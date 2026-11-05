@@ -7,9 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/access"
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 )
 
@@ -113,6 +115,17 @@ type BulkOutcome struct {
 	// this person is left holding afterwards. Empty when there is nothing
 	// surprising to say.
 	Consequence string `json:"consequence,omitempty"`
+	// WaitReason and Retry say, for a queued row, why it isn't in Zitadel
+	// yet (role_waits, manual, halted:<reason>, halted:retrying) and, when it
+	// is a retry, its next try, so the result tells a row Syndra sends again
+	// on its own from one that waits for Send (re-audit R2).
+	WaitReason string              `json:"wait_reason,omitempty"`
+	Retry      *extcall.RetryState `json:"retry,omitempty"`
+	// RuleWaiting counts the rows automatic rules queued with this row's act
+	// that wait for Send. Apart from Effect, so a rule's wait is never blamed
+	// on the act (final verification N4): an approval or an adoption that
+	// took effect stays applied, and the result still ends on Send.
+	RuleWaiting int `json:"rule_waiting,omitempty"`
 	// Grants the row would act on. Populated for remove_role and extend so the
 	// apply pass acts on identified rows rather than re-guessing.
 	GrantIDs []string `json:"grant_ids,omitempty"`
@@ -306,7 +319,7 @@ func rehearseOne(
 		// a bulk selection goes wrong — they match the filter that found the
 		// cohort and nobody notices in a count.
 		out.Effect = EffectBlocked
-		out.Detail = fmt.Sprintf("Account is %s — remove it from the selection to continue.", strings.ToLower(profile.Status))
+		out.Detail = fmt.Sprintf("Account is %s. Remove it from the selection to continue.", strings.ToLower(profile.Status))
 		out.Fingerprint = FingerprintUserAccess(uid, profile.Status, nil, nil)
 		return out, nil
 	}
@@ -353,7 +366,36 @@ func rehearseOne(
 	if err != nil {
 		return BulkOutcome{}, err
 	}
-	return WithCancels(out, cancels), nil
+	// What the automatic rules give on top of the roles chosen, named per
+	// person before the apply (coherence audit C2).
+	var given []access.Role
+	for _, p := range params {
+		if p.OpType == "add" {
+			given = append(given, access.Role{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]})
+		}
+	}
+	rules, err := RulesFollowing(ctx, uid, given)
+	if err != nil {
+		return BulkOutcome{}, err
+	}
+	// The cancels line stays last: the plan renderer splits it off the end.
+	return WithCancels(WithRules(out, rules), cancels), nil
+}
+
+// WithRules adds what the rules give to a plan row: its consequence names
+// each, and its fingerprint binds them, so an apply after a rule changed is a
+// moved row rather than a give nobody read.
+func WithRules(out BulkOutcome, rows []RuleRow) BulkOutcome {
+	if len(rows) == 0 {
+		return out
+	}
+	fields := []string{out.Fingerprint, "rules"}
+	for _, r := range rows {
+		fields = append(fields, r.RuleID, r.ProjectID, r.RoleKey)
+	}
+	out.Fingerprint = Fingerprint(fields...)
+	out.Consequence = strings.TrimSpace(out.Consequence + " " + RuleSentences(rows))
+	return out
 }
 
 // cancellingWrites are the single-role writes this row's apply would make
@@ -450,7 +492,7 @@ func rehearseRemoveRole(
 		out.Effect = EffectNoChange
 		if effective := roleMap[roleKey{projectID: req.ProjectID, roleKey: req.RoleKey}]; effective != nil {
 			out.Detail = "Holds no direct grant here."
-			out.Consequence = fmt.Sprintf("Keeps the role %s — remove that source instead.", sourcePhrase(effective.Reasons))
+			out.Consequence = fmt.Sprintf("Keeps the role %s. Remove that source instead.", sourcePhrase(effective.Reasons))
 		} else {
 			out.Detail = "Doesn't hold this role."
 		}
@@ -461,7 +503,7 @@ func rehearseRemoveRole(
 	out.GrantIDs = []string{existing.ID}
 	if other := otherSources(roleMap, req.ProjectID, req.RoleKey); other != "" {
 		out.Detail = "Direct grant removed."
-		out.Consequence = fmt.Sprintf("Keeps the role %s — this does not take their access away.", other)
+		out.Consequence = fmt.Sprintf("Keeps the role %s, so this does not take their access away.", other)
 	} else {
 		out.Detail = "Loses this role."
 	}
@@ -669,7 +711,7 @@ func lengthens(current *time.Time, durationDays int) bool {
 func expiryPhrase(current *time.Time, durationDays int) string {
 	if durationDays <= 0 {
 		if current != nil {
-			return "Expiry removed — the grant becomes permanent."
+			return "Expiry removed, so the grant becomes permanent."
 		}
 		return "No expiry."
 	}
@@ -692,31 +734,11 @@ func pluralGrants(n int) string {
 	return fmt.Sprintf("%d grants", n)
 }
 
-// isDepartedStatus reports whether an account is one a bulk grant must refuse.
-//
-// The list used to be "departed", "inactive", "alumni", "deactivated" — four
-// words, of which the live directory emits exactly ONE. `normalizeUserState`
-// (internal/directory/zitadel.go) produces `active | inactive | initial |
-// locked | deleted`, so three of the four were unreachable branches and the two
-// that mattered most were absent: a LOCKED or DELETED Zitadel account passed
-// this guard, and could be handed a role in bulk.
-//
-// The unreachable words are kept rather than tidied away. They cost nothing,
-// and a directory that is not Zitadel — or a fixture, or a future one — may
-// well speak them; removing them would narrow the guard to today's producer.
-// What was wrong was never that the list was too long.
-func isDepartedStatus(status string) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "departed", "inactive", "alumni", "deactivated":
-		return true
-	// What Zitadel actually emits for an account that is no longer usable.
-	// `initial` is deliberately NOT here: it means invited and not yet signed
-	// in, which is a person arriving rather than one who has gone.
-	case "locked", "deleted":
-		return true
-	}
-	return false
-}
+// isDepartedStatus reports whether an account is one a bulk grant must refuse:
+// access.Left, the one definition of somebody who has gone. Zitadel emits
+// `active | inactive | initial | locked | deleted`; a LOCKED or DELETED account
+// once passed this guard because the list here named words Zitadel never sends.
+func isDepartedStatus(status string) bool { return access.Left(status) }
 
 func dedupeIDs(ids []string) []string {
 	seen := make(map[string]struct{}, len(ids))

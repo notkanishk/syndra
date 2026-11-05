@@ -15,7 +15,7 @@ The backend's service account is the one rotate.sh uses, so Syndra already holds
 
 ### Decision
 
-- Syndra replaces the keys of both of its targets, the claim injector and the event listener. It does this itself a few days before the limit (default 5) and inside a quiet window (default 03:00–05:00 local). It acts only when Zitadel answers and the L1 probe passed in the last 5 minutes. `SYNDRA_ACTION_KEY_AUTOROTATE=off` turns it off.
+- Syndra replaces the keys of both of its targets, the claim injector and the event listener. It does this itself a few days before the limit (default 5) and inside a quiet window (default 03:00–05:00 makerspace time). It acts only when Zitadel answers and the L1 probe passed in the last 5 minutes. `SYNDRA_ACTION_KEY_AUTOROTATE=off` turns it off.
 - "Replace now" on the Zitadel page does the same on demand, and may override the 24h guard.
 - **A replacement is a Syndra-mediated Zitadel mutation.**
   - It holds a Postgres advisory lock.
@@ -36,6 +36,7 @@ The backend's service account is the one rotate.sh uses, so Syndra already holds
 
 - The key never goes overdue while the schedule is on and Zitadel accepts the write. No step of a replacement is manual.
 - The backend's service account must keep `action.target.write`. Revoking the instance permissions between script runs (DEPLOY.md's old advice) now turns every automatic attempt into `KEY_ROTATION:failed`.
-- The quiet window is read in the container's `TZ`. Unset, that is UTC.
+- The quiet window is read in the makerspace's time zone (`clock.Loc`): the container's `TZ`, or Asia/Kolkata when `TZ` is unset or invalid.
+- A replacement can end `partial` (one key of two) or `unknown` (Zitadel's answer was lost and the read-back failed), each with a plain reason, never an HTTP status (coherence audit W4, 5 Nov 2026). The schedule's status says when it is waiting for a passing test sign-in (`auto.waiting_for`), and the screen promises a replacement "on its own" only when it would happen (W5).
 - rotate.sh stays as the manual fallback. Syndra notices a manual replacement through the keyring and dates the key from it. The by-hand guide on the Zitadel page watches for that and checks the key on its own.
 - A call Zitadel signs with the new key before its answer reaches Syndra is covered by the in-flight wait. A call that arrives after the 1s wait, with a key no keyring has, is refused as before: interrupt-on-error stays off, so the sign-in goes ahead without Syndra's claims, and telemetry counts it.

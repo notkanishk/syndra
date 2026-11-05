@@ -18,7 +18,7 @@
   - `handlers/discovery_grants_test.go`: a role a bundle gives is kept, an unoffered or already-held role is refused, replace;
   - `handlers/discovery_roles_test.go`;
   - UI: `deleteRole.test.tsx`, `revokeGrant.test.tsx`.
-- [ ] 1.13 `handlers/roles.go` (`POST /api/v1/roles`) to answer through `writeRoleWriteError`, so both screens answer refusals alike (it is not a W1a file) #ready-for-agent
+- [x] 1.13 `handlers/roles.go` (`POST /api/v1/roles`) answers through `writeRoleWriteError`, so both screens answer refusals alike: a bad key is a 400 (was a 500), a lost reply is OUTCOME_UNKNOWN (was "Something went wrong"). `TestCreateRole_AnswersAsTheProjectsScreenDoes` (release/coherence)
 - [ ] 1.14 Deploy, then delete a role nobody holds on the dev box and confirm both audit rows and the read-back (operator-gated) #ready-for-human
 
 ## W1d · Retries (branch `fix/one-retry-core`)
@@ -30,7 +30,40 @@
 - [x] 1.5 Migration 000080 `propagation_outbox.not_before`; `RequeuePropagation` sets it; both batch claims respect it
 - [x] 1.6 One start-up wait schedule in `cmd/api/main.go`
 - [x] 1.7 Tests: backoff spacing and cap, retryable vs terminal, read-back on ambiguous write, outbox respects `not_before`, max attempts to failed (live), down migration (text and live, in a rolled-back transaction)
-- [ ] 1.8 Show "next try at" (`not_before`) on the pending worklist. The models and UI are outside W1d's files #ready-for-agent
+- [x] 1.8 Show "next try at" (`not_before`) on the pending worklist: `GetPendingPropagations` returns `not_before`, `attempts` and `retry`; `RetryStatus` says "Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)." in IST (branch `fix/coherence-delivery`)
+- [x] 1.8a One retry model (`extcall/retry.go`: `OutboxRetry`, `AddonResend`, `Policy.Retrying`, `AuditMark`), parity test across both (`extcall/retry_test.go`); `ui/src/lib/retry.ts` + `components/ui/RetryStatus.tsx` the one set of words and the one part
+- [x] 1.8b Background drain retries any change already sent that Zitadel didn't take, past its backoff, gives included (`db.ClaimDueRetries`, live test `retry_claims_live_test.go`); never `role_waits`/`manual`; every automatic try audited `propagation.retried`; tick 1m
+- [x] 1.8c Send takes rows in backoff (`ClaimPendingPropagations` ungated); `Delivery.WaitReason()` = `halted:retrying` on Requeued/Errored, with `Drain.Retry`; approve, give, remove, bundle retire carry `retry`
+- [x] 1.8d Vocal: Home's Pending changes block says retrying and gave-up counts (`/governance/indicators` `retrying`, `gave_up`); member storage page says "Not confirmed yet. Syndra is trying again at 14:05." and waits for the server-named next try
+- [x] 1.8e Rule retire (`app/policies/page.tsx` `DeleteRuleConfirm`) uses `retireOutcome` from `lib/retry.ts` with the cascade's `drain.retry`; "applied without review" gone (release/coherence; `deleteRule.test.tsx`)
+- [x] 1.8f The rail carries a retry pill (`components/shell/RetryPill.tsx`, `retryBadge`): amber "↻ n" while retrying, danger "! n" once given up, on Home (Basic and Advanced) and on Pending changes (Advanced); a collapsed Changes group lights on a phone (`touch-nav.ts`). `RetryPill.test.tsx` (release/coherence)
+- [x] 1.8h A straight-away send that halted before it went (Zitadel unreachable, a drain error) is retried on its own like a 503 after a send (owner-approved, 5 Nov): `services.Deliver` → `db.ScheduleRetry` counts try 1, sets the next try and `halted:retrying`, never on a row that waits; the outcome carries `retry`. If the schedule can't be written, the halt reason stays and the rows wait for Send. Tests: `TestDeliver_AHaltedSendIsRetriedOnItsOwn`, `TestDeliver_AnUnscheduledHaltSaysWhy`, live `TestScheduleRetry_AHaltedSendGetsANextTry` (release/coherence)
+- [x] 1.8i Retries in Basic too: Home's *Sent again on its own* block (both views) and the rail pill; Home's Pending changes counts only what waits for a send (retrying rows are not "waiting for you"). A give-up stays until **Mark seen** (`POST /propagations/gave-up/seen`, `db.MarkGaveUpSeen`, per person since 6 Nov: table `gave_up_seen`, migration 000082, the old shared config key is dropped; before a person's first mark, the last 7 days count for them). Tests: `HomeRetries.test.tsx` (both views), `TestHandleMarkGaveUpSeen`, live `TestCountRetries_AGiveUpStaysUntilSeenByEachPerson` (two operators), `TestGaveUpSeenMigration_CoversTheQueries` (release/coherence)
+- [x] 1.8j Next step or none on every outcome and retry state (owner, 5 Nov): `nextStepOf` + `next` on `ActionOutcome`, `retryNextStep`, drawn by `ActionOutcome` (all placements) and `RetryStatus`; guard `next-step.test.tsx`; copy guide §5 (release/coherence)
+- [x] 1.8k `useWaitsBeforeLine(op)` is exact per act: a give or a removal while Zitadel is down goes on its own; only a role marked to wait waits for Send (was "will wait for you to send" for everything). `WaitsBeforeLine.test.tsx` (release/coherence)
+- [x] 1.8l `Notice` requires `next` or `nothingToDo` through its types (`NoticeNextStep`); every caller states one; guard `notice-next-step.test.tsx` (types, runtime, copy rules) (release/coherence, 6 Nov)
+- [x] 1.8m A refused role write whose undo failed says so: `services.ErrRoleRecordNotRestored` (`RoleRecordNotRestoredError{Reference}`), audit `role.not_restored`, 502 `RECORD_NOT_RESTORED` with a next step; never "Syndra put its record back". Tests: `TestCreateRole_RefusedAndUndoFails_SaysTheRecordIsNotRestored`, `TestRoleRecordNotRestored_IsHonestAndEndsOnANextStep` (release/coherence, 6 Nov)
+- [x] 1.8n Re-audit (6 Nov, `fix/reaudit`): every next step says what really happens.
+  - Give-ups: `db.CountRetries` counts every `failed` row per target (a retry Zitadel then refused no longer vanishes); `db.ListGaveUp` feeds Pending changes' **Syndra stopped sending** (filter `?gave_up=1`), which Home's card links to; a given-up revocation goes to Drift (its ledger row is gone), never "revoke again on their page". Indicators carry `retrying_by`, `gave_up_by`, `auto_retry`.
+  - `REVOCATION_DRAIN_ENABLED=false`: `propagation.SetAutoRetry`; `RowRetry` answers `waiting` ("Press Send on Pending changes to try again"), and Home, Pending changes and the Zitadel offline Notice say so.
+  - Retries that go on their own say so with their next try: bulk rows (`BulkOutcome.wait_reason/retry`, plain-language `queuedDetail`), bulk approve (now queued when it didn't land), Zitadel › Users (`retry`), drift revoke (`propagation`, `retry`), extend (`outcomeFromExtend`). A role marked to wait after its change was sent shows the wait, not a next try (R15).
+  - Approve and give split their own row from the rules' rows (`Delivery.ReasonFor`, `WaitingBesides`; `rule_waiting`); bulk approve plan names rule gifts; a person's Requests tab shows the rule preview.
+  - Exact failure classes on Zitadel › Users: `GRANT_NOT_READ` (nothing written), `PARTLY_RECORDED` (roles named in `details.recorded`); `OUTCOME_UNKNOWN` is partial ("Check Zitadel › Projects"). The revoke dialog's count comes from `GET …/grants/{grantId}/removal`, the removal's own walk with nothing written.
+  - Shared defaults: `waitsForSend` (a queued outcome with another named step draws no Send link), a refusal says "Nothing was changed." once, `RetryStateName` is `retrying | waiting` only, dead `max_retries_exceeded` words gone, a lost reply says "Check this page after a reload".
+  - Guards: `next-step-places.test.ts` (every "A › B" and every shared next step names a real place), `reaudit-outcomes.test.tsx`, `reaudit_test.go`, `TestCountRetries_ARefusedRetryIsGivenUpUnderItsTarget` (live DB).
+- [x] 1.8o Revocation copy when `REVOCATION_DRAIN_ENABLED=false`: `REVOKE_SENDS_ITSELF`, `retireOutcome` (halted without a retry) and bulk `queuedNote` still say revocations send on their own; read `auto_retry` there too (done: `auto` threaded from `useAutoRetry`; tests `lib/__tests__/drain-off-copy.test.tsx`; PersonStorage offline Notice now `offlineNext`, traced to propagation/addon.go:81 and revocations.go:92) #ready-for-agent
+- [x] 1.8p Final verification (6 Nov, `fix/final-n`), N1 to N7 and the MyStorage pause line.
+  - N1, a change Zitadel refused outright: the drain names each refused row with its plain cause (`DrainResult.Refused`, `propagation.RefusalCause`: `not_allowed` 401/403, `not_found` 404/410, `invalid` 400/412/422, `other`); `services.Deliver` carries it as `refused:<cause>` (`db.WaitReasonRefused`), first in `WaitReason()` and per row in `ReasonFor`. Every result says "Zitadel refused this", the cause and the true step (`lib/retry.ts refusedOutcome`/`refusedNext`, kind `failed` with `recorded`, so never "Nothing was changed." and the act's button is spent): give, approve (Home, Requests, a person's Requests tab), removal (direct and bundle), drift revoke, retire (bundle and rule), bulk rows (`failed` with `refusedDetail`), extend, Zitadel › Users (per role `reason`), ManageBundles. Tests: `delivery_refused_test.go`, `propagation/refused_test.go`, `handlers/final_n_test.go`, `ui/src/lib/__tests__/final-verification.test.tsx`, GrantDirectAccess, ManageBundlesPublished, grantOutcome.
+  - N2: the rail pill says "Syndra stopped sending" and follows `auto_retry`; "↻" only when the drain is on.
+  - N3: `useAutoRetry` is null until the indicators answer; every drain-dependent sentence has a neutral branch ending on `DRAIN_UNKNOWN_NEXT`; `retryingOutcome` with no retry is neutral too.
+  - N4: `BulkOutcome.rule_waiting`; bulk approve uses the approval's own `ReasonFor` and stays applied when only a rule's row waits; bulk adopt stays applied; both end on Send.
+  - N5: `ApproveButton` (`components/requests/Holding.tsx`) holds Approve while the rule preview loads or fails, with the reason; `RulesLine` says when it can't read the rules.
+  - N6: `PARTLY_RECORDED` says a recorded revocation sends on its own with the drain on and waits for Send with it off (`partlyRecordedMessage`).
+  - N7: em dashes out of `services/bulk.go` plan text; copy guide drift revoke row current.
+  - One consent rule (6 Nov): Approve, Give, Zitadel › Users assign and Drift adopt take their hold from one hook, `useRuleConsent` / `RuleConsentFailed` (`components/requests/RuleConsent.tsx`): held while the rule preview loads, held when it fails, with the reason and Try again. Bulk give and approve are held by `RehearsalDialog` (no apply without a plan).
+  - Stopped sending says why (6 Nov): a refused row keeps `wait_reason = refused:<cause>` (`db.MarkPropagationRefused`, migration 000083 widens the 000056 check). Pending changes names the cause per row; Home's card counts per cause; add-on failures and older rows keep the general sentence.
+  - MyStorage: a pause never ends by itself (an operator sets the add-on back to active) and nothing resumes on its end alone, so "by itself" and "a few minutes" are gone (`handlers/my_storage.go` Lifecycle doc).
+- [ ] 1.8g Deploy, then 503 one give on the dev box (stop Zitadel briefly) and watch it go on its own at the named time; audit shows `propagation.retried` #ready-for-human
 - [ ] 1.9 Move the add-on transport onto `extcall` (W1e) #ready-for-agent
 - [ ] 1.10 Owner: after deploy, watch `[ZITADEL] ... req=` lines during the next Zitadel blip #ready-for-human
 
@@ -38,7 +71,7 @@
 - [x] Move the envelope to `handlers/errors.go`; sanitise raw upstream text at 502/503/504 `ready-for-agent`
 - [x] Proxy errors use the envelope; gateway text never reaches the screen
 - [x] `merge_findings.go` and `claim_shape.go` bodies use the envelope
-- [ ] `writeUpstream` at every raw call site, then delete `rawUpstreamCodes` (needs W1a, W1e files) `needs-triage`
+- [x] `writeUpstream` at every raw call site, `rawUpstreamCodes` deleted; guard `TestNoErrorTextReachesAFiveHundredBody` (branch `fix/one-name-path`)
 - [ ] Route `bundles.go`, `access.go`, `claimserve/door.go`, the add-on writer through one envelope type `needs-triage`
 
 Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
@@ -60,7 +93,7 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 
 - [ ] The add-on's `PUT /settings/{name}` does not read the `Idempotency-Key` header (`addons/truenas/settings.go` was outside this wave). Writing the same value twice is harmless today, so nothing breaks, but the key is not deduplicated add-on-side until it does. #ready-for-agent
 - [ ] Create-path home: plan projects a new account's home from the desired state, apply asks `decideHome` (which reads the target). They can still disagree when the folder already exists. Fixing it makes plan read the filesystem for new accounts, which changes plan output, so it was left. #needs-triage
-- [ ] The Unconfirmed changes card (`ui/.../UnconfirmedChanges.tsx`) and `ui/src/lib/audit-vocabulary.ts` have no wording for `lifecycle.set`; it falls back to the default sentence. A lifecycle row that settles `indeterminate` is settled by a person, not from a read. #ready-for-agent
+- [x] (release/coherence: `UnconfirmedChanges.tsx` words `lifecycle.set` as the system's own state, "Set TrueNAS to read-only"; the audit vocabulary already had "a maintenance change") The Unconfirmed changes card (`ui/.../UnconfirmedChanges.tsx`) and `ui/src/lib/audit-vocabulary.ts` have no wording for `lifecycle.set`; it falls back to the default sentence. A lifecycle row that settles `indeterminate` is settled by a person, not from a read. #ready-for-agent
 - [ ] Outcome-to-HTTP mapping per handler (audit family 2, "differs per handler") and "reads drop the breaker reason" are not part of W1e. #needs-triage
 
 ## W2b · One cache refresh (branch `fix/one-refresh-path`)
@@ -78,3 +111,44 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [x] Guard test: every mutation uses it; rail kinds hold governance
 - [ ] `HomeLimit.tsx`, `UnconfirmedChanges.tsx` onto `invalidateAfter`, then widen the guard's raw-call scan to `src/` `ready-for-agent`
 - [ ] `["name-catalog"]` defined twice (`useNameCatalog.ts`, `useNameResolver.tsx`) belongs to W2d
+
+## W2d: one path for a name (branch `fix/one-name-path`)
+
+- [x] `ui/src/lib/names.ts` `roleName`; inline chains, local hooks and `shownNames.ts` routed through it
+- [x] Ids out of the audit CSV name columns (id columns added), People on a target, Unexplained access picker, plan review sort, create-role picker
+- [x] `backend/internal/textsort`; twelve backend name sorts routed through it
+- [x] Guards: `names-one-path.test.ts`, `repoguard/name_sort_test.go`
+- [x] One person fallback phrase across screens: `personOr` / `UNKNOWN_PERSON` in `lib/names.ts` ("this person", "This person" to open a sentence); ten sites routed; guard in `names-one-path.test.ts` (release/coherence)
+- [ ] Backend returns `("", false)` rather than the id as a name in six places (`directory/zitadel.go:430-436`, `insights_trends.go:240`, `insights_lens.go:165`, `claim_shape.go:644`, `role_members.go:120`, `directory/demo.go:48`) #ready-for-agent
+- [ ] Go `roleLabel` (`services/views.go`) deleted or pinned to `humanizeKey` by a golden test #ready-for-agent
+- [ ] SQL `ORDER BY name` (`db/bundle_includes.go`, `target_bindings.go`, `role_waits.go`): DB collation UNVERIFIED #needs-triage
+- [ ] One envelope type for `bundles.go`, `access.go`, `claimserve/door.go`, add-on writer #needs-triage
+
+## Coherence group D (branch `fix/coherence-remaining`)
+
+- [x] Rate limits: the door counts only after every key and the refresh failed (`claimserve/door.go` `SignatureCheck`), shared by the event webhook; `TestRateLimit_VerifiedWebhookCallsAreNeverCounted` pins it. A 429 shows the server sentence through `describeFailure`/`outcomeFromError`.
+- [x] `writeUpstream` sentences name what failed (Zitadel, that system) and `describeFailure` adds the next step and the full reference to a bare line; cards keep `failureMessage` plus their own reference.
+- [x] Claims page: check 5 "unlisted" says access, not role (the gate is any grant); the not-listed notice ignores an unreadable call record; save, History restore and the save row say what holds a shape back (`heldBackLine`) instead of promising "next sign-in" while Zitadel names no app or lists no project.
+- [x] Template sheet and chooser use `heldBackLine` instead of "keeps the project's default until you save" while Zitadel names no app
+- [x] Partial-failure codes (`MAY_HAVE_GONE_THROUGH` in `ui/src/lib/outcome.ts`) say "Some of this may have gone through. Check <where> before trying again."; `partial-codes.test.tsx` reads the handlers and fails on an undecided 5xx code
+
+- [x] A lost reply on a write (`LostReply` in `api-client.ts`, the proxy `BACKEND_UNREACHABLE`/`UPSTREAM_ERROR` on a non-GET) says "Check Pending changes or Audit", never "Nothing was changed."; `ANSWER_NOT_RECORDED` mapped, `CREDENTIAL_NOT_SET` and `PLAN_CLAIM_ERROR` verified as writing nothing
+
+## W2a · One access core (branch `feat/one-closure-core`)
+
+- [x] 2a.1 `internal/access`: `Ends`, `Closure`, `Fired`, `Later`, `Left`; `models.RuleClosure` deleted
+- [x] 2a.2 Compiler on `access.Ends`: a rule role ends when its source ends (`cache/compiler_ends_test.go`)
+- [x] 2a.3 `collectUserRoles` on `access.Ends` + `Fired`; `EffectiveRole.Ends`; role members' Ends from it; person page reads `role.ends`
+- [x] 2a.4 `services.MappingHolders` (records + closure − people who left); `db.HeldRecords`; `ListMappingHistory` takes the holders func
+- [x] 2a.5 Drift and reconciliation on `services.RuleDerived` (records only, forward); `ExpectedViaRule` deleted
+- [x] 2a.6 Bundle readers on `bundleGivesSQL` (role usage, referenced roles, projects' bundle count, the access map); bundle impact on the latest version
+- [x] 2a.7 `BundleHolding`, `RuleHolding`; `observed_holder_count` on bundle and rule lists
+- [x] 2a.8 What-if kinds `rule_added`, `bundle_assigned`, `bundle_unassigned`; the three UI previews ask it
+- [x] 2a.9 UI: observed holder numbers, recorded ones labelled; `holdersLine` never heads with a recorded number; six fallbacks sort by observed (`heldSortKey`); copy traced (see design)
+- [x] 2a.10 One `Left` for bulk, insights, usage and the entitlement path
+- [x] 2a.11 Parity and behaviour tests; two mutations checked
+- [ ] 2a.12 `handlers/bundles.go` `GET /bundles/{id}/roles` (working copy, the editor's own list) and `BundlePage.tsx` re-deriving includes (`:164-167`) left: the editor shows what it edits #needs-triage
+- [ ] 2a.13 `RequestHolding` (`db/access_requests.go:84`), `GrantDirectAccess` `noteOf`, `MemberAccess` and `observedRolesByProject` overwrite: W3b's holding index #ready-for-agent
+- [ ] 2a.14 `claim_shape.reachOf`, `insights_asof` (recorded fallback), the "Bundle … is unused" hint (assignments): onto the snapshot in W3b #ready-for-agent
+- [ ] 2a.15 Cost: bundle and rule lists now walk the snapshot per request, like the role catalogue. Watch on prod; cache the snapshot across requests if slow #needs-triage
+- [ ] 2a.16 After deploy: drift may raise rule targets whose source is only in Zitadel; triage them with their source (operator) #ready-for-human

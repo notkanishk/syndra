@@ -77,6 +77,14 @@ export const AUDIT_ACTIONS: Record<
   "role.deleted": { verb: "Deleted a role", destructive: true },
   // The second row of a role change Zitadel refused: Syndra put its own record back.
   "role.not_changed": { verb: "Tried to change a role; Zitadel didn't, so Syndra put its record back" },
+  // A refused role change whose undo failed too: Syndra's record may still show the change Zitadel never made.
+  "role.not_restored": {
+    verb: "Tried to change a role; Zitadel didn't, and Syndra couldn't put its own record back, so its list of roles may show the change",
+  },
+  // C6: the answer was lost and the read-back failed. Syndra kept its record; Zitadel may hold the change.
+  "role.change_unknown": {
+    verb: "Changed a role in Zitadel, but couldn't tell whether Zitadel made the change; Syndra kept its record. Open the project under Zitadel › Projects to see what Zitadel holds",
+  },
   "access_request.created": { verb: "Asked for access" },
   // Roles that wait for you (N14 B): settings, not access, so no passive.
   "role.waits_marked": { verb: "Marked a role to wait for you" },
@@ -88,7 +96,12 @@ export const AUDIT_ACTIONS: Record<
   "welcome_claims.turned_off": { verb: "Turned off welcome roles at a first sign-in" },
   // action-key-autorotation: Syndra replacing the action signing key, on its own or from Replace now.
   "action_key.replaced": { verb: "Replaced the action signing key" },
-  "action_key.not_replaced": { verb: "Tried to replace the action signing key; Zitadel didn't" },
+  "action_key.not_replaced": { verb: "Tried to replace the action signing keys; Zitadel replaced neither" },
+  // W4: one of the two keys replaced, or an answer lost with no read-back. The details carry the reason.
+  "action_key.partly_replaced": { verb: "Replaced one action signing key; Zitadel didn't replace the other" },
+  "action_key.replace_unknown": {
+    verb: "Tried to replace the action signing key; Zitadel didn't answer, so Syndra can't tell whether it did",
+  },
   "action_key.verified_later": { verb: "Confirmed the new action signing key with a test sign-in" },
   // Look up sign-ins (owner, 3 Nov): recorded before Zitadel's log is read, with the
   // reason and the range in its details. The person is the target; an app lookup has none.
@@ -116,6 +129,14 @@ export const AUDIT_ACTIONS: Record<
   // Worded the operator's way (A-04 §14.8). The row carries who caused it, the person
   // and the outbox row, but not what the change was, who queued it or why: those are
   // on the superseded outbox row, which no read returns yet.
+  // The background drain sent again, on its own, a change Zitadel didn't take
+  // (the one retry model, owner 5 Nov 2026). One row per automatic try; its
+  // details carry retried_by "automatic", try n of N, and how it went.
+  "propagation.retried": {
+    verb: "Sent a change again on its own (an automatic retry)",
+    template: "Sent a change for {} again on its own (an automatic retry)",
+    passive: "A change to their access was sent again on its own (an automatic retry)",
+  },
   "propagation.cancelled_unsent": {
     verb: "Cancelled a change that was waiting for you to send",
     template: "Cancelled a change that was waiting for you to send, for {}",
@@ -167,6 +188,8 @@ export const OPERATION_NOUN: Record<string, string> = {
   "account.adopt": "an account assignment",
   "account.release": "a release of an account",
   "setting.put": "a settings change",
+  // S5: addon.<t>.lifecycle.set.dispatched (backend/internal/addons/read.go).
+  "lifecycle.set": "a maintenance change",
 };
 
 export function describeAction(

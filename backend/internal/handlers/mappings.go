@@ -371,7 +371,7 @@ func writeMappingError(w http.ResponseWriter, err error) {
 	case errors.Is(err, errMappingTargetSilent):
 		// 503, not 400: the request may be perfectly correct and the backend
 		// cannot tell yet. Retrying once the add-on answers is the right move.
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_CAPABILITIES_UNKNOWN", err.Error())
+		writeUpstreamStatus(w, http.StatusServiceUnavailable, err, "TARGET_CAPABILITIES_UNKNOWN")
 	case errors.Is(err, addons.ErrValueNotResolvable):
 		// The add-on's OWN sentinel, not a local restatement of it. This branch
 		// used to test a sentinel declared in this file that nothing ever

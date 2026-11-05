@@ -208,7 +208,7 @@ func writeEntitlementError(w http.ResponseWriter, err error) {
 	case errors.Is(err, services.ErrTargetUnplannable):
 		// 503, not 500: the backend is fine and the operator's request was fine.
 		// Retrying later is the action, and it is the only one.
-		jsonErrorResponse(w, http.StatusServiceUnavailable, "ADDON_UNREACHABLE", err.Error())
+		writeUpstreamStatus(w, http.StatusServiceUnavailable, err, "ADDON_UNREACHABLE")
 	case errors.Is(err, planapply.ErrPlanRequired):
 		missingPlanCitation(w)
 	case errors.Is(err, db.ErrTargetNotActive):

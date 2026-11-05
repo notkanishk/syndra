@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
+import { seedAutoRetry } from "@/test-utils/drain";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -59,20 +60,35 @@ const revokeCtl = vi.hoisted(() => ({
   // A promise the revoke waits on, so a test can look at the first 100ms.
   hold: null as null | Promise<void>,
   waits: false,
+  // What the server answered: a wait_reason when the revoke was held.
+  answer: {} as Record<string, unknown>,
 }));
 // Which roles are Roles that wait; the shared setup answers "none".
 vi.mock("@/lib/queries/useRoleWaits", () => ({ useRoleWaits: () => () => revokeCtl.waits }));
 
+// What the automatic rules give on adopting (the backend's preview), and the
+// rule rows the adoption answered with.
+const adoptCtl = vi.hoisted(() => ({ rules: [] as string[], answer: {} as Record<string, unknown>, error: false, refetch: vi.fn() }));
+vi.mock("@/lib/queries/useRulePreview", () => ({
+  useRulePreview: (_u: string, _p: string, _k: string[], enabled: boolean) => ({
+    data: enabled ? adoptCtl.rules.map((sentence) => ({ sentence })) : undefined,
+    isLoading: false,
+    isError: enabled && adoptCtl.error,
+    isFetching: false,
+    refetch: adoptCtl.refetch,
+  }),
+}));
+
 vi.mock("@/lib/queries/useDrift", () => ({
   useDriftItems: () => ({ ...drift, isLoading: false, error: null, refetch: () => {} }),
-  useAttributeDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useAttributeDrift: () => ({ mutateAsync: async () => adoptCtl.answer, isPending: false }),
   useRevokeDrift: () =>
     useMutation({
       mutationFn: async () => {
         revokeCtl.calls += 1;
         if (revokeCtl.hold) await revokeCtl.hold;
         if (revokeCtl.fails) throw new Error("revoke failed");
-        return {};
+        return revokeCtl.answer;
       },
     }),
   useMarkExternalDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -145,7 +161,7 @@ function enterSelect() {
 }
 
 function renderTriage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = seedAutoRetry(new QueryClient({ defaultOptions: { queries: { retry: false } } }), true);
   return render(
     <QueryClientProvider client={client}>
       <UnexplainedAccess />
@@ -168,6 +184,9 @@ beforeEach(() => {
   revokeCtl.fails = false;
   revokeCtl.hold = null;
   revokeCtl.waits = false;
+  revokeCtl.answer = {};
+  adoptCtl.rules = [];
+  adoptCtl.answer = { status: "attributed", rule_outbox_ids: [] };
   NAMES.current = {};
 });
 
@@ -698,6 +717,25 @@ describe("the revoke confirm, once it has run", () => {
     expect(result.querySelector(".bg-faint")).not.toBeNull();
   });
 
+  // Audit C5: a role that waits holds the revoke, as the forecast said; the
+  // result says it waits for the operator, never "On its way".
+  it("a revoke on a role that waits is not sent, and says it waits for you", async () => {
+    revokeCtl.waits = true;
+    revokeCtl.answer = { status: "revoked", outbox_id: "o1", wait_reason: "role_waits" };
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/once you send it, because operator always waits for you/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+
+    const result = await within(dialog).findByRole("status");
+    expect(result.textContent).toContain("Waits for you");
+    expect(result.textContent).toContain("operator always waits for you.");
+    expect(result.textContent).not.toContain("On its way");
+  });
+
   // A-20 P8: the first 100ms of Drift's highest-stakes act, said in Syndra's own tense.
   describe("forecast", () => {
     async function pressRevoke() {
@@ -773,8 +811,56 @@ describe("the revoke confirm, once it has run", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).queryByText(/removed from Zitadel as you confirm/i)).toBeNull();
     expect(within(dialog).queryByText(/send on their own/i)).toBeNull();
-    // "Queues the removal" is said once, in the lede, and the result says the rest.
-    expect(within(dialog).getAllByText(/queues removal|queues the removal/i)).toHaveLength(1);
+    // The removal is said once, in the lede, and the result says the rest.
+    expect(within(dialog).getAllByText(/removes the access in Zitadel/i)).toHaveLength(1);
+  });
+});
+
+// Audit C1: adopting is when a rule starting from the role fires, so the
+// dialog names what the rules give before the operator confirms, and its copy
+// never says the access stays exactly as it is when rules add roles.
+describe("the adopt confirm, with automatic rules", () => {
+  function openAdopt() {
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Adopt" }));
+    return screen.getByRole("dialog");
+  }
+
+  it("names the roles the rules give, and drops 'stays exactly as it is'", async () => {
+    adoptCtl.rules = ["Also gives Bench in Workshop, by the automatic rule from Operator."];
+    adoptCtl.answer = { status: "attributed", rule_outbox_ids: ["o2"] };
+    const dialog = openAdopt();
+    expect(within(dialog).getByText("Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/stays exactly as it is/);
+    expect(dialog.textContent).toMatch(/add what they give to Pending changes, for you to send/);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Adopt in Syndra" }));
+    const result = await within(dialog).findByRole("status");
+    expect(result.textContent).toContain("1 more change from automatic rules waits in Pending changes for you to send.");
+  });
+
+  it("holds the adopt when the rule preview fails, and Try again reads it again", () => {
+    adoptCtl.error = true;
+    adoptCtl.refetch = vi.fn();
+    try {
+      const dialog = openAdopt();
+      expect(within(dialog).getByRole("button", { name: "Adopt in Syndra" })).toBeDisabled();
+      expect(within(dialog).getByText(/Syndra couldn.t read the automatic rules/)).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Try again" }));
+      expect(adoptCtl.refetch).toHaveBeenCalledTimes(1);
+    } finally {
+      adoptCtl.error = false;
+    }
+  });
+
+  it("says the access stays exactly as it is when no rule follows", async () => {
+    const dialog = openAdopt();
+    expect(dialog.textContent).toMatch(/stays exactly as it is/);
+    expect(within(dialog).queryByText(/Also gives/)).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Adopt in Syndra" }));
+    const result = await within(dialog).findByRole("status");
+    expect(result.textContent).not.toMatch(/automatic rules/);
   });
 });
 
@@ -788,7 +874,7 @@ describe("Drift while Zitadel is not answering", () => {
   it("disables the decisions and says they wait, in words", () => {
     zitadel.down = true;
     render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={seedAutoRetry(new QueryClient(), true)}>
         <UnexplainedAccess />
       </QueryClientProvider>,
     );
@@ -804,7 +890,7 @@ describe("Drift while Zitadel is not answering", () => {
   it("leaves them live when Zitadel answers", () => {
     zitadel.down = false;
     render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={seedAutoRetry(new QueryClient(), true)}>
         <UnexplainedAccess />
       </QueryClientProvider>,
     );

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -188,6 +189,52 @@ func TestFollowRules_ConvergesWhatTheRulesReach(t *testing.T) {
 	}
 	if !slices.Equal(queued, []string{"truenas/u1"}) {
 		t.Fatalf("convergences = %v", queued)
+	}
+}
+
+// C1, C2: the preview a give or an adoption shows is what the write queues.
+// RulesFollowing and followRules share ruleDelta, so for the same person and
+// the same role they name the same rows, the whole chain, and the rule that
+// reaches each.
+func TestRulesFollowing_NamesWhatTheWriteQueues(t *testing.T) {
+	l := &ledger{}
+	l.install(t, chain)
+	preview, err := RulesFollowing(context.Background(), "u1", []access.Role{{ProjectID: "p", RoleKey: "a"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued, err := followRules(context.Background(), db.EnqueueParams{UserID: "u1", ProjectID: "p", RoleKeys: []string{"a"}, OpType: "add", GrantedBy: "op"},
+		func() error {
+			l.direct = append(l.direct, models.DirectGrant{ProjectID: "p", RoleKey: "a"})
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var said []write
+	for _, r := range preview {
+		said = append(said, write{"add", r.ProjectID, r.RoleKey, r.RuleID})
+	}
+	if w := writesOf(queued); !slices.Equal(said, w) {
+		t.Fatalf("preview %v, queued %v: the dialog must name exactly what the write queues", said, w)
+	}
+	if preview[1].Sentence != "Also gives c in r, by the automatic rule from b." {
+		t.Fatalf("an unnamed role falls back to its key, got %q", preview[1].Sentence)
+	}
+}
+
+// Nothing is previewed for a role already held, or with no rules (production
+// today), and no rules costs no reads.
+func TestRulesFollowing_NothingWhenNothingFollows(t *testing.T) {
+	l := &ledger{direct: []models.DirectGrant{{ProjectID: "p", RoleKey: "a"}}}
+	l.install(t, chain)
+	if got, err := RulesFollowing(context.Background(), "u1", []access.Role{{ProjectID: "p", RoleKey: "a"}}); err != nil || got != nil {
+		t.Fatalf("already held: got %v, %v", got, err)
+	}
+	l = &ledger{}
+	l.install(t, nil)
+	if got, err := RulesFollowing(context.Background(), "u1", []access.Role{{ProjectID: "p", RoleKey: "a"}}); err != nil || got != nil || l.reads != 0 {
+		t.Fatalf("no rules: got %v, %v, reads %d", got, err, l.reads)
 	}
 }
 

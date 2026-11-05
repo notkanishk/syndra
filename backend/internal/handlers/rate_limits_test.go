@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/claimserve"
 	"syndra/internal/ratelimit"
 )
 
@@ -85,5 +86,49 @@ func TestRateLimit_WebhookFailures(t *testing.T) {
 		if c := call(); c != http.StatusUnauthorized {
 			t.Fatalf("limits off, failure %d: %d", i+1, c)
 		}
+	}
+}
+
+// A webhook call that verifies is never counted or refused, however many come
+// from one source, and it never spends the bucket a forged call from that
+// source draws on. The limit sits only after verification has failed.
+func TestRateLimit_VerifiedWebhookCallsAreNeverCounted(t *testing.T) {
+	t.Setenv("ZITADEL_DOMAIN", "zitadel.example.org")
+	key := strings.Repeat("e", 32)
+	t.Setenv("ZITADEL_EVENT_SIGNING_KEY", key)
+	h := NewRouter()
+	body := []byte(`{}`)
+	call := func(signed bool) int {
+		r := httptest.NewRequest(http.MethodPost, "/api/webhooks/zitadel", strings.NewReader(string(body)))
+		if signed {
+			r.Header.Set(claimserve.SignatureHeader, claimserve.SignatureHeaderValue(time.Now(), body, key))
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, r)
+		return rr.Code
+	}
+
+	l := ratelimit.New(ratelimit.Memory(), []ratelimit.Rule{{N: 2, Per: time.Minute}}, nil)
+	withLimiter(t, l)
+	for i := 0; i < 200; i++ {
+		if c := call(true); c == http.StatusUnauthorized || c == http.StatusTooManyRequests {
+			t.Fatalf("verified call %d refused: %d", i+1, c)
+		}
+	}
+	if s := l.Stats(); len(s.Limited) != 0 {
+		t.Fatalf("verified calls were counted: %+v", s)
+	}
+	// The bucket is untouched: two failures still answer 401, the third 429,
+	// and a verified call from that same source still passes.
+	for i := 0; i < 2; i++ {
+		if c := call(false); c != http.StatusUnauthorized {
+			t.Fatalf("failure %d: %d", i+1, c)
+		}
+	}
+	if c := call(false); c != http.StatusTooManyRequests {
+		t.Fatalf("past the limit: %d", c)
+	}
+	if c := call(true); c == http.StatusUnauthorized || c == http.StatusTooManyRequests {
+		t.Fatalf("verified call from a limited source: %d", c)
 	}
 }

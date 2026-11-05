@@ -108,6 +108,7 @@ export function DegradedBanner({ under = false }: { under?: boolean } = {}) {
               tone="warn"
               live
               title={`Zitadel isn't answering. This is what it held at ${formatWhen(data.last_read_at)}.`}
+              nothingToDo="This page updates on its own when Zitadel answers."
             >
               Everything below is real, read <Relative iso={data.last_read_at} />, and may have
               changed since. {waitsFor(pathname)}
@@ -118,13 +119,14 @@ export function DegradedBanner({ under = false }: { under?: boolean } = {}) {
               live
               blocking
               title="Zitadel isn't answering, and Syndra hasn't read it yet."
+              nothingToDo="This page tries again every minute and shows Zitadel as soon as it answers."
             >
               There is nothing to show until it answers. This page tries again every minute on its
               own, and giving and revoking access waits until then.
             </Notice>
           )
         ) : (
-          <Notice tone="warn" title={`${residue} things on these screens are sample data.`}>
+          <Notice tone="warn" title={`${residue} things on these screens are sample data.`} next="Ask whoever runs the Syndra server to clear it, using the steps below.">
             People and projects are real. Some bundles, rules, access and history are sample data,
             and nothing else on screen tells them apart, so treat anything you can&apos;t confirm
             as sample until it&apos;s cleared.

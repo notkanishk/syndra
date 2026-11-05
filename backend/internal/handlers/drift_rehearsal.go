@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
@@ -94,6 +95,24 @@ func rehearseOneDrift(ctx context.Context, id, op string) services.BulkOutcome {
 	case driftOpAdopt:
 		out.Detail = fmt.Sprintf("Adopted into Syndra (%s).", roleSummary(item.RoleKeys))
 		out.Consequence = "Records a direct grant, so the access stops being unexplained and starts being owned."
+		// Adopting is when a rule starting from the role fires (ADR-006), so
+		// the plan names what the rules give, from the closure the write
+		// follows (coherence audit C1).
+		roles := make([]access.Role, 0, len(item.RoleKeys))
+		for _, rk := range item.RoleKeys {
+			roles = append(roles, access.Role{ProjectID: item.ProjectID, RoleKey: rk})
+		}
+		rules, err := svcRulesFollowing(ctx, item.UserID, roles)
+		if err != nil {
+			out.Effect = services.EffectBlocked
+			out.Detail = "Couldn't read the automatic rules, so what adopting sets off is unknown. Try again."
+			out.Consequence = ""
+			return out
+		}
+		out = services.WithRules(out, rules)
+		if len(rules) > 0 {
+			out.Consequence += " " + ruleRowsWait
+		}
 	case driftOpExternal:
 		out.Detail = fmt.Sprintf("Marked as owned elsewhere (%s).", roleSummary(item.RoleKeys))
 		out.Consequence = "Syndra stops reporting it. The access itself is left exactly as it is."
@@ -180,24 +199,47 @@ func applyDriftPlan(r *http.Request, plan *services.BulkPlan, op, actor, reason 
 			continue
 		}
 
-		if err := applyOneDrift(r, item, op, actor, reason); err != nil {
+		ruleIDs, err := applyOneDrift(r, item, op, actor, reason)
+		if err != nil {
 			out.Effect = services.EffectFailed
 			out.Detail = "Didn't go through: " + err.Error()
 			continue
 		}
 		out.Effect = services.EffectApplied
+		if n := len(ruleIDs); n > 0 {
+			// The adoption is done, but what the rules gave waits for Send.
+			// Counted apart, never as the adoption waiting (final verification
+			// N4), and the result still ends on "send it", never on "nothing
+			// for you to do" (re-audit R1).
+			out.RuleWaiting = n
+			out.Consequence = adoptedRuleRows(n)
+		}
 	}
 
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
 }
 
-func applyOneDrift(r *http.Request, item models.DriftItem, op, actor, reason string) error {
+// ruleRowsWait is what happens to the rows a rule queues on an adoption: they
+// are adds, so nothing sends them but the operator (ADR-006).
+const ruleRowsWait = "These wait in Pending changes for you to send."
+
+// adoptedRuleRows is the result line for an adoption that set off n rule rows.
+func adoptedRuleRows(n int) string {
+	if n == 1 {
+		return "1 more change from automatic rules waits in Pending changes for you to send."
+	}
+	return fmt.Sprintf("%d more changes from automatic rules wait in Pending changes for you to send.", n)
+}
+
+// applyOneDrift resolves one row, returning the ids of the rows the automatic
+// rules queued on it (an adoption's; marking external queues none).
+func applyOneDrift(r *http.Request, item models.DriftItem, op, actor, reason string) ([]string, error) {
 	switch op {
 	case driftOpAdopt:
 		return attributeOneDrift(r.Context(), item, attributeRequest{Source: "external_backfill"}, actor)
 	case driftOpExternal:
-		return dbMarkDriftExternalTx(r.Context(), item.ID, item.UserID, item.ProjectID,
+		return nil, dbMarkDriftExternalTx(r.Context(), item.ID, item.UserID, item.ProjectID,
 			item.RoleKeys, actor, reason, "{}")
 	}
-	return fmt.Errorf("unsupported drift operation %q", op)
+	return nil, fmt.Errorf("unsupported drift operation %q", op)
 }

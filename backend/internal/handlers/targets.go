@@ -510,7 +510,7 @@ func handleReconcileTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := svcReconcileAddon(r.Context(), target)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "RECONCILE_FAILED", err.Error())
+		writeUpstream(w, err, "RECONCILE_FAILED")
 		return
 	}
 	jsonResponse(w, http.StatusOK, res)

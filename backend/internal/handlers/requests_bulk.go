@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/access"
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/services"
@@ -117,7 +118,7 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 		request, err := dbGetAccessRequestByID(ctx, id)
 		if err != nil {
 			out.Effect = services.EffectBlocked
-			out.Detail = "No such request — it may have been withdrawn."
+			out.Detail = "No such request. It may have been withdrawn."
 			out.Fingerprint = services.Fingerprint("request", id, "absent")
 			plan.Outcomes = append(plan.Outcomes, out)
 			continue
@@ -217,7 +218,18 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 				plan.Outcomes = append(plan.Outcomes, out)
 				continue
 			}
-			out = services.WithCancels(out, cancels)
+			// What the automatic rules give with the approval, named before
+			// the apply as a single approval names them (re-audit C2).
+			rules, err := svcRulesFollowing(ctx, request.RequesterID,
+				[]access.Role{{ProjectID: request.ProjectID, RoleKey: request.RoleKey}})
+			if err != nil {
+				out.Effect = services.EffectBlocked
+				out.Detail = "Syndra couldn't read the automatic rules, so what approving sets off is unknown. Try again."
+				out.Consequence = ""
+				plan.Outcomes = append(plan.Outcomes, out)
+				continue
+			}
+			out = services.WithCancels(services.WithRules(out, rules), cancels)
 		} else {
 			out.Detail = fmt.Sprintf("Declined for %s.", request.RoleKey)
 			out.Consequence = "Nothing about their current access changes."
@@ -253,21 +265,52 @@ func applyDecisionPlan(r *http.Request, plan *services.BulkPlan, status, note st
 		if out.Effect != services.EffectApply {
 			continue
 		}
-		if err := decideOneRequest(r, out.UserID, status, note); err != nil {
+		decided, err := decideOneRequest(r, out.UserID, status, note)
+		if err != nil {
 			out.Effect = services.EffectFailed
 			out.Detail = "Didn't go through: " + err.Error()
 			continue
 		}
-		out.Effect = services.EffectApplied
+		// What the approval's delivery did to the approved role's OWN row
+		// (ReasonFor, as the single path), not "applied" regardless (re-audit
+		// R2): Zitadel refused it, a role that waits, or a send Zitadel
+		// didn't take. A role an automatic rule gave that waits is counted
+		// apart and never blamed on the approval (final verification N4).
+		out.RuleWaiting = decided.RuleWaiting
+		if decided.RuleWaiting > 0 {
+			out.Consequence = ruleWaitingLine(decided.RuleWaiting)
+		}
+		switch {
+		case db.IsRefused(decided.WaitReason):
+			out.Effect = services.EffectFailed
+			out.WaitReason = decided.WaitReason
+			out.Detail = refusedDetail(decided.WaitReason, false)
+		case decided.WaitReason != "":
+			out.Effect = services.EffectQueued
+			out.WaitReason, out.Retry = decided.WaitReason, decided.Retry
+			out.Detail = queuedDetail(decided.WaitReason)
+		default:
+			out.Effect = services.EffectApplied
+		}
 	}
 
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+}
+
+// ruleWaitingLine is a bulk row's line for the roles automatic rules gave
+// with the act that wait for Send (the same words as request-decisions.ts
+// withRuleWaits).
+func ruleWaitingLine(n int) string {
+	if n == 1 {
+		return "One role an automatic rule also gives always waits for you, so it is in Pending changes."
+	}
+	return fmt.Sprintf("%d roles automatic rules also give always wait for you, so they are in Pending changes.", n)
 }
 
 // decideOneRequest runs the very same decision the single-request endpoint
 // runs — extracted rather than replayed over HTTP, so the approval transaction,
 // the race guard, the cache rebuild and the inline drain cannot drift apart
 // between the one-at-a-time path and the bulk one.
-func decideOneRequest(r *http.Request, id, status, note string) error {
-	return resolveOneAccessRequest(r.Context(), id, status, resolveActor(r, ""), note)
+func decideOneRequest(r *http.Request, id, status, note string) (decisionResult, error) {
+	return resolveAccessRequestOutcome(r.Context(), id, status, resolveActor(r, ""), note)
 }

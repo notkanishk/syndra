@@ -168,6 +168,7 @@ export function TargetOverview({ target }: { target: string }) {
               blocking
               title={`This page for ${name} could not be read.`}
               action={{ label: "Try again", onClick: () => health.refetch() }}
+              next="Press Try again. If it keeps failing, ask whoever runs the Syndra server."
             >
               Syndra&rsquo;s server did not answer when this page asked for it. This says nothing about{" "}
               {name} itself. Nothing was changed.
@@ -192,6 +193,7 @@ export function TargetOverview({ target }: { target: string }) {
                       ? "One item under Waiting on you needs a decision."
                       : `${anchorFinding + conflicts.length} items under Waiting on you need a decision.`
                   }
+                  next="Decide each item under Waiting on you."
                 >
                   Until this is settled, what {name} reports cannot be trusted.
                 </Notice>
@@ -609,7 +611,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
                             [b.subject_id]:
                               res.warning ||
                               res.detail ||
-                              `${name} did not confirm. Nothing was changed here.`,
+                              `${name} did not confirm. Some of this may have gone through. Check this list again before trying again.`,
                           }));
                         },
                       })
@@ -675,7 +677,7 @@ function ReachNotice({
 
   if (transportError || health?.status === "cannot_connect") {
     return (
-      <Notice tone="danger" blocking title="Cannot connect.">
+      <Notice tone="danger" blocking title="Cannot connect." next="Ask whoever runs the Syndra server to fix the key. Syndra connects on its next check.">
         Syndra cannot read the key it uses to talk to {name}, so it cannot make any request. This is
         a problem on <strong className="font-semibold">the Syndra server</strong>, not on {name}
         {transportError ? `: ${transportError}` : "."}
@@ -693,6 +695,11 @@ function ReachNotice({
         tone="warn"
         live={offline}
         title={offline ? `${name} isn't answering.` : `Syndra is waiting to retry ${name}.`}
+        next={
+          offline
+            ? `Check that ${name} is running and reachable.`
+            : "Syndra tries again on its own when the wait is over. If it keeps happening, ask whoever runs the Syndra server to look at it."
+        }
       >
         {reading.sentence} {offline && reading.look}
       </Notice>
@@ -998,6 +1005,7 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
       tone="danger"
       title={`The change log on ${name} has been altered`}
       action={{ label: "Resolve this finding", onClick: () => setResolving(true) }}
+      next="Find out why the log changed. Resolve this finding only once you know."
     >
       <p>
         {what} Syndra last saw {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
@@ -1058,6 +1066,7 @@ function BindingConflictFinding({
       tone="danger"
       title={`Two records disagree about who owns ${conflict.username}`}
       action={{ label: "Decide who owns it", onClick: () => setDeciding(true) }}
+      next="Press Decide who owns it and choose the right person."
     >
       <p>
         A change for{" "}
@@ -1823,7 +1832,7 @@ function LifecycleControl({
           teaches people to type "asdf" the second time. */}
       {set.error && (
         <CardRow>
-          <Notice tone="warn" title="That did not go through." className="w-full">
+          <Notice tone="warn" title="That did not go through." className="w-full" next={`Try again. If it keeps failing, check that ${name} is running.`}>
             <p>{name} did not answer the request.</p>
             <p className="mt-1">
               <span className="font-semibold">The state is still {stateLabel(current)}</span>, the

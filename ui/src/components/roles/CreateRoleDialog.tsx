@@ -1,5 +1,6 @@
 "use client";
 
+import { roleName } from "@/lib/names";
 import { useState } from "react";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -148,12 +149,12 @@ export function CreateRoleDialog({
               onChange={(event) => setCloneFrom(event.target.value)}
             >
               <option value="">Start empty</option>
-              {sortByName(all, (role) => `${role.project_name} / ${role.role_key}`, (role) => role.project_id).map((role) => (
+              {sortByName(all, (role) => `${role.project_name} / ${roleName(role.display_name, role.role_key)}`, (role) => `${role.project_id}:${role.role_key}`).map((role) => (
                 <option
                   key={`${role.project_id}:${role.role_key}`}
                   value={`${role.project_id}:${role.role_key}`}
                 >
-                  {role.project_name} / {role.role_key}
+                  {role.project_name} / {roleName(role.display_name, role.role_key)}
                 </option>
               ))}
             </Select>

@@ -1,4 +1,5 @@
 "use client";
+import { personOr } from "@/lib/names";
 
 import { useContext, useState } from "react";
 
@@ -10,9 +11,10 @@ import {
 } from "@/components/access/AccessSource";
 import { RoleRef } from "@/components/names";
 import { useShownNames } from "@/components/names/shownNames";
+import { sortNames } from "@/lib/sort";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
-import { settleIndicators } from "@/lib/queries/useIndicators";
+import { settleIndicators, useAutoRetry } from "@/lib/queries/useIndicators";
 import { QueryClientContext } from "@tanstack/react-query";
 import { StatusDot } from "@/components/ui/Badge";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
@@ -21,14 +23,18 @@ import { Button } from "@/components/ui/Button";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { useRemoveDirectGrant } from "@/lib/queries/useRoleMembers";
+import { useRemoveDirectGrant, type DirectGrantRemoval } from "@/lib/queries/useRoleMembers";
+import { RETRYING, refusedOutcome, retireOutcome, retryingOutcome } from "@/lib/retry";
+import { isRefused, waitReasonLine } from "@/lib/wait-reason";
 import { useRemoveBundle } from "@/lib/queries/useBundles";
 import {
   forecastFor,
   FORECAST,
   outcomeFromError,
   succeeded,
+  DRAIN_UNKNOWN_NEXT,
   type ActionOutcome as Outcome,
+  type AutoRetry,
 } from "@/lib/outcome";
 
 /**
@@ -77,8 +83,78 @@ function useRoleLabel() {
   return (removal: Removal) => `${removal.projectName} / ${names.role(removal.projectId, removal.roleKey)}`;
 }
 
+type ShownNames = Pick<ReturnType<typeof useShownNames>, "project" | "role">;
+
+/** "Role in Project" for each "project/role" pair the server names, alphabetical. */
+export function retainedLabels(pairs: string[], names: ShownNames): string[] {
+  return sortNames(
+    pairs.map((pair) => {
+      const at = pair.indexOf("/");
+      return at < 0 ? pair : `${names.role(pair.slice(0, at), pair.slice(at + 1))} in ${names.project(pair.slice(0, at))}`;
+    }),
+  );
+}
+
 /** The act's own word on the result, never "Applied" (A-17 G4). */
-const resultWord = (outcome: Outcome | null) => (succeeded(outcome) ? "Removed" : "Not removed");
+const resultWord = (outcome: Outcome | null) =>
+  outcome?.recorded ? "Refused by Zitadel" : succeeded(outcome) ? "Removed" : "Not removed";
+
+/**
+ * What removing a direct grant did, from the server's answer (W7). "The access
+ * is gone" only when nothing was queued or Zitadel took the revocation; a role
+ * that waits, a send that stopped, and a send Zitadel didn't take each say so.
+ */
+export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel: string, names?: ShownNames, auto: AutoRetry = true): Outcome {
+  const raw = result?.retained_roles ?? [];
+  const retained = names ? retainedLabels(raw, names) : raw;
+  const kept = retained.length ? ` They still hold ${retained.join(", ")}, from a bundle or a rule.` : "";
+  const reason = result?.wait_reason;
+  // Final verification N1: Zitadel refused the revocation, so the access is not gone.
+  if (isRefused(reason) || result?.status === "failed") {
+    const out = refusedOutcome("Removed in Syndra", reason, { revocation: true });
+    return { ...out, detail: `${out.detail}${kept}` };
+  }
+  if (reason === RETRYING) return retryingOutcome(`Removed in Syndra`, result?.retry);
+  if (reason === "role_waits") {
+    return {
+      kind: "queued",
+      message: `Removed in Syndra. ${roleLabel} always waits for you, so it leaves Zitadel when you send it.${kept}`,
+      detail: waitReasonLine(reason, roleLabel),
+    };
+  }
+  if (reason) {
+    // Halted: a revocation the background drain sends on its own; with the
+    // drain off it waits in Pending changes until someone presses Send.
+    const why = waitReasonLine(reason, roleLabel, new Date().toISOString());
+    if (auto === null) {
+      // Not known yet whether it goes on its own (N3): no promise either way.
+      return {
+        kind: "queued",
+        message: `Removed in Syndra. ${why ? `${why}. ` : ""}The revocation is not in Zitadel yet.${kept}`,
+        sendsItself: true,
+        next: DRAIN_UNKNOWN_NEXT,
+      };
+    }
+    if (!auto) {
+      return {
+        kind: "queued",
+        message: `Removed in Syndra. ${why ? `${why}. ` : ""}The revocation waits in Pending changes until someone presses Send.${kept}`,
+      };
+    }
+    return {
+      kind: "queued",
+      message: `Removed in Syndra. ${why ? `${why}. ` : ""}Revocations send on their own, so it leaves Zitadel when Zitadel answers.${kept}`,
+      sendsItself: true,
+    };
+  }
+  return {
+    kind: "applied",
+    message: `Direct access to ${roleLabel} removed`,
+    detail: retained.length
+      ? `They still hold ${retained.join(", ")}, from a bundle or a rule.`
+      : "Nothing else was supplying it, so the access is gone.",
+  };
+}
 
 export function RemovalDialog({
   removal,
@@ -106,7 +182,7 @@ export function RemovalDialog({
 
   if (!removal) return null;
 
-  const subject = removal.userName ?? userName ?? "this person";
+  const subject = personOr(removal.userName ?? userName);
   const person = removal.userId ?? userId;
   const roleLabel = label(removal);
 
@@ -207,10 +283,12 @@ function DirectDialog({
   const remove = useRemoveDirectGrant();
   const roleWaits = useRoleWaits();
   const client = useContext(QueryClientContext);
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("remove");
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const retained = others.length > 0;
   const roleLabel = useRoleLabel()(removal);
+  const shown = useShownNames();
 
   // `grantsResolved === false` is the third state, and the reason this is not
   // a boolean: "no grant id" and "no answer yet" are different facts and the
@@ -267,7 +345,14 @@ function DirectDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel. Revocations send on their own, every few minutes.
+                No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel.{" "}
+                {roleWaits(removal.projectId, removal.roleKey)
+                  ? `${roleLabel} always waits for you, so the change waits in Pending changes until you send it.`
+                  : auto === null
+                    ? "" // Not known yet whether it goes on its own (N3): nothing promised.
+                    : auto
+                    ? "Revocations send on their own, within a minute."
+                    : "The revocation waits in Pending changes until someone presses Send."}
               </span>
             </>
           )}
@@ -336,14 +421,7 @@ function DirectDialog({
                 // survives the removal, and which ones those are is a closure
                 // diff the server does — the UI must not hold a second opinion
                 // about somebody's access.
-                const retained = result?.retained_roles ?? [];
-                setOutcome({
-                  kind: "applied",
-                  message: `Direct access to ${roleLabel} removed`,
-                  detail: retained.length
-                    ? `They still hold ${retained.join(", ")}, from a bundle or a rule.`
-                    : "Nothing else was supplying it, so the access is gone.",
-                });
+                setOutcome(removalOutcome(result, roleLabel, shown, auto));
               } catch (error) {
                 setOutcome(outcomeFromError(error));
               }
@@ -380,7 +458,8 @@ function BundleDialog({
   const bundleName = source.bundle_name ?? "this bundle";
   const removeBundle = useRemoveBundle(userId ?? "");
   const roleWaits = useRoleWaits();
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("remove");
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const step = useCancelStep({
     host: `Remove the ${bundleName} bundle from ${subject}`,
@@ -486,6 +565,14 @@ function BundleDialog({
                 const result = await step.run(() => removeBundle.mutateAsync(source.bundle_id!));
                 if (result === KEPT) return;
                 const waiting = result?.cascade?.enqueued ?? 0;
+                if (waiting > 0) {
+                  // What the server's delivery did with the revocations, in
+                  // the words a retired bundle uses (lib/retry.ts
+                  // retireOutcome): sent, refused (N1), retrying, or waiting.
+                  const out = retireOutcome(waiting, result?.cascade?.wait_reason, result?.cascade?.drain?.retry, "", auto);
+                  setOutcome({ ...out, message: `${bundleName} removed from ${subject}. ${out.message}` });
+                  return;
+                }
                 setOutcome({
                   // `queued` paints an amber "Waiting for you to send" badge, and a
                   // withdrawal leaves nothing waiting — the badge sat directly

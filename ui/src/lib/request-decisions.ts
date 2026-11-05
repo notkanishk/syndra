@@ -3,17 +3,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { formatShortDate, humanizeKey } from "@/lib/format";
-import { FORECAST, forecastFor, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
+import { request } from "@/lib/api-client";
+import { formatShortDate } from "@/lib/format";
+import { personOr, roleName } from "@/lib/names";
+import { FORECAST, forecastFor, outcomeFromError, SEND_IT, type ActionOutcome } from "@/lib/outcome";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
 import { FLASH_MS } from "@/lib/motion";
-import { waitReasonLine } from "@/lib/wait-reason";
+import { RETRYING, refusedOutcome, retryingOutcome } from "@/lib/retry";
+import { isRefused, waitReasonLine } from "@/lib/wait-reason";
 
 /**
  * What approving one request reports. The response says only whether the
  * approval is in Zitadel yet (`wait_reason`), so that is all this can claim.
+ * A send Zitadel didn't take is never "Sent": it says when Syndra sends it
+ * again, and which try (`retry`, lib/retry.ts).
  *
  * `message` is the sentence; `detail` is the one faint line the row's
  * Decision seat shows under the word (route-requests, #96).
@@ -22,8 +27,80 @@ export function approvalOutcome(
   waitReason: string | undefined,
   name: string,
   role: string,
-  result?: Pick<DecisionResult, "effect" | "until">,
+  result?: Pick<DecisionResult, "effect" | "until" | "retry" | "rule_waiting">,
+  alsoGave: RuleGift[] = [],
 ): ActionOutcome {
+  const outcome = approvalOnly(waitReason, name, role, result);
+  const rules = ruleGiftLine(alsoGave);
+  const withRules = rules ? { ...outcome, message: `${outcome.message} ${rules}` } : outcome;
+  return withRuleWaits(withRules, result?.rule_waiting);
+}
+
+/**
+ * A role an automatic rule gave with the act that waits for you (re-audit
+ * R12): said apart from the act's own outcome, which is never blamed for it,
+ * and the result ends on Send. The act itself may have gone straight away.
+ */
+export function withRuleWaits(outcome: ActionOutcome, ruleWaiting: number | undefined): ActionOutcome {
+  if (!ruleWaiting) return outcome;
+  const line =
+    ruleWaiting === 1
+      ? "One role an automatic rule also gives always waits for you, so it is in Pending changes."
+      : `${ruleWaiting} roles automatic rules also give always wait for you, so they are in Pending changes.`;
+  // Already waiting for Send: the link says it once.
+  if (outcome.kind === "queued" && !outcome.sendsItself) return { ...outcome, message: `${outcome.message} ${line}` };
+  // A refusal stays a refusal (N1): the rule's wait is one more step after it.
+  if (outcome.recorded) return { ...outcome, message: `${outcome.message}. ${line}`, next: `${outcome.next ?? ""} Then press Send on Pending changes for the rule's role.`.trim() };
+  return { ...outcome, kind: "queued", sendsItself: undefined, message: `${outcome.message} ${line}`, next: SEND_IT };
+}
+
+/** A role an automatic rule also gave with the approval, by name. */
+export interface RuleGift {
+  role: string;
+  project: string;
+}
+
+/**
+ * "An automatic rule also gave them Bench in Workshop." The approval's whole
+ * effect, not only the role asked for (coherence audit C2): the rules fire on
+ * the same write, under the same delivery.
+ */
+export function ruleGiftLine(gifts: RuleGift[]): string {
+  if (gifts.length === 0) return "";
+  const names = gifts.map((g) => `${g.role} in ${g.project}`);
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${gifts.length === 1 ? "An automatic rule" : "Automatic rules"} also gave them ${list}.`;
+}
+
+/**
+ * What the automatic rules would also give with this approval, asked BEFORE
+ * the approval is written (afterwards they already hold it, and the answer is
+ * empty). The backend's own closure (`GET /users/{id}/rule-preview`), never one
+ * walked here. A failed read says nothing rather than something wrong.
+ */
+export async function previewRuleGifts(
+  entry: Pick<AccessRequest, "requester_id" | "project_id" | "role_key">,
+): Promise<Array<{ project_id: string; role_key: string }>> {
+  const query = new URLSearchParams({ project_id: entry.project_id, role_key: entry.role_key });
+  try {
+    const data = await request<{ rows?: Array<{ project_id: string; role_key: string }> }>(
+      `/users/${encodeURIComponent(entry.requester_id)}/rule-preview?${query}`,
+    );
+    return data?.rows ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function approvalOnly(
+  waitReason: string | undefined,
+  name: string,
+  role: string,
+  result?: Pick<DecisionResult, "effect" | "until" | "retry" | "rule_waiting">,
+): ActionOutcome {
+  // Final verification N1: Zitadel refused the approved role outright.
+  if (isRefused(waitReason)) return refusedOutcome("Approved in Syndra", waitReason);
+  if (waitReason === RETRYING) return retryingOutcome("Approved", result?.retry);
   if (!waitReason) {
     const ends = result?.until ? `until ${formatShortDate(result.until)}` : "with no end date";
     return {
@@ -140,6 +217,8 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
         ? FORECAST.decline
         : forecastFor(entry.kind === "extend" ? "extend" : "approve", roleWaits(entry.project_id, entry.role_key)),
     );
+    // Asked before the write: once approved, the rules' roles are already held.
+    const gifts = next === "approved" && entry.kind !== "extend" ? previewRuleGifts(entry) : Promise.resolve([]);
     try {
       const result = await step.run(() => decide.mutateAsync({ id: entry.id, status: next }));
       if (result === KEPT) {
@@ -160,13 +239,16 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
         decided = { word: "Extended", outcome: extendedOutcome(entry, result) };
       } else {
         decided = {
-          word: "Approved",
+          word: isRefused(result?.wait_reason) ? "Refused by Zitadel" : "Approved",
           outcome: approvalOutcome(
             result?.wait_reason,
-            resolver.resolveUser(entry.requester_id).value?.display_name || "They",
-            resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
-              humanizeKey(entry.role_key),
+            personOr(resolver.resolveUser(entry.requester_id).value?.display_name, true),
+            roleName(resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name, entry.role_key),
             result,
+            (await gifts).map((row) => ({
+              role: roleName(resolver.resolveRole(row.project_id, row.role_key).value?.display_name, row.role_key),
+              project: resolver.resolveProject(row.project_id).value?.name || "its project",
+            })),
           ),
         };
       }

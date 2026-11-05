@@ -3,8 +3,10 @@ package services
 import (
 	"context"
 	"log"
+	"slices"
 
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/services/propagation"
 )
 
@@ -15,19 +17,69 @@ type Delivery struct {
 	Waiting []string // held for the operator
 	Reason  map[string]string
 	Drain   propagation.DrainResult
+
+	// retrying: a halted send's rows were given a next try (db.ScheduleRetry).
+	retrying bool
 }
 
-// WaitReason says why the action's change isn't in Zitadel yet: the role
-// waits (or, before the switch over, its mode did), or the send halted. ""
-// when everything went.
+// WaitReason says why the action's change isn't in Zitadel yet: Zitadel
+// refused it outright (refused:<cause>, said first, because it is terminal
+// and nothing sends it again: final verification N1), the role waits (or,
+// before the switch over, its mode did), the send halted, or Zitadel didn't
+// take it and Syndra sends it again on its own (halted:retrying; Drain.Retry
+// says when, and which try). "" only when everything went.
 func (d Delivery) WaitReason() string {
+	for _, id := range d.Sent {
+		if r := d.Reason[id]; db.IsRefused(r) {
+			return r
+		}
+	}
 	for _, id := range d.Waiting {
 		return d.Reason[id]
+	}
+	if d.retrying {
+		return db.WaitReasonHalted(db.HaltRetrying)
 	}
 	if d.Drain.Halted {
 		return db.WaitReasonHalted(d.Drain.Reason)
 	}
+	if d.Drain.Requeued+d.Drain.Errored > 0 {
+		return db.WaitReasonHalted(db.HaltRetrying)
+	}
 	return ""
+}
+
+// ReasonFor is WaitReason for one row: its own wait or refusal, or why a send that left
+// rows behind didn't take it. A write carries its own row and the rules' rows
+// in one delivery, and the first waiting row is not always its own (re-audit
+// R12): a rule-given role that waits must not be blamed on the act. A sent row
+// the send did apply is the caller's to clear (it reads the row's status).
+func (d Delivery) ReasonFor(id string) string {
+	if r := d.Reason[id]; r != "" {
+		return r
+	}
+	if !slices.Contains(d.Sent, id) {
+		return ""
+	}
+	if d.Drain.Halted {
+		return db.WaitReasonHalted(d.Drain.Reason)
+	}
+	if d.Drain.Requeued+d.Drain.Errored > 0 {
+		return db.WaitReasonHalted(db.HaltRetrying)
+	}
+	return ""
+}
+
+// WaitingBesides counts the rows other than own held for the operator: what a
+// rule gave with the act that waits for Send.
+func (d Delivery) WaitingBesides(own string) int {
+	n := 0
+	for _, id := range d.Waiting {
+		if id != own {
+			n++
+		}
+	}
+	return n
 }
 
 // --- injectable deps (swapped in tests) ---
@@ -35,6 +87,8 @@ var (
 	svcOutboxRowsWaitForRole = db.OutboxRowsWaitForRole
 	svcSetWaitReason         = db.SetWaitReason
 	svcGetConfigSetting      = db.GetConfigSetting
+	svcGetPendingRows        = db.GetPendingPropagations
+	svcScheduleRetry         = db.ScheduleRetry
 )
 
 // switchedOver reports whether the operator has moved to roles that wait. An
@@ -109,11 +163,59 @@ func Deliver(ctx context.Context, ids []string, legacyWait bool) Delivery {
 		}
 	}
 	if d.Drain.Halted {
-		// Which of them went is the outbox's to say; the reason is recorded
-		// only on the rows still pending.
-		d.wait(ctx, d.Sent, db.WaitReasonHalted(d.Drain.Reason))
+		// Which of them went is the outbox's to say. Those still pending were
+		// meant to go now and hit a transient failure before they went, so
+		// they are retried on their own like a 503 after a send (owner, 5 Nov
+		// 2026): try 1 counted, a next try, each retry audited by the
+		// background drain. If the schedule can't be written, the halt reason
+		// is recorded and they wait for Send: the safe way to be wrong.
+		scheduled, err := svcScheduleRetry(ctx, d.Sent, "halted: "+d.Drain.Reason)
+		if err != nil {
+			log.Printf("[DELIVERY] schedule a retry of %d row(s): %v (left for Send)", len(d.Sent), err)
+			d.wait(ctx, d.Sent, db.WaitReasonHalted(d.Drain.Reason))
+		}
+		for _, id := range scheduled {
+			d.Reason[id] = db.WaitReasonHalted(db.HaltRetrying)
+		}
+		d.retrying = len(scheduled) > 0
+	}
+	// A row Zitadel refused outright is terminal: it says so with the cause,
+	// set last, so no halt or retry reason above stands over it.
+	for _, id := range d.Sent {
+		if cause, ok := d.Drain.Refused[id]; ok {
+			d.Reason[id] = db.WaitReasonRefused(cause)
+		}
+	}
+	if d.Drain.Requeued > 0 || d.retrying {
+		d.Drain.Retry = nextRetry(ctx, d.Sent)
 	}
 	return d
+}
+
+// nextRetry is where the first of these rows Zitadel didn't take stands: its
+// next try and which try of how many, read from the row itself so the words
+// the operator sees are the schedule the background drain keeps. nil when it
+// can't be read; the outcome then says only that Syndra sends it again.
+//
+// ponytail: reads the whole unresolved queue (tens of rows) to find a few ids.
+func nextRetry(ctx context.Context, ids []string) *extcall.RetryState {
+	rows, err := svcGetPendingRows(ctx)
+	if err != nil {
+		log.Printf("[DELIVERY] read the next try of %d row(s): %v", len(ids), err)
+		return nil
+	}
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	for _, row := range rows {
+		if want[row.ID] {
+			if s := propagation.RowRetry(row); s != nil {
+				return s
+			}
+		}
+	}
+	return nil
 }
 
 // wait records reason on rows still pending. Role and manual waits are

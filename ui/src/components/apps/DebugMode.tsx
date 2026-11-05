@@ -1,4 +1,5 @@
 "use client";
+import { personOr } from "@/lib/names";
 
 import { useEffect, useRef, useState } from "react";
 
@@ -72,7 +73,7 @@ export function DebugMode({ appId, ctx }: { appId: string; ctx: Omit<CheckContex
   const stop = useStopDebug(appId);
   const [sheet, setSheet] = useState<"on" | "switch" | null>(null);
   const [stopOutcome, setStopOutcome] = useState<Outcome | null>(null);
-  const nameOf = (id?: string) => (id === selfId ? "You" : (users.data.find((u) => u.id === id)?.name ?? "Someone"));
+  const nameOf = (id?: string) => (id === selfId ? "You" : personOr(users.data.find((u) => u.id === id)?.name, true));
   const whose = session ? (session.user_id === selfId ? "Your" : `${nameOf(session.user_id)}'s`) : "";
 
   // The server ends it; the page asks again the moment it should have.
@@ -141,7 +142,7 @@ export function DebugMode({ appId, ctx }: { appId: string; ctx: Omit<CheckContex
             session={session}
             ctx={ctx}
             mine={session.user_id === selfId}
-            nameOf={(id) => users.data.find((u) => u.id === id)?.name ?? "this person"}
+            nameOf={(id) => personOr(users.data.find((u) => u.id === id)?.name)}
           />
         )}
       </Unfold>
@@ -401,7 +402,7 @@ function DebugSheet({
   const [query, setQuery] = useState("");
   const [done, setDone] = useState<{ ends_at: string; switched: boolean } | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const nameOf = (id: string) => (id === selfId ? "you" : (people.find((u) => u.id === id)?.name ?? "this person"));
+  const nameOf = (id: string) => (id === selfId ? "you" : personOr(people.find((u) => u.id === id)?.name));
   const needle = query.trim().toLowerCase();
   const matches = needle
     ? sortAccounts(people.filter((u) => u.id !== selfId && (u.name.toLowerCase().includes(needle) || u.email.toLowerCase().includes(needle)))).slice(0, 5)

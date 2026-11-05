@@ -7,6 +7,7 @@ import { MyStorage } from "@/components/storage/MyStorage";
 import { deviceFrom } from "@/components/storage/device";
 import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
+import type { RetryState } from "@/lib/retry";
 
 // The member's storage page, state by state (route-storage; A-01, A-02).
 // What each state may and may not offer is the point: a password form where a
@@ -18,6 +19,8 @@ const state = {
   sent: [] as OneShotSecret[],
   // The mutation's state, as the form reads it (A-13 §4).
   credential: { isPending: false, data: undefined as CredentialAnswer | undefined, error: null as Error | null },
+  // What the form hears while the page waits to send it again (the one retry model).
+  onRetry: undefined as undefined | ((retry: RetryState) => void),
 };
 
 vi.mock("@/lib/queries/useMyStorage", async () => {
@@ -27,10 +30,13 @@ vi.mock("@/lib/queries/useMyStorage", async () => {
   return {
     ...actual,
     useMyStorage: () => ({ data: state.targets, isLoading: false, error: null, refetch: vi.fn() }),
-    useSetStorageCredential: () => ({
-      mutate: (secret: OneShotSecret) => state.sent.push(secret),
-      ...state.credential,
-    }),
+    useSetStorageCredential: (_target: string, onRetry?: (retry: RetryState) => void) => {
+      state.onRetry = onRetry;
+      return {
+        mutate: (secret: OneShotSecret) => state.sent.push(secret),
+        ...state.credential,
+      };
+    },
   };
 });
 
@@ -266,8 +272,18 @@ describe("when changes can't happen", () => {
       expect(container.textContent).not.toMatch(/apply it|when changes start again/i);
       // A drain earns no person; an open-ended pause gets one instead of an estimate.
       expect(Boolean(screen.queryByText(/Need it today\? Ask makerspace staff/))).toBe(lifecycle === "read_only");
+      // Final verification: neither pause ends, nor resumes changes, by itself
+      // (an operator sets the add-on back to active; a change it declined
+      // waits in Pending changes), and neither has a known length.
+      expect(container.textContent).not.toMatch(/by itself|on its own|few minutes/i);
       unmount();
     }
+  });
+
+  it("a drain says who ends the pause, and that held-back changes wait until then", () => {
+    state.targets = [view({ lifecycle: "draining" })];
+    renderStorage();
+    expect(screen.getAllByText(/Makerspace staff end the pause; account changes held back wait until then\./).length).toBeGreaterThan(0);
   });
 
   it("an account on its way while paused waits on staff, said inside the state", () => {
@@ -388,6 +404,32 @@ describe("a password change nobody has confirmed", () => {
     fireEvent.click(screen.getByRole("button", { name: "Change password" }));
     expect(state.sent).toHaveLength(1);
     expect(state.sent[0].take()).toBe("correct horse");
+  });
+
+  // Vocal (owner, 5 Nov 2026): while the page waits to send it again, the
+  // person is told when, in IST, and never told it is done.
+  it("while Syndra is trying again: says when, never done", () => {
+    state.targets = [ready()];
+    state.credential = { isPending: true, data: undefined, error: null };
+    renderStorage();
+    act(() => state.onRetry?.({ state: "retrying", try: 2, of: 2, next_try: "2099-11-05T08:35:00Z" }));
+    expect(screen.getByText("Not confirmed yet. Syndra is trying again at 14:05. Keep this page open.")).toBeTruthy();
+    expect(screen.queryByText("Changed")).toBeNull();
+  });
+
+  it("after the one resend went unanswered too: says so in the shared words", () => {
+    state.targets = [ready()];
+    state.credential = {
+      isPending: false,
+      data: { status: "indeterminate", retry: { state: "waiting", try: 2, of: 2 } },
+      error: null,
+    };
+    renderStorage();
+    expect(
+      screen.getByText(
+        "TrueNAS didn't answer after 2 tries, so Syndra won't send it again on its own. Your password may not have changed.",
+      ),
+    ).toBeTruthy();
   });
 
   it("a clear refusal is red and says nothing changed", () => {

@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
   bundles: [] as unknown[],
   roles: [] as unknown[],
   remove: vi.fn(),
+  impact: { users: [] as unknown[] },
+  whatIf: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -29,7 +31,7 @@ vi.mock("@/lib/queries/useBundles", () => ({
   useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBundles: () => ({ data: state.bundles, isLoading: false, refetch: vi.fn() }),
   useBundleRoles: () => ({ data: state.roles, isLoading: false, refetch: vi.fn() }),
-  useBundleImpact: () => ({ data: { users: [] }, isLoading: false }),
+  useBundleImpact: () => ({ data: state.impact, isLoading: false }),
   useAddBundleRole: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -49,6 +51,10 @@ vi.mock("@/lib/queries/useBundleVersions", () => ({
 }));
 
 vi.mock("@/lib/queries/useMappingRules", () => ({ useMappingRules: () => ({ data: [] }) }));
+// Who would lose what is the backend's answer, never a walk of the rule list.
+vi.mock("@/lib/queries/useInsights", () => ({
+  useInsightsWhatIf: (...args: unknown[]) => state.whatIf(...args),
+}));
 vi.mock("@/lib/queries/useRoles", () => ({ useGlobalRoleCatalog: () => ({ data: [] }) }));
 vi.mock("@/components/names", () => ({
   ProjectName: ({ id, name }: { id: string; name?: string }) => <span>{name || id}</span>,
@@ -61,6 +67,8 @@ beforeEach(() => {
   state.bundles = [{ id: "b1", name: "Lab Tech", holder_count: 2 }];
   state.roles = [{ zitadel_project_id: "p1", zitadel_role_key: "operator" }];
   state.remove = vi.fn().mockResolvedValue({});
+  state.impact = { users: [] };
+  state.whatIf = vi.fn().mockReturnValue({ data: { gains: [], losses: [], unchanged: 0 }, isLoading: false, error: null });
 });
 
 describe("dropping a role from a bundle's working copy", () => {
@@ -85,5 +93,45 @@ describe("dropping a role from a bundle's working copy", () => {
     await waitFor(() => expect(screen.getByText(/Nothing was changed/i)).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Remove from the next version" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+  });
+
+  // Three people the bundle is assigned to: one loses the role and, down a
+  // chain of two rules, both roles the rules gave from it; two keep it through
+  // something else. Every number is the backend's.
+  it("says who would lose it, who keeps it, and every role the rules take with it", () => {
+    state.impact = { users: [{ id: "u1" }, { id: "u2" }, { id: "u3" }] };
+    state.whatIf = vi.fn().mockReturnValue({
+      data: {
+        gains: [],
+        losses: [
+          {
+            user_id: "u1",
+            name: "Ada",
+            roles: [
+              { project_id: "p1", role_key: "operator" },
+              { project_id: "p2", role_key: "chained-one" },
+              { project_id: "p3", role_key: "chained-two" },
+            ],
+          },
+        ],
+        unchanged: 2,
+      },
+      isLoading: false,
+      error: null,
+    });
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(state.whatIf).toHaveBeenCalledWith({
+      kind: "bundle_gives_not",
+      bundle_id: "b1",
+      project_id: "p1",
+      role_key: "operator",
+    });
+    expect(screen.getByText(/1 person would lose it/)).toBeInTheDocument();
+    expect(screen.getByText(/2 people keep it, because something else gives it to them/)).toBeInTheDocument();
+    expect(screen.getByText("chained-one")).toBeInTheDocument();
+    expect(screen.getByText("chained-two")).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/3 people Lab Tech is assigned to/);
   });
 });

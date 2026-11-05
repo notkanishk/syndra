@@ -292,6 +292,7 @@ function HomeLocationDialog({
             tone="neutral"
             title={`${share} has no folder to make homes in.`}
             action={{ label: "Read again", onClick: () => void settings.refetch() }}
+            next={`Make a folder on ${name}, then press Read again.`}
           >
             Homes go inside a folder at the top of the {share} share, and {share} has none yet. Make one on {name},
             then read again. Mappings work without it; none can give a home folder until one is chosen.

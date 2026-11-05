@@ -1,5 +1,6 @@
 "use client";
 
+import { roleName } from "@/lib/names";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Fragment, useState } from "react";
 
@@ -9,7 +10,7 @@ import { Notice } from "@/components/ui/Notice";
 import { Segmented, Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
 import { ApiError } from "@/lib/api-client";
-import { formatClock, humanizeKey } from "@/lib/format";
+import { formatClock } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useCreateMapping, useMappings } from "@/lib/queries/useMappings";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -100,7 +101,7 @@ export function RoleMappingDialog({
   const roles =
     (projects.data ?? []).find((r) => r.project.id === project?.id)?.project.roles.filter((r) => !mapped.has(r.key)) ?? [];
   const roleLabel =
-    (role && resolver.resolveRole(role.projectId, role.roleKey).value?.display_name) || humanizeKey(role?.roleKey ?? "");
+    roleName(role && resolver.resolveRole(role.projectId, role.roleKey).value?.display_name, role?.roleKey ?? "");
 
   const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
@@ -179,6 +180,7 @@ export function RoleMappingDialog({
                     tone="neutral"
                     title={neverRead ? `${name} hasn't listed its groups yet.` : `${name} has no groups of its own yet.`}
                     action={{ label: "Read again", onClick: () => void values.refetch() }}
+                    next={neverRead ? "Press Read again in a minute." : `Press Read again once ${name} has groups of its own.`}
                   >
                     {neverRead
                       ? `Syndra asks for the list when this opens, and ${name} hasn't answered${
@@ -210,7 +212,7 @@ export function RoleMappingDialog({
                 </FieldHint>
                 {value && <OpensLine name={name} places={reach.data?.read ? reach.data.groups?.[value] : undefined} />}
                 {!list.current && (
-                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`}>
+                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`} next={`Preview as usual. If you doubt a group still exists, check it on ${name} first.`}>
                     Syndra can&apos;t read {name}&apos;s groups right now. You can still preview. A group deleted since{" "}
                     {formatClock(list.read_at)} fails when the mapping is applied, and the failure is reported.
                   </Notice>

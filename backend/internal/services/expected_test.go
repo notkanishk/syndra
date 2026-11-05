@@ -1,46 +1,77 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	"syndra/internal/models"
-	"syndra/internal/zitadel"
 )
 
-func TestExpectedViaRule_UserHoldingSourceMakesTargetExpected(t *testing.T) {
+func TestRuleDerived_HoldingTheSourceMakesTheTargetExpected(t *testing.T) {
 	// Rule: holding p1:member derives p2:contributor.
 	rules := []models.MappingRule{{SourceProject: "p1", SourceRole: "member", TargetProject: "p2", TargetRole: "contributor"}}
-	// The user holds the source (as a Zitadel grant); the derived target is therefore expected, not drift.
-	holder := BuildHolderSet(
-		nil,
-		[]zitadel.UserGrant{{UserID: "u1", ProjectID: "p1", RoleKeys: []string{"member"}}},
-	)
-	if !ExpectedViaRule(holder, rules, "u1", "p2", "contributor") {
-		t.Fatal("target of a fired rule must be expected_via_rule")
+	got := RuleDerived(BuildHolderSet([]models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "member"}}, nil), rules)
+	if !got[HolderKey{"u1", "p2", "contributor"}] {
+		t.Fatal("target of a fired rule must be expected")
 	}
 	// A user NOT holding the source must not have the target explained by the rule.
-	if ExpectedViaRule(holder, rules, "u2", "p2", "contributor") {
+	if got[HolderKey{"u2", "p2", "contributor"}] {
 		t.Fatal("rule must not explain a target for a user lacking the source")
 	}
 }
 
 // A→B→C: the user holds only A, so C is expected through B. A user holding
 // nothing on the chain, and a role no rule reaches, are still not explained.
-func TestExpectedViaRule_FollowsChains(t *testing.T) {
+func TestRuleDerived_FollowsChains(t *testing.T) {
 	rules := []models.MappingRule{
 		{SourceProject: "p1", SourceRole: "a", TargetProject: "p1", TargetRole: "b"},
 		{SourceProject: "p1", SourceRole: "b", TargetProject: "p2", TargetRole: "c"},
 		{SourceProject: "p2", SourceRole: "c", TargetProject: "p1", TargetRole: "a"}, // cycle must terminate
 	}
-	holder := BuildHolderSet(nil, []zitadel.UserGrant{{UserID: "u1", ProjectID: "p1", RoleKeys: []string{"a"}}})
-	if !ExpectedViaRule(holder, rules, "u1", "p2", "c") {
+	got := RuleDerived(BuildHolderSet([]models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "a"}}, nil), rules)
+	if !got[HolderKey{"u1", "p2", "c"}] {
 		t.Fatal("a chained grant (A→B→C, user holds A) must be expected, not drift")
 	}
-	if ExpectedViaRule(holder, rules, "u2", "p2", "c") {
+	if got[HolderKey{"u2", "p2", "c"}] {
 		t.Fatal("a user holding nothing on the chain must not be explained")
 	}
-	if ExpectedViaRule(holder, rules, "u1", "p3", "x") {
+	if got[HolderKey{"u1", "p3", "x"}] {
 		t.Fatal("a role no rule reaches must not be explained")
+	}
+}
+
+// Parity with the person view: for every person and every role, the sweep's
+// rule answer is true exactly when collectUserRoles lists a "mapping" reason
+// for that role. Same records in, same rules, same answer.
+func TestRuleDerived_AgreesWithThePersonView(t *testing.T) {
+	f := parityFixture()
+	f.install(t)
+	held := map[HolderKey]bool{}
+	for u, roles := range f.records() {
+		for k := range roles {
+			held[HolderKey{u, k.ProjectID, k.RoleKey}] = true
+		}
+	}
+	derived := RuleDerived(held, f.rules)
+	for _, u := range f.people() {
+		roleMap, _, err := collectUserRoles(context.Background(), u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for k, r := range roleMap {
+			viaRule := false
+			for _, reason := range r.Reasons {
+				viaRule = viaRule || reason.Kind == "mapping"
+			}
+			if got := derived[HolderKey{u, k.projectID, k.roleKey}]; got != viaRule {
+				t.Errorf("%s %s:%s: sweep says rule-derived=%v, person view says %v", u, k.projectID, k.roleKey, got, viaRule)
+			}
+		}
+		for hk := range derived {
+			if hk.UserID == u && roleMap[roleKey{hk.ProjectID, hk.RoleKey}] == nil {
+				t.Errorf("%s %s:%s: sweep derives a role the person view does not list", u, hk.ProjectID, hk.RoleKey)
+			}
+		}
 	}
 }
 

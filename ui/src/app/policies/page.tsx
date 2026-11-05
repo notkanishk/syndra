@@ -29,10 +29,15 @@ import {
 } from "@/lib/queries/useMappingRules";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
-import { humanizeKey } from "@/lib/format";
+import { formatList } from "@/lib/format";
+import { NOT_CHECKED, holdersLine, holdersToneClass } from "@/lib/holders";
+import { fetchWhatIf } from "@/lib/queries/useInsights";
+import { retireOutcome } from "@/lib/retry";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
-import { sortByName } from "@/lib/sort";
+import { sortByName, sortNames } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
+import { roleName } from "@/lib/names";
 
 /**
  * S2 · Automation › Automatic rules.
@@ -132,15 +137,10 @@ export default function AutomaticRulesPage() {
                   </span>
                 </span>
 
-                <span className="text-[15px] tablet:w-[110px] tablet:text-right">
-                  {rule.holder_count ?? 0}
-                  <span className="text-[13px] text-faint tablet:hidden">
-                    {(rule.holder_count ?? 0) === 1
-                      ? " person has"
-                      : " people have"}{" "}
-                    the second role from this rule
-                  </span>
-                </span>
+                {/* Who has the second role from this rule is what Zitadel
+                    shows; how many should have it (the rule applies to them
+                    in Syndra's records) only explains it. */}
+                <RuleHolders rule={rule} />
               </button>
             </div>
           ))}
@@ -203,7 +203,6 @@ function RuleEditor({
     notes: string[];
   } | null>(null);
 
-  const existingRules = useMappingRules().data ?? [];
   // Saved used to close the dialog in the same tick as setOutcome, which
   // discarded `savedDetail()` — the operator's only account of whether the
   // rule waits under Pending changes or already applied — before it ever
@@ -226,9 +225,10 @@ function RuleEditor({
       };
       place.roles.push({
         key: role.role_key,
-        name: role.display_name || humanizeKey(role.role_key),
+        name: roleName(role.display_name, role.role_key),
         description: role.description,
-        people: role.assigned_user_count,
+        // The picker says how many hold it in Zitadel; not checked says nothing.
+        people: role.observed_user_count ?? undefined,
         waits: role.waits_for_send,
         note: { kind: "none" },
       });
@@ -258,7 +258,7 @@ function RuleEditor({
     );
   const targetEntry = roleEntry(targetProject, targetRole);
   const targetWaits = Boolean(targetEntry?.waits_for_send);
-  const targetName = targetEntry?.display_name || humanizeKey(targetRole);
+  const targetName = roleName(targetEntry?.display_name, targetRole);
 
   const complete = Boolean(
     sourceProject && sourceRole && targetProject && targetRole,
@@ -304,36 +304,41 @@ function RuleEditor({
 
     const notes: string[] = [];
     const targetRoleName = roleLabel(targetProject, targetRole);
-    const holders = (catalog.data ?? []).find(
-      (role) =>
-        role.project_id === sourceProject && role.role_key === sourceRole,
-    )?.assigned_user_count;
-    if (holders) {
-      // "directly" is not decoration. `assigned_user_count` is
-      // COUNT(DISTINCT user_id) FROM direct_role_grants — bundle holders and
-      // rule-produced holders are not in it. Saying "N people hold this" over
-      // that number under-counts silently, and the sentence it feeds is read
-      // immediately before a Save.
-      const who = `${holders} ${holders === 1 ? "person already holds" : "people already hold"} the first role`;
-      notes.push(`${who}. Saving would give them ${targetRoleName}.`);
-    }
-
-    // Naming the chain matters more than any other line here: a rule that
-    // triggers another rule is the single most surprising thing this system
-    // does, and finding out afterwards is how people stop trusting it.
-    for (const chained of existingRules) {
-      if (chained.id === rule?.id) continue;
-      if (
-        chained.source_project === targetProject &&
-        chained.source_role === targetRole
-      ) {
-        notes.push(
-          `Also sets off another rule, which would then give them ${roleLabel(
-            chained.target_project,
-            chained.target_role,
-          )}.`,
-        );
+    // Who gains and loses what is the backend's answer (the what-if), computed
+    // by the closure saving would run (`internal/access`) over the unsaved
+    // rule: every chained rule, all the way down (audit W12), and nobody who
+    // already has the role. Never walked here: the browser's copy of the rule
+    // list is not the closure the write follows (rules-on-the-pipeline 6.5d).
+    try {
+      const preview = await fetchWhatIf({
+        kind: "rule_added",
+        project_id: sourceProject,
+        role_key: sourceRole,
+        target_project_id: targetProject,
+        target_role_key: targetRole,
+        ...(rule ? { rule_id: rule.id } : {}),
+      });
+      const label = (r: { project_id: string; role_key: string }) => roleLabel(r.project_id, r.role_key);
+      const gives = new Set(preview.gains.flatMap((p) => p.roles.map(label)));
+      const takes = new Set(preview.losses.flatMap((p) => p.roles.map(label)));
+      const n = (k: number) => `${k} ${k === 1 ? "person" : "people"}`;
+      if (preview.gains.length > 0) {
+        const chained = [...gives].filter((r) => r !== targetRoleName);
+        notes.push(`Saving would give ${n(preview.gains.length)} ${targetRoleName}.`);
+        // Naming the chain matters more than any other line here: a rule that
+        // triggers another rule is the single most surprising thing this
+        // system does, and finding out afterwards is how people stop trusting it.
+        if (chained.length > 0) {
+          notes.push(
+            `Also sets off ${chained.length === 1 ? "another rule" : "other rules"}, which would then give them ${formatList(sortNames(chained))}.`,
+          );
+        }
       }
+      if (preview.losses.length > 0) {
+        notes.push(`${n(preview.losses.length)} would lose ${formatList(sortNames([...takes]))}.`);
+      }
+    } catch {
+      notes.push("Couldn’t work out who this would reach. Saving still works.");
     }
 
     setValidated({ ok: true, notes });
@@ -358,7 +363,7 @@ function RuleEditor({
         title={rule ? "Edit this rule" : "New automatic rule"}
         titleId="rule-title"
         chip={rule && ruleChip(rule)}
-        lede="Anybody who holds the first role gets the second: everyone who holds it today, and everyone who is given it later."
+        lede="Anybody who holds the first role gets the second: everyone who holds it today, and anyone given the first role through Syndra."
       />
 
       <div className="flex flex-col gap-3.5 px-6">
@@ -406,14 +411,16 @@ function RuleEditor({
           (validated.ok && validated.notes.length === 0 ? (
             // Nothing is wrong: a result, said as a caption, not a box.
             <p className="text-[14px] leading-[1.55] text-muted">
-              <strong className="font-semibold text-ink">Checked.</strong> Nobody holds the first role,
-              directly or through a bundle. Somebody given it by another rule is not counted here, so
-              this could still reach people.
+              <strong className="font-semibold text-ink">Checked.</strong> Saving gives the second role
+              to nobody new today: everybody who holds the first role, however they got it, already has it.
             </p>
           ) : (
             <Notice
               tone={validated.ok ? "warn" : "danger"}
               blocking={!validated.ok}
+              {...(validated.ok
+                ? { next: "Read them, then save if they are what you meant." }
+                : { next: "Change the rule so the points below no longer apply, then save again." })}
               title={
                 validated.ok
                   ? `Checked: ${validated.notes.length} ${validated.notes.length === 1 ? "thing" : "things"} to know`
@@ -534,9 +541,12 @@ function RuleEditor({
 /** What a saved rule does next, by whether the role it gives waits. */
 function savedDetail(targetWaits: boolean): string {
   return targetWaits
-    ? "The access this rule gives waits under Pending changes; send it from there. Anyone given the first role later is handled the same way."
-    : "People who already hold the first role get the second at once; anyone given the first role later gets the second too.";
+    ? `The access this rule gives waits under Pending changes; send it from there. Anyone given the first role through Syndra is handled the same way. ${IN_ZITADEL_BY_HAND}`
+    : `People who already hold the first role get the second at once, and so does anyone given the first role through Syndra. ${IN_ZITADEL_BY_HAND}`;
 }
+
+/** What a rule does with a role given outside Syndra (ADR-006, audit W6). */
+const IN_ZITADEL_BY_HAND = "A role added directly in Zitadel shows in Drift, and the rule follows once you adopt it.";
 
 /**
  * The consequence, before the click.
@@ -559,6 +569,7 @@ function DeleteRuleConfirm({
   onDeleted: () => void;
 }) {
   const remove = useDeleteMappingRule();
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const step = useCancelStep({ host: "Retire this rule", goAhead: "retire it", tone: "danger" });
   const holders = rule.holder_count ?? 0;
@@ -597,14 +608,14 @@ function DeleteRuleConfirm({
             <li>The rule stops giving {label} to anybody, and can&rsquo;t be used again. It stays in the history.</li>
             <li>
               {holders === 0
-                ? "This rule is giving the second role to nobody today, so retiring it revokes nothing."
-                : `${holders} ${holders === 1 ? "person has" : "people have"} ${label} from this rule. ` +
-                  `It is revoked for them unless a bundle or a direct grant also gives it.`}
+                ? "This rule applies to nobody in Syndra's records, so retiring it revokes nothing."
+                : `This rule gives ${label} to ${holders} ${holders === 1 ? "person" : "people"} in Syndra's records. ` +
+                  `It is revoked for each of them unless a bundle, direct access or another rule also gives it.`}
             </li>
             <li>
               {waitsForYou
                 ? "Revoking waits under Pending changes until you send it. Until then, their access stays."
-                : "Their access ends at once, with no review."}
+                : "Their access ends as soon as the revocation reaches Zitadel."}
             </li>
           </ul>
         </div>
@@ -638,9 +649,11 @@ function DeleteRuleConfirm({
                 const result = await step.run(() => remove.mutateAsync(rule.id));
                 if (result === KEPT) return;
                 const n = result.cascade?.enqueued ?? 0;
-                // What the server says happened, not a guess from settings:
-                // any wait reason means some of it is not in Zitadel yet.
-                const auto = !result.cascade?.wait_reason;
+                // What the server says happened, not a guess from settings, in
+                // the words a retired bundle uses (lib/retry.ts retireOutcome,
+                // one-path 1.8e): a role that waits is the operator's to send;
+                // a send that stopped or that Zitadel didn't take goes on its
+                // own, with its next try (audit W3).
                 setOutcome(
                   n === 0
                     ? {
@@ -649,19 +662,7 @@ function DeleteRuleConfirm({
                         detail:
                           "Nobody's access changed. The rule was giving nothing.",
                       }
-                    : {
-                        // Queued unless the rule fired unattended: the
-                        // withdrawals it caused are recorded and wait for
-                        // somebody to resume the queue, and calling them applied
-                        // would say access is gone that is still there.
-                        kind: auto ? "applied" : "queued",
-                        message: `Rule retired, ${n} ${
-                          n === 1 ? "revocation" : "revocations"
-                        } ${auto ? "sent" : "waiting for you to send"}`,
-                        detail: auto
-                          ? "The rule applied without review, so the access it gave was revoked without review too."
-                          : "The revocations wait under Pending changes until you send them. Until then, that access stays.",
-                      },
+                    : retireOutcome(n, result.cascade?.wait_reason, result.cascade?.drain?.retry, "", auto),
                 );
               } catch (error) {
                 setOutcome(outcomeFromError(error));
@@ -698,6 +699,27 @@ function ruleChip(rule: MappingRuleRow) {
         roleKey={rule.target_role}
         className="font-semibold"
       />
+    </span>
+  );
+}
+
+/**
+ * A rule's people column. The headline is who Zitadel shows holding the second
+ * role among the people the rule applies to; the note says how many of them
+ * should have it and do not yet. Not checked is never a number.
+ */
+function RuleHolders({ rule }: { rule: MappingRuleRow }) {
+  const seen = rule.observed_holder_count ?? undefined;
+  const line = holdersLine(rule.holder_count ?? 0, seen, seen);
+  return (
+    <span className="text-[15px] tablet:w-[110px] tablet:text-right">
+      {line.headline}
+      {line.headline !== NOT_CHECKED && (
+        <span className="text-[13px] text-faint tablet:hidden">
+          {line.headline === "1" ? " person has" : " people have"} the second role from this rule
+        </span>
+      )}
+      {line.note && <span className={`block text-[12.5px] ${holdersToneClass[line.tone]}`}>{line.note}</span>}
     </span>
   );
 }

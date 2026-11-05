@@ -45,6 +45,7 @@ import {
   declinedKeepOutcome,
   extendedOutcome,
   useRequestDecisions,
+  withRuleWaits,
   type Decided,
 } from "@/lib/request-decisions";
 import {
@@ -55,10 +56,13 @@ import {
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate, humanizeKey } from "@/lib/format";
+import { roleName } from "@/lib/names";
 import { keptEnds, stillEnds } from "@/lib/keep-ends";
 import { AskForAccess } from "@/components/requests/AskForAccess";
-import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember } from "@/components/requests/Holding";
+import { ApproveButton, HoldingNote, describeAsk, describeAskForMember } from "@/components/requests/Holding";
 import { FORECAST, outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
+import { RETRYING, refusedOutcome, retryingOutcome } from "@/lib/retry";
+import { isRefused } from "@/lib/wait-reason";
 import dynamic from "next/dynamic";
 
 // Opened on demand, so it stays out of the page's first load.
@@ -399,16 +403,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                 {entry.status === "pending" && !resolved.has(entry.id) ? (
                   <div className="flex flex-col gap-2">
                     <div className="flex w-full flex-row-reverse gap-3 tablet:flex-row tablet:gap-2">
-                      <Button
-                        variant="accent"
-                        size="sm"
-                        className="flex-1 tablet:flex-none"
-                        disabled={alreadyHeld(entry)}
-                        reason={alreadyHeld(entry) ? "They already have this." : undefined}
-                        onClick={() => act(entry, "approved")}
-                      >
-                        Approve
-                      </Button>
+                      <ApproveButton request={entry} className="flex-1 tablet:flex-none" onClick={() => act(entry, "approved")} />
                       <Button size="sm" onClick={() => act(entry, "rejected")}>
                         Decline
                       </Button>
@@ -664,8 +659,7 @@ function YourRequests({
                 {entry.kind === "extend" && "Keep "}
                 <ProjectName id={entry.project_id} />{" "}
                 ·{" "}
-                {resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
-                  humanizeKey(entry.role_key)}
+                {roleName(resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name, entry.role_key)}
               </div>
               <div className="text-[13.5px] text-faint [text-wrap:pretty]">
                 {describeAskForMember(entry, terms.data)}
@@ -774,7 +768,7 @@ export function keepResult(request: AccessRequest): string | undefined {
  * failed, or not in the result) is not here: it is still waiting, and keeps its
  * buttons.
  */
-function decidedByBulk(
+export function decidedByBulk(
   rows: AccessRequest[],
   ids: string[],
   status: "approved" | "rejected",
@@ -789,23 +783,40 @@ function decidedByBulk(
       continue;
     }
     const result = plan.outcomes.find((o) => o.user_id === entry.requester_id);
-    if (!result || result.effect === "blocked" || result.effect === "failed") continue;
+    if (!result || result.effect === "blocked") continue;
+    // Final verification N1: approved in Syndra, refused by Zitadel. Not
+    // waiting any more, so it reports here rather than keeping its buttons.
+    if (result.effect === "failed") {
+      if (isRefused(result.wait_reason)) {
+        out.push([entry, { word: "Refused by Zitadel", outcome: withRuleWaits(refusedOutcome("Approved in Syndra", result.wait_reason), result.rule_waiting) }]);
+      }
+      continue;
+    }
     if (result.effect === "queued") {
+      // Re-audit R2: a send Zitadel didn't take goes again on its own, with
+      // its next try; only a row that really waits says "when you send it".
       out.push([
         entry,
         {
           word: "Approved",
-          outcome: { kind: "queued", message: "Approved. It goes when you send it.", detail: result.detail || undefined },
+          outcome: withRuleWaits(
+            result.wait_reason === RETRYING
+              ? retryingOutcome("Approved", result.retry)
+              : { kind: "queued", message: "Approved. It goes when you send it.", detail: result.detail || undefined },
+            result.rule_waiting,
+          ),
         },
       ]);
     } else if (keeping) {
-      out.push([entry, { word: "Extended", outcome: extendedOutcome(entry) }]);
+      out.push([entry, { word: "Extended", outcome: withRuleWaits(extendedOutcome(entry), result.rule_waiting) }]);
     } else {
+      // N4: the approval went; a role a rule gave that waits is said apart
+      // (withRuleWaits), never as the approval waiting.
       out.push([
         entry,
         {
           word: "Approved",
-          outcome: { kind: "applied", message: "Approved.", detail: "Sent · not yet seen in Zitadel" },
+          outcome: withRuleWaits({ kind: "applied", message: "Approved.", detail: "Sent · not yet seen in Zitadel" }, result.rule_waiting),
         },
       ]);
     }
@@ -834,7 +845,7 @@ function BulkDecisionDialog({
   const rehearse = useRehearseBulkDecision();
   const apply = useApplyBulkDecision();
   const body = { ids, status };
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("give");
 
   return (
     <RehearsalDialog

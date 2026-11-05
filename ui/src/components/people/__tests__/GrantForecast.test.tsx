@@ -19,6 +19,10 @@ const wire = vi.hoisted(() => ({
 
 vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => false }));
 vi.mock("@/lib/queries/useTerms", () => ({ useTerms: () => ({ data: undefined }) }));
+// No automatic rule follows these roles (the preview has answered).
+vi.mock("@/lib/queries/useRulePreview", () => ({
+  useRulePreview: () => ({ data: [], isLoading: false, isError: false }),
+}));
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({ data: [{ project: { id: "p1", name: "Printing Lab" } }] }),
 }));

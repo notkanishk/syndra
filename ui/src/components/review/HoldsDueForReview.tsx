@@ -15,7 +15,7 @@ import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { targetLabel } from "@/lib/nav";
-import { FORECAST, NOTHING_CHANGED, outcomeFromError, sentence, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { FORECAST, NOTHING_CHANGED, outcomeFromError, partialSentence, sentence, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useHoldsDueForReview, useLiftHold, type Hold } from "@/lib/queries/useHolds";
 
 /**
@@ -203,7 +203,9 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
                   ...failed,
                   message:
                     failed.kind === "failed"
-                      ? NOTHING_CHANGED
+                      ? failed.partial
+                        ? partialSentence(failed.partial)
+                        : NOTHING_CHANGED
                       : `${sentence(failed.message)} ${NOTHING_CHANGED}`,
                 });
               }

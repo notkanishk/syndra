@@ -288,6 +288,8 @@ func resetAccessDeps(t *testing.T) {
 	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
 		return models.RequestHolding{Kind: models.HoldingNone}, nil
 	}
+	// A sent row is applied unless a test says otherwise.
+	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
 	t.Cleanup(func() {
 		dbRequestHolding = origHolding
 		dbGetAccessRequestByID = origGetByID

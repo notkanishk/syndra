@@ -57,7 +57,7 @@ Migration `000071_app_claim_shapes`:
 
 An app with no creation date counts as existing. An old `app_claim_overrides` row rides along in that app's seed if its keys fit; its note then reads "As Actions v1 sent it, with its own claims from before". Apps made after the cutoff start on their project's default. The seed is idempotent: it writes only into an app with no versions.
 
-**Facts** gain `given_name`, `family_name` and `username` from Zitadel's profile, `bundles` (the names of bundles giving a role in this project), `role_ends` (only when every source of a role ends) and `is_service_account` (a machine user or an operator's mark). The cache compiler persists them.
+**Facts** gain `given_name`, `family_name` and `username` from Zitadel's profile, `bundles` (the names of bundles giving a role in this project), `role_ends` (only when every source of a role ends; a rule-derived role ends with its source, one-path W2a) and `is_service_account` (a machine user or an operator's mark). The cache compiler persists them.
 
 ## API
 

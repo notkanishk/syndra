@@ -7,9 +7,10 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Choice";
 import { ModalFooter } from "@/components/ui/Modal";
-import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { OUTCOME_LABEL, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { formatList } from "@/lib/format";
+import { OUTCOME_LABEL, sendsItselfWord, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { sortNames } from "@/lib/sort";
 
 /**
  * The frame every upstream-inspection page shares.
@@ -65,20 +66,42 @@ export function UpstreamShell({
 export function WriteResult({
   outcome,
   word,
+  neutral = OUTCOME_LABEL.no_change,
   className = "mx-6 mb-1",
 }: {
   outcome: Outcome;
   /** The act, past tense: "Given", "Revoked", "Replaced". */
   word: string;
+  /** The word for a neutral end (`no_change`): "Nothing revoked", "Not known". */
+  neutral?: string;
   className?: string;
 }) {
-  return (
-    <ActionOutcome
-      outcome={outcome}
-      word={outcome.kind === "applied" ? word : OUTCOME_LABEL[outcome.kind]}
-      className={className}
-    />
-  );
+  const shown =
+    outcome.kind === "applied" || outcome.recorded
+      ? word
+      : outcome.kind === "no_change"
+        ? neutral
+        : outcome.sendsItself
+          ? sendsItselfWord(outcome)
+          : OUTCOME_LABEL[outcome.kind];
+  return <ActionOutcome outcome={outcome} word={shown} className={className} />;
+}
+
+/**
+ * When a change made here reaches Zitadel (C3). Every give, replace and
+ * removal goes straight away unless a role waits for the operator (N14 B,
+ * migration 000078), so the caption names the roles that wait, once it knows
+ * them. `waiting` is undefined while the list of roles that wait is unread.
+ */
+export function sendsWhen(waiting: string[] | undefined): string {
+  if (waiting === undefined) {
+    return "It is sent to Zitadel straight away, unless a role waits for you: that change waits in Pending changes until you send it.";
+  }
+  if (waiting.length === 0) return "It is sent to Zitadel straight away.";
+  const one = waiting.length === 1;
+  return `It is sent to Zitadel straight away, except ${formatList(sortNames(waiting))}: ${
+    one ? "that role always waits" : "those roles always wait"
+  } for you, so ${one ? "its change waits" : "their changes wait"} in Pending changes until you send ${one ? "it" : "them"}.`;
 }
 
 /** The footer of a direct-write sheet: Cancel and the act, then after the result one outline Close. */
@@ -92,7 +115,8 @@ export function WriteFooter({
   /** The act (accent, or dangerConfirm). */
   children: React.ReactNode;
 }) {
-  const done = outcome?.kind === "applied";
+  // Anything but a refusal or a failure happened, or may have: no second press.
+  const done = succeeded(outcome);
   return (
     <ModalFooter cancel={done ? undefined : { onClick: onClose }}>
       {done ? (
@@ -113,29 +137,17 @@ export function WriteFooter({
  */
 export function DirectWriteWarning({
   what,
-  traced = false,
+  sends,
   acknowledged,
   onAcknowledge,
 }: {
   what: string;
-  /**
-   * True where this surface's writes go through Syndra's own path — the
-   * ledger, the audit row and the outbox in one transaction — rather than
-   * straight out to Zitadel.
-   *
-   * The single warning used to say "Syndra keeps no record of them" on every
-   * screen under `/zitadel`. That stopped being true for grants when the
-   * handlers moved onto `EnqueueDirectGrantPropagation`, and a false warning
-   * is worse than none: it teaches an operator to distrust a path that is
-   * actually the traced one, and to distrust the warning itself where it is
-   * still real. It remains real for project and role edits, which do go
-   * straight out.
-   */
-  traced?: boolean;
+  /** Traced only: when it reaches Zitadel ({@link sendsWhen}). */
+  sends?: string;
   /**
    * Supply both to gate the action on a tick, which every write on these
    * screens does. These are the least undoable actions in the product — no
-   * rehearsal, no cascade preview, no ledger row — and the ladder's own rule
+   * rehearsal, no cascade preview, no reason — and the ladder's own rule
    * is that the rung is set by what cannot be undone rather than by how many
    * rows are touched. A paragraph above an armed button is not a rung.
    */
@@ -150,31 +162,22 @@ export function DirectWriteWarning({
       <span className="flex size-[var(--tap)] shrink-0 items-center justify-center desktop:h-auto desktop:w-auto">
         <Checkbox checked={Boolean(acknowledged)} onChange={(event) => onAcknowledge(event.target.checked)} />
       </span>
-      <span>I understand this changes Zitadel now, with no preview and no record in Syndra.</span>
+      <span>
+        {/* A record IS written (C3), so the tick names only what is missing. */}
+        I understand this changes Zitadel now, with no preview and no reason.
+      </span>
     </label>
   ) : null;
 
-  if (traced) {
-    // Nothing is wrong on this path: an explanation, so a caption, not a box.
-    return (
-      <div>
-        <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
-          <strong className="font-semibold text-ink">This writes to Zitadel through Syndra’s record.</strong>{" "}
-          {what} The grant, an audit line and the queued change are written together, so it is explained
-          afterwards. It reaches Zitadel when Pending changes is sent; revocations go on their own,
-          every few minutes.
-        </p>
-        {tick}
-      </div>
-    );
-  }
-  // The other path skips Syndra's record, which is a fault in the making: a box.
+  // Every write on these screens is traced: an explanation, so a caption, not a box.
   return (
-    <Notice tone="warn" title="Changes here go straight to Zitadel, and Syndra keeps no record of them.">
-      {what} The next drift sweep, every six hours, lists what you changed under Drift with nobody’s
-      name on it, for somebody to resolve by hand. Do this inside Syndra instead unless there is
-      genuinely no way to.
+    <div>
+      <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
+        <strong className="font-semibold text-ink">This goes through Syndra’s record.</strong> {what} The
+        grant, an audit line and the change are written together, so it is explained afterwards.{" "}
+        {sends ?? sendsWhen(undefined)}
+      </p>
       {tick}
-    </Notice>
+    </div>
   );
 }

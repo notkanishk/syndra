@@ -111,7 +111,7 @@ export function SignInLookup({
               <FieldHint>Recorded with the lookup, for whoever reads Change history.</FieldHint>
             </div>
             {lookup.error && (
-              <Notice tone="danger" title="That lookup didn't run.">
+              <Notice tone="danger" title="That lookup didn't run." next="Check the address and look it up again.">
                 {sentence(describeFailure(lookup.error))}
               </Notice>
             )}

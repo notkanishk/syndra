@@ -137,6 +137,7 @@ func TestRoleMembers_DirectRowCarriesGrantIDAndExpiry(t *testing.T) {
 			{projectID: "p0", roleKey: "trained"}: {
 				ProjectID: "p0", RoleKey: "trained", IsSource: true,
 				Reasons: []models.RoleReason{{Kind: "direct"}},
+				Ends:    &expires, // collectUserRoles' answer, from access.Ends
 			},
 		}, nil, nil
 	}
@@ -197,13 +198,32 @@ func TestGovernanceIndicators_CountsWithoutBuildingSummary(t *testing.T) {
 	svcCountPendingPropagations = func(context.Context) (int, error) { return 2, nil }
 	svcCountPendingDrift = func(context.Context) (int, error) { return 12, nil }
 	svcZitadelReachable = func(context.Context) bool { return false }
+	var retriesFor string
+	svcCountRetries = func(_ context.Context, actor string) (map[string]int, map[string]int, error) {
+		retriesFor = actor
+		return map[string]int{"zitadel": 1}, map[string]int{"zitadel": 3, "truenas": 1}, nil
+	}
 
-	got, err := GovernanceIndicators(context.Background())
+	got, err := GovernanceIndicators(context.Background(), "op")
 	if err != nil {
 		t.Fatalf("GovernanceIndicators: %v", err)
 	}
 	if got.PendingRequests != 3 || got.ExpiringGrants != 1 || got.PendingPropagation != 2 || got.Drift != 12 {
 		t.Fatalf("indicator counts wrong: %#v", got)
+	}
+	// An automatic retry, and its end, are said on the rail and Home.
+	if got.Retrying != 1 || got.GaveUp != 4 {
+		t.Fatalf("retrying/gave_up = %d/%d, want 1/4", got.Retrying, got.GaveUp)
+	}
+	// Each under the system it was for: a TrueNAS give-up is never Zitadel's.
+	if got.GaveUpBy["truenas"] != 1 || got.GaveUpBy["zitadel"] != 3 || got.RetryingBy["zitadel"] != 1 {
+		t.Fatalf("per-system split wrong: retrying %v, gave up %v", got.RetryingBy, got.GaveUpBy)
+	}
+	if !got.AutoRetry {
+		t.Error("auto_retry is on by default, the background drain's default")
+	}
+	if retriesFor != "op" {
+		t.Errorf("give-ups are counted per person; asked for %q, want op", retriesFor)
 	}
 	if horizon != expiryHorizon {
 		t.Errorf("badge and Today must share one expiry horizon; got %v want %v", horizon, expiryHorizon)
@@ -229,7 +249,7 @@ func TestGovernanceIndicators_SkipsReachabilityProbeWhenOutboxEmpty(t *testing.T
 		return false
 	}
 
-	got, err := GovernanceIndicators(context.Background())
+	got, err := GovernanceIndicators(context.Background(), "op")
 	if err != nil {
 		t.Fatalf("GovernanceIndicators: %v", err)
 	}
@@ -256,7 +276,7 @@ func TestHoldsDueAreCountedApartFromExpiringGrants(t *testing.T) {
 		return []db.Allowance{{ID: "a1"}, {ID: "a2"}, {ID: "a3"}}, nil
 	}
 
-	got, err := GovernanceIndicators(context.Background())
+	got, err := GovernanceIndicators(context.Background(), "op")
 	if err != nil {
 		t.Fatalf("GovernanceIndicators: %v", err)
 	}

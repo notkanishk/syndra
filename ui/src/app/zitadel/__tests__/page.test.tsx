@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import IdentityProviderPage from "@/app/zitadel/page";
 
@@ -178,6 +178,14 @@ describe("Identity provider · health line", () => {
  * Do it by hand opens the guide (components/system/SigningKeyGuide).
  */
 describe("Identity provider · signing key row", () => {
+  // The fixtures name 5 and 6 Nov 2026; on 6 Nov itself the next try reads as
+  // "today", so the clock is pinned to the day the fixtures were written.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-05T12:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it("says when the next replacement is due, and that Syndra does it on its own", async () => {
     renderPage();
     expect(await screen.findByText("Within its limit")).toBeInTheDocument();
@@ -225,8 +233,59 @@ describe("Identity provider · signing key row", () => {
   it("with Syndra switched off, says so and points at Replace now", async () => {
     rotation.value = { ...rotation.value, status: "warn", age_days: 104, auto: { on: false, off_reason: "switched_off", lead_days: 5, window: "03:00–05:00" } };
     renderPage();
-    expect(await screen.findByText(/Replacing it on its own is switched off: Replace now, below, does it/)).toBeInTheDocument();
+    expect(await screen.findByText(/Replacing it on its own is switched off. Replace now, below, does it/)).toBeInTheDocument();
     expect(screen.getByText("Replacing it on its own is switched off. Replace it now, or by hand below.")).toBeInTheDocument();
+  });
+
+  // W5: "on its own" only when the schedule would actually act.
+  it("never promises a replacement on its own while it waits for a test sign-in", async () => {
+    rotation.value = {
+      ...rotation.value,
+      status: "warn",
+      age_days: 104,
+      auto: { on: true, lead_days: 5, window: "03:00–05:00", next_attempt_at: "2026-11-06T03:00:00Z", waiting_for: "test_sign_in_setup" },
+    };
+    renderPage();
+    expect(await screen.findByText(/none can run until SYNDRA_EXTERNAL_URL is set. Replace now, below, does it/)).toBeInTheDocument();
+    expect(screen.getByText(/^Syndra replaces it on its own only after a test sign-in passes, and none can run until SYNDRA_EXTERNAL_URL is set\. Replace it now, or by hand below\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/in the next quiet hours/)).not.toBeInTheDocument();
+  });
+
+  it("after a failure, says it tries again only when the schedule is on and will", async () => {
+    const failed = { trigger: "button", outcome: "failed", started_at: "2026-11-05T03:00:00Z", finished_at: "2026-11-05T03:00:02Z", reason: "Zitadel didn't answer. Syndra read the key again: it didn't change." };
+    rotation.value = { ...rotation.value, auto: { on: true, lead_days: 5, window: "03:00–05:00", next_attempt_at: "2026-11-06T03:00:00Z", waiting_for: "test_sign_in" }, last_outcome: failed };
+    const { unmount } = renderPage();
+    expect(await screen.findByText(/none has passed recently\. Replace it now, or by hand below\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/tries again/)).not.toBeInTheDocument();
+    unmount();
+
+    rotation.value = { ...rotation.value, auto: { on: false, off_reason: "switched_off", lead_days: 5, window: "03:00–05:00" }, last_outcome: failed };
+    const off = renderPage();
+    expect(await screen.findByText(/switched off\. Replace it now, or by hand below\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/tries again/)).not.toBeInTheDocument();
+    off.unmount();
+
+    rotation.value = { ...rotation.value, auto: { on: true, lead_days: 5, window: "03:00–05:00", next_attempt_at: "2026-11-06T03:00:00Z" }, last_outcome: failed };
+    renderPage();
+    expect(await screen.findByText(/Syndra tries again on its own on 6 Nov/)).toBeInTheDocument();
+  });
+
+  // W4: a partial or unknown outcome says so, with its plain reason; a stored raw status is never shown.
+  it("names a partial replacement and an unknown one in their own words", async () => {
+    rotation.value = {
+      ...rotation.value,
+      last_outcome: { trigger: "button", outcome: "partial", started_at: "2026-11-05T03:00:00Z", finished_at: "2026-11-05T03:00:02Z", replaced: ["syndra-claim-injector"], reason: "Zitadel replaced the claims action's key, but not the event listener's key. Zitadel refused." },
+    };
+    const { unmount } = renderPage();
+    expect(await screen.findByText("Partly replaced")).toBeInTheDocument();
+    expect(screen.getByText(/but not the event listener's key\. Zitadel refused\. Syndra uses the new key, and the old one still works for the other/)).toBeInTheDocument();
+    unmount();
+
+    rotation.value = { ...rotation.value, last_outcome: { trigger: "auto", outcome: "unknown", started_at: "2026-11-05T03:00:00Z", finished_at: "2026-11-05T03:00:02Z", reason: "Zitadel didn't answer: HTTP 503" } };
+    renderPage();
+    expect(await screen.findByText("Not known")).toBeInTheDocument();
+    expect(screen.getByText(/can't tell whether it was replaced/)).toBeInTheDocument();
+    expect(screen.queryByText(/HTTP 503/)).not.toBeInTheDocument();
   });
 
   it("says Replacing while a replacement is in flight, and offers no second one", async () => {
@@ -246,18 +305,32 @@ describe("Identity provider · signing key row", () => {
     };
     renderPage();
     expect(await screen.findByText("Not confirmed")).toBeInTheDocument();
-    expect(screen.getByText(/didn't get its claims. Syndra still accepts the old key and the new one, and won't replace it again on its own/)).toBeInTheDocument();
+    // W11: 7 days, not for ever; confirmed by a regular test sign-in; replaced again when next due.
+    expect(screen.getByText(/didn't get its claims. Syndra accepts the old key and the new one for 7 days. It marks the new key confirmed once a regular test sign-in passes, and won't replace it again before it is next due/)).toBeInTheDocument();
+  });
+
+  // W9: with no test sign-in set up, none ran, so none "didn't get its claims".
+  it("says no test sign-in could run when none is set up", async () => {
+    rotation.value = {
+      ...rotation.value,
+      last_rotated_at: "2026-11-05T03:00:20Z",
+      last_rotated_source: "syndra",
+      last_outcome: { trigger: "button", outcome: "unverified", started_at: "2026-11-05T03:00:00Z", finished_at: "2026-11-05T03:00:20Z", probe: { pass: false, class: "not_set_up" } },
+    };
+    renderPage();
+    expect(await screen.findByText(/No test sign-in could run, because SYNDRA_EXTERNAL_URL is not set/)).toBeInTheDocument();
+    expect(screen.queryByText(/didn't get its claims/)).not.toBeInTheDocument();
   });
 
   it("says honestly when Zitadel didn't replace it, and that the old key still works", async () => {
     rotation.value = {
       ...rotation.value,
       auto: { on: true, lead_days: 5, window: "03:00–05:00", next_attempt_at: "2026-11-06T03:00:00Z" },
-      last_outcome: { trigger: "auto", outcome: "failed", started_at: "2026-11-05T03:00:00Z", finished_at: "2026-11-05T03:00:02Z", error: "Zitadel refused" },
+      last_outcome: { trigger: "auto", outcome: "failed", started_at: "2026-11-05T03:00:00Z", finished_at: "2026-11-05T03:00:02Z", reason: "Zitadel refused." },
     };
     renderPage();
     expect(await screen.findByText("Not replaced")).toBeInTheDocument();
-    expect(screen.getByText(/Zitadel didn't replace it. The old key still works. Syndra tries again in the next quiet hours, on 6 Nov.*at most once a day/)).toBeInTheDocument();
+    expect(screen.getByText(/Zitadel didn't replace it. Zitadel refused. The old key still works. Syndra tries again on its own on 6 Nov/)).toBeInTheDocument();
   });
 
   // "disabled" reads like "not set up yet" and means every inbound Action
@@ -277,7 +350,8 @@ describe("Identity provider · Replace now", () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/Zitadel makes a new key and Syndra starts using it at once, so sign-ins carry on/)).toBeInTheDocument();
+    // W9: both keys, named.
+    expect(within(dialog).getByText(/Zitadel makes new keys for the claims action and the event listener, and Syndra starts using them at once/)).toBeInTheDocument();
     const buttons = within(dialog).getAllByRole("button").filter((b) => b.getAttribute("tabindex") !== "-1");
     expect(buttons.map((b) => b.textContent)).toEqual(["Cancel", "Replace the key"]);
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
@@ -317,12 +391,40 @@ describe("Identity provider · Replace now", () => {
   });
 
   it("says honestly when Zitadel didn't replace it", async () => {
-    rotate.next = Promise.resolve({ outcome: "failed", replaced: [], error: "Zitadel refused the change" });
+    rotate.next = Promise.resolve({ outcome: "failed", replaced: [], reason: "Zitadel refused." });
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Replace the key" }));
     expect(await screen.findByText("Not replaced")).toBeInTheDocument();
-    expect(screen.getByText(/Zitadel didn't replace the key: Zitadel refused the change. The old key still works/)).toBeInTheDocument();
+    expect(screen.getByText(/Zitadel didn't replace the key. Zitadel refused. The old key still works/)).toBeInTheDocument();
+  });
+
+  // W4: partial and unknown are their own results, with the plain reason, never "Nothing was changed".
+  it("reports a partial and an unknown replacement as what they are", async () => {
+    rotate.next = Promise.resolve({
+      outcome: "partial",
+      replaced: ["syndra-claim-injector"],
+      reason: "Zitadel replaced the claims action's key, but not the event listener's key. Zitadel refused.",
+    });
+    const { unmount } = renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Replace the key" }));
+    expect(await screen.findByText("Partly replaced")).toBeInTheDocument();
+    expect(screen.getByText(/the old one still works for the other/)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
+    unmount();
+
+    rotate.next = Promise.resolve({
+      outcome: "unknown",
+      replaced: [],
+      reason: "Zitadel didn't answer, and Syndra couldn't read the key back, so it can't tell whether Zitadel replaced it.",
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Replace the key" }));
+    expect(await screen.findByText("Not known")).toBeInTheDocument();
+    expect(screen.getByText(/can't tell whether Zitadel replaced it/)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
   });
 
   it("keeps the act after a refusal, so it can be tried again", async () => {

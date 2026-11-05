@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { seedAutoRetry } from "@/test-utils/drain";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -43,7 +44,7 @@ vi.mock("@/lib/queries/useHolds", async () => {
 });
 
 function renderRevoke() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = seedAutoRetry(new QueryClient({ defaultOptions: { queries: { retry: false } } }), true);
   return render(
     <QueryClientProvider client={client}>
       <RevokeDialog target="truenas" subjectId="u1" subjectName="Ada Rivera" onClose={() => {}} />
@@ -108,7 +109,7 @@ describe("revoking access on a target", () => {
   // not tell the operator both.
   it("does not claim the hold needs a manual send from Pending changes", () => {
     renderRevoke();
-    expect(screen.getByText(/revocations send on their own, every few minutes/i)).toBeInTheDocument();
+    expect(screen.getByText(/revocations send on their own, within a minute/i)).toBeInTheDocument();
     expect(screen.queryByText(/sends it from Pending changes/i)).toBeNull();
   });
 
@@ -160,7 +161,7 @@ describe("revoking access on a target", () => {
 
 describe("putting a hold on", () => {
   function renderHold() {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = seedAutoRetry(new QueryClient({ defaultOptions: { queries: { retry: false } } }), true);
     return render(
       <QueryClientProvider client={client}>
         <HoldDialog

@@ -8,7 +8,7 @@ import { Notice } from "@/components/ui/Notice";
 import { Segmented } from "@/components/ui/Select";
 import { Unfold } from "@/lib/motion";
 import { ApiError } from "@/lib/api-client";
-import { describeFailure, sentence } from "@/lib/outcome";
+import { failureMessage, sentence } from "@/lib/outcome";
 import { useSaveWelcomeClaims, useWelcomeClaims } from "@/lib/queries/useWelcomeClaims";
 
 import { SetByLine } from "./SetByLine";
@@ -36,7 +36,7 @@ export function WelcomeClaimsCard() {
       await save.mutateAsync(next);
     } catch (e) {
       const ref = e instanceof ApiError ? e.details?.request_id : undefined;
-      setFailure({ text: sentence(describeFailure(e)), reference: typeof ref === "string" ? ref : undefined });
+      setFailure({ text: sentence(failureMessage(e)), reference: typeof ref === "string" ? ref : undefined });
     }
   }
 
@@ -77,7 +77,7 @@ export function WelcomeClaimsCard() {
         <Unfold open={Boolean(failure)} gap={16}>
           {failure && (
             <div className="px-5 pt-3">
-              <Notice tone="danger" title="The setting didn't save." reference={failure.reference}>
+              <Notice tone="danger" title="The setting didn't save." reference={failure.reference} next="Try the switch again. If it keeps failing, ask whoever runs the Syndra server and quote the reference.">
                 {failure.text} Nothing was changed.
               </Notice>
             </div>

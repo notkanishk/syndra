@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GIVE_ROLE_LABEL, GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ApiError } from "@/lib/api-client";
+import { waitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 
 /**
  * The direct-grant endpoint always enqueues to the outbox for the
@@ -19,9 +20,23 @@ const state = vi.hoisted(() => ({
   queued: [] as string[],
   queuedAt: undefined as string | undefined,
   terms: undefined as Array<{ name: string; start: string; end: string }> | undefined,
+  // What the automatic rules also give, by role key (the backend's preview).
+  rules: {} as Record<string, string[]>,
+  rulesError: false,
+  refetch: vi.fn(),
 }));
 
 vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => state.down }));
+
+vi.mock("@/lib/queries/useRulePreview", () => ({
+  useRulePreview: (_user: string, _project: string, keys: string[]) => ({
+    data: keys.flatMap((key) => state.rules[key] ?? []).map((sentence) => ({ sentence })),
+    isLoading: false,
+    isError: state.rulesError,
+    isFetching: false,
+    refetch: state.refetch,
+  }),
+}));
 
 vi.mock("@/lib/queries/useTerms", () => ({
   useTerms: () => ({ data: state.terms }),
@@ -81,6 +96,9 @@ beforeEach(() => {
   state.queued = [];
   state.queuedAt = undefined;
   state.terms = undefined;
+  state.rules = {};
+  state.rulesError = false;
+  state.refetch = vi.fn();
   state.mutateAsync.mockReset();
 });
 
@@ -227,6 +245,23 @@ describe("GrantDirectAccess · its result", () => {
     ).toBeInTheDocument();
   });
 
+  // Final verification N1: Zitadel refused it outright. It used to read "It
+  // goes when you send it", with a Send link Send could never honour.
+  it("a give Zitadel refused says so, with why and the true step, and no Send link", async () => {
+    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "failed", wait_reason: "refused:not_found" });
+    open();
+    await grant();
+
+    expect(screen.getByText("Refused by Zitadel")).toBeInTheDocument();
+    expect(screen.getByText(/Zitadel refused this: it no longer has this person, project or role/)).toBeInTheDocument();
+    expect(screen.getByText(/give it again once the reason is fixed/)).toBeInTheDocument();
+    expect(screen.queryByText(/goes when you send it/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
+    // Given in Syndra: the sheet is its result, and nothing gives twice.
+    expect(screen.queryByRole("button", { name: "Give role" })).not.toBeInTheDocument();
+  });
+
   it("reports Given, in their first name, when nothing waits", async () => {
     state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "applied" });
     open();
@@ -236,6 +271,38 @@ describe("GrantDirectAccess · its result", () => {
     expect(screen.getByText("Ada can use Operator on their own now.")).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Give role" })).not.toBeInTheDocument();
+  });
+
+  // Audit C2: the person giving one role sees, before the click, every role an
+  // automatic rule also gives with it, and the result says they went with it.
+  it("names what automatic rules also give, before the give and in its result", async () => {
+    state.rules = { operator: ["Also gives Bench in Workshop, by the automatic rule from Operator."] };
+    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "applied", rule_outbox_ids: ["o2"] });
+    open();
+    choose("Operator");
+    expect(screen.getByText("Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+    expect(await screen.findByText("Ada can use Operator on their own now.")).toBeInTheDocument();
+    expect(screen.getByText(/Also gives Bench in Workshop/)).toBeInTheDocument();
+  });
+
+  // One consent rule with Approve (RuleConsent): a preview that can't be read
+  // holds the give, with the reason and a Try again, never a give with a warning.
+  it("holds the give when the rule preview fails, and Try again reads it again", () => {
+    state.rulesError = true;
+    open();
+    choose("Operator");
+    expect(screen.getByRole("button", { name: "Give role" })).toBeDisabled();
+    expect(screen.getByText("Held until Syndra can read the automatic rules.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(state.refetch).toHaveBeenCalledTimes(1);
+    expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("says nothing about rules when no rule starts from the role", async () => {
+    open();
+    choose("Operator");
+    expect(screen.queryByText(/Also gives/)).not.toBeInTheDocument();
   });
 
   it("a refusal is Not given, and keeps the form", async () => {
@@ -257,7 +324,7 @@ describe("GrantDirectAccess · while Zitadel is not answering", () => {
     choose("Operator");
     const dialog = screen.getByRole("dialog");
     expect(
-      within(dialog).getByText("Zitadel isn't answering, so this will wait for you to send it once it does."),
+      within(dialog).getByText(waitsBeforeLine("give")),
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(/as soon as you give it/)).not.toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Give role" })).toBeEnabled();

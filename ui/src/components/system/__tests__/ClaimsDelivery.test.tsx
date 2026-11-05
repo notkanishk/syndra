@@ -239,7 +239,8 @@ describe("Claims delivery, with problems", () => {
     renderIt();
     const notice = screen.getByRole("status");
     expect(notice).toHaveTextContent("The new signing key isn't confirmed");
-    expect(notice).toHaveTextContent(/accepts the old key and the new one, and won't replace it again on its own/);
+    // W11: 7 days, confirmed by a regular test sign-in, replaced again when next due.
+    expect(notice).toHaveTextContent(/accepts the old key and the new one for 7 days\. It marks the new key confirmed once a regular test sign-in passes, and won't replace it again before it is next due/);
     expect(notice).toHaveTextContent(/Action signing key row, below/);
     expect(notice.className).toMatch(/warn/);
     expect(notice).not.toHaveTextContent("KEY_ROTATION");
@@ -250,7 +251,21 @@ describe("Claims delivery, with problems", () => {
     renderIt();
     const notice = screen.getByRole("status");
     expect(notice).toHaveTextContent("Zitadel didn't replace the signing key");
-    expect(notice).toHaveTextContent(/The old key still works, and Syndra tries again in the next quiet hours/);
+    expect(notice).toHaveTextContent(/The old key still works\./);
+    // W5: this Notice can't see the schedule, so it never promises a retry.
+    expect(notice).not.toHaveTextContent(/tries again in the next quiet hours/);
+    expect(notice).toHaveTextContent(/whether Syndra tries again on its own/);
+  });
+
+  it("names a partial and an unknown replacement in their own words", () => {
+    set(delivery({ findings: [finding({ kind: "KEY_ROTATION", subject: "partial", severity: "soft" })] }));
+    const { unmount } = renderIt();
+    expect(screen.getByRole("status")).toHaveTextContent("Zitadel replaced only one of the signing keys");
+    unmount();
+    set(delivery({ findings: [finding({ kind: "KEY_ROTATION", subject: "unknown", severity: "soft" })] }));
+    renderIt();
+    expect(screen.getByRole("status")).toHaveTextContent("Syndra can't tell whether the signing key was replaced");
+    expect(screen.getByRole("status")).not.toHaveTextContent(/didn't replace/);
   });
 
   it("tells the owner what to grant when Zitadel refuses a read", () => {
@@ -287,5 +302,35 @@ describe("Claims delivery, with problems", () => {
       "href",
       "https://auth.example.org/ui/console/projects/pNet/apps/a-net",
     );
+  });
+});
+
+// Each kind of finding ends on its own true step, never one blanket line.
+describe("the last line of each finding", () => {
+  const next = (f: Partial<ClaimFinding>) => {
+    set(delivery({ findings: [finding(f)] }));
+    const { unmount } = renderIt();
+    const text = screen.getByRole("status").querySelector("[data-notice-next]")!.textContent;
+    unmount();
+    return text;
+  };
+
+  it("names the real place to act for each kind", () => {
+    expect(next({ kind: "CLAIMS_NOT_CALLED" })).toMatch(/Open Actions in Zitadel on each row that differs/);
+    expect(next({ kind: "CLAIMS_NOT_SERVED" })).toMatch(/Show each app under Live/);
+    expect(next({ kind: "SIGNIN_EVENTS_MISSING", subject: "-" })).toMatch(/syndra-event-listener/);
+    expect(next({ kind: "CONFIG_DRIFT", subject: "R1:endpoint" })).toMatch(/Configuration, below/);
+    expect(next({ kind: "KEY_ROTATION", subject: "partial" })).toMatch(/Action signing key row, below/);
+  });
+
+  it("a refused read says which role to give; an unanswered one says it checks every 10 minutes", () => {
+    expect(next({ kind: "CANNOT_CHECK", subject: "R3", sample: { status: 403 } })).toBe(
+      "Give Syndra's service account the IAM_OWNER_VIEWER role in Zitadel.",
+    );
+    expect(next({ kind: "CANNOT_CHECK", subject: "R3" })).toMatch(/^Nothing for you to do\. Syndra checks again every 10 minutes\./);
+  });
+
+  it("no kind keeps the old blanket line", () => {
+    expect(next({ kind: "CLAIMS_NOT_CALLED" })).not.toMatch(/matching row below/);
   });
 });

@@ -173,6 +173,10 @@ var (
 	}
 	svcGetBundlesForUser = db.GetBundlesForUser
 	svcGetRolesForBundle = db.GetRolesForBundle
+	// svcGetBundleRolesGiven is what every live bundle gives (working copy,
+	// includes, latest and held versions): the reader for counts and the map,
+	// never the working copy alone.
+	svcGetBundleRolesGiven = db.GetBundleRolesGiven
 	// What a bundle grants TODAY: the latest published version, which is what a
 	// new assignment pins to.
 	svcLatestVersionRoles     = db.LatestVersionRoles
@@ -317,6 +321,9 @@ var svcAllowancesDueForReview = db.AllowancesDueForReview
 // Changes a connected system never answered, per target (A-09 §3): the
 // system page's Waiting on you chip and lede, and Home's Not confirmed block.
 var svcCountUnresolvedAddonOperations = db.CountUnresolvedAddonOperations
+
+// svcCountRetries counts automatic retries under way and the give-ups one person has not marked seen.
+var svcCountRetries = db.CountRetries
 
 // The dormant listing's four reads (change `addon-platform` 9.11; design §29).
 //

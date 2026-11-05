@@ -8,6 +8,7 @@ import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { CascadeOutcome } from "@/lib/types";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
+import type { RetryState } from "@/lib/retry";
 
 // Shapes mirror the backend `users.go` handler responses. Kept narrow to what
 // the Users page renders; widen if more fields are needed.
@@ -75,6 +76,8 @@ export interface AccessRoleReason {
 export interface AccessRole {
   role_key: string;
   reasons: AccessRoleReason[];
+  /** When it ends, from every source (a rule role with its source); absent: never. */
+  ends?: string | null;
 }
 
 export interface UserAccessProject {
@@ -255,6 +258,12 @@ export interface CreateGrantResult {
   status: string;
   /** Why the grant isn't in Zitadel yet: role_waits, halted:<reason> or manual. */
   wait_reason?: string;
+  /** With halted:retrying: when Syndra sends it again, and which try. */
+  retry?: RetryState;
+  /** The rows the automatic rules queued with it. */
+  rule_outbox_ids?: string[];
+  /** How many of those wait for you to send because their role waits (re-audit R12). */
+  rule_waiting?: number;
 }
 
 /**

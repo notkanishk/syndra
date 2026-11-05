@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
+import { ApproveButton, HoldingNote } from "@/components/requests/Holding";
 
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
 
@@ -25,21 +25,22 @@ import {
 } from "@/lib/queries/useGovernance";
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestDecisions } from "@/lib/request-decisions";
-import { useDrainPropagations } from "@/lib/queries/usePropagation";
-import { useIndicatorsRead } from "@/lib/queries/useIndicators";
+import { isRefused, refusalCause } from "@/lib/wait-reason";
+import { useDrainPropagations, useGaveUpPropagations, useMarkGaveUpSeen } from "@/lib/queries/usePropagation";
+import { useAutoRetry, useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
 import { serviceAccountHref, useServiceAccounts } from "@/lib/queries/useServiceAccounts";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
-import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { EXTEND_DAYS, NOTHING_TO_DO, outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome, type AutoRetry } from "@/lib/outcome";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import type { ServiceAccount } from "@/lib/types";
 import { useIsAdvanced } from "@/lib/ui-view";
 import { targetLabel } from "@/lib/nav";
 import { ArriveList } from "@/lib/motion";
-import { ArrowLink } from "@/components/ui/ArrowLink";
+import { ARROW_LINK, ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
 import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
@@ -53,7 +54,7 @@ import { ShellNotices } from "@/components/shell/ShellNotices";
 import { firstName, greeting, isQuietHour, lastHere, WELCOME } from "@/lib/greeting";
 import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine } from "@/lib/term-dates";
-import { compareNames, sortByName } from "@/lib/sort";
+import { compareNames, sortByName, sortNames } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
 /**
@@ -130,6 +131,11 @@ export function Home({ session }: { session: SessionUser }) {
   // zeros are not a reading, so they count as nothing.
   const unconfirmedBy = (indicators.isPlaceholderData ? undefined : indicators.data?.unconfirmed_operations) ?? {};
   const unconfirmed = Object.values(unconfirmedBy).reduce((sum, n) => sum + n, 0);
+  // Changes Zitadel didn't take that Syndra sends again on its own, and the
+  // ones it gave up on this week: said here so an automatic retry, and its
+  // end, never go unnoticed (owner, 5 Nov 2026).
+  const retrying = (indicators.isPlaceholderData ? 0 : indicators.data?.retrying) ?? 0;
+  const gaveUp = (indicators.isPlaceholderData ? 0 : indicators.data?.gave_up) ?? 0;
   // Writes Zitadel accepted that no later read has been able to see, old
   // enough that the gap is a finding rather than Zitadel's read projection
   // catching up (see UnconfirmedWrites — the threshold lives on the backend
@@ -168,14 +174,19 @@ export function Home({ session }: { session: SessionUser }) {
   // unreadable target produces no drift findings, so a week of silence lands here
   // as blocks === 0 and the page says "Nothing here needs you" — the one sentence
   // that must never be said about a system nobody has been able to look at.
+  // Pending changes that wait for a send: the ones Syndra is retrying on its
+  // own are not, and are said by the Retries block in both views.
+  // With the background drain off, nothing is sent again on its own: those wait for Send too.
+  const toSend = Math.max(0, (propagation?.count ?? 0) - (indicators.data?.auto_retry === false ? 0 : retrying));
   const blocks = [
     pending.length > 0,
     expiring.length > 0,
     onboardingGaps > 0,
     unowned.length > 0,
+    retrying + gaveUp > 0,
     ...(advanced
       ? [
-          (propagation?.count ?? 0) > 0,
+          toSend > 0,
           unconfirmedWrites.count > 0,
           (drift?.count ?? 0) > 0,
           unvouched.length > 0,
@@ -193,7 +204,7 @@ export function Home({ session }: { session: SessionUser }) {
     queue.rows.length === 0 && ["Requests", "/requests"],
     expiring.length === 0 && ["Expiring access", "/review/expiring-access"],
     advanced && (drift?.count ?? 0) === 0 && ["Drift", "/governance/drift"],
-    advanced && (propagation?.count ?? 0) === 0 && ["Pending changes", "/governance/pending"],
+    advanced && (propagation?.count ?? 0) === 0 && gaveUp === 0 && ["Pending changes", "/governance/pending"],
     advanced &&
       readIndicators?.unconfirmed_revocations === 0 && [
         "Unfinished revocations",
@@ -258,6 +269,7 @@ export function Home({ session }: { session: SessionUser }) {
         <Unfold
           open={
             expiring.length > 0 ||
+            retrying + gaveUp > 0 ||
             (advanced &&
               ((drift?.count ?? 0) > 0 || unvouched.length > 0 || unconfirmedWrites.count > 0))
           }
@@ -269,6 +281,17 @@ export function Home({ session }: { session: SessionUser }) {
           >
             <Block open={advanced && (drift?.count ?? 0) > 0}>
               <UnexplainedAccess count={drift?.count ?? 0} />
+            </Block>
+            {/* Both views (owner, 5 Nov 2026): a retry, and the end of one,
+                are never only in Advanced. */}
+            <Block open={retrying + gaveUp > 0}>
+              <Retries
+                retrying={retrying}
+                gaveUp={gaveUp}
+                retryingBy={readIndicators?.retrying_by}
+                gaveUpBy={readIndicators?.gave_up_by}
+                auto={readIndicators?.auto_retry ?? null}
+              />
             </Block>
             <Block open={expiring.length > 0}>
               <ExpiringSoon grants={expiring} />
@@ -288,7 +311,7 @@ export function Home({ session }: { session: SessionUser }) {
             onboardingGaps > 0 ||
             gaps.rows.length > 0 ||
             unowned.length > 0 ||
-            (advanced && (findings > 0 || unconfirmed > 0 || (propagation?.count ?? 0) > 0))
+            (advanced && (findings > 0 || unconfirmed > 0 || toSend > 0))
           }
           className="min-w-0 desktop:col-start-2"
         >
@@ -308,11 +331,8 @@ export function Home({ session }: { session: SessionUser }) {
             <Block open={advanced && unconfirmed > 0}>
               <NotConfirmed count={unconfirmed} bySystem={unconfirmedBy} />
             </Block>
-            <Block open={advanced && (propagation?.count ?? 0) > 0}>
-              <PendingChanges
-                count={propagation?.count ?? 0}
-                reachable={propagation?.zitadel_reachable ?? true}
-              />
+            <Block open={advanced && toSend > 0}>
+              <PendingChanges count={toSend} reachable={propagation?.zitadel_reachable ?? true} />
             </Block>
           </QueueColumn>
         </Unfold>
@@ -639,15 +659,7 @@ function OpenRequests({
               ) : (
                 <>
                   <div className="flex gap-2">
-                    <Button
-                      variant="accent"
-                      size="sm"
-                      disabled={alreadyHeld(entry)}
-                      reason={alreadyHeld(entry) ? "They already have this." : undefined}
-                      onClick={() => act(entry, "approved")}
-                    >
-                      Approve
-                    </Button>
+                    <ApproveButton request={entry} onClick={() => act(entry, "approved")} />
                     <Button size="sm" onClick={() => act(entry, "rejected")}>
                       Decline
                     </Button>
@@ -866,13 +878,122 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
   );
 }
 
+/**
+ * Changes Syndra sends again on its own, and the ones it gave up on that
+ * nobody has marked seen (owner, 5 Nov 2026: "the user should always be in the
+ * know"). In both views, beside the rail's retry pill, each row ending on its
+ * next step or on there being none.
+ */
+/**
+ * The systems a count is for, by name and alphabetical ("TrueNAS and
+ * Zitadel"): a TrueNAS change is never called Zitadel's (re-audit R11). An
+ * older server sends no split; its retries were all counted as Zitadel's.
+ */
+export function systemsOf(by: Record<string, number> | undefined): string {
+  const names = sortNames(Object.keys(by ?? {}).filter((t) => (by?.[t] ?? 0) > 0).map(targetLabel));
+  if (names.length === 0) return "Zitadel";
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+export function Retries({
+  retrying,
+  gaveUp,
+  retryingBy,
+  gaveUpBy,
+  auto = true,
+}: {
+  retrying: number;
+  gaveUp: number;
+  retryingBy?: Record<string, number>;
+  gaveUpBy?: Record<string, number>;
+  /** False when this server sends nothing again on its own (REVOCATION_DRAIN_ENABLED=false); null while unknown (N3). */
+  auto?: AutoRetry;
+}) {
+  const seen = useMarkGaveUpSeen();
+  const stopped = useGaveUpPropagations();
+  // What each refusal was, once per cause with how many: the same words as
+  // Pending changes' stopped list (lib/wait-reason.ts).
+  const causes = new Map<string, number>();
+  for (const r of stopped.data ?? []) {
+    if (isRefused(r.wait_reason)) causes.set(r.wait_reason ?? "", (causes.get(r.wait_reason ?? "") ?? 0) + 1);
+  }
+  const [failure, setFailure] = useState<Outcome | null>(null);
+  const one = (n: number) => (n === 1 ? "one change" : `${n} changes`);
+  return (
+    <Card>
+      <CardHeader title={auto ? "Sent again on its own" : "Not taken when sent"} count={retrying + gaveUp} />
+      {retrying > 0 && (
+        <CardRow>
+          <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
+            <StatusDot tone="warn" />
+            <span className="text-warn-text">
+              {systemsOf(retryingBy)} didn&apos;t take {one(retrying)}.{" "}
+              {auto === null
+                ? `Each change on Pending changes says whether Syndra sends it again on its own or it waits for you.`
+                : auto
+                ? `Syndra sends ${retrying === 1 ? "it" : "them"} again on its own and says here if it stops. ${NOTHING_TO_DO}`
+                : `This Syndra server doesn't send changes again on its own, so ${retrying === 1 ? "it waits" : "they wait"} for you. Press Send on Pending changes to try again.`}
+            </span>
+          </span>
+          <AdvancedLink href="/governance/pending" className={ARROW_LINK}>
+            {auto ? "See when" : "Pending changes"} <span aria-hidden>→</span>
+          </AdvancedLink>
+        </CardRow>
+      )}
+      {gaveUp > 0 && (
+        <CardRow>
+          <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
+            <StatusDot tone="danger" />
+            <span className="text-danger-text">
+              Syndra stopped sending {one(gaveUp)}, so {gaveUp === 1 ? "it isn't" : "they aren't"} in{" "}
+              {systemsOf(gaveUpBy)}. Pending changes lists {gaveUp === 1 ? "it" : "them"} and what to do: give a role
+              again from the person&apos;s page; a revocation shows in Drift after Syndra&apos;s next check, to revoke
+              there. Then mark this seen. It marks it for you only; each person marks their own.
+              {[...causes].map(([reason, n]) => (
+                <span key={reason} className="mt-1 block">
+                  {n === 1 ? "One was" : `${n} were`} refused: {refusalCause(reason)}.
+                </span>
+              ))}
+            </span>
+          </span>
+          <AdvancedLink href="/governance/pending?gave_up=1" className={ARROW_LINK}>
+            See {gaveUp === 1 ? "it" : "them"} <span aria-hidden>→</span>
+          </AdvancedLink>
+          <Button
+            variant="outline"
+            size="sm"
+            isPending={seen.isPending}
+            onClick={async () => {
+              setFailure(null);
+              try {
+                await seen.mutateAsync();
+              } catch (error) {
+                setFailure(outcomeFromError(error));
+              }
+            }}
+          >
+            Mark seen
+          </Button>
+        </CardRow>
+      )}
+      {failure && (
+        <CardRow>
+          <ActionOutcome outcome={failure} placement="inline" word="Not marked" />
+        </CardRow>
+      )}
+    </Card>
+  );
+}
+
 function PendingChanges({ count, reachable }: { count: number; reachable: boolean }) {
   const drain = useDrainPropagations();
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <Card>
       <CardHeader title="Pending changes" count={count} />
+      {count > 0 && (
       <CardRow>
         <div className="flex-1 text-[14.5px]">
           {count} {count === 1 ? "change is" : "changes are"} waiting for you to send to Zitadel
@@ -889,7 +1010,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           onClick={async () => {
             setOutcome(null);
             try {
-              setOutcome(outcomeFromDrain(await drain.mutateAsync()));
+              setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto));
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -898,6 +1019,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           Send {count === 1 ? "it" : "them"} now
         </Button>
       </CardRow>
+      )}
 
       {/* The result sits in the block that ran it, at row weight rather than
           as a bordered box inside a bordered card. Today is a landing an
@@ -905,7 +1027,12 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           must not restyle the block around it. */}
       {outcome && (
         <CardRow>
-          <ActionOutcome outcome={outcome} placement="inline" word={outcomeWord(outcome, "Sent", "Not sent")} />
+          <ActionOutcome
+            outcome={outcome}
+            placement="inline"
+            // Never "Sent" for a pass that left changes to be sent again.
+            word={outcome.kind === "queued" ? "Not all sent" : outcomeWord(outcome, "Sent", "Not sent")}
+          />
         </CardRow>
       )}
     </Card>
@@ -965,6 +1092,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
 
 /** The result's word: the act's own past tense, or "Not …" when it did not happen. */
 function outcomeWord(outcome: Outcome, done: string, not: string): string {
+  if (outcome.recorded) return "Refused by Zitadel";
   return outcome.kind === "failed" || outcome.kind === "refused" ? not : done;
 }
 

@@ -91,10 +91,11 @@ describe("deleting an automatic rule", () => {
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
 
-    expect(document.body.textContent).toMatch(/12 people have .* from this rule/);
+    // Recorded, and labelled so: the rule applies to them in Syndra's records.
+    expect(document.body.textContent).toMatch(/This rule gives .* to 12 people in Syndra.s records/);
     // And that holding it elsewhere keeps it — the backend works this out per person, so the
     // dialog must not promise a precise loss.
-    expect(document.body.textContent).toMatch(/unless a bundle or a direct grant also gives it/);
+    expect(document.body.textContent).toMatch(/unless a bundle, direct access or another rule also gives it/);
   });
 
   // Retire keeps its history (owner, 19 Oct 2026): the dialog says so, and the list ends in a
@@ -127,7 +128,8 @@ describe("deleting an automatic rule", () => {
     render(<AutomaticRulesPage />);
     fireEvent.click(screen.getByText("member"));
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
-    expect(document.body.textContent).toMatch(/ends at once, with no review/);
+    expect(document.body.textContent).toMatch(/ends as soon as the revocation reaches Zitadel/);
+    expect(document.body.textContent).not.toMatch(/no review/);
   });
 
   it("says nothing is taken back when nobody holds the trigger role", () => {
@@ -181,6 +183,25 @@ describe("deleting an automatic rule", () => {
     await waitFor(() =>
       expect(state.remove).toHaveBeenCalledWith("aaaabbbb-1111-2222-3333-444455556666"),
     );
+  });
+
+  // Audit W3, one-path 1.8e: who sends the revocations decides the sentence,
+  // in the words a retired bundle uses (lib/retry.ts retireOutcome). A role
+  // that waits is the operator's to send; a send that stopped, or that Zitadel
+  // didn't take, is retried on its own with its next try; and the
+  // confirmation-mode words ("without review") describe nothing now.
+  it.each([
+    ["role_waits", undefined, /12 changes wait for you to send.*wait under Pending changes until you send them/],
+    ["halted:zitadel_offline", undefined, /Not in Zitadel yet\. Zitadel didn.t answer, so Syndra sends them again on its own\..*nothing waits for you/],
+    ["halted:retrying", { state: "retrying", try: 2, of: 6, next_try: "2099-11-05T08:35:00Z" }, /Syndra sends them again at .* \(try 2 of 6\)/],
+    [undefined, undefined, /12 changes went to Zitadel\..*The access it gave was revoked\./],
+  ])("says who sends the revocations, for %s", async (why, retry, said) => {
+    state.remove = vi.fn().mockResolvedValue({ message: "ok", cascade: { enqueued: 12, wait_reason: why, drain: { retry } } });
+    openTheRule();
+    fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire rule and revoke access" }));
+    await waitFor(() => expect(document.body.textContent).toMatch(said));
+    expect(document.body.textContent).not.toMatch(/without review/);
   });
 
   // A rule that does not exist yet cannot be retired.

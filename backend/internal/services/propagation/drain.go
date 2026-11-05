@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"sort"
+	"strconv"
 
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 )
 
@@ -37,6 +40,11 @@ type DrainResult struct {
 	Exhausted int    `json:"exhausted,omitempty"`
 	Halted    bool   `json:"halted"`
 	Reason    string `json:"reason,omitempty"`
+	// Retry is where a change the caller just sent stands when the target
+	// didn't take it: the next try and which try of how many. Set by
+	// services.Deliver for the rows it sent; a pass over many rows leaves it
+	// to each row (GetPendingPropagations).
+	Retry *extcall.RetryState `json:"retry,omitempty"`
 	// HaltedTarget names whose pass produced Reason. Its own field rather than a
 	// prefix on Reason: the reason strings are matched by callers and read by
 	// operators, and folding two facts into one string makes both harder to use.
@@ -47,6 +55,47 @@ type DrainResult struct {
 	// while the NAS pass applied nine rows was telling them their change had not
 	// gone through when it had.
 	Passes []PassResult `json:"passes,omitempty"`
+	// Refused names each row the target refused outright in this pass, with
+	// the plain cause (RefusalCause). The counters say how many; this says
+	// which, so services.Deliver can tell the act's own row from a rule's
+	// (final verification N1: a refusal used to read as success).
+	Refused map[string]string `json:"refused,omitempty"`
+}
+
+// zitadelStatus is the status zitadel.StatusError writes into its text
+// ("zitadel api 403: ..."); the row's error is a string by the time it is
+// classified here.
+var zitadelStatus = regexp.MustCompile(`zitadel api (\d{3})`)
+
+// RefusalCause is the plain cause of a refusal, from the error the drain
+// recorded for it: one of db.Refusal*.
+//
+// ponytail: reads the status back out of StatusError's own text; carry the
+// code beside errMsg from classifyDispatch if a second error shape appears.
+func RefusalCause(errMsg string) string {
+	m := zitadelStatus.FindStringSubmatch(errMsg)
+	if m == nil {
+		return db.RefusalOther
+	}
+	code, _ := strconv.Atoi(m[1])
+	switch code {
+	case 401, 403:
+		return db.RefusalNotAllowed
+	case 404, 410:
+		return db.RefusalNotFound
+	case 400, 412, 422:
+		return db.RefusalInvalid
+	default:
+		return db.RefusalOther
+	}
+}
+
+// refuse records that the target refused row id outright.
+func (r *DrainResult) refuse(id, errMsg string) {
+	if r.Refused == nil {
+		r.Refused = map[string]string{}
+	}
+	r.Refused[id] = RefusalCause(errMsg)
 }
 
 // PassResult is one target's leg of a drain.
@@ -85,6 +134,12 @@ func (r *DrainResult) merge(target string, p DrainResult) {
 	})
 	if p.Halted && !r.Halted {
 		r.Halted, r.Reason, r.HaltedTarget = true, p.Reason, target
+	}
+	for id, cause := range p.Refused {
+		if r.Refused == nil {
+			r.Refused = map[string]string{}
+		}
+		r.Refused[id] = cause
 	}
 }
 
@@ -323,13 +378,14 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 		}
 		res.Applied++
 	case ackFailed:
-		if err := markFailed(ctx, row.ID, errMsg); err != nil {
+		if err := markRefused(ctx, row.ID, errMsg, RefusalCause(errMsg)); err != nil {
 			if !res.abandoned(row.ID, "mark failed", err) {
 				res.persistErr(row.ID, "mark failed", err)
 			}
 			return false
 		}
 		res.Failed++
+		res.refuse(row.ID, errMsg)
 		refreshAfterRow(ctx, row, "failed")
 	case ackTransient:
 		if row.Attempts >= maxRetries {

@@ -57,13 +57,19 @@ func handleGetMappingRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// How many people each rule applies to — the count of holders of its input
-	// role. Editing a rule changes access for all of them at once, so the
-	// number belongs in the list rather than behind the editor. Best-effort:
-	// a failed count renders zeros, never a failed page.
-	if counts, err := dbGetAssignedUserCounts(r.Context()); err == nil {
+	// How many people each rule applies to (recorded: they hold its source),
+	// and how many of them Zitadel shows holding its target (observed), from
+	// one snapshot. Editing a rule changes access for all of them at once, so
+	// the numbers belong in the list rather than behind the editor.
+	// Best-effort: a failed count renders zeros and "not checked", never a
+	// failed page.
+	if f, err := svcRuleHolding(r.Context(), rules); err == nil {
 		for i := range rules {
-			rules[i].HolderCount = counts[rules[i].SourceProject+":"+rules[i].SourceRole]
+			rules[i].HolderCount = f.Given[rules[i].ID]
+			if f.Observed != nil {
+				n := f.Observed[rules[i].ID]
+				rules[i].ObservedHolderCount = &n
+			}
 		}
 	}
 

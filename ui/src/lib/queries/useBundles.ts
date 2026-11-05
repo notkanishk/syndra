@@ -6,6 +6,7 @@ import { request } from "@/lib/api-client";
 import { sortByName } from "@/lib/sort";
 import type { CascadeOutcome } from "@/lib/types";
 import { invalidateAfter } from "./invalidation";
+import type { RetryState } from "@/lib/retry";
 
 export interface BundleRow {
   id: string;
@@ -15,8 +16,10 @@ export interface BundleRow {
   roles?: string[];
   /** How many distinct roles the latest version grants. The list never carries `roles` itself. */
   role_count?: number;
-  /** How many people currently hold this bundle. Editing it changes all of them. */
+  /** How many people the bundle is ASSIGNED to (recorded). Publishing or retiring moves all of them; never shown as holding. */
   holder_count?: number;
+  /** How many of them Zitadel shows holding every role it gives them: the holder number. null: not checked. */
+  observed_holder_count?: number | null;
   /** Highest published version. */
   latest_version?: number;
   /** Holders pinned to something older than the latest version. */
@@ -256,7 +259,7 @@ export function useDeleteBundle() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) =>
-      request<{ message: string; was_welcome: boolean; cascade: { enqueued: number; waiting?: number; wait_reason?: string } }>(
+      request<{ message: string; was_welcome: boolean; cascade: { enqueued: number; waiting?: number; wait_reason?: string; drain?: { retry?: RetryState } } }>(
         `/bundles/${id}`,
         { method: "DELETE" },
       ),

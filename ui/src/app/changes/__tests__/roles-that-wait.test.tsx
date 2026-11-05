@@ -14,7 +14,7 @@ const state = vi.hoisted(() => ({
 function role(project_id: string, role_key: string, display_name: string, people: number, waits = false): CatalogRole {
   return {
     project_id, project_name: "Laser Lab", role_key, display_name, description: "",
-    bundle_count: 0, rule_count: 0, assigned_user_count: people, is_unused: false, source: "zitadel",
+    bundle_count: 0, rule_count: 0, assigned_user_count: people, observed_user_count: people, is_unused: false, source: "zitadel",
     waits_for_send: waits,
   } as CatalogRole;
 }

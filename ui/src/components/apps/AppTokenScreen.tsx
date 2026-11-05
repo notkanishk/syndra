@@ -1,4 +1,5 @@
 "use client";
+import { personOr } from "@/lib/names";
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -35,7 +36,7 @@ import { useAppSignIns } from "@/lib/queries/useSignIns";
 import { appSignInMeta } from "@/lib/sign-in-line";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
-import { listingNotice, type CheckContext } from "./claim-words";
+import { heldBackLine, listingNotice, type CheckContext } from "./claim-words";
 import { ClaimHistory } from "./ClaimHistory";
 import { ClaimPreview } from "./ClaimPreview";
 import { DebugMode } from "./DebugMode";
@@ -150,7 +151,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
     setPersonId(users.data.some((u) => u.id === selfId) ? selfId! : users.data[0].id);
   }, [users.data, selfId, personId]);
   useEffect(() => keepPerson(applicationId, personId), [applicationId, personId]);
-  const person = users.data.find((u) => u.id === personId)?.name ?? "this person";
+  const person = personOr(users.data.find((u) => u.id === personId)?.name);
 
   // A draft survives leaving the page and coming back, until it is saved or discarded (A-19 P10.6).
   const [restored] = useState(() => readKeptDraft(applicationId));
@@ -203,7 +204,10 @@ function AppClaims({ applicationId }: { applicationId: string }) {
   };
   // About the app, not the person or a draft: read off the saved shape's trail.
   const listing = listingNotice(one?.now, { ...ctx, profile: shape.profile, draft: undefined });
-  const say: SayContext = { app, roles: shape.project_roles, reach: preview.data?.reach, templateId: appTemplateId(shape, draft) };
+  // A draft's trail names the app's new shape, so it knows if the app can't be told apart.
+  const heldBack =
+    heldBackLine(one?.draft ?? one?.now, { ...ctx, profile: draft?.profile ?? shape.profile, draft: undefined }) ?? undefined;
+  const say: SayContext = { app, roles: shape.project_roles, reach: preview.data?.reach, templateId: appTemplateId(shape, draft), heldBack };
 
   const tpl = sheet?.kind === "template" ? templates.find((t) => t.id === sheet.id) : undefined;
 
@@ -233,13 +237,18 @@ function AppClaims({ applicationId }: { applicationId: string }) {
       {lookingUp && <SignInLookup appId={applicationId} name={app} onClose={() => setLookingUp(false)} />}
 
       {listing && (
-        <Notice tone="warn" title={listing.title}>
-          <Ticks text={listing.body} />
-          {listing.link && (
-            <span className="mt-1.5 block">
+        <Notice
+          tone="warn"
+          title={listing.title}
+          next={
+            listing.link ? (
               <ArrowLink href={listing.link.href}>{listing.link.label}</ArrowLink>
-            </span>
-          )}
+            ) : (
+              "Make the change the notice names, then check again."
+            )
+          }
+        >
+          <Ticks text={listing.body} />
         </Notice>
       )}
 
@@ -259,6 +268,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
             templates={templates}
             advanced={advanced}
             projectName={project}
+            heldBack={heldBack}
             onSave={() => setSheet({ kind: "save" })}
             onOpenTemplate={(id) => setSheet({ kind: "template", id })}
             onOpenCopy={() => {
@@ -299,6 +309,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
           template={tpl}
           shape={shape}
           project={project}
+          heldBack={heldBack}
           onClose={() => setSheet(null)}
           onStart={async () => {
             setSheet(null);

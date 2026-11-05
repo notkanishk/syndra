@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
-	"syndra/internal/models"
+	"syndra/internal/access"
 )
 
 // Role-to-target mappings: what a Zitadel role means on a target (design §6).
@@ -233,26 +232,19 @@ func TargetsMappedToRole(ctx context.Context, projectID, roleKey string) ([]stri
 	return out, rows.Err()
 }
 
-// MappingHolders lists the subjects a mapping currently reaches — the cohort a
-// mapping edit or delete would move.
+// HeldRecords is every person's recorded base holding, in one read: unexpired
+// direct grants and the roles of each bundle version they are pinned to (own
+// and included, through bundle_version_effective_roles). The same seed the
+// person view resolves one person at a time (services.collectUserRoles); this
+// is it for everybody, for the mapping cohort. Rules are not followed here:
+// services.MappingHolders follows them with access.Closure, the one closure.
 //
-// Read from the effective-access projection rather than from direct grants
-// alone, because a role held through a bundle or derived by a rule is held just
-// as much as one granted by hand, and a blast-radius count that missed those
-// would understate the change on exactly the mappings that matter most.
-// The rule arm is the one this comment promised and the query did not have.
-// Direct grants carry an expiry; a lapsed one is not held, and counting it
-// overstated the cohort in the other direction.
+// Direct grants carry an expiry; a lapsed one is not held.
 //
-// Rules are followed as chains (A→B→C) by models.RuleClosure, the one
-// implementation the claims compiler and the cascades also call: a cohort that
-// stopped at one hop would understate the blast radius on a chained mapping,
-// and a cohort computed by different code from the token is a guess about it.
-//
-// ponytail: reads every held tuple and closes per person in Go. Fine at
-// makerspace scale (thousands of rows); filter the read to people holding a
-// role that can reach (projectID, roleKey) if it ever is not.
-func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, error) {
+// ponytail: reads every held tuple. Fine at makerspace scale (thousands of
+// rows); filter the read to people holding a role that can reach the target if
+// it ever is not.
+func HeldRecords(ctx context.Context) (map[string]map[access.Role]bool, error) {
 	const q = `
 		SELECT user_id, zitadel_project_id, zitadel_role_key
 		  FROM direct_role_grants
@@ -263,38 +255,31 @@ func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, e
 		  JOIN bundle_version_effective_roles bvr ON bvr.version_id = ba.version_id`
 	rows, err := querier(ctx).Query(ctx, q)
 	if err != nil {
-		return nil, fmt.Errorf("read mapping holders: %w", err)
+		return nil, fmt.Errorf("read held records: %w", err)
 	}
 	defer rows.Close()
-	held := map[string]map[models.HeldRole]bool{}
+	held := map[string]map[access.Role]bool{}
 	for rows.Next() {
 		var u string
-		var k models.HeldRole
+		var k access.Role
 		if err := rows.Scan(&u, &k.ProjectID, &k.RoleKey); err != nil {
-			return nil, fmt.Errorf("scan mapping holder: %w", err)
+			return nil, fmt.Errorf("scan held record: %w", err)
 		}
 		if held[u] == nil {
-			held[u] = map[models.HeldRole]bool{}
+			held[u] = map[access.Role]bool{}
 		}
 		held[u][k] = true
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read mapping holders: %w", err)
+		return nil, fmt.Errorf("read held records: %w", err)
 	}
-	rules, err := GetActiveMappingRules(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("read mapping rules: %w", err)
-	}
-	want := models.HeldRole{ProjectID: projectID, RoleKey: roleKey}
-	var out []string
-	for u, base := range held {
-		if models.RuleClosure(base, rules, models.NewHeldRole)[want] {
-			out = append(out, u)
-		}
-	}
-	sort.Strings(out)
-	return out, nil
+	return held, nil
 }
+
+// HoldersFunc answers who a mapping on (projectID, roleKey) reaches. The answer
+// needs the directory (people who have left are not in the cohort), which db
+// cannot read, so the caller passes services.MappingHolders.
+type HoldersFunc func(ctx context.Context, projectID, roleKey string) ([]string, error)
 
 // roleMappingFields is the one column list every RoleMapping read selects, and
 // scanDest is the one destination list it scans into, kept side by side. They
@@ -583,14 +568,14 @@ func bindingKey(project, role, field string) string {
 // diffAgainstVersion enumerates what the working copy holds that a version does
 // not, and the reverse. Holder counts are read per distinct role, not per
 // change: two edits on one role are one cohort.
-func diffAgainstVersion(ctx context.Context, live []RoleMapping, snapshot []MappingVersionEntry) ([]MappingChange, error) {
+func diffAgainstVersion(ctx context.Context, live []RoleMapping, snapshot []MappingVersionEntry, mappingHolders HoldersFunc) ([]MappingChange, error) {
 	changes := classifyMappingChanges(live, snapshot)
 
 	cohort := map[string]int{}
 	for i, c := range changes {
 		role := c.ProjectID + "\x00" + c.RoleKey
 		if _, done := cohort[role]; !done {
-			holders, err := MappingHolders(ctx, c.ProjectID, c.RoleKey)
+			holders, err := mappingHolders(ctx, c.ProjectID, c.RoleKey)
 			if err != nil {
 				return nil, fmt.Errorf("count holders for %s/%s: %w", c.ProjectID, c.RoleKey, err)
 			}
@@ -667,7 +652,7 @@ func touchedAt(m RoleMapping) *time.Time {
 
 // ListMappingHistory reads a target's version history and compares the newest
 // version against what is live.
-func ListMappingHistory(ctx context.Context, target string) (MappingHistory, error) {
+func ListMappingHistory(ctx context.Context, target string, holders HoldersFunc) (MappingHistory, error) {
 	if strings.TrimSpace(target) == "" {
 		return MappingHistory{}, fmt.Errorf("list mapping history: no target")
 	}
@@ -723,7 +708,7 @@ func ListMappingHistory(ctx context.Context, target string) (MappingHistory, err
 		// Nothing published, so every binding is unpublished — and each one is
 		// an addition against the empty set, which is exactly what an operator
 		// on day two needs listed before they publish a first version.
-		changes, err := diffAgainstVersion(ctx, live, nil)
+		changes, err := diffAgainstVersion(ctx, live, nil, holders)
 		if err != nil {
 			return MappingHistory{}, err
 		}
@@ -732,7 +717,7 @@ func ListMappingHistory(ctx context.Context, target string) (MappingHistory, err
 		return history, nil
 	}
 	history.CurrentVersion = history.Versions[0].Version
-	changes, err := diffAgainstVersion(ctx, live, history.Versions[0].Entries)
+	changes, err := diffAgainstVersion(ctx, live, history.Versions[0].Entries, holders)
 	if err != nil {
 		return MappingHistory{}, err
 	}

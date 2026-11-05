@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { RetryState } from "@/lib/retry";
 
 import { invalidateAfter } from "./invalidation";
 
@@ -29,15 +30,22 @@ export interface PendingRow {
   /**
    * Why it waits for the operator: "role_waits" (the role always waits),
    * "halted:<reason>" (meant to go, and the send stopped), "manual" (a bundle
-   * or rule set to wait, before the switch over). Absent on older rows.
+   * or rule set to wait: rows from before migration 000078 only). Absent on
+   * older rows.
    */
   wait_reason?: string;
+  /** When a row Zitadel didn't take is tried again. Absent on a row never tried. */
+  not_before?: string;
+  /** Where it stands under the one retry model, when Syndra sends it again on its own. */
+  retry?: RetryState;
 }
 
 /** Named for the screen that reads it, where "propagation" is never spoken. */
 export type PendingPropagationRow = PendingRow;
 
 export interface DrainResult {
+  /** Set when what an action just sent is retrying: its next try, and which try. */
+  retry?: RetryState;
   applied: number;
   failed: number;
   requeued: number;
@@ -91,12 +99,28 @@ const KEYS = {
 };
 
 /** The operator's "awaiting Zitadel" worklist (pending + in_flight rows). */
+/** One read of the queue: what waits, and what Syndra stopped sending that this person has not marked seen. */
+interface PendingRead {
+  pending: PendingRow[];
+  gave_up: PendingRow[];
+}
+
+const pendingRead = async (): Promise<PendingRead> => {
+  const body = await request<Partial<PendingRead>>("/propagations");
+  return { pending: body?.pending ?? [], gave_up: body?.gave_up ?? [] };
+};
+
 export function usePendingPropagations() {
-  return useQuery({
-    queryKey: KEYS.pending,
-    queryFn: async () =>
-      (await request<{ pending: PendingRow[] }>("/propagations")).pending ?? [],
-  });
+  return useQuery({ queryKey: KEYS.pending, queryFn: pendingRead, select: (read: PendingRead) => read.pending });
+}
+
+/**
+ * The changes Syndra stopped sending (out of tries, or refused) that this
+ * person has not marked seen: what Home's "Syndra stopped sending" counts,
+ * listed on Pending changes (re-audit R11). The same read as the queue.
+ */
+export function useGaveUpPropagations() {
+  return useQuery({ queryKey: KEYS.pending, queryFn: pendingRead, select: (read: PendingRead) => read.gave_up });
 }
 
 /**
@@ -110,6 +134,18 @@ export function useDrainPropagations() {
     mutationFn: async () =>
       request<DrainResult>("/propagations/drain", { method: "POST" }),
     onSuccess: () => invalidateAfter(qc, "access"),
+  });
+}
+
+/**
+ * Mark the changes Syndra gave up on as seen: until then Home and the rail
+ * keep raising them (owner, 5 Nov 2026), whichever view the reader is in.
+ */
+export function useMarkGaveUpSeen() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => request<{ status: string }>("/propagations/gave-up/seen", { method: "POST" }),
+    onSuccess: () => invalidateAfter(qc, "retriesSeen"),
   });
 }
 

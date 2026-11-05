@@ -388,29 +388,36 @@ func CloseGoneDrift(ctx context.Context, driftID, target string) error {
 // vanished between detection and adoption, the ledger row is now the thing that
 // disagrees with Zitadel, the next reconcile raises it as syndra_only drift, and
 // a human triages it. Surfacing that beats silently re-granting it.
-func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) error {
+//
+// The adopted row itself never goes out, but the rules still follow it
+// (ADR-006: adopting is when a rule fires): the returned ids are the rows the
+// mapping rules queued, which wait in Pending changes for the operator.
+func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) ([]string, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin attribute tx: %w", err)
+		return nil, fmt.Errorf("begin attribute tx: %w", err)
 	}
 	if owned {
 		defer tx.Rollback(ctx) // no-op after Commit
 	}
 	if _, err := claimDriftTx(ctx, tx, driftID, TargetZitadel, "attributed", p.GrantedBy, p.PayloadJSON); err != nil {
-		return err
+		return nil, err
 	}
 	p.NoPropagation = true
 	key, err := newOutboxIdempotencyKey()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if _, _, err := enqueueWrites(ctx, tx, p, key); err != nil {
-		return fmt.Errorf("attribute ledger writes: %w", err)
+	_, ruleIDs, err := enqueueWrites(ctx, tx, p, key)
+	if err != nil {
+		return nil, fmt.Errorf("attribute ledger writes: %w", err)
 	}
-	if !owned {
-		return nil
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
 	}
-	return tx.Commit(ctx)
+	return ruleIDs, nil
 }
 
 // RevokeDriftAndEnqueue claims a pending drift (→revoked) and enqueues a revoke

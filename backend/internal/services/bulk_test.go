@@ -21,13 +21,16 @@ type bulkFixture struct {
 	grants map[string][]models.DirectGrant
 	// queued: what a write would cancel, by "user/op/role".
 	queued map[string][]models.QueuedChange
+	// rules are the active mapping rules (none unless a test says so).
+	rules []models.MappingRule
+	projs []models.ProjectCatalog
 }
 
 func setupBulk(t *testing.T, fx bulkFixture) {
 	t.Helper()
 
 	origDir := directory.Default
-	directory.Default = &snapshotFixtureDirectory{users: fx.users}
+	directory.Default = &snapshotFixtureDirectory{users: fx.users, projs: fx.projs}
 	t.Cleanup(func() { directory.Default = origDir })
 
 	origCollect := collectUserRolesHook
@@ -35,13 +38,18 @@ func setupBulk(t *testing.T, fx bulkFixture) {
 	origBundle := svcGetBundleByID
 	origRoles := svcLatestVersionRoles
 	origCancel := svcWouldCancel
+	origRules, origByBundle, origQueued := svcGetActiveMappingRules, svcGetUserBundleRolesGrouped, svcQueuedRevocations
 	t.Cleanup(func() {
 		collectUserRolesHook = origCollect
 		svcGetDirectGrantsForUser = origGrants
 		svcGetBundleByID = origBundle
 		svcLatestVersionRoles = origRoles
 		svcWouldCancel = origCancel
+		svcGetActiveMappingRules, svcGetUserBundleRolesGrouped, svcQueuedRevocations = origRules, origByBundle, origQueued
 	})
+	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return fx.rules, nil }
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) { return nil, nil }
+	svcQueuedRevocations = func(context.Context, string) ([]db.RoleRef, error) { return nil, nil }
 	svcWouldCancel = func(_ context.Context, p db.EnqueueParams) ([]models.QueuedChange, error) {
 		return fx.queued[p.UserID+"/"+p.OpType+"/"+p.RoleKeys[0]], nil
 	}
@@ -551,6 +559,64 @@ func TestABulkRowNamesWhatItWouldCancel(t *testing.T) {
 	}
 	if c := outcomeFor(t, plan, "u2").Consequence; strings.Contains(c, "Cancels") {
 		t.Fatalf("nothing queued, nothing said, got %q", c)
+	}
+}
+
+// C2: a bulk give names, per person, every role an automatic rule gives on top
+// of the one chosen, the whole chain, before the apply. And the rule rows are
+// bound into the row's fingerprint, so a rule added after the review moves the
+// row rather than riding through on an approval that never mentioned it.
+func TestRehearseBulk_GiveNamesWhatTheRulesAlsoGive(t *testing.T) {
+	fx := bulkFixture{
+		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}},
+		rules: []models.MappingRule{
+			{ID: "r1", SourceProject: "pLaser", SourceRole: "trained", TargetProject: "pLaser", TargetRole: "advanced"},
+			{ID: "r2", SourceProject: "pLaser", SourceRole: "advanced", TargetProject: "pShop", TargetRole: "bench"},
+		},
+		projs: []models.ProjectCatalog{
+			{ID: "pLaser", Name: "Laser", Roles: []models.ProjectRole{{Key: "trained", Label: "Trained"}, {Key: "advanced", Label: "Advanced"}}},
+			{ID: "pShop", Name: "Workshop", Roles: []models.ProjectRole{{Key: "bench", Label: "Bench"}}},
+		},
+	}
+	setupBulk(t, fx)
+	req := BulkRequest{Op: BulkOpAssignRole, UserIDs: []string{"u1"}, ProjectID: "pLaser", RoleKey: "trained"}
+	plan, err := RehearseBulk(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := outcomeFor(t, plan, "u1")
+	for _, want := range []string{
+		"Also gives Advanced in Laser, by the automatic rule from Trained.",
+		"Also gives Bench in Workshop, by the automatic rule from Advanced.",
+	} {
+		if !strings.Contains(row.Consequence, want) {
+			t.Errorf("consequence %q is missing %q", row.Consequence, want)
+		}
+	}
+
+	// The cancels line stays last, where the plan renderer splits it off.
+	fx.queued = map[string][]models.QueuedChange{
+		"u1/add/trained": {{ID: "q1", OpType: "revoke", RoleKeys: []string{"trained"}, QueuedAt: time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)}},
+	}
+	setupBulk(t, fx)
+	both, err := RehearseBulk(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := outcomeFor(t, both, "u1").Consequence; !strings.Contains(c, "Also gives Bench") ||
+		!strings.HasSuffix(c, "the removal of trained queued 15 Oct 2026.") {
+		t.Fatalf("rule rows, then the cancels line last: %q", c)
+	}
+
+	fx.rules, fx.queued = nil, nil
+	setupBulk(t, fx)
+	bare, err := RehearseBulk(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := outcomeFor(t, bare, "u1"); strings.Contains(b.Consequence, "Also gives") || b.Fingerprint == row.Fingerprint {
+		t.Fatalf("no rules, no rule rows, and a different fingerprint: %q (same fingerprint: %v)",
+			b.Consequence, b.Fingerprint == row.Fingerprint)
 	}
 }
 

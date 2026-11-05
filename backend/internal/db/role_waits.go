@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -25,10 +26,29 @@ const (
 	WaitReasonRoleWaits = "role_waits"
 	WaitReasonManual    = "manual"
 	waitReasonHalted    = "halted:"
+	waitReasonRefused   = "refused:"
 )
 
 // WaitReasonHalted is a row that was meant to go and whose send stopped.
 func WaitReasonHalted(reason string) string { return waitReasonHalted + reason }
+
+// The plain causes of a refusal (refused:<cause>), from the target's answer
+// (propagation.RefusalCause). A closed set: the screens say each in words.
+const (
+	RefusalNotAllowed = "not_allowed" // 401/403: Syndra's account may not make the change
+	RefusalNotFound   = "not_found"   // 404/410: the person, project or role is gone there
+	RefusalInvalid    = "invalid"     // 400/412/422: the target said the change is not valid
+	RefusalOther      = "other"       // any other refusal
+)
+
+// WaitReasonRefused is a row the target refused outright when it was sent
+// (final verification N1): terminal (status failed), so nothing sends it
+// again, and every result says so with the cause. Not a wait at all; it rides
+// the same field so one vocabulary carries every "not in Zitadel" reason.
+func WaitReasonRefused(cause string) string { return waitReasonRefused + cause }
+
+// IsRefused reports whether reason is a refusal (WaitReasonRefused).
+func IsRefused(reason string) bool { return strings.HasPrefix(reason, waitReasonRefused) }
 
 // RoleWait is one marked role.
 type RoleWait struct {

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { seedAutoRetry } from "@/test-utils/drain";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +11,7 @@ import type { BundleRow } from "@/lib/queries/useBundles";
 import type { MappingRuleRow } from "@/lib/queries/useMappingRules";
 
 const pending = vi.hoisted(() => ({ data: [] as PendingRow[] }));
+const gaveUp = vi.hoisted(() => ({ data: [] as PendingRow[] }));
 const summary = vi.hoisted(() => ({ reachable: true }));
 const bundles = vi.hoisted(() => ({ data: [] as BundleRow[] }));
 const rules = vi.hoisted(() => ({ data: [] as MappingRuleRow[] }));
@@ -30,6 +32,7 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 }));
 
 vi.mock("@/lib/queries/usePropagation", () => ({
+  useGaveUpPropagations: () => ({ data: gaveUp.data, isLoading: false }),
   usePendingPropagations: () => ({ ...pending, isLoading: load.loading, error: null, refetch: () => {} }),
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -66,7 +69,7 @@ function row(overrides: Partial<PendingRow> = {}): PendingRow {
 }
 
 function renderPending() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = seedAutoRetry(new QueryClient({ defaultOptions: { queries: { retry: false } } }), true);
   return render(
     <QueryClientProvider client={client}>
       <PendingChangesPage />
@@ -76,6 +79,7 @@ function renderPending() {
 
 beforeEach(() => {
   pending.data = [];
+  gaveUp.data = [];
   summary.reachable = true;
   bundles.data = [];
   rules.data = [];
@@ -97,6 +101,21 @@ describe("Pending changes", () => {
     expect(chosen).toHaveClass("text-muted");
     const stopped = screen.getByText(/^Zitadel didn't answer at \d\d:\d\d$/);
     expect(stopped).toHaveClass("text-warn-text");
+  });
+
+  it("says why Zitadel refused a change Syndra stopped sending, and keeps the try count for the ones that ran out", () => {
+    gaveUp.data = [
+      row({ id: "g1", status: "failed", wait_reason: "refused:not_allowed", last_error: "zitadel api 403" }),
+      row({ id: "g2", status: "failed", wait_reason: "refused:not_found", last_error: "zitadel api 404", cascade_id: "c2" }),
+      row({ id: "g3", status: "failed", attempts: 5, last_error: "out of retries after 5 attempts", cascade_id: "c3" }),
+      row({ id: "g4", status: "failed", last_error: "unknown", cascade_id: "c4" }),
+    ];
+    renderPending();
+    expect(screen.getByText("Zitadel refused it: Syndra's service account isn't allowed to make this change, so Syndra stopped sending it.")).toBeInTheDocument();
+    expect(screen.getByText("Zitadel refused it: it no longer has this person, project or role, so Syndra stopped sending it.")).toBeInTheDocument();
+    expect(screen.getByText("Zitadel didn't answer after 5 tries, so Syndra stopped sending it.")).toBeInTheDocument();
+    // A row from before the cause was kept says what it always said.
+    expect(screen.getByText("Zitadel refused it, so Syndra stopped sending it.")).toBeInTheDocument();
   });
 
   it("says two writes belong to one cascade rather than leaving them looking unrelated", () => {
@@ -290,13 +309,39 @@ describe("Pending changes · board layout", () => {
     ];
     renderPending();
     expect(screen.getByRole("img", { name: "Waits for you" })).toBeInTheDocument();
-    expect(screen.getByText(/also sends on its own within a few minutes/)).toBeInTheDocument();
+    expect(screen.getByText(/also sends on its own within a minute/)).toBeInTheDocument();
   });
 
-  it("shows a failed change's status in its own row with what the system said", () => {
+  // S4: this list holds only pending and in-flight rows; a failed row is
+  // terminal, so no line here may promise to try it again or show raw text.
+  it("never promises to retry a failed row, nor shows the system's raw text", () => {
     pending.data = [row({ status: "failed", last_error: "no such role" })];
     renderPending();
-    expect(screen.getByText(/Failed, and Syndra will try again: no such role/)).toBeInTheDocument();
+    expect(screen.queryByText(/Syndra will try again/)).toBeNull();
+    expect(screen.queryByText(/no such role/)).toBeNull();
+  });
+
+  // The one retry model: a change Zitadel didn't take says why, when Syndra
+  // sends it again (in IST, whatever the browser's zone), and which try.
+  it("shows a retrying change's next try in IST, and which try", () => {
+    pending.data = [
+      row({
+        id: "o1",
+        attempts: 1,
+        not_before: "2026-11-05T08:35:00Z",
+        retry: { state: "retrying", try: 2, of: 6, next_try: "2099-11-05T08:35:00Z" },
+      }),
+    ];
+    renderPending();
+    expect(
+      screen.getByText("Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)."),
+    ).toBeInTheDocument();
+  });
+
+  it("a revocation that waits for you does not claim to send on its own", () => {
+    pending.data = [row({ id: "o2", op_type: "revoke", wait_reason: "role_waits", cascade_id: "c2" })];
+    renderPending();
+    expect(screen.queryByText(/also sends on its own/)).toBeNull();
   });
 
   it("says a batch's shared reason once, in its band, not on every row", () => {

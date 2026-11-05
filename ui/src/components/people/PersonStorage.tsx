@@ -14,13 +14,15 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Notice } from "@/components/ui/Notice";
 import { Relative } from "@/components/ui/Time";
 import { Tinted } from "@/lib/motion";
-import { formatClock, formatList, formatRelative, formatShortDate, humanizeKey } from "@/lib/format";
+import { formatClock, formatList, formatRelative, formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { usePersonTargets, type PersonTargetView, type RoleSource, type StoragePlace } from "@/lib/queries/useMyStorage";
-import { useNameResolver } from "@/lib/queries/useNameResolver";
+
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useTargets } from "@/lib/queries/useTargets";
 import { sortByName, sortNames } from "@/lib/sort";
 import { useIsAdvanced } from "@/lib/ui-view";
+import { useShownNames } from "@/components/names/shownNames";
 
 /**
  * A person's network storage, for operators (A-10 Part 1): one read-only card
@@ -44,11 +46,8 @@ function gbWords(bytes: number | undefined): string {
 }
 
 function useRoleNames() {
-  const resolver = useNameResolver();
-  return (roles: RoleSource[] | undefined) =>
-    sortNames(
-      (roles ?? []).map((r) => resolver.resolveRole(r.project_id, r.role_key).value?.display_name || humanizeKey(r.role_key)),
-    );
+  const shown = useShownNames();
+  return (roles: RoleSource[] | undefined) => sortNames((roles ?? []).map((r) => shown.role(r.project_id, r.role_key)));
 }
 
 /** The person's storage section: a label, then one card per system. */
@@ -67,6 +66,7 @@ export function PersonStorage({ userId, name }: { userId: string; name: string }
           tone="danger"
           title={`Couldn't load ${name}'s storage${systems.length === 1 ? ` on ${targetLabel(systems[0])}` : ""}.`}
           action={{ label: "Try again", onClick: () => views.refetch() }}
+          next="Press Try again. If it keeps failing, ask whoever runs the Syndra server."
         >
           Syndra didn&apos;t answer when this page asked. Nothing was changed.
         </Notice>
@@ -148,9 +148,28 @@ function Status({ view }: { view: PersonTargetView }) {
   );
 }
 
+/**
+ * The step while a system is offline. Syndra changes nothing there while it is
+ * unreachable (the drain halts, propagation/addon.go:81 and revocations.go:92)
+ * and every change for it stays queued. Once it answers, revocations go on
+ * their own, unless the background drain is off (`auto` false); every other
+ * change goes when someone presses Send. Only a person who changed their access
+ * meanwhile has anything to do, so it says so rather than promising nothing.
+ */
+export function offlineNext(label: string, auto: boolean | null): string {
+  // Not known yet whether revocations go on their own (N3): no promise either way.
+  if (auto === null) {
+    return `If you change their access while ${label} is offline, the change stays in Pending changes until it reaches ${label}. Otherwise there is nothing for you to do.`;
+  }
+  return auto
+    ? `If you change their access while ${label} is offline, the change waits until it answers: a revocation then sends on its own, anything else when you press Send on Pending changes. Otherwise there is nothing for you to do.`
+    : `If you change their access while ${label} is offline, the change waits in Pending changes; press Send there once it answers. Otherwise there is nothing for you to do.`;
+}
+
 function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: string; name: string }) {
   const label = targetLabel(view.target);
   const roleNames = useRoleNames();
+  const auto = useAutoRetry();
   const offline = view.health === "offline";
   const storage = view.storage ?? view.last_known?.storage;
   // Stale (A-13 d): a card drawn from the last read recedes to the page; its
@@ -295,7 +314,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
       <CardTop target={view.target} status={<Status view={view} />} />
       {offline && (
         <div className="px-5 pb-3">
-          <Notice tone="warn" live title={`${label} is offline`}>
+          <Notice tone="warn" live title={`${label} is offline`} next={offlineNext(label, auto)}>
             {view.reachable_since ? `It stopped answering at ${formatClock(view.reachable_since)}. ` : ""}
             {view.last_known
               ? `Home folder and Folders below are what it said at ${formatClock(view.last_known.read_at)}, ${formatRelative(view.last_known.read_at)}. `

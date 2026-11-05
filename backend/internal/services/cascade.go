@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/access"
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -134,10 +135,10 @@ func applyMode(ctx context.Context, ids []string) (CascadeResult, error) {
 // existing atomic *AndEnqueue db functions (mutation + audit + enqueue in one tx).
 
 // effectiveClosure applies the mapping-rule fixpoint over a base set of held (project,role) keys,
-// through models.RuleClosure — the one implementation the compiler, the views and the mapping
+// through access.Closure — the one implementation the compiler, the views, drift and the mapping
 // cohort share, so a cascade sends Zitadel exactly the chain the token carries.
 func effectiveClosure(base map[roleKey]bool, rules []models.MappingRule) map[roleKey]bool {
-	return models.RuleClosure(base, rules, newRoleKey)
+	return access.Closure(base, rules, newRoleKey)
 }
 
 func newRoleKey(projectID, role string) roleKey { return roleKey{projectID: projectID, roleKey: role} }

@@ -409,10 +409,14 @@ func main() {
 	// Revocation drain: the one background drain in the system. Grants stay
 	// operator-gated — the drain rule protects a consent property, and nobody
 	// gains access without a human — but a queued revoke is retained access, so
-	// it must not wait on somebody opening the right page. Shares the operator
+	// it must not wait on somebody opening the right page. It also sends again
+	// any change already sent once that Zitadel didn't take, at its next try
+	// (ClaimDueRetries; never a row that waits for you). Shares the operator
 	// drain's advisory lock, so the two never dispatch concurrently; a pass that
 	// cannot take it simply returns and the next tick tries again.
 	var revokeSched *periodic.Runner
+	// Said wherever a retry is: off, "Syndra sends it again at …" would be false.
+	propagation.SetAutoRetry(revocationDrainEnabled())
 	if revocationDrainEnabled() {
 		revokeSched = periodic.New("REVOKE", revocationDrainInterval(), 5*time.Minute, func(ctx context.Context) error {
 			res, err := propagation.DrainRevocations(ctx)
@@ -826,15 +830,19 @@ func revocationDrainEnabled() bool {
 	return b
 }
 
+// A minute, because the screens name a change's next try ("Syndra sends it
+// again at 14:05") and the shortest backoff is a minute: a slower tick would
+// make that time a promise the runner keeps late. Each tick is one cheap probe
+// when there is nothing to send.
 func revocationDrainInterval() time.Duration {
 	v := os.Getenv("REVOCATION_DRAIN_INTERVAL")
 	if v == "" {
-		return 5 * time.Minute
+		return time.Minute
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil || d <= 0 {
-		log.Printf("[REVOKE] Invalid REVOCATION_DRAIN_INTERVAL=%q, defaulting to 5m", v)
-		return 5 * time.Minute
+		log.Printf("[REVOKE] Invalid REVOCATION_DRAIN_INTERVAL=%q, defaulting to 1m", v)
+		return time.Minute
 	}
 	return d
 }

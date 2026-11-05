@@ -58,7 +58,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
   const bundles = useBundles();
   const rehearse = useRehearseBulk();
   const apply = useApplyBulk();
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("change");
   const applied = useRef(false);
 
   const needsRole = op === "assign_role" || op === "remove_role";

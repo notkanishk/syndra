@@ -7,14 +7,17 @@ import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { RoleRef } from "@/components/names";
 import { Button } from "@/components/ui/Button";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { DRAIN_UNKNOWN_NEXT, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { refusedOutcome } from "@/lib/retry";
+import { isRefused } from "@/lib/wait-reason";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { useBundleRolesByBundle, useBundles, useRemoveBundle } from "@/lib/queries/useBundles";
-import { useMappingRules } from "@/lib/queries/useMappingRules";
-import { useAssignBundle, useUserAccess } from "@/lib/queries/useUsers";
-import { sortByName } from "@/lib/sort";
+import { useInsightsWhatIf } from "@/lib/queries/useInsights";
+import { useAssignBundle } from "@/lib/queries/useUsers";
+import { compareNames, sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
 /**
@@ -51,14 +54,13 @@ function ManageBundlesOpen({
   onClose: () => void;
 }) {
   const bundles = useBundles();
-  const access = useUserAccess(userId);
-  const rules = useMappingRules();
   const assign = useAssignBundle(userId);
   const remove = useRemoveBundle(userId);
 
   const assignedIds = useMemo(() => new Set(assigned.map((b) => b.id)), [assigned]);
   const [staged, setStaged] = useState<Set<string>>(new Set());
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("change");
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Which way the change being sent goes, so a step says "assign" or "remove".
   const [acting, setActing] = useState<"assign" | "remove">("assign");
@@ -80,19 +82,33 @@ function ManageBundlesOpen({
   const changes = Array.from(staged);
   const previewFor = changes[0];
 
-  const held = useMemo(() => {
-    const keys = new Set<string>();
-    for (const project of access.data?.projects ?? []) {
-      for (const key of project.effective_role_keys) keys.add(`${project.project_id}::${key}`);
-    }
-    return keys;
-  }, [access.data]);
-
 
   const previewBundle = (bundles.data ?? []).find((bundle) => bundle.id === previewFor);
   const previewAdding = previewFor ? !assignedIds.has(previewFor) : false;
   const names = useShownNames();
+  // What the change does for this person, rules followed, from the backend.
+  const preview = useInsightsWhatIf(
+    previewFor
+      ? { kind: previewAdding ? "bundle_assigned" : "bundle_unassigned", bundle_id: previewFor, user_id: userId }
+      : null,
+  );
+  const changed = useMemo(() => {
+    if (!preview.data) return null;
+    const people = previewAdding ? preview.data.gains : preview.data.losses;
+    const keys = new Set<string>();
+    for (const p of people) if (p.user_id === userId) for (const r of p.roles) keys.add(`${r.project_id}:${r.role_key}`);
+    return keys;
+  }, [preview.data, previewAdding, userId]);
   const previewRoles = sortByName(previewFor ? (bundleRoles[previewFor] ?? []) : [], (r) => names.roleRef(r.zitadel_project_id, r.zitadel_role_key), (r) => `${r.zitadel_project_id}:${r.zitadel_role_key}`);
+
+  const throughRules = useMemo(() => {
+    if (!changed) return [];
+    const own = new Set(previewRoles.map((r) => `${r.zitadel_project_id}:${r.zitadel_role_key}`));
+    return Array.from(changed)
+      .filter((k) => !own.has(k))
+      .map((k) => ({ project_id: k.slice(0, k.indexOf(":")), role_key: k.slice(k.indexOf(":") + 1) }))
+      .sort((a, b) => compareNames(names.roleRef(a.project_id, a.role_key), names.roleRef(b.project_id, b.role_key)));
+  }, [changed, previewRoles, names]);
 
   async function apply() {
     try {
@@ -106,6 +122,8 @@ function ManageBundlesOpen({
       // confirm an empty screen.
       let waiting = 0;
       let revoking = 0;
+      let sent = 0;
+      let refused: { reason?: string; removing: boolean } | undefined;
       for (const id of changes) {
         const removing = assignedIds.has(id);
         setActing(removing ? "remove" : "assign");
@@ -120,32 +138,60 @@ function ManageBundlesOpen({
           next.delete(id);
           return next;
         });
-        const enqueued = result?.cascade?.enqueued ?? 0;
+        const cascade = result?.cascade;
+        const enqueued = cascade?.enqueued ?? 0;
+        if (isRefused(cascade?.wait_reason)) {
+          // Final verification N1: terminal, never "waits" or "went".
+          refused ??= { reason: cascade?.wait_reason, removing };
+          continue;
+        }
+        // The server's delivery decides (services.Deliver): no wait reason
+        // means every row went to Zitadel.
+        if (!cascade?.wait_reason) {
+          sent += enqueued;
+          continue;
+        }
         waiting += enqueued;
-        if (removing) revoking += enqueued;
+        // With the background drain off a revocation waits for Send like the
+        // rest, and a role that waits holds one too.
+        if (removing && auto === true && cascade.wait_reason !== "role_waits") revoking += enqueued;
       }
       const recorded =
         changes.length === 1 ? "One bundle change recorded" : `${changes.length} bundle changes recorded`;
+      if (refused) {
+        setOutcome(refusedOutcome(recorded, refused.reason, { revocation: refused.removing }));
+        setStaged(new Set());
+        return;
+      }
+      if (waiting === 0 && sent > 0) {
+        setOutcome({ kind: "applied", message: recorded, detail: `Sent to Zitadel: ${sent === 1 ? "one change" : `${sent} changes`}.` });
+        setStaged(new Set());
+        return;
+      }
       setOutcome({
         // Amber "waiting" only where something waits. A change that queued
         // nothing is done, and painting it as pending sends an operator to an
         // empty Pending changes to look for it.
         kind: waiting > 0 ? "queued" : "applied",
+        // Unknown drain (N3): no promise, and no Send link for a revocation that may go on its own.
+        ...(waiting > 0 && auto === null ? { sendsItself: true, next: DRAIN_UNKNOWN_NEXT } : {}),
         message: recorded,
-        // Revocations do not wait for a person — they send on their own every
-        // few minutes — so telling the operator to go and send them would be
+        // Revocations do not wait for a person — they send on their own within a
+        // minute — so telling the operator to go and send them would be
         // false, and saying nothing about it would leave them wondering why
         // Pending changes emptied by itself.
         detail:
           waiting > 0
-            ? `Nothing has reached Zitadel or a connected system yet. ${
+            ? `${sent > 0 ? `${sent === 1 ? "One change" : `${sent} changes`} went to Zitadel. ` : ""}${
                 waiting === 1 ? "One change waits" : `${waiting} changes wait`
               } under Pending changes${
-                revoking === waiting
-                  ? ". Revocations send on their own within a few minutes, or send them now."
-                  : revoking > 0
-                    ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a few minutes, the rest until you send them.`
-                    : " until you send them."
+                auto === null
+                  ? ", listed there until each reaches Zitadel."
+                  : revoking === waiting
+                    ? ". Revocations send on their own within a minute, or send them now."
+                    : revoking > 0
+                      ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a minute, the rest until you send them.`
+                      : " until you send them."
               }`
             : "Nothing is waiting for you to send: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",
       });
@@ -193,45 +239,51 @@ function ManageBundlesOpen({
       {previewBundle && (
         <div className="mx-6 mt-5 border-t border-line pt-4">
           <div className="mb-2.5 type-label">
-            {previewAdding ? `Adding ${previewBundle.name} would grant` : `Removing ${previewBundle.name} would revoke`}
+            {previewAdding ? `Adding ${previewBundle.name} would give` : `Removing ${previewBundle.name} would revoke`}
           </div>
           <div className="flex flex-col gap-[7px] text-[14px]">
             {previewRoles.length === 0 && (
               <span className="text-faint">
                 {previewBundle.latest_version
-                  ? `v${previewBundle.latest_version} of this bundle carries no roles, so this grants nothing.`
+                  ? `v${previewBundle.latest_version} of this bundle carries no roles, so this gives nothing.`
                   : "This bundle carries no roles yet."}
               </span>
             )}
             {previewRoles.map((role) => {
               const projectId = role.zitadel_project_id;
               const roleKey = role.zitadel_role_key;
-              const alreadyHeld = held.has(`${projectId}::${roleKey}`);
-              const cascade = (rules.data ?? []).find(
-                (rule) => rule.source_project === projectId && rule.source_role === roleKey,
-              );
+              // No change for this role, by the backend's answer: already held
+              // (adding), or still given by something else (removing).
+              const unchanged = changed !== null && !changed.has(`${projectId}:${roleKey}`);
               return (
-                <div key={`${projectId}:${roleKey}`} className="flex flex-col gap-[7px]">
-                  <div
-                    className={`flex items-center gap-2.5 ${
-                      previewAdding && alreadyHeld ? "text-faint" : ""
-                    }`}
-                  >
-                    <StatusDot tone={previewAdding && alreadyHeld ? "neutral" : "accent"} />
-                    <RoleRef projectId={projectId} roleKey={roleKey} />
-                    {previewAdding && alreadyHeld && (
-                      <span className="text-[13px]">already held, no change</span>
-                    )}
-                  </div>
-                  {cascade && (
-                    <div className="flex items-center gap-2.5 text-muted">
-                      <StatusDot tone="neutral" />
-                      and, through an automatic rule, <RoleRef projectId={cascade.target_project} roleKey={cascade.target_role} />
-                    </div>
+                <div
+                  key={`${projectId}:${roleKey}`}
+                  className={`flex items-center gap-2.5 ${unchanged ? "text-faint" : ""}`}
+                >
+                  <StatusDot tone={unchanged ? "neutral" : "accent"} />
+                  <RoleRef projectId={projectId} roleKey={roleKey} />
+                  {unchanged && (
+                    <span className="text-[13px]">
+                      {previewAdding ? "already held, no change" : "kept, something else gives it"}
+                    </span>
                   )}
                 </div>
               );
             })}
+            {/* Every role the automatic rules add or take with it, down the
+                whole chain: the backend's answer, never a walk of the rule
+                list here (which used to name the first matching rule only). */}
+            {throughRules.map((r) => (
+              <div key={`${r.project_id}:${r.role_key}`} className="flex items-center gap-2.5 text-muted">
+                <StatusDot tone="neutral" />
+                and, through an automatic rule, <RoleRef projectId={r.project_id} roleKey={r.role_key} />
+              </div>
+            ))}
+            {preview.error && (
+              <span className="text-[13px] text-faint">
+                Couldn&rsquo;t work out what the automatic rules add. The roles above are the bundle&rsquo;s own.
+              </span>
+            )}
           </div>
 
           {/*
@@ -253,7 +305,7 @@ function ManageBundlesOpen({
         </div>
       )}
 
-      {outcome && <ActionOutcome word="Recorded" outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={outcome.recorded ? "Refused by Zitadel" : "Recorded"} outcome={outcome} className="mx-6 mb-1" />}
       {outcome && step.after}
 
       {/* The footer follows the state of the work, because the work has three

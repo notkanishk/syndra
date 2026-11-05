@@ -9,6 +9,23 @@
  * and it doesn't match".
  */
 
+/** The headline of a count Zitadel has not been read for. Not a number. */
+export const NOT_CHECKED = "—";
+
+/**
+ * The sort key of a people column: what Zitadel shows, never the recorded
+ * number. Not checked sorts below zero, so it never ranks as a headcount.
+ */
+export function heldSortKey(observed: number | null | undefined): number {
+  return observed ?? -1;
+}
+
+/** " person" or " people" after a headline; nothing after a count not checked. */
+export function peopleSuffix(headline: string): string {
+  if (headline === NOT_CHECKED) return "";
+  return headline === "1" ? " person" : " people";
+}
+
 export type HoldersTone = "ok" | "warn" | "danger" | "muted";
 
 export interface HoldersLine {
@@ -36,8 +53,14 @@ export function holdersLine(
   confirmed: number | undefined,
   observed: number | undefined,
 ): HoldersLine {
+  // Never the recorded number in the headline: "12" over "not checked yet" is
+  // still read as twelve people holding it. The recorded number is the note.
   if (observed === undefined) {
-    return { headline: String(given), note: "not checked yet", tone: "muted" };
+    return {
+      headline: NOT_CHECKED,
+      note: given > 0 ? `not checked yet · ${given} given by Syndra` : "not checked yet",
+      tone: "muted",
+    };
   }
 
   // The overlap is unknown — this caller does not compute it. It is NOT zero:

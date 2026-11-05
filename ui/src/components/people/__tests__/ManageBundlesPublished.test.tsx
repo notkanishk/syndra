@@ -20,6 +20,7 @@ import { ManageBundles } from "@/components/people/ManageBundles";
 const state = vi.hoisted(() => ({
   roleQueries: vi.fn(),
   assignAsync: vi.fn().mockResolvedValue(undefined),
+  whatIf: vi.fn(),
 }));
 
 vi.mock("@/lib/queries/useBundles", () => ({
@@ -38,7 +39,10 @@ vi.mock("@/lib/queries/useBundles", () => ({
   useRemoveBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-vi.mock("@/lib/queries/useMappingRules", () => ({ useMappingRules: () => ({ data: [] }) }));
+// The rules are followed by the backend (the what-if), never by this panel.
+vi.mock("@/lib/queries/useInsights", () => ({
+  useInsightsWhatIf: (...args: unknown[]) => state.whatIf(...args),
+}));
 
 vi.mock("@/lib/queries/useUsers", () => ({
   useAssignBundle: () => ({ mutateAsync: state.assignAsync, isPending: false }),
@@ -57,6 +61,7 @@ beforeEach(() => {
     allLoaded: true,
   });
   state.assignAsync = vi.fn().mockResolvedValue(undefined);
+  state.whatIf = vi.fn().mockReturnValue({ data: undefined, error: null });
 });
 
 function open() {
@@ -116,8 +121,33 @@ describe("ManageBundles", () => {
     expect(screen.getByText(/nothing is waiting for you to send/i)).toBeInTheDocument();
   });
 
-  it("reports the change waiting, and where to send it, when it enqueues a cascade", async () => {
+  // Final verification N1: a cascade Zitadel refused is said as a refusal, with
+  // its cause and step; it never waits, and Send is not the step.
+  it("says Zitadel refused this, with why and what to do, when it did", async () => {
+    state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 1, wait_reason: "refused:not_allowed" } });
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
+
+    expect(await screen.findByText("Refused by Zitadel")).toBeInTheDocument();
+    expect(screen.getByText(/Zitadel refused this: Syndra's service account isn't allowed/)).toBeInTheDocument();
+    expect(screen.getByText(/Ask whoever runs Zitadel/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
+  });
+
+  it("says a cascade the server sent went, never that it waits", async () => {
     state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 2 } });
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
+
+    expect(await screen.findByText(/Sent to Zitadel: 2 changes/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
+  });
+
+  it("reports the change waiting, and where to send it, when it enqueues a cascade", async () => {
+    state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 2, waiting: 2, wait_reason: "role_waits" } });
     open();
     fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
     fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
@@ -127,5 +157,34 @@ describe("ManageBundles", () => {
       "/governance/pending",
     );
     expect(screen.getByText(/2 changes wait under pending changes/i)).toBeInTheDocument();
+  });
+
+  it("lists every role the automatic rules add, from the backend, and what is already held", () => {
+    state.whatIf = vi.fn().mockReturnValue({
+      data: {
+        gains: [
+          {
+            user_id: "u1",
+            name: "Ada",
+            roles: [
+              { project_id: "p2", role_key: "chained-one" },
+              { project_id: "p3", role_key: "chained-two" },
+            ],
+          },
+        ],
+        losses: [],
+        unchanged: 0,
+      },
+      error: null,
+    });
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+
+    expect(state.whatIf).toHaveBeenLastCalledWith({ kind: "bundle_assigned", bundle_id: "b1", user_id: "u1" });
+    // Both rule targets, not just the first matching rule's.
+    expect(screen.getByText("chained-one")).toBeInTheDocument();
+    expect(screen.getByText("chained-two")).toBeInTheDocument();
+    // The bundle's own role gains nothing by the backend's answer: already held.
+    expect(screen.getByText("already held, no change")).toBeInTheDocument();
   });
 });

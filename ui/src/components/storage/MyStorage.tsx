@@ -20,7 +20,7 @@ import type { GuideFolder } from "@/components/storage/ConnectionGuide";
 import { deviceFrom, type Device } from "@/components/storage/device";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
-import { formatAt, formatBytes, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
+import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import {
@@ -32,6 +32,9 @@ import {
 } from "@/lib/queries/useMyStorage";
 import { oneShot } from "@/lib/secret";
 import dynamic from "next/dynamic";
+import { RetryStatus } from "@/components/ui/RetryStatus";
+import { retryLine, type RetryState } from "@/lib/retry";
+import { roleName } from "@/lib/names";
 
 // Opened on demand, so it stays out of the page's first load.
 const ConnectionGuide = dynamic(() => import("@/components/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
@@ -124,7 +127,7 @@ function useRoleName() {
   return (role: RoleSource) => {
     const project = catalog.data.find((p) => p.id === role.project_id);
     const found = project?.roles.find((r) => r.key === role.role_key);
-    return found?.label || humanizeKey(role.role_key);
+    return roleName(found?.label, role.role_key);
   };
 }
 
@@ -162,7 +165,7 @@ function TargetCard({ view }: { view: MyTargetView }) {
       </div>
 
       <Unfold open={Boolean(offline)}>
-        <Notice tone="warn" title={`${label} is offline`} blocking live className="mx-5 mt-[18px]">
+        <Notice tone="warn" title={`${label} is offline`} blocking live className="mx-5 mt-[18px]" nothingToDo={`This page updates on its own when ${label} returns.`}>
           It stopped answering{view.reachable_since ? ` at ${formatClock(view.reachable_since)}` : ""}, so your
           folders won&apos;t open until it&apos;s back. Your account, files and access are safe, and this page
           updates on its own when {label} returns.
@@ -194,9 +197,13 @@ function TargetCard({ view }: { view: MyTargetView }) {
 
       <Unfold open={Boolean(notice) && !hasAccount}>
         {notice && (
-          <Notice tone="warn" title={notice.title} className="mx-5 mb-[22px]">
+          <Notice
+            tone="warn"
+            title={notice.title}
+            className="mx-5 mb-[22px]"
+            {...(notice.person ? { next: PERSON } : { nothingToDo: PAUSE_ENDS })}
+          >
             {notice.body}
-            {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
           </Notice>
         )}
       </Unfold>
@@ -221,9 +228,13 @@ function TargetCard({ view }: { view: MyTargetView }) {
 
           <Unfold open={Boolean(notice)}>
             {notice && (
-              <Notice tone="warn" title={notice.title} className="mx-5 mb-5">
+              <Notice
+                tone="warn"
+                title={notice.title}
+                className="mx-5 mb-5"
+                {...(notice.person ? { next: PERSON } : { nothingToDo: PAUSE_ENDS })}
+              >
                 {notice.body}
-                {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
               </Notice>
             )}
           </Unfold>
@@ -250,6 +261,11 @@ function TargetCard({ view }: { view: MyTargetView }) {
   );
 }
 
+// Final verification: the pause ends when an operator sets the add-on back to
+// active (or a restart does), never by itself, and nothing resumes on its end
+// alone: a revocation goes on the background drain, anything else on an
+// operator's Send (handlers/my_storage.go Lifecycle). So no "by itself".
+const PAUSE_ENDS = "Makerspace staff end the pause; account changes held back wait until then.";
 const PERSON = "Need it today? Ask makerspace staff: they can see this pause and how long it should last.";
 
 function copyFor(state: State, label: string, view: MyTargetView): [string, string, React.ReactNode] {
@@ -340,8 +356,8 @@ function pausedNotice(view: MyTargetView, label: string): { title: string; body:
   if (!view.account) return null;
   if (view.lifecycle === "draining") {
     return {
-      title: "Account changes are paused for a few minutes",
-      body: `${label} is online and your access hasn't changed, so you can connect and use your files now. Syndra is only holding off on account changes while the last few finish.`,
+      title: "Account changes are paused while the last few finish",
+      body: `${label} is online and your access hasn't changed, so you can connect and use your files now. Syndra is holding off on new account changes while the last few finish, so makerspace staff can work on ${label}.`,
       person: false,
     };
   }
@@ -688,7 +704,9 @@ function PasswordForm({
   accent?: boolean;
 }) {
   const [password, setPassword] = useState("");
-  const set = useSetStorageCredential(view.target);
+  // Said while the page waits to send it again: never "done" before Syndra knows.
+  const [retrying, setRetrying] = useState<RetryState | null>(null);
+  const set = useSetStorageCredential(view.target, setRetrying);
   const status = set.data?.status;
   const changed = status === "set";
   const noAnswer = status === "indeterminate";
@@ -703,6 +721,7 @@ function PasswordForm({
       className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
+        setRetrying(null);
         // The field clears only on a confirmed done: otherwise it still holds
         // what was typed, so one press sends it again.
         set.mutate(oneShot(password), {
@@ -738,16 +757,24 @@ function PasswordForm({
           </span>
         </div>
       </div>
-      <Unfold open={slow}>
+      <Unfold open={slow && !retrying}>
         <p role="status" className="max-w-[62ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
           Still waiting for {label}. Keep this page open until it answers.
         </p>
       </Unfold>
+      {retrying && set.isPending && (
+        // The one retry model's seat (RetryStatus), in the member's voice.
+        <RetryStatus retry={retrying} system={label} own />
+      )}
       {noAnswer && !set.isPending && (
         // Step 2: a failure appears still; it never lifts.
         <Result
           tone="warn"
-          title={`${label} didn't answer, so your password may not have changed.`}
+          title={
+            set.data?.retry
+              ? `${retryLine(set.data.retry, label)} Your password may not have changed.`
+              : `${label} didn't answer, so your password may not have changed.`
+          }
           body={`Try again in a minute: press ${submitLabel}. Sending the same password twice is safe, and ${label} then has the one you set.`}
         />
       )}

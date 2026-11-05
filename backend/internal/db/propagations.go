@@ -293,10 +293,11 @@ const revocationFirst = `
 	            AND r.status IN ('pending', 'in_flight'))) DESC,
 	p.intent_seq`
 
-// notBeforeDue is the backoff gate both batch claims share: a requeued row is
-// not claimable until its not_before has passed. ClaimPropagationByID does not
-// apply it: that claim is an operator's explicit apply of one row, a
-// deliberate retry, and the retry budget still bounds it.
+// notBeforeDue is the backoff gate the background claims share: a requeued
+// row is not claimable by them until its not_before has passed. The operator's
+// claims (ClaimPendingPropagations, ClaimPropagationByID) do not apply it:
+// pressing Send is an explicit request, a deliberate retry, and the retry
+// budget still bounds it.
 const notBeforeDue = `(p.not_before IS NULL OR p.not_before <= NOW())`
 
 // ClaimPendingPropagations atomically transitions up to `limit` claimable rows
@@ -333,7 +334,7 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 			SELECT p.id FROM propagation_outbox p
 			JOIN targets t ON t.target = p.target AND t.state = 'active'
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
-			  AND ` + notBeforeDue + `
+			-- No backoff gate: Send is the operator asking for it now.
 			-- Revocations first, by subject; then intent order, not
 			-- transaction-start order — created_at is fixed at BEGIN and the
 			-- access lock is taken after it, so a serially-older add can carry
@@ -350,7 +351,7 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
 		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
-		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,'')`
+		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim propagations: %w", err)
@@ -393,7 +394,7 @@ func ClaimPropagationByID(ctx context.Context, target, id string) (*models.Pendi
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
 		          p.source, COALESCE(p.source_ref,''),
 		          COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
-		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,'')`
+		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
 	rows, err := querier(ctx).Query(ctx, q, id, target)
 	if err != nil {
 		return nil, false, fmt.Errorf("claim propagation %s: %w", id, err)
@@ -486,10 +487,67 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
 		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
-		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,'')`
+		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim pending revocations: %w", err)
+	}
+	defer rows.Close()
+	return scanPropagations(rows)
+}
+
+// ClaimDueRetries is the background drain's second claim: rows that were
+// already sent once (straight away, or by the operator's Send), that Zitadel
+// didn't take (503, no answer, 429), and whose backoff has passed. The
+// operator consented to them going when they were first sent, so trying again
+// on schedule asks nothing new of them — gives included (owner, 5 Nov 2026).
+//
+// What it never takes: a row that waits for the operator, by its stamp
+// (role_waits, or manual from before the switch over) or by its role being
+// marked to wait now. And never a withdrawal: ClaimPendingRevocations already
+// owns those, with its own rule against overtaking older conferring intent.
+//
+// in_flight counts as tried: under the drain lock it is a row a drain claimed
+// and could not settle (a crash, or a state write that failed), and the
+// idempotent already-exists check resolves it as the operator's claim would.
+//
+// ponytail: no older-intent guard on conferring rows. Deliver already sent
+// this row once ahead of anything older, so the retry overtakes nothing the
+// first try did not. Add one if Deliver ever learns to wait its turn.
+func ClaimDueRetries(ctx context.Context, target string, limit int) ([]models.PendingPropagation, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if err := terminateSuperseded(ctx, target, ""); err != nil {
+		return nil, err
+	}
+	const q = `
+		WITH claimed AS (
+			SELECT p.id FROM propagation_outbox p
+			JOIN targets t ON t.target = p.target AND t.state = 'active'
+			WHERE p.target = $2
+			  AND (p.status = 'in_flight' OR (p.status = 'pending' AND p.not_before IS NOT NULL))
+			  AND ` + notBeforeDue + `
+			  AND NOT (p.op_type = 'revoke' OR p.withdraws_only)
+			  AND p.wait_reason IS DISTINCT FROM 'role_waits'
+			  AND p.wait_reason IS DISTINCT FROM 'manual'
+			  AND NOT EXISTS (SELECT 1 FROM role_waits w
+			                  WHERE w.project_id = p.project_id AND w.role_key = ANY(p.role_keys))
+			ORDER BY ` + revocationFirst + `
+			LIMIT $1
+			FOR UPDATE OF p SKIP LOCKED
+		)
+		UPDATE propagation_outbox p
+		SET status = 'in_flight', started_at = NOW()
+		FROM claimed
+		WHERE p.id = claimed.id
+		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
+		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
+		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
+		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
+	rows, err := querier(ctx).Query(ctx, q, limit, target)
+	if err != nil {
+		return nil, fmt.Errorf("claim due retries: %w", err)
 	}
 	defer rows.Close()
 	return scanPropagations(rows)
@@ -665,11 +723,22 @@ func MarkPropagationFailed(ctx context.Context, id, errMsg string) error {
 		 WHERE id=$1 AND status='in_flight'`, errMsg)
 }
 
+// MarkPropagationRefused is MarkPropagationFailed for a row the target refused
+// outright: it also keeps the plain cause (Refusal*) as wait_reason
+// "refused:<cause>", so Pending changes and Home can say why Syndra stopped
+// sending it. No new column: wait_reason already carries this vocabulary
+// (WaitReasonRefused) and nothing reads it on a failed row for anything else.
+func MarkPropagationRefused(ctx context.Context, id, errMsg, cause string) error {
+	return settleOne(ctx, "mark propagation refused", id,
+		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2, wait_reason=$3
+		 WHERE id=$1 AND status='in_flight'`, errMsg, WaitReasonRefused(cause))
+}
+
 // outboxBackoff spaces a row's tries: 1m doubling to a 30m cap, jittered. With
 // the default budget of five that is roughly 1+2+4+8+16 minutes before a row
 // lands in failed, long enough to outlast a Zitadel blip, which an unspaced
 // budget did not (one row could spend every try inside a second).
-var outboxBackoff = extcall.Policy{Base: time.Minute, Max: 30 * time.Minute}
+var outboxBackoff = extcall.OutboxRetry
 
 // RequeuePropagation returns a row to pending after a transient error, bumps
 // attempts, and sets not_before so the batch claims leave it alone until its
@@ -694,6 +763,43 @@ func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 		return 0, fmt.Errorf("requeue propagation: %w", err)
 	}
 	return attempts, nil
+}
+
+// ScheduleRetry gives rows a straight-away send left pending, because the send
+// halted before they went (Zitadel unreachable, a drain error), the same
+// schedule a 503 after a send gets: the halted send counts as try 1, the next
+// try is one backoff away, and the background drain (ClaimDueRetries) sends it
+// on its own from then (owner, 5 Nov 2026: any straight-away send that hit a
+// transient failure is retried automatically). It returns the ids it scheduled.
+//
+// Never a row that waits for the operator (stamped role_waits or manual), and
+// never one already scheduled (not_before set): a row the drain requeued after
+// a 503 already counted its try. The background drain probes Zitadel before it
+// claims, so an outage does not spend the budget.
+func ScheduleRetry(ctx context.Context, ids []string, errMsg string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	const q = `UPDATE propagation_outbox
+		SET attempts = attempts + 1, last_error = $2, wait_reason = $3,
+		    not_before = NOW() + make_interval(secs => ($4::float8[])[LEAST(attempts+1, cardinality($4::float8[]))])
+		WHERE id::text = ANY($1) AND status = 'pending' AND not_before IS NULL
+		  AND wait_reason IS DISTINCT FROM 'role_waits' AND wait_reason IS DISTINCT FROM 'manual'
+		RETURNING id::text`
+	rows, err := querier(ctx).Query(ctx, q, ids, errMsg, WaitReasonHalted(HaltRetrying), backoffSchedule())
+	if err != nil {
+		return nil, fmt.Errorf("schedule retry: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("schedule retry: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // backoffSchedule is outboxBackoff's wait, in seconds, after 0..15 spent tries
@@ -724,19 +830,122 @@ func ReleasePropagation(ctx context.Context, id, reason string) error {
 }
 
 // GetPendingPropagations returns rows still in flight (pending or in_flight),
-// oldest first — the operator's "awaiting Zitadel" worklist.
+// oldest first — the operator's "awaiting Zitadel" worklist. Each row carries
+// attempts and not_before, so a row Zitadel didn't take can say when it is
+// tried next.
 func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, error) {
 	const q = `
 		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
 		       source, COALESCE(source_ref,''),
 		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
-		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,''), COALESCE(wait_reason,'')
+		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,''), COALESCE(wait_reason,''), not_before
 		FROM propagation_outbox
 		WHERE status IN ('pending','in_flight')
 		ORDER BY cascade_id NULLS LAST, created_at`
 	rows, err := querier(ctx).Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("get pending propagations: %w", err)
+	}
+	defer rows.Close()
+	return scanPropagations(rows)
+}
+
+// HaltRetrying is the halt reason (halted:retrying) of a change Zitadel didn't
+// take when it was sent: requeued with a backoff, and sent again on its own by
+// the background drain (ClaimDueRetries).
+const HaltRetrying = "retrying"
+
+// retryingRow is a pending row the background drain will send again on its
+// own: tried, given a next try, and not waiting for the operator. It is the
+// same rule as ClaimDueRetries plus the revocations the revocation claim
+// retries, which is every withdrawal that does not wait.
+//
+// ponytail: RowRetry (the per-row words) reads only the stamp, not role_waits,
+// so a role marked to wait AFTER its change was sent still shows a next try
+// on its Pending changes row, while this count and the claim hold it. Stamp
+// such rows when a role is marked, if that corner ever matters.
+const retryingRow = `status = 'pending' AND attempts > 0 AND not_before IS NOT NULL
+	AND wait_reason IS DISTINCT FROM 'role_waits' AND wait_reason IS DISTINCT FROM 'manual'
+	AND NOT EXISTS (SELECT 1 FROM role_waits w WHERE w.project_id = propagation_outbox.project_id
+	                AND w.role_key = ANY(propagation_outbox.role_keys))`
+
+// gaveUpBefore is how far back an unseen give-up counts before a person has
+// ever marked one seen: a week, so the first deploy does not raise every
+// give-up the outbox ever recorded.
+const gaveUpBefore = "7 days"
+
+// MarkGaveUpSeen records that actor has seen every change Syndra gave up on
+// so far; CountRetries stops counting them for that person only (owner,
+// 6 Nov 2026: each operator sees a give-up until they themselves mark it
+// seen). Stamped by the database clock, so it compares with completed_at on
+// the same clock. Table gave_up_seen, migration 000082.
+func MarkGaveUpSeen(ctx context.Context, actor string) error {
+	_, err := querier(ctx).Exec(ctx, `
+		INSERT INTO gave_up_seen (actor, seen_at) VALUES ($1, NOW())
+		ON CONFLICT (actor) DO UPDATE SET seen_at = NOW()`, actor)
+	if err != nil {
+		return fmt.Errorf("mark gave-up seen: %w", err)
+	}
+	return nil
+}
+
+// gaveUpRow is a change Syndra stopped sending that actor ($1) has not marked
+// seen: any row that ended without being applied, whether out of retries,
+// refused by the target on a later try, or refused on its first (re-audit
+// R11: a refused retry used to leave "retrying" and never reach "gave up", so
+// Home went quiet; and a refused row leaves Pending changes, so it is listed
+// here rather than nowhere). Failed rows are terminal and rare.
+const gaveUpRow = `status = 'failed'
+	AND completed_at > COALESCE((SELECT seen_at FROM gave_up_seen WHERE actor = $1),
+	                            NOW() - INTERVAL '` + gaveUpBefore + `')`
+
+// CountRetries counts, per target, the changes Syndra is sending again on its
+// own and the ones it stopped sending that actor has not marked seen, so
+// neither goes unnoticed, and each is said under the system it was for.
+func CountRetries(ctx context.Context, actor string) (retrying, gaveUp map[string]int, err error) {
+	q := `SELECT target,
+		COUNT(*) FILTER (WHERE ` + retryingRow + `),
+		COUNT(*) FILTER (WHERE ` + gaveUpRow + `)
+		FROM propagation_outbox
+		WHERE status IN ('pending','failed')
+		GROUP BY target`
+	rows, err := querier(ctx).Query(ctx, q, actor)
+	if err != nil {
+		return nil, nil, fmt.Errorf("count retries: %w", err)
+	}
+	defer rows.Close()
+	retrying, gaveUp = map[string]int{}, map[string]int{}
+	for rows.Next() {
+		var target string
+		var r, g int
+		if err := rows.Scan(&target, &r, &g); err != nil {
+			return nil, nil, fmt.Errorf("count retries: %w", err)
+		}
+		if r > 0 {
+			retrying[target] = r
+		}
+		if g > 0 {
+			gaveUp[target] = g
+		}
+	}
+	return retrying, gaveUp, rows.Err()
+}
+
+// ListGaveUp is the changes CountRetries counts as given up for actor, newest
+// first: what Home's "Syndra stopped sending" points at, on Pending changes.
+func ListGaveUp(ctx context.Context, actor string) ([]models.PendingPropagation, error) {
+	q := `
+		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
+		       source, COALESCE(source_ref,''),
+		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
+		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,''), COALESCE(wait_reason,''), not_before
+		FROM propagation_outbox
+		WHERE ` + gaveUpRow + `
+		ORDER BY completed_at DESC
+		LIMIT 200`
+	rows, err := querier(ctx).Query(ctx, q, actor)
+	if err != nil {
+		return nil, fmt.Errorf("list gave up: %w", err)
 	}
 	defer rows.Close()
 	return scanPropagations(rows)
@@ -897,7 +1106,7 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 		if err := rows.Scan(&p.ID, &p.Target, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
 			&p.Source, &p.SourceRef, &p.CascadeID,
 			&p.ZitadelGrantID, &p.Status, &p.Attempts, &p.LastError, &p.InitiatedBy,
-			&p.CreatedAt, &p.StartedAt, &p.CompletedAt, &p.Reason, &p.WaitReason); err != nil {
+			&p.CreatedAt, &p.StartedAt, &p.CompletedAt, &p.Reason, &p.WaitReason, &p.NotBefore); err != nil {
 			return nil, fmt.Errorf("scan propagation: %w", err)
 		}
 		out = append(out, p)
