@@ -17,6 +17,7 @@ import { waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
+import { useRulePreview } from "@/lib/queries/useRulePreview";
 import { forecastFor, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import { useTerms, type Term } from "@/lib/queries/useTerms";
@@ -106,8 +107,12 @@ function GrantDirectAccessOpen({
   // sheet to a step first (A-04 §14); Keep it comes back here as it was.
   const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${roleName}` });
   const waits = useWaitsBeforeLine();
+  // What the automatic rules also give with this role, said before the click
+  // (audit C2), from the closure the write itself follows.
+  const rules = useRulePreview(userId, projectId, [roleKey]);
+  const ruleLines = (rules.data ?? []).map((row) => row.sentence);
 
-  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate));
+  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate)) && !rules.isLoading;
   // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
   const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued";
 
@@ -224,6 +229,17 @@ function GrantDirectAccessOpen({
                 ) : (
                   <span className="block">{first} can use it as soon as you give it.</span>
                 ))}
+              {selectedRole &&
+                ruleLines.map((line) => (
+                  <span key={line} className="block">
+                    {line}
+                  </span>
+                ))}
+              {selectedRole && rules.isError && (
+                <span className="block">
+                  Syndra couldn&rsquo;t read the automatic rules, so a role one of them also gives isn&rsquo;t named here.
+                </span>
+              )}
             </>
           ))
         }
@@ -243,7 +259,9 @@ function GrantDirectAccessOpen({
                 !ready
                   ? !value
                     ? "Choose a role to give."
-                    : "Pick the date the access should end."
+                    : rules.isLoading
+                      ? "Checking what automatic rules also give."
+                      : "Pick the date the access should end."
                   : undefined
               }
               isPending={grant.isPending}
@@ -263,6 +281,10 @@ function GrantDirectAccessOpen({
                   // `wait_reason` is the backend's account of why this isn't
                   // in Zitadel yet; without one the grant went straight through.
                   const why = waitReasonLine(made.wait_reason, roleName, new Date().toISOString());
+                  // The rows the rules queued with it: named as the preview
+                  // named them, only when the write says it queued some.
+                  const queuedByRules = (made as { rule_outbox_ids?: string[] }).rule_outbox_ids?.length ?? 0;
+                  const alsoGave = queuedByRules > 0 && ruleLines.length > 0 ? ` ${ruleLines.join(" ")}` : "";
                   if (made.status !== "applied" || made.wait_reason) {
                     setResult({
                       word: "Given",
@@ -270,17 +292,21 @@ function GrantDirectAccessOpen({
                         kind: "queued",
                         message: `${roleName} is given to ${first}`,
                         detail:
-                          made.wait_reason === "role_waits"
+                          (made.wait_reason === "role_waits"
                             ? `${why}, so ${first} can't use it yet.`
                             : why
                               ? `${why}, so it goes when you send it.`
-                              : "It goes when you send it.",
+                              : "It goes when you send it.") + alsoGave,
                       },
                     });
                   } else {
                     setResult({
                       word: "Given",
-                      outcome: { kind: "applied", message: `${first} can use ${roleName} on their own now` },
+                      outcome: {
+                        kind: "applied",
+                        message: `${first} can use ${roleName} on their own now`,
+                        ...(alsoGave ? { detail: alsoGave.trim() } : {}),
+                      },
                     });
                   }
                 } catch (error) {

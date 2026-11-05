@@ -353,7 +353,36 @@ func rehearseOne(
 	if err != nil {
 		return BulkOutcome{}, err
 	}
-	return WithCancels(out, cancels), nil
+	// What the automatic rules give on top of the roles chosen, named per
+	// person before the apply (coherence audit C2).
+	var given []models.HeldRole
+	for _, p := range params {
+		if p.OpType == "add" {
+			given = append(given, models.HeldRole{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]})
+		}
+	}
+	rules, err := RulesFollowing(ctx, uid, given)
+	if err != nil {
+		return BulkOutcome{}, err
+	}
+	// The cancels line stays last: the plan renderer splits it off the end.
+	return WithCancels(WithRules(out, rules), cancels), nil
+}
+
+// WithRules adds what the rules give to a plan row: its consequence names
+// each, and its fingerprint binds them, so an apply after a rule changed is a
+// moved row rather than a give nobody read.
+func WithRules(out BulkOutcome, rows []RuleRow) BulkOutcome {
+	if len(rows) == 0 {
+		return out
+	}
+	fields := []string{out.Fingerprint, "rules"}
+	for _, r := range rows {
+		fields = append(fields, r.RuleID, r.ProjectID, r.RoleKey)
+	}
+	out.Fingerprint = Fingerprint(fields...)
+	out.Consequence = strings.TrimSpace(out.Consequence + " " + RuleSentences(rows))
+	return out
 }
 
 // cancellingWrites are the single-role writes this row's apply would make

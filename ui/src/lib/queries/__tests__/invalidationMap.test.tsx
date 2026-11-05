@@ -50,6 +50,14 @@ describe("the write-to-keys map", () => {
     }
   });
 
+  // Audit S7: a drift revoke queues a removal and an adopt can queue what a
+  // rule gives; the signing key and a target's own state now write audit rows.
+  it("drift reaches Pending changes, and the key and target writes reach the audit log", () => {
+    expect(has(keysFor("drift") as unknown[][], ["propagations"])).toBe(true);
+    expect(has(keysFor("signingKey") as unknown[][], ["audit"])).toBe(true);
+    expect(has(keysFor("target", { target: "t" }) as unknown[][], ["audit"])).toBe(true);
+  });
+
   it("scopes and extras are added, never replace the kind's keys", () => {
     const keys = keysFor("claimShape", { appId: "a1", extra: [["mine"]] }) as unknown[][];
     expect(has(keys, ["claim-shape", "app", "a1"])).toBe(true);

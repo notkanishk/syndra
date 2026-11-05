@@ -74,6 +74,8 @@ import {
   type DriftSortKey,
 } from "@/lib/drift-filters";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { useRulePreview } from "@/lib/queries/useRulePreview";
+import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { targetLabel } from "@/lib/nav";
 import {
@@ -1064,8 +1066,9 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
       <div>
         <div className="type-label mb-1.5">If you adopt</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">
-          Syndra records this as access you gave, and the row stops appearing here. The
-          person&rsquo;s access does not change.
+          Syndra records this as access you gave, and the row stops appearing here. Their access
+          does not change here. An automatic rule that starts from this role adds its role to
+          Pending changes.
         </p>
       </div>
       <div>
@@ -1103,16 +1106,30 @@ function ResolutionDialog({
   const revoke = useRevokeDrift();
   const external = useMarkExternalDrift();
   const roleWaits = useRoleWaits();
+  // Adopting is when a rule starting from the role fires (ADR-006), so the
+  // dialog names what the rules give before the operator confirms (audit C1),
+  // from the closure the adoption itself follows.
+  const rules = useRulePreview(
+    pending?.item.user_id ?? "",
+    pending?.item.project_id ?? "",
+    pending?.item.role_keys ?? [],
+    pending?.resolution === "attribute",
+  );
 
   if (!pending) return null;
   const { item, resolution } = pending;
   const busy = attribute.isPending || revoke.isPending || external.isPending;
   const role = item.role_keys[0] ?? "";
+  const ruleLines = resolution === "attribute" ? (rules.data ?? []).map((row) => row.sentence) : [];
+  const waits = roleWaits(item.project_id, role);
 
   const copy = {
     attribute: {
       title: "Adopt this access in Syndra?",
-      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, end or revoke it like any other access.",
+      lede:
+        ruleLines.length > 0
+          ? "Syndra takes this access on as its own. The access stays as it is, and the automatic rules that start from this role add what they give to Pending changes, for you to send:"
+          : "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, end or revoke it like any other access.",
       confirm: "Adopt in Syndra",
       word: "Adopted",
       variant: "accent" as const,
@@ -1126,7 +1143,11 @@ function ResolutionDialog({
     },
     revoke: {
       title: "Revoke this access?",
-      lede: "This queues removal of the access in Zitadel and records your decision in Syndra, so the next check will not list it again.",
+      // A role that waits holds the removal for you, as every other removal
+      // of it is held (audit C5): the server now delivers it the same way.
+      lede: waits
+        ? `This removes the access in Zitadel once you send it, because ${role} always waits for you, and records your decision in Syndra, so the next check will not list it again.`
+        : "This removes the access in Zitadel and records your decision in Syndra, so the next check will not list it again.",
       confirm: "Revoke access",
       word: "Revocation recorded",
       variant: "dangerConfirm" as const,
@@ -1140,6 +1161,20 @@ function ResolutionDialog({
         <div className="rounded-inner bg-tint-1 px-4 py-3.5 text-[14.5px]">
           <UserName id={item.user_id} /> · <ProjectName id={item.project_id} /> / <Mono>{role}</Mono>
         </div>
+
+        {ruleLines.length > 0 && (
+          <ul className="flex flex-col gap-1 text-[13.5px] leading-[1.55] text-muted">
+            {ruleLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
+        {resolution === "attribute" && rules.isError && (
+          <p className="text-[13.5px] leading-[1.55] text-muted">
+            Syndra couldn&rsquo;t read the automatic rules, so a role one of them gives on adopting
+            isn&rsquo;t named here.
+          </p>
+        )}
 
         {resolution === "revoke" && (
           <>
@@ -1183,7 +1218,15 @@ function ResolutionDialog({
       {outcome && (
         <ActionOutcome
           outcome={outcome}
-          word={outcome.sendsItself ? REVOKE_SENDS_ITSELF_WORD : succeeded(outcome) ? copy.word : "Didn’t go through"}
+          word={
+            outcome.sendsItself
+              ? REVOKE_SENDS_ITSELF_WORD
+              : resolution === "revoke" && outcome.kind === "queued"
+                ? REVOKE_WAITS_WORD
+                : succeeded(outcome)
+                  ? copy.word
+                  : "Didn’t go through"
+          }
           className="mx-6 mb-1"
         />
       )}
@@ -1206,18 +1249,23 @@ function ResolutionDialog({
             // places Cancel.
             data-skip-initial-focus={resolution === "revoke" ? "" : undefined}
             isPending={busy}
+            // Adopting is consent to what the rules give with it, so it waits
+            // for the preview that names them.
+            disabled={resolution === "attribute" && rules.isLoading}
             onClick={async () => {
               try {
+                let answer: { rule_outbox_ids?: string[]; wait_reason?: string } | undefined;
                 if (resolution === "attribute") {
-                  await attribute.mutateAsync({ id: item.id, body: { source: "external_backfill" } });
+                  answer = (await attribute.mutateAsync({ id: item.id, body: { source: "external_backfill" } })) as typeof answer;
                 } else if (resolution === "revoke") {
-                  await revoke.mutateAsync({ id: item.id });
+                  answer = (await revoke.mutateAsync({ id: item.id })) as typeof answer;
                 } else {
                   await external.mutateAsync({ id: item.id, body: {} });
                 }
+                const queuedByRules = answer?.rule_outbox_ids?.length ?? 0;
                 setOutcome(
                   resolution === "revoke"
-                    ? REVOKE_SENDS_ITSELF
+                    ? revokeOutcome(answer?.wait_reason, role)
                     : {
                         kind: "applied",
                         // Not "will not be listed again" — that renders right
@@ -1225,6 +1273,8 @@ function ResolutionDialog({
                         // still on screen, which makes it false the instant it
                         // appears. It leaves once this dialog closes.
                         message: "Resolved. It drops off this list once you close this.",
+                        // What the rules queued on the adoption (audit C1).
+                        ...(queuedByRules > 0 ? { detail: adoptedRuleRowsLine(queuedByRules) } : {}),
                       },
                 );
               } catch (error) {
@@ -1238,6 +1288,28 @@ function ResolutionDialog({
       </ModalFooter>
     </Modal>
   );
+}
+
+/** The result's word for a Drift revoke held by its role. */
+export const REVOKE_WAITS_WORD = "Waits for you";
+
+/**
+ * A Drift revoke's result, from what the server did with it (audit C5): it is
+ * delivered like every other write, so a role that waits holds it for the
+ * operator, and anything else sends on its own.
+ */
+export function revokeOutcome(waitReason: string | undefined, role: string): Outcome {
+  if (waitIsChosen(waitReason)) {
+    return { kind: "queued", message: "Waiting for you to send", detail: `${waitReasonLine(waitReason, role)}.` };
+  }
+  return REVOKE_SENDS_ITSELF;
+}
+
+/** What an adoption's automatic rules queued, said in its result (audit C1). */
+export function adoptedRuleRowsLine(n: number): string {
+  return n === 1
+    ? "1 more change from automatic rules waits in Pending changes for you to send."
+    : `${n} more changes from automatic rules wait in Pending changes for you to send.`;
 }
 
 /**
