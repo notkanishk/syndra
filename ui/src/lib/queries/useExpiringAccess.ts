@@ -3,6 +3,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * An operator's recorded "I have seen this and I am letting it lapse".
@@ -83,9 +84,7 @@ export function useAcknowledgeExpiry() {
         method: "POST",
         body: { expires_at: expiresAt, note: note ?? "" },
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["review", "expiring-grants"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "expiryNote"),
   });
 }
 
@@ -97,9 +96,7 @@ export function useClearExpiryAcknowledgement() {
       request<{ message: string }>(`/review/expiring-grants/${grantId}/acknowledge`, {
         method: "DELETE",
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["review", "expiring-grants"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "expiryNote"),
   });
 }
 

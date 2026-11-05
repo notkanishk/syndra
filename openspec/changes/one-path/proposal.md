@@ -80,3 +80,19 @@ This file holds the waves that have landed. Tasks and evidence are in [tasks.md]
 - `addons/truenas`: `decide(current, desired, home) change` is the one decision. `plan` reads it to say what would happen; `converge` and `createAndConverge` read it to do it.
 
 **Behaviour.** The same outcomes for the same inputs, except two additions: a lifecycle flip leaves a row and an audit line, and writes carry the `Idempotency-Key` header. Wording is untouched: plan keeps `describePlannedChange`, apply keeps `describeChange`.
+
+## W2b · One cache refresh (audit family 10, item 12, backend)
+
+Verified on main before changing: `drain.go` refreshed the cache only after an applied row (`refreshClaims`, was `drain.go:516`); a failed row and a row out of retries reached `markFailed` with no refresh (was `drain.go:326-349`). `services/service_accounts.go` (`SaveServiceAccount`, `UnmarkServiceAccount`) had none, though `facts.IsServiceAccount` is compiled from the mark (`cache/compiler.go`). `handleUpdateBundle` had none, though token facts carry bundle names (`compiler.go` `bundleNames`).
+
+Change: `cache.Refresh(ctx, people, projects...)` in `cache/refresh.go` is the one call a write path makes after its commit. Routed through it: the drain (applied, failed, exhausted via `refreshAfterRow`), service-account mark/unmark, and a bundle rename (every holder from `db.GetBundleHoldersByVersion`, on a detached bounded context). A cache failure is logged and never fails the write; the 12-hour warm stays the backstop. Guard: `cache/refresh_guard_test.go` fails if a listed write path stops calling it, or if new code calls `cache.RefreshUser` directly.
+
+Not moved (outside W2b's file list, still on `RefreshUser`/`RebuildUserCache`): `handlers/webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go`, `services/expiry/sweep.go`. They are allow-listed in the guard.
+
+## W2c · One invalidation map (audit family 10, item 12, UI)
+
+Change: `ui/src/lib/queries/invalidation.ts` maps each kind of write (`access`, `bundle`, `bundleRename`, `request`, `drift`, `role`, `serviceAccount`, `expiryNote`, `claimShape`, `signingKey`, `target`, `storageCredential`, `terms`) to the keys it makes stale; every mutation hook calls `invalidateAfter(qc, kind, scope)`. Every kind that can move a rail count includes `["governance"]`, which holds `["governance","indicators"]`. Hooks that were short now reach what the audit named: approving a request (people, pending changes), a drain (people), `useAnswerUnconfirmed` (had no invalidation at all). The signing-key pair is now one `signingKey` kind (`app/zitadel/page.tsx`, `SigningKeyGuide.tsx`). `useUpstream.ts` is W1a's and untouched.
+
+Guards (`__tests__/invalidationMap.test.tsx`): every kind is classified and rail kinds hold `["governance"]`; every `useMutation` in `lib/queries` calls `invalidateAfter` unless it is a listed dry run or lookup; no raw `invalidateQueries` in `lib/queries`.
+
+Left: raw `invalidateQueries` in `components/targets/HomeLimit.tsx`, `components/targets/UnconfirmedChanges.tsx` (writes) and `components/states/{DegradedBanner,index}.tsx` (global refetch), outside W2c's list.

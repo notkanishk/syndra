@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 
-import { governanceQueryKeys } from "./useGovernance";
+import { invalidateAfter } from "./invalidation";
 
 export interface PendingRow {
   id: string;
@@ -109,10 +109,7 @@ export function useDrainPropagations() {
   return useMutation({
     mutationFn: async () =>
       request<DrainResult>("/propagations/drain", { method: "POST" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.pending });
-      qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
-    },
+    onSuccess: () => invalidateAfter(qc, "access"),
   });
 }
 

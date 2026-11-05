@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * Converging a cohort's entitlements on a target: rehearse, then apply the id
@@ -77,11 +78,6 @@ export function useApplyEntitlements(target: string) {
         method: "POST",
         body: { plan_id: input.planId, subject_ids: input.subjectIds },
       }),
-    onSuccess: () => {
-      // The rows are queued, so what changed is the pending count — never the
-      // target's own state, which the drain has not touched yet.
-      client.invalidateQueries({ queryKey: ["governance", "indicators"] });
-      client.invalidateQueries({ queryKey: ["propagations"] });
-    },
+    onSuccess: () => invalidateAfter(client, "access"),
   });
 }

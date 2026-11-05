@@ -330,6 +330,7 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 			return false
 		}
 		res.Failed++
+		refreshAfterRow(ctx, row, "failed")
 	case ackTransient:
 		if row.Attempts >= maxRetries {
 			// The budget is spent. TERMINAL, and the pass continues.
@@ -354,6 +355,7 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 			}
 			res.Failed++
 			res.Exhausted++
+			refreshAfterRow(ctx, row, "ran out of retries")
 			return false
 		}
 		if _, err := requeue(ctx, row.ID, errMsg); err != nil {
@@ -513,12 +515,20 @@ func applyRow(ctx context.Context, row models.PendingPropagation) error {
 				row.ID, err)
 		}
 	}
-	if err := refreshClaims(ctx, row.UserID, row.ProjectID); err != nil {
-		log.Printf("[PROPAGATION] applied %s but could not refresh %s's cached claims: %v "+
-			"— tokens issued before the cache expires may still carry the old roles",
-			row.ID, row.UserID, err)
-	}
+	refreshAfterRow(ctx, row, "applied")
 	return nil
+}
+
+// refreshAfterRow is the one refresh every outcome of a row goes through:
+// applied, failed and out of retries alike. A failed row still changed the
+// ledger in the transaction that queued it (a retire deletes the assignments),
+// so the facts lag it until this runs.
+func refreshAfterRow(ctx context.Context, row models.PendingPropagation, outcome string) {
+	if err := refreshClaims(ctx, []string{row.UserID}, row.ProjectID); err != nil {
+		log.Printf("[PROPAGATION] %s %s but could not refresh %s's cached claims: %v "+
+			"— tokens issued before the cache expires may still carry the old facts",
+			row.ID, outcome, row.UserID, err)
+	}
 }
 
 // rememberPropagation records that the target ACCEPTED this write.

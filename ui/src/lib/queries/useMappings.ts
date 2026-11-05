@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * What a role reaches on a target, and the history of that answer.
@@ -250,13 +251,7 @@ export function useCreateMapping() {
           ...(input.planId ? { plan_id: input.planId } : {}),
         },
       }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", "mappings"] });
-      // The convergences it queued show up as pending changes, the same as
-      // every other mapping change.
-      client.invalidateQueries({ queryKey: ["propagations"] });
-      client.invalidateQueries({ queryKey: ["governance"] });
-    },
+    onSuccess: () => invalidateAfter(client, "access"),
   });
 }
 
@@ -268,14 +263,7 @@ export function usePublishMappingVersion(target: string) {
         method: "POST",
         body: { target, note },
       }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target, "mapping-versions"] });
-      // A publish replaces the working copy with a new version and queues its
-      // convergences, so the mapping list and the pending count both go stale.
-      client.invalidateQueries({ queryKey: ["targets", "mappings"] });
-      client.invalidateQueries({ queryKey: ["propagations"] });
-      client.invalidateQueries({ queryKey: ["governance"] });
-    },
+    onSuccess: () => invalidateAfter(client, "access"),
   });
 }
 
@@ -314,13 +302,6 @@ export function useRollbackMappingVersion(target: string) {
         `/targets/${target}/mappings/versions/${version}/rollback`,
         { method: "POST", body: { plan_id: planId } },
       ),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target, "mapping-versions"] });
-      client.invalidateQueries({ queryKey: ["targets", "mappings"] });
-      // The rollback queues a convergence per affected holder, so what changed
-      // for an operator watching is the pending count.
-      client.invalidateQueries({ queryKey: ["propagations"] });
-      client.invalidateQueries({ queryKey: ["governance"] });
-    },
+    onSuccess: () => invalidateAfter(client, "access"),
   });
 }

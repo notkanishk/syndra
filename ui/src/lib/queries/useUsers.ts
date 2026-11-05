@@ -7,6 +7,7 @@ import { request } from "@/lib/api-client";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { CascadeOutcome } from "@/lib/types";
 import { sortByName } from "@/lib/sort";
+import { invalidateAfter } from "./invalidation";
 
 // Shapes mirror the backend `users.go` handler responses. Kept narrow to what
 // the Users page renders; widen if more fields are needed.
@@ -230,17 +231,7 @@ export function useAssignBundle(userId: string) {
         body: { bundle_id: bundleId },
       });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.access(userId) });
-      qc.invalidateQueries({ queryKey: ["users", "list"] });
-      // The bundle's own holder count and holder list.
-      qc.invalidateQueries({ queryKey: ["bundles"] });
-      // An assignment in manual mode puts rows under Pending changes. Not
-      // invalidating them left the nav count and that screen a step behind the
-      // edit that had just been made from this very screen.
-      qc.invalidateQueries({ queryKey: ["governance"] });
-      qc.invalidateQueries({ queryKey: ["propagations"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "access"),
   });
 }
 
@@ -279,19 +270,7 @@ export function useCreateGrant(userId: string) {
     onSuccess: (made) => {
       // Given but not yet sent: it is now one more thing waiting for the operator.
       if (made?.status !== "applied" || made?.wait_reason) settleIndicators(qc, { pending_propagation: 1 });
-      qc.invalidateQueries({ queryKey: KEYS.access(userId) });
-      qc.invalidateQueries({ queryKey: KEYS.grants(userId) });
-      qc.invalidateQueries({ queryKey: ["users", "list"] });
-      // The expiring-access queue is built from expiry dates, and this endpoint upserts them.
-      // Without this, extending a row from Review › Expiring access leaves it on screen with its
-      // old date — and, if it had been acknowledged, still showing an acknowledgement that the
-      // new date has already voided. The screen would be contradicting the backend.
-      qc.invalidateQueries({ queryKey: ["review", "expiring-grants"] });
-      // Home counts what is expiring, so its queue is wrong by one until this lands too.
-      qc.invalidateQueries({ queryKey: ["governance"] });
-      // Same as useAssignBundle: a grant made in manual mode is queued, not
-      // applied, so the pending list is missing a row without this.
-      qc.invalidateQueries({ queryKey: ["propagations"] });
+      invalidateAfter(qc, "access");
     },
   });
 }
