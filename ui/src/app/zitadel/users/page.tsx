@@ -31,6 +31,7 @@ import {
   useUpstreamUpdateGrant,
   useUpstreamUserGrants,
   useUpstreamUsers,
+  type ZitadelGrantChange,
 } from "@/lib/queries/useUpstream";
 import { useDebounce } from "@/lib/useDebounce";
 import { humanizeKey } from "@/lib/format";
@@ -41,9 +42,15 @@ function userStateLabel(state: string): string {
   return humanizeKey(state.replace(/^USER_STATE_/, "").toLowerCase());
 }
 
-/** What is recorded when a change goes straight to Zitadel: one line, and no explanation. */
-const AUDIT_ONLY =
-  "Syndra recorded one line in Audit and nothing else; it will not explain this access anywhere.";
+/**
+ * What a change recorded, and which roles it kept because a bundle or a rule
+ * still gives them — the backend's words, never this screen's own guess.
+ */
+function changeDetail(res: ZitadelGrantChange | undefined): string {
+  const recorded = "Recorded in Syndra as a change on their page, so it is explained afterwards.";
+  const kept = sortNames((res?.retained_roles ?? []).map((role) => role.slice(role.indexOf("/") + 1)));
+  return kept.length ? `${recorded} Kept, because a bundle or a rule still gives it: ${kept.join(", ")}.` : recorded;
+}
 
 /** A grant's roles, wrapping: a role key is never cut short. */
 function RoleKeys({ keys }: { keys: string[] }) {
@@ -274,7 +281,7 @@ function RevokeDialog({
         lede={
           done
             ? undefined
-            : "Revoking ends their access. It happens the moment you press the button, with no preview, and Syndra keeps no record of why."
+            : "Revoked as a person’s page revokes: only what Syndra gives them directly goes, and a role a bundle or a rule still gives them stays."
         }
       />
       {!done && (
@@ -288,7 +295,7 @@ function RevokeDialog({
             count={grant.roleKeys.length}
             noun="roles"
             verb="revokes"
-            consequence={`${name} loses these roles once the change reaches Zitadel. Revocations send on their own, every few minutes. Syndra records the revocation as its own, so it is explained afterwards.`}
+            consequence={`${name} loses these roles once the change reaches Zitadel, except any a bundle or a rule still gives them. It is sent straight away unless the role waits for you, and Syndra records it as its own, so it is explained afterwards.`}
           />
         </div>
       )}
@@ -302,8 +309,8 @@ function RevokeDialog({
           isPending={remove.isPending}
           onClick={async () => {
             try {
-              await remove.mutateAsync({ userId, grantId: grant.grantId });
-              setOutcome({ kind: "applied", message: "Roles revoked in Zitadel", detail: AUDIT_ONLY });
+              const res = await remove.mutateAsync({ userId, grantId: grant.grantId });
+              setOutcome({ kind: "applied", message: "Roles revoked in Zitadel", detail: changeDetail(res) });
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -335,7 +342,11 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
     <Modal open onClose={onClose} busy={assign.isPending} size="sm">
       <ModalHeader
         title="Give roles in Zitadel"
-        lede={done ? undefined : "This gives the roles in Zitadel directly, skipping Syndra."}
+        lede={
+          done
+            ? undefined
+            : "Given as a person’s page gives them: each role must still exist in Zitadel, and they must not already have it."
+        }
       />
       {!done && (
         <div className="flex flex-col gap-3.5 px-6">
@@ -391,14 +402,14 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
               : parsed.length === 0
                 ? "Enter at least one role key."
                 : !acknowledged
-                  ? "Check the box above to confirm you understand this skips Syndra."
+                  ? "Check the box above to confirm."
                   : undefined
           }
           isPending={assign.isPending}
           onClick={async () => {
             try {
-              await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
-              setOutcome({ kind: "applied", message: "Roles given in Zitadel", detail: AUDIT_ONLY });
+              const res = await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
+              setOutcome({ kind: "applied", message: "Roles given in Zitadel", detail: changeDetail(res) });
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -432,7 +443,11 @@ function EditRolesDialog({
     <Modal open onClose={onClose} busy={update.isPending} size="sm">
       <ModalHeader
         title="Replace this person's roles in Zitadel"
-        lede={done ? undefined : "The new set replaces the old one entirely. Any role you leave out is revoked."}
+        lede={
+          done
+            ? undefined
+            : "The new set replaces the old one. Any role you leave out is revoked, unless a bundle or a rule still gives it."
+        }
       />
       {!done && (
         <div className="flex flex-col gap-3.5 px-6">
@@ -465,8 +480,8 @@ function EditRolesDialog({
           isPending={update.isPending}
           onClick={async () => {
             try {
-              await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
-              setOutcome({ kind: "applied", message: "Roles replaced in Zitadel", detail: AUDIT_ONLY });
+              const res = await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
+              setOutcome({ kind: "applied", message: "Roles replaced in Zitadel", detail: changeDetail(res) });
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }

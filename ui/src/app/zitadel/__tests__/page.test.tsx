@@ -430,7 +430,8 @@ describe("Identity provider · Change Zitadel directly", () => {
     const projectsLink = screen.getByRole("link", { name: /Change projects and roles/ });
     expect(projectsLink).toHaveAttribute("href", "/zitadel/projects");
     const projectsRow = projectsLink.closest(".row-divider") as HTMLElement;
-    expect(within(projectsRow).getByText(/Goes straight to Zitadel, and Syndra keeps no record of it/)).toBeInTheDocument();
+    expect(within(projectsRow).getByText(/Recorded in Syndra, then changed in Zitadel at once/)).toBeInTheDocument();
+    expect(within(projectsRow).queryByText(/keeps no record/)).not.toBeInTheDocument();
     expect(within(projectsRow).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects");
   });
 

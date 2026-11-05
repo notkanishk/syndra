@@ -7,9 +7,12 @@ import (
 	"log"
 	"regexp"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
@@ -37,12 +40,12 @@ var roleKeyPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 var ErrCloneSourceNotFound = errors.New("clone source role not found")
 
 // CreateRole creates a new role, optionally cloning metadata from a source role.
-// Persists locally first, then propagates to Zitadel. If Zitadel propagation
-// fails, the local row is rolled back to avoid Syndra tracking a role that
-// doesn't exist upstream.
+// It is the one way a role is made, from Access › Roles and from Zitadel ›
+// Projects alike: writeRole records it, sends it, and reads it back before
+// undoing anything.
 func CreateRole(ctx context.Context, req CreateRoleRequest, createdBy string) (models.Role, error) {
 	if !roleKeyPattern.MatchString(req.RoleKey) {
-		return models.Role{}, fmt.Errorf("role_key must match [a-zA-Z0-9_-]+")
+		return models.Role{}, ErrInvalidRoleKey
 	}
 
 	// Resolve clone source if provided.
@@ -62,47 +65,296 @@ func CreateRole(ctx context.Context, req CreateRoleRequest, createdBy string) (m
 		}
 	}
 
-	// 1. Persist locally first — catches duplicates before touching Zitadel.
+	if req.DisplayName == "" {
+		req.DisplayName = req.RoleKey // Zitadel and the roles table both need one
+	}
+
 	var clonedFromProject, clonedFromRole *string
 	if req.CloneFrom != nil {
 		clonedFromProject = &req.CloneFrom.ProjectID
 		clonedFromRole = &req.CloneFrom.RoleKey
 	}
 
-	id, err := svcDbCreateRole(ctx, req.ProjectID, req.RoleKey, req.DisplayName, req.Description,
-		req.Group, createdBy, clonedFromProject, clonedFromRole)
+	var id string
+	err := writeRole(ctx, roleWrite{
+		actor: createdBy, action: auditRoleCreated, projectID: req.ProjectID, roleKey: req.RoleKey,
+		details: map[string]any{"display_name": req.DisplayName, "group": req.Group},
+		// The local row first also catches a duplicate before Zitadel is touched.
+		local: func(ctx context.Context) (err error) {
+			id, err = svcDbCreateRole(ctx, req.ProjectID, req.RoleKey, req.DisplayName, req.Description,
+				req.Group, createdBy, clonedFromProject, clonedFromRole)
+			return err
+		},
+		undo: func(ctx context.Context) error { return svcDbDeleteRole(ctx, id) },
+		send: func(ctx context.Context, c zitadel.ZitadelClient) error {
+			return c.AddProjectRole(ctx, req.ProjectID, req.RoleKey, req.DisplayName, req.Group)
+		},
+		landed: func(r *zitadel.ProjectRoleResult) bool {
+			return r != nil && r.DisplayName == req.DisplayName && r.Group == req.Group
+		},
+	})
 	if err != nil {
 		return models.Role{}, err
 	}
-
-	// 2. Propagate to Zitadel. If this fails, roll back the local row.
-	if zitadel.MgmtClient != nil {
-		if err := zitadel.MgmtClient.AddProjectRole(ctx, req.ProjectID, req.RoleKey, req.DisplayName, req.Group); err != nil {
-			// Compensating rollback: remove the local row so state stays consistent.
-			if delErr := svcDbDeleteRole(ctx, id); delErr != nil {
-				log.Printf("[ROLES] WARNING: failed to rollback local role %s after Zitadel failure: %v", id, delErr)
-			}
-			return models.Role{}, fmt.Errorf("zitadel role creation failed: %w", err)
-		}
-		// Drop the directory's cached role list for this project so the next
-		// GET /api/v1/projects/{id}/roles (and any catalog-driven UI picker)
-		// sees the new role immediately instead of waiting out the TTL.
-		// Matches the invalidation pattern in handlers/discovery.go for the
-		// raw /api/v1/zitadel/projects/{id}/roles POST/PUT/DELETE path.
-		directory.Default.InvalidateProject(req.ProjectID)
-		log.Printf("[ROLES] Propagated role %s:%s to Zitadel", req.ProjectID, req.RoleKey)
-	} else {
-		log.Printf("[ROLES] Skipping Zitadel propagation (local-policy-only mode)")
-	}
-
-	// 3. Audit log.
-	_ = svcInsertAuditLog(ctx, createdBy, "-", "role.created", id)
 
 	role, err := svcDbGetRole(ctx, req.ProjectID, req.RoleKey)
 	if err != nil {
 		return models.Role{}, fmt.Errorf("fetch created role: %w", err)
 	}
 	return role, nil
+}
+
+// UpdateRole renames a role or changes its group, in Zitadel and in Syndra's
+// record of it (when there is one: a role made in Zitadel directly has none).
+func UpdateRole(ctx context.Context, projectID, roleKey, displayName, group, actor string) error {
+	if displayName == "" {
+		displayName = roleKey
+	}
+	var before *models.Role
+	return writeRole(ctx, roleWrite{
+		actor: actor, action: auditRoleUpdated, projectID: projectID, roleKey: roleKey,
+		details: map[string]any{"display_name": displayName, "group": group},
+		local: func(ctx context.Context) error {
+			old, err := svcDbGetRole(ctx, projectID, roleKey)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			before = &old
+			return svcDbUpdateRole(ctx, projectID, roleKey, displayName, group)
+		},
+		undo: func(ctx context.Context) error {
+			if before == nil {
+				return nil
+			}
+			return svcDbUpdateRole(ctx, projectID, roleKey, before.DisplayName, before.Group)
+		},
+		send: func(ctx context.Context, c zitadel.ZitadelClient) error {
+			return c.UpdateProjectRole(ctx, projectID, roleKey, displayName, group)
+		},
+		landed: func(r *zitadel.ProjectRoleResult) bool {
+			return r != nil && r.DisplayName == displayName && r.Group == group
+		},
+	})
+}
+
+// RoleInUseError refuses a delete while Syndra itself still gives the role.
+// Deleting it in Zitadel then would leave Syndra sending a role that no longer
+// exists, so the giving is undone first, where each removal is traced.
+type RoleInUseError struct {
+	Given, Bundles, Rules int
+}
+
+func (e *RoleInUseError) Error() string {
+	return fmt.Sprintf("syndra still gives this role: %d people, %d bundles, %d rules", e.Given, e.Bundles, e.Rules)
+}
+
+// RoleHeldError refuses a delete that would take the role from people Zitadel
+// shows holding it, until the caller confirms exactly that many. Unknown means
+// Syndra has no complete, current read of who holds it, so it cannot say how
+// many would lose it and does not guess.
+type RoleHeldError struct {
+	Holders []models.UserProfile
+	Unknown bool
+}
+
+func (e *RoleHeldError) Error() string {
+	if e.Unknown {
+		return "syndra cannot tell who holds this role in zitadel"
+	}
+	return fmt.Sprintf("%d people hold this role in zitadel", len(e.Holders))
+}
+
+// DeleteRole deletes a role in Zitadel and Syndra's record of it.
+//
+// Zitadel takes a deleted role from everyone who holds it, at once, with no
+// trace of its own. So this never strips silently: it refuses while Syndra
+// gives the role (RoleInUseError), and while anyone holds it in Zitadel unless
+// confirmHolders names exactly how many (RoleHeldError). The check runs inside
+// the trace's transaction, under the access lock, so nobody is given the role
+// between the count and the write.
+func DeleteRole(ctx context.Context, projectID, roleKey, actor string, confirmHolders int) error {
+	var before *models.Role
+	details := map[string]any{}
+	return writeRole(ctx, roleWrite{
+		actor: actor, action: auditRoleDeleted, projectID: projectID, roleKey: roleKey,
+		details: details,
+		local: func(ctx context.Context) error {
+			holders, err := roleDeleteGuard(ctx, projectID, roleKey, confirmHolders)
+			if err != nil {
+				return err
+			}
+			ids := make([]string, 0, len(holders))
+			for _, h := range holders {
+				ids = append(ids, h.ID)
+			}
+			details["holders_lost"] = ids
+			old, err := svcDbGetRole(ctx, projectID, roleKey)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			before = &old
+			return svcDbDeleteRole(ctx, old.ID)
+		},
+		undo: func(ctx context.Context) error {
+			if before == nil {
+				return nil
+			}
+			// ponytail: the row comes back with a new id and created_at; nothing references roles.id.
+			_, err := svcDbCreateRole(ctx, before.ProjectID, before.RoleKey, before.DisplayName, before.Description,
+				before.Group, before.CreatedBy, nonEmpty(before.ClonedFromProject), nonEmpty(before.ClonedFromRole))
+			return err
+		},
+		send: func(ctx context.Context, c zitadel.ZitadelClient) error {
+			return c.DeleteProjectRole(ctx, projectID, roleKey)
+		},
+		landed: func(r *zitadel.ProjectRoleResult) bool { return r == nil },
+	})
+}
+
+// roleDeleteGuard returns who would lose the role, alphabetically, or why the
+// delete may not go ahead.
+func roleDeleteGuard(ctx context.Context, projectID, roleKey string, confirmHolders int) ([]models.UserProfile, error) {
+	usage, err := svcDbGetRoleUsageCounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load role usage: %w", err)
+	}
+	view, err := roleMembersFor(ctx, projectID, roleKey)
+	if err != nil {
+		return nil, fmt.Errorf("read who holds the role: %w", err)
+	}
+	u := usage[projectID+":"+roleKey]
+	if len(view.Members) > 0 || u.BundleCount > 0 || u.RuleCount > 0 {
+		return nil, &RoleInUseError{Given: len(view.Members), Bundles: u.BundleCount, Rules: u.RuleCount}
+	}
+	if view.ObservedOnly == nil || !view.Observation.Current || view.Observation.Truncated {
+		return nil, &RoleHeldError{Unknown: true}
+	}
+	holders := append([]models.UserProfile(nil), view.ObservedOnly...)
+	sort.Slice(holders, func(i, j int) bool {
+		return strings.ToLower(holders[i].Name) < strings.ToLower(holders[j].Name)
+	})
+	if len(holders) != confirmHolders {
+		return nil, &RoleHeldError{Holders: holders}
+	}
+	return holders, nil
+}
+
+func nonEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// Audit actions for role writes. role.not_changed is the second row of a
+// write Zitadel refused: Syndra undid its own record and says so.
+const (
+	auditRoleCreated    = "role.created"
+	auditRoleUpdated    = "role.updated"
+	auditRoleDeleted    = "role.deleted"
+	auditRoleNotChanged = "role.not_changed"
+	auditNoTarget       = "-"
+)
+
+// ErrInvalidRoleKey is a role key Zitadel and Syndra would not agree on.
+var ErrInvalidRoleKey = errors.New("role_key must match [a-zA-Z0-9_-]+")
+
+// ErrRoleNotChangedInZitadel wraps a Zitadel refusal the read-back confirmed:
+// nothing changed there, and Syndra undid its own record.
+var ErrRoleNotChangedInZitadel = errors.New("zitadel did not make the change, so syndra undid its record")
+
+var (
+	svcDbUpdateRole          = db.UpdateRole
+	svcInsertAuditLogDetails = db.InsertAuditLogDetails
+	roleMembersFor           = RoleMembers
+)
+
+// roleWrite is one write to a project role. local and undo change Syndra's
+// record; send changes Zitadel; landed judges the read-back (nil when Zitadel
+// has no such role): is Zitadel now as asked?
+type roleWrite struct {
+	actor, action, projectID, roleKey string
+	details                           map[string]any
+	local, undo                       func(context.Context) error
+	send                              func(context.Context, zitadel.ZitadelClient) error
+	landed                            func(*zitadel.ProjectRoleResult) bool
+}
+
+// writeRole is the one pipe for a project role, from any screen:
+//
+//  1. the trace, before Zitadel is touched: Syndra's record and its audit row
+//     in one transaction under the access lock. No trace, no write.
+//  2. the call.
+//  3. on any error, a read-back before anything is undone: a 503 or a timeout
+//     can hide a write that landed, and undoing that would orphan the role.
+//  4. only when the read-back does not show the change, the undo, traced as
+//     role.not_changed in its own transaction.
+//
+// The directory's cached roles for the project are dropped either way, so
+// every picker sees what Zitadel now holds.
+func writeRole(ctx context.Context, w roleWrite) error {
+	if err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
+		if err := w.local(ctx); err != nil {
+			return err
+		}
+		return svcInsertAuditLogDetails(ctx, w.actor, auditNoTarget, w.action, w.projectID+"/"+w.roleKey, w.details)
+	}); err != nil {
+		return err
+	}
+	defer directory.Default.InvalidateProject(w.projectID)
+
+	client := zitadel.MgmtClient
+	if client == nil {
+		log.Printf("[ROLES] %s %s:%s recorded locally only (no Zitadel client)", w.action, w.projectID, w.roleKey)
+		return nil
+	}
+
+	sendErr := w.send(ctx, client)
+	if sendErr == nil {
+		return nil
+	}
+	// Detached: a request that timed out must still read back and undo.
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+	defer cancel()
+	found, readErr := readBackRole(dctx, client, w.projectID, w.roleKey)
+	if readErr == nil && w.landed(found) {
+		log.Printf("[ROLES] %s %s:%s answered %v, but the read-back shows it landed", w.action, w.projectID, w.roleKey, sendErr)
+		return nil
+	}
+	why := map[string]any{"action": w.action, "error": sendErr.Error()}
+	if readErr != nil {
+		why["read_back_error"] = readErr.Error()
+	}
+	if err := svcInTxLockingAccess(dctx, func(ctx context.Context) error {
+		if err := w.undo(ctx); err != nil {
+			return err
+		}
+		return svcInsertAuditLogDetails(ctx, w.actor, auditNoTarget, auditRoleNotChanged, w.projectID+"/"+w.roleKey, why)
+	}); err != nil {
+		log.Printf("[ROLES] WARNING: could not undo %s %s:%s after Zitadel refused it: %v", w.action, w.projectID, w.roleKey, err)
+	}
+	return fmt.Errorf("%w: %v", ErrRoleNotChangedInZitadel, sendErr)
+}
+
+// readBackRole is the role as Zitadel holds it now, or nil when it has none.
+// ponytail: first page only (500 roles); page on when a project has more.
+func readBackRole(ctx context.Context, c zitadel.ZitadelClient, projectID, roleKey string) (*zitadel.ProjectRoleResult, error) {
+	res, err := c.ListProjectRoles(ctx, projectID, zitadel.SearchParams{Limit: zitadel.DefaultSearchLimit})
+	if err != nil {
+		return nil, err
+	}
+	for i := range res.Items {
+		if res.Items[i].Key == roleKey {
+			return &res.Items[i], nil
+		}
+	}
+	return nil, nil
 }
 
 // resolveRoleMetadata looks up role metadata from local DB, then demo catalog.

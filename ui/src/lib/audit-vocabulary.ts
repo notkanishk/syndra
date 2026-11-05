@@ -72,6 +72,11 @@ export const AUDIT_ACTIONS: Record<
   "mapping_rule.deleted": { verb: "Deleted an automatic rule", destructive: true },
   "mapping_rule.retired": { verb: "Retired an automatic rule", destructive: true },
   "role.created": { verb: "Created a role" },
+  // One pipe for a role from any screen (W1a): recorded before Zitadel is changed.
+  "role.updated": { verb: "Renamed a role or changed its group" },
+  "role.deleted": { verb: "Deleted a role", destructive: true },
+  // The second row of a role change Zitadel refused: Syndra put its own record back.
+  "role.not_changed": { verb: "Tried to change a role; Zitadel didn't, so Syndra put its record back" },
   "access_request.created": { verb: "Asked for access" },
   // Roles that wait for you (N14 B): settings, not access, so no passive.
   "role.waits_marked": { verb: "Marked a role to wait for you" },
