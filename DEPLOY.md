@@ -216,10 +216,13 @@ The service user needs permissions at two different scopes:
   a prebuilt action-scoped role such as `IAM_ACTION_ADMIN`; otherwise
   `IAM_OWNER`, which works everywhere but grants the whole instance.
 
-Only the registration and rotation scripts use the instance permissions —
-steady-state traffic is Zitadel calling Syndra, which needs none. You may
-revoke them between runs, or issue a second machine key used only by the
-scripts, if you want the backend's everyday key to carry no instance authority.
+The backend itself uses `action.target.write`: Syndra replaces both targets'
+signing keys on its own before they reach their limit
+(`openspec/changes/action-key-autorotation`, ADR-005). Keep that permission on
+the backend's service account. Without it, every automatic replacement fails
+with `KEY_ROTATION:failed` on `/healthz/claims`, and the old key stays in use.
+`action.execution.write` and `action.target.delete` are only used by the
+scripts, so you may revoke those between runs.
 
 Full permission matrix: the "Service-Account Permissions" section of
 `zitadel/actions/README.md`.
@@ -640,9 +643,33 @@ All commands run from `/opt/syndra` as the `runner` user.
   Because `SESSION_SECRET` is set independently, live sessions survive.
 - **`SESSION_SECRET`** — edit `.env`, `docker compose up -d ui`. Every operator
   is logged out.
-- **Zitadel signing keys** — `make zitadel-actions-rotate-key`, then apply the
-  emitted `.action-env.fragment` and restart the backend. Zitadel does not
-  expire these on its own; rotate on incident, policy, or operator handoff.
+- **Zitadel signing keys:** Syndra replaces these itself
+  (`openspec/changes/action-key-autorotation`, ADR-005). Zitadel never expires
+  them, so the limit is Syndra's own (90 days,
+  `ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS`).
+  - **When.** `SYNDRA_ACTION_KEY_LEAD_DAYS` (5) days before the limit, inside
+    `SYNDRA_ACTION_KEY_WINDOW` (`03:00-05:00`). The window is read in the
+    backend's `TZ`, so set `TZ` in `.env` (for example `TZ=Asia/Kolkata`);
+    unset, it is UTC. Syndra replaces it only when Zitadel answers and the L1
+    probe passed in the last 5 minutes.
+  - **What happens.** Syndra asks Zitadel for new keys for both targets. It
+    verifies with each new key at once, in the backend and in the claims
+    container. The old key keeps working for 15 minutes.
+  - **The check.** Syndra runs the test sign-in and records the result in the
+    audit log and on System › Zitadel.
+  - **If the check fails.** Both keys stay accepted for 7 days, and
+    `/healthz/claims` goes degraded (`KEY_ROTATION:unverified`), which stops the
+    dead-man ping. Syndra does not try again on its own.
+  - **Replace now.** The button on System › Zitadel does the same on demand.
+  - **Kill switch.** `SYNDRA_ACTION_KEY_AUTOROTATE=off`.
+  - **No restart, no `.env` edit.** The keys live in Redis (`claims:keyring`,
+    `events:keyring`, kept by its append-only file). `ZITADEL_ACTION_SIGNING_KEY`
+    and `ZITADEL_EVENT_SIGNING_KEY` in `.env` are only where Syndra starts.
+  - **By hand (fallback)** `make zitadel-actions-rotate-key`, or "Do it by hand"
+    on System › Zitadel. Use it when the automatic replacement is off, failed,
+    or Zitadel refused the write. Syndra notices the new keys within a minute
+    and dates the key from them. Nothing has to be applied or restarted.
+    Updating `.env` from `.action-env.fragment` at the next deploy is optional.
 - **`POSTGRES_PASSWORD`** — requires changing it inside Postgres first (`ALTER
   ROLE syndra WITH PASSWORD ...`) and then in `.env`. Editing only `.env` locks
   the backend out of its own data.
@@ -1043,7 +1070,9 @@ and always consistent.
 | `register.sh`: "requires bash 4+" | macOS ships bash 3.2. Run it on the LXC (bash 5) with a pre-minted `ZITADEL_M2M_TOKEN`. See step 7. |
 | Backend restart-loops on `Production refusing to start` | Signing keys are not in `.env` yet. Expected between steps 6 and 7; not expected afterwards. |
 | Tokens carry no Syndra claims | Another deployment re-registered the instance's Actions targets and repointed them. Re-run step 7. |
-| Webhook endpoint returns 401 | `ZITADEL_EVENT_SIGNING_KEY` in `.env` no longer matches the target's key. Rotate or re-capture. |
+| Webhook endpoint returns 401 | Syndra cannot read the event listener's key from Zitadel (the keyring line on System › Zitadel says why), and `ZITADEL_EVENT_SIGNING_KEY` in `.env` is stale. Restore Syndra's read of Actions targets; nothing needs a restart. |
+| `/healthz/claims` degraded with `KEY_ROTATION:failed` | Zitadel refused Syndra's key replacement, usually because `action.target.write` was revoked from the backend's service account. The old key still works. Restore the permission, then use Replace now on System › Zitadel. |
+| `/healthz/claims` degraded with `KEY_ROTATION:unverified` | The keys were replaced but the test sign-in after it failed. Both keys stay accepted for 7 days. Read the L1 and L2 lines on `/healthz/claims`; the finding settles itself once the probes pass. |
 
 ---
 

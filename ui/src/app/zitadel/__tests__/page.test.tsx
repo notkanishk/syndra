@@ -10,11 +10,20 @@ const health = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 const projects = vi.hoisted(() => ({ value: [] as unknown[] | undefined }));
 const refetch = vi.hoisted(() => vi.fn());
 
-// The page reads rotation status through the raw request helper and health
-// through its own hook, so both are stubbed at their respective seams.
-vi.mock("@/lib/api-client", () => ({
-  request: async () => rotation.value,
+// The page reads rotation status and replaces the key through the raw request
+// helper, and health through its own hook, so both are stubbed at their seams.
+const rotate = vi.hoisted(() => ({ next: null as Promise<unknown> | (() => Promise<unknown>) | null, calls: [] as unknown[][] }));
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string, init?: { method?: string }) => {
+    if (init?.method === "POST") {
+      rotate.calls.push([path, init]);
+      return typeof rotate.next === "function" ? rotate.next() : rotate.next;
+    }
+    return rotation.value;
+  },
 }));
+const posts = () => rotate.calls;
 
 vi.mock("@/lib/queries/useZitadel", () => ({
   useZitadelHealth: () => ({ data: health.value, isLoading: false, error: null, refetch, isFetching: false }),
@@ -46,13 +55,19 @@ beforeEach(() => {
   health.value = { status: "ok", mode: "live", latency_ms: 21, domain: "auth.example.org" };
   projects.value = [];
   keyring.value = null;
+  rotate.next = null;
+  rotate.calls = [];
   rotation.value = {
     key_installed: true,
     status: "ok",
     age_days: 12,
     threshold_days: 90,
     last_rotated_at: "2026-07-01T00:00:00Z",
+    last_rotated_source: "env",
+    due_at: "2026-09-29T00:00:00Z",
     rotate_command: "make zitadel-actions-rotate-key",
+    auto: { on: true, lead_days: 5, window: "03:00–05:00", next_attempt_at: "2026-09-25T03:00:00Z" },
+    rotating: false,
   };
 });
 
@@ -158,85 +173,190 @@ describe("Identity provider · health line", () => {
 });
 
 /**
- * The signing key is one compact row: a word and a sentence, and the guide
- * behind a button. The sentence reads as a fact while there is nothing to do
- * and only turns into an instruction once the threshold is crossed.
+ * The signing key is one compact row: a word and a sentence about when it was
+ * last replaced and when Syndra replaces it next. Replace now opens a dialog;
+ * Do it by hand opens the guide (components/system/SigningKeyGuide).
  */
 describe("Identity provider · signing key row", () => {
-  it("says it is within its limit, in words, with no instruction", async () => {
+  it("says when the next replacement is due, and that Syndra does it on its own", async () => {
     renderPage();
     expect(await screen.findByText("Within its limit")).toBeInTheDocument();
-    expect(screen.getByText(/12 days old, within the 90-day limit. Nothing to do./)).toBeInTheDocument();
-    expect(screen.queryByText(/Replace it now|Plan to replace/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Due on \d+ \w+( \d{4})?; Syndra replaces it on its own before then\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/Replace it now/)).not.toBeInTheDocument();
   });
 
-  it("turns into an instruction once the threshold is crossed, and says so above the page", async () => {
+  it("says Syndra replaced it on its own, and when the next one is due", async () => {
     rotation.value = {
-      key_installed: true,
+      ...rotation.value,
+      last_rotated_source: "syndra",
+      last_outcome: { trigger: "auto", outcome: "verified", started_at: "2026-11-03T03:10:00Z", finished_at: "2026-11-03T03:10:20Z" },
+    };
+    renderPage();
+    expect(await screen.findByText(/^Replaced on its own on 3 Nov( 2026)?\. Next by \d+ \w+( \d{4})?\.$/)).toBeInTheDocument();
+  });
+
+  it("says a button replacement without 'on its own'", async () => {
+    rotation.value = {
+      ...rotation.value,
+      last_rotated_source: "syndra",
+      last_outcome: { trigger: "button", outcome: "verified", started_at: "2026-11-03T10:00:00Z", finished_at: "2026-11-03T10:00:20Z" },
+    };
+    renderPage();
+    expect(await screen.findByText(/^Replaced on 3 Nov( 2026)?\. Next by /)).toBeInTheDocument();
+  });
+
+  it("past the limit with Syndra on: the Notice and the row say it is replaced in the next quiet hours", async () => {
+    rotation.value = {
+      ...rotation.value,
       status: "warn",
       age_days: 104,
-      threshold_days: 90,
-      last_rotated_at: "2026-01-01T00:00:00Z",
+      auto: { on: true, lead_days: 5, window: "03:00–05:00", next_attempt_at: "2026-11-06T03:00:00Z" },
     };
     renderPage();
     expect(await screen.findByText("Past its limit")).toBeInTheDocument();
     // The age is said once, by the Notice under the header; the card does not repeat it.
     expect(screen.getByText("The action signing key is 104 days old.")).toBeInTheDocument();
     expect(screen.getAllByText(/104 days old/)).toHaveLength(1);
+    expect(screen.getByText(/Syndra replaces it on its own in the next quiet hours, and sign-ins carry on/)).toBeInTheDocument();
+    expect(screen.getByText(/^Syndra replaces it on its own in the next quiet hours, on 6 Nov/)).toBeInTheDocument();
+    expect(screen.queryByText(/walks through it/)).not.toBeInTheDocument();
   });
 
-  it("calls a stale key stale rather than reporting a number", async () => {
+  it("with Syndra switched off, says so and points at Replace now", async () => {
+    rotation.value = { ...rotation.value, status: "warn", age_days: 104, auto: { on: false, off_reason: "switched_off", lead_days: 5, window: "03:00–05:00" } };
+    renderPage();
+    expect(await screen.findByText(/Replacing it on its own is switched off: Replace now, below, does it/)).toBeInTheDocument();
+    expect(screen.getByText("Replacing it on its own is switched off. Replace it now, or by hand below.")).toBeInTheDocument();
+  });
+
+  it("says Replacing while a replacement is in flight, and offers no second one", async () => {
+    rotation.value = { ...rotation.value, rotating: true, last_outcome: { trigger: "auto", outcome: "in_flight", started_at: "2026-11-05T03:00:00Z" } };
+    renderPage();
+    expect(await screen.findByText("Replacing")).toBeInTheDocument();
+    expect(screen.getByText(/^Replacing… /)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Replace now" })).not.toBeInTheDocument();
+  });
+
+  it("says honestly when the test sign-in after a replacement failed, and what still works", async () => {
     rotation.value = {
-      key_installed: true,
-      status: "stale",
-      age_days: 220,
-      threshold_days: 90,
-      rotate_command: "make zitadel-actions-rotate-key",
+      ...rotation.value,
+      last_rotated_at: "2026-11-05T03:00:20Z",
+      last_rotated_source: "syndra",
+      last_outcome: { trigger: "auto", outcome: "unverified", started_at: "2026-11-05T03:00:00Z", finished_at: "2026-11-05T03:00:20Z", probe: { pass: false, class: "claims" } },
     };
     renderPage();
-    expect(await screen.findByText(/more than twice the 90-day limit/)).toBeInTheDocument();
+    expect(await screen.findByText("Not confirmed")).toBeInTheDocument();
+    expect(screen.getByText(/didn't get its claims. Syndra still accepts the old key and the new one, and won't replace it again on its own/)).toBeInTheDocument();
+  });
+
+  it("says honestly when Zitadel didn't replace it, and that the old key still works", async () => {
+    rotation.value = {
+      ...rotation.value,
+      auto: { on: true, lead_days: 5, window: "03:00–05:00", next_attempt_at: "2026-11-06T03:00:00Z" },
+      last_outcome: { trigger: "auto", outcome: "failed", started_at: "2026-11-05T03:00:00Z", finished_at: "2026-11-05T03:00:02Z", error: "Zitadel refused" },
+    };
+    renderPage();
+    expect(await screen.findByText("Not replaced")).toBeInTheDocument();
+    expect(screen.getByText(/Zitadel didn't replace it. The old key still works. Syndra tries again in the next quiet hours, on 6 Nov.*at most once a day/)).toBeInTheDocument();
   });
 
   // "disabled" reads like "not set up yet" and means every inbound Action
   // request is being trusted unchecked. The copy has to say the second thing.
-  it("treats a missing key as verification being off", async () => {
+  it("treats a missing key as verification being off, with no Replace now", async () => {
     rotation.value = { key_installed: false, status: "disabled", threshold_days: 90 };
     renderPage();
     expect(await screen.findByText(/accepts every request that claims to come from Zitadel without checking/)).toBeInTheDocument();
     expect(screen.getByText("Not set up")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "How to set it up" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Replace now" })).not.toBeInTheDocument();
   });
 });
 
-describe("Identity provider · signing key guide", () => {
-  it("keeps the command out of the row until 'How to replace it' is pressed", async () => {
+describe("Identity provider · Replace now", () => {
+  it("opens a dialog with one plain sentence, Cancel first and focused", async () => {
     renderPage();
-    const button = await screen.findByRole("button", { name: "How to replace it" });
-    expect(button).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Zitadel makes a new key and Syndra starts using it at once, so sign-ins carry on/)).toBeInTheDocument();
+    const buttons = within(dialog).getAllByRole("button").filter((b) => b.getAttribute("tabindex") !== "-1");
+    expect(buttons.map((b) => b.textContent)).toEqual(["Cancel", "Replace the key"]);
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+  });
+
+  it("Cancel closes it without asking the server for anything", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("says what Syndra will do while it runs, then the result", async () => {
+    let answer!: (v: unknown) => void;
+    rotate.next = new Promise((resolve) => (answer = resolve));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Replace the key" }));
+    expect(await screen.findByText("Will be replaced")).toBeInTheDocument();
+    expect(posts()).toEqual([["/zitadel/action-key/rotate", { method: "POST", body: { force: true } }]]);
+
+    answer({ outcome: "verified", replaced: ["syndra-claim-injector", "syndra-event-listener"], next_due_at: "2027-01-29T03:00:00Z", probe: { pass: true } });
+    expect(await screen.findByText(/^Replaced\. A test sign-in got its claims\. Next due 29 Jan 2027\.$/)).toBeInTheDocument();
+    expect(screen.queryByText("Will be replaced")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("says honestly when the test sign-in after it failed", async () => {
+    rotate.next = Promise.resolve({ outcome: "unverified", replaced: ["syndra-claim-injector"], probe: { pass: false, class: "claims" } });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Replace the key" }));
+    expect(await screen.findByText("Replaced, not confirmed")).toBeInTheDocument();
+    expect(screen.getByText(/Replaced, but the test sign-in after it didn't get its claims/)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
+  });
+
+  it("says honestly when Zitadel didn't replace it", async () => {
+    rotate.next = Promise.resolve({ outcome: "failed", replaced: [], error: "Zitadel refused the change" });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Replace the key" }));
+    expect(await screen.findByText("Not replaced")).toBeInTheDocument();
+    expect(screen.getByText(/Zitadel didn't replace the key: Zitadel refused the change. The old key still works/)).toBeInTheDocument();
+  });
+
+  it("keeps the act after a refusal, so it can be tried again", async () => {
+    rotate.next = () => Promise.reject(new Error("Another replacement is running."));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Replace now" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Replace the key" }));
+    expect(await screen.findByText("Not replaced")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Replace the key" })).toBeInTheDocument();
+  });
+});
+
+describe("Identity provider · doing it by hand", () => {
+  it("puts 'Do it by hand' beside Replace now, and keeps no command on the page", async () => {
+    renderPage();
+    expect(await screen.findByRole("button", { name: "Replace now" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Do it by hand" })).toBeInTheDocument();
     expect(screen.queryByText("make zitadel-actions-rotate-key")).not.toBeInTheDocument();
-
-    fireEvent.click(button);
-    expect(await screen.findByText("make zitadel-actions-rotate-key")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Copy command: make zitadel-actions-rotate-key/ }),
-    ).toBeInTheDocument();
   });
 
-  // S5: the claims key follows Zitadel, so only the event listener's key
-  // still needs a restart; .env is updated at the next deploy, not urgently.
-  it("says the claims key needs no restart, and which key still does", async () => {
+  it("opens the guide on its first step, with the status's command verbatim", async () => {
+    rotation.value = { ...rotation.value, rotate_command: "cd /srv/example && make zitadel-actions-rotate-key" };
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "How to replace it" }));
-    expect(await screen.findByText(/keeps the old one working for 15 minutes, so sign-ins carry on/)).toBeInTheDocument();
-    expect(screen.getByText(/ZITADEL_EVENT_SIGNING_KEY/).closest("li")).toHaveTextContent(/docker compose restart backend/);
-    expect(screen.getByText(/ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT/).closest("li")).toHaveTextContent(/At the next deploy, not before/);
-    expect(screen.queryByText(/access\s+details Syndra normally adds at sign-in are missing/)).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Do it by hand" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Step 1 of 2")).toBeInTheDocument();
+    expect(within(dialog).getByText("cd /srv/example && make zitadel-actions-rotate-key")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
   });
 
-  it("says when Syndra last read the key from Zitadel", async () => {
+  it("says when Syndra last read the keys from Zitadel", async () => {
     keyring.value = { read_at: new Date().toISOString(), changed_at: null, reads: 4 };
     renderPage();
-    expect(await screen.findByText(/reads the key from Zitadel every minute.*Last read at \d\d:\d\d today/)).toBeInTheDocument();
+    expect(await screen.findByText(/event listener's key from Zitadel every minute.*never needs a restart. Last read at \d\d:\d\d today/)).toBeInTheDocument();
   });
 
   it("tells the owner what to grant when Zitadel refuses the key read", async () => {
@@ -250,19 +370,14 @@ describe("Identity provider · signing key guide", () => {
     expect(await screen.findByRole("region", { name: "Claims delivery" })).toHaveAttribute("id", "claims-delivery");
   });
 
-  it("never offers to rotate the key itself: the only button opens the guide", async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "How to replace it" }));
-    await screen.findByText("make zitadel-actions-rotate-key");
-    expect(screen.queryByRole("button", { name: /^Rotate/ })).not.toBeInTheDocument();
-  });
-
   it("offers register, not rotate, when there is no key", async () => {
     rotation.value = { key_installed: false, status: "disabled", threshold_days: 90 };
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "How to set it up" }));
-    expect(await screen.findByText("make zitadel-actions-register")).toBeInTheDocument();
-    expect(screen.queryByText("make zitadel-actions-rotate-key")).not.toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("make zitadel-actions-register")).toBeInTheDocument();
+    expect(within(dialog).queryByText("make zitadel-actions-rotate-key")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Let Syndra do it now" })).not.toBeInTheDocument();
   });
 });
 

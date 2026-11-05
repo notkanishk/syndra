@@ -24,12 +24,19 @@ const drainAdvisoryLockKey int64 = 771234501
 // this lock for its whole run, the only in_flight rows a claiming drain ever
 // sees are those orphaned by a crashed drain whose session (and lock) is gone.
 func TryAcquireDrainLock(ctx context.Context) (func(), bool, error) {
+	return tryAdvisoryLock(ctx, drainAdvisoryLockKey)
+}
+
+// tryAdvisoryLock takes a session-level advisory lock on its own pooled
+// connection: released by the closure, or by Postgres when the session dies,
+// so a crashed holder never leaves it taken.
+func tryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
 	conn, err := PG.Acquire(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("acquire drain-lock conn: %w", err)
+		return nil, false, fmt.Errorf("acquire advisory-lock conn: %w", err)
 	}
 	var got bool
-	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, drainAdvisoryLockKey).Scan(&got); err != nil {
+	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&got); err != nil {
 		conn.Release()
 		return nil, false, fmt.Errorf("pg_try_advisory_lock: %w", err)
 	}
@@ -39,8 +46,8 @@ func TryAcquireDrainLock(ctx context.Context) (func(), bool, error) {
 	}
 	release := func() {
 		// Unlock on the SAME connection that holds it, then return it to the pool.
-		// Use a background context so cleanup runs even if the drain's ctx is done.
-		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, drainAdvisoryLockKey)
+		// Use a background context so cleanup runs even if the caller's ctx is done.
+		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, key)
 		conn.Release()
 	}
 	return release, true, nil

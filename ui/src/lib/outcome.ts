@@ -205,6 +205,8 @@ export const FORECAST = {
   cancel: "Will be cancelled",
   adopt: "Will be adopted",
   mark: "Will be marked",
+  /** The action signing key: Zitadel makes a new one and Syndra uses it at once. */
+  replace: "Will be replaced",
 } as const;
 
 /** The acts a forecast can name: every word but the one for a wait. */

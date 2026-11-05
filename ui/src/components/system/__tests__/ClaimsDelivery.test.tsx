@@ -228,6 +228,26 @@ describe("Claims delivery, with problems", () => {
     );
   });
 
+  // action-key-autorotation: a replacement the test sign-in didn't confirm, or one Zitadel refused.
+  it("says a new signing key isn't confirmed, what still works, and where to look", () => {
+    set(delivery({ findings: [finding({ kind: "KEY_ROTATION", subject: "unverified", severity: "soft" })] }));
+    renderIt();
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("The new signing key isn't confirmed");
+    expect(notice).toHaveTextContent(/accepts the old key and the new one, and won't replace it again on its own/);
+    expect(notice).toHaveTextContent(/Action signing key row, below/);
+    expect(notice.className).toMatch(/warn/);
+    expect(notice).not.toHaveTextContent("KEY_ROTATION");
+  });
+
+  it("says Zitadel didn't replace the signing key and the old one still works", () => {
+    set(delivery({ findings: [finding({ kind: "KEY_ROTATION", subject: "failed", severity: "soft" })] }));
+    renderIt();
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("Zitadel didn't replace the signing key");
+    expect(notice).toHaveTextContent(/The old key still works, and Syndra tries again in the next quiet hours/);
+  });
+
   it("tells the owner what to grant when Zitadel refuses a read", () => {
     set(
       delivery({

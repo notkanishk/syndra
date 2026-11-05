@@ -33,6 +33,15 @@ const (
 	// them from Zitadel (Keyring JSON, no TTL). The key is in Redis because the
 	// data plane may run in its own container (P4); Redis is internal-only.
 	KeyringKey = "claims:keyring"
+	// EventsKeyringKey is the event listener target's keyring, the same shape.
+	// Only the backend verifies events; it is in Redis beside the claims one so
+	// a restart while Zitadel is unreachable still verifies (Redis keeps both in
+	// its append-only file on a volume).
+	EventsKeyringKey = "events:keyring"
+	// RotatingKey is set while Syndra replaces a key (action-key-autorotation):
+	// unix seconds until which a door that matches no key waits briefly for the
+	// new one instead of refusing at once. No TTL: the value ends itself.
+	RotatingKey = "claims:keyring:rotating"
 	// WelcomeKey holds Makerspace settings' welcome switch and what it sends
 	// (Welcome JSON, no TTL).
 	WelcomeKey = "claims:welcome"
@@ -60,20 +69,39 @@ type Keyring struct {
 	Current       string `json:"current"`
 	Previous      string `json:"previous,omitempty"`
 	PreviousUntil int64  `json:"previous_until,omitempty"` // unix seconds
+	// ChangedAt is when the keyring last saw the key change (unix seconds); 0
+	// before the first change it saw. It is the observed "last replaced" when
+	// Syndra has no record of its own (a manual rotate.sh).
+	ChangedAt int64 `json:"changed_at,omitempty"`
 }
 
 // Next is the keyring after Zitadel was read holding key: unchanged when it is
 // the current one, else key becomes current and the old current is kept
 // PreviousKeyKeep.
+//
+// A read of the key just moved off (the previous one, still kept) is a stale
+// read, never a rotation back: Zitadel makes every key fresh, so the one it
+// replaced cannot return. Its search reads a projection that can lag the
+// write; without this, a lagging read just after Syndra replaced the key would
+// swap the two and drop the new one 15 minutes later.
 func (k Keyring) Next(key string, now time.Time) Keyring {
-	if key == "" || key == k.Current {
+	if key == "" || key == k.Current || (key == k.Previous && now.Unix() < k.PreviousUntil) {
 		return k
 	}
 	next := Keyring{Current: key}
 	if k.Current != "" {
-		next.Previous, next.PreviousUntil = k.Current, now.Add(PreviousKeyKeep).Unix()
+		next.Previous, next.PreviousUntil, next.ChangedAt = k.Current, now.Add(PreviousKeyKeep).Unix(), now.Unix()
 	}
 	return next
+}
+
+// Hold keeps the previous key verifying until at least until: after a
+// replacement the test sign-in could not confirm, both keys stay accepted.
+func (k Keyring) Hold(until time.Time) Keyring {
+	if k.Previous != "" && until.Unix() > k.PreviousUntil {
+		k.PreviousUntil = until.Unix()
+	}
+	return k
 }
 
 // SlotKey is one key the data plane verifies with, and its telemetry slot.

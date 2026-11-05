@@ -259,6 +259,9 @@ func nudgeKeyring() {
 func RunKeyring(ctx context.Context) {
 	tick := time.NewTicker(keyringEvery)
 	defer tick.Stop()
+	if rdb := claimConfigRedis(); rdb != nil {
+		loadEventKeyring(ctx, rdb) // what was kept, before Zitadel is asked
+	}
 	for {
 		readKeyringOnce(ctx)
 		select {
@@ -294,7 +297,10 @@ func followKeyring(ctx context.Context) error {
 	now := time.Now()
 	rctx, cancel := context.WithTimeout(ctx, keyringReadTime)
 	defer cancel()
-	key, err := readClaimTargetKey(rctx)
+	keys, err := readTargetKeys(rctx)
+	if err == nil && keys[claimcheck.ClaimTarget] == "" {
+		err = fmt.Errorf("zitadel has no target named %s, or returned it without its signing key", claimcheck.ClaimTarget)
+	}
 	keyring.mu.Lock()
 	keyring.status.Reads++
 	if err != nil {
@@ -308,47 +314,97 @@ func followKeyring(ctx context.Context) error {
 			Sample: map[string]any{"read": "keyring", "reason": claimcheck.Reason(err)}}}, claimtel.ResolveAfterReads)
 		return err
 	}
-	var cur claimserve.Keyring
-	if cfg := claimPlane.Config(); cfg != nil {
-		cur = cfg.Keys
+	// The event listener's key is followed the same way (action-key-autorotation);
+	// a listener missing from Zitadel is R3's to report, not the keyring's.
+	if k := keys[claimcheck.EventTarget]; k != "" {
+		if err := adoptKey(ctx, claimcheck.EventTarget, k, now); err != nil {
+			log.Printf("[DATA PLANE] keyring: could not publish the event listener's key: %v", err)
+		}
 	}
-	next := cur.Next(key, now)
-	if next == cur {
-		return nil
-	}
+	return adoptKey(ctx, claimcheck.ClaimTarget, keys[claimcheck.ClaimTarget], now)
+}
+
+// adoptKey makes key target's current key (Keyring.Next), publishing it when
+// it moved. The follower calls it with what it read; the rotator with what
+// Zitadel's answer carried, before anything else happens.
+func adoptKey(ctx context.Context, target, key string, now time.Time) error {
+	return moveKeyring(ctx, target, func(k claimserve.Keyring) claimserve.Keyring { return k.Next(key, now) })
+}
+
+// moveKeyring applies move to target's keyring and publishes the result when
+// it changed: the claims target's through claims:keyring and claims:gen (this
+// process's data plane at once, the claims container within its next poll or
+// its first call that matches no key), the event listener's through
+// events:keyring and this process at once. Redis's append-only file is what
+// keeps either across a restart while Zitadel is unreachable.
+func moveKeyring(ctx context.Context, target string, move func(claimserve.Keyring) claimserve.Keyring) error {
 	rdb := claimConfigRedis()
 	if rdb == nil {
 		return errors.New("redis is not connected")
 	}
-	if err := claimserve.PublishKeyring(ctx, rdb, next); err != nil {
-		return err
+	switch target {
+	case claimcheck.ClaimTarget:
+		var cur claimserve.Keyring
+		if cfg := claimPlane.Config(); cfg != nil {
+			cur = cfg.Keys
+		}
+		next := move(cur)
+		if next == cur {
+			return nil
+		}
+		if err := claimserve.PublishKeyring(ctx, rdb, next); err != nil {
+			return err
+		}
+		_ = claimPlane.Poll(ctx) // this process's data plane follows at once
+		if next.Current != cur.Current {
+			now := time.Now()
+			keyring.mu.Lock()
+			keyring.status.ChangedAt = &now
+			keyring.mu.Unlock()
+			log.Printf("[DATA PLANE] keyring: the claims target's signing key changed; the data plane verifies with it now (the previous one for %s)", claimserve.PreviousKeyKeep)
+		}
+		return nil
+	case claimcheck.EventTarget:
+		if eventKeyring.Load() == nil {
+			loadEventKeyring(ctx, rdb)
+		}
+		var cur claimserve.Keyring
+		if k := eventKeyring.Load(); k != nil {
+			cur = *k
+		}
+		next := move(cur)
+		if next == cur {
+			return nil
+		}
+		if err := claimserve.PublishEventsKeyring(ctx, rdb, next); err != nil {
+			return err
+		}
+		eventKeyring.Store(&next)
+		if next.Current != cur.Current {
+			log.Printf("[DATA PLANE] keyring: the event listener's signing key changed; Syndra verifies events with it now (the previous one for %s)", claimserve.PreviousKeyKeep)
+		}
+		return nil
 	}
-	_ = claimPlane.Poll(ctx) // this process's data plane follows at once
-	keyring.mu.Lock()
-	keyring.status.ChangedAt = &now
-	keyring.mu.Unlock()
-	log.Printf("[DATA PLANE] keyring: Zitadel's signing key for the claims target changed; the data plane verifies with it now (the previous one for %s)", claimserve.PreviousKeyKeep)
-	return nil
+	return fmt.Errorf("no keyring for target %s", target)
 }
 
-func readClaimTargetKey(ctx context.Context) (string, error) {
+// readTargetKeys is each target's signing key by name, from one read.
+func readTargetKeys(ctx context.Context) (map[string]string, error) {
 	reader := zitadelActions()
 	if reader == nil {
-		return "", errNoClient
+		return nil, errNoClient
 	}
 	targets, err := reader.ListActionTargets(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	out := map[string]string{}
 	for _, t := range targets {
-		if t.Name == claimcheck.ClaimTarget {
-			if t.SigningKey == "" {
-				return "", errors.New("zitadel returned the claims target without its signing key")
-			}
-			return t.SigningKey, nil
+		if t.SigningKey != "" {
+			out[t.Name] = t.SigningKey
 		}
 	}
-	return "", fmt.Errorf("zitadel has no target named %s", claimcheck.ClaimTarget)
+	return out, nil
 }
 
 func keyringSnapshot() keyringStatus {

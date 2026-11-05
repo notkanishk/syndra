@@ -33,6 +33,7 @@ describe("the copy guide's forecast table", () => {
       FORECAST.cancel,
       FORECAST.adopt,
       FORECAST.mark,
+      FORECAST.replace,
       FORECAST.queued,
     ]);
   });
