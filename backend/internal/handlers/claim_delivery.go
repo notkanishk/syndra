@@ -183,6 +183,8 @@ func claimsHealthNow(ctx context.Context) (claimsHealth, int) {
 	cancel()
 	base, hard, soft := claimserve.Assess(now, recent, lastServed, pingErr, claimPlane.Status())
 	h := claimsHealth{Health: base, Notes: deadmanNotes(), CheckingSince: claimCorrelator.Since().UTC()}
+	rl := rateLimiter.Stats()
+	h.RateLimits = &rl
 
 	if wr, ok := cacheLastWarm(); ok {
 		h.WarmAgeS = ageS(now, wr.At)

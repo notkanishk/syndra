@@ -708,6 +708,57 @@ describe("an app with no shape of its own", () => {
   });
 });
 
+// Before Actions v1 goes off: a real sign-in against the preview, and the
+// notice when Zitadel won't list the app's project.
+describe("checking the preview against real sign-ins", () => {
+  function previewWith(extra: Record<string, unknown>, now = explanation({ groups: ["netbird-staff", "netbird-admins"] })) {
+    api.routes["POST /applications/a1/claim-shape/preview"] = () => ({ people: [{ user_id: "me", now }], changes: [], breaking: [], left_out: [], ...extra });
+  }
+  const served = (groups: string[]) => [{ key: "groups", value: groups }];
+
+  it("says plainly when the last sign-in carried exactly what the preview shows", async () => {
+    previewWith({
+      live: { me: { at: "2026-11-03T10:09:00Z", function: "function/preaccesstoken", served: served(["netbird-staff", "netbird-admins"]), expected: served(["netbird-staff", "netbird-admins"]), match: true } },
+    });
+    renderScreen();
+    expect(await screen.findByText(/Kanishk Singh's last sign-in, at \d\d:\d\d, carried exactly this in the access token\./)).toBeInTheDocument();
+    expect(screen.queryByText(/what Syndra sent at/)).toBeNull();
+  });
+
+  it("says when it differs, and shows what was really sent", async () => {
+    previewWith({
+      live: { me: { at: "2026-11-03T10:09:00Z", function: "function/preaccesstoken", served: served(["netbird-staff"]), expected: served(["netbird-staff", "netbird-admins"]), match: false } },
+    });
+    renderScreen();
+    expect(await screen.findByText(/carried something different in the access token\./)).toBeInTheDocument();
+    expect(screen.getByText("Doesn't match.", { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(/what Syndra sent at/)).toBeInTheDocument();
+  });
+
+  it("with no sign-in seen, says how to see one and never invents a match", async () => {
+    previewWith({});
+    renderScreen();
+    expect(await screen.findByText(/No sign-in of Kanishk Singh's has been seen to compare with this\./)).toBeInTheDocument();
+    expect(screen.queryByText(/carried exactly this/)).toBeNull();
+  });
+
+  it("shows a notice under the header when Zitadel doesn't list the project, and none when it does", async () => {
+    const e = explanation({ groups: [] });
+    e.checks[0] = { state: "fail", facts: { ...e.checks[0].facts, project_role_assertion: false } };
+    e.checks[5] = { state: "none", facts: {} };
+    previewWith({}, e);
+    renderScreen();
+    const notice = (await screen.findByText("NetBird gets nothing from Syndra.")).closest('[role="status"]') as HTMLElement;
+    expect(notice).toHaveTextContent(/In Zitadel, turn on "Assert roles on authentication" for Network/);
+    expect(within(notice).getByRole("link", { name: /Open Network in Zitadel/ })).toHaveAttribute("href", "https://auth.example.edu/ui/console/projects/pNet");
+    cleanup();
+    previewWith({});
+    renderScreen();
+    await screen.findByText(/Checked /);
+    expect(screen.queryByText("NetBird gets nothing from Syndra.")).toBeNull();
+  });
+});
+
 describe("debug mode", () => {
   const session = (over: Record<string, unknown> = {}) => ({
     application_id: "a1",

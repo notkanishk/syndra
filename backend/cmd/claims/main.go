@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"syndra/internal/claimserve"
+	"syndra/internal/ratelimit"
 )
 
 func main() {
@@ -42,6 +43,8 @@ func main() {
 	}
 	rdb := claimserve.NewRedisClient(addr)
 	proc := claimserve.NewProcess(rdb, os.Getenv("ZITADEL_ACTION_SIGNING_KEY"), os.Getenv("ZITADEL_DOMAIN") == "")
+	// Failed signatures only, per source; a signed call is never counted.
+	proc.Limit = ratelimit.FromEnv(rdb, os.Getenv)
 	srv := claimserve.NewServer(claimserve.Addr(), proc.Router())
 	go func() {
 		fmt.Printf("Claims data plane listening on %s\n", srv.Addr)

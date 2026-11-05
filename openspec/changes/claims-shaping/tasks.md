@@ -48,9 +48,13 @@ Contract: `design.md`. Tags per `docs/agents/triage-labels.md`.
 
 ## 7. Not in this slice
 - [x] 7.1 UI slice: the claims part per A-14 on this API (§8 below)
-- [ ] 7.2 [ready-for-agent] Test people (`GET/PUT /applications/{id}/test-people`) and "What the app reads" (A-11 §3, §6)
+- [x] 7.2a Test people, rescoped (owner, 5 Nov: "pick any person and see exactly what their token would carry"): the preview's person picker already does it (`ClaimPreview`, A to Z, service accounts apart) through the one shaper, so no saved list and no `test-people` endpoints. What was missing was parity at the door: the preview shaped a token for someone Zitadel lists no project for, where the door answers `no_grants` and nothing. `explain` now applies the same gate (`zitadelLists`: an observed grant in the project, roles or none) and check 5 says so (`unlisted`). The property test now runs the door (`Door.Answer` on a decoded payload, 1,600 cases, ~270 with no project listed), not `Plane.Answer`
+- [ ] 7.2b [needs-triage] "What the app reads" (A-11 §6), and a saved test-people list only if the picker proves short
 - [ ] 7.3 [needs-info] Which Supabase provider the deployment uses (research unverified)
-- [ ] 7.4 [needs-triage] Confirm on prod that Zitadel sends `application.client_id` in both functions (debug mode's first capture shows it); without it every app gets its project's default
+- [x] 7.4a The page says it when Zitadel doesn't send `application.client_id`: the newest call per step across every app (`claim_delivery_last`, `ClientID == "-"`, within a day) is the instance's answer, since Zitadel's version decides it (`clientIDMissing`). An app with its own shape whose steps are affected gets an amber check 4: "Zitadel doesn't say which app is signing in, so {app} gets {project}'s default, not this shape", and the fix (Zitadel 4.0 or later)
+- [ ] 7.4b [ready-for-human] Confirm on prod: the code path is in place, but whether prod sends the field is UNVERIFIED here (no prod read). Open any app's claims page after a sign-in: check 4 turns amber if it doesn't
+- [x] 7.5 The live check (owner, 5 Nov): the preview response carries `live`, per person, their newest sign-in debug mode captured for the app against the saved shape's preview (`services.CompareServed`: the same `Envelope`, nothing where the shape doesn't land at that step, values compared as JSON, the claims' order kept). The preview says "carried exactly this", or "something different" with what was sent; with nothing seen, how to see one. Debug captures only: the correlator's relayed calls (`claims:calls:*`) carry outcomes, not payloads
+- [x] 7.6 The project-not-listed notice (`listingNotice`), under the header: the project's roles aren't asserted and no call was served in a day (so the app asks for no role scopes either), or the newest call was refused as cross-project (ADR-002: the extra `…:aud` scope)
 
 ## 8. The UI (A-14 §1–§8)
 - [x] 8.1 The page: header (client id in Advanced), "What <app> is told" beside the sticky preview, Debug mode, History; on a phone the shape comes first. The old per-app override screen (`TokenFormatEditor`, `TokenPreview`) is gone
@@ -63,7 +67,7 @@ Contract: `design.md`. Tags per `docs/agents/triage-labels.md`.
 - [x] 8.8 Debug mode: one account at a time (you by default, or someone else by search), the 15-minute end shown and enforced by the server, the live list whose new rows wait while the pointer, focus or an opened sign-in is in it, one sign-in opened in place (request, answer, checks, labelled rebuild, no signatures), the ended state
 - [x] 8.9 Apps index: the Claims column (real key, where it lands, amber "Doesn't reach it"), the sub-line naming the template or default, one warn line above the table. Backend: `GET /applications` gains `claims` per app (`attachClaimLines`); its verdict is check 1's last answer, never a fresh Zitadel call per app
 - [x] 8.10 The project default moves to the project's page (`ProjectClaimDefault`), with the apps it reaches
-- [ ] 8.11 [ready-for-agent] Test people in the debug sheet and the preview (needs 7.2); "Last on 2 Nov, for 15 minutes, by …" on the off row (needs the last session kept past its hour)
+- [ ] 8.11 [needs-triage] "Last on 2 Nov, for 15 minutes, by …" on the off row (needs the last session kept past its hour). Test people in the preview: done by 7.2a; the debug sheet's "Someone else" already picks any person
 
 ## 9. The page, calm by default (A-15, 3 Nov; Q-15 after the owner saw A-14 live)
 Layout only: every A-14 behaviour and the API stand (no API change).

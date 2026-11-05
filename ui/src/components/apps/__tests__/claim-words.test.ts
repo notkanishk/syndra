@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { check5, checkWords, type CheckContext } from "@/components/apps/claim-words";
+import { check5, checkWords, listingNotice, type CheckContext } from "@/components/apps/claim-words";
 import type { CheckState, Explanation } from "@/lib/queries/useClaimShape";
 
 const ctx: CheckContext = {
@@ -33,5 +33,67 @@ describe("claim words, with a token's roles from Zitadel (ADR-004)", () => {
     const c2 = checkWords(e, ctx)[1];
     expect(c2.sentence).toBe("Syndra couldn't read Ada's roles from Zitadel just now.");
     expect(c2.tone).toBe("warn");
+  });
+});
+
+describe("before Actions v1 goes off", () => {
+  it("says a person Zitadel lists no project for gets nothing, as the token does", () => {
+    const e = explanation(["pass", "none", "none", "pass", "none", "pass"], [{}, { roles: [] }, {}, {}, { unlisted: true }]);
+    const c5 = check5(e, ctx, false);
+    expect(c5.sentence).toBe("Zitadel doesn't list Network in Ada's token, so Syndra adds nothing.");
+    expect(c5.tone).toBe("neutral");
+  });
+
+  it("says when Zitadel names no app, so the project default goes out instead", () => {
+    const named = explanation(["pass", "pass", "pass", "pass", "pass", "pass"], [{}, {}, {}, { source: "app", version: 2 }]);
+    expect(checkWords(named, ctx)[3].sentence).toBe("What NetBird is told applies, version 2.");
+
+    const unnamed = explanation(["pass", "pass", "pass", "warn", "pass", "pass"], [
+      {},
+      {},
+      {},
+      { source: "app", version: 2, client_id_missing: ["function/preaccesstoken"] },
+    ]);
+    const c4 = checkWords(unnamed, ctx)[3];
+    expect(c4.tone).toBe("warn");
+    expect(c4.sentence).toBe("Zitadel doesn't say which app is signing in, so NetBird gets Network's default, not this shape.");
+    expect(c4.faint?.[0]).toContain("the access token");
+    expect(c4.faint?.[0]).toContain("version 4.0");
+  });
+
+  describe("the project-not-listed notice", () => {
+    const links = { project: "https://zitadel.example.org/ui/console/projects/pNet" };
+
+    it("shows when the roles aren't asserted and nothing was served lately, with the fix in Zitadel", () => {
+      const e = explanation(["fail", "pass", "pass", "pass", "fail", "none"], [{ project_role_assertion: false }]);
+      const n = listingNotice(e, { ...ctx, links });
+      expect(n?.title).toBe("NetBird gets nothing from Syndra.");
+      expect(n?.body).toContain('turn on "Assert roles on authentication" for Network');
+      expect(n?.link?.href).toBe(links.project);
+    });
+
+    it("stays away when a recent call was served: the app asks for role scopes", () => {
+      const e = explanation(["fail", "pass", "pass", "pass", "fail", "pass"], [{ project_role_assertion: false }]);
+      expect(listingNotice(e, ctx)).toBeNull();
+    });
+
+    it("names the extra audience scope when the last call spanned projects", () => {
+      const e = explanation(["pass", "pass", "pass", "pass", "pass", "warn"], [
+        { project_role_assertion: true },
+        {},
+        {},
+        {},
+        {},
+        { last_outcome: "refused_cross_project" },
+      ]);
+      expect(listingNotice(e, ctx)?.body).toContain("urn:zitadel:iam:org:project:id:…:aud");
+    });
+
+    it("says nothing when the roles are asserted, or the shape sends nothing of its own", () => {
+      expect(listingNotice(explanation(["pass", "pass", "pass", "pass", "pass", "pass"], [{ project_role_assertion: true }]), ctx)).toBeNull();
+      const signInOnly = { ...ctx, profile: { ...ctx.profile, claims: [] } };
+      expect(listingNotice(explanation(["warn", "pass", "pass", "pass", "none", "none"], [{ project_role_assertion: false }]), signInOnly)).toBeNull();
+      expect(listingNotice(undefined, ctx)).toBeNull();
+    });
   });
 });
