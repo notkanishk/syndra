@@ -118,12 +118,18 @@ describe("the bundles list", () => {
     expect(row).not.toHaveTextContent("—");
   });
 
-  it("shows a dash for roles when the server sends no count, and 0 people", () => {
+  it("shows the word None for roles when the server sends no count, and 0 people", () => {
     state.bundles = [bundle({ role_count: undefined, holder_count: undefined })];
     render(<BundlesPage />);
 
     const row = screen.getByRole("link", { name: "Lab Tech" }).closest(".row-divider") as HTMLElement;
-    expect(row).toHaveTextContent("—");
+    expect(row).toHaveTextContent("None");
     expect(row).toHaveTextContent("0");
+  });
+
+  it("the lede is two sentences: it no longer explains versions here (A-20 P17)", () => {
+    render(<BundlesPage />);
+    expect(screen.getByText(/A bundle is a set of roles given together\. Give someone a bundle and they get every role in it\.$/)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("Publish a new version");
   });
 });

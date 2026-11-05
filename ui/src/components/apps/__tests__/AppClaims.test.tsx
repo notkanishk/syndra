@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppTokenScreen } from "@/components/apps/AppTokenScreen";
@@ -158,7 +158,12 @@ describe("an app's header", () => {
     expect(screen.getByRole("heading", { level: 1 }).parentElement).not.toHaveTextContent("301928374650192837");
   });
 
-  it("gives the client id its own copyable row in the tools card, in either view", async () => {
+  it("gives the client id its own copyable row in the tools card, in Advanced only (A-20 P13)", async () => {
+    renderScreen();
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText("Client ID")).not.toBeInTheDocument();
+    cleanup();
+    api.view.advanced = true;
     renderScreen();
     const row = (await screen.findByText("Client ID")).parentElement!;
     expect(within(row).getByText("301928374650192837")).toBeInTheDocument();
@@ -217,6 +222,22 @@ describe("a save NetBird will act on", () => {
     );
     // The roles line describes the draft.
     expect(await rolesLine()).toHaveTextContent("2 of 3 roles. 2 renamed, 1 left out.");
+  });
+
+  it("a failed re-run keeps the last preview, receded, with the reason and its age (A-20 P13)", async () => {
+    renderScreen();
+    await screen.findByText(/Checked /);
+    expect(screen.queryByText(/Couldn.t run the checks again/)).not.toBeInTheDocument();
+    api.routes["POST /applications/a1/claim-shape/preview"] = () => {
+      throw new Error("server down");
+    };
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    const notice = await screen.findByText(/Couldn.t run the checks again\. This is from /);
+    expect(notice).toBeInTheDocument();
+    // The earlier answer is still on the page, inert and dimmed, not replaced by the error.
+    const held = screen.getByText(/Show the checks|Hide the checks/).closest("[inert]");
+    expect(held).not.toBeNull();
+    expect(held).toHaveClass("opacity-45");
   });
 
   it("shows Save only after the first edit, and folds it away on Discard", async () => {

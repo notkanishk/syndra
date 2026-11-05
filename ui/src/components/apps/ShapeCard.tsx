@@ -9,6 +9,7 @@ import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { FoldChevron } from "@/components/ui/FoldChevron";
 import { FormPart } from "@/components/ui/FormPart";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -193,12 +194,7 @@ function LineHead({
     <>
       <span className="flex size-[var(--tap)] flex-none items-center justify-center">
         {onToggle && (
-          <span
-            aria-hidden
-            className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn ${open ? "rotate-90" : ""}`}
-          >
-            ›
-          </span>
+          <FoldChevron open={!!open} />
         )}
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-0.5 pt-[11px]">
@@ -1262,8 +1258,7 @@ function PickRoles({
           }
         />
       </div>
-      <ModalFooter>
-        <Button onClick={onClose}>Cancel</Button>
+      <ModalFooter cancel={{ onClick: onClose }}>
         <Button variant="accent" disabled={chosen.size === 0} onClick={() => onDone(Array.from(chosen).map((id) => id.slice(projectId.length + 1)))}>
           {chosen.size <= 1 ? "Use this role" : `Use these ${chosen.size} roles`}
         </Button>

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { KeysHost } from "@/components/shell/KeysHost";
 import { ArriveList } from "@/lib/motion";
-import { KEY_ROWS } from "@/lib/keys";
+import { KEY_ROWS, MOD } from "@/lib/keys";
 
 const key = (init: KeyboardEventInit, target: Element | Window = window) => fireEvent.keyDown(target, init);
 
@@ -30,8 +30,19 @@ describe("the Keys sheet (A-19 P7)", () => {
     expect(sheet.querySelectorAll("kbd").length).toBe(KEY_ROWS.flatMap((row) => row.keys).length);
   });
 
+  it("tells the truth about the arrows and lists the Go to chord (A-20 P17)", () => {
+    expect(KEY_ROWS.some((row) => row.keys.includes(MOD) && row.keys.includes("K"))).toBe(true);
+    mount(<span />);
+    fireEvent.keyDown(window, { key: "?" });
+    const sheet = screen.getByRole("dialog");
+    expect(sheet).toHaveTextContent("These work on every page. In a list, the arrows move between rows.");
+    expect(sheet).not.toHaveTextContent("Mod");
+  });
+
   it("has no letter shortcut for a verb", () => {
     for (const row of KEY_ROWS) {
+      // The ⌘K chord is a modifier plus a letter; a bare letter is what may not be a verb.
+      if (row.keys.includes(MOD)) continue;
       for (const cap of row.keys) expect(cap).not.toMatch(/^[a-z]$/i);
     }
   });

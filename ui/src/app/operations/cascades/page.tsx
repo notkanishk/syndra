@@ -2,6 +2,7 @@
 
 import { Term } from "@/components/ui/Term";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -96,7 +97,7 @@ export default function ChangeHistoryPage() {
       >
         <div className="flex flex-col gap-4">
           {rows.map((group) => (
-            <CascadeCard key={group.cascade_id} group={group} rules={rules} />
+            <CascadeCard key={group.cascade_id} group={group} rules={rules} one={Boolean(asked)} />
           ))}
         </div>
       </ListStates>
@@ -104,7 +105,8 @@ export default function ChangeHistoryPage() {
   );
 }
 
-function CascadeCard({ group, rules }: { group: CascadeGroupRow; rules?: MappingRuleRow[] }) {
+/** `one`: this is the single-edit view, so every write is listed; otherwise the rest are one click away. */
+function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: MappingRuleRow[]; one: boolean }) {
   const first = group.writes[0];
   // The rule by what it does: it has no name of its own. A bundle by its name.
   const rule = group.source === "rule" ? rules?.find((entry) => entry.id === first?.source_ref) : undefined;
@@ -123,7 +125,7 @@ function CascadeCard({ group, rules }: { group: CascadeGroupRow; rules?: Mapping
       </div>
 
       <div className="row-divider flex flex-wrap gap-x-5 gap-y-1.5 px-5 py-3 text-[13.5px]">
-        {group.writes.slice(0, 6).map((write) => (
+        {(one ? group.writes : group.writes.slice(0, 6)).map((write) => (
           <span key={write.id} className="text-muted">
             <UserName id={write.user_id} /> ·{" "}
             {(write.role_keys ?? []).map((key) => (
@@ -131,8 +133,13 @@ function CascadeCard({ group, rules }: { group: CascadeGroupRow; rules?: Mapping
             ))}
           </span>
         ))}
-        {group.writes.length > 6 && (
-          <span className="text-faint">and {group.writes.length - 6} more</span>
+        {!one && group.writes.length > 6 && (
+          <Link
+            href={`/operations/cascades?cascade=${encodeURIComponent(group.cascade_id)}`}
+            className="font-semibold text-accent-text link-hover"
+          >
+            and {group.writes.length - 6} more
+          </Link>
         )}
         {group.source === "bundle" && first?.source_ref && (
           <span className="text-faint">

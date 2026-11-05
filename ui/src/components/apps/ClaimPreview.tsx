@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { CheckTrail } from "@/components/ui/CheckTrail";
 import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
+import { ApiError } from "@/lib/api-client";
 import { Crossfade } from "@/lib/motion";
 import { Select } from "@/components/ui/Select";
 import { Ticks, TokenBlock } from "@/components/ui/TokenBlock";
@@ -73,6 +74,8 @@ export function ClaimPreview({
   const chosen = choice?.bad === bad ? choice.open : null;
   const open = chosen ?? bad;
 
+  // A re-run failed but an earlier answer is held: show it receded with the reason.
+  const stale = Boolean(error && preview && !(error instanceof ApiError && error.code === "VALIDATION_FAILED"));
   const foot = asDraft ? draftFoot(lines, preview, shown, ctx.person) : c5?.foot;
 
   return (
@@ -126,6 +129,18 @@ export function ClaimPreview({
           </div>
         ) : shown ? (
           <>
+            {stale && (
+              <div className="px-5 pb-3">
+                <ErrorState
+                  title={`Couldn't run the checks again. This is from ${clockOf(shown.read_at)}.`}
+                  error={error}
+                  onRetry={onRetry}
+                  bare
+                />
+              </div>
+            )}
+            {/* A failed re-run leaves the last good preview in place, receded: its age is in the header and the Notice above. */}
+            <div className={stale ? "opacity-45 motion-tint" : "motion-tint"} {...(stale ? { inert: true, "aria-disabled": true } : {})}>
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 pb-3">
               <StatusDot tone={verdict.tone} />
               <Crossfade id={verdict.text} inline>
@@ -163,6 +178,7 @@ export function ClaimPreview({
                   <CopiedSeat done={copied} idle={canCopy ? "Copy preview" : "Select preview"} word={canCopy ? "Copied" : "Selected"} dot={canCopy} />
                 </Button>
               </span>
+            </div>
             </div>
           </>
         ) : null}

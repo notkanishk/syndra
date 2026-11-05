@@ -35,6 +35,18 @@ beforeEach(() => {
   view.audience = "advanced";
 });
 
+describe("Go to's placeholder says what this session can reach (A-20 P17)", () => {
+  it.each([
+    ["member", MEMBER_NAV, "A page"],
+    ["basic", BASIC_NAV, "A person, a project, an app, or a page"],
+    ["advanced", ADVANCED_NAV, "A person, a project, an app, a bundle, or a page"],
+  ] as const)("%s", (audience, nav, words) => {
+    view.audience = audience;
+    renderIn(<GoTo open onClose={() => {}} nav={nav} />);
+    expect(screen.getByRole("combobox")).toHaveAttribute("placeholder", words);
+  });
+});
+
 describe("Go to", () => {
   it("is a dialog named Go to, holding a combobox that owns a listbox", () => {
     renderIn(<GoTo open onClose={() => {}} nav={ADVANCED_NAV} />);
