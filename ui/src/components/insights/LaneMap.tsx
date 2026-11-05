@@ -4,9 +4,9 @@ import { ArriveList } from "@/lib/motion";
 import { useRef, useState } from "react";
 
 import { LANES, type Highlight, type Model, type Tone } from "@/components/insights/model";
-import { NodeGlyph, TONE_COLOUR, nodeSurface } from "@/components/insights/tone";
+import { NodeGlyph, TONE_COLOUR, ToneDot, nodeSurface } from "@/components/insights/tone";
 import { AnchoredPanel } from "@/components/ui/Anchored";
-import { PILL } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 
 export type Mark = "drift" | "send" | "single";
 
@@ -83,7 +83,7 @@ export function LaneMap({
   startSettled?: boolean;
 }) {
   const [opened, setOpened] = useState<Set<string>>(new Set());
-  const keysButton = useRef<HTMLButtonElement | null>(null);
+  const keysButton = useRef<HTMLSpanElement | null>(null);
 
   const lanes = LANES.map((lane, l) => {
     const all = model.lanes[lane.kind];
@@ -217,12 +217,9 @@ export function LaneMap({
                     <NodeGlyph kind={node.kind} />
                     <span className="min-w-0 flex-1 text-[13px] font-semibold leading-tight">{name}</span>
                     {(marks.get(node.id) ?? []).map((mark) => (
-                      <span
-                        key={mark}
-                        title={MARK_WORDS[mark].words}
-                        className="size-[7px] flex-none rounded-pill"
-                        style={{ background: TONE_COLOUR[MARK_WORDS[mark].tone] }}
-                      />
+                      <span key={mark} title={MARK_WORDS[mark].words} className="flex-none">
+                        <ToneDot tone={MARK_WORDS[mark].tone} />
+                      </span>
                     ))}
                     {people != null && <span className="text-[12.5px] tabular-nums text-faint">{people}</span>}
                   </button>
@@ -237,7 +234,7 @@ export function LaneMap({
                 <button
                   type="button"
                   onClick={() => setOpened((s) => new Set(s).add(lane.kind))}
-                  className="motion-tint flex min-h-[var(--tap)] desktop:min-h-[38px] w-full items-center rounded-nav border border-dashed border-line-strong px-3 text-left text-[13px] text-muted hover:text-ink"
+                  className="motion-tint flex min-h-[var(--tap)] desktop:min-h-[38px] w-full items-center rounded-nav border border-line-strong px-3 text-left text-[13px] text-muted hover:text-ink"
                 >
                   {lane.more} more {lane.noun}
                 </button>
@@ -260,20 +257,16 @@ export function LaneMap({
             .filter(marked)
             .map((mark) => (
               <span key={mark} className="inline-flex items-center gap-2 text-[12.5px] text-muted">
-                <span aria-hidden className="size-[7px] rounded-pill" style={{ background: TONE_COLOUR[MARK_WORDS[mark].tone] }} />
+                <ToneDot tone={MARK_WORDS[mark].tone} />
                 {MARK_WORDS[mark].words}
               </span>
             ))}
-          <button
-            ref={keysButton}
-            type="button"
-            onClick={onKeys}
-            aria-expanded={keysOpen}
-            className={`control press-scale ml-auto inline-flex items-center gap-2 rounded-pill border border-line bg-surface-1 text-muted hover:text-ink ${PILL.sm}`}
-          >
-            Keys
-            <span className="type-mono text-ink">?</span>
-          </button>
+          <span ref={keysButton} className="ml-auto inline-flex">
+            <Button variant="outline" size="sm" onClick={onKeys} aria-expanded={keysOpen}>
+              Keys
+              <span className="type-mono text-ink">?</span>
+            </Button>
+          </span>
         </div>
 
         <AnchoredPanel
