@@ -3,6 +3,8 @@
 // who recognize project names better than internal keys. This module
 // centralizes the human-readable formatting so every view does it the same way.
 
+import { MAKERSPACE_TZ, civilDay, daysFromToday, endAfterDaysISO, isSameDay } from "@/lib/time";
+
 /**
  * How a role reads in a SENTENCE — a toast, a dialog lede, a warning banner.
  *
@@ -66,8 +68,8 @@ export function askLengthForOperator(
 ): string {
   if (!days || days < 1) return "With no end date";
   // An ask that named its end ("until the end of term") is granted to that date, however late it is decided.
-  const end = askedUntil ? new Date(askedUntil) : new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-  return `For ${lengthWords(days)} · until ${formatShortDate(end.toISOString(), now)}`;
+  const end = askedUntil ?? endAfterDaysISO(days, now);
+  return `For ${lengthWords(days)} · until ${formatShortDate(end, now)}`;
 }
 
 /**
@@ -130,6 +132,9 @@ export function formatAgoShort(iso: string | null | undefined, now: Date = new D
  */
 const DATE_LOCALE = "en-GB";
 
+/** Every date and clock is read in the makerspace's zone, never the browser's (lib/time.ts). */
+const IN_ZONE = { timeZone: MAKERSPACE_TZ } as const;
+
 /**
  * "2 Aug" — the form a deadline is spoken in. The year appears only when the
  * date is not in this year ("2 Aug 2027"): a year on every date is noise, and
@@ -143,9 +148,10 @@ export function formatShortDate(
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString(DATE_LOCALE, {
+    ...IN_ZONE,
     day: "numeric",
     month: "short",
-    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+    ...(civilDay(date).slice(0, 4) === civilDay(now).slice(0, 4) ? {} : { year: "numeric" }),
   });
 }
 
@@ -158,7 +164,7 @@ export function formatClock(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString(DATE_LOCALE, { hour: "2-digit", minute: "2-digit", hour12: false });
+  return date.toLocaleTimeString(DATE_LOCALE, { ...IN_ZONE, hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 /**
@@ -171,7 +177,7 @@ export function formatWhen(iso: string | null | undefined, now: Date = new Date(
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
   const clock = formatClock(iso);
-  return date.toDateString() === now.toDateString() ? clock : `${formatShortDate(iso, now)} ${clock}`;
+  return isSameDay(date, now) ? clock : `${formatShortDate(iso, now)} ${clock}`;
 }
 
 /**
@@ -183,7 +189,7 @@ export function formatAt(iso: string | null | undefined, now: Date = new Date())
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   const clock = formatClock(iso);
-  return date.toDateString() === now.toDateString()
+  return isSameDay(date, now)
     ? `at ${clock} today`
     : `on ${formatShortDate(iso, now)} at ${clock}`;
 }
@@ -193,7 +199,7 @@ export function formatClockSeconds(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString(DATE_LOCALE, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  return date.toLocaleTimeString(DATE_LOCALE, { ...IN_ZONE, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
 
 /** "Friday 31 July" — the line under a greeting. */
@@ -202,18 +208,22 @@ export function formatWeekday(date: Date = new Date()): string {
   // September" beside a feed of "18 Sept" rows is the same product speaking
   // two dialects on one screen.
   return date.toLocaleDateString(DATE_LOCALE, {
+    ...IN_ZONE,
     weekday: "long",
     day: "numeric",
     month: "short",
   });
 }
 
-/** Whole days until an expiry, or null when there isn't one. */
+/**
+ * Whole calendar days from today to an expiry's day (the makerspace's days),
+ * the same count expiryLabel says; null when there isn't one.
+ */
 export function daysUntil(iso: string | null | undefined, now: Date = new Date()): number | null {
   if (!iso) return null;
-  const target = new Date(iso).getTime();
-  if (Number.isNaN(target)) return null;
-  return Math.ceil((target - now.getTime()) / (1000 * 60 * 60 * 24));
+  const target = new Date(iso);
+  if (Number.isNaN(target.getTime())) return null;
+  return daysFromToday(civilDay(target), now);
 }
 
 /**
@@ -236,8 +246,7 @@ export function expiryLabel(
   const end = new Date(iso);
   if (Number.isNaN(end.getTime())) return null;
   if (end.getTime() <= now.getTime()) return "Ended";
-  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((day(end) - day(now)) / (24 * 60 * 60 * 1000));
+  const days = daysUntil(iso, now) ?? 0;
   if (days <= 0) return form === "short" ? "Today" : "Ends today";
   if (days === 1 && form === "long") return "Ends tomorrow";
   const n = `${days} ${days === 1 ? "day" : "days"}`;

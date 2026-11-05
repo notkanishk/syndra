@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"syndra/internal/auth"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services/propagation"
@@ -134,8 +135,9 @@ func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *test
 	if gotParams.ExpiresAt == nil {
 		t.Fatalf("expected expiry for duration-backed request")
 	}
-	expected := time.Now().UTC().Add(5 * 24 * time.Hour)
-	if diff := gotParams.ExpiresAt.Sub(expected); diff < -time.Minute || diff > time.Minute {
+	// "5 days" ends as the 5th calendar day does, in the makerspace's zone.
+	expected := clock.EndAfterDays(time.Now(), 5)
+	if diff := gotParams.ExpiresAt.Sub(expected); diff != 0 && diff != 24*time.Hour { // the day may turn mid-test
 		t.Fatalf("expiresAt %v not within 1 minute of expected %v", gotParams.ExpiresAt, expected)
 	}
 }
@@ -432,9 +434,9 @@ func TestHandleUpsertUserDirectGrant_ExpiryCalculation(t *testing.T) {
 	if capturedExpiry == nil {
 		t.Fatalf("expected non-nil expiresAt for DurationDays=7")
 	}
-	expected := time.Now().UTC().Add(7 * 24 * time.Hour)
+	expected := clock.EndAfterDays(time.Now(), 7)
 	diff := capturedExpiry.Sub(expected)
-	if diff < -time.Minute || diff > time.Minute {
+	if diff != 0 && diff != 24*time.Hour { // the day may turn mid-test
 		t.Fatalf("expiresAt %v is not within 1 minute of expected %v", capturedExpiry, expected)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/services"
 )
@@ -335,7 +336,7 @@ func cascadeQueuedReason(res services.CascadeResult) string {
 func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, reason string, durationDays int, endRule db.EndRule) (string, error) {
 	var expiresAt *time.Time
 	if durationDays > 0 {
-		expiry := time.Now().UTC().Add(time.Duration(durationDays) * 24 * time.Hour)
+		expiry := clock.EndAfterDays(time.Now(), durationDays)
 		expiresAt = &expiry
 	}
 

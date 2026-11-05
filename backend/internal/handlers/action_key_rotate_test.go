@@ -17,6 +17,7 @@ import (
 	"syndra/internal/claimserve"
 	"syndra/internal/claimserve/claimservetest"
 	"syndra/internal/claimtel"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/zitadel"
 )
@@ -543,7 +544,7 @@ func TestConfirmUnverified_ByTheProbesNotAnotherReplacement(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func localAt(s string) time.Time {
-	t, err := time.ParseInLocation("2006-01-02 15:04", s, time.Local)
+	t, err := time.ParseInLocation("2006-01-02 15:04", s, clock.Loc)
 	if err != nil {
 		panic(err)
 	}

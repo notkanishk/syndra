@@ -529,9 +529,10 @@ func main() {
 	// Insights usage: drop "last seen" rows nobody has refreshed in 400 days. Once
 	// a day, at once on boot; a failure is logged and retried on the next tick.
 	// The same nightly pass rolls claim-delivery telemetry older than 48h into
-	// hourly rows and drops hourly rows past 90 days.
+	// hourly rows and drops hourly rows past 90 days, and recounts the daily
+	// sign-in totals 000079 asks for (a no-op once done).
 	usagePruneSched := periodic.New("FINDINGS", 24*time.Hour, 24*time.Hour, func(ctx context.Context) error {
-		uerr := services.PruneUsageLastSeen(ctx)
+		uerr := errors.Join(services.PruneUsageLastSeen(ctx), handlers.RecountSignInDays(ctx))
 		n, cerr := db.RollClaimDelivery(ctx, time.Now())
 		if n > 0 {
 			log.Printf("[DATA PLANE] telemetry: rolled %d five-minute rows into hours", n)

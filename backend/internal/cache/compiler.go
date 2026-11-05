@@ -16,6 +16,7 @@ import (
 
 	"syndra/internal/claims"
 	"syndra/internal/claimserve"
+	"syndra/internal/clock"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -301,7 +302,7 @@ func (u userRoles) facts(projectID string) claims.Facts {
 		if facts.RoleEnds == nil {
 			facts.RoleEnds = map[string]string{}
 		}
-		facts.RoleEnds[role] = end.UTC().Format(time.DateOnly)
+		facts.RoleEnds[role] = clock.Day(end)
 	}
 	return facts
 }

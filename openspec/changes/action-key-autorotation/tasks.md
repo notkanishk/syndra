@@ -57,6 +57,6 @@ Branch `feat/action-key-autorotate`, 5 Nov 2026. Design: [design.md](design.md).
 
 ## Operator-gated
 
-- [ ] Set `TZ` in production's `.env` (for example `TZ=Asia/Kolkata`). Unset, the 03:00–05:00 window is read in UTC. #ready-for-human
+- [x] Set `TZ` in production's `.env` (`TZ=Asia/Kolkata`, PR #102). Since `one-time-zone` the window is read in `clock.Loc`, which defaults to `Asia/Kolkata` even with `TZ` unset.
 - [ ] Confirm the backend's service account still holds `action.target.write`. If it was revoked after registration, the first automatic attempt fails with `KEY_ROTATION:failed` and the dead-man alert, and nothing else changes. #ready-for-human
 - [ ] After the first automatic replacement in production, read `/zitadel`. The row should say "Replaced on its own on …", the audit should hold an `action_key.replaced` row, and `sig_mismatch` on `/api/v1/claims/delivery` should stay at zero around the replacement. #ready-for-human

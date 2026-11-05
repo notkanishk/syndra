@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -112,6 +113,14 @@ func TestHandleCreateAccessRequest_AskToKeepItLonger(t *testing.T) {
 	}
 }
 
+func endOf(day string) time.Time {
+	t, err := clock.EndOfDay(day)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
 // "Another month" on a role that ends 18 Dec means 18 Jan: the extension counts
 // from the end they have when that is still ahead, and from now when it isn't
 // (A-04 §2).
@@ -124,9 +133,9 @@ func TestExtendCountsFromTheCurrentEnd(t *testing.T) {
 		held models.RequestHolding
 		want time.Time
 	}{
-		{"future end: counts from it", models.RequestHolding{Kind: models.HoldingUntil, Until: &dec18}, dec18.Add(31 * 24 * time.Hour)},
-		{"end already passed: counts from now", models.RequestHolding{Kind: models.HoldingUntil, Until: &past}, now.Add(31 * 24 * time.Hour)},
-		{"lapsed and gone: given again from now", models.RequestHolding{Kind: models.HoldingNone}, now.Add(31 * 24 * time.Hour)},
+		{"future end: counts from it", models.RequestHolding{Kind: models.HoldingUntil, Until: &dec18}, endOf("2027-01-18")},
+		{"end already passed: counts from now", models.RequestHolding{Kind: models.HoldingUntil, Until: &past}, endOf("2026-11-17")},
+		{"lapsed and gone: given again from now", models.RequestHolding{Kind: models.HoldingNone}, endOf("2026-11-17")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			plan, err := planApproval(models.AccessRequest{Kind: requestKindExtend, DurationDays: days(31)}, tc.held, now)
@@ -167,7 +176,7 @@ func TestWithHolding_ExtendCarriesCurrentAndNewEnd(t *testing.T) {
 	if a.CurrentUntil == nil || !a.CurrentUntil.Equal(dec18) {
 		t.Fatalf("current_until: %v", a.CurrentUntil)
 	}
-	if a.Until == nil || !a.Until.Equal(dec18.Add(31*24*time.Hour)) {
+	if a.Until == nil || !a.Until.Equal(clock.EndAfterDays(dec18, 31)) {
 		t.Fatalf("until: %v", a.Until)
 	}
 	if out[1].CurrentUntil != nil || out[1].Until != nil || out[2].Until != nil {
