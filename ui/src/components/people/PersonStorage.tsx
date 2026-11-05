@@ -240,9 +240,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
             {view.adopted ? (
               <>
                 Made by hand on {label} before Syndra managed it.{" "}
-                <Link href={`/users/${encodeURIComponent(view.adopted.actor_id)}`} className="text-ink link-hover">
-                  <UserName id={view.adopted.actor_id} />
-                </Link>{" "}
+                <UserName id={view.adopted.actor_id} className="text-ink" />{" "}
                 assigned it to {name} on {formatShortDate(view.adopted.at)}, with everything it held.
               </>
             ) : (
@@ -507,9 +505,7 @@ function HoldRow({ view, seat }: { view: PersonTargetView; seat: ReactNode }) {
           </Dotted>
           <Faint>
             “{hold.reason}” · put on hold by{" "}
-            <Link href={`/users/${encodeURIComponent(hold.actor_id)}`} className="text-ink link-hover">
-              <UserName id={hold.actor_id} />
-            </Link>
+            <UserName id={hold.actor_id} className="text-ink" />
             {hold.expires_at
               ? ` · ends ${formatShortDate(hold.expires_at)}`
               : hold.review_date

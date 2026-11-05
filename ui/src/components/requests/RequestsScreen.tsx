@@ -341,9 +341,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
               )}
               <UserAvatar id={entry.requester_id} />
               <div className="w-full text-[15px] font-semibold [text-wrap:pretty] tablet:w-[170px] tablet:shrink-0">
-                <Link href={`/users/${encodeURIComponent(entry.requester_id)}`} className="link-hover">
-                  <UserName id={entry.requester_id} />
-                </Link>
+                <UserName id={entry.requester_id} />
               </div>
               <div className="w-full text-[14.5px] text-ink [text-wrap:pretty] tablet:w-[250px] tablet:min-w-[160px] tablet:shrink">
                 {entry.kind === "extend" && "Keep "}
@@ -351,7 +349,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   href={`/projects/${encodeURIComponent(entry.project_id)}/roles/${encodeURIComponent(entry.role_key)}`}
                   className="link-hover"
                 >
-                  <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+                  <RoleRef projectId={entry.project_id} roleKey={entry.role_key} link={false} />
                 </Link>
                 {catalog.data?.some(
                   (r) =>
@@ -644,9 +642,7 @@ function YourRequests({
                   two identical rows. */}
               <div className="text-[15px] font-semibold [text-wrap:pretty]">
                 {entry.kind === "extend" && "Keep "}
-                <Link href={`/projects/${encodeURIComponent(entry.project_id)}`} className="link-hover">
-                  <ProjectName id={entry.project_id} />
-                </Link>{" "}
+                <ProjectName id={entry.project_id} />{" "}
                 ·{" "}
                 {resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
                   humanizeKey(entry.role_key)}

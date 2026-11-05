@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useState } from "react";
 
@@ -93,9 +92,7 @@ function Subject({ id }: { id: string }) {
   const accountHref = useAccountHref();
   return (
     <span className="text-[14px]">
-      <Link href={accountHref(id)} className="link-hover">
-        <UserName id={id} />
-      </Link>
+      <UserName id={id} href={accountHref(id)} />
       <ServiceAccountTag id={id} />
     </span>
   );

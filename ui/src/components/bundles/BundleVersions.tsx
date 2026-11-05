@@ -110,9 +110,7 @@ export function BundleVersions({
                 {version.published_by === "system" ? (
                   "Syndra (automatic)"
                 ) : (
-                  <Link href={`/users/${encodeURIComponent(version.published_by)}`} className="link-hover">
-                    <UserName id={version.published_by} />
-                  </Link>
+                  <UserName id={version.published_by} />
                 )}
                 {" · "}
                 <Relative iso={version.published_at} />
@@ -262,12 +260,7 @@ function Holders({
                 <div key={holder.user_id} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-1 px-5 py-3">
                   <span className="flex min-w-[min(220px,100%)] flex-1 items-center gap-3">
                     <UserAvatar id={holder.user_id} size="row" />
-                    <Link
-                      href={`/users/${encodeURIComponent(holder.user_id)}`}
-                      className="text-[14.5px] font-semibold text-ink link-hover"
-                    >
-                      <UserName id={holder.user_id} />
-                    </Link>
+                    <UserName id={holder.user_id} className="text-[14.5px] font-semibold text-ink" />
                   </span>
                   <span className="min-w-0 flex-1 text-[13.5px] text-muted">{howTheyGotIt(holder)}</span>
                   <span className="w-[110px] text-right text-[13.5px] text-muted">

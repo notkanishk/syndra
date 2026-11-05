@@ -59,7 +59,8 @@ vi.mock("@/components/bundles/BundleVersions", () => ({
   BundleVersions: () => <div>every version</div>,
 }));
 vi.mock("@/components/names", () => ({
-  ProjectName: ({ id, name }: { id: string; name?: string }) => <span>{name || id}</span>,
+  ProjectName: ({ id, name, link = true }: { id: string; name?: string; link?: boolean }) =>
+    link ? <a href={`/projects/${id}`}>{name || id}</a> : <span>{name || id}</span>,
   RoleRef: ({ roleKey }: { roleKey: string }) => <span>{roleKey}</span>,
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
 }));

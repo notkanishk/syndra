@@ -1,5 +1,6 @@
 "use client";
 
+import { NameLink, nameHref, useNameLinks } from "@/components/names/NameLink";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { SHOW_DEBUG_IDS } from "@/components/names/UserName";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -8,9 +9,13 @@ interface BundleNameProps {
   id: string | null | undefined;
   fallback?: React.ReactNode;
   className?: string;
+  /** Links to the bundle's page (G14). Only a page's own subject passes false. */
+  link?: boolean;
 }
 
-export function BundleName({ id, fallback = "—", className = "" }: BundleNameProps) {
+export function BundleName({ id, fallback = "—", className = "", link: linkProp }: BundleNameProps) {
+  const inDialog = useNameLinks();
+  const link = linkProp ?? inDialog;
   const resolver = useNameResolver();
   const { value, resolved } = id ? resolver.resolveBundle(id) : { value: undefined, resolved: true };
   // The name that lands after a skeleton tints in, not snaps (S7).
@@ -35,9 +40,15 @@ export function BundleName({ id, fallback = "—", className = "" }: BundleNameP
     );
   }
 
-  return (
-    <span className={`${className} ${tint}`} title={SHOW_DEBUG_IDS ? id : undefined}>
-      {value.name || (fallback as React.ReactNode)}
+  const text = value.name || (fallback as React.ReactNode);
+  const title = SHOW_DEBUG_IDS ? id : undefined;
+  return link && value.name ? (
+    <NameLink href={nameHref.bundle(id)} className={`${className} ${tint}`} title={title}>
+      {text}
+    </NameLink>
+  ) : (
+    <span className={`${className} ${tint}`} title={title}>
+      {text}
     </span>
   );
 }

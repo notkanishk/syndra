@@ -32,9 +32,7 @@ export function WhoSeat({
     <div className={`flex w-full min-w-0 items-center gap-3 ${className}`}>
       <UserAvatar id={id} size="row" />
       <span className="min-w-0">
-        <Link href={href ?? accountHref(id)} className="block text-[14.5px] font-semibold link-hover">
-          <UserName id={id} />
-        </Link>
+        <UserName id={id} href={href ?? accountHref(id)} className="block text-[14.5px] font-semibold" />
         {sub ? <span className="block text-[12.5px] text-faint">{sub}</span> : <ServiceAccountTag id={id} />}
       </span>
     </div>
@@ -60,7 +58,7 @@ export function WhatSeat({
     <div className={`flex w-full min-w-0 flex-col items-start gap-[3px] ${className}`}>
       {projectId ? (
         <Link href={`/projects/${projectId}`} className="text-[14px] leading-[1.45] link-hover">
-          <ProjectName id={projectId} />
+          <ProjectName id={projectId} link={false} />
           {roleKeys.length > 0 && ` · ${roleKeys.map(humanizeKey).join(", ")}`}
         </Link>
       ) : (
