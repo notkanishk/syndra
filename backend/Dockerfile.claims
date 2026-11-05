@@ -12,6 +12,7 @@ RUN go mod download
 COPY internal/claims ./internal/claims
 COPY internal/claimtel ./internal/claimtel
 COPY internal/claimserve ./internal/claimserve
+COPY internal/ratelimit ./internal/ratelimit
 COPY internal/services/periodic ./internal/services/periodic
 COPY cmd/claims ./cmd/claims
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/claims ./cmd/claims

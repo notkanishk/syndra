@@ -99,6 +99,8 @@ Reading an app that qualifies for the seed seeds it first.
 ```
 `left_out` lists the rows the draft preview had to skip: copied `if_role` rows that have no role yet.
 
+`live` (5 Nov) maps a person to `{at, function, served, expected, match}`: their newest sign-in debug mode captured for the app, against `now` (never a draft). Absent for someone never captured. A person Zitadel lists no project for gets `token: {}` and check 5 `none` with `unlisted: true`, as the door answers `no_grants`. Check 4 carries `client_id_missing: [function]` (amber) for an app with its own shape when the newest call at a step it lands in named no app; check 6 carries the instance-wide list.
+
 An `Explanation` is `{user_id, checks: [5 × {state, facts}], token, would_receive?, read_at}`. The states are `pass | none | warn | fail | stale`:
 1. **Zitadel's settings for the app.** Facts: `project_role_assertion`, `project_role_check`, `access_token_type` (`JWT`/`BEARER`), `id_token_userinfo_assertion`, `lands`, `reads`, and `reached{access_token, id_token, userinfo}`.
    - `fail` when the project's roles aren't asserted, or when the template's `reads` isn't reached.

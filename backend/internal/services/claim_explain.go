@@ -2,13 +2,17 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
 	"syndra/internal/claims"
+	"syndra/internal/claimserve"
 	"syndra/internal/claimtel"
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -198,6 +202,12 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 	// token's comes from the payload's user.
 	id := observedIdentity(ctx, userID)
 	facts = facts.Identify(id)
+	// Zitadel lists a project in the token only for someone it holds a grant
+	// for there (ADR-002); with none, the door answers no_grants and the app
+	// gets nothing. Unread grants can't say, so the shape runs as if listed.
+	// ponytail: the welcome switch (a brand-new member, for 10 minutes) is not
+	// previewed; it is off on prod. Model Plane.Welcome here if it goes on.
+	listed := oerr != nil || len(roles) > 0 || zitadelLists(ctx, userID, app.ProjectID)
 	c2 := Check{State: CheckPass, Facts: map[string]any{"roles": nonNil(roles)}}
 	switch {
 	case oerr != nil:
@@ -227,6 +237,19 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 			c4.State, c4.Facts["suggested_template"] = CheckWarn, sug.ID
 		}
 	}
+	// Without application.client_id (Zitadel before 4.0) the data plane can't
+	// tell the app, so every app on the project gets its default (ADR-003).
+	if s.source == SourceApp {
+		var missing []string
+		for _, fn := range strs(reached.Facts["client_id_missing"]) {
+			if s.profile.LandsIn(fn) {
+				missing = append(missing, fn)
+			}
+		}
+		if len(missing) > 0 {
+			c4.State, c4.Facts["client_id_missing"] = CheckWarn, missing
+		}
+	}
 	out.Checks[3] = c4
 
 	// 5 · the token.
@@ -236,6 +259,8 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 	switch {
 	case signInOnly:
 		c5.State = CheckNone
+	case !listed:
+		out.Token, c5.State, c5.Facts["unlisted"] = claims.NewObject(), CheckNone, true
 	case serr != nil || !built:
 		// With no stored claims the token path answers the shape over
 		// Zitadel's roles and identity alone, exactly as here; with roles to
@@ -291,8 +316,9 @@ func reachedSyndra(ctx context.Context, app models.ApplicationCatalog) Check {
 			signIn = &at
 		}
 	}
-	c.Facts["last_call_at"], c.Facts["last_outcome"], c.Facts["last_served_at"], c.Facts["last_sign_in_at"] = last, outcome, served, signIn
 	now := time.Now()
+	c.Facts["last_call_at"], c.Facts["last_outcome"], c.Facts["last_served_at"], c.Facts["last_sign_in_at"] = last, outcome, served, signIn
+	c.Facts["client_id_missing"] = clientIDMissing(rows, now)
 	switch {
 	case last != nil && now.Sub(*last) <= reachedRecently:
 		c.State = CheckPass
@@ -303,6 +329,47 @@ func reachedSyndra(ctx context.Context, app models.ApplicationCatalog) Check {
 		c.State = CheckFail
 	}
 	return c
+}
+
+// zitadelLists is whether Syndra last observed a grant of Zitadel's for the
+// person in the project, with roles or without: what puts the project in the
+// token's user_grants.
+func zitadelLists(ctx context.Context, userID, projectID string) bool {
+	grants, err := svcObservedGrantsFor(ctx, userID)
+	if err != nil {
+		return true
+	}
+	for _, g := range grants {
+		if g.ProjectID == projectID {
+			return true
+		}
+	}
+	return false
+}
+
+// clientIDMissing is each function whose newest call, across every app, named
+// no application.client_id. Zitadel's version decides that for the whole
+// instance (it sends the field from 4.0), so the newest call says what it
+// sends now.
+func clientIDMissing(rows []db.ClaimDeliveryLastRow, now time.Time) []string {
+	newest := map[string]db.ClaimDeliveryLastRow{}
+	for _, r := range rows {
+		if n, ok := newest[r.Function]; !ok || r.LastAt.After(n.LastAt) {
+			newest[r.Function] = r
+		}
+	}
+	out := []string{}
+	for _, fn := range []string{claims.FunctionPreAccessToken, claims.FunctionPreUserinfo} {
+		if r, ok := newest[fn]; ok && r.ClientID == claimtel.None && now.Sub(r.LastAt) <= reachedRecently {
+			out = append(out, fn)
+		}
+	}
+	return out
+}
+
+func strs(v any) []string {
+	s, _ := v.([]string)
+	return s
 }
 
 func nonNil(s []string) []string {
@@ -446,4 +513,53 @@ func ExplainSignIn(ctx context.Context, clientID, userID, projectID string) (Exp
 		return explain(ctx, a, s, readTokenSettings(ctx, a), reachedSyndra(ctx, a), userID), nil
 	}
 	return Explanation{}, errors.New("the client isn't an app on this project")
+}
+
+// ---------------------------------------------------------------------------
+// The live check: a real sign-in against the preview.
+
+// LiveCheck is one person's last sign-in to the app that debug mode saw,
+// against what the preview says their token carries. Observed only: no
+// sign-in is ever made up.
+type LiveCheck struct {
+	At       time.Time `json:"at"`
+	Function string    `json:"function"`
+	// Served is the append_claims Syndra answered; Expected is the preview's
+	// token through the same Envelope, for that step.
+	Served   []claimserve.Claim `json:"served"`
+	Expected []claimserve.Claim `json:"expected"`
+	Match    bool               `json:"match"`
+}
+
+// CompareServed reads a captured answer (the append_claims envelope) against
+// the preview's trail for the same person: nothing where the shape doesn't
+// land at that step, as the data plane answers. Values compare as JSON, so a
+// nested object's key order doesn't count; the claims' own order does.
+func CompareServed(e Explanation, function string, response []byte, at time.Time) LiveCheck {
+	out := LiveCheck{At: at, Function: function, Served: []claimserve.Claim{}, Expected: []claimserve.Claim{}}
+	var served struct {
+		AppendClaims []claimserve.Claim `json:"append_claims"`
+	}
+	if json.Unmarshal(response, &served) == nil && served.AppendClaims != nil {
+		out.Served = served.AppendClaims
+	}
+	var lands string
+	if len(e.Checks) > 4 {
+		lands, _ = e.Checks[4].Facts["lands"].(string)
+	}
+	if e.Token != nil && (claims.Profile{Lands: lands}).LandsIn(function) {
+		out.Expected = claimserve.Envelope(e.Token)
+	}
+	out.Match = sameJSON(out.Served, out.Expected)
+	return out
+}
+
+func sameJSON(a, b any) bool {
+	var x, y any
+	ab, err1 := json.Marshal(a)
+	bb, err2 := json.Marshal(b)
+	if err1 != nil || err2 != nil || json.Unmarshal(ab, &x) != nil || json.Unmarshal(bb, &y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
 }

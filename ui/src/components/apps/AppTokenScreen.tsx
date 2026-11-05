@@ -12,7 +12,9 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
+import { Notice } from "@/components/ui/Notice";
 import { BELOW_HEADER, PageHeader } from "@/components/ui/PageHeader";
+import { Ticks } from "@/components/ui/TokenBlock";
 import { ApiError, request } from "@/lib/api-client";
 import { rowProblems, type SayContext } from "@/lib/claims";
 import { keepDraft, keepPerson, readKeptDraft, readKeptPerson } from "@/lib/claims-memory";
@@ -33,7 +35,7 @@ import { useAppSignIns } from "@/lib/queries/useSignIns";
 import { appSignInMeta } from "@/lib/sign-in-line";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
-import type { CheckContext } from "./claim-words";
+import { listingNotice, type CheckContext } from "./claim-words";
 import { ClaimHistory } from "./ClaimHistory";
 import { ClaimPreview } from "./ClaimPreview";
 import { DebugMode } from "./DebugMode";
@@ -199,6 +201,8 @@ function AppClaims({ applicationId }: { applicationId: string }) {
           }
         : undefined,
   };
+  // About the app, not the person or a draft: read off the saved shape's trail.
+  const listing = listingNotice(one?.now, { ...ctx, profile: shape.profile, draft: undefined });
   const say: SayContext = { app, roles: shape.project_roles, reach: preview.data?.reach, templateId: appTemplateId(shape, draft) };
 
   const tpl = sheet?.kind === "template" ? templates.find((t) => t.id === sheet.id) : undefined;
@@ -227,6 +231,17 @@ function AppClaims({ applicationId }: { applicationId: string }) {
         }
       />
       {lookingUp && <SignInLookup appId={applicationId} name={app} onClose={() => setLookingUp(false)} />}
+
+      {listing && (
+        <Notice tone="warn" title={listing.title}>
+          <Ticks text={listing.body} />
+          {listing.link && (
+            <span className="mt-1.5 block">
+              <ArrowLink href={listing.link.href}>{listing.link.label}</ArrowLink>
+            </span>
+          )}
+        </Notice>
+      )}
 
       {/* What the app is told | Preview: two halves; on a phone the shape comes first (#90). */}
       <div className="flex flex-wrap items-start gap-4">
