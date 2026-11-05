@@ -6,10 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 import UpstreamProjectsPage from "@/app/zitadel/projects/page";
 
 /**
- * The delete-role confirm is the one destructive control on this page that
- * never got the "retire on success, survive a failure" treatment its sibling
- * (the RoleDialog submit, same file) already has. These tests pin that down
- * directly, rather than trusting a read of the JSX.
+ * The delete-role confirm retires on success and survives a failure, like its
+ * sibling (the RoleDialog submit, same file). Who loses the role, and the
+ * count that confirms it, are pinned in projects/__tests__/deleteRole.test.tsx.
  */
 
 const deleteRole = vi.hoisted(() => vi.fn());
@@ -41,25 +40,15 @@ function renderPage() {
   );
 }
 
-async function openConfirm() {
+function openConfirm() {
   fireEvent.click(screen.getByRole("button", { name: /Delete Trained/i }));
-  // Acknowledge the consequence, otherwise the confirm stays disabled.
-  fireEvent.click(screen.getByRole("checkbox"));
 }
 
 describe("upstream role delete", () => {
-  it("names the missing acknowledgement instead of failing silently", async () => {
-    renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /Delete Trained/i }));
-    expect(
-      screen.getByText(/Check the box above to confirm you understand the consequence/i),
-    ).toBeInTheDocument();
-  });
-
   it("retires the delete button on success, and flips Cancel to Close", async () => {
     deleteRole.mockResolvedValueOnce({});
     renderPage();
-    await openConfirm();
+    openConfirm();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete role in Zitadel" }));
     await screen.findByText(/deleted in Zitadel/i);
@@ -72,7 +61,7 @@ describe("upstream role delete", () => {
   it("keeps the delete button after a failure, so there is a retry path", async () => {
     deleteRole.mockRejectedValueOnce(new Error("boom"));
     renderPage();
-    await openConfirm();
+    openConfirm();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete role in Zitadel" }));
     await screen.findByText(/boom/i);
@@ -81,17 +70,15 @@ describe("upstream role delete", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
-  it("stops describing the delete as imminent once it has already happened", async () => {
+  it("stops describing the check once the delete has happened", async () => {
     deleteRole.mockResolvedValueOnce({});
     renderPage();
-    await openConfirm();
-    expect(screen.getByText(/the moment you press the button/i)).toBeInTheDocument();
+    openConfirm();
+    expect(screen.getByText(/Syndra checks who holds it first/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete role in Zitadel" }));
     await screen.findByText(/deleted in Zitadel/i);
 
-    // The warning leaves with the click; the result says the rest.
-    expect(screen.queryByText(/the moment you press the button/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Syndra checks who holds it first/i)).not.toBeInTheDocument();
   });
 });
