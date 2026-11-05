@@ -54,7 +54,7 @@ func TestCreateRole_AnswersAsTheProjectsScreenDoes(t *testing.T) {
 		want string
 	}{
 		{services.ErrInvalidRoleKey, http.StatusBadRequest, "VALIDATION_FAILED"},
-		{db.ErrDuplicateRole, http.StatusConflict, "Nothing was changed."},
+		{db.ErrDuplicateRole, http.StatusConflict, "CONFLICT"},
 		{services.ErrRoleChangeUnknown, http.StatusBadGateway, roleChangeUnknownCode},
 		{services.ErrRoleNotChangedInZitadel, http.StatusBadGateway, "ZITADEL_REFUSED"},
 		{&services.RoleRecordNotRestoredError{Reference: "laser/trained"}, http.StatusBadGateway, roleRecordNotRestoredCode},

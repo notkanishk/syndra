@@ -11,6 +11,7 @@ import {
 } from "@/components/access/AccessSource";
 import { RoleRef } from "@/components/names";
 import { useShownNames } from "@/components/names/shownNames";
+import { sortNames } from "@/lib/sort";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { settleIndicators } from "@/lib/queries/useIndicators";
@@ -80,6 +81,18 @@ function useRoleLabel() {
   return (removal: Removal) => `${removal.projectName} / ${names.role(removal.projectId, removal.roleKey)}`;
 }
 
+type ShownNames = Pick<ReturnType<typeof useShownNames>, "project" | "role">;
+
+/** "Role in Project" for each "project/role" pair the server names, alphabetical. */
+export function retainedLabels(pairs: string[], names: ShownNames): string[] {
+  return sortNames(
+    pairs.map((pair) => {
+      const at = pair.indexOf("/");
+      return at < 0 ? pair : `${names.role(pair.slice(0, at), pair.slice(at + 1))} in ${names.project(pair.slice(0, at))}`;
+    }),
+  );
+}
+
 /** The act's own word on the result, never "Applied" (A-17 G4). */
 const resultWord = (outcome: Outcome | null) => (succeeded(outcome) ? "Removed" : "Not removed");
 
@@ -88,8 +101,9 @@ const resultWord = (outcome: Outcome | null) => (succeeded(outcome) ? "Removed" 
  * is gone" only when nothing was queued or Zitadel took the revocation; a role
  * that waits, a send that stopped, and a send Zitadel didn't take each say so.
  */
-export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel: string): Outcome {
-  const retained = result?.retained_roles ?? [];
+export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel: string, names?: ShownNames): Outcome {
+  const raw = result?.retained_roles ?? [];
+  const retained = names ? retainedLabels(raw, names) : raw;
   const kept = retained.length ? ` They still hold ${retained.join(", ")}, from a bundle or a rule.` : "";
   const reason = result?.wait_reason;
   if (reason === RETRYING) return retryingOutcome(`Removed in Syndra`, result?.retry);
@@ -249,6 +263,7 @@ function DirectDialog({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const retained = others.length > 0;
   const roleLabel = useRoleLabel()(removal);
+  const shown = useShownNames();
 
   // `grantsResolved === false` is the third state, and the reason this is not
   // a boolean: "no grant id" and "no answer yet" are different facts and the
@@ -377,7 +392,7 @@ function DirectDialog({
                 // survives the removal, and which ones those are is a closure
                 // diff the server does — the UI must not hold a second opinion
                 // about somebody's access.
-                setOutcome(removalOutcome(result, roleLabel));
+                setOutcome(removalOutcome(result, roleLabel, shown));
               } catch (error) {
                 setOutcome(outcomeFromError(error));
               }

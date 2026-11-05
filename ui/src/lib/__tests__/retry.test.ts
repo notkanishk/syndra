@@ -19,7 +19,15 @@ describe("the one retry model's words", () => {
     expect(retryLine({ state: "waiting", try: 2, of: 2 }, "TrueNAS")).toBe(
       "TrueNAS didn't answer after 2 tries, so Syndra won't send it again on its own.",
     );
-    expect(retryLine({ state: "failed", try: 6, of: 6 })).toBe("Syndra gave up after 6 tries.");
+    // With the background drain off a retried row waits after its one try (re-audit).
+    expect(retryLine({ state: "waiting", try: 1, of: 6 })).toBe(
+      "Zitadel didn't answer after one try, so Syndra won't send it again on its own.",
+    );
+    expect(retryingOutcome("Given", { state: "waiting", try: 1, of: 6 })).toMatchObject({
+      kind: "queued",
+      sendsItself: undefined,
+      next: "Press Send on Pending changes to try again.",
+    });
   });
 
   it("tell a person about their own password without ever saying done", () => {
@@ -77,5 +85,17 @@ describe("removing direct access (W7)", () => {
     expect(out).toMatchObject({ kind: "queued", sendsItself: true });
     expect(out.message).toBe("Removed in Syndra. Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6).");
     expect(`${out.message} ${out.detail}`).not.toMatch(/access is gone/);
+  });
+});
+
+describe("what they still hold after a removal", () => {
+  const names = {
+    project: (id: string) => ({ pLab: "Lab" })[id] ?? id,
+    role: (_p: string, key: string) => ({ trained: "Trained", admin: "Admin" })[key] ?? key,
+  };
+  it("names each role in its project, alphabetical, never the raw pair", () => {
+    const out = removalOutcome({ retained_roles: ["pLab/trained", "pLab/admin"], status: "applied" }, "Laser", names);
+    expect(out.detail).toBe("They still hold Admin in Lab, Trained in Lab, from a bundle or a rule.");
+    expect(out.detail).not.toMatch(/pLab/);
   });
 });

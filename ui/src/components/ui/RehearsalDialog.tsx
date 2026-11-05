@@ -11,7 +11,10 @@ import {
   type ActionOutcome as Outcome,
   OUTCOME_LABEL,
   type OutcomeKind,
+  SENDS_ITSELF_NEXT,
 } from "@/lib/outcome";
+import { RETRYING, retryLine, retryNextStep, type RetryState } from "@/lib/retry";
+import { waitIsChosen } from "@/lib/wait-reason";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -69,7 +72,7 @@ export function resultMessage(
     return `Done. Nobody's access changed, because nobody holds it yet.`;
   }
   const parts = [`Applied to ${of(succeeded)}.`];
-  if (queued > 0) parts.push(`${of(queued)} ${queued === 1 ? "is" : "are"} waiting for you to send to ${system}.`);
+  if (queued > 0) parts.push(resultSentence(plan, noun, system));
   if (failed > 0) parts.push(`${of(failed)} failed.`);
   return parts.join(" ");
 }
@@ -137,7 +140,38 @@ export function resultSentence(
 ): string {
   const { queued } = plan.summary;
   if (queued === 0) return "It has taken effect.";
-  return `${queued} ${queued === 1 ? noun[0] : noun[1]} ${queued === 1 ? "is" : "are"} waiting for you to send to ${system}.`;
+  const { waiting, going } = splitQueued(plan);
+  const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]} ${n === 1 ? "is" : "are"}`;
+  const parts: string[] = [];
+  if (waiting > 0) parts.push(`${of(waiting)} waiting for you to send to ${system}.`);
+  if (going > 0) parts.push(`${of(going)} not in ${system} yet; Syndra sends ${going === 1 ? "it" : "them"} on its own.`);
+  return parts.join(" ");
+}
+
+/**
+ * The queued rows by who sends them (re-audit R2): a revocation, and a send
+ * Zitadel didn't take that Syndra retries on its own, go by themselves; every
+ * other queued row waits for Send. Read from each row's own reason, so a
+ * retry is never sent to Pending changes; rows the plan doesn't carry (an
+ * older server) fall back to the op's rule. `retry` is the first next try.
+ */
+export function splitQueued(plan: BulkPlan): { waiting: number; going: number; retry?: RetryState } {
+  const rows = plan.outcomes.filter((o) => o.effect === "queued");
+  const revoking = REVOKING_OPS.has(plan.op);
+  let waiting = 0;
+  let going = 0;
+  let retry: RetryState | undefined;
+  for (const o of rows) {
+    const goes = o.wait_reason === RETRYING ? o.retry?.state !== "waiting" : revoking && !waitIsChosen(o.wait_reason);
+    if (goes) {
+      going++;
+      retry ??= o.retry;
+    } else waiting++;
+  }
+  const rest = Math.max(0, plan.summary.queued - rows.length);
+  if (revoking) going += rest;
+  else waiting += rest;
+  return { waiting, going, retry };
 }
 
 /**
@@ -177,10 +211,32 @@ const REVOKING_OPS: ReadonlySet<BulkPlan["op"]> = new Set<BulkPlan["op"]>([
  */
 export function queuedNote(plan: BulkPlan, system: string = "Zitadel"): string | undefined {
   if (plan.summary.queued === 0) return undefined;
-  const revocation = REVOKING_OPS.has(plan.op);
-  return revocation
-    ? `Recorded in Syndra, not yet sent to ${system}. Syndra sends revocations on their own, within a minute; until then the person still has the access.`
-    : `Recorded in Syndra and waiting for you to send to ${system}. Nothing has changed there yet; send it from Pending changes.`;
+  const { waiting, going, retry } = splitQueued(plan);
+  const parts: string[] = [];
+  if (going > 0) {
+    parts.push(
+      retry
+        ? `Recorded in Syndra. ${retryLine(retry, system, going === 1 ? "it" : "them")}`
+        : REVOKING_OPS.has(plan.op)
+          ? `Recorded in Syndra, not yet sent to ${system}. Syndra sends revocations on their own, within a minute; until then the person still has the access.`
+          : `Recorded in Syndra. ${system} didn't answer, so Syndra sends ${going === 1 ? "it" : "them"} again on its own.`,
+    );
+  }
+  if (waiting > 0) {
+    parts.push(`Recorded in Syndra and waiting for you to send to ${system}. Nothing has changed there yet; send it from Pending changes.`);
+  }
+  return parts.join(" ");
+}
+
+/**
+ * The step a queued result leaves: Send when anything waits for it (drawn as
+ * the "Waiting for you to send" link); otherwise nothing, and when.
+ */
+export function queuedStep(plan: BulkPlan): Pick<Outcome, "sendsItself" | "next"> {
+  if (plan.summary.queued === 0) return {};
+  const { waiting, going, retry } = splitQueued(plan);
+  if (waiting > 0) return {};
+  return { sendsItself: true, next: retry ? retryNextStep(retry, { it: going === 1 ? "it" : "them" }) : SENDS_ITSELF_NEXT };
 }
 
 /** An error only when something actually failed; queued rows are a warning. */
@@ -492,10 +548,12 @@ export function RehearsalDialog({
       // second surface reporting what this step is for, and the one that
       // removed itself after four seconds.
       const word = resultWord(result, noun);
+      const kind = resultKind(result);
       setOutcome({
-        kind: resultKind(result),
+        kind,
         message: word ? resultSentence(result, noun, system) : resultMessage(result, noun, system),
         detail: queuedNote(result, system),
+        ...(kind === "queued" ? queuedStep(result) : {}),
         word,
       });
     } catch (error) {

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { RetryState } from "@/lib/retry";
 
 /**
  * The identity provider's own view, read straight through the proxy.
@@ -103,6 +104,21 @@ export function useUpstreamUsers() {
   });
 }
 
+/**
+ * What revoking one grant would revoke and keep, from the removal's own code
+ * on the server (GET …/grants/{grantId}/removal, re-audit R18): the count a
+ * revoke asks consent for is never worked out in the browser.
+ */
+export function useGrantRemovalPreview(userId: string, grantId: string) {
+  return useQuery({
+    queryKey: ["upstream", "users", userId, "grants", grantId, "removal"],
+    queryFn: () =>
+      request<ZitadelGrantChange>(`/zitadel/users/${encodeURIComponent(userId)}/grants/${encodeURIComponent(grantId)}/removal`),
+    enabled: Boolean(userId && grantId),
+    retry: false,
+  });
+}
+
 export function useUpstreamUserGrants(userId: string | null) {
   return useQuery({
     queryKey: userId ? KEYS.userGrants(userId) : ["upstream", "users", "none", "grants"],
@@ -173,6 +189,8 @@ export interface ZitadelGrantChange {
   /** The least delivered role's state: applied, pending (incl. waiting), failed, or unchanged (all kept). */
   status?: "applied" | "pending" | "failed" | "unchanged";
   wait_reason?: string;
+  /** With halted:retrying: when Syndra sends what Zitadel didn't take again (re-audit R3). */
+  retry?: RetryState;
   /** Each role's own outcome (W8). */
   roles?: ZitadelRoleChange[];
 }

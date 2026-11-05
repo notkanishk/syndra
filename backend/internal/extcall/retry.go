@@ -24,12 +24,12 @@ var (
 	AddonResend = Policy{Attempts: 2, Base: 10 * time.Second, Max: 10 * time.Second}
 )
 
-// The four states a sent change can be in. A change never sent has none.
+// The two states an unanswered change can be in. One never sent, sent, or
+// failed has none: its own status says that (re-audit, 6 Nov 2026: "sent" and
+// "failed" were never produced, so the words for them were dead).
 const (
-	RetrySent     = "sent"     // the target confirmed it
 	RetryRetrying = "retrying" // the target didn't take it; Syndra tries again at NextTry
 	RetryWaiting  = "waiting"  // nothing will try again until a person acts
-	RetryFailed   = "failed"   // Syndra gave up, or the target said no
 )
 
 // RetryState is where one change stands, in the shape every surface reads.

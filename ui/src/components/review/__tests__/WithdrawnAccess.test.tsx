@@ -161,9 +161,12 @@ describe("the board's anatomy", () => {
     for (const name of ["Sort by who", "Sort by what was revoked", "Sort by where", "Sort by revoked"]) {
       expect(screen.getAllByRole("button", { name }).length).toBe(2);
     }
-    // A given-up row names the way forward on that person's page, and says why it stopped.
-    const link = screen.getByRole("link", { name: /Revoke again on Sana.s page/ });
-    expect(link.getAttribute("href")).toBe("/users/u1");
+    // A given-up row names the way forward, and says why it stopped. Its record
+    // is gone, so not the person's page (nothing left to revoke there): Drift,
+    // where the access Zitadel still holds is raised (re-audit R11).
+    const link = screen.getByRole("link", { name: /Revoke it from Drift/ });
+    expect(link.getAttribute("href")).toBe("/governance/drift");
+    expect(screen.queryByRole("link", { name: /Revoke again on/ })).toBeNull();
     expect(screen.getByText("Zitadel says this person no longer exists there.")).toBeInTheDocument();
     // A queued row says how many tries, and claims neither a limit nor a next time.
     expect(screen.getByText("Tried 2 times")).toBeInTheDocument();

@@ -695,9 +695,11 @@ function ReachNotice({
         tone="warn"
         live={offline}
         title={offline ? `${name} isn't answering.` : `Syndra is waiting to retry ${name}.`}
-        {...(offline
-          ? { next: `Check that ${name} is running and reachable.` }
-          : { nothingToDo: "Syndra retries on its own when the wait is over." })}
+        next={
+          offline
+            ? `Check that ${name} is running and reachable.`
+            : "Syndra tries again on its own when the wait is over. If it keeps happening, ask whoever runs the Syndra server to look at it."
+        }
       >
         {reading.sentence} {offline && reading.look}
       </Notice>

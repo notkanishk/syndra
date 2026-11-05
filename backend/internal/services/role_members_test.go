@@ -199,7 +199,10 @@ func TestGovernanceIndicators_CountsWithoutBuildingSummary(t *testing.T) {
 	svcCountPendingDrift = func(context.Context) (int, error) { return 12, nil }
 	svcZitadelReachable = func(context.Context) bool { return false }
 	var retriesFor string
-	svcCountRetries = func(_ context.Context, actor string) (int, int, error) { retriesFor = actor; return 1, 4, nil }
+	svcCountRetries = func(_ context.Context, actor string) (map[string]int, map[string]int, error) {
+		retriesFor = actor
+		return map[string]int{"zitadel": 1}, map[string]int{"zitadel": 3, "truenas": 1}, nil
+	}
 
 	got, err := GovernanceIndicators(context.Background(), "op")
 	if err != nil {
@@ -211,6 +214,13 @@ func TestGovernanceIndicators_CountsWithoutBuildingSummary(t *testing.T) {
 	// An automatic retry, and its end, are said on the rail and Home.
 	if got.Retrying != 1 || got.GaveUp != 4 {
 		t.Fatalf("retrying/gave_up = %d/%d, want 1/4", got.Retrying, got.GaveUp)
+	}
+	// Each under the system it was for: a TrueNAS give-up is never Zitadel's.
+	if got.GaveUpBy["truenas"] != 1 || got.GaveUpBy["zitadel"] != 3 || got.RetryingBy["zitadel"] != 1 {
+		t.Fatalf("per-system split wrong: retrying %v, gave up %v", got.RetryingBy, got.GaveUpBy)
+	}
+	if !got.AutoRetry {
+		t.Error("auto_retry is on by default, the background drain's default")
 	}
 	if retriesFor != "op" {
 		t.Errorf("give-ups are counted per person; asked for %q, want op", retriesFor)

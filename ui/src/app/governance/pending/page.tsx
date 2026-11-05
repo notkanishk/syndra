@@ -15,7 +15,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { Input } from "@/components/ui/Input";
@@ -30,10 +30,12 @@ import { targetLabel } from "@/lib/nav";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { outcomeFromError, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useBundles, type BundleRow } from "@/lib/queries/useBundles";
 import { useMappingRules, type MappingRuleRow } from "@/lib/queries/useMappingRules";
 import {
   useDrainPropagations,
+  useGaveUpPropagations,
   usePendingPropagations,
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
@@ -56,6 +58,7 @@ const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${
  */
 export default function PendingChangesPage() {
   const pending = usePendingPropagations();
+  const auto = useAutoRetry();
   const summary = useGovernanceSummary();
   const drain = useDrainPropagations();
   // Named, not just numbered: a bundle or rule is the thing an operator
@@ -84,6 +87,16 @@ export default function PendingChangesPage() {
   // "Waiting for you to send →" lands here narrowed to a person or a role
   // (A-19 P3, A-20 P16): one model, one in-force chip each, cleared by its own ✕.
   const { inForce, key: filterKey, active: filtered, clear } = usePendingFilters(params);
+  // `?gave_up=1` (Home's "See them →"): only what Syndra stopped sending.
+  const gaveUp = useGaveUpPropagations();
+  const [onlyStopped, setOnlyStoppedState] = useState(() => params?.get("gave_up") === "1");
+  const setOnlyStopped = (on: boolean) => {
+    setOnlyStoppedState(on);
+    const url = new URL(window.location.href);
+    if (on) url.searchParams.set("gave_up", "1");
+    else url.searchParams.delete("gave_up");
+    window.history.replaceState(window.history.state, "", url);
+  };
   const { person, role } = inForce;
   const matched = useMemo(
     () => narrow(rows, inForce).filter((row) => !needle || matches(row, needle, resolver)),
@@ -114,7 +127,7 @@ export default function PendingChangesPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Pending changes"
-        lede="Changes that have not reached Zitadel or a connected system yet. Sending delivers all of them, in order, now. Revocations, and changes Zitadel didn't take when they were sent, also go again on their own; a role that waits for you never does."
+        lede={`Changes that have not reached Zitadel or a connected system yet. Sending delivers all of them, in order, now. ${auto ? "Revocations, and changes Zitadel didn't take when they were sent, also go again on their own; a role that waits for you never does." : "This Syndra server sends nothing again on its own, so each waits for Send."}`}
         actions={
           // With nothing left to send it fades out, then goes.
           cleared && folded ? null : (
@@ -208,7 +221,18 @@ export default function PendingChangesPage() {
         />
       )}
 
-      <Card>
+      {onlyStopped && (
+        <FilterBar
+          read={
+            <FilterChip onClear={() => setOnlyStopped(false)} clearLabel="Show the whole queue">
+              Changes Syndra stopped sending
+            </FilterChip>
+          }
+        />
+      )}
+      {onlyStopped && <StoppedSending rows={gaveUp.data ?? []} loading={gaveUp.isLoading} />}
+
+      <Card className={onlyStopped ? "hidden" : undefined}>
         {(cleared ? !folded : known && shown.length > 0) && (
           <CardColumns>
             <span className="w-[130px]">Who</span>
@@ -275,7 +299,86 @@ export default function PendingChangesPage() {
           </div>
         )}
       </Card>
+
+      {!onlyStopped && (gaveUp.data?.length ?? 0) > 0 && <StoppedSending rows={gaveUp.data ?? []} loading={false} />}
     </div>
+  );
+}
+
+/**
+ * What Syndra stopped sending that this person has not marked seen on Home
+ * (re-audit R11): out of tries, or refused by the system. Each row says why
+ * and the one true step. Its record is gone, so a revocation is not revoked
+ * from the person's page: still held in the system, it is raised in Drift by
+ * the next check and revoked there. A give is given again from their page.
+ */
+function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; loading: boolean }) {
+  return (
+    <Card id="stopped-sending">
+      <CardHeader title="Syndra stopped sending" count={rows.length} />
+      {loading ? (
+        <RowSkeleton rows={2} label="Loading what Syndra stopped sending" />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          resolved
+          title="Nothing here."
+          guidance="Every change Syndra stopped sending has been marked seen, or there were none this week."
+        />
+      ) : (
+        rows.map((row) => {
+          const system = targetLabel(row.target ?? "zitadel");
+          const outOfTries = (row.last_error ?? "").startsWith("out of retries");
+          const revocation = row.op_type === "revoke";
+          const zitadel = (row.target ?? "zitadel") === "zitadel";
+          return (
+            <CardRow key={row.id}>
+              <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
+                <UserName id={row.user_id} />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                <span className="text-[14px]">
+                  {row.op_type === "apply" ? (
+                    <SystemChange row={row} />
+                  ) : (
+                    <>
+                      <span className="text-muted">{verb(row.op_type)}</span>{" "}
+                      {(row.role_keys ?? []).map((key) => (
+                        <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-3" />
+                      ))}
+                    </>
+                  )}
+                </span>
+                <span className="inline-flex items-center gap-2 text-[13px]">
+                  <StatusDot tone="danger" />
+                  <span className="text-danger-text">
+                    {outOfTries
+                      ? `${system} didn't answer after ${row.attempts} ${row.attempts === 1 ? "try" : "tries"}, so Syndra stopped sending it.`
+                      : `${system} refused it, so Syndra stopped sending it.`}
+                  </span>
+                </span>
+                <span className="text-[12.5px] text-faint">
+                  {revocation && zitadel
+                    ? `They may still hold it in ${system}. It shows in Drift after Syndra's next check; revoke it there.`
+                    : revocation
+                      ? `They may still hold it in ${system}. Check their account on ${system}'s page.`
+                      : "Give it again from their page once the reason is fixed."}{" "}
+                  Then mark it seen on Home.
+                </span>
+              </span>
+              <span className="tablet:w-[140px] tablet:shrink-0 tablet:text-right">
+                {revocation && zitadel ? (
+                  <ArrowLink href="/governance/drift">Drift</ArrowLink>
+                ) : revocation ? (
+                  <ArrowLink href={`/system/targets/${encodeURIComponent(row.target ?? "")}`}>{`Open ${system}`}</ArrowLink>
+                ) : (
+                  <ArrowLink href={`/users/${encodeURIComponent(row.user_id)}`}>Their page</ArrowLink>
+                )}
+              </span>
+            </CardRow>
+          );
+        })
+      )}
+    </Card>
   );
 }
 
@@ -485,6 +588,7 @@ function sharedWait(rows: PendingPropagationRow[]): string | undefined {
  * about one truthfully (S4).
  */
 function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: string }) {
+  const auto = useAutoRetry();
   if (row.retry) return <RetryStatus retry={row.retry} system={targetLabel(row.target ?? "zitadel")} />;
   const line = waitLine(row);
   return (
@@ -499,7 +603,7 @@ function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: s
             <span className="text-warn-text">{line}</span>
           </span>
         ))}
-      {row.op_type === "revoke" && !waitIsChosen(row.wait_reason) && (
+      {row.op_type === "revoke" && !waitIsChosen(row.wait_reason) && auto && (
         <span className="text-[12.5px] text-faint">
           A revocation: it also sends on its own within a minute.
         </span>

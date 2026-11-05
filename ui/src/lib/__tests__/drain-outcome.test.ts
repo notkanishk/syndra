@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { outcomeFromDrain, describeDrain } from "@/lib/drain-outcome";
+import { waitsForSend } from "@/lib/outcome";
 import type { DrainResult } from "@/lib/queries/usePropagation";
 
 function result(overrides: Partial<DrainResult> = {}): DrainResult {
@@ -51,22 +52,30 @@ describe("describeDrain", () => {
     const offline = describeDrain(result({ halted: true, reason: "zitadel_offline" }));
     expect(offline.tone).toBe("error");
     expect(offline.message).toMatch(/Nothing was sent/);
-    const exhausted = describeDrain(
-      result({ halted: true, reason: "max_retries_exceeded", applied: 4 }),
-    );
-    expect(exhausted.tone).toBe("error");
-    expect(exhausted.message).toContain("4 sent");
-    expect(exhausted.message).toMatch(/given up/);
+    // No pass halts on a spent row any more (drain.go processRow), so the
+    // reason has no words of its own: it reads as any early stop.
+    const other = describeDrain(result({ halted: true, reason: "max_retries_exceeded", applied: 4 }));
+    expect(other.message).toBe("4 sent. Stopped early.");
   });
 
   // Given up is the one outcome sending again cannot fix, so the sentence has
-  // to say what does — and never use the mechanism's words for it.
+  // to say what does — and never use the mechanism's words for it. Some went,
+  // so it is not "failed" (whose result would add "Nothing was changed").
   it("tells the reader what to do about a change that was given up on", () => {
     const outcome = describeDrain(result({ applied: 2, failed: 1, exhausted: 1 }));
-    expect(outcome.tone).toBe("error");
-    expect(outcome.message).toBe("2 sent · 1 failed. Syndra has given up on one change.");
-    expect(outcome.detail).toMatch(/from the person's page/);
-    expect(outcome.detail).not.toMatch(/resum|drain|retries/i);
+    expect(outcome.tone).toBe("warning");
+    expect(outcome.message).toBe("2 sent · 1 failed. Syndra stopped sending one change.");
+    expect(outcome.next).toMatch(/Syndra stopped sending, on Pending changes/);
+    expect(outcome.next).toMatch(/Drift/);
+    expect(`${outcome.detail} ${outcome.next}`).not.toMatch(/resum|drain|retries/i);
+  });
+
+  // A refused row is terminal: Send won't move it, so the result never ends
+  // on the "Waiting for you to send" link (re-audit (c)).
+  it("a refused change ends on where it is, not on Send", () => {
+    const outcome = outcomeFromDrain(result({ applied: 2, failed: 1 }));
+    expect(outcome).toMatchObject({ kind: "queued", next: expect.stringMatching(/Syndra stopped sending/) });
+    expect(waitsForSend(outcome)).toBe(false);
   });
 
   it("says so when there was nothing to do", () => {

@@ -14,7 +14,7 @@ const pending = vi.hoisted(() => ({ data: [] as PendingRow[] }));
 const drain = vi.hoisted(() => ({ run: vi.fn() }));
 
 vi.mock("@/lib/queries/usePropagation", () => ({
-  usePendingPropagations: () => ({ ...pending, isLoading: false, error: null, refetch: () => {} }),
+  useGaveUpPropagations: () => ({ data: [], isLoading: false }),  usePendingPropagations: () => ({ ...pending, isLoading: false, error: null, refetch: () => {} }),
   useDrainPropagations: () => ({ mutateAsync: drain.run, isPending: false }),
 }));
 vi.mock("@/lib/queries/useBundles", () => ({ useBundles: () => ({ data: [], isLoading: false, error: null }) }));

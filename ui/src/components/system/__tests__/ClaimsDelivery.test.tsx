@@ -304,3 +304,33 @@ describe("Claims delivery, with problems", () => {
     );
   });
 });
+
+// Each kind of finding ends on its own true step, never one blanket line.
+describe("the last line of each finding", () => {
+  const next = (f: Partial<ClaimFinding>) => {
+    set(delivery({ findings: [finding(f)] }));
+    const { unmount } = renderIt();
+    const text = screen.getByRole("status").querySelector("[data-notice-next]")!.textContent;
+    unmount();
+    return text;
+  };
+
+  it("names the real place to act for each kind", () => {
+    expect(next({ kind: "CLAIMS_NOT_CALLED" })).toMatch(/Open Actions in Zitadel on each row that differs/);
+    expect(next({ kind: "CLAIMS_NOT_SERVED" })).toMatch(/Show each app under Live/);
+    expect(next({ kind: "SIGNIN_EVENTS_MISSING", subject: "-" })).toMatch(/syndra-event-listener/);
+    expect(next({ kind: "CONFIG_DRIFT", subject: "R1:endpoint" })).toMatch(/Configuration, below/);
+    expect(next({ kind: "KEY_ROTATION", subject: "partial" })).toMatch(/Action signing key row, below/);
+  });
+
+  it("a refused read says which role to give; an unanswered one says it checks every 10 minutes", () => {
+    expect(next({ kind: "CANNOT_CHECK", subject: "R3", sample: { status: 403 } })).toBe(
+      "Give Syndra's service account the IAM_OWNER_VIEWER role in Zitadel.",
+    );
+    expect(next({ kind: "CANNOT_CHECK", subject: "R3" })).toMatch(/^Nothing for you to do\. Syndra checks again every 10 minutes\./);
+  });
+
+  it("no kind keeps the old blanket line", () => {
+    expect(next({ kind: "CLAIMS_NOT_CALLED" })).not.toMatch(/matching row below/);
+  });
+});

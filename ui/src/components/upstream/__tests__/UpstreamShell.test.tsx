@@ -12,31 +12,19 @@ import { DirectWriteWarning, UpstreamShell, sendsWhen } from "@/components/upstr
  * writes in it with no ceremony at all: a paragraph above an armed button.
  */
 describe("a write that goes straight to the provider", () => {
-  it("names what is missing rather than counting what changes", () => {
-    render(
-      <DirectWriteWarning what="Anything." acknowledged={false} onAcknowledge={() => {}} />,
-    );
-    expect(
-      screen.getByText(/changes Zitadel now, with no preview and no record in Syndra/),
-    ).toBeTruthy();
-  });
-
-  // A box means something is wrong (A-04 §7.1a). The path that skips Syndra's
-  // record is a fault in the making: a Notice. The traced path is explained,
-  // not warned about: a caption.
-  it("is a Notice when Syndra keeps no record, and a caption when it does", () => {
-    const { unmount } = render(<DirectWriteWarning what="Anything." />);
-    expect(screen.getByRole("status")).toHaveTextContent(/Syndra keeps no record of them/);
-    unmount();
-    render(<DirectWriteWarning traced what="Anything." />);
+  // The path that skips Syndra's record no longer exists on these screens, so no
+  // Notice claims "keeps no record" or a stale sweep interval. The caption explains.
+  it("is a caption: it says there is a record, and never a box", () => {
+    render(<DirectWriteWarning what="Anything." />);
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByText(/goes through Syndra/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/keeps no record|every six hours/);
   });
 
-  // C3: the traced path writes a record, so its tick never says there is none,
+  // C3: the write has a record, so its tick never says there is none,
   // and its caption says when the change is sent, never "when Pending changes is sent".
-  it("on the traced path, ticks for what is missing and says when it is sent", () => {
-    render(<DirectWriteWarning traced what="Anything." sends={sendsWhen([])} acknowledged={false} onAcknowledge={() => {}} />);
+  it("ticks for what is missing and says when it is sent", () => {
+    render(<DirectWriteWarning what="Anything." sends={sendsWhen([])} acknowledged={false} onAcknowledge={() => {}} />);
     expect(screen.getByText("I understand this changes Zitadel now, with no preview and no reason.")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/no record in Syndra/);
     expect(document.body.textContent).toMatch(/It is sent to Zitadel straight away\./);

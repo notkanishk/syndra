@@ -3,6 +3,7 @@ package propagation
 import (
 	"context"
 	"log"
+	"sync/atomic"
 
 	"syndra/internal/db"
 	"syndra/internal/extcall"
@@ -17,16 +18,33 @@ func RetryRule() extcall.Policy {
 	return p
 }
 
+// autoRetry is whether the background drain runs on this server
+// (REVOCATION_DRAIN_ENABLED, cmd/api). Off, nothing sends a change again on
+// its own, so no row may say "Syndra sends it again at 14:05".
+var autoRetry atomic.Bool
+
+func init() { autoRetry.Store(true) }
+
+// SetAutoRetry records whether the background drain runs. Called once at start.
+func SetAutoRetry(on bool) { autoRetry.Store(on) }
+
+// AutoRetry reports whether Syndra sends a change again on its own here.
+func AutoRetry() bool { return autoRetry.Load() }
+
 // RowRetry is where an unresolved row stands, or nil when there is nothing to
 // say beyond its wait reason: never tried, being sent now, or held for the
 // operator (a row that waits is never retried on its own, so it is not
-// "retrying" whatever its attempts say).
+// "retrying" whatever its attempts say). With the background drain off, a
+// row Zitadel didn't take is waiting: only Send moves it.
 func RowRetry(row models.PendingPropagation) *extcall.RetryState {
 	if row.Status != "pending" || row.Attempts == 0 || row.NotBefore == nil {
 		return nil
 	}
 	if row.WaitReason == db.WaitReasonRoleWaits || row.WaitReason == db.WaitReasonManual {
 		return nil
+	}
+	if !AutoRetry() {
+		return &extcall.RetryState{State: extcall.RetryWaiting, Try: row.Attempts, Of: RetryRule().Attempts}
 	}
 	s := RetryRule().Retrying(row.Attempts, row.NotBefore)
 	return &s

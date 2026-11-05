@@ -46,6 +46,7 @@ func TestMain(m *testing.M) {
 				return d
 			}
 			d.Drain.Applied += dr.Applied
+			d.Drain.Requeued += dr.Requeued
 			if dr.Halted {
 				d.Drain.Halted, d.Drain.Reason = true, dr.Reason
 				return d

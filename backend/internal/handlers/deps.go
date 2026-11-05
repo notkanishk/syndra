@@ -44,6 +44,8 @@ var (
 	dbApproveRequestAndEnqueue      = db.ApproveRequestAndEnqueue
 	dbGetPendingPropagations        = db.GetPendingPropagations
 	dbMarkGaveUpSeen                = db.MarkGaveUpSeen
+	dbListGaveUp                    = db.ListGaveUp
+	dbOutboxRowsWaitForRole         = db.OutboxRowsWaitForRole
 	dbGetPropagationStatus          = db.GetPropagationStatus
 	svcDrainPropagations            = propagation.Drain
 	svcDrainPropagationRow          = propagation.DrainOne

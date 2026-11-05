@@ -30,7 +30,7 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 }));
 
 vi.mock("@/lib/queries/usePropagation", () => ({
-  usePendingPropagations: () => ({ ...pending, isLoading: load.loading, error: null, refetch: () => {} }),
+  useGaveUpPropagations: () => ({ data: [], isLoading: false }),  usePendingPropagations: () => ({ ...pending, isLoading: load.loading, error: null, refetch: () => {} }),
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 

@@ -17,6 +17,7 @@ import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
 import { outcomeFromError, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { RETRYING, retryLine, retryNextStep } from "@/lib/retry";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
@@ -25,6 +26,7 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { Select } from "@/components/ui/Select";
 import { ProjectName } from "@/components/names";
 import {
+  useGrantRemovalPreview,
   useUpstreamAssignGrant,
   useUpstreamProjectRoles,
   useUpstreamProjects,
@@ -36,7 +38,6 @@ import {
   type ZitadelRoleChange,
 } from "@/lib/queries/useUpstream";
 import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
-import { useUserAccess } from "@/lib/queries/useUsers";
 import { useRulePreview } from "@/lib/queries/useRulePreview";
 import { useDebounce } from "@/lib/useDebounce";
 import { formatList, humanizeKey } from "@/lib/format";
@@ -52,6 +53,11 @@ const roleOf = (role: string) => role.slice(role.indexOf("/") + 1);
 
 type Act = "given" | "revoked" | "replaced";
 const ACT_WORD: Record<Act, string> = { given: "Given", revoked: "Revoked", replaced: "Replaced" };
+
+/** The step a role Zitadel refused leaves: it is terminal, and Syndra's record now differs from Zitadel. */
+const REFUSED_NEXT = "Open their page to see what they hold now, then give or revoke the refused role again.";
+
+const sendsAny = (roles: ZitadelRoleChange[], pick: (r: ZitadelRoleChange) => boolean) => roles.some(pick);
 
 /**
  * What a change did, role by role, in the backend's words (W8): never "done"
@@ -73,9 +79,15 @@ function changeResult(res: ZitadelGrantChange | undefined, act: Act): { outcome:
   };
   say("Given in Zitadel", (r) => r.change === "given" && r.status === "applied");
   say("Revoked in Zitadel", (r) => r.change === "revoked" && r.status === "applied");
+  // Re-audit R3: a give Zitadel didn't take is retried on its own (the
+  // server says when); only one that isn't goes when you send it.
+  const retrying = res?.wait_reason === RETRYING && res.retry?.state !== "waiting";
+  const goesItself = (r: ZitadelRoleChange) => r.status === "pending" && (r.change === "revoked" || retrying);
   say("Waiting for you to send, because the role always waits for you", (r) => r.status === "waiting");
-  say("Not in Zitadel yet, because Zitadel didn't take it. It is in Pending changes", (r) => r.change === "given" && r.status === "pending");
+  say("Not in Zitadel yet, because Zitadel didn't answer. Syndra sends it again on its own", (r) => r.change === "given" && r.status === "pending" && retrying);
+  say("Not in Zitadel yet. It goes when you send it", (r) => r.change === "given" && r.status === "pending" && !retrying);
   say("Not revoked in Zitadel yet, because Zitadel didn't take it. Revocations send on their own", (r) => r.change === "revoked" && r.status === "pending");
+  if (res?.retry && sendsAny(roles, goesItself)) lines.push(retryLine(res.retry));
   say("Zitadel refused, so it is not in Zitadel", (r) => r.status === "failed");
   say("Kept, because a bundle or a rule still gives it", (r) => r.change === "kept");
   const detail = [...lines, recorded].join(" ");
@@ -84,20 +96,33 @@ function changeResult(res: ZitadelGrantChange | undefined, act: Act): { outcome:
   if (sent.length === 0) {
     return { outcome: { kind: "no_change", message: "Nothing was revoked. A bundle or a rule still gives every role", detail }, word: "Nothing revoked" };
   }
+  const refused = sent.some((r) => r.status === "failed");
   const open = sent.filter((r) => r.status === "waiting" || r.status === "pending");
   if (open.length) {
+    const itself = open.every(goesItself);
     return {
       outcome: {
         kind: "queued",
         message: "Recorded in Syndra. Not all of it is in Zitadel yet",
         detail,
-        sendsItself: open.every((r) => r.change === "revoked" && r.status === "pending") || undefined,
+        sendsItself: itself || undefined,
+        // What Syndra sends itself says when; a refused part needs a person.
+        next: refused
+          ? `${itself ? "" : "Press Send on Pending changes for what waits. "}${REFUSED_NEXT}`
+          : itself && res?.retry
+            ? retryNextStep(res.retry)
+            : undefined,
       },
       word: ACT_WORD[act],
     };
   }
-  if (sent.some((r) => r.status === "failed")) {
-    return { outcome: { kind: "no_change", message: "Recorded in Syndra, but Zitadel refused part of it", detail }, word: "Not all in Zitadel" };
+  if (refused) {
+    // Re-audit R4: a refused row is terminal and Syndra's record now differs
+    // from Zitadel, so there is something to do.
+    return {
+      outcome: { kind: "no_change", message: "Recorded in Syndra, but Zitadel refused part of it", detail, next: REFUSED_NEXT },
+      word: "Not all in Zitadel",
+    };
   }
   return { outcome: { kind: "applied", message: `Roles ${act} in Zitadel`, detail }, word: ACT_WORD[act] };
 }
@@ -107,39 +132,6 @@ function useWaitingAmong(projectId: string, keys: string[]): string[] | undefine
   const waits = useRolesThatWait().data?.roles;
   if (!waits || !projectId) return undefined;
   return keys.filter((key) => waits.some((w) => w.project_id === projectId && w.role_key === key));
-}
-
-/**
- * The roles on this grant a revoke keeps, from Syndra's own explanation of
- * the person's access: those a bundle gives, or a rule whose starting role
- * they keep (W1a's removeRoles keeps exactly what Syndra still gives).
- * `kept` is undefined while unread or unreadable.
- */
-function useKeptAmong(userId: string, projectId: string, keys: string[]): { kept?: string[]; reading: boolean } {
-  const access = useUserAccess(userId);
-  const project = access.data?.projects.find((p) => p.project_id === projectId);
-  if (!access.data) return { reading: access.isLoading };
-  const roles = [...(project?.source_roles ?? []), ...(project?.derived_roles ?? [])];
-  const reasonsFor = (key: string) => roles.filter((r) => r.role_key === key).flatMap((r) => r.reasons);
-  // A role held outside this grant keeps whatever a rule starts from it.
-  const held = (p: string, key: string, kept: Set<string>) => p !== projectId || !keys.includes(key) || kept.has(key);
-  const kept = new Set<string>();
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const key of keys) {
-      if (kept.has(key)) continue;
-      const stays = reasonsFor(key).some(
-        (r) =>
-          r.kind === "bundle" ||
-          (r.kind === "mapping" && Boolean(r.trigger_role) && held(r.trigger_project ?? projectId, r.trigger_role!, kept)),
-      );
-      if (stays) {
-        kept.add(key);
-        grew = true;
-      }
-    }
-  }
-  return { kept: keys.filter((key) => kept.has(key)), reading: false };
 }
 
 /** A grant's roles, wrapping: a role key is never cut short. */
@@ -363,12 +355,21 @@ function RevokeDialog({
   const outcome = result?.outcome ?? null;
   const [acknowledged, setAcknowledged] = useState(false);
   const done = succeeded(outcome);
-  // C4: the count is the roles that go. Until Syndra's explanation of their
-  // access is read it is "up to" every role on the grant, never a guess.
-  const { kept, reading } = useKeptAmong(userId, grant.projectId, grant.roleKeys);
-  const going = kept ? grant.roleKeys.filter((key) => !kept.includes(key)) : grant.roleKeys;
-  const waiting = useWaitingAmong(grant.projectId, going);
-  const nothingGoes = going.length === 0;
+  // C4, re-audit R18: the count is the roles that go, by the server's own
+  // removal rule (a preview of the very walk the revoke runs), including a
+  // role a rule gave from one that goes. Never worked out here; unread, the
+  // revoke waits for it.
+  const preview = useGrantRemovalPreview(userId, grant.grantId);
+  const reading = preview.isLoading;
+  const unread = !reading && !preview.data;
+  const goingPairs = preview.data?.revoked_roles ?? [];
+  const going = goingPairs.map(roleOf);
+  const kept = preview.data ? (preview.data.retained_roles ?? []).map(roleOf) : undefined;
+  const waiting = useWaitingAmong(
+    grant.projectId,
+    goingPairs.filter((pair) => pair.startsWith(`${grant.projectId}/`)).map(roleOf),
+  );
+  const nothingGoes = Boolean(preview.data) && going.length === 0;
 
   return (
     <Modal open onClose={onClose} busy={remove.isPending} size="sm" labelledBy="revoke-grant-title">
@@ -395,13 +396,19 @@ function RevokeDialog({
             <p className="text-[13.5px] leading-[1.55] text-muted">
               Nothing on this grant would be revoked: a bundle or a rule gives {name} every role on it.
             </p>
+          ) : reading || unread ? (
+            <p className="text-[13.5px] leading-[1.55] text-muted">
+              {reading
+                ? "Reading what this would revoke…"
+                : "Syndra couldn't read what this would revoke, so it won't ask you to confirm a count. Try again in a minute."}
+            </p>
           ) : (
             <AcknowledgeCount
               checked={acknowledged}
               onChange={setAcknowledged}
               count={going.length}
               noun="roles"
-              verb={kept ? "revokes" : "revokes up to"}
+              verb="revokes"
               consequence={`${name} loses ${going.length === 1 ? "it" : "them"} once the change reaches Zitadel. ${sendsWhen(waiting)} Syndra records it as its own, so it is explained afterwards.`}
             />
           )}
@@ -412,11 +419,13 @@ function RevokeDialog({
       <WriteFooter outcome={outcome} onClose={onClose}>
         <Button
           variant="dangerConfirm"
-          disabled={reading || nothingGoes || !acknowledged}
+          disabled={reading || unread || nothingGoes || !acknowledged}
           reason={
             reading
-              ? "Reading what Syndra gives them first."
-              : nothingGoes
+              ? "Reading what this would revoke first."
+              : unread
+                ? "Syndra couldn't read what this would revoke."
+                : nothingGoes
                 ? "Nothing here would be revoked."
                 : !acknowledged
                   ? "Check the box above to confirm you understand the consequence."
@@ -514,7 +523,6 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
             </div>
           )}
           <DirectWriteWarning
-            traced
             what="Syndra records this grant as its own, so it is explained afterwards rather than surfacing under Drift."
             sends={sendsWhen(waiting)}
             acknowledged={acknowledged}
@@ -599,7 +607,6 @@ function EditRolesDialog({
             <FieldHint>The short name other systems see, e.g. trained, comma separated.</FieldHint>
           </div>
           <DirectWriteWarning
-            traced
             what="Replacing the roles revokes any you leave out, unless a bundle or a rule still gives it."
             sends={sendsWhen(waiting)}
             acknowledged={acknowledged}

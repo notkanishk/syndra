@@ -60,6 +60,7 @@ import { keptEnds, stillEnds } from "@/lib/keep-ends";
 import { AskForAccess } from "@/components/requests/AskForAccess";
 import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember } from "@/components/requests/Holding";
 import { FORECAST, outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
+import { RETRYING, retryingOutcome } from "@/lib/retry";
 import dynamic from "next/dynamic";
 
 // Opened on demand, so it stays out of the page's first load.
@@ -774,7 +775,7 @@ export function keepResult(request: AccessRequest): string | undefined {
  * failed, or not in the result) is not here: it is still waiting, and keeps its
  * buttons.
  */
-function decidedByBulk(
+export function decidedByBulk(
   rows: AccessRequest[],
   ids: string[],
   status: "approved" | "rejected",
@@ -791,11 +792,16 @@ function decidedByBulk(
     const result = plan.outcomes.find((o) => o.user_id === entry.requester_id);
     if (!result || result.effect === "blocked" || result.effect === "failed") continue;
     if (result.effect === "queued") {
+      // Re-audit R2: a send Zitadel didn't take goes again on its own, with
+      // its next try; only a row that really waits says "when you send it".
       out.push([
         entry,
         {
           word: "Approved",
-          outcome: { kind: "queued", message: "Approved. It goes when you send it.", detail: result.detail || undefined },
+          outcome:
+            result.wait_reason === RETRYING
+              ? retryingOutcome("Approved", result.retry)
+              : { kind: "queued", message: "Approved. It goes when you send it.", detail: result.detail || undefined },
         },
       ]);
     } else if (keeping) {

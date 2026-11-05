@@ -63,8 +63,8 @@ func TestRetryClaims_BackgroundTakesDueRetriesOnlyAndSendTakesAll(t *testing.T) 
 	if err != nil {
 		t.Fatalf("CountRetries: %v", err)
 	}
-	if retrying < 2 {
-		t.Errorf("CountRetries = %d, want at least the due and the backing-off row", retrying)
+	if retrying[TargetZitadel] < 2 {
+		t.Errorf("CountRetries = %v, want at least the due and the backing-off row under zitadel", retrying)
 	}
 	pending, err := GetPendingPropagations(ctx)
 	if err != nil {
@@ -126,7 +126,7 @@ func TestCountRetries_AGiveUpStaysUntilSeenByEachPerson(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CountRetries: %v", err)
 		}
-		return n
+		return n[TargetZitadel]
 	}
 	beforeA, beforeB := count(a), count(b)
 	gaveUp()
@@ -148,6 +148,51 @@ func TestCountRetries_AGiveUpStaysUntilSeenByEachPerson(t *testing.T) {
 	}
 	if got := count(b); got != beforeB+2 {
 		t.Fatalf("B sees both: %d, want %d", got, beforeB+2)
+	}
+}
+
+// Re-audit R11: a retry the target then refused is given up on too (it left
+// "retrying", so it must reach "gave up", never vanish), and so is a refusal
+// on the first try (it left Pending changes). Counted under its own target,
+// and listed for Pending changes' "Syndra stopped sending" view; a row still
+// pending is neither.
+func TestCountRetries_ARefusedRetryIsGivenUpUnderItsTarget(t *testing.T) {
+	ctx := liveDB(t)
+	const a = "op-c@example.org"
+	if err := MarkGaveUpSeen(ctx, a); err != nil {
+		t.Fatalf("MarkGaveUpSeen: %v", err)
+	}
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM gave_up_seen WHERE actor = $1`, a) })
+	fail := func(user string, attempts int, target, lastError string) string {
+		id := outboxRow(t, ctx, user, "community", "", attempts, "")
+		if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET status = 'failed', target = $2,
+			last_error = $3, completed_at = NOW() + INTERVAL '1 second' WHERE id = $1`, id, target, lastError); err != nil {
+			t.Fatalf("fail row: %v", err)
+		}
+		return id
+	}
+	refused := fail("u10", 2, TargetZitadel, "zitadel refused: 400")
+	firstTry := fail("u11", 0, TargetZitadel, "zitadel refused: 400")
+	nas := fail("u12", 6, "truenas", "out of retries after 6 attempts: 503")
+	stillPending := outboxRow(t, ctx, "u13", "community", "", 1, "5 minutes")
+
+	_, gaveUp, err := CountRetries(ctx, a)
+	if err != nil {
+		t.Fatalf("CountRetries: %v", err)
+	}
+	if gaveUp[TargetZitadel] != 2 || gaveUp["truenas"] != 1 {
+		t.Fatalf("gave up = %v, want 2 under zitadel (the refused retry and first try) and 1 under truenas", gaveUp)
+	}
+	listed, err := ListGaveUp(ctx, a)
+	if err != nil {
+		t.Fatalf("ListGaveUp: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, row := range listed {
+		ids[row.ID] = true
+	}
+	if !ids[refused] || !ids[nas] || !ids[firstTry] || ids[stillPending] {
+		t.Fatalf("ListGaveUp = %v, want every failed row and no pending one", ids)
 	}
 }
 

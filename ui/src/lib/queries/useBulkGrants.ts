@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { RetryState } from "@/lib/retry";
 import { invalidateAfter } from "./invalidation";
 
 /**
@@ -88,6 +89,10 @@ export interface BulkOutcome {
   /** What this person is left holding — the part a count never tells you. */
   consequence?: string;
   grant_ids?: string[];
+  /** A queued row's reason: role_waits, manual, halted:<reason>, or halted:retrying (Syndra sends it again on its own). */
+  wait_reason?: string;
+  /** A retrying row's next try. */
+  retry?: RetryState;
 }
 
 export interface BulkSummary {

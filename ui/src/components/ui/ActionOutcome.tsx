@@ -9,6 +9,7 @@ import {
   nextStepOf,
   sentence,
   statesNothingChanged,
+  waitsForSend,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 
@@ -73,7 +74,7 @@ function dotTone(outcome: Outcome): StatusTone {
  * the "Waiting for you to send →" link, or inside a sentence already shown.
  */
 function nextLine(outcome: Outcome, shown: (string | undefined)[]): string | null {
-  if (outcome.kind === "queued" && !outcome.sendsItself) return null;
+  if (waitsForSend(outcome)) return null;
   const next = nextStepOf(outcome);
   return shown.some((text) => text?.includes(next)) ? null : next;
 }
@@ -116,7 +117,7 @@ export function ActionOutcome({
             wears the amber dot, so the link doesn't repeat it (route-requests). */}
         {said && <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">{said}</span>}
         {next && <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">{next}</span>}
-        {outcome.kind === "queued" && !outcome.sendsItself && <NextStep dot={false} person={person} className="pl-[14px]" />}
+        {waitsForSend(outcome) && <NextStep dot={false} person={person} className="pl-[14px]" />}
         {outcome.kind === "failed" && outcome.requestId && (
           <CopyableValue value={outcome.requestId} label="Reference" className="pl-[14px]" />
         )}
@@ -134,7 +135,7 @@ export function ActionOutcome({
         role="status"
         className={`tint-in inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 ${className}`}
       >
-        {outcome.kind === "queued" && !outcome.sendsItself ? (
+        {waitsForSend(outcome) ? (
           <NextStep person={person} />
         ) : (
           <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink">
@@ -170,7 +171,10 @@ export function ActionOutcome({
       </div>
       <p className="text-[15px] leading-[1.55] text-ink">
         {sentence(outcome.message)}
-        {statesNothingChanged(outcome.kind) && !outcome.partial ? ` ${NOTHING_CHANGED}` : ""}
+        {/* Said once: a refusal whose own sentence already says it is not told twice (re-audit R20). */}
+        {statesNothingChanged(outcome.kind) && !outcome.partial && !/nothing was changed/i.test(outcome.message)
+          ? ` ${NOTHING_CHANGED}`
+          : ""}
       </p>
       {outcome.detail && (
         <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
@@ -179,7 +183,7 @@ export function ActionOutcome({
         const next = nextLine(outcome, [outcome.message, outcome.detail]);
         return next && <p className="text-[13px] leading-[1.5] text-faint">{next}</p>;
       })()}
-      {outcome.kind === "queued" && !outcome.sendsItself && <NextStep dot={false} person={person} />}
+      {waitsForSend(outcome) && <NextStep dot={false} person={person} />}
       {outcome.sessionEnded && <SignInAgain />}
       {outcome.requestId && <QuoteThis id={outcome.requestId} />}
     </div>

@@ -439,10 +439,15 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
 
       <span className="flex w-full flex-none justify-end pt-0.5 desktop:w-[240px]">
         {row.spent ? (
-          // The way forward is the person's own page, where Syndra revokes it again.
-          <ArrowLink href={`/users/${row.user_id}`}>
-            Revoke again on {first ? `${first}’s` : "their"} page
-          </ArrowLink>
+          // Re-audit R11: Syndra's record of this access is already gone, so
+          // the person's page has nothing left to revoke. Still held in
+          // Zitadel, it is raised in Drift by the next check and revoked
+          // there; on a connected system, its page shows the account.
+          row.target === "zitadel" ? (
+            <ArrowLink href="/governance/drift">Revoke it from Drift</ArrowLink>
+          ) : (
+            <ArrowLink href={`/system/targets/${encodeURIComponent(row.target)}`}>{`Check ${first ? `${first}’s` : "their"} account on ${where}`}</ArrowLink>
+          )
         ) : (
           // The API carries how many tries so far, not the limit or the next time, so neither is claimed (A-07 §21).
           <span className="text-right text-[13px] text-muted">

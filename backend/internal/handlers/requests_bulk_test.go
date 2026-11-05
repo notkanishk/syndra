@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/access"
 	"syndra/internal/auth"
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -72,11 +73,16 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 	origDrain := svcDrainPropagationRow
 	origRebuild := cacheRebuildUser
 	origHolding := dbRequestHolding
+	origStatus, origRules := dbGetPropagationStatus, svcRulesFollowing
 	// Nobody holds anything unless a test says so.
 	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
 		return models.RequestHolding{Kind: models.HoldingNone}, nil
 	}
+	// A sent row is applied, and no rule follows, unless a test says so.
+	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
+	svcRulesFollowing = func(context.Context, string, []access.Role) ([]services.RuleRow, error) { return nil, nil }
 	t.Cleanup(func() {
+		dbGetPropagationStatus, svcRulesFollowing = origStatus, origRules
 		dbRequestHolding = origHolding
 		cacheRebuildUser = origRebuild
 		dbGetAccessRequestByID = origGet

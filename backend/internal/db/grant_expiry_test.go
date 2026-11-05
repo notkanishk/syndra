@@ -224,7 +224,10 @@ func TestEveryClosureDiffRunsUnderTheAccessLock(t *testing.T) {
 	// matters is the function that owns the read-to-commit window. The set is
 	// pinned rather than inferred, so a new delta-computing function fails this
 	// test until somebody decides which side of the lock it belongs on.
-	pure := map[string]bool{"closureDelta": true, "holderDelta": true}
+	// directGrantRemovalDelta reads and writes nothing of its own: DeleteDirectGrant
+	// (wrapped below) calls it under the lock, and the revoke preview (re-audit
+	// R18) calls it to write nothing at all.
+	pure := map[string]bool{"closureDelta": true, "holderDelta": true, "directGrantRemovalDelta": true}
 	wrapped := map[string]bool{
 		"CascadeBundleAssignedToUser":  true,
 		"CascadeRuleCreated":           true,
