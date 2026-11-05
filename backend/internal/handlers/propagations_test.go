@@ -37,6 +37,28 @@ func TestHandleDrainPropagations_ReturnsResult(t *testing.T) {
 	}
 }
 
+// A give-up stays on Home and the rail until an operator marks it seen; the
+// marker records who. A failed write is a 500, never a silent "seen".
+func TestHandleMarkGaveUpSeen(t *testing.T) {
+	orig := dbMarkGaveUpSeen
+	t.Cleanup(func() { dbMarkGaveUpSeen = orig })
+	var by string
+	dbMarkGaveUpSeen = func(_ context.Context, actor string) error { by = actor; return nil }
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/propagations/gave-up/seen", nil)
+	w := httptest.NewRecorder()
+	handleMarkGaveUpSeen(w, req)
+	if w.Code != http.StatusOK || by == "" {
+		t.Fatalf("want 200 with an actor recorded, got %d actor %q", w.Code, by)
+	}
+
+	dbMarkGaveUpSeen = func(context.Context, string) error { return context.DeadlineExceeded }
+	w = httptest.NewRecorder()
+	handleMarkGaveUpSeen(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500 when the marker can't be written, got %d", w.Code)
+	}
+}
+
 func TestHandleDrainPropagations_502OnError(t *testing.T) {
 	resetPropagationDeps(t)
 	svcDrainPropagations = func(context.Context) (propagation.DrainResult, error) {

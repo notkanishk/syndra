@@ -87,7 +87,10 @@ describe("a write that may have partly landed", () => {
 // a sent change is answered "indeterminate" at my_storage.go:507-513). PLAN_CLAIM_ERROR
 // is a claim transaction that rolls back on any error (db/plans.go:640-660), before
 // anything is applied. ANSWER_NOT_RECORDED can write, so it is mapped instead.
+// ZITADEL_REFUSED is a role write Zitadel refused and the read-back confirmed
+// absent, after which Syndra undid its own record (services/roles.go writeRole).
 const NOTHING_WRITTEN = new Set([
+  "ZITADEL_REFUSED",
   "ADDON_UNREACHABLE", "TARGET_CAPABILITIES_UNKNOWN", "CATALOGUE_UNREAD", "NOT_CONFIGURED",
   "ZITADEL_UNAVAILABLE", "BULK_REHEARSAL_ERROR", "FINDINGS_ERROR", "VIEW_ERROR", "TARGET_UNREACHABLE",
   "RESEND_CHECK_FAILED", "CREDENTIAL_NOT_SET", "INVENTORY_ERROR", "TARGET_UNREADABLE", "DORMANT_ERROR",

@@ -121,4 +121,16 @@ export function useDrainPropagations() {
   });
 }
 
+/**
+ * Mark the changes Syndra gave up on as seen: until then Home and the rail
+ * keep raising them (owner, 5 Nov 2026), whichever view the reader is in.
+ */
+export function useMarkGaveUpSeen() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => request<{ status: string }>("/propagations/gave-up/seen", { method: "POST" }),
+    onSuccess: () => invalidateAfter(qc, "retriesSeen"),
+  });
+}
+
 export const propagationQueryKeys = KEYS;

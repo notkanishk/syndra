@@ -5,12 +5,32 @@ import { describe, expect, it, vi } from "vitest";
 import { RemovalDialog } from "@/components/people/RemovalDialog";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 
+import { waitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
+
 /**
  * A-07 §9: while Zitadel isn't answering, a person's page, Requests and Expiring stay on and
- * their dialogs say, before the act, that the change will wait. Their buttons stay live.
+ * their dialogs say, before the act, what happens to the change. Their buttons stay live.
+ *
+ * Exact per op (owner, 5 Nov 2026): it used to say every change "will wait for you to send
+ * it", which was false for a removal (revocations go on their own) and is now false for a
+ * give too (a give that finds Zitadel down is retried on its own). Only a role marked to
+ * wait still waits for Send.
  */
 
-const LINE = "Zitadel isn't answering, so this will wait for you to send it once it does.";
+const LINE = waitsBeforeLine("remove");
+
+describe("the line itself", () => {
+  it("never tells anyone to send what goes on its own", () => {
+    for (const op of ["give", "remove", "change"] as const) {
+      const line = waitsBeforeLine(op);
+      expect(line).toMatch(/sends it on its own once Zitadel answers/);
+      expect(line).toMatch(/nothing for you to send/);
+      expect(line).not.toMatch(/will wait for you to send it once/);
+    }
+    expect(waitsBeforeLine("give")).toMatch(/records the give/);
+    expect(waitsBeforeLine("remove")).toMatch(/records the removal/);
+  });
+});
 
 vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => true }));
 vi.mock("@/lib/queries/useBundles", () => ({

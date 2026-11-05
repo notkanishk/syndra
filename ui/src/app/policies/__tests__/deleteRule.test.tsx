@@ -185,15 +185,18 @@ describe("deleting an automatic rule", () => {
     );
   });
 
-  // Audit W3: who sends the revocations decides the sentence. A role that waits
-  // is the operator's to send; a send that stopped is retried on its own; and
-  // the confirmation-mode words ("without review") describe nothing now.
+  // Audit W3, one-path 1.8e: who sends the revocations decides the sentence,
+  // in the words a retired bundle uses (lib/retry.ts retireOutcome). A role
+  // that waits is the operator's to send; a send that stopped, or that Zitadel
+  // didn't take, is retried on its own with its next try; and the
+  // confirmation-mode words ("without review") describe nothing now.
   it.each([
-    ["role_waits", /12 revocations waiting for you to send.*wait under Pending changes until you send them/],
-    ["halted:zitadel_offline", /12 revocations on their way.*Revocations send on their own\. Zitadel didn.t answer at .*, so they go when it does\./],
-    [undefined, /12 revocations sent.*The access it gave was revoked\./],
-  ])("says who sends the revocations, for %s", async (why, said) => {
-    state.remove = vi.fn().mockResolvedValue({ message: "ok", cascade: { enqueued: 12, wait_reason: why } });
+    ["role_waits", undefined, /12 changes wait for you to send.*wait under Pending changes until you send them/],
+    ["halted:zitadel_offline", undefined, /Not in Zitadel yet\. Zitadel didn.t answer, so Syndra sends them again on its own\..*nothing waits for you/],
+    ["halted:retrying", { state: "retrying", try: 2, of: 6, next_try: "2099-11-05T08:35:00Z" }, /Syndra sends them again at .* \(try 2 of 6\)/],
+    [undefined, undefined, /12 changes went to Zitadel\..*The access it gave was revoked\./],
+  ])("says who sends the revocations, for %s", async (why, retry, said) => {
+    state.remove = vi.fn().mockResolvedValue({ message: "ok", cascade: { enqueued: 12, wait_reason: why, drain: { retry } } });
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
     fireEvent.click(screen.getByRole("button", { name: "Retire rule and revoke access" }));

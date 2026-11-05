@@ -501,7 +501,7 @@ function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: s
         ))}
       {row.op_type === "revoke" && !waitIsChosen(row.wait_reason) && (
         <span className="text-[12.5px] text-faint">
-          A revocation: it also sends on its own within a few minutes.
+          A revocation: it also sends on its own within a minute.
         </span>
       )}
     </>

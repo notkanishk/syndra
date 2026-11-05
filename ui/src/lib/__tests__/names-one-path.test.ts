@@ -34,6 +34,19 @@ describe("one name path", () => {
     expect(bad).toEqual([]);
   });
 
+  it("one phrase for a person nobody can name (lib/names.ts personOr)", () => {
+    // "They", "Somebody", "Someone" or a literal "this person" as a name's fallback.
+    const fallback = /(?:\?\?|\|\|)\s*"(?:They|Somebody|Someone|this person)"|fallback="(?:Somebody|Someone|They)"/;
+    const bad: string[] = [];
+    for (const f of files) {
+      if (f.rel === join("lib", "names.ts")) continue;
+      f.text.split("\n").forEach((line, i) => {
+        if (fallback.test(line)) bad.push(`${f.rel}:${i + 1}`);
+      });
+    }
+    expect(bad).toEqual([]);
+  });
+
   it("no bare localeCompare on names (time fields compare as text on purpose)", () => {
     // A line that sorts timestamps (`_at`, `.start`, `joined`, `expires`, `earliest_end`) is ISO text, where
     // byte order is the right order. Anything else goes through lib/sort.ts.

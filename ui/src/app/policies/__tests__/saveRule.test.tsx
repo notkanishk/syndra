@@ -243,16 +243,30 @@ describe("the rule check's result", () => {
     expect(notice).toHaveTextContent("Also sets off other rules, which would then give them Laser Lab / keys and Laser Lab / senior.");
   });
 
-  // Audit W12: the whole chain fires, not one hop, so the check names every
-  // rule the second role sets off and every role they give.
-  it("names the whole chain the rule sets off", async () => {
+  // Audit W12, rules-on-the-pipeline 6.5d: the chain is the backend's closure
+  // over the unsaved rule, never walked over the browser's rule list. A chain
+  // in the list that the what-if does not report is not named.
+  it("never walks the rule list in the browser", async () => {
     state.rules = [
       rule(),
       rule({ id: "r2", source_project: "pLaser", source_role: "trained", target_project: "pShop", target_role: "bench" }),
       rule({ id: "r3", source_project: "pShop", source_role: "bench", target_project: "pShop", target_role: "key" }),
     ];
     await check({});
-    expect(document.body.textContent).toMatch(/Also sets off 2 more rules, which would then give them .*bench and .*key\./);
+    expect(document.body.textContent).not.toMatch(/Also sets off/);
+    expect(state.whatIf).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "rule_added", target_project_id: "pLaser", target_role_key: "trained" }),
+    );
+  });
+
+  it("says 'another rule' for one chained role", async () => {
+    state.whatIf = vi.fn().mockResolvedValue({
+      gains: [{ user_id: "u1", name: "u1", roles: [{ project_id: "pLaser", role_key: "trained" }, { project_id: "pLaser", role_key: "keys" }] }],
+      losses: [],
+      unchanged: 0,
+    });
+    await check({});
+    expect(screen.getByRole("status")).toHaveTextContent("Also sets off another rule, which would then give them Laser Lab / keys.");
   });
 
   it("says an all-clear as a caption, with no box", async () => {

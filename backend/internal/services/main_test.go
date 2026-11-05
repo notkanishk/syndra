@@ -17,6 +17,10 @@ func TestMain(m *testing.M) {
 	svcWouldCancel = func(context.Context, db.EnqueueParams) ([]models.QueuedChange, error) { return nil, nil }
 	svcOutboxRowsWaitForRole = func(context.Context, []string) (map[string]bool, error) { return map[string]bool{}, nil }
 	svcSetWaitReason = func(context.Context, []string, string) error { return nil }
+	// A halted send's rows are scheduled for a retry (db.ScheduleRetry), and
+	// nothing is pending unless a test says so.
+	svcScheduleRetry = func(_ context.Context, ids []string, _ string) ([]string, error) { return ids, nil }
+	svcGetPendingRows = func(context.Context) ([]models.PendingPropagation, error) { return nil, nil }
 	svcGetConfigSetting = func(context.Context, string) (string, error) { return "", nil }
 	svcListRoleWaits = func(context.Context) ([]db.RoleWait, error) { return nil, nil }
 	// No bundle includes another unless a test says so (B8).

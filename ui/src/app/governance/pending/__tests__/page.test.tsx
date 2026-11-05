@@ -290,7 +290,7 @@ describe("Pending changes · board layout", () => {
     ];
     renderPending();
     expect(screen.getByRole("img", { name: "Waits for you" })).toBeInTheDocument();
-    expect(screen.getByText(/also sends on its own within a few minutes/)).toBeInTheDocument();
+    expect(screen.getByText(/also sends on its own within a minute/)).toBeInTheDocument();
   });
 
   // S4: this list holds only pending and in-flight rows; a failed row is

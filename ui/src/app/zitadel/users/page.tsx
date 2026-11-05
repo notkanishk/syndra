@@ -37,6 +37,7 @@ import {
 } from "@/lib/queries/useUpstream";
 import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
 import { useUserAccess } from "@/lib/queries/useUsers";
+import { useRulePreview } from "@/lib/queries/useRulePreview";
 import { useDebounce } from "@/lib/useDebounce";
 import { formatList, humanizeKey } from "@/lib/format";
 import { sortByName, sortNames } from "@/lib/sort";
@@ -452,6 +453,12 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   const parsed = parseKeys(keys);
   const available = sortNames(roles.data?.items.map((role) => role.key) ?? []);
   const waiting = useWaitingAmong(projectId, parsed);
+  // What the automatic rules also give with these roles, said before the
+  // click, from the endpoint the person page's give reads (audit C2): this
+  // give goes through the same write (giveRoles → grantDirect), so the same
+  // rules follow it. Only for keys that exist, so typing doesn't ask.
+  const rules = useRulePreview(userId, projectId, parsed.filter((key) => available.includes(key)));
+  const ruleLines = (rules.data ?? []).map((row) => row.sentence);
 
   return (
     <Modal open onClose={onClose} busy={assign.isPending} size="sm">
@@ -496,6 +503,16 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
               <p className="mt-1.5 text-[12.5px] text-faint">Available: {available.join(", ")}</p>
             )}
           </div>
+          {(ruleLines.length > 0 || rules.isError) && (
+            <div className="flex flex-col gap-1 text-[13px] leading-[1.5] text-muted" data-testid="rule-preview">
+              {ruleLines.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+              {rules.isError && (
+                <span>Syndra couldn&rsquo;t read the automatic rules, so a role one of them also gives isn&rsquo;t named here.</span>
+              )}
+            </div>
+          )}
           <DirectWriteWarning
             traced
             what="Syndra records this grant as its own, so it is explained afterwards rather than surfacing under Drift."
@@ -511,15 +528,17 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
         <Button
           // Granting, not revoking: accent, so it cannot be mistaken for "Revoke roles".
           variant="accent"
-          disabled={!projectId || parsed.length === 0 || !acknowledged}
+          disabled={!projectId || parsed.length === 0 || !acknowledged || rules.isLoading}
           reason={
             !projectId
               ? "Choose a project first."
               : parsed.length === 0
                 ? "Enter at least one role key."
-                : !acknowledged
-                  ? "Check the box above to confirm."
-                  : undefined
+                : rules.isLoading
+                  ? "Checking what automatic rules also give."
+                  : !acknowledged
+                    ? "Check the box above to confirm."
+                    : undefined
           }
           isPending={assign.isPending}
           onClick={async () => {

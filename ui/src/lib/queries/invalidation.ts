@@ -41,7 +41,9 @@ export type WriteKind =
   /** Term dates. */
   | "terms"
   /** The welcome-claims switch. */
-  | "welcomeClaims";
+  | "welcomeClaims"
+  /** Changes Syndra gave up on were marked seen: Home and the rail stop raising them. */
+  | "retriesSeen";
 
 export interface WriteScope {
   target?: string;
@@ -102,6 +104,8 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
         return [["terms"], ["insights"]];
       case "welcomeClaims":
         return [];
+      case "retriesSeen":
+        return [GOVERNANCE];
     }
   })();
   return [...keys, ...(scope.extra ?? [])];

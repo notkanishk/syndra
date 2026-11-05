@@ -108,7 +108,7 @@ describe("a decided request names its person and its next step", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(decide).toHaveBeenCalledWith({ id: "r1", status: "approved" }));
     const seat = await decisionSeat();
-    expect(seat.textContent).toBe("ApprovedSent · not yet seen in Zitadel");
+    expect(seat.textContent).toBe("ApprovedSent · not yet seen in ZitadelNothing for you to do.");
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(screen.queryByText("Applied")).toBeNull();
   });
@@ -126,7 +126,7 @@ describe("a decided request names its person and its next step", () => {
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
 
     answer({ message: "Request resolved" });
-    expect((await trueSeat()).textContent).toBe("ApprovedSent · not yet seen in Zitadel");
+    expect((await trueSeat()).textContent).toBe("ApprovedSent · not yet seen in ZitadelNothing for you to do.");
   });
 
   it("a refused decision returns the buttons beside the honest error, with no forecast left", async () => {
@@ -183,7 +183,7 @@ describe("a decided request names its person and its next step", () => {
     fireEvent.click(screen.getByRole("button", { name: "Decline" }));
     await waitFor(() => expect(decide).toHaveBeenCalledWith({ id: "r1", status: "rejected" }));
     const seat = await decisionSeat();
-    expect(seat.textContent).toBe("DeclinedNothing was sent");
+    expect(seat.textContent).toBe("DeclinedNothing was sentNothing for you to do.");
     expect(seat.textContent).not.toMatch(/Zitadel/);
   });
 

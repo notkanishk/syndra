@@ -167,7 +167,7 @@ export function RevokeDialog({
 
       <ModalFooter
         cancel={{ onClick: onClose, disabled: revoke.isPending }}
-        note="Revocations send on their own, every few minutes, not from Pending changes."
+        note="Revocations send on their own, within a minute, not from Pending changes."
       >
         <Button
           variant="dangerConfirm"

@@ -651,7 +651,9 @@ func setupSnapshotTestFixtures(t *testing.T, numUsers, numApps, numProjects int)
 	// on the built-in default.
 	origProfile, origShapes := svcGetClaimProfile, svcLatestClaimShapes
 	t.Cleanup(func() { svcGetClaimProfile, svcLatestClaimShapes = origProfile, origShapes })
-	svcGetClaimProfile = func(context.Context, string) (db.ClaimProfileRow, bool, error) { return db.ClaimProfileRow{}, false, nil }
+	svcGetClaimProfile = func(context.Context, string) (db.ClaimProfileRow, bool, error) {
+		return db.ClaimProfileRow{}, false, nil
+	}
 	svcLatestClaimShapes = func(context.Context, string) ([]db.ClaimShapeVersion, error) { return nil, nil }
 
 	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {

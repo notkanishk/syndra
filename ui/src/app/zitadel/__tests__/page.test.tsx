@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import IdentityProviderPage from "@/app/zitadel/page";
 
@@ -178,6 +178,14 @@ describe("Identity provider · health line", () => {
  * Do it by hand opens the guide (components/system/SigningKeyGuide).
  */
 describe("Identity provider · signing key row", () => {
+  // The fixtures name 5 and 6 Nov 2026; on 6 Nov itself the next try reads as
+  // "today", so the clock is pinned to the day the fixtures were written.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-05T12:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it("says when the next replacement is due, and that Syndra does it on its own", async () => {
     renderPage();
     expect(await screen.findByText("Within its limit")).toBeInTheDocument();

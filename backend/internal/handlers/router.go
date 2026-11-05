@@ -257,6 +257,7 @@ func NewRouter() http.Handler {
 	// rest drained and has come back.
 	mux.HandleFunc("POST /api/v1/targets/{target}/propagations/drain", withCORS(withOperatorAuth(withTargetProject(handleDrainTarget))))
 	mux.HandleFunc("GET /api/v1/propagations", withCORS(withOperatorAuth(handleListPendingPropagations)))
+	mux.HandleFunc("POST /api/v1/propagations/gave-up/seen", withCORS(withOperatorAuth(handleMarkGaveUpSeen)))
 	// Change history: the same rows grouped by the event that produced them,
 	// including the ones still waiting. A half-applied cascade has to be
 	// visible AS a half-applied cascade.
@@ -669,4 +670,3 @@ func jsonResponse(w http.ResponseWriter, status int, payload any) {
 		log.Printf("Failed to encode json: %v", err)
 	}
 }
-

@@ -834,7 +834,7 @@ function BulkDecisionDialog({
   const rehearse = useRehearseBulkDecision();
   const apply = useApplyBulkDecision();
   const body = { ids, status };
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("give");
 
   return (
     <RehearsalDialog

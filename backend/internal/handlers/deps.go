@@ -43,6 +43,7 @@ var (
 	dbEnqueueDirectGrantPropagation = db.EnqueueDirectGrantPropagation
 	dbApproveRequestAndEnqueue      = db.ApproveRequestAndEnqueue
 	dbGetPendingPropagations        = db.GetPendingPropagations
+	dbMarkGaveUpSeen                = db.MarkGaveUpSeen
 	dbGetPropagationStatus          = db.GetPropagationStatus
 	svcDrainPropagations            = propagation.Drain
 	svcDrainPropagationRow          = propagation.DrainOne

@@ -1,4 +1,5 @@
 "use client";
+import { personOr } from "@/lib/names";
 
 import { useContext, useState } from "react";
 
@@ -143,7 +144,7 @@ export function RemovalDialog({
 
   if (!removal) return null;
 
-  const subject = removal.userName ?? userName ?? "this person";
+  const subject = personOr(removal.userName ?? userName);
   const person = removal.userId ?? userId;
   const roleLabel = label(removal);
 
@@ -244,7 +245,7 @@ function DirectDialog({
   const remove = useRemoveDirectGrant();
   const roleWaits = useRoleWaits();
   const client = useContext(QueryClientContext);
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("remove");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const retained = others.length > 0;
   const roleLabel = useRoleLabel()(removal);
@@ -307,7 +308,7 @@ function DirectDialog({
                 No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel.{" "}
                 {roleWaits(removal.projectId, removal.roleKey)
                   ? `${roleLabel} always waits for you, so the change waits in Pending changes until you send it.`
-                  : "Revocations send on their own, every few minutes."}
+                  : "Revocations send on their own, within a minute."}
               </span>
             </>
           )}
@@ -413,7 +414,7 @@ function BundleDialog({
   const bundleName = source.bundle_name ?? "this bundle";
   const removeBundle = useRemoveBundle(userId ?? "");
   const roleWaits = useRoleWaits();
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("remove");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const step = useCancelStep({
     host: `Remove the ${bundleName} bundle from ${subject}`,
