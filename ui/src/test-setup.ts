@@ -81,7 +81,10 @@ beforeEach(() => {
   resetMediaQueries();
   installMatchMedia();
   installClipboard();
-  if (typeof window !== "undefined") window.localStorage.clear();
+  if (typeof window !== "undefined") {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  }
 });
 
 // @testing-library/react auto-cleans only with vitest globals:true. We import

@@ -1,0 +1,153 @@
+{
+  "_": "The Moves and Phone line of every card (A-19 P6). A card not listed under `cards` takes `defaults`. Edit here, run `node .design-sync/moves.mjs`, and the previews and MOVES.md follow; `design-sync-moves.test.ts` fails when they have not. Verbs are the ones in src/lib/motion: press, tint, settle, arrive, unfold, leave, crossfade, glide, flash, bloom, lift, breathe. Every one has a still form, and the line says it.",
+  "defaults": {
+    "moves": "Nothing on it moves. Still: the same.",
+    "phone": "The same at every width."
+  },
+  "cards": {
+    "Button": {
+      "moves": "Presses 3%, colour on tint. Busy, its dot breathes and the label and width hold. Still: no scale, the dot holds.",
+      "phone": "44px tap floor, through the tablet range; it returns to its dense size at the desktop breakpoint."
+    },
+    "ButtonLink": {
+      "moves": "Presses 3%, colour on tint. Still: no scale.",
+      "phone": "44px tap floor, through the tablet range; it returns to its dense size at the desktop breakpoint."
+    },
+    "Modal": {
+      "moves": "Settles in (scale 0.98, 8px) with the scrim leading by 40ms; closing fades first, and is quicker. Still: appears and goes at once.",
+      "phone": "Becomes a bottom sheet that rises from the edge; its grabber drags it down to close."
+    },
+    "ModalHeader": {
+      "moves": "Moves with its dialog. Still: the same.",
+      "phone": "Sits under the sheet's grabber."
+    },
+    "ModalFooter": {
+      "moves": "Moves with its dialog. Still: the same.",
+      "phone": "Its buttons take the 44px tap floor."
+    },
+    "RehearsalDialog": {
+      "moves": "Settles in as a Modal; each step tints in where the last was. The result lifts only when something went well. Still: steps swap at once.",
+      "phone": "A bottom sheet, as every Modal."
+    },
+    "PushedStep": {
+      "moves": "Settles in as a Modal. Still: appears at once.",
+      "phone": "A bottom sheet, as every Modal."
+    },
+    "GoTo": {
+      "moves": "Settles in as a Modal. Still: appears at once.",
+      "phone": "Becomes the Go to a page sheet with the Input at its top; the page list stays until something is typed."
+    },
+    "GoToPanel": {
+      "moves": "Nothing on it moves. Still: the same.",
+      "phone": "Sits above the page list inside the sheet."
+    },
+    "AccountSheet": {
+      "moves": "Settles in as a Modal. Still: appears at once.",
+      "phone": "A bottom sheet, as every Modal."
+    },
+    "ActionOutcome": {
+      "moves": "Done lifts 6px and its dot blooms once; everything else tints in where it stands. A forecast crossfades to the true word. Still: appears in place, no bloom.",
+      "phone": "Wraps under the row; the row's height holds."
+    },
+    "StatusDot": {
+      "moves": "Blooms once, only for something that went well because of you. Still: the dot, without the bloom.",
+      "phone": "The same at every width."
+    },
+    "EmptyState": {
+      "moves": "Lifts into place when the list just emptied in front of you, and blooms its dot if your act emptied it; otherwise tints in. Still: appears in place.",
+      "phone": "The same at every width."
+    },
+    "ArriveList": {
+      "moves": "Rows rise 10px on a first paint you navigated to, 40ms apart, the stagger capped at five; never on Back, refresh, filter or sort. Still: they are simply there.",
+      "phone": "The same at every width. Carries the list's arrow keys on a keyboard."
+    },
+    "LeavingRow": {
+      "moves": "A row that goes on a later read fades where it was, then its gap closes on settle; it waits while the pointer or focus is inside. Still: it goes at once.",
+      "phone": "The same at every width."
+    },
+    "Unfold": {
+      "moves": "Opens to its own height and pushes the page; closing fades first, then folds. Still: opens and closes at once.",
+      "phone": "The same at every width."
+    },
+    "Tinted": {
+      "moves": "Tints in where it appears; nothing travels. Still: appears in place.",
+      "phone": "The same at every width."
+    },
+    "UnfoldOnArrival": {
+      "moves": "Opens by Unfold when it arrives late, never twice inside a wrapper. Still: appears at once.",
+      "phone": "The same at every width."
+    },
+    "Crossfade": {
+      "moves": "One seat whose words change in place: the old layer fades out and the new fades in on tint, in the same cell, so nothing shifts. Still: the words swap at once.",
+      "phone": "The same at every width."
+    },
+    "CopiedSeat": {
+      "moves": "Copy crossfades to Copied for 900ms and a dot that went somewhere blooms once. Still: the word swaps at once.",
+      "phone": "The same at every width."
+    },
+    "GlideIndicator": {
+      "moves": "A fill or underline that glides to the choice on settle while the labels tint; outside the travel cap. Still: it jumps.",
+      "phone": "The same at every width."
+    },
+    "Segmented": {
+      "moves": "Its indicator glides to the choice on settle. Still: it jumps.",
+      "phone": "Can span its container with equal segments, as the phone sheet's form."
+    },
+    "FilterPills": {
+      "moves": "Its indicator glides to the choice on settle. Still: it jumps.",
+      "phone": "44px tap floor on every pill."
+    },
+    "Tabs": {
+      "moves": "Its underline glides to the tab on settle. Still: it jumps.",
+      "phone": "Holds one height on every screen."
+    },
+    "PaginationRow": {
+      "moves": "Show more arrives only the new rows; back to ten glides to the heading and trims out of sight. Still: the rows are there, the glide is a jump.",
+      "phone": "The same at every width."
+    },
+    "Skeleton": {
+      "moves": "Appears only after 200ms, then tints; a read that lands sooner never shows it. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "RowSkeleton": {
+      "moves": "Appears only after 200ms, then tints out as the rows tint in. Still: swaps at once.",
+      "phone": "The same at every width."
+    },
+    "ReadFreshness": {
+      "moves": "Only a read you pressed for blooms, for a second. Still: the age, without the bloom.",
+      "phone": "The same at every width."
+    },
+    "Notice": {
+      "moves": "Opens by Unfold when it arrives. Still: appears at once.",
+      "phone": "The same at every width."
+    },
+    "Sidebar": {
+      "moves": "A count that changed while you looked elsewhere flashes its row once; the number never ticks. Still: the flash stays, colour only.",
+      "phone": "Hidden below the tablet breakpoint; TouchNav takes its place."
+    },
+    "TouchNav": {
+      "moves": "The Go to a page sheet rises from the edge. Still: appears at once.",
+      "phone": "This is the phone: the tab bar, and the sheet for the rest of the pages."
+    },
+    "AppShell": {
+      "moves": "Nothing moves in the frame. Still: the same.",
+      "phone": "The sidebar gives way to TouchNav; the page takes the full width."
+    },
+    "SelectionBar": {
+      "moves": "The count changes without ticking: counts never animate. Still: the same.",
+      "phone": "The verb the filter was for leads and the rest wait under More changes, a sheet; its buttons take the 44px floor."
+    },
+    "Card": {
+      "moves": "Never scales; a pressable one presses to --tint-3. Still: the same.",
+      "phone": "A row with more than two facts discloses the rest rather than wrapping."
+    },
+    "Kbd": {
+      "moves": "None. It is text. Still: the same.",
+      "phone": "Drawn only on the Keys sheet and Go to's footer, which a phone does not show."
+    },
+    "KeysSheet": {
+      "moves": "Settles in as a Modal. Still: appears at once.",
+      "phone": "A bottom sheet, as every Modal; a phone has no `?` key, so it is opened from a keyboard only."
+    }
+  }
+}

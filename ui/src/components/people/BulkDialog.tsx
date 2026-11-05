@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
@@ -43,7 +43,8 @@ interface BulkDialogProps {
   grantIds?: string[];
   /** Pre-armed target, e.g. when arriving from a role page. */
   initial?: { projectId?: string; roleKey?: string; bundleId?: string };
-  onClose: () => void;
+  /** `applied` is true when the dialog closes on its result, so the caller can end Select. */
+  onClose: (applied?: boolean) => void;
 }
 
 export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: BulkDialogProps) {
@@ -58,6 +59,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
   const rehearse = useRehearseBulk();
   const apply = useApplyBulk();
   const waits = useWaitsBeforeLine();
+  const applied = useRef(false);
 
   const needsRole = op === "assign_role" || op === "remove_role";
   const needsBundle = op === "assign_bundle" || op === "remove_bundle";
@@ -125,8 +127,12 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
       // The same body, plus the approval it is applying. The backend binds the
       // two: a body that is not the one the plan was computed for is refused,
       // so an edit made after the dialog cannot ride in under the approval.
-      onApply={(planId) => apply.mutateAsync({ ...input, plan_id: planId })}
-      onClose={onClose}
+      onApply={async (planId) => {
+        const result = await apply.mutateAsync({ ...input, plan_id: planId });
+        applied.current = true;
+        return result;
+      }}
+      onClose={() => onClose(applied.current)}
       compose={
         <>
           {needsRole && (

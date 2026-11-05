@@ -12,7 +12,7 @@ import Link from "next/link";
  * that stands on its own.
  */
 export const ARROW_LINK =
-  "inline-flex min-h-[44px] items-center gap-1 text-[13.5px] font-semibold text-accent-text link-hover desktop:min-h-0";
+  "inline-flex min-h-[var(--tap)] items-center gap-1 text-[13.5px] font-semibold text-accent-text link-hover desktop:min-h-0";
 
 export function ArrowLink({
   href,

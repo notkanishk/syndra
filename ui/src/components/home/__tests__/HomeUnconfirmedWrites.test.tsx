@@ -188,7 +188,7 @@ describe("Home shows a write Zitadel accepted and has not confirmed", () => {
     await screen.findByText("Sent, and not seen back yet");
     expect(screen.queryByText("—")).toBeNull();
     expect(screen.getAllByRole("link", { name: /^u-\d$/ })).toHaveLength(5);
-    expect(screen.getByRole("link", { name: "and 2 more" })).toHaveAttribute("href", "/users");
+    expect(screen.getByRole("link", { name: "and 2 more" })).toHaveAttribute("href", "/users?attention=unseen");
   });
 
   it("counts toward the headline in Advanced", async () => {

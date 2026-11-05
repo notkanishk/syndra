@@ -15,7 +15,7 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { RoleWordsTable, type RoleWordRow } from "@/components/ui/RoleWordsTable";
 import { Segmented, Select } from "@/components/ui/Select";
 import { Ticks } from "@/components/ui/TokenBlock";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import {
   ADD_MENU,
   addMuted,
@@ -43,7 +43,7 @@ import {
   type AddEntry,
   type ClaimLine,
 } from "@/lib/claims";
-import { formatShortDate } from "@/lib/format";
+import { formatClock, formatShortDate } from "@/lib/format";
 import type {
   AppClaimShape,
   Claim,
@@ -71,6 +71,7 @@ export function ShapeCard({
   shape,
   draft,
   setDraft,
+  restoredAt,
   token,
   person,
   preview,
@@ -86,6 +87,8 @@ export function ShapeCard({
   shape: AppClaimShape;
   draft: ShapeDraft | null;
   setDraft: (d: ShapeDraft | null) => void;
+  /** When the draft on the card was last kept, if this visit found it waiting. */
+  restoredAt?: string;
   /** The token the editors' "Sent as" lines read: the draft's, else what applies now. */
   token: Record<string, unknown> | null;
   person: string;
@@ -130,6 +133,7 @@ export function ShapeCard({
           shape={shape}
           draft={draft}
           setDraft={setDraft}
+          restoredAt={restoredAt}
           token={token}
           person={person}
           preview={preview}
@@ -160,7 +164,7 @@ function Unreached({ unreached }: { unreached?: string }) {
 function NoRoles({ app, first }: { app: string; first: boolean }) {
   return (
     <div className={`flex items-start gap-x-3 pb-2 pl-[11px] pr-[22px] pt-1.5 ${first ? "" : "row-divider"}`}>
-      <span className="size-11 flex-none" />
+      <span className="size-[var(--tap)] flex-none" />
       <span className="pt-[11px] text-[14.5px] leading-[1.5] text-ink">No roles. {app} gets none from Syndra.</span>
     </div>
   );
@@ -186,7 +190,7 @@ function LineHead({
 }) {
   const body = (
     <>
-      <span className="flex size-11 flex-none items-center justify-center">
+      <span className="flex size-[var(--tap)] flex-none items-center justify-center">
         {onToggle && (
           <span
             aria-hidden
@@ -301,6 +305,7 @@ function ShapeForm({
   shape,
   draft,
   setDraft,
+  restoredAt,
   token,
   person,
   preview,
@@ -316,6 +321,7 @@ function ShapeForm({
   shape: AppClaimShape;
   draft: ShapeDraft | null;
   setDraft: (d: ShapeDraft | null) => void;
+  restoredAt?: string;
   token: Record<string, unknown> | null;
   person: string;
   preview?: Preview;
@@ -603,6 +609,9 @@ function ShapeForm({
           <span className={`flex min-w-0 flex-[1_1_240px] items-start gap-2 text-[13px] leading-[1.5] ${beforeLine.warn ? "text-warn-text" : "text-faint"}`}>
             {beforeLine.warn && <StatusDot tone="warn" className="mt-[7px]" />}
             <span>
+              {restoredAt && (
+                <span className="block text-muted">You have an unsaved draft from {formatClock(restoredAt)}.</span>
+              )}
               <Ticks text={beforeLine.text} />
             </span>
           </span>
@@ -1169,7 +1178,7 @@ function AddClaim({
                 aria-selected={false}
                 aria-disabled={muted ? true : undefined}
                 onClick={muted ? undefined : () => pick(e)}
-                className={`motion-tint flex min-h-[44px] w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-inner px-3 py-2 text-left desktop:min-h-0 ${
+                className={`motion-tint flex min-h-[var(--tap)] w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-inner px-3 py-2 text-left desktop:min-h-0 ${
                   muted ? "cursor-default" : "hover:bg-[var(--hover)] focus-visible:bg-[var(--hover)]"
                 }`}
               >

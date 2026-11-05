@@ -44,8 +44,8 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
  * where the control returns to its dense size.
  */
 export const PILL: Record<Size, string> = {
-  sm: "min-h-[44px] px-3.5 text-[13px] desktop:min-h-0 desktop:py-1.5",
-  md: "min-h-[44px] px-4 text-[13.5px] desktop:min-h-0 desktop:py-[7px]",
+  sm: "min-h-[var(--tap)] px-3.5 text-[13px] desktop:min-h-0 desktop:py-1.5",
+  md: "min-h-[var(--tap)] px-4 text-[13.5px] desktop:min-h-0 desktop:py-[7px]",
 };
 
 /** Every label on this control is 13–13.5px, which is small text by WCAG at

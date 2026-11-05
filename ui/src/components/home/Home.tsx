@@ -38,15 +38,15 @@ import type { SessionUser } from "@/lib/session";
 import type { ServiceAccount } from "@/lib/types";
 import { useIsAdvanced } from "@/lib/ui-view";
 import { targetLabel } from "@/lib/nav";
-import { ArriveList } from "@/components/ui/ArriveList";
+import { ArriveList } from "@/lib/motion";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
 import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
-import { Unfold } from "@/components/ui/Unfold";
-import { Crossfade } from "@/components/ui/Crossfade";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { Unfold } from "@/lib/motion";
+import { Crossfade } from "@/lib/motion";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
 import { greeting } from "@/lib/greeting";
@@ -352,7 +352,7 @@ export function Home({ session }: { session: SessionUser }) {
             {clear.map(([name, href], index) => (
               <span key={href} className="inline-flex items-center gap-2">
                 {index > 0 && <span aria-hidden>·</span>}
-                <Link href={href} className="inline-flex min-h-[44px] items-center text-ink link-hover desktop:min-h-0">
+                <Link href={href} className="inline-flex min-h-[var(--tap)] items-center text-ink link-hover desktop:min-h-0">
                   {name}
                 </Link>
               </span>
@@ -912,7 +912,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
           {count === 1 ? "it" : "them"} back yet.
         </div>
       </CardRow>
-      <Capped items={rows} href="/users">
+      <Capped items={rows} href="/users?attention=unseen">
         {(row) => (
           <CardRow key={row.id}>
             <UserAvatar id={row.user_id} size="list" />

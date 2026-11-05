@@ -2,7 +2,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Crossfade } from "@/components/ui/Crossfade";
+import { Crossfade } from "@/lib/motion";
 import { motionInTests } from "@/test-utils/motion";
 
 /** Motion v2 S4: words crossfade on tint, both layers in one cell, so nothing shifts. */

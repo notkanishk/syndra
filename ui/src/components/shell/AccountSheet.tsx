@@ -9,7 +9,7 @@ import { Modal, ModalHeader } from "@/components/ui/Modal";
 import { SyndraMark, WELCOMED } from "@/components/shell/SyndraMark";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Segmented } from "@/components/ui/Select";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { ACCOUNT_NAV } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
@@ -46,7 +46,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex min-h-[44px] items-center gap-[9px] rounded-pill pl-1 pr-1 text-left control press-scale hover:bg-[var(--hover)] tablet:pr-3"
+        className="flex min-h-[var(--tap)] items-center gap-[9px] rounded-pill pl-1 pr-1 text-left control press-scale hover:bg-[var(--hover)] tablet:pr-3"
       >
         <span
           aria-hidden
@@ -70,7 +70,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
           <div className="flex items-center gap-3">
             <span
               aria-hidden
-              className="avatar-fill flex h-[44px] w-[44px] flex-none items-center justify-center rounded-pill text-[15px] font-semibold text-muted"
+              className="avatar-fill flex size-[var(--tap)] flex-none items-center justify-center rounded-pill text-[15px] font-semibold text-muted"
             >
               {session.avatar}
             </span>
@@ -93,7 +93,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
                   key={item.href}
                   href={item.href}
                   onClick={() => setOpen(false)}
-                  className="-mx-2 flex min-h-[44px] flex-col justify-center gap-0.5 rounded-inner px-2 py-1.5 hover-tint"
+                  className="-mx-2 flex min-h-[var(--tap)] flex-col justify-center gap-0.5 rounded-inner px-2 py-1.5 hover-tint"
                 >
                   <span className="text-[14.5px] font-semibold text-accent-text">
                     {item.label} <span aria-hidden>→</span>
@@ -139,7 +139,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
               type="button"
               aria-expanded={about}
               onClick={() => setAbout((on) => !on)}
-              className="flex min-h-[44px] w-full items-center gap-2.5 rounded-inner py-1.5 pl-4 pr-2 text-left text-[14.5px] hover-tint"
+              className="flex min-h-[var(--tap)] w-full items-center gap-2.5 rounded-inner py-1.5 pl-4 pr-2 text-left text-[14.5px] hover-tint"
             >
               <SyndraMark size={16} />
               <span className="flex-1">About Syndra</span>

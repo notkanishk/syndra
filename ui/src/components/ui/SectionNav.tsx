@@ -78,7 +78,7 @@ export function ReadLine<T extends NavSection>({
                 event.preventDefault();
                 go(section, onOpen);
               }}
-              className="group inline-flex min-h-11 items-center rounded-pill control press-scale desktop:min-h-0"
+              className="group inline-flex min-h-[var(--tap)] items-center rounded-pill control press-scale desktop:min-h-0"
             >
               <Chip className="gap-2 motion-tint group-hover:bg-tint-3">
                 {section.tone && <StatusDot tone={section.tone} />}

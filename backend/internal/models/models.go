@@ -412,6 +412,9 @@ type UserListItem struct {
 	ExpiringCount    int `json:"expiring_count"`
 	OpenRequestCount int `json:"open_request_count"`
 	UnexplainedCount int `json:"unexplained_count"`
+	// UnseenCount: writes Zitadel accepted for this person that no read has seen back yet
+	// (A-19 P10.5, the People filter Home's "Sent, not seen back" opens).
+	UnseenCount int `json:"unseen_count"`
 
 	// SoonestExpiry is the nearest expiry among this person's direct grants
 	// inside the watch window, so the row can say "1 expires in 2 days"
@@ -919,6 +922,9 @@ type UnconfirmedWrite struct {
 type UnconfirmedWriteSummary struct {
 	Count int                `json:"count"`
 	Top   []UnconfirmedWrite `json:"top,omitempty"`
+	// Users counts the unconfirmed writes per person, over every row read rather than
+	// the preview. Not sent: the People index uses it for its "not seen back" filter.
+	Users map[string]int `json:"-"`
 }
 
 // UnreconciledTarget is one target Syndra has not read for itself, and since

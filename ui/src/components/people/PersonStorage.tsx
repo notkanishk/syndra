@@ -12,7 +12,7 @@ import { Card, CardRow } from "@/components/ui/Card";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Notice } from "@/components/ui/Notice";
 import { Relative } from "@/components/ui/Time";
-import { Tinted } from "@/components/ui/Unfold";
+import { Tinted } from "@/lib/motion";
 import { formatClock, formatList, formatRelative, formatShortDate, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { usePersonTargets, type PersonTargetView, type RoleSource, type StoragePlace } from "@/lib/queries/useMyStorage";

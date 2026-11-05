@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { stillMotion, TINT_MS } from "@/lib/motion";
+import { stillMotion, TINT_MS } from "./still";
 
 /**
  * One seat whose words change in place (Motion v2 S4): the old layer fades out

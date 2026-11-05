@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { stillMotion, TINT_MS } from "@/lib/motion";
+import { keepView, recallView } from "@/lib/place";
 import { compareNames } from "@/lib/sort";
 
 /**
@@ -19,10 +20,37 @@ import { compareNames } from "@/lib/sort";
  */
 export type Sort<K extends string> = { key: K; dir: 1 | -1 };
 
-export function useSort<K extends string>(initial: K) {
-  const [sort, setSort] = useState<Sort<K>>({ key: initial, dir: 1 });
-  const flip = (key: K) =>
+/**
+ * Last view (A-19 P8): a list that names itself keeps its sort across visits,
+ * as a per-browser preference. `keys` are the headings that exist, so a stale
+ * value from an older build is ignored; `when: false` skips the memory where a
+ * link has already chosen the order.
+ */
+export type RememberSort<K extends string> = { list: string; keys: readonly K[]; when?: boolean };
+
+const isSortOf =
+  <K extends string>(keys: readonly K[]) =>
+  (value: unknown): value is Sort<K> => {
+    const v = value as Sort<K> | null;
+    return typeof v === "object" && v !== null && keys.includes(v.key) && (v.dir === 1 || v.dir === -1);
+  };
+
+export function useSort<K extends string>(initial: K, remember?: RememberSort<K>) {
+  const [sort, setSort] = useState<Sort<K>>(() => {
+    const kept =
+      remember && remember.when !== false ? recallView(remember.list, "sort", isSortOf(remember.keys)) : undefined;
+    return kept ?? { key: initial, dir: 1 };
+  });
+  // Only the reader's own press is a preference; the starting order is not.
+  const pressed = useRef(false);
+  const flip = (key: K) => {
+    pressed.current = true;
     setSort((cur) => ({ key, dir: cur.key === key ? (-cur.dir as 1 | -1) : 1 }));
+  };
+  const list = remember?.list;
+  useEffect(() => {
+    if (list && pressed.current) keepView(list, "sort", sort);
+  }, [list, sort]);
 
   // A re-sort (A-05 §2.10): the heading turns at once, but the list fades out,
   // re-orders while nobody can see it, and fades back in. Rows never travel.

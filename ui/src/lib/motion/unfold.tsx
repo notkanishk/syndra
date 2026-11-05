@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { SETTLE_MS, TINT_MS, useExitPhase } from "@/lib/motion";
+import { SETTLE_MS, TINT_MS, useExitPhase } from "./still";
 
 type Phase = "opening" | "open" | "closing";
 

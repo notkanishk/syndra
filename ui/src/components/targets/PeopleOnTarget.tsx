@@ -9,7 +9,7 @@ import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAc
 import { RevokeDialog } from "@/components/targets/RevokeDialog";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UserAvatar, UserName } from "@/components/names";
 import { formatShortDate } from "@/lib/format";
@@ -43,7 +43,7 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
   const accounts = sortByName(inventory.data?.accounts ?? [], (a) => names.user(a.subject_id), (a) => a.subject_id);
   const homeOf = new Map((homes.data?.accounts ?? []).map((h) => [h.subject_id, h]));
   const name = targetLabel(target);
-  const paging = usePaging();
+  const paging = usePaging(undefined, undefined, "people");
   // S5: somebody whose access has been revoked leaves on the next read, fading where they were and
   // closing the gap after, and not under the pointer.
   const leaving = useLeavingRows(accounts, (a) => a.subject_id, !inventory.isLoading && !inventory.error);

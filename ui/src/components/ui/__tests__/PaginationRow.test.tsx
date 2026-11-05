@@ -3,7 +3,7 @@ import { act, fireEvent, render, renderHook, screen } from "@testing-library/rea
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ArriveList } from "@/components/ui/ArriveList";
+import { ArriveList } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { motionInTests } from "@/test-utils/motion";
 

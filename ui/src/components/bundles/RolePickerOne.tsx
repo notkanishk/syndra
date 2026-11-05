@@ -8,7 +8,7 @@ import { ChosenChip, Mono } from "@/components/ui/Badge";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { Input } from "@/components/ui/Input";
 import { NextStep } from "@/components/ui/NextStep";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { formatAgoShort, formatShortDate } from "@/lib/format";
 import { sortByName } from "@/lib/sort";

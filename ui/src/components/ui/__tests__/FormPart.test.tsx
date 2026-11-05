@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
-import { useLeavingRows } from "@/components/ui/LeavingRows";
+import { useLeavingRows } from "@/lib/motion";
 import { gapSettled } from "@/test-utils/leaving";
 import { motionInTests } from "@/test-utils/motion";
 

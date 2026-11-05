@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => false }));
+vi.mock("@/lib/queries/seed", () => ({ useSeededProjectName: () => undefined }));
 vi.mock("@/lib/page-crumb", () => ({ useCrumb: () => {} }));
 vi.mock("@/components/projects/ProjectClaimDefault", () => ({ ProjectClaimDefault: () => null }));
 vi.mock("@/lib/queries/useProjects", () => ({

@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 
-import { ARRIVE_SETTLED_MS, returnedToThisPage } from "@/components/ui/ArriveList";
+import { ARRIVE_SETTLED_MS, returnedToThisPage } from "@/lib/motion";
 import { TINT_MS } from "@/lib/motion";
 
 /**

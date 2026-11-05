@@ -26,7 +26,7 @@ describe("every control clears the touch floor", () => {
     );
     for (const name of ["Refresh", "Approve"]) {
       const control = screen.getByRole("button", { name });
-      expect(control.className, `${name} must clear the floor`).toContain("min-h-[44px]");
+      expect(control.className, `${name} must clear the floor`).toContain("min-h-[var(--tap)]");
       // And releases it only above the desktop breakpoint, where the product
       // is a dense rail-and-table application again.
       expect(control.className).toContain("desktop:min-h-0");
@@ -35,11 +35,11 @@ describe("every control clears the touch floor", () => {
 
   it("holds the floor for a link that looks like a button", () => {
     render(<ButtonLink href="/users">People</ButtonLink>);
-    expect(screen.getByRole("link", { name: "People" }).className).toContain("min-h-[44px]");
+    expect(screen.getByRole("link", { name: "People" }).className).toContain("min-h-[var(--tap)]");
   });
 
   it("keeps the floor on a destructive control, where a mis-tap costs most", () => {
     render(<Button variant="danger">Revoke</Button>);
-    expect(screen.getByRole("button", { name: "Revoke" }).className).toContain("min-h-[44px]");
+    expect(screen.getByRole("button", { name: "Revoke" }).className).toContain("min-h-[var(--tap)]");
   });
 });

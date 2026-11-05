@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { ArriveList } from "@/components/ui/ArriveList";
+import { ArriveList } from "@/lib/motion";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
@@ -18,10 +18,10 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
 import { Select } from "@/components/ui/Select";
-import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows, type LeaveProps } from "@/lib/motion";
 import { RunLabel, SortHead, orderBy, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
 import { Relative } from "@/components/ui/Time";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { request } from "@/lib/api-client";
 import { formatShortDate, humanizeKey } from "@/lib/format";
@@ -112,7 +112,7 @@ export function WithdrawnAccess() {
   const [search, setSearch] = useState("");
   const [where, setWhere] = useState("");
   // Most recent first, as the board draws it: `when` is how long ago, so ascending is newest.
-  const [sort, flipSort, view] = useSort<SortKey>("when");
+  const [sort, flipSort, view] = useSort<SortKey>("when", { list: "withdrawn", keys: ["who", "what", "where", "when"] });
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({ spent: true, queued: true });
 
   const text = useMemo(
@@ -313,7 +313,7 @@ function RevocationSection({
   sort: Sort<SortKey>;
   onSort: (key: SortKey) => void;
 }) {
-  const paging = usePaging();
+  const paging = usePaging(undefined, undefined, "withdrawn");
   const resolver = useNameResolver();
   const anchor = useRef<HTMLDivElement>(null);
   const shown = rows.slice(0, paging.limit);

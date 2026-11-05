@@ -78,11 +78,11 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
   };
 }
 
-function open(op: Parameters<typeof BulkDialog>[0]["op"] = "assign_role") {
+function open(op: Parameters<typeof BulkDialog>[0]["op"] = "assign_role", onClose: (applied?: boolean) => void = () => {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <BulkDialog op={op} userIds={["u1", "u2", "u3"]} scope="in Laser Lab" onClose={() => {}} />
+      <BulkDialog op={op} userIds={["u1", "u2", "u3"]} scope="in Laser Lab" onClose={onClose} />
     </QueryClientProvider>,
   );
 }
@@ -160,6 +160,25 @@ describe("BulkDialog", () => {
     // is deliberately outside the binding and outside the apply.
     const { acknowledge_scope: _ack, ...rehearsed } = api.rehearsed[0] as Record<string, unknown>;
     expect(api.applied[0]).toEqual({ ...rehearsed, plan_id: "plan_1" });
+  });
+
+  // A-19 P10.2 (Q9): the caller ends Select only when the dialog closes on its result.
+  it("tells its caller it closed on a result, so Select can end", async () => {
+    const closed: Array<boolean | undefined> = [];
+    open("assign_role", (applied) => closed.push(applied));
+    await rehearse();
+    fireEvent.click(screen.getByRole("button", { name: "Apply to 1 person" }));
+    await waitFor(() => expect(api.applied).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Close" }));
+    expect(closed).toEqual([true]);
+  });
+
+  it("tells its caller it closed without applying when it is cancelled", () => {
+    const closed: Array<boolean | undefined> = [];
+    open("assign_role", (applied) => closed.push(applied));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(api.applied).toHaveLength(0);
+    expect(closed).toEqual([false]);
   });
 
   it("cannot apply a rehearsal the backend did not record", async () => {

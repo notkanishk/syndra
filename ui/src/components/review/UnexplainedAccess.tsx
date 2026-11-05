@@ -25,9 +25,9 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness, useRefreshPress } from "@/components/ui/ReadFreshness";
 import { FilterPills, Select } from "@/components/ui/Select";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
-import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows, type LeaveProps } from "@/lib/motion";
 import { RunLabel, SortHead, runStarts, useSort } from "@/components/ui/SortHead";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
@@ -173,7 +173,7 @@ export function UnexplainedAccess() {
   const projects = useProjects();
   // Search is not a filter in the URL: it finds a row, it does not make a view.
   const [query, setQuery] = useState("");
-  const [sort, flipSort, view] = useSort<DriftSortKey>("found");
+  const [sort, flipSort, view] = useSort<DriftSortKey>("found", { list: "drift", keys: ["who", "what", "why", "found"] });
   const [open, setOpen] = useState<Record<SectionKind, boolean>>({
     target_only: true,
     syndra_only: true,
@@ -800,7 +800,7 @@ function DriftSection({
   runOf: ((item: DriftTriageItem) => string) | null;
   renderRow: (item: DriftTriageItem) => ReactNode;
 }) {
-  const paging = usePaging();
+  const paging = usePaging(undefined, undefined, "drift");
   const anchor = useRef<HTMLDivElement>(null);
   const visible = section.items.slice(0, paging.limit);
   // The comparison's rows follow the findings and share their ten.

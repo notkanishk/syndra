@@ -124,7 +124,7 @@ export function CommandBlock({
           aria-label={
             label ?? `${canCopy ? "Copy" : "Select"} command: ${command}`
           }
-          className={`min-h-[44px] shrink-0 rounded-pill px-3.5 text-[13px] font-semibold control press-scale ${
+          className={`min-h-[var(--tap)] shrink-0 rounded-pill px-3.5 text-[13px] font-semibold control press-scale ${
             onWarn
               ? "border border-warn-ink/30 text-warn-ink hover:bg-warn-ink/10"
               : "border border-line-strong text-ink hover:bg-[var(--hover)]"

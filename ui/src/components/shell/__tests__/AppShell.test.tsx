@@ -7,6 +7,8 @@ import type { SessionUser } from "@/lib/session";
 
 vi.mock("@/components/shell/Sidebar", () => ({ default: () => <a href="#rail">rail</a> }));
 vi.mock("@/components/shell/TopBar", () => ({ TopBar: () => <header>top</header> }));
+vi.mock("@/components/shell/PlaceHost", () => ({ PlaceHost: () => null }));
+vi.mock("@/components/shell/IntentPrefetchHost", () => ({ IntentPrefetchHost: () => null }));
 vi.mock("@/components/shell/TouchNav", () => ({ TouchNav: () => null }));
 vi.mock("@/components/shell/GoToHost", () => ({ GoToHost: () => null }));
 vi.mock("@/components/states/DegradedBanner", () => ({ DegradedBanner: () => null }));

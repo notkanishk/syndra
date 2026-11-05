@@ -1,7 +1,7 @@
 "use client";
 
 import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { Crossfade } from "@/components/ui/Crossfade";
+import { Crossfade } from "@/lib/motion";
 
 /**
  * A status said in a seat: a dot, the word, and one faint note. When what it

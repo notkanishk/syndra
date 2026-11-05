@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, type FocusEvent, type PointerEvent, type ReactNode } from "react";
 
-import { ARRIVE_MEMORY_MS, armedRecently } from "@/components/ui/ArriveList";
-import { SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
+import { ARRIVE_MEMORY_MS, armedRecently } from "./arrive";
+import { SETTLE_MS, TINT_MS, stillMotion } from "./still";
 
 /**
  * A row that leaves on a later read (Motion v2 S5): it fades where it was, then

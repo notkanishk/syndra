@@ -7,7 +7,7 @@ import { EmptyState, ListStates } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
-import { useLeavingRows } from "@/components/ui/LeavingRows";
+import { useLeavingRows } from "@/lib/motion";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { AddMappingButton, RefusedFields, RoleMappingDialog, placeName } from "@/components/targets/AddMappingDialog";
 import {

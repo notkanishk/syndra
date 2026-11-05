@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { notePage } from "@/components/ui/ArriveList";
+import { notePage } from "@/lib/motion";
 import { Notice } from "@/components/ui/Notice";
-import { Tinted, Unfold } from "@/components/ui/Unfold";
+import { Tinted, Unfold } from "@/lib/motion";
 import { setMediaQuery } from "@/test-utils/media";
 import { motionInTests } from "@/test-utils/motion";
 

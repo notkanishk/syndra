@@ -191,6 +191,7 @@ export default function RoleMembersPage({
           />
           {observedOnly.map((person) => (
             <Link
+              data-row
               key={person.id}
               href={`/users/${person.id}`}
               className="row-divider flex min-h-[60px] items-center gap-3 px-5 py-3 hover-tint"

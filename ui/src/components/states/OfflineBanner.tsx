@@ -1,7 +1,7 @@
 "use client";
 
 import { Notice } from "@/components/ui/Notice";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { useOnline } from "@/lib/useOnline";
 
 /**

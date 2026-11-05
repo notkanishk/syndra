@@ -191,6 +191,22 @@ both halves.
 Syndra and waiting to be sent to Zitadel. Nothing has changed there yet; send
 it from *Pending changes*."
 
+**The first 100ms is said in the future tense.** While a write is in flight the
+seat says what Syndra *will* do, never that it did (A-19 P2). The forecast is a
+sentence about Syndra's own next step, never a claim about the target, and it
+carries no number. When the server answers it crosses to the true word. The
+words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
+
+| Act | While it is in flight | When it has happened |
+|---|---|---|
+| Approve | Will be approved | Approved |
+| Decline | Will be declined | Declined |
+| Extend | Will be extended | Extended |
+| Remove | Will be removed | Removed |
+| Keep | Will be kept | Kept |
+| Lift a hold | Will be lifted | Lifted |
+| Anything Syndra knows will wait | Will wait for you to send | Waiting for you to send |
+
 ## 6. Vocabulary
 
 One word for one thing, everywhere, and the precise word in preference to a

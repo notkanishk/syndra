@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Owner } from "@/components/system/ServiceAccountOwner";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Card, CardColumns, CardRow } from "@/components/ui/Card";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import {

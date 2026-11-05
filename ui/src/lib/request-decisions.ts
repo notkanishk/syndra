@@ -7,7 +7,7 @@ import { formatShortDate, humanizeKey } from "@/lib/format";
 import { FORECAST, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
-import { FLASH_MS } from "@/lib/useFlashOnChange";
+import { FLASH_MS } from "@/lib/motion";
 import { waitReasonLine } from "@/lib/wait-reason";
 
 /**

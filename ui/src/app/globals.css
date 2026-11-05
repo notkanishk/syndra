@@ -1409,12 +1409,6 @@ html.theme-fading *::after {
   border-top: 1px solid var(--divider);
 }
 
-@utility accent-note {
-  background-color: color-mix(in srgb, var(--accent) 7%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-  border-radius: var(--radius-panel);
-}
-
 @utility warn-note {
   background-color: color-mix(in srgb, var(--warn) 9%, transparent);
   border: 1px solid var(--warn-line);

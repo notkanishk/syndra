@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { stillMotion } from "@/lib/motion";
+import { stillMotion } from "./still";
 
 /**
  * The one indicator behind Segmented, FilterPills and Tabs (S10): a fill or an

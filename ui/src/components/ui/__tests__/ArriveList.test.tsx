@@ -8,7 +8,7 @@ import {
   ArriveList,
   armArrive,
   markViewSwitched,
-} from "@/components/ui/ArriveList";
+} from "@/lib/motion";
 
 describe("ArriveList", () => {
   beforeEach(() => vi.useFakeTimers());

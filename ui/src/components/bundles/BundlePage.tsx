@@ -19,13 +19,13 @@ import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedSte
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
 import { FieldLabel, Input } from "@/components/ui/Input";
-import { useLeavingRows } from "@/components/ui/LeavingRows";
+import { useLeavingRows } from "@/lib/motion";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { glideTo } from "@/lib/motion";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { formatList, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
@@ -35,6 +35,7 @@ import {
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import { useCrumb } from "@/lib/page-crumb";
+import { useSeededBundleName } from "@/lib/queries/seed";
 import {
   draftChangeCount,
   useBundleDraft,
@@ -95,7 +96,9 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
   const [remembered, setRemembered] = useState<BundleRow | null>(null);
   if (live && live.id !== remembered?.id) setRemembered(live);
   const bundle = live ?? remembered;
-  useCrumb(bundle?.name);
+  // The name from the list the reader came from, before this page's own read lands (A-19 P1).
+  const seeded = useSeededBundleName(bundleId);
+  useCrumb(bundle?.name ?? seeded);
 
   const [tab, setTab] = useState<Tab>("grants");
   const [publishing, setPublishing] = useState(false);
@@ -131,7 +134,7 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
     if (bundles.isLoading || bundles.error) {
       return (
         <div className="flex flex-col gap-4">
-          <PageHeader title="Bundle" lede="What it gives, who has it, and its history." />
+          <PageHeader title={seeded ?? "Bundle"} lede="What it gives, who has it, and its history." />
           <Card>
             <ListStates
               isLoading={bundles.isLoading}
