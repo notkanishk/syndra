@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/auth"
+	"syndra/internal/claimdebug"
 	"syndra/internal/claims"
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -116,6 +118,69 @@ func TestGetAppClaimShape_SeedDropsTheCache(t *testing.T) {
 
 // Debug mode: the caller by default, one account, a switch keeps the end, each
 // step audited; an app with no client can't be debugged.
+// The preview carries, per person, their last sign-in debug mode saw against
+// what it previews: a match, a mismatch, and nothing for someone never seen.
+func TestPreview_LiveCheck_HTTP(t *testing.T) {
+	stubClaimHandlers(t)
+	orig, origPreview := claimDebug, svcPreviewAppClaimShape
+	t.Cleanup(func() { claimDebug, svcPreviewAppClaimShape = orig, origPreview })
+	claimDebug = claimdebug.New(time.Now, nil, nil)
+	claimDebug.Start("aNB", "cNB", "aanya", "kanishk")
+
+	tok := claims.NewObject()
+	tok.Set("groups", []any{"netbird-staff"})
+	trail := services.Explanation{Token: tok, Checks: []services.Check{{}, {}, {}, {}, {Facts: map[string]any{"lands": claims.LandsBoth}}}}
+	svcPreviewAppClaimShape = func(_ context.Context, _ string, req services.PreviewRequest) (services.Preview, error) {
+		pv := services.Preview{}
+		for _, id := range req.UserIDs {
+			pv.People = append(pv.People, services.PersonPreview{UserID: id, Now: trail})
+		}
+		return pv, nil
+	}
+	preview := func() map[string]services.LiveCheck {
+		rr := httptest.NewRecorder()
+		req := asOperator(httptest.NewRequest(http.MethodPost, "/api/v1/applications/aNB/claim-shape/preview",
+			strings.NewReader(`{"user_ids":["aanya","grace"]}`)), "kanishk")
+		req.SetPathValue("id", "aNB")
+		handlePreviewAppClaimShape(rr, req)
+		var out struct {
+			Live map[string]services.LiveCheck `json:"live"`
+		}
+		if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &out) != nil {
+			t.Fatalf("preview: %d %s", rr.Code, rr.Body.String())
+		}
+		return out.Live
+	}
+	capture := func(answer string) {
+		n := len(claimDebug.SignIns("aNB", 0))
+		claimDebug.Record(claimdebug.Capture{At: time.Now(), Function: claims.FunctionPreAccessToken, ClientID: "cNB", UserID: "aanya",
+			ProjectID: "pNet", Request: []byte(`{}`), Response: []byte(answer)})
+		for deadline := time.Now().Add(2 * time.Second); len(claimDebug.SignIns("aNB", 0)) == n; {
+			if time.Now().After(deadline) {
+				t.Fatal("the capture never arrived")
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	if live := preview(); len(live) != 0 {
+		t.Fatalf("nobody seen yet: %+v", live)
+	}
+	capture(`{"append_claims":[{"key":"groups","value":["netbird-staff"]}]}`)
+	live := preview()
+	if lc, ok := live["aanya"]; !ok || !lc.Match || lc.Function != claims.FunctionPreAccessToken {
+		t.Fatalf("match: %+v", live)
+	}
+	if _, ok := live["grace"]; ok {
+		t.Fatal("grace was never seen, so she has no live check")
+	}
+	// The newest capture is the one compared.
+	capture(`{"append_claims":[]}`)
+	if lc := preview()["aanya"]; lc.Match || len(lc.Served) != 0 || len(lc.Expected) != 1 {
+		t.Fatalf("mismatch: %+v", lc)
+	}
+}
+
 func TestAppDebug_HTTP(t *testing.T) {
 	audits, _ := stubClaimHandlers(t)
 	t.Cleanup(func() { claimDebug.Stop("aNB", "test") })
