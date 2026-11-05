@@ -8,7 +8,8 @@ import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
 import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
 import { Unfold } from "@/components/ui/Unfold";
-import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
+import { GoToPanel } from "@/components/ui/GoTo";
+import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavEntry, type NavLeaf } from "@/lib/nav";
 import { useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useTargets } from "@/lib/queries/useTargets";
 import {
@@ -78,6 +79,7 @@ export function TouchNav() {
         <TabBar destinations={destinations} pathname={pathname} counts={counts} />
       ) : (
         <SheetTrigger
+          nav={entries}
           destinations={destinations}
           sheetDestinations={sheetDestinations}
           open={sheetOpen}
@@ -182,6 +184,7 @@ function Tab({
  * operator who cannot tell from it where to go.
  */
 function SheetTrigger({
+  nav,
   destinations,
   sheetDestinations,
   open,
@@ -189,6 +192,7 @@ function SheetTrigger({
   pathname,
   counts,
 }: {
+  nav: NavEntry[];
   destinations: TouchDestination[];
   sheetDestinations: SheetDestination[];
   open: boolean;
@@ -239,6 +243,7 @@ function SheetTrigger({
 
       {open && (
         <NavSheet
+          nav={nav}
           destinations={sheetDestinations}
           pathname={pathname}
           counts={counts}
@@ -250,11 +255,14 @@ function SheetTrigger({
 }
 
 function NavSheet({
+  nav,
   destinations,
   pathname,
   counts,
   onClose,
 }: {
+  /** The pages Go to may list: the current view's tree. */
+  nav: NavEntry[];
   destinations: SheetDestination[];
   pathname: string;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
@@ -375,20 +383,29 @@ function NavSheet({
           </div>
         )}
 
-        {/* No `gap`: each row carries its own 2px above it (`mt-0.5`), so a part
-            that folds takes its gap with it. */}
-        <div className="-mt-0.5 flex flex-col">
-          {destinations.map((destination) => (
-            <SheetSection
-              key={destination.href}
-              destination={destination}
-              pathname={pathname}
-              counts={counts}
-              onPick={onClose}
-              advanced={audience === "advanced"}
-            />
-          ))}
-        </div>
+        {/* Go to (A-19 P4): the Input sits at the top in both views, and the
+            page list stays beneath it until something is typed. */}
+        <GoToPanel
+          embedded
+          nav={nav}
+          onGo={onClose}
+          idle={
+            /* No `gap`: each row carries its own 2px above it (`mt-0.5`), so a part
+                that folds takes its gap with it. */
+            <div className="-mt-0.5 flex flex-col">
+              {destinations.map((destination) => (
+                <SheetSection
+                  key={destination.href}
+                  destination={destination}
+                  pathname={pathname}
+                  counts={counts}
+                  onPick={onClose}
+                  advanced={audience === "advanced"}
+                />
+              ))}
+            </div>
+          }
+        />
       </div>
     </div>
     </ToBody>

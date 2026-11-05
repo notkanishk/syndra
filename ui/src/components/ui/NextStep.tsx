@@ -13,23 +13,27 @@ import { StatusDot } from "@/components/ui/Badge";
  */
 export function NextStep({
   why,
-  href = "/governance/pending",
+  href,
+  person,
   dot = true,
   className = "",
 }: {
   /** What isn't true yet, by name: "He can't supervise yet · Supervisor always waits for you". */
   why?: string;
   href?: string;
+  /** A person's Zitadel id: Pending changes opens narrowed to them, with the way out attached (A-19 P3). */
+  person?: string;
   /** Off where a status word above already wears the amber dot (ActionOutcome's seat). */
   dot?: boolean;
   className?: string;
 }) {
+  const to = href ?? (person ? `/governance/pending?person=${encodeURIComponent(person)}` : "/governance/pending");
   return (
     <span className={`inline-flex flex-col gap-0.5 ${className}`}>
       <span className="inline-flex items-center gap-2">
         {dot && <StatusDot tone="warn" />}
         <Link
-          href={href}
+          href={to}
           className="text-[13.5px] font-semibold text-accent-text link-hover"
         >
           Waiting for you to send <span aria-hidden>→</span>
