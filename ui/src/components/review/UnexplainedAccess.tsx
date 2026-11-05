@@ -687,7 +687,7 @@ export function UnexplainedAccess() {
       {/* A system nobody could read says what is missing from the list and why;
           the rows below are still current for the ones that were read. */}
       {unread.map((target) => (
-        <Notice key={target.target} tone="warn" live title={`${targetLabel(target.target)} hasn’t been read since ${formatWhen(target.since)}.`}>
+        <Notice key={target.target} tone="warn" live title={`${targetLabel(target.target)} hasn’t been read since ${formatWhen(target.since)}.`} next={`Check that ${targetLabel(target.target)} is running, then open this page again.`}>
           Anything that drifted on it is not in this list.{" "}
           {target.reason ? `${whyNotChecked(target.reason)} ` : ""}The rows below are current for
           the systems that were read.
@@ -695,13 +695,13 @@ export function UnexplainedAccess() {
       ))}
 
       <Unfold open={Boolean(diff.data?.truncated)} gap={16}>
-        <Notice tone="warn" title="The comparison stopped early.">
+        <Notice tone="warn" title="The comparison stopped early." next="Narrow the list with a filter, then look again.">
           The list was too long, so what the comparison adds to the findings is incomplete. Treat a
           missing row as “nothing found so far”, not as “nothing exists”.
         </Notice>
       </Unfold>
       <Unfold open={Boolean(diff.error)} gap={16}>
-        <Notice tone="warn" title="The comparison didn’t load.">
+        <Notice tone="warn" title="The comparison didn’t load." next="Reload the page to try the comparison again.">
           The findings below are still current. Differences only the comparison shows are missing.
         </Notice>
       </Unfold>

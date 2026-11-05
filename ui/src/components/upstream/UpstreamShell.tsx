@@ -202,7 +202,7 @@ export function DirectWriteWarning({
   }
   // The other path skips Syndra's record, which is a fault in the making: a box.
   return (
-    <Notice tone="warn" title="Changes here go straight to Zitadel, and Syndra keeps no record of them.">
+    <Notice tone="warn" title="Changes here go straight to Zitadel, and Syndra keeps no record of them." next="Make the change inside Syndra instead, unless there is no way to.">
       {what} The next drift sweep, every six hours, lists what you changed under Drift with nobody’s
       name on it, for somebody to resolve by hand. Do this inside Syndra instead unless there is
       genuinely no way to.

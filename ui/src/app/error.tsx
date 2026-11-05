@@ -43,6 +43,7 @@ export default function AppError({ error }: { error: Error & { digest?: string }
         tone="danger"
         blocking
         title="This page couldn't be shown."
+        next="Go to the home page below. If it keeps happening, ask whoever runs the Syndra server and quote the reference."
         reference={error.digest || undefined}
       >
         Something in the page itself failed, not something you did. It happened while showing you

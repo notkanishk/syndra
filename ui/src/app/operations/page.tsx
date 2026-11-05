@@ -172,6 +172,7 @@ export default function EventActivityPage() {
           tone="warn"
           live
           title={`Events haven't been read since ${formatWhen(readAt)}.`}
+          nothingToDo="Syndra keeps asking, and the list updates when it answers."
         >
           Syndra&apos;s server stopped answering this page. The list below is
           what had arrived by then; anything newer will appear when it answers
@@ -277,6 +278,7 @@ export default function EventActivityPage() {
               : "People joining could not be read."
           }
           action={{ label: "Try again", onClick: retry }}
+          next="Press Try again. If it keeps failing, ask whoever runs the Syndra server."
         >
           The list below has only what {eventsDown ? "new people" : "Zitadel"}{" "}
           sent, and that part is current. Nothing was changed.

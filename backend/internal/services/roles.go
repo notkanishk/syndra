@@ -261,6 +261,7 @@ const (
 	auditRoleDeleted       = "role.deleted"
 	auditRoleNotChanged    = "role.not_changed"
 	auditRoleChangeUnknown = "role.change_unknown"
+	auditRoleNotRestored   = "role.not_restored" // a refused write whose undo failed too
 	auditNoTarget          = "-"
 )
 
@@ -270,6 +271,20 @@ var ErrInvalidRoleKey = errors.New("role_key must match [a-zA-Z0-9_-]+")
 // ErrRoleNotChangedInZitadel wraps a Zitadel refusal the read-back confirmed:
 // nothing changed there, and Syndra undid its own record.
 var ErrRoleNotChangedInZitadel = errors.New("zitadel did not make the change, so syndra undid its record")
+
+// ErrRoleRecordNotRestored is a refusal Zitadel made final (so nothing changed
+// there) whose undo of Syndra's own record failed too: Syndra's list of roles
+// may show a change Zitadel does not hold. Never "Syndra put its record back".
+var ErrRoleRecordNotRestored = errors.New("zitadel did not make the change, and syndra could not undo its record")
+
+// RoleRecordNotRestoredError carries the reference an operator can give
+// whoever runs the server: the target of the role.not_restored audit row.
+type RoleRecordNotRestoredError struct{ Reference string }
+
+func (e *RoleRecordNotRestoredError) Error() string {
+	return ErrRoleRecordNotRestored.Error() + " (" + e.Reference + ")"
+}
+func (e *RoleRecordNotRestoredError) Is(t error) bool { return t == ErrRoleRecordNotRestored }
 
 // ErrRoleChangeUnknown is a write whose answer was lost (a timeout, a broken
 // connection, a 5xx) and whose read-back failed too. Zitadel may have made
@@ -354,7 +369,15 @@ func writeRole(ctx context.Context, w roleWrite) error {
 		}
 		return svcInsertAuditLogDetails(ctx, w.actor, auditNoTarget, auditRoleNotChanged, w.projectID+"/"+w.roleKey, why)
 	}); err != nil {
+		// The undo's own transaction rolled back, audit row included, so the
+		// failure gets its own row. Never say "put its record back".
 		log.Printf("[ROLES] WARNING: could not undo %s %s:%s after Zitadel refused it: %v", w.action, w.projectID, w.roleKey, err)
+		why["undo_error"] = err.Error()
+		ref := w.projectID + "/" + w.roleKey
+		if aerr := svcInsertAuditLogDetails(dctx, w.actor, auditNoTarget, auditRoleNotRestored, ref, why); aerr != nil {
+			log.Printf("[ROLES] WARNING: could not audit the failed undo of %s %s:%s: %v", w.action, w.projectID, w.roleKey, aerr)
+		}
+		return fmt.Errorf("%w: %v", &RoleRecordNotRestoredError{Reference: ref}, sendErr)
 	}
 	return fmt.Errorf("%w: %v", ErrRoleNotChangedInZitadel, sendErr)
 }

@@ -116,7 +116,7 @@ describe("Notice", () => {
       const { Notice } = await import("@/components/ui/Notice");
       await new Promise((resolve) => setTimeout(resolve, 80));
       render(
-        <Notice tone="danger" title="Could not load">
+        <Notice tone="danger" title="Could not load" next="Try again.">
           Nothing was changed.
         </Notice>,
       );

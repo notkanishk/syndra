@@ -121,7 +121,7 @@ describe("a Notice that can leave (A-08 §5)", () => {
   it("opens and folds by the Unfold around it, and is not opened twice", () => {
     const notice = (open: boolean) => (
       <Unfold open={open}>
-        <Notice tone="warn" title="Stale">
+        <Notice tone="warn" title="Stale" next="Try again.">
           Nothing changed.
         </Notice>
       </Unfold>
@@ -149,7 +149,7 @@ describe("a Notice and its page's first paint (A-08 §5)", () => {
     const block = (stale: boolean) => (
       <Unfold open>
         {stale && (
-          <Notice tone="warn" title="Stale">
+          <Notice tone="warn" title="Stale" next="Try again.">
             Nothing changed.
           </Notice>
         )}
@@ -165,7 +165,7 @@ describe("a Notice and its page's first paint (A-08 §5)", () => {
   it("arrives with a page reached by a link: it is part of that page's first paint", () => {
     notePage("/reached-by-a-link");
     render(
-      <Notice tone="warn" title="Stale">
+      <Notice tone="warn" title="Stale" next="Try again.">
         Nothing changed.
       </Notice>,
     );

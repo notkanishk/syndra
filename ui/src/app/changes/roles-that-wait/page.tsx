@@ -283,7 +283,7 @@ function WaitingRoles({
         )}
         <Unfold open={Boolean(failure)}>
           <div className="row-divider px-5 py-3">
-            <Notice tone="danger" title="That role still waits.">
+            <Notice tone="danger" title="That role still waits." next="Try again. If it keeps failing, ask whoever runs the Syndra server.">
               {failure?.text} {failure?.state}
             </Notice>
           </div>
@@ -355,7 +355,7 @@ function AddRoles({
       </div>
       <Unfold open={Boolean(failure)}>
         <div className="mx-6 mt-3">
-          <Notice tone="danger" title="Not all of them were marked.">
+          <Notice tone="danger" title="Not all of them were marked." next="Press the button again for the rest. If it keeps failing, ask whoever runs the Syndra server.">
             {failure?.text}{" "}
             {failure?.state === NOTHING_CHANGED
               ? "The roles still ticked weren't marked; press it again for the rest."

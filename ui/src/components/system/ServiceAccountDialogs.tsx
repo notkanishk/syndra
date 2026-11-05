@@ -152,7 +152,7 @@ export function ServiceAccountDialog({
               </div>
             )}
             <Unfold open={Boolean(failure)} gap={16}>
-              <Notice tone="danger" title="That didn't save.">
+              <Notice tone="danger" title="That didn't save." next="Try again. If it keeps failing, ask whoever runs the Syndra server.">
                 {failure} Nothing was changed.
               </Notice>
             </Unfold>
@@ -280,7 +280,7 @@ export function UnmarkDialog({ account, onClose }: { account: { id: string; name
           />
         ) : (
           <Unfold open={Boolean(failure)} gap={16}>
-            <Notice tone="danger" title="That didn't save.">
+            <Notice tone="danger" title="That didn't save." next="Try again. If it keeps failing, ask whoever runs the Syndra server.">
               {failure} Nothing was changed.
             </Notice>
           </Unfold>

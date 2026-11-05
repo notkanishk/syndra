@@ -77,6 +77,10 @@ export const AUDIT_ACTIONS: Record<
   "role.deleted": { verb: "Deleted a role", destructive: true },
   // The second row of a role change Zitadel refused: Syndra put its own record back.
   "role.not_changed": { verb: "Tried to change a role; Zitadel didn't, so Syndra put its record back" },
+  // A refused role change whose undo failed too: Syndra's record may still show the change Zitadel never made.
+  "role.not_restored": {
+    verb: "Tried to change a role; Zitadel didn't, and Syndra couldn't put its own record back, so its list of roles may show the change",
+  },
   // C6: the answer was lost and the read-back failed. Syndra kept its record; Zitadel may hold the change.
   "role.change_unknown": {
     verb: "Changed a role in Zitadel, but couldn't tell whether Zitadel made the change; Syndra kept its record. Open the project under Zitadel › Projects to see what Zitadel holds",

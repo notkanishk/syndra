@@ -912,7 +912,7 @@ function Retries({ retrying, gaveUp }: { retrying: number; gaveUp: number }) {
             <span className="text-danger-text">
               Syndra gave up on {gaveUp === 1 ? "one change" : `${gaveUp} changes`} after every try, so{" "}
               {gaveUp === 1 ? "it isn't" : "they aren't"} in Zitadel. Find {gaveUp === 1 ? "it" : "them"} in Audit, give
-              or revoke the access again from the person&apos;s page, then mark this seen.
+              or revoke the access again from the person&apos;s page, then mark this seen. It marks it for you only; each person marks their own.
             </span>
           </span>
           <AdvancedLink href="/audit" className={ARROW_LINK}>

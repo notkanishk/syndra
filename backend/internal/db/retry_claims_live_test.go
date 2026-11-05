@@ -59,7 +59,7 @@ func TestRetryClaims_BackgroundTakesDueRetriesOnlyAndSendTakesAll(t *testing.T) 
 	}
 
 	// Pending changes says the due and the backing-off rows are retrying.
-	retrying, _, err := CountRetries(ctx)
+	retrying, _, err := CountRetries(ctx, "op-a@example.org")
 	if err != nil {
 		t.Fatalf("CountRetries: %v", err)
 	}
@@ -106,41 +106,48 @@ func TestRetryClaims_BackgroundTakesDueRetriesOnlyAndSendTakesAll(t *testing.T) 
 	}
 }
 
-// A change Syndra gave up on is counted until an operator marks the give-ups
-// seen, then not; a later give-up is counted again.
-func TestCountRetries_AGiveUpStaysUntilSeen(t *testing.T) {
+// A change Syndra gave up on is counted for each person until THEY mark the
+// give-ups seen: one operator marking seen leaves the other still seeing it.
+// A later give-up is counted again for the one who had marked.
+func TestCountRetries_AGiveUpStaysUntilSeenByEachPerson(t *testing.T) {
 	ctx := liveDB(t)
-	_, _ = PG.Exec(ctx, `DELETE FROM config_settings WHERE key = $1`, ConfigKeyGaveUpSeenAt)
-	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM config_settings WHERE key = $1`, ConfigKeyGaveUpSeenAt) })
-	gaveUp := func() string {
+	const a, b = "op-a@example.org", "op-b@example.org"
+	_, _ = PG.Exec(ctx, `DELETE FROM gave_up_seen WHERE actor IN ($1, $2)`, a, b)
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM gave_up_seen WHERE actor IN ($1, $2)`, a, b) })
+	gaveUp := func() {
 		id := outboxRow(t, ctx, "u9", "community", "", 6, "")
 		if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET status = 'failed',
 			last_error = 'out of retries: 503', completed_at = NOW() WHERE id = $1`, id); err != nil {
 			t.Fatalf("give up: %v", err)
 		}
-		return id
 	}
-	count := func() int {
-		_, n, err := CountRetries(ctx)
+	count := func(actor string) int {
+		_, n, err := CountRetries(ctx, actor)
 		if err != nil {
 			t.Fatalf("CountRetries: %v", err)
 		}
 		return n
 	}
-	before := count()
+	beforeA, beforeB := count(a), count(b)
 	gaveUp()
-	if got := count(); got != before+1 {
-		t.Fatalf("an unseen give-up is counted: %d, want %d", got, before+1)
+	if got := count(a); got != beforeA+1 {
+		t.Fatalf("A: an unseen give-up is counted: %d, want %d", got, beforeA+1)
 	}
-	if err := MarkGaveUpSeen(ctx, "tester"); err != nil {
+	if err := MarkGaveUpSeen(ctx, a); err != nil {
 		t.Fatalf("MarkGaveUpSeen: %v", err)
 	}
-	if got := count(); got != 0 {
-		t.Fatalf("after seen, nothing counts: %d", got)
+	if got := count(a); got != 0 {
+		t.Fatalf("A marked it seen, so nothing counts for A: %d", got)
+	}
+	if got := count(b); got != beforeB+1 {
+		t.Fatalf("B has not marked it seen and must still see it: %d, want %d", got, beforeB+1)
 	}
 	gaveUp()
-	if got := count(); got != 1 {
-		t.Fatalf("a later give-up counts again: %d", got)
+	if got := count(a); got != 1 {
+		t.Fatalf("a later give-up counts again for A: %d", got)
+	}
+	if got := count(b); got != beforeB+2 {
+		t.Fatalf("B sees both: %d, want %d", got, beforeB+2)
 	}
 }
 

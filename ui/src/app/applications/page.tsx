@@ -69,7 +69,7 @@ export default function AppsPage() {
         <ReadFreshness state={readState} subject="What Zitadel confirmed" className="px-[2px]" />
       )}
       {unreached.length > 0 && (
-        <Notice tone="warn" title={`${unreached.join(", ")} ${unreached.length === 1 ? "doesn't" : "don't"} get ${unreached.length === 1 ? "its" : "their"} claims.`}>
+        <Notice tone="warn" title={`${unreached.join(", ")} ${unreached.length === 1 ? "doesn't" : "don't"} get ${unreached.length === 1 ? "its" : "their"} claims.`} next={`Open ${unreached.length === 1 ? "its" : "each"} page and change the Zitadel setting it names.`}>
           {unreached.length === 1 ? "Its page says" : "Each page says"} which Zitadel setting to change.
         </Notice>
       )}

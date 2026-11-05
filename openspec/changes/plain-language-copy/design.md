@@ -228,7 +228,9 @@ kind its step and `ActionOutcome` draws it in every placement; `retryNextStep`
 **Retries are seen in both views.** While Syndra is sending changes again on its
 own, Home says so in *Sent again on its own* and the rail carries a pill beside
 Home (and beside Pending changes in Advanced): amber "↻ 2" while retrying, danger
-"! 1" once it gave up. A give-up stays until someone presses **Mark seen**.
+"! 1" once it gave up. A give-up stays until you press **Mark seen**; it is yours alone, so each person marks their own (migration 000082).
+
+**Every Notice ends on a next step or none** (6 Nov): `Notice` takes `next` (what to do, or where to go) or `nothingToDo` (why there is nothing; drawn as "Nothing for you to do." plus it). One is required by its types.
 Retrying changes are never counted as "waiting for you to send".
 
 **While Zitadel isn't answering, the line before the act is exact per act**

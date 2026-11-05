@@ -381,7 +381,7 @@ const revocationEscalation = 24 * time.Hour
 
 // GovernanceIndicators counts the four badge signals directly, without
 // building the full GovernanceSummary payload.
-func GovernanceIndicators(ctx context.Context) (Indicators, error) {
+func GovernanceIndicators(ctx context.Context, actor string) (Indicators, error) {
 	out := Indicators{ZitadelReachable: true}
 
 	requests, err := svcGetAccessRequests(ctx, "pending")
@@ -427,7 +427,7 @@ func GovernanceIndicators(ctx context.Context) (Indicators, error) {
 	}
 	out.UnconfirmedOperations = unconfirmed
 
-	retrying, gaveUp, err := svcCountRetries(ctx)
+	retrying, gaveUp, err := svcCountRetries(ctx, actor)
 	if err != nil {
 		return Indicators{}, err
 	}

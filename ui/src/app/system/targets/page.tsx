@@ -115,7 +115,7 @@ function FaultNotice({ row }: { row: TargetSummary }) {
   const reading = readingFor(row);
   if (row.status === "cannot_connect") {
     return (
-      <Notice tone="danger" blocking title={`Syndra can't connect to ${name}.`}>
+      <Notice tone="danger" blocking title={`Syndra can't connect to ${name}.`} next={`Fix the key under ${name}'s page, then Syndra connects on its next check.`}>
         {reading.sentence} Nothing is reaching {name}: no new accounts, and no revocations.{" "}
         {reading.look}
       </Notice>
@@ -123,7 +123,7 @@ function FaultNotice({ row }: { row: TargetSummary }) {
   }
   if (row.status === "offline") {
     return (
-      <Notice tone="warn" live title={`${name} isn't answering.`}>
+      <Notice tone="warn" live title={`${name} isn't answering.`} next={`Check that ${name} is running and reachable.`}>
         Syndra&apos;s last 3 checks went unanswered, from {formatClock(row.health?.reachable_since)},
         and it keeps checking every 30 seconds. Look at {name}, not at Syndra. Changes for {name}{" "}
         wait until it answers, and nothing is lost.
@@ -132,7 +132,7 @@ function FaultNotice({ row }: { row: TargetSummary }) {
   }
   if (row.status === "waiting_to_retry") {
     return (
-      <Notice tone="warn" live title={`Syndra is waiting to retry ${name}.`}>
+      <Notice tone="warn" live title={`Syndra is waiting to retry ${name}.`} nothingToDo="Syndra retries on its own when the wait is over.">
         {reading.sentence}
       </Notice>
     );

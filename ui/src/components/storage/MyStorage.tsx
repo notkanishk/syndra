@@ -165,7 +165,7 @@ function TargetCard({ view }: { view: MyTargetView }) {
       </div>
 
       <Unfold open={Boolean(offline)}>
-        <Notice tone="warn" title={`${label} is offline`} blocking live className="mx-5 mt-[18px]">
+        <Notice tone="warn" title={`${label} is offline`} blocking live className="mx-5 mt-[18px]" nothingToDo={`This page updates on its own when ${label} returns.`}>
           It stopped answering{view.reachable_since ? ` at ${formatClock(view.reachable_since)}` : ""}, so your
           folders won&apos;t open until it&apos;s back. Your account, files and access are safe, and this page
           updates on its own when {label} returns.
@@ -197,9 +197,13 @@ function TargetCard({ view }: { view: MyTargetView }) {
 
       <Unfold open={Boolean(notice) && !hasAccount}>
         {notice && (
-          <Notice tone="warn" title={notice.title} className="mx-5 mb-[22px]">
+          <Notice
+            tone="warn"
+            title={notice.title}
+            className="mx-5 mb-[22px]"
+            {...(notice.person ? { next: PERSON } : { nothingToDo: PAUSE_ENDS })}
+          >
             {notice.body}
-            {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
           </Notice>
         )}
       </Unfold>
@@ -224,9 +228,13 @@ function TargetCard({ view }: { view: MyTargetView }) {
 
           <Unfold open={Boolean(notice)}>
             {notice && (
-              <Notice tone="warn" title={notice.title} className="mx-5 mb-5">
+              <Notice
+                tone="warn"
+                title={notice.title}
+                className="mx-5 mb-5"
+                {...(notice.person ? { next: PERSON } : { nothingToDo: PAUSE_ENDS })}
+              >
                 {notice.body}
-                {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
               </Notice>
             )}
           </Unfold>
@@ -253,6 +261,7 @@ function TargetCard({ view }: { view: MyTargetView }) {
   );
 }
 
+const PAUSE_ENDS = "Syndra carries on with account changes by itself when the pause ends.";
 const PERSON = "Need it today? Ask makerspace staff: they can see this pause and how long it should last.";
 
 function copyFor(state: State, label: string, view: MyTargetView): [string, string, React.ReactNode] {

@@ -417,6 +417,9 @@ function RuleEditor({
             <Notice
               tone={validated.ok ? "warn" : "danger"}
               blocking={!validated.ok}
+              {...(validated.ok
+                ? { next: "Read them, then save if they are what you meant." }
+                : { next: "Change the rule so the points below no longer apply, then save again." })}
               title={
                 validated.ok
                   ? `Checked: ${validated.notes.length} ${validated.notes.length === 1 ? "thing" : "things"} to know`
