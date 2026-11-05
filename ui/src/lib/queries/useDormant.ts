@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { request } from "@/lib/api-client";
 import type { OneShotSecret } from "@/lib/secret";
 import { sortByName } from "@/lib/sort";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * Accounts Syndra created whose reason for existing has gone (9.11/9.12).
@@ -87,13 +88,6 @@ export function useSweepDormant(target: string) {
         method: "POST",
         body: { accounts: input.accounts, elevated_key: input.elevatedKey.take(), confirmed: true },
       }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target, "dormant"] });
-      client.invalidateQueries({ queryKey: ["targets", target, "inventory"] });
-      // Each removal is dispatched, not merely decided, so it is a pending row
-      // until the target confirms it, and the sweep is itself a governance event.
-      client.invalidateQueries({ queryKey: ["propagations"] });
-      client.invalidateQueries({ queryKey: ["governance"] });
-    },
+    onSuccess: () => invalidateAfter(client, "access"),
   });
 }

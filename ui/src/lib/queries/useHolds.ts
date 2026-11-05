@@ -4,7 +4,7 @@ import { settleIndicators } from "@/lib/queries/useIndicators";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
-import { usersQueryKeys } from "@/lib/queries/useUsers";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * Holds — access a role still grants, taken away without touching the role.
@@ -98,23 +98,7 @@ export function useCreateHold() {
           review_date: input.reviewDate,
         },
       }),
-    onSuccess: (hold) => {
-      // Through the key factory, never hand-written. This used to invalidate
-      // `["users", subject_id]`, which matches nothing: the access query is
-      // keyed `["users", "access", id]` and prefix matching compares position
-      // by position, so authoring a hold left the Withheld band off the page
-      // that had just authored it. Lifting one used a bare `["users"]` and did
-      // refresh — one direction working and the other not is what makes it a
-      // bug rather than a convention.
-      client.invalidateQueries({ queryKey: usersQueryKeys.access(hold.subject_id) });
-      client.invalidateQueries({ queryKey: usersQueryKeys.grants(hold.subject_id) });
-      // And the hold list itself, which IS keyed under the subject — the one
-      // thing the old key happened to match, which is why this looked like it
-      // worked.
-      client.invalidateQueries({ queryKey: ["users", hold.subject_id] });
-      client.invalidateQueries({ queryKey: ["governance", "holds", "review-due"] });
-      client.invalidateQueries({ queryKey: ["me", "targets"] });
-    },
+    onSuccess: () => invalidateAfter(client, "access"),
   });
 }
 
@@ -125,9 +109,7 @@ export function useLiftHold() {
       request<{ status: string }>(`/allowances/${id}/lift`, { method: "POST", body: {} }),
     onSuccess: () => {
       settleIndicators(client, { holds_due: -1 });
-      client.invalidateQueries({ queryKey: ["users"] });
-      client.invalidateQueries({ queryKey: ["governance"] });
-      client.invalidateQueries({ queryKey: ["me", "targets"] });
+      invalidateAfter(client, "access");
     },
   });
 }
@@ -159,14 +141,6 @@ export function useRevokeTargetAccess(target: string, subjectId: string) {
         method: "POST",
         body: { reason: input.reason, confirmed: true, review_date: input.reviewDate },
       }),
-    onSuccess: () => {
-      // Same three as authoring a hold: a revocation writes one, and the
-      // access view is keyed apart from the subject's other queries.
-      client.invalidateQueries({ queryKey: usersQueryKeys.access(subjectId) });
-      client.invalidateQueries({ queryKey: usersQueryKeys.grants(subjectId) });
-      client.invalidateQueries({ queryKey: ["users", subjectId] });
-      client.invalidateQueries({ queryKey: ["governance", "unconfirmed-revocations"] });
-      client.invalidateQueries({ queryKey: ["governance", "indicators"] });
-    },
+    onSuccess: () => invalidateAfter(client, "access"),
   });
 }

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { invalidateAfter } from "./invalidation";
 
 /** One term, both days inclusive, as YYYY-MM-DD (GET /terms). */
 export interface Term {
@@ -41,9 +42,6 @@ export function useSaveTerms() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (terms: Term[]) => request("/terms", { method: "PUT", body: { terms } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: termsKey });
-      qc.invalidateQueries({ queryKey: ["insights"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "terms", { extra: [termsKey] }),
   });
 }

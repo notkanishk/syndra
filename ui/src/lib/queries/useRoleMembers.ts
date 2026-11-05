@@ -7,6 +7,7 @@ import { request } from "@/lib/api-client";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { UserProfile } from "@/lib/types";
 import { sortByName } from "@/lib/sort";
+import { invalidateAfter } from "./invalidation";
 
 /** One holder of a (project, role) pair, with the sources that produced it. */
 export interface RoleMember {
@@ -120,14 +121,6 @@ export function useRemoveDirectGrant() {
       request<DirectGrantRemoval>(`/users/${userId}/grants/${grantId}?apply=true`, {
         method: "DELETE",
       }),
-    onSuccess: (_data, { userId }) => {
-      qc.invalidateQueries({ queryKey: ["users", "access", userId] });
-      qc.invalidateQueries({ queryKey: ["users", "grants", userId] });
-      qc.invalidateQueries({ queryKey: ["roles", "members"] });
-      qc.invalidateQueries({ queryKey: ["governance"] });
-      // The Zitadel revoke is queued in the same transaction as the ledger
-      // delete, so it is sitting in the pending list until this invalidates it.
-      qc.invalidateQueries({ queryKey: ["propagations"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "access"),
   });
 }

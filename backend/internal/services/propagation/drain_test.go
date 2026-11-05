@@ -45,7 +45,7 @@ func stubDrainDeps(t *testing.T) {
 		swap(&markApplied, func(context.Context, string) error { return nil }),
 		// The claim envelope the drain clears, the confirmation it records, and
 		// the read-back it records it from. Unstubbed each reaches a nil client.
-		swap(&refreshClaims, func(context.Context, string, ...string) error { return nil }),
+		swap(&refreshClaims, func(context.Context, []string, ...string) error { return nil }),
 		swap(&markConfirmed, func(context.Context, string) error { return nil }),
 		swap(&observeUser, func(context.Context, string) (observe.Result, error) {
 			// A WHOLE answer by default, so a test that is not about truncation
@@ -1152,7 +1152,7 @@ func TestDrain_AppliedChangeClearsTheCachedClaims(t *testing.T) {
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
 	var cleared string
 	var projects []string
-	refreshClaims = func(_ context.Context, userID string, p ...string) error { cleared, projects = userID, p; return nil }
+	refreshClaims = func(_ context.Context, ids []string, p ...string) error { cleared, projects = ids[0], p; return nil }
 
 	if _, err := Drain(context.Background()); err != nil {
 		t.Fatalf("Drain: %v", err)
@@ -1171,7 +1171,7 @@ func TestDrain_AFailedCacheClearStillAppliesTheRow(t *testing.T) {
 		return "g1", map[string]bool{}, nil
 	}
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
-	refreshClaims = func(context.Context, string, ...string) error { return errors.New("redis is down") }
+	refreshClaims = func(context.Context, []string, ...string) error { return errors.New("redis is down") }
 	var appliedID string
 	markApplied = func(_ context.Context, id string) error { appliedID = id; return nil }
 

@@ -24,6 +24,7 @@ import { FORECAST, outcomeFromError, type ActionOutcome as Outcome } from "@/lib
 import { useClaimsDelivery, type ClaimsDelivery as Delivery } from "@/lib/queries/useClaimsDelivery";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useZitadelHealth } from "@/lib/queries/useZitadel";
+import { invalidateAfter } from "@/lib/queries/invalidation";
 import { CheckPips, zitadelReading } from "@/components/targets/TargetReading";
 import { useMissedChecks } from "@/lib/useMissedChecks";
 
@@ -254,10 +255,7 @@ const ReplaceKeyDialog = mountedWhileOpen(function ReplaceKeyDialog({
   const replace = useMutation({
     mutationFn: () =>
       request<RotateResult>("/zitadel/action-key/rotate", { method: "POST", body: { force: true } }),
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: ["zitadel", "rotation"] });
-      void client.invalidateQueries({ queryKey: ["claims"] });
-    },
+    onSettled: () => invalidateAfter(client, "signingKey"),
   });
   const done = result?.final ?? false;
 

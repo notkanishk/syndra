@@ -6,7 +6,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { request } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 
-import { governanceQueryKeys, type DriftItem } from "./useGovernance";
+import { type DriftItem } from "./useGovernance";
+import { invalidateAfter } from "./invalidation";
 
 export interface DriftFilter {
   user_id?: string;
@@ -119,11 +120,7 @@ function useBulkDriftMutation<B>(path: string, apply: boolean) {
     onSuccess: (plan) => {
       if (!apply) return;
       settleIndicators(qc, { drift: -(plan.summary?.succeeded ?? 0) });
-      qc.invalidateQueries({ queryKey: ["drift"] });
-      qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
-      // Drift status drives the People list's unexplained_count, so a bulk
-      // triage pass leaves that count wrong until this lands too.
-      qc.invalidateQueries({ queryKey: ["users"] });
+      invalidateAfter(qc, "drift");
     },
   });
 }
@@ -169,12 +166,7 @@ function useDriftMutation<B>(path: (id: string) => string, extraKeys: readonly (
     onSuccess: () => {
       // The rail's count follows the answer; the refetch below confirms it.
       settleIndicators(qc, { drift: -1 });
-      qc.invalidateQueries({ queryKey: ["drift"] });
-      qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
-      // Drift status drives the People list's unexplained_count, so any triage
-      // action here leaves that count wrong until this lands too.
-      qc.invalidateQueries({ queryKey: ["users"] });
-      for (const queryKey of extraKeys) qc.invalidateQueries({ queryKey });
+      invalidateAfter(qc, "drift", { extra: extraKeys });
     },
   });
 }
@@ -195,10 +187,7 @@ export function useReconcileNow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => request("/governance/drift/reconcile", { method: "POST" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["drift"] });
-      qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
-    },
+    onSuccess: () => invalidateAfter(qc, "drift"),
   });
 }
 

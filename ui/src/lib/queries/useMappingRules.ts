@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { invalidateAfter } from "./invalidation";
 
 export interface MappingRuleRow {
   id: string;
@@ -69,15 +70,7 @@ export function useCreateMappingRule() {
         body: input,
       });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
-      // The backend enqueues one outbox row per current holder of the source
-      // role in this same transaction, so the pending count, the governance
-      // summary, and the People list's derived access are all stale without this.
-      qc.invalidateQueries({ queryKey: ["propagations"] });
-      qc.invalidateQueries({ queryKey: ["governance"] });
-      qc.invalidateQueries({ queryKey: ["users"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "access", { extra: [KEYS.list] }),
   });
 }
 
@@ -92,14 +85,7 @@ export function useUpdateMappingRule() {
   return useMutation({
     mutationFn: async ({ id, ...input }: CreateMappingRuleInput & { id: string }) =>
       request<MappingRuleRow>(`/rules/mapping/${id}`, { method: "PUT", body: input }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
-      qc.invalidateQueries({ queryKey: ["users"] });
-      // Same closure diff its sibling delete commits: somebody's effective
-      // access just changed, and the writes are queued, not yet applied.
-      qc.invalidateQueries({ queryKey: ["governance"] });
-      qc.invalidateQueries({ queryKey: ["propagations"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "access", { extra: [KEYS.list] }),
   });
 }
 
@@ -119,11 +105,7 @@ export function useDeleteMappingRule() {
         `/rules/mapping/${id}`,
         { method: "DELETE" },
       ),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
-      qc.invalidateQueries({ queryKey: ["users"] });
-      qc.invalidateQueries({ queryKey: ["governance"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "access", { extra: [KEYS.list] }),
   });
 }
 

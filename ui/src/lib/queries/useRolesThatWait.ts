@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { invalidateAfter } from "./invalidation";
 
 /** One role that always waits for the operator (N14 B). */
 export interface RoleWait {
@@ -20,7 +21,6 @@ export interface RolesThatWait {
 }
 
 export const rolesThatWaitKey = ["roles-that-wait"] as const;
-const catalogKey = ["roles", "catalog"] as const;
 
 export function useRolesThatWait() {
   return useQuery({
@@ -42,9 +42,6 @@ export function useSetRolesWait() {
         await request(path(id.slice(0, at), id.slice(at + 1)), { method: waits ? "PUT" : "DELETE" });
       }
     },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: rolesThatWaitKey });
-      qc.invalidateQueries({ queryKey: catalogKey });
-    },
+    onSettled: () => invalidateAfter(qc, "role"),
   });
 }

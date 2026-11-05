@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * Bulk access changes, rehearsed before they land.
@@ -140,25 +141,7 @@ export function useApplyBulk() {
   return useMutation({
     mutationFn: (input: BulkGrantInput) =>
       request<BulkPlan>(bulkPath(true), { method: "POST", body: input }),
-    onSuccess: () => {
-      // `review` is here because `extend` rewrites expiry dates, and Review › Expiring access is
-      // built entirely from those — a bulk extend launched from that screen would otherwise leave
-      // every row it just renewed on screen with its old date.
-      for (const key of [
-        "users",
-        "roles",
-        "bundles",
-        "governance",
-        "propagations",
-        "audit",
-        "review",
-        // Home's "New people without a bundle" is read from here: a bundle given
-        // to one of them takes the row off on this read, not the next poll.
-        "operations",
-      ]) {
-        qc.invalidateQueries({ queryKey: [key] });
-      }
-    },
+    onSuccess: () => invalidateAfter(qc, "access"),
   });
 }
 
