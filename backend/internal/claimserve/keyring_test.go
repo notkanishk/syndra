@@ -57,7 +57,7 @@ func TestSignatureCheck_RefreshesOnceOnAMismatch(t *testing.T) {
 	_ = PublishKeyring(context.Background(), r, Keyring{}.Next("old-key-0123456789abcdef0123456789ab", time.Now()).Next("new-key-0123456789abcdef0123456789ab", time.Now()))
 
 	var mismatches atomic.Int32
-	h := SignatureCheck("K", p.SigningKeys, p.RefreshKeys, func() { mismatches.Add(1) }, func() bool { return false },
+	h := SignatureCheck("K", p.SigningKeys, p.RefreshKeys, func() { mismatches.Add(1) }, func() bool { return false }, nil,
 		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	call := func(key string) int {
 		b := `{"x":1}`
