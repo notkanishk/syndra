@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import type { SessionUser } from "@/lib/session";
@@ -173,5 +173,55 @@ describe("Home's first paint", () => {
     const greeting = screen.getByRole("heading", { level: 1 }).parentElement!;
     expect(greeting).toHaveClass("page-head");
     expect(greeting).not.toHaveAttribute("data-settled");
+  });
+});
+
+describe("quiet hours and the first welcome", () => {
+  beforeEach(() => {
+    state.advanced = true;
+    state.governance.unreconciled_targets = [];
+    state.governance.merge_findings = 0;
+    state.governance.pending_propagation = { count: 0, zitadel_reachable: true };
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const at = (hour: number) => vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 10, 5, hour, 0, 0) });
+  const keeps = "It will keep until morning.";
+
+  it("adds the sentence to the calm panel late at night, once", () => {
+    at(23);
+    renderHome();
+    expect(screen.getByText(/No open requests, and no access ending in the next 14 days\. It will keep until morning\./)).toBeTruthy();
+    expect(screen.getAllByText(new RegExp(keeps.replace(/\./g, "\\.")))).toHaveLength(1);
+    expect(screen.getByText(/^Evening/)).toBeTruthy();
+  });
+
+  it("is not there by day, or at 05:00", () => {
+    at(14);
+    const { unmount } = renderHome();
+    expect(screen.queryByText(/keep until morning/)).toBeNull();
+    unmount();
+    at(5);
+    renderHome();
+    expect(screen.queryByText(/keep until morning/)).toBeNull();
+  });
+
+  it("is never said when something needs you", () => {
+    at(2);
+    state.governance.unreconciled_targets = [{ target: "truenas", since: new Date().toISOString(), reason: "refused" }];
+    renderHome();
+    expect(screen.queryByText(/keep until morning/)).toBeNull();
+  });
+
+  it("welcomes on the first visit only", () => {
+    const { unmount } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Home session={{ ...session, firstVisit: true }} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText(/Welcome to Syndra\. It keeps the makerspace.s list of who can use what, and why\./)).toBeTruthy();
+    unmount();
+    renderHome();
+    expect(screen.queryByText(/Welcome to Syndra/)).toBeNull();
   });
 });

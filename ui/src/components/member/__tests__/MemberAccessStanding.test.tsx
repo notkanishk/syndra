@@ -385,3 +385,13 @@ describe("MemberAccess header line and cards", () => {
     expect(titles).toEqual(["3D printing", "Laser cutting", "Wood shop"]);
   });
 });
+
+describe("MemberAccess first welcome", () => {
+  it("says the welcome on the first visit, in the line's seat, and never otherwise", () => {
+    const { unmount } = render(<MemberAccess session={{ ...session, firstVisit: true }} />);
+    expect(screen.getByText(/Welcome to Syndra\. It keeps the makerspace.s list of who can use what, and why\./)).toBeTruthy();
+    unmount();
+    render(<MemberAccess session={session} />);
+    expect(screen.queryByText(/Welcome to Syndra/)).toBeNull();
+  });
+});
