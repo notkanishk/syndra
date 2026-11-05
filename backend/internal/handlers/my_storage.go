@@ -476,7 +476,7 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		// Fails closed and says so. Accepting it and reporting success would
 		// tell a member their password works when nothing received it.
 		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE",
-			"That system is not answering right now. Nothing was changed — try again shortly.")
+			"That system is not answering right now. Nothing was changed. Try again shortly.")
 		return
 	}
 

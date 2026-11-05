@@ -74,6 +74,9 @@ type EnqueueResult struct {
 	// chain of rules derives from the role given, or takes back with the role
 	// removed. Written in the same transaction, delivered with OutboxID.
 	RuleOutboxIDs []string `json:"rule_outbox_ids,omitempty"`
+	// RuleWaiting counts the rule rows held for the operator because their
+	// role waits: said apart from WaitReason, which is the write's own.
+	RuleWaiting int `json:"rule_waiting,omitempty"`
 }
 
 // OutboxIDs is every row this write queued: its own, then the rules'.

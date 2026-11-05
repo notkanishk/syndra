@@ -12,7 +12,7 @@ import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
-import { describeAsk } from "@/components/requests/Holding";
+import { HoldingNote, describeAsk } from "@/components/requests/Holding";
 import { OUTCOME_LABEL } from "@/lib/outcome";
 import { useRequestDecisions, type Decided } from "@/lib/request-decisions";
 import { useTerms } from "@/lib/queries/useTerms";
@@ -138,6 +138,8 @@ function RequestRow({
       <span className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
         <Relative iso={entry.created_at} />
       </span>
+      {/* What approving also gives, as the queue and Home say it (re-audit C2). */}
+      {open && isOperator && <HoldingNote request={entry} />}
       {/* One seat: the buttons, then the decision in their place (#96). */}
       <span className="flex w-full flex-col gap-2 tablet:w-[196px] tablet:shrink-0">
         <Crossfade id={open && isOperator ? "open" : outcome && optimisticallyResolved ? "outcome" : forecast ? "forecast" : "status"}>

@@ -51,10 +51,10 @@ describe("a write that may have partly landed", () => {
       const lost = new LostReply(new TypeError("Failed to fetch"), method);
       const o = outcomeFromError(lost);
       expect(o.kind).toBe("failed");
-      expect(o.partial).toBe("Pending changes or Audit");
+      expect(o.partial).toBe("this page after a reload");
       const { container, unmount } = render(<ActionOutcome word="Not done" outcome={o} />);
       expect(container.textContent).not.toMatch(/nothing was changed/i);
-      expect(container.textContent).toContain("Check Pending changes or Audit before trying again.");
+      expect(container.textContent).toContain("Check this page after a reload before trying again.");
       expect(describeFailure(lost)).toContain("Syndra's server didn't answer.");
       expect(describeFailure(lost)).not.toMatch(/nothing was changed/i);
       expect(stateLine(lost)).toContain("Some of this may have gone through.");
@@ -64,8 +64,8 @@ describe("a write that may have partly landed", () => {
 
   it("the proxy's own 'didn't answer' on a write is the same, and on a read stays as it is", () => {
     const body = { error: "BACKEND_UNREACHABLE", message: "Syndra's server didn't answer." };
-    expect(outcomeFromError(new ApiError(502, body, "POST")).partial).toBe("Pending changes or Audit");
-    expect(outcomeFromError(new ApiError(502, { ...body, error: "UPSTREAM_ERROR" }, "DELETE")).partial).toBe("Pending changes or Audit");
+    expect(outcomeFromError(new ApiError(502, body, "POST")).partial).toBe("this page after a reload");
+    expect(outcomeFromError(new ApiError(502, { ...body, error: "UPSTREAM_ERROR" }, "DELETE")).partial).toBe("this page after a reload");
     expect(outcomeFromError(new ApiError(502, body, "GET")).partial).toBeUndefined();
     expect(stateLine(new ApiError(502, body, "GET"))).toBe("Nothing was changed.");
   });

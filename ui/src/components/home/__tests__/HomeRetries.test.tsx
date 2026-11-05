@@ -12,7 +12,10 @@ import type { SessionUser } from "@/lib/session";
  * the end of it when Syndra gives up, until someone marks it seen. Neither may
  * go unnoticed or vanish silently.
  */
-const state = vi.hoisted(() => ({ pending: 0, retrying: 0, gaveUp: 0, advanced: true, seen: vi.fn() }));
+const state = vi.hoisted(() => ({
+  pending: 0, retrying: 0, gaveUp: 0, advanced: true, seen: vi.fn(),
+  auto: true, retryingBy: undefined as Record<string, number> | undefined, gaveUpBy: undefined as Record<string, number> | undefined,
+}));
 
 vi.mock("@/lib/queries/useIndicators", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useIndicators")>("@/lib/queries/useIndicators");
@@ -30,6 +33,9 @@ vi.mock("@/lib/queries/useIndicators", async () => {
         zitadel_reachable: true,
         retrying: state.retrying,
         gave_up: state.gaveUp,
+        retrying_by: state.retryingBy,
+        gave_up_by: state.gaveUpBy,
+        auto_retry: state.auto,
       },
       isPlaceholderData: false,
     }),
@@ -96,6 +102,9 @@ beforeEach(() => {
   state.retrying = 0;
   state.gaveUp = 0;
   state.advanced = true;
+  state.auto = true;
+  state.retryingBy = undefined;
+  state.gaveUpBy = undefined;
   state.seen = vi.fn().mockResolvedValue({ status: "seen" });
 });
 
@@ -106,7 +115,7 @@ describe("Home says what Syndra is sending again, and what it gave up on", () =>
     state.retrying = 2;
     renderHome();
     expect(
-      await screen.findByText(/Zitadel didn.t take 2 changes\. Syndra sends them again on its own and says here if it gives up\. Nothing for you to do\./),
+      await screen.findByText(/Zitadel didn.t take 2 changes\. Syndra sends them again on its own and says here if it stops\. Nothing for you to do\./),
     ).toBeTruthy();
     // The retrying ones are not "waiting for you to send": only the third is.
     if (advanced) expect(screen.getByText(/1 change is waiting for you to send/)).toBeTruthy();
@@ -116,10 +125,36 @@ describe("Home says what Syndra is sending again, and what it gave up on", () =>
     state.advanced = advanced;
     state.gaveUp = 1;
     renderHome();
-    expect(await screen.findByText(/Syndra gave up on one change after every try, so it isn.t in Zitadel\..*then mark this seen\./)).toBeTruthy();
+    expect(await screen.findByText(/Syndra stopped sending one change, so it isn.t in Zitadel\..*Then mark this seen\./)).toBeTruthy();
+    // Re-audit R11: it points where the change really is, not at Audit.
+    const see = screen.getByRole("link", { name: /See it/ });
+    expect(see.getAttribute("href")).toBe("/governance/pending?gave_up=1");
+    expect(screen.queryByRole("link", { name: /^Audit/ })).toBeNull();
     expect(screen.queryByText(/Nothing here needs you/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Mark seen" }));
     await waitFor(() => expect(state.seen).toHaveBeenCalled());
+  });
+
+  // Re-audit R11: a TrueNAS change is said to be TrueNAS's, never Zitadel's.
+  it("names the system each change was for", async () => {
+    state.retrying = 1;
+    state.retryingBy = { truenas: 1 };
+    state.gaveUp = 3;
+    state.gaveUpBy = { zitadel: 2, truenas: 1 };
+    renderHome();
+    expect(await screen.findByText(/^TrueNAS didn.t take one change\./)).toBeTruthy();
+    expect(screen.getByText(/so they aren.t in TrueNAS and Zitadel\./)).toBeTruthy();
+  });
+
+  // With REVOCATION_DRAIN_ENABLED=false nothing is sent again on its own, so
+  // Home must not say it is: the step is Send.
+  it("says to press Send when this server does not send again on its own", async () => {
+    state.retrying = 2;
+    state.pending = 2;
+    state.auto = false;
+    renderHome();
+    expect(await screen.findByText(/doesn.t send changes again on its own, so they wait for you\. Press Send on Pending changes to try again\./)).toBeTruthy();
+    expect(screen.queryByText(/sends them again on its own and says here/)).toBeNull();
   });
 
   it("says nothing about retries when there are none", async () => {

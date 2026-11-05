@@ -196,7 +196,7 @@ it from *Pending changes*."
 "Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)." The time
 is in the makerspace's zone. It is queued, never "Sent", and carries no "send
 it" link: Syndra sends it on its own, unless the role waits for you. When the
-tries run out: "Syndra gave up after 6 tries." A member's own password says
+tries run out, or the system refuses a try: "Syndra stopped sending it", listed on Pending changes under *Syndra stopped sending*. A member's own password says
 "Not confirmed yet. Syndra is trying again at 14:05. Keep this page open." The
 words live in `ui/src/lib/retry.ts` and nowhere else.
 
@@ -206,7 +206,7 @@ lack thereof"). Every outcome, state and notice ends on one of two things: what
 to do and where, as a link or button when there is one ("Press Send on Pending
 changes", "Check TrueNAS under System", "Ask Priya to sign in once"), or an
 explicit *Nothing for you to do.* ("Nothing for you to do. Syndra sends it
-again at 14:05 and says on Home if it gives up."). Silence is never the "none".
+again at 14:05 and says on Home if it stops sending it."). Silence is never the "none".
 It holds by construction: `nextStepOf` (`lib/outcome.ts`) gives every outcome
 kind its step and `ActionOutcome` draws it in every placement; `retryNextStep`
 (`lib/retry.ts`) gives every retry state its step and `RetryStatus` draws it;
@@ -217,9 +217,10 @@ kind its step and `ActionOutcome` draws it in every placement; `retryNextStep`
 |---|---|---|
 | Sent, confirmed | Done / the act's word | Nothing for you to do. |
 | Waits for you (a role marked to wait) | Waiting for you to send → | Press Send on Pending changes (the link). |
-| Retrying | Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6). | Nothing for you to do. Syndra sends it again at 14:05 and says on Home if it gives up. |
-| Gave up | Syndra gave up after 6 tries. | Give or revoke the access again from the person's page, then Mark seen on Home. |
-| Sends itself (a revocation) | On its way | Nothing for you to do. Syndra sends it on its own and says on Home if it gives up. |
+| Retrying | Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6). | Nothing for you to do. Syndra sends it again at 14:05 and says on Home if it stops sending it. |
+| Not taken, and this server sends nothing again on its own (`REVOCATION_DRAIN_ENABLED=false`) | Zitadel didn't answer after one try, so Syndra won't send it again on its own. | Press Send on Pending changes to try again. |
+| Stopped sending (out of tries, or refused) | Syndra stopped sending it. | Give a role again from the person's page; a revocation shows in Drift after the next check, to revoke there. Then Mark seen on Home. |
+| Sends itself (a revocation) | On its way | Nothing for you to do. Syndra sends it on its own and says on Home if it stops sending it. |
 | May have gone through | Some of this may have gone through. | Check *where* before trying again. |
 | Failed | Failed | Try again in a minute. If it keeps failing, ask the person who runs the Syndra server. |
 | Refused | Refused | What refused it says the step: sign in again, ask someone with access, reload, or change what it names. |

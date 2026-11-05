@@ -260,6 +260,10 @@ export interface CreateGrantResult {
   wait_reason?: string;
   /** With halted:retrying: when Syndra sends it again, and which try. */
   retry?: RetryState;
+  /** The rows the automatic rules queued with it. */
+  rule_outbox_ids?: string[];
+  /** How many of those wait for you to send because their role waits (re-audit R12). */
+  rule_waiting?: number;
 }
 
 /**

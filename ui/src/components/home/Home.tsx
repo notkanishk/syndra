@@ -53,7 +53,7 @@ import { ShellNotices } from "@/components/shell/ShellNotices";
 import { firstName, greeting, isQuietHour, lastHere, WELCOME } from "@/lib/greeting";
 import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine } from "@/lib/term-dates";
-import { compareNames, sortByName } from "@/lib/sort";
+import { compareNames, sortByName, sortNames } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
 /**
@@ -175,7 +175,8 @@ export function Home({ session }: { session: SessionUser }) {
   // that must never be said about a system nobody has been able to look at.
   // Pending changes that wait for a send: the ones Syndra is retrying on its
   // own are not, and are said by the Retries block in both views.
-  const toSend = Math.max(0, (propagation?.count ?? 0) - retrying);
+  // With the background drain off, nothing is sent again on its own: those wait for Send too.
+  const toSend = Math.max(0, (propagation?.count ?? 0) - (indicators.data?.auto_retry === false ? 0 : retrying));
   const blocks = [
     pending.length > 0,
     expiring.length > 0,
@@ -283,7 +284,13 @@ export function Home({ session }: { session: SessionUser }) {
             {/* Both views (owner, 5 Nov 2026): a retry, and the end of one,
                 are never only in Advanced. */}
             <Block open={retrying + gaveUp > 0}>
-              <Retries retrying={retrying} gaveUp={gaveUp} />
+              <Retries
+                retrying={retrying}
+                gaveUp={gaveUp}
+                retryingBy={readIndicators?.retrying_by}
+                gaveUpBy={readIndicators?.gave_up_by}
+                auto={readIndicators?.auto_retry !== false}
+              />
             </Block>
             <Block open={expiring.length > 0}>
               <ExpiringSoon grants={expiring} />
@@ -884,24 +891,50 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
  * know"). In both views, beside the rail's retry pill, each row ending on its
  * next step or on there being none.
  */
-function Retries({ retrying, gaveUp }: { retrying: number; gaveUp: number }) {
+/**
+ * The systems a count is for, by name and alphabetical ("TrueNAS and
+ * Zitadel"): a TrueNAS change is never called Zitadel's (re-audit R11). An
+ * older server sends no split; its retries were all counted as Zitadel's.
+ */
+export function systemsOf(by: Record<string, number> | undefined): string {
+  const names = sortNames(Object.keys(by ?? {}).filter((t) => (by?.[t] ?? 0) > 0).map(targetLabel));
+  if (names.length === 0) return "Zitadel";
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+export function Retries({
+  retrying,
+  gaveUp,
+  retryingBy,
+  gaveUpBy,
+  auto = true,
+}: {
+  retrying: number;
+  gaveUp: number;
+  retryingBy?: Record<string, number>;
+  gaveUpBy?: Record<string, number>;
+  /** False when this server sends nothing again on its own (REVOCATION_DRAIN_ENABLED=false). */
+  auto?: boolean;
+}) {
   const seen = useMarkGaveUpSeen();
   const [failure, setFailure] = useState<Outcome | null>(null);
+  const one = (n: number) => (n === 1 ? "one change" : `${n} changes`);
   return (
     <Card>
-      <CardHeader title="Sent again on its own" count={retrying + gaveUp} />
+      <CardHeader title={auto ? "Sent again on its own" : "Not taken when sent"} count={retrying + gaveUp} />
       {retrying > 0 && (
         <CardRow>
           <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
             <StatusDot tone="warn" />
             <span className="text-warn-text">
-              Zitadel didn&apos;t take {retrying === 1 ? "one change" : `${retrying} changes`}. Syndra sends{" "}
-              {retrying === 1 ? "it" : "them"} again on its own and says here if it gives up.{" "}
-              {NOTHING_TO_DO}
+              {systemsOf(retryingBy)} didn&apos;t take {one(retrying)}.{" "}
+              {auto
+                ? `Syndra sends ${retrying === 1 ? "it" : "them"} again on its own and says here if it stops. ${NOTHING_TO_DO}`
+                : `This Syndra server doesn't send changes again on its own, so ${retrying === 1 ? "it waits" : "they wait"} for you. Press Send on Pending changes to try again.`}
             </span>
           </span>
           <AdvancedLink href="/governance/pending" className={ARROW_LINK}>
-            See when <span aria-hidden>→</span>
+            {auto ? "See when" : "Pending changes"} <span aria-hidden>→</span>
           </AdvancedLink>
         </CardRow>
       )}
@@ -910,13 +943,14 @@ function Retries({ retrying, gaveUp }: { retrying: number; gaveUp: number }) {
           <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
             <StatusDot tone="danger" />
             <span className="text-danger-text">
-              Syndra gave up on {gaveUp === 1 ? "one change" : `${gaveUp} changes`} after every try, so{" "}
-              {gaveUp === 1 ? "it isn't" : "they aren't"} in Zitadel. Find {gaveUp === 1 ? "it" : "them"} in Audit, give
-              or revoke the access again from the person&apos;s page, then mark this seen. It marks it for you only; each person marks their own.
+              Syndra stopped sending {one(gaveUp)}, so {gaveUp === 1 ? "it isn't" : "they aren't"} in{" "}
+              {systemsOf(gaveUpBy)}. Pending changes lists {gaveUp === 1 ? "it" : "them"} and what to do: give a role
+              again from the person&apos;s page; a revocation shows in Drift after Syndra&apos;s next check, to revoke
+              there. Then mark this seen. It marks it for you only; each person marks their own.
             </span>
           </span>
-          <AdvancedLink href="/audit" className={ARROW_LINK}>
-            Audit <span aria-hidden>→</span>
+          <AdvancedLink href="/governance/pending?gave_up=1" className={ARROW_LINK}>
+            See {gaveUp === 1 ? "it" : "them"} <span aria-hidden>→</span>
           </AdvancedLink>
           <Button
             variant="outline"

@@ -99,12 +99,28 @@ const KEYS = {
 };
 
 /** The operator's "awaiting Zitadel" worklist (pending + in_flight rows). */
+/** One read of the queue: what waits, and what Syndra stopped sending that this person has not marked seen. */
+interface PendingRead {
+  pending: PendingRow[];
+  gave_up: PendingRow[];
+}
+
+const pendingRead = async (): Promise<PendingRead> => {
+  const body = await request<Partial<PendingRead>>("/propagations");
+  return { pending: body?.pending ?? [], gave_up: body?.gave_up ?? [] };
+};
+
 export function usePendingPropagations() {
-  return useQuery({
-    queryKey: KEYS.pending,
-    queryFn: async () =>
-      (await request<{ pending: PendingRow[] }>("/propagations")).pending ?? [],
-  });
+  return useQuery({ queryKey: KEYS.pending, queryFn: pendingRead, select: (read: PendingRead) => read.pending });
+}
+
+/**
+ * The changes Syndra stopped sending (out of tries, or refused) that this
+ * person has not marked seen: what Home's "Syndra stopped sending" counts,
+ * listed on Pending changes (re-audit R11). The same read as the queue.
+ */
+export function useGaveUpPropagations() {
+  return useQuery({ queryKey: KEYS.pending, queryFn: pendingRead, select: (read: PendingRead) => read.gave_up });
 }
 
 /**

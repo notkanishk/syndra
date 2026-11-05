@@ -12,6 +12,8 @@ export interface DrainOutcome {
   detail?: string;
   /** What is left goes on its own: no "send it" step for the reader. */
   sendsItself?: boolean;
+  /** The step left, when it is not the kind's default. */
+  next?: string;
 }
 
 /**
@@ -89,15 +91,8 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
           detail:
             "Syndra checked once before sending anything, so nothing counts against the retry limit. Everything is still waiting for you to send.",
         };
-      case "max_retries_exceeded":
-        return {
-          tone: "error",
-          message: counts
-            ? `${counts}. Stopped: Syndra has given up on one change.`
-            : "Stopped: Syndra has given up on one change.",
-          detail:
-            "The queue stops at that change, and nothing behind it was tried. Give or revoke the access again from the person's page to try afresh.",
-        };
+      // No "max_retries_exceeded": a spent row is made terminal and the pass
+      // carries on (propagation/drain.go processRow), so no pass halts on one.
       default:
         return {
           tone: "error",
@@ -114,10 +109,10 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   // again" advice below — sending again does nothing for these rows.
   if (exhausted) {
     return {
-      tone: "error",
-      message: `${counts}. Syndra has given up on ${exhausted === 1 ? "one change" : `${exhausted} changes`}.`,
-      detail:
-        "Those changes will not be tried again; the rest of the queue kept moving. Give or revoke the access again from the person's page to try afresh.",
+      tone: "warning",
+      message: `${counts}. Syndra stopped sending ${exhausted === 1 ? "one change" : `${exhausted} changes`}.`,
+      detail: "Those changes will not be tried again; the rest of the queue kept moving.",
+      next: STOPPED_NEXT,
     };
   }
 
@@ -135,8 +130,20 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
     };
   }
 
-  return { tone: failed ? "warning" : "success", message: `${counts}.` };
+  // A failed row is terminal: Send won't move it, so the step is not "send it"
+  // (re-audit (c): the "Waiting for you to send" link was drawn here).
+  return failed
+    ? { tone: "warning", message: `${counts}.`, detail: "Zitadel refused what failed, so it is not sent again.", next: STOPPED_NEXT }
+    : { tone: "success", message: `${counts}.` };
 }
+
+/**
+ * What to do about a change Syndra stopped sending. Its record is gone, so the
+ * person's page has nothing to revoke: a revocation still held in Zitadel is
+ * raised in Drift by the next check, and revoked there; a give is given again.
+ */
+export const STOPPED_NEXT =
+  "Each is listed under Syndra stopped sending, on Pending changes. Give a role again from the person's page; a revocation shows in Drift after Syndra's next check, to revoke there.";
 
 /**
  * The same send, in the vocabulary every other action reports in.
@@ -158,10 +165,10 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
  * machine instead of pressing the button again.
  */
 export function outcomeFromDrain(result: DrainResult | undefined): ActionOutcome {
-  const { tone, message, detail, sendsItself } = describeDrain(result);
+  const { tone, message, detail, sendsItself, next } = describeDrain(result);
   const kind: OutcomeKind =
     tone === "success" ? "applied" : tone === "warning" ? "queued" : tone === "error" ? "failed" : "no_change";
-  return sendsItself ? { kind, message, detail, sendsItself } : { kind, message, detail };
+  return { kind, message, detail, ...(sendsItself ? { sendsItself } : {}), ...(next ? { next } : {}) };
 }
 
 /**
@@ -177,8 +184,6 @@ function haltDetail(reason: string | undefined, system: string | undefined): str
       return "Zitadel is not answering. Its changes are still waiting for you to send, in order; the rest went through.";
     case "target_unreachable":
       return `${system ?? "The connected system"} is not answering. Its changes are still waiting for you to send, and nothing counts against the retry limit.`;
-    case "max_retries_exceeded":
-      return "Syndra has given up on a change there, so that queue stops at it. Nothing behind it was tried.";
     case "drain_in_progress":
       return "Another send was already running for it.";
     default:

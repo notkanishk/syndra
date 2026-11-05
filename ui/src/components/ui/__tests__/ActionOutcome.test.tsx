@@ -159,7 +159,7 @@ describe("a queued revoke (Drift)", () => {
       />,
     );
     const seat = screen.getByRole("status");
-    expect(seat.textContent).toBe("On its wayRevocations send on their ownNothing for you to do. Syndra sends it on its own and says on Home if it gives up.");
+    expect(seat.textContent).toBe("On its wayRevocations send on their ownNothing for you to do. Syndra sends it on its own and says on Home if it stops sending it.");
     expect(screen.queryByRole("link")).toBeNull();
     expect(seat.querySelector(".bg-warn")).toBeNull();
     expect(seat.querySelector("[data-dot]")?.className).toContain("bg-faint");

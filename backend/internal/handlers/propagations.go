@@ -61,10 +61,33 @@ func handleListPendingPropagations(w http.ResponseWriter, r *http.Request) {
 		rows = []models.PendingPropagation{} // encode as [] not null for the UI
 	}
 	// Each row Syndra sends again on its own says when, and which try.
+	var tried []string
 	for i := range rows {
-		rows[i].Retry = propagation.RowRetry(rows[i])
+		if rows[i].Retry = propagation.RowRetry(rows[i]); rows[i].Retry != nil {
+			tried = append(tried, rows[i].ID)
+		}
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"pending": rows})
+	// A role marked to wait AFTER its change was sent holds that change: the
+	// background drain skips it (ClaimDueRetries), so its row must not promise
+	// a next try (re-audit R15). Said as the wait it now is. A failed read
+	// leaves the promise, which the count beside it already discounts.
+	if len(tried) > 0 {
+		if waits, err := dbOutboxRowsWaitForRole(r.Context(), tried); err == nil {
+			for i := range rows {
+				if waits[rows[i].ID] {
+					rows[i].Retry, rows[i].WaitReason = nil, db.WaitReasonRoleWaits
+				}
+			}
+		}
+	}
+	// What Syndra stopped sending that this person has not marked seen: Home's
+	// "Syndra stopped sending" points here (re-audit R11). Never fatal: the
+	// queue is the page's subject.
+	gaveUp, err := dbListGaveUp(r.Context(), resolveActor(r, ""))
+	if err != nil || gaveUp == nil {
+		gaveUp = []models.PendingPropagation{}
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{"pending": rows, "gave_up": gaveUp})
 }
 
 // handleMarkGaveUpSeen is the operator saying they have seen the changes

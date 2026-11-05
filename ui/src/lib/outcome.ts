@@ -1,4 +1,6 @@
 import { ApiError, LostReply } from "@/lib/api-client";
+// A cycle (retry.ts reads NOTHING_TO_DO): both sides use the other only inside functions.
+import { RETRYING, retryingOutcome, type RetryState } from "@/lib/retry";
 
 /**
  * What happened, in six words, everywhere in the product.
@@ -64,7 +66,7 @@ export const NOTHING_TO_DO = "Nothing for you to do.";
 export const SEND_IT = "Press Send on Pending changes.";
 
 /** A change that goes on its own, with nothing to say about when. */
-export const SENDS_ITSELF_NEXT = `${NOTHING_TO_DO} Syndra sends it on its own and says on Home if it gives up.`;
+export const SENDS_ITSELF_NEXT = `${NOTHING_TO_DO} Syndra sends it on its own and says on Home if it stops sending it.`;
 
 /**
  * The step an outcome leaves, or that there is none. Never empty: the guard
@@ -77,6 +79,9 @@ export function nextStepOf(outcome: ActionOutcome): string {
   switch (outcome.kind) {
     case "applied":
     case "no_change":
+      // Only true when nothing is left: a caller whose detail names a step,
+      // or whose change left anything waiting, says so in `next` (re-audit
+      // R1, R4, R6, R8, R12); reaudit-outcomes.test.tsx holds each.
       return NOTHING_TO_DO;
     case "queued":
       return outcome.sendsItself ? SENDS_ITSELF_NEXT : SEND_IT;
@@ -249,16 +254,21 @@ export const EXTEND_DAYS = 90;
  * next read; it is not said while the change is still held back.
  */
 export function outcomeFromExtend(
-  result: { status?: string; outbox_id?: string } | undefined,
+  result: { status?: string; outbox_id?: string; wait_reason?: string; retry?: RetryState } | undefined,
   days: number,
   leaves?: string,
 ): ActionOutcome {
-  const waiting = result?.status === "pending";
-  return {
-    kind: waiting ? "queued" : "applied",
-    message: waiting ? `Will extend by ${days} days once sent` : `Extended by ${days} days`,
-    detail: waiting ? undefined : leaves,
-  };
+  if (result?.status !== "pending") {
+    return { kind: "applied", message: `Extended by ${days} days`, detail: leaves };
+  }
+  // Re-audit R14: the end date is Syndra's and has already moved; only what
+  // reaches Zitadel waits, and why decides who sends it.
+  const done = `Extended by ${days} days in Syndra`;
+  if (result.wait_reason === RETRYING) return retryingOutcome(done, result.retry);
+  if (result.wait_reason === "role_waits" || result.wait_reason === "manual" || !result.wait_reason) {
+    return { kind: "queued", message: `Will extend by ${days} days once sent` };
+  }
+  return { kind: "queued", message: `${done}. Zitadel didn't take it when it was sent; it goes when you send it` };
 }
 
 /**
@@ -333,8 +343,13 @@ export const NOTHING_CHANGED = "Nothing was changed.";
  * {@link NOTHING_CHANGED}. Every backend code that can fail part-way is here;
  * `partial-codes.test.ts` reads the handlers and fails on one that is not.
  */
-/** Where to look after a write whose reply never came: any action, so the two places every one of them leaves a trace. */
-const LOST_REPLY_WHERE = "Pending changes or Audit";
+/**
+ * Where to look after a write whose reply never came. Any action can lose its
+ * reply, and not every one leaves a row in Pending changes or Audit (marking a
+ * give-up seen, a setting), so the place is the one every write changes: the
+ * page it was made on, read again.
+ */
+const LOST_REPLY_WHERE = "this page after a reload";
 
 export const MAY_HAVE_GONE_THROUGH: Record<string, string> = {
   DRAIN_ERROR: "Pending changes",
@@ -353,6 +368,10 @@ export const MAY_HAVE_GONE_THROUGH: Record<string, string> = {
   RECORD_NOT_RESTORED: "the role under Roles",
   // Writes the answer and its audit line in one transaction (db/addon_operations.go:382-419); a failed commit is unknowable from here.
   ANSWER_NOT_RECORDED: "Unconfirmed changes on the system's page",
+  // A role write whose answer was lost and whose read-back failed (handlers/discovery.go roleChangeUnknownCode): it may be in Zitadel.
+  OUTCOME_UNKNOWN: "Zitadel › Projects",
+  // A Zitadel › Users change that recorded some roles, then hit a fault (handlers/discovery.go grantChangeFailed).
+  PARTLY_RECORDED: "Pending changes and the person's page",
   // Read on most screens, write on a few (WRITE_ONLY).
   ZITADEL_ERROR: "Audit",
   INTERNAL_ERROR: "Audit",
@@ -387,6 +406,15 @@ export function partialSentence(where: string): string {
 /** True when the outcome must carry {@link NOTHING_CHANGED}. */
 export function statesNothingChanged(kind: OutcomeKind): boolean {
   return kind === "refused" || kind === "failed";
+}
+
+/**
+ * True when the step left is pressing Send, drawn as the one link "Waiting for
+ * you to send →". A queued outcome that goes on its own, or whose caller named
+ * another step (a refused change that Send won't move), draws its own line.
+ */
+export function waitsForSend(outcome: ActionOutcome): boolean {
+  return outcome.kind === "queued" && !outcome.sendsItself && (outcome.next === undefined || outcome.next === SEND_IT);
 }
 
 /**

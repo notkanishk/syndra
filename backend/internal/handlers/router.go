@@ -269,6 +269,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleAssignZitadelGrant)))
 	mux.HandleFunc("PUT /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleUpdateZitadelGrant)))
 	mux.HandleFunc("DELETE /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleRemoveZitadelGrant)))
+	// What that revoke would revoke and keep, by its own code (re-audit R18).
+	mux.HandleFunc("GET /api/v1/zitadel/users/{id}/grants/{grantId}/removal", withCORS(withOperatorAuth(handleRemoveZitadelGrantPreview)))
 
 	// Drift triage (B2): operator resolves out-of-band Zitadel grants surfaced by
 	// the webhook listener or the reconciliation sweep. Operator-gated — same

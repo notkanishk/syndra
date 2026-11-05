@@ -133,9 +133,9 @@ export const AUDIT_ACTIONS: Record<
   // (the one retry model, owner 5 Nov 2026). One row per automatic try; its
   // details carry retried_by "automatic", try n of N, and how it went.
   "propagation.retried": {
-    verb: "Sent a change to Zitadel again on its own (an automatic retry)",
-    template: "Sent a change for {} to Zitadel again on its own (an automatic retry)",
-    passive: "A change to their access was sent to Zitadel again on its own (an automatic retry)",
+    verb: "Sent a change again on its own (an automatic retry)",
+    template: "Sent a change for {} again on its own (an automatic retry)",
+    passive: "A change to their access was sent again on its own (an automatic retry)",
   },
   "propagation.cancelled_unsent": {
     verb: "Cancelled a change that was waiting for you to send",

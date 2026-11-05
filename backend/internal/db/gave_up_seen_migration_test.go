@@ -27,8 +27,10 @@ func TestGaveUpSeenMigration_CoversTheQueries(t *testing.T) {
 		t.Error("000082 down must drop the table up created")
 	}
 	src, _ := os.ReadFile("propagations.go")
-	if !strings.Contains(funcBody(t, string(src), "CountRetries"), "gave_up_seen WHERE actor = $1") {
-		t.Error("CountRetries must read the asking person's own marker")
+	if !strings.Contains(string(src), "gave_up_seen WHERE actor = $1") ||
+		!strings.Contains(funcBody(t, string(src), "CountRetries"), "gaveUpRow") ||
+		!strings.Contains(funcBody(t, string(src), "ListGaveUp"), "gaveUpRow") {
+		t.Error("CountRetries and ListGaveUp must both read the asking person's own marker (gaveUpRow)")
 	}
 	if !strings.Contains(funcBody(t, string(src), "MarkGaveUpSeen"), "ON CONFLICT (actor)") {
 		t.Error("MarkGaveUpSeen must write the caller's own row, not a shared one")

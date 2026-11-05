@@ -7,7 +7,6 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Choice";
 import { ModalFooter } from "@/components/ui/Modal";
-import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatList } from "@/lib/format";
 import { OUTCOME_LABEL, REVOKE_SENDS_ITSELF_WORD, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -138,7 +137,6 @@ export function WriteFooter({
  */
 export function DirectWriteWarning({
   what,
-  traced = false,
   sends,
   acknowledged,
   onAcknowledge,
@@ -146,20 +144,6 @@ export function DirectWriteWarning({
   what: string;
   /** Traced only: when it reaches Zitadel ({@link sendsWhen}). */
   sends?: string;
-  /**
-   * True where this surface's writes go through Syndra's own path — the
-   * ledger, the audit row and the outbox in one transaction — rather than
-   * straight out to Zitadel.
-   *
-   * The single warning used to say "Syndra keeps no record of them" on every
-   * screen under `/zitadel`. That stopped being true for grants when the
-   * handlers moved onto `EnqueueDirectGrantPropagation`, and a false warning
-   * is worse than none: it teaches an operator to distrust a path that is
-   * actually the traced one, and to distrust the warning itself where it is
-   * still real. It remains real for project and role edits, which do go
-   * straight out.
-   */
-  traced?: boolean;
   /**
    * Supply both to gate the action on a tick, which every write on these
    * screens does. These are the least undoable actions in the product — no
@@ -179,34 +163,21 @@ export function DirectWriteWarning({
         <Checkbox checked={Boolean(acknowledged)} onChange={(event) => onAcknowledge(event.target.checked)} />
       </span>
       <span>
-        {/* Traced: a record IS written (C3), so the tick names only what is missing. */}
-        {traced
-          ? "I understand this changes Zitadel now, with no preview and no reason."
-          : "I understand this changes Zitadel now, with no preview and no record in Syndra."}
+        {/* A record IS written (C3), so the tick names only what is missing. */}
+        I understand this changes Zitadel now, with no preview and no reason.
       </span>
     </label>
   ) : null;
 
-  if (traced) {
-    // Nothing is wrong on this path: an explanation, so a caption, not a box.
-    return (
-      <div>
-        <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
-          <strong className="font-semibold text-ink">This goes through Syndra’s record.</strong> {what} The
-          grant, an audit line and the change are written together, so it is explained afterwards.{" "}
-          {sends ?? sendsWhen(undefined)}
-        </p>
-        {tick}
-      </div>
-    );
-  }
-  // The other path skips Syndra's record, which is a fault in the making: a box.
+  // Every write on these screens is traced: an explanation, so a caption, not a box.
   return (
-    <Notice tone="warn" title="Changes here go straight to Zitadel, and Syndra keeps no record of them." next="Make the change inside Syndra instead, unless there is no way to.">
-      {what} The next drift sweep, every six hours, lists what you changed under Drift with nobody’s
-      name on it, for somebody to resolve by hand. Do this inside Syndra instead unless there is
-      genuinely no way to.
+    <div>
+      <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
+        <strong className="font-semibold text-ink">This goes through Syndra’s record.</strong> {what} The
+        grant, an audit line and the change are written together, so it is explained afterwards.{" "}
+        {sends ?? sendsWhen(undefined)}
+      </p>
       {tick}
-    </Notice>
+    </div>
   );
 }

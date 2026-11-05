@@ -21,7 +21,7 @@ import { retireOutcome, retryingOutcome, retryNextStep, type RetryState, type Re
  * parts, so no screen can forget it.
  */
 const KINDS: OutcomeKind[] = ["applied", "queued", "no_change", "refused", "failed"];
-const STATES: RetryStateName[] = ["sent", "retrying", "waiting", "failed"];
+const STATES: RetryStateName[] = ["retrying", "waiting"];
 const NEXT = "2099-11-05T08:35:00Z";
 
 describe("every outcome kind maps to a next step", () => {
@@ -50,7 +50,7 @@ describe("every outcome kind maps to a next step", () => {
 
   it("a retrying change says when, and that there is nothing to do", () => {
     const retry: RetryState = { state: "retrying", try: 2, of: 6, next_try: NEXT };
-    expect(nextStepOf(retryingOutcome("Given", retry))).toMatch(/^Nothing for you to do\. Syndra sends it again at .* and says on Home if it gives up\.$/);
+    expect(nextStepOf(retryingOutcome("Given", retry))).toMatch(/^Nothing for you to do\. Syndra sends it again at .* and says on Home if it stops sending it\.$/);
     expect(nextStepOf(retireOutcome(2, "halted:retrying", retry))).toMatch(/sends them again at/);
   });
 });

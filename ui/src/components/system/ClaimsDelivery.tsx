@@ -175,6 +175,7 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
   const apps = group.length;
   let title: string;
   let body: ReactNode;
+  let end: { next: ReactNode } | { nothingToDo: string };
   switch (kind) {
     case "CLAIMS_NOT_CALLED":
       title = `Zitadel didn't reach Syndra for ${plural(apps, "app")}`;
@@ -185,6 +186,7 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
           Actions with what delivery needs.
         </>
       );
+      end = { next: "Open Configuration, below, and use Open Actions in Zitadel on each row that differs." };
       break;
     case "CLAIMS_NOT_SERVED":
       title = `Syndra answered ${plural(apps, "app")} without people's claims`;
@@ -199,26 +201,32 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
           Zitadel called, so the sign-in went ahead, but the token carried none of Syndra&rsquo;s claims.
         </>
       );
+      end = { next: "Open Show each app under Live, below, and read what Syndra answered that app." };
       break;
     case "SIGNIN_EVENTS_MISSING":
       title = "No sign-in has reached Syndra for a day";
       body =
         "Zitadel still asks Syndra for claims, but its sign-in events have stopped arriving, so Syndra can't tell whether every sign-in got its claims. Check the event listener in Zitadel's Actions.";
+      end = { next: "Open Actions in Zitadel and check the event listener, syndra-event-listener." };
       break;
     case "CONFIG_DRIFT":
       title = "Zitadel's setup differs from what claim delivery needs";
       body = `${plural(apps, "check")} ${apps === 1 ? "differs" : "differ"}. Configuration, below, says what was expected, what Zitadel has, and where to change it.`;
+      end = { next: "Change each differing row in Configuration, below, where its link or note says." };
       break;
     case "CANNOT_CHECK": {
       const refused = group.some((f) => statusOf(f.sample) === 403);
       const parts = formatList(Array.from(new Set(group.map((f) => CHECK_PART[f.subject.split(":")[0]] ?? f.subject))));
       title = "Syndra can't read part of Zitadel's setup";
+      end = refused
+        ? { next: "Give Syndra's service account the IAM_OWNER_VIEWER role in Zitadel." }
+        : { nothingToDo: "Syndra checks again every 10 minutes. If it keeps failing, ask whoever runs the Syndra server." };
       body = refused ? (
         <>
           It couldn&rsquo;t read {parts}. {GRANT_VIEWER}
         </>
       ) : (
-        `It couldn't read ${parts}: Zitadel didn't answer. Syndra checks again every 10 minutes, so there is nothing for you to do unless it keeps failing.`
+        `It couldn't read ${parts}: Zitadel didn't answer. Syndra checks again every 10 minutes.`
       );
       break;
     }
@@ -228,6 +236,7 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
     // This Notice can't see the schedule, so it never promises a retry (W5):
     // the row below says whether Syndra tries again, and when.
     case "KEY_ROTATION":
+      end = { next: "Open the Action signing key row, below, and do what it says." };
       if (group.some((f) => f.subject === "unverified")) {
         title = "The new signing key isn't confirmed";
         body = `Syndra replaced the action signing key, but the test sign-in after it didn't pass. ${UNCONFIRMED_HOLD} The Action signing key row, below, says when it happened.`;
@@ -246,6 +255,7 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
       }
       break;
     default:
+      end = { next: "Ask whoever runs the Syndra server to look at it." };
       title = "Claim delivery needs a look";
       body = (
         <>
@@ -254,9 +264,15 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
       );
   }
   return (
-    <Notice tone={tone} title={title} live next="The matching row below says what to do, and whether Syndra tries again on its own.">
-      {body}
-    </Notice>
+    "nothingToDo" in end ? (
+      <Notice tone={tone} title={title} live nothingToDo={end.nothingToDo}>
+        {body}
+      </Notice>
+    ) : (
+      <Notice tone={tone} title={title} live next={end.next}>
+        {body}
+      </Notice>
+    )
   );
 }
 

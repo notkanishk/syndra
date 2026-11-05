@@ -20,6 +20,7 @@ import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { useRulePreview } from "@/lib/queries/useRulePreview";
 import { forecastFor, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { withRuleWaits } from "@/lib/request-decisions";
 import { expiryLabel, formatShortDate } from "@/lib/format";
 import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
@@ -289,12 +290,16 @@ function GrantDirectAccessOpen({
                   // named them, only when the write says it queued some.
                   const queuedByRules = (made as { rule_outbox_ids?: string[] }).rule_outbox_ids?.length ?? 0;
                   const alsoGave = queuedByRules > 0 && ruleLines.length > 0 ? ` ${ruleLines.join(" ")}` : "";
+                  // A rule-given role that waits is said, and ends on Send,
+                  // whatever happened to the role given here (re-audit R12).
+                  const report = (r: { word: string; outcome: Outcome }) =>
+                    setResult({ ...r, outcome: withRuleWaits(r.outcome, made.rule_waiting) });
                   if (made.wait_reason === RETRYING) {
                     // Zitadel didn't take it; Syndra sends it again on its own (lib/retry.ts).
                     const out = retryingOutcome(`${grantedRole} is given to ${first} in Syndra`, made.retry);
-                    setResult({ word: "Given", outcome: { ...out, detail: `${out.detail ?? ""}${alsoGave}` } });
+                    report({ word: "Given", outcome: { ...out, detail: `${out.detail ?? ""}${alsoGave}` } });
                   } else if (made.status !== "applied" || made.wait_reason) {
-                    setResult({
+                    report({
                       word: "Given",
                       outcome: {
                         kind: "queued",
@@ -308,7 +313,7 @@ function GrantDirectAccessOpen({
                       },
                     });
                   } else {
-                    setResult({
+                    report({
                       word: "Given",
                       outcome: {
                         kind: "applied",

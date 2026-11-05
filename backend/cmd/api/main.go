@@ -415,6 +415,8 @@ func main() {
 	// drain's advisory lock, so the two never dispatch concurrently; a pass that
 	// cannot take it simply returns and the next tick tries again.
 	var revokeSched *periodic.Runner
+	// Said wherever a retry is: off, "Syndra sends it again at …" would be false.
+	propagation.SetAutoRetry(revocationDrainEnabled())
 	if revocationDrainEnabled() {
 		revokeSched = periodic.New("REVOKE", revocationDrainInterval(), 5*time.Minute, func(ctx context.Context) error {
 			res, err := propagation.DrainRevocations(ctx)

@@ -11,6 +11,7 @@ import (
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 )
 
@@ -114,6 +115,12 @@ type BulkOutcome struct {
 	// this person is left holding afterwards. Empty when there is nothing
 	// surprising to say.
 	Consequence string `json:"consequence,omitempty"`
+	// WaitReason and Retry say, for a queued row, why it isn't in Zitadel
+	// yet (role_waits, manual, halted:<reason>, halted:retrying) and, when it
+	// is a retry, its next try, so the result tells a row Syndra sends again
+	// on its own from one that waits for Send (re-audit R2).
+	WaitReason string              `json:"wait_reason,omitempty"`
+	Retry      *extcall.RetryState `json:"retry,omitempty"`
 	// Grants the row would act on. Populated for remove_role and extend so the
 	// apply pass acts on identified rows rather than re-guessing.
 	GrantIDs []string `json:"grant_ids,omitempty"`

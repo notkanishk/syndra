@@ -20,7 +20,7 @@ export function RetryStatus({
   own?: boolean;
   className?: string;
 }) {
-  const ended = retry.state === "failed" || retry.state === "waiting";
+  const ended = retry.state === "waiting";
   return (
     <span className={`inline-flex flex-col gap-0.5 text-[13px] ${className}`} role="status">
       <span className="inline-flex items-center gap-2">

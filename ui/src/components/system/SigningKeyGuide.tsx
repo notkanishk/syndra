@@ -58,6 +58,7 @@ export function replaceResult(r: RotateResult): { outcome: Outcome; word: string
         kind: "no_change",
         message: "Replaced. No test sign-in could run, because SYNDRA_EXTERNAL_URL is not set",
         detail: "Syndra accepts the old key and the new one for 7 days.",
+        next: "Set SYNDRA_EXTERNAL_URL on the Syndra server and restart it, so a test sign-in can confirm the new key.",
       },
       word: "Replaced, not confirmed",
     };
@@ -68,6 +69,7 @@ export function replaceResult(r: RotateResult): { outcome: Outcome; word: string
         kind: "no_change",
         message: `Replaced, but the test sign-in after it didn't get its claims. ${UNCONFIRMED_HOLD}`,
         detail: "Claims delivery, above, says what the test sign-in got.",
+        next: "Open the Claims delivery section on this page and fix what it names.",
       },
       word: "Replaced, not confirmed",
     };
@@ -77,7 +79,7 @@ export function replaceResult(r: RotateResult): { outcome: Outcome; word: string
       outcome: {
         kind: "no_change",
         message: `${r.reason ?? "Zitadel replaced one key but not the other."} Syndra uses the new key, and the old one still works for the other`,
-        detail: "Replace now again to finish, or do it by hand.",
+        next: "Press Replace now again to finish, or use Do it by hand on the Action signing key row.",
       },
       word: "Partly replaced",
     };
@@ -121,6 +123,7 @@ function verifyResult(r: VerifyResult, setup: boolean): { outcome: Outcome; word
       kind: "no_change",
       message: `Syndra has the new key, but the test sign-in didn't get its claims${r.probe.detail ? `: ${r.probe.detail}` : ""}.`,
       detail: "Claims delivery, above, says what to check. The old key keeps working for 15 minutes.",
+      next: "Open the Claims delivery section on this page and fix what it names.",
     },
     word: "Not confirmed",
   };

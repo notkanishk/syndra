@@ -115,7 +115,7 @@ function FaultNotice({ row }: { row: TargetSummary }) {
   const reading = readingFor(row);
   if (row.status === "cannot_connect") {
     return (
-      <Notice tone="danger" blocking title={`Syndra can't connect to ${name}.`} next={`Fix the key under ${name}'s page, then Syndra connects on its next check.`}>
+      <Notice tone="danger" blocking title={`Syndra can't connect to ${name}.`} next="Ask whoever runs the Syndra server to fix the key. Syndra connects on its next check.">
         {reading.sentence} Nothing is reaching {name}: no new accounts, and no revocations.{" "}
         {reading.look}
       </Notice>
@@ -132,7 +132,7 @@ function FaultNotice({ row }: { row: TargetSummary }) {
   }
   if (row.status === "waiting_to_retry") {
     return (
-      <Notice tone="warn" live title={`Syndra is waiting to retry ${name}.`} nothingToDo="Syndra retries on its own when the wait is over.">
+      <Notice tone="warn" live title={`Syndra is waiting to retry ${name}.`} next="Syndra tries again on its own when the wait is over. If it keeps happening, ask whoever runs the Syndra server to look at it.">
         {reading.sentence}
       </Notice>
     );

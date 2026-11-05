@@ -105,7 +105,8 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "welcomeClaims":
         return [];
       case "retriesSeen":
-        return [GOVERNANCE];
+        // The rail's count and Pending changes' "Syndra stopped sending" list.
+        return [GOVERNANCE, ["propagations"]];
     }
   })();
   return [...keys, ...(scope.extra ?? [])];

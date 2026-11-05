@@ -9,7 +9,9 @@ import (
 
 	"syndra/internal/clock"
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/services"
+	"syndra/internal/services/propagation"
 )
 
 // BulkGrantRequest is one access operation aimed at a set of people.
@@ -160,7 +162,7 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 		if out.Effect != services.EffectApply {
 			continue
 		}
-		outboxIDs, queued, err := applyBulkOne(r, actor, input, *out)
+		outboxIDs, queued, retry, err := applyBulkOne(r, actor, input, *out)
 		if err != nil {
 			out.Effect = services.EffectFailed
 			out.Detail = "Didn't go through: " + err.Error()
@@ -189,11 +191,12 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 		// offline every row still reported success while a bulk revoke sat
 		// unexecuted in the outbox.
 		if queued == "" {
-			queued = projectUpstream(r.Context(), outboxIDs)
+			queued, retry = projectUpstream(r.Context(), outboxIDs)
 		}
 		if queued != "" {
 			out.Effect = services.EffectQueued
-			out.Detail = "Recorded here, not yet in Zitadel — " + queued
+			out.WaitReason, out.Retry = queued, retry
+			out.Detail = queuedDetail(queued)
 			continue
 		}
 		out.Effect = services.EffectApplied
@@ -213,7 +216,7 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 // conservative direction — under-claiming sends an operator to a queue that
 // turns out to be empty, over-claiming tells them a door is locked when it is
 // open.
-func projectUpstream(ctx context.Context, outboxIDs []string) string {
+func projectUpstream(ctx context.Context, outboxIDs []string) (string, *extcall.RetryState) {
 	ids := make([]string, 0, len(outboxIDs))
 	for _, id := range outboxIDs {
 		// An empty id is nothing queued for this one: nothing to watch land.
@@ -222,21 +225,39 @@ func projectUpstream(ctx context.Context, outboxIDs []string) string {
 		}
 	}
 	if len(ids) == 0 {
-		return ""
+		return "", nil
 	}
-	// The one rule (services.Deliver): a role that waits waits here too.
+	// The one rule (services.Deliver): a role that waits waits here too, and
+	// a send Zitadel didn't take is retried on its own (halted:retrying).
 	d := svcDeliver(ctx, ids, false)
-	switch {
-	case len(d.Waiting) > 0:
-		return d.WaitReason()
-	case d.Drain.Halted && d.Drain.Reason != "":
-		return d.Drain.Reason
-	case d.Drain.Applied < len(d.Sent):
-		// Requeued, failed, or claimed by a concurrent drain. Either way this
-		// request did not watch it land.
-		return "still queued for propagation"
+	if why := d.WaitReason(); why != "" {
+		return why, d.Drain.Retry
 	}
-	return ""
+	if d.Drain.Applied < len(d.Sent) {
+		// Failed, or claimed by a concurrent drain: this request did not watch
+		// it land, and nothing here says it goes on its own.
+		return db.WaitReasonHalted("not_confirmed"), nil
+	}
+	return "", nil
+}
+
+// queuedDetail is a queued bulk row's sentence, by why it isn't in Zitadel
+// yet: plain words, never the raw reason (re-audit R2). A retry's time and
+// try are said by the result from the row's retry.
+func queuedDetail(reason string) string {
+	switch {
+	case reason == db.WaitReasonRoleWaits:
+		return "Recorded in Syndra. A role it gives always waits for you, so it is in Pending changes until you send it."
+	case reason == db.WaitReasonManual:
+		return "Recorded in Syndra. It is in Pending changes until you send it."
+	case reason == db.WaitReasonHalted(db.HaltRetrying):
+		if !propagation.AutoRetry() {
+			return "Recorded in Syndra. Zitadel didn't answer, and this server doesn't send changes again on its own, so it is in Pending changes until you send it."
+		}
+		return "Recorded in Syndra. Zitadel didn't answer, so Syndra sends it again on its own."
+	default:
+		return "Recorded in Syndra, not in Zitadel yet. It is in Pending changes until you send it."
+	}
 }
 
 // applyBulkOne performs one person's share of the operation. It returns the
@@ -248,37 +269,39 @@ func projectUpstream(ctx context.Context, outboxIDs []string) string {
 // back rows. A role that waits is *meant* to leave work queued — that is not a
 // failure, but it is not "applied" either, and the operator has to be told
 // which one they got.
-func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out services.BulkOutcome) ([]string, string, error) {
+func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out services.BulkOutcome) ([]string, string, *extcall.RetryState, error) {
 	ctx := r.Context()
 
 	switch input.Op {
 	case services.BulkOpAssignRole:
 		ids, err := enqueueBulkGrant(ctx, actor, out.UserID, input.ProjectID, input.RoleKey, input.Reason, input.DurationDays, db.EndKept)
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
-		return ids, "", nil
+		return ids, "", nil, nil
 
 	case services.BulkOpRemoveRole:
 		var ids []string
 		for _, grantID := range out.GrantIDs {
 			res, err := svcDeleteDirectGrant(ctx, out.UserID, grantID, actor)
 			if err != nil {
-				return nil, "", err
+				return nil, "", nil, err
 			}
 			// There may be none — every role the grant carried is still covered
 			// by another source, so nothing is queued and nothing is drained.
 			ids = append(ids, res.OutboxIDs...)
 		}
-		return ids, "", nil
+		return ids, "", nil, nil
 
 	case services.BulkOpAssignBundle:
 		res, err := svcCascadeBundleAssigned(ctx, actor, out.UserID, input.BundleID)
-		return nil, cascadeQueuedReason(res), err
+		why, retry := cascadeQueuedReason(res)
+		return nil, why, retry, err
 
 	case services.BulkOpRemoveBundle:
 		res, err := svcCascadeBundleRemoved(ctx, actor, out.UserID, input.BundleID)
-		return nil, cascadeQueuedReason(res), err
+		why, retry := cascadeQueuedReason(res)
+		return nil, why, retry, err
 
 	case services.BulkOpExtend:
 		// The grant ledger upserts on (user, project, role), so re-enqueuing
@@ -287,7 +310,7 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 		// grants those are.
 		grants, err := svcUserDirectGrants(ctx, out.UserID)
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 		wanted := map[string]struct{}{}
 		for _, id := range out.GrantIDs {
@@ -300,30 +323,30 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 			}
 			queued, err := enqueueBulkGrant(ctx, actor, out.UserID, g.ProjectID, g.RoleKey, input.Reason, input.DurationDays, db.EndSet)
 			if err != nil {
-				return nil, "", err
+				return nil, "", nil, err
 			}
 			ids = append(ids, queued...)
 		}
-		return ids, "", nil
+		return ids, "", nil, nil
 	}
 
-	return nil, "", nil
+	return nil, "", nil, nil
 }
 
 // cascadeQueuedReason reports why a cascade's rows have not reached Zitadel, or
 // "" when they have (or when there were none to send).
-func cascadeQueuedReason(res services.CascadeResult) string {
+func cascadeQueuedReason(res services.CascadeResult) (string, *extcall.RetryState) {
 	switch {
 	case res.Enqueued == 0:
-		return "" // nothing to propagate; the closure was already correct
+		return "", nil // nothing to propagate; the closure was already correct
 	case res.Waiting > 0:
-		return "a role it gives always waits for you"
-	case res.Drain.Halted && res.Drain.Reason != "":
-		return res.Drain.Reason
+		return db.WaitReasonRoleWaits, nil
+	case res.WaitReason != "":
+		return res.WaitReason, res.Drain.Retry
 	case res.Drain.Applied < res.Enqueued:
-		return "still queued for propagation"
+		return db.WaitReasonHalted("not_confirmed"), nil
 	}
-	return ""
+	return "", nil
 }
 
 // enqueueBulkGrant writes the ledger + audit + outbox row in one transaction,

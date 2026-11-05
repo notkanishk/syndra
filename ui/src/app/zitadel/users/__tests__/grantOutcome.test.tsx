@@ -189,7 +189,44 @@ describe("giving roles in Zitadel", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Give roles in Zitadel" }));
 
     await waitFor(() => expect(dialog.textContent).toMatch(/Given in Zitadel: trained\./));
-    expect(dialog.textContent).toMatch(/Not in Zitadel yet, because Zitadel didn't take it\. It is in Pending changes: maintainer\./);
+    // No retry from the server: it waits for Send, and says so.
+    expect(dialog.textContent).toMatch(/Not in Zitadel yet\. It goes when you send it: maintainer\./);
     expect(dialog.textContent).not.toMatch(/Roles given in Zitadel/);
+  });
+
+  // Re-audit R3: a give Zitadel didn't take is retried on its own: it says
+  // when, and draws no Send link.
+  it("a give Zitadel didn't take says Syndra sends it again, and when", async () => {
+    state.assign.mockResolvedValue({
+      status: "pending",
+      wait_reason: "halted:retrying",
+      retry: { state: "retrying", try: 2, of: 6, next_try: "2099-11-05T08:35:00Z" },
+      roles: [{ role: "pLaser/maintainer", change: "given", status: "pending" }],
+    });
+    render(<UpstreamUsersPage />);
+    const dialog = openGive("maintainer");
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Give .* in Zitadel/ }));
+
+    await waitFor(() => expect(dialog.textContent).toMatch(/Syndra sends it again on its own: maintainer\./));
+    expect(dialog.textContent).toMatch(/Syndra sends it again at 14:05 \(try 2 of 6\)\./);
+    expect(dialog.textContent).toMatch(/Nothing for you to do\. Syndra sends it again at 14:05/);
+    expect(within(dialog).queryByText(/Waiting for you to send/)).toBeNull();
+  });
+
+  // Re-audit R4: a refused part is terminal, so the result names the step.
+  it("a refused part ends on what to do, never on nothing", async () => {
+    state.assign.mockResolvedValue({
+      status: "failed",
+      roles: [{ role: "pLaser/maintainer", change: "given", status: "failed" }],
+    });
+    render(<UpstreamUsersPage />);
+    const dialog = openGive("maintainer");
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Give .* in Zitadel/ }));
+
+    await waitFor(() => expect(dialog.textContent).toMatch(/Zitadel refused part of it/));
+    expect(dialog.textContent).toMatch(/Open their page to see what they hold now/);
+    expect(dialog.textContent).not.toMatch(/Nothing for you to do/);
   });
 });

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"log"
+	"slices"
 
 	"syndra/internal/db"
 	"syndra/internal/extcall"
@@ -40,6 +41,39 @@ func (d Delivery) WaitReason() string {
 		return db.WaitReasonHalted(db.HaltRetrying)
 	}
 	return ""
+}
+
+// ReasonFor is WaitReason for one row: its own wait, or why a send that left
+// rows behind didn't take it. A write carries its own row and the rules' rows
+// in one delivery, and the first waiting row is not always its own (re-audit
+// R12): a rule-given role that waits must not be blamed on the act. A sent row
+// the send did apply is the caller's to clear (it reads the row's status).
+func (d Delivery) ReasonFor(id string) string {
+	if r := d.Reason[id]; r != "" {
+		return r
+	}
+	if !slices.Contains(d.Sent, id) {
+		return ""
+	}
+	if d.Drain.Halted {
+		return db.WaitReasonHalted(d.Drain.Reason)
+	}
+	if d.Drain.Requeued+d.Drain.Errored > 0 {
+		return db.WaitReasonHalted(db.HaltRetrying)
+	}
+	return ""
+}
+
+// WaitingBesides counts the rows other than own held for the operator: what a
+// rule gave with the act that waits for Send.
+func (d Delivery) WaitingBesides(own string) int {
+	n := 0
+	for _, id := range d.Waiting {
+		if id != own {
+			n++
+		}
+	}
+	return n
 }
 
 // --- injectable deps (swapped in tests) ---

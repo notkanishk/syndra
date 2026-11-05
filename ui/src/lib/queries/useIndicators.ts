@@ -52,6 +52,14 @@ export interface Indicators {
    */
   retrying?: number;
   gave_up?: number;
+  /** The same two, per system the change was for ("zitadel", "truenas"): a TrueNAS change is never called Zitadel's. */
+  retrying_by?: Record<string, number>;
+  gave_up_by?: Record<string, number>;
+  /**
+   * Whether this server sends changes again on its own (the background drain,
+   * REVOCATION_DRAIN_ENABLED). Off, a change Zitadel didn't take waits for Send.
+   */
+  auto_retry?: boolean;
   zitadel_reachable: boolean;
 }
 
@@ -117,6 +125,14 @@ function indicatorsQuery(enabled: boolean) {
  */
 export function useIndicatorsRead(enabled = true) {
   return useQuery(indicatorsQuery(enabled));
+}
+
+/**
+ * Whether this server sends changes again on its own (the background drain).
+ * True until read, the shipped default; false only when the server says so.
+ */
+export function useAutoRetry(): boolean {
+  return useIndicatorsRead().data?.auto_retry !== false;
 }
 
 /**

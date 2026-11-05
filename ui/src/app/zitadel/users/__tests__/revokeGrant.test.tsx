@@ -7,8 +7,11 @@ import UpstreamUsersPage from "@/app/zitadel/users/page";
 const state = vi.hoisted(() => ({
   remove: vi.fn(),
   roleKeys: ["trained"] as string[],
-  // Syndra's explanation of their access on pLaser: role → reasons.
-  access: {} as Record<string, Array<{ kind: string; trigger_project?: string; trigger_role?: string }>>,
+  // The server's own answer to "what would this revoke" (re-audit R18):
+  // undefined data is a preview that couldn't be read.
+  preview: { revoked_roles: ["pLaser/trained"], retained_roles: [] as string[] } as
+    | { revoked_roles: string[]; retained_roles: string[] }
+    | undefined,
   waits: [] as Array<{ project_id: string; role_key: string }>,
 }));
 
@@ -30,21 +33,7 @@ vi.mock("@/lib/queries/useUpstream", () => ({
   useUpstreamAssignGrant: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpstreamUpdateGrant: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpstreamRemoveGrant: () => ({ mutateAsync: state.remove, isPending: false }),
-}));
-
-vi.mock("@/lib/queries/useUsers", () => ({
-  useUserAccess: () => ({
-    isLoading: false,
-    data: {
-      projects: [
-        {
-          project_id: "pLaser",
-          source_roles: Object.entries(state.access).map(([role_key, reasons]) => ({ role_key, reasons })),
-          derived_roles: [],
-        },
-      ],
-    },
-  }),
+  useGrantRemovalPreview: () => ({ isLoading: false, data: state.preview }),
 }));
 
 vi.mock("@/lib/queries/useRolesThatWait", () => ({
@@ -56,7 +45,7 @@ vi.mock("@/components/names", () => ({ ProjectName: () => null }));
 beforeEach(() => {
   state.remove = vi.fn().mockResolvedValue(undefined);
   state.roleKeys = ["trained"];
-  state.access = { trained: [{ kind: "direct" }] };
+  state.preview = { revoked_roles: ["pLaser/trained"], retained_roles: [] };
   state.waits = [];
 });
 
@@ -102,12 +91,8 @@ describe("revoking a person's roles in Zitadel", () => {
   // C4: the lede says untraced roles go too, and the count is only what goes.
   it("counts only the roles that will be removed, and names the ones that stay", () => {
     state.roleKeys = ["trained", "lead", "stray"];
-    state.access = {
-      trained: [{ kind: "direct" }],
-      lead: [{ kind: "bundle" }],
-      // A rule from a role this revoke takes away keeps nothing.
-      stray: [{ kind: "mapping", trigger_project: "pLaser", trigger_role: "trained" }],
-    };
+    // The server's answer, not a walk here: it is what the revoke then does.
+    state.preview = { revoked_roles: ["pLaser/trained", "pLaser/stray"], retained_roles: ["pLaser/lead"] };
     openRevoke();
 
     expect(document.body.textContent).toMatch(/Every other role on this grant is revoked, including any Syndra has no record of/);
@@ -116,12 +101,18 @@ describe("revoking a person's roles in Zitadel", () => {
     expect(screen.getByRole("button", { name: "Revoke these 2 roles in Zitadel" })).toBeTruthy();
   });
 
+  // Re-audit R18: no consent on a count the server didn't give.
+  it("won't ask for a count it couldn't read", () => {
+    state.preview = undefined;
+    openRevoke();
+    expect(document.body.textContent).toMatch(/couldn.t read what this would revoke/);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: /in Zitadel$/ })).toBeDisabled();
+  });
+
   it("keeps a role a rule gives from a role that stays", () => {
     state.roleKeys = ["trained", "lead"];
-    state.access = {
-      trained: [{ kind: "mapping", trigger_project: "pLaser", trigger_role: "lead" }],
-      lead: [{ kind: "bundle" }],
-    };
+    state.preview = { revoked_roles: [], retained_roles: ["pLaser/lead", "pLaser/trained"] };
     openRevoke();
     expect(document.body.textContent).toMatch(/Nothing on this grant would be revoked/);
     expect(screen.queryByRole("checkbox")).toBeNull();
@@ -155,7 +146,7 @@ describe("revoking a person's roles in Zitadel", () => {
   // W8: each role's real status, never "done" for one that is not in Zitadel yet.
   it("shows each role's real status", async () => {
     state.roleKeys = ["trained", "stray"];
-    state.access = {};
+    state.preview = { revoked_roles: ["pLaser/trained", "pLaser/stray"], retained_roles: [] };
     state.remove = vi.fn().mockResolvedValue({
       status: "pending",
       roles: [

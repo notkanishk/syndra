@@ -10,14 +10,18 @@ import { NOTHING_TO_DO, SENDS_ITSELF_NEXT, type ActionOutcome } from "@/lib/outc
  * describe the same situation two ways.
  *
  *   retrying  "Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)."
- *   waiting   nothing tries again until a person acts
- *   failed    Syndra gave up, or the system said no
- *   sent      the system confirmed it
+ *   waiting   nothing tries again until a person acts: past its last try, or
+ *             this server doesn't send changes again on its own
+ *             (REVOCATION_DRAIN_ENABLED=false, internal/services/propagation
+ *             RowRetry)
+ *
+ * A change that was sent, or failed, has no retry state: its own status says
+ * so (re-audit, 6 Nov 2026: "sent" and "failed" were never produced).
  *
  * Never "Sent" before the system confirms: a retrying change is queued, and
  * goes on its own (`sendsItself`), so it carries no "send it" link.
  */
-export type RetryStateName = "sent" | "retrying" | "waiting" | "failed";
+export type RetryStateName = "retrying" | "waiting";
 
 export interface RetryState {
   state: RetryStateName;
@@ -49,11 +53,7 @@ export function retryLine(
     case "retrying":
       return `${system} didn't answer. Syndra sends ${it} again ${when(retry.next_try, now)} (try ${retry.try} of ${retry.of}).`;
     case "waiting":
-      return `${system} didn't answer after ${retry.of === 1 ? "one try" : `${retry.of} tries`}, so Syndra won't send ${it} again on its own.`;
-    case "failed":
-      return `Syndra gave up after ${retry.try} ${retry.try === 1 ? "try" : "tries"}.`;
-    case "sent":
-      return `${system} confirmed ${it}.`;
+      return `${system} didn't answer after ${retry.try === 1 ? "one try" : `${retry.try} tries`}, so Syndra won't send ${it} again on its own.`;
   }
 }
 
@@ -67,15 +67,9 @@ export function retryNextStep(retry: RetryState, { own = false, it = "it", now =
     case "retrying":
       return own
         ? "It says here when it's done."
-        : `${NOTHING_TO_DO} Syndra sends ${it} again ${when(retry.next_try, now)} and says on Home if it gives up.`;
+        : `${NOTHING_TO_DO} Syndra sends ${it} again ${when(retry.next_try, now)} and says on Home if it stops sending ${it}.`;
     case "waiting":
       return own ? "Set your password again." : "Press Send on Pending changes to try again.";
-    case "failed":
-      return own
-        ? "Set your password again. If it keeps failing, ask makerspace staff."
-        : "Give or revoke the access again from the person's page.";
-    case "sent":
-      return NOTHING_TO_DO;
   }
 }
 
@@ -94,11 +88,13 @@ export function retryingOutcome(done: string, retry: RetryState | undefined, it 
   const line = retry
     ? retryLine(retry, "Zitadel", it)
     : `Zitadel didn't answer. Syndra sends ${it} again on its own.`;
+  // Waiting is never "on its way": nothing sends it until Send is pressed.
+  const goes = !retry || retry.state === "retrying";
   return {
     kind: "queued",
     message: `${done}. ${line}`,
     detail: line,
-    sendsItself: true,
+    sendsItself: goes || undefined,
     next: retry ? retryNextStep(retry, { it }) : SENDS_ITSELF_NEXT,
   };
 }
@@ -129,6 +125,10 @@ export function retireOutcome(n: number, reason: string | undefined, retry?: Ret
     reason === RETRYING && retry
       ? retryLine(retry, "Zitadel", "them")
       : "Zitadel didn't answer, so Syndra sends them again on its own.";
+  if (retry?.state === "waiting") {
+    // This server sends nothing again on its own (the background drain is off).
+    return { kind: "queued", message: `Not in Zitadel yet. ${line}`, detail: after.trim() || undefined, next: retryNextStep(retry, { it: "them" }) };
+  }
   return {
     kind: "queued",
     message: `Not in Zitadel yet. ${line}`,

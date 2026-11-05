@@ -74,6 +74,8 @@ export interface DecisionResult {
   /** given, the end moved (extended), or it had ended while waiting (given_again). */
   effect?: "given" | "extended" | "given_again";
   until?: string;
+  /** How many roles an automatic rule gave with the approval that wait for you to send (re-audit R12). */
+  rule_waiting?: number;
 }
 
 const KEYS = {

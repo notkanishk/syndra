@@ -44,8 +44,9 @@ function roleWriteOutcome(error: unknown, what: string): Outcome {
     return {
       kind: "no_change",
       message: `Zitadel didn't answer, so Syndra can't tell whether ${what}`,
-      detail:
-        "Syndra kept its record and wrote this to Audit. Open this project again in a minute to see what Zitadel holds.",
+      detail: "Syndra kept its record and wrote this to Audit.",
+      // Re-audit R6: the step is said as the step, never followed by "nothing to do".
+      next: "Open this project again in a minute to see what Zitadel holds.",
     };
   }
   return outcomeFromError(error);

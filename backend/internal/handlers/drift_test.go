@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/access"
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 	"syndra/internal/services"
 	"syndra/internal/services/drift"
@@ -49,6 +50,38 @@ func resetDriftDeps(t *testing.T) {
 	}
 	// No automatic rules unless a test says so.
 	svcRulesFollowing = func(context.Context, string, []access.Role) ([]services.RuleRow, error) { return nil, nil }
+	origStatus := dbGetPropagationStatus
+	t.Cleanup(func() { dbGetPropagationStatus = origStatus })
+	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
+}
+
+// Re-audit R5: a revoke Zitadel took says it went ("applied"); one it didn't
+// take carries its next try, so the result is never "On its way" for a revoke
+// already done, nor silent about when the next try is.
+func TestHandleRevokeDrift_SaysWhereTheRevokeStands(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
+	dbRevokeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) { return "o1", nil }
+	revoke := func() map[string]any {
+		req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/revoke", nil)
+		req.SetPathValue("id", "d1")
+		w := httptest.NewRecorder()
+		handleRevokeDrift(w, req)
+		body := map[string]any{}
+		_ = json.Unmarshal(w.Body.Bytes(), &body)
+		return body
+	}
+	if body := revoke(); body["propagation"] != "applied" || body["wait_reason"] != nil {
+		t.Fatalf("a revoke Zitadel took says applied: %v", body)
+	}
+	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
+		return services.Delivery{Sent: ids, Drain: propagation.DrainResult{Requeued: 1,
+			Retry: &extcall.RetryState{State: extcall.RetryRetrying, Try: 2, Of: 6}}}
+	}
+	body := revoke()
+	if body["wait_reason"] != "halted:retrying" || body["retry"] == nil || body["propagation"] != nil {
+		t.Fatalf("a revoke Zitadel didn't take says when it goes again: %v", body)
+	}
 }
 
 // --- Adoption records a direct grant, and says only that ---
@@ -307,6 +340,15 @@ func TestBulkAdoptPlan_NamesTheRuleRows(t *testing.T) {
 	if adoptedRuleRows(1) != "1 more change from automatic rules waits in Pending changes for you to send." ||
 		adoptedRuleRows(3) != "3 more changes from automatic rules wait in Pending changes for you to send." {
 		t.Fatal("the apply line counts the rule rows")
+	}
+	// Re-audit R1: an adoption that queued rule rows is not done for the
+	// operator: the row is queued, so the result ends on "send it".
+	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) {
+		return []string{"rule-o1"}, nil
+	}
+	applyDriftPlan(httptest.NewRequest("POST", "/", nil), &plan, driftOpAdopt, "op", "")
+	if o := plan.Outcomes[0]; o.Effect != services.EffectQueued || !strings.Contains(o.Consequence, "for you to send") {
+		t.Fatalf("an adoption that queued rule rows must be queued, got %+v", o)
 	}
 }
 

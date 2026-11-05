@@ -101,4 +101,6 @@ var (
 	svcRoleMembers          = services.RoleMembers
 	svcGovernanceIndicators = services.GovernanceIndicators
 	svcDeleteDirectGrant    = services.DeleteDirectGrant
+	// svcPreviewDirectGrantRemoval is the removal's answer without its write.
+	svcPreviewDirectGrantRemoval = services.PreviewDirectGrantRemoval
 )

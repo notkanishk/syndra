@@ -32,6 +32,7 @@ import { useZitadelHealth } from "@/lib/queries/useZitadel";
 import { invalidateAfter } from "@/lib/queries/invalidation";
 import { CheckPips, zitadelReading } from "@/components/targets/TargetReading";
 import { useMissedChecks } from "@/lib/useMissedChecks";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 
 interface RotationStatus {
   key_installed?: boolean;
@@ -489,6 +490,7 @@ function HealthLine({
   detail?: string;
   projectCount?: number;
 }) {
+  const auto = useAutoRetry();
   const word = reading.word;
   const sees = projectCount === undefined ? "" : `, and sees ${projectCount} project${projectCount === 1 ? "" : "s"}`;
   // One or two missed checks are shown as pips and raise no Notice; three in a row is Offline.
@@ -517,13 +519,18 @@ function HealthLine({
           title={`${word}.`}
           {...(notConfigured
             ? { next: "Ask whoever runs the Syndra server to connect it to Zitadel." }
-            : { nothingToDo: "Syndra keeps checking and sends what is waiting when Zitadel answers." })}
+            : { next: "Once Zitadel answers, press Send on Pending changes for anything still waiting for you." })}
         >
           {notConfigured
             ? "Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access. "
             : "Three checks in a row went unanswered. Syndra keeps checking. "}
+          {/* Re-audit R9: exactly what happens. Only the background drain
+              sends on its own (revocations, and changes it is already sending
+              again); a change that waits for you never goes by itself. */}
           {detail ||
-            "Syndra is showing what it last knew. Nothing is lost: changes waiting for you to send stay in order and go through when Zitadel is back."}
+            (auto
+              ? "Syndra is showing what it last knew. Nothing is lost: revocations, changes sent straight away, and changes Syndra is sending again go on their own when Zitadel answers. Changes waiting for you stay, in order, until you press Send."
+              : "Syndra is showing what it last knew. Nothing is lost: every change stays, in order, until you press Send. This Syndra server sends nothing again on its own.")}
         </Notice>
       </Unfold>
     </div>

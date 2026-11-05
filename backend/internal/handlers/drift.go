@@ -285,9 +285,18 @@ func handleRevokeDrift(w http.ResponseWriter, r *http.Request) {
 	// Delivered by the one rule (services.Deliver), like every other write: a
 	// role that waits holds the revoke for the operator, as its forecast said
 	// (coherence audit C5). It used to be drained by id, past that check.
+	// The answer says where the revoke stands (re-audit R5): sent says
+	// "applied" once Zitadel took it, a retry carries its next try, and a
+	// role that waits says so. "On its way" is only for one still going.
 	body := map[string]any{"status": "revoked", "outbox_id": outboxID}
-	if why := svcDeliver(r.Context(), []string{outboxID}, false).WaitReason(); why != "" {
+	d := svcDeliver(r.Context(), []string{outboxID}, false)
+	if why := d.WaitReason(); why != "" {
 		body["wait_reason"] = why
+		if d.Drain.Retry != nil {
+			body["retry"] = d.Drain.Retry
+		}
+	} else if st, err := dbGetPropagationStatus(r.Context(), outboxID); err == nil && st != "" {
+		body["propagation"] = st
 	}
 	jsonResponse(w, http.StatusOK, body)
 }

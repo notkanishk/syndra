@@ -6,7 +6,7 @@ import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { request } from "@/lib/api-client";
 import { formatShortDate } from "@/lib/format";
 import { personOr, roleName } from "@/lib/names";
-import { FORECAST, forecastFor, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
+import { FORECAST, forecastFor, outcomeFromError, SEND_IT, type ActionOutcome } from "@/lib/outcome";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
@@ -27,12 +27,29 @@ export function approvalOutcome(
   waitReason: string | undefined,
   name: string,
   role: string,
-  result?: Pick<DecisionResult, "effect" | "until" | "retry">,
+  result?: Pick<DecisionResult, "effect" | "until" | "retry" | "rule_waiting">,
   alsoGave: RuleGift[] = [],
 ): ActionOutcome {
   const outcome = approvalOnly(waitReason, name, role, result);
   const rules = ruleGiftLine(alsoGave);
-  return rules ? { ...outcome, message: `${outcome.message} ${rules}` } : outcome;
+  const withRules = rules ? { ...outcome, message: `${outcome.message} ${rules}` } : outcome;
+  return withRuleWaits(withRules, result?.rule_waiting);
+}
+
+/**
+ * A role an automatic rule gave with the act that waits for you (re-audit
+ * R12): said apart from the act's own outcome, which is never blamed for it,
+ * and the result ends on Send. The act itself may have gone straight away.
+ */
+export function withRuleWaits(outcome: ActionOutcome, ruleWaiting: number | undefined): ActionOutcome {
+  if (!ruleWaiting) return outcome;
+  const line =
+    ruleWaiting === 1
+      ? "One role an automatic rule also gives always waits for you, so it is in Pending changes."
+      : `${ruleWaiting} roles automatic rules also give always wait for you, so they are in Pending changes.`;
+  // Already waiting for Send: the link says it once.
+  if (outcome.kind === "queued" && !outcome.sendsItself) return { ...outcome, message: `${outcome.message} ${line}` };
+  return { ...outcome, kind: "queued", sendsItself: undefined, message: `${outcome.message} ${line}`, next: SEND_IT };
 }
 
 /** A role an automatic rule also gave with the approval, by name. */
@@ -77,7 +94,7 @@ function approvalOnly(
   waitReason: string | undefined,
   name: string,
   role: string,
-  result?: Pick<DecisionResult, "effect" | "until" | "retry">,
+  result?: Pick<DecisionResult, "effect" | "until" | "retry" | "rule_waiting">,
 ): ActionOutcome {
   if (waitReason === RETRYING) return retryingOutcome("Approved", result?.retry);
   if (!waitReason) {

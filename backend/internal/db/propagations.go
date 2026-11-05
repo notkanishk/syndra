@@ -878,21 +878,66 @@ func MarkGaveUpSeen(ctx context.Context, actor string) error {
 	return nil
 }
 
-// CountRetries counts the changes Syndra is sending again on its own, and the
-// ones it gave up on (out of retries) that actor has not marked seen, so
-// neither goes unnoticed. A give-up stays until that person marks it seen.
-func CountRetries(ctx context.Context, actor string) (retrying, gaveUp int, err error) {
-	q := `SELECT
+// gaveUpRow is a change Syndra stopped sending that actor ($1) has not marked
+// seen: any row that ended without being applied, whether out of retries,
+// refused by the target on a later try, or refused on its first (re-audit
+// R11: a refused retry used to leave "retrying" and never reach "gave up", so
+// Home went quiet; and a refused row leaves Pending changes, so it is listed
+// here rather than nowhere). Failed rows are terminal and rare.
+const gaveUpRow = `status = 'failed'
+	AND completed_at > COALESCE((SELECT seen_at FROM gave_up_seen WHERE actor = $1),
+	                            NOW() - INTERVAL '` + gaveUpBefore + `')`
+
+// CountRetries counts, per target, the changes Syndra is sending again on its
+// own and the ones it stopped sending that actor has not marked seen, so
+// neither goes unnoticed, and each is said under the system it was for.
+func CountRetries(ctx context.Context, actor string) (retrying, gaveUp map[string]int, err error) {
+	q := `SELECT target,
 		COUNT(*) FILTER (WHERE ` + retryingRow + `),
-		COUNT(*) FILTER (WHERE status = 'failed' AND last_error LIKE 'out of retries%'
-		                   AND completed_at > COALESCE(
-		                       (SELECT seen_at FROM gave_up_seen WHERE actor = $1),
-		                       NOW() - INTERVAL '` + gaveUpBefore + `'))
-		FROM propagation_outbox`
-	if err := querier(ctx).QueryRow(ctx, q, actor).Scan(&retrying, &gaveUp); err != nil {
-		return 0, 0, fmt.Errorf("count retries: %w", err)
+		COUNT(*) FILTER (WHERE ` + gaveUpRow + `)
+		FROM propagation_outbox
+		WHERE status IN ('pending','failed')
+		GROUP BY target`
+	rows, err := querier(ctx).Query(ctx, q, actor)
+	if err != nil {
+		return nil, nil, fmt.Errorf("count retries: %w", err)
 	}
-	return retrying, gaveUp, nil
+	defer rows.Close()
+	retrying, gaveUp = map[string]int{}, map[string]int{}
+	for rows.Next() {
+		var target string
+		var r, g int
+		if err := rows.Scan(&target, &r, &g); err != nil {
+			return nil, nil, fmt.Errorf("count retries: %w", err)
+		}
+		if r > 0 {
+			retrying[target] = r
+		}
+		if g > 0 {
+			gaveUp[target] = g
+		}
+	}
+	return retrying, gaveUp, rows.Err()
+}
+
+// ListGaveUp is the changes CountRetries counts as given up for actor, newest
+// first: what Home's "Syndra stopped sending" points at, on Pending changes.
+func ListGaveUp(ctx context.Context, actor string) ([]models.PendingPropagation, error) {
+	q := `
+		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
+		       source, COALESCE(source_ref,''),
+		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
+		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,''), COALESCE(wait_reason,''), not_before
+		FROM propagation_outbox
+		WHERE ` + gaveUpRow + `
+		ORDER BY completed_at DESC
+		LIMIT 200`
+	rows, err := querier(ctx).Query(ctx, q, actor)
+	if err != nil {
+		return nil, fmt.Errorf("list gave up: %w", err)
+	}
+	defer rows.Close()
+	return scanPropagations(rows)
 }
 
 // CountPendingPropagations counts rows still in flight (pending or in_flight) —

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/services"
 	"syndra/internal/services/propagation"
 )
@@ -365,10 +366,10 @@ func TestHandleBulkGrants_UnconfirmedDrainReportsQueuedNotApplied(t *testing.T) 
 		err  error
 		want string
 	}{
-		{"drain errors", propagation.DrainResult{}, errors.New("zitadel unreachable"), "zitadel unreachable"},
-		{"zitadel offline halts with no error", propagation.DrainResult{Halted: true, Reason: "zitadel_offline"}, nil, "zitadel_offline"},
-		{"another drain holds the lock", propagation.DrainResult{Halted: true, Reason: "drain_in_progress"}, nil, "drain_in_progress"},
-		{"requeued rather than applied", propagation.DrainResult{Requeued: 1}, nil, "still queued"},
+		{"drain errors", propagation.DrainResult{}, errors.New("zitadel unreachable"), "halted:"},
+		{"zitadel offline halts with no error", propagation.DrainResult{Halted: true, Reason: "zitadel_offline"}, nil, "halted:"},
+		{"another drain holds the lock", propagation.DrainResult{Halted: true, Reason: "drain_in_progress"}, nil, "halted:"},
+		{"requeued rather than applied", propagation.DrainResult{Requeued: 1}, nil, "halted:retrying"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stubRehearsal(t, services.BulkPlan{
@@ -397,8 +398,14 @@ func TestHandleBulkGrants_UnconfirmedDrainReportsQueuedNotApplied(t *testing.T) 
 			if plan.Outcomes[0].Effect != services.EffectQueued {
 				t.Fatalf("effect = %q, want queued — the change has not reached Zitadel", plan.Outcomes[0].Effect)
 			}
-			if !strings.Contains(plan.Outcomes[0].Detail, tc.want) {
-				t.Errorf("the row must say why it is queued, got %q", plan.Outcomes[0].Detail)
+			// Why, as a reason the result reads (re-audit R2), and a sentence
+			// in plain words: never the raw code, never an em dash.
+			o := plan.Outcomes[0]
+			if !strings.HasPrefix(o.WaitReason, tc.want) {
+				t.Errorf("wait_reason = %q, want %q", o.WaitReason, tc.want)
+			}
+			if !strings.HasPrefix(o.Detail, "Recorded in Syndra") || strings.ContainsAny(o.Detail, "—_") {
+				t.Errorf("the row must say why it is queued in plain words, got %q", o.Detail)
 			}
 			// Counted apart from success, so the headline cannot round it up.
 			if plan.Summary.Queued != 1 || plan.Summary.Succeeded != 0 {
@@ -512,11 +519,24 @@ func TestHandleBulkGrants_RejectsInvalidRequests(t *testing.T) {
 // A bundle whose role waits says so, rather than blaming the bundle's mode or
 // calling it merely "still queued".
 func TestCascadeQueuedReason_SaysTheRoleWaits(t *testing.T) {
-	got := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Waiting: 1, WaitReason: db.WaitReasonRoleWaits})
-	if got != "a role it gives always waits for you" {
+	got, _ := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Waiting: 1, WaitReason: db.WaitReasonRoleWaits})
+	if got != db.WaitReasonRoleWaits || !strings.Contains(queuedDetail(got), "always waits for you") {
 		t.Fatalf("got %q", got)
 	}
-	if got := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Drain: propagation.DrainResult{Applied: 2}}); got != "" {
+	if got, _ := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Drain: propagation.DrainResult{Applied: 2}}); got != "" {
 		t.Fatalf("everything sent says nothing: %q", got)
+	}
+	// A cascade Zitadel didn't take is retrying, with its next try, and says
+	// it goes on its own (re-audit R2).
+	next := &extcall.RetryState{State: extcall.RetryRetrying, Try: 2, Of: 6}
+	got, retry := cascadeQueuedReason(services.CascadeResult{Enqueued: 1, WaitReason: "halted:retrying", Drain: propagation.DrainResult{Requeued: 1, Retry: next}})
+	if got != "halted:retrying" || retry != next || !strings.Contains(queuedDetail(got), "sends it again on its own") {
+		t.Fatalf("retrying cascade: %q %v %q", got, retry, queuedDetail(got))
+	}
+	// With the background drain off, nothing sends it on its own.
+	propagation.SetAutoRetry(false)
+	t.Cleanup(func() { propagation.SetAutoRetry(true) })
+	if d := queuedDetail("halted:retrying"); !strings.Contains(d, "until you send it") {
+		t.Fatalf("drain off: %q", d)
 	}
 }

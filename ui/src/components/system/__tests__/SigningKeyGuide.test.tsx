@@ -166,3 +166,14 @@ describe("SigningKeyGuide", () => {
     expect(posts("/zitadel/action-key/rotate")).toHaveLength(0);
   });
 });
+
+// R8: no outcome of a replacement ends on the default "Nothing for you to do."
+describe("replaceResult next steps", () => {
+  it("partial: press Replace now again, or Do it by hand", () => {
+    expect(replaceResult({ outcome: "partial" }).outcome.next).toMatch(/Replace now again to finish, or use Do it by hand/);
+  });
+  it("unverified: points at Claims delivery, or at SYNDRA_EXTERNAL_URL when no test sign-in could run", () => {
+    expect(replaceResult({ outcome: "unverified", probe: { pass: false, class: "claims" } }).outcome.next).toMatch(/Claims delivery section on this page/);
+    expect(replaceResult({ outcome: "unverified", probe: { pass: false, class: "not_set_up" } }).outcome.next).toMatch(/Set SYNDRA_EXTERNAL_URL on the Syndra server and restart it/);
+  });
+});

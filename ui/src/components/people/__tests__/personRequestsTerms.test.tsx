@@ -34,6 +34,23 @@ vi.mock("@/lib/queries/useTerms", () => ({
   useTerms: () => ({ data: [{ name: "Spring", start: "2027-01-01", end: "2027-05-31" }] }),
 }));
 vi.mock("@/components/names", () => ({ RoleRef: () => <span>Laser Lab · Operator</span> }));
+// What the automatic rules give with an approval, from the server's preview.
+vi.mock("@/lib/queries/useRulePreview", () => ({
+  useRulePreview: () => ({ data: [{ sentence: "Also gives Bench in Workshop, by the automatic rule from Operator." }] }),
+}));
+
+// Re-audit C2: the person's Requests tab says what approving also gives, as
+// the queue and Home do, before the approve button is pressed.
+describe("PersonRequests · approving names what the rules give", () => {
+  it("shows the rule preview beside Approve", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PersonRequests userId="u9" name="Ada" isOperator />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText(/If you approve: Also gives Bench in Workshop/)).toBeInTheDocument();
+  });
+});
 
 describe("PersonRequests · a request to keep a role", () => {
   it("says To the end of next term when the new end is a term's last day", () => {

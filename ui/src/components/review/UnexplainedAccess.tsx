@@ -84,9 +84,11 @@ import {
   outcomeFromError,
   REVOKE_SENDS_ITSELF,
   REVOKE_SENDS_ITSELF_WORD,
+  SEND_IT,
   succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
+import { RETRYING, retryingOutcome, type RetryState } from "@/lib/retry";
 import dynamic from "next/dynamic";
 import { sortByName } from "@/lib/sort";
 
@@ -1227,6 +1229,7 @@ function ResolutionDialog({
                   ? copy.word
                   : "Didn’t go through"
           }
+          person={item.user_id}
           className="mx-6 mb-1"
         />
       )}
@@ -1254,7 +1257,7 @@ function ResolutionDialog({
             disabled={resolution === "attribute" && rules.isLoading}
             onClick={async () => {
               try {
-                let answer: { rule_outbox_ids?: string[]; wait_reason?: string } | undefined;
+                let answer: DriftAnswer | undefined;
                 if (resolution === "attribute") {
                   answer = (await attribute.mutateAsync({ id: item.id, body: { source: "external_backfill" } })) as typeof answer;
                 } else if (resolution === "revoke") {
@@ -1265,17 +1268,8 @@ function ResolutionDialog({
                 const queuedByRules = answer?.rule_outbox_ids?.length ?? 0;
                 setOutcome(
                   resolution === "revoke"
-                    ? revokeOutcome(answer?.wait_reason, role)
-                    : {
-                        kind: "applied",
-                        // Not "will not be listed again" — that renders right
-                        // above this item's own name and role while both are
-                        // still on screen, which makes it false the instant it
-                        // appears. It leaves once this dialog closes.
-                        message: "Resolved. It drops off this list once you close this.",
-                        // What the rules queued on the adoption (audit C1).
-                        ...(queuedByRules > 0 ? { detail: adoptedRuleRowsLine(queuedByRules) } : {}),
-                      },
+                    ? revokeOutcome(answer?.wait_reason, role, answer)
+                    : resolvedOutcome(queuedByRules),
                 );
               } catch (error) {
                 setOutcome(outcomeFromError(error));
@@ -1298,11 +1292,47 @@ export const REVOKE_WAITS_WORD = "Waits for you";
  * delivered like every other write, so a role that waits holds it for the
  * operator, and anything else sends on its own.
  */
-export function revokeOutcome(waitReason: string | undefined, role: string): Outcome {
+export function revokeOutcome(
+  waitReason: string | undefined,
+  role: string,
+  answer?: Pick<DriftAnswer, "propagation" | "retry">,
+): Outcome {
   if (waitIsChosen(waitReason)) {
     return { kind: "queued", message: "Waiting for you to send", detail: `${waitReasonLine(waitReason, role)}.` };
   }
+  // Re-audit R5: it went, so it is not "on its way"; Zitadel didn't take it,
+  // so it says when Syndra sends it again.
+  if (!waitReason && answer?.propagation === "applied") {
+    return { kind: "applied", message: "Removed in Zitadel" };
+  }
+  if (waitReason === RETRYING) return retryingOutcome("Revocation recorded", answer?.retry);
   return REVOKE_SENDS_ITSELF;
+}
+
+/** What a drift adopt or revoke answers (handlers/drift.go). */
+interface DriftAnswer {
+  rule_outbox_ids?: string[];
+  wait_reason?: string;
+  /** The revoke's outbox status once sent: "applied" when Zitadel took it. */
+  propagation?: string;
+  retry?: RetryState;
+}
+
+/**
+ * An adopt or mark-external result. Queued when the rules queued rows: the
+ * adoption is done, but what they give waits for Send, so the result ends on
+ * that step, never on "Nothing for you to do" (re-audit R1).
+ */
+export function resolvedOutcome(queuedByRules: number): Outcome {
+  return {
+    kind: queuedByRules > 0 ? "queued" : "applied",
+    // Not "will not be listed again" — that renders right above this item's
+    // own name and role while both are still on screen, which makes it false
+    // the instant it appears. It leaves once this dialog closes.
+    message: "Resolved. It drops off this list once you close this.",
+    // What the rules queued on the adoption (audit C1).
+    ...(queuedByRules > 0 ? { detail: adoptedRuleRowsLine(queuedByRules), next: SEND_IT } : {}),
+  };
 }
 
 /** What an adoption's automatic rules queued, said in its result (audit C1). */
