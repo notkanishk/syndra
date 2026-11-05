@@ -144,8 +144,9 @@ func TestServiceAccountViews_MachinesAndMarkedHumansByName(t *testing.T) {
 
 func saveDeps(t *testing.T, users ...models.UserProfile) (upserts *[]db.ServiceAccountRow) {
 	t.Helper()
-	oFind, oUp, oSnap := svcFindUser, svcUpsertServiceAccount, svcSnapshotOf
-	t.Cleanup(func() { svcFindUser, svcUpsertServiceAccount, svcSnapshotOf = oFind, oUp, oSnap })
+	oFind, oUp, oSnap, oRef := svcFindUser, svcUpsertServiceAccount, svcSnapshotOf, svcRefresh
+	t.Cleanup(func() { svcFindUser, svcUpsertServiceAccount, svcSnapshotOf, svcRefresh = oFind, oUp, oSnap, oRef })
+	svcRefresh = func(context.Context, []string, ...string) error { return nil }
 	svcSnapshotOf = func(_ context.Context, us []models.UserProfile) *accessSnapshot { return snapshotWith(us, nil, nil) }
 	svcFindUser = func(_ context.Context, id string) (models.UserProfile, bool, error) {
 		for _, u := range users {

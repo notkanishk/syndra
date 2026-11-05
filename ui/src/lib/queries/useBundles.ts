@@ -5,6 +5,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { request } from "@/lib/api-client";
 import { sortByName } from "@/lib/sort";
 import type { CascadeOutcome } from "@/lib/types";
+import { invalidateAfter } from "./invalidation";
 
 export interface BundleRow {
   id: string;
@@ -217,12 +218,6 @@ export function useBundleRolesByBundle(
  * `users` is NOT invalidated. An edit reaches nobody, so nobody's access
  * changed; refetching People after one would be claiming otherwise.
  */
-function invalidateAfterEdit(qc: ReturnType<typeof useQueryClient>, bundleId: string) {
-  qc.invalidateQueries({ queryKey: KEYS.rolesFor(bundleId) });
-  qc.invalidateQueries({ queryKey: KEYS.impactFor(bundleId) });
-  qc.invalidateQueries({ queryKey: ["bundles", bundleId, "draft"] });
-  qc.invalidateQueries({ queryKey: KEYS.list });
-}
 
 /** Create a new bundle. Invalidates the list. */
 export function useCreateBundle() {
@@ -231,9 +226,7 @@ export function useCreateBundle() {
     mutationFn: async (input: CreateBundleInput) => {
       return await request<BundleRow>("/bundles", { method: "POST", body: input });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
-    },
+    onSuccess: () => invalidateAfter(qc, "bundle"),
   });
 }
 
@@ -248,11 +241,7 @@ export function useUpdateBundle() {
   return useMutation({
     mutationFn: async ({ id, ...input }: UpdateBundleInput & { id: string }) =>
       request<{ message: string }>(`/bundles/${id}`, { method: "PUT", body: input }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
-      // The name resolver keeps its own copy; without this a screen keeps the old name.
-      qc.invalidateQueries({ queryKey: ["name-bundles"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "bundleRename"),
   });
 }
 
@@ -271,14 +260,7 @@ export function useDeleteBundle() {
         `/bundles/${id}`,
         { method: "DELETE" },
       ),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
-      qc.invalidateQueries({ queryKey: ["users"] });
-      qc.invalidateQueries({ queryKey: ["governance"] });
-      // The cascade revokes from every holder, and each revoke is queued, so
-      // the pending list gains a row per holder that this alone would miss.
-      qc.invalidateQueries({ queryKey: ["propagations"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "access"),
   });
 }
 
@@ -292,7 +274,7 @@ export function useAddBundleRole(bundleId: string) {
         body: input,
       });
     },
-    onSuccess: () => invalidateAfterEdit(qc, bundleId),
+    onSuccess: () => invalidateAfter(qc, "bundle"),
   });
 }
 
@@ -309,7 +291,7 @@ export function useRemoveBundleRole(bundleId: string) {
         `/bundles/${bundleId}/roles/${encodeURIComponent(projectId)}/${encodeURIComponent(roleKey)}`,
         { method: "DELETE" },
       ),
-    onSuccess: () => invalidateAfterEdit(qc, bundleId),
+    onSuccess: () => invalidateAfter(qc, "bundle"),
   });
 }
 
@@ -327,7 +309,7 @@ export function useSetBundleInclude(bundleId: string) {
         method: "PUT",
         body: version ? { version } : {},
       }),
-    onSuccess: () => invalidateAfterEdit(qc, bundleId),
+    onSuccess: () => invalidateAfter(qc, "bundle"),
   });
 }
 
@@ -339,7 +321,7 @@ export function useRemoveBundleInclude(bundleId: string) {
       request(`/bundles/${encodeURIComponent(bundleId)}/draft/includes/${encodeURIComponent(child)}`, {
         method: "DELETE",
       }),
-    onSuccess: () => invalidateAfterEdit(qc, bundleId),
+    onSuccess: () => invalidateAfter(qc, "bundle"),
   });
 }
 
@@ -350,9 +332,7 @@ export function useSetWelcomeBundle() {
     mutationFn: async (bundleId: string) => {
       return await request(`/bundles/${bundleId}/welcome`, { method: "PUT" });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
-    },
+    onSuccess: () => invalidateAfter(qc, "bundle"),
   });
 }
 
@@ -367,17 +347,6 @@ export function useRemoveBundle(userId: string) {
   return useMutation({
     mutationFn: async (bundleId: string) =>
       request<CascadeOutcome>(`/users/${userId}/bundles/${bundleId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["users", "access", userId] });
-      qc.invalidateQueries({ queryKey: ["users", "list"] });
-      qc.invalidateQueries({ queryKey: ["bundles"] });
-      // What waits under Pending changes just moved, in either direction: a
-      // removal queues revocations, or — when the assignment had never been
-      // sent — withdraws the deliveries that were still queued. Neither was
-      // invalidated here, so the nav count and that screen went on showing the
-      // state from before the edit until something else happened to refetch.
-      qc.invalidateQueries({ queryKey: ["governance"] });
-      qc.invalidateQueries({ queryKey: ["propagations"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "access"),
   });
 }

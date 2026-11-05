@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { request } from "@/lib/api-client";
 import type { ServiceAccount, ServiceAccountKind } from "@/lib/types";
 import { sortByName } from "@/lib/sort";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * Service accounts (A-07 §26–31): a Zitadel machine user, or a human-type
@@ -69,32 +70,21 @@ export interface ServiceAccountInput {
   owner_id: string;
 }
 
-/** What a mark or an unmark moves: the account's own reads, and everything that counts people. */
-function useRefresh() {
-  const qc = useQueryClient();
-  return () => {
-    qc.invalidateQueries({ queryKey: ["service-accounts"] });
-    // People, the people counts and the welcome bundle all read the user list.
-    qc.invalidateQueries({ queryKey: ["users"] });
-    qc.invalidateQueries({ queryKey: ["governance"] });
-  };
-}
-
 /** PUT: marks a human-type account, or changes kind, purpose or owner of any service account. */
 export function useSaveServiceAccount(id: string) {
-  const refresh = useRefresh();
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: ServiceAccountInput) =>
       request<ServiceAccount>(`/service-accounts/${encodeURIComponent(id)}`, { method: "PUT", body: input }),
-    onSuccess: refresh,
+    onSuccess: () => invalidateAfter(qc, "serviceAccount"),
   });
 }
 
 /** DELETE: "Mark as a person". The backend refuses a machine account (409 MACHINE_ACCOUNT). */
 export function useUnmarkServiceAccount(id: string) {
-  const refresh = useRefresh();
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: () => request<unknown>(`/service-accounts/${encodeURIComponent(id)}`, { method: "DELETE" }),
-    onSuccess: refresh,
+    onSuccess: () => invalidateAfter(qc, "serviceAccount"),
   });
 }

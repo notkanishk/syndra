@@ -7,6 +7,7 @@ import type { AccountHome } from "@/lib/queries/useTargets";
 import type { OneShotSecret } from "@/lib/secret";
 import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * A member's own storage view.
@@ -260,8 +261,6 @@ export function useSetStorageCredential(target: string) {
         }),
       );
     },
-    onSettled: () => {
-      client.invalidateQueries({ queryKey: ["me", "targets"] });
-    },
+    onSettled: () => invalidateAfter(client, "storageCredential"),
   });
 }

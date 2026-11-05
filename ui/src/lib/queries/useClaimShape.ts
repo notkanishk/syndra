@@ -4,6 +4,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClie
 
 import { request } from "@/lib/api-client";
 import { sortByName } from "@/lib/sort";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * What each app is told (A-14, ADR-003). A shape belongs to one app; an app
@@ -261,21 +262,12 @@ export function useDraftFrom(appId: string) {
   });
 }
 
-function useInvalidateApp(appId: string) {
-  const qc = useQueryClient();
-  return () => {
-    qc.invalidateQueries({ queryKey: ["claim-shape", "app", appId] });
-    // The index's Claims column reads the same shape.
-    qc.invalidateQueries({ queryKey: ["applications"] });
-  };
-}
-
 export function useSaveAppClaimShape(appId: string) {
-  const invalidate = useInvalidateApp(appId);
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: SaveRequest) =>
       request<SaveResult>(`${app(appId)}/claim-shape`, { method: "PUT", body }),
-    onSuccess: invalidate,
+    onSuccess: () => invalidateAfter(qc, "claimShape", { appId }),
   });
 }
 
@@ -288,14 +280,14 @@ export function useClaimShapeVersions(appId: string) {
 }
 
 export function useRestoreClaimShape(appId: string) {
-  const invalidate = useInvalidateApp(appId);
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ version, acknowledge }: { version: number; acknowledge: boolean }) =>
       request<SaveResult>(`${app(appId)}/claim-shape/versions/${version}/restore`, {
         method: "POST",
         body: { acknowledge_breaking: acknowledge },
       }),
-    onSuccess: invalidate,
+    onSuccess: () => invalidateAfter(qc, "claimShape", { appId }),
   });
 }
 
@@ -317,7 +309,7 @@ export function useStartDebug(appId: string) {
         method: "PUT",
         body: userId ? { user_id: userId } : {},
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: claimKeys.debug(appId) }),
+    onSuccess: () => invalidateAfter(qc, "claimShape", { appId }),
   });
 }
 
@@ -325,7 +317,7 @@ export function useStopDebug(appId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => request<{ on: boolean; session: DebugSession | null }>(`${app(appId)}/debug`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: claimKeys.debug(appId) }),
+    onSuccess: () => invalidateAfter(qc, "claimShape", { appId }),
   });
 }
 
@@ -372,9 +364,6 @@ export function useSaveProjectClaimProfile(projectId: string) {
     mutationFn: (body: ProjectDefaultForm) =>
       request<ProjectClaimShape>(`/projects/${encodeURIComponent(projectId)}/claim-profile`, { method: "PUT", body }),
     // Every app on the default reads it.
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["claim-shape"] });
-      qc.invalidateQueries({ queryKey: ["applications"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "claimShape"),
   });
 }

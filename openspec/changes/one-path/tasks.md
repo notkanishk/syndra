@@ -62,3 +62,19 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [ ] Create-path home: plan projects a new account's home from the desired state, apply asks `decideHome` (which reads the target). They can still disagree when the folder already exists. Fixing it makes plan read the filesystem for new accounts, which changes plan output, so it was left. #needs-triage
 - [ ] The Unconfirmed changes card (`ui/.../UnconfirmedChanges.tsx`) and `ui/src/lib/audit-vocabulary.ts` have no wording for `lifecycle.set`; it falls back to the default sentence. A lifecycle row that settles `indeterminate` is settled by a person, not from a read. #ready-for-agent
 - [ ] Outcome-to-HTTP mapping per handler (audit family 2, "differs per handler") and "reads drop the breaker reason" are not part of W1e. #needs-triage
+
+## W2b · One cache refresh (branch `fix/one-refresh-path`)
+
+- [x] `cache/refresh.go` `Refresh`; drain refreshes applied, failed and exhausted rows
+- [x] Service-account mark/unmark and bundle rename refresh through it
+- [x] Guard `cache/refresh_guard_test.go`; behavioural tests per path
+- [ ] Move `webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go`, `expiry/sweep.go` onto `Refresh`, then empty the guard's allow-list `ready-for-agent`
+- [ ] Webhook refreshes before the rule write (`webhook.go:294` then `:297`); order it after `ready-for-agent`
+- [ ] Dead `directory.InvalidateUsers`/`InvalidateAll` and the comment at `directory/zitadel.go:168` `ready-for-agent`
+
+## W2c · One invalidation map
+
+- [x] `lib/queries/invalidation.ts`; all mutation hooks and the two signing-key sites use it
+- [x] Guard test: every mutation uses it; rail kinds hold governance
+- [ ] `HomeLimit.tsx`, `UnconfirmedChanges.tsx` onto `invalidateAfter`, then widen the guard's raw-call scan to `src/` `ready-for-agent`
+- [ ] `["name-catalog"]` defined twice (`useNameCatalog.ts`, `useNameResolver.tsx`) belongs to W2d

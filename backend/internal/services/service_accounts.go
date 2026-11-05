@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"unicode/utf8"
 
+	"syndra/internal/cache"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -74,6 +76,9 @@ const maxServicePurpose = 200
 var (
 	svcUpsertServiceAccount = db.UpsertServiceAccount
 	svcDeleteServiceAccount = db.DeleteServiceAccount
+	// svcRefresh recompiles the account's cached claims: the facts carry
+	// IsServiceAccount, so a mark or unmark is a write the token must follow.
+	svcRefresh = cache.Refresh
 	// svcSnapshotOf is the access snapshot over exactly these users, for the
 	// one reading of what they hold that the People list also uses.
 	svcSnapshotOf = func(ctx context.Context, users []models.UserProfile) *accessSnapshot {
@@ -215,6 +220,7 @@ func SaveServiceAccount(ctx context.Context, id string, in ServiceAccountInput, 
 		return models.ServiceAccount{}, err
 	}
 	marks[id] = row
+	refreshServiceAccount(ctx, id)
 	return viewOf(ctx, u, marks)
 }
 
@@ -256,5 +262,14 @@ func UnmarkServiceAccount(ctx context.Context, id string) error {
 	if !removed {
 		return ErrServiceAccountNotFound
 	}
+	refreshServiceAccount(ctx, id)
 	return nil
+}
+
+// refreshServiceAccount runs after the commit. The write stands if the cache
+// is down; the 12-hour warm is the backstop, so this logs rather than fails.
+func refreshServiceAccount(ctx context.Context, id string) {
+	if err := svcRefresh(ctx, []string{id}); err != nil {
+		log.Printf("[CACHE] saved %s but could not refresh its cached claims: %v", id, err)
+	}
 }
