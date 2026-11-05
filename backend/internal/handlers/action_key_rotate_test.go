@@ -595,7 +595,7 @@ func withOldKeyDue(t *testing.T) {
 	t.Setenv(envActionKeyRotatedAt, time.Now().Add(-92*24*time.Hour).UTC().Format(time.RFC3339))
 	// The window is the whole day but this minute's neighbour, so the test
 	// never depends on the hour it runs at.
-	now := time.Now()
+	now := clock.Now()
 	t.Setenv(envQuietWindow, fmt.Sprintf("%s-%s", now.Add(-time.Minute).Format("15:04"), now.Add(2*time.Hour).Format("15:04")))
 }
 
@@ -627,7 +627,7 @@ func TestRunAuto_FirstRunOnAnOverdueKey(t *testing.T) {
 	}
 
 	t.Setenv(envAutoRotate, "")
-	now := time.Now()
+	now := clock.Now()
 	t.Setenv(envQuietWindow, fmt.Sprintf("%s-%s", now.Add(time.Hour).Format("15:04"), now.Add(2*time.Hour).Format("15:04")))
 	_ = RunActionKeyAutoRotate(context.Background())
 	if g.ev.count("zitadel:rotate:") != 0 {
