@@ -19,6 +19,15 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
+## 0d. One add-on pipe (W1e/W1f, 5 Nov 2026)
+
+Branch `fix/one-addon-pipe`; change [`changes/one-path`](changes/one-path/tasks.md). Every add-on call now goes through `addons/pipe.go` (breaker, trace before a write, idempotency key), lifecycle changes leave an `addon_operations` row and an audit line, and the TrueNAS plan and apply share one `decide`. Open from it:
+
+- The add-on's setting endpoint does not read the `Idempotency-Key` header yet (`addons/truenas/settings.go`).
+- Plan and apply can still disagree on a new account's home folder when it already exists.
+- No UI wording for `lifecycle.set` rows (Unconfirmed changes, audit vocabulary).
+- Not yet run against the real add-on: production use (2 mappings, 6 bindings) is covered by the recorded-fixture and contract tests only. Check one lifecycle flip and one setting write after deploy, then read the new row and the `Idempotency-Key` in the add-on's request log. #ready-for-human
+
 ## 0c. Dead-schema cleanup: stopped, and guards added (5 Nov 2026)
 
 Branch `chore/dead-schema-and-guards`. Owner approved two removals on condition that nothing still reads or writes them. Both are still read, so neither was removed and no migration 000078 was written.
