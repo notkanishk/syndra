@@ -123,6 +123,16 @@ export interface Preview {
   breaking: Change[];
   reach?: Reach | null;
   left_out: number[];
+  /** Per person: their last sign-in debug mode saw, against this preview's token. Absent when none was seen. */
+  live?: Record<string, LiveCheck>;
+}
+
+export interface LiveCheck {
+  at: string;
+  function: string;
+  served: Array<{ key: string; value: unknown }>;
+  expected: Array<{ key: string; value: unknown }>;
+  match: boolean;
 }
 
 export interface Draft {

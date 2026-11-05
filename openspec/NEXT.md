@@ -20,6 +20,16 @@ Four buckets, in the order they actually unblock each other:
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
 ## 0d. Rules on the pipeline (5 Nov 2026)
+## 0d. One add-on pipe (W1e/W1f, 5 Nov 2026)
+
+Branch `fix/one-addon-pipe`; change [`changes/one-path`](changes/one-path/tasks.md). Every add-on call now goes through `addons/pipe.go` (breaker, trace before a write, idempotency key), lifecycle changes leave an `addon_operations` row and an audit line, and the TrueNAS plan and apply share one `decide`. Open from it:
+
+- The add-on's setting endpoint does not read the `Idempotency-Key` header yet (`addons/truenas/settings.go`).
+- Plan and apply can still disagree on a new account's home folder when it already exists.
+- No UI wording for `lifecycle.set` rows (Unconfirmed changes, audit vocabulary).
+- Not yet run against the real add-on: production use (2 mappings, 6 bindings) is covered by the recorded-fixture and contract tests only. Check one lifecycle flip and one setting write after deploy, then read the new row and the `Idempotency-Key` in the add-on's request log. #ready-for-human
+
+## 0c. Dead-schema cleanup: stopped, and guards added (5 Nov 2026)
 
 Change [`rules-on-the-pipeline`](changes/rules-on-the-pipeline/tasks.md), ADR-006, migration 000078, branch `feat/rules-on-the-pipeline`.
 
@@ -42,6 +52,20 @@ Source: owner, 5 Nov 2026, "Automatic + button". It reverses #71. Change: [`chan
 - Set `TZ` in production's `.env`. Unset, the 03:00–05:00 window is UTC.
 - Confirm the backend's service account still holds `action.target.write`.
 - After the first replacement, read the Zitadel row and the audit.
+
+## 0c. Rate limits that never get in the way
+
+Source: owner, 5 Nov 2026, "it should never come in the way of legitimate use". Change: [`changes/rate-limits`](changes/rate-limits/tasks.md), branch `feat/rate-limits`.
+
+**What it does.**
+- On the three signed doors (`/api/action/inject` in both processes, and `/api/webhooks/zitadel`), only failed signatures are counted, per source IP (30 a minute). A signed call is never counted.
+- A member's own storage password and shadow-credential writes are limited per person (10 a minute, 50 an hour).
+- Redis down allows everything. `SYNDRA_RATE_LIMITS=off` turns all of it off.
+- The counts are under `rate_limits` on `/healthz/claims`.
+
+**Open, owner** (#ready-for-human):
+- After deploy, read `rate_limits` on production's `/healthz/claims`.
+- Confirm Caddy writes the client's address as the last `X-Forwarded-For` entry. This is unverified on the live box.
 
 ## 1. Code
 
@@ -223,7 +247,7 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
 - **A-14 replaces A-11** (claims shaping, rescoped).
   - Templates come from `docs/research/2026-11-03-app-claims.md`: every app wants a flat list; renames break NetBird and GitLab; claims must be sent as `[]`, never left out.
   - **Gap for code, found while checking:** the live path shapes with every profile in the project (`claimProfilesRead(projectID)`), so each app's override reaches every app in that project. Per-app shapes need the request's `application.client_id` mapped to its app. Zitadel sends it from v4.0. Built 3 Nov (ADR-003): the backend logs "a request named no application.client_id" once per project if prod doesn't send it.
-  - **Backend built** (`changes/claims-shaping`, ADR-003, migration 000071): one shape per app by client id, the grown shaper and templates, versions, drafts, the five-check explain step, debug mode and the lazy Actions v1 seed. The API contract is in its `design.md`. **UI built** on `feat/claims-shaping` (tasks §8): the claims part per A-14 §1–§8, the apps index's Claims column, the project default on the project's page. Still open: test people and "what the app reads" (7.2, 8.11), and confirming that prod sends `client_id` (7.4).
+  - **Backend built** (`changes/claims-shaping`, ADR-003, migration 000071): one shape per app by client id, the grown shaper and templates, versions, drafts, the five-check explain step, debug mode and the lazy Actions v1 seed. The API contract is in its `design.md`. **UI built** on `feat/claims-shaping` (tasks §8): the claims part per A-14 §1–§8, the apps index's Claims column, the project default on the project's page. Still open: "what the app reads" (7.2b), and confirming that prod sends `client_id` (7.4b #ready-for-human: the claims page now says it in check 4 when the newest calls name no app). **Built 5 Nov** on `feat/claims-pre-v1-off`, before Actions v1 goes off: test people are the preview's picker, now at parity with the door for someone Zitadel lists no project for (7.2a); the live check of a person's last captured sign-in against the preview (7.5); the project-not-listed notice (7.6); the `client_id` check (7.4a).
 - **Owner, 3 Nov, on A-14:**
   - text formats for roles: Advanced only, with a warning;
   - debug mode captures one chosen account at a time (default: the operator), never everyone;
@@ -266,7 +290,7 @@ The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checke
 `docs/from another side/ACTIONS-V2-REVIEW-2026-10-27.md` (with `FEATURE-MAP-2026-10-27.md` beside it, a test map of every feature set). The shaper is sound; the gaps are in what feeds it and what the screen claims. Checked against the code:
 
 - **Decided 28 Oct: one project per token** (ADR-002). Zitadel lists only the token's role audience in `user_grants`; a token spanning two projects (an app asking for another project's `:aud`) carries no Syndra claims, and keys are unique within a project only. Dependent roles come through rules in the app's own project.
-- **Preview isn't the live path.** The simulator compiles facts fresh; the live token reads Redis and only emits projects Zitadel lists in `user_grants`. Batch 1's recompile and warm close the worst gap (an emptied cache); the `user_grants` gate and the fail mode still differ. Next: a parity test (simulator vs `HandleActionInject` on the same facts), and the preview saying when Zitadel doesn't list the project.
+- ~~**Preview isn't the live path.**~~ **Closed 5 Nov** (`changes/claims-shaping` 7.2a, 7.5, 7.6). The parity property (`TestSnapshotAnswerEqualsThePreview`) now runs the door, `Door.Answer` on a decoded payload, so the `user_grants` gate is compared too, and the preview applies the same gate: a person Zitadel lists no project for previews as nothing, and check 5 says why. The page shows a notice when Zitadel won't list the app's project at all (roles not asserted with no served call, or a cross-project refusal), and the preview compares each person's last captured sign-in with what it shows. Left: the welcome switch's first 10 minutes aren't previewed (off on prod); a degraded answer (Redis down) is only seen by the live check.
 - **The smoke test checks shape only** (`scripts/smoke-test-action-v2.sh`): swap for a fixture with exact `append_claims`.
 - ~~**Smaller:** the Postgres fallback in the handler has no overall deadline under Zitadel's 3s; an absent `user_grants` is a silent empty 200.~~ **Built 3 Nov 2026** in [`changes/claims-delivery-integrity`](changes/claims-delivery-integrity/tasks.md) S0 and S1 (branch `feat/integrity-s0-s1`, migration 000072): one 250ms deadline per call, a Redis client whose deadlines hold, every call counted by outcome class (`GET /api/v1/claims/delivery`, `GET /healthz/claims`). Absent `user_grants` is Zitadel's own `omitempty` for "no role audience", so it counts `no_grants` per app; a renamed or project-less grant list counts `contract_fault`. Next there: S1b (the write side at scale), then S2 (the snapshot). Owner: record S0a's proof from `/healthz/claims` after a real sign-in.
 - **Built 3 Nov 2026: S1b and S2** of [`changes/claims-delivery-integrity`](changes/claims-delivery-integrity/tasks.md) (branch `feat/integrity-s1b-s2`, migration 000073). Facts are one hash per person (`facts:{u}`); a warm reads the global tables and the directory once per pass and is paced. The token path reads only an in-memory config snapshot (shapes and failure modes, reloaded within 1s of any save through `claims:gen`) and one bounded `HGET`; a last-known-good copy answers through a Redis outage for up to the project's bound (default 6h, `claim_profiles.claim_lkg_max_age_seconds`); no Postgres or Zitadel. Its own listener on `:8090` starts before migrations; `:8080` still serves the route. The parity test above is the equivalence property in `services/claim_equivalence_test.go`. **Owner:** (1) the Caddy edit in `changes/zitadel-actions-v2-deployment/DEPLOY.md` (route `/api/action/*` to `:8090` with `lb_try_duration 2s`) #ready-for-human; (2) confirm the 6h last-known-good default #needs-info; (3) the dev-box drill (Redis stop, Postgres stop, a backend restart under 2s: 0 non-served in `/healthz/claims`) #ready-for-human. The first deploy of S2 answers fail closed for the seconds between listen and the first publish; every later restart starts from the snapshot already in Redis.

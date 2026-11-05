@@ -110,12 +110,38 @@ func handlePreviewAppClaimShape(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
-	pv, err := svcPreviewAppClaimShape(r.Context(), r.PathValue("id"), req)
+	appID := r.PathValue("id")
+	pv, err := svcPreviewAppClaimShape(r.Context(), appID, req)
 	if err != nil {
 		claimShapeError(w, err)
 		return
 	}
-	jsonResponse(w, http.StatusOK, pv)
+	jsonResponse(w, http.StatusOK, withLive(appID, pv))
+}
+
+// livePreview is the preview plus, per person, their last sign-in that debug
+// mode saw, against what the preview says it carries.
+type livePreview struct {
+	services.Preview
+	Live map[string]services.LiveCheck `json:"live"`
+}
+
+// withLive compares each person's newest captured sign-in with the saved
+// shape's preview (never a draft's: a draft has carried nothing yet).
+// ponytail: debug mode's captures only (an hour, one account at a time); the
+// correlator's relayed calls carry outcomes, not payloads.
+func withLive(appID string, pv services.Preview) livePreview {
+	out := livePreview{Preview: pv, Live: map[string]services.LiveCheck{}}
+	signIns := claimDebug.SignIns(appID, 0) // newest first
+	for _, p := range pv.People {
+		for _, s := range signIns {
+			if s.UserID == p.UserID {
+				out.Live[p.UserID] = services.CompareServed(p.Now, s.Function, s.Response, s.At)
+				break
+			}
+		}
+	}
+	return out
 }
 
 func handleDraftFromAppClaimShape(w http.ResponseWriter, r *http.Request) {
