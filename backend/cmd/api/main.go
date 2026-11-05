@@ -163,19 +163,24 @@ func observeInterval() time.Duration {
 	return d
 }
 
+// startupWaits is the one start-up schedule (about two minutes in all) that
+// both awaitFirstManifests and awaitFirstObservation wait on before giving up
+// onto their regular interval.
+var startupWaits = []time.Duration{2 * time.Second, 3 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second, 30 * time.Second, 45 * time.Second}
+
 func awaitFirstManifests(ctx context.Context) {
 	// Each start-up attempt that finds the add-on not listening yet is the
 	// ordinary case, not an error: quiet while waiting, one line at the end.
 	addons.QuietStartup(true)
 	defer addons.QuietStartup(false)
-	for _, wait := range []time.Duration{2, 3, 5, 10, 15, 30, 45} {
+	for _, wait := range startupWaits {
 		if len(addons.PendingManifests()) == 0 {
 			return
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(wait * time.Second):
+		case <-time.After(wait):
 		}
 		_ = addons.RefreshAll(ctx)
 	}
@@ -206,14 +211,14 @@ var checkObservation = func(ctx context.Context) error {
 // all, when Sweep already knows how to say "not checked yet" about exactly
 // that case.
 func awaitFirstObservation(ctx context.Context) {
-	for _, wait := range []time.Duration{2, 3, 5, 10, 15, 30, 45} {
+	for _, wait := range startupWaits {
 		if checkObservation(ctx) == nil {
 			return
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(wait * time.Second):
+		case <-time.After(wait):
 		}
 	}
 	if checkObservation(ctx) != nil {
