@@ -50,7 +50,8 @@ const state: {
 } = {
   mappings: [mapping],
   holders: [],
-  history: { target: "truenas", current_version: 0, unpublished: false, versions: [] },
+  history: { target: "truenas", current_version: 0, unpublished_changes: [],
+    unpublished: false, versions: [] },
   rehearsals: [],
   rehearsalExtras: {},
 };
@@ -141,7 +142,8 @@ function renderMappings() {
 beforeEach(() => {
   state.mappings = [mapping];
   state.holders = [];
-  state.history = { target: "truenas", current_version: 0, unpublished: false, versions: [] };
+  state.history = { target: "truenas", current_version: 0, unpublished_changes: [],
+    unpublished: false, versions: [] };
   state.rehearsals = [];
   state.rehearsalExtras = {};
 });
@@ -208,7 +210,8 @@ describe("version history", () => {
     state.history = {
       target: "truenas",
       current_version: 2,
-      unpublished: false,
+      unpublished_changes: [],
+    unpublished: false,
       versions: [
         {
           version: 2,
@@ -234,7 +237,8 @@ describe("version history", () => {
     state.history = {
       target: "truenas",
       current_version: 2,
-      unpublished: true,
+      unpublished_changes: [],
+    unpublished: true,
       versions: [
         { version: 2, note: "n", published_by: "op_7", published_at: "2026-08-01T00:00:00Z", entries: [] },
       ],
@@ -248,7 +252,8 @@ describe("version history", () => {
     state.history = {
       target: "truenas",
       current_version: 3,
-      unpublished: false,
+      unpublished_changes: [],
+    unpublished: false,
       versions: [
         { version: 3, note: "now", published_by: "op_7", published_at: "2026-08-01T00:00:00Z", entries: [] },
         {
@@ -366,7 +371,8 @@ describe("publishing a version", () => {
     state.history = {
       target: "truenas",
       current_version: 0,
-      unpublished: true,
+      unpublished_changes: [],
+    unpublished: true,
       versions: [],
     };
     renderMappings();

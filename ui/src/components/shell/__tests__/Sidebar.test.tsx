@@ -57,6 +57,7 @@ describe("the rail's stable structure", () => {
     indicators.data = {
       pending_requests: 0,
       expiring_grants: 0,
+      holds_due: 0,
       pending_propagation: 0,
       drift: 0,
       unconfirmed_revocations: 0,
@@ -71,6 +72,7 @@ describe("the rail's stable structure", () => {
     indicators.data = {
       pending_requests: 3,
       expiring_grants: 1,
+      holds_due: 0,
       pending_propagation: 2,
       drift: 12,
       unconfirmed_revocations: 0,
@@ -85,6 +87,7 @@ describe("the rail's stable structure", () => {
     indicators.data = {
       pending_requests: 0,
       expiring_grants: 0,
+      holds_due: 0,
       pending_propagation: 0,
       drift: 0,
       unconfirmed_revocations: 0,
@@ -105,6 +108,7 @@ describe("the rail's stable structure", () => {
     indicators.data = {
       pending_requests: 0,
       expiring_grants: 0,
+      holds_due: 0,
       pending_propagation: 0,
       drift: 0,
       unconfirmed_revocations: 0,

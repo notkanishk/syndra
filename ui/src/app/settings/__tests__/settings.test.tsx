@@ -301,7 +301,7 @@ describe("Edit term dates", () => {
     motionInTests();
     try {
       fireEvent.click(within(d).getAllByRole("button", { name: /^Remove/ })[2]);
-      const gone = within(dialog()).getByLabelText("Monsoon, name", { hidden: true });
+      const gone = within(dialog()).getByLabelText("Monsoon, name");
       expect(gone.closest("[data-leaving]")).not.toBeNull();
       expect(gone.closest("[inert]")).not.toBeNull();
       expect(gone.closest("[data-closing]")).not.toBeNull();

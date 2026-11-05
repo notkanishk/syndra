@@ -320,7 +320,7 @@ export default function RolesPage() {
               {/*
                 What would break if this role went away. A role nobody holds may
                 still be the input to a mapping rule or a member of a bundle,
-                and "0 members" alone reads as safe to delete when it isn't.
+                and "0 people" alone reads as safe to delete when it isn't.
               */}
               <span className="hidden w-[150px] shrink-0 text-[13.5px] text-muted [text-wrap:pretty] desktop:block">
                 {role.is_unused ? (
