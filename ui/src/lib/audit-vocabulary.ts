@@ -309,15 +309,3 @@ export function actedOn(entry: AuditEntry, userId: string): "acted" | "affected"
   if (isActor && isTarget) return "both";
   return isActor ? "acted" : "affected";
 }
-
-/** Groups entries by calendar day, newest first, preserving order within a day. */
-export function groupByDay(entries: AuditEntry[]): Array<{ day: string; entries: AuditEntry[] }> {
-  const groups: Array<{ day: string; entries: AuditEntry[] }> = [];
-  for (const entry of entries) {
-    const day = entry.created_at.slice(0, 10);
-    const last = groups[groups.length - 1];
-    if (last && last.day === day) last.entries.push(entry);
-    else groups.push({ day, entries: [entry] });
-  }
-  return groups;
-}

@@ -3,18 +3,15 @@
 import type { AppSignIns } from "@/lib/queries/useSignIns";
 
 import { ToolRow } from "./ToolRow";
+import { addDays, civilDay } from "@/lib/time";
 
 const DAYS = 30;
 const TALL = 20;
 
-/** The last 30 calendar days, oldest first, as YYYY-MM-DD. */
+/** The last 30 of the makerspace's days, oldest first, as YYYY-MM-DD: the days the backend counts in. */
 export function lastDays(now: Date = new Date(), n = DAYS): string[] {
-  const out: string[] = [];
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
-  }
-  return out;
+  const today = civilDay(now);
+  return Array.from({ length: n }, (_, i) => addDays(today, i - n + 1));
 }
 
 /**

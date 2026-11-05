@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services/propagation"
@@ -21,8 +22,8 @@ import (
 
 func TestPlanApproval_AskedUntil(t *testing.T) {
 	now := time.Date(2026, 12, 15, 12, 0, 0, 0, time.UTC)
-	termEnd := time.Date(2026, 12, 18, 23, 59, 59, 0, time.UTC)
-	gone := now.Add(-time.Hour)
+	termEnd, _ := clock.EndOfDay("2026-12-18") // the whole of 18 Dec in the makerspace's zone
+	gone := now.AddDate(0, 0, -1)
 	held := models.RequestHolding{Kind: models.HoldingUntil, Until: ptrTime(now.Add(24 * time.Hour))}
 	none := models.RequestHolding{Kind: models.HoldingNone}
 
@@ -58,7 +59,7 @@ func TestPlanApproval_AskedUntil(t *testing.T) {
 
 	t.Run("a days ask is unchanged: it counts from the decision", func(t *testing.T) {
 		plan, err := planApproval(models.AccessRequest{Kind: requestKindAccess, DurationDays: days(30)}, none, now)
-		if want := now.Add(30 * 24 * time.Hour); err != nil || plan.ExpiresAt == nil || !plan.ExpiresAt.Equal(want) {
+		if want := clock.EndAfterDays(now, 30); err != nil || plan.ExpiresAt == nil || !plan.ExpiresAt.Equal(want) {
 			t.Fatalf("want %v, got %v (%v)", want, plan.ExpiresAt, err)
 		}
 	})
@@ -95,7 +96,7 @@ func decideAsk(t *testing.T, request models.AccessRequest) (code int, body strin
 }
 
 func TestApprovingALateTermAskGrantsToTheTermEnd(t *testing.T) {
-	termEnd := time.Now().UTC().Add(5 * 24 * time.Hour).Truncate(time.Second)
+	termEnd := clock.EndAfterDays(time.Now(), 5)
 	// Asked with 120 days; approved with five left in the term.
 	code, body, got, approved := decideAsk(t, models.AccessRequest{Kind: requestKindAccess, DurationDays: days(120), AskedUntil: &termEnd})
 	if code != http.StatusOK || !approved || got == nil || !got.Equal(termEnd) {
@@ -103,8 +104,21 @@ func TestApprovingALateTermAskGrantsToTheTermEnd(t *testing.T) {
 	}
 }
 
+// An ask sent as UTC midnight (the old date picker) still means the whole of
+// that day in the makerspace's zone, not until 05:30 IST.
+func TestAskedEndIsTheWholeOfItsDay(t *testing.T) {
+	sent := time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC) // 05:30 IST on 30 Nov
+	want, _ := clock.EndOfDay("2026-11-30")
+	if got := askedEnd(&sent); !got.Equal(want) {
+		t.Fatalf("askedEnd(UTC midnight 30 Nov) = %v, want %v", got, want)
+	}
+	if !want.Equal(time.Date(2026, 11, 30, 18, 29, 59, 0, time.UTC)) {
+		t.Fatalf("the end of 30 Nov is 23:59:59 IST, got %v", want)
+	}
+}
+
 func TestApprovingAfterTheAskedEndIsRefused(t *testing.T) {
-	over := time.Now().UTC().Add(-time.Hour)
+	over := time.Now().AddDate(0, 0, -1) // yesterday: an ask covers its whole last day
 	code, body, _, approved := decideAsk(t, models.AccessRequest{Kind: requestKindAccess, DurationDays: days(30), AskedUntil: &over})
 	if code != http.StatusConflict || !strings.Contains(body, "END_PASSED") || approved {
 		t.Fatalf("want 409 END_PASSED and nothing approved, got %d %s (approved %v)", code, body, approved)
@@ -117,8 +131,8 @@ func TestApprovingAfterTheAskedEndIsRefused(t *testing.T) {
 func TestApprovingADaysAskStillCountsFromTheDecision(t *testing.T) {
 	before := time.Now().UTC()
 	code, body, got, approved := decideAsk(t, models.AccessRequest{Kind: requestKindAccess, DurationDays: days(30)})
-	want := before.Add(30 * 24 * time.Hour)
-	if code != http.StatusOK || !approved || got == nil || got.Before(want) || got.After(want.Add(time.Minute)) {
+	want := clock.EndAfterDays(before, 30)
+	if code != http.StatusOK || !approved || got == nil || got.Before(want) || got.After(want.Add(24*time.Hour)) {
 		t.Fatalf("want a grant ending about %v, got %d %s (end %v)", want, code, body, got)
 	}
 }

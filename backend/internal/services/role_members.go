@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -227,9 +228,9 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		}
 		if grant, ok := grantsByUser[user.ID]; ok {
 			member.GrantID = grant.ID
-			member.Since = grant.CreatedAt.UTC().Format("2006-01-02")
+			member.Since = clock.Day(grant.CreatedAt)
 			if grant.ExpiresAt != nil {
-				member.Expires = grant.ExpiresAt.UTC().Format("2006-01-02")
+				member.Expires = clock.Day(*grant.ExpiresAt)
 			}
 		}
 		view.Members = append(view.Members, member)

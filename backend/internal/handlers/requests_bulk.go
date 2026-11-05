@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/services"
 )
@@ -192,7 +193,7 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 			if request.AskedUntil != nil {
 				out.Consequence = fmt.Sprintf(
 					"Approving mints a direct grant until %s, the end date they asked for, the same as granting it by hand.",
-					request.AskedUntil.Format("2 Jan 2006"))
+					request.AskedUntil.In(clock.Loc).Format("2 Jan 2006"))
 			} else if request.DurationDays != nil && *request.DurationDays > 0 {
 				out.Consequence = fmt.Sprintf(
 					"Approving mints a direct grant for %d days, the same as granting it by hand.",

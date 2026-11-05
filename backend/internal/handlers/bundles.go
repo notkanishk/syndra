@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
@@ -61,7 +62,7 @@ func writeRetired(w http.ResponseWriter, what string, err error) bool {
 func writeRetiredAt(w http.ResponseWriter, what string, at time.Time) {
 	jsonResponse(w, http.StatusConflict, map[string]any{
 		"error":   "RETIRED",
-		"message": "This " + what + " was retired on " + at.Format("2 Jan 2006") + ". Nothing about it can change.",
+		"message": "This " + what + " was retired on " + at.In(clock.Loc).Format("2 Jan 2006") + ". Nothing about it can change.",
 		"details": map[string]any{"retired_at": at},
 	})
 }

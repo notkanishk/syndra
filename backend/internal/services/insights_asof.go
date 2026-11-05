@@ -39,7 +39,7 @@ func parseDay(s string) (time.Time, error) {
 	return t, nil
 }
 
-// ParseAsOfDate validates ?date= against the server's local today.
+// ParseAsOfDate validates ?date= against the makerspace's today.
 func ParseAsOfDate(s string) (string, error) {
 	if _, err := parseDay(s); err != nil || s > trendNow().Format(dateLayout) { // ISO dates sort as text
 		return "", ErrInvalidAsOfDate
@@ -69,8 +69,8 @@ var (
 	snapshotBounds     = db.InsightsSnapshotBounds
 )
 
-// TakeDailyInsightsSnapshot is the daily runner's job: if today (the server's
-// local date) has no row, build one and store it. Cheap when it has, so it can
+// TakeDailyInsightsSnapshot is the daily runner's job: if today (the makerspace's
+// day) has no row, build one and store it. Cheap when it has, so it can
 // run every few hours; an error is returned for the runner to log and retry on
 // its next tick.
 func TakeDailyInsightsSnapshot(ctx context.Context) error {
@@ -116,8 +116,8 @@ func buildInsightsSnapshot(ctx context.Context, day string) (db.InsightsSnapshot
 }
 
 // sumChanges counts audit rows that give or take away access in [fromDay, to).
-func sumChanges(ctx context.Context, from, to time.Time, offset int) (map[string]int, error) {
-	rows, err := trendAuditDays(ctx, from, to, accessChangeActions(), offset)
+func sumChanges(ctx context.Context, from, to time.Time) (map[string]int, error) {
+	rows, err := trendAuditDays(ctx, from, to, accessChangeActions())
 	if err != nil {
 		return nil, err
 	}
@@ -147,8 +147,7 @@ func InsightsAsOf(ctx context.Context, day string) (models.InsightsAsOf, error) 
 	if err != nil {
 		return models.InsightsAsOf{}, err
 	}
-	_, offset := now.Zone()
-	perDay, err := sumChanges(ctx, from, now.Add(24*time.Hour), offset)
+	perDay, err := sumChanges(ctx, from, now.Add(24*time.Hour))
 	if err != nil {
 		return models.InsightsAsOf{}, err
 	}
@@ -174,8 +173,7 @@ func InsightsTimeline(ctx context.Context, from, to string) (models.InsightsTime
 	if err != nil {
 		return models.InsightsTimeline{}, err
 	}
-	_, offset := now.Zone()
-	perDay, err := sumChanges(ctx, start, end.AddDate(0, 0, 1), offset)
+	perDay, err := sumChanges(ctx, start, end.AddDate(0, 0, 1))
 	if err != nil {
 		return models.InsightsTimeline{}, err
 	}
