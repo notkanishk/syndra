@@ -66,14 +66,14 @@ describe("one surface per control", () => {
   it("has no hand-rolled pill control outside the primitives", () => {
     const offenders = relevant()
       .filter(({ source }) => /rounded-pill/.test(source))
-      .filter(({ source }) => /min-h-\[44px\]|min-h-11/.test(source))
+      .filter(({ source }) => /min-h-\[var\(--tap\)\]/.test(source))
       .flatMap(({ path, source }) =>
         source
           .split("\n")
           .map((line, i) => ({ path, line: i + 1, text: line.trim() }))
           .filter(
             (row) =>
-              /rounded-pill/.test(row.text) && /min-h-\[44px\]|min-h-11/.test(row.text),
+              /rounded-pill/.test(row.text) && /min-h-\[var\(--tap\)\]/.test(row.text),
           ),
       )
       .map((row) => `${row.path}:${row.line}`);
@@ -127,7 +127,7 @@ describe("a control states its role in the vocabulary the product already has", 
       [...source.matchAll(/<button\b/g)]
         .map((m) => ({ at: m.index!, tag: tagAt(source, m.index!) }))
         .filter(({ tag }) => /rounded-pill/.test(tag))
-        .filter(({ tag }) => !/min-h-\[44px\]|min-h-11|PILL/.test(tag))
+        .filter(({ tag }) => !/min-h-\[var\(--tap\)\]|PILL/.test(tag))
         .map(({ at }) => `${path}:${source.slice(0, at).split("\n").length}`),
     );
 
@@ -343,13 +343,13 @@ describe("a link that acts is big enough to press", () => {
         const close = source.indexOf("</Link>", m.index);
         const body = close < 0 ? "" : source.slice(m.index, close);
         if (!/→/.test(body)) continue;
-        if (/min-h-\[44px\]|min-h-11|\bPILL\b/.test(tag)) continue;
+        if (/min-h-\[var\(--tap\)\]|\bPILL\b/.test(tag)) continue;
         const line = source.slice(0, m.index).split("\n").length;
         found.push(`${path}:${line}`);
       }
       return found;
     });
-    expect(offenders, "an action link needs min-h-[44px] through the tablet range").toEqual([]);
+    expect(offenders, "an action link needs min-h-[var(--tap)] through the tablet range").toEqual([]);
   });
 });
 

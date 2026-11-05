@@ -284,7 +284,7 @@ describe("the sheet's grabber", () => {
     renderNav();
     const sheet = openSheet();
 
-    expect(within(sheet).getByRole("button", { name: "Close this sheet" }).className).toContain("h-11");
+    expect(within(sheet).getByRole("button", { name: "Close this sheet" }).className).toContain("h-[var(--tap)]");
   });
 
   // Modal's grabber answers to the same word. Two sheets whose handles have
