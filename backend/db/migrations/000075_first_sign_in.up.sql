@@ -4,12 +4,11 @@
 -- overwritten (A-18 Q9, idea 8: the one-time welcome). The sign-in route writes
 -- it with INSERT ... ON CONFLICT DO NOTHING, so a later sign-in changes nothing.
 --
--- Backfill: Syndra has kept no record of its own sign-ins, so nobody who has
--- already used it may be welcomed as new. Everyone Syndra holds any record of
--- is marked as having signed in, from the earliest such record: an audit-log
--- entry they made, a request they filed, a sign-in event Zitadel reported, or
--- a grant held (a grant carries its own created_at). People with no record at
--- all are the ones who have never touched Syndra, and still get the welcome.
+-- Backfill: Syndra has kept no record of its own sign-ins, so the people known
+-- to have used it are marked as signed in, from the earliest thing they did in
+-- it: an audit-log entry they made or a request they filed. Holding a role, or
+-- signing in to some other app, is not using Syndra: those people may never
+-- have opened it, and they still get the welcome on their first visit.
 CREATE TABLE IF NOT EXISTS person_first_sign_in (
     user_id          TEXT        PRIMARY KEY CHECK (btrim(user_id) <> ''),
     first_sign_in_at TIMESTAMPTZ NOT NULL
@@ -20,10 +19,6 @@ SELECT user_id, MIN(at) FROM (
     SELECT actor_zitadel_user_id AS user_id, created_at AS at FROM audit_logs
     UNION ALL
     SELECT requester_user_id, created_at FROM access_requests
-    UNION ALL
-    SELECT user_id, last_at FROM usage_last_seen WHERE kind = 'sign_in'
-    UNION ALL
-    SELECT user_id, created_at FROM zitadel_grants_index
 ) seen
 WHERE user_id IS NOT NULL AND btrim(user_id) <> '' AND user_id <> 'system' AND at IS NOT NULL
 GROUP BY user_id

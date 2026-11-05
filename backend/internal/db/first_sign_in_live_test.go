@@ -76,7 +76,14 @@ func TestFirstSignInBackfill_Live(t *testing.T) {
 	must(`INSERT INTO zitadel_grants_index (grant_id, user_id, project_id, created_at) VALUES ($1,$2,'p',$3)`, "g"+stamp, grant, old)
 	must(backfill)
 
-	for _, u := range []string{actor, requester, usage, grant} {
+	// Holding a role or signing in to another app is not using Syndra.
+	for _, u := range []string{usage, grant} {
+		var n int
+		if err := PG.QueryRow(ctx, `SELECT count(*) FROM person_first_sign_in WHERE user_id = $1`, u).Scan(&n); err != nil || n != 0 {
+			t.Errorf("%s was backfilled (n=%d, err=%v); only people who acted in Syndra are", u, n, err)
+		}
+	}
+	for _, u := range []string{actor, requester} {
 		var at time.Time
 		if err := PG.QueryRow(ctx, `SELECT first_sign_in_at FROM person_first_sign_in WHERE user_id = $1`, u).Scan(&at); err != nil {
 			t.Fatalf("%s not backfilled: %v", u, err)
