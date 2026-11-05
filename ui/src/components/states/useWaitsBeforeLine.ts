@@ -1,6 +1,7 @@
 "use client";
 
 import { useDegraded } from "@/components/states/DegradedBanner";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 
 /**
  * The line a dialog says BEFORE its act while Zitadel isn't answering (A-07 §9):
@@ -23,7 +24,11 @@ const WHAT: Record<WaitsOp, string> = {
   change: "the change",
 };
 
-export function waitsBeforeLine(op: WaitsOp): string {
+export function waitsBeforeLine(op: WaitsOp, auto = true): string {
+  // With the background drain off nothing is sent on its own once Zitadel answers.
+  if (!auto) {
+    return `Zitadel isn't answering. Syndra records ${WHAT[op]} now, and it waits in Pending changes until someone presses Send once Zitadel answers.`;
+  }
   return (
     `Zitadel isn't answering. Syndra records ${WHAT[op]} now and sends it on its own once Zitadel answers, ` +
     "so there is nothing for you to send. A role marked to wait still waits for you to send it."
@@ -31,5 +36,6 @@ export function waitsBeforeLine(op: WaitsOp): string {
 }
 
 export function useWaitsBeforeLine(op: WaitsOp): string | undefined {
-  return useDegraded() ? waitsBeforeLine(op) : undefined;
+  const auto = useAutoRetry();
+  return useDegraded() ? waitsBeforeLine(op, auto) : undefined;
 }

@@ -18,6 +18,7 @@ import { formatClock, formatList, formatRelative, formatShortDate } from "@/lib/
 import { targetLabel } from "@/lib/nav";
 import { usePersonTargets, type PersonTargetView, type RoleSource, type StoragePlace } from "@/lib/queries/useMyStorage";
 
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useTargets } from "@/lib/queries/useTargets";
 import { sortByName, sortNames } from "@/lib/sort";
 import { useIsAdvanced } from "@/lib/ui-view";
@@ -147,9 +148,24 @@ function Status({ view }: { view: PersonTargetView }) {
   );
 }
 
+/**
+ * The step while a system is offline. Syndra changes nothing there while it is
+ * unreachable (the drain halts, propagation/addon.go:81 and revocations.go:92)
+ * and every change for it stays queued. Once it answers, revocations go on
+ * their own, unless the background drain is off (`auto` false); every other
+ * change goes when someone presses Send. Only a person who changed their access
+ * meanwhile has anything to do, so it says so rather than promising nothing.
+ */
+export function offlineNext(label: string, auto: boolean): string {
+  return auto
+    ? `If you change their access while ${label} is offline, the change waits until it answers: a revocation then sends on its own, anything else when you press Send on Pending changes. Otherwise there is nothing for you to do.`
+    : `If you change their access while ${label} is offline, the change waits in Pending changes; press Send there once it answers. Otherwise there is nothing for you to do.`;
+}
+
 function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: string; name: string }) {
   const label = targetLabel(view.target);
   const roleNames = useRoleNames();
+  const auto = useAutoRetry();
   const offline = view.health === "offline";
   const storage = view.storage ?? view.last_known?.storage;
   // Stale (A-13 d): a card drawn from the last read recedes to the page; its
@@ -294,7 +310,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
       <CardTop target={view.target} status={<Status view={view} />} />
       {offline && (
         <div className="px-5 pb-3">
-          <Notice tone="warn" live title={`${label} is offline`} nothingToDo="Their folders open again on their own when it is back.">
+          <Notice tone="warn" live title={`${label} is offline`} next={offlineNext(label, auto)}>
             {view.reachable_since ? `It stopped answering at ${formatClock(view.reachable_since)}. ` : ""}
             {view.last_known
               ? `Home folder and Folders below are what it said at ${formatClock(view.last_known.read_at)}, ${formatRelative(view.last_known.read_at)}. `

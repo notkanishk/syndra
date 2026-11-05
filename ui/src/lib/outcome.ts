@@ -330,6 +330,20 @@ export const REVOKE_SENDS_ITSELF: ActionOutcome = {
 export const REVOKE_SENDS_ITSELF_WORD = "On its way";
 
 /**
+ * The same revoke when this server's background drain is off
+ * (REVOCATION_DRAIN_ENABLED=false, `auto_retry: false` in the indicators):
+ * nothing sends it until someone presses Send, so it says that and ends on
+ * Pending changes.
+ */
+export const REVOKE_WAITS_FOR_SEND: ActionOutcome = {
+  kind: "queued",
+  message: "Recorded in Syndra. The revocation waits in Pending changes until someone presses Send",
+};
+
+/** {@link REVOKE_SENDS_ITSELF} with the drain on, {@link REVOKE_WAITS_FOR_SEND} with it off. */
+export const revokeQueued = (auto: boolean): ActionOutcome => (auto ? REVOKE_SENDS_ITSELF : REVOKE_WAITS_FOR_SEND);
+
+/**
  * Every refusal and every failure ends the same way, and it is the sentence an
  * operator most needs: whatever else went wrong, the state they were looking at
  * is the state that still holds.

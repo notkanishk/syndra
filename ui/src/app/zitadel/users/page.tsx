@@ -37,6 +37,7 @@ import {
   type ZitadelGrantChange,
   type ZitadelRoleChange,
 } from "@/lib/queries/useUpstream";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
 import { useRulePreview } from "@/lib/queries/useRulePreview";
 import { useDebounce } from "@/lib/useDebounce";
@@ -63,7 +64,7 @@ const sendsAny = (roles: ZitadelRoleChange[], pick: (r: ZitadelRoleChange) => bo
  * What a change did, role by role, in the backend's words (W8): never "done"
  * for a role that waits, that Zitadel didn't take, or that was kept.
  */
-function changeResult(res: ZitadelGrantChange | undefined, act: Act): { outcome: Outcome; word: string } {
+function changeResult(res: ZitadelGrantChange | undefined, act: Act, auto = true): { outcome: Outcome; word: string } {
   const roles = res?.roles ?? [];
   const recorded = "Recorded in Syndra as a change on their page, so it is explained afterwards.";
   if (roles.length === 0) {
@@ -82,11 +83,16 @@ function changeResult(res: ZitadelGrantChange | undefined, act: Act): { outcome:
   // Re-audit R3: a give Zitadel didn't take is retried on its own (the
   // server says when); only one that isn't goes when you send it.
   const retrying = res?.wait_reason === RETRYING && res.retry?.state !== "waiting";
-  const goesItself = (r: ZitadelRoleChange) => r.status === "pending" && (r.change === "revoked" || retrying);
+  const goesItself = (r: ZitadelRoleChange) => auto && r.status === "pending" && (r.change === "revoked" || retrying);
   say("Waiting for you to send, because the role always waits for you", (r) => r.status === "waiting");
   say("Not in Zitadel yet, because Zitadel didn't answer. Syndra sends it again on its own", (r) => r.change === "given" && r.status === "pending" && retrying);
   say("Not in Zitadel yet. It goes when you send it", (r) => r.change === "given" && r.status === "pending" && !retrying);
-  say("Not revoked in Zitadel yet, because Zitadel didn't take it. Revocations send on their own", (r) => r.change === "revoked" && r.status === "pending");
+  say(
+    auto
+      ? "Not revoked in Zitadel yet, because Zitadel didn't take it. Revocations send on their own"
+      : "Not revoked in Zitadel yet, because Zitadel didn't take it. It waits in Pending changes until you send it",
+    (r) => r.change === "revoked" && r.status === "pending",
+  );
   if (res?.retry && sendsAny(roles, goesItself)) lines.push(retryLine(res.retry));
   say("Zitadel refused, so it is not in Zitadel", (r) => r.status === "failed");
   say("Kept, because a bundle or a rule still gives it", (r) => r.change === "kept");
@@ -350,6 +356,7 @@ function RevokeDialog({
   grant: GrantRef;
   onClose: () => void;
 }) {
+  const auto = useAutoRetry();
   const remove = useUpstreamRemoveGrant();
   const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
   const outcome = result?.outcome ?? null;
@@ -435,7 +442,7 @@ function RevokeDialog({
           onClick={async () => {
             try {
               const res = await remove.mutateAsync({ userId, grantId: grant.grantId });
-              setResult(changeResult(res, "revoked"));
+              setResult(changeResult(res, "revoked", auto));
             } catch (error) {
               setResult({ outcome: outcomeFromError(error), word: "" });
             }
@@ -449,6 +456,7 @@ function RevokeDialog({
 }
 
 function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const auto = useAutoRetry();
   const projects = useUpstreamProjects();
   const [projectId, setProjectId] = useState("");
   const roles = useUpstreamProjectRoles(projectId || null);
@@ -552,7 +560,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           onClick={async () => {
             try {
               const res = await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
-              setResult(changeResult(res, "given"));
+              setResult(changeResult(res, "given", auto));
             } catch (error) {
               setResult({ outcome: outcomeFromError(error), word: "" });
             }
@@ -574,6 +582,7 @@ function EditRolesDialog({
   grant: GrantRef;
   onClose: () => void;
 }) {
+  const auto = useAutoRetry();
   const update = useUpstreamUpdateGrant();
   const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
   const outcome = result?.outcome ?? null;
@@ -631,7 +640,7 @@ function EditRolesDialog({
           onClick={async () => {
             try {
               const res = await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
-              setResult(changeResult(res, "replaced"));
+              setResult(changeResult(res, "replaced", auto));
             } catch (error) {
               setResult({ outcome: outcomeFromError(error), word: "" });
             }

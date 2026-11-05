@@ -33,6 +33,7 @@ import { formatList } from "@/lib/format";
 import { NOT_CHECKED, holdersLine, holdersToneClass } from "@/lib/holders";
 import { fetchWhatIf } from "@/lib/queries/useInsights";
 import { retireOutcome } from "@/lib/retry";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { sortByName, sortNames } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
@@ -568,6 +569,7 @@ function DeleteRuleConfirm({
   onDeleted: () => void;
 }) {
   const remove = useDeleteMappingRule();
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const step = useCancelStep({ host: "Retire this rule", goAhead: "retire it", tone: "danger" });
   const holders = rule.holder_count ?? 0;
@@ -660,7 +662,7 @@ function DeleteRuleConfirm({
                         detail:
                           "Nobody's access changed. The rule was giving nothing.",
                       }
-                    : retireOutcome(n, result.cascade?.wait_reason, result.cascade?.drain?.retry),
+                    : retireOutcome(n, result.cascade?.wait_reason, result.cascade?.drain?.retry, "", auto),
                 );
               } catch (error) {
                 setOutcome(outcomeFromError(error));
