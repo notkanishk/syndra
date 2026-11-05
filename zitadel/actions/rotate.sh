@@ -16,12 +16,18 @@
 #   - existing .action-signing-key  -> .action-signing-key.previous  (backup, mode 0600)
 #   - new key                       -> .action-signing-key           (mode 0600)
 #
-# Syndra does NOT ship dual-key acceptance today — the backend trusts a
-# single ZITADEL_ACTION_SIGNING_KEY env var. After this script succeeds the
-# operator must swap the env var and restart the backend. During the swap
-# window, inbound Action requests fail 401 INVALID_SIGNATURE and Zitadel
-# issues tokens with stock claims only (because restCall.interruptOnError is
-# false). Users are never blocked; custom claims disappear for the gap.
+# THE MANUAL FALLBACK. Since 5 Nov 2026 Syndra replaces both keys itself,
+# a few days before the 90-day limit in a quiet window, and "Replace now" on
+# System > Zitadel does it on demand (openspec/changes/action-key-autorotation,
+# docs/adr/005-syndra-replaces-the-action-signing-key.md). Run this only when
+# that is switched off, failed, or Zitadel refused Syndra's write; "Do it by
+# hand" on the same page walks through it and checks the result.
+#
+# Nothing has to be applied or restarted afterwards: Syndra reads both
+# targets' keys from Zitadel every minute (and at once after a call it can't
+# verify), keeps the previous key working for 15 minutes, and dates the key
+# from the change it saw. The .env values are only where Syndra starts; the
+# fragment below is there to refresh them at the next deploy, if you like.
 #
 # Usage:
 #   rotate.sh
@@ -234,31 +240,20 @@ fi
 # ---- Operator guidance (single-shot, regardless of target count) ----
 cat >&2 <<EOF
 
-Rotation complete. Apply the new values to your backend env:
+Rotation complete. Nothing to restart: Syndra reads both new keys from
+Zitadel within a minute (at once after the first call it can't verify) and
+keeps the old ones working for 15 minutes. System > Zitadel shows the key
+as replaced once it has seen the change; "Do it by hand" there checks it
+with a test sign-in. Or verify from here:
 
-    cat "${FRAGMENT_FILE}" >> .env
-    # OR, for systemd EnvironmentFile deploys:
-    sudo install -m 0600 "${FRAGMENT_FILE}" /etc/syndra/action-env
-
-Then restart the backend and verify:
-
-    docker compose up -d backend       # or your deploy equivalent
     make zitadel-actions-verify
 
-The /zitadel Rotation Status panel should flip to "ok" with age 0.
+Optional, at the next deploy: refresh the bootstrap values in .env
 
-During the window between Zitadel accepting the new key and the backend
-picking it up, inbound Action requests fail with 401 INVALID_SIGNATURE and
-Zitadel falls back to stock claims. Because restCall.interruptOnError is
-false, user token issuance is NOT blocked during this window — custom
-claims simply disappear for the gap. Keep the restart under a minute.
+    cat "${FRAGMENT_FILE}" >> .env
 
 Per-target backups in .action-signing-key.<name>.previous are retained for
-audit/rollback. Rotation timestamps are mirrored to
-.action-signing-key.<name>.rotated_at for local audit; Syndra itself reads
-the *_ROTATED_AT env vars at runtime, not these files.
-
-Delete ${FRAGMENT_FILE} once the values are applied.
+audit/rollback. Delete ${FRAGMENT_FILE} once you no longer need it.
 EOF
 
 echo "Done." >&2

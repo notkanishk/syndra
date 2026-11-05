@@ -19,6 +19,21 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. P11 (Technical detail) is the third wave.
 
+## 0b. Syndra replaces the action signing key itself
+
+Source: owner, 5 Nov 2026, "Automatic + button". It reverses #71. Change: [`changes/action-key-autorotation`](changes/action-key-autorotation/tasks.md), ADR-005, migration 000077, on branch `feat/action-key-autorotate`.
+
+**What it does.**
+- Syndra replaces both target keys a few days before the 90-day limit, in a quiet window, and checks them with a test sign-in.
+- "Replace now" and a by-hand guide are on System › Zitadel.
+- The event listener's key is under the keyring now, so no key change needs a restart.
+- Production's key was 92 days old, so the first quiet window after deploy replaces it.
+
+**Open, owner** (#ready-for-human):
+- Set `TZ` in production's `.env`. Unset, the 03:00–05:00 window is UTC.
+- Confirm the backend's service account still holds `action.target.write`.
+- After the first replacement, read the Zitadel row and the audit.
+
 ## 1. Code
 
 ### A-20 second pass — [`changes/second-pass`](changes/second-pass/proposal.md)

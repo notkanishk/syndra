@@ -59,6 +59,8 @@ type Plane struct {
 	failures  atomic.Int64 // polls or reloads that failed since the last success
 	reloads   atomic.Int64
 	lastErr   atomic.Pointer[string]
+	// lastRefresh is unix nanos of the last poll a mismatch asked for.
+	lastRefresh atomic.Int64
 }
 
 // New is a plane with no config yet: every call answers degraded until the
@@ -350,14 +352,124 @@ func (p *Plane) SigningKeys() []SlotKey {
 	return cfg.Keys.Keys(p.now())
 }
 
+// Waiting for a key Syndra is replacing (action-key-autorotation). Zitadel
+// signs with the new key from the moment it commits it, a few milliseconds
+// before its answer reaches Syndra; a call signed in that gap waits here for
+// the keyring to move rather than being refused.
+const (
+	// RotationWait bounds the wait: far inside Zitadel's 3s call timeout.
+	RotationWait  = time.Second
+	rotationStep  = 50 * time.Millisecond
+	refreshMinGap = rotationStep
+)
+
+// RefreshKeys is a door's second look after a call no key verified: a poll
+// now, then, only while a replacement is in flight (RotatingKey), a poll every
+// 50ms for up to RotationWait until the keys move (AwaitNewKeys).
+func (p *Plane) RefreshKeys(ctx context.Context) []SlotKey {
+	if p.rdb == nil {
+		return p.SigningKeys()
+	}
+	return AwaitNewKeys(ctx, p.rdb, &p.lastRefresh, p.SigningKeys, func() []SlotKey {
+		_ = p.Poll(ctx)
+		return p.SigningKeys()
+	})
+}
+
+// AwaitNewKeys is the second look shared by every door: look once (at most
+// once per refreshMinGap, tracked in last; otherwise current answers), and
+// while a replacement is in flight look again every 50ms, up to RotationWait,
+// until the keys differ from what current said before.
+func AwaitNewKeys(ctx context.Context, rdb Redis, last *atomic.Int64, current, look func() []SlotKey) []SlotKey {
+	before := current()
+	// One caller looks per gap; the rest read what that look found.
+	try := func() []SlotKey {
+		if l := last.Load(); time.Since(time.Unix(0, l)) >= refreshMinGap && last.CompareAndSwap(l, time.Now().UnixNano()) {
+			return look()
+		}
+		return current()
+	}
+	// ponytail: the in-flight check is one GET per refused call, not rate
+	// limited; cache it per gap if forged-call floods ever show in Redis.
+	if keys := try(); !sameKeys(keys, before) || !RotationInFlight(ctx, rdb, time.Now()) {
+		return keys
+	}
+	deadline := time.Now().Add(RotationWait)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return current()
+		case <-time.After(rotationStep):
+		}
+		if keys := try(); !sameKeys(keys, before) {
+			return keys
+		}
+	}
+	return current()
+}
+
+// RotationInFlight is whether Syndra is replacing a key right now.
+func RotationInFlight(ctx context.Context, rdb Redis, now time.Time) bool {
+	gctx, cancel := context.WithTimeout(ctx, pollTimeout)
+	defer cancel()
+	until, err := rdb.Get(gctx, RotatingKey).Int64()
+	return err == nil && now.Unix() < until
+}
+
+// MarkRotation says a replacement is in flight until until (the zero time
+// clears it). The value ends itself, so a crash mid-replacement leaves nothing
+// waiting.
+func MarkRotation(ctx context.Context, rdb Redis, until time.Time) error {
+	var v int64
+	if !until.IsZero() {
+		v = until.Unix()
+	}
+	return rdb.MSet(ctx, RotatingKey, v).Err()
+}
+
+func sameKeys(a, b []SlotKey) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // PublishKeyring writes the keyring through and moves claims:gen, so every
 // data plane picks it up within a poll.
 func PublishKeyring(ctx context.Context, rdb Redis, k Keyring) error {
+	return publishKeyringAt(ctx, rdb, KeyringKey, k)
+}
+
+// PublishEventsKeyring writes the event listener's keyring through. Only the
+// backend reads it; claims:gen moves anyway so every backend re-reads.
+func PublishEventsKeyring(ctx context.Context, rdb Redis, k Keyring) error {
+	return publishKeyringAt(ctx, rdb, EventsKeyringKey, k)
+}
+
+// ReadKeyring reads a keyring from Redis; absent is the empty keyring.
+func ReadKeyring(ctx context.Context, rdb Redis, key string) (Keyring, error) {
+	var k Keyring
+	v, err := rdb.Get(ctx, key).Result()
+	if errors.Is(err, redis.Nil) {
+		return k, nil
+	}
+	if err != nil {
+		return k, err
+	}
+	return k, json.Unmarshal([]byte(v), &k)
+}
+
+func publishKeyringAt(ctx context.Context, rdb Redis, key string, k Keyring) error {
 	v, err := encode(k)
 	if err != nil {
 		return err
 	}
-	if err := rdb.MSet(ctx, KeyringKey, v).Err(); err != nil {
+	if err := rdb.MSet(ctx, key, v).Err(); err != nil {
 		return fmt.Errorf("publish keyring: %w", err)
 	}
 	if err := rdb.Incr(ctx, GenKey).Err(); err != nil {

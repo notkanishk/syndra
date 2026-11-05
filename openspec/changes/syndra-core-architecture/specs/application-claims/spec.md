@@ -110,19 +110,48 @@ The Zitadel Actions v2 target configuration and deployment assets MUST be mainta
 - **THEN** token issuance MUST continue with stock Zitadel claims
 - **AND** `restCall.interruptOnError: false` MUST be preserved so Syndra outages never block users.
 
-## Signing Key Rotation is Policy-Driven, Not Scheduled
-Zitadel does not expire the Action target signing key: `CreateTargetRequest` has no expiration field, and `UpdateTargetRequest.expiration_signing_key` (per `proto/zitadel/action/v2/target.proto`) is a rotation trigger, not a TTL — current Zitadel only accepts `"0s"` (immediate hard swap). The first key returned at target creation works indefinitely. Rotation is therefore a Syndra deployment-policy decision (incident response, compliance cadence, operator handoff), not a Zitadel requirement.
+## Syndra Replaces the Signing Keys Itself
+*Superseded 5 Nov 2026: this section used to read "Signing Key Rotation is Policy-Driven, Not Scheduled", with Syndra forbidden to schedule rotation. The owner reversed that ("Automatic + button"); see `changes/action-key-autorotation` and ADR-005.*
 
-The repository MUST ship an operator-facing one-shot rotate command (`make zitadel-actions-rotate-key` invoking `zitadel/actions/rotate.sh`) that performs the target lookup, `POST /v2/actions/targets/{id}` with `{"expirationSigningKey":"0s"}`, captures the new `signingKey` from the response, and preserves the prior key for audit. Syndra MUST NOT schedule this command in-process; scheduled rotation, if required by deployment policy, MUST be driven by an external trigger (host cron, CI job, operator runbook). Backend middleware MAY remain single-key until such time as Zitadel supports longer graceful periods on `expiration_signing_key` — at that point dual-key acceptance becomes worth adding to close the verification-gap window that exists today between Zitadel accepting the rotated key and the backend being restarted with the new env value.
+Zitadel does not expire the Action target signing key: `UpdateTargetRequest.expiration_signing_key` is a rotation trigger, and current Zitadel only accepts `"0s"`, an immediate hard swap. The limit (default 90 days, `ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS`) is Syndra's policy, and Syndra keeps it.
 
-### Scenario: Operator rotates the signing key on demand
-- **WHEN** an operator needs to rotate the Action signing key (incident response, compliance cadence, handoff)
-- **THEN** the repository MUST provide a single command (`make zitadel-actions-rotate-key`) that performs the rotation, captures the new key to a 0600-mode file, and preserves the prior key for audit
-- **AND** the operator documentation MUST describe the post-rotate env-var swap + backend restart step and the verification-gap window during that swap
-- **AND** Syndra MUST NOT schedule rotation automatically — the command MUST be invoked by explicit operator or external-trigger action.
+**The schedule.** Syndra MUST replace the keys of both of its targets on its own. It does so once the claims key's observed age reaches the threshold minus a lead (default 5 days), inside a quiet window (default 03:00–05:00 local), and only when Zitadel answers and the L1 probe passed in the last 5 minutes. It makes at most one automatic attempt per window. `SYNDRA_ACTION_KEY_AUTOROTATE=off` turns it off.
+
+**Each replacement:**
+- MUST hold a single-flight lock.
+- MUST be refused within 24h of the last one, unless forced from the button.
+- MUST write its trace before the Management API call.
+- MUST publish the new key to the keyring from Zitadel's answer before anything else.
+- MUST keep the previous key accepted for the overlap.
+- MUST run the test sign-in, and record the outcome and an audit row.
+
+**When the test sign-in fails:**
+- MUST keep both keys accepted.
+- MUST raise a `KEY_ROTATION` claims finding.
+- MUST NOT retry on its own.
+
+`make zitadel-actions-rotate-key` stays as the manual fallback. Syndra notices its key change through the keyring, so no `.env` edit or restart follows it.
+
+### Scenario: The key is replaced before it is due
+- **WHEN** the claims key's age reaches threshold − lead and the quiet window opens with Zitadel answering and L1 passing
+- **THEN** Syndra replaces both keys, verifies with them at once in every process, runs the test sign-in, and records `verified` with the next due date
+- **AND** no call signed with either the new or the old key is refused during the overlap.
+
+### Scenario: The test sign-in fails after a replacement
+- **WHEN** the check after a replacement does not pass
+- **THEN** the attempt is recorded `unverified`, both keys stay accepted for 7 days, and `/healthz/claims` is degraded with `KEY_ROTATION:unverified`
+- **AND** Syndra does not replace the key again on its own.
 
 ## Rotation Status MUST be Observable to Operators
-Because Zitadel does not expire the signing key and Syndra does not schedule rotation, operators need an in-app signal that a key has crossed the deployment's rotation-policy threshold. Syndra MUST expose `GET /api/v1/zitadel/action-rotation-status` (gated by `withOperatorAuth`) returning `{last_rotated_at, age_days, threshold_days, status, rotate_command}` and MUST render a corresponding panel on `/zitadel` in the admin UI.
+Operators need an in-app signal of how old the key is, when it is due, and what Syndra's schedule will do about it. Syndra MUST expose `GET /api/v1/zitadel/action-rotation-status` (gated by `withOperatorAuth`) and MUST render it on `/zitadel` in the admin UI. The response returns:
+- `{last_rotated_at, last_rotated_source, age_days, due_at, threshold_days, status, rotate_command, register_command}`;
+- `auto{on, off_reason, lead_days, window, next_attempt_at}`;
+- `rotating`;
+- `last_outcome`.
+
+*Since action-key-autorotation:*
+- **Age is observed.** `last_rotated_at` is Syndra's own record of its last replacement, or the keyring seeing Zitadel's key change, whichever is later. `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT` below is read only while neither exists.
+- **`key_installed`** is true when the keyring or the env holds a key.
 
 The `status` field MUST use this ladder (highest precedence first):
 
@@ -144,7 +173,7 @@ Configuration is via two env vars:
 - **WHEN** an operator requests `GET /api/v1/zitadel/action-rotation-status`
 - **THEN** the response `status` MUST be `"ok"`
 - **AND** `age_days` and `last_rotated_at` MUST be populated
-- **AND** `rotate_command` MUST be `"make zitadel-actions-rotate-key"`.
+- **AND** `rotate_command` MUST be `"make zitadel-actions-rotate-key"`, prefixed with `cd <SYNDRA_SERVER_DIR> && ` when the server's checkout is known.
 
 ### Scenario: Aged key reports warn or stale
 - **GIVEN** the signing key was rotated more than `threshold_days` ago but less than `2 × threshold_days`

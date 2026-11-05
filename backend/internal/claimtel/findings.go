@@ -19,6 +19,12 @@ const (
 	KindProbeL1       = "PROBE_L1"              // subject: why it failed, "dns", "claims", …
 	KindProbeL2       = "PROBE_L2"              // subject: why it failed, "token", "claims", …
 	KindCertExpiring  = "CERT_EXPIRING"         // subject: "L1"; sample.not_after
+	// KindKeyRotation is a key replacement that did not end verified
+	// (action-key-autorotation): subject "unverified" (replaced, the test
+	// sign-in did not pass) or "failed" (Zitadel did not replace it). Soft:
+	// the keys Syndra holds still verify, and degraded stops the dead-man
+	// ping, which is what tells the owner.
+	KindKeyRotation = "KEY_ROTATION"
 )
 
 // ResolveAfter is how many clean observations in a row settle a finding. A
@@ -123,7 +129,7 @@ func FindingSeverity(kind string, sample map[string]any) Severity {
 // FindingReason names an open finding in /healthz/claims without any id: the
 // kind, and for a configuration finding its check ("CONFIG_DRIFT:R2").
 func FindingReason(kind, subject string) string {
-	if kind == KindProbeL1 || kind == KindProbeL2 {
+	if kind == KindProbeL1 || kind == KindProbeL2 || kind == KindKeyRotation {
 		return kind + ":" + subject // a failure class, never an id
 	}
 	if kind == KindConfigDrift || kind == KindCannotCheck {
