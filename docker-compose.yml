@@ -13,6 +13,9 @@ services:
     image: postgres:15-alpine
     container_name: syndra_postgres
     environment:
+      # Log times only: the cluster's own `timezone` stays UTC (set at initdb),
+      # and every column is timestamptz, so stored instants never move.
+      TZ: ${TZ:-UTC}
       POSTGRES_USER: syndra
       # No default. A literal password here meant every deployment that forgot
       # to override it shipped the same credential, and DB_DSN below silently
@@ -64,6 +67,7 @@ services:
       dockerfile: Dockerfile.claims
     container_name: syndra_claims
     environment:
+      - TZ=${TZ:-UTC}
       - REDIS_URL=${REDIS_URL:-redis:6379}
       # Production when set: unsigned calls are refused, and the env key must
       # be a real one (it verifies until the keyring is read from Redis).
@@ -155,7 +159,7 @@ services:
       # limit, inside WINDOW (default 03:00-05:00, local time in TZ, an IANA
       # zone such as Asia/Kolkata; unset is UTC). AUTOROTATE=off is the kill
       # switch.
-      - TZ=${TZ:-}
+      - TZ=${TZ:-UTC}
       - SYNDRA_ACTION_KEY_AUTOROTATE=${SYNDRA_ACTION_KEY_AUTOROTATE:-}
       - SYNDRA_ACTION_KEY_LEAD_DAYS=${SYNDRA_ACTION_KEY_LEAD_DAYS:-}
       - SYNDRA_ACTION_KEY_WINDOW=${SYNDRA_ACTION_KEY_WINDOW:-}
@@ -263,6 +267,7 @@ services:
     ports:
       - "${UI_HOST_PORT:-3000}:3000"
     environment:
+      - TZ=${TZ:-UTC}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8080}
       - SYNDRA_API_KEY=${SYNDRA_API_KEY:-dev_auth_token_secret}
       # HMAC key for the session cookie. The UI falls back to SYNDRA_API_KEY
@@ -370,6 +375,7 @@ services:
     # nothing `depends_on` expresses promises the add-on has SERVED a manifest
     # by the time the backend asks for one.
     environment:
+      - TZ=${TZ:-UTC}
       - LISTEN_ADDR=:8443
       # This add-on's name in the deployment, and the HKDF salt. It MUST equal
       # the entry the backend carries in ADDON_TARGETS: the salt feeds both
