@@ -246,12 +246,31 @@ export function listingNotice(e: Explanation | undefined, ctx: CheckContext): { 
       body: `${app}'s last sign-in asked Zitadel for more than one project's roles, and Syndra sends claims for one project per token. Remove the extra \`urn:zitadel:iam:org:project:id:…:aud\` scope from what ${app} asks Zitadel for, or give the role in ${project} with a rule.`,
     };
   }
-  if (fact<boolean>(e, 0, "project_role_assertion") === false && e.checks[5]?.state !== "pass") {
+  // An unreadable record of Zitadel's calls proves nothing, so it says nothing.
+  if (fact<boolean>(e, 0, "project_role_assertion") === false && e.checks[5]?.state !== "pass" && e.checks[5]?.state !== "stale") {
     return {
       title,
       body: `Zitadel doesn't list ${project} in ${app}'s tokens. In Zitadel, turn on "Assert roles on authentication" for ${project}, or have ${app} ask for role scopes. Then check again.`,
       link: ctx.links?.project ? { label: `Open ${project} in Zitadel`, href: ctx.links.project } : undefined,
     };
+  }
+  return null;
+}
+
+/**
+ * Why saving the shape would not reach the app yet, as one sentence, or null.
+ * The save dialogs say "next sign-in" only when that is true: not while Zitadel
+ * names no app (the app keeps its project's default) or lists no project (the
+ * app gets nothing). Read off the same trail as the notices above.
+ */
+export function heldBackLine(e: Explanation | undefined, ctx: CheckContext): string | null {
+  if (!e) return null;
+  const { app, project } = ctx;
+  if ((fact<string[]>(e, 3, "client_id_missing") ?? []).length) {
+    return `Zitadel doesn't say which app is signing in, so ${app} keeps getting ${project}'s default until Zitadel is upgraded.`;
+  }
+  if (listingNotice(e, ctx)) {
+    return `Zitadel doesn't list ${project} in ${app}'s tokens, so ${app} gets nothing from Syndra until that is fixed. The notice at the top says how.`;
   }
   return null;
 }
@@ -270,7 +289,7 @@ export function check5(e: Explanation, ctx: CheckContext, asDraft: boolean): Tra
     return {
       tone,
       sentence: `Zitadel doesn't list ${ctx.project} in ${ctx.person}'s token, so Syndra adds nothing.`,
-      faint: [`Zitadel lists ${ctx.project} only for people who hold a role in it.`],
+      faint: [`Zitadel lists ${ctx.project} only for people who have been given access to it.`],
       foot: ZITADEL_ADDS,
     };
   }

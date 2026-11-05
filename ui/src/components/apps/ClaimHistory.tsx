@@ -138,13 +138,13 @@ export function ClaimHistory({
         </>
       </Unfold>
       {restoring && (
-        <GoBack appId={appId} entry={restoring} next={(list[0]?.version ?? 0) + 1} app={ctx.app} onClose={() => setRestoring(null)} />
+        <GoBack appId={appId} entry={restoring} next={(list[0]?.version ?? 0) + 1} app={ctx.app} heldBack={ctx.heldBack} onClose={() => setRestoring(null)} />
       )}
     </>
   );
 }
 
-function GoBack({ appId, entry, next, app, onClose }: { appId: string; entry: HistoryEntry; next: number; app: string; onClose: () => void }) {
+function GoBack({ appId, entry, next, app, heldBack, onClose }: { appId: string; entry: HistoryEntry; next: number; app: string; heldBack?: string; onClose: () => void }) {
   const restore = useRestoreClaimShape(appId);
   const [breaking, setBreaking] = useState(false);
   const [understood, setUnderstood] = useState(false);
@@ -171,7 +171,7 @@ function GoBack({ appId, entry, next, app, onClose }: { appId: string; entry: Hi
             outcome={{
               kind: "applied",
               message: `${app}'s claims are now version ${next}, as version ${entry.version} had them.`,
-              detail: `It reaches ${app} at each person's next sign-in.`,
+              detail: heldBack ?? `It reaches ${app} at each person's next sign-in.`,
             }}
           />
         ) : (
@@ -186,7 +186,7 @@ function GoBack({ appId, entry, next, app, onClose }: { appId: string; entry: Hi
       </div>
       <ModalFooter
         cancel={done ? undefined : { onClick: onClose }}
-        note={done ? undefined : breaking && !understood ? "Tick the box above to go back." : `Takes effect at each person's next sign-in to ${app}.`}
+        note={done ? undefined : breaking && !understood ? "Tick the box above to go back." : (heldBack ?? `Takes effect at each person's next sign-in to ${app}.`)}
       >
         {done ? (
           <Button onClick={onClose}>Close</Button>

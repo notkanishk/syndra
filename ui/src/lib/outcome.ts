@@ -111,7 +111,7 @@ export function nextStep(hasReference: boolean): string {
 }
 
 /** What went wrong, in the product's voice rather than the transport's. */
-export function describeFailure(error: unknown): string {
+export function failureMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 403) return "You don't have permission to do this.";
     if (error.status === 404) return "That item no longer exists. Someone may have removed it.";
@@ -121,6 +121,20 @@ export function describeFailure(error: unknown): string {
   if (error instanceof TypeError || (error instanceof Error && RAW_NETWORK.test(error.message))) return NETWORK_FAULT;
   if (error instanceof Error) return error.message;
   return "Something went wrong and the request did not go through.";
+}
+
+/**
+ * {@link failureMessage} for a line that stands alone. A server fault says what
+ * to do and carries its reference in full, because a bare line has no card
+ * beneath it to hold them (copy guide §8). Surfaces that show the reference
+ * themselves use failureMessage.
+ */
+export function describeFailure(error: unknown): string {
+  const said = failureMessage(error);
+  if (!(error instanceof ApiError) || error.status < 500) return said;
+  const ref = error.details?.request_id;
+  const step = "Try again in a minute. If it keeps failing, ask the person who runs the Syndra server";
+  return `${sentence(said)} ${step}${typeof ref === "string" ? ` and quote the reference ${ref}` : ""}.`;
 }
 
 /**
@@ -145,7 +159,7 @@ export function outcomeFromError(error: unknown): ActionOutcome {
     (error instanceof ApiError && error.status >= 400 && error.status < 500);
   return {
     kind: refused ? "refused" : "failed",
-    message: describeFailure(error),
+    message: failureMessage(error),
     // Not "it will send when you're back". There is no client-side queue by
     // design, so nothing sends itself, and saying otherwise would be the
     // product promising something it has deliberately refused to build.
@@ -156,7 +170,10 @@ export function outcomeFromError(error: unknown): ActionOutcome {
         // ends with it. "Still here" is what stops an operator abandoning a
         // plan they had already read and approved.
         ? "What you were doing is still here. Sign in again, then press the same button once more."
-        : undefined,
+        : // A server fault ends on the next step and where (copy guide §8); the reference sits below.
+          error instanceof ApiError && error.status >= 500
+          ? nextStep(typeof requestId === "string")
+          : undefined,
     requestId: typeof requestId === "string" ? requestId : undefined,
     sessionEnded: sessionEnded || undefined,
   };

@@ -82,6 +82,7 @@ export function ShapeCard({
   templates,
   advanced,
   projectName,
+  heldBack,
   onSave,
   onOpenTemplate,
   onOpenCopy,
@@ -102,6 +103,8 @@ export function ShapeCard({
   templates: ClaimTemplate[];
   advanced: boolean;
   projectName: string;
+  /** Why a save would not reach the app yet (claim-words heldBackLine). */
+  heldBack?: string;
   onSave: () => void;
   onOpenTemplate: (id: string) => void;
   onOpenCopy: () => void;
@@ -144,6 +147,7 @@ export function ShapeCard({
           templates={templates}
           advanced={advanced}
           project={projectName}
+          heldBack={heldBack}
           onSave={onSave}
           onOpenTemplate={onOpenTemplate}
           onOpenCopy={onOpenCopy}
@@ -311,6 +315,7 @@ function ShapeForm({
   templates,
   advanced,
   project,
+  heldBack,
   onSave,
   onOpenTemplate,
   onOpenCopy,
@@ -327,6 +332,7 @@ function ShapeForm({
   templates: ClaimTemplate[];
   advanced: boolean;
   project: string;
+  heldBack?: string;
   onSave: () => void;
   onOpenTemplate: (id: string) => void;
   onOpenCopy: () => void;
@@ -468,7 +474,7 @@ function ShapeForm({
       ? { warn: false, text: advanced ? `Fix \`${problemPath}\` to save.` : `Fix \`${problemPath}\` in Advanced to save.` }
       : breaking.length > 0
         ? { warn: true, text: breakingLine(breaking, { app, roles: shape.project_roles, reach: preview?.reach, templateId: appTemplateId(shape, draft) }) }
-        : { warn: false, text: `Takes effect at each person's next sign-in to ${app}.` };
+        : { warn: Boolean(heldBack), text: heldBack ?? `Takes effect at each person's next sign-in to ${app}.` };
 
   const ctx: EditorContext = {
     app,

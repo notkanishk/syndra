@@ -58,3 +58,25 @@ func TestAuthoredSentenceAtFiveHundredsSurvives(t *testing.T) {
 		t.Fatalf("authored sentence replaced: %+v", e)
 	}
 }
+
+// The sentence names what failed, so an operator knows where to look, and never
+// borrows the upstream's words.
+func TestUpstreamSentenceNamesWhatFailed(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		code   string
+		want   string
+	}{
+		{http.StatusBadGateway, "ZITADEL_ERROR", "Zitadel gave an answer Syndra could not use."},
+		{http.StatusServiceUnavailable, "ZITADEL_ERROR", "Zitadel is not answering right now."},
+		{http.StatusServiceUnavailable, "ADDON_UNREACHABLE", "That system is not answering right now."},
+		{http.StatusBadGateway, "RECONCILE_FAILED", "That system gave an answer Syndra could not use."},
+		{http.StatusBadGateway, "DRAIN_ERROR", "A service Syndra depends on gave an answer Syndra could not use."},
+	} {
+		rr := httptest.NewRecorder()
+		writeUpstreamStatus(rr, tc.status, errors.New(zitadelRaw), tc.code)
+		if e := envelope(t, rr); e.Message != tc.want || e.Details["request_id"] == "" {
+			t.Fatalf("%s/%d: %+v, want %q with a reference", tc.code, tc.status, e, tc.want)
+		}
+	}
+}

@@ -17,17 +17,35 @@ type ErrorResponse struct {
 	Details map[string]string `json:"details,omitempty"`
 }
 
-// upstreamSentence is what an operator reads when Zitadel or an add-on fails.
-// The upstream's own text (an rpc error, a SQL string, a stack) is for the log.
-func upstreamSentence(status int) string {
-	switch status {
-	case http.StatusBadGateway, http.StatusGatewayTimeout:
-		return "A service Syndra depends on gave an answer Syndra could not use. Try again in a moment."
-	case http.StatusServiceUnavailable:
-		return "A service Syndra depends on is not answering right now. Try again in a moment."
+// upstreamSentenceFor is what an operator reads when Zitadel or an add-on fails:
+// which thing failed, in the copy guide's words (plain-language-copy §8). The
+// upstream's own text (an rpc error, a SQL string, a stack) is for the log. The
+// next step and the reference are added where the sentence is shown
+// (describeFailure in the UI), so they are not said twice.
+func upstreamSentenceFor(status int, code string) string {
+	unavailable := status == http.StatusServiceUnavailable
+	var who string
+	switch code {
+	case "ZITADEL_ERROR", "SWEEP_ERROR":
+		who = "Zitadel"
+	case "ADDON_UNREACHABLE", "TARGET_CAPABILITIES_UNKNOWN", "RECONCILE_FAILED", "LIFECYCLE_NOT_SET", "RELEASE_NOT_CONFIRMED":
+		who = "That system"
+	}
+	switch {
+	case who != "" && unavailable:
+		return who + " is not answering right now."
+	case who != "":
+		return who + " gave an answer Syndra could not use."
+	case status == http.StatusBadGateway, status == http.StatusGatewayTimeout:
+		return "A service Syndra depends on gave an answer Syndra could not use."
+	case unavailable:
+		return "A service Syndra depends on is not answering right now."
 	}
 	return "Something went wrong inside Syndra."
 }
+
+// upstreamSentence is the sentence for a failure whose code names no one.
+func upstreamSentence(status int) string { return upstreamSentenceFor(status, "") }
 
 // jsonErrorResponse writes the envelope. A 500 never shows its message: it goes
 // to the log with a reference, and the screen gets a plain sentence and the
@@ -59,7 +77,7 @@ func writeSanitised(w http.ResponseWriter, status int, code, raw string) {
 	log.Printf("[HTTP] error status=%d ref=%s code=%s: %s", status, ref, code, raw)
 	jsonResponse(w, status, ErrorResponse{
 		Error:   code,
-		Message: upstreamSentence(status),
+		Message: upstreamSentenceFor(status, code),
 		Details: map[string]string{"request_id": ref},
 	})
 }
