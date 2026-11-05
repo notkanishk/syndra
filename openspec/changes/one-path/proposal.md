@@ -80,3 +80,29 @@ This file holds the waves that have landed. Tasks and evidence are in [tasks.md]
 - `addons/truenas`: `decide(current, desired, home) change` is the one decision. `plan` reads it to say what would happen; `converge` and `createAndConverge` read it to do it.
 
 **Behaviour.** The same outcomes for the same inputs, except two additions: a lifecycle flip leaves a row and an audit line, and writes carry the `Idempotency-Key` header. Wording is untouched: plan keeps `describePlannedChange`, apply keeps `describeChange`.
+
+## W2a · One access core (audit families 3 and 4, item 9)
+
+**Problem (verified on `main` at `23bbc59a`).**
+- The token compiler marked every rule target as never ending (`cache/compiler.go:239-241`, a `ponytail:` note), so `role_ends` said a rule role outlived the grant it came from.
+- `db.MappingHolders` (`db/mappings.go:255`) counted people the directory says have left, whose accounts the entitlement path already disables (`services/entitlement.go:252`).
+- Drift seeded rule derivation from observed Zitadel grants as well as records (`services/drift/sweep.go:153`, `handlers/reconciliation.go:186`), while the person view and the webhook seed from records only (`services/views.go:1432`). A target whose source was added by hand in Zitadel was "explained" to the sweep and unexplained on the person page. `ExpectedViaRule` (`services/expected.go:110`) was a second, reverse walk of the chain.
+- The working-copy bundle readers ignored includes and held versions: role usage and referenced roles (`db/roles.go:122,192`), the projects' bundle count, bundle impact and the access map (`services/views.go:1017,1080,1384`). A bundle made only of includes gave "nothing", and a role only in an older held version was "unused".
+- Bundle and rule holder counts were recorded numbers shown as holding (`handlers/bundles.go:123`, `handlers/rules.go:65`). Six UI sites fell back from observed to the recorded count. Three UI previews walked the rule list one hop (`app/policies/page.tsx:310-335`, `components/people/ManageBundles.tsx:210`, the first matching rule only; `components/bundles/BundlePage.tsx:909-926`).
+- "Left" was defined twice (`services/bulk.go:708`, `services/insights_trends.go:98`), disagreeing on alumni and deactivated.
+
+**What.**
+- **`internal/access`**, pure: `Ends` (the one fixpoint, each role with when it ends; a rule role ends with its last source), `Closure` (the same fixpoint without dates), `Fired` (the rules whose source is held), `Later`, and `Left` (the one definition of a person who has gone). `models.RuleClosure` is deleted.
+- Every closure goes through it: the compiler (`access.Ends`), `collectUserRoles` (now also carries each role's end, so the person page and the role page say what the token says), every cascade, welcome claims, the what-if, drift and reconciliation (`services.RuleDerived`, records only, forward), and the mapping cohort.
+- **The mapping cohort** is `services.MappingHolders`: `db.HeldRecords` (one read) + `access.Closure`, minus people `access.Left` positively reports. `db.ListMappingHistory` takes it as a parameter.
+- **Bundle readers** read `bundleGivesSQL`: the working copy (own and included), the latest version and every held version, each through `bundle_version_effective_roles`. Bundle impact counts the latest published version, as the bundle list does.
+- **Counts.** `services.BundleHolding` and `services.RuleHolding` read the one snapshot (`HolderFacts` shape): Given is recorded, Observed is Zitadel's, nil when never read. The bundle and rule lists carry `observed_holder_count` beside the recorded `holder_count`.
+- **UI.** Holder numbers are observed; recorded numbers are labelled ("assigned to", "given by Syndra", "in Syndra's records") or are the note. `holdersLine` never puts a recorded number in the headline. The previews ask the backend's what-if, which gains `rule_added`, `bundle_assigned` and `bundle_unassigned`.
+
+**Not preserving, by intent (user-visible).**
+- A rule-derived role's end in the token (`role_ends`), on the person page and on the role page is its source's end, not "no end". A role held by a dated grant and by a bundle now says no end on both pages (it said the grant's date).
+- Mapping blast radius counts (merge findings, mapping plans, version diffs, holders endpoint) drop people who have left. The add-on's unbound pass no longer considers them (it already skipped them at resolve).
+- Drift raises a rule target whose source is only in Zitadel, alongside that source.
+- Role "in use by N bundles" and the delete guard count a bundle that gives the role through an include or a held older version.
+- Bundle and rule lists show who Zitadel shows holding, with "not checked yet" before any read. Sorting by people puts "not checked" last.
+- "Left" adds "alumni" and "deactivated" to the insights and usage reports' definition, and "departed", "alumni", "deactivated" to the entitlement path's. Zitadel emits none of the three, so nothing changes in production.

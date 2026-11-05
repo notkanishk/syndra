@@ -13,7 +13,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { machineName } from "@/lib/audit-vocabulary";
 import { EventSentence } from "@/components/audit/EventLine";
-import { holdersLine, holdersToneClass } from "@/lib/holders";
+import { heldSortKey, holdersLine, holdersToneClass } from "@/lib/holders";
 import { formatShortDate, formatWhen, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { hasAccess, isDeparted, isPerson, peopleHref } from "@/lib/people-filters";
@@ -237,16 +237,15 @@ function AccessShape() {
   const top = useMemo(
     () =>
       [...(roles.data ?? [])]
-        .filter((role) => (role.observed_user_count ?? role.assigned_user_count) > 0)
-        .sort(
-          (a, b) =>
-            (b.observed_user_count ?? b.assigned_user_count) -
-            (a.observed_user_count ?? a.assigned_user_count),
-        )
+        // Who holds a role is what Zitadel shows. Not checked is not a
+        // headcount, so the recorded number never ranks a role here.
+        .filter((role) => heldSortKey(role.observed_user_count) > 0)
+        .sort((a, b) => heldSortKey(b.observed_user_count) - heldSortKey(a.observed_user_count))
         .slice(0, 5),
     [roles.data],
   );
   const unused = (roles.data ?? []).filter((role) => role.is_unused).length;
+  // Recorded, and said so: bundles Syndra has assigned to nobody.
   const emptyBundles = (bundles.data ?? []).filter((bundle) => !bundle.holder_count).length;
 
   // One basis for the whole tile — every row carries an identical copy, so
@@ -276,7 +275,7 @@ function AccessShape() {
             </div>
           )}
           {top.length === 0 ? (
-            <EmptyState title="Nobody holds a role yet." />
+            <EmptyState title={basis?.read_at ? "Nobody holds a role yet." : "Not checked in Zitadel yet."} />
           ) : (
             top.map((role) => {
               const holders = holdersLine(
@@ -341,7 +340,7 @@ function AccessShape() {
               {unused > 0 && emptyBundles > 0 && <span aria-hidden>·</span>}
               {emptyBundles > 0 && (
                 <ArrowLink href="/bundles">
-                  {emptyBundles} empty {emptyBundles === 1 ? "bundle" : "bundles"}
+                  {emptyBundles} {emptyBundles === 1 ? "bundle" : "bundles"} given to nobody
                 </ArrowLink>
               )}
             </>

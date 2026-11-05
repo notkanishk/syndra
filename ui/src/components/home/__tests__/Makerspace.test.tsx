@@ -257,6 +257,8 @@ describe("Home › The makerspace", () => {
         role_key: "trained",
         display_label: "Trained",
         assigned_user_count: 12,
+        // The shape list ranks by what Zitadel shows, never the recorded count.
+        observed_user_count: 12,
         is_unused: false,
       },
       {
@@ -436,5 +438,24 @@ describe("Home › The makerspace", () => {
     // to always show a bare clock, which read as "today" for a week-old entry.
     const times = screen.getAllByText(/^\d{2}:\d{2}$|^\d{1,2} \w+ \d{2}:\d{2}$/);
     expect(times.some((el) => /^\d{1,2} \w+ \d{2}:\d{2}$/.test(el.textContent ?? ""))).toBe(true);
+  });
+
+  // Zitadel not read: a recorded count never ranks a role as most held, and
+  // the empty state does not claim nobody holds anything.
+  it("ranks nothing on recorded counts, and says not checked rather than nobody", () => {
+    state.roles = [
+      {
+        project_id: "pLaser",
+        project_name: "Laser Lab",
+        role_key: "trained",
+        display_label: "Trained",
+        assigned_user_count: 12,
+        is_unused: false,
+      },
+    ];
+    renderMakerspace();
+    expect(screen.queryByRole("link", { name: /Trained/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Not checked in Zitadel yet.")).toBeInTheDocument();
+    expect(screen.queryByText("Nobody holds a role yet.")).not.toBeInTheDocument();
   });
 });

@@ -324,7 +324,7 @@ describe("PublishVersionDialog · bundles that include it", () => {
     openWithIncluders();
     expect(
       screen.getByText(
-        "Safety basics reaches 53 people: 8 directly, and 45 through New members and Staff, which include it. Nobody moves unless you say so.",
+        "Safety basics is assigned to 53 people: 8 directly, and 45 through New members and Staff, which include it. Nobody moves unless you say so.",
       ),
     ).toBeInTheDocument();
   });

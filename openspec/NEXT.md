@@ -19,6 +19,10 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
+## 0d. One access core (one-path W2a, 5 Nov 2026)
+
+Branch `feat/one-closure-core`; change [`changes/one-path`](changes/one-path/tasks.md) §W2a. `internal/access` is the one closure (`Ends`, `Closure`, `Fired`) and the one "left" (`Left`); the compiler, person view, cascades, drift, what-if and mapping cohort all call it. User-visible: rule roles end with their source (token, person and role pages); mapping blast radii drop people who have left; drift raises a rule target whose source is only in Zitadel; bundle and rule lists show observed holding, recorded numbers labelled; the rule editor, a person's bundle dialog and a bundle's role removal preview the whole chain from the backend. Open: the holding index for `RequestHolding`, `noteOf`, `MemberAccess`, `reachOf`, as-of (W3b); the snapshot cost on the bundle and rule lists; triage any new rule-target drift after deploy.
+
 ## 0d. One retry core (one-path W1d, 5 Nov 2026)
 
 Change: [`changes/one-path`](changes/one-path/tasks.md), branch `fix/one-retry-core`, migration 000080.
@@ -58,7 +62,7 @@ Branch `fix/one-addon-pipe`; change [`changes/one-path`](changes/one-path/tasks.
 Change [`rules-on-the-pipeline`](changes/rules-on-the-pipeline/tasks.md), ADR-006, migration 000078, branch `feat/rules-on-the-pipeline`.
 
 - **Mapping rules now go through the outbox.** Every direct write (a grant, an approval, a bulk give, a replace or revoke, an adopted drift) runs through `db.FollowRules`, which enqueues the closure difference as `source='rule'` rows in the same transaction. The webhook fires no rules: a Zitadel-side change is drift. The untraced orchestrator is deleted, and the repo guard allows one Zitadel writer, the drain.
-- **One closure.** `models.RuleClosure` is called by the compiler, every cascade, the access views and the mapping cohort. A live test asserts that Zitadel is sent exactly what `cache.CompileFacts` derives on A→B→C.
+- **One closure.** `access.Closure` (was `models.RuleClosure`; one-path W2a) is called by the compiler, every cascade, the access views and the mapping cohort. A live test asserts that Zitadel is sent exactly what `cache.CompileFacts` derives on A→B→C.
 - **Dead schema removed** (was 0c, stopped earlier the same day). `confirmation_mode` was traced read by read and is inert under roles (design.md). The reads, the writes, the endpoints and the one-time move are gone, and so is `app_claim_overrides`'s reader. Migration 000078 refuses unless `confirmation.model = 'roles'` and refuses while the table has a row.
 - **Open:** run 000078 on staging first (it refuses safely). Before the first production rule, try one on staging. The other "who holds what" readers the audit found are listed in tasks §6.
 

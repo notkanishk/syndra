@@ -182,6 +182,33 @@ func TestParity_PersonViewIsTheCoreClosure(t *testing.T) {
 	}
 }
 
+// A rule role ends when its source ends, on the person view as in the token:
+// alice's direct grant of a ends in June, so b and c (through two rules) end
+// then too. bob's come from a bundle and never end.
+func TestParity_ARuleRoleEndsWithItsSourceOnThePersonView(t *testing.T) {
+	f := parityFixture()
+	f.install(t)
+	june := time.Date(2027, 6, 30, 0, 0, 0, 0, time.UTC)
+	alice, _, err := collectUserRoles(context.Background(), "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []roleKey{{"p", "a"}, {"p", "b"}, {"q", "c"}} {
+		if r := alice[k]; r == nil || r.Ends == nil || !r.Ends.Equal(june) {
+			t.Errorf("alice %v ends %v, want %v", k, r, june)
+		}
+	}
+	bob, _, err := collectUserRoles(context.Background(), "bob")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, r := range bob {
+		if r.Ends != nil {
+			t.Errorf("bob %v ends %v, want never (a bundle gives it)", k, r.Ends)
+		}
+	}
+}
+
 // Bundle and rule counts are observed. Bob's bundle is held: Zitadel shows
 // every role his pinned version gives, the included one too. The rule counts
 // separate who should have the target (records) from who has it (Zitadel).

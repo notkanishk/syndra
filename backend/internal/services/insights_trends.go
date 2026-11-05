@@ -93,7 +93,6 @@ func accessChangeActions() []string {
 	return append(append(append(append([]string{}, actionsThroughBundle...), actionsByRequest...), actionsByHand...), actionsTakenAway...)
 }
 
-
 const (
 	trendTopN      = 5
 	noReasonGiven  = "No reason given"

@@ -91,10 +91,11 @@ describe("deleting an automatic rule", () => {
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
 
-    expect(document.body.textContent).toMatch(/12 people have .* from this rule/);
+    // Recorded, and labelled so: the rule applies to them in Syndra's records.
+    expect(document.body.textContent).toMatch(/This rule gives .* to 12 people in Syndra.s records/);
     // And that holding it elsewhere keeps it — the backend works this out per person, so the
     // dialog must not promise a precise loss.
-    expect(document.body.textContent).toMatch(/unless a bundle or a direct grant also gives it/);
+    expect(document.body.textContent).toMatch(/unless a bundle, direct access or another rule also gives it/);
   });
 
   // Retire keeps its history (owner, 19 Oct 2026): the dialog says so, and the list ends in a

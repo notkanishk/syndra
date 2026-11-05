@@ -80,7 +80,7 @@ func TestHeldRecords_SeedTheMappingCohortThroughRuleChains(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := PG.Exec(ctx, `UPDATE direct_role_grants SET expires_at = NOW() - INTERVAL '1 day' WHERE user_id = $1`, lapsed); err != nil {
+	if _, err := PG.Exec(ctx, `UPDATE direct_role_grants SET created_at = NOW() - INTERVAL '3 days', expires_at = NOW() - INTERVAL '1 day' WHERE user_id = $1`, lapsed); err != nil {
 		t.Fatal(err)
 	}
 	held, err := HeldRecords(ctx)

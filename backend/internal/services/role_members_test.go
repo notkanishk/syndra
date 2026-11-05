@@ -137,6 +137,7 @@ func TestRoleMembers_DirectRowCarriesGrantIDAndExpiry(t *testing.T) {
 			{projectID: "p0", roleKey: "trained"}: {
 				ProjectID: "p0", RoleKey: "trained", IsSource: true,
 				Reasons: []models.RoleReason{{Kind: "direct"}},
+				Ends:    &expires, // collectUserRoles' answer, from access.Ends
 			},
 		}, nil, nil
 	}

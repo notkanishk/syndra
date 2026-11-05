@@ -22,7 +22,7 @@ import { Select } from "@/components/ui/Select";
 import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui/SortHead";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
-import { holdersLine, holdersToneClass } from "@/lib/holders";
+import { heldSortKey, holdersLine, holdersToneClass, peopleSuffix } from "@/lib/holders";
 import { humanizeKey } from "@/lib/format";
 import { sortByName, sortNames } from "@/lib/sort";
 
@@ -33,7 +33,7 @@ const ROLE_SORT: Record<RoleSort, (role: CatalogRole) => string | number> = {
   role: (role) => role.display_name || humanizeKey(role.role_key),
   group: (role) => role.group || "",
   // The number the row shows: what Zitadel holds, else what Syndra recorded.
-  people: (role) => role.observed_user_count ?? role.assigned_user_count,
+  people: (role) => heldSortKey(role.observed_user_count),
 };
 
 /**
@@ -332,7 +332,7 @@ export default function RolesPage() {
               <span className="w-full text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">
                 {holders.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
-                  {holders.headline === "1" ? " person" : " people"}
+                  {peopleSuffix(holders.headline)}
                 </span>
                 {/* Recorded is what Syndra decided; this is what Zitadel shows
                     right now — never the same word, never the same line. */}

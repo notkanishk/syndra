@@ -63,7 +63,7 @@ import {
   type BundleRoleRow,
   type BundleRow,
 } from "@/lib/queries/useBundles";
-import { useMappingRules } from "@/lib/queries/useMappingRules";
+import { useInsightsWhatIf, type RoleRef as RoleRefValue } from "@/lib/queries/useInsights";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import dynamic from "next/dynamic";
 import { compareNames, sortByName, sortNames } from "@/lib/sort";
@@ -166,7 +166,13 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
     ...includes.flatMap((i) => pinnedRoles(i, childVersions[i.child_bundle_id]).map(idOf)),
   ]).size;
   const includedBy = includers.data ?? [];
-  const people = `${holders} ${holders === 1 ? "person" : "people"}`;
+  // Who has it is what Zitadel shows; the assignments explain it and are what
+  // a publish or a retire moves (`holders`, below).
+  const seen = bundle.observed_holder_count;
+  const people =
+    seen === undefined || seen === null
+      ? `Assigned to ${holders}, not checked in Zitadel`
+      : `${seen} ${seen === 1 ? "person has" : "people have"} it${seen === holders ? "" : `, assigned to ${holders}`}`;
   const welcome = (bundles.data ?? []).find((b) => b.is_welcome);
 
   return (
@@ -352,10 +358,10 @@ function UnpublishedPanel({
       <ChangeLines draft={draft} className="px-5 pb-3" />
       <p className="px-5 pb-4 text-[13px] text-muted">
         {holders === 0
-          ? `Nobody has ${name} yet, so publishing moves nobody.`
+          ? `${name} is assigned to nobody yet, so publishing moves nobody.`
           : `Publishing asks whether the ${holders} ${
               holders === 1 ? "person" : "people"
-            } with ${name} move to v${draft.next_version}.`}
+            } ${name} is assigned to move to v${draft.next_version}.`}
       </p>
       {failure && <ActionOutcome outcome={failure} word="Not discarded" className="mx-5 mb-4" />}
     </Card>
@@ -604,8 +610,8 @@ function EndCards({
           <p className="mt-0.5 text-[13px] text-muted">
             {refused ??
               (holders === 0
-                ? "Nobody has it, so retiring it takes nothing from anyone."
-                : `The ${holders} ${holders === 1 ? "person" : "people"} with it lose whatever only ${name} gave them. You see who and what before anything is sent.`)}
+                ? "It is assigned to nobody, so retiring it takes nothing from anyone."
+                : `The ${holders} ${holders === 1 ? "person" : "people"} it is assigned to lose whatever only ${name} gave them. You see who and what before anything is sent.`)}
           </p>
         </div>
         {/* The line beside it is the reason; Button's own would say it twice. */}
@@ -763,8 +769,8 @@ function DeleteBundleDialog({
         titleId="delete-bundle"
         lede={
           holders === 0
-            ? "Nobody holds it. Retiring it takes nothing away from anybody."
-            : `${holders} ${holders === 1 ? "person holds" : "people hold"} it right now.`
+            ? "It is assigned to nobody. Retiring it takes nothing away from anybody."
+            : `It is assigned to ${holders} ${holders === 1 ? "person" : "people"} right now.`
         }
       />
 
@@ -774,7 +780,7 @@ function DeleteBundleDialog({
           <ul className="flex flex-col gap-1 text-muted">
             {holders > 0 && (
               <li>
-                Everyone holding it loses whichever of its {roleCount}{" "}
+                Everyone it is assigned to loses whichever of its {roleCount}{" "}
                 {roleCount === 1 ? "role" : "roles"} nothing else gives them. A rule or direct
                 access to the same role keeps it.
               </li>
@@ -893,31 +899,35 @@ function RemovalImpact({
   onCancel: () => void;
 }) {
   const impact = useBundleImpact(bundleId);
-  const rules = useMappingRules();
   const remove = useRemoveBundleRole(bundleId);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const holders = impact.data?.users ?? [];
 
-  // Who keeps the role anyway, because a rule produces it. Removing it from the
-  // bundle changes nothing for them, and saying so is the difference between a
-  // safe click and an outage.
-  const coveringRule = (rules.data ?? []).find(
-    (rule) =>
-      rule.target_project === role.zitadel_project_id && rule.target_role === role.zitadel_role_key,
-  );
-
-  // What else goes with it: a rule that reads this role as its input stops
-  // firing for anybody who loses it.
-  const cascades = useMemo(
-    () =>
-      (rules.data ?? []).filter(
-        (rule) =>
-          rule.source_project === role.zitadel_project_id &&
-          rule.source_role === role.zitadel_role_key,
-      ),
-    [rules.data, role],
-  );
+  // Who would lose what is the backend's answer (the what-if), computed by the
+  // same closure the publish runs: every rule, down the whole chain, and every
+  // other source that keeps the role. This panel used to walk the rule list
+  // itself, one hop, and named only the first rule that produced the role.
+  const whatIf = useInsightsWhatIf({
+    kind: "bundle_gives_not",
+    bundle_id: bundleId,
+    project_id: role.zitadel_project_id,
+    role_key: role.zitadel_role_key,
+  });
+  const key = `${role.zitadel_project_id}:${role.zitadel_role_key}`;
+  const losses = whatIf.data?.losses ?? [];
+  const lose = losses.filter((p) => p.roles.some((r) => `${r.project_id}:${r.role_key}` === key)).length;
+  const keep = Math.max(holders.length - lose, 0);
+  // What goes with it: every role a rule gave only through this one.
+  const alsoLost = useMemo(() => {
+    const seen = new Map<string, RoleRefValue>();
+    for (const person of whatIf.data?.losses ?? [])
+      for (const r of person.roles) {
+        const k = `${r.project_id}:${r.role_key}`;
+        if (k !== key) seen.set(k, r);
+      }
+    return Array.from(seen.values());
+  }, [whatIf.data, key]);
 
   return (
     <div className="border-t border-line pt-4">
@@ -926,41 +936,42 @@ function RemovalImpact({
         version
       </div>
       <p className="mb-2.5 max-w-[60ch] text-[13.5px] leading-[1.55] text-muted">
-        This is what would happen to the {holders.length} {holders.length === 1 ? "person" : "people"} holding{" "}
-        {bundleName} <em>if</em> you publish the next version and move them onto it.
+        This is what would happen to the {holders.length} {holders.length === 1 ? "person" : "people"}{" "}
+        {bundleName} is assigned to <em>if</em> you publish the next version and move them onto it.
       </p>
 
       <ul className="mb-4 flex flex-col gap-2 text-[14px] leading-[1.5]">
         <li className="flex items-start gap-2.5">
           <StatusDot tone="danger" className="mt-[7px] flex-none" />
           <span>
-            <strong className="font-semibold">
-              {holders.length} {holders.length === 1 ? "person would lose" : "people would lose"} it
-              through this bundle
-            </strong>
-            {coveringRule ? (
-              <span className="text-muted">, unless a rule also gives it to them</span>
+            {whatIf.isLoading ? (
+              <span className="text-muted">Working out who would lose it.</span>
+            ) : whatIf.error ? (
+              <span className="text-muted">Couldn&rsquo;t work out who would lose it. Try again in a moment.</span>
             ) : (
-              <span className="text-muted">. No rule reproduces it</span>
+              <strong className="font-semibold">
+                {lose} {lose === 1 ? "person would lose" : "people would lose"} it
+              </strong>
             )}
           </span>
         </li>
 
-        {coveringRule && (
+        {!whatIf.isLoading && !whatIf.error && keep > 0 && (
           <li className="flex items-start gap-2.5">
             <StatusDot tone="neutral" className="mt-[7px] flex-none" />
             <span className="text-muted">
-              Anybody holding <RoleRef projectId={coveringRule.source_project} roleKey={coveringRule.source_role} /> would keep it, because an automatic rule produces it
-              independently.
+              {keep} {keep === 1 ? "person keeps" : "people keep"} it, because something else gives it to them: an
+              automatic rule, direct access or an included bundle.
             </span>
           </li>
         )}
 
-        {cascades.map((rule) => (
-          <li key={rule.id} className="flex items-start gap-2.5">
+        {alsoLost.map((r) => (
+          <li key={`${r.project_id}:${r.role_key}`} className="flex items-start gap-2.5">
             <StatusDot tone="neutral" className="mt-[7px] flex-none" />
             <span className="text-muted">
-              They would also lose <RoleRef projectId={rule.target_project} roleKey={rule.target_role} /> by <Term name="cascade">cascade</Term>, because this role is that rule&rsquo;s input.
+              Some would also lose <RoleRef projectId={r.project_id} roleKey={r.role_key} /> by{" "}
+              <Term name="cascade">cascade</Term>, because an automatic rule gave it to them from this role.
             </span>
           </li>
         ))}
