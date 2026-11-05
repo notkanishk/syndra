@@ -44,6 +44,7 @@ var claimDoor = &claimserve.Door{
 	OnMiss:     func(u string) { claimRepair.enqueue(u) },
 	OnMismatch: func() { nudgeKeyring() },
 	Debug:      backendDebug{},
+	Limit:      limiter,
 }
 
 // HandleActionInject answers one Actions v2 call (claimserve.Door.Inject).
