@@ -17,10 +17,10 @@ import { Unfold } from "@/lib/motion";
 import { clockOf, diffLines, tokenLines } from "@/lib/claims";
 import { selectContents, useClipboardAvailable } from "@/lib/clipboard";
 import type { CatalogUser } from "@/lib/queries/useCatalogUsers";
-import type { Explanation, Preview } from "@/lib/queries/useClaimShape";
+import type { Explanation, LiveCheck, Preview } from "@/lib/queries/useClaimShape";
 import { sortAccounts } from "@/lib/sort";
 
-import { check5, check6, checkWords, verdictOf, type CheckContext } from "./claim-words";
+import { check5, check6, checkWords, stepName, verdictOf, type CheckContext } from "./claim-words";
 
 /**
  * The preview (A-11, A-14 §1, A-15 §5): "Preview for <person>", one verdict
@@ -161,6 +161,7 @@ export function ClaimPreview({
               <TokenBlock lines={lines} empty={<span className="text-muted">{"{}"}</span>} className="[overflow-wrap:anywhere]" />
               {shown.would_receive && <TokenBlock lines={tokenLines(shown.would_receive)} comment="once their claims are built" />}
             </div>
+            {!asDraft && <LiveLine live={preview?.live?.[personId]} person={ctx.person} />}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 pb-5 pt-2.5">
               <span className="min-w-0 flex-[1_1_260px] text-[13px] leading-[1.55] text-faint [text-wrap:pretty]">
                 {foot && <Ticks text={foot} />}
@@ -184,6 +185,53 @@ export function ClaimPreview({
         ) : null}
       </ReadGate>
     </Card>
+  );
+}
+
+/**
+ * The live check: the person's last real sign-in that debug mode saw, against
+ * this preview. The backend compares the two; this only says the answer.
+ * Nothing seen: one faint line saying how to see one. A sign-in is never faked.
+ */
+export function LiveLine({ live, person }: { live?: LiveCheck; person: string }) {
+  if (!live) {
+    return (
+      <p className="px-5 pt-2.5 text-[13px] leading-[1.55] text-faint [text-wrap:pretty]">
+        No sign-in of {person}&apos;s has been seen to compare with this. Turn on debug mode for them below, and their next sign-in is
+        checked against it.
+      </p>
+    );
+  }
+  const where = stepName(live.function);
+  const at = clockOf(live.at);
+  const sentence = live.match
+    ? live.expected.length
+      ? `${person}'s last sign-in, at ${at}, carried exactly this in ${where}.`
+      : `${person}'s last sign-in, at ${at}, carried nothing in ${where}, as this shape says.`
+    : `${person}'s last sign-in, at ${at}, carried something different in ${where}.`;
+  return (
+    <div className="flex flex-col gap-2 px-5 pt-2.5">
+      <span className="flex items-baseline gap-2.5 text-[13.5px] leading-[1.55] text-ink">
+        <StatusDot tone={live.match ? "healthy" : "warn"} />
+        <span>
+          <span className="sr-only">{live.match ? "Matches. " : "Doesn't match. "}</span>
+          {sentence}
+        </span>
+      </span>
+      {!live.match && (
+        <>
+          <TokenBlock
+            lines={tokenLines(Object.fromEntries(live.served.map((c) => [c.key, c.value])))}
+            comment={`what Syndra sent at ${at}`}
+            empty={<span className="text-muted">{"{}"}</span>}
+            className="[overflow-wrap:anywhere]"
+          />
+          <span className="text-[13px] leading-[1.55] text-faint">
+            If the shape or their roles changed after {at}, have them sign in again to compare.
+          </span>
+        </>
+      )}
+    </div>
   );
 }
 
