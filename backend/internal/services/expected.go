@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
@@ -61,18 +62,16 @@ var AllIntentSources = []IntentSource{
 	IntentExclusion,
 }
 
-// HolderKey is one (user, project, role) tuple a user actually holds — union of
-// Syndra direct grants and live Zitadel grants. It is the input to rule
-// derivation: a mapping rule's target is "expected" only for users who hold the
-// rule's source.
+// HolderKey is one (user, project, role) tuple.
 type HolderKey struct {
 	UserID    string
 	ProjectID string
 	RoleKey   string
 }
 
-// BuildHolderSet unions Syndra direct grants and Zitadel grants into the set of
-// tuples each user currently holds.
+// BuildHolderSet unions Syndra direct grants and Zitadel grants into one set
+// of tuples. Rule derivation is never seeded from the Zitadel half (see
+// RuleDerived); the sweep uses it to see what Zitadel holds.
 func BuildHolderSet(direct []models.DirectGrant, zit []zitadel.UserGrant) map[HolderKey]bool {
 	h := make(map[HolderKey]bool)
 	for _, g := range direct {
@@ -101,32 +100,39 @@ func ObservedToUserGrants(observed []db.ObservedGrant) []zitadel.UserGrant {
 	return out
 }
 
-// ExpectedViaRule reports whether (userID, projectID, roleKey) is the target of
-// an active mapping rule chain the user qualifies for: they hold the source of
-// some rule on a path that ends at the role. Chains are legal (cycles are
-// refused on insert) and the resolver, collectUserRoles, follows them to a
-// fixpoint, so this walks them too; a one-hop check showed a chained grant as
-// drift.
-func ExpectedViaRule(holder map[HolderKey]bool, rules []models.MappingRule, userID, projectID, roleKey string) bool {
-	type role struct{ project, key string }
-	seen := map[role]bool{{projectID, roleKey}: true}
-	for queue := []role{{projectID, roleKey}}; len(queue) > 0; queue = queue[1:] {
-		t := queue[0]
-		for _, r := range rules {
-			if r.TargetProject != t.project || r.TargetRole != t.key {
-				continue
-			}
-			if holder[HolderKey{userID, r.SourceProject, r.SourceRole}] {
-				return true
-			}
-			// seen also stops a cycle that slipped past the insert check.
-			if s := (role{r.SourceProject, r.SourceRole}); !seen[s] {
-				seen[s] = true
-				queue = append(queue, s)
-			}
+// RuleDerived is every (user, role) a mapping rule gives, for everybody at
+// once: the targets of the rules that fire on each person's closure.
+//
+// held is what Syndra RECORDS each person holding (direct grants and pinned
+// bundle roles), never what Zitadel was seen to hold. That is the seed the
+// person view, the webhook (UserExpectsRole) and the token use, so the sweep
+// and the person page now agree about a rule target. They did not: the sweep
+// seeded from observed grants as well, so a target whose source somebody added
+// by hand in Zitadel was "explained" to the sweep while the person page called
+// the source unexplained. The token never carries such a target (rules fire
+// from records only), so the sweep now raises it with its source.
+//
+// Forward, through access.Closure and access.Fired, rather than a reverse walk
+// from each target: one closure per person answers every target, and it is the
+// same code that decides what the token carries.
+func RuleDerived(held map[HolderKey]bool, rules []models.MappingRule) map[HolderKey]bool {
+	out := map[HolderKey]bool{}
+	if len(rules) == 0 {
+		return out
+	}
+	byUser := map[string]map[access.Role]bool{}
+	for k := range held {
+		if byUser[k.UserID] == nil {
+			byUser[k.UserID] = map[access.Role]bool{}
+		}
+		byUser[k.UserID][access.Role{ProjectID: k.ProjectID, RoleKey: k.RoleKey}] = true
+	}
+	for u, base := range byUser {
+		for _, r := range access.Fired(access.Closure(base, rules, access.NewRole), rules, access.NewRole) {
+			out[HolderKey{u, r.TargetProject, r.TargetRole}] = true
 		}
 	}
-	return false
+	return out
 }
 
 // UserExpectsRole reports whether Syndra's effective-role computation already

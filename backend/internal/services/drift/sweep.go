@@ -142,27 +142,31 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	for _, g := range bundled {
 		bundleSet[services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: g.RoleKey}] = true
 	}
-	// Bundle-derived roles are part of what the person HOLDS, not only part of
-	// what Syndra intends — and `holder` is what rule derivation is evaluated
-	// against. Without them the fix above stopped one hop short: a bundle gives
-	// S, a rule says S→T, T is live in Zitadel, and S itself is not (its
-	// projection failed, or somebody removed it by hand). `expectedViaRule`
-	// looks for S among the holdings, does not find it, and the sweep raises T
-	// as unexplained — a finding the webhook would never make, because
-	// collectUserRoles seeds its rule fixpoint from bundle roles too.
-	holder := buildHolderSet(direct, zit)
+	// Rule derivation is seeded from what Syndra RECORDS the person holding —
+	// direct grants and pinned bundle roles — exactly as collectUserRoles (the
+	// person page and the webhook) and the token compiler seed it. Bundle roles
+	// are in it: a bundle gives S, a rule says S→T, T is live in Zitadel and S
+	// is not (its projection failed); T is still explained. Observed grants are
+	// NOT in it: a source somebody added by hand in Zitadel is itself
+	// unexplained, the token carries no target from it, and so its target is
+	// raised with it rather than "explained" by it.
+	directSet := buildHolderSet(direct, nil) // Syndra's own direct intent
+	holder := make(map[services.HolderKey]bool, len(directSet)+len(bundleSet))
+	for k := range directSet {
+		holder[k] = true
+	}
 	for k := range bundleSet {
 		holder[k] = true
 	}
+	ruleSet := ruleDerived(holder, rules)
 
 	res := DriftResult{Target: target, ZitadelGrants: len(zit), Truncated: truncated}
 
 	// --- target_only: unexplained live grants → drift_items ---
-	directSet := buildHolderSet(direct, nil) // Syndra's own direct intent
 	for _, g := range zit {
 		for _, rk := range g.RoleKeys {
 			k := services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: rk}
-			if explained(k, directSet, bundleSet, holder, rules, exclusions, target) {
+			if explained(k, directSet, bundleSet, ruleSet, exclusions, target) {
 				continue // Syndra accounts for this grant — not drift
 			}
 			if _, inserted, err := upsertDriftItem(ctx, target, g.UserID, g.ProjectID,
@@ -188,7 +192,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	// above, so a finding cannot be raised and retracted on alternating ticks.
 	// Only `target_only` on THIS target: a `syndra_only` finding is the opposite
 	// claim and is not this pass's business.
-	res.DriftItemsRetracted = retractExplained(ctx, target, directSet, bundleSet, holder, rules, exclusions)
+	res.DriftItemsRetracted = retractExplained(ctx, target, directSet, bundleSet, ruleSet, exclusions)
 
 	// --- syndra_only: direct grants Syndra expects but Zitadel lacks → re-enqueue ---
 	//
@@ -513,13 +517,11 @@ func recordObservedGrants(ctx context.Context, target string, zit []zitadel.User
 // the one that got written down.
 func explained(
 	k services.HolderKey,
-	directSet, bundleSet map[services.HolderKey]bool,
-	holder map[services.HolderKey]bool,
-	rules []models.MappingRule,
+	directSet, bundleSet, ruleSet map[services.HolderKey]bool,
 	exclusions []models.ExternalGrantExclusion,
 	target string,
 ) bool {
-	_, ok := explainedBy(k, directSet, bundleSet, holder, rules, exclusions, target)
+	_, ok := explainedBy(k, directSet, bundleSet, ruleSet, exclusions, target)
 	return ok
 }
 
@@ -533,9 +535,7 @@ func explained(
 // `marked_external` is the status that already means what happened.
 func explainedBy(
 	k services.HolderKey,
-	directSet, bundleSet map[services.HolderKey]bool,
-	holder map[services.HolderKey]bool,
-	rules []models.MappingRule,
+	directSet, bundleSet, ruleSet map[services.HolderKey]bool,
 	exclusions []models.ExternalGrantExclusion,
 	target string,
 ) (services.IntentSource, bool) {
@@ -544,7 +544,7 @@ func explainedBy(
 		return services.IntentDirectGrant, true
 	case bundleSet[k]:
 		return services.IntentBundle, true
-	case expectedViaRule(holder, rules, k.UserID, k.ProjectID, k.RoleKey):
+	case ruleSet[k]:
 		return services.IntentMappingRule, true
 	case isExcluded(exclusions, target, k.UserID, k.ProjectID, k.RoleKey):
 		return services.IntentExclusion, true
@@ -588,8 +588,7 @@ func describeIntent(source services.IntentSource) string {
 func retractExplained(
 	ctx context.Context,
 	target string,
-	directSet, bundleSet, holder map[services.HolderKey]bool,
-	rules []models.MappingRule,
+	directSet, bundleSet, ruleSet map[services.HolderKey]bool,
 	exclusions []models.ExternalGrantExclusion,
 ) int {
 	pending, err := svcPendingDriftItems(ctx, target)
@@ -615,7 +614,7 @@ func retractExplained(
 		var source services.IntentSource
 		for _, rk := range item.RoleKeys {
 			k := services.HolderKey{UserID: item.UserID, ProjectID: item.ProjectID, RoleKey: rk}
-			got, ok := explainedBy(k, directSet, bundleSet, holder, rules, exclusions, target)
+			got, ok := explainedBy(k, directSet, bundleSet, ruleSet, exclusions, target)
 			if !ok || (source != "" && got != source) {
 				all = false
 				break

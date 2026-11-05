@@ -117,14 +117,58 @@ func GetAllLocalRoles(ctx context.Context) ([]models.Role, error) {
 	return roles, nil
 }
 
-// GetRoleUsageCounts returns per-role usage from bundle_roles and mapping_rules.
-// The key is "projectID:roleKey".
+// bundleGivesSQL is every (bundle, role) a bundle gives anybody or will give:
+// its working copy (own roles and the pinned versions it includes), its latest
+// published version (what a new holder gets) and every version somebody is
+// pinned to, each through bundle_version_effective_roles so an include counts.
+// The one answer to "which bundles give this role"; retired bundles are
+// filtered by the caller's join.
+//
+// The working copy alone (bundle_roles) missed two cases: a bundle made only
+// of includes gave "nothing", and a role dropped from the draft but still held
+// through an older version was "unused", which let its delete through.
+const bundleGivesSQL = `
+	SELECT br.bundle_id, br.zitadel_project_id, br.zitadel_role_key FROM bundle_roles br
+	UNION
+	SELECT i.parent_bundle_id, r.zitadel_project_id, r.zitadel_role_key
+	  FROM bundle_includes i JOIN bundle_version_roles r ON r.version_id = i.child_version_id
+	UNION
+	SELECT v.bundle_id, r.zitadel_project_id, r.zitadel_role_key
+	  FROM bundle_versions v JOIN bundle_version_effective_roles r ON r.version_id = v.id
+	 WHERE v.version = (SELECT MAX(x.version) FROM bundle_versions x WHERE x.bundle_id = v.bundle_id)
+	    OR EXISTS (SELECT 1 FROM user_bundle_assignments a WHERE a.version_id = v.id)`
+
+// GetBundleRolesGiven is bundleGivesSQL for every live bundle, keyed by bundle
+// id, in one read.
+func GetBundleRolesGiven(ctx context.Context) (map[string][]models.BundleRole, error) {
+	rows, err := querier(ctx).Query(ctx, `
+		SELECT g.bundle_id, g.zitadel_project_id, g.zitadel_role_key
+		  FROM (`+bundleGivesSQL+`) g
+		  JOIN bundles b ON b.id = g.bundle_id AND b.retired_at IS NULL
+		 ORDER BY g.bundle_id, g.zitadel_project_id, g.zitadel_role_key`)
+	if err != nil {
+		return nil, fmt.Errorf("query bundle roles given: %w", err)
+	}
+	defer rows.Close()
+	out := map[string][]models.BundleRole{}
+	for rows.Next() {
+		var r models.BundleRole
+		if err := rows.Scan(&r.BundleID, &r.ProjectID, &r.RoleKey); err != nil {
+			return nil, fmt.Errorf("scan bundle role given: %w", err)
+		}
+		out[r.BundleID] = append(out[r.BundleID], r)
+	}
+	return out, rows.Err()
+}
+
+// GetRoleUsageCounts returns per-role usage from bundles (bundleGivesSQL) and
+// mapping_rules. The key is "projectID:roleKey".
 func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
-	// Count bundle_roles per (project, role).
+	// Count the live bundles giving each (project, role).
 	bundleQuery := `
-		SELECT br.zitadel_project_id, br.zitadel_role_key, COUNT(*)
-		FROM bundle_roles br JOIN bundles b ON b.id = br.bundle_id AND b.retired_at IS NULL
-		GROUP BY br.zitadel_project_id, br.zitadel_role_key`
+		SELECT g.zitadel_project_id, g.zitadel_role_key, COUNT(DISTINCT g.bundle_id)
+		FROM (` + bundleGivesSQL + `) g JOIN bundles b ON b.id = g.bundle_id AND b.retired_at IS NULL
+		GROUP BY g.zitadel_project_id, g.zitadel_role_key`
 
 	rows, err := querier(ctx).Query(ctx, bundleQuery)
 	if err != nil {
@@ -192,8 +236,8 @@ func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
 func GetAllReferencedRoleKeys(ctx context.Context) ([][2]string, error) {
 	query := `
 		SELECT DISTINCT project_id, role_key FROM (
-			SELECT br.zitadel_project_id AS project_id, br.zitadel_role_key AS role_key
-			  FROM bundle_roles br JOIN bundles b ON b.id = br.bundle_id AND b.retired_at IS NULL
+			SELECT g.zitadel_project_id AS project_id, g.zitadel_role_key AS role_key
+			  FROM (` + bundleGivesSQL + `) g JOIN bundles b ON b.id = g.bundle_id AND b.retired_at IS NULL
 			UNION
 			SELECT source_zitadel_project_id, source_zitadel_role_key FROM mapping_rules WHERE retired_at IS NULL
 			UNION

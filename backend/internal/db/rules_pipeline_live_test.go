@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/access"
 	"syndra/internal/cache"
 	"syndra/internal/db"
-	"syndra/internal/models"
 	_ "syndra/internal/services" // wires db.FollowRules, as in the binary
 )
 
@@ -97,12 +97,12 @@ func TestRulesOnThePipeline_OwnGrantSendsZitadelExactlyTheCompiledChain(t *testi
 	if len(rows) != 3 {
 		t.Fatalf("outbox for %s: %+v", user, rows)
 	}
-	sent := map[models.HeldRole]bool{}
+	sent := map[access.Role]bool{}
 	for id, r := range rows {
 		if r.status != "pending" || r.op != "add" {
 			t.Fatalf("row %s is %+v; nothing may be sent before it is traced", id, r)
 		}
-		sent[models.HeldRole{ProjectID: r.project, RoleKey: r.role}] = true
+		sent[access.Role{ProjectID: r.project, RoleKey: r.role}] = true
 	}
 	for _, id := range res.RuleOutboxIDs {
 		r := rows[id]
@@ -118,14 +118,14 @@ func TestRulesOnThePipeline_OwnGrantSendsZitadelExactlyTheCompiledChain(t *testi
 	}
 
 	// Exactly the compiler's closure: what Zitadel is sent is what the token says.
-	compiled := map[models.HeldRole]bool{}
+	compiled := map[access.Role]bool{}
 	for _, p := range []string{f.pa, f.pb, f.pc} {
 		facts, err := cache.CompileFacts(f.ctx, user, p)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, r := range facts.Roles {
-			compiled[models.HeldRole{ProjectID: p, RoleKey: r}] = true
+			compiled[access.Role{ProjectID: p, RoleKey: r}] = true
 		}
 	}
 	if !maps.Equal(sent, compiled) {

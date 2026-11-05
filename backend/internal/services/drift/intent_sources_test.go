@@ -2,6 +2,7 @@ package drift
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"syndra/internal/db"
@@ -38,9 +39,8 @@ func TestSweep_AccountsForEverySourceOfIntent(t *testing.T) {
 				bundled    []db.BundleDerivedGrant
 				rules      []models.MappingRule
 				exclusions []models.ExternalGrantExclusion
-				// The rule case needs the person to hold the rule's SOURCE, so
-				// the live Zitadel read supplies that alongside the grant under
-				// test.
+				// The rule case needs the person to hold the rule's SOURCE in
+				// Syndra's records (a direct grant here); Zitadel shows it too.
 				extraZitadel []zitadel.UserGrant
 			)
 
@@ -54,6 +54,7 @@ func TestSweep_AccountsForEverySourceOfIntent(t *testing.T) {
 					SourceProject: "p-src", SourceRole: "src-role",
 					TargetProject: project, TargetRole: role,
 				}}
+				direct = []models.DirectGrant{{UserID: user, ProjectID: "p-src", RoleKey: "src-role"}}
 				extraZitadel = []zitadel.UserGrant{
 					{ID: "g-src", UserID: user, ProjectID: "p-src", RoleKeys: []string{"src-role"}},
 				}
@@ -105,15 +106,14 @@ func TestSweep_AccountsForEverySourceOfIntent(t *testing.T) {
 
 			// And the same judgement, asked directly, must agree — `explained`
 			// is what both the raising and the retracting pass consult.
-			holder := services.BuildHolderSet(direct, append([]zitadel.UserGrant{
-				{ID: "g1", UserID: user, ProjectID: project, RoleKeys: []string{role}},
-			}, extraZitadel...))
 			directSet := services.BuildHolderSet(direct, nil)
 			bundleSet := map[services.HolderKey]bool{}
+			holder := services.BuildHolderSet(direct, nil)
 			for _, g := range bundled {
 				bundleSet[services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: g.RoleKey}] = true
+				holder[services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: g.RoleKey}] = true
 			}
-			if !explained(k, directSet, bundleSet, holder, rules, exclusions, db.TargetZitadel) {
+			if !explained(k, directSet, bundleSet, services.RuleDerived(holder, rules), exclusions, db.TargetZitadel) {
 				t.Fatalf("explained() does not recognise %q", source)
 			}
 		})
@@ -139,5 +139,35 @@ func TestSweep_AGrantNothingAccountsForIsStillDrift(t *testing.T) {
 	}
 	if raised != 1 {
 		t.Fatalf("an unexplained grant must be raised exactly once, got %d", raised)
+	}
+}
+
+// A rule target whose source is held ONLY in Zitadel (added there by hand) is
+// drift, with its source: rules fire from what Syndra records, as on the person
+// page and in the token. Before W2a the sweep seeded rules from observed grants
+// and "explained" the target while the person page called the source
+// unexplained.
+func TestSweep_ARuleTargetFromAnUnrecordedSourceIsDrift(t *testing.T) {
+	stubSweep(t)
+	t.Cleanup(swap(&svcGetActiveMappingRules, func(context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{{SourceProject: "p-src", SourceRole: "src-role", TargetProject: "p1", TargetRole: "the-role"}}, nil
+	}))
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{
+			observedGrant("g-src", "u1", "p-src", "src-role"),
+			observedGrant("g1", "u1", "p1", "the-role"),
+		}, nil
+	}))
+	var raised []string
+	t.Cleanup(swap(&upsertDriftItem, func(_ context.Context, _, _, p string, roles []string, _, _, _ string, _ db.DriftEvidence) (string, bool, error) {
+		raised = append(raised, p+":"+roles[0])
+		return "d1", true, nil
+	}))
+	if _, err := Sweep(context.Background()); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	sort.Strings(raised)
+	if len(raised) != 2 || raised[0] != "p-src:src-role" || raised[1] != "p1:the-role" {
+		t.Fatalf("raised %v, want the hand-added source and the target it would derive", raised)
 	}
 }
