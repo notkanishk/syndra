@@ -10,11 +10,11 @@ describe("an upstream failure on the screen", () => {
     const e = new ApiError(502, {
       error: "ZITADEL_ERROR",
       message: "A service Syndra depends on gave an answer Syndra could not use. Try again in a moment.",
-      details: { request_id: "ABCD1234" },
+      details: { request_id: "ref-test-0001" },
     });
     const o = outcomeFromError(e);
     expect(o.kind).toBe("failed");
-    expect(o.requestId).toBe("ABCD1234");
+    expect(o.requestId).toBe("ref-test-0001");
     expect(o.message).not.toContain("rpc error");
   });
 
