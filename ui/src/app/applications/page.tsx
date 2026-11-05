@@ -34,7 +34,7 @@ const APP_SORT: Record<AppSort, (entry: ApplicationView) => string | number> = {
  */
 export default function AppsPage() {
   const apps = useApplications();
-  const [sort, setSort, view] = useSort<AppSort>("app");
+  const [sort, setSort, view] = useSort<AppSort>("app", { list: "applications", keys: ["app", "people"] });
   const all = useMemo(() => apps.data ?? [], [apps.data]);
   const rows = useMemo(() => orderBy(all, view.sort, APP_SORT), [all, view.sort]);
   const basis = all[0]?.observation;

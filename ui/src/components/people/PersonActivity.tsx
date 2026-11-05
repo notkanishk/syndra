@@ -36,7 +36,7 @@ import { useTargetActivity, type TargetActivityEvent } from "@/lib/queries/useTa
  * is a different claim entirely.
  */
 export function PersonActivity({ userId, name }: { userId: string; name: string }) {
-  const paging = usePaging();
+  const paging = usePaging(undefined, undefined, "activity");
   const limit = paging.limit;
   const entries = useAuditEntries({ userId, limit });
 
