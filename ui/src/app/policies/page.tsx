@@ -29,7 +29,8 @@ import {
 } from "@/lib/queries/useMappingRules";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
-import { humanizeKey } from "@/lib/format";
+import { formatList, humanizeKey } from "@/lib/format";
+import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
@@ -320,20 +321,28 @@ function RuleEditor({
 
     // Naming the chain matters more than any other line here: a rule that
     // triggers another rule is the single most surprising thing this system
-    // does, and finding out afterwards is how people stop trusting it.
-    for (const chained of existingRules) {
-      if (chained.id === rule?.id) continue;
-      if (
-        chained.source_project === targetProject &&
-        chained.source_role === targetRole
-      ) {
-        notes.push(
-          `Also sets off another rule, which would then give them ${roleLabel(
-            chained.target_project,
-            chained.target_role,
-          )}.`,
-        );
+    // does, and finding out afterwards is how people stop trusting it. The
+    // whole chain, not one hop: the backend follows every rule the second role
+    // sets off (models.RuleClosure), so this names all of them (audit W12).
+    // ponytail: walked here because the draft rule is not saved yet; one
+    // backend preview replaces it (rules-on-the-pipeline 6.5).
+    const pair = (project: string, role: string) => `${project}\u0000${role}`;
+    const reached = new Set([pair(targetProject, targetRole)]);
+    const chained: string[] = [];
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const other of existingRules) {
+        const to = pair(other.target_project, other.target_role);
+        if (other.id === rule?.id || reached.has(to) || !reached.has(pair(other.source_project, other.source_role))) continue;
+        reached.add(to);
+        chained.push(roleLabel(other.target_project, other.target_role));
+        grew = true;
       }
+    }
+    if (chained.length > 0) {
+      notes.push(
+        `Also sets off ${chained.length === 1 ? "another rule" : `${chained.length} more rules`}, which would then give them ${formatList(chained)}.`,
+      );
     }
 
     setValidated({ ok: true, notes });
@@ -358,7 +367,7 @@ function RuleEditor({
         title={rule ? "Edit this rule" : "New automatic rule"}
         titleId="rule-title"
         chip={rule && ruleChip(rule)}
-        lede="Anybody who holds the first role gets the second: everyone who holds it today, and everyone who is given it later."
+        lede="Anybody who holds the first role gets the second: everyone who holds it today, and anyone given the first role through Syndra."
       />
 
       <div className="flex flex-col gap-3.5 px-6">
@@ -534,9 +543,12 @@ function RuleEditor({
 /** What a saved rule does next, by whether the role it gives waits. */
 function savedDetail(targetWaits: boolean): string {
   return targetWaits
-    ? "The access this rule gives waits under Pending changes; send it from there. Anyone given the first role later is handled the same way."
-    : "People who already hold the first role get the second at once; anyone given the first role later gets the second too.";
+    ? `The access this rule gives waits under Pending changes; send it from there. Anyone given the first role through Syndra is handled the same way. ${IN_ZITADEL_BY_HAND}`
+    : `People who already hold the first role get the second at once, and so does anyone given the first role through Syndra. ${IN_ZITADEL_BY_HAND}`;
 }
+
+/** What a rule does with a role given outside Syndra (ADR-006, audit W6). */
+const IN_ZITADEL_BY_HAND = "A role added directly in Zitadel shows in Drift, and the rule follows once you adopt it.";
 
 /**
  * The consequence, before the click.
@@ -604,7 +616,7 @@ function DeleteRuleConfirm({
             <li>
               {waitsForYou
                 ? "Revoking waits under Pending changes until you send it. Until then, their access stays."
-                : "Their access ends at once, with no review."}
+                : "Their access ends as soon as the revocation reaches Zitadel."}
             </li>
           </ul>
         </div>
@@ -639,8 +651,12 @@ function DeleteRuleConfirm({
                 if (result === KEPT) return;
                 const n = result.cascade?.enqueued ?? 0;
                 // What the server says happened, not a guess from settings:
-                // any wait reason means some of it is not in Zitadel yet.
-                const auto = !result.cascade?.wait_reason;
+                // any wait reason means some of it is not in Zitadel yet, and
+                // which one decides who sends it (audit W3). A role that waits
+                // is the operator's to send; a send that stopped is not, since
+                // revocations are retried on their own.
+                const why = result.cascade?.wait_reason;
+                const revocations = `${n} ${n === 1 ? "revocation" : "revocations"}`;
                 setOutcome(
                   n === 0
                     ? {
@@ -649,19 +665,26 @@ function DeleteRuleConfirm({
                         detail:
                           "Nobody's access changed. The rule was giving nothing.",
                       }
-                    : {
-                        // Queued unless the rule fired unattended: the
-                        // withdrawals it caused are recorded and wait for
-                        // somebody to resume the queue, and calling them applied
-                        // would say access is gone that is still there.
-                        kind: auto ? "applied" : "queued",
-                        message: `Rule retired, ${n} ${
-                          n === 1 ? "revocation" : "revocations"
-                        } ${auto ? "sent" : "waiting for you to send"}`,
-                        detail: auto
-                          ? "The rule applied without review, so the access it gave was revoked without review too."
-                          : "The revocations wait under Pending changes until you send them. Until then, that access stays.",
-                      },
+                    : !why
+                      ? {
+                          kind: "applied",
+                          message: `Rule retired, ${revocations} sent`,
+                          detail: "The access it gave was revoked.",
+                        }
+                      : waitIsChosen(why)
+                        ? {
+                            kind: "queued",
+                            message: `Rule retired, ${revocations} waiting for you to send`,
+                            detail:
+                              "The revocations wait under Pending changes until you send them. Until then, that access stays.",
+                          }
+                        : {
+                            kind: "queued",
+                            message: `Rule retired, ${revocations} on their way`,
+                            detail: `Revocations send on their own. ${
+                              waitReasonLine(why, "", new Date().toISOString()) ?? "The send stopped"
+                            }, so they go when it does.`,
+                          },
                 );
               } catch (error) {
                 setOutcome(outcomeFromError(error));

@@ -63,4 +63,19 @@ describe("lastHere (A-20 P18)", () => {
   it("says a date from a week on", () => {
     expect(lastHere(at(28, 9), now)).toEqual({ since: "28 Oct", on: "on 28 Oct" });
   });
+
+  // Audit S6: days are the makerspace's, whatever zone the browser is in.
+  // 22:30 and 00:30 IST on either side of midnight are the same UTC day.
+  it("counts makerspace days in a browser set to another zone", () => {
+    const zone = process.env.TZ;
+    process.env.TZ = "UTC";
+    try {
+      const then = "2026-11-03T17:00:00Z"; // Tuesday 3 Nov, 22:30 IST
+      const after = new Date("2026-11-03T19:00:00Z"); // Wednesday 4 Nov, 00:30 IST
+      expect(lastHere(then, after)).toEqual({ since: "yesterday", on: "yesterday" });
+      expect(lastHere("2026-11-02T17:00:00Z", after)).toEqual({ since: "Monday", on: "on Monday" });
+    } finally {
+      process.env.TZ = zone;
+    }
+  });
 });
