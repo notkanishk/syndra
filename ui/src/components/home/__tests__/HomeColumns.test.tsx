@@ -66,7 +66,10 @@ vi.mock("@/lib/queries/useIndicators", () => ({
     isPlaceholderData: !state.indicatorsReal,
   }),
 }));
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => state.advanced,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false }));
 
@@ -202,7 +205,7 @@ describe("Home's two columns", () => {
       const view = render(home());
       const requests = screen.getByText("Open requests");
       expect(screen.queryByRole("link", { name: "Review on Drift" })).toBeNull();
-      const footnote = screen.getByText(/Pending changes and Drift are in Advanced/);
+      const footnote = screen.getByRole("link", { name: "Drift" });
       expect(footnote.closest(".unfold")).toHaveAttribute("data-phase", "open");
 
       state.advanced = true;
@@ -214,7 +217,7 @@ describe("Home's two columns", () => {
         "opening",
       );
       // Folding, not gone: it fades first and its gap closes after.
-      expect(screen.getByText(/Pending changes and Drift are in Advanced/).closest(".unfold")).toHaveAttribute(
+      expect(screen.getByRole("link", { name: "Drift" }).closest(".unfold")).toHaveAttribute(
         "data-phase",
         "closing",
       );

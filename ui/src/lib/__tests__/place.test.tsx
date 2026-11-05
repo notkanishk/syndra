@@ -155,6 +155,51 @@ describe("Back keeps your place (P5)", () => {
   });
 });
 
+describe("Back keeps the scroll of a query-only change (A-20 P19)", () => {
+  function Route({ route }: { route: string }) {
+    usePlaceScroll(route);
+    return null;
+  }
+
+  it("keeps where the reader is on a forward change, and hands each query its own place on Back", () => {
+    later();
+    const box = document.createElement("div");
+    box.id = "app-scroll";
+    document.body.append(box);
+    const scrollTo = (top: number) => {
+      box.scrollTop = top;
+      fireEvent.scroll(box);
+      act(() => void vi.advanceTimersByTime(50));
+    };
+    const at = (url: string) => window.history.replaceState(null, "", url);
+
+    at("/people?q=a");
+    const view = render(<Route route="/people?q=a" />);
+    scrollTo(300);
+
+    // A filter chip: same page, other query. The scroll stays, and is saved under the new query.
+    at("/people?q=b");
+    view.rerender(<Route route="/people?q=b" />);
+    expect(box.scrollTop).toBe(300);
+    scrollTo(700);
+
+    // Back to the first query: it gets the place it had, not the other one's.
+    at("/people?q=a");
+    box.scrollTop = 0;
+    back();
+    view.rerender(<Route route="/people?q=a" />);
+    act(() => void vi.advanceTimersByTime(1500));
+    expect(box.scrollTop).toBe(300);
+
+    // A different page is a fresh visit: the top, as before.
+    at("/projects");
+    view.rerender(<Route route="/projects" />);
+    expect(window.sessionStorage.getItem("syndra:place:/projects:scroll")).toBe("0");
+    box.remove();
+    at("/");
+  });
+});
+
 describe("Your last view (P8)", () => {
   it("keeps sort and pill across visits, never the search text", () => {
     later();

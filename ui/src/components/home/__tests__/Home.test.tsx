@@ -72,7 +72,10 @@ vi.mock("@/lib/queries/useOperations", () => ({
     refetch: vi.fn(),
   }),
 }));
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => state.advanced,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 
 // One object, as the query cache gives: a fresh one per render reads as a new list.

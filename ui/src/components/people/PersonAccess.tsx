@@ -1,5 +1,6 @@
 "use client";
 
+import { usePlace } from "@/lib/place";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -121,7 +122,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   if (access.isLoading && seed) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col items-start gap-4 sm:flex-row sm:gap-[22px]">
+        <div className="flex flex-col items-start gap-4 tablet:flex-row tablet:gap-[22px]">
           <Avatar name={seed.name} size="header" />
           <PageHeader
             className="w-full flex-1"
@@ -184,13 +185,15 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
   const [removal, setRemoval] = useState<Removal | null>(null);
   // Projects folded shut. Open by default: a person's page is read to find
   // something, and a fold that hid the answer would be the page's own fault.
-  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  // Handed back after a Back (A-20 P19): kept as a list, since place is JSON.
+  const [foldedIds, setFoldedIds] = usePlace<string[]>(
+    "folded-projects",
+    [],
+    (kept): kept is string[] => Array.isArray(kept) && kept.every((id) => typeof id === "string"),
+  );
+  const folded: ReadonlySet<string> = useMemo(() => new Set(foldedIds), [foldedIds]);
   const toggleProject = (id: string) =>
-    setFolded((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
+    setFoldedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   const user = access.data?.user;
   useCrumb(user?.name);
@@ -306,20 +309,16 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
   const appList = (apps.data ?? []).map((a) => a.application);
   // A folded project opens on the way to it.
   const openProject = ({ projectId }: { projectId: string }) =>
-    setFolded((prev) => {
-      const next = new Set(prev);
-      next.delete(projectId);
-      return next;
-    });
+    setFoldedIds((prev) => prev.filter((id) => id !== projectId));
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Stacked below `sm`, side by side above it. At phone width the avatar
+      {/* Stacked below the tablet breakpoint, side by side above it. At phone width the avatar
           sitting left of the text column left email/id/lede/actions squeezed
           into a narrow remainder, with the two action buttons forced onto
           their own stacked rows inside it — full width for the text and
           actions here is what gives them room to wrap normally instead. */}
-      <div className="flex flex-col items-start gap-4 sm:flex-row sm:gap-[22px]">
+      <div className="flex flex-col items-start gap-4 tablet:flex-row tablet:gap-[22px]">
         <Avatar name={user.name} size="header" />
         <PageHeader
           className="w-full flex-1"

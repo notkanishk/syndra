@@ -1,7 +1,7 @@
 "use client";
 
 import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
-import Link from "next/link";
+import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import type { ReactNode } from "react";
 
 import { UserName } from "@/components/names/UserName";
@@ -88,9 +88,9 @@ function CardTop({ target, status }: { target: string; status?: ReactNode }) {
   return (
     <div className="px-5 pb-3 pt-4">
       <span className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
-        <Link href={`/system/targets/${target}`} className="type-card-title text-ink link-hover">
+        <AdvancedLink href={`/system/targets/${target}`} className="type-card-title text-ink link-hover">
           {targetLabel(target)}
-        </Link>
+        </AdvancedLink>
         {status}
       </span>
     </div>

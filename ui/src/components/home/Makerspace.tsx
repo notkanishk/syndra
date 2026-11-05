@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { UserName } from "@/components/names";
 import { EmptyState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
+import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
@@ -212,7 +213,7 @@ function GapRow({
   }
 
   return (
-    <Link
+    <AdvancedLink
       href={href}
       className="row-divider flex items-baseline gap-3 px-5 py-3.5 hover-tint"
     >
@@ -220,7 +221,7 @@ function GapRow({
       <span className="text-[14.5px]">{headline}</span>
       <span className="flex-1" />
       <span className="text-[13px] text-faint">{note}</span>
-    </Link>
+    </AdvancedLink>
   );
 }
 

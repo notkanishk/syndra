@@ -370,7 +370,7 @@ export function UnexplainedAccess() {
 
   const head = (
     <CardColumns>
-      {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+      {selecting && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
       <span className="w-[180px] shrink-0">
         <SortHead label="Who" name="who" sort={sort} onSort={flipSort} />
       </span>

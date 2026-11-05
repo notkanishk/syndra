@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AdvancedLink } from "@/components/ui/AdvancedLink";
 
 /**
  * "Somewhere else →": the one link that goes to another page.
@@ -25,9 +25,9 @@ export function ArrowLink({
   className?: string;
 }) {
   return (
-    <Link href={href} className={`${ARROW_LINK} ${className}`}>
+    <AdvancedLink href={href} className={`${ARROW_LINK} ${className}`}>
       {children}
       <span aria-hidden>→</span>
-    </Link>
+    </AdvancedLink>
   );
 }

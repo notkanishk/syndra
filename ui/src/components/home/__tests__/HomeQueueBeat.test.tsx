@@ -64,7 +64,10 @@ vi.mock("@/lib/queries/useOperations", () => ({
     refetch: vi.fn(),
   }),
 }));
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => false }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => false,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 vi.mock("@/components/requests/Holding", () => ({
   HoldingNote: () => null,

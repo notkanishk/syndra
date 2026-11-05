@@ -56,3 +56,14 @@ export function lastHere(
   const date = formatShortDate(iso, now);
   return { since: date, on: `on ${date}` };
 }
+
+
+/**
+ * The greeting addresses a person, so it must never address an id. When the
+ * session has no name at all the greeting simply drops the address rather than
+ * greeting a Zitadel subject — "Morning." is fine; "Morning, 318...447." is not.
+ */
+export function firstName(session: { name: string; email: string }): string {
+  const source = session.name.trim() || (session.email.split("@")[0] ?? "");
+  return source.trim().split(/\s+/)[0] ?? "";
+}
