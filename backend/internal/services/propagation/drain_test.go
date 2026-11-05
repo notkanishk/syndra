@@ -60,6 +60,7 @@ func stubDrainDeps(t *testing.T) {
 		swap(&forgetPropagatedFields, func(context.Context, string, string, []string) error { return nil }),
 		swap(&forgetPropagatedFieldsExcept, func(context.Context, string, string, string, []string) error { return nil }),
 		swap(&markFailed, func(context.Context, string, string) error { return nil }),
+		swap(&markRefused, func(context.Context, string, string, string) error { return nil }),
 		swap(&requeue, func(context.Context, string, string) (int, error) { return 0, nil }),
 		swap(&reconcileLedger, func(context.Context, string) error { return nil }),
 		swap(&acquireDrainLock, func(context.Context) (func(), bool, error) { return func() {}, true, nil }),
@@ -173,13 +174,18 @@ func TestDrain_FailedOn4xx_DoesNotHaltOthers(t *testing.T) {
 		}
 		return nil
 	}
-	var failedID, appliedID string
-	markFailed = func(_ context.Context, id, _ string) error { failedID = id; return nil }
+	var failedID, failedCause, appliedID string
+	markRefused = func(_ context.Context, id, _, cause string) error { failedID, failedCause = id, cause; return nil }
 	markApplied = func(_ context.Context, id string) error { appliedID = id; return nil }
 
 	res, _ := Drain(context.Background())
 	if failedID != "bad" || appliedID != "ok" || res.Failed != 1 || res.Applied != 1 {
 		t.Fatalf("4xx must fail its row but not halt others: %+v", res)
+	}
+	// The row keeps the plain cause (statusErr(400) is "not valid"), so the
+	// stopped-sending list can say why.
+	if failedCause != db.RefusalInvalid {
+		t.Fatalf("a refused row must keep its cause: got %q", failedCause)
 	}
 }
 
@@ -778,7 +784,7 @@ func TestDrain_AbandonedRowIsLeftTerminal(t *testing.T) {
 		{
 			name: "while recording failure",
 			arrange: func() {
-				markFailed = func(context.Context, string, string) error { return db.ErrPropagationNotInFlight }
+				markRefused = func(context.Context, string, string, string) error { return db.ErrPropagationNotInFlight }
 				zitadelAddUserGrant = func(context.Context, string, string, []string) error { return statusErr(400) }
 			},
 			assert: func(t *testing.T, res DrainResult) {

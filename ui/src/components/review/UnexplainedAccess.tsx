@@ -75,7 +75,7 @@ import {
   type DriftSortKey,
 } from "@/lib/drift-filters";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
-import { useRulePreview } from "@/lib/queries/useRulePreview";
+import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
 import { isRefused, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { targetLabel } from "@/lib/nav";
@@ -1114,7 +1114,7 @@ function ResolutionDialog({
   // Adopting is when a rule starting from the role fires (ADR-006), so the
   // dialog names what the rules give before the operator confirms (audit C1),
   // from the closure the adoption itself follows.
-  const rules = useRulePreview(
+  const rules = useRuleConsent(
     pending?.item.user_id ?? "",
     pending?.item.project_id ?? "",
     pending?.item.role_keys ?? [],
@@ -1125,7 +1125,7 @@ function ResolutionDialog({
   const { item, resolution } = pending;
   const busy = attribute.isPending || revoke.isPending || external.isPending;
   const role = item.role_keys[0] ?? "";
-  const ruleLines = resolution === "attribute" ? (rules.data ?? []).map((row) => row.sentence) : [];
+  const ruleLines = resolution === "attribute" ? rules.lines : [];
   const waits = roleWaits(item.project_id, role);
 
   const copy = {
@@ -1174,11 +1174,8 @@ function ResolutionDialog({
             ))}
           </ul>
         )}
-        {resolution === "attribute" && rules.isError && (
-          <p className="text-[13.5px] leading-[1.55] text-muted">
-            Syndra couldn&rsquo;t read the automatic rules, so a role one of them gives on adopting
-            isn&rsquo;t named here.
-          </p>
+        {resolution === "attribute" && (
+          <RuleConsentFailed consent={rules} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] leading-[1.55] text-muted" />
         )}
 
         {resolution === "revoke" && (
@@ -1259,7 +1256,8 @@ function ResolutionDialog({
             isPending={busy}
             // Adopting is consent to what the rules give with it, so it waits
             // for the preview that names them.
-            disabled={resolution === "attribute" && rules.isLoading}
+            disabled={resolution === "attribute" && Boolean(rules.hold)}
+            reason={resolution === "attribute" ? rules.hold : undefined}
             onClick={async () => {
               try {
                 let answer: DriftAnswer | undefined;

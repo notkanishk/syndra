@@ -9,7 +9,7 @@ import { useRequestsMine } from "@/lib/queries/useRequests";
 import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { useMyChanges } from "@/lib/queries/useMyChanges";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
-import { useRulePreview } from "@/lib/queries/useRulePreview";
+import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
 import type { Term } from "@/lib/queries/useTerms";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 
@@ -95,17 +95,13 @@ export function HoldingNote({ request }: { request: AccessRequest }) {
  * follows; nothing when nothing follows or there is nothing to approve.
  */
 function RulesLine({ request }: { request: AccessRequest }) {
-  const rules = useRulePreview(request.requester_id, request.project_id, [request.role_key], !alreadyHeld(request));
-  const lines = (rules.data ?? []).map((row) => row.sentence);
+  const consent = useRuleConsent(request.requester_id, request.project_id, [request.role_key], !alreadyHeld(request));
   // Final verification N5: a preview that can't be read is said, never
-  // silence that reads as "nothing else follows" (the give dialog's words).
-  if (rules.isError) return <span className="w-full text-[13px] text-muted">{RULES_UNREAD}</span>;
-  if (lines.length === 0) return null;
-  return <span className="w-full text-[13px] text-muted">If you approve: {lines.join(" ")}</span>;
+  // silence that reads as "nothing else follows" (RuleConsent: the one rule).
+  if (consent.failed) return <RuleConsentFailed consent={consent} />;
+  if (consent.lines.length === 0) return null;
+  return <span className="w-full text-[13px] text-muted">If you approve: {consent.lines.join(" ")}</span>;
 }
-
-/** Said where the approve button is when the rule preview can't be read (N5). */
-const RULES_UNREAD = "Syndra couldn't read the automatic rules, so a role one of them also gives isn't named here.";
 
 /**
  * Why approving is held, or undefined when it can go (N5). The consent is the
@@ -116,11 +112,9 @@ const RULES_UNREAD = "Syndra couldn't read the automatic rules, so a role one of
  */
 export function useApproveHold(request: AccessRequest): string | undefined {
   const held = alreadyHeld(request);
-  const rules = useRulePreview(request.requester_id, request.project_id, [request.role_key], !held);
+  const consent = useRuleConsent(request.requester_id, request.project_id, [request.role_key], !held);
   if (held) return "They already have this.";
-  if (rules.isLoading) return "Checking what automatic rules also give.";
-  if (rules.isError) return `${RULES_UNREAD} Reload the page to try again.`;
-  return undefined;
+  return consent.hold;
 }
 
 /** The Approve button, held while the rule preview is unread (N5). One for Home, Requests and a person's Requests tab. */

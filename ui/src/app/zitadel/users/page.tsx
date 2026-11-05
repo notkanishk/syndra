@@ -40,7 +40,7 @@ import {
 } from "@/lib/queries/useUpstream";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
-import { useRulePreview } from "@/lib/queries/useRulePreview";
+import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
 import { useDebounce } from "@/lib/useDebounce";
 import { formatList, humanizeKey } from "@/lib/format";
 import { sortByName, sortNames } from "@/lib/sort";
@@ -496,8 +496,8 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   // click, from the endpoint the person page's give reads (audit C2): this
   // give goes through the same write (giveRoles → grantDirect), so the same
   // rules follow it. Only for keys that exist, so typing doesn't ask.
-  const rules = useRulePreview(userId, projectId, parsed.filter((key) => available.includes(key)));
-  const ruleLines = (rules.data ?? []).map((row) => row.sentence);
+  const rules = useRuleConsent(userId, projectId, parsed.filter((key) => available.includes(key)));
+  const ruleLines = rules.lines;
 
   return (
     <Modal open onClose={onClose} busy={assign.isPending} size="sm">
@@ -542,14 +542,12 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
               <p className="mt-1.5 text-[12.5px] text-faint">Available: {available.join(", ")}</p>
             )}
           </div>
-          {(ruleLines.length > 0 || rules.isError) && (
+          {(ruleLines.length > 0 || rules.failed) && (
             <div className="flex flex-col gap-1 text-[13px] leading-[1.5] text-muted" data-testid="rule-preview">
               {ruleLines.map((line) => (
                 <span key={line}>{line}</span>
               ))}
-              {rules.isError && (
-                <span>Syndra couldn&rsquo;t read the automatic rules, so a role one of them also gives isn&rsquo;t named here.</span>
-              )}
+              <RuleConsentFailed consent={rules} className="flex flex-wrap items-center gap-x-3 gap-y-1" />
             </div>
           )}
           <DirectWriteWarning
@@ -566,14 +564,14 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
         <Button
           // Granting, not revoking: accent, so it cannot be mistaken for "Revoke roles".
           variant="accent"
-          disabled={!projectId || parsed.length === 0 || !acknowledged || rules.isLoading}
+          disabled={!projectId || parsed.length === 0 || !acknowledged || Boolean(rules.hold)}
           reason={
             !projectId
               ? "Choose a project first."
               : parsed.length === 0
                 ? "Enter at least one role key."
-                : rules.isLoading
-                  ? "Checking what automatic rules also give."
+                : rules.hold
+                  ? rules.hold
                   : !acknowledged
                     ? "Check the box above to confirm."
                     : undefined

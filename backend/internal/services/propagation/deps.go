@@ -55,7 +55,10 @@ var (
 		return observe.UserWithGrants(ctx, userID)
 	}
 	markFailed = db.MarkPropagationFailed
-	requeue    = db.RequeuePropagation
+	// markRefused is markFailed for a target's outright refusal: it keeps the
+	// plain cause on the row for the stopped-sending list.
+	markRefused = db.MarkPropagationRefused
+	requeue     = db.RequeuePropagation
 	// release returns a row to pending without spending a retry, for the one
 	// case where nothing was attempted at all.
 	release = db.ReleasePropagation

@@ -68,12 +68,14 @@ vi.mock("@/lib/queries/useRoleWaits", () => ({ useRoleWaits: () => () => revokeC
 
 // What the automatic rules give on adopting (the backend's preview), and the
 // rule rows the adoption answered with.
-const adoptCtl = vi.hoisted(() => ({ rules: [] as string[], answer: {} as Record<string, unknown> }));
+const adoptCtl = vi.hoisted(() => ({ rules: [] as string[], answer: {} as Record<string, unknown>, error: false, refetch: vi.fn() }));
 vi.mock("@/lib/queries/useRulePreview", () => ({
   useRulePreview: (_u: string, _p: string, _k: string[], enabled: boolean) => ({
     data: enabled ? adoptCtl.rules.map((sentence) => ({ sentence })) : undefined,
     isLoading: false,
-    isError: false,
+    isError: enabled && adoptCtl.error,
+    isFetching: false,
+    refetch: adoptCtl.refetch,
   }),
 }));
 
@@ -836,6 +838,20 @@ describe("the adopt confirm, with automatic rules", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Adopt in Syndra" }));
     const result = await within(dialog).findByRole("status");
     expect(result.textContent).toContain("1 more change from automatic rules waits in Pending changes for you to send.");
+  });
+
+  it("holds the adopt when the rule preview fails, and Try again reads it again", () => {
+    adoptCtl.error = true;
+    adoptCtl.refetch = vi.fn();
+    try {
+      const dialog = openAdopt();
+      expect(within(dialog).getByRole("button", { name: "Adopt in Syndra" })).toBeDisabled();
+      expect(within(dialog).getByText(/Syndra couldn.t read the automatic rules/)).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Try again" }));
+      expect(adoptCtl.refetch).toHaveBeenCalledTimes(1);
+    } finally {
+      adoptCtl.error = false;
+    }
   });
 
   it("says the access stays exactly as it is when no rule follows", async () => {

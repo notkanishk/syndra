@@ -378,7 +378,7 @@ func (res *DrainResult) processRow(ctx context.Context, row models.PendingPropag
 		}
 		res.Applied++
 	case ackFailed:
-		if err := markFailed(ctx, row.ID, errMsg); err != nil {
+		if err := markRefused(ctx, row.ID, errMsg, RefusalCause(errMsg)); err != nil {
 			if !res.abandoned(row.ID, "mark failed", err) {
 				res.persistErr(row.ID, "mark failed", err)
 			}

@@ -64,7 +64,7 @@ describe("giving roles in Zitadel names what rules also give", () => {
     });
     render(<UpstreamUsersPage />);
     const dialog = openGive("trained, nonsense");
-    expect(state.rulePreview).toHaveBeenLastCalledWith("u1", "pLaser", ["trained"]);
+    expect(state.rulePreview).toHaveBeenLastCalledWith("u1", "pLaser", ["trained"], true);
     expect(within(dialog).getByTestId("rule-preview")).toHaveTextContent("Also gives Bench in Workshop, by the automatic rule from Trained.");
   });
 
@@ -74,6 +74,18 @@ describe("giving roles in Zitadel names what rules also give", () => {
     const dialog = openGive("trained");
     fireEvent.click(within(dialog).getByRole("checkbox"));
     expect(within(dialog).getByRole("button", { name: "Give roles in Zitadel" })).toBeDisabled();
+  });
+
+  it("holds the give when the preview fails, says why, and Try again reads it again", () => {
+    const refetch = vi.fn();
+    state.rulePreview = vi.fn().mockReturnValue({ data: undefined, isLoading: false, isError: true, isFetching: false, refetch });
+    render(<UpstreamUsersPage />);
+    const dialog = openGive("trained");
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    expect(within(dialog).getByRole("button", { name: "Give roles in Zitadel" })).toBeDisabled();
+    expect(within(dialog).getByText(/Syndra couldn.t read the automatic rules/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Try again" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });
 

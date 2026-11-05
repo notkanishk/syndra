@@ -18,7 +18,7 @@ import { isRefused, waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { useRulePreview } from "@/lib/queries/useRulePreview";
+import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
 import { forecastFor, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { withRuleWaits } from "@/lib/request-decisions";
 import { expiryLabel, formatShortDate } from "@/lib/format";
@@ -112,10 +112,11 @@ function GrantDirectAccessOpen({
   const waits = useWaitsBeforeLine("give");
   // What the automatic rules also give with this role, said before the click
   // (audit C2), from the closure the write itself follows.
-  const rules = useRulePreview(userId, projectId, [roleKey]);
-  const ruleLines = (rules.data ?? []).map((row) => row.sentence);
+  const rules = useRuleConsent(userId, projectId, [roleKey]);
+  const ruleLines = rules.lines;
 
-  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate)) && !rules.isLoading;
+  // Held while the rules are read, and held when they can't be (RuleConsent).
+  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate)) && !rules.hold;
   // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
   const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued" || Boolean(result?.outcome.recorded);
 
@@ -240,11 +241,7 @@ function GrantDirectAccessOpen({
                     {line}
                   </span>
                 ))}
-              {selectedRole && rules.isError && (
-                <span className="block">
-                  Syndra couldn&rsquo;t read the automatic rules, so a role one of them also gives isn&rsquo;t named here.
-                </span>
-              )}
+              {selectedRole && <RuleConsentFailed consent={rules} className="flex flex-wrap items-center gap-x-3 gap-y-1" />}
             </>
           ))
         }
@@ -264,9 +261,7 @@ function GrantDirectAccessOpen({
                 !ready
                   ? !value
                     ? "Choose a role to give."
-                    : rules.isLoading
-                      ? "Checking what automatic rules also give."
-                      : "Pick the date the access should end."
+                    : rules.hold ?? "Pick the date the access should end."
                   : undefined
               }
               isPending={grant.isPending}
