@@ -352,7 +352,7 @@ export function Home({ session }: { session: SessionUser }) {
             {clear.map(([name, href], index) => (
               <span key={href} className="inline-flex items-center gap-2">
                 {index > 0 && <span aria-hidden>·</span>}
-                <Link href={href} className="inline-flex min-h-[44px] items-center text-ink link-hover desktop:min-h-0">
+                <Link href={href} className="inline-flex min-h-[var(--tap)] items-center text-ink link-hover desktop:min-h-0">
                   {name}
                 </Link>
               </span>

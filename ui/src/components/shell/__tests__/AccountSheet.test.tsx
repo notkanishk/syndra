@@ -105,7 +105,7 @@ describe("the account sheet", () => {
       screen.getByRole("button", { name: /Sign out/ }),
     ];
     for (const control of controls) {
-      expect(control.className, `${control.textContent} must clear the touch floor`).toContain("min-h-[44px]");
+      expect(control.className, `${control.textContent} must clear the touch floor`).toContain("min-h-[var(--tap)]");
     }
   });
 
@@ -117,7 +117,7 @@ describe("the account sheet", () => {
     expect(links.map((l) => l.getAttribute("href"))).toEqual(["/me", "/storage"]);
     expect(links[0].textContent).toContain("What you can use, and asking for more");
     expect(links[1].textContent).toContain("Your password and folders");
-    for (const link of links) expect(link.className).toContain("min-h-[44px]");
+    for (const link of links) expect(link.className).toContain("min-h-[var(--tap)]");
   });
 
   // A member has the same page in their rail; one row per job.

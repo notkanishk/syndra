@@ -9,7 +9,7 @@ import { TINT_MS, useExitPhase } from "@/lib/motion";
  * floor below desktop, as `PILL.sm` is for a button. For fields that sit in a
  * card's rows (the claims editor), where the 46px field was the outsized one.
  */
-export const DENSE_FIELD = "min-h-[44px] py-[5px] text-[13.5px] desktop:min-h-0";
+export const DENSE_FIELD = "min-h-[var(--tap)] py-[5px] text-[13.5px] desktop:min-h-0";
 
 /**
  * Text input. 14px radius rather than a pill: a field the operator types a

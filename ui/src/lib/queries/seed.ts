@@ -3,6 +3,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 
 import type { ApplicationView } from "@/lib/queries/useApplications";
+import type { BundleRow } from "@/lib/queries/useBundles";
+import type { ProjectSummaryRow } from "@/lib/queries/useProjects";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { UserListEntry } from "@/lib/queries/useUsers";
 
@@ -29,6 +31,31 @@ export function useSeededUser(id: string): SeededUser | undefined {
   }
   const named = resolver.resolveUser(id).value;
   return named?.display_name ? { name: named.display_name, email: named.email } : undefined;
+}
+
+/**
+ * A project's or bundle's name, from the list the reader came from (the raw
+ * cache, so it works before the page's own query has selected anything), else
+ * the name catalog. Name only: counts and descriptions stay a skeleton.
+ */
+export function useSeededProjectName(id: string): string | undefined {
+  const qc = useQueryClient();
+  const resolver = useNameResolver();
+  return (
+    qc.getQueryData<ProjectSummaryRow[]>(["projects"])?.find((row) => row.project.id === id)?.project.name ||
+    resolver.resolveProject(id).value?.name ||
+    undefined
+  );
+}
+
+export function useSeededBundleName(id: string): string | undefined {
+  const qc = useQueryClient();
+  const resolver = useNameResolver();
+  return (
+    qc.getQueryData<BundleRow[]>(["bundles"])?.find((row) => row.id === id)?.name ||
+    resolver.resolveBundle(id).value?.name ||
+    undefined
+  );
 }
 
 export function useSeededApp(id: string): ApplicationView["application"] | undefined {

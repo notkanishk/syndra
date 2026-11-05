@@ -145,7 +145,7 @@ export function GoToPanel({
                     aria-selected={selected}
                     tabIndex={-1}
                     onClick={onGo}
-                    className={`motion-tint flex min-h-[44px] items-center gap-3 px-6 py-1.5 ${selected ? "bg-tint-2" : ""}`}
+                    className={`motion-tint flex min-h-[var(--tap)] items-center gap-3 px-6 py-1.5 ${selected ? "bg-tint-2" : ""}`}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate text-[14.5px] font-semibold text-ink">{item.name}</span>

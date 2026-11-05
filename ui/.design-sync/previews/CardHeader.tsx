@@ -9,7 +9,7 @@ const body = { fontSize: 14.5, color: "var(--muted)" } as const;
 /** Count tone is the axis: accent (work to do), warn (a deadline), danger (decide now). */
 export const Accent = () => (
   <Card>
-    <CardHeader title="Open requests" count={4} action={<CardHeaderLink href="/requests">See all →</CardHeaderLink>} />
+    <CardHeader title="Open requests" count={4} action={<CardHeaderLink href="/requests">All requests</CardHeaderLink>} />
     <CardRow first><span style={body}>Aanya Rao asked for Laser cutter · Operator</span></CardRow>
   </Card>
 );

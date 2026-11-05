@@ -95,7 +95,7 @@ describe("<AccessSourceList/>", () => {
     const more = screen.getByRole("button", { name: "+2 more" });
     expect(more.getAttribute("aria-expanded")).toBe("false");
     // 44px of target: it is now a control, and controls clear the floor.
-    expect(more.className).toContain("h-11");
+    expect(more.className).toContain("h-[var(--tap)]");
   });
 });
 

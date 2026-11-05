@@ -291,7 +291,7 @@ function PendingGroups({
                   aria-expanded={open}
                   aria-label={`${open ? "Fold" : "Open"} these ${count} changes`}
                   onClick={() => toggle(group.key)}
-                  className="group -my-2 -ml-2 flex size-11 flex-none items-center justify-center"
+                  className="group -my-2 -ml-2 flex size-[var(--tap)] flex-none items-center justify-center"
                 >
                   <FoldChevron open={open} />
                 </button>

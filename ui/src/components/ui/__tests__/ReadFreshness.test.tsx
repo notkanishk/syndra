@@ -106,7 +106,7 @@ describe("the strip", () => {
     // Beats the Button's 44px floor and its desktop padding.
     expect(button).toHaveClass("min-h-0!", "py-px!");
     // The target: a 44px `before` box, centred on the line, gone on desktop.
-    expect(button).toHaveClass("before:h-11", "before:top-1/2", "desktop:before:hidden");
+    expect(button).toHaveClass("before:h-[var(--tap)]", "before:top-1/2", "desktop:before:hidden");
     expect(button.className).not.toMatch(/before:(bg|border)/);
   });
 });

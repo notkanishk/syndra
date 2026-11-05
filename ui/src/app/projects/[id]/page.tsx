@@ -20,6 +20,7 @@ import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useCrumb } from "@/lib/page-crumb";
 import { sortByName } from "@/lib/sort";
 import { useApplications } from "@/lib/queries/useApplications";
+import { useSeededProjectName } from "@/lib/queries/seed";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { humanizeKey } from "@/lib/format";
@@ -48,7 +49,9 @@ export default function ProjectDetailPage({
   const project = (projects.data ?? []).find(
     (entry) => entry.project.id === id,
   );
-  useCrumb(project?.project.name);
+  // The name from the list the reader came from, before this page's own read lands (A-19 P1).
+  const seeded = useSeededProjectName(id);
+  useCrumb(project?.project.name ?? seeded);
   // The title that lands after its skeleton tints in, not snaps (S7).
   const titleTint = useTintAfterSkeleton(projects.isLoading && !project);
 
@@ -104,6 +107,8 @@ export default function ProjectDetailPage({
         title={
           project ? (
             <span className={titleTint}>{project.project.name}</span>
+          ) : seeded && projects.isLoading ? (
+            <span>{seeded}</span>
           ) : projects.isLoading ? (
             <Skeleton className="h-7 w-56" aria-label="Loading project" />
           ) : (
