@@ -665,6 +665,28 @@ describe("the revoke confirm, once it has run", () => {
     expect(revokeCtl.calls).toBe(1);
   });
 
+  // A-19 P14. Code decides (the revocation drain claims op_type "revoke" with no
+  // operator in the loop), so the result says that one thing: no amber dot, no
+  // "Waiting for you to send" link, no second line saying it has not arrived.
+  it("says one thing: a queued revoke is on its way and sends on its own", async () => {
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+
+    const result = await within(dialog).findByRole("status");
+    expect(result.textContent).toContain("On its way");
+    expect(result.textContent).toContain("Revocations send on their own");
+    expect(result.textContent).not.toMatch(/waiting for you/i);
+    expect(result.textContent).not.toMatch(/has not reached/i);
+    expect(within(dialog).queryByRole("link", { name: /Waiting for you to send/ })).toBeNull();
+    // A neutral dot, never the amber of a step left.
+    expect(result.querySelector(".bg-warn")).toBeNull();
+    expect(result.querySelector(".bg-faint")).not.toBeNull();
+  });
+
   it("keeps the confirm button when the revoke fails, so there is a retry", async () => {
     revokeCtl.fails = true;
     drift.data = [item({ id: "d1" })];

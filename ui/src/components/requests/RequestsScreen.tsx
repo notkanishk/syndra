@@ -9,7 +9,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { type StatusTone } from "@/components/ui/Badge";
 import { Crossfade } from "@/components/ui/Crossfade";
 import { StatusSeat } from "@/components/ui/StatusSeat";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
@@ -138,7 +138,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
   // The beat of a bulk decision starts when its dialog closes: until then the
   // operator is looking at the dialog's own result, not at the rows behind it.
-  const { act, settleAll, resolved, staying, outcomes, cancelStep } = useRequestDecisions({
+  const { act, settleAll, resolved, staying, outcomes, forecasts, cancelStep } = useRequestDecisions({
     pauseBeat: bulkStatus !== null,
   });
   const catalog = useGlobalRoleCatalog();
@@ -374,7 +374,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   their place — one seat, so no column moves on the tap. The
                   row keeps it until the next read; no toast. */}
               <div className="w-full tablet:ml-auto tablet:w-[196px] tablet:shrink-0">
-                <Crossfade id={entry.status === "pending" && !resolved.has(entry.id) ? "open" : outcomes[entry.id] ? "outcome" : "status"}>
+                <Crossfade id={entry.status === "pending" && !resolved.has(entry.id) ? "open" : outcomes[entry.id] ? "outcome" : forecasts[entry.id] ? "forecast" : "status"}>
                 {entry.status === "pending" && !resolved.has(entry.id) ? (
                   <div className="flex flex-col gap-2">
                     <div className="flex w-full flex-row-reverse gap-3 tablet:flex-row tablet:gap-2">
@@ -403,6 +403,8 @@ function OperatorQueue({ userId }: { userId?: string }) {
                     word={outcomes[entry.id].word ?? "Not decided"}
                     outcome={outcomes[entry.id].outcome}
                   />
+                ) : forecasts[entry.id] ? (
+                  <ActionForecast word={forecasts[entry.id]} />
                 ) : resolved.has(entry.id) ? null : (
                   <StatusSeat
                     tone={requestOutcome(entry.status, entry.kind).operatorTone}

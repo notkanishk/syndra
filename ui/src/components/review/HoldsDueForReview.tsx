@@ -7,7 +7,7 @@ import { useState } from "react";
 import { EmptyState, ListStates } from "@/components/states";
 import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { Crossfade } from "@/components/ui/Crossfade";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card, CardRow } from "@/components/ui/Card";
@@ -16,7 +16,7 @@ import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { targetLabel } from "@/lib/nav";
-import { NOTHING_CHANGED, outcomeFromError, sentence, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { FORECAST, NOTHING_CHANGED, outcomeFromError, sentence, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useHoldsDueForReview, useLiftHold, type Hold } from "@/lib/queries/useHolds";
 
 /**
@@ -168,8 +168,10 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
       {/* Lifted and "couldn't lift it" take the seat the button held (route-holds:
           lifted, lift-failed). The row stays until the next read, so nothing moves
           under the hand; a failed lift keeps the button, as Try again. */}
-      <Crossfade id={outcome?.kind === "applied" ? "outcome" : "open"}>
-      {outcome?.kind === "applied" ? (
+      <Crossfade id={outcome?.kind === "applied" ? "outcome" : lift.isPending ? "forecast" : "open"}>
+      {lift.isPending ? (
+        <ActionForecast word={FORECAST.lift} />
+      ) : outcome?.kind === "applied" ? (
         <ActionOutcome
           placement="seat"
           word="Lifted"

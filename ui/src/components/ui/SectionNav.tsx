@@ -138,7 +138,7 @@ export function SectionPill<T extends NavSection>({
   if (sections.length < 2) return null;
   const at = Math.max(0, sections.findIndex((section) => section.id === spy.active));
   return (
-    <div className="sticky top-0 z-[5] h-0" style={{ marginBottom: -gap }}>
+    <div className="sticky top-0 z-(--layer-bar) h-0" style={{ marginBottom: -gap }}>
       <nav
         aria-label={`${label} (while scrolling)`}
         aria-hidden={!spy.away}
