@@ -15,6 +15,7 @@ export function NextStep({
   why,
   href,
   person,
+  role,
   dot = true,
   className = "",
 }: {
@@ -23,11 +24,19 @@ export function NextStep({
   href?: string;
   /** A person's Zitadel id: Pending changes opens narrowed to them, with the way out attached (A-19 P3). */
   person?: string;
+  /** A role, as project id and role key: Pending changes opens narrowed to it, with the way out attached. */
+  role?: { projectId: string; roleKey: string };
   /** Off where a status word above already wears the amber dot (ActionOutcome's seat). */
   dot?: boolean;
   className?: string;
 }) {
-  const to = href ?? (person ? `/governance/pending?person=${encodeURIComponent(person)}` : "/governance/pending");
+  const to =
+    href ??
+    (person
+      ? `/governance/pending?person=${encodeURIComponent(person)}`
+      : role
+        ? `/governance/pending?role=${encodeURIComponent(`${role.projectId}/${role.roleKey}`)}`
+        : "/governance/pending");
   return (
     <span className={`inline-flex flex-col gap-0.5 ${className}`}>
       <span className="inline-flex items-center gap-2">

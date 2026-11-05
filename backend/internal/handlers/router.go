@@ -214,6 +214,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/users/{uid}/profile", withCORS(withAPIKeyAuth(handleGetUserProfile)))
 	// Self-profile (UI — populates OIDC session cookie with Title/Team)
 	mux.HandleFunc("GET /api/v1/me/profile", withCORS(withUserAuth(handleGetMyProfile)))
+	mux.HandleFunc("POST /api/v1/me/first-sign-in", withCORS(withUserAuth(handleFirstSignIn)))
 
 	// Operator: event and trigger logs
 	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withOperatorAuth(handleGetOnboardingTriggers)))
