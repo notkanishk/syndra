@@ -58,11 +58,11 @@
       "phone": "The same at every width."
     },
     "ArriveList": {
-      "moves": "Rows rise 10px on a first paint you navigated to, 40ms apart, the stagger capped at five; never on Back, refresh, filter or sort. Still: they are simply there.",
+      "moves": "Internal: never mounted alone. Rows rise 8px on a first paint you navigated to, 40ms apart, the stagger capped at five; never on Back, refresh, filter or sort. Still: they are simply there.",
       "phone": "The same at every width. Carries the list's arrow keys on a keyboard."
     },
     "LeavingRow": {
-      "moves": "A row that goes on a later read fades where it was, then its gap closes on settle; it waits while the pointer or focus is inside. Still: it goes at once.",
+      "moves": "Internal: never mounted alone. A row that goes on a later read fades where it was, then its gap closes on settle; it waits while the pointer or focus is inside. Still: it goes at once.",
       "phone": "The same at every width."
     },
     "Unfold": {
@@ -86,7 +86,7 @@
       "phone": "The same at every width."
     },
     "GlideIndicator": {
-      "moves": "A fill or underline that glides to the choice on settle while the labels tint; outside the travel cap. Still: it jumps.",
+      "moves": "Internal: never mounted alone. A fill or underline that glides to the choice on settle while the labels tint; outside the travel cap. Still: it jumps.",
       "phone": "The same at every width."
     },
     "Segmented": {
@@ -106,7 +106,7 @@
       "phone": "The same at every width."
     },
     "Skeleton": {
-      "moves": "Appears only after 200ms, then tints; a read that lands sooner never shows it. Still: the same.",
+      "moves": "Tints in. A read that lands inside 200ms never shows it (ReadGate holds it back). Still: the same.",
       "phone": "The same at every width."
     },
     "RowSkeleton": {
@@ -118,7 +118,7 @@
       "phone": "The same at every width."
     },
     "Notice": {
-      "moves": "Opens by Unfold when it arrives. Still: appears at once.",
+      "moves": "Opens by Unfold when it arrives late, never twice inside a wrapper; a live amber dot breathes (2400ms, 50% to full) for as long as the condition lasts, and it is the only thing that loops. Still: appears at once, the dot rests at full strength.",
       "phone": "The same at every width."
     },
     "Sidebar": {
@@ -138,7 +138,7 @@
       "phone": "The verb the filter was for leads and the rest wait under More changes, a sheet; its buttons take the 44px floor."
     },
     "Card": {
-      "moves": "Never scales; a pressable one presses to --tint-3. Still: the same.",
+      "moves": "Never scales. A stale one recedes to the canvas ground and rises back as a tint of surface and edge on settle. Still: the tint is at once.",
       "phone": "A row with more than two facts discloses the rest rather than wrapping."
     },
     "Kbd": {
@@ -148,6 +148,194 @@
     "KeysSheet": {
       "moves": "Settles in as a Modal. Still: appears at once.",
       "phone": "A bottom sheet, as every Modal; a phone has no `?` key, so it is opened from a keyboard only."
+    },
+    "Checkbox": {
+      "moves": "The fill tints in on 120ms and the tick settles in from 60%, 40ms behind it; the seat presses 3%. Still: the tick is simply there, no scale.",
+      "phone": "24px seat on touch, 16px from the desktop breakpoint; its hit area stays 24px either way."
+    },
+    "Radio": {
+      "moves": "The fill tints in on 120ms and the tick settles in from 60%, 40ms behind it; the seat presses 3%. Still: the tick is simply there, no scale.",
+      "phone": "24px seat on touch, 16px from the desktop breakpoint; its hit area stays 24px either way."
+    },
+    "Seat": {
+      "moves": "The fill tints in on 120ms and the tick settles in from 60%, 40ms behind it; the seat presses 3%. Still: the tick is simply there, no scale.",
+      "phone": "24px seat on touch, 16px from the desktop breakpoint; its hit area stays 24px either way."
+    },
+    "ChoiceRow": {
+      "moves": "The row tints with the choice on 120ms and its seat does as Checkbox's does: the tick settles in from 60% and the seat presses 3%. Still: no scale, the tick is simply there.",
+      "phone": "Never under the 44px tap floor."
+    },
+    "AnchoredPanel": {
+      "moves": "Opens on settle, rising 4px; goes by fading on tint where it stands. Still: appears and goes at once.",
+      "phone": "The same at every width."
+    },
+    "ConfirmByTyping": {
+      "moves": "The border warms toward danger with each letter that still matches, to 70% at the full name and never 100; a wrong letter returns it to neutral, and nothing shakes. Still: the same, a colour only.",
+      "phone": "The same at every width."
+    },
+    "CopyableValue": {
+      "moves": "Copy crossfades to Copied for 900ms and a dot that went somewhere blooms once; it presses 3%. Still: the word swaps at once, no bloom, no scale.",
+      "phone": "The block form is 52px tall and its Copy button takes the 44px floor."
+    },
+    "ViewSwitch": {
+      "moves": "Its indicator glides to the choice on settle, and the page's Advanced parts unfold or fold with it. Still: the indicator jumps and the parts appear at once.",
+      "phone": "Keeps the 44px touch floor Segmented carries below the desktop breakpoint."
+    },
+    "SyndraMark": {
+      "moves": "Blooms its dot once, the first time it is on screen in a browser session (the rail's mark above tablet, the top bar's on a phone); then still. Still: no bloom.",
+      "phone": "Seated in the top bar below tablet, where the rail that holds it is hidden."
+    },
+    "Badge": {
+      "moves": "Nothing on it moves. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "Chip": {
+      "moves": "Nothing on it moves. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "Mono": {
+      "moves": "Nothing on it moves. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "CountChip": {
+      "moves": "Nothing on it moves. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "ChosenChip": {
+      "moves": "Tints in and rises 4px into its seat; its ✕ tints on hover. Still: appears in place.",
+      "phone": "The same at every width."
+    },
+    "SortHead": {
+      "moves": "The arrow turns on settle; a re-sort fades the rows out and in on tint, and nothing travels. Still: the arrow jumps and the rows swap at once.",
+      "phone": "The same at every width."
+    },
+    "RunLabel": {
+      "moves": "Moves with its SortHead: the rows fade out and in on tint. Still: they swap at once.",
+      "phone": "The same at every width."
+    },
+    "FilterChip": {
+      "moves": "Tints in where it appears and fades out where it stands when the filter is taken away elsewhere; its ✕ presses 3%. Still: appears and goes at once, no scale.",
+      "phone": "The ✕ has a 44px target through the tablet range; compact from the desktop breakpoint."
+    },
+    "WaitsMark": {
+      "moves": "Its note tints in on hover or focus; nothing travels. Still: appears at once.",
+      "phone": "The same at every width."
+    },
+    "ThemeToggle": {
+      "moves": "The sun and moon crossfade on tint and the control presses 3%; the page's colours then crossfade for 300ms, and nothing moves. Still: the swap is at once, no scale.",
+      "phone": "A 44px target through the tablet range; 32px from the desktop breakpoint."
+    },
+    "StatCard": {
+      "moves": "Hover draws its edge on tint; pressed, it darkens one step to --tint-3. Never scales. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "FormPart": {
+      "moves": "A part the reader adds opens to its own height with its contents tinting in one tint behind; removed, it fades first, then its gap settles. Still: it is there and gone at once.",
+      "phone": "The same at every width."
+    },
+    "SectionPill": {
+      "moves": "Drops in 10px on settle once the read line has scrolled away, and leaves by fading where it stands; its links press 3%. Still: appears at once, no scale.",
+      "phone": "The same at every width."
+    },
+    "ReadLine": {
+      "moves": "Its chips press 3%; a step glides the page to the section and the place it lands flashes once. Still: the glide is a jump, the flash stays as colour.",
+      "phone": "Each chip takes the 44px floor; compact from the desktop breakpoint."
+    },
+    "SignInRow": {
+      "moves": "The body opens to its own height by Unfold, closing fades first, then folds; the chevron turns on settle and presses 3%. Still: opens and closes at once.",
+      "phone": "Stacks: time and verdict on one line, then the person, then what was asked."
+    },
+    "CardRow": {
+      "moves": "A row that opens something tints to --hover and darkens to --tint-3 pressed, and never scales; its body opens by Unfold. Still: opens at once, the tint stays.",
+      "phone": "A row with more than two facts discloses the rest rather than wrapping."
+    },
+    "ReadGate": {
+      "moves": "The skeleton appears only if the read is still going after 200ms and fades when it lands; the content then arrives. It never crossfades. Still: the swap is at once.",
+      "phone": "The same at every width."
+    },
+    "FoldChevron": {
+      "moves": "Turns on settle, the Unfold's own duration and curve. Still: it turns at once.",
+      "phone": "The same at every width."
+    },
+    "StatusSeat": {
+      "moves": "The word crossfades in its seat on tint; its dot blooms once only for something that went well because of you. Still: the word swaps at once, no bloom.",
+      "phone": "The same at every width."
+    },
+    "Input": {
+      "moves": "The border and ring colours tint on 120ms; an error line tints in. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "Textarea": {
+      "moves": "The border and ring colours tint on 120ms; an error line tints in. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "Select": {
+      "moves": "The border tints on 120ms. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "Term": {
+      "moves": "Its popover opens on settle, rising 4px, and fades out on tint. Still: appears and goes at once.",
+      "phone": "The same at every width."
+    },
+    "FilterPanel": {
+      "moves": "Opens on settle, rising 4px; its trigger presses 3%. Still: appears at once, no scale.",
+      "phone": "The same at every width."
+    },
+    "FilterField": {
+      "moves": "Moves with its panel. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "TopBar": {
+      "moves": "The mark blooms once on a phone's first paint; its controls press 3%. Still: no bloom, no scale.",
+      "phone": "Carries the mark, since the rail that holds it is hidden."
+    },
+    "SelectionAction": {
+      "moves": "Presses 3%, colour on tint. Still: no scale.",
+      "phone": "The same at every width."
+    },
+    "RowCheckbox": {
+      "moves": "Presses 3%, colour on tint. Still: no scale.",
+      "phone": "The same at every width."
+    },
+    "SelectModeToggle": {
+      "moves": "Presses 3%, colour on tint. Still: no scale.",
+      "phone": "The same at every width."
+    },
+    "SelectAllRow": {
+      "moves": "Presses 3%, colour on tint. Still: no scale.",
+      "phone": "The same at every width."
+    },
+    "DegradedBanner": {
+      "moves": "Opens by Unfold when it arrives, and folds by fading first. Still: appears and goes at once.",
+      "phone": "The same at every width."
+    },
+    "OfflineBanner": {
+      "moves": "Opens by Unfold when it arrives, and folds by fading first. Still: appears and goes at once.",
+      "phone": "The same at every width."
+    },
+    "CommandBlock": {
+      "moves": "Its copy control presses 3% and crossfades to Copied. Still: the word swaps at once, no scale.",
+      "phone": "The same at every width."
+    },
+    "ClipboardUnavailableNote": {
+      "moves": "Copy crossfades to Copied for 900ms and presses 3%. Still: the word swaps at once.",
+      "phone": "The same at every width."
+    },
+    "NotOpenYet": {
+      "moves": "Tints in where it appears; nothing travels. Still: appears in place.",
+      "phone": "The same at every width."
+    },
+    "SkeletonCardList": {
+      "moves": "Tints in; the 200ms wait lives in ReadGate. Still: the same.",
+      "phone": "The same at every width."
+    },
+    "Unresolved": {
+      "moves": "The copy control beside the id presses 3% and crossfades to Copied. Still: no scale.",
+      "phone": "The same at every width."
+    },
+    "ListStates": {
+      "moves": "The skeleton waits 200ms and fades out as the rows arrive; an empty or failed list appears in place. Still: swaps at once.",
+      "phone": "The same at every width."
     }
   }
 }

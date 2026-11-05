@@ -275,6 +275,12 @@ export function useSheetLeave(
   }, [active, scrimRef, draggedAway]);
 }
 
+/**
+ * A dialog: a scrim, and a card that rises 8px from 98% (40ms behind the scrim).
+ * Below the tablet breakpoint it is a bottom sheet with a grabber that drags it
+ * down to close. G4: the footer's `cancel` slot places Cancel as the ghost half
+ * of the pair beside the act; after a result there is one outline Close.
+ */
 export function Modal({
   open,
   onClose,

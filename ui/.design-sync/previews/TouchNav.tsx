@@ -12,8 +12,8 @@ function View({ view, children }: { view: "basic" | "advanced"; children: React.
   return <>{children}</>;
 }
 
-/** Full-bleed phone screen (390x844 viewport): the bar sits at its bottom. Destinations come from src/lib/nav.ts. */
-const phone = { margin: -24, height: "100dvh", display: "flex", flexDirection: "column", justifyContent: "flex-end", background: "var(--canvas)" } as const;
+/** Full-bleed phone screen (390px viewport; the card is only as tall as the bar): the bar sits at its bottom. Destinations come from src/lib/nav.ts. */
+const phone = { margin: -24, height: 140, display: "flex", flexDirection: "column", justifyContent: "flex-end", background: "var(--canvas)" } as const;
 
 export const MemberTabs = () => (
   <SyndraRoot pathname="/">

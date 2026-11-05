@@ -14,7 +14,8 @@
  *
  *   [ leading ]  [ search…              ]        [ Filters · 2 ] [ trailing ]
  *
- * `leading` is whatever decides what the page IS — tabs, usually. Search is
+ * `leading` is whatever chooses which list you are reading (G18): a pill set
+ * such as Requests' status or Expiring's window. Search is
  * next because it is the fastest way to the one row somebody wants, and it
  * stays visible for exactly that reason: a search hidden behind a disclosure is
  * a search nobody uses. Everything that narrows rather than finds goes in the
