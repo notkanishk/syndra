@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
+	"syndra/internal/access"
 	"syndra/internal/cache"
 	"syndra/internal/claims"
 	"syndra/internal/db"
@@ -981,6 +984,13 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 		return nil, fmt.Errorf("observation basis: %w", err)
 	}
 
+	// What each bundle gives, includes and held versions too: a bundle made
+	// only of includes gives a project roles as much as one listing them.
+	given, err := svcGetBundleRolesGiven(snap.ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	projectSummaries := make([]models.ProjectSummary, 0, len(projects))
 	for _, project := range projects {
 		memberCount := 0
@@ -1014,11 +1024,7 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 
 		bundleCount := 0
 		for _, bundle := range bundles {
-			roles, err := svcGetRolesForBundle(snap.ctx, bundle.ID)
-			if err != nil {
-				return nil, err
-			}
-			for _, role := range roles {
+			for _, role := range given[bundle.ID] {
 				if role.ProjectID == project.ID {
 					bundleCount++
 					break
@@ -1077,8 +1083,11 @@ func BundleImpact(ctx context.Context, bundleID string) (models.BundleImpact, er
 }
 
 func bundleImpactFromSnapshot(snap *accessSnapshot, bundleID string) (models.BundleImpact, error) {
-	roles, err := svcGetRolesForBundle(snap.ctx, bundleID)
-	if err != nil {
+	// What the bundle gives today: its latest published version, own roles
+	// and included ones, the same set the bundle list counts. The working copy
+	// alone counted a bundle made of includes as giving nothing.
+	_, roles, err := svcLatestVersionRoles(snap.ctx, bundleID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return models.BundleImpact{}, err
 	}
 
@@ -1372,6 +1381,10 @@ func topologyFromSnapshot(snap *accessSnapshot) (models.TopologyGraph, error) {
 	if err != nil {
 		return graph, err
 	}
+	given, err := svcGetBundleRolesGiven(ctx)
+	if err != nil {
+		return graph, err
+	}
 	for _, bundle := range bundles {
 		bundleID := "bundle:" + bundle.ID
 		addNode(models.TopologyNode{
@@ -1381,11 +1394,7 @@ func topologyFromSnapshot(snap *accessSnapshot) (models.TopologyGraph, error) {
 			Description: bundle.Description,
 		})
 
-		roles, err := svcGetRolesForBundle(ctx, bundle.ID)
-		if err != nil {
-			return graph, err
-		}
-		for _, role := range roles {
+		for _, role := range given[bundle.ID] {
 			ensureRoleNode(role.ProjectID, role.RoleKey)
 			addEdge(models.TopologyEdge{
 				ID:     "bundle-role:" + bundle.ID + ":" + role.ProjectID + ":" + role.RoleKey,
@@ -1497,18 +1506,14 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		return nil, nil, err
 	}
 
-	// What the chains reach is models.RuleClosure's to say (the one
-	// implementation); this only names, for each role reached, every rule that
-	// reaches it. A rule whose source is in the closure fires, and no other.
+	// What the chains reach, and which rules fire, is the access core's to
+	// say (the one implementation); this only names, for each role reached,
+	// every rule that reaches it.
 	held := make(map[roleKey]bool, len(roleMap))
 	for k := range roleMap {
 		held[k] = true
 	}
-	closure := effectiveClosure(held, rules)
-	for _, rule := range rules {
-		if !closure[roleKey{projectID: rule.SourceProject, roleKey: rule.SourceRole}] {
-			continue
-		}
+	for _, rule := range access.Fired(effectiveClosure(held, rules), rules, newRoleKey) {
 		upsertRole(ctx, roleMap, roleKey{projectID: rule.TargetProject, roleKey: rule.TargetRole}, false, models.RoleReason{
 			Kind:           "mapping",
 			Description:    fmt.Sprintf("Derived from %s:%s", rule.SourceProject, rule.SourceRole),

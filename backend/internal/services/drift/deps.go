@@ -91,9 +91,9 @@ var (
 
 // classification helpers are pure and shared with the reconciliation endpoint.
 var (
-	buildHolderSet  = services.BuildHolderSet
-	expectedViaRule = services.ExpectedViaRule
-	isExcluded      = services.IsExcluded
+	buildHolderSet = services.BuildHolderSet
+	ruleDerived    = services.RuleDerived
+	isExcluded     = services.IsExcluded
 )
 
 // The add-on reconciler's seams (1.18, 1.22).
@@ -112,7 +112,7 @@ var (
 	// The unbound half of the pass: who holds a mapped role, and whether a
 	// convergence for them is already waiting.
 	listMappings   = db.ListRoleMappings
-	mappingHolders = db.MappingHolders
+	mappingHolders = services.MappingHolders
 	pendingApply   = db.PendingApplyWants
 
 	// The mutation-log anchor (2.28). Two seams rather than one, because the

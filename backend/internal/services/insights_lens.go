@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -259,15 +260,14 @@ func tallyGroup(group []lensPerson, name func(string, string) (string, string)) 
 // ever recorded has no first time, so is not new. A person's status is the directory's own word.
 //
 // Statuses that exist (directory.normalizeUserState): active, inactive,
-// initial, locked, deleted, unspecified. "left" is leftStatuses: inactive,
-// locked, deleted, plus "departed", the word the drift queue uses.
+// initial, locked, deleted, unspecified. "left" is access.Left.
 func pickGroup(g LensGroup, people []lensPerson, firstSeen map[string]time.Time, termStart time.Time) []lensPerson {
 	var out []lensPerson
 	for _, p := range people {
 		var in bool
 		switch g.Kind {
 		case LensLeft:
-			in = leftStatuses[strings.ToLower(p.Status)]
+			in = access.Left(p.Status)
 		case LensNewTerm:
 			// Zitadel's creation date wins: holding and people are observed
 			// from Zitadel, records only explain. First seen is a fallback for

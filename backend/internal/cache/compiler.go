@@ -14,6 +14,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"syndra/internal/access"
 	"syndra/internal/claims"
 	"syndra/internal/claimserve"
 	"syndra/internal/clock"
@@ -177,24 +178,22 @@ func compileUser(ctx context.Context, userID string, ps *pass) (userRoles, error
 		return userRoles{}, fmt.Errorf("cache compile: failed to fetch base grants: %w", err)
 	}
 
-	activeRoles := make(map[string]map[string]bool) // projectID -> map[roleKey]exists
-	ends := map[string]map[string]time.Time{}
-	endless := map[string]bool{} // projectID+"\x00"+roleKey held with no end
+	// Each base role with the date it ends; the zero time is never. A role held
+	// twice ends at the later of the two, and an open grant or a bundle (which
+	// has no end) makes it endless.
+	base := map[access.Role]time.Time{}
+	hold := func(k access.Role, end time.Time) {
+		if cur, ok := base[k]; ok {
+			end = access.Later(cur, end)
+		}
+		base[k] = end
+	}
 	for _, g := range baseGrants {
-		if activeRoles[g.ProjectID] == nil {
-			activeRoles[g.ProjectID] = make(map[string]bool)
+		var end time.Time
+		if g.ExpiresAt != nil {
+			end = *g.ExpiresAt
 		}
-		activeRoles[g.ProjectID][g.RoleKey] = true
-		if g.ExpiresAt == nil {
-			endless[g.ProjectID+"\x00"+g.RoleKey] = true
-			continue
-		}
-		if ends[g.ProjectID] == nil {
-			ends[g.ProjectID] = map[string]time.Time{}
-		}
-		if g.ExpiresAt.After(ends[g.ProjectID][g.RoleKey]) {
-			ends[g.ProjectID][g.RoleKey] = *g.ExpiresAt
-		}
+		hold(access.Role{ProjectID: g.ProjectID, RoleKey: g.RoleKey}, end)
 	}
 
 	// What their bundles give them, through each assignment's pinned version.
@@ -204,11 +203,7 @@ func compileUser(ctx context.Context, userID string, ps *pass) (userRoles, error
 	}
 	bundleIDs := map[string]map[string]bool{} // projectID -> bundle ids
 	for _, r := range bundleRoles {
-		if activeRoles[r.ProjectID] == nil {
-			activeRoles[r.ProjectID] = make(map[string]bool)
-		}
-		activeRoles[r.ProjectID][r.RoleKey] = true
-		endless[r.ProjectID+"\x00"+r.RoleKey] = true
+		hold(access.Role{ProjectID: r.ProjectID, RoleKey: r.RoleKey}, time.Time{})
 		if bundleIDs[r.ProjectID] == nil {
 			bundleIDs[r.ProjectID] = map[string]bool{}
 		}
@@ -219,34 +214,24 @@ func compileUser(ctx context.Context, userID string, ps *pass) (userRoles, error
 		return userRoles{}, fmt.Errorf("cache compile: %w", err)
 	}
 
-	// What the rules derive is models.RuleClosure's answer, the same function
-	// the cascades use to decide what Zitadel is sent: the token and Zitadel
-	// follow one chain, not two copies of it.
-	base := map[models.HeldRole]bool{}
-	for pid, byRole := range activeRoles {
-		for role := range byRole {
-			base[models.HeldRole{ProjectID: pid, RoleKey: role}] = true
-		}
-	}
-	for k := range models.RuleClosure(base, ps.rules, models.NewHeldRole) {
-		if base[k] {
-			continue
-		}
+	// What the rules derive, and when each derived role ends, is access.Ends's
+	// answer: the same fixpoint the cascades use to decide what Zitadel is
+	// sent, so the token and Zitadel follow one chain. A rule role ends when
+	// the last of its sources ends.
+	activeRoles := make(map[string]map[string]bool) // projectID -> map[roleKey]exists
+	ends := map[string]map[string]time.Time{}
+	for k, end := range access.Ends(base, ps.rules, access.NewRole) {
 		if activeRoles[k.ProjectID] == nil {
 			activeRoles[k.ProjectID] = make(map[string]bool)
 		}
 		activeRoles[k.ProjectID][k.RoleKey] = true
-		// ponytail: a role a rule gives has no end, even when its source
-		// does; carry the source's end once an app needs it (NEXT.md).
-		endless[k.ProjectID+"\x00"+k.RoleKey] = true
-	}
-
-	for pid, byRole := range ends {
-		for role := range byRole {
-			if endless[pid+"\x00"+role] {
-				delete(byRole, role)
-			}
+		if end.IsZero() {
+			continue
 		}
+		if ends[k.ProjectID] == nil {
+			ends[k.ProjectID] = map[string]time.Time{}
+		}
+		ends[k.ProjectID][k.RoleKey] = end
 	}
 
 	u := userRoles{userID: userID, active: activeRoles, ends: ends, bundles: bundles}
