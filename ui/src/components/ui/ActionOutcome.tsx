@@ -6,6 +6,7 @@ import { CopyableValue } from "@/components/ui/CopyableValue";
 import { NextStep } from "@/components/ui/NextStep";
 import {
   NOTHING_CHANGED,
+  nextStepOf,
   sentence,
   statesNothingChanged,
   type ActionOutcome as Outcome,
@@ -66,6 +67,17 @@ function dotTone(outcome: Outcome): StatusTone {
   return outcome.sendsItself ? "neutral" : SEAT_DOT[outcome.kind];
 }
 
+/**
+ * The last line every result ends on: its next step, or that there is none
+ * (owner, 5 Nov 2026; copy guide §2). Null only where it is already drawn: as
+ * the "Waiting for you to send →" link, or inside a sentence already shown.
+ */
+function nextLine(outcome: Outcome, shown: (string | undefined)[]): string | null {
+  if (outcome.kind === "queued" && !outcome.sendsItself) return null;
+  const next = nextStepOf(outcome);
+  return shown.some((text) => text?.includes(next)) ? null : next;
+}
+
 export function ActionOutcome({
   outcome,
   placement = "block",
@@ -88,6 +100,8 @@ export function ActionOutcome({
   const grave = outcome.kind === "failed" || outcome.kind === "refused";
 
   if (placement === "seat") {
+    const said = grave ? sentence(outcome.message) : outcome.detail ?? (outcome.sendsItself ? outcome.message : undefined);
+    const next = nextLine(outcome, [said]);
     return (
       <span
         role={grave ? "alert" : "status"}
@@ -100,11 +114,8 @@ export function ActionOutcome({
         </span>
         {/* Queued: why it waits, then the step left — the word above already
             wears the amber dot, so the link doesn't repeat it (route-requests). */}
-        {(grave ? outcome.message : outcome.detail ?? (outcome.sendsItself ? outcome.message : undefined)) && (
-          <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">
-            {grave ? sentence(outcome.message) : outcome.detail ?? outcome.message}
-          </span>
-        )}
+        {said && <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">{said}</span>}
+        {next && <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">{next}</span>}
         {outcome.kind === "queued" && !outcome.sendsItself && <NextStep dot={false} person={person} className="pl-[14px]" />}
         {outcome.kind === "failed" && outcome.requestId && (
           <CopyableValue value={outcome.requestId} label="Reference" className="pl-[14px]" />
@@ -132,6 +143,10 @@ export function ActionOutcome({
           </span>
         )}
         <span className="text-[13px] text-muted">{sentence(outcome.message)}</span>
+        {(() => {
+          const next = nextLine(outcome, [outcome.message]);
+          return next && <span className="text-[13px] text-faint">{next}</span>;
+        })()}
       </span>
     );
   }
@@ -160,6 +175,10 @@ export function ActionOutcome({
       {outcome.detail && (
         <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
       )}
+      {(() => {
+        const next = nextLine(outcome, [outcome.message, outcome.detail]);
+        return next && <p className="text-[13px] leading-[1.5] text-faint">{next}</p>;
+      })()}
       {outcome.kind === "queued" && !outcome.sendsItself && <NextStep dot={false} person={person} />}
       {outcome.sessionEnded && <SignInAgain />}
       {outcome.requestId && <QuoteThis id={outcome.requestId} />}

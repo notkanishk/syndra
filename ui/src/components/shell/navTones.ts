@@ -33,6 +33,23 @@ export function loudestTone(tones: (BadgeTone | undefined)[]): BadgeTone | null 
   return null;
 }
 
+/**
+ * The retry pill a `retries` row carries (lib/nav.ts): a give-up nobody has
+ * marked seen outranks a retry under way, because it needs a person and a
+ * retry does not. Null when neither, so the pill takes no seat.
+ */
+export function retryBadge(
+  counts: { retrying?: number; gave_up?: number } | undefined,
+): { count: number; tone: BadgeTone; label: string } | null {
+  const gaveUp = Number(counts?.gave_up ?? 0);
+  const retrying = Number(counts?.retrying ?? 0);
+  if (gaveUp > 0) return { count: gaveUp, tone: "danger", label: `Syndra gave up on ${gaveUp} ${gaveUp === 1 ? "change" : "changes"}` };
+  if (retrying > 0) {
+    return { count: retrying, tone: "warn", label: `Syndra is sending ${retrying} ${retrying === 1 ? "change" : "changes"} again on its own` };
+  }
+  return null;
+}
+
 /** The dot a tone paints when it stands in for a count. */
 export const DOT_TONE: Record<BadgeTone, string> = {
   accent: "bg-accent",

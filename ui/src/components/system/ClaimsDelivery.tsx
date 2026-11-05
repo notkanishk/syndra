@@ -218,7 +218,7 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
           It couldn&rsquo;t read {parts}. {GRANT_VIEWER}
         </>
       ) : (
-        `It couldn't read ${parts}: Zitadel didn't answer. Syndra tries again every few minutes.`
+        `It couldn't read ${parts}: Zitadel didn't answer. Syndra checks again every 10 minutes, so there is nothing for you to do unless it keeps failing.`
       );
       break;
     }
@@ -415,7 +415,7 @@ function Configuration({ d, connected, names }: { d: Delivery; connected: boolea
 
   const sentence = !cfg
     ? connected
-      ? "Not checked yet. Syndra checks Zitadel's setup a few minutes after it starts."
+      ? "Not checked yet. Syndra checks Zitadel's setup when it starts and every 10 minutes after. Nothing for you to do."
       : "Not checked: Syndra isn't connected to Zitadel, so there is nothing to compare."
     : drift
       ? `${plural(drift, "check")} ${drift === 1 ? "differs" : "differ"} from what claim delivery needs. Checked ${at}.`

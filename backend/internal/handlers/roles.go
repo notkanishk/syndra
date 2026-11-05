@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"syndra/internal/db"
 	"syndra/internal/services"
 )
 
@@ -51,15 +50,14 @@ func handleCreateRole(w http.ResponseWriter, r *http.Request) {
 
 	role, err := svcCreateRole(r.Context(), req, actor)
 	if err != nil {
-		if errors.Is(err, db.ErrDuplicateRole) {
-			jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "A role with this project_id and role_key already exists")
-			return
-		}
 		if errors.Is(err, services.ErrCloneSourceNotFound) {
-			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Clone source role not found")
+			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "The role to copy from no longer exists. Nothing was changed.")
 			return
 		}
-		jsonErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		// One-path 1.13: the same answers as Zitadel › Projects, so a bad key
+		// is a refusal (not a 500), a duplicate says nothing changed, and a
+		// lost reply is "not known", never "nothing was changed".
+		writeRoleWriteError(w, err)
 		return
 	}
 

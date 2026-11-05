@@ -158,7 +158,7 @@ export const useBulkMarkExternalDrift = () =>
  * all POST to a per-item endpoint and invalidate both the drift list and the
  * governance summary so the nav badge and dashboard callout update immediately.
  */
-function useDriftMutation<B>(path: (id: string) => string, extraKeys: readonly (readonly unknown[])[] = []) {
+function useDriftMutation<B>(path: (id: string) => string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, body }: { id: string; body?: B }) =>
@@ -166,7 +166,9 @@ function useDriftMutation<B>(path: (id: string) => string, extraKeys: readonly (
     onSuccess: () => {
       // The rail's count follows the answer; the refetch below confirms it.
       settleIndicators(qc, { drift: -1 });
-      invalidateAfter(qc, "drift", { extra: extraKeys });
+      // "drift" already holds ["propagations"]: a revoke queues a removal and
+      // an adopt can queue what a rule gives (invalidation.ts).
+      invalidateAfter(qc, "drift");
     },
   });
 }
@@ -175,10 +177,7 @@ export const useAttributeDrift = () =>
   useDriftMutation<{ source: AttributionSource }>(
     (id) => `/governance/drift/${id}/attribute`,
   );
-export const useRevokeDrift = () =>
-  // The Zitadel revoke this queues is itself a propagation row, so the
-  // pending list is stale too until this invalidates it.
-  useDriftMutation<undefined>((id) => `/governance/drift/${id}/revoke`, [["propagations"]]);
+export const useRevokeDrift = () => useDriftMutation<undefined>((id) => `/governance/drift/${id}/revoke`);
 export const useMarkExternalDrift = () =>
   useDriftMutation<{ reason?: string }>((id) => `/governance/drift/${id}/mark-external`);
 

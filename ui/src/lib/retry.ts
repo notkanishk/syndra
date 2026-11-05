@@ -1,5 +1,5 @@
 import { formatClock } from "@/lib/format";
-import type { ActionOutcome } from "@/lib/outcome";
+import { NOTHING_TO_DO, SENDS_ITSELF_NEXT, type ActionOutcome } from "@/lib/outcome";
 
 /**
  * One retry model, in words (owner, 5 Nov 2026). A Zitadel change in the
@@ -57,6 +57,28 @@ export function retryLine(
   }
 }
 
+/**
+ * The step a retry state leaves, or that there is none (owner, 5 Nov 2026):
+ * every state ends on one. `own` is a member's own storage password, which
+ * only their open page can send again.
+ */
+export function retryNextStep(retry: RetryState, { own = false, it = "it", now = new Date() }: { own?: boolean; it?: string; now?: Date } = {}): string {
+  switch (retry.state) {
+    case "retrying":
+      return own
+        ? "It says here when it's done."
+        : `${NOTHING_TO_DO} Syndra sends ${it} again ${when(retry.next_try, now)} and says on Home if it gives up.`;
+    case "waiting":
+      return own ? "Set your password again." : "Press Send on Pending changes to try again.";
+    case "failed":
+      return own
+        ? "Set your password again. If it keeps failing, ask makerspace staff."
+        : "Give or revoke the access again from the person's page.";
+    case "sent":
+      return NOTHING_TO_DO;
+  }
+}
+
 /** The member's own words for their password while Syndra is still trying (A-13 §4). */
 export function memberRetryLine(retry: RetryState, now: Date = new Date()): string {
   return retry.state === "retrying"
@@ -72,7 +94,13 @@ export function retryingOutcome(done: string, retry: RetryState | undefined, it 
   const line = retry
     ? retryLine(retry, "Zitadel", it)
     : `Zitadel didn't answer. Syndra sends ${it} again on its own.`;
-  return { kind: "queued", message: `${done}. ${line}`, detail: line, sendsItself: true };
+  return {
+    kind: "queued",
+    message: `${done}. ${line}`,
+    detail: line,
+    sendsItself: true,
+    next: retry ? retryNextStep(retry, { it }) : SENDS_ITSELF_NEXT,
+  };
 }
 
 /** The wait reason an action answers with when what it sent is retrying. */
@@ -106,5 +134,6 @@ export function retireOutcome(n: number, reason: string | undefined, retry?: Ret
     message: `Not in Zitadel yet. ${line}`,
     detail: `Revocations send on their own; nothing waits for you.${after}`,
     sendsItself: true,
+    next: reason === RETRYING && retry ? retryNextStep(retry, { it: "them" }) : SENDS_ITSELF_NEXT,
   };
 }

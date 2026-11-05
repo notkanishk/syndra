@@ -56,7 +56,7 @@ function ManageBundlesOpen({
 
   const assignedIds = useMemo(() => new Set(assigned.map((b) => b.id)), [assigned]);
   const [staged, setStaged] = useState<Set<string>>(new Set());
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("change");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Which way the change being sent goes, so a step says "assign" or "remove".
   const [acting, setActing] = useState<"assign" | "remove">("assign");
@@ -144,8 +144,8 @@ function ManageBundlesOpen({
         // empty Pending changes to look for it.
         kind: waiting > 0 ? "queued" : "applied",
         message: recorded,
-        // Revocations do not wait for a person — they send on their own every
-        // few minutes — so telling the operator to go and send them would be
+        // Revocations do not wait for a person — they send on their own within a
+        // minute — so telling the operator to go and send them would be
         // false, and saying nothing about it would leave them wondering why
         // Pending changes emptied by itself.
         detail:
@@ -154,9 +154,9 @@ function ManageBundlesOpen({
                 waiting === 1 ? "One change waits" : `${waiting} changes wait`
               } under Pending changes${
                 revoking === waiting
-                  ? ". Revocations send on their own within a few minutes, or send them now."
+                  ? ". Revocations send on their own within a minute, or send them now."
                   : revoking > 0
-                    ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a few minutes, the rest until you send them.`
+                    ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a minute, the rest until you send them.`
                     : " until you send them."
               }`
             : "Nothing is waiting for you to send: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",

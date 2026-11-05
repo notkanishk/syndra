@@ -28,7 +28,7 @@ import {
   useSetRolesWait,
 } from "@/lib/queries/useRolesThatWait";
 import { compareNames } from "@/lib/sort";
-import { roleName } from "@/lib/names";
+import { personOr, roleName } from "@/lib/names";
 
 const roleId = (projectId: string, roleKey: string) =>
   `${projectId}:${roleKey}`;
@@ -228,7 +228,7 @@ function WaitingRoles({
                     )}
                   </div>
                   <span className="hidden w-[200px] text-[13.5px] text-muted tablet:block">
-                    <UserName id={m.marked_by} fallback="Someone" />,{" "}
+                    <UserName id={m.marked_by} fallback={personOr(null, true)} />,{" "}
                     {formatShortDate(m.marked_at)}
                   </span>
                   <span className="w-full text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:shrink-0 tablet:text-right">

@@ -67,6 +67,18 @@ func handleListPendingPropagations(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{"pending": rows})
 }
 
+// handleMarkGaveUpSeen is the operator saying they have seen the changes
+// Syndra gave up on: Home and the rail stop raising them (owner, 5 Nov 2026:
+// a give-up stays visible until seen). No body; who and when are recorded on
+// the marker itself (config_settings.updated_by).
+func handleMarkGaveUpSeen(w http.ResponseWriter, r *http.Request) {
+	if err := dbMarkGaveUpSeen(r.Context(), resolveActor(r, "")); err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "seen"})
+}
+
 // handleUnconfirmedRevocations lists the withdrawals that have not reached
 // their target (change `addon-platform` 2.51, 9.9).
 //

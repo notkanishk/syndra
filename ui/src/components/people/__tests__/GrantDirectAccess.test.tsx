@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GIVE_ROLE_LABEL, GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ApiError } from "@/lib/api-client";
+import { waitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 
 /**
  * The direct-grant endpoint always enqueues to the outbox for the
@@ -287,7 +288,7 @@ describe("GrantDirectAccess · while Zitadel is not answering", () => {
     choose("Operator");
     const dialog = screen.getByRole("dialog");
     expect(
-      within(dialog).getByText("Zitadel isn't answering, so this will wait for you to send it once it does."),
+      within(dialog).getByText(waitsBeforeLine("give")),
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(/as soon as you give it/)).not.toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Give role" })).toBeEnabled();

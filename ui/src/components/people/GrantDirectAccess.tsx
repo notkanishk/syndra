@@ -24,7 +24,7 @@ import { expiryLabel, formatShortDate } from "@/lib/format";
 import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 import { daysFromToday, endAfterDaysISO, endOfDayISO } from "@/lib/time";
-import { roleName } from "@/lib/names";
+import { personOr, roleName } from "@/lib/names";
 
 /**
  * E5 · Give a role. Project → role → expiry.
@@ -103,12 +103,12 @@ function GrantDirectAccessOpen({
         note: noteOf(entry.project.id, role.role_key),
       })),
   }));
-  const first = userName.trim().split(/\s+/)[0] || "They";
+  const first = userName.trim().split(/\s+/)[0] || personOr(null, true);
   const grantedRole = roleName(selectedRole?.display_name, roleKey);
   // A grant that would cancel a removal still waiting for you to send turns the
   // sheet to a step first (A-04 §14); Keep it comes back here as it was.
   const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${grantedRole}` });
-  const waits = useWaitsBeforeLine();
+  const waits = useWaitsBeforeLine("give");
   // What the automatic rules also give with this role, said before the click
   // (audit C2), from the closure the write itself follows.
   const rules = useRulePreview(userId, projectId, [roleKey]);
@@ -221,13 +221,15 @@ function GrantDirectAccessOpen({
                   : "It stays until someone removes it."}
               </span>
               {selectedRole &&
-                (waits ? (
-                  <span className="block">{waits}</span>
-                ) : selectedRole.waits_for_send ? (
+                // A role that waits waits for Send whatever Zitadel is doing,
+                // so its own line outranks the degraded one.
+                (selectedRole.waits_for_send ? (
                   <span className="block">
                     <WaitsMark className="mr-1.5" />
                     {grantedRole} always waits for you, so {first} gets it once you send it.
                   </span>
+                ) : waits ? (
+                  <span className="block">{waits}</span>
                 ) : (
                   <span className="block">{first} can use it as soon as you give it.</span>
                 ))}

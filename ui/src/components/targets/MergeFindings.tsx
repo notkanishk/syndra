@@ -1,4 +1,5 @@
 "use client";
+import { personOr } from "@/lib/names";
 
 import { Term } from "@/components/ui/Term";
 import { useState } from "react";
@@ -429,7 +430,7 @@ function AlreadyDecided({
   return (
     <Notice tone="neutral" title="This was decided while the page was open.">
       <p>
-        <Person id={taken.decided_by} fallback="Somebody" />
+        <Person id={taken.decided_by} fallback={personOr(null, true)} />
         {taken.decided_at ? (
           <>
             {" "}

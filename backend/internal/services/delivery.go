@@ -16,6 +16,9 @@ type Delivery struct {
 	Waiting []string // held for the operator
 	Reason  map[string]string
 	Drain   propagation.DrainResult
+
+	// retrying: a halted send's rows were given a next try (db.ScheduleRetry).
+	retrying bool
 }
 
 // WaitReason says why the action's change isn't in Zitadel yet: the role
@@ -26,6 +29,9 @@ type Delivery struct {
 func (d Delivery) WaitReason() string {
 	for _, id := range d.Waiting {
 		return d.Reason[id]
+	}
+	if d.retrying {
+		return db.WaitReasonHalted(db.HaltRetrying)
 	}
 	if d.Drain.Halted {
 		return db.WaitReasonHalted(d.Drain.Reason)
@@ -42,6 +48,7 @@ var (
 	svcSetWaitReason         = db.SetWaitReason
 	svcGetConfigSetting      = db.GetConfigSetting
 	svcGetPendingRows        = db.GetPendingPropagations
+	svcScheduleRetry         = db.ScheduleRetry
 )
 
 // switchedOver reports whether the operator has moved to roles that wait. An
@@ -116,11 +123,23 @@ func Deliver(ctx context.Context, ids []string, legacyWait bool) Delivery {
 		}
 	}
 	if d.Drain.Halted {
-		// Which of them went is the outbox's to say; the reason is recorded
-		// only on the rows still pending.
-		d.wait(ctx, d.Sent, db.WaitReasonHalted(d.Drain.Reason))
+		// Which of them went is the outbox's to say. Those still pending were
+		// meant to go now and hit a transient failure before they went, so
+		// they are retried on their own like a 503 after a send (owner, 5 Nov
+		// 2026): try 1 counted, a next try, each retry audited by the
+		// background drain. If the schedule can't be written, the halt reason
+		// is recorded and they wait for Send: the safe way to be wrong.
+		scheduled, err := svcScheduleRetry(ctx, d.Sent, "halted: "+d.Drain.Reason)
+		if err != nil {
+			log.Printf("[DELIVERY] schedule a retry of %d row(s): %v (left for Send)", len(d.Sent), err)
+			d.wait(ctx, d.Sent, db.WaitReasonHalted(d.Drain.Reason))
+		}
+		for _, id := range scheduled {
+			d.Reason[id] = db.WaitReasonHalted(db.HaltRetrying)
+		}
+		d.retrying = len(scheduled) > 0
 	}
-	if d.Drain.Requeued > 0 {
+	if d.Drain.Requeued > 0 || d.retrying {
 		d.Drain.Retry = nextRetry(ctx, d.Sent)
 	}
 	return d

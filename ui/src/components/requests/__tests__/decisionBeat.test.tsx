@@ -108,7 +108,7 @@ describe("a decided request keeps its seat for a beat", () => {
     rerender(<Screen />);
 
     expect(screen.getByText(/why r1/)).toBeInTheDocument();
-    expect(within(rowOf(/why r1/)).getByRole("status").textContent).toBe("ApprovedSent · not yet seen in Zitadel");
+    expect(within(rowOf(/why r1/)).getByRole("status").textContent).toBe("ApprovedSent · not yet seen in ZitadelNothing for you to do.");
     expect(fadeOf(/why r1/)).not.toHaveAttribute("data-leaving");
 
     tick(899);
@@ -129,7 +129,7 @@ describe("a decided request keeps its seat for a beat", () => {
     await flush();
     data = [ask("r2", "u2")];
     rerender(<Screen />);
-    expect(within(rowOf(/why r1/)).getByRole("status").textContent).toBe("DeclinedNothing was sent");
+    expect(within(rowOf(/why r1/)).getByRole("status").textContent).toBe("DeclinedNothing was sentNothing for you to do.");
   });
 
   it("leaves the other rows' buttons working during the beat", async () => {
@@ -247,7 +247,7 @@ describe("a bulk decision from Select mode", () => {
 
     const first = within(rowOf(/why r1/)).getByRole("status");
     const second = within(rowOf(/why r2/)).getByRole("status");
-    expect(first.textContent).toBe("ApprovedSent · not yet seen in Zitadel");
+    expect(first.textContent).toBe("ApprovedSent · not yet seen in ZitadelNothing for you to do.");
     expect(second.textContent).toContain("Approved");
     expect(second.textContent).toContain("This role always waits for you.");
 

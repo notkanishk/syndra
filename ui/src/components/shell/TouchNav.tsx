@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
+import { RetryPill } from "@/components/shell/RetryPill";
 import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
 import { Unfold } from "@/lib/motion";
@@ -159,6 +160,7 @@ function Tab({
           {count}
         </span>
       )}
+      {destination.retries && <RetryPill counts={counts} className="absolute left-2 top-1" />}
       {groupTone && (
         <span
           aria-hidden
@@ -471,6 +473,7 @@ function SheetSectionBody({
         active={here}
         indicator={destination.indicator}
         tone={destination.tone}
+        retries={destination.retries}
         counts={counts}
         onPick={onPick}
       />
@@ -510,6 +513,7 @@ function SheetSectionBody({
             active={leafMatches(child, pathname)}
             indicator={child.indicator}
             tone={child.tone}
+            retries={child.retries}
             counts={counts}
             onPick={onPick}
             nested
@@ -530,6 +534,7 @@ function SheetRow({
   onPick,
   nested = false,
   dot = null,
+  retries = false,
 }: {
   href: string;
   label: string;
@@ -540,6 +545,7 @@ function SheetRow({
   onPick: () => void;
   nested?: boolean;
   dot?: ReturnType<typeof loudestTone>;
+  retries?: boolean;
 }) {
   const count = indicator ? Number(counts?.[indicator] ?? 0) : undefined;
 
@@ -554,6 +560,7 @@ function SheetRow({
       } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-muted"}`}
     >
       <span className="flex-1 truncate">{label}</span>
+      {retries && <RetryPill counts={counts} />}
 
       {dot && (
         <>

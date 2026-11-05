@@ -5,6 +5,7 @@ import {
   type NavEntry,
   type NavLeaf,
 } from "@/lib/nav";
+import { retryBadge } from "@/components/shell/navTones";
 
 /**
  * The rail's tree, as a thumb has to meet it.
@@ -31,12 +32,14 @@ export interface TouchDestination {
   /** Counted indicator, for a leaf that has one. */
   indicator?: IndicatorKey;
   tone?: BadgeTone;
+  /** The leaf carries the retry pill (lib/nav.ts `retries`). */
+  retries?: boolean;
 }
 
 export function touchDestinations(entries: NavEntry[]): TouchDestination[] {
   return entries.map((entry) =>
     entry.kind === "leaf"
-      ? { label: entry.label, href: entry.href, indicator: entry.indicator, tone: entry.tone }
+      ? { label: entry.label, href: entry.href, indicator: entry.indicator, tone: entry.tone, retries: entry.retries }
       : {
           label: entry.label,
           href: entry.children[0]?.href ?? "/",
@@ -89,7 +92,8 @@ function wantsAttention(
   const indicators = destination.children
     ? destination.children.map((child) => child.indicator)
     : [destination.indicator];
-  return indicators.some((key) => (key ? Number(counts?.[key] ?? 0) > 0 : false));
+  const retries = destination.children ? destination.children.some((child) => child.retries) : destination.retries;
+  return indicators.some((key) => (key ? Number(counts?.[key] ?? 0) > 0 : false)) || Boolean(retries && retryBadge(counts));
 }
 
 /** The tones a destination is currently carrying, for the dot that stands in. */
@@ -98,7 +102,12 @@ export function tonesInPlay(
   counts: Partial<Record<IndicatorKey, number>> | undefined,
 ): (BadgeTone | undefined)[] {
   const leaves = destination.children ?? [];
-  return leaves
-    .filter((leaf) => (leaf.indicator ? Number(counts?.[leaf.indicator] ?? 0) > 0 : false))
-    .map((leaf) => leaf.tone);
+  const retry = leaves.some((leaf) => leaf.retries) ? retryBadge(counts) : null;
+  return [
+    ...leaves
+      .filter((leaf) => (leaf.indicator ? Number(counts?.[leaf.indicator] ?? 0) > 0 : false))
+      .map((leaf) => leaf.tone),
+    // A collapsed Changes group says a retry, or a give-up, in its dot too.
+    ...(retry ? [retry.tone] : []),
+  ];
 }

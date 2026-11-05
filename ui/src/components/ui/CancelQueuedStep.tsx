@@ -18,7 +18,7 @@ import { settleIndicators } from "@/lib/queries/useIndicators";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { ActionForecast } from "@/components/ui/ActionOutcome";
 import { FORECAST } from "@/lib/outcome";
-import { roleName } from "@/lib/names";
+import { personOr, roleName } from "@/lib/names";
 
 /**
  * Undoing a change that's still waiting (A-04 §14, proposed/CancelQueuedStep.md).
@@ -83,7 +83,7 @@ const isRemoval = (change: QueuedChange) => change.op_type === "revoke";
 function useWho() {
   const resolver = useNameResolver();
   return {
-    person: (id: string) => resolver.resolveUser(id).value?.display_name ?? "this person",
+    person: (id: string) => personOr(resolver.resolveUser(id).value?.display_name),
     queuer: (change: QueuedChange) => {
       if (change.initiated_by_name) return change.initiated_by_name;
       if (!change.initiated_by || change.initiated_by === "system") return "Syndra";

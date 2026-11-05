@@ -30,6 +30,7 @@ const KINDS: Record<WriteKind, { rail: boolean }> = {
   storageCredential: { rail: false },
   terms: { rail: false },
   welcomeClaims: { rail: false },
+  retriesSeen: { rail: true },
 };
 
 const has = (keys: readonly unknown[][], key: readonly unknown[]) =>

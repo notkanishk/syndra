@@ -18,7 +18,7 @@
   - `handlers/discovery_grants_test.go`: a role a bundle gives is kept, an unoffered or already-held role is refused, replace;
   - `handlers/discovery_roles_test.go`;
   - UI: `deleteRole.test.tsx`, `revokeGrant.test.tsx`.
-- [ ] 1.13 `handlers/roles.go` (`POST /api/v1/roles`) to answer through `writeRoleWriteError`, so both screens answer refusals alike (it is not a W1a file) #ready-for-agent
+- [x] 1.13 `handlers/roles.go` (`POST /api/v1/roles`) answers through `writeRoleWriteError`, so both screens answer refusals alike: a bad key is a 400 (was a 500), a lost reply is OUTCOME_UNKNOWN (was "Something went wrong"). `TestCreateRole_AnswersAsTheProjectsScreenDoes` (release/coherence)
 - [ ] 1.14 Deploy, then delete a role nobody holds on the dev box and confirm both audit rows and the read-back (operator-gated) #ready-for-human
 
 ## W1d · Retries (branch `fix/one-retry-core`)
@@ -35,8 +35,13 @@
 - [x] 1.8b Background drain retries any change already sent that Zitadel didn't take, past its backoff, gives included (`db.ClaimDueRetries`, live test `retry_claims_live_test.go`); never `role_waits`/`manual`; every automatic try audited `propagation.retried`; tick 1m
 - [x] 1.8c Send takes rows in backoff (`ClaimPendingPropagations` ungated); `Delivery.WaitReason()` = `halted:retrying` on Requeued/Errored, with `Drain.Retry`; approve, give, remove, bundle retire carry `retry`
 - [x] 1.8d Vocal: Home's Pending changes block says retrying and gave-up counts (`/governance/indicators` `retrying`, `gave_up`); member storage page says "Not confirmed yet. Syndra is trying again at 14:05." and waits for the server-named next try
-- [ ] 1.8e Rule retire (`app/policies/page.tsx:643-663`) to use `retireOutcome` from `lib/retry.ts` and drop "applied without review" (group B's file) #ready-for-agent
-- [ ] 1.8f The rail's Pending changes badge could turn warn while `retrying > 0` (Sidebar/TouchNav, outside this branch's files) #needs-triage
+- [x] 1.8e Rule retire (`app/policies/page.tsx` `DeleteRuleConfirm`) uses `retireOutcome` from `lib/retry.ts` with the cascade's `drain.retry`; "applied without review" gone (release/coherence; `deleteRule.test.tsx`)
+- [x] 1.8f The rail carries a retry pill (`components/shell/RetryPill.tsx`, `retryBadge`): amber "↻ n" while retrying, danger "! n" once given up, on Home (Basic and Advanced) and on Pending changes (Advanced); a collapsed Changes group lights on a phone (`touch-nav.ts`). `RetryPill.test.tsx` (release/coherence)
+- [x] 1.8h A straight-away send that halted before it went (Zitadel unreachable, a drain error) is retried on its own like a 503 after a send (owner-approved, 5 Nov): `services.Deliver` → `db.ScheduleRetry` counts try 1, sets the next try and `halted:retrying`, never on a row that waits; the outcome carries `retry`. If the schedule can't be written, the halt reason stays and the rows wait for Send. Tests: `TestDeliver_AHaltedSendIsRetriedOnItsOwn`, `TestDeliver_AnUnscheduledHaltSaysWhy`, live `TestScheduleRetry_AHaltedSendGetsANextTry` (release/coherence)
+- [x] 1.8i Retries in Basic too: Home's *Sent again on its own* block (both views) and the rail pill; Home's Pending changes counts only what waits for a send (retrying rows are not "waiting for you"). A give-up stays until **Mark seen** (`POST /propagations/gave-up/seen`, `db.MarkGaveUpSeen`, config `retries_gave_up_seen_at`; before any mark, the last 7 days count). Tests: `HomeRetries.test.tsx` (both views), `TestHandleMarkGaveUpSeen`, live `TestCountRetries_AGiveUpStaysUntilSeen` (release/coherence)
+- [x] 1.8j Next step or none on every outcome and retry state (owner, 5 Nov): `nextStepOf` + `next` on `ActionOutcome`, `retryNextStep`, drawn by `ActionOutcome` (all placements) and `RetryStatus`; guard `next-step.test.tsx`; copy guide §5 (release/coherence)
+- [x] 1.8k `useWaitsBeforeLine(op)` is exact per act: a give or a removal while Zitadel is down goes on its own; only a role marked to wait waits for Send (was "will wait for you to send" for everything). `WaitsBeforeLine.test.tsx` (release/coherence)
+- [ ] 1.8l `Notice` is a container and does not enforce a next step by construction; its callers carry their own. Audit them screen by screen #needs-triage
 - [ ] 1.8g Deploy, then 503 one give on the dev box (stop Zitadel briefly) and watch it go on its own at the named time; audit shows `propagation.retried` #ready-for-human
 - [ ] 1.9 Move the add-on transport onto `extcall` (W1e) #ready-for-agent
 - [ ] 1.10 Owner: after deploy, watch `[ZITADEL] ... req=` lines during the next Zitadel blip #ready-for-human
@@ -67,7 +72,7 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 
 - [ ] The add-on's `PUT /settings/{name}` does not read the `Idempotency-Key` header (`addons/truenas/settings.go` was outside this wave). Writing the same value twice is harmless today, so nothing breaks, but the key is not deduplicated add-on-side until it does. #ready-for-agent
 - [ ] Create-path home: plan projects a new account's home from the desired state, apply asks `decideHome` (which reads the target). They can still disagree when the folder already exists. Fixing it makes plan read the filesystem for new accounts, which changes plan output, so it was left. #needs-triage
-- [ ] The Unconfirmed changes card (`ui/.../UnconfirmedChanges.tsx`) and `ui/src/lib/audit-vocabulary.ts` have no wording for `lifecycle.set`; it falls back to the default sentence. A lifecycle row that settles `indeterminate` is settled by a person, not from a read. #ready-for-agent
+- [x] (release/coherence: `UnconfirmedChanges.tsx` words `lifecycle.set` as the system's own state, "Set TrueNAS to read-only"; the audit vocabulary already had "a maintenance change") The Unconfirmed changes card (`ui/.../UnconfirmedChanges.tsx`) and `ui/src/lib/audit-vocabulary.ts` have no wording for `lifecycle.set`; it falls back to the default sentence. A lifecycle row that settles `indeterminate` is settled by a person, not from a read. #ready-for-agent
 - [ ] Outcome-to-HTTP mapping per handler (audit family 2, "differs per handler") and "reads drop the breaker reason" are not part of W1e. #needs-triage
 
 ## W2b · One cache refresh (branch `fix/one-refresh-path`)
@@ -92,7 +97,7 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [x] Ids out of the audit CSV name columns (id columns added), People on a target, Unexplained access picker, plan review sort, create-role picker
 - [x] `backend/internal/textsort`; twelve backend name sorts routed through it
 - [x] Guards: `names-one-path.test.ts`, `repoguard/name_sort_test.go`
-- [ ] One person fallback phrase across screens (`this person`, `Somebody`, `They`) #ready-for-agent
+- [x] One person fallback phrase across screens: `personOr` / `UNKNOWN_PERSON` in `lib/names.ts` ("this person", "This person" to open a sentence); ten sites routed; guard in `names-one-path.test.ts` (release/coherence)
 - [ ] Backend returns `("", false)` rather than the id as a name in six places (`directory/zitadel.go:430-436`, `insights_trends.go:240`, `insights_lens.go:165`, `claim_shape.go:644`, `role_members.go:120`, `directory/demo.go:48`) #ready-for-agent
 - [ ] Go `roleLabel` (`services/views.go`) deleted or pinned to `humanizeKey` by a golden test #ready-for-agent
 - [ ] SQL `ORDER BY name` (`db/bundle_includes.go`, `target_bindings.go`, `role_waits.go`): DB collation UNVERIFIED #needs-triage

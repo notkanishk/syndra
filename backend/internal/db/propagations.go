@@ -754,6 +754,43 @@ func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 	return attempts, nil
 }
 
+// ScheduleRetry gives rows a straight-away send left pending, because the send
+// halted before they went (Zitadel unreachable, a drain error), the same
+// schedule a 503 after a send gets: the halted send counts as try 1, the next
+// try is one backoff away, and the background drain (ClaimDueRetries) sends it
+// on its own from then (owner, 5 Nov 2026: any straight-away send that hit a
+// transient failure is retried automatically). It returns the ids it scheduled.
+//
+// Never a row that waits for the operator (stamped role_waits or manual), and
+// never one already scheduled (not_before set): a row the drain requeued after
+// a 503 already counted its try. The background drain probes Zitadel before it
+// claims, so an outage does not spend the budget.
+func ScheduleRetry(ctx context.Context, ids []string, errMsg string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	const q = `UPDATE propagation_outbox
+		SET attempts = attempts + 1, last_error = $2, wait_reason = $3,
+		    not_before = NOW() + make_interval(secs => ($4::float8[])[LEAST(attempts+1, cardinality($4::float8[]))])
+		WHERE id::text = ANY($1) AND status = 'pending' AND not_before IS NULL
+		  AND wait_reason IS DISTINCT FROM 'role_waits' AND wait_reason IS DISTINCT FROM 'manual'
+		RETURNING id::text`
+	rows, err := querier(ctx).Query(ctx, q, ids, errMsg, WaitReasonHalted(HaltRetrying), backoffSchedule())
+	if err != nil {
+		return nil, fmt.Errorf("schedule retry: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("schedule retry: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // backoffSchedule is outboxBackoff's wait, in seconds, after 0..15 spent tries
 // (SQL index n+1). Sixteen reaches the cap many times over.
 func backoffSchedule() []float64 {
@@ -821,18 +858,44 @@ const retryingRow = `status = 'pending' AND attempts > 0 AND not_before IS NOT N
 	AND NOT EXISTS (SELECT 1 FROM role_waits w WHERE w.project_id = propagation_outbox.project_id
 	                AND w.role_key = ANY(propagation_outbox.role_keys))`
 
-// gaveUpWindow is how long a change Syndra gave up on keeps being said on Home
-// and the rail. ponytail: a fixed week, not "until someone has looked"; a
-// per-person seen marker is the upgrade if a week proves wrong.
-const gaveUpWindow = "7 days"
+// ConfigKeyGaveUpSeenAt is when an operator last said they had seen the
+// changes Syndra gave up on (MarkGaveUpSeen). A change it gave up on stays on
+// Home and the rail until then (owner, 5 Nov 2026: "the user should always be
+// in the know"). ponytail: one marker for the team, not per person; the
+// makerspace runs one operator team, and per-person is the upgrade if not.
+const ConfigKeyGaveUpSeenAt = "retries_gave_up_seen_at"
+
+// gaveUpBefore is how far back an unseen give-up counts before anyone has
+// ever marked one seen: a week, so the first deploy does not raise every
+// give-up the outbox ever recorded.
+const gaveUpBefore = "7 days"
+
+// MarkGaveUpSeen records that actor has seen every change Syndra gave up on
+// so far; CountRetries stops counting them. Stamped by the database clock, so
+// it compares with completed_at on the same clock; the text carries its offset.
+func MarkGaveUpSeen(ctx context.Context, actor string) error {
+	_, err := querier(ctx).Exec(ctx, `
+		INSERT INTO config_settings (key, value, updated_by, updated_at)
+		VALUES ($1, NOW()::text, $2, NOW())
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value,
+			updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+		ConfigKeyGaveUpSeenAt, actor)
+	if err != nil {
+		return fmt.Errorf("mark gave-up seen: %w", err)
+	}
+	return nil
+}
 
 // CountRetries counts the changes Syndra is sending again on its own, and the
-// ones it gave up on recently (out of retries), so neither goes unnoticed.
+// ones it gave up on (out of retries) that nobody has marked seen, so neither
+// goes unnoticed.
 func CountRetries(ctx context.Context) (retrying, gaveUp int, err error) {
 	q := `SELECT
 		COUNT(*) FILTER (WHERE ` + retryingRow + `),
 		COUNT(*) FILTER (WHERE status = 'failed' AND last_error LIKE 'out of retries%'
-		                   AND completed_at > NOW() - INTERVAL '` + gaveUpWindow + `')
+		                   AND completed_at > COALESCE(
+		                       (SELECT value::timestamptz FROM config_settings WHERE key = '` + ConfigKeyGaveUpSeenAt + `'),
+		                       NOW() - INTERVAL '` + gaveUpBefore + `'))
 		FROM propagation_outbox`
 	if err := querier(ctx).QueryRow(ctx, q).Scan(&retrying, &gaveUp); err != nil {
 		return 0, 0, fmt.Errorf("count retries: %w", err)

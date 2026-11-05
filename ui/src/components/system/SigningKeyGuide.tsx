@@ -87,7 +87,8 @@ export function replaceResult(r: RotateResult): { outcome: Outcome; word: string
       outcome: {
         kind: "no_change",
         message: r.reason ?? "Zitadel didn't answer, and Syndra couldn't read the key back, so it can't tell whether it was replaced",
-        detail: "The old key keeps working either way. The Action signing key row shows what Syndra reads next.",
+        detail: "The old key keeps working either way.",
+        next: "Check the Action signing key row in a minute. If it still says Not known, press Replace now.",
       },
       word: "Not known",
     };

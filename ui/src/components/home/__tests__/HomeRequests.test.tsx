@@ -112,7 +112,7 @@ describe("deciding a request on Home", () => {
     state.decide.mockResolvedValueOnce({ message: "ok" });
     renderHome();
     fireEvent.click(screen.getByRole("button", { name: "Decline" }));
-    expect((await trueSeat()).textContent).toBe("DeclinedNothing was sent");
+    expect((await trueSeat()).textContent).toBe("DeclinedNothing was sentNothing for you to do.");
   });
 });
 

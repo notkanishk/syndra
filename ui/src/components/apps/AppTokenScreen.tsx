@@ -1,4 +1,5 @@
 "use client";
+import { personOr } from "@/lib/names";
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -150,7 +151,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
     setPersonId(users.data.some((u) => u.id === selfId) ? selfId! : users.data[0].id);
   }, [users.data, selfId, personId]);
   useEffect(() => keepPerson(applicationId, personId), [applicationId, personId]);
-  const person = users.data.find((u) => u.id === personId)?.name ?? "this person";
+  const person = personOr(users.data.find((u) => u.id === personId)?.name);
 
   // A draft survives leaving the page and coming back, until it is saved or discarded (A-19 P10.6).
   const [restored] = useState(() => readKeptDraft(applicationId));

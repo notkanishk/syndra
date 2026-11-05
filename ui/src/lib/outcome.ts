@@ -49,6 +49,44 @@ export interface ActionOutcome {
    * The place to check (MAY_HAVE_GONE_THROUGH), said by {@link partialSentence}.
    */
   partial?: string;
+  /**
+   * The step this outcome leaves, or that there is none, when the caller knows
+   * better than the default for its kind ({@link nextStepOf}). Every outcome
+   * ends on one (owner, 5 Nov 2026: "clear next steps or lack thereof").
+   */
+  next?: string;
+}
+
+/** The explicit "no step left" (copy guide §2): said, never implied by silence. */
+export const NOTHING_TO_DO = "Nothing for you to do.";
+
+/** The step a change waiting for its send leaves; ActionOutcome draws it as the NextStep link. */
+export const SEND_IT = "Press Send on Pending changes.";
+
+/** A change that goes on its own, with nothing to say about when. */
+export const SENDS_ITSELF_NEXT = `${NOTHING_TO_DO} Syndra sends it on its own and says on Home if it gives up.`;
+
+/**
+ * The step an outcome leaves, or that there is none. Never empty: the guard
+ * test (`next-step.test.ts`) walks every kind. The caller's own `next` wins;
+ * otherwise the kind decides.
+ */
+export function nextStepOf(outcome: ActionOutcome): string {
+  if (outcome.next) return outcome.next;
+  if (outcome.partial) return partialSentence(outcome.partial);
+  switch (outcome.kind) {
+    case "applied":
+    case "no_change":
+      return NOTHING_TO_DO;
+    case "queued":
+      return outcome.sendsItself ? SENDS_ITSELF_NEXT : SEND_IT;
+    case "refused":
+      return outcome.sessionEnded
+        ? "Sign in again, then press the same button once more."
+        : "Change what it says above, then try again.";
+    case "failed":
+      return nextStep(Boolean(outcome.requestId));
+  }
 }
 
 /**
@@ -189,6 +227,14 @@ export function outcomeFromError(error: unknown): ActionOutcome {
             : undefined,
     requestId: typeof requestId === "string" ? requestId : undefined,
     sessionEnded: sessionEnded || undefined,
+    // The step, by what refused it; the rest fall to nextStepOf's kind default.
+    next: offline
+      ? "Try again once you are back online."
+      : error instanceof ApiError && error.status === 403
+        ? "Ask someone who runs Syndra to do it, or to give you access."
+        : error instanceof ApiError && error.status === 404
+          ? "Reload the page to see what is there now."
+          : undefined,
   };
 }
 

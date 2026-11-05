@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { request } from "@/lib/api-client";
 import { formatShortDate } from "@/lib/format";
-import { roleName } from "@/lib/names";
+import { personOr, roleName } from "@/lib/names";
 import { FORECAST, forecastFor, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -221,7 +221,7 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
           word: "Approved",
           outcome: approvalOutcome(
             result?.wait_reason,
-            resolver.resolveUser(entry.requester_id).value?.display_name || "They",
+            personOr(resolver.resolveUser(entry.requester_id).value?.display_name, true),
             roleName(resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name, entry.role_key),
             result,
             (await gifts).map((row) => ({

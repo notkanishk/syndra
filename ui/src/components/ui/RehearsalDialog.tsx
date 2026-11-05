@@ -179,7 +179,7 @@ export function queuedNote(plan: BulkPlan, system: string = "Zitadel"): string |
   if (plan.summary.queued === 0) return undefined;
   const revocation = REVOKING_OPS.has(plan.op);
   return revocation
-    ? `Recorded in Syndra, not yet sent to ${system}. Syndra sends revocations on their own, every few minutes; until then the person still has the access.`
+    ? `Recorded in Syndra, not yet sent to ${system}. Syndra sends revocations on their own, within a minute; until then the person still has the access.`
     : `Recorded in Syndra and waiting for you to send to ${system}. Nothing has changed there yet; send it from Pending changes.`;
 }
 

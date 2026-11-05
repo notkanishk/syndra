@@ -180,8 +180,8 @@ describe("a control states its role in the vocabulary the product already has", 
     const ARGUED: Record<string, string> = {
       "Record the owner":
         "the other claimant stops holding the account in Syndra, immediately and without being told",
-      // A-17 §2.22: the replacement drops every role not in the new list, straight in Zitadel.
-      "Replace roles in Zitadel": "every role left out of the new list is revoked in Zitadel, with no record in Syndra",
+      // A-17 §2.22, W8: the replacement takes away every role not in the new list (handleUpdateZitadelGrant → removeRoles).
+      "Replace roles in Zitadel": "every role left out of the new list is revoked, unless a bundle or a rule still gives it; Syndra records each removal and sends it through its own pipe, as a person's page does",
       "Accept this log and start over":
         "the only act in the product that discards evidence — the missing records stay missing and Syndra stops being able to say so",
     };

@@ -8,6 +8,12 @@ const state = vi.hoisted(() => ({
   update: vi.fn(),
   assign: vi.fn(),
   waits: undefined as Array<{ project_id: string; role_key: string }> | undefined,
+  rulePreview: vi.fn(),
+}));
+
+// The same endpoint the person page's give reads (useRulePreview).
+vi.mock("@/lib/queries/useRulePreview", () => ({
+  useRulePreview: (...args: unknown[]) => state.rulePreview(...args),
 }));
 
 vi.mock("@/lib/queries/useUpstream", () => ({
@@ -24,7 +30,7 @@ vi.mock("@/lib/queries/useUpstream", () => ({
     refetch: () => {},
   }),
   useUpstreamProjects: () => ({ data: { items: [{ id: "pLaser", name: "Laser Lab" }] } }),
-  useUpstreamProjectRoles: () => ({ data: { items: [] } }),
+  useUpstreamProjectRoles: () => ({ data: { items: [{ key: "trained" }, { key: "keyholder" }] } }),
   useUpstreamAssignGrant: () => ({ mutateAsync: state.assign, isPending: false }),
   useUpstreamUpdateGrant: () => ({ mutateAsync: state.update, isPending: false }),
   useUpstreamRemoveGrant: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -44,6 +50,31 @@ beforeEach(() => {
   state.update = vi.fn();
   state.assign = vi.fn();
   state.waits = [];
+  state.rulePreview = vi.fn().mockReturnValue({ data: [], isLoading: false, isError: false });
+});
+
+// Coherence audit C2: the give names what the automatic rules also give,
+// before the click, as the person page's give does.
+describe("giving roles in Zitadel names what rules also give", () => {
+  it("asks the shared preview for the roles that exist and lists its sentences", () => {
+    state.rulePreview = vi.fn().mockReturnValue({
+      data: [{ project_id: "pShop", role_key: "bench", rule_id: "r1", sentence: "Also gives Bench in Workshop, by the automatic rule from Trained." }],
+      isLoading: false,
+      isError: false,
+    });
+    render(<UpstreamUsersPage />);
+    const dialog = openGive("trained, nonsense");
+    expect(state.rulePreview).toHaveBeenLastCalledWith("u1", "pLaser", ["trained"]);
+    expect(within(dialog).getByTestId("rule-preview")).toHaveTextContent("Also gives Bench in Workshop, by the automatic rule from Trained.");
+  });
+
+  it("holds the give while the preview is loading", () => {
+    state.rulePreview = vi.fn().mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    render(<UpstreamUsersPage />);
+    const dialog = openGive("trained");
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    expect(within(dialog).getByRole("button", { name: "Give roles in Zitadel" })).toBeDisabled();
+  });
 });
 
 function submitEdit() {
