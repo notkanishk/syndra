@@ -1,6 +1,6 @@
 "use client";
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
@@ -177,13 +177,20 @@ export function useUsers(q: string = "") {
   });
 }
 
+const fetchUserAccess = async (userId: string): Promise<UserAccessView | null> => {
+  if (!userId) return null;
+  return await request<UserAccessView>(`/users/${userId}/access`);
+};
+
+/** Warms a person's access read (A-19 P9). The same key and read the page uses, so its first frame is complete. */
+export function prefetchUserAccess(qc: QueryClient, userId: string) {
+  return qc.prefetchQuery({ queryKey: KEYS.access(userId), queryFn: () => fetchUserAccess(userId) });
+}
+
 export function useUserAccess(userId: string) {
   return useQuery({
     queryKey: KEYS.access(userId),
-    queryFn: async (): Promise<UserAccessView | null> => {
-      if (!userId) return null;
-      return await request<UserAccessView>(`/users/${userId}/access`);
-    },
+    queryFn: () => fetchUserAccess(userId),
     enabled: !!userId,
     // Bundles and projects A to Z (RULES.md); the roles inside go by key.
     select: (view) =>

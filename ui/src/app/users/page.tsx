@@ -194,6 +194,8 @@ export default function PeoplePage() {
   const [sort, setSort, view] = useSort<PeopleSort>(
     // Who just arrived, from Home's "and N more" (A-07 §33).
     filters.bundle === NO_BUNDLE ? "joined" : "person",
+    // A link that chose its own order or filters is not a return to your last view.
+    { list: "people", keys: ["person", "bundles", "attention", "joined"], when: !hasAnyFilter(filters) },
   );
   const rows = useMemo(
     () => orderBy(applyFilters(all, filters, holders), view.sort, PEOPLE_SORT),

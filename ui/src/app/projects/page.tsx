@@ -39,7 +39,7 @@ export default function ProjectsPage() {
   const projects = useProjects();
   const apps = useApplications();
   const [query, setQuery] = useState("");
-  const [sort, setSort, view] = useSort<ProjectSort>("project");
+  const [sort, setSort, view] = useSort<ProjectSort>("project", { list: "projects", keys: ["project", "people"] });
 
   const appsByProject = useMemo(() => {
     const map = new Map<string, string[]>();
