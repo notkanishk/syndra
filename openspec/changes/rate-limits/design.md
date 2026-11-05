@@ -35,7 +35,7 @@ The limiter does not skip the keyring refresh for a limited source. Skipping it 
 ## Source address
 
 `ratelimit.ClientIP`:
-- When the peer is private or loopback (Caddy at 192.168.4.5, or Docker's port mapping), the source is the last `X-Forwarded-For` entry, the one the nearest proxy wrote.
+- When the peer is private or loopback (Caddy at the proxy host, or Docker's port mapping), the source is the last `X-Forwarded-For` entry, the one the nearest proxy wrote.
 - From any other peer, the header is ignored.
 
 A lying private peer can only move failed calls between buckets.
