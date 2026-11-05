@@ -387,11 +387,26 @@ describe("MemberAccess header line and cards", () => {
 });
 
 describe("MemberAccess first welcome", () => {
-  it("says the welcome on the first visit, in the line's seat, and never otherwise", () => {
+  it("is the title's second sentence on the first visit, and never otherwise", () => {
     const { unmount } = render(<MemberAccess session={{ ...session, firstVisit: true }} />);
-    expect(screen.getByText(/Welcome to Syndra\. It keeps the makerspace.s list of who can use what, and why\./)).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/Welcome to Syndra\.$/);
+    expect(screen.queryByText(/Here.s what you can use/)).toBeNull();
     unmount();
     render(<MemberAccess session={session} />);
     expect(screen.queryByText(/Welcome to Syndra/)).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/Here.s what you can use\./);
+  });
+
+  it("never adds a row: the ladder still speaks below, and says what Syndra is when it has nothing else", () => {
+    reset();
+    access.value = view(COMPLETE, ["laser", "mill"]);
+    const { container, unmount } = render(<MemberAccess session={session} />);
+    const rows = (c: HTMLElement) => c.querySelector("h1")!.parentElement!.children.length;
+    const before = rows(container);
+    unmount();
+    const first = render(<MemberAccess session={{ ...session, firstVisit: true }} />);
+    expect(rows(first.container)).toBe(before);
+    expect(screen.getByText(/It keeps the makerspace.s list of who can use what, and why\./)).toBeTruthy();
+    expect(screen.queryByText("Nothing needs you right now.")).toBeNull();
   });
 });

@@ -24,12 +24,12 @@ import { useOnline } from "@/lib/useOnline";
  * Notice that already leaves the moment the network returns is a control for
  * something that happens by itself.
  */
-export function OfflineBanner() {
+export function OfflineBanner({ under = false }: { under?: boolean } = {}) {
   const online = useOnline();
 
   return (
     <Unfold open={!online}>
-      <div className="pb-4">
+      <div className={under ? "pt-4" : "pb-4"}>
         <Notice tone="neutral" title="No network connection.">
           What you see is the last thing Syndra loaded, and it may be out of date. You can&apos;t
           make changes until the connection is back. Anything you try is stopped before it is

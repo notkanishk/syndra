@@ -24,4 +24,7 @@ export function greeting(now: Date): string {
 }
 
 /** The one-time welcome (A-18 §4 idea 8), said on the first visit only. */
-export const WELCOME = "Welcome to Syndra. It keeps the makerspace\u2019s list of who can use what, and why.";
+export const WELCOME = "Welcome to Syndra.";
+
+/** What Syndra is: the first visit's calm rung (A-20 P2), where the ladder has nothing else to say. */
+export const ABOUT = "It keeps the makerspace\u2019s list of who can use what, and why.";
