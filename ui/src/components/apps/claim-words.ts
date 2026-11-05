@@ -174,6 +174,17 @@ function check4(e: Explanation, ctx: CheckContext): TrailCheck {
   const suggested = fact<string>(e, 3, "suggested_template");
   const tplName = (id?: string) => ctx.templates.find((t) => t.id === id)?.name ?? id ?? "";
   const tone = STATE_TONE[c.state];
+  // Zitadel before 4.0 doesn't name the app, so the data plane can't pick its shape (ADR-003).
+  const unnamed = fact<string[]>(e, 3, "client_id_missing") ?? [];
+  if (unnamed.length) {
+    return {
+      tone,
+      sentence: `Zitadel doesn't say which app is signing in, so ${ctx.app} gets ${ctx.project}'s default, not this shape.`,
+      faint: [
+        `Zitadel's newest calls for ${list(unnamed.map(stepName))} named no app. Zitadel names it from version 4.0: upgrade Zitadel, then check again.`,
+      ],
+    };
+  }
   if (ctx.draft && fact<boolean>(e, 3, "draft")) {
     const leftOut = ctx.draft.leftOut?.length
       ? ` ${list(ctx.draft.leftOut.map((k) => `\`${k}\``))} ${ctx.draft.leftOut.length === 1 ? "is" : "are"} left out until it has a role from ${ctx.project}.`
@@ -211,6 +222,40 @@ function check4(e: Explanation, ctx: CheckContext): TrailCheck {
 
 const ZITADEL_ADDS = "Zitadel adds `sub`, `email`, `name` and `preferred_username` itself.";
 
+/** A data-plane step as a person reads it. */
+export function stepName(fn: string): string {
+  if (fn === "function/preaccesstoken") return "the access token";
+  if (fn === "function/preuserinfo") return "userinfo";
+  return "the token";
+}
+
+/**
+ * The page's one notice when Zitadel won't put the app's project in its
+ * tokens, so Syndra would deliver nothing to anyone (ADR-002): the project's
+ * roles aren't asserted and no call was served lately (so the app asks for no
+ * role scopes either), or the newest call asked for more than one project.
+ * Read off the same trail as the preview; null when neither holds.
+ */
+export function listingNotice(e: Explanation | undefined, ctx: CheckContext): { title: string; body: string; link?: { label: string; href: string } } | null {
+  if (!e || ctx.profile.claims.length === 0) return null;
+  const { app, project } = ctx;
+  const title = `${app} gets nothing from Syndra.`;
+  if (e.checks[5]?.facts?.last_outcome === "refused_cross_project") {
+    return {
+      title,
+      body: `${app}'s last sign-in asked Zitadel for more than one project's roles, and Syndra sends claims for one project per token. Remove the extra \`urn:zitadel:iam:org:project:id:…:aud\` scope from what ${app} asks Zitadel for, or give the role in ${project} with a rule.`,
+    };
+  }
+  if (fact<boolean>(e, 0, "project_role_assertion") === false && e.checks[5]?.state !== "pass") {
+    return {
+      title,
+      body: `Zitadel doesn't list ${project} in ${app}'s tokens. In Zitadel, turn on "Assert roles on authentication" for ${project}, or have ${app} ask for role scopes. Then check again.`,
+      link: ctx.links?.project ? { label: `Open ${project} in Zitadel`, href: ctx.links.project } : undefined,
+    };
+  }
+  return null;
+}
+
 /**
  * Check 5's sentence (A-15 §5), and `foot`, the one faint line under the token
  * that sits below the trail. Whatever the foot doesn't say, the check does.
@@ -220,6 +265,15 @@ export function check5(e: Explanation, ctx: CheckContext, asDraft: boolean): Tra
   const tone = STATE_TONE[c.state];
   const keys = list(Object.keys(e.token ?? {}).map((k) => `\`${k}\``));
   const answers = asDraft ? "Syndra would answer with" : "Syndra answers with";
+  if (c.state === "none" && c.facts?.unlisted) {
+    // The door answers a token that names no project with nothing (ADR-002); so does the preview.
+    return {
+      tone,
+      sentence: `Zitadel doesn't list ${ctx.project} in ${ctx.person}'s token, so Syndra adds nothing.`,
+      faint: [`Zitadel lists ${ctx.project} only for people who hold a role in it.`],
+      foot: ZITADEL_ADDS,
+    };
+  }
   if (c.state === "none") {
     return {
       tone,

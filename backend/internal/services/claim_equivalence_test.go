@@ -156,9 +156,14 @@ func randomGrants(rng *rand.Rand) []db.ObservedGrant {
 	}
 	rng.Shuffle(len(roles), func(i, j int) { roles[i], roles[j] = roles[j], roles[i] })
 	cut := rng.IntN(len(roles) + 1)
+	other := db.ObservedGrant{UserID: "u1", ProjectID: "pOther", RoleKeys: []string{"admin"}}
+	if rng.IntN(5) == 0 {
+		// No grant in the project at all: Zitadel lists no project for it.
+		return []db.ObservedGrant{other}
+	}
 	return []db.ObservedGrant{
 		{UserID: "u1", ProjectID: "pEq", RoleKeys: roles[:cut]},
-		{UserID: "u1", ProjectID: "pOther", RoleKeys: []string{"admin"}},
+		other,
 		{UserID: "u1", ProjectID: "pEq", RoleKeys: roles[cut:]},
 	}
 }
@@ -183,7 +188,7 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 	functions := []string{claims.FunctionPreAccessToken, claims.FunctionPreUserinfo, "function/somethingnew"}
 	clients := []struct{ client, app string }{{"cOwn", "aOwn"}, {"cDef", "aDef"}, {"", "aDef"}, {"cElse", "aDef"}}
 
-	compared, landed := 0, 0
+	compared, landed, unlisted := 0, 0, 0
 	for i := 0; i < 400; i++ {
 		s.versions, s.defaults = map[string][]db.ClaimShapeVersion{}, map[string]db.ClaimProfileRow{}
 		if rng.IntN(2) == 0 {
@@ -204,16 +209,27 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 		// in the preview, the payload's user (query.User's keys) live. The
 		// live side decodes the payload exactly as the door does.
 		equivUser = randomPerson(rng)
+		// The payload lists only the token's role audience, the app's own
+		// project (ADR-002): never pOther, and no key at all when Zitadel
+		// holds no grant for them in pEq.
 		var rows []map[string]any
 		for _, g := range grants {
-			rows = append(rows, map[string]any{"project_id": g.ProjectID, "roles": g.RoleKeys})
+			if g.ProjectID == "pEq" {
+				rows = append(rows, map[string]any{"project_id": g.ProjectID, "roles": g.RoleKeys})
+			}
 		}
-		body, _ := json.Marshal(map[string]any{"user": payloadUser(equivUser), "user_grants": rows})
-		req, bad := claimserve.Decode(body)
-		if bad != "" {
-			t.Fatalf("case %d: the payload decoded %s", i, bad)
+		payload := func(client, function string) claimserve.Request {
+			m := map[string]any{"function": function, "application": map[string]any{"client_id": client}, "user": payloadUser(equivUser)}
+			if rows != nil {
+				m["user_grants"] = rows
+			}
+			body, _ := json.Marshal(m)
+			req, bad := claimserve.Decode(body)
+			if bad != "" {
+				t.Fatalf("case %d: the payload decoded %s", i, bad)
+			}
+			return req
 		}
-		listed := req.Roles("pEq")
 		built := rng.IntN(4) > 0 // else no facts at all: answered over the roles alone
 		if !built {
 			delete(s.stored, "u1:pEq")
@@ -236,10 +252,11 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 		if err := plane.Poll(ctx); err != nil {
 			t.Fatal(err)
 		}
+		door := &claimserve.Door{Plane: func() *claimserve.Plane { return plane }}
 
 		for _, c := range clients {
 			function := functions[rng.IntN(len(functions))]
-			got := plane.Answer(ctx, "u1", "pEq", c.client, function, listed, req.User.Identity)
+			got := door.Answer(ctx, payload(c.client, function))
 
 			pv, err := PreviewAppClaimShape(ctx, c.app, PreviewRequest{UserIDs: []string{"u1"}})
 			if err != nil {
@@ -256,11 +273,20 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 			if string(gj) != string(wj) {
 				t.Fatalf("case %d, client %q, %s:\nsnapshot %s\npreview  %s\nfacts %+v", i, c.client, function, gj, wj, facts)
 			}
+			// The live check reads the same answer as a debug capture and
+			// must call it a match.
+			answer, _ := json.Marshal(claimserve.Response{AppendClaims: got.Claims})
+			if lc := CompareServed(pv.People[0].Now, function, answer, time.Now()); !lc.Match {
+				t.Fatalf("case %d: the live check calls an equal answer a mismatch: %+v", i, lc)
+			}
+			if rows == nil {
+				unlisted++
+			}
 			compared++
 		}
 	}
-	t.Logf("measured: %d random (shape, facts, function, client) cases equal, %d of them landing", compared, landed)
-	if landed < compared/3 {
-		t.Fatalf("only %d of %d cases landed: the property is barely exercised", landed, compared)
+	t.Logf("measured: %d random (shape, facts, function, client) cases equal, %d of them landing, %d with no project listed", compared, landed, unlisted)
+	if landed < compared/3 || unlisted == 0 {
+		t.Fatalf("only %d of %d cases landed, %d unlisted: the property is barely exercised", landed, compared, unlisted)
 	}
 }
