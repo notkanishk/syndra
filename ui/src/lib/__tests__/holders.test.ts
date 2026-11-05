@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { holdersLine } from "@/lib/holders";
+import { heldSortKey, holdersLine, peopleSuffix } from "@/lib/holders";
 
 describe("holdersLine, overlap unknown", () => {
   // undefined confirmed is "this caller does not compute the overlap", which
@@ -14,12 +14,26 @@ describe("holdersLine, overlap unknown", () => {
 });
 
 describe("holdersLine", () => {
-  it("reads as unchecked when Zitadel has never been read", () => {
+  it("reads as unchecked when Zitadel has never been read, the recorded number only as the note", () => {
     expect(holdersLine(5, undefined, undefined)).toEqual({
-      headline: "5",
-      note: "not checked yet",
+      headline: "—",
+      note: "not checked yet · 5 given by Syndra",
       tone: "muted",
     });
+    expect(holdersLine(0, undefined, undefined)).toEqual({ headline: "—", note: "not checked yet", tone: "muted" });
+  });
+
+  it("says no noun after a count not checked", () => {
+    expect(peopleSuffix("—")).toBe("");
+    expect(peopleSuffix("1")).toBe(" person");
+    expect(peopleSuffix("4")).toBe(" people");
+  });
+
+  it("sorts by what Zitadel shows, not checked below zero", () => {
+    expect(heldSortKey(3)).toBe(3);
+    expect(heldSortKey(0)).toBe(0);
+    expect(heldSortKey(undefined)).toBe(-1);
+    expect(heldSortKey(null)).toBe(-1);
   });
 
   it("says nothing when observed matches what's recorded", () => {

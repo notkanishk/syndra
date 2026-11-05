@@ -334,7 +334,7 @@ function DecisionForm({
           {(finding.policy ?? []).map((p) => (
             <span key={p.mapping_id} className="text-faint">
               <RoleRef projectId={p.project_id} roleKey={p.role_key} /> gives the {p.value} group ·{" "}
-              {p.holders} {p.holders === 1 ? "person holds" : "people hold"} that role
+              Syndra gives that role to {p.holders} {p.holders === 1 ? "person" : "people"}
             </span>
           ))}
         </div>

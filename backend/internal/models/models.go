@@ -318,6 +318,10 @@ type EffectiveRole struct {
 	RoleKey             string       `json:"role_key"`
 	IsSource            bool         `json:"is_source"`
 	Reasons             []RoleReason `json:"reasons"`
+	// Ends is when the role ends for this person, from access.Ends: the latest
+	// end among every source, a rule-derived role ending with its source. nil
+	// means it never ends. The token's role_ends is the same answer.
+	Ends *time.Time `json:"ends,omitempty"`
 }
 
 type ProjectAccessView struct {

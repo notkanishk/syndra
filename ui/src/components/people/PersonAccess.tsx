@@ -103,6 +103,8 @@ type Confirmation = "read" | "unreachable" | "unknown";
 interface AccessRole {
   role_key: string;
   reasons: RoleReason[];
+  /** When it ends, from every source (a rule role with its source); absent: never. */
+  ends?: string | null;
 }
 
 /**
@@ -904,7 +906,10 @@ function RoleGroup({
         const grant = grantsByRole.get(`${projectId}::${role.role_key}`);
         const sources = orderedSources(role.reasons);
         const strongest = sources[0];
-        const expires = grant?.expires_at ?? null;
+        // When the role ends for them, from every source (the backend's
+        // access.Ends, the token's role_ends): a rule role ends with its
+        // source, and a dated grant of a role a bundle also gives never ends.
+        const expires = role.ends ?? null;
         const remaining = daysUntil(expires);
         // Nothing that gives this role has left the queue, so the row is a
         // record of a decision and not a description of their access. It takes

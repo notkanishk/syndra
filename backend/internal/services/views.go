@@ -1440,6 +1440,14 @@ func topologyFromSnapshot(snap *accessSnapshot) (models.TopologyGraph, error) {
 
 func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
 	roleMap := make(map[roleKey]*models.EffectiveRole)
+	// Each base role with when it ends (zero: never), for access.Ends.
+	base := map[roleKey]time.Time{}
+	hold := func(k roleKey, end time.Time) {
+		if cur, ok := base[k]; ok {
+			end = access.Later(cur, end)
+		}
+		base[k] = end
+	}
 
 	directGrants, err := svcGetDirectGrantsForUser(ctx, userID, false)
 	if err != nil {
@@ -1447,6 +1455,11 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 	}
 	for _, grant := range directGrants {
 		key := roleKey{projectID: grant.ProjectID, roleKey: grant.RoleKey}
+		var end time.Time
+		if grant.ExpiresAt != nil {
+			end = *grant.ExpiresAt
+		}
+		hold(key, end)
 		description := "Direct Zitadel grant"
 		if grant.Reason != "" {
 			description = grant.Reason
@@ -1487,6 +1500,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		roles := byBundle[bundle.ID]
 		for _, role := range roles {
 			key := roleKey{projectID: role.ProjectID, roleKey: role.RoleKey}
+			hold(key, time.Time{})
 			reason := models.RoleReason{
 				Kind:        "bundle",
 				Description: fmt.Sprintf("Given by bundle %s v%d", bundle.Name, bundle.PinnedVersion),
@@ -1506,20 +1520,27 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		return nil, nil, err
 	}
 
-	// What the chains reach, and which rules fire, is the access core's to
-	// say (the one implementation); this only names, for each role reached,
-	// every rule that reaches it.
-	held := make(map[roleKey]bool, len(roleMap))
-	for k := range roleMap {
-		held[k] = true
+	// What the chains reach, when each role ends, and which rules fire, is
+	// the access core's to say (the one implementation, which the token
+	// compiler also calls); this only names, for each role reached, every rule
+	// that reaches it.
+	dated := access.Ends(base, rules, newRoleKey)
+	closure := make(map[roleKey]bool, len(dated))
+	for k := range dated {
+		closure[k] = true
 	}
-	for _, rule := range access.Fired(effectiveClosure(held, rules), rules, newRoleKey) {
+	for _, rule := range access.Fired(closure, rules, newRoleKey) {
 		upsertRole(ctx, roleMap, roleKey{projectID: rule.TargetProject, roleKey: rule.TargetRole}, false, models.RoleReason{
 			Kind:           "mapping",
 			Description:    fmt.Sprintf("Derived from %s:%s", rule.SourceProject, rule.SourceRole),
 			TriggerProject: rule.SourceProject,
 			TriggerRole:    rule.SourceRole,
 		})
+	}
+	for k, r := range roleMap {
+		if end := dated[k]; !end.IsZero() {
+			r.Ends = &end
+		}
 	}
 
 	return roleMap, bundles, nil

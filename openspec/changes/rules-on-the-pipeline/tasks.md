@@ -28,10 +28,10 @@
 - [ ] 5.3 [ready-for-human] Staging runs 000078 on last night's copy of production before production does
 
 ## 6. Next wave: the other "who holds what" readers (audit family 3, not in this change)
-- [ ] 6.1 [needs-triage] Compiler forces rule-derived roles endless (`cache/compiler.go`, `ponytail:` note): the token says a rule role never ends when its source does
+- [x] 6.1 (one-path W2a) Compiler forces rule-derived roles endless (`cache/compiler.go`, `ponytail:` note): the token says a rule role never ends when its source does
 - [ ] 6.2 [needs-triage] Seeds differ: the cascade subtracts queued revocations, the compiler and `collectUserRoles` do not (one `BaseHoldings` with options, per the audit)
-- [ ] 6.3 [needs-triage] `MappingHolders` counts departed people and people whose removal is queued
-- [ ] 6.4 [needs-triage] `ExpectedViaRule` (drift) seeds observed Zitadel grants while the person view uses records only; a reverse walk, not moved onto `RuleClosure`
-- [ ] 6.5 [needs-triage] UI one-hop previews: `app/policies/page.tsx` (~325), `components/people/ManageBundles.tsx` (~210, first matching rule only), `components/bundles/BundlePage.tsx` (~903); replace with one backend preview
+- [x] 6.3 (one-path W2a; departed only, queued removals stay a cascade concern, see one-path design) `MappingHolders` counts departed people and people whose removal is queued
+- [x] 6.4 (one-path W2a, `services.RuleDerived`) `ExpectedViaRule` (drift) seeds observed Zitadel grants while the person view uses records only; a reverse walk, not moved onto `RuleClosure`
+- [x] 6.5 (one-path W2a, the what-if) UI one-hop previews: `app/policies/page.tsx` (~325), `components/people/ManageBundles.tsx` (~210, first matching rule only), `components/bundles/BundlePage.tsx` (~903); replace with one backend preview
 - [ ] 6.6 [needs-triage] `RequestHolding` reads no bundles or rules; `GrantDirectAccess` `noteOf` ignores queued revocations; `observedRolesByProject` overwrites two grants in one project; working-copy bundle readers ignore includes and pins
 - [ ] 6.7 [needs-triage] `?apply=true` and `switchedOver` (the legacy direct-grant wait) and `PUT /config/confirmation-model` are dead under roles; remove with the switch-over UI's last trace

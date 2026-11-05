@@ -27,6 +27,7 @@ import {
 } from "@/lib/queries/useBundles";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
 import { useUserAccess } from "@/lib/queries/useUsers";
+import { holdersLine, holdersToneClass, peopleSuffix } from "@/lib/holders";
 
 /**
  * S1 · Bundles (1c): a list, like Projects, and a page for each bundle.
@@ -112,6 +113,8 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
     notes.push({ text: `${n} ${n === 1 ? "person" : "people"} on an older version`, tone: "text-warn-text" });
   }
   if (bundle.is_welcome) notes.push({ text: "Given to everyone who joins", tone: "text-faint" });
+  const observed = bundle.observed_holder_count ?? undefined;
+  const people = holdersLine(bundle.holder_count ?? 0, observed, observed);
   return (
     <div className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-1 px-5 py-3.5">
       <div className="w-[min(260px,40%)] min-w-0">
@@ -134,9 +137,13 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
         {bundle.role_count ?? "None"}
         <span className="text-[13px] font-normal text-faint tablet:hidden">{bundle.role_count === 1 ? " role" : " roles"}</span>
       </span>
+      {/* People is who Zitadel shows holding it; the assignments only explain it. */}
       <span className="text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:text-right">
-        {bundle.holder_count ?? 0}
-        <span className="text-[13px] font-normal text-faint tablet:hidden">{bundle.holder_count === 1 ? " person" : " people"}</span>
+        {people.headline}
+        <span className="text-[13px] font-normal text-faint tablet:hidden">{peopleSuffix(people.headline)}</span>
+        {people.note && (
+          <span className={`block text-[12.5px] font-normal ${holdersToneClass[people.tone]}`}>{people.note}</span>
+        )}
       </span>
     </div>
   );

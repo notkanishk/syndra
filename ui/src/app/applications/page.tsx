@@ -11,7 +11,7 @@ import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName } from "@/components/names";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
-import { holdersLine, holdersToneClass } from "@/lib/holders";
+import { heldSortKey, holdersLine, holdersToneClass, peopleSuffix } from "@/lib/holders";
 import { useApplications, type ApplicationView } from "@/lib/queries/useApplications";
 import { useClaimTemplates, type ClaimTemplate } from "@/lib/queries/useClaimShape";
 
@@ -19,8 +19,8 @@ type AppSort = "app" | "people";
 
 const APP_SORT: Record<AppSort, (entry: ApplicationView) => string | number> = {
   app: (entry) => entry.application.name,
-  // The number the row shows: what Zitadel holds, else what Syndra recorded.
-  people: (entry) => entry.observed_user_count ?? entry.assigned_user_count,
+  // What Zitadel holds; not checked sorts last, never by the recorded number.
+  people: (entry) => heldSortKey(entry.observed_user_count),
 };
 
 /**
@@ -142,7 +142,7 @@ export default function AppsPage() {
               <span className="text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">
                 {people.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
-                  {people.headline === "1" ? " person" : " people"}
+                  {peopleSuffix(people.headline)}
                 </span>
                 {people.note && (
                   <span className={`block text-[12.5px] ${holdersToneClass[people.tone]}`}>

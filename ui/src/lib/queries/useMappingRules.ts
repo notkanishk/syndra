@@ -10,8 +10,10 @@ export interface MappingRuleRow {
   source_role: string;
   target_project: string;
   target_role: string;
-  /** How many people hold the input role — i.e. how many this rule acts on. */
+  /** How many people the rule applies to: they hold its first role in Syndra's records, so should have the second. Recorded. */
   holder_count: number;
+  /** How many of them Zitadel shows holding the second role. null: not checked. */
+  observed_holder_count?: number | null;
   created_at: string;
   /** Retired: no longer applied, kept in the history. Only the retired list carries it. */
   retired_at?: string | null;

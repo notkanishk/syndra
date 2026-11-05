@@ -46,6 +46,9 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
               role_key: "community",
               is_source: true,
               reasons: [{ kind: "direct", description: "" }],
+              // The backend's end from every source (access.Ends): here, the one grant's.
+              ends:
+                state.endsInDays === null ? null : new Date(Date.now() + state.endsInDays * 86_400_000).toISOString(),
             },
           ],
           derived_roles: [],

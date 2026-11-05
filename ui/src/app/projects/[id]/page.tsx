@@ -16,7 +16,7 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
-import { holdersLine, holdersToneClass } from "@/lib/holders";
+import { holdersLine, holdersToneClass, peopleSuffix } from "@/lib/holders";
 import { useCrumb } from "@/lib/page-crumb";
 import { sortByName } from "@/lib/sort";
 import { useApplications } from "@/lib/queries/useApplications";
@@ -148,7 +148,7 @@ export default function ProjectDetailPage({
           !project ? undefined : (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>
-                {people ? `${people.headline} ${people.headline === "1" ? "person" : "people"} · ` : ""}
+                {people ? `${people.headline}${peopleSuffix(people.headline)} · ` : ""}
                 {projectRoles.length} {projectRoles.length === 1 ? "role" : "roles"}
               </span>
               <Tinted show={advanced}>
