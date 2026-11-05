@@ -9,6 +9,7 @@ import type { InsightsUrl } from "@/components/insights/useInsightsUrl";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills } from "@/components/ui/Select";
 import { useInsightsTrends, useInsightsUsage, type InsightsTrends, type TrendPeriod } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
@@ -48,7 +49,8 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
 
 const ENDING_ROW = "row-divider grid grid-cols-[1fr_110px_110px] items-baseline gap-4 px-5 py-3";
 
-const Quiet = ({ children }: { children: string }) => <EmptyState title={children} />;
+/** A line that says nothing is wrong is the healthy dot's (resolved); "not yet" lines are not. */
+const Quiet = ({ children, ok = false }: { children: string; ok?: boolean }) => <EmptyState title={children} resolved={ok} />;
 
 /** Weeks as columns: given in the accent, revoked beneath in warn. The words carry it; the bars show the shape. */
 function Weeks({ weekly }: { weekly: InsightsTrends["weekly"] }) {
@@ -70,7 +72,8 @@ function Weeks({ weekly }: { weekly: InsightsTrends["weekly"] }) {
 export function TrendsTab({ url }: { url: InsightsUrl }) {
   const trends = useInsightsTrends(url.period);
   const topology = useTopology();
-  const usage = useInsightsUsage().data;
+  const usageRead = useInsightsUsage();
+  const usage = usageRead.data;
   const model = useMemo(() => (topology.data ? buildModel(topology.data) : null), [topology.data]);
   const t = trends.data;
   const roleName = (projectId: string, roleKey: string) => {
@@ -100,6 +103,16 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
           <span className="text-[13px] text-faint">{t?.window.label ?? ""}</span>
         )}
       </div>
+
+      {t && (
+        <ReadFreshness
+          subject="The trends"
+          state={{
+            readAt: trends.dataUpdatedAt ? new Date(trends.dataUpdatedAt).toISOString() : null,
+            current: trends.isError ? false : undefined,
+          }}
+        />
+      )}
 
       <ListStates
         isLoading={trends.isLoading}
@@ -132,7 +145,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                 <Fact key={r.reason} label={`Declined: ${r.reason}`} value={r.n} />
               ))}
               {t.requests.outside_bundles.length === 0 ? (
-                <Quiet>Nobody has asked for a role that no bundle gives.</Quiet>
+                <Quiet ok>Nobody has asked for a role that no bundle gives.</Quiet>
               ) : (
                 t.requests.outside_bundles.map((r) => (
                   <Fact key={`${r.project_id}:${r.role_key}`} label={`Asked for outside a bundle: ${roleName(r.project_id, r.role_key)}`} value={r.n} />
@@ -165,7 +178,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
             <Card>
               <CardHeader title="Ending soon" note="People whose direct access ends within 14 and 30 days. Each number opens Expiring access in the same window." />
               {t.ending_soon.length === 0 ? (
-                <Quiet>No direct access ends in the next 30 days.</Quiet>
+                <Quiet ok>No direct access ends in the next 30 days.</Quiet>
               ) : (
                 // The product's one window (A-04 §4). In order by the 30-day count, most first,
                 // and the arrow says so (A-07 §17).
@@ -205,13 +218,13 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                 action={<CardHeaderLink href="/insights?lens=use">Show on the map</CardHeaderLink>}
               />
               {!usage ? (
-                <Quiet>Reading recent use.</Quiet>
+                <Quiet>{usageRead.isError ? "Couldn't read recent use." : "Reading recent use."}</Quiet>
               ) : !usage.sources.sign_in.receiving ? (
                 <Quiet>This fills in once sign-ins arrive.</Quiet>
               ) : !usage.holders_observed ? (
                 <Quiet>Syndra hasn&apos;t read who holds what from Zitadel yet.</Quiet>
               ) : usage.held_not_used.length === 0 ? (
-                <Quiet>{`Every role someone holds has been used in ${usage.window_days} days.`}</Quiet>
+                <Quiet ok>{`Every role someone holds has been used in ${usage.window_days} days.`}</Quiet>
               ) : (
                 [...usage.held_not_used]
                   .sort((a, b) => b.people - a.people)

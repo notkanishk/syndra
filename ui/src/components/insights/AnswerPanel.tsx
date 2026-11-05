@@ -5,8 +5,9 @@ import { useEffect, useState } from "react";
 import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
 
 import type { Lit, Tone } from "@/components/insights/model";
-import { TONE_COLOUR } from "@/components/insights/tone";
+import { ToneDot } from "@/components/insights/tone";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { useClipboardAvailable } from "@/lib/clipboard";
@@ -27,11 +28,14 @@ export interface Panel {
   open?: { label: string; href: string };
 }
 
-const BOX = {
-  accent: "border-line bg-surface-1",
-  warn: "border-warn-line bg-warn-soft",
-  danger: "border-danger-line bg-danger-soft",
-  neutral: "border-line bg-surface-1",
+/**
+ * The panel is one surface whatever it says. A warn or danger answer is told by
+ * a Notice-toned line (dot and words in the tone's text colour), not by a
+ * tinted box (A-20 P12).
+ */
+const TONED = {
+  warn: { dot: "warn", text: "text-warn-text" },
+  danger: { dot: "danger", text: "text-danger-text" },
 } as const;
 
 /** The panel's words as plain text: its title, then one sentence a line. */
@@ -50,7 +54,6 @@ export function AnswerPanel({
   onUnpin,
   onPin,
   onlyPinned,
-  phone = false,
   onLight,
 }: {
   panel: Panel;
@@ -60,8 +63,6 @@ export function AnswerPanel({
   /** Present only when the followed thing can be pinned. */
   onPin?: () => void;
   onlyPinned?: () => void;
-  /** Below tablet the panel is the page, and the pin says what it pins. */
-  phone?: boolean;
   /** Present only where there is a map to light (tablet and up): says what a hovered or focused line names, or null. */
   onLight?: (lit: (Lit & { tone: Tone }) | null) => void;
 }) {
@@ -81,13 +82,20 @@ export function AnswerPanel({
     }
   }
 
+  const toned = panel.tone === "warn" || panel.tone === "danger" ? TONED[panel.tone] : null;
+
   return (
     <section
       aria-label={panel.title}
-      className={`tint-in flex flex-col gap-4 rounded-panel border px-5 py-[18px] tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-x-6 ${BOX[panel.tone]}`}
+      className={`tint-in flex flex-col gap-4 rounded-panel border border-line bg-surface-1 px-5 py-[18px] tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-x-6`}
     >
       <div className="flex min-w-0 flex-col gap-1.5 tablet:min-w-[240px] tablet:flex-[0_1_320px]">
-        {panel.eyebrow && <span className="type-label text-label">{panel.eyebrow}</span>}
+        {(panel.eyebrow || toned) && (
+          <span className={`type-label flex items-center gap-2 ${toned ? toned.text : "text-label"}`}>
+            {toned && <StatusDot tone={toned.dot} />}
+            {panel.eyebrow}
+          </span>
+        )}
         <h2 className="font-display text-[24px] font-semibold leading-[1.15] [text-wrap:pretty]">{panel.title}</h2>
         {panel.meta && <span className="text-[13.5px] text-muted">{panel.meta}</span>}
       </div>
@@ -107,11 +115,7 @@ export function AnswerPanel({
                 }
               : {})}
           >
-            <span
-              aria-hidden
-              className="size-[7px] flex-none rounded-pill"
-              style={{ background: TONE_COLOUR[line.tone] }}
-            />
+            <ToneDot tone={line.tone} />
             <span>
               {line.lead && <strong className="font-semibold">{line.lead} </strong>}
               {line.text}
@@ -123,7 +127,7 @@ export function AnswerPanel({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 tablet:flex-col tablet:items-end">
         {onBack && (
           <Button variant="outline" size="sm" onClick={onBack}>
-            Back
+            Back to the map
           </Button>
         )}
         {panel.open && <ArrowLink href={panel.open.href}>{panel.open.label}</ArrowLink>}
@@ -136,7 +140,7 @@ export function AnswerPanel({
             {pins.map((pin) => (
               <FilterChip key={pin.id} onClear={() => onUnpin?.(pin.id)} clearLabel={`Unpin ${pin.name}`}>
                 <span className="inline-flex items-center gap-2">
-                  <span aria-hidden className="size-2 rounded-pill" style={{ background: TONE_COLOUR[pin.tone] }} />
+                  <ToneDot tone={pin.tone} />
                   {pin.name}
                 </span>
               </FilterChip>
@@ -146,7 +150,7 @@ export function AnswerPanel({
         <span className="flex-1" />
         {onPin && (
           <Button variant="outline" size="sm" onClick={onPin}>
-            {phone ? "Pin this" : "Pin"}
+            Keep this answer
           </Button>
         )}
         {onlyPinned && (

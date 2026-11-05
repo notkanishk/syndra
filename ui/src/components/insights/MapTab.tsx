@@ -8,7 +8,7 @@ import { addDays, dayLabel, today as todayDay } from "@/components/insights/days
 import { LaneMap } from "@/components/insights/LaneMap";
 import { LensChoice } from "@/components/insights/LensChoice";
 import { readLens } from "@/components/insights/lens";
-import { NodeList } from "@/components/insights/NodeList";
+import { NodeList, PhoneNodes } from "@/components/insights/NodeList";
 import {
   buildModel,
   crossing,
@@ -32,8 +32,9 @@ import { useAnswer } from "@/components/insights/useAnswer";
 import { FINDINGS, LENSES, MAX_PINS, type Finding, type InsightsUrl, type Lens } from "@/components/insights/useInsightsUrl";
 import { useFindings } from "@/components/insights/useFindings";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Chip, StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { Button, PILL } from "@/components/ui/Button";
+import { Badge, Chip, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { FilterChip } from "@/components/ui/FilterChip";
 import { Notice } from "@/components/ui/Notice";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills, Segmented, Select } from "@/components/ui/Select";
@@ -52,6 +53,7 @@ const CHIP_WORDS: Record<Finding, [string, string]> = {
   unused: ["unused", "unused"],
   overlap: ["overlap", "overlaps"],
 };
+const chipWord = (f: Finding, n: number) => CHIP_WORDS[f][n === 1 ? 0 : 1];
 const PHONE_NOTE = "The map draws this on a wider screen. The link keeps the question, so it opens there as you left it.";
 const TIMELINE_DAYS = 120;
 const NO_MARKS = new Map<string, never[]>();
@@ -266,7 +268,6 @@ export function MapTab({ url }: { url: InsightsUrl }) {
   const [firstView] = useState(view);
   const [switched, setSwitched] = useState(false);
   if (!switched && view !== firstView) setSwitched(true);
-  const chips = FINDINGS.filter((f) => findings.counts[f] > 0);
 
   return (
     <>
@@ -330,12 +331,9 @@ export function MapTab({ url }: { url: InsightsUrl }) {
           )}
           {asOn ? (
             <>
-              <span className={`rounded-pill border border-accent-line bg-accent-soft font-semibold ${PILL.sm}`}>
+              <FilterChip onClear={toToday} clearLabel="Back to now">
                 Showing {dayLabel(url.asof!)}
-              </span>
-              <Button variant="outline" size="sm" onClick={toToday}>
-                Back to now
-              </Button>
+              </FilterChip>
               <span className="text-[13px] text-faint">{AS_OF_LENS}</span>
             </>
           ) : (
@@ -348,20 +346,31 @@ export function MapTab({ url }: { url: InsightsUrl }) {
           <span className="flex-1" />
           {!phone &&
             !asOn &&
-            chips.map((f) => (
-              <button
-                key={f}
-                type="button"
-                aria-pressed={finding === f}
-                onClick={() => url.set({ ...toParams(null), ...NO_LENS, finding: finding === f ? null : f })}
-                className="control press-scale inline-flex min-h-[var(--tap)] items-center desktop:min-h-0"
-              >
-                <Chip className={`gap-2 ${finding === f ? "!bg-tint-3" : ""}`}>
-                  <StatusDot tone={DOT[f]} />
-                  {findings.counts[f]} {CHIP_WORDS[f][findings.counts[f] === 1 ? 0 : 1]}
-                </Chip>
-              </button>
-            ))}
+            FINDINGS.map((f) => {
+              // The five seats stay put; only the count inside changes, and a zero is hollow.
+              const n = findings.ready ? findings.counts[f] : null;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  aria-pressed={finding === f}
+                  aria-label={n == null ? chipWord(f, 2) : `${n} ${chipWord(f, n)}`}
+                  disabled={!n}
+                  onClick={() => url.set({ ...toParams(null), ...NO_LENS, finding: finding === f ? null : f })}
+                  className="control press-scale inline-flex min-h-[var(--tap)] items-center disabled:cursor-default desktop:min-h-0"
+                >
+                  <Chip className={`gap-2 ${finding === f ? "!bg-tint-3" : ""} ${n ? "" : "text-muted"}`}>
+                    <StatusDot tone={n ? DOT[f] : "neutral"} />
+                    {chipWord(f, 2)}
+                    {n != null && (
+                      <Badge hollow={n === 0} tone="neutral">
+                        {n}
+                      </Badge>
+                    )}
+                  </Chip>
+                </button>
+              );
+            })}
         </div>
       </div>
 
@@ -385,7 +394,6 @@ export function MapTab({ url }: { url: InsightsUrl }) {
           <AnswerPanel
             key={`${finding}|${JSON.stringify(question)}|${pins.join()}|${lens}|${url.days}|${url.group}`}
             panel={panel}
-            phone={phone}
             onLight={phone ? undefined : setLit}
             onBack={question || finding || pins.length || lens !== "people" ? back : undefined}
             pins={pins.map((id) => ({ id, name: model!.nameOf(id), tone: tones.get(id)! }))}
@@ -431,6 +439,16 @@ export function MapTab({ url }: { url: InsightsUrl }) {
             keysOpen={keysOpen}
             onKeys={() => setKeysOpen((o) => !o)}
             // ponytail: an earlier map is read, not followed; questions are about today.
+            onPick={asOn ? () => {} : pick}
+          />
+        )}
+        {shown && phone && (
+          <PhoneNodes
+            model={shown}
+            focusId={focus}
+            // The same numbers the map draws: observed holders, or the lens's reading.
+            count={asOn ? (id) => thenHeld.get(id) ?? null : lensRead ? (id) => lensRead.counts.get(id) ?? null : held}
+            unit={asOn ? "" : lensRead?.unit}
             onPick={asOn ? () => {} : pick}
           />
         )}
