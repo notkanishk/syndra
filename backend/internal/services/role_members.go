@@ -12,8 +12,8 @@ import (
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/extcall"
-	"syndra/internal/services/propagation"
 	"syndra/internal/models"
+	"syndra/internal/services/propagation"
 )
 
 // RoleMembers answers "who can currently use the laser cutter?" — the reverse
