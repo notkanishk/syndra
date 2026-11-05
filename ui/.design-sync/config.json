@@ -109,6 +109,8 @@
     "CheckTrail": "src/components/ui/CheckTrail.tsx",
     "RoleWordsTable": "src/components/ui/RoleWordsTable.tsx",
     "SignInRow": "src/components/ui/SignInRow.tsx",
+    "TechnicalDetail": "src/components/ui/TechnicalDetail.tsx",
+    "TechnicalPayload": "src/components/ui/TechnicalDetail.tsx",
     "TokenBlock": "src/components/ui/TokenBlock.tsx",
     "Ticks": "src/components/ui/TokenBlock.tsx",
     "Tabs": "src/components/ui/Tabs.tsx",

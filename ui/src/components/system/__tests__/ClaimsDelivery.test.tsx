@@ -221,7 +221,12 @@ describe("Claims delivery, with problems", () => {
     expect(screen.getByText(/^1 check differs from what claim delivery needs/)).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Configuration checklist" });
     const row = within(list).getByText("Making an access token calls only the claims action").closest("li")!;
-    expect(row).toHaveTextContent("Expected syndra-claim-injector · found syndra-claim-injector, old-script");
+    // A sentence outside; the expected and found values wait under Technical detail.
+    expect(row).toHaveTextContent("Syndra expected something other than what Zitadel has.");
+    expect(row).not.toHaveTextContent("old-script");
+    fireEvent.click(within(row).getByRole("button", { name: /Technical detail/ }));
+    expect(row).toHaveTextContent("Expected syndra-claim-injector");
+    expect(row).toHaveTextContent("Found syndra-claim-injector, old-script");
     expect(within(row).getByRole("link", { name: /Open Actions in Zitadel/ })).toHaveAttribute(
       "href",
       "https://auth.example.org/ui/console/actions",
@@ -254,7 +259,10 @@ describe("Claims delivery, with problems", () => {
     set(delivery({ configuration: { ...delivery().configuration!, rows: [r5] } }));
     renderIt();
     const row = screen.getByText("NetBird's claims reach where its shape sends them").closest("li")!;
-    expect(row).toHaveTextContent("Expected The access token · found BEARER access token, userinfo outside the ID token");
+    expect(row).not.toHaveTextContent("BEARER");
+    fireEvent.click(within(row).getByRole("button", { name: /Technical detail/ }));
+    expect(row).toHaveTextContent("Expected The access token");
+    expect(row).toHaveTextContent("Found BEARER access token, userinfo outside the ID token");
     expect(within(row).getByRole("link", { name: /Open NetBird in Zitadel/ })).toHaveAttribute(
       "href",
       "https://auth.example.org/ui/console/projects/pNet/apps/a-net",

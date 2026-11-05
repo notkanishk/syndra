@@ -394,6 +394,10 @@ describe("one target's page", () => {
     state.inventory = { target: "truenas", bound: 1, unmanaged: [], current: true };
     renderTarget();
 
+    // Words outside; the ids wait under Technical detail until it is opened (A-20 P11).
+    expect(screen.getByText("Deletes an account and its files")).toBeInTheDocument();
+    expect(screen.queryByText("account.purge")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
     expect(screen.getByText("password.set")).toBeInTheDocument();
     expect(screen.getByText("account.purge")).toBeInTheDocument();
   });
@@ -441,7 +445,7 @@ describe("one target's page", () => {
 
     // Shown disabled and explained. Omitted, an operator wonders whether the
     // feature exists at all.
-    expect(screen.getByText("account.purge")).toBeInTheDocument();
+    expect(screen.getByText("Deletes an account and its files")).toBeInTheDocument();
     expect(screen.getByText(/does not expose user.delete/)).toBeInTheDocument();
   });
 
@@ -853,10 +857,10 @@ describe("what it can do · the confirmation the manifest declares", () => {
     renderTarget();
 
     // The board's words: "Stops and asks" / "Runs by itself" (route-system-targets-id).
-    const purge = screen.getByText("account.purge").closest(".flex-wrap");
+    const purge = screen.getByText("Deletes an account and its files").closest(".flex-wrap");
     expect(purge?.textContent).toContain("Stops and asks");
 
-    const provision = screen.getByText("account.provision").closest(".flex-wrap");
+    const provision = screen.getByText("Creates an account").closest(".flex-wrap");
     expect(provision?.textContent).not.toContain("Stops and asks");
     expect(provision?.textContent).toContain("Runs by itself");
   });

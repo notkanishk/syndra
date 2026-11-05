@@ -10,6 +10,8 @@ import {
   WriteResult,
 } from "@/components/upstream/UpstreamShell";
 import { Mono } from "@/components/ui/Badge";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -83,7 +85,6 @@ export default function UpstreamProjectsPage() {
                 }`}
               >
                 <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{project.name}</span>
-                <Mono className="text-faint [overflow-wrap:anywhere]">{project.id}</Mono>
               </button>
             ))}
           </ListStates>
@@ -101,6 +102,14 @@ export default function UpstreamProjectsPage() {
               ) : undefined
             }
           />
+
+          {activeId && (
+            <div className="row-divider px-5 py-3">
+              <TechnicalDetail placeKey={`project:${activeId}`}>
+                <CopyableValue value={activeId} label="Project id" />
+              </TechnicalDetail>
+            </div>
+          )}
 
           <ListStates
             head={

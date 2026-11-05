@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { UpstreamShell } from "@/components/upstream/UpstreamShell";
 import { Mono } from "@/components/ui/Badge";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -131,9 +133,11 @@ export default function UpstreamGrantsPage() {
                   </Mono>
                 ))}
               </span>
-              <Mono className="max-w-full text-faint [overflow-wrap:anywhere] tablet:w-[190px] tablet:shrink-0 tablet:text-right">
-                {grant.id}
-              </Mono>
+              <span className="basis-full">
+                <TechnicalDetail placeKey={`grant:${grant.id}`}>
+                  <CopyableValue value={grant.id} label="Grant id" />
+                </TechnicalDetail>
+              </span>
             </div>
           ))}
 
