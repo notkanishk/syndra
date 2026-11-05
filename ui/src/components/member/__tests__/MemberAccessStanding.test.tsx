@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { SessionUser } from "@/lib/session";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -48,7 +49,7 @@ vi.mock("@/lib/queries/useCatalogUsers", () => ({
   }),
 }));
 
-const session = { id: "u1", name: "Sam", email: "sam@x", role: "member" } as never;
+const session: SessionUser = { id: "u1", name: "Sam", email: "sam@x", title: "", team: "", status: "active", avatar: "", role: "user", sessionType: "demo" };
 
 function view(
   observation: Record<string, unknown> | undefined,

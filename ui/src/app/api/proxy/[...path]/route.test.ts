@@ -36,7 +36,7 @@ function call(
   opts?: { body?: unknown; headers?: Record<string, string> },
 ): Promise<Response> {
   const url = `http://localhost/api/proxy/${path.join("/")}`;
-  const init: RequestInit = { method };
+  const init: NonNullable<ConstructorParameters<typeof NextRequest>[1]> = { method };
   if (opts?.headers) init.headers = opts.headers;
   if (opts?.body !== undefined) {
     init.body = JSON.stringify(opts.body);

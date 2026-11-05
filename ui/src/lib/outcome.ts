@@ -173,7 +173,7 @@ export const EXTEND_DAYS = 90;
  * next read; it is not said while the change is still held back.
  */
 export function outcomeFromExtend(
-  result: { status?: string } | undefined,
+  result: { status?: string; outbox_id?: string } | undefined,
   days: number,
   leaves?: string,
 ): ActionOutcome {

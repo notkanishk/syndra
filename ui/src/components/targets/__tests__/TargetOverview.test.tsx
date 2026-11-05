@@ -1135,7 +1135,7 @@ describe("while TrueNAS isn't answering", () => {
     state.inventory = {
       target: "truenas",
       bound: 1,
-      accounts: [{ subject_id: "s-99", username: "sai", since: "2026-10-01T00:00:00Z" }],
+      accounts: [{ target: "truenas", subject_id: "s-99", username: "sai", bound_by: "op", bound_at: "2026-10-01T00:00:00Z", last_seen_at: "2026-10-01T00:00:00Z" }],
       unmanaged: [{ username: "kiosk", uid: 1001 }, { username: "lab", uid: 1002 }],
       current: false,
       read_at: new Date().toISOString(),
