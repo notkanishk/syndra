@@ -4,15 +4,15 @@ import { daysUntilTermEnd, keepOptions, nextTermEnd } from "@/lib/term";
 
 describe("nextTermEnd", () => {
   it("returns the May boundary from earlier in the year", () => {
-    expect(nextTermEnd(new Date(2026, 1, 3))).toEqual(new Date(2026, 4, 18));
+    expect(nextTermEnd(new Date(2026, 1, 3))).toBe("2026-05-18");
   });
 
   it("returns the December boundary once May has passed", () => {
-    expect(nextTermEnd(new Date(2026, 7, 2))).toEqual(new Date(2026, 11, 18));
+    expect(nextTermEnd(new Date(2026, 7, 2))).toBe("2026-12-18");
   });
 
   it("rolls into next year once December has passed", () => {
-    expect(nextTermEnd(new Date(2026, 11, 20))).toEqual(new Date(2027, 4, 18));
+    expect(nextTermEnd(new Date(2026, 11, 20))).toBe("2027-05-18");
   });
 
   const setting = [
@@ -21,18 +21,18 @@ describe("nextTermEnd", () => {
   ];
 
   it("reads the end of the term holding today from the setting", () => {
-    expect(nextTermEnd(new Date(2026, 8, 1), setting)).toEqual(new Date(2026, 10, 27));
+    expect(nextTermEnd(new Date(2026, 8, 1), setting)).toBe("2026-11-27");
     expect(daysUntilTermEnd(new Date(2026, 10, 26, 12), setting)).toBe(1);
   });
 
   it("reads the next term's end when today falls between two", () => {
-    expect(nextTermEnd(new Date(2026, 6, 1), setting)).toEqual(new Date(2026, 10, 27));
+    expect(nextTermEnd(new Date(2026, 6, 1), setting)).toBe("2026-11-27");
   });
 
   it("falls back to the usual dates when the setting is unread, empty or all past", () => {
-    expect(nextTermEnd(new Date(2026, 7, 2))).toEqual(new Date(2026, 11, 18));
-    expect(nextTermEnd(new Date(2026, 7, 2), [])).toEqual(new Date(2026, 11, 18));
-    expect(nextTermEnd(new Date(2026, 11, 2), setting)).toEqual(new Date(2026, 11, 18));
+    expect(nextTermEnd(new Date(2026, 7, 2))).toBe("2026-12-18");
+    expect(nextTermEnd(new Date(2026, 7, 2), [])).toBe("2026-12-18");
+    expect(nextTermEnd(new Date(2026, 11, 2), setting)).toBe("2026-12-18");
   });
 
   it("never resolves to zero days, even on the boundary itself", () => {

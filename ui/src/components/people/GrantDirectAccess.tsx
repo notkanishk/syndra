@@ -18,9 +18,10 @@ import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { forecastFor, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { daysUntil, expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
+import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
+import { daysFromToday, endAfterDaysISO, endOfDayISO } from "@/lib/time";
 
 /**
  * E5 · Give a role. Project → role → expiry.
@@ -304,17 +305,15 @@ function GrantDirectAccessOpen({
 function resolveExpiry(preset: Preset, custom: string, terms?: Term[]): { date: string | null; days: number } {
   const now = new Date();
   if (preset === "never") return { date: null, days: 0 };
-  if (preset === "30") {
-    const date = new Date(now.getTime() + 30 * 86_400_000);
-    return { date: date.toISOString(), days: 30 };
-  }
+  // The backend ends a grant as the duration_days-th calendar day does
+  // (clock.EndAfterDays), so the date shown is that day's end.
+  if (preset === "30") return { date: endAfterDaysISO(30, now), days: 30 };
   if (preset === "date") {
     if (!custom) return { date: null, days: 0 };
-    const days = daysUntil(custom) ?? 0;
-    return { date: new Date(custom).toISOString(), days: Math.max(1, days) };
+    const days = Math.max(1, daysFromToday(custom, now));
+    return { date: endAfterDaysISO(days, now), days };
   }
-  const endOfTerm = nextTermEnd(now, terms);
-  return { date: endOfTerm.toISOString(), days: daysUntilTermEnd(now, terms) };
+  return { date: endOfDayISO(nextTermEnd(now, terms)), days: daysUntilTermEnd(now, terms) };
 }
 
 export const GrantDirectAccess = mountedWhileOpen(GrantDirectAccessOpen);

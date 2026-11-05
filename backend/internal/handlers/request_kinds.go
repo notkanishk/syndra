@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -51,12 +52,12 @@ type approvalPlan struct {
 	EndRule   db.EndRule
 }
 
-// endAfter is now plus days, or no end for zero.
+// endAfter is the end of the days-th day after now's (clock.EndAfterDays), or no end for zero.
 func endAfter(now time.Time, days *int) *time.Time {
 	if days == nil || *days <= 0 {
 		return nil
 	}
-	t := now.UTC().Add(time.Duration(*days) * 24 * time.Hour)
+	t := clock.EndAfterDays(now, *days)
 	return &t
 }
 
@@ -76,9 +77,12 @@ func extendEnd(now time.Time, h models.RequestHolding, days *int, until *time.Ti
 	return endAfter(base, days)
 }
 
-// askedEnd is the fixed end date an ask carries, in UTC.
+// askedEnd is the fixed end date an ask carries: the end of its day in the
+// makerspace's zone (clock.EndOfDay), whatever instant on that day was sent. A
+// client that sent UTC midnight ("until 30 Nov" as 05:30 IST) still gets all
+// of 30 Nov.
 func askedEnd(until *time.Time) *time.Time {
-	t := until.UTC()
+	t, _ := clock.EndOfDay(clock.Day(*until)) // a Day is always a valid day
 	return &t
 }
 
@@ -97,7 +101,7 @@ func checkExtension(h models.RequestHolding, newEnd *time.Time) error {
 // checkRequestKind refuses a request that doesn't fit what they hold, when it
 // is asked. The holding is read again when it is decided (planApproval).
 func checkRequestKind(kind string, h models.RequestHolding, days *int, until *time.Time, now time.Time) error {
-	if until != nil && !until.After(now) {
+	if until != nil && !askedEnd(until).After(now) { // an ask covers its whole last day
 		return errAskEnded
 	}
 	switch kind {
@@ -128,7 +132,7 @@ var errNothingHeldToExtend = errors.New("you don't have this, so there's nothing
 // date, not now plus the days it was worth when asked; one whose date has
 // passed is refused rather than given already ended.
 func planApproval(r models.AccessRequest, h models.RequestHolding, now time.Time) (approvalPlan, error) {
-	if r.AskedUntil != nil && !r.AskedUntil.After(now) {
+	if r.AskedUntil != nil && !askedEnd(r.AskedUntil).After(now) {
 		return approvalPlan{}, errAskEnded
 	}
 	end := endAfter(now, r.DurationDays)
@@ -169,7 +173,7 @@ func endPhrase(t *time.Time) string {
 	if t == nil {
 		return "with no end date"
 	}
-	return fmt.Sprintf("until %s", t.Format("2 Jan 2006"))
+	return fmt.Sprintf("until %s", t.In(clock.Loc).Format("2 Jan 2006"))
 }
 
 // approvalReason is the grant's recorded reason for what the approval did.

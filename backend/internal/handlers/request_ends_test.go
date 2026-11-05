@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services/propagation"
@@ -61,7 +62,7 @@ func TestApprovingAnExtensionRecordsTheEndTheyHadAndTheEndItSet(t *testing.T) {
 	if approves != 1 || before == nil || !before.Equal(had) {
 		t.Fatalf("ended_before = %v, want the end they had (%v)", before, had)
 	}
-	if want := had.Add(31 * 24 * time.Hour); after == nil || !after.Equal(want) {
+	if want := clock.EndAfterDays(had, 31); after == nil || !after.Equal(want) {
 		t.Fatalf("ends_after = %v, want %v (counted from the end they had)", after, want)
 	}
 }

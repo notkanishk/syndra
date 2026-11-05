@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -569,7 +570,7 @@ func rehearseExtend(out BulkOutcome, req BulkRequest, grants []models.DirectGran
 	out.Effect = EffectApply
 	out.GrantIDs = ids
 	out.Detail = fmt.Sprintf("Extends %s.", pluralGrants(len(ids)))
-	out.Consequence = fmt.Sprintf("New expiry %s.", formatDay(time.Now().UTC().Add(time.Duration(req.DurationDays)*24*time.Hour)))
+	out.Consequence = fmt.Sprintf("New expiry %s.", formatDay(clock.EndAfterDays(time.Now(), req.DurationDays)))
 	return out
 }
 
@@ -662,7 +663,7 @@ func lengthens(current *time.Time, durationDays int) bool {
 	if durationDays <= 0 {
 		return true
 	}
-	return time.Now().UTC().Add(time.Duration(durationDays) * 24 * time.Hour).After(*current)
+	return clock.EndAfterDays(time.Now(), durationDays).After(*current)
 }
 
 func expiryPhrase(current *time.Time, durationDays int) string {
@@ -672,10 +673,10 @@ func expiryPhrase(current *time.Time, durationDays int) string {
 		}
 		return "No expiry."
 	}
-	return fmt.Sprintf("Expires %s.", formatDay(time.Now().UTC().Add(time.Duration(durationDays)*24*time.Hour)))
+	return fmt.Sprintf("Expires %s.", formatDay(clock.EndAfterDays(time.Now(), durationDays)))
 }
 
-func formatDay(t time.Time) string { return t.Format("2 Jan 2006") }
+func formatDay(t time.Time) string { return t.In(clock.Loc).Format("2 Jan 2006") }
 
 func pluralRoles(n int) string {
 	if n == 1 {

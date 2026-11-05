@@ -560,9 +560,12 @@ var (
 	dbGetUserUsage          = db.GetUserUsage
 	// Sign-ins per app (A-10 Part 2): the reads, and the audited lookup of
 	// Zitadel's own log.
-	dbUsageLatestByKind     = db.UsageLatestByKind
-	dbSignInsSince          = db.SignInsSince
-	dbGetAppUsage           = db.GetAppUsage
+	dbUsageLatestByKind = db.UsageLatestByKind
+	dbSignInsSince      = db.SignInsSince
+	dbGetAppUsage       = db.GetAppUsage
+	// The one-off recount of daily sign-in totals onto the makerspace's day (000079).
+	dbSignInRecountPending  = db.SignInRecountPending
+	dbReplaceSignInDays     = db.ReplaceSignInDays
 	dbInsertAuditLogDetails = db.InsertAuditLogDetails
 	zitadelSearchEvents     = func(ctx context.Context, q zitadel.EventSearch) ([]zitadel.LoggedEvent, bool, error) {
 		if zitadel.MgmtClient == nil {
