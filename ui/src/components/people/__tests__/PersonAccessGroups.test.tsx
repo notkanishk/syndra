@@ -267,3 +267,26 @@ describe("a person who holds nothing", () => {
     expect(screen.getByText("You hold no access yet")).toBeInTheDocument();
   });
 });
+
+// A-20 P19: Back hands the folds back; a fresh visit opens everything.
+describe("Back keeps the project folds", () => {
+  it("returns a folded project after Back, and opens it on a fresh visit", () => {
+    window.sessionStorage.clear();
+    const first = renderPerson();
+    fireEvent.click(screen.getByRole("button", { name: "Fold Wood shop" }));
+    expect(screen.queryByText("Member")).toBeNull();
+    first.unmount();
+
+    // Not a Back: nothing is handed back, so everything is open.
+    const fresh = renderPerson();
+    expect(screen.getByText("Member")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Fold Wood shop" }));
+    fresh.unmount();
+
+    act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
+    renderPerson();
+    expect(screen.queryByText("Member")).toBeNull();
+    expect(screen.getByRole("button", { name: "Open Wood shop" })).toHaveAttribute("aria-expanded", "false");
+    window.sessionStorage.clear();
+  });
+});

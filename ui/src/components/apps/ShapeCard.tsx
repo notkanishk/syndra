@@ -16,6 +16,7 @@ import { RoleWordsTable, type RoleWordRow } from "@/components/ui/RoleWordsTable
 import { Segmented, Select } from "@/components/ui/Select";
 import { Ticks } from "@/components/ui/TokenBlock";
 import { Unfold } from "@/lib/motion";
+import { usePlace } from "@/lib/place";
 import {
   ADD_MENU,
   addMuted,
@@ -341,8 +342,13 @@ function ShapeForm({
   const template = templates.find((t) => t.id === templateId);
   const suggested = templates.find((t) => t.id === shape.suggested_template);
   const [picking, setPicking] = useState<Picking | null>(null);
-  // One line open at a time, by its first row; closed on every arrival.
-  const [open, setOpen] = useState<number | null>(null);
+  // One line open at a time, by its first row; closed on every arrival, and
+  // handed back after a Back (A-20 P19) when it is still a row that exists.
+  const [open, setOpen] = usePlace<number | null>(
+    "open-line",
+    null,
+    (kept): kept is number | null => kept === null || (Number.isInteger(kept) && (kept as number) >= 0 && (kept as number) < profile.claims.length),
+  );
   // The line a menu pick just added: it arrives as a FormPart (A-16 §6).
   const [fresh, setFresh] = useState<number | null>(null);
 

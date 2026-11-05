@@ -28,6 +28,7 @@ import { FilterPills } from "@/components/ui/Select";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterChip } from "@/components/ui/FilterChip";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { Input } from "@/components/ui/Input";
@@ -65,6 +66,12 @@ const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").
 
 type RequestSort = "who" | "when";
 type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
+const STATUS_SHOWN: Record<Exclude<StatusFilter, "pending">, string> = {
+  approved: "Showing approved requests",
+  rejected: "Showing declined requests",
+  withdrawn: "Showing withdrawn requests",
+  all: "Showing every request",
+};
 const STATUSES: readonly StatusFilter[] = ["pending", "approved", "rejected", "withdrawn", "all"];
 
 /**
@@ -261,6 +268,15 @@ function OperatorQueue({ userId }: { userId?: string }) {
         }
       />
 
+      {/* The pill remembers across visits, so a remembered "Declined" must never
+          be silent: anything but Open is said in words, with the way back
+          attached (A-20 P19). */}
+      {status !== "pending" && (
+        <FilterChip clearLabel="Show open requests again" onClear={() => setStatus("pending")}>
+          {STATUS_SHOWN[status]}
+        </FilterChip>
+      )}
+
       <Card>
 
         <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
@@ -269,7 +285,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
           head={
             <>
             <CardColumns>
-              {selecting && anyPending && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+              {selecting && anyPending && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
               <span className="w-[170px]">
                 <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
               </span>
@@ -334,7 +350,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
               {...selection.rowProps(entry.id)}
             >
               {selecting && anyPending && (
-                <span className="w-11 shrink-0 desktop:w-[26px]">
+                <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]">
                   {entry.status === "pending" && !resolved.has(entry.id) ? (
                     <RowCheckbox
                       label="Select this request"

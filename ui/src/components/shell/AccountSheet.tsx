@@ -9,6 +9,7 @@ import { Modal, ModalHeader } from "@/components/ui/Modal";
 import { SyndraMark, WELCOMED } from "@/components/shell/SyndraMark";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Segmented } from "@/components/ui/Select";
+import { firstName } from "@/lib/greeting";
 import { Unfold } from "@/lib/motion";
 import { ACCOUNT_NAV } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";
@@ -54,11 +55,11 @@ export function AccountSheet({ session }: { session: SessionUser }) {
         >
           {session.avatar}
         </span>
-        {/* The name is orientation, not identification, so it goes when the
-            room is narrow. Email is the fallback and never the id: if every
-            naming source came up empty, an address still names a human. */}
+        {/* Who you are, by the name RULES uses for you: the first one (A-20
+            P15). It goes when the room is narrow, where the avatar and the
+            mark are the seat. The sheet keeps the full name and the address. */}
         <span className="hidden max-w-[180px] truncate text-[13.5px] text-muted tablet:block">
-          {session.name || session.email}
+          {firstName(session)}
         </span>
         <span className="sr-only">Account</span>
       </button>
@@ -124,13 +125,16 @@ export function AccountSheet({ session }: { session: SessionUser }) {
           {/* Another setting about this device: the chime is a browser
               preference, so it sits beside Appearance rather than among the
               org-wide automation policy it used to share a box with. */}
-          <div className="flex flex-col gap-2.5 rounded-inner border border-line px-4 py-3 text-[14.5px]">
-            <span className="flex flex-col gap-0.5">
-              <span>Sound when drift is found</span>
-              <span className="text-[13px] text-muted">In this browser only</span>
-            </span>
-            <ChimeToggle />
-          </div>
+          {/* Drift is an operator's page, so a member is never offered its sound (A-20 P15). */}
+          {session.role !== "user" && (
+            <div className="flex flex-col gap-2.5 rounded-inner border border-line px-4 py-3 text-[14.5px]">
+              <span className="flex flex-col gap-0.5">
+                <span>Sound when drift is found</span>
+                <span className="text-[13px] text-muted">In this browser only</span>
+              </span>
+              <ChimeToggle />
+            </div>
+          )}
 
           {/* The one home of the story of the name (A-18 H1): every person reaches
               this sheet at every width. Closed at rest, never pushed at anyone. */}

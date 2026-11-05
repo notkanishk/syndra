@@ -511,7 +511,7 @@ function ExpiringSection({
         <Unfold open={open}>
           <div id={`${id}-body`}>
             <CardColumns>
-              {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+              {selecting && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
               <span className="w-[180px]">
                 <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
               </span>
@@ -604,7 +604,7 @@ function ExpiringRow({
       {...(ack ? {} : selection.rowProps(grant.id))}
     >
       {selecting && (
-        <span className="w-11 shrink-0 desktop:w-[26px]">
+        <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]">
           {/* No checkbox on a row somebody has dealt with — it is not part of the working set, and
               offering it back into a bulk extend would undo a decision by accident. The reason is
               already on the row: who acknowledged it, and when. */}

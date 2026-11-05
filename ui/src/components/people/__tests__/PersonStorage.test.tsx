@@ -12,7 +12,10 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@/lib/queries/useMyStorage", () => ({ usePersonTargets: () => state.views }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => ({ data: [{ target: "truenas" }] }) }));
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => state.advanced,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveRole: (_p: string, k: string) => ({ value: { display_name: k === "lead" ? "Fabrication lead" : k } }) }),
 }));
