@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState, type Dispatch, type SetStateAction } from "react";
 
-import { returnedToThisPage } from "@/components/ui/ArriveList";
+import { returnedToThisPage } from "@/lib/motion";
 
 /**
  * Two kinds of memory, kept apart on purpose (A-19 P5 and P8).
