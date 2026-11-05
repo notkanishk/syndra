@@ -467,12 +467,7 @@ function WhatItGives({
           <Card key={projectId}>
             <CardHeader
               title={
-                <Link
-                  href={`/projects/${encodeURIComponent(projectId)}`}
-                  className="link-hover"
-                >
-                  <ProjectName id={projectId} name={project} />
-                </Link>
+                <ProjectName id={projectId} name={project} />
               }
               count={list.filter((role) => live.has(idOf(role))).length}
             />
@@ -1129,12 +1124,7 @@ function IncludedBundleCard({
               {entry?.waits_for_send && <WaitsMark className="ml-2" />}{" "}
               <span className="text-[13.5px] text-muted">
                 ·{" "}
-                <Link
-                  href={`/projects/${encodeURIComponent(role.zitadel_project_id)}`}
-                  className="link-hover"
-                >
-                  <ProjectName id={role.zitadel_project_id} name={entry?.project_name} />
-                </Link>
+                <ProjectName id={role.zitadel_project_id} name={entry?.project_name} />
               </span>
               {entry?.description && (
                 <p className="mt-0.5 max-w-[80ch] text-[13.5px] text-muted [text-wrap:pretty]">{entry.description}</p>

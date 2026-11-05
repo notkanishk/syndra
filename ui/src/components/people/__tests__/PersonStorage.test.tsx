@@ -16,7 +16,7 @@ vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveRole: (_p: string, k: string) => ({ value: { display_name: k === "lead" ? "Fabrication lead" : k } }) }),
 }));
-vi.mock("@/components/names/UserName", () => ({ UserName: ({ id }: { id: string }) => <span>{id === "op-9" ? "Kanishk Singh" : id}</span> }));
+vi.mock("@/components/names/UserName", () => ({ UserName: ({ id }: { id: string }) => <a href={`/users/${id}`}>{id === "op-9" ? "Kanishk Singh" : id}</a> }));
 
 const GB = 1024 ** 3;
 const lead = { project_id: "fab", role_key: "lead" };

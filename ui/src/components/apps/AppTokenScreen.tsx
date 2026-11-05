@@ -64,7 +64,7 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
               {kindOf(seed.consumer)} · roles from{" "}
               <ArrowLink href={`/projects/${seed.project_id}`}>
-                <ProjectName id={seed.project_id} />
+                <ProjectName id={seed.project_id} link={false} />
               </ArrowLink>
             </span>
           }
@@ -201,7 +201,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
             {kindOf(shape.application.consumer)} · roles from{" "}
             <ArrowLink href={`/projects/${projectId}`}>
-              <ProjectName id={projectId} />
+              <ProjectName id={projectId} link={false} />
             </ArrowLink>
             {signInMeta && (
               <span className="tint-in">

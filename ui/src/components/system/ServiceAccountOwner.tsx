@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 
 import { UserName } from "@/components/names/UserName";
 import { Crossfade } from "@/lib/motion";
@@ -12,9 +11,7 @@ export function Owner({ id }: { id: string }) {
   return (
     <Crossfade id={id || "none"} className="justify-items-start">
       {id ? (
-        <Link href={`/users/${encodeURIComponent(id)}`} className="link-hover">
-          <UserName id={id} />
-        </Link>
+        <UserName id={id} />
       ) : (
         <StatusSeat tone="warn" word="No owner" />
       )}

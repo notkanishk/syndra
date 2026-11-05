@@ -40,7 +40,7 @@ vi.mock("@/components/names", () => ({
   UserAvatar: () => null,
   ProjectName: () => <span>Laser Lab</span>,
   RoleRef: ({ roleKey }: { roleKey: string }) => <span>{ROLES[roleKey]}</span>,
-  UserName: ({ id }: { id: string }) => <span>{NAMES[id]}</span>,
+  UserName: ({ id }: { id: string }) => <a href={`/users/${id}`}>{NAMES[id]}</a>,
 }));
 
 function ask(id: string, who: string, role: string, status = "pending"): AccessRequest {

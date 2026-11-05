@@ -71,9 +71,7 @@ export default function RoleMembersPage({
     <div className="flex flex-col gap-4">
       <PageHeader
         eyebrow={
-          <Link href={`/projects/${id}`} className="link-hover">
-            <ProjectName id={id} name={view?.project_name} />
-          </Link>
+          <ProjectName id={id} name={view?.project_name} />
         }
         title={view?.display_name || humanizeKey(roleKey)}
         lede="Everyone who holds this role, and how each came to hold it: directly, through a bundle, or by an automatic rule."
