@@ -102,13 +102,14 @@ export default function UpstreamProjectsPage() {
             }
           />
 
-          <CardColumns>
-            <span className="flex-1">Role</span>
-            <span className="w-[160px]">Group</span>
-            <span className="w-[160px]" />
-          </CardColumns>
-
           <ListStates
+            head={
+              <CardColumns>
+                <span className="flex-1">Role</span>
+                <span className="w-[160px]">Group</span>
+                <span className="w-[160px]" />
+              </CardColumns>
+            }
             isLoading={roles.isLoading}
             error={roles.error}
             isEmpty={(roles.data?.items ?? []).length === 0}

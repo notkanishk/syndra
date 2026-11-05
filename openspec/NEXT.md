@@ -17,6 +17,10 @@ Four buckets, in the order they actually unblock each other:
 
 ## 1. Code
 
+### A-20 second pass (P4, P7 built)
+
+Headings leave with the rows and errors carry four parts: see [`changes/second-pass`](changes/second-pass/tasks.md). Open: pass `fine` to `ErrorState` from Zitadel-facing pages.
+
 ### LDAP / sync — **gone**
 
 Deleted on 2026-08-10 by [`changes/addon-platform`](changes/addon-platform/proposal.md),

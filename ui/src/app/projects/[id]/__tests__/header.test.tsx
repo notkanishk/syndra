@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProjectDetailPage from "@/app/projects/[id]/page";
 
-const state = vi.hoisted(() => ({ loading: true, failed: false, advanced: false }));
+const state = vi.hoisted(() => ({ loading: true, failed: false, advanced: false, seed: undefined as string | undefined }));
 
 vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
-vi.mock("@/lib/queries/seed", () => ({ useSeededProjectName: () => undefined }));
+vi.mock("@/lib/queries/seed", () => ({ useSeededProjectName: () => state.seed }));
 vi.mock("@/lib/page-crumb", () => ({ useCrumb: () => {} }));
 vi.mock("@/components/projects/ProjectClaimDefault", () => ({ ProjectClaimDefault: () => null }));
 vi.mock("@/lib/queries/useProjects", () => ({
@@ -45,6 +45,7 @@ beforeEach(() => {
   state.loading = true;
   state.failed = false;
   state.advanced = false;
+  state.seed = undefined;
 });
 
 // While the list loaded the title was the project id and the meta line read "0 roles · no app
@@ -76,6 +77,20 @@ describe("a project's header", () => {
     );
     expect(await screen.findByText("Couldn't load this project.")).toBeInTheDocument();
     expect(screen.queryByText(/isn't listed/)).not.toBeInTheDocument();
+  });
+
+  // A page reached by a link already knows the name; a failed read does not take it away.
+  it("keeps the seeded name over an error", async () => {
+    state.loading = false;
+    state.failed = true;
+    state.seed = "Laser Lab";
+    render(
+      <Suspense fallback={null}>
+        <ProjectDetailPage params={params} />
+      </Suspense>,
+    );
+    expect(await screen.findByText("Couldn't load this project.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Laser Lab");
   });
 
   it("keeps the id in Advanced", async () => {

@@ -223,24 +223,25 @@ export default function RolesPage() {
       />
 
       <Card stale={readState.current === false}>
-        <CardColumns>
-          <span className="w-[180px] shrink-0">
-            <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
-          </span>
-          <span className="min-w-[200px] flex-1">
-            <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
-          </span>
-          <span className="hidden w-[130px] shrink-0 desktop:block">
-            <SortHead label="Group" name="group" sort={sort} onSort={setSort} />
-          </span>
-          <span className="hidden w-[150px] shrink-0 desktop:block">Used by</span>
-          <span className="w-[110px] shrink-0 text-right">
-            <SortHead label="People" name="people" sort={sort} onSort={setSort} />
-          </span>
-        </CardColumns>
-
         <div className={view.className}>
         <ListStates
+          head={
+            <CardColumns>
+              <span className="w-[180px] shrink-0">
+                <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
+              </span>
+              <span className="min-w-[200px] flex-1">
+                <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
+              </span>
+              <span className="hidden w-[130px] shrink-0 desktop:block">
+                <SortHead label="Group" name="group" sort={sort} onSort={setSort} />
+              </span>
+              <span className="hidden w-[150px] shrink-0 desktop:block">Used by</span>
+              <span className="w-[110px] shrink-0 text-right">
+                <SortHead label="People" name="people" sort={sort} onSort={setSort} />
+              </span>
+            </CardColumns>
+          }
           isLoading={roles.isLoading}
           error={roles.error}
           isEmpty={leaving.rows.length === 0}

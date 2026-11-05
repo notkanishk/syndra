@@ -100,6 +100,16 @@ export function sentence(text: string): string {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
+/** What a browser calls a request that never reached the server, in each engine's words. */
+const RAW_NETWORK = /failed to fetch|networkerror|network request failed|load failed|fetch failed/i;
+
+export const NETWORK_FAULT = "Syndra's server didn't answer.";
+
+/** The third of the copy guide's four parts (§8): the next step, and where. */
+export function nextStep(hasReference: boolean): string {
+  return `Try again in a minute. If it keeps failing, ask the person who runs the Syndra server${hasReference ? " and quote the reference below" : ""}.`;
+}
+
 /** What went wrong, in the product's voice rather than the transport's. */
 export function describeFailure(error: unknown): string {
   if (error instanceof ApiError) {
@@ -107,6 +117,8 @@ export function describeFailure(error: unknown): string {
     if (error.status === 404) return "That item no longer exists. Someone may have removed it.";
     return error.message;
   }
+  // A fetch that never connected: the browser's words are never the product's.
+  if (error instanceof TypeError || (error instanceof Error && RAW_NETWORK.test(error.message))) return NETWORK_FAULT;
   if (error instanceof Error) return error.message;
   return "Something went wrong and the request did not go through.";
 }
