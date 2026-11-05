@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -53,19 +53,28 @@ vi.mock("next/navigation", () => ({
 
 // Controls what the single-item Revoke confirm does, for the "cannot be
 // pressed twice" tests: how many times it actually ran, and whether it fails.
-const revokeCtl = vi.hoisted(() => ({ calls: 0, fails: false }));
+const revokeCtl = vi.hoisted(() => ({
+  calls: 0,
+  fails: false,
+  // A promise the revoke waits on, so a test can look at the first 100ms.
+  hold: null as null | Promise<void>,
+  waits: false,
+}));
+// Which roles are Roles that wait; the shared setup answers "none".
+vi.mock("@/lib/queries/useRoleWaits", () => ({ useRoleWaits: () => () => revokeCtl.waits }));
 
 vi.mock("@/lib/queries/useDrift", () => ({
   useDriftItems: () => ({ ...drift, isLoading: false, error: null, refetch: () => {} }),
   useAttributeDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useRevokeDrift: () => ({
-    mutateAsync: async () => {
-      revokeCtl.calls += 1;
-      if (revokeCtl.fails) throw new Error("revoke failed");
-      return {};
-    },
-    isPending: false,
-  }),
+  useRevokeDrift: () =>
+    useMutation({
+      mutationFn: async () => {
+        revokeCtl.calls += 1;
+        if (revokeCtl.hold) await revokeCtl.hold;
+        if (revokeCtl.fails) throw new Error("revoke failed");
+        return {};
+      },
+    }),
   useMarkExternalDrift: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRehearseAdoptDrift: () => ({
     mutateAsync: async () => {
@@ -157,6 +166,8 @@ beforeEach(() => {
   bulk.applies = 0;
   revokeCtl.calls = 0;
   revokeCtl.fails = false;
+  revokeCtl.hold = null;
+  revokeCtl.waits = false;
   NAMES.current = {};
 });
 
@@ -685,6 +696,47 @@ describe("the revoke confirm, once it has run", () => {
     // A neutral dot, never the amber of a step left.
     expect(result.querySelector(".bg-warn")).toBeNull();
     expect(result.querySelector(".bg-faint")).not.toBeNull();
+  });
+
+  // A-20 P8: the first 100ms of Drift's highest-stakes act, said in Syndra's own tense.
+  describe("forecast", () => {
+    async function pressRevoke() {
+      let release!: () => void;
+      revokeCtl.hold = new Promise<void>((resolve) => (release = resolve));
+      drift.data = [item({ id: "d1" })];
+      renderTriage();
+      fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+      const dialog = screen.getByRole("dialog");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+      return { dialog, release };
+    }
+
+    it("says 'Will be removed' while it is out, then crosses to the true word and drops the forecast", async () => {
+      const { dialog, release } = await pressRevoke();
+      expect(await within(dialog).findByText("Will be removed")).toBeInTheDocument();
+      // No outcome has been claimed ahead of the server.
+      expect(within(dialog).queryByText("On its way")).toBeNull();
+      release();
+      await within(dialog).findByText("On its way");
+      expect(within(dialog).queryByText("Will be removed")).toBeNull();
+    });
+
+    it("says 'Will wait for you to send' for a role that waits, never 'Will be removed'", async () => {
+      revokeCtl.waits = true;
+      const { dialog, release } = await pressRevoke();
+      expect(await within(dialog).findByText("Will wait for you to send")).toBeInTheDocument();
+      expect(within(dialog).queryByText("Will be removed")).toBeNull();
+      release();
+    });
+
+    it("shows the honest error, with no forecast left behind, when it fails", async () => {
+      revokeCtl.fails = true;
+      const { dialog, release } = await pressRevoke();
+      expect(await within(dialog).findByText("Will be removed")).toBeInTheDocument();
+      release();
+      await waitFor(() => expect(within(dialog).getByText(/Nothing was changed/i)).toBeInTheDocument());
+      expect(within(dialog).queryByText("Will be removed")).toBeNull();
+    });
   });
 
   it("keeps the confirm button when the revoke fails, so there is a retry", async () => {

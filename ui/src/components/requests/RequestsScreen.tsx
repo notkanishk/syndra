@@ -57,7 +57,7 @@ import { formatShortDate, humanizeKey } from "@/lib/format";
 import { keptEnds, stillEnds } from "@/lib/keep-ends";
 import { AskForAccess } from "@/components/requests/AskForAccess";
 import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember } from "@/components/requests/Holding";
-import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
+import { FORECAST, outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import dynamic from "next/dynamic";
 
 // Opened on demand, so it stays out of the page's first load.
@@ -823,6 +823,7 @@ function BulkDecisionDialog({
   return (
     <RehearsalDialog
       waits={waits}
+      forecast={status === "approved" ? FORECAST.approve : FORECAST.decline}
       title={status === "approved" ? "Approve requests" : "Decline requests"}
       lede=""
       noun={["request", "requests"]}

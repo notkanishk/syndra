@@ -1,5 +1,6 @@
 "use client";
 
+import { settleIndicators } from "@/lib/queries/useIndicators";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
@@ -275,7 +276,9 @@ export function useCreateGrant(userId: string) {
     mutationFn: async (input: CreateGrantInput) => {
       return await request<CreateGrantResult>(`/users/${userId}/grants`, { method: "POST", body: input });
     },
-    onSuccess: () => {
+    onSuccess: (made) => {
+      // Given but not yet sent: it is now one more thing waiting for the operator.
+      if (made?.status !== "applied" || made?.wait_reason) settleIndicators(qc, { pending_propagation: 1 });
       qc.invalidateQueries({ queryKey: KEYS.access(userId) });
       qc.invalidateQueries({ queryKey: KEYS.grants(userId) });
       qc.invalidateQueries({ queryKey: ["users", "list"] });

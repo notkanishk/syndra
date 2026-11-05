@@ -1,5 +1,6 @@
 "use client";
 
+import { settleIndicators } from "@/lib/queries/useIndicators";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
@@ -130,7 +131,9 @@ export function useDecideRequest() {
         body: input,
       });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // The request leaves the queue; an approval that waits joins Pending changes.
+      settleIndicators(qc, { pending_requests: -1, pending_propagation: result?.wait_reason ? 1 : 0 });
       qc.invalidateQueries({ queryKey: ["requests"] });
       qc.invalidateQueries({ queryKey: ["governance"] });
     },

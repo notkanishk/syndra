@@ -67,7 +67,7 @@ export function MergeFindings({ target }: { target: string }) {
         errorTitle="The findings could not be read"
         empty={
           <EmptyState
-            title="Nothing disputed"
+            title="Nothing disputed."
             guidance={`Every account Syndra manages on ${name} matches what Syndra expects, or differs in a way Syndra could explain.`}
           />
         }
