@@ -66,13 +66,15 @@ export default function BundlesPage() {
       )}
 
       <Card {...leaving.listProps}>
-        <CardColumns>
-          <span className="w-[min(260px,40%)]">Bundle</span>
-          <span className="hidden flex-1 tablet:block">What it&rsquo;s for</span>
-          <span className="w-[110px] text-right">Roles</span>
-          <span className="w-[110px] text-right">People</span>
-        </CardColumns>
         <ListStates
+          head={
+            <CardColumns>
+              <span className="w-[min(260px,40%)]">Bundle</span>
+              <span className="hidden flex-1 tablet:block">What it&rsquo;s for</span>
+              <span className="w-[110px] text-right">Roles</span>
+              <span className="w-[110px] text-right">People</span>
+            </CardColumns>
+          }
           isLoading={bundles.isLoading}
           error={bundles.error}
           isEmpty={rows.length === 0}

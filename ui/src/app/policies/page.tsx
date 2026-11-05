@@ -83,14 +83,13 @@ export default function AutomaticRulesPage() {
       )}
 
       <Card>
-        {rows.length > 0 && (
-          <CardColumns>
-            <span className="flex-1">If &hellip; then</span>
-            <span className="w-[110px] text-right">People</span>
-          </CardColumns>
-        )}
-
         <ListStates
+          head={
+            <CardColumns>
+              <span className="flex-1">If &hellip; then</span>
+              <span className="w-[110px] text-right">People</span>
+            </CardColumns>
+          }
           isLoading={rules.isLoading}
           error={rules.error}
           isEmpty={rows.length === 0}

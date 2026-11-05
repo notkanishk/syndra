@@ -396,34 +396,37 @@ export default function PeoplePage() {
       )}
 
       <Card stale={readState.current === false}>
-        <CardColumns>
-          {bulkMode && <span className="w-11 shrink-0 desktop:w-[26px]" />}
-          <span className="w-[250px] min-w-[180px]">
-            <SortHead label="Person" name="person" sort={sort} onSort={setSort} />
-          </span>
-          <span className="hidden w-[180px] shrink-0 desktop:block">
-            <SortHead label="Bundles" name="bundles" sort={sort} onSort={setSort} />
-          </span>
-          <span className="min-w-[170px] flex-1">Access</span>
-          <span className="w-[110px] shrink-0 text-right">
-            <SortHead label="Attention" name="attention" sort={sort} onSort={setSort} />
-          </span>
-        </CardColumns>
-
-        {bulkMode && rows.length > 0 && (
-          <SelectAllRow
-            inScope={rows.length}
-            total={all.length}
-            noun={["person", "people"]}
-            allSelected={selection.allSelected}
-            {...selection.headerCheckboxProps}
-            onChange={toggleAll}
-          />
-        )}
 
         <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
         <div className={view.className}>
         <ListStates
+          head={
+            <>
+            <CardColumns>
+              {bulkMode && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+              <span className="w-[250px] min-w-[180px]">
+                <SortHead label="Person" name="person" sort={sort} onSort={setSort} />
+              </span>
+              <span className="hidden w-[180px] shrink-0 desktop:block">
+                <SortHead label="Bundles" name="bundles" sort={sort} onSort={setSort} />
+              </span>
+              <span className="min-w-[170px] flex-1">Access</span>
+              <span className="w-[110px] shrink-0 text-right">
+                <SortHead label="Attention" name="attention" sort={sort} onSort={setSort} />
+              </span>
+            </CardColumns>
+            {bulkMode && rows.length > 0 && (
+              <SelectAllRow
+                inScope={rows.length}
+                total={all.length}
+                noun={["person", "people"]}
+                allSelected={selection.allSelected}
+                {...selection.headerCheckboxProps}
+                onChange={toggleAll}
+              />
+            )}
+            </>
+          }
           // The last search's empty answer is not this one's: "Nobody matches" waits for it.
           isLoading={users.isLoading || (users.isPlaceholderData && leaving.rows.length === 0)}
           error={users.error}

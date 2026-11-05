@@ -20,6 +20,9 @@ Four buckets, in the order they actually unblock each other:
 ### A-20 second pass — [`changes/second-pass`](changes/second-pass/proposal.md)
 
 Owner said "all yes" on 5 Nov 2026. **P1 (names link by default, G14) is built** on `feat/a20-names-link`; P2 to P8 are in other branches and add their own sections to that change. Open from P1: the resolver does not know which ids are service accounts, so a bare `UserName` opens `/users/:id`; only rows that call `useAccountHref` reach `/system/service-accounts/:id`.
+### A-20 second pass (P4, P7 built)
+
+Headings leave with the rows and errors carry four parts: see [`changes/second-pass`](changes/second-pass/tasks.md). Open: pass `fine` to `ErrorState` from Zitadel-facing pages.
 
 ### LDAP / sync — **gone**
 

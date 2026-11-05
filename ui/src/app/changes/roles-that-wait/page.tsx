@@ -182,20 +182,21 @@ function WaitingRoles({
 
   return (
     <Card>
-      <CardColumns>
-        <span className="flex-1">
-          <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
-        </span>
-        <span className="hidden w-[200px] tablet:block">
-          <SortHead label="Marked" name="marked" sort={sort} onSort={setSort} />
-        </span>
-        <span className="w-[110px] text-right">
-          <SortHead label="People" name="people" sort={sort} onSort={setSort} />
-        </span>
-        <span className="w-[140px]" aria-hidden />
-      </CardColumns>
-
       <ListStates
+        head={
+          <CardColumns>
+            <span className="flex-1">
+              <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
+            </span>
+            <span className="hidden w-[200px] tablet:block">
+              <SortHead label="Marked" name="marked" sort={sort} onSort={setSort} />
+            </span>
+            <span className="w-[110px] text-right">
+              <SortHead label="People" name="people" sort={sort} onSort={setSort} />
+            </span>
+            <span className="w-[140px]" aria-hidden />
+          </CardColumns>
+        }
         isLoading={isLoading}
         error={error}
         isEmpty={marked.length === 0}
