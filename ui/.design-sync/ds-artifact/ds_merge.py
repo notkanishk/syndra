@@ -1,7 +1,10 @@
 """Convert a Claude Design / design-sync bundle folder into the Design System
 "files" layout, the same way the old org's "Finish setting up" did.
 
-usage: python3 -I ds_merge.py <bundle_dir> <tokens.json> <out_project_dir>
+usage: python3 -I ds_merge.py <bundle_dir> <tokens.json> <out_project_dir> [MOVES.md]
+
+With MOVES.md (ui/.design-sync/MOVES.md, written by moves.mjs), each card's
+README.md ends with its Moves and Phone lines.
 
 Writes only derived files into <out_project_dir> (which should start as a copy
 of the live backup's project/):
@@ -13,6 +16,12 @@ of the live backup's project/):
 import json, os, re, shutil, sys
 
 src, tokens_path, out = sys.argv[1:4]
+moves = {}
+if len(sys.argv) > 4:
+    for row in open(sys.argv[4]).read().splitlines():
+        cells = [c.strip() for c in row.strip().strip("|").split("|")]
+        if len(cells) == 3 and cells[0] and not set(cells[0]) <= set("-: ") and cells != ["Card", "Moves", "Phone"]:
+            moves[cells[0]] = cells[1:]
 tokens = json.load(open(tokens_path))
 
 # Every --name the page declares from tokens.json (craft.md: One source).
@@ -69,7 +78,10 @@ for c in sorted(comps, key=str.lower):
     for f in sorted(os.listdir(os.path.join(src, base))):
         put(base + f, read(base + f, binary=True))
     put(f"components/{c}/preview.html", preview(read(base + c + ".html")))
-    put(f"components/{c}/README.md", read(base + c + ".prompt.md"))
+    readme = read(base + c + ".prompt.md")
+    if c in moves:
+        readme = readme.rstrip("\n") + f"\n\n**Moves.** {moves[c][0]}\n\n**Phone.** {moves[c][1]}\n"
+    put(f"components/{c}/README.md", readme)
     d = read(base + c + ".d.ts")
     dts.append(d.replace("import * as React from 'react';\n", "", 1).strip("\n"))
 
