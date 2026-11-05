@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
@@ -97,9 +98,9 @@ func rehearseOneDrift(ctx context.Context, id, op string) services.BulkOutcome {
 		// Adopting is when a rule starting from the role fires (ADR-006), so
 		// the plan names what the rules give, from the closure the write
 		// follows (coherence audit C1).
-		roles := make([]models.HeldRole, 0, len(item.RoleKeys))
+		roles := make([]access.Role, 0, len(item.RoleKeys))
 		for _, rk := range item.RoleKeys {
-			roles = append(roles, models.HeldRole{ProjectID: item.ProjectID, RoleKey: rk})
+			roles = append(roles, access.Role{ProjectID: item.ProjectID, RoleKey: rk})
 		}
 		rules, err := svcRulesFollowing(ctx, item.UserID, roles)
 		if err != nil {

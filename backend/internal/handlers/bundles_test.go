@@ -19,6 +19,10 @@ import (
 // resetBundleDeps captures and restores all bundle-related injectable vars.
 func resetBundleDeps(t *testing.T) {
 	t.Helper()
+	origHolding := svcBundleHolding
+	t.Cleanup(func() { svcBundleHolding = origHolding })
+	// Not checked: Zitadel never read, so no observed holder number.
+	svcBundleHolding = func(context.Context) (services.HolderFacts, error) { return services.HolderFacts{}, nil }
 	origCreate := dbCreateBundle
 	origGetAll := dbGetAllBundles
 	origGetRoles := dbGetRolesForBundle

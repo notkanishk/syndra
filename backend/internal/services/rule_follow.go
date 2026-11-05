@@ -6,6 +6,7 @@ import (
 	"maps"
 	"strings"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -136,9 +137,9 @@ type RuleRow struct {
 
 // RulesFollowing is followRules asked in advance: the roles the rules would
 // queue if userID were given roles now. The same reads (userBaseHoldings), the
-// same delta (ruleDelta), the same closure (models.RuleClosure), so what the
+// same delta (ruleDelta), the same closure (access.Closure), so what the
 // dialog names is what the write queues. Nil when no rule follows.
-func RulesFollowing(ctx context.Context, userID string, roles []models.HeldRole) ([]RuleRow, error) {
+func RulesFollowing(ctx context.Context, userID string, roles []access.Role) ([]RuleRow, error) {
 	rules, err := svcGetActiveMappingRules(ctx)
 	if err != nil || len(rules) == 0 {
 		return nil, err

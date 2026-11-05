@@ -87,7 +87,7 @@ func (r EnqueueResult) OutboxIDs() []string {
 
 // FollowRules carries a direct write through the mapping rules. Wired by
 // services (services.followRules), which owns the one definition of what a
-// person holds and the one closure (models.RuleClosure) the token is compiled
+// person holds and the one closure (access.Closure) the token is compiled
 // from.
 //
 // enqueueWrites hands it the write as a function. It reads the person's

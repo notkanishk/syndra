@@ -14,7 +14,7 @@ Bundle and rule cascades already followed rules through the closure and the outb
 
 ### Decision
 
-- **One closure.** `models.RuleClosure` is the only code that follows rules. The token compiler, every cascade, the access views and the mapping cohort call it.
+- **One closure.** `access.Closure` / `access.Ends` (`internal/access`, one-path W2a; was `models.RuleClosure`) is the only code that follows rules. A rule role ends when its source ends. The token compiler, every cascade, the access views and the mapping cohort call it.
 - **Rules fire on changes to Syndra's own record.** Every direct write goes through `db.enqueueWrites`, which runs it through `db.FollowRules` (wired by services). In the write's transaction, the hook diffs the person's closure before and after. The difference, beyond the write's own roles, is enqueued as `source='rule'` outbox rows. They are delivered with the write, by the same drain, under the same rule (only a role that waits holds a row).
 - **Rules do not fire on webhooks.** A Zitadel-side change with no Syndra trace is drift. It is triaged, and when adopted it is a Syndra write, which fires the rules.
 - **Removal is the mirror.** The same closure diff follows the chain and keeps what another source still gives.

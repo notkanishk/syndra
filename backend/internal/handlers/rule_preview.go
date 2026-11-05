@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"syndra/internal/models"
+	"syndra/internal/access"
 	"syndra/internal/services"
 )
 
@@ -19,10 +19,10 @@ import (
 func handleRulePreview(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	projectID := strings.TrimSpace(q.Get("project_id"))
-	var roles []models.HeldRole
+	var roles []access.Role
 	for _, rk := range q["role_key"] {
 		if rk = strings.TrimSpace(rk); rk != "" {
-			roles = append(roles, models.HeldRole{ProjectID: projectID, RoleKey: rk})
+			roles = append(roles, access.Role{ProjectID: projectID, RoleKey: rk})
 		}
 	}
 	if projectID == "" || len(roles) == 0 {

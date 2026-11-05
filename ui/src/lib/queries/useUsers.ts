@@ -76,6 +76,8 @@ export interface AccessRoleReason {
 export interface AccessRole {
   role_key: string;
   reasons: AccessRoleReason[];
+  /** When it ends, from every source (a rule role with its source); absent: never. */
+  ends?: string | null;
 }
 
 export interface UserAccessProject {

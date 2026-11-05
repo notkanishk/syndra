@@ -129,7 +129,7 @@ export function AddRolesToBundle({
           holders > 0
             ? `Publish a version to decide whether the ${holders} ${
                 holders === 1 ? "person" : "people"
-              } holding ${name} ${holders === 1 ? "gets" : "get"} ${included === 1 ? "it" : "them"}.`
+              } ${name} is assigned to ${holders === 1 ? "gets" : "get"} ${included === 1 ? "it" : "them"}.`
             : "Publish a version to give it to people.",
       });
     } else if (added > 0) {
@@ -148,7 +148,7 @@ export function AddRolesToBundle({
           holders > 0
             ? `Publish a version to decide whether the ${holders} ${
                 holders === 1 ? "person" : "people"
-              } holding ${name} ${holders === 1 ? "gets" : "get"} them.`
+              } ${name} is assigned to ${holders === 1 ? "gets" : "get"} them.`
             : "Publish a version to give them to people.",
       });
     }

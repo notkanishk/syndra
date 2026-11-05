@@ -83,9 +83,11 @@ export function PublishVersionDialog({
   // One phrase, used by the field label, the radiogroup's accessible name and
   // the not-ready reason. Written out once because it was written out three
   // times and only one of them agreed with itself for a single holder.
+  // Assigned, and said so: publishing moves assignments. Who Zitadel shows
+  // holding it is the bundle list's number, not this one.
   const holdersPhrase = includers.length
-    ? `The ${holders} who ${holders === 1 ? "has" : "have"} it directly`
-    : `The ${holders} who already ${holders === 1 ? "holds" : "hold"} it`;
+    ? `The ${holders} it is assigned to directly`
+    : `The ${holders} it is assigned to`;
   const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
 
   return (
@@ -93,12 +95,12 @@ export function PublishVersionDialog({
       title={`Publish ${name} v${draft.next_version}`}
       lede={
         includers.length > 0
-          ? `${name} reaches ${people(holders + through)}: ${holders} directly, and ${through} through ${formatList(
+          ? `${name} is assigned to ${people(holders + through)}: ${holders} directly, and ${through} through ${formatList(
               sortNames(includers.map((i) => i.name)),
             )}, which ${includers.length === 1 ? "includes" : "include"} it. Nobody moves unless you say so.`
           : holders === 0
-          ? "Nobody holds this bundle yet, so publishing changes nothing for anyone."
-          : `${holders} ${holders === 1 ? "person holds" : "people hold"} this bundle today. Publishing does not move them unless you say so.`
+          ? "This bundle is assigned to nobody yet, so publishing changes nothing for anyone."
+          : `This bundle is assigned to ${people(holders)} today. Publishing does not move them unless you say so.`
       }
       noun={["person", "people"]}
       ready={decided && answered}

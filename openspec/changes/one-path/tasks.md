@@ -107,3 +107,22 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [x] Partial-failure codes (`MAY_HAVE_GONE_THROUGH` in `ui/src/lib/outcome.ts`) say "Some of this may have gone through. Check <where> before trying again."; `partial-codes.test.tsx` reads the handlers and fails on an undecided 5xx code
 
 - [x] A lost reply on a write (`LostReply` in `api-client.ts`, the proxy `BACKEND_UNREACHABLE`/`UPSTREAM_ERROR` on a non-GET) says "Check Pending changes or Audit", never "Nothing was changed."; `ANSWER_NOT_RECORDED` mapped, `CREDENTIAL_NOT_SET` and `PLAN_CLAIM_ERROR` verified as writing nothing
+
+## W2a · One access core (branch `feat/one-closure-core`)
+
+- [x] 2a.1 `internal/access`: `Ends`, `Closure`, `Fired`, `Later`, `Left`; `models.RuleClosure` deleted
+- [x] 2a.2 Compiler on `access.Ends`: a rule role ends when its source ends (`cache/compiler_ends_test.go`)
+- [x] 2a.3 `collectUserRoles` on `access.Ends` + `Fired`; `EffectiveRole.Ends`; role members' Ends from it; person page reads `role.ends`
+- [x] 2a.4 `services.MappingHolders` (records + closure − people who left); `db.HeldRecords`; `ListMappingHistory` takes the holders func
+- [x] 2a.5 Drift and reconciliation on `services.RuleDerived` (records only, forward); `ExpectedViaRule` deleted
+- [x] 2a.6 Bundle readers on `bundleGivesSQL` (role usage, referenced roles, projects' bundle count, the access map); bundle impact on the latest version
+- [x] 2a.7 `BundleHolding`, `RuleHolding`; `observed_holder_count` on bundle and rule lists
+- [x] 2a.8 What-if kinds `rule_added`, `bundle_assigned`, `bundle_unassigned`; the three UI previews ask it
+- [x] 2a.9 UI: observed holder numbers, recorded ones labelled; `holdersLine` never heads with a recorded number; six fallbacks sort by observed (`heldSortKey`); copy traced (see design)
+- [x] 2a.10 One `Left` for bulk, insights, usage and the entitlement path
+- [x] 2a.11 Parity and behaviour tests; two mutations checked
+- [ ] 2a.12 `handlers/bundles.go` `GET /bundles/{id}/roles` (working copy, the editor's own list) and `BundlePage.tsx` re-deriving includes (`:164-167`) left: the editor shows what it edits #needs-triage
+- [ ] 2a.13 `RequestHolding` (`db/access_requests.go:84`), `GrantDirectAccess` `noteOf`, `MemberAccess` and `observedRolesByProject` overwrite: W3b's holding index #ready-for-agent
+- [ ] 2a.14 `claim_shape.reachOf`, `insights_asof` (recorded fallback), the "Bundle … is unused" hint (assignments): onto the snapshot in W3b #ready-for-agent
+- [ ] 2a.15 Cost: bundle and rule lists now walk the snapshot per request, like the role catalogue. Watch on prod; cache the snapshot across requests if slow #needs-triage
+- [ ] 2a.16 After deploy: drift may raise rule targets whose source is only in Zitadel; triage them with their source (operator) #ready-for-human

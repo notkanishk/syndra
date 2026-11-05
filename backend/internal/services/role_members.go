@@ -230,9 +230,12 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		if grant, ok := grantsByUser[user.ID]; ok {
 			member.GrantID = grant.ID
 			member.Since = clock.Day(grant.CreatedAt)
-			if grant.ExpiresAt != nil {
-				member.Expires = clock.Day(*grant.ExpiresAt)
-			}
+		}
+		// When the role ends for them, from every source (access.Ends): a
+		// direct grant's end only when nothing else gives it for longer, a
+		// rule role's with its source. The token says the same.
+		if role.Ends != nil {
+			member.Expires = clock.Day(*role.Ends)
 		}
 		view.Members = append(view.Members, member)
 	}

@@ -10,6 +10,9 @@ import (
 	"syndra/internal/textsort"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
+	"syndra/internal/access"
 	"syndra/internal/cache"
 	"syndra/internal/claims"
 	"syndra/internal/db"
@@ -980,6 +983,13 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 		return nil, fmt.Errorf("observation basis: %w", err)
 	}
 
+	// What each bundle gives, includes and held versions too: a bundle made
+	// only of includes gives a project roles as much as one listing them.
+	given, err := svcGetBundleRolesGiven(snap.ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	projectSummaries := make([]models.ProjectSummary, 0, len(projects))
 	for _, project := range projects {
 		memberCount := 0
@@ -1013,11 +1023,7 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 
 		bundleCount := 0
 		for _, bundle := range bundles {
-			roles, err := svcGetRolesForBundle(snap.ctx, bundle.ID)
-			if err != nil {
-				return nil, err
-			}
-			for _, role := range roles {
+			for _, role := range given[bundle.ID] {
 				if role.ProjectID == project.ID {
 					bundleCount++
 					break
@@ -1074,8 +1080,11 @@ func BundleImpact(ctx context.Context, bundleID string) (models.BundleImpact, er
 }
 
 func bundleImpactFromSnapshot(snap *accessSnapshot, bundleID string) (models.BundleImpact, error) {
-	roles, err := svcGetRolesForBundle(snap.ctx, bundleID)
-	if err != nil {
+	// What the bundle gives today: its latest published version, own roles
+	// and included ones, the same set the bundle list counts. The working copy
+	// alone counted a bundle made of includes as giving nothing.
+	_, roles, err := svcLatestVersionRoles(snap.ctx, bundleID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return models.BundleImpact{}, err
 	}
 
@@ -1369,6 +1378,10 @@ func topologyFromSnapshot(snap *accessSnapshot) (models.TopologyGraph, error) {
 	if err != nil {
 		return graph, err
 	}
+	given, err := svcGetBundleRolesGiven(ctx)
+	if err != nil {
+		return graph, err
+	}
 	for _, bundle := range bundles {
 		bundleID := "bundle:" + bundle.ID
 		addNode(models.TopologyNode{
@@ -1378,11 +1391,7 @@ func topologyFromSnapshot(snap *accessSnapshot) (models.TopologyGraph, error) {
 			Description: bundle.Description,
 		})
 
-		roles, err := svcGetRolesForBundle(ctx, bundle.ID)
-		if err != nil {
-			return graph, err
-		}
-		for _, role := range roles {
+		for _, role := range given[bundle.ID] {
 			ensureRoleNode(role.ProjectID, role.RoleKey)
 			addEdge(models.TopologyEdge{
 				ID:     "bundle-role:" + bundle.ID + ":" + role.ProjectID + ":" + role.RoleKey,
@@ -1428,6 +1437,14 @@ func topologyFromSnapshot(snap *accessSnapshot) (models.TopologyGraph, error) {
 
 func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
 	roleMap := make(map[roleKey]*models.EffectiveRole)
+	// Each base role with when it ends (zero: never), for access.Ends.
+	base := map[roleKey]time.Time{}
+	hold := func(k roleKey, end time.Time) {
+		if cur, ok := base[k]; ok {
+			end = access.Later(cur, end)
+		}
+		base[k] = end
+	}
 
 	directGrants, err := svcGetDirectGrantsForUser(ctx, userID, false)
 	if err != nil {
@@ -1435,6 +1452,11 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 	}
 	for _, grant := range directGrants {
 		key := roleKey{projectID: grant.ProjectID, roleKey: grant.RoleKey}
+		var end time.Time
+		if grant.ExpiresAt != nil {
+			end = *grant.ExpiresAt
+		}
+		hold(key, end)
 		description := "Direct Zitadel grant"
 		if grant.Reason != "" {
 			description = grant.Reason
@@ -1475,6 +1497,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		roles := byBundle[bundle.ID]
 		for _, role := range roles {
 			key := roleKey{projectID: role.ProjectID, roleKey: role.RoleKey}
+			hold(key, time.Time{})
 			reason := models.RoleReason{
 				Kind:        "bundle",
 				Description: fmt.Sprintf("Given by bundle %s v%d", bundle.Name, bundle.PinnedVersion),
@@ -1494,24 +1517,27 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		return nil, nil, err
 	}
 
-	// What the chains reach is models.RuleClosure's to say (the one
-	// implementation); this only names, for each role reached, every rule that
-	// reaches it. A rule whose source is in the closure fires, and no other.
-	held := make(map[roleKey]bool, len(roleMap))
-	for k := range roleMap {
-		held[k] = true
+	// What the chains reach, when each role ends, and which rules fire, is
+	// the access core's to say (the one implementation, which the token
+	// compiler also calls); this only names, for each role reached, every rule
+	// that reaches it.
+	dated := access.Ends(base, rules, newRoleKey)
+	closure := make(map[roleKey]bool, len(dated))
+	for k := range dated {
+		closure[k] = true
 	}
-	closure := effectiveClosure(held, rules)
-	for _, rule := range rules {
-		if !closure[roleKey{projectID: rule.SourceProject, roleKey: rule.SourceRole}] {
-			continue
-		}
+	for _, rule := range access.Fired(closure, rules, newRoleKey) {
 		upsertRole(ctx, roleMap, roleKey{projectID: rule.TargetProject, roleKey: rule.TargetRole}, false, models.RoleReason{
 			Kind:           "mapping",
 			Description:    fmt.Sprintf("Derived from %s:%s", rule.SourceProject, rule.SourceRole),
 			TriggerProject: rule.SourceProject,
 			TriggerRole:    rule.SourceRole,
 		})
+	}
+	for k, r := range roleMap {
+		if end := dated[k]; !end.IsZero() {
+			r.Ends = &end
+		}
 	}
 
 	return roleMap, bundles, nil

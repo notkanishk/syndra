@@ -86,6 +86,9 @@ func resetGovernanceDeps(t *testing.T) {
 	svcGetBundleHolderCounts = func(context.Context) (map[string]int, error) { return map[string]int{}, nil }
 	t.Cleanup(func() { svcGetBundleHolderCounts = origHolderCounts })
 	origGetRolesForBundle := svcGetRolesForBundle
+	origGiven := svcGetBundleRolesGiven
+	t.Cleanup(func() { svcGetBundleRolesGiven = origGiven })
+	svcGetBundleRolesGiven = func(context.Context) (map[string][]models.BundleRole, error) { return nil, nil }
 	origUserBundleRoles := svcGetUserBundleRolesGrouped
 	origGetDirectGrants := svcGetDirectGrantsForUser
 	origGetRules := svcGetActiveMappingRules

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
@@ -47,7 +48,7 @@ func resetDriftDeps(t *testing.T) {
 		return services.Delivery{Sent: ids, Drain: propagation.DrainResult{Applied: len(ids)}}
 	}
 	// No automatic rules unless a test says so.
-	svcRulesFollowing = func(context.Context, string, []models.HeldRole) ([]services.RuleRow, error) { return nil, nil }
+	svcRulesFollowing = func(context.Context, string, []access.Role) ([]services.RuleRow, error) { return nil, nil }
 }
 
 // --- Adoption records a direct grant, and says only that ---
@@ -290,8 +291,8 @@ func TestBulkAdoptPlan_NamesTheRuleRows(t *testing.T) {
 		item.ID = id
 		return item, nil
 	}
-	svcRulesFollowing = func(_ context.Context, uid string, roles []models.HeldRole) ([]services.RuleRow, error) {
-		if uid != "u1" || len(roles) != 1 || roles[0] != (models.HeldRole{ProjectID: "p_laser", RoleKey: "trained"}) {
+	svcRulesFollowing = func(_ context.Context, uid string, roles []access.Role) ([]services.RuleRow, error) {
+		if uid != "u1" || len(roles) != 1 || roles[0] != (access.Role{ProjectID: "p_laser", RoleKey: "trained"}) {
 			t.Errorf("the preview must be asked about the adopted role, got %s %v", uid, roles)
 		}
 		return []services.RuleRow{{ProjectID: "p_shop", RoleKey: "bench", RuleID: "r1",

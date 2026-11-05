@@ -46,9 +46,9 @@ const order = () =>
 
 beforeEach(() => {
   state.roles = [
-    role("gamma", { display_name: "Gamma", project_name: "Wood shop", project_id: "p2", assigned_user_count: 5, bundle_count: 2, rule_count: 1 }),
-    role("alpha", { display_name: "Alpha", assigned_user_count: 9, waits_for_send: true }),
-    role("beta", { display_name: "Beta", project_name: "Studio", project_id: "p3", assigned_user_count: 2, is_unused: true }),
+    role("gamma", { display_name: "Gamma", project_name: "Wood shop", project_id: "p2", assigned_user_count: 5, observed_user_count: 5, bundle_count: 2, rule_count: 1 }),
+    role("alpha", { display_name: "Alpha", assigned_user_count: 9, observed_user_count: 9, waits_for_send: true }),
+    role("beta", { display_name: "Beta", project_name: "Studio", project_id: "p3", assigned_user_count: 2, observed_user_count: 2, is_unused: true }),
   ];
 });
 

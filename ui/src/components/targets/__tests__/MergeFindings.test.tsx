@@ -159,7 +159,7 @@ describe("differences waiting on a decision", () => {
     expect(screen.queryByText("Use TrueNAS's value")).toBeNull();
     // And the alternative, with the mapping and how far editing it reaches.
     expect(screen.getByText(/every holder of that role/i)).toBeTruthy();
-    expect(screen.getByText(/3 people hold that role/i)).toBeTruthy();
+    expect(screen.getByText(/Syndra gives that role to 3 people/i)).toBeTruthy();
   });
 
   // A suspension the target made IS expressible — as a deny allowance — so the

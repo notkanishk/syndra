@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -198,7 +199,7 @@ func TestFollowRules_ConvergesWhatTheRulesReach(t *testing.T) {
 func TestRulesFollowing_NamesWhatTheWriteQueues(t *testing.T) {
 	l := &ledger{}
 	l.install(t, chain)
-	preview, err := RulesFollowing(context.Background(), "u1", []models.HeldRole{{ProjectID: "p", RoleKey: "a"}})
+	preview, err := RulesFollowing(context.Background(), "u1", []access.Role{{ProjectID: "p", RoleKey: "a"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,12 +228,12 @@ func TestRulesFollowing_NamesWhatTheWriteQueues(t *testing.T) {
 func TestRulesFollowing_NothingWhenNothingFollows(t *testing.T) {
 	l := &ledger{direct: []models.DirectGrant{{ProjectID: "p", RoleKey: "a"}}}
 	l.install(t, chain)
-	if got, err := RulesFollowing(context.Background(), "u1", []models.HeldRole{{ProjectID: "p", RoleKey: "a"}}); err != nil || got != nil {
+	if got, err := RulesFollowing(context.Background(), "u1", []access.Role{{ProjectID: "p", RoleKey: "a"}}); err != nil || got != nil {
 		t.Fatalf("already held: got %v, %v", got, err)
 	}
 	l = &ledger{}
 	l.install(t, nil)
-	if got, err := RulesFollowing(context.Background(), "u1", []models.HeldRole{{ProjectID: "p", RoleKey: "a"}}); err != nil || got != nil || l.reads != 0 {
+	if got, err := RulesFollowing(context.Background(), "u1", []access.Role{{ProjectID: "p", RoleKey: "a"}}); err != nil || got != nil || l.reads != 0 {
 		t.Fatalf("no rules: got %v, %v, reads %d", got, err, l.reads)
 	}
 }

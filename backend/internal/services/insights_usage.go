@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -68,7 +69,7 @@ func observedRoleHolders(ctx context.Context) (map[string][]string, bool, error)
 	}
 	out := map[string][]string{}
 	for _, u := range snap.Users() {
-		if leftStatuses[strings.ToLower(u.Status)] {
+		if access.Left(u.Status) {
 			continue // somebody who has left holding access is its own finding
 		}
 		held, err := snap.Observed(u.ID)
