@@ -93,6 +93,8 @@ var permittedDomains = map[string]bool{
 	"docker.com": true, "npmjs.com": true, "bun.sh": true, "nextjs.org": true,
 	// The self-hosted fonts' licence (ui/src/app/fonts/README.md).
 	"openfontlicense.org": true,
+	// The laser software whose fit docs/research/2026-11-05-trotec-ruby.md assesses.
+	"troteclaser.com": true,
 	// The apps whose claim needs docs/research/2026-11-03-app-claims.md cites.
 	"netbird.io": true, "supabase.com": true, "gitlab.com": true, "navidrome.org": true, "freenas.org": true,
 	// The CDNs a self-contained review page loads its styles and diagrams from.

@@ -402,6 +402,8 @@ Everything else is healthy: index tracks HEAD, embeddings are local-semantic (`X
 
 **Design System publishing (5 Nov 2026).** This repo's Claude Code session owns BRIDGE steps 2–3 (publish the Syndra Design System artifact, refresh the canvas copy), each after the owner's OK in that session. Today's converter is `ui/.design-sync/ds-artifact/ds_merge.py`. When a Claude Code release lets `/design-sync` target a Design System artifact (2.1.316's only pushes to standalone claude.ai/design), or the `design-system-from-code` skill ships, run it once beside `ds_merge.py`, compare the published files, then retire `ds-artifact/`.
 
+**Trotec Ruby (laser), later.** Feasible as a second add-on (account provisioning by role, disable on revoke, self-service password); not as SSO, which Ruby lacks. Assessment and the read-only checks owed before building: `docs/research/2026-11-05-trotec-ruby.md`. `needs-triage`
+
 **Standalone claude.ai/design closes 14 Dec 2026.** Checked 5 Nov: nothing in `ui/.design-sync` or `ui/.ds-sync` makes a network call or uploads there. The only mentions are code comments and `config.json`'s `projectId` (`7133b076-…`, an identity field the scripts never send anywhere); the `--remote` anchor is a local copy of `ds-bundle/_ds_sync.json`. Nothing to stop. Whether to delete the old Claude Design project, and whether to drop `projectId`, is the owner's call. `needs-triage`
 
 ---
