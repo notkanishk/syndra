@@ -1,5 +1,6 @@
 "use client";
 
+import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -522,17 +523,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                   >
                     <FoldChevron open={open} />
                   </button>
-                  <Link
-                    href={`/projects/${encodeURIComponent(project.project_id)}`}
-                    className="link-hover"
-                  >
-                    <ResolvedProjectName
-                      className="type-card-title"
-                      name={project.project_name}
-                      resolved={project.project_name_resolved}
-                      id={project.project_id}
-                    />
-                  </Link>
+                  <ResolvedProjectName className="type-card-title" name={project.project_name} resolved={project.project_name_resolved} id={project.project_id} />
                   <ProjectRoleTally
                     recorded={project.effective_role_keys.length}
                     unexplained={unexplainedIn(project).length}
@@ -816,6 +807,7 @@ function ExtendSeat({
   roleKey: string;
 }) {
   const extend = useCreateGrant(userId);
+  const roleWaits = useRoleWaits();
   const roleName = useRoleName();
   // No sheet of its own: a small one holds the step if extending would cancel a change still
   // waiting for you to send (A-04 §14).
@@ -826,7 +818,7 @@ function ExtendSeat({
   return (
     <Crossfade id={done ? "outcome" : extend.isPending ? "forecast" : "open"}>
       {extend.isPending && !done ? (
-        <ActionForecast word={`${FORECAST.extend} by ${EXTEND_DAYS} days`} />
+        <ActionForecast word={roleWaits(projectId, roleKey) ? FORECAST.queued : `${FORECAST.extend} by ${EXTEND_DAYS} days`} />
       ) : outcome && done ? (
         <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} person={userId} />
       ) : (

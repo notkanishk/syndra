@@ -15,7 +15,18 @@ Four buckets, in the order they actually unblock each other:
 
 ---
 
+## 0. The second pass (A-20), first wave
+
+Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. P11 (Technical detail) is the third wave.
+
 ## 1. Code
+
+### A-20 second pass — [`changes/second-pass`](changes/second-pass/proposal.md)
+
+Owner said "all yes" on 5 Nov 2026. **P1 (names link by default, G14) is built** on `feat/a20-names-link`; P2 to P8 are in other branches and add their own sections to that change. Open from P1: the resolver does not know which ids are service accounts, so a bare `UserName` opens `/users/:id`; only rows that call `useAccountHref` reach `/system/service-accounts/:id`.
+### A-20 second pass (P4, P7 built)
+
+Headings leave with the rows and errors carry four parts: see [`changes/second-pass`](changes/second-pass/tasks.md). Open: pass `fine` to `ErrorState` from Zitadel-facing pages.
 
 ### LDAP / sync — **gone**
 
@@ -32,6 +43,10 @@ must set a new storage credential. Their hash went with the vault, and it could
 not have been converted anyway — TrueNAS takes plaintext and nothing else. The
 member view renders the re-enrolment state; the operator communication is the
 thing to do before this deploys.
+
+### A-20 second pass, P2 P3 P6 (built 5 Nov 2026)
+
+[`changes/second-pass`](changes/second-pass/tasks.md): the welcome as the title's second sentence (Home on a calm day only), the shell's Notices under the page header, the phone top bar's mark and Go to. Open: a look on a real phone (bar at 360px, the bloom). Go to for members is deliberately not built (A-20 P6).
 
 ### Basic / Advanced IA — what the redesign left open
 

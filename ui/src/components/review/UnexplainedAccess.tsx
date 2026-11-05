@@ -8,7 +8,8 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { useDegraded } from "@/components/states/DegradedBanner";
 import { isDeparted } from "@/lib/people-filters";
 import { serviceAccountHref } from "@/lib/queries/useServiceAccounts";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
+import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { Badge, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
@@ -76,6 +77,8 @@ import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { targetLabel } from "@/lib/nav";
 import {
+  FORECAST,
+  forecastFor,
   outcomeFromError,
   REVOKE_SENDS_ITSELF,
   REVOKE_SENDS_ITSELF_WORD,
@@ -1099,6 +1102,7 @@ function ResolutionDialog({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const revoke = useRevokeDrift();
   const external = useMarkExternalDrift();
+  const roleWaits = useRoleWaits();
 
   if (!pending) return null;
   const { item, resolution } = pending;
@@ -1165,6 +1169,17 @@ function ResolutionDialog({
       {/* The dialog states what it did, and for a revocation that is that
           nothing has reached the target yet — the access is still there until
           the drain runs. */}
+      {/* The first 100ms: what Syndra will do, until the server answers. A revoke goes
+          to Zitadel, so a role that waits forecasts the wait. */}
+      {!outcome && busy && (
+        <ActionForecast
+          className="mx-6 mb-1"
+          word={forecastFor(
+            resolution === "revoke" ? "remove" : resolution === "attribute" ? "adopt" : "mark",
+            roleWaits(item.project_id, role),
+          )}
+        />
+      )}
       {outcome && (
         <ActionOutcome
           outcome={outcome}
@@ -1423,6 +1438,7 @@ function BulkResolutionDialog({
 
   return (
     <RehearsalDialog
+      forecast={op === "adopt" ? FORECAST.adopt : FORECAST.mark}
       title={op === "adopt" ? "Adopt in Syndra" : "Mark as owned elsewhere"}
       lede={composition}
       noun={["item", "items"]}

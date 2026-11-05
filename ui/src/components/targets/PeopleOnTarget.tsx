@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
@@ -85,7 +84,7 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
         errorTitle="The account list could not be read"
         empty={
           <EmptyState
-            title="Nobody yet"
+            title="Nobody yet."
             guidance={`No role is mapped to ${name} yet, or the changes that would create accounts are still waiting for you to send from Pending changes.`}
           />
         }
@@ -151,12 +150,7 @@ function PersonRow({
         <span className="flex w-[220px] flex-none items-center gap-2.5">
           <UserAvatar id={account.subject_id} size="row" />
           <span className="min-w-0">
-            <Link
-              href={accountHref(account.subject_id)}
-              className="[overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink link-hover"
-            >
-              <UserName id={account.subject_id} />
-            </Link>
+            <UserName id={account.subject_id} href={accountHref(account.subject_id)} className="[overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink" />
             <ServiceAccountTag id={account.subject_id} />
           </span>
         </span>

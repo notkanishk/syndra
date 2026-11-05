@@ -90,12 +90,19 @@ export default function ProjectDetailPage({
   // A failed list says nothing about whether the project exists: "isn't listed"
   // is for a list that answered without it.
   if (projects.error && !project) {
+    // A page reached by a link already knows the project's name: the header stays.
     return (
-      <ErrorState
-        title="Couldn't load this project."
-        error={projects.error}
-        onRetry={() => projects.refetch()}
-      />
+      <div className="flex flex-col gap-4">
+        <PageHeader
+          title={seeded ?? "This project"}
+          lede="The roles this project offers and who holds each."
+        />
+        <ErrorState
+          title="Couldn't load this project."
+          error={projects.error}
+          onRetry={() => projects.refetch()}
+        />
+      </div>
     );
   }
 
@@ -162,14 +169,15 @@ export default function ProjectDetailPage({
       {project && <ReadFreshness state={readState} subject="What Zitadel confirmed" />}
 
       <Card stale={readState.current === false}>
-        <CardColumns>
-          <span className="min-w-[200px] flex-1">Role</span>
-          <span className="hidden w-[130px] shrink-0 desktop:block">Group</span>
-          <span className="hidden w-[140px] shrink-0 tablet:block">When given</span>
-          <span className="w-[110px] shrink-0 text-right">People</span>
-        </CardColumns>
-
         <ListStates
+          head={
+            <CardColumns>
+              <span className="min-w-[200px] flex-1">Role</span>
+              <span className="hidden w-[130px] shrink-0 desktop:block">Group</span>
+              <span className="hidden w-[140px] shrink-0 tablet:block">When given</span>
+              <span className="w-[110px] shrink-0 text-right">People</span>
+            </CardColumns>
+          }
           isLoading={roles.isLoading}
           error={roles.error}
           isEmpty={projectRoles.length === 0}

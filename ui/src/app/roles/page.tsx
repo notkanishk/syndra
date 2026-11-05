@@ -223,24 +223,25 @@ export default function RolesPage() {
       />
 
       <Card stale={readState.current === false}>
-        <CardColumns>
-          <span className="w-[180px] shrink-0">
-            <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
-          </span>
-          <span className="min-w-[200px] flex-1">
-            <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
-          </span>
-          <span className="hidden w-[130px] shrink-0 desktop:block">
-            <SortHead label="Group" name="group" sort={sort} onSort={setSort} />
-          </span>
-          <span className="hidden w-[150px] shrink-0 desktop:block">Used by</span>
-          <span className="w-[110px] shrink-0 text-right">
-            <SortHead label="People" name="people" sort={sort} onSort={setSort} />
-          </span>
-        </CardColumns>
-
         <div className={view.className}>
         <ListStates
+          head={
+            <CardColumns>
+              <span className="w-[180px] shrink-0">
+                <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
+              </span>
+              <span className="min-w-[200px] flex-1">
+                <SortHead label="Role" name="role" sort={sort} onSort={setSort} />
+              </span>
+              <span className="hidden w-[130px] shrink-0 desktop:block">
+                <SortHead label="Group" name="group" sort={sort} onSort={setSort} />
+              </span>
+              <span className="hidden w-[150px] shrink-0 desktop:block">Used by</span>
+              <span className="w-[110px] shrink-0 text-right">
+                <SortHead label="People" name="people" sort={sort} onSort={setSort} />
+              </span>
+            </CardColumns>
+          }
           isLoading={roles.isLoading}
           error={roles.error}
           isEmpty={leaving.rows.length === 0}
@@ -291,7 +292,7 @@ export default function RolesPage() {
                 <span aria-hidden className="hidden tablet:block tablet:w-[180px] tablet:shrink-0" />
               ) : (
                 <span className="w-full text-[12.5px] text-muted [text-wrap:pretty] tablet:w-[180px] tablet:shrink-0 tablet:text-[14.5px]">
-                  <ProjectName id={role.project_id} name={role.project_name} />
+                  <ProjectName id={role.project_id} name={role.project_name} link={false} />
                 </span>
               )}
               <span className="w-full min-w-0 tablet:min-w-[200px] tablet:flex-1">
@@ -302,7 +303,7 @@ export default function RolesPage() {
                 </span>
                 {role.cloned_from_role && (
                   <span className="block text-[12.5px] text-faint [text-wrap:pretty]">
-                    cloned from <ProjectName id={role.cloned_from_project} /> / {role.cloned_from_role}
+                    cloned from <ProjectName id={role.cloned_from_project} link={false} /> / {role.cloned_from_role}
                   </span>
                 )}
                 {/* Between tablet and desktop the group and what uses the role

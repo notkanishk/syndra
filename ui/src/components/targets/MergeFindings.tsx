@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Term } from "@/components/ui/Term";
 import { useState } from "react";
 
@@ -68,7 +67,7 @@ export function MergeFindings({ target }: { target: string }) {
         errorTitle="The findings could not be read"
         empty={
           <EmptyState
-            title="Nothing disputed"
+            title="Nothing disputed."
             guidance={`Every account Syndra manages on ${name} matches what Syndra expects, or differs in a way Syndra could explain.`}
           />
         }
@@ -450,8 +449,6 @@ function AlreadyDecided({
 function Person({ id, fallback }: { id: string; fallback?: string }) {
   const href = useAccountHref();
   return (
-    <Link href={href(id)} className="font-semibold text-ink link-hover">
-      <UserName id={id} fallback={fallback} />
-    </Link>
+    <UserName id={id} fallback={fallback} href={href(id)} className="font-semibold text-ink" />
   );
 }

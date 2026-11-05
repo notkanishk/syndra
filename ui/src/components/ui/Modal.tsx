@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { NameLinksContext } from "@/components/names/NameLink";
 import { Button } from "@/components/ui/Button";
 import { FLASH_MS } from "@/lib/motion";
 import { LIGHT_LEAD_MS, SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
@@ -339,7 +340,7 @@ export function Modal({
         className={`flex w-full ${SIZE_CLASS[size]} sheet-in flex-col overflow-y-auto [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
       >
         <SheetGrabber busy={busy} onClose={onClose} drag={grabber} />
-        {children}
+        <NameLinksContext.Provider value={false}>{children}</NameLinksContext.Provider>
       </div>
     </div>
     </DialogTitleId.Provider>

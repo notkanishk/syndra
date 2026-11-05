@@ -49,6 +49,7 @@ import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
+import { ShellNotices } from "@/components/shell/ShellNotices";
 import { greeting, isQuietHour, WELCOME } from "@/lib/greeting";
 import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine } from "@/lib/term-dates";
@@ -224,6 +225,10 @@ export function Home({ session }: { session: SessionUser }) {
   const headline = error
     ? "Couldn't check."
     : workSentence(calm && !swap.showsCalm ? held.current.blocks : blocks, loading);
+  // The first visit's welcome takes the headline's seat on a calm day only
+  // (A-20 P2): on a working day the work is the welcome. It is a sentence in
+  // the seat that is already there, so the date line never moves.
+  const welcome = session.firstVisit && !error && !loading && calm && swap.showsCalm;
 
   // One wrapper, so the Basic footnote's Unfold is not a direct child of the
   // arriving list (its settled rule would stop the unfold playing). It is also
@@ -322,13 +327,11 @@ export function Home({ session }: { session: SessionUser }) {
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}
           <span className="text-faint">
-            <Crossfade id={headline} inline>
-              {headline}
+            <Crossfade id={welcome ? WELCOME : headline} inline>
+              {welcome ? WELCOME : headline}
             </Crossfade>
           </span>
         </h1>
-        {/* The first visit only (A-18 idea 8): from the session, so it is there at first paint. */}
-        {session.firstVisit && <div className="mt-2 text-[14.5px] text-muted">{WELCOME}</div>}
         <div className="mt-2 text-[14.5px] text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}
           {termDay && ` · ${termDay}`}
@@ -362,6 +365,8 @@ export function Home({ session }: { session: SessionUser }) {
           </div>
           </Unfold>
         )}
+        {/* The shell's Notices, under the whole head (A-20 P3, G7). */}
+        <ShellNotices />
       </div>
 
       {error ? (
@@ -592,7 +597,7 @@ function OpenRequests({
           <LeavingRow key={entry.id} {...queue.props(entry.id)}>
             <CardRow>
               <UserAvatar id={entry.requester_id} size="list" />
-              <PersonLink id={entry.requester_id} />
+              <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={entry.requester_id} />
             <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
               <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
             </div>
@@ -694,7 +699,7 @@ function ExpiringRow({
   return (
     <CardRow>
       <UserAvatar id={grant.user_id} size="list" />
-      <PersonLink id={grant.user_id} />
+      <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={grant.user_id} />
       <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
@@ -792,7 +797,7 @@ function OnboardingGaps({
           <LeavingRow key={person.user_id} {...gaps.props(person.user_id)}>
             <CardRow>
               <UserAvatar id={person.user_id} size="list" />
-              <PersonLink id={person.user_id} />
+              <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={person.user_id} />
               <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
                 Holds no bundle
               </div>
@@ -923,7 +928,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
         {(row) => (
           <CardRow key={row.id}>
             <UserAvatar id={row.user_id} size="list" />
-            <PersonLink id={row.user_id} />
+            <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={row.user_id} />
             {row.role_keys && row.role_keys.length > 0 && (
               <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
                 {sortByName(row.role_keys, (key) => names.roleRef(row.project_id ?? "", key), (key) => key).map((key) => (
@@ -938,15 +943,6 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
         )}
       </Capped>
     </Card>
-  );
-}
-
-/** A person's name, linking to their page (G14). */
-function PersonLink({ id }: { id: string }) {
-  return (
-    <Link href={`/users/${id}`} className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold link-hover">
-      <UserName id={id} />
-    </Link>
   );
 }
 

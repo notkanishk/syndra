@@ -504,7 +504,7 @@ function VersionHistory({ target }: { target: string }) {
         errorTitle="The version history could not be read"
         empty={
           <EmptyState
-            title="Nothing published yet"
+            title="Nothing published yet."
             guidance="Publish the current set to give a future change something to roll back to."
           />
         }

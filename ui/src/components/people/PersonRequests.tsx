@@ -58,14 +58,15 @@ export function PersonRequests({
   return (
     <Card>
       {cancelStep}
-      <CardColumns>
-        <span className="w-[250px]">What they asked for</span>
-        <span className="flex-1">Why</span>
-        <span className="w-[66px]">When</span>
-        <span className="w-[196px]">Outcome</span>
-      </CardColumns>
-
       <ListStates
+        head={
+          <CardColumns>
+            <span className="w-[250px]">What they asked for</span>
+            <span className="flex-1">Why</span>
+            <span className="w-[66px]">When</span>
+            <span className="w-[196px]">Outcome</span>
+          </CardColumns>
+        }
         isLoading={requests.isLoading}
         error={requests.error}
         isEmpty={mine.length === 0}

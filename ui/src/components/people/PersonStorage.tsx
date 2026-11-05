@@ -1,5 +1,6 @@
 "use client";
 
+import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -133,14 +134,14 @@ function Status({ view }: { view: PersonTargetView }) {
       <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
       {offline ? (
         <>
-          Offline{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}
+          {SYSTEM_WORDS.offline}{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}
           {view.last_known ? ` · last read ${formatClock(view.last_known.read_at)}` : ""}
         </>
       ) : held ? (
-        <>Answering · their account is on hold</>
+        <>{SYSTEM_WORDS.answering} · their account is on hold</>
       ) : (
         <>
-          Answering{view.checked_at ? <> · read <Relative iso={view.checked_at} /></> : null}
+          {SYSTEM_WORDS.answering}{view.checked_at ? <> · read <Relative iso={view.checked_at} /></> : null}
         </>
       )}
     </span>
@@ -240,9 +241,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
             {view.adopted ? (
               <>
                 Made by hand on {label} before Syndra managed it.{" "}
-                <Link href={`/users/${encodeURIComponent(view.adopted.actor_id)}`} className="text-ink link-hover">
-                  <UserName id={view.adopted.actor_id} />
-                </Link>{" "}
+                <UserName id={view.adopted.actor_id} className="text-ink" />{" "}
                 assigned it to {name} on {formatShortDate(view.adopted.at)}, with everything it held.
               </>
             ) : (
@@ -507,9 +506,7 @@ function HoldRow({ view, seat }: { view: PersonTargetView; seat: ReactNode }) {
           </Dotted>
           <Faint>
             “{hold.reason}” · put on hold by{" "}
-            <Link href={`/users/${encodeURIComponent(hold.actor_id)}`} className="text-ink link-hover">
-              <UserName id={hold.actor_id} />
-            </Link>
+            <UserName id={hold.actor_id} className="text-ink" />
             {hold.expires_at
               ? ` · ends ${formatShortDate(hold.expires_at)}`
               : hold.review_date

@@ -143,7 +143,7 @@ describe("the three states", () => {
     state.targets = [view()];
     renderStorage();
     expect(screen.getByText("Your account is ready")).toBeTruthy();
-    expect(screen.getByText(/Online and accepting sign-ins/)).toBeTruthy();
+    expect(screen.getByText(/Answering and accepting sign-ins/)).toBeTruthy();
     const names = screen.getAllByText(/^(Your home folder|waddle_share|quack_share)$/).map((n) => n.textContent);
     expect(names).toEqual(["quack_share", "waddle_share", "Your home folder"]);
     expect(screen.getByText("In main › home_dir · private to you")).toBeTruthy();
@@ -251,7 +251,7 @@ describe("when changes can't happen", () => {
   it("can't tell yet: no status at all rather than a guess", () => {
     state.targets = [view({ health: "unknown" })];
     renderStorage();
-    expect(screen.queryByText(/^Online|^Offline/)).toBeNull();
+    expect(screen.queryByText(/^Online|^Answering|^Offline/)).toBeNull();
   });
 
   it("paused: access first, then the pause, and no form, first password included", () => {
@@ -286,7 +286,7 @@ describe("when changes can't happen", () => {
     renderStorage();
     expect(screen.getByText("Your account is switched off for now")).toBeTruthy();
     expect(screen.getByText("On hold since 9 Oct")).toBeTruthy();
-    expect(screen.getByText(/Online · your account is on hold/)).toBeTruthy();
+    expect(screen.getByText(/Answering · your account is on hold/)).toBeTruthy();
     expect(passwordField()).toBeNull();
   });
 

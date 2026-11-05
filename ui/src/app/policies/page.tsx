@@ -83,14 +83,13 @@ export default function AutomaticRulesPage() {
       )}
 
       <Card>
-        {rows.length > 0 && (
-          <CardColumns>
-            <span className="flex-1">If &hellip; then</span>
-            <span className="w-[110px] text-right">People</span>
-          </CardColumns>
-        )}
-
         <ListStates
+          head={
+            <CardColumns>
+              <span className="flex-1">If &hellip; then</span>
+              <span className="w-[110px] text-right">People</span>
+            </CardColumns>
+          }
           isLoading={rules.isLoading}
           error={rules.error}
           isEmpty={rows.length === 0}
@@ -118,7 +117,7 @@ export default function AutomaticRulesPage() {
               >
                 <span className="w-full text-[14.5px] tablet:min-w-[320px] tablet:flex-1">
                   <span className="text-muted">
-                    <ProjectName id={rule.source_project} /> /{" "}
+                    <ProjectName id={rule.source_project} link={false} /> /{" "}
                     <Mono>{rule.source_role}</Mono>
                   </span>
                   <span aria-hidden className="mx-2.5 text-faint">
@@ -126,7 +125,7 @@ export default function AutomaticRulesPage() {
                   </span>
                   <span className="sr-only">then </span>
                   <span className="font-semibold">
-                    <ProjectName id={rule.target_project} /> /{" "}
+                    <ProjectName id={rule.target_project} link={false} /> /{" "}
                     <Mono>{rule.target_role}</Mono>
                     {waits(rule.target_project, rule.target_role) && (
                       <WaitsMark className="ml-2" />

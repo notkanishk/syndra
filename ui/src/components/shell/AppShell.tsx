@@ -7,8 +7,7 @@ import { PlaceHost } from "@/components/shell/PlaceHost";
 import Sidebar from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { TouchNav } from "@/components/shell/TouchNav";
-import { DegradedBanner } from "@/components/states/DegradedBanner";
-import { OfflineBanner } from "@/components/states/OfflineBanner";
+import { ShellNoticesProvider } from "@/components/shell/ShellNotices";
 import { PageCrumbProvider } from "@/lib/page-crumb";
 import type { SessionUser } from "@/lib/session";
 import type { UiView } from "@/lib/nav";
@@ -83,18 +82,12 @@ export function AppShell({
             <TopBar session={session} />
             <div id="app-scroll" className="min-h-0 flex-1 overflow-y-auto">
               {/* Notices, not a band under the top bar (6a): every dysfunction
-                  is said in the content column, above the page it qualifies,
-                  and pushes the page down rather than covering it.
-
-                  Offline is above degraded because it qualifies it: with no
-                  network the mode read cannot refresh either, so a degraded
-                  Notice underneath is reporting a state nobody can currently
-                  confirm. */}
+                  is said in the content column and pushes the page down
+                  rather than covering it. They sit under the page's own
+                  header (A-20 P3, G7), in the seat `ShellNotices` holds. */}
               {/* tabIndex -1 so the skip link's jump moves focus here, not only the scroll. */}
               <main id="main" tabIndex={-1} className="px-4 pb-9 pt-5 tablet:px-[26px] tablet:pt-[30px]">
-                <OfflineBanner />
-                <DegradedBanner />
-                {children}
+                <ShellNoticesProvider>{children}</ShellNoticesProvider>
               </main>
             </div>
           </div>

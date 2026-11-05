@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { UserAvatar, UserName } from "@/components/names";
@@ -229,9 +228,7 @@ function LiveList({
                 person={
                   <>
                     <UserAvatar id={s.user_id} size="row" />
-                    <Link href={`/users/${s.user_id}`} className="text-[14.5px] font-semibold link-hover">
-                      <UserName id={s.user_id} />
-                    </Link>
+                    <UserName id={s.user_id} className="text-[14.5px] font-semibold" />
                   </>
                 }
                 asked={s.function.endsWith("preaccesstoken") ? "Access token" : "Userinfo"}

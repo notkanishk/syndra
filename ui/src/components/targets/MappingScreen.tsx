@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 
 import { roleCount } from "@/lib/role-mapping-plan";
 
@@ -57,12 +56,7 @@ export function MappingScreen({ target }: { target: string }) {
               project ? (
                 <span key="project">
                   Zitadel project{" "}
-                  <Link
-                    href={`/projects/${project.id}`}
-                    className="font-semibold text-ink link-hover"
-                  >
-                    <ProjectName id={project.id} name={project.name} />
-                  </Link>
+                  <ProjectName id={project.id} name={project.name} className="font-semibold text-ink" />
                 </span>
               ) : null,
               reach === undefined ? null : reach === 0 ? "no mappings" : `${reach} ${reach === 1 ? "mapping" : "mappings"}`,

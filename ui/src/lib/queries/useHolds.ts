@@ -1,5 +1,6 @@
 "use client";
 
+import { settleIndicators } from "@/lib/queries/useIndicators";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
@@ -123,6 +124,7 @@ export function useLiftHold() {
     mutationFn: (id: string) =>
       request<{ status: string }>(`/allowances/${id}/lift`, { method: "POST", body: {} }),
     onSuccess: () => {
+      settleIndicators(client, { holds_due: -1 });
       client.invalidateQueries({ queryKey: ["users"] });
       client.invalidateQueries({ queryKey: ["governance"] });
       client.invalidateQueries({ queryKey: ["me", "targets"] });

@@ -112,19 +112,20 @@ export default function ProjectsPage() {
       />
 
       <Card stale={readState.current === false}>
-        <CardColumns>
-          <span className="w-[250px] min-w-[170px]">
-            <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
-          </span>
-          <span className="min-w-[180px] flex-1">Apps served</span>
-          <span className="hidden w-[110px] shrink-0 text-right desktop:block">Roles</span>
-          <span className="w-[110px] shrink-0 text-right">
-            <SortHead label="People" name="people" sort={sort} onSort={setSort} />
-          </span>
-        </CardColumns>
-
         <div className={view.className}>
         <ListStates
+          head={
+            <CardColumns>
+              <span className="w-[250px] min-w-[170px]">
+                <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
+              </span>
+              <span className="min-w-[180px] flex-1">Apps served</span>
+              <span className="hidden w-[110px] shrink-0 text-right desktop:block">Roles</span>
+              <span className="w-[110px] shrink-0 text-right">
+                <SortHead label="People" name="people" sort={sort} onSort={setSort} />
+              </span>
+            </CardColumns>
+          }
           isLoading={projects.isLoading}
           error={projects.error}
           isEmpty={leaving.rows.length === 0}

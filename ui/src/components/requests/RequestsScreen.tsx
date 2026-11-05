@@ -57,7 +57,7 @@ import { formatShortDate, humanizeKey } from "@/lib/format";
 import { keptEnds, stillEnds } from "@/lib/keep-ends";
 import { AskForAccess } from "@/components/requests/AskForAccess";
 import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember } from "@/components/requests/Holding";
-import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
+import { FORECAST, outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import dynamic from "next/dynamic";
 
 // Opened on demand, so it stays out of the page's first load.
@@ -262,34 +262,38 @@ function OperatorQueue({ userId }: { userId?: string }) {
       />
 
       <Card>
-        <CardColumns>
-          {selecting && anyPending && <span className="w-11 shrink-0 desktop:w-[26px]" />}
-          <span className="w-[170px]">
-            <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
-          </span>
-          <span className="w-[250px]">What they asked for</span>
-          <span className="flex-1">Why</span>
-          <span className="w-[66px]">
-            <SortHead label="When" name="when" sort={sort} onSort={setSort} />
-          </span>
-          <span className="w-[196px]">Decision</span>
-        </CardColumns>
-        {/* Only open requests can be selected; a decided one is not part of the
-            working set, so the first number here is the open count and the
-            second is everything the current filter shows. */}
-        {selecting && openRows.length > 0 && (
-          <SelectAllRow
-            inScope={openRows.length}
-            total={rows.length}
-            noun={["request", "requests"]}
-            allSelected={selection.allSelected}
-            {...selection.headerCheckboxProps}
-          />
-        )}
 
         <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
         <div className={view.className}>
         <ListStates
+          head={
+            <>
+            <CardColumns>
+              {selecting && anyPending && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+              <span className="w-[170px]">
+                <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
+              </span>
+              <span className="w-[250px]">What they asked for</span>
+              <span className="flex-1">Why</span>
+              <span className="w-[66px]">
+                <SortHead label="When" name="when" sort={sort} onSort={setSort} />
+              </span>
+              <span className="w-[196px]">Decision</span>
+            </CardColumns>
+            {/* Only open requests can be selected; a decided one is not part of the
+                working set, so the first number here is the open count and the
+                second is everything the current filter shows. */}
+            {selecting && openRows.length > 0 && (
+              <SelectAllRow
+                inScope={openRows.length}
+                total={rows.length}
+                noun={["request", "requests"]}
+                allSelected={selection.allSelected}
+                {...selection.headerCheckboxProps}
+              />
+            )}
+            </>
+          }
           isLoading={requests.isLoading}
           error={requests.error}
           isEmpty={drawn.length === 0}
@@ -341,9 +345,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
               )}
               <UserAvatar id={entry.requester_id} />
               <div className="w-full text-[15px] font-semibold [text-wrap:pretty] tablet:w-[170px] tablet:shrink-0">
-                <Link href={`/users/${encodeURIComponent(entry.requester_id)}`} className="link-hover">
-                  <UserName id={entry.requester_id} />
-                </Link>
+                <UserName id={entry.requester_id} />
               </div>
               <div className="w-full text-[14.5px] text-ink [text-wrap:pretty] tablet:w-[250px] tablet:min-w-[160px] tablet:shrink">
                 {entry.kind === "extend" && "Keep "}
@@ -351,7 +353,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   href={`/projects/${encodeURIComponent(entry.project_id)}/roles/${encodeURIComponent(entry.role_key)}`}
                   className="link-hover"
                 >
-                  <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+                  <RoleRef projectId={entry.project_id} roleKey={entry.role_key} link={false} />
                 </Link>
                 {catalog.data?.some(
                   (r) =>
@@ -644,9 +646,7 @@ function YourRequests({
                   two identical rows. */}
               <div className="text-[15px] font-semibold [text-wrap:pretty]">
                 {entry.kind === "extend" && "Keep "}
-                <Link href={`/projects/${encodeURIComponent(entry.project_id)}`} className="link-hover">
-                  <ProjectName id={entry.project_id} />
-                </Link>{" "}
+                <ProjectName id={entry.project_id} />{" "}
                 ·{" "}
                 {resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
                   humanizeKey(entry.role_key)}
@@ -823,6 +823,7 @@ function BulkDecisionDialog({
   return (
     <RehearsalDialog
       waits={waits}
+      forecast={status === "approved" ? FORECAST.approve : FORECAST.decline}
       title={status === "approved" ? "Approve requests" : "Decline requests"}
       lede=""
       noun={["request", "requests"]}

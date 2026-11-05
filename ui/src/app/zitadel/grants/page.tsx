@@ -87,14 +87,15 @@ export default function UpstreamGrantsPage() {
           count={grants.isLoading ? undefined : (grants.data?.total ?? rows.length)}
         />
 
-        <CardColumns>
-          <span className="w-[230px]">Person</span>
-          <span className="w-[200px]">Project</span>
-          <span className="flex-1">Roles</span>
-          <span className="w-[190px] text-right">ID in Zitadel</span>
-        </CardColumns>
-
         <ListStates
+          head={
+            <CardColumns>
+              <span className="w-[230px]">Person</span>
+              <span className="w-[200px]">Project</span>
+              <span className="flex-1">Roles</span>
+              <span className="w-[190px] text-right">ID in Zitadel</span>
+            </CardColumns>
+          }
           isLoading={grants.isLoading}
           error={grants.error}
           isEmpty={rows.length === 0}

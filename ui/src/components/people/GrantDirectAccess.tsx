@@ -6,7 +6,7 @@ import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
 import { type PickerPlace, type RoleNote } from "@/components/bundles/RolePickerOne";
 import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { FieldLabel, Input } from "@/components/ui/Input";
@@ -17,7 +17,7 @@ import { waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { forecastFor, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { daysUntil, expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
@@ -192,6 +192,10 @@ function GrantDirectAccessOpen({
           in the act's own word. It stays open on success too: what an operator
           wants next is to read what happened to the person they just acted on,
           and a dialog that closes itself takes that with it. */}
+      {/* The first 100ms: a role that waits says so before the server does. */}
+      {!result && grant.isPending && (
+        <ActionForecast className="mx-6 mb-1" word={forecastFor("give", selectedRole?.waits_for_send)} />
+      )}
       {result && <ActionOutcome outcome={result.outcome} word={result.word} person={userId} className="mx-6 mb-1" />}
       {result && step.after}
 
