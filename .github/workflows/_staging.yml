@@ -1,0 +1,109 @@
+name: staging (reusable)
+
+# Deploys one commit to the staging box (the dev LXC) through the self-hosted
+# runner that lives there, and proves it: migrations applied clean, every
+# service answering. Called by deploy.yml (main, before production) and by
+# deploy-staging.yml (an experiment, by hand). Never call it from anything a
+# fork can trigger: the runner has docker on that box and a copy of
+# production's data.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit, branch or tag to deploy
+        type: string
+        required: true
+      restore_prod_data:
+        description: Reset staging's database to last night's copy of production first
+        type: boolean
+        default: true
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    runs-on: [self-hosted, syndra-staging]
+    timeout-minutes: 30
+    env:
+      STAGE_DIR: /opt/syndra
+      PROD_DUMP: /var/lib/syndra-staging/prod-latest.dump
+    steps:
+      - name: Check out ${{ inputs.ref }} into /opt/syndra
+        run: |
+          set -euo pipefail
+          cd "$STAGE_DIR"
+          git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
+          ref='${{ inputs.ref }}'
+          if git rev-parse -q --verify "origin/$ref^{commit}" >/dev/null; then ref="origin/$ref"; fi
+          git checkout --force --detach "$ref"
+          echo "staging now at $(git rev-parse --short HEAD): $(git log -1 --format=%s)"
+
+      # Production's data, last night's copy, so every migration and every
+      # read runs against real rows before it runs on production. It also
+      # wipes whatever an experiment left behind.
+      - name: Reset the database to production's copy
+        if: inputs.restore_prod_data
+        run: |
+          set -euo pipefail
+          cd "$STAGE_DIR"
+          if [ ! -s "$PROD_DUMP" ]; then
+            echo "::warning::no copy of production at $PROD_DUMP; keeping staging's own data"
+            exit 0
+          fi
+          echo "copy of production taken $(date -r "$PROD_DUMP" '+%Y-%m-%d %H:%M')"
+          docker compose stop backend claims truenas-addon 2>/dev/null || true
+          docker compose up -d postgres
+          for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U syndra -d postgres >/dev/null 2>&1 && break; sleep 2; done
+          docker compose exec -T postgres sh -c 'dropdb -U "$POSTGRES_USER" --if-exists --force "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
+          docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges --exit-on-error' < "$PROD_DUMP"
+          echo "restored"
+
+      - name: Build and start
+        run: |
+          set -euo pipefail
+          cd "$STAGE_DIR"
+          docker compose up -d --build --remove-orphans
+          docker image prune -f
+          docker builder prune -f --keep-storage 4GB
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          cd "$STAGE_DIR"
+          port() { docker compose port "$1" "$2" | sed 's/.*://'; }
+          api="http://localhost:$(port backend 8080)"
+          ui="http://localhost:$(port ui 3000)"
+          claims="http://localhost:$(port claims 8090)"
+          curl -fsS --retry 30 --retry-delay 3 --retry-all-errors "$api/healthz" >/dev/null
+          curl -fsS --retry 30 --retry-delay 3 --retry-all-errors "$ui" >/dev/null
+          echo "backend and ui answering"
+          for url in "$api/healthz/claims" "$claims/healthz/claims"; do
+            code="$(curl -sS -o /tmp/claims.json -w '%{http_code}' -m 10 --retry 10 --retry-delay 2 --retry-connrefused "$url")"
+            case "$code" in
+              200|503) echo "$url: $(cat /tmp/claims.json)" ;;
+              *) echo "$url answered HTTP $code"; exit 1 ;;
+            esac
+          done
+
+      # The migration the code expects is the migration the database is at,
+      # and not dirty. This is the check that would have caught a migration
+      # that only fails on real rows.
+      - name: Migrations applied clean
+        run: |
+          set -euo pipefail
+          cd "$STAGE_DIR"
+          want="$(ls backend/db/migrations | sed -n 's/^0*\([0-9][0-9]*\)_.*\.up\.sql$/\1/p' | sort -n | tail -1)"
+          got="$(docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -c "select version, dirty from schema_migrations"' | tr -d '[:space:]')"
+          echo "expected ${want}|f, database says: $got"
+          [ "$got" = "${want}|f" ] || { echo "migration mismatch or dirty"; exit 1; }
+          echo "migrations clean at $want"
+
+      - name: Report container state on failure
+        if: failure()
+        run: |
+          cd "$STAGE_DIR"
+          docker compose ps
+          docker compose logs --tail=80

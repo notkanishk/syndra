@@ -1,6 +1,11 @@
-name: deploy-prod
+name: deploy
 
-# Deploys main to the production LXC (syndra) through a self-hosted runner
+# main goes to staging first, then, only if staging deployed it clean and
+# passed its checks, the same commit goes to production. Nothing reaches
+# production that staging (with last night's copy of production's data) has
+# not already run. Experiments go to staging alone: deploy-staging.yml.
+#
+# The production job deploys through a self-hosted runner
 # living inside that LXC. The runner drives the long-lived clone at
 # /opt/syndra rather than its own workspace, because that directory holds
 # .env, the Zitadel service-account key, and the named docker volumes' identity.
@@ -29,13 +34,36 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-prod
+  group: deploy-main
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  staging:
+    uses: ./.github/workflows/_staging.yml
+    with:
+      ref: ${{ github.sha }}
+      restore_prod_data: true
+
+  production:
+    needs: staging
     runs-on: [self-hosted, syndra-prod]
+    concurrency:
+      group: production
+      cancel-in-progress: false
     steps:
+      # A copy of the database before anything changes, every time, kept for
+      # 14 deploys. Restore with pg_restore --clean into the postgres container.
+      - name: Back up the database
+        run: |
+          set -euo pipefail
+          cd /opt/syndra
+          mkdir -p "$HOME/syndra-backups"
+          f="$HOME/syndra-backups/pre-deploy-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::8}.dump"
+          docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > "$f"
+          [ -s "$f" ] || { echo "empty dump"; exit 1; }
+          echo "backup: $f ($(du -h "$f" | cut -f1))"
+          ls -1t "$HOME"/syndra-backups/pre-deploy-*.dump | tail -n +15 | xargs -r rm -f
+
       - name: Check out ${{ github.sha }} into /opt/syndra
         run: |
           set -euo pipefail
