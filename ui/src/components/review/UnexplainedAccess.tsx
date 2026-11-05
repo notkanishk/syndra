@@ -10,6 +10,7 @@ import { isDeparted } from "@/lib/people-filters";
 import { serviceAccountHref } from "@/lib/queries/useServiceAccounts";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { Badge, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
@@ -82,7 +83,7 @@ import {
   FORECAST,
   forecastFor,
   outcomeFromError,
-  REVOKE_SENDS_ITSELF,
+  revokeQueued,
   REVOKE_SENDS_ITSELF_WORD,
   SEND_IT,
   succeeded,
@@ -1108,6 +1109,7 @@ function ResolutionDialog({
   const revoke = useRevokeDrift();
   const external = useMarkExternalDrift();
   const roleWaits = useRoleWaits();
+  const auto = useAutoRetry();
   // Adopting is when a rule starting from the role fires (ADR-006), so the
   // dialog names what the rules give before the operator confirms (audit C1),
   // from the closure the adoption itself follows.
@@ -1268,7 +1270,7 @@ function ResolutionDialog({
                 const queuedByRules = answer?.rule_outbox_ids?.length ?? 0;
                 setOutcome(
                   resolution === "revoke"
-                    ? revokeOutcome(answer?.wait_reason, role, answer)
+                    ? revokeOutcome(answer?.wait_reason, role, answer, auto)
                     : resolvedOutcome(queuedByRules),
                 );
               } catch (error) {
@@ -1296,6 +1298,7 @@ export function revokeOutcome(
   waitReason: string | undefined,
   role: string,
   answer?: Pick<DriftAnswer, "propagation" | "retry">,
+  auto = true,
 ): Outcome {
   if (waitIsChosen(waitReason)) {
     return { kind: "queued", message: "Waiting for you to send", detail: `${waitReasonLine(waitReason, role)}.` };
@@ -1306,7 +1309,7 @@ export function revokeOutcome(
     return { kind: "applied", message: "Removed in Zitadel" };
   }
   if (waitReason === RETRYING) return retryingOutcome("Revocation recorded", answer?.retry);
-  return REVOKE_SENDS_ITSELF;
+  return revokeQueued(auto);
 }
 
 /** What a drift adopt or revoke answers (handlers/drift.go). */

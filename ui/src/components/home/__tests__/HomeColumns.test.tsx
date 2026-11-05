@@ -61,6 +61,7 @@ vi.mock("@/lib/queries/useOperations", () => ({
   useMissedOnboarding: () => ({ data: state.onboarding, isLoading: false, error: null, refetch: vi.fn() }),
 }));
 vi.mock("@/lib/queries/useIndicators", () => ({
+  useAutoRetry: () => true,
   useIndicatorsRead: () => ({
     data: state.indicators,
     isPlaceholderData: !state.indicatorsReal,

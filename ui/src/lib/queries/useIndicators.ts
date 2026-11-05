@@ -1,7 +1,7 @@
 "use client";
 
-import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { QueryClient, QueryClientContext, queryOptions, useQuery } from "@tanstack/react-query";
+import { useContext, useEffect, useRef } from "react";
 
 import { request } from "@/lib/api-client";
 import { playDriftChime } from "@/lib/driftChime";
@@ -132,8 +132,14 @@ export function useIndicatorsRead(enabled = true) {
  * True until read, the shipped default; false only when the server says so.
  */
 export function useAutoRetry(): boolean {
-  return useIndicatorsRead().data?.auto_retry !== false;
+  // Copy deep in a dialog reads this, and a dialog may render with no provider
+  // above it (a unit render): that is the shipped default, never a throw.
+  const client = useContext(QueryClientContext);
+  return useQuery(indicatorsQuery(client !== undefined), client ?? NO_CLIENT).data?.auto_retry !== false;
 }
+
+/** Stands in for a missing provider; its query is disabled, so it never fetches. */
+const NO_CLIENT = new QueryClient();
 
 /**
  * Whether the rail's own poll could reach Zitadel; undefined until a real

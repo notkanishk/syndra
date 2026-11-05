@@ -7,6 +7,7 @@ import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { RoleRef } from "@/components/names";
 import { Button } from "@/components/ui/Button";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -57,6 +58,7 @@ function ManageBundlesOpen({
   const assignedIds = useMemo(() => new Set(assigned.map((b) => b.id)), [assigned]);
   const [staged, setStaged] = useState<Set<string>>(new Set());
   const waits = useWaitsBeforeLine("change");
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Which way the change being sent goes, so a step says "assign" or "remove".
   const [acting, setActing] = useState<"assign" | "remove">("assign");
@@ -134,7 +136,8 @@ function ManageBundlesOpen({
         });
         const enqueued = result?.cascade?.enqueued ?? 0;
         waiting += enqueued;
-        if (removing) revoking += enqueued;
+        // With the background drain off a revocation waits for Send like the rest.
+        if (removing && auto) revoking += enqueued;
       }
       const recorded =
         changes.length === 1 ? "One bundle change recorded" : `${changes.length} bundle changes recorded`;

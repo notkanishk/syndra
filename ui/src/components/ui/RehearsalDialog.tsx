@@ -13,6 +13,7 @@ import {
   type OutcomeKind,
   SENDS_ITSELF_NEXT,
 } from "@/lib/outcome";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { RETRYING, retryLine, retryNextStep, type RetryState } from "@/lib/retry";
 import { waitIsChosen } from "@/lib/wait-reason";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
@@ -54,6 +55,7 @@ export function resultMessage(
   plan: BulkPlan,
   noun: [string, string],
   system: string = "Zitadel",
+  auto = true,
 ): string {
   const { succeeded, failed, queued } = plan.summary;
   const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]}`;
@@ -72,7 +74,7 @@ export function resultMessage(
     return `Done. Nobody's access changed, because nobody holds it yet.`;
   }
   const parts = [`Applied to ${of(succeeded)}.`];
-  if (queued > 0) parts.push(resultSentence(plan, noun, system));
+  if (queued > 0) parts.push(resultSentence(plan, noun, system, auto));
   if (failed > 0) parts.push(`${of(failed)} failed.`);
   return parts.join(" ");
 }
@@ -137,10 +139,11 @@ export function resultSentence(
   plan: BulkPlan,
   noun: [string, string],
   system: string = "Zitadel",
+  auto = true,
 ): string {
   const { queued } = plan.summary;
   if (queued === 0) return "It has taken effect.";
-  const { waiting, going } = splitQueued(plan);
+  const { waiting, going } = splitQueued(plan, auto);
   const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]} ${n === 1 ? "is" : "are"}`;
   const parts: string[] = [];
   if (waiting > 0) parts.push(`${of(waiting)} waiting for you to send to ${system}.`);
@@ -154,15 +157,17 @@ export function resultSentence(
  * other queued row waits for Send. Read from each row's own reason, so a
  * retry is never sent to Pending changes; rows the plan doesn't carry (an
  * older server) fall back to the op's rule. `retry` is the first next try.
+ * With the background drain off (`auto` false) nothing goes by itself, so
+ * every queued row waits for Send.
  */
-export function splitQueued(plan: BulkPlan): { waiting: number; going: number; retry?: RetryState } {
+export function splitQueued(plan: BulkPlan, auto = true): { waiting: number; going: number; retry?: RetryState } {
   const rows = plan.outcomes.filter((o) => o.effect === "queued");
-  const revoking = REVOKING_OPS.has(plan.op);
+  const revoking = auto && REVOKING_OPS.has(plan.op);
   let waiting = 0;
   let going = 0;
   let retry: RetryState | undefined;
   for (const o of rows) {
-    const goes = o.wait_reason === RETRYING ? o.retry?.state !== "waiting" : revoking && !waitIsChosen(o.wait_reason);
+    const goes = o.wait_reason === RETRYING ? auto && o.retry?.state !== "waiting" : revoking && !waitIsChosen(o.wait_reason);
     if (goes) {
       going++;
       retry ??= o.retry;
@@ -209,9 +214,9 @@ const REVOKING_OPS: ReadonlySet<BulkPlan["op"]> = new Set<BulkPlan["op"]>([
  * never have to know which rule applied — so the copy says what will happen
  * rather than naming the rule that decided it.
  */
-export function queuedNote(plan: BulkPlan, system: string = "Zitadel"): string | undefined {
+export function queuedNote(plan: BulkPlan, system: string = "Zitadel", auto = true): string | undefined {
   if (plan.summary.queued === 0) return undefined;
-  const { waiting, going, retry } = splitQueued(plan);
+  const { waiting, going, retry } = splitQueued(plan, auto);
   const parts: string[] = [];
   if (going > 0) {
     parts.push(
@@ -232,9 +237,9 @@ export function queuedNote(plan: BulkPlan, system: string = "Zitadel"): string |
  * The step a queued result leaves: Send when anything waits for it (drawn as
  * the "Waiting for you to send" link); otherwise nothing, and when.
  */
-export function queuedStep(plan: BulkPlan): Pick<Outcome, "sendsItself" | "next"> {
+export function queuedStep(plan: BulkPlan, auto = true): Pick<Outcome, "sendsItself" | "next"> {
   if (plan.summary.queued === 0) return {};
-  const { waiting, going, retry } = splitQueued(plan);
+  const { waiting, going, retry } = splitQueued(plan, auto);
   if (waiting > 0) return {};
   return { sendsItself: true, next: retry ? retryNextStep(retry, { it: going === 1 ? "it" : "them" }) : SENDS_ITSELF_NEXT };
 }
@@ -477,6 +482,7 @@ export function RehearsalDialog({
   const nothingWillAct = plan !== null && plan.summary.apply === 0;
   const isDefinitionApply = Boolean(definitionLabel) && nothingWillAct && !incoherent;
   const [outcome, setOutcome] = useState<(Outcome & { word?: string }) | null>(null);
+  const auto = useAutoRetry();
 
   /**
    * Why Apply cannot be pressed, or undefined when it can.
@@ -551,9 +557,9 @@ export function RehearsalDialog({
       const kind = resultKind(result);
       setOutcome({
         kind,
-        message: word ? resultSentence(result, noun, system) : resultMessage(result, noun, system),
-        detail: queuedNote(result, system),
-        ...(kind === "queued" ? queuedStep(result) : {}),
+        message: word ? resultSentence(result, noun, system, auto) : resultMessage(result, noun, system, auto),
+        detail: queuedNote(result, system, auto),
+        ...(kind === "queued" ? queuedStep(result, auto) : {}),
         word,
       });
     } catch (error) {

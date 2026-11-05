@@ -14,7 +14,7 @@ import { useShownNames } from "@/components/names/shownNames";
 import { sortNames } from "@/lib/sort";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
-import { settleIndicators } from "@/lib/queries/useIndicators";
+import { settleIndicators, useAutoRetry } from "@/lib/queries/useIndicators";
 import { QueryClientContext } from "@tanstack/react-query";
 import { StatusDot } from "@/components/ui/Badge";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
@@ -101,7 +101,7 @@ const resultWord = (outcome: Outcome | null) => (succeeded(outcome) ? "Removed" 
  * is gone" only when nothing was queued or Zitadel took the revocation; a role
  * that waits, a send that stopped, and a send Zitadel didn't take each say so.
  */
-export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel: string, names?: ShownNames): Outcome {
+export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel: string, names?: ShownNames, auto = true): Outcome {
   const raw = result?.retained_roles ?? [];
   const retained = names ? retainedLabels(raw, names) : raw;
   const kept = retained.length ? ` They still hold ${retained.join(", ")}, from a bundle or a rule.` : "";
@@ -115,8 +115,15 @@ export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel
     };
   }
   if (reason) {
-    // Halted: a revocation the background drain sends on its own.
+    // Halted: a revocation the background drain sends on its own; with the
+    // drain off it waits in Pending changes until someone presses Send.
     const why = waitReasonLine(reason, roleLabel, new Date().toISOString());
+    if (!auto) {
+      return {
+        kind: "queued",
+        message: `Removed in Syndra. ${why ? `${why}. ` : ""}The revocation waits in Pending changes until someone presses Send.${kept}`,
+      };
+    }
     return {
       kind: "queued",
       message: `Removed in Syndra. ${why ? `${why}. ` : ""}Revocations send on their own, so it leaves Zitadel when Zitadel answers.${kept}`,
@@ -260,6 +267,7 @@ function DirectDialog({
   const roleWaits = useRoleWaits();
   const client = useContext(QueryClientContext);
   const waits = useWaitsBeforeLine("remove");
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const retained = others.length > 0;
   const roleLabel = useRoleLabel()(removal);
@@ -323,7 +331,9 @@ function DirectDialog({
                 No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel.{" "}
                 {roleWaits(removal.projectId, removal.roleKey)
                   ? `${roleLabel} always waits for you, so the change waits in Pending changes until you send it.`
-                  : "Revocations send on their own, within a minute."}
+                  : auto
+                    ? "Revocations send on their own, within a minute."
+                    : "The revocation waits in Pending changes until someone presses Send."}
               </span>
             </>
           )}
@@ -392,7 +402,7 @@ function DirectDialog({
                 // survives the removal, and which ones those are is a closure
                 // diff the server does — the UI must not hold a second opinion
                 // about somebody's access.
-                setOutcome(removalOutcome(result, roleLabel, shown));
+                setOutcome(removalOutcome(result, roleLabel, shown, auto));
               } catch (error) {
                 setOutcome(outcomeFromError(error));
               }

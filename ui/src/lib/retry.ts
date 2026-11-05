@@ -109,12 +109,21 @@ export const RETRYING = "halted:retrying";
  * goes on its own, because revocations do. Shared, so a bundle and a rule say
  * it the same way. `after` is appended to the detail.
  */
-export function retireOutcome(n: number, reason: string | undefined, retry?: RetryState, after = ""): ActionOutcome {
+export function retireOutcome(
+  n: number,
+  reason: string | undefined,
+  retry?: RetryState,
+  after = "",
+  auto = true,
+): ActionOutcome {
   const changes = `${n} ${n === 1 ? "change" : "changes"}`;
   if (!reason) {
     return { kind: "applied", message: `${changes} went to Zitadel.`, detail: `The access it gave was revoked.${after}` };
   }
-  if (reason === "role_waits" || reason === "manual") {
+  // With the background drain off nothing goes on its own, so a revocation
+  // that is not in Zitadel waits for Send like one a role holds, unless the
+  // server already said so with its own retry state (below).
+  if (reason === "role_waits" || reason === "manual" || (!auto && retry?.state !== "waiting")) {
     return {
       kind: "queued",
       message: `${n} ${n === 1 ? "change waits" : "changes wait"} for you to send.`,

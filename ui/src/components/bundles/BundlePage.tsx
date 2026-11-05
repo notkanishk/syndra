@@ -27,6 +27,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
 import { Unfold } from "@/lib/motion";
 import { retireOutcome } from "@/lib/retry";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { glideTo } from "@/lib/motion";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { formatList, formatShortDate, roleLabel } from "@/lib/format";
@@ -749,6 +750,7 @@ function DeleteBundleDialog({
   onDeleted: () => void;
 }) {
   const remove = useDeleteBundle();
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Retiring revokes what the bundle carried, which can cancel a change still
   // waiting for you to send: the sheet turns to the step first (A-04 §14).
@@ -847,7 +849,7 @@ function DeleteBundleDialog({
                       message: `Nobody's access changed. It carried nothing anybody held.`,
                       detail: `Its history stays readable.${orphaned}`,
                     }
-                  : retireOutcome(n, reason, result.cascade?.drain?.retry, orphaned),
+                  : retireOutcome(n, reason, result.cascade?.drain?.retry, orphaned, auto),
               );
             } catch (error) {
               setOutcome(outcomeFromError(error));

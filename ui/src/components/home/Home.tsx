@@ -26,7 +26,7 @@ import {
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestDecisions } from "@/lib/request-decisions";
 import { useDrainPropagations, useMarkGaveUpSeen } from "@/lib/queries/usePropagation";
-import { useIndicatorsRead } from "@/lib/queries/useIndicators";
+import { useAutoRetry, useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
 import { serviceAccountHref, useServiceAccounts } from "@/lib/queries/useServiceAccounts";
@@ -980,6 +980,7 @@ export function Retries({
 
 function PendingChanges({ count, reachable }: { count: number; reachable: boolean }) {
   const drain = useDrainPropagations();
+  const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
@@ -1002,7 +1003,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           onClick={async () => {
             setOutcome(null);
             try {
-              setOutcome(outcomeFromDrain(await drain.mutateAsync()));
+              setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto));
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }

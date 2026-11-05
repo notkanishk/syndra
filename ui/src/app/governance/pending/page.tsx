@@ -144,7 +144,7 @@ export default function PendingChangesPage() {
                   setOutcome(null);
                   beginSend(rows.length);
                   try {
-                    setOutcome(outcomeFromDrain(await drain.mutateAsync()));
+                    setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto));
                   } catch (error) {
                     failedSend();
                     setOutcome(outcomeFromError(error));

@@ -30,7 +30,7 @@ export interface DrainOutcome {
  * silence on an HTTP 200: an operator reads "0 sent, 0 failed" after a pass
  * that requeued eight changes and concludes the queue is idle.
  */
-export function describeDrain(result: DrainResult | undefined): DrainOutcome {
+export function describeDrain(result: DrainResult | undefined, auto = true): DrainOutcome {
   const applied = result?.applied ?? 0;
   const failed = result?.failed ?? 0;
   const requeued = result?.requeued ?? 0;
@@ -81,8 +81,9 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
         return {
           tone: "error",
           message: "Zitadel is not answering. Nothing was sent.",
-          detail:
-            "Nothing counts against the retry limit. Revocations, and changes Zitadel didn't take before, go again on their own once it answers; the rest wait for you to send.",
+          detail: auto
+            ? "Nothing counts against the retry limit. Revocations, and changes Zitadel didn't take before, go again on their own once it answers; the rest wait for you to send."
+            : "Nothing counts against the retry limit. This Syndra server doesn't send anything again on its own, so everything waits for you to press Send once Zitadel answers.",
         };
       case "target_unreachable":
         return {
@@ -120,6 +121,16 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   // Neither asks anything of the operator: the background drain sends them
   // again at their next try, which each row below names.
   if (requeued || errored) {
+    if (!auto) {
+      // The background drain is off: nothing sends these again until Send.
+      return {
+        tone: "warning",
+        message: `${counts}.`,
+        detail: errored
+          ? "Syndra could not record how a change went. This Syndra server doesn't settle it on its own, so press Send on Pending changes to try again."
+          : `Zitadel didn't answer for ${requeued === 1 ? "one change" : `${requeued} changes`}. This Syndra server doesn't send ${requeued === 1 ? "it" : "them"} again on its own, so ${requeued === 1 ? "it waits" : "they wait"} in Pending changes until you press Send.`,
+      };
+    }
     return {
       tone: "warning",
       sendsItself: true,
@@ -164,8 +175,8 @@ export const STOPPED_NEXT =
  * not a failure, and an operator who reads it as one goes looking for a broken
  * machine instead of pressing the button again.
  */
-export function outcomeFromDrain(result: DrainResult | undefined): ActionOutcome {
-  const { tone, message, detail, sendsItself, next } = describeDrain(result);
+export function outcomeFromDrain(result: DrainResult | undefined, auto = true): ActionOutcome {
+  const { tone, message, detail, sendsItself, next } = describeDrain(result, auto);
   const kind: OutcomeKind =
     tone === "success" ? "applied" : tone === "warning" ? "queued" : tone === "error" ? "failed" : "no_change";
   return { kind, message, detail, ...(sendsItself ? { sendsItself } : {}), ...(next ? { next } : {}) };
