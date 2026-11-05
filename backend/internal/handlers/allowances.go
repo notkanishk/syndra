@@ -184,7 +184,8 @@ func writeAllowanceError(w http.ResponseWriter, err error) {
 		// 501, not 400: the request is well formed and the backend has not
 		// built the arm yet. A 400 would send an operator looking for their own
 		// mistake.
-		jsonErrorResponse(w, http.StatusNotImplemented, "ALLOWANCE_ADDITIVE_UNSUPPORTED", err.Error())
+		jsonErrorResponse(w, http.StatusNotImplemented, "ALLOWANCE_ADDITIVE_UNSUPPORTED",
+			"Adding to what a person already holds is not available yet. Replace their allowance instead.")
 	case errors.Is(err, db.ErrAllowanceInvalid):
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"allowance": "invalid"})
 	case errors.Is(err, db.ErrAllowanceNotFound):

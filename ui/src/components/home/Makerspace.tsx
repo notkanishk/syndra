@@ -14,7 +14,7 @@ import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { machineName } from "@/lib/audit-vocabulary";
 import { EventSentence } from "@/components/audit/EventLine";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
-import { formatShortDate, formatWhen, humanizeKey } from "@/lib/format";
+import { formatShortDate, formatWhen } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { hasAccess, isDeparted, isPerson, peopleHref } from "@/lib/people-filters";
 import { useAuditEntries } from "@/lib/queries/useAudit";
@@ -24,6 +24,7 @@ import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useTargets } from "@/lib/queries/useTargets";
 import { useUsers } from "@/lib/queries/useUsers";
 import { useIsPhone } from "@/lib/useViewport";
+import { roleName } from "@/lib/names";
 
 /**
  * The makerspace, below the work.
@@ -300,7 +301,7 @@ function AccessShape() {
                       role alone — the pair is established by the row, the same way
                       the roles index establishes it with a Project column. */}
                   <span className="min-w-0 flex-1 truncate text-[14.5px]">
-                    {role.display_name || humanizeKey(role.role_key)}
+                    {roleName(role.display_name, role.role_key)}
                   </span>
                   <span className="shrink-0 truncate text-right text-[13px] text-faint">
                     {role.project_name}

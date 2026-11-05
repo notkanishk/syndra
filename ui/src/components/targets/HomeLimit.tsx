@@ -10,13 +10,14 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Select";
 import { request } from "@/lib/api-client";
 import { describeFailure, sentence } from "@/lib/outcome";
-import { formatBytes, formatShortDate, humanizeKey } from "@/lib/format";
+import { formatBytes, formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useLiftHold } from "@/lib/queries/useHolds";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { AccountHome } from "@/lib/queries/useTargets";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { endOfDayISO } from "@/lib/time";
+import { roleName } from "@/lib/names";
 
 /**
  * One person's home folder limit, on the system's account list (A-03 §3): the
@@ -38,7 +39,7 @@ function gbWords(bytes: number | undefined): string {
 function useRoleLabel() {
   const resolver = useNameResolver();
   return (role?: { project_id: string; role_key: string }) =>
-    role ? resolver.resolveRole(role.project_id, role.role_key).value?.display_name || humanizeKey(role.role_key) : "";
+    role ? roleName(resolver.resolveRole(role.project_id, role.role_key).value?.display_name, role.role_key) : "";
 }
 
 /** "Home folder up to 20 GB, from Fabrication lead", and what is owed about it. */

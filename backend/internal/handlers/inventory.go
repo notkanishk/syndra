@@ -178,7 +178,7 @@ func writeOperationError(w http.ResponseWriter, err error, code, confirmation st
 	case errors.As(err, new(*addons.ErrOperationUnavailable)):
 		jsonErrorResponse(w, http.StatusConflict, "OPERATION_UNAVAILABLE", err.Error())
 	default:
-		jsonErrorResponse(w, http.StatusBadGateway, code, err.Error())
+		writeUpstream(w, err, code)
 	}
 }
 
@@ -335,7 +335,7 @@ func handleSetTargetLifecycle(w http.ResponseWriter, r *http.Request) {
 	// actor travels with it.
 	out, err := addonsSetLifecycle(r.Context(), r.PathValue("target"), req.State, req.Reason, resolveActor(r, ""))
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "LIFECYCLE_NOT_SET", err.Error())
+		writeUpstream(w, err, "LIFECYCLE_NOT_SET")
 		return
 	}
 	jsonResponse(w, http.StatusOK, out)

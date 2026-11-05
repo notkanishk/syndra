@@ -1,4 +1,4 @@
-import { ApiError } from "@/lib/api-client";
+import { ApiError, LostReply } from "@/lib/api-client";
 
 /**
  * What happened, in six words, everywhere in the product.
@@ -44,6 +44,11 @@ export interface ActionOutcome {
    * neutral dot and no link, because there is no step left for the reader.
    */
   sendsItself?: boolean;
+  /**
+   * The write may have partly landed, so "Nothing was changed." would be false.
+   * The place to check (MAY_HAVE_GONE_THROUGH), said by {@link partialSentence}.
+   */
+  partial?: string;
 }
 
 /**
@@ -111,7 +116,7 @@ export function nextStep(hasReference: boolean): string {
 }
 
 /** What went wrong, in the product's voice rather than the transport's. */
-export function describeFailure(error: unknown): string {
+export function failureMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 403) return "You don't have permission to do this.";
     if (error.status === 404) return "That item no longer exists. Someone may have removed it.";
@@ -121,6 +126,24 @@ export function describeFailure(error: unknown): string {
   if (error instanceof TypeError || (error instanceof Error && RAW_NETWORK.test(error.message))) return NETWORK_FAULT;
   if (error instanceof Error) return error.message;
   return "Something went wrong and the request did not go through.";
+}
+
+/**
+ * {@link failureMessage} for a line that stands alone. A server fault says what
+ * to do and carries its reference in full, because a bare line has no card
+ * beneath it to hold them (copy guide §8). Surfaces that show the reference
+ * themselves use failureMessage.
+ */
+export function describeFailure(error: unknown): string {
+  const said = failureMessage(error);
+  const where = mayHaveGoneThrough(error);
+  if (!where && (!(error instanceof ApiError) || error.status < 500)) return said;
+  const ref = error instanceof ApiError ? error.details?.request_id : undefined;
+  // A write that may have landed is not told to simply try again: check first.
+  const step = where
+    ? `${partialSentence(where)} If it keeps failing, ask the person who runs the Syndra server`
+    : "Try again in a minute. If it keeps failing, ask the person who runs the Syndra server";
+  return `${sentence(said)} ${step}${typeof ref === "string" ? ` and quote the reference ${ref}` : ""}.`;
 }
 
 /**
@@ -143,9 +166,11 @@ export function outcomeFromError(error: unknown): ActionOutcome {
     offline ||
     sessionEnded ||
     (error instanceof ApiError && error.status >= 400 && error.status < 500);
+  const where = mayHaveGoneThrough(error);
   return {
     kind: refused ? "refused" : "failed",
-    message: describeFailure(error),
+    partial: where,
+    message: failureMessage(error),
     // Not "it will send when you're back". There is no client-side queue by
     // design, so nothing sends itself, and saying otherwise would be the
     // product promising something it has deliberately refused to build.
@@ -156,7 +181,12 @@ export function outcomeFromError(error: unknown): ActionOutcome {
         // ends with it. "Still here" is what stops an operator abandoning a
         // plan they had already read and approved.
         ? "What you were doing is still here. Sign in again, then press the same button once more."
-        : undefined,
+        : // A server fault ends on the next step and where (copy guide §8); the reference sits below.
+          where
+          ? `${partialSentence(where)} ${nextStep(typeof requestId === "string")}`
+          : error instanceof ApiError && error.status >= 500
+            ? nextStep(typeof requestId === "string")
+            : undefined,
     requestId: typeof requestId === "string" ? requestId : undefined,
     sessionEnded: sessionEnded || undefined,
   };
@@ -249,6 +279,62 @@ export const REVOKE_SENDS_ITSELF_WORD = "On its way";
  * is the state that still holds.
  */
 export const NOTHING_CHANGED = "Nothing was changed.";
+
+/**
+ * Failures of a write that does several things, or whose answer may be lost
+ * after the thing was done. Each is told with where to look (copy guide §8:
+ * say the state of the world, then the next step) and never with
+ * {@link NOTHING_CHANGED}. Every backend code that can fail part-way is here;
+ * `partial-codes.test.ts` reads the handlers and fails on one that is not.
+ */
+/** Where to look after a write whose reply never came: any action, so the two places every one of them leaves a trace. */
+const LOST_REPLY_WHERE = "Pending changes or Audit";
+
+export const MAY_HAVE_GONE_THROUGH: Record<string, string> = {
+  DRAIN_ERROR: "Pending changes",
+  CASCADE_ERROR: "Pending changes",
+  APPLY_ERROR: "Pending changes and the bundle's page",
+  RESOLVE_FAILED: "Pending changes and Audit",
+  CONVERGENCE_NOT_QUEUED: "Pending changes",
+  CONVERGENCE_CHECK_FAILED: "Pending changes",
+  RECONCILE_FAILED: "the system's page under System",
+  LIFECYCLE_NOT_SET: "the system's page under System",
+  RELEASE_NOT_CONFIRMED: "the system's page under System",
+  TARGET_UNCONFIRMED: "the system's page under System",
+  TARGET_ANSWER_UNREADABLE: "the system's page under System",
+  SWEEP_ERROR: "Audit",
+  // Writes the answer and its audit line in one transaction (db/addon_operations.go:382-419); a failed commit is unknowable from here.
+  ANSWER_NOT_RECORDED: "Unconfirmed changes on the system's page",
+  // Read on most screens, write on a few (WRITE_ONLY).
+  ZITADEL_ERROR: "Audit",
+  INTERNAL_ERROR: "Audit",
+  // The proxy gave up, or a gateway answered for the backend: the write may have landed.
+  BACKEND_UNREACHABLE: LOST_REPLY_WHERE,
+  UPSTREAM_ERROR: LOST_REPLY_WHERE,
+};
+
+/** Codes that stand for a read on one screen and a write on another: partial only for a write. */
+const WRITE_ONLY = new Set(["ZITADEL_ERROR", "INTERNAL_ERROR", "BACKEND_UNREACHABLE", "UPSTREAM_ERROR"]);
+
+/** Where to check, when this error may have partly landed; otherwise undefined. */
+export function mayHaveGoneThrough(error: unknown): string | undefined {
+  if (error instanceof LostReply) return LOST_REPLY_WHERE;
+  if (!(error instanceof ApiError) || error.status < 500) return undefined;
+  const where = MAY_HAVE_GONE_THROUGH[error.code];
+  if (!where) return undefined;
+  return WRITE_ONLY.has(error.code) && (error.method ?? "GET") === "GET" ? undefined : where;
+}
+
+/** What a failed write says about the state of the world: the partial sentence, or "Nothing was changed." */
+export function stateLine(error: unknown): string {
+  const where = mayHaveGoneThrough(error);
+  return where ? partialSentence(where) : NOTHING_CHANGED;
+}
+
+/** The sentence that replaces "Nothing was changed." for a partial failure. */
+export function partialSentence(where: string): string {
+  return `Some of this may have gone through. Check ${where} before trying again.`;
+}
 
 /** True when the outcome must carry {@link NOTHING_CHANGED}. */
 export function statesNothingChanged(kind: OutcomeKind): boolean {

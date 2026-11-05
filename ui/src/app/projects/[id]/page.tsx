@@ -23,9 +23,10 @@ import { useApplications } from "@/lib/queries/useApplications";
 import { useSeededProjectName } from "@/lib/queries/seed";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
-import { humanizeKey } from "@/lib/format";
+
 import { Tinted } from "@/lib/motion";
 import { useIsAdvanced } from "@/lib/ui-view";
+import { roleName } from "@/lib/names";
 
 /**
  * E1 detail · a project's roles. Each row's member count is the link into E2 —
@@ -59,7 +60,7 @@ export default function ProjectDetailPage({
     () =>
       sortByName(
         (roles.data ?? []).filter((role) => role.project_id === id),
-        (role) => role.display_name || humanizeKey(role.role_key),
+        (role) => roleName(role.display_name, role.role_key),
         (role) => role.role_key,
       ),
     [roles.data, id],
@@ -210,7 +211,7 @@ export default function ProjectDetailPage({
                       href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
                       className="link-hover"
                     >
-                      {role.display_name || humanizeKey(role.role_key)}
+                      {roleName(role.display_name, role.role_key)}
                     </Link>
                     {/* Below tablet the When given column is gone; the mark
                         stays, after the name, and says it on tap or focus. */}

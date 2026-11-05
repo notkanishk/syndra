@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
-import { humanizeKey } from "@/lib/format";
+import { roleName } from "@/lib/names";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
 
@@ -110,7 +110,7 @@ export function useGlobalRoleCatalog() {
 const byRoleName = (rows: CatalogRole[]) =>
   sortByName(
     rows,
-    (r) => r.display_name || humanizeKey(r.role_key),
+    (r) => roleName(r.display_name, r.role_key),
     (r) => `${r.project_name}\u0000${r.role_key}`,
   );
 

@@ -101,3 +101,23 @@ Change: `ui/src/lib/queries/invalidation.ts` maps each kind of write (`access`, 
 Guards (`__tests__/invalidationMap.test.tsx`): every kind is classified and rail kinds hold `["governance"]`; every `useMutation` in `lib/queries` calls `invalidateAfter` unless it is a listed dry run or lookup; no raw `invalidateQueries` in `lib/queries`.
 
 Left: raw `invalidateQueries` in `components/targets/HomeLimit.tsx`, `components/targets/UnconfirmedChanges.tsx` (writes) and `components/states/{DegradedBanner,index}.tsx` (global refetch), outside W2c's list.
+
+## W1b follow-up: `writeUpstream` (branch `fix/one-name-path`, 5 Nov 2026)
+
+`handlers/errors.go` gains `writeUpstream(w, err, code)` (502) and `writeUpstreamStatus(w, status, err, code)` (503): the raw error goes to the log with a reference, the caller gets the plain sentence and `details.request_id`. Every call site that sent an upstream's `err.Error()` at 502/503 now uses it: `discovery.go` (7), `drift.go`, `entitlements.go`, `inventory.go` (`writeOperationError` and the lifecycle call), `mappings.go`, `propagations.go` (2), `targets.go`, `merge_findings.go`, `profile.go` (2), `reconciliation.go` (the observation's `Error` text). `rawUpstreamCodes` is deleted; `jsonErrorResponse` now sanitises a 500 only, and a 5xx sentence passed to it is one a handler wrote ("the change may have applied" stays).
+
+The guard found three more leaks, now closed: `/zitadel/health` returned `err.Error()` in its 502 body, `/health` returned the Postgres ping error in its 503 body, and the 501 for additive allowances returned `db: additive allowances are not supported yet`. Proof: `TestNoErrorTextReachesAFiveHundredBody` (parses the package; fails on `.Error()` inside any 5xx `jsonErrorResponse`/`jsonResponse` call except a plain 500 through `jsonErrorResponse`), `TestUpstreamFailureNeverShowsRawText`.
+
+Still open: the hand-built bodies in `bundles.go`, `access.go`, `claimserve/door.go` and the add-on writer (one envelope type), and a 5xx whose message is a variable rather than a literal call (the guard reads `.Error()` calls only).
+
+## W2d. One path for a name (branch `fix/one-name-path`, 5 Nov 2026; audit family 9)
+
+Verified on main before changing: the `display_name || humanizeKey(key)` chain was inline in 25+ places (screens, components, `useRoles.ts`, `shownNames.ts`), with four local `useRoleName` hooks; `ServiceAccountPage` used the key alone; the audit CSV put `actor_id` and `target_id` in the who and target columns; `drift-filters.ts` sorted names with a bare `localeCompare`; six backend name sorts used byte order or `strings.ToLower` (`views.go`, `bundle_publish.go`, `target_homes.go`, `claim_delivery.go`, `service_accounts.go`, `role_members.go`), and five more were found by the guard (`insights.go` twice, `roles.go`, and two more in `views.go`).
+
+Done:
+- `ui/src/lib/names.ts`: `roleName(displayName, key)` and `humanizeKey` (re-exported from `format.ts`). Every inline chain, the local hooks (`PersonAccess`, `PersonStorage` now use `useShownNames().role`) and `shownNames.ts` go through it. `ServiceAccountPage` shows the role's own name.
+- Raw ids out of name slots: the audit CSV (names in `who` and `target`, "Unknown account" when unresolved, ids in `who_id` and `target_id`), the People on a target dialogs, the Unexplained access person picker, the plan review sort key, the create-role clone picker (role name, not key).
+- `backend/internal/textsort` (`x/text/collate`, `Loose` + `Numeric`, the same options as `Intl.Collator` base/numeric): `Compare`, `Less`, `Strings`, `ByName`. All name sorts above route through it.
+- Guards: `ui/src/lib/__tests__/names-one-path.test.ts` (no inline chain outside `names.ts`; no `localeCompare` on names, time fields excepted), `backend/internal/repoguard/name_sort_test.go` (no `sort.Strings` on names, no name compared with `<`). Tests: `names.test.ts`, `textsort_test.go` (same cases as `sort.test.ts`), the Lab 2/Lab 10 case in `drift-filters.test.ts`, the CSV columns in `export.test.tsx`.
+
+Not done: the person fallback phrase still differs by screen ("this person", "Somebody", "They"); the backend still returns the id as the name in six places (`directory/zitadel.go:430-436` and others) with the UI's `name !== id` check carrying it; `services/views.go` `roleLabel` is unchanged; SQL `ORDER BY b.name` and DB collation are UNVERIFIED; `machineName(id)` in the audit `Actor` still returns a raw id for a non-system actor; `ShapeChooser`/`ShapeCard` show role keys beside names on purpose.

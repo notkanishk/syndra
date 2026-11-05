@@ -20,7 +20,7 @@ import type { GuideFolder } from "@/components/storage/ConnectionGuide";
 import { deviceFrom, type Device } from "@/components/storage/device";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
-import { formatAt, formatBytes, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
+import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import {
@@ -34,6 +34,7 @@ import { oneShot } from "@/lib/secret";
 import dynamic from "next/dynamic";
 import { RetryStatus } from "@/components/ui/RetryStatus";
 import { retryLine, type RetryState } from "@/lib/retry";
+import { roleName } from "@/lib/names";
 
 // Opened on demand, so it stays out of the page's first load.
 const ConnectionGuide = dynamic(() => import("@/components/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
@@ -126,7 +127,7 @@ function useRoleName() {
   return (role: RoleSource) => {
     const project = catalog.data.find((p) => p.id === role.project_id);
     const found = project?.roles.find((r) => r.key === role.role_key);
-    return found?.label || humanizeKey(role.role_key);
+    return roleName(found?.label, role.role_key);
   };
 }
 

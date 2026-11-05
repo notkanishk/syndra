@@ -3,7 +3,10 @@
 // who recognize project names better than internal keys. This module
 // centralizes the human-readable formatting so every view does it the same way.
 
+import { humanizeKey, roleName } from "@/lib/names";
 import { MAKERSPACE_TZ, civilDay, daysFromToday, endAfterDaysISO, isSameDay } from "@/lib/time";
+
+export { humanizeKey };
 
 /**
  * How a role reads in a SENTENCE — a toast, a dialog lede, a warning banner.
@@ -19,19 +22,7 @@ import { MAKERSPACE_TZ, civilDay, daysFromToday, endAfterDaysISO, isSameDay } fr
  * scanned for identifiers rather than read.
  */
 export function roleLabel(projectName: string, roleKey: string, roleDisplayName?: string): string {
-  return `${projectName} / ${roleDisplayName || humanizeKey(roleKey)}`;
-}
-
-/**
- * Convert a snake/kebab/lower role key into a friendlier label. Used as a
- * fallback when the project catalog doesn't carry an explicit `label` for
- * the role.
- */
-export function humanizeKey(key: string): string {
-  if (!key) return "";
-  return key
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return `${projectName} / ${roleName(roleDisplayName, roleKey)}`;
 }
 
 /**

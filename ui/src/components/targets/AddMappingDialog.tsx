@@ -1,5 +1,6 @@
 "use client";
 
+import { roleName } from "@/lib/names";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Fragment, useState } from "react";
 
@@ -9,7 +10,7 @@ import { Notice } from "@/components/ui/Notice";
 import { Segmented, Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
 import { ApiError } from "@/lib/api-client";
-import { formatClock, humanizeKey } from "@/lib/format";
+import { formatClock } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useCreateMapping, useMappings } from "@/lib/queries/useMappings";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -100,7 +101,7 @@ export function RoleMappingDialog({
   const roles =
     (projects.data ?? []).find((r) => r.project.id === project?.id)?.project.roles.filter((r) => !mapped.has(r.key)) ?? [];
   const roleLabel =
-    (role && resolver.resolveRole(role.projectId, role.roleKey).value?.display_name) || humanizeKey(role?.roleKey ?? "");
+    roleName(role && resolver.resolveRole(role.projectId, role.roleKey).value?.display_name, role?.roleKey ?? "");
 
   const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";

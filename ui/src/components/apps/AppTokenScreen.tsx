@@ -35,7 +35,7 @@ import { useAppSignIns } from "@/lib/queries/useSignIns";
 import { appSignInMeta } from "@/lib/sign-in-line";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
-import { listingNotice, type CheckContext } from "./claim-words";
+import { heldBackLine, listingNotice, type CheckContext } from "./claim-words";
 import { ClaimHistory } from "./ClaimHistory";
 import { ClaimPreview } from "./ClaimPreview";
 import { DebugMode } from "./DebugMode";
@@ -203,7 +203,10 @@ function AppClaims({ applicationId }: { applicationId: string }) {
   };
   // About the app, not the person or a draft: read off the saved shape's trail.
   const listing = listingNotice(one?.now, { ...ctx, profile: shape.profile, draft: undefined });
-  const say: SayContext = { app, roles: shape.project_roles, reach: preview.data?.reach, templateId: appTemplateId(shape, draft) };
+  // A draft's trail names the app's new shape, so it knows if the app can't be told apart.
+  const heldBack =
+    heldBackLine(one?.draft ?? one?.now, { ...ctx, profile: draft?.profile ?? shape.profile, draft: undefined }) ?? undefined;
+  const say: SayContext = { app, roles: shape.project_roles, reach: preview.data?.reach, templateId: appTemplateId(shape, draft), heldBack };
 
   const tpl = sheet?.kind === "template" ? templates.find((t) => t.id === sheet.id) : undefined;
 
@@ -259,6 +262,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
             templates={templates}
             advanced={advanced}
             projectName={project}
+            heldBack={heldBack}
             onSave={() => setSheet({ kind: "save" })}
             onOpenTemplate={(id) => setSheet({ kind: "template", id })}
             onOpenCopy={() => {
@@ -299,6 +303,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
           template={tpl}
           shape={shape}
           project={project}
+          heldBack={heldBack}
           onClose={() => setSheet(null)}
           onStart={async () => {
             setSheet(null);

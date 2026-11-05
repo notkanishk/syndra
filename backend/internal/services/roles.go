@@ -7,7 +7,7 @@ import (
 	"log"
 	"regexp"
 	"sort"
-	"strings"
+	"syndra/internal/textsort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -237,9 +237,7 @@ func roleDeleteGuard(ctx context.Context, projectID, roleKey string, confirmHold
 		return nil, &RoleHeldError{Unknown: true}
 	}
 	holders := append([]models.UserProfile(nil), view.ObservedOnly...)
-	sort.Slice(holders, func(i, j int) bool {
-		return strings.ToLower(holders[i].Name) < strings.ToLower(holders[j].Name)
-	})
+	textsort.ByName(holders, func(u models.UserProfile) string { return u.Name }, nil)
 	if len(holders) != confirmHolders {
 		return nil, &RoleHeldError{Holders: holders}
 	}

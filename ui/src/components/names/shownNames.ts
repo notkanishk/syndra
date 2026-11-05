@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 
-import { humanizeKey } from "@/lib/format";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { roleName } from "@/lib/names";
 
 /**
  * The names the name components show, as strings to sort by (RULES.md:
@@ -23,7 +23,7 @@ export function useShownNames() {
         `${resolver.resolveProject(projectId).value?.name || projectId} / ${roleKey}`,
       /** A role's own name, the key made readable when unknown. */
       role: (projectId: string, roleKey: string) =>
-        resolver.resolveRole(projectId, roleKey).value?.display_name || humanizeKey(roleKey),
+        roleName(resolver.resolveRole(projectId, roleKey).value?.display_name, roleKey),
     }),
     [resolver],
   );

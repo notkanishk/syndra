@@ -12,12 +12,13 @@ import { NextStep } from "@/components/ui/NextStep";
 import { PaginationRow } from "@/components/ui/PaginationRow";
 import { WouldCancelQueued } from "@/lib/api-client";
 import { armAck, type QueuedChange } from "@/lib/cancel-confirm";
-import { formatAgoShort, humanizeKey } from "@/lib/format";
+import { formatAgoShort } from "@/lib/format";
 import { SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 import { settleIndicators } from "@/lib/queries/useIndicators";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { ActionForecast } from "@/components/ui/ActionOutcome";
 import { FORECAST } from "@/lib/outcome";
+import { roleName } from "@/lib/names";
 
 /**
  * Undoing a change that's still waiting (A-04 §14, proposed/CancelQueuedStep.md).
@@ -91,7 +92,7 @@ function useWho() {
     place: (change: QueuedChange) => resolver.resolveProject(change.project_id).value?.name || UNKNOWN_PROJECT,
     role: (change: QueuedChange) =>
       change.role_keys
-        .map((key) => resolver.resolveRole(change.project_id, key).value?.display_name ?? humanizeKey(key))
+        .map((key) => roleName(resolver.resolveRole(change.project_id, key).value?.display_name, key))
         .join(", "),
   };
 }

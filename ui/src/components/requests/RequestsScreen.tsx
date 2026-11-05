@@ -55,6 +55,7 @@ import {
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate, humanizeKey } from "@/lib/format";
+import { roleName } from "@/lib/names";
 import { keptEnds, stillEnds } from "@/lib/keep-ends";
 import { AskForAccess } from "@/components/requests/AskForAccess";
 import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember } from "@/components/requests/Holding";
@@ -664,8 +665,7 @@ function YourRequests({
                 {entry.kind === "extend" && "Keep "}
                 <ProjectName id={entry.project_id} />{" "}
                 ·{" "}
-                {resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
-                  humanizeKey(entry.role_key)}
+                {roleName(resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name, entry.role_key)}
               </div>
               <div className="text-[13.5px] text-faint [text-wrap:pretty]">
                 {describeAskForMember(entry, terms.data)}

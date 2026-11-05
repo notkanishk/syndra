@@ -1,3 +1,4 @@
+import { compareNames } from "@/lib/sort";
 import type { DriftTriageItem } from "@/lib/queries/useDrift";
 
 /**
@@ -208,7 +209,7 @@ export function sortDrift(
   const text = (item: DriftTriageItem) =>
     key === "who" ? names.who(item) : key === "what" ? names.what(item) : REASON_LABELS[driftReason(item)];
   return [...items].sort((a, b) => {
-    const order = key === "found" ? newest(a, b) : text(a).localeCompare(text(b)) * dir;
+    const order = key === "found" ? newest(a, b) : compareNames(text(a), text(b)) * dir;
     return (key === "found" ? order * dir : order) || newest(a, b);
   });
 }

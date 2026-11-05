@@ -138,7 +138,7 @@ func handleListZitadelUsers(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
 	result, err := zitadelListUsers(r.Context(), p)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, paginatedResponse{
@@ -155,7 +155,7 @@ func handleGetZitadelUser(w http.ResponseWriter, r *http.Request) {
 
 	user, err := zitadelGetUser(r.Context(), userID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, user)
@@ -167,7 +167,7 @@ func handleListZitadelProjects(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
 	result, err := zitadelListProjects(r.Context(), p)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, paginatedResponse{
@@ -187,7 +187,7 @@ func handleListZitadelProjectRoles(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
 	result, err := zitadelListProjectRoles(r.Context(), projectID, p)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, paginatedResponse{
@@ -267,6 +267,8 @@ func writeRoleWriteError(w http.ResponseWriter, err error) {
 		log.Printf("[ROLES] outcome unknown: %v", err)
 		jsonErrorResponse(w, http.StatusBadGateway, roleChangeUnknownCode, roleChangeUnknownMessage)
 	case errors.Is(err, services.ErrRoleNotChangedInZitadel):
+		// Not writeUpstream's generic sentence: this one says what Syndra did
+		// (put its record back). The raw rpc text goes to the log only.
 		log.Printf("[ROLES] not changed: %v", err)
 		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_REFUSED", "Zitadel didn't make the change, so Syndra put its record back.")
 	default:
@@ -532,7 +534,7 @@ func handleUpdateZitadelGrant(w http.ResponseWriter, r *http.Request) {
 
 	projectID, current, err := resolveGrantTarget(r.Context(), userID, grantID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	adds, removes := setDiff(want, current), setDiff(current, want)
@@ -566,7 +568,7 @@ func handleRemoveZitadelGrant(w http.ResponseWriter, r *http.Request) {
 
 	projectID, roleKeys, err := resolveGrantTarget(r.Context(), userID, grantID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	res := newZitadelGrantChange()
@@ -794,12 +796,13 @@ func handleZitadelHealth(w http.ResponseWriter, r *http.Request) {
 	latency := time.Since(start).Milliseconds()
 
 	if err != nil {
+		log.Printf("[ZITADEL] health probe failed: %v", err)
 		jsonResponse(w, http.StatusBadGateway, zitadelHealthResponse{
 			Status:    "error",
 			Mode:      "live",
 			Domain:    domain,
 			LatencyMs: latency,
-			Error:     err.Error(),
+			Error:     upstreamSentence(http.StatusBadGateway),
 		})
 		return
 	}

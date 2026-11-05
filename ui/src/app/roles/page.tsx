@@ -23,14 +23,15 @@ import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
-import { humanizeKey } from "@/lib/format";
+
 import { sortByName, sortNames } from "@/lib/sort";
+import { roleName } from "@/lib/names";
 
 type RoleSort = "project" | "role" | "group" | "people";
 
 const ROLE_SORT: Record<RoleSort, (role: CatalogRole) => string | number> = {
   project: (role) => projectLabel(role.project_name, role.project_id),
-  role: (role) => role.display_name || humanizeKey(role.role_key),
+  role: (role) => roleName(role.display_name, role.role_key),
   group: (role) => role.group || "",
   // The number the row shows: what Zitadel holds, else what Syndra recorded.
   people: (role) => role.observed_user_count ?? role.assigned_user_count,
@@ -62,7 +63,7 @@ export default function RolesPage() {
 
   // Alphabetical by role first: every sort keeps ties in this order, so a project's roles read A to Z.
   const all = useMemo(
-    () => sortByName(roles.data ?? [], (role) => role.display_name || humanizeKey(role.role_key), (role) => role.role_key),
+    () => sortByName(roles.data ?? [], (role) => roleName(role.display_name, role.role_key), (role) => role.role_key),
     [roles.data],
   );
 
@@ -297,7 +298,7 @@ export default function RolesPage() {
               )}
               <span className="w-full min-w-0 tablet:min-w-[200px] tablet:flex-1">
                 <span className="block text-[15px] font-semibold [text-wrap:pretty]">
-                  {role.display_name || humanizeKey(role.role_key)}
+                  {roleName(role.display_name, role.role_key)}
                   {role.waits_for_send && <WaitsMark className="ml-2" />}{" "}
                   <Mono className="font-normal text-faint">{role.role_key}</Mono>
                 </span>

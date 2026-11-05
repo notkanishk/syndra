@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syndra/internal/textsort"
 
 	"syndra/internal/db"
 	"syndra/internal/directory"
@@ -172,7 +173,7 @@ func diffIncludes(prev, next []models.BundleInclude) []IncludeChange {
 	for _, p := range was {
 		out = append(out, IncludeChange{ChildBundleID: p.ChildBundleID, ChildName: p.ChildName, From: p.ChildVersion})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ChildName < out[j].ChildName })
+	textsort.ByName(out, func(c IncludeChange) string { return c.ChildName }, nil)
 	return out
 }
 
