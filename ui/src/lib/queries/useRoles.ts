@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { request } from "@/lib/api-client";
 import { humanizeKey } from "@/lib/format";
 import { sortByName } from "@/lib/sort";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * Mirror of `models.CatalogRole` from the backend. Powers the clone-from
@@ -125,13 +126,7 @@ export function useCreateRole() {
     mutationFn: async (input: CreateRoleInput) => {
       return await request<RoleRecord>("/roles", { method: "POST", body: input });
     },
-    onSuccess: (_data, input) => {
-      qc.invalidateQueries({ queryKey: KEYS.catalog });
-      qc.invalidateQueries({ queryKey: KEYS.catalogByProject(input.project_id) });
-      // The project cards carry a role count, and the name resolver a role name.
-      qc.invalidateQueries({ queryKey: ["projects"] });
-      qc.invalidateQueries({ queryKey: ["name-catalog"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "role"),
   });
 }
 

@@ -4,8 +4,9 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 
 import { request } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
-import { bundlesQueryKeys, type BundleRoleRow } from "@/lib/queries/useBundles";
+import { type BundleRoleRow } from "@/lib/queries/useBundles";
 import { sortByName } from "@/lib/sort";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * Bundle versioning.
@@ -231,7 +232,7 @@ export function useApplyPublish(bundleId: string) {
         `/bundles/${bundleId}/publish?apply=true`,
         { method: "POST", body: input },
       ),
-    onSuccess: () => invalidateBundle(qc, bundleId),
+    onSuccess: () => invalidateAfter(qc, "access"),
   });
 }
 
@@ -257,7 +258,7 @@ export function useApplyMoveHolders(bundleId: string) {
         method: "POST",
         body: input,
       }),
-    onSuccess: () => invalidateBundle(qc, bundleId),
+    onSuccess: () => invalidateAfter(qc, "access"),
   });
 }
 
@@ -266,18 +267,6 @@ export function useApplyMoveHolders(bundleId: string) {
  * person's row carries which version of each bundle they hold, and a stale row
  * there would show somebody on a version they were just moved off.
  */
-function invalidateBundle(qc: ReturnType<typeof useQueryClient>, bundleId: string) {
-  qc.invalidateQueries({ queryKey: KEYS.versions(bundleId) });
-  qc.invalidateQueries({ queryKey: KEYS.holders(bundleId) });
-  qc.invalidateQueries({ queryKey: KEYS.draft(bundleId) });
-  qc.invalidateQueries({ queryKey: bundlesQueryKeys.list });
-  qc.invalidateQueries({ queryKey: ["users"] });
-  qc.invalidateQueries({ queryKey: ["propagations"] });
-  // A version change is a bundle-wide closure diff, the same kind of event the
-  // governance summary tracks everywhere else it happens.
-  qc.invalidateQueries({ queryKey: ["governance"] });
-}
-
 export const bundleVersionKeys = KEYS;
 
 /**
@@ -288,10 +277,6 @@ export function useDiscardBundleDraft(bundleId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => request<BundleDraft>(`/bundles/${encodeURIComponent(bundleId)}/draft`, { method: "DELETE" }),
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: KEYS.draft(bundleId) });
-      qc.invalidateQueries({ queryKey: ["bundles", bundleId, "roles"] });
-      qc.invalidateQueries({ queryKey: bundlesQueryKeys.list });
-    },
+    onSettled: () => invalidateAfter(qc, "bundle"),
   });
 }

@@ -13,6 +13,7 @@ import { Modal, ModalFooter, mountedWhileOpen } from "@/components/ui/Modal";
 import { request } from "@/lib/api-client";
 import { formatShortDate } from "@/lib/format";
 import { Unfold } from "@/lib/motion";
+import { invalidateAfter } from "@/lib/queries/invalidation";
 import { FORECAST, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 
 /** What the guide reads from GET /zitadel/action-rotation-status. */
@@ -163,10 +164,7 @@ export const SigningKeyGuide = mountedWhileOpen(function SigningKeyGuide({
     retry: false,
   });
 
-  const settle = () => {
-    void client.invalidateQueries({ queryKey: ["zitadel", "rotation"] });
-    void client.invalidateQueries({ queryKey: ["claims"] });
-  };
+  const settle = () => invalidateAfter(client, "signingKey");
   const verify = useMutation({
     mutationFn: () => request<VerifyResult>("/zitadel/action-key/verify", { method: "POST", body: {} }),
     onSettled: settle,

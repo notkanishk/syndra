@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
+import { invalidateAfter } from "./invalidation";
 
 export interface AccessRequest {
   id: string;
@@ -111,9 +112,7 @@ export function useCreateRequest() {
     mutationFn: async (input: CreateRequestInput) => {
       return await request<AccessRequest>("/requests", { method: "POST", body: input });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["requests"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "request"),
   });
 }
 
@@ -134,8 +133,7 @@ export function useDecideRequest() {
     onSuccess: (result) => {
       // The request leaves the queue; an approval that waits joins Pending changes.
       settleIndicators(qc, { pending_requests: -1, pending_propagation: result?.wait_reason ? 1 : 0 });
-      qc.invalidateQueries({ queryKey: ["requests"] });
-      qc.invalidateQueries({ queryKey: ["governance"] });
+      invalidateAfter(qc, "access");
     },
   });
 }
@@ -155,10 +153,7 @@ export function useWithdrawRequest() {
   return useMutation({
     mutationFn: async (id: string) =>
       request<{ message: string }>(`/requests/${id}/withdraw`, { method: "POST" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["requests"] });
-      qc.invalidateQueries({ queryKey: ["governance"] });
-    },
+    onSuccess: () => invalidateAfter(qc, "request"),
   });
 }
 
@@ -197,9 +192,7 @@ function useBulkDecisionMutation(apply: boolean) {
       }),
     onSuccess: () => {
       if (!apply) return;
-      qc.invalidateQueries({ queryKey: ["requests"] });
-      qc.invalidateQueries({ queryKey: ["governance"] });
-      qc.invalidateQueries({ queryKey: ["users"] });
+      invalidateAfter(qc, "access");
     },
   });
 }

@@ -94,7 +94,7 @@ var (
 	grantIndexHasRole = db.GrantIndexHasRole
 	// The claim envelope Actions v2 serves. Recompiled by the drain, because the
 	// drain is what changed the access it was compiled from.
-	refreshClaims = cache.RefreshUser
+	refreshClaims = cache.Refresh
 	// liveUserGrant is the one read behind both the add and the revoke path:
 	// Zitadel keeps ONE grant per (user, project) carrying every role, so a
 	// write must know the grant id and the roles already on it. Empty id means

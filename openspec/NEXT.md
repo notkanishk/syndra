@@ -19,6 +19,10 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
+## 0d. One refresh path, W2b and W2c (5 Nov 2026)
+
+Branch `fix/one-refresh-path`; detail in [`changes/one-path`](changes/one-path/proposal.md). Backend: `cache.Refresh` is the one post-commit refresh; the drain (including failed and exhausted rows), service-account mark/unmark and bundle rename now call it. UI: `lib/queries/invalidation.ts` maps writes to keys and every mutation hook uses it; both are guard-tested. Open: move `webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go`, `expiry/sweep.go` onto `Refresh` (guard allow-list); the webhook refreshes before its rule write; dead `directory.InvalidateUsers/InvalidateAll`; `HomeLimit.tsx` and `UnconfirmedChanges.tsx` still call `invalidateQueries` directly.
+
 ## 0d. One retry core (one-path W1d, 5 Nov 2026)
 
 Change: [`changes/one-path`](changes/one-path/tasks.md), branch `fix/one-retry-core`, migration 000080.

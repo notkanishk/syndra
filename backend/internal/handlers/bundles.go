@@ -3,12 +3,14 @@ package handlers
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"syndra/internal/cache"
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -284,7 +286,35 @@ func handleUpdateBundle(w http.ResponseWriter, r *http.Request) {
 		actor = "system"
 	}
 	_ = dbInsertAuditLog(r.Context(), actor, "-", "bundle.updated", id)
+	refreshBundleHolders(r.Context(), id)
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Bundle updated"})
+}
+
+// bundleHolders and bundleRefresh are the seams behind a rename's refresh.
+var (
+	bundleHolders = db.GetBundleHoldersByVersion
+	bundleRefresh = cache.Refresh
+)
+
+// refreshBundleHolders: a token carries bundle NAMES, so a rename reaches every
+// holder's cached claims, not just the ones who happen to be refreshed next.
+// Runs after the commit on a detached, bounded context; a failure is logged,
+// never the rename's (the 12-hour warm is the backstop).
+func refreshBundleHolders(ctx context.Context, bundleID string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cacheRebuildDetachTimeout)
+	defer cancel()
+	holders, err := bundleHolders(ctx, bundleID)
+	if err != nil {
+		log.Printf("[CACHE] renamed %s but could not list its holders to refresh: %v", bundleID, err)
+		return
+	}
+	ids := make([]string, 0, len(holders))
+	for _, h := range holders {
+		ids = append(ids, h.UserID)
+	}
+	if err := bundleRefresh(ctx, ids); err != nil {
+		log.Printf("[CACHE] renamed %s but could not refresh its holders' cached claims: %v", bundleID, err)
+	}
 }
 
 // handleRetireBundle retires a bundle and revokes what only it was granting, in one transaction.

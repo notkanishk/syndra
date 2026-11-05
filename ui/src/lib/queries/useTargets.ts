@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { request } from "@/lib/api-client";
 import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
+import { invalidateAfter } from "./invalidation";
 
 /**
  * The add-on roster and the reads hanging off it.
@@ -192,9 +193,7 @@ export function useResolveLogFinding(target: string) {
         method: "POST",
         body: { head: input.head, note: input.note, confirmed: true },
       }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target, "health"] });
-    },
+    onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
 
@@ -213,10 +212,7 @@ export function useResolveBindingConflict(target: string) {
         `/targets/${target}/binding-conflicts/${input.id}/resolve`,
         { method: "POST", body: { owner: input.owner, note: input.note, confirmed: true } },
       ),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target, "health"] });
-      client.invalidateQueries({ queryKey: ["targets", target, "inventory"] });
-    },
+    onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
 
@@ -303,13 +299,7 @@ export function useAdoptAccount(target: string) {
         `/targets/${target}/inventory/${encodeURIComponent(input.username)}/adopt`,
         { method: "POST", body: { subject_id: input.subjectId, confirmed: true } },
       ),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target, "inventory"] });
-      // The binding count on this page comes from the same read. Leaving it
-      // stale shows an account that has just left the unmanaged list without
-      // appearing anywhere else, which reads as a row that vanished.
-      client.invalidateQueries({ queryKey: ["targets", target, "health"] });
-    },
+    onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
 
@@ -322,10 +312,7 @@ export function useReconcileTarget(target: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: () => request<TargetReconcileResult>(`/targets/${target}/reconcile`, { method: "POST" }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target] });
-      client.invalidateQueries({ queryKey: ["governance"] });
-    },
+    onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
 
@@ -351,13 +338,7 @@ export function useReleaseBinding(target: string) {
         `/targets/${target}/bindings/${encodeURIComponent(subjectId)}/release`,
         { method: "POST", body: { confirmed: true } },
       ),
-    onSuccess: () => {
-      // The roster, the health card and the inventory all count bindings, and
-      // the released account joins the unmanaged list. Leaving any of them
-      // stale shows a row that has left one list without arriving in another.
-      client.invalidateQueries({ queryKey: ["targets", target] });
-      client.invalidateQueries({ queryKey: ["governance"] });
-    },
+    onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
 
@@ -459,12 +440,14 @@ export function useUnconfirmedOperations(target: string | undefined) {
  * the read its Close asks for.
  */
 export function useAnswerUnconfirmed(target: string) {
+  const client = useQueryClient();
   return useMutation({
     mutationFn: (input: { id: string; happened: boolean }) =>
       request<{ id: string; happened: boolean }>(`/targets/${target}/unconfirmed/${input.id}/answer`, {
         method: "POST",
         body: { happened: input.happened },
       }),
+    onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
 
@@ -501,10 +484,7 @@ export function useResolveMergeFinding(target: string) {
           },
         },
       ),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target] });
-      client.invalidateQueries({ queryKey: ["governance"] });
-    },
+    onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
 
@@ -543,9 +523,7 @@ export function useSetLifecycle(target: string) {
   return useMutation({
     mutationFn: (input: { state: string; reason: string }) =>
       request<TargetHealth>(`/targets/${target}/lifecycle`, { method: "POST", body: input }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target, "health"] });
-    },
+    onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
 
@@ -561,9 +539,8 @@ export function useSetTargetProject(target: string) {
         method: "PUT",
         body: { project_id: projectId },
       }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets"] });
-    },
+    // The roster carries the project, so it is the whole list that is read again.
+    onSuccess: () => invalidateAfter(client, "target"),
   });
 }
 
@@ -646,9 +623,7 @@ export function useSetTargetSetting(target: string) {
   return useMutation({
     mutationFn: ({ name, value }: { name: string; value: string }) =>
       request<TargetSetting>(`/targets/${target}/settings/${name}`, { method: "PUT", body: { value } }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target, "settings"] });
-    },
+    onSuccess: () => invalidateAfter(client, "target", { target }),
   });
 }
 
