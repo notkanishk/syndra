@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"syndra/internal/models"
 )
 
 // Role-to-target mappings: what a Zitadel role means on a target (design §6).
@@ -241,46 +244,56 @@ func TargetsMappedToRole(ctx context.Context, projectID, roleKey string) ([]stri
 // Direct grants carry an expiry; a lapsed one is not held, and counting it
 // overstated the cohort in the other direction.
 //
-// Rules are followed as chains (A→B→C), to a fixpoint, exactly as the resolver
-// (collectUserRoles) does: a count that stopped at one hop would understate the
-// blast radius on a chained mapping. UNION, not UNION ALL, is what ends the walk
-// on a cycle, which insert refuses but a restored backup could still hold.
+// Rules are followed as chains (A→B→C) by models.RuleClosure, the one
+// implementation the claims compiler and the cascades also call: a cohort that
+// stopped at one hop would understate the blast radius on a chained mapping,
+// and a cohort computed by different code from the token is a guess about it.
+//
+// ponytail: reads every held tuple and closes per person in Go. Fine at
+// makerspace scale (thousands of rows); filter the read to people holding a
+// role that can reach (projectID, roleKey) if it ever is not.
 func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, error) {
 	const q = `
-		WITH RECURSIVE held AS (
-			SELECT user_id, zitadel_project_id AS project_id, zitadel_role_key AS role_key
-			  FROM direct_role_grants
-			 WHERE expires_at IS NULL OR expires_at > NOW()
-			UNION
-			SELECT ba.user_id, bvr.zitadel_project_id, bvr.zitadel_role_key
-			  FROM user_bundle_assignments ba
-			  JOIN bundle_version_effective_roles bvr ON bvr.version_id = ba.version_id
-		), reach AS (
-			SELECT user_id, project_id, role_key FROM held
-			UNION
-			SELECT re.user_id, r.target_zitadel_project_id, r.target_zitadel_role_key
-			  FROM reach re
-			  JOIN mapping_rules r
-			    ON r.source_zitadel_project_id = re.project_id
-			   AND r.source_zitadel_role_key = re.role_key
-			 WHERE r.retired_at IS NULL
-		)
-		SELECT user_id FROM reach WHERE project_id = $1 AND role_key = $2
-		ORDER BY user_id`
-	rows, err := querier(ctx).Query(ctx, q, projectID, roleKey)
+		SELECT user_id, zitadel_project_id, zitadel_role_key
+		  FROM direct_role_grants
+		 WHERE expires_at IS NULL OR expires_at > NOW()
+		UNION
+		SELECT ba.user_id, bvr.zitadel_project_id, bvr.zitadel_role_key
+		  FROM user_bundle_assignments ba
+		  JOIN bundle_version_effective_roles bvr ON bvr.version_id = ba.version_id`
+	rows, err := querier(ctx).Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("read mapping holders: %w", err)
 	}
 	defer rows.Close()
-	var out []string
+	held := map[string]map[models.HeldRole]bool{}
 	for rows.Next() {
 		var u string
-		if err := rows.Scan(&u); err != nil {
+		var k models.HeldRole
+		if err := rows.Scan(&u, &k.ProjectID, &k.RoleKey); err != nil {
 			return nil, fmt.Errorf("scan mapping holder: %w", err)
 		}
-		out = append(out, u)
+		if held[u] == nil {
+			held[u] = map[models.HeldRole]bool{}
+		}
+		held[u][k] = true
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read mapping holders: %w", err)
+	}
+	rules, err := GetActiveMappingRules(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read mapping rules: %w", err)
+	}
+	want := models.HeldRole{ProjectID: projectID, RoleKey: roleKey}
+	var out []string
+	for u, base := range held {
+		if models.RuleClosure(base, rules, models.NewHeldRole)[want] {
+			out = append(out, u)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // roleMappingFields is the one column list every RoleMapping read selects, and

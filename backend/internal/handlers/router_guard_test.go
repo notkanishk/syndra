@@ -108,7 +108,6 @@ func TestUserLevelRoutesAreClassified(t *testing.T) {
 		"GET /api/v1/rules/mapping":                        true,
 		"GET /api/v1/rules/mapping/{id}":                   true,
 		"POST /api/v1/rules/mapping/validate":              true,
-		"GET /api/v1/config/confirmation-mode-default":     true,
 		"GET /api/v1/terms":                                true,
 		"GET /api/v1/requests":                             true, // own only: the handler filters
 		"POST /api/v1/requests":                            true, // own only: the handler binds the requester

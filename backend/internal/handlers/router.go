@@ -128,16 +128,6 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/rules/mapping/{id}", withCORS(withOperatorAuth(handleRetireMappingRule)))
 	mux.HandleFunc("POST /api/v1/rules/mapping/validate", withCORS(withUserAuth(handleValidateMappingRule)))
 
-	// Global confirmation-mode default (Task 22): every create-bundle/create-rule form reads this
-	// to prefill its mode selector, so the GET is user-gated like the rest of those forms. Setting
-	// it is global policy — operator-gated, same posture as the welcome-bundle toggle.
-	mux.HandleFunc("GET /api/v1/config/confirmation-mode-default", withCORS(withUserAuth(handleGetGlobalConfirmationDefault)))
-	mux.HandleFunc("PUT /api/v1/config/confirmation-mode-default", withCORS(withOperatorAuth(handleSetGlobalConfirmationDefault)))
-
-	// Bulk confirmation-mode toggle (Task 22): flips confirmation_mode on a set of rules or
-	// bundles in one statement. Operator-gated — a cross-cutting policy mutation.
-	mux.HandleFunc("POST /api/v1/policies/confirmation-mode", withCORS(withOperatorAuth(handleBulkSetConfirmationMode)))
-
 	// Roles that wait for you (N14 B): the one write place for which roles
 	// wait in Pending changes. Operator-gated, like every makerspace-wide setting.
 	mux.HandleFunc("GET /api/v1/roles-that-wait", withCORS(withOperatorAuth(handleListRolesThatWait)))

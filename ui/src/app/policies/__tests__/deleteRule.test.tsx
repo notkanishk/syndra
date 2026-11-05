@@ -24,10 +24,8 @@ vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({ data: [{ project: { id: "pLaser", name: "Laser Lab" } }] }),
 }));
 
-// Before the switch over: a rule's own mode still holds its changes.
-vi.mock("@/lib/queries/useRolesThatWait", () => ({
-  useRolesThatWait: () => ({ data: { switched_over: false, roles: [], suggestions: [] } }),
-}));
+// Whether the role a rule gives waits is the only thing that holds its revokes.
+const catalog = vi.hoisted(() => ({ waits: false }));
 vi.mock("@/lib/queries/useRoles", () => ({
   useGlobalRoleCatalog: () => ({
     data: [
@@ -36,6 +34,7 @@ vi.mock("@/lib/queries/useRoles", () => ({
         project_name: "Laser Lab",
         role_key: "trained",
         display_name: "Trained",
+        waits_for_send: catalog.waits,
       },
     ],
   }),
@@ -55,7 +54,6 @@ function rule(overrides: Partial<MappingRuleRow> = {}): MappingRuleRow {
     source_role: "member",
     target_project: "pLaser",
     target_role: "trained",
-    confirmation_mode: "manual",
     holder_count: 12,
     created_at: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -68,8 +66,9 @@ function openTheRule() {
 }
 
 beforeEach(() => {
+  catalog.waits = false;
   state.rules = [rule()];
-  state.remove = vi.fn().mockResolvedValue({ message: "ok", cascade: { enqueued: 12, mode: "manual" } });
+  state.remove = vi.fn().mockResolvedValue({ message: "ok", cascade: { enqueued: 12, waiting: 12, wait_reason: "role_waits" } });
 });
 
 afterEach(cleanup);
@@ -116,15 +115,15 @@ describe("deleting an automatic rule", () => {
 
   // A queued rule's revokes queue too. Saying "applied" here would have an operator believe a
   // door was locked while it was still open.
-  it("says where the revokes go, per the rule's own mode", () => {
-    state.rules = [rule({ confirmation_mode: "manual" })];
+  it("says where the revokes go, per whether the role waits", () => {
+    catalog.waits = true;
     const { unmount } = render(<AutomaticRulesPage />);
     fireEvent.click(screen.getByText("member"));
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
     expect(document.body.textContent).toMatch(/waits under Pending changes/);
     unmount();
 
-    state.rules = [rule({ confirmation_mode: "auto" })];
+    catalog.waits = false;
     render(<AutomaticRulesPage />);
     fireEvent.click(screen.getByText("member"));
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
@@ -206,7 +205,7 @@ describe("after a rule is deleted", () => {
   async function deleteTheRule() {
     state.remove = vi
       .fn()
-      .mockResolvedValue({ cascade: { enqueued: 3, mode: "auto" } });
+      .mockResolvedValue({ cascade: { enqueued: 3 } });
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
     fireEvent.click(screen.getByRole("button", { name: "Retire rule and revoke access" }));

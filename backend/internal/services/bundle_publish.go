@@ -560,11 +560,7 @@ func PublishBundleVersion(ctx context.Context, actor string, req PublishRequest)
 	// Outside the lock: the plan is being rendered, not decided.
 	DecoratePlan(ctx, &plan)
 
-	bundle, err := svcGetBundleByID(ctx, req.BundleID)
-	if err != nil {
-		return plan, version, err
-	}
-	if _, err := applyMode(ctx, bundle.ConfirmationMode, ids); err != nil {
+	if _, err := applyMode(ctx, ids); err != nil {
 		return plan, version, err
 	}
 
@@ -750,11 +746,7 @@ func MoveHolders(ctx context.Context, actor string, req MoveHoldersRequest) (Bul
 		return plan, err
 	}
 	DecoratePlan(ctx, &plan)
-	bundle, err := svcGetBundleByID(ctx, req.BundleID)
-	if err != nil {
-		return plan, err
-	}
-	if _, err := applyMode(ctx, bundle.ConfirmationMode, ids); err != nil {
+	if _, err := applyMode(ctx, ids); err != nil {
 		return plan, err
 	}
 

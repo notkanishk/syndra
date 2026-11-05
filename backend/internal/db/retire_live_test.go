@@ -19,7 +19,7 @@ func TestRetireBundle_KeepsHistoryAndLeavesEveryList(t *testing.T) {
 	pid := "pRetire" + stamp
 	name := "Retire me " + stamp
 
-	id, err := CreateBundle(ctx, name, "d", "auto", []models.BundleRole{{ProjectID: pid, RoleKey: "door"}})
+	id, err := CreateBundle(ctx, name, "d", []models.BundleRole{{ProjectID: pid, RoleKey: "door"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestRetireBundle_KeepsHistoryAndLeavesEveryList(t *testing.T) {
 	})
 
 	// While it is live, its name is taken.
-	if _, err := CreateBundle(ctx, name, "", "auto", nil); !IsUniqueViolation(err) {
+	if _, err := CreateBundle(ctx, name, "", nil); !IsUniqueViolation(err) {
 		t.Fatalf("a live bundle's name is unique: %v", err)
 	}
 
@@ -110,7 +110,7 @@ func TestRetireBundle_KeepsHistoryAndLeavesEveryList(t *testing.T) {
 	}
 
 	// Its name is free again.
-	if reused, err = CreateBundle(ctx, name, "", "auto", nil); err != nil {
+	if reused, err = CreateBundle(ctx, name, "", nil); err != nil {
 		t.Fatalf("a retired bundle must not block a new bundle with the same name: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestRetireBundle_ARetiredIncluderNoLongerBlocks(t *testing.T) {
 	ctx := liveDB(t)
 	stamp := time.Now().Format("150405.000000")
 	mk := func(name string) string {
-		id, err := CreateBundle(ctx, name+" "+stamp, "", "auto",
+		id, err := CreateBundle(ctx, name+" "+stamp, "",
 			[]models.BundleRole{{ProjectID: "pRetInc" + stamp, RoleKey: name}})
 		if err != nil {
 			t.Fatal(err)
@@ -167,7 +167,7 @@ func TestRetireRule_KeepsTheRuleAndLeavesEveryRead(t *testing.T) {
 	stamp := time.Now().Format("150405.000000")
 	sp, sr, tp, tr := "pRule"+stamp, "from", "pRule"+stamp, "to"
 	create := func() string {
-		id, _, err := CreateMappingRuleAndEnqueue(ctx, "op", sp, sr, tp, tr, "auto", nil)
+		id, _, err := CreateMappingRuleAndEnqueue(ctx, "op", sp, sr, tp, tr, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -183,7 +183,7 @@ func TestRetireRule_KeepsTheRuleAndLeavesEveryRead(t *testing.T) {
 		}
 		_, _ = PG.Exec(ctx, `DELETE FROM audit_logs WHERE resource_id = $1`, id)
 	})
-	if _, _, err := CreateMappingRuleAndEnqueue(ctx, "op", sp, sr, tp, tr, "auto", nil); !IsUniqueViolation(err) {
+	if _, _, err := CreateMappingRuleAndEnqueue(ctx, "op", sp, sr, tp, tr, nil); !IsUniqueViolation(err) {
 		t.Fatalf("a rule in force is unique: %v", err)
 	}
 	if usage, _ := GetRoleUsageCounts(ctx); usage[tp+":"+tr].RuleCount != 1 {

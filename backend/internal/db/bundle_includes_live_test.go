@@ -19,7 +19,7 @@ func TestBundleIncludes_AgainstTheSchema(t *testing.T) {
 		for _, r := range roles {
 			rs = append(rs, models.BundleRole{ProjectID: "pInc", RoleKey: r})
 		}
-		id, err := CreateBundle(ctx, name+" "+stamp, "", "auto", rs)
+		id, err := CreateBundle(ctx, name+" "+stamp, "", rs)
 		if err != nil {
 			t.Fatal(err)
 		}
