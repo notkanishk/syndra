@@ -12,19 +12,11 @@ export interface RoleWait {
   marked_at: string;
 }
 
-/** A role the one-time move suggests: something set to wait used to give it. */
-export interface WaitSuggestion {
-  project_id: string;
-  role_key: string;
-  via: { kind: "bundle" | "rule"; id: string; name?: string }[];
-}
-
 export interface RolesThatWait {
   roles: RoleWait[];
-  /** Only roles decide now. Until then bundles and rules set to wait still hold changes. */
+  /** Only roles decide whether a change waits; every deployment has switched over (migration 000078). */
   switched_over: boolean;
   switch?: { set_by: string; set_at: string };
-  suggestions: WaitSuggestion[];
 }
 
 export const rolesThatWaitKey = ["roles-that-wait"] as const;
@@ -54,15 +46,5 @@ export function useSetRolesWait() {
       qc.invalidateQueries({ queryKey: rolesThatWaitKey });
       qc.invalidateQueries({ queryKey: catalogKey });
     },
-  });
-}
-
-/** The switch over: from now on only roles that wait hold a change. */
-export function useSwitchToRolesThatWait() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      request("/config/confirmation-model", { method: "PUT", body: { model: "roles" } }),
-    onSettled: () => qc.invalidateQueries({ queryKey: rolesThatWaitKey }),
   });
 }

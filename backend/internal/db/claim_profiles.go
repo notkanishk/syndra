@@ -25,19 +25,6 @@ type ClaimProfileRow struct {
 	StaticClaims    map[string]any
 }
 
-// AppClaimOverrideRow is one application's departure from its project's
-// default under the retired per-project shaping (000018). Nothing writes it
-// any more: the Actions v1 seed folds a row into that app's first shape
-// version (services.seedApp). Drop the table once every environment is seeded.
-type AppClaimOverrideRow struct {
-	ApplicationID   string
-	ProjectID       string
-	ClaimName       string
-	FormatType      string
-	AttributeClaims map[string]string
-	StaticClaims    map[string]any
-}
-
 const claimProfileColumns = `zitadel_project_id, claim_name, format_type, attribute_claims, static_claims`
 
 // ListClaimProfiles returns every claim_profiles row. Used to overlay
@@ -101,35 +88,6 @@ func UpsertClaimProfile(ctx context.Context, r ClaimProfileRow) error {
 		return fmt.Errorf("upsert claim profile for project %s: %w", r.ProjectID, err)
 	}
 	return nil
-}
-
-// ListAppClaimOverrides returns every retired per-application override, for
-// the Actions v1 seed only.
-func ListAppClaimOverrides(ctx context.Context) ([]AppClaimOverrideRow, error) {
-	rows, err := querier(ctx).Query(ctx, `
-		SELECT application_id, zitadel_project_id, claim_name, format_type, attribute_claims, static_claims
-		FROM app_claim_overrides`)
-	if err != nil {
-		return nil, fmt.Errorf("list app claim overrides: %w", err)
-	}
-	defer rows.Close()
-
-	var out []AppClaimOverrideRow
-	for rows.Next() {
-		var r AppClaimOverrideRow
-		var attrs, statics []byte
-		if err := rows.Scan(&r.ApplicationID, &r.ProjectID, &r.ClaimName, &r.FormatType, &attrs, &statics); err != nil {
-			return nil, fmt.Errorf("scan app claim override row: %w", err)
-		}
-		if err := unmarshalClaimMaps(attrs, statics, &r.AttributeClaims, &r.StaticClaims); err != nil {
-			return nil, fmt.Errorf("decode app claim override %s: %w", r.ApplicationID, err)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate app claim overrides: %w", err)
-	}
-	return out, nil
 }
 
 // rowScanner is satisfied by both pgx.Row and pgx.Rows.

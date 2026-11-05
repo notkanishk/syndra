@@ -27,7 +27,7 @@ const bundle: RoleReason = { kind: "bundle", bundle_id: "b1", bundle_name: "Lab 
 
 describe("the Removal dialog's way to Pending changes", () => {
   it("carries the person it removed the bundle from", async () => {
-    removeBundle.mockResolvedValue({ cascade: { enqueued: 2, mode: "manual" } });
+    removeBundle.mockResolvedValue({ cascade: { enqueued: 2 } });
     render(
       <QueryClientProvider client={new QueryClient()}>
         <RemovalDialog

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -91,6 +92,12 @@ func resetCascadeDeps(t *testing.T) {
 		return nil, nil
 	}
 
+	// A cascade's rows are sent unless their role waits (no bundle or rule mode
+	// holds them since 000078), so the send needs a stand-in too.
+	svcDrainBatch = func(_ context.Context, ids []string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{Applied: len(ids)}, nil
+	}
+
 	// And the lifecycle trigger's read, for the same reason. Its default answer
 	// is "this role reaches no target", which is what most roles in this
 	// deployment do — a cascade test that has not said otherwise is testing the
@@ -116,6 +123,21 @@ func stubNoMappedTargets(t *testing.T) {
 	}
 }
 
+// waitsForRole marks the given outbox rows as carrying a role that waits.
+func waitsForRole(t *testing.T, ids ...string) {
+	t.Helper()
+	orig, origSet := svcOutboxRowsWaitForRole, svcSetWaitReason
+	t.Cleanup(func() { svcOutboxRowsWaitForRole, svcSetWaitReason = orig, origSet })
+	svcOutboxRowsWaitForRole = func(_ context.Context, rows []string) (map[string]bool, error) {
+		out := map[string]bool{}
+		for _, r := range rows {
+			out[r] = slices.Contains(ids, r)
+		}
+		return out, nil
+	}
+	svcSetWaitReason = func(context.Context, []string, string) error { return nil }
+}
+
 // noBundles/noDirects/noRules are the common "holds nothing else" stubs used by most closure-diff
 // tests below, to keep each test's arrange section focused on what it actually varies.
 func noDirects(ctx context.Context, u string, inc bool) ([]models.DirectGrant, error) {
@@ -137,7 +159,7 @@ func noRules(ctx context.Context) ([]models.MappingRule, error) { return nil, ni
 func TestCascadeBundleAssignedToUser_AutoEnqueuesPerRoleAndDrains(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
 		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{
@@ -173,18 +195,18 @@ func TestCascadeBundleAssignedToUser_AutoEnqueuesPerRoleAndDrains(t *testing.T) 
 	if strings.Join(drainedIDs, ",") != "o1,o2" {
 		t.Fatalf("drained %v", drainedIDs)
 	}
-	if res.Mode != "auto" {
-		t.Fatalf("mode = %q", res.Mode)
-	}
 	if res.Enqueued != 2 {
 		t.Fatalf("enqueued count = %d, want 2", res.Enqueued)
 	}
 }
 
-func TestCascadeBundleAssignedToUser_ManualQueuesWithoutDrain(t *testing.T) {
+// What holds a cascade's change now is its role, and only that: a bundle used
+// to carry its own mode as well (dropped in 000078, inert under roles).
+func TestCascadeBundleAssignedToUser_ARoleThatWaitsQueuesWithoutDrain(t *testing.T) {
 	resetCascadeDeps(t)
+	waitsForRole(t, "o1")
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
 		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
@@ -205,17 +227,17 @@ func TestCascadeBundleAssignedToUser_ManualQueuesWithoutDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if drainCalled {
-		t.Fatal("manual mode must not drain")
+		t.Fatal("a row whose role waits must not drain")
 	}
-	if res.Mode != "manual" {
-		t.Fatalf("mode = %q", res.Mode)
+	if res.Waiting != 1 || res.WaitReason != db.WaitReasonRoleWaits {
+		t.Fatalf("waiting = %d reason = %q", res.Waiting, res.WaitReason)
 	}
 }
 
 func TestCascadeBundleAssignedToUser_EnqueueErrorPropagates(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
 		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
@@ -249,7 +271,7 @@ func TestCascadeBundleAssignedToUser_EnqueueErrorPropagates(t *testing.T) {
 func TestCascadeBundleAssignedToUser_ClosureDiffIncludesRuleDerivedTarget(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
 		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{ProjectID: "p1", RoleKey: "A"}}, nil
@@ -292,7 +314,7 @@ func TestCascadeBundleAssignedToUser_ClosureDiffIncludesRuleDerivedTarget(t *tes
 func TestCascadeBundleAssignedToUser_IdempotentWhenAlreadyEffectivelyGranted(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcLatestVersionRoles = func(ctx context.Context, id string) (models.BundleVersion, []models.BundleRole, error) {
 		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{ProjectID: "p1", RoleKey: "r1"}}, nil
@@ -397,7 +419,7 @@ func TestCascadeRuleCreated_DiscoversHolderAbsentFromGrantIndex(t *testing.T) {
 	}
 	svcGetActiveMappingRules = noRules
 	var gotParams []db.EnqueueParams
-	svcCreateRuleAndEnqueue = func(ctx context.Context, actor, sp, sr, tp, tr, mode string, params []db.EnqueueParams) (string, []string, error) {
+	svcCreateRuleAndEnqueue = func(ctx context.Context, actor, sp, sr, tp, tr string, params []db.EnqueueParams) (string, []string, error) {
 		gotParams = params
 		return "rule-1", []string{"o1"}, nil
 	}
@@ -405,7 +427,7 @@ func TestCascadeRuleCreated_DiscoversHolderAbsentFromGrantIndex(t *testing.T) {
 		return propagation.DrainResult{}, nil
 	}
 
-	ruleID, res, err := CascadeRuleCreated(context.Background(), "admin", "sp", "sr", "tp", "tr", "auto")
+	ruleID, _, err := CascadeRuleCreated(context.Background(), "admin", "sp", "sr", "tp", "tr")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,9 +437,6 @@ func TestCascadeRuleCreated_DiscoversHolderAbsentFromGrantIndex(t *testing.T) {
 	if len(gotParams) != 1 || gotParams[0].OpType != "add" || gotParams[0].UserID != "u1" ||
 		gotParams[0].ProjectID != "tp" || gotParams[0].RoleKeys[0] != "tr" || gotParams[0].Source != "rule" {
 		t.Fatalf("bad param: %+v", gotParams)
-	}
-	if res.Mode != "auto" {
-		t.Fatalf("mode = %q", res.Mode)
 	}
 }
 
@@ -435,12 +454,12 @@ func TestCascadeRuleCreated_SkipsUsersWithEmptyDelta(t *testing.T) {
 	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
 	var gotParams []db.EnqueueParams
-	svcCreateRuleAndEnqueue = func(ctx context.Context, actor, sp, sr, tp, tr, mode string, params []db.EnqueueParams) (string, []string, error) {
+	svcCreateRuleAndEnqueue = func(ctx context.Context, actor, sp, sr, tp, tr string, params []db.EnqueueParams) (string, []string, error) {
 		gotParams = params
 		return "rule-2", nil, nil
 	}
 
-	if _, _, err := CascadeRuleCreated(context.Background(), "admin", "sp", "sr", "tp", "tr", "manual"); err != nil {
+	if _, _, err := CascadeRuleCreated(context.Background(), "admin", "sp", "sr", "tp", "tr"); err != nil {
 		t.Fatal(err)
 	}
 	if len(gotParams) != 1 || gotParams[0].UserID != "u1" {
@@ -448,8 +467,9 @@ func TestCascadeRuleCreated_SkipsUsersWithEmptyDelta(t *testing.T) {
 	}
 }
 
-func TestCascadeRuleCreated_ManualQueuesWithoutDrain(t *testing.T) {
+func TestCascadeRuleCreated_ARoleThatWaitsQueuesWithoutDrain(t *testing.T) {
 	resetCascadeDeps(t)
+	waitsForRole(t, "o1")
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) {
 		return []string{"u1"}, nil
 	}
@@ -458,7 +478,7 @@ func TestCascadeRuleCreated_ManualQueuesWithoutDrain(t *testing.T) {
 	}
 	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
-	svcCreateRuleAndEnqueue = func(ctx context.Context, actor, sp, sr, tp, tr, mode string, params []db.EnqueueParams) (string, []string, error) {
+	svcCreateRuleAndEnqueue = func(ctx context.Context, actor, sp, sr, tp, tr string, params []db.EnqueueParams) (string, []string, error) {
 		return "rule-3", []string{"o1"}, nil
 	}
 	drainCalled := false
@@ -467,7 +487,7 @@ func TestCascadeRuleCreated_ManualQueuesWithoutDrain(t *testing.T) {
 		return propagation.DrainResult{}, nil
 	}
 
-	ruleID, res, err := CascadeRuleCreated(context.Background(), "admin", "sp", "sr", "tp", "tr", "manual")
+	ruleID, res, err := CascadeRuleCreated(context.Background(), "admin", "sp", "sr", "tp", "tr")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,10 +495,10 @@ func TestCascadeRuleCreated_ManualQueuesWithoutDrain(t *testing.T) {
 		t.Fatalf("ruleID = %q", ruleID)
 	}
 	if drainCalled {
-		t.Fatal("manual mode must not drain")
+		t.Fatal("a row whose role waits must not drain")
 	}
-	if res.Mode != "manual" {
-		t.Fatalf("mode = %q", res.Mode)
+	if res.Waiting != 1 || res.WaitReason != db.WaitReasonRoleWaits {
+		t.Fatalf("waiting = %d reason = %q", res.Waiting, res.WaitReason)
 	}
 }
 
@@ -490,7 +510,7 @@ func TestApplyMode_AutoDrainFailureIsNonFatal(t *testing.T) {
 		return propagation.DrainResult{}, errors.New("zitadel unreachable")
 	}
 
-	res, err := applyMode(context.Background(), "auto", []string{"o1"})
+	res, err := applyMode(context.Background(), []string{"o1"})
 	if err != nil {
 		t.Fatalf("a drain failure must not be returned as an error (rows stay pending): %v", err)
 	}
@@ -510,7 +530,7 @@ func TestApplyMode_AutoDrainFailureIsNonFatal(t *testing.T) {
 func TestCascadeBundleRemoved_ClosureCoverageSuppressesRevoke(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
@@ -548,7 +568,7 @@ func TestCascadeBundleRemoved_ClosureCoverageSuppressesRevoke(t *testing.T) {
 func TestCascadeBundleRemoved_ClosureRevokeSymmetry(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
@@ -594,7 +614,7 @@ func TestCascadeBundleRemoved_ClosureRevokeSymmetry(t *testing.T) {
 func TestCascadeBundleRemoved_RevokesWhenUncovered(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
@@ -628,7 +648,7 @@ func TestCascadeBundleRemoved_RevokesWhenUncovered(t *testing.T) {
 func TestCascadeBundleRemoved_EnqueueErrorPropagates(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
 	svcGetBundlesForUser = func(ctx context.Context, u string) ([]models.Bundle, error) {
@@ -659,7 +679,7 @@ func TestCascadeBundleRemoved_EnqueueErrorPropagates(t *testing.T) {
 func TestCascadeBundleAssigned_ProjectsThePublishedVersionNotTheWorkingCopy(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
 	svcGetUserBundleRolesGrouped = noBundleRoles
@@ -703,7 +723,7 @@ func TestCascadeBundleAssigned_ProjectsThePublishedVersionNotTheWorkingCopy(t *t
 func publishStubs(t *testing.T, working, published []models.BundleRole, holders []models.BundleHolder) {
 	t.Helper()
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcLatestVersion = func(ctx context.Context, id string) (models.BundleVersion, error) {
 		return models.BundleVersion{ID: "v-old", BundleID: id, Version: 2}, nil
@@ -876,7 +896,7 @@ func TestPublish_RefusesWhenThereIsNothingToPublish(t *testing.T) {
 func TestCascadeRuleUpdated_TargetChangeClosureDiff(t *testing.T) {
 	resetCascadeDeps(t)
 	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
-		TargetProject: "tp", TargetRole: "trOld", ConfirmationMode: "auto"}
+		TargetProject: "tp", TargetRole: "trOld"}
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{old}, nil
@@ -919,7 +939,7 @@ func TestCascadeRuleUpdated_TargetChangeClosureDiff(t *testing.T) {
 func TestCascadeRuleUpdated_OldTargetStillCoveredByBundle_NoRevoke(t *testing.T) {
 	resetCascadeDeps(t)
 	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
-		TargetProject: "tp", TargetRole: "trOld", ConfirmationMode: "auto"}
+		TargetProject: "tp", TargetRole: "trOld"}
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{old}, nil
@@ -955,7 +975,7 @@ func TestCascadeRuleUpdated_SameTripleReAdded_NoChurnForKeptUser(t *testing.T) {
 	// and new source directly, so tp/tr is already in the closure via the old rule before the
 	// update, and stays in the closure via the new rule after — identical before/after, no churn.
 	old := models.MappingRule{ID: "rule1", SourceProject: "spOld", SourceRole: "sr",
-		TargetProject: "tp", TargetRole: "tr", ConfirmationMode: "auto"}
+		TargetProject: "tp", TargetRole: "tr"}
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{old}, nil
@@ -984,7 +1004,7 @@ func TestCascadeRuleUpdated_SameTripleReAdded_NoChurnForKeptUser(t *testing.T) {
 func TestCascadeRuleUpdated_SkipsUsersWithEmptyDelta(t *testing.T) {
 	resetCascadeDeps(t)
 	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
-		TargetProject: "tp", TargetRole: "trOld", ConfirmationMode: "manual"}
+		TargetProject: "tp", TargetRole: "trOld"}
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1", "u2"}, nil }
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{old}, nil
@@ -1101,7 +1121,7 @@ func TestMoveHolders_TargetVersionComesFromTheVersionList(t *testing.T) {
 func TestCascadeBundleAssigned_PinsTheVersionItProjected(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
 	svcGetUserBundleRolesGrouped = noBundleRoles
@@ -1142,7 +1162,7 @@ func TestCascadeBundleAssigned_PinsTheVersionItProjected(t *testing.T) {
 func TestCascadeBundleAssigned_ExistingHolderIsANoOp(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcGetDirectGrantsForUser = noDirects
 	svcGetActiveMappingRules = noRules
@@ -1192,7 +1212,7 @@ func TestCascadeBundleAssigned_ExistingHolderIsANoOp(t *testing.T) {
 func TestCascadeRuleRetired_RevokesTargetTheRuleAloneGranted(t *testing.T) {
 	resetCascadeDeps(t)
 	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
-		TargetProject: "tp", TargetRole: "tr", ConfirmationMode: "auto"}
+		TargetProject: "tp", TargetRole: "tr"}
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{old}, nil
@@ -1243,7 +1263,7 @@ func TestCascadeRuleRetired_RevokesTargetTheRuleAloneGranted(t *testing.T) {
 func TestCascadeRuleRetired_TargetStillCoveredByBundle_NoRevoke(t *testing.T) {
 	resetCascadeDeps(t)
 	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
-		TargetProject: "tp", TargetRole: "tr", ConfirmationMode: "auto"}
+		TargetProject: "tp", TargetRole: "tr"}
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{old}, nil
@@ -1275,10 +1295,11 @@ func TestCascadeRuleRetired_TargetStillCoveredByBundle_NoRevoke(t *testing.T) {
 // A manual rule's deletion queues its revokes rather than draining them, exactly as its other
 // writes were queued. A retirement that fired immediately when every prior write waited would be
 // the one irreversible thing the confirmation gate did not cover.
-func TestCascadeRuleRetired_ManualModeDoesNotDrain(t *testing.T) {
+func TestCascadeRuleRetired_ARoleThatWaitsDoesNotDrain(t *testing.T) {
 	resetCascadeDeps(t)
+	waitsForRole(t, "o1")
 	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
-		TargetProject: "tp", TargetRole: "tr", ConfirmationMode: "manual"}
+		TargetProject: "tp", TargetRole: "tr"}
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }
 	svcGetActiveMappingRules = func(ctx context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{old}, nil
@@ -1301,10 +1322,10 @@ func TestCascadeRuleRetired_ManualModeDoesNotDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if drained {
-		t.Fatal("manual rule must not drain its own deletion")
+		t.Fatal("a revocation whose role waits must not drain")
 	}
-	if res.Mode != "manual" || res.Enqueued != 1 {
-		t.Fatalf("res=%+v, want manual/1", res)
+	if res.Waiting != 1 || res.Enqueued != 1 {
+		t.Fatalf("res=%+v, want 1 waiting of 1", res)
 	}
 }
 
@@ -1316,7 +1337,7 @@ func TestCascadeRuleRetired_ManualModeDoesNotDrain(t *testing.T) {
 func TestCascadeBundleRetired_RevokesPerHolderNotPerBundle(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: "b1", ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: "b1"}, nil
 	}
 	svcGetActiveMappingRules = noRules
 	svcGetUsersForBundle = func(ctx context.Context, id string) ([]string, error) {
@@ -1362,7 +1383,7 @@ func TestCascadeBundleRetired_RevokesPerHolderNotPerBundle(t *testing.T) {
 func TestCascadeBundleRetired_NoHoldersStillRetires(t *testing.T) {
 	resetCascadeDeps(t)
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: "b1", ConfirmationMode: "auto"}, nil
+		return models.Bundle{ID: "b1"}, nil
 	}
 	svcGetActiveMappingRules = noRules
 	svcGetUsersForBundle = func(ctx context.Context, id string) ([]string, error) { return nil, nil }

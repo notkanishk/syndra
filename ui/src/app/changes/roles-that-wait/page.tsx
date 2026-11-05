@@ -11,8 +11,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
-import { ChoiceRow } from "@/components/ui/ChoiceRow";
+import { Card, CardColumns } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";
 import { Notice } from "@/components/ui/Notice";
@@ -27,10 +26,8 @@ import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import {
   useRolesThatWait,
   useSetRolesWait,
-  useSwitchToRolesThatWait,
-  type WaitSuggestion,
 } from "@/lib/queries/useRolesThatWait";
-import { compareNames, sortByName } from "@/lib/sort";
+import { compareNames } from "@/lib/sort";
 
 const roleId = (projectId: string, roleKey: string) =>
   `${projectId}:${roleKey}`;
@@ -62,34 +59,26 @@ export default function RolesThatWaitPage() {
     return m;
   }, [catalog.data]);
 
-  const switched = waits.data?.switched_over ?? false;
-
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Roles that wait"
         lede="When someone would gain or lose one of these roles, however it happens, the change waits in Pending changes until you send it. Every other role goes straight to Zitadel."
         actions={
-          switched ? (
-            <Button variant="accent" onClick={() => setAdding(true)}>
-              Add roles
-            </Button>
-          ) : undefined
+          <Button variant="accent" onClick={() => setAdding(true)}>
+            Add roles
+          </Button>
         }
       />
 
-      {waits.data && !switched ? (
-        <OneTimeMove suggestions={waits.data.suggestions} byId={byId} />
-      ) : (
-        <WaitingRoles
-          isLoading={waits.isLoading}
-          error={waits.error}
-          onRetry={() => waits.refetch()}
-          marked={waits.data?.roles ?? []}
-          byId={byId}
-          landed={landed}
-        />
-      )}
+      <WaitingRoles
+        isLoading={waits.isLoading}
+        error={waits.error}
+        onRetry={() => waits.refetch()}
+        marked={waits.data?.roles ?? []}
+        byId={byId}
+        landed={landed}
+      />
 
       {adding && (
         <AddRoles
@@ -304,153 +293,6 @@ function WaitingRoles({
         </Unfold>
     </Card>
   );
-}
-
-/**
- * The one-time move, the first visit after the update: every role something
- * set to wait used to give, with why, chosen to keep waiting. Nothing is
- * sent while choosing; changes already waiting stay waiting.
- */
-function OneTimeMove({
-  suggestions,
-  byId,
-}: {
-  suggestions: WaitSuggestion[];
-  byId: Map<string, CatalogRole>;
-}) {
-  const ids = suggestions.map((s) => roleId(s.project_id, s.role_key));
-  // All of them, to start: keeping what waited waiting is the choice that
-  // changes nothing, and the operator unticks what doesn't deserve it.
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set(ids));
-  const mark = useSetRolesWait();
-  const finish = useSwitchToRolesThatWait();
-  const [failure, setFailure] = useState<string | null>(null);
-  const busy = mark.isPending || finish.isPending;
-
-  const bundles = new Set(
-    suggestions.flatMap((s) =>
-      s.via.filter((v) => v.kind === "bundle").map((v) => v.id),
-    ),
-  ).size;
-  const rules = new Set(
-    suggestions.flatMap((s) =>
-      s.via.filter((v) => v.kind === "rule").map((v) => v.id),
-    ),
-  ).size;
-  const n = chosen.size;
-
-  async function done(marking: string[]) {
-    setFailure(null);
-    try {
-      await mark.mutateAsync({ ids: marking, waits: true });
-      await finish.mutateAsync();
-    } catch (e) {
-      setFailure(sentence(describeFailure(e)));
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader
-        title="Roles to keep waiting"
-        note="Once, after the update"
-      />
-      <p className="row-divider max-w-[86ch] px-5 py-4 text-[14.5px] leading-[1.55] text-muted [text-wrap:pretty]">
-        {bundles + rules > 0 ? (
-          <>
-            Before this update, {plural(bundles, "bundle")}
-            {rules ? ` and ${plural(rules, "rule")}` : ""} waited for you and
-            the rest went straight through. From now on, the role decides. These
-            roles were given by something that waited. Choose the ones that
-            should keep waiting.
-          </>
-        ) : (
-          <>
-            Before this update, a bundle or rule could wait for you as a whole. From
-            now on, the role decides. Nothing was set to wait, so there is
-            nothing to carry over; add a role here whenever one deserves a look.
-          </>
-        )}
-      </p>
-
-      <div className="flex flex-col gap-1 px-2.5 pb-3">
-        {sortByName(
-          suggestions,
-          (s) => roleName(byId.get(roleId(s.project_id, s.role_key)), s.role_key),
-          (s) => roleId(s.project_id, s.role_key),
-        ).map((s) => {
-          const id = roleId(s.project_id, s.role_key);
-          const role = byId.get(id);
-          return (
-            <ChoiceRow
-              key={id}
-              selected={chosen.has(id)}
-              disabled={busy}
-              onToggle={() =>
-                setChosen((prev) => {
-                  const next = new Set(prev);
-                  if (!next.delete(id)) next.add(id);
-                  return next;
-                })
-              }
-              title={roleName(role, s.role_key)}
-              meta={<Mono className="font-normal">{s.role_key}</Mono>}
-              description={givenBy(s)}
-              aside={
-                <span className="block w-full text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:text-right">
-                  {peopleOf(role)}
-                  <span className="text-[13px] font-normal text-faint tablet:hidden">
-                    {peopleOf(role) === "1" ? " person" : " people"}
-                  </span>
-                </span>
-              }
-            />
-          );
-        })}
-      </div>
-
-      <Unfold open={Boolean(failure)}>
-        <div className="px-5 pt-4">
-          <Notice tone="danger" title="That didn't finish.">
-            {failure} The roles marked so far stay marked; press it again to
-            finish.
-          </Notice>
-        </div>
-      </Unfold>
-
-      <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-        <Button
-          variant="accent"
-          isPending={busy}
-          disabled={busy}
-          onClick={() => done(Array.from(chosen))}
-        >
-          {n > 0 ? `Mark ${n} and finish` : "Finish with none marked"}
-        </Button>
-        {n > 0 && (
-          <Button disabled={busy} onClick={() => done([])}>
-            Mark none
-          </Button>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function plural(n: number, noun: string) {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
-/** "Given by Staff, which waited" · "Given by the rule from Laser cutter · Operator, which waited". */
-function givenBy(s: WaitSuggestion) {
-  const names = s.via.map((v) =>
-    v.kind === "bundle" ? v.name || "a bundle" : "a rule",
-  );
-  const list =
-    names.length <= 2
-      ? names.join(" and ")
-      : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-  return `Given by ${list}, which waited`;
 }
 
 /** The role picker, marking roles to wait. The footer note says what marking means first. */

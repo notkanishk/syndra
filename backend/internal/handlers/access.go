@@ -181,15 +181,16 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// still waits as it always did. Targeted to THIS row only — giving one
 	// role must not send unrelated changes an operator left queued. A failed
 	// send is non-fatal: the row stays pending and says why.
-	if res.OutboxID != "" {
-		d := svcDeliver(r.Context(), []string{res.OutboxID}, r.URL.Query().Get("apply") != "true")
+	// The rows the mapping rules added go with it, under the same rule.
+	if ids := res.OutboxIDs(); len(ids) > 0 {
+		d := svcDeliver(r.Context(), ids, r.URL.Query().Get("apply") != "true")
 		res.WaitReason = d.WaitReason()
-		if len(d.Sent) > 0 {
+		if len(d.Sent) > 0 && res.OutboxID != "" {
 			if st, serr := dbGetPropagationStatus(r.Context(), res.OutboxID); serr == nil && st != "" {
 				res.Status = st
 			}
 		}
-		if res.Status == "applied" {
+		if res.Status == "applied" && d.Reason[res.OutboxID] == "" {
 			res.WaitReason = ""
 		}
 	}
@@ -643,8 +644,8 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 		// failure (e.g. Zitadel offline) leaves the row pending in the worklist for
 		// a later resume; access already works via the ledger.
 		res.Effect, res.Until = plan.Effect, plan.ExpiresAt
-		if queued.OutboxID != "" {
-			res.WaitReason = svcDeliver(ctx, []string{queued.OutboxID}, false).WaitReason()
+		if ids := queued.OutboxIDs(); len(ids) > 0 {
+			res.WaitReason = svcDeliver(ctx, ids, false).WaitReason()
 		}
 	} else { // rejected — no grant, just the conditional resolution
 		// A declined extension remembers the end it left alone. Best-effort: a

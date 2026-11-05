@@ -14,12 +14,12 @@ func TestGetBundleRoleCounts_MatchesTheLatestVersion(t *testing.T) {
 	stamp := time.Now().Format("150405.000000")
 	pid := "pCount" + stamp
 
-	two, err := CreateBundle(ctx, "Counts two "+stamp, "", "auto",
+	two, err := CreateBundle(ctx, "Counts two "+stamp, "",
 		[]models.BundleRole{{ProjectID: pid, RoleKey: "door"}, {ProjectID: pid, RoleKey: "lab"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	none, err := CreateBundle(ctx, "Counts none "+stamp, "", "auto", nil)
+	none, err := CreateBundle(ctx, "Counts none "+stamp, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
