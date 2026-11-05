@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flatItems, goTo, type GoToSource } from "@/lib/go-to";
+import { flatItems, fold, goTo, type GoToSource } from "@/lib/go-to";
 import { ADVANCED_NAV, BASIC_NAV, MEMBER_NAV } from "@/lib/nav";
 
 const user = (id: string, name: string, extra: object = {}) =>
@@ -75,4 +75,11 @@ describe("Go to", () => {
     expect(hrefs["app:a1"]).toBe("/applications/a1");
     expect(hrefs["bundle:b1"]).toBe("/bundles/b1");
   });
+});
+
+describe("fold", () => {
+  it("drops case and accents, so a name is found however it is typed", () => {
+    expect(fold("  Émile Zoë Ångström ")).toBe("emile zoe angstrom");
+  });
+
 });
