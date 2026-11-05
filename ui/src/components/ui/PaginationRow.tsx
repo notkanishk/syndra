@@ -1,25 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
 
 import { armArrive } from "@/lib/motion";
 import { Button } from "@/components/ui/Button";
 import { glideTo, stillMotion } from "@/lib/motion";
+import { usePlace } from "@/lib/place";
 
 /** The first page of every long list, and what Show more adds (A-04 section 7.4). */
 export const PAGE_FIRST = 10;
 export const PAGE_MORE = 25;
 
 /** The one limit every long list pages by. */
-export function usePaging(initial = PAGE_FIRST, step = PAGE_MORE) {
-  const [limit, setLimit] = useState(initial);
+export function usePaging(initial = PAGE_FIRST, step = PAGE_MORE, name = "limit") {
+  // A Back returns the list at the fold it was left at (A-19 P5); a fresh visit starts at the first page.
+  // A page with two lists names the second.
+  const [limit, setLimit] = usePlace(name, initial);
   return {
     limit,
     initial,
     step,
-    more: useCallback(() => setLimit((n) => n + step), [step]),
-    all: useCallback((total: number) => setLimit(total), []),
-    back: useCallback(() => setLimit(initial), [initial]),
+    more: useCallback(() => setLimit((n) => n + step), [setLimit, step]),
+    all: useCallback((total: number) => setLimit(total), [setLimit]),
+    back: useCallback(() => setLimit(initial), [setLimit, initial]),
   };
 }
 

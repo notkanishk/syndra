@@ -53,7 +53,7 @@ export default function RolesPage() {
   const [group, setGroup] = useState("");
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
-  const [sort, setSort, view] = useSort<RoleSort>("project");
+  const [sort, setSort, view] = useSort<RoleSort>("project", { list: "roles", keys: ["project", "role", "group", "people"] });
 
   // Unused lives in the URL, unlike the other two, because Home links straight
   // here with "N roles nobody holds" — a link that until now landed on an

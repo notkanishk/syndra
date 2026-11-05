@@ -2,6 +2,8 @@
 
 import { GoToHost } from "@/components/shell/GoToHost";
 import { KeysHost } from "@/components/shell/KeysHost";
+import { IntentPrefetchHost } from "@/components/shell/IntentPrefetchHost";
+import { PlaceHost } from "@/components/shell/PlaceHost";
 import Sidebar from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { TouchNav } from "@/components/shell/TouchNav";
@@ -99,6 +101,8 @@ export function AppShell({
           <TouchNav />
           <GoToHost />
           <KeysHost />
+          <PlaceHost />
+          <IntentPrefetchHost />
         </div>
       </PageCrumbProvider>
     </UiViewProvider>

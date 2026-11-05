@@ -157,7 +157,7 @@ function WaitingRoles({
 
   // Rows gathered by project (a quiet label and its count), A to Z; the heading in force orders
   // them inside each project. Two projects nobody could name sort by id, so they never interleave.
-  const [sort, setSort, view] = useSort<WaitSort>("role");
+  const [sort, setSort, view] = useSort<WaitSort>("role", { list: "roles-that-wait", keys: ["role", "marked", "people"] });
   const { sorted: rows, runAt } = useMemo(() => {
     const by: Record<WaitSort, (m: (typeof marked)[number]) => string | number> = {
       role: (m) => roleName(byId.get(roleId(m.project_id, m.role_key)), m.role_key),
