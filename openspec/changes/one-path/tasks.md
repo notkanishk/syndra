@@ -83,3 +83,4 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [x] Template sheet and chooser use `heldBackLine` instead of "keeps the project's default until you save" while Zitadel names no app
 - [x] Partial-failure codes (`MAY_HAVE_GONE_THROUGH` in `ui/src/lib/outcome.ts`) say "Some of this may have gone through. Check <where> before trying again."; `partial-codes.test.tsx` reads the handlers and fails on an undecided 5xx code
 
+- [x] A lost reply on a write (`LostReply` in `api-client.ts`, the proxy `BACKEND_UNREACHABLE`/`UPSTREAM_ERROR` on a non-GET) says "Check Pending changes or Audit", never "Nothing was changed."; `ANSWER_NOT_RECORDED` mapped, `CREDENTIAL_NOT_SET` and `PLAN_CLAIM_ERROR` verified as writing nothing

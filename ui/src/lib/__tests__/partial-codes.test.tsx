@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, LostReply } from "@/lib/api-client";
 import { MAY_HAVE_GONE_THROUGH, describeFailure, outcomeFromError, stateLine } from "@/lib/outcome";
 
 /**
@@ -46,19 +46,54 @@ describe("a write that may have partly landed", () => {
     expect(outcomeFromError(read).partial).toBeUndefined();
   });
 
+  it("a lost reply on a write says where to check and never \"Nothing was changed\"", () => {
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      const lost = new LostReply(new TypeError("Failed to fetch"), method);
+      const o = outcomeFromError(lost);
+      expect(o.kind).toBe("failed");
+      expect(o.partial).toBe("Pending changes or Audit");
+      const { container, unmount } = render(<ActionOutcome word="Not done" outcome={o} />);
+      expect(container.textContent).not.toMatch(/nothing was changed/i);
+      expect(container.textContent).toContain("Check Pending changes or Audit before trying again.");
+      expect(describeFailure(lost)).toContain("Syndra's server didn't answer.");
+      expect(describeFailure(lost)).not.toMatch(/nothing was changed/i);
+      expect(stateLine(lost)).toContain("Some of this may have gone through.");
+      unmount();
+    }
+  });
+
+  it("the proxy's own 'didn't answer' on a write is the same, and on a read stays as it is", () => {
+    const body = { error: "BACKEND_UNREACHABLE", message: "Syndra's server didn't answer." };
+    expect(outcomeFromError(new ApiError(502, body, "POST")).partial).toBe("Pending changes or Audit");
+    expect(outcomeFromError(new ApiError(502, { ...body, error: "UPSTREAM_ERROR" }, "DELETE")).partial).toBe("Pending changes or Audit");
+    expect(outcomeFromError(new ApiError(502, body, "GET")).partial).toBeUndefined();
+    expect(stateLine(new ApiError(502, body, "GET"))).toBe("Nothing was changed.");
+  });
+
+  it("a read that never got a reply is untouched", () => {
+    const plain = new TypeError("Failed to fetch");
+    expect(outcomeFromError(plain).partial).toBeUndefined();
+    expect(stateLine(plain)).toBe("Nothing was changed.");
+  });
+
   it("a refusal (4xx) of the same code is a refusal", () => {
     expect(outcomeFromError(new ApiError(409, { error: "DRAIN_ERROR", message: "No." }, "POST")).partial).toBeUndefined();
   });
 });
 
 // Codes at 5xx that are reads, plans, or refusals before anything is written.
+// CREDENTIAL_NOT_SET is only answered when no record was committed and nothing
+// dispatched (handlers/my_storage.go:566-579 after services/addonop/dispatch.go:253-297;
+// a sent change is answered "indeterminate" at my_storage.go:507-513). PLAN_CLAIM_ERROR
+// is a claim transaction that rolls back on any error (db/plans.go:640-660), before
+// anything is applied. ANSWER_NOT_RECORDED can write, so it is mapped instead.
 const NOTHING_WRITTEN = new Set([
-  "ADDON_UNREACHABLE", "TARGET_CAPABILITIES_UNKNOWN", "UPSTREAM_ERROR", "CATALOGUE_UNREAD", "NOT_CONFIGURED",
+  "ADDON_UNREACHABLE", "TARGET_CAPABILITIES_UNKNOWN", "CATALOGUE_UNREAD", "NOT_CONFIGURED",
   "ZITADEL_UNAVAILABLE", "BULK_REHEARSAL_ERROR", "FINDINGS_ERROR", "VIEW_ERROR", "TARGET_UNREACHABLE",
   "RESEND_CHECK_FAILED", "CREDENTIAL_NOT_SET", "INVENTORY_ERROR", "TARGET_UNREADABLE", "DORMANT_ERROR",
   "ZITADEL_NOT_CONFIGURED", "PLAN_NOT_RECORDED", "PLAN_CLAIM_ERROR", "ROLE_MEMBERS_ERROR", "INDICATORS_ERROR",
   "SERVER_ERROR", "NOT_AUDITED", "APPS_UNREADABLE", "DIRECTORY_UNAVAILABLE", "DIRECTORY_UNREACHABLE",
-  "UNCONFIRMED_READ_FAILED", "PLAN_ERROR", "DB_ERROR", "LOOKUP_ERROR", "ANSWER_NOT_RECORDED", "PROCESSING_FAULT",
+  "UNCONFIRMED_READ_FAILED", "PLAN_ERROR", "DB_ERROR", "LOOKUP_ERROR", "PROCESSING_FAULT",
 ]);
 
 describe("every 5xx code in the handlers is decided", () => {

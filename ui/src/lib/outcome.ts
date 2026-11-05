@@ -1,4 +1,4 @@
-import { ApiError } from "@/lib/api-client";
+import { ApiError, LostReply } from "@/lib/api-client";
 
 /**
  * What happened, in six words, everywhere in the product.
@@ -136,9 +136,9 @@ export function failureMessage(error: unknown): string {
  */
 export function describeFailure(error: unknown): string {
   const said = failureMessage(error);
-  if (!(error instanceof ApiError) || error.status < 500) return said;
-  const ref = error.details?.request_id;
   const where = mayHaveGoneThrough(error);
+  if (!where && (!(error instanceof ApiError) || error.status < 500)) return said;
+  const ref = error instanceof ApiError ? error.details?.request_id : undefined;
   // A write that may have landed is not told to simply try again: check first.
   const step = where
     ? `${partialSentence(where)} If it keeps failing, ask the person who runs the Syndra server`
@@ -284,6 +284,9 @@ export const NOTHING_CHANGED = "Nothing was changed.";
  * {@link NOTHING_CHANGED}. Every backend code that can fail part-way is here;
  * `partial-codes.test.ts` reads the handlers and fails on one that is not.
  */
+/** Where to look after a write whose reply never came: any action, so the two places every one of them leaves a trace. */
+const LOST_REPLY_WHERE = "Pending changes or Audit";
+
 export const MAY_HAVE_GONE_THROUGH: Record<string, string> = {
   DRAIN_ERROR: "Pending changes",
   CASCADE_ERROR: "Pending changes",
@@ -297,16 +300,22 @@ export const MAY_HAVE_GONE_THROUGH: Record<string, string> = {
   TARGET_UNCONFIRMED: "the system's page under System",
   TARGET_ANSWER_UNREADABLE: "the system's page under System",
   SWEEP_ERROR: "Audit",
+  // Writes the answer and its audit line in one transaction (db/addon_operations.go:382-419); a failed commit is unknowable from here.
+  ANSWER_NOT_RECORDED: "Unconfirmed changes on the system's page",
   // Read on most screens, write on a few (WRITE_ONLY).
   ZITADEL_ERROR: "Audit",
   INTERNAL_ERROR: "Audit",
+  // The proxy gave up, or a gateway answered for the backend: the write may have landed.
+  BACKEND_UNREACHABLE: LOST_REPLY_WHERE,
+  UPSTREAM_ERROR: LOST_REPLY_WHERE,
 };
 
 /** Codes that stand for a read on one screen and a write on another: partial only for a write. */
-const WRITE_ONLY = new Set(["ZITADEL_ERROR", "INTERNAL_ERROR"]);
+const WRITE_ONLY = new Set(["ZITADEL_ERROR", "INTERNAL_ERROR", "BACKEND_UNREACHABLE", "UPSTREAM_ERROR"]);
 
 /** Where to check, when this error may have partly landed; otherwise undefined. */
 export function mayHaveGoneThrough(error: unknown): string | undefined {
+  if (error instanceof LostReply) return LOST_REPLY_WHERE;
   if (!(error instanceof ApiError) || error.status < 500) return undefined;
   const where = MAY_HAVE_GONE_THROUGH[error.code];
   if (!where) return undefined;
