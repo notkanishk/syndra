@@ -10,6 +10,7 @@ import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { targetLabel } from "@/lib/nav";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useRevokeTargetAccess, type RevocationResult } from "@/lib/queries/useHolds";
 import { useIsTouch } from "@/lib/useViewport";
 import { endOfDayISO } from "@/lib/time";
@@ -57,6 +58,7 @@ export function RevokeDialog({
   onClose: () => void;
 }) {
   const revoke = useRevokeTargetAccess(target, subjectId);
+  const auto = useAutoRetry();
   const touch = useIsTouch();
   const [reason, setReason] = useState("");
   const [reviewDate, setReviewDate] = useState("");
@@ -113,7 +115,7 @@ export function RevokeDialog({
         {/* Amber, and above the form rather than beside the button: it is what
             the reader needs to know BEFORE deciding, not a caveat attached to
             the decision. */}
-        <Notice tone="warn" title="Anyone connected stays connected for now.">
+        <Notice tone="warn" title="Anyone connected stays connected for now." nothingToDo="Their next connection is refused on its own.">
           {sessionSentence(name)}
         </Notice>
 
@@ -167,7 +169,13 @@ export function RevokeDialog({
 
       <ModalFooter
         cancel={{ onClick: onClose, disabled: revoke.isPending }}
-        note="Revocations send on their own, every few minutes, not from Pending changes."
+        note={
+          auto === null
+            ? "It is listed in Pending changes until it is sent."
+            : auto
+            ? "Revocations send on their own, within a minute, not from Pending changes."
+            : "This Syndra server does not send revocations on its own: it waits in Pending changes until someone presses Send."
+        }
       >
         <Button
           variant="dangerConfirm"

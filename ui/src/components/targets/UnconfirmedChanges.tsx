@@ -1,4 +1,5 @@
 "use client";
+import { personOr } from "@/lib/names";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -74,7 +75,7 @@ const SYNDRA = /^system(:|$)/;
 
 /** A name as text, for a sentence that is a string (a title, an aria-label). */
 function usePersonName(id: string): string {
-  return useNameResolver().resolveUser(id).value?.display_name?.trim() || "this person";
+  return personOr(useNameResolver().resolveUser(id).value?.display_name);
 }
 
 /** Each kind, worded (A-09 §4's table, less the two password rows A-13 §5 drops). */
@@ -111,6 +112,20 @@ function wording(op: UnconfirmedOperation, who: string, name: string) {
         done: `Syndra no longer manages ${account}. It stays on ${name}.`,
         notDone: `You recorded that ${name} didn't let go of ${account}.`,
       };
+    // A maintenance change is about the system itself, not a person
+    // (addons/read.go SetLifecycle: subject is the target, about is the state).
+    case "lifecycle.set": {
+      const state = op.about === "draining" ? "finishing up" : op.about === "read_only" ? "read-only" : op.about ?? "a new state";
+      return {
+        asked: [`Set ${name} to ${state}`, null],
+        question: `Did ${name} change to ${state}?`,
+        tell: `The state at the top of this page shows what ${name} says it is now.`,
+        yes: `${name} is ${state}.`,
+        no: `${name} is still in the state it was.`,
+        done: `${name} is ${state}.`,
+        notDone: `You recorded that ${name} didn't change to ${state}.`,
+      };
+    }
     case "setting.put":
       return {
         asked: [`Change where home folders go to ${op.about ?? "a new place"}`, null],

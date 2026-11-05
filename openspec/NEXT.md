@@ -19,9 +19,17 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
+## 0c. Release coherence (6 Nov 2026)
+
+Branch `release/coherence`: groups A (delivery and one retry model), B (rule consent), C (Zitadel screens and the key, migration 000081), D (PR 113, names and upstream errors) and PR 114 (`internal/access`) merged, with one closure (`access.Closure`; B's `models.HeldRole` is `access.Role`). On top: rule retire says `retireOutcome`; the rule editor's preview is the backend what-if over the unsaved rule; Zitadel › Users give shows the rule preview; the degraded "before" line is exact per act; a give halted before it went is retried on its own (`db.ScheduleRetry`); retries show in Basic (Home block, rail pill) and a give-up stays until **Mark seen**; every outcome and retry state ends on a next step or "Nothing for you to do." (`nextStepOf`, `retryNextStep`, copy guide §5). `Notice` requires a next step or `nothingToDo` by type (1.8l); Mark seen is per person (migration 000082); a role undo that fails says so (`role.not_restored`, 1.8m). Re-audit fixes (1.8n, `fix/reaudit`): give-ups listed on Pending changes and linked from Home, per system; retries that go on their own say so and when, everywhere; the drain-off setting is in the indicators; exact partial-failure classes; the Zitadel › Users revoke count from the server's own removal walk. Revocation copy with the drain off (1.8o) done. Final verification (1.8p, `fix/final-n`): a refusal by Zitadel is said as one, with its cause, on every result; the rail pill says "Syndra stopped sending"; no drain promise before the indicators are read; Approve waits for the rule preview. Open: deploy checks 1.8g, 2a.16.
+
 ## 0d. One refresh path, W2b and W2c (5 Nov 2026)
 
 Branch `fix/one-refresh-path`; detail in [`changes/one-path`](changes/one-path/proposal.md). Backend: `cache.Refresh` is the one post-commit refresh; the drain (including failed and exhausted rows), service-account mark/unmark and bundle rename now call it. UI: `lib/queries/invalidation.ts` maps writes to keys and every mutation hook uses it; both are guard-tested. Open: move `webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go`, `expiry/sweep.go` onto `Refresh` (guard allow-list); the webhook refreshes before its rule write; dead `directory.InvalidateUsers/InvalidateAll`; `HomeLimit.tsx` and `UnconfirmedChanges.tsx` still call `invalidateQueries` directly.
+
+## 0d. One access core (one-path W2a, 5 Nov 2026)
+
+Branch `feat/one-closure-core`; change [`changes/one-path`](changes/one-path/tasks.md) §W2a. `internal/access` is the one closure (`Ends`, `Closure`, `Fired`) and the one "left" (`Left`); the compiler, person view, cascades, drift, what-if and mapping cohort all call it. User-visible: rule roles end with their source (token, person and role pages); mapping blast radii drop people who have left; drift raises a rule target whose source is only in Zitadel; bundle and rule lists show observed holding, recorded numbers labelled; the rule editor, a person's bundle dialog and a bundle's role removal preview the whole chain from the backend. Open: the holding index for `RequestHolding`, `noteOf`, `MemberAccess`, `reachOf`, as-of (W3b); the snapshot cost on the bundle and rule lists; triage any new rule-target drift after deploy.
 
 ## 0d. One retry core (one-path W1d, 5 Nov 2026)
 
@@ -45,9 +53,13 @@ Owner: "get everything in one IST time zone." Change [`changes/one-time-zone`](c
 - **Operator-gated.** Run on staging against production's copy first; read the production counts in `tasks.md` 4.5 before deploy; confirm the `[FINDINGS] sign-in totals … recounted` log line. UNVERIFIED: that the deployment's Zitadel credentials can read the event log back to 3 Nov (Zitadel keeps events; the lookup endpoint already reads them).
 - **Also resolves** the action-key change's "TZ must be set" gate: the quiet window is read in `clock.Loc`, which defaults to IST.
 ## 0d. Rules on the pipeline (5 Nov 2026)
+## 0d. One path, W2d: names (5 Nov 2026)
+
+Branch `fix/one-name-path`; detail in [`changes/one-path`](changes/one-path/proposal.md). One role-name helper (`ui/src/lib/names.ts`), ids out of the audit CSV name columns and three screens, one backend sort (`internal/textsort`), guards on both. Open: one person-fallback phrase, the six backend "id as name" returns, Go `roleLabel`, SQL `ORDER BY` collation (UNVERIFIED).
+
 ## 0d. One path, W1b: the error envelope (5 Nov 2026)
 
-Branch `fix/error-envelope`; detail in [`changes/one-path`](changes/one-path/proposal.md). Raw Zitadel and add-on text no longer reaches the screen at 502/503 for the raw codes, the proxy speaks the same envelope, and the reference is kept. Open: a `writeUpstream` at each raw call site (retire `rawUpstreamCodes`), and the remaining hand-built bodies in `bundles.go`, `access.go`, `claimserve/door.go` and the add-on.
+Branch `fix/error-envelope`; detail in [`changes/one-path`](changes/one-path/proposal.md). Raw Zitadel and add-on text no longer reaches the screen at 502/503 for the raw codes, the proxy speaks the same envelope, and the reference is kept. `writeUpstream` is now at every raw call site and `rawUpstreamCodes` is gone (branch `fix/one-name-path`). Open: the remaining hand-built bodies in `bundles.go`, `access.go`, `claimserve/door.go` and the add-on.
 ## 0d. One add-on pipe (W1e/W1f, 5 Nov 2026)
 
 Branch `fix/one-addon-pipe`; change [`changes/one-path`](changes/one-path/tasks.md). Every add-on call now goes through `addons/pipe.go` (breaker, trace before a write, idempotency key), lifecycle changes leave an `addon_operations` row and an audit line, and the TrueNAS plan and apply share one `decide`. Open from it:
@@ -62,7 +74,7 @@ Branch `fix/one-addon-pipe`; change [`changes/one-path`](changes/one-path/tasks.
 Change [`rules-on-the-pipeline`](changes/rules-on-the-pipeline/tasks.md), ADR-006, migration 000078, branch `feat/rules-on-the-pipeline`.
 
 - **Mapping rules now go through the outbox.** Every direct write (a grant, an approval, a bulk give, a replace or revoke, an adopted drift) runs through `db.FollowRules`, which enqueues the closure difference as `source='rule'` rows in the same transaction. The webhook fires no rules: a Zitadel-side change is drift. The untraced orchestrator is deleted, and the repo guard allows one Zitadel writer, the drain.
-- **One closure.** `models.RuleClosure` is called by the compiler, every cascade, the access views and the mapping cohort. A live test asserts that Zitadel is sent exactly what `cache.CompileFacts` derives on A→B→C.
+- **One closure.** `access.Closure` (was `models.RuleClosure`; one-path W2a) is called by the compiler, every cascade, the access views and the mapping cohort. A live test asserts that Zitadel is sent exactly what `cache.CompileFacts` derives on A→B→C.
 - **Dead schema removed** (was 0c, stopped earlier the same day). `confirmation_mode` was traced read by read and is inert under roles (design.md). The reads, the writes, the endpoints and the one-time move are gone, and so is `app_claim_overrides`'s reader. Migration 000078 refuses unless `confirmation.model = 'roles'` and refuses while the table has a row.
 - **Open:** run 000078 on staging first (it refuses safely). Before the first production rule, try one on staging. The other "who holds what" readers the audit found are listed in tasks §6.
 

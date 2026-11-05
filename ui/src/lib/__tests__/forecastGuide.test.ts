@@ -17,7 +17,8 @@ function forecastColumn(): string[] {
   expect(start, "the forecast table is in section 5").toBeGreaterThan(-1);
   const lines = guide.slice(start).split("\n").slice(2); // past header and separator
   const end = lines.findIndex((line) => !line.startsWith("|"));
-  return lines.slice(0, end).map((line) => line.split("|")[2].trim());
+  // Two acts may share a forecast (Remove, and Revoke under Drift): each word once.
+  return [...new Set(lines.slice(0, end).map((line) => line.split("|")[2].trim()))];
 }
 
 describe("the copy guide's forecast table", () => {

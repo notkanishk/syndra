@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"syndra/internal/extcall"
 )
 
 // Statuses an addon_operations row may hold. Kept as constants beside the SQL
@@ -152,7 +153,11 @@ func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams
 		if err != nil {
 			return "", fmt.Errorf("insert addon operation resend: %w", err)
 		}
-		details, _ = json.Marshal(map[string]any{"attempt": 2, "retry_of": p.RetryOf, "retried_by": "automatic"})
+		// The one audit mark every automatic try carries (extcall.AuditMark),
+		// with the record's own link beside it.
+		mark := extcall.AddonResend.AuditMark(2)
+		mark["attempt"], mark["retry_of"] = 2, p.RetryOf
+		details, _ = json.Marshal(mark)
 	}
 
 	const insertAudit = `INSERT INTO audit_logs

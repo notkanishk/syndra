@@ -44,6 +44,47 @@ func getGlobalCatalog(t *testing.T, query string) *httptest.ResponseRecorder {
 	return rr
 }
 
+// One-path 1.13: creating a role answers refusals as Zitadel › Projects does
+// (writeRoleWriteError): a bad key is a 400, never a 500; a lost reply is
+// "not known", never "Nothing was changed."
+func TestCreateRole_AnswersAsTheProjectsScreenDoes(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		code int
+		want string
+	}{
+		{services.ErrInvalidRoleKey, http.StatusBadRequest, "VALIDATION_FAILED"},
+		{db.ErrDuplicateRole, http.StatusConflict, "CONFLICT"},
+		{services.ErrRoleChangeUnknown, http.StatusBadGateway, roleChangeUnknownCode},
+		{services.ErrRoleNotChangedInZitadel, http.StatusBadGateway, "ZITADEL_REFUSED"},
+		{&services.RoleRecordNotRestoredError{Reference: "laser/trained"}, http.StatusBadGateway, roleRecordNotRestoredCode},
+		{services.ErrCloneSourceNotFound, http.StatusNotFound, "Nothing was changed."},
+	} {
+		resetRoleDeps(t)
+		svcCreateRole = func(context.Context, services.CreateRoleRequest, string) (models.Role, error) {
+			return models.Role{}, tc.err
+		}
+		rr := postRole(t, []byte(`{"project_id":"laser","role_key":"x","display_name":"X"}`))
+		if rr.Code != tc.code || !bytes.Contains(rr.Body.Bytes(), []byte(tc.want)) {
+			t.Errorf("%v: got %d %s, want %d containing %q", tc.err, rr.Code, rr.Body, tc.code, tc.want)
+		}
+	}
+}
+
+// A refusal whose undo failed never says Syndra put its record back, and ends
+// on a next step with the reference to quote.
+func TestRoleRecordNotRestored_IsHonestAndEndsOnANextStep(t *testing.T) {
+	msg := roleRecordNotRestoredMessage(&services.RoleRecordNotRestoredError{Reference: "laser/trained"})
+	for _, want := range []string{"couldn't put its own record back", "Check the role under Roles", "ask whoever runs the Syndra server", "laser/trained"} {
+		if !bytes.Contains([]byte(msg), []byte(want)) {
+			t.Errorf("message %q must contain %q", msg, want)
+		}
+	}
+	if bytes.Contains([]byte(msg), []byte("Nothing was changed")) || bytes.Contains([]byte(msg), []byte("so Syndra put its record back")) {
+		t.Errorf("says something that did not happen: %q", msg)
+	}
+}
+
 func TestCreateRole_HappyPath(t *testing.T) {
 	resetRoleDeps(t)
 

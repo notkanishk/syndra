@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 	"unicode/utf8"
 
 	"syndra/internal/cache"
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/textsort"
 )
 
 // svcListServiceAccountRows is Syndra's own record of service accounts: the
@@ -140,9 +140,7 @@ func serviceAccountViews(snap *accessSnapshot, marks map[string]db.ServiceAccoun
 		out = append(out, v)
 	}
 	// By name as a person reads it: "netbird" does not sort after "Zed".
-	sort.SliceStable(out, func(i, j int) bool {
-		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
-	})
+	textsort.ByName(out, func(v models.ServiceAccount) string { return v.Name }, nil)
 	return out, nil
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
@@ -82,9 +83,15 @@ type myTargetView struct {
 	// had no way to learn why.
 	//
 	// The two states are kept apart rather than collapsed to a boolean, because
-	// they differ in exactly the way a member needs: a drain is minutes and ends
-	// by itself, and read-only is somebody working on the server and ends when
-	// they say so. One deserves "shortly" and the other must not be given it.
+	// they differ in what a member is told: a drain lets the last few changes
+	// finish before staff work on the server, and read-only is staff working on
+	// it. Neither ends by itself: an operator sets the add-on back to active
+	// (addons/truenas lifecycle.go, POST /lifecycle via handlers/inventory.go),
+	// or a restart does after a shutdown drain. Nothing resumes on the end of a
+	// pause either: a change the add-on declined is released to pending
+	// (propagation/addon.go), where a revocation goes on the background drain
+	// and anything else waits for an operator's Send. So neither state is
+	// given a time or a "by itself" (final verification, MyStorage).
 	Lifecycle string `json:"lifecycle,omitempty"`
 	// Storage is what the TARGET says about this account: whether it can be
 	// used yet, and how much room is left.
@@ -410,7 +417,8 @@ func restoredAt(ctx context.Context, subject, target string) *time.Time {
 
 type setCredentialRequest struct {
 	Password string `json:"password"`
-	// Resend is the page sending the same password once more, at once, after
+	// Resend is the page sending the same password once more, at the next try
+	// the first answer named (`retry.next_try`, extcall.AddonResend), after
 	// the first send's reply was lost (A-13 §4 step 1). Only the page can: it
 	// is the only place the value still is. The server keeps no copy and never
 	// retries a member's password by itself.
@@ -474,7 +482,7 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		// Fails closed and says so. Accepting it and reporting success would
 		// tell a member their password works when nothing received it.
 		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREACHABLE",
-			"That system is not answering right now. Nothing was changed — try again shortly.")
+			"That system is not answering right now. Nothing was changed. Try again shortly.")
 		return
 	}
 
@@ -524,11 +532,15 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		// three apart: indeterminate is a lost reply, which it sends again once
 		// with the value it still holds; rejected and unreached are clear
 		// answers that nothing changed, and are not resent.
-		jsonResponse(w, http.StatusAccepted, map[string]any{
+		body := map[string]any{
 			"status":    string(res.Outcome),
 			"operation": res.OperationID,
 			"detail":    unconfirmedCredentialCopy[res.Outcome],
-		})
+		}
+		if res.Outcome == addons.OutcomeIndeterminate {
+			body["retry"] = credentialRetry(req.Resend, time.Now())
+		}
+		jsonResponse(w, http.StatusAccepted, body)
 		return
 	}
 
@@ -553,6 +565,19 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		// is not their Syndra password and not their Google password.
 		"detail": "Your storage password is set. It is used only for this system.",
 	})
+}
+
+// credentialRetry is where a lost-reply password change stands under the one
+// retry model (extcall.AddonResend): after the first send, retrying, with the
+// moment the page sends it again and "try 2 of 2"; after the resend, nothing
+// tries again until the member does (waiting).
+func credentialRetry(resend bool, now time.Time) extcall.RetryState {
+	p := extcall.AddonResend
+	if resend {
+		return p.Retrying(p.Attempts, nil)
+	}
+	next := p.NextTryAfter(now, 1)
+	return p.Retrying(1, &next)
 }
 
 // unconfirmedCredentialCopy is the backend's sentence for each answer that is

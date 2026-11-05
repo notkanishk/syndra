@@ -4,6 +4,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"syndra/internal/access"
 )
 
 // This exercises the production query and its shared scanner together. A
@@ -51,12 +53,14 @@ func TestMappingsForRoles_QueryMatchesScanner(t *testing.T) {
 }
 
 // A→B→C: whoever holds A reaches C through B, so an edit of C moves them. A
-// one-hop join counted only the holders of B.
-func TestMappingHolders_FollowsRuleChains(t *testing.T) {
+// one-hop join counted only the holders of B. HeldRecords is the seed and
+// access.Closure follows the chain (services.MappingHolders is exactly this,
+// minus people who have left); a lapsed grant is not held.
+func TestHeldRecords_SeedTheMappingCohortThroughRuleChains(t *testing.T) {
 	ctx := liveDB(t)
 	suffix := time.Now().Format("150405.000000000")
 	proj := "chain-holders-" + suffix
-	holderA, holderB, bystander := "chain-a-"+suffix, "chain-b-"+suffix, "chain-x-"+suffix
+	holderA, holderB, bystander, lapsed := "chain-a-"+suffix, "chain-b-"+suffix, "chain-x-"+suffix, "chain-l-"+suffix
 	var ruleIDs []string
 	t.Cleanup(func() {
 		for _, id := range ruleIDs {
@@ -71,16 +75,30 @@ func TestMappingHolders_FollowsRuleChains(t *testing.T) {
 		}
 		ruleIDs = append(ruleIDs, id)
 	}
-	for u, role := range map[string]string{holderA: "a", holderB: "b", bystander: "z"} {
+	for u, role := range map[string]string{holderA: "a", holderB: "b", bystander: "z", lapsed: "a"} {
 		if _, err := UpsertDirectGrant(ctx, u, proj, role, "chain-test", "", nil); err != nil {
 			t.Fatal(err)
 		}
 	}
-	got, err := MappingHolders(ctx, proj, "c")
+	if _, err := PG.Exec(ctx, `UPDATE direct_role_grants SET created_at = NOW() - INTERVAL '3 days', expires_at = NOW() - INTERVAL '1 day' WHERE user_id = $1`, lapsed); err != nil {
+		t.Fatal(err)
+	}
+	held, err := HeldRecords(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+	rules, err := GetActiveMappingRules(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for u, base := range held {
+		if access.Closure(base, rules, access.NewRole)[access.Role{ProjectID: proj, RoleKey: "c"}] {
+			got = append(got, u)
+		}
+	}
+	slices.Sort(got)
 	if !slices.Equal(got, []string{holderA, holderB}) {
-		t.Fatalf("holders of c = %v, want the holder of a (two hops) and of b (one)", got)
+		t.Fatalf("holders of c = %v, want the holder of a (two hops) and of b (one), not the lapsed one", got)
 	}
 }

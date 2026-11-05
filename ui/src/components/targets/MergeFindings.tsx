@@ -1,11 +1,12 @@
 "use client";
+import { personOr } from "@/lib/names";
 
 import { Term } from "@/components/ui/Term";
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ApiError } from "@/lib/api-client";
-import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
+import { describeFailure, mayHaveGoneThrough, outcomeFromError, partialSentence, sentence } from "@/lib/outcome";
 import { UserName } from "@/components/names";
 import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
 import { RoleRef } from "@/components/names/RoleRef";
@@ -334,7 +335,7 @@ function DecisionForm({
           {(finding.policy ?? []).map((p) => (
             <span key={p.mapping_id} className="text-faint">
               <RoleRef projectId={p.project_id} roleKey={p.role_key} /> gives the {p.value} group ·{" "}
-              {p.holders} {p.holders === 1 ? "person holds" : "people hold"} that role
+              Syndra gives that role to {p.holders} {p.holders === 1 ? "person" : "people"}
             </span>
           ))}
         </div>
@@ -354,7 +355,9 @@ function DecisionForm({
                   // An ApiError's message is the envelope's sentence (never upstream text); anything else is a transport fault.
                   const said = error instanceof ApiError ? error.message : describeFailure(error);
                   const ref = outcomeFromError(error).requestId;
-                  return ref ? `${sentence(said)} Reference ${ref}.` : said;
+                  const where = mayHaveGoneThrough(error);
+                  const told = where ? `${sentence(said)} ${partialSentence(where)}` : said;
+                  return ref ? `${sentence(told)} Reference ${ref}.` : told;
                 })()
               : "That decision did not go through. Nothing was changed."}
           </span>
@@ -425,9 +428,9 @@ function AlreadyDecided({
   const agree = picked !== null && picked === taken.decision;
 
   return (
-    <Notice tone="neutral" title="This was decided while the page was open.">
+    <Notice tone="neutral" title="This was decided while the page was open." nothingToDo="Syndra checks the account again every 6 hours by default, and clears the finding when it matches.">
       <p>
-        <Person id={taken.decided_by} fallback="Somebody" />
+        <Person id={taken.decided_by} fallback={personOr(null, true)} />
         {taken.decided_at ? (
           <>
             {" "}

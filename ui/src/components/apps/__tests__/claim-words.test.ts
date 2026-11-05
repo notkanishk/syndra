@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { check5, checkWords, listingNotice, type CheckContext } from "@/components/apps/claim-words";
+import { check5, checkWords, heldBackLine, listingNotice, type CheckContext } from "@/components/apps/claim-words";
 import type { CheckState, Explanation } from "@/lib/queries/useClaimShape";
 
 const ctx: CheckContext = {
@@ -89,11 +89,38 @@ describe("before Actions v1 goes off", () => {
       expect(listingNotice(e, ctx)?.body).toContain("urn:zitadel:iam:org:project:id:…:aud");
     });
 
+    it("stays away when Syndra could not read its record of calls: unread proves nothing", () => {
+      const e = explanation(["fail", "pass", "pass", "pass", "fail", "stale"], [{ project_role_assertion: false }]);
+      expect(listingNotice(e, ctx)).toBeNull();
+    });
+
     it("says nothing when the roles are asserted, or the shape sends nothing of its own", () => {
       expect(listingNotice(explanation(["pass", "pass", "pass", "pass", "pass", "pass"], [{ project_role_assertion: true }]), ctx)).toBeNull();
       const signInOnly = { ...ctx, profile: { ...ctx.profile, claims: [] } };
       expect(listingNotice(explanation(["warn", "pass", "pass", "pass", "none", "none"], [{ project_role_assertion: false }]), signInOnly)).toBeNull();
       expect(listingNotice(undefined, ctx)).toBeNull();
+    });
+  });
+
+  it("says people with access to the project are the ones it lists, not only people with a role", () => {
+    const e = explanation(["pass", "none", "none", "pass", "none", "pass"], [{}, { roles: [] }, {}, {}, { unlisted: true }]);
+    expect(check5(e, ctx, false).faint?.[0]).toBe("Zitadel lists Network only for people who have been given access to it.");
+  });
+
+  describe("what holds a saved shape back", () => {
+    it("is the app keeping the project's default while Zitadel names no app", () => {
+      const e = explanation(["pass", "pass", "pass", "warn", "pass", "pass"], [{}, {}, {}, { source: "app", client_id_missing: ["function/preuserinfo"] }]);
+      expect(heldBackLine(e, ctx)).toBe("Zitadel doesn't say which app is signing in, so NetBird keeps getting Network's default until Zitadel is upgraded.");
+    });
+
+    it("is the app getting nothing while Zitadel lists no project", () => {
+      const e = explanation(["fail", "pass", "pass", "pass", "fail", "none"], [{ project_role_assertion: false }]);
+      expect(heldBackLine(e, ctx)).toContain("NetBird gets nothing from Syndra until that is fixed");
+    });
+
+    it("is nothing when the shape reaches the app, or nothing is known", () => {
+      expect(heldBackLine(explanation(["pass", "pass", "pass", "pass", "pass", "pass"], [{ project_role_assertion: true }]), ctx)).toBeNull();
+      expect(heldBackLine(undefined, ctx)).toBeNull();
     });
   });
 });

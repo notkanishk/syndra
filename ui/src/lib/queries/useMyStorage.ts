@@ -8,6 +8,7 @@ import type { OneShotSecret } from "@/lib/secret";
 import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
+import type { RetryState } from "@/lib/retry";
 
 /**
  * A member's own storage view.
@@ -211,6 +212,13 @@ export interface CredentialAnswer {
   /** `set` is the only confirmed done; the other three are not success. */
   status: "set" | "indeterminate" | "rejected" | "unreached";
   detail?: string;
+  /**
+   * On a lost reply, where the change stands under the one retry model
+   * (extcall.AddonResend): retrying, with when the page sends it again and
+   * "try 2 of 2"; after that resend, waiting (nothing tries again until the
+   * member does).
+   */
+  retry?: RetryState;
 }
 
 /**
@@ -224,41 +232,64 @@ export function lostReply(error: unknown): boolean {
 }
 
 /**
- * One send, and on a lost reply one more, at once, with the same value (A-13
- * §4 step 1, owner 3 Nov). Only a confirmed `set` from either send is done; if
- * neither is answered with one, the change is unconfirmed, whatever the second
- * send heard, because the first may have landed. A clear refusal of the first
- * send is final and is not resent.
+ * When the server said nothing at all (the reply itself was lost), the page
+ * still sends once more, now. The numbers are the server's rule
+ * (extcall.AddonResend: two tries), which its parity test holds at two.
  */
-export async function sendWithOneResend(send: (resend: boolean) => Promise<CredentialAnswer>): Promise<CredentialAnswer> {
+const RESEND_NOW: RetryState = { state: "retrying", try: 2, of: 2 };
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * One send, and on a lost reply one more with the same value (A-13 §4 step 1,
+ * owner 3 Nov), at the next try the server named (the one retry model, owner
+ * 5 Nov). `onRetry` hears it first, so the page can say "Not confirmed yet.
+ * Syndra is trying again at 14:05" while it waits. Only a confirmed `set` from
+ * either send is done; if neither is answered with one, the change is
+ * unconfirmed, whatever the second send heard, because the first may have
+ * landed. A clear refusal of the first send is final and is not resent.
+ */
+export async function sendWithOneResend(
+  send: (resend: boolean) => Promise<CredentialAnswer>,
+  onRetry: (retry: RetryState) => void = () => {},
+  wait: (ms: number) => Promise<void> = sleep,
+): Promise<CredentialAnswer> {
+  let retry = RESEND_NOW;
   try {
     const first = await send(false);
     if (first.status !== "indeterminate") return first;
+    if (first.retry) retry = first.retry;
   } catch (error) {
     if (!lostReply(error)) throw error;
   }
+  onRetry(retry);
+  if (retry.next_try) await wait(Math.max(0, new Date(retry.next_try).getTime() - Date.now()));
+  let after: RetryState = { state: "waiting", try: retry.of, of: retry.of };
   try {
     const second = await send(true);
     if (second.status === "set") return second;
+    if (second.retry) after = second.retry;
   } catch {
     // Unanswered again, or refused after a first send that may have landed:
     // either way nobody knows, and the page says so.
   }
-  return { status: "indeterminate" };
+  return { status: "indeterminate", retry: after };
 }
 
-export function useSetStorageCredential(target: string) {
+export function useSetStorageCredential(target: string, onRetry?: (retry: RetryState) => void) {
   const client = useQueryClient();
   return useMutation({
     // The value is taken out of its box once and held only by this call, in
     // memory, until a final answer: never stored, never in the query cache.
     mutationFn: (password: OneShotSecret) => {
       const value = password.take();
-      return sendWithOneResend((resend) =>
-        request<CredentialAnswer>(`/me/targets/${target}/credential`, {
-          method: "POST",
-          body: resend ? { password: value, resend: true } : { password: value },
-        }),
+      return sendWithOneResend(
+        (resend) =>
+          request<CredentialAnswer>(`/me/targets/${target}/credential`, {
+            method: "POST",
+            body: resend ? { password: value, resend: true } : { password: value },
+          }),
+        onRetry,
       );
     },
     onSettled: () => invalidateAfter(client, "storageCredential"),

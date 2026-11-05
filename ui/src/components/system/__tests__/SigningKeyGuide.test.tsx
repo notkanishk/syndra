@@ -3,7 +3,32 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { NOT_SEEN_AFTER_MS, SigningKeyGuide, type GuideStatus } from "@/components/system/SigningKeyGuide";
+import { NOT_SEEN_AFTER_MS, SigningKeyGuide, replaceResult, type GuideStatus } from "@/components/system/SigningKeyGuide";
+import { statesNothingChanged } from "@/lib/outcome";
+
+// W4, W9, W11: each outcome of a replacement in its own words.
+describe("replaceResult", () => {
+  it("never says nothing changed when a key was, or may have been, replaced", () => {
+    for (const outcome of ["unverified", "partial", "unknown"] as const) {
+      const r = replaceResult({ outcome, replaced: [], reason: "Zitadel didn't answer." });
+      expect(statesNothingChanged(r.outcome.kind)).toBe(false);
+    }
+    expect(replaceResult({ outcome: "partial", reason: "Zitadel replaced the claims action's key, but not the event listener's key. Zitadel refused." }).word).toBe("Partly replaced");
+    expect(replaceResult({ outcome: "unknown" }).word).toBe("Not known");
+  });
+
+  it("says no test sign-in ran when none is set up, not that it failed", () => {
+    const r = replaceResult({ outcome: "unverified", probe: { pass: false, class: "not_set_up" } });
+    expect(r.outcome.message).toMatch(/No test sign-in could run, because SYNDRA_EXTERNAL_URL is not set/);
+    expect(r.outcome.message).not.toMatch(/didn't get its claims/);
+  });
+
+  it("holds the old key for 7 days, not for ever", () => {
+    const r = replaceResult({ outcome: "unverified", probe: { pass: false, class: "claims" } });
+    expect(r.outcome.message).toMatch(/for 7 days/);
+    expect(r.outcome.message).not.toMatch(/won't replace it again on its own/);
+  });
+});
 
 /**
  * The by-hand guide (route-zitadel §2): it watches for the new key and moves
@@ -100,6 +125,8 @@ describe("SigningKeyGuide", () => {
     expect(fold).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(fold);
     expect(screen.getByText("ZITADEL_EVENT_SIGNING_KEY")).toBeInTheDocument();
+    // S10: the condition is one the reader can see on the page.
+    expect(screen.getByText(/Only if the keyring line on this page says Syndra isn.t allowed to read the key from Zitadel/)).toBeInTheDocument();
     expect(screen.getByText("Step 1 of 2")).toBeInTheDocument();
     expect(posts("/zitadel/action-key/verify")).toHaveLength(0);
   });
@@ -137,5 +164,16 @@ describe("SigningKeyGuide", () => {
     open(setup);
     expect(await screen.findByText(/^Set up\. A test sign-in got its claims/)).toBeInTheDocument();
     expect(posts("/zitadel/action-key/rotate")).toHaveLength(0);
+  });
+});
+
+// R8: no outcome of a replacement ends on the default "Nothing for you to do."
+describe("replaceResult next steps", () => {
+  it("partial: press Replace now again, or Do it by hand", () => {
+    expect(replaceResult({ outcome: "partial" }).outcome.next).toMatch(/Replace now again to finish, or use Do it by hand/);
+  });
+  it("unverified: points at Claims delivery, or at SYNDRA_EXTERNAL_URL when no test sign-in could run", () => {
+    expect(replaceResult({ outcome: "unverified", probe: { pass: false, class: "claims" } }).outcome.next).toMatch(/Claims delivery section on this page/);
+    expect(replaceResult({ outcome: "unverified", probe: { pass: false, class: "not_set_up" } }).outcome.next).toMatch(/Set SYNDRA_EXTERNAL_URL on the Syndra server and restart it/);
   });
 });

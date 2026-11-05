@@ -9,14 +9,14 @@ describe("Notice", () => {
   // one that only informs is read when reached.
   it("is an alert only when it blocks", () => {
     const { rerender } = render(
-      <Notice tone="warn" title="TrueNAS is offline" blocking>
+      <Notice tone="warn" title="TrueNAS is offline" next="Try again." blocking>
         {"Your shares won't open until it's back."}
       </Notice>,
     );
     expect(screen.getByRole("alert").textContent).toContain("TrueNAS is offline");
 
     rerender(
-      <Notice tone="warn" title="Account changes are paused">
+      <Notice tone="warn" title="Account changes are paused" next="Try again.">
         {"Your access hasn't changed."}
       </Notice>,
     );
@@ -27,7 +27,7 @@ describe("Notice", () => {
   it("offers its action as an outline button and the reference as a copyable value", () => {
     const retry = vi.fn();
     render(
-      <Notice tone="danger" title="Couldn't load" action={{ label: "Try again", onClick: retry }} reference="req_7f3a91c2">
+      <Notice tone="danger" title="Couldn't load" next="Try again." action={{ label: "Try again", onClick: retry }} reference="req_7f3a91c2">
         Nothing was changed.
       </Notice>,
     );

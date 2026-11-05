@@ -28,7 +28,8 @@ import { sortByName } from "@/lib/sort";
 import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
 import { useRoleMembers, type RoleMember } from "@/lib/queries/useRoleMembers";
-import { formatShortDate, humanizeKey } from "@/lib/format";
+import { formatShortDate } from "@/lib/format";
+import { roleName } from "@/lib/names";
 
 type Filter = "all" | SourceKind;
 
@@ -75,7 +76,7 @@ export default function RoleMembersPage({
         eyebrow={
           <ProjectName id={id} name={view?.project_name} />
         }
-        title={view?.display_name || humanizeKey(roleKey)}
+        title={roleName(view?.display_name, roleKey)}
         lede="Everyone who holds this role, and how each came to hold it: directly, through a bundle, or by an automatic rule."
         meta={
           <span className="flex flex-wrap items-center gap-3">
@@ -102,7 +103,7 @@ export default function RoleMembersPage({
       {view?.withheld_unavailable && (
         // A zero the page cannot stand behind. Saying "none" from a read that did not happen is
         // the failure this column exists to close, reproduced on the screen that closes it.
-        <Notice tone="warn" title="Holds could not be read.">
+        <Notice tone="warn" title="Holds could not be read." next="Reload the page in a minute to read them again.">
           This list does not say who has something withheld.
         </Notice>
       )}

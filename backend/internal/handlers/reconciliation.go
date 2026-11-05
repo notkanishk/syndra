@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 	"time"
@@ -140,7 +141,7 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		if msg == "" {
 			msg = "Zitadel did not answer"
 		}
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", msg)
+		writeUpstream(w, errors.New(msg), "ZITADEL_ERROR")
 		return
 	}
 	allZitadel := services.ObservedToUserGrants(observed)
@@ -183,13 +184,14 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		bundleSet[services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: g.RoleKey}] = true
 	}
 
-	holder := services.BuildHolderSet(syndraGrants, allZitadel)
-	// What a bundle gives is held, not merely intended, so rule derivation has
-	// to see it — the same hop the sweep needed.
+	// Rules fire from what Syndra records the person holding (direct grants
+	// and bundle roles), never from observed grants: the sweep's seed, the
+	// person page's and the token's (services.RuleDerived).
+	holder := services.BuildHolderSet(syndraGrants, nil)
 	for k := range bundleSet {
 		holder[k] = true
 	}
-	diff.OnlyInZitadel = filterExplained(diff.OnlyInZitadel, holder, bundleSet, rules, exclusions)
+	diff.OnlyInZitadel = filterExplained(diff.OnlyInZitadel, services.RuleDerived(holder, rules), bundleSet, exclusions)
 
 	jsonResponse(w, http.StatusOK, diff)
 }
@@ -201,14 +203,14 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 // It must cover every services.IntentSource. The direct-grant arm is implicit
 // and worth naming: `OnlyInZitadel` is computed by diffing against Syndra's
 // direct grants, so anything reaching here is already known not to be one.
-func filterExplained(in []ReconciliationGrant, holder, bundleSet map[services.HolderKey]bool,
-	rules []models.MappingRule, exclusions []models.ExternalGrantExclusion) []ReconciliationGrant {
+func filterExplained(in []ReconciliationGrant, ruleSet, bundleSet map[services.HolderKey]bool,
+	exclusions []models.ExternalGrantExclusion) []ReconciliationGrant {
 	out := make([]ReconciliationGrant, 0, len(in))
 	for _, g := range in {
 		var unexplained []string
 		for _, rk := range g.RoleKeys {
-			if bundleSet[services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: rk}] ||
-				services.ExpectedViaRule(holder, rules, g.UserID, g.ProjectID, rk) ||
+			k := services.HolderKey{UserID: g.UserID, ProjectID: g.ProjectID, RoleKey: rk}
+			if bundleSet[k] || ruleSet[k] ||
 				services.IsExcluded(exclusions, db.TargetZitadel, g.UserID, g.ProjectID, rk) {
 				continue
 			}

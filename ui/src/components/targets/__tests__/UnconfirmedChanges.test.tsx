@@ -77,6 +77,13 @@ describe("Waiting on you: changes nobody confirmed", () => {
     expect(document.body.textContent).not.toContain(PURGE.id);
   });
 
+  // one-path Open: a maintenance change is about the system, never "a change for <person>".
+  it("words a maintenance change as the system's own state", () => {
+    renderIt([{ ...PURGE, operation: "lifecycle.set", subject_id: "truenas", about: "read_only" }]);
+    expect(document.body.textContent).toContain("Set TrueNAS to read-only");
+    expect(document.body.textContent).not.toMatch(/a change for/i);
+  });
+
   it("names Syndra when Syndra asked by itself", () => {
     renderIt([{ ...PURGE, actor_id: "system:reconcile" }]);
     expect(screen.getByText("Asked by Syndra, bringing accounts in line")).toBeTruthy();

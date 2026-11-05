@@ -77,7 +77,7 @@ vi.mock("@/lib/ui-view", () => ({
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 vi.mock("@/components/requests/Holding", () => ({
   HoldingNote: () => null,
-  alreadyHeld: () => false,
+  alreadyHeld: () => false, ApproveButton: ({ onClick }: { onClick: () => void }) => <button type="button" onClick={onClick}>Approve</button>,
 }));
 
 // One object, as the query cache gives: a fresh one per render reads as a new list.
@@ -112,7 +112,7 @@ describe("deciding a request on Home", () => {
     state.decide.mockResolvedValueOnce({ message: "ok" });
     renderHome();
     fireEvent.click(screen.getByRole("button", { name: "Decline" }));
-    expect((await trueSeat()).textContent).toBe("DeclinedNothing was sent");
+    expect((await trueSeat()).textContent).toBe("DeclinedNothing was sentNothing for you to do.");
   });
 });
 

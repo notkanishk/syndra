@@ -46,7 +46,8 @@ import {
   type MappingVersion,
   type RoleMapping,
 } from "@/lib/queries/useMappings";
-import { formatClock, humanizeKey, roleLabel } from "@/lib/format";
+import { formatClock, roleLabel } from "@/lib/format";
+import { roleName as nameOfRole } from "@/lib/names";
 import { targetLabel } from "@/lib/nav";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -57,7 +58,6 @@ import { useShownNames } from "@/components/names/shownNames";
 
 // Opened on demand, so it stays out of the page's first load.
 const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
-
 
 /**
  * What a role reaches on this target, and every version of that answer
@@ -254,7 +254,7 @@ function MappingRow({
   const roleName = useRoleName(mapping.project_id, mapping.role_key);
   const resolver = useNameResolver();
   // The project is the system's one, named in the strip; the row names the role.
-  const label = resolver.resolveRole(mapping.project_id, mapping.role_key).value?.display_name || humanizeKey(mapping.role_key);
+  const label = nameOfRole(resolver.resolveRole(mapping.project_id, mapping.role_key).value?.display_name, mapping.role_key);
   const name = targetLabel(mapping.target);
 
   return (

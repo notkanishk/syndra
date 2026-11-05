@@ -1,12 +1,15 @@
 "use client";
 
 import { StatusDot } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { askLengthForMember, askLengthForOperator, formatShortDate } from "@/lib/format";
+import { civilDay } from "@/lib/time";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { useMyChanges } from "@/lib/queries/useMyChanges";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
 import type { Term } from "@/lib/queries/useTerms";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 
@@ -29,11 +32,9 @@ export function alreadyHeld(request: AccessRequest): boolean {
   return Boolean(kind && kind !== "none");
 }
 
-/** The same calendar day, in local time: a term's last day against an end counted in days. */
+/** The same makerspace day: a term's last day against an end counted in days. */
 function sameDay(ymd: string, iso: string): boolean {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const end = new Date(iso);
-  return end.getFullYear() === y && end.getMonth() === m - 1 && end.getDate() === d;
+  return civilDay(new Date(iso)) === ymd;
 }
 
 /**
@@ -79,6 +80,72 @@ export function describeAskForMember(request: AccessRequest, terms?: Term[]): st
  * row says why and what closes it.
  */
 export function HoldingNote({ request }: { request: AccessRequest }) {
+  return (
+    <>
+      <HeldLine request={request} />
+      <RulesLine request={request} />
+    </>
+  );
+}
+
+/**
+ * What an automatic rule also gives if this is approved, said where the
+ * approve button is (audit C2): approving gives the role, and the rules
+ * follow it. From the backend's preview, the same closure the approval
+ * follows; nothing when nothing follows or there is nothing to approve.
+ */
+function RulesLine({ request }: { request: AccessRequest }) {
+  const consent = useRuleConsent(request.requester_id, request.project_id, [request.role_key], !alreadyHeld(request));
+  // Final verification N5: a preview that can't be read is said, never
+  // silence that reads as "nothing else follows" (RuleConsent: the one rule).
+  if (consent.failed) return <RuleConsentFailed consent={consent} />;
+  if (consent.lines.length === 0) return null;
+  return <span className="w-full text-[13px] text-muted">If you approve: {consent.lines.join(" ")}</span>;
+}
+
+/**
+ * Why approving is held, or undefined when it can go (N5). The consent is the
+ * row: what the rules also give is part of what approving does, so approve
+ * waits for the preview, and a preview that failed holds it with the reason,
+ * rather than approving a gift nobody was shown. The same query as RulesLine,
+ * so it is one read.
+ */
+export function useApproveHold(request: AccessRequest): string | undefined {
+  const held = alreadyHeld(request);
+  const consent = useRuleConsent(request.requester_id, request.project_id, [request.role_key], !held);
+  if (held) return "They already have this.";
+  return consent.hold;
+}
+
+/** The Approve button, held while the rule preview is unread (N5). One for Home, Requests and a person's Requests tab. */
+export function ApproveButton({
+  request,
+  onClick,
+  className,
+  isPending,
+}: {
+  request: AccessRequest;
+  onClick: () => void;
+  className?: string;
+  isPending?: boolean;
+}) {
+  const hold = useApproveHold(request);
+  return (
+    <Button
+      variant="accent"
+      size="sm"
+      className={className}
+      isPending={isPending}
+      disabled={hold !== undefined}
+      reason={hold}
+      onClick={onClick}
+    >
+      Approve
+    </Button>
+  );
+}
+
+function HeldLine({ request }: { request: AccessRequest }) {
   const holding = request.holding;
   const resolver = useNameResolver();
   if (request.kind === "extend" && holding && holding.kind !== "for_good") {

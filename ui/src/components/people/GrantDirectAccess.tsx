@@ -13,15 +13,19 @@ import { FieldLabel, Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { WaitsMark } from "@/components/ui/WaitsMark";
-import { waitReasonLine } from "@/lib/wait-reason";
+import { RETRYING, refusedOutcome, retryingOutcome } from "@/lib/retry";
+import { isRefused, waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
+import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
 import { forecastFor, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
+import { withRuleWaits } from "@/lib/request-decisions";
+import { expiryLabel, formatShortDate } from "@/lib/format";
 import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 import { daysFromToday, endAfterDaysISO, endOfDayISO } from "@/lib/time";
+import { personOr, roleName } from "@/lib/names";
 
 /**
  * E5 · Give a role. Project → role → expiry.
@@ -92,7 +96,7 @@ function GrantDirectAccessOpen({
       .filter((role) => role.project_id === entry.project.id)
       .map((role) => ({
         key: role.role_key,
-        name: role.display_name || humanizeKey(role.role_key),
+        name: roleName(role.display_name, role.role_key),
         description: role.description || undefined,
         // Observed in Zitadel, or nothing: a count that was never read isn't zero.
         people: role.observed_user_count,
@@ -100,16 +104,21 @@ function GrantDirectAccessOpen({
         note: noteOf(entry.project.id, role.role_key),
       })),
   }));
-  const first = userName.trim().split(/\s+/)[0] || "They";
-  const roleName = selectedRole?.display_name || humanizeKey(roleKey);
+  const first = userName.trim().split(/\s+/)[0] || personOr(null, true);
+  const grantedRole = roleName(selectedRole?.display_name, roleKey);
   // A grant that would cancel a removal still waiting for you to send turns the
   // sheet to a step first (A-04 §14); Keep it comes back here as it was.
-  const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${roleName}` });
-  const waits = useWaitsBeforeLine();
+  const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${grantedRole}` });
+  const waits = useWaitsBeforeLine("give");
+  // What the automatic rules also give with this role, said before the click
+  // (audit C2), from the closure the write itself follows.
+  const rules = useRuleConsent(userId, projectId, [roleKey]);
+  const ruleLines = rules.lines;
 
-  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate));
+  // Held while the rules are read, and held when they can't be (RuleConsent).
+  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate)) && !rules.hold;
   // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
-  const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued";
+  const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued" || Boolean(result?.outcome.recorded);
 
   return (
     <Modal open onClose={onClose} busy={grant.isPending} size="md" labelledBy="grant-title">
@@ -214,16 +223,25 @@ function GrantDirectAccessOpen({
                   : "It stays until someone removes it."}
               </span>
               {selectedRole &&
-                (waits ? (
-                  <span className="block">{waits}</span>
-                ) : selectedRole.waits_for_send ? (
+                // A role that waits waits for Send whatever Zitadel is doing,
+                // so its own line outranks the degraded one.
+                (selectedRole.waits_for_send ? (
                   <span className="block">
                     <WaitsMark className="mr-1.5" />
-                    {roleName} always waits for you, so {first} gets it once you send it.
+                    {grantedRole} always waits for you, so {first} gets it once you send it.
                   </span>
+                ) : waits ? (
+                  <span className="block">{waits}</span>
                 ) : (
                   <span className="block">{first} can use it as soon as you give it.</span>
                 ))}
+              {selectedRole &&
+                ruleLines.map((line) => (
+                  <span key={line} className="block">
+                    {line}
+                  </span>
+                ))}
+              {selectedRole && <RuleConsentFailed consent={rules} className="flex flex-wrap items-center gap-x-3 gap-y-1" />}
             </>
           ))
         }
@@ -243,7 +261,7 @@ function GrantDirectAccessOpen({
                 !ready
                   ? !value
                     ? "Choose a role to give."
-                    : "Pick the date the access should end."
+                    : rules.hold ?? "Pick the date the access should end."
                   : undefined
               }
               isPending={grant.isPending}
@@ -262,25 +280,45 @@ function GrantDirectAccessOpen({
                   if (made === KEPT) return;
                   // `wait_reason` is the backend's account of why this isn't
                   // in Zitadel yet; without one the grant went straight through.
-                  const why = waitReasonLine(made.wait_reason, roleName, new Date().toISOString());
-                  if (made.status !== "applied" || made.wait_reason) {
-                    setResult({
+                  const why = waitReasonLine(made.wait_reason, grantedRole, new Date().toISOString());
+                  // The rows the rules queued with it: named as the preview
+                  // named them, only when the write says it queued some.
+                  const queuedByRules = (made as { rule_outbox_ids?: string[] }).rule_outbox_ids?.length ?? 0;
+                  const alsoGave = queuedByRules > 0 && ruleLines.length > 0 ? ` ${ruleLines.join(" ")}` : "";
+                  // A rule-given role that waits is said, and ends on Send,
+                  // whatever happened to the role given here (re-audit R12).
+                  const report = (r: { word: string; outcome: Outcome }) =>
+                    setResult({ ...r, outcome: withRuleWaits(r.outcome, made.rule_waiting) });
+                  if (isRefused(made.wait_reason) || made.status === "failed") {
+                    // Final verification N1: Zitadel refused it outright; Send won't move it.
+                    const out = refusedOutcome(`${grantedRole} is given to ${first} in Syndra`, made.wait_reason);
+                    report({ word: "Refused by Zitadel", outcome: { ...out, detail: `${out.detail ?? ""}${alsoGave}` } });
+                  } else if (made.wait_reason === RETRYING) {
+                    // Zitadel didn't take it; Syndra sends it again on its own (lib/retry.ts).
+                    const out = retryingOutcome(`${grantedRole} is given to ${first} in Syndra`, made.retry);
+                    report({ word: "Given", outcome: { ...out, detail: `${out.detail ?? ""}${alsoGave}` } });
+                  } else if (made.status !== "applied" || made.wait_reason) {
+                    report({
                       word: "Given",
                       outcome: {
                         kind: "queued",
-                        message: `${roleName} is given to ${first}`,
+                        message: `${grantedRole} is given to ${first}`,
                         detail:
-                          made.wait_reason === "role_waits"
+                          (made.wait_reason === "role_waits"
                             ? `${why}, so ${first} can't use it yet.`
                             : why
                               ? `${why}, so it goes when you send it.`
-                              : "It goes when you send it.",
+                              : "It goes when you send it.") + alsoGave,
                       },
                     });
                   } else {
-                    setResult({
+                    report({
                       word: "Given",
-                      outcome: { kind: "applied", message: `${first} can use ${roleName} on their own now` },
+                      outcome: {
+                        kind: "applied",
+                        message: `${first} can use ${grantedRole} on their own now`,
+                        ...(alsoGave ? { detail: alsoGave.trim() } : {}),
+                      },
                     });
                   }
                 } catch (error) {

@@ -3,6 +3,8 @@ package models
 import (
 	"encoding/json"
 	"time"
+
+	"syndra/internal/extcall"
 )
 
 // Project represents a downstream application in Zitadel
@@ -27,11 +29,15 @@ type Bundle struct {
 	RetiredAt *time.Time `json:"retired_at,omitempty"`
 	RetiredBy string     `json:"retired_by,omitempty"`
 
-	// HolderCount is how many people currently hold this bundle. Computed on
-	// read, never persisted. Publishing a version can change access for all of
-	// them at once, so the number belongs next to the name rather than a click
-	// away.
+	// HolderCount is how many people the bundle is ASSIGNED to: recorded, so
+	// it explains holding and is never shown as it. Computed on read, never
+	// persisted. Publishing a version can change access for all of them at
+	// once, so the number belongs next to the name rather than a click away.
 	HolderCount int `json:"holder_count"`
+	// ObservedHolderCount is how many of them Zitadel shows holding every role
+	// their version gives: the holder number a screen shows. nil means Zitadel
+	// has not been read ("not checked"), never zero.
+	ObservedHolderCount *int `json:"observed_holder_count"`
 
 	// LatestVersion is the highest published version number, and StaleHolders
 	// how many people are pinned to something older than it. Both computed on
@@ -141,10 +147,15 @@ type MappingRule struct {
 	RetiredAt *time.Time `json:"retired_at,omitempty"`
 	RetiredBy string     `json:"retired_by,omitempty"`
 
-	// HolderCount is how many people currently hold the target role because of
-	// this rule. Computed on read, never persisted — "this affects 7 people" is
-	// the difference between editing a rule and gambling with one.
+	// HolderCount is how many people the rule applies to: they hold its
+	// source in Syndra's records, so they should have its target. Recorded,
+	// and the retire blast radius. Computed on read, never persisted — "this
+	// affects 7 people" is the difference between editing a rule and gambling
+	// with one.
 	HolderCount int `json:"holder_count"`
+	// ObservedHolderCount is how many of them Zitadel shows holding the
+	// target: the "have it" number. nil means Zitadel has not been read.
+	ObservedHolderCount *int `json:"observed_holder_count"`
 }
 
 // ClaimProfile defines how roles map to JWT output for a specific project
@@ -309,6 +320,10 @@ type EffectiveRole struct {
 	RoleKey             string       `json:"role_key"`
 	IsSource            bool         `json:"is_source"`
 	Reasons             []RoleReason `json:"reasons"`
+	// Ends is when the role ends for this person, from access.Ends: the latest
+	// end among every source, a rule-derived role ending with its source. nil
+	// means it never ends. The token's role_ends is the same answer.
+	Ends *time.Time `json:"ends,omitempty"`
 }
 
 type ProjectAccessView struct {
@@ -592,6 +607,13 @@ type PendingPropagation struct {
 	// manual (a bundle or rule set to wait, before the switch over). Empty for
 	// rows from before roles that wait.
 	WaitReason string `json:"wait_reason,omitempty"`
+	// NotBefore is when a row Zitadel didn't take is tried again: set by a
+	// requeue, nil on a row never tried. The background drain sends it then,
+	// unless it waits for the operator.
+	NotBefore *time.Time `json:"not_before,omitempty"`
+	// Retry is where it stands under the one retry model (extcall): filled by
+	// the Pending changes read for a row Syndra sends again on its own.
+	Retry *extcall.RetryState `json:"retry,omitempty"`
 }
 
 // CascadeSummary is one cascade-originated outbox write, as it appears inside
@@ -1182,6 +1204,12 @@ type InsightsWhatIfChange struct {
 	ProjectID string `json:"project_id,omitempty"`
 	RoleKey   string `json:"role_key,omitempty"`
 	RuleID    string `json:"rule_id,omitempty"`
+	// rule_added: ProjectID/RoleKey are the rule's source and these its
+	// target; RuleID, when set, is the rule the new one replaces (an edit).
+	TargetProjectID string `json:"target_project_id,omitempty"`
+	TargetRoleKey   string `json:"target_role_key,omitempty"`
+	// bundle_assigned / bundle_unassigned: the one person it is about.
+	UserID string `json:"user_id,omitempty"`
 }
 
 type InsightWhatIfPerson struct {

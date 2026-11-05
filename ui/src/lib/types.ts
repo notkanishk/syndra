@@ -1,6 +1,8 @@
 // API response types — mirrors Go models returned by the backend.
 // Page-level components may define their own narrower types for client-side use.
 
+import type { RetryState } from "@/lib/retry";
+
 export interface Bundle {
   id: string;
   name: string;
@@ -88,6 +90,8 @@ export interface CascadeOutcome {
     waiting?: number;
     /** Why any of them is not in Zitadel yet (role_waits, halted:…); absent when all went. */
     wait_reason?: string;
+    /** With halted:retrying, the send that came back unanswered: next try, and which try. */
+    drain?: { retry?: RetryState };
     no_op?: boolean;
   };
 }

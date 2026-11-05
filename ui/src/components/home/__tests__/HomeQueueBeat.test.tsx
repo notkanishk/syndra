@@ -71,7 +71,7 @@ vi.mock("@/lib/ui-view", () => ({
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 vi.mock("@/components/requests/Holding", () => ({
   HoldingNote: () => null,
-  alreadyHeld: () => false,
+  alreadyHeld: () => false, ApproveButton: ({ onClick }: { onClick: () => void }) => <button type="button" onClick={onClick}>Approve</button>,
 }));
 
 // One object, as the query cache gives: a fresh one per render reads as a new list.

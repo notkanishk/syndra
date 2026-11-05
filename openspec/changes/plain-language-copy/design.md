@@ -191,6 +191,74 @@ both halves.
 Syndra and waiting to be sent to Zitadel. Nothing has changed there yet; send
 it from *Pending changes*."
 
+**A change the system didn't take says when it goes again** (owner, 5 Nov
+2026). One retry model, one sentence, wherever it was sent and on its row:
+"Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)." The time
+is in the makerspace's zone. It is queued, never "Sent", and carries no "send
+it" link: Syndra sends it on its own, unless the role waits for you. When the
+tries run out, or the system refuses a try: "Syndra stopped sending it", listed on Pending changes under *Syndra stopped sending*. A member's own password says
+"Not confirmed yet. Syndra is trying again at 14:05. Keep this page open." The
+words live in `ui/src/lib/retry.ts` and nowhere else.
+
+**An outcome always says the next step, or that there is none** (owner, 5 Nov
+2026: "along with clear communication, there should be clear next steps or
+lack thereof"). Every outcome, state and notice ends on one of two things: what
+to do and where, as a link or button when there is one ("Press Send on Pending
+changes", "Check TrueNAS under System", "Ask Priya to sign in once"), or an
+explicit *Nothing for you to do.* ("Nothing for you to do. Syndra sends it
+again at 14:05 and says on Home if it stops sending it."). Silence is never the "none".
+It holds by construction: `nextStepOf` (`lib/outcome.ts`) gives every outcome
+kind its step and `ActionOutcome` draws it in every placement; `retryNextStep`
+(`lib/retry.ts`) gives every retry state its step and `RetryStatus` draws it;
+`ErrorState` ends on `nextStep`. A caller who knows better sets `next`. Guard:
+`lib/__tests__/next-step.test.tsx` fails on any kind or state with no step.
+
+| State | Word | Next step, or none |
+|---|---|---|
+| Sent, confirmed | Done / the act's word | Nothing for you to do. |
+| Waits for you (a role marked to wait) | Waiting for you to send → | Press Send on Pending changes (the link). |
+| Retrying | Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6). | Nothing for you to do. Syndra sends it again at 14:05 and says on Home if it stops sending it. |
+| Not taken, and this server sends nothing again on its own (`REVOCATION_DRAIN_ENABLED=false`) | Zitadel didn't answer after one try, so Syndra won't send it again on its own. | Press Send on Pending changes to try again. |
+| Stopped sending (out of tries, or refused) | Syndra stopped sending it. | Give a role again from the person's page; a revocation shows in Drift after the next check, to revoke there. Then Mark seen on Home. |
+| Sends itself (a revocation) | On its way | Nothing for you to do. Syndra sends it on its own and says on Home if it stops sending it. |
+| May have gone through | Some of this may have gone through. | Check *where* before trying again. |
+| Failed | Failed | Try again in a minute. If it keeps failing, ask the person who runs the Syndra server. |
+| Refused | Refused | What refused it says the step: sign in again, ask someone with access, reload, or change what it names. |
+| A member's own password, retrying | Not confirmed yet. Syndra is trying again at 14:05. | Keep this page open. It says here when it's done. |
+
+**Retries are seen in both views.** While Syndra is sending changes again on its
+own, Home says so in *Sent again on its own* and the rail carries a pill beside
+Home (and beside Pending changes in Advanced): amber "↻ 2" while retrying, danger
+"! 1" once it gave up. A give-up stays until you press **Mark seen**; it is yours alone, so each person marks their own (migration 000082).
+
+**Every Notice ends on a next step or none** (6 Nov): `Notice` takes `next` (what to do, or where to go) or `nothingToDo` (why there is nothing; drawn as "Nothing for you to do." plus it). One is required by its types.
+Retrying changes are never counted as "waiting for you to send".
+
+**While Zitadel isn't answering, the line before the act is exact per act**
+(`useWaitsBeforeLine(op)`): "Zitadel isn't answering. Syndra records the give
+now and sends it on its own once Zitadel answers, so there is nothing for you
+to send. A role marked to wait still waits for you to send it." (the removal,
+the change). Never "will wait for you to send": a removal goes on its own, and a
+give that finds Zitadel down is retried on its own.
+
+**The action signing key's states** (`app/zitadel/page.tsx` `keyState`,
+`SigningKeyGuide.tsx`):
+
+| Word | Means | Next step |
+|---|---|---|
+| Within its limit | Replaced in time | Nothing for you to do. Syndra replaces it on its own before it is due. |
+| Replacing | Zitadel is making a new key | Nothing for you to do. |
+| Not confirmed | Replaced, the test sign-in didn't confirm it | Claims delivery says what the test sign-in got. |
+| Partly replaced | Zitadel replaced one key but not the other; the old one still works for the other | Replace now again to finish, or do it by hand. |
+| Not known | Zitadel didn't answer and the read-back failed, so nobody can tell; the old key keeps working | Check the row in a minute. If it still says Not known, press Replace now. |
+| Not replaced | Zitadel refused; the old key still works | Syndra tries again on its own at the named time, or Replace now. |
+| Past its limit | Overdue | Replace now, or Syndra does it in the next quiet hours. |
+
+**Background timing is said as it is.** The revocation and retry runner ticks
+every minute, so a revocation "sends on its own, within a minute"; Zitadel's
+setup is checked "when Syndra starts and every 10 minutes after". Never "every
+few minutes" for either.
+
 **The first 100ms is said in the future tense.** While a write is in flight the
 seat says what Syndra *will* do, never that it did (A-19 P2). The forecast is a
 sentence about Syndra's own next step, never a claim about the target, and it
@@ -203,6 +271,7 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 | Decline | Will be declined | Declined |
 | Extend | Will be extended | Extended |
 | Remove | Will be removed | Removed |
+| Revoke under Drift | Will be removed | Taken: Removed in Zitadel. Not taken yet: the retry line ("Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)."). Halted with the drain on: On its way, Revocations send on their own. Drain off: Recorded in Syndra. The revocation waits in Pending changes until someone presses Send. Drain not read yet: Not in Zitadel yet, then "Open Pending changes to see what has not reached Zitadel yet." A role that waits: Waits for you, Waiting for you to send. Refused: Refused by Zitadel |
 | Keep | Will be kept | Kept |
 | Lift a hold | Will be lifted | Lifted |
 | Give | Will be given | Given |
@@ -211,6 +280,12 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 | Mark as owned elsewhere | Will be marked | Marked |
 | Replace the action signing key | Will be replaced | Replaced |
 | Anything Syndra knows will wait | Will wait for you to send | Waiting for you to send |
+
+**Anything Zitadel refused outright** has no forecast of its own (the act's own forecast stands) and, once it happened, reads Refused by Zitadel: "{Done} in Syndra. Zitadel refused this: {cause}." Then "It isn't in Zitadel, and Syndra won't send it again. Pending changes lists it under Syndra stopped sending." The step: give or extend it again from their page once the reason is fixed; a revocation shows in Drift after the next check, to revoke there. Never "Nothing was changed.": Syndra recorded it.
+
+**A refusal's cause is said in plain words** (`refused:<cause>`, `lib/wait-reason.ts refusalCause`, the same words as `handlers/bulk.go refusalWords`): not allowed, "Syndra's service account isn't allowed to make this change" (and the step starts "Ask whoever runs Zitadel to let Syndra's service account change grants."); not found, "it no longer has this person, project or role"; not valid, "it said the change isn't valid"; anything else, "it gave a reason Syndra can't put in plain words".
+
+**The drain switch is said only once it is read.** Until the indicators answer (or when they can't), nothing says "on its own" or "until you press Send": the sentence says what is known and ends on "Open Pending changes to see what has not reached Zitadel yet." The rail pill says "Syndra stopped sending N changes" for a give-up, the same words as Home and Pending changes.
 
 ## 6. Vocabulary
 

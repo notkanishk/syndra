@@ -103,7 +103,7 @@ func TestHandleDeleteUserDirectGrant_RequiresBothPathValues(t *testing.T) {
 func TestHandleGetGovernanceIndicators_ReturnsScalars(t *testing.T) {
 	orig := svcGovernanceIndicators
 	t.Cleanup(func() { svcGovernanceIndicators = orig })
-	svcGovernanceIndicators = func(context.Context) (services.Indicators, error) {
+	svcGovernanceIndicators = func(context.Context, string) (services.Indicators, error) {
 		return services.Indicators{PendingRequests: 3, ExpiringGrants: 1, PendingPropagation: 2, Drift: 12}, nil
 	}
 

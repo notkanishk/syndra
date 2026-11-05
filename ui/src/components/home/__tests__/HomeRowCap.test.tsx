@@ -68,7 +68,7 @@ vi.mock("@/lib/ui-view", () => ({
   useUiView: () => ({ view: "basic", setView: () => {} }),
 }));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
-vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false }));
+vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false, ApproveButton: ({ onClick }: { onClick: () => void }) => <button type="button" onClick={onClick}>Approve</button> }));
 vi.mock("@/components/names", async () => {
   const actual = await vi.importActual<typeof import("@/components/names")>("@/components/names");
   return {

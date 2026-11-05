@@ -22,7 +22,10 @@ export type IndicatorKey =
   | "pending_propagation"
   | "drift"
   | "unconfirmed_revocations"
-  | "holds_due";
+  | "holds_due"
+  /** Read by a leaf's `retries` pill, never as a leaf's own count. */
+  | "retrying"
+  | "gave_up";
 
 /**
  * Badge tone follows the semantic palette and nothing else: Requests and
@@ -49,6 +52,14 @@ export interface NavLeaf {
   pattern?: RegExp;
   /** Set by `operatorNav`: this row is in Advanced and not in Basic. */
   advancedOnly?: boolean;
+  /**
+   * This row also carries the retry pill (`retryBadge`): amber with the count
+   * while Syndra sends changes again on its own, danger once it gave up on
+   * one nobody has marked seen. Static, like every seat here; only its value
+   * moves. Home carries it so Basic, which has no Pending changes row, is
+   * always in the know (owner, 5 Nov 2026).
+   */
+  retries?: boolean;
 }
 
 export interface NavGroup {
@@ -76,7 +87,7 @@ const group = (label: string, children: NavLeaf[]): NavGroup => ({
 
 /** Basic — the everyday surface. Four destinations. */
 export const BASIC_NAV: NavEntry[] = [
-  leaf("Home", "/"),
+  leaf("Home", "/", { retries: true }),
   leaf("People", "/users", { pattern: /^\/users(\/|$)/ }),
   group("Access", [
     leaf("Projects", "/projects", { pattern: /^\/projects(\/[^/]+)?$/ }),
@@ -98,6 +109,7 @@ export const ADVANCED_NAV: NavEntry[] = [
     leaf("Pending changes", "/governance/pending", {
       indicator: "pending_propagation",
       tone: "accent",
+      retries: true,
     }),
     leaf("Change history", "/operations/cascades"),
     leaf("Roles that wait", "/changes/roles-that-wait", {

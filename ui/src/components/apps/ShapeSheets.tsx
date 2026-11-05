@@ -70,12 +70,14 @@ export function TemplateSheet({
   template,
   shape,
   project,
+  heldBack,
   onClose,
   onStart,
 }: {
   template: ClaimTemplate;
   shape: AppClaimShape;
   project: string;
+  heldBack?: string;
   onClose: () => void;
   onStart: () => void;
 }) {
@@ -109,7 +111,9 @@ export function TemplateSheet({
             ? mine && mine.changes.length === 0
               ? "A template is copied in. Syndra never changes your shape when a template changes."
               : "Starting again makes a draft of the template. Nothing changes until you save."
-            : `Makes a draft. ${app} keeps ${project}'s default until you save.`
+            : heldBack
+              ? `Makes a draft. Saving it won't change what ${app} gets yet. ${heldBack}`
+              : `Makes a draft. ${app} keeps ${project}'s default until you save.`
         }
       >
         <Button onClick={onClose}>Close</Button>
@@ -237,9 +241,9 @@ export function SaveSummary({
           <p className="text-[13px] leading-[1.5] text-faint">
             <Ticks
               text={
-                saved.breaking.length && ctx.templateId === "netbird"
+                saved.breaking.length && ctx.templateId === "netbird" && !ctx.heldBack
                   ? `${moved ? `${moved} people` : "People"} move as they sign in. Point NetBird's policies at the new group once it appears there; a group made by hand isn't joined.`
-                  : `It reaches ${app} at each person's next sign-in.`
+                  : (ctx.heldBack ?? `It reaches ${app} at each person's next sign-in.`)
               }
             />
           </p>
@@ -280,7 +284,9 @@ export function SaveSummary({
         note={
           saved
             ? undefined
-            : reach
+            : ctx.heldBack
+              ? `Saved as ${app}'s shape, but not sent yet. ${ctx.heldBack}`
+              : reach
               ? `Reaches ${app} and ${reach.people} ${reach.people === 1 ? "person" : "people"} at their next sign-in. Anyone signed in now keeps the old claims until then.`
               : `Reaches ${app} at each person's next sign-in. Anyone signed in now keeps the old claims until then.`
         }

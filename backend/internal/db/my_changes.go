@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"syndra/internal/clock"
 )
 
 // MyChangeRow is one change to a person's own access, as Syndra recorded it
@@ -67,8 +69,11 @@ FROM (
 	       CASE WHEN ar.status = 'approved' AND ar.kind = 'extend'
 	                 THEN COALESCE(ar.ends_after, g.expires_at)
 	            WHEN ar.status = 'approved' THEN COALESCE(g.expires_at, ar.asked_until,
+	            -- clock.EndAfterDays: the last second of the n-th makerspace
+	            -- day after the decision's own, never n×24h from its instant.
 	            CASE WHEN ar.duration_days > 0
-	                 THEN ar.resolved_at + make_interval(days => ar.duration_days) END)
+	                 THEN (((ar.resolved_at AT TIME ZONE $3::text)::date + ar.duration_days + 1)::timestamp
+	                       AT TIME ZONE $3::text) - interval '1 second' END)
 	       END                                                               AS ends_at,
 	       w.id IS NOT NULL                                                  AS pending,
 	       COALESCE(w.wait_reason, '')                                       AS wait_reason,
@@ -156,7 +161,7 @@ LIMIT 200` // ponytail: a fixed cap on one person's month; page it if anyone out
 // ListMyChanges returns the changes to one person's access in the last `days`
 // days, newest first, whether or not they hold anything now.
 func ListMyChanges(ctx context.Context, userID string, days int) ([]MyChangeRow, error) {
-	rows, err := querier(ctx).Query(ctx, myChangesSQL, userID, days)
+	rows, err := querier(ctx).Query(ctx, myChangesSQL, userID, days, clock.Name)
 	if err != nil {
 		return nil, fmt.Errorf("list my changes: %w", err)
 	}

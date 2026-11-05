@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { request } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 import { invalidateAfter } from "./invalidation";
+import type { RetryState } from "@/lib/retry";
 
 export interface AccessRequest {
   id: string;
@@ -68,9 +69,13 @@ export interface DecisionInput {
 export interface DecisionResult {
   message?: string;
   wait_reason?: string;
+  /** With halted:retrying: when Syndra sends it again, and which try. */
+  retry?: RetryState;
   /** given, the end moved (extended), or it had ended while waiting (given_again). */
   effect?: "given" | "extended" | "given_again";
   until?: string;
+  /** How many roles an automatic rule gave with the approval that wait for you to send (re-audit R12). */
+  rule_waiting?: number;
 }
 
 const KEYS = {

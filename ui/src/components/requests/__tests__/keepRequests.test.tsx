@@ -17,6 +17,8 @@ const state = vi.hoisted(() => ({
   decide: vi.fn(),
 }));
 
+// The rule preview answered, nothing follows: Approve is not held (N5 has its own test).
+vi.mock("@/lib/queries/useRulePreview", () => ({ useRulePreview: () => ({ data: [], isLoading: false, isError: false }) }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
   useRouter: () => ({ replace: () => {} }),
@@ -133,7 +135,7 @@ describe("The queue · a request to keep a role", () => {
     renderAs(true);
     fireEvent.click(screen.getByRole("button", { name: /^Approve/ }));
     const seat = await trueSeat();
-    expect(seat).toHaveTextContent(/^ExtendedNow ends 17 Jan( 2027)?, not 18 Dec\.$/);
+    expect(seat).toHaveTextContent(/^ExtendedNow ends 17 Jan( 2027)?, not 18 Dec\.Nothing for you to do\.$/);
   });
 
   it("declining reports Declined, and that it still ends", async () => {

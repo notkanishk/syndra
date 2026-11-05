@@ -26,12 +26,14 @@ export interface GuideStatus {
 
 /** POST /zitadel/action-key/rotate's answer. */
 export interface RotateResult {
-  outcome: "verified" | "unverified" | "failed";
+  /** partial: one key replaced, not the other; unknown: the answer was lost and the read-back failed (W4). */
+  outcome: "verified" | "unverified" | "partial" | "unknown" | "failed";
   replaced_at?: string;
   replaced?: string[];
   probe?: { pass: boolean; class?: string; detail?: string };
   next_due_at?: string;
-  error?: string;
+  /** A plain sentence, never an HTTP status: it arrives in a 200 body, past the error envelope. */
+  reason?: string;
 }
 
 /** POST /zitadel/action-key/verify's answer. */
@@ -48,24 +50,60 @@ export function replaceResult(r: RotateResult): { outcome: Outcome; word: string
   if (r.outcome === "verified") {
     return { outcome: { kind: "applied", message: `Replaced. A test sign-in got its claims.${nextDue(r.next_due_at)}` }, word: "Replaced" };
   }
-  if (r.outcome === "unverified") {
-    // ponytail: "no_change" is the neutral seat: no bloom, and no "Nothing was
-    // changed" (the key WAS replaced). OutcomeKind has no "done, unconfirmed".
+  // ponytail: "no_change" is the neutral seat: no bloom, and no "Nothing was
+  // changed" (a key WAS, or may have been, replaced). OutcomeKind has no "done, unconfirmed".
+  if (r.outcome === "unverified" && r.probe?.class === "not_set_up") {
     return {
       outcome: {
         kind: "no_change",
-        message:
-          "Replaced, but the test sign-in after it didn't get its claims. Syndra still accepts the old key and the new one, and won't replace it again on its own.",
-        detail: "Claims delivery, above, says what the test sign-in got.",
+        message: "Replaced. No test sign-in could run, because SYNDRA_EXTERNAL_URL is not set",
+        detail: "Syndra accepts the old key and the new one for 7 days.",
+        next: "Set SYNDRA_EXTERNAL_URL on the Syndra server and restart it, so a test sign-in can confirm the new key.",
       },
       word: "Replaced, not confirmed",
     };
   }
+  if (r.outcome === "unverified") {
+    return {
+      outcome: {
+        kind: "no_change",
+        message: `Replaced, but the test sign-in after it didn't get its claims. ${UNCONFIRMED_HOLD}`,
+        detail: "Claims delivery, above, says what the test sign-in got.",
+        next: "Open the Claims delivery section on this page and fix what it names.",
+      },
+      word: "Replaced, not confirmed",
+    };
+  }
+  if (r.outcome === "partial") {
+    return {
+      outcome: {
+        kind: "no_change",
+        message: `${r.reason ?? "Zitadel replaced one key but not the other."} Syndra uses the new key, and the old one still works for the other`,
+        next: "Press Replace now again to finish, or use Do it by hand on the Action signing key row.",
+      },
+      word: "Partly replaced",
+    };
+  }
+  if (r.outcome === "unknown") {
+    return {
+      outcome: {
+        kind: "no_change",
+        message: r.reason ?? "Zitadel didn't answer, and Syndra couldn't read the key back, so it can't tell whether it was replaced",
+        detail: "The old key keeps working either way.",
+        next: "Check the Action signing key row in a minute. If it still says Not known, press Replace now.",
+      },
+      word: "Not known",
+    };
+  }
   return {
-    outcome: { kind: "failed", message: `Zitadel didn't replace the key${r.error ? `: ${r.error}` : ""}. The old key still works.` },
+    outcome: { kind: "failed", message: `Zitadel didn't replace the key.${r.reason ? ` ${r.reason}` : ""} The old key still works` },
     word: "Not replaced",
   };
 }
+
+/** W11: what an unconfirmed replacement keeps, and how it settles. */
+export const UNCONFIRMED_HOLD =
+  "Syndra accepts the old key and the new one for 7 days. It marks the new key confirmed once a regular test sign-in passes, and won't replace it again before it is next due.";
 
 function nextDue(iso?: string): string {
   return iso ? ` Next due ${formatShortDate(iso)}.` : "";
@@ -85,6 +123,7 @@ function verifyResult(r: VerifyResult, setup: boolean): { outcome: Outcome; word
       kind: "no_change",
       message: `Syndra has the new key, but the test sign-in didn't get its claims${r.probe.detail ? `: ${r.probe.detail}` : ""}.`,
       detail: "Claims delivery, above, says what to check. The old key keeps working for 15 minutes.",
+      next: "Open the Claims delivery section on this page and fix what it names.",
     },
     word: "Not confirmed",
   };
@@ -326,8 +365,8 @@ function NotSeenYet({ open, onToggle, setup }: { open: boolean; onToggle: () => 
             this Syndra uses.
           </p>
           <p>
-            Only if this Syndra still reads its keys from .env: set these to what the command printed, then
-            restart the backend.
+            Only if the keyring line on this page says Syndra isn&rsquo;t allowed to read the key from
+            Zitadel: set these to what the command printed, then restart the backend.
           </p>
           <CopyableValue label="Claims key setting" value="ZITADEL_ACTION_SIGNING_KEY" />
           {!setup && <CopyableValue label="Event key setting" value="ZITADEL_EVENT_SIGNING_KEY" />}

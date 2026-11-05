@@ -10,6 +10,12 @@ const state = vi.hoisted(() => ({
   update: vi.fn(),
   targetWaits: false,
   validate: vi.fn(),
+  whatIf: vi.fn(),
+}));
+
+// Who a rule reaches is the backend's answer (the what-if), down the chain.
+vi.mock("@/lib/queries/useInsights", () => ({
+  fetchWhatIf: (...args: unknown[]) => state.whatIf(...args),
 }));
 
 vi.mock("@/lib/queries/useMappingRules", () => ({
@@ -73,6 +79,7 @@ async function saveTheOpenRule() {
 }
 
 beforeEach(() => {
+  state.whatIf = vi.fn().mockResolvedValue({ gains: [], losses: [], unchanged: 0 });
   state.rules = [rule()];
   state.update = vi.fn().mockResolvedValue({});
   state.targetWaits = false;
@@ -119,6 +126,11 @@ describe("after saving a rule", () => {
 
     await waitFor(() => expect(document.body.textContent).toMatch(/Saved/));
     expect(document.body.textContent).toMatch(/get the second at once/);
+    // Audit W6: a rule follows roles given through Syndra; one added by hand in
+    // Zitadel is drift, and the rule follows once it is adopted.
+    expect(document.body.textContent).toMatch(/anyone given the first role through Syndra/);
+    expect(document.body.textContent).toMatch(/added directly in Zitadel shows in Drift, and the rule follows once you adopt it/);
+    expect(document.body.textContent).not.toMatch(/given the first role later/);
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Close" })).toBeNull());
@@ -194,14 +206,71 @@ describe("the rule check's result", () => {
 
   it("says things to know in an amber Notice", async () => {
     state.rules = [rule({ source_project: "pLaser", source_role: "trained" })];
+    state.whatIf = vi.fn().mockResolvedValue({
+      gains: ["u1", "u2", "u3"].map((u) => ({ user_id: u, name: u, roles: [{ project_id: "pLaser", role_key: "trained" }] })),
+      losses: [],
+      unchanged: 0,
+    });
     await check({});
     const notice = screen.getByRole("status");
     expect(notice).toHaveTextContent("Checked: 1 thing to know");
-    expect(notice).toHaveTextContent("3 people already hold the first role");
+    expect(notice).toHaveTextContent("Saving would give 3 people Laser Lab / trained.");
     expect(notice).toHaveClass("bg-warn-soft");
+    // An edit asks about replacing this rule, not adding a second one.
+    expect(state.whatIf).toHaveBeenCalledWith(expect.objectContaining({ kind: "rule_added", rule_id: "aaaabbbb-1111-2222-3333-444455556666" }));
+  });
+
+  it("names every role the chain gives, from the backend", async () => {
+    state.rules = [rule()];
+    state.whatIf = vi.fn().mockResolvedValue({
+      gains: [
+        {
+          user_id: "u1",
+          name: "u1",
+          roles: [
+            { project_id: "pLaser", role_key: "trained" },
+            { project_id: "pLaser", role_key: "senior" },
+            { project_id: "pLaser", role_key: "keys" },
+          ],
+        },
+      ],
+      losses: [],
+      unchanged: 0,
+    });
+    await check({});
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("Saving would give 1 person Laser Lab / trained.");
+    expect(notice).toHaveTextContent("Also sets off other rules, which would then give them Laser Lab / keys and Laser Lab / senior.");
+  });
+
+  // Audit W12, rules-on-the-pipeline 6.5d: the chain is the backend's closure
+  // over the unsaved rule, never walked over the browser's rule list. A chain
+  // in the list that the what-if does not report is not named.
+  it("never walks the rule list in the browser", async () => {
+    state.rules = [
+      rule(),
+      rule({ id: "r2", source_project: "pLaser", source_role: "trained", target_project: "pShop", target_role: "bench" }),
+      rule({ id: "r3", source_project: "pShop", source_role: "bench", target_project: "pShop", target_role: "key" }),
+    ];
+    await check({});
+    expect(document.body.textContent).not.toMatch(/Also sets off/);
+    expect(state.whatIf).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "rule_added", target_project_id: "pLaser", target_role_key: "trained" }),
+    );
+  });
+
+  it("says 'another rule' for one chained role", async () => {
+    state.whatIf = vi.fn().mockResolvedValue({
+      gains: [{ user_id: "u1", name: "u1", roles: [{ project_id: "pLaser", role_key: "trained" }, { project_id: "pLaser", role_key: "keys" }] }],
+      losses: [],
+      unchanged: 0,
+    });
+    await check({});
+    expect(screen.getByRole("status")).toHaveTextContent("Also sets off another rule, which would then give them Laser Lab / keys.");
   });
 
   it("says an all-clear as a caption, with no box", async () => {
+    state.rules = [rule()];
     await check({});
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();

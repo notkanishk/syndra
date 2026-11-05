@@ -42,6 +42,10 @@ func resetGovernanceDeps(t *testing.T) {
 	svcCountUnresolvedAddonOperations = func(context.Context, time.Duration) (map[string]int, error) {
 		return map[string]int{}, nil
 	}
+	// And the automatic retries, the eighth.
+	origRetries := svcCountRetries
+	t.Cleanup(func() { svcCountRetries = origRetries })
+	svcCountRetries = func(context.Context, string) (map[string]int, map[string]int, error) { return nil, nil, nil }
 	// And the observation store, same reason again: the access view now reports
 	// what Zitadel holds beside what was decided. The default is the honest one
 	// — nothing has ever been observed — so a test that says nothing about the
@@ -82,6 +86,9 @@ func resetGovernanceDeps(t *testing.T) {
 	svcGetBundleHolderCounts = func(context.Context) (map[string]int, error) { return map[string]int{}, nil }
 	t.Cleanup(func() { svcGetBundleHolderCounts = origHolderCounts })
 	origGetRolesForBundle := svcGetRolesForBundle
+	origGiven := svcGetBundleRolesGiven
+	t.Cleanup(func() { svcGetBundleRolesGiven = origGiven })
+	svcGetBundleRolesGiven = func(context.Context) (map[string][]models.BundleRole, error) { return nil, nil }
 	origUserBundleRoles := svcGetUserBundleRolesGrouped
 	origGetDirectGrants := svcGetDirectGrantsForUser
 	origGetRules := svcGetActiveMappingRules
@@ -644,7 +651,9 @@ func setupSnapshotTestFixtures(t *testing.T, numUsers, numApps, numProjects int)
 	// on the built-in default.
 	origProfile, origShapes := svcGetClaimProfile, svcLatestClaimShapes
 	t.Cleanup(func() { svcGetClaimProfile, svcLatestClaimShapes = origProfile, origShapes })
-	svcGetClaimProfile = func(context.Context, string) (db.ClaimProfileRow, bool, error) { return db.ClaimProfileRow{}, false, nil }
+	svcGetClaimProfile = func(context.Context, string) (db.ClaimProfileRow, bool, error) {
+		return db.ClaimProfileRow{}, false, nil
+	}
 	svcLatestClaimShapes = func(context.Context, string) ([]db.ClaimShapeVersion, error) { return nil, nil }
 
 	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {

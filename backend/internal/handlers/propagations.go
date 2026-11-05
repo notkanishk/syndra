@@ -18,7 +18,7 @@ import (
 func handleDrainPropagations(w http.ResponseWriter, r *http.Request) {
 	res, err := svcDrainPropagations(r.Context())
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "DRAIN_ERROR", err.Error())
+		writeUpstream(w, err, "DRAIN_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, res)
@@ -43,7 +43,7 @@ func handleDrainTarget(w http.ResponseWriter, r *http.Request) {
 				"Zitadel drains with the whole deployment, not on its own.")
 			return
 		}
-		jsonErrorResponse(w, http.StatusBadGateway, "DRAIN_ERROR", err.Error())
+		writeUpstream(w, err, "DRAIN_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, res)
@@ -60,7 +60,46 @@ func handleListPendingPropagations(w http.ResponseWriter, r *http.Request) {
 	if rows == nil {
 		rows = []models.PendingPropagation{} // encode as [] not null for the UI
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"pending": rows})
+	// Each row Syndra sends again on its own says when, and which try.
+	var tried []string
+	for i := range rows {
+		if rows[i].Retry = propagation.RowRetry(rows[i]); rows[i].Retry != nil {
+			tried = append(tried, rows[i].ID)
+		}
+	}
+	// A role marked to wait AFTER its change was sent holds that change: the
+	// background drain skips it (ClaimDueRetries), so its row must not promise
+	// a next try (re-audit R15). Said as the wait it now is. A failed read
+	// leaves the promise, which the count beside it already discounts.
+	if len(tried) > 0 {
+		if waits, err := dbOutboxRowsWaitForRole(r.Context(), tried); err == nil {
+			for i := range rows {
+				if waits[rows[i].ID] {
+					rows[i].Retry, rows[i].WaitReason = nil, db.WaitReasonRoleWaits
+				}
+			}
+		}
+	}
+	// What Syndra stopped sending that this person has not marked seen: Home's
+	// "Syndra stopped sending" points here (re-audit R11). Never fatal: the
+	// queue is the page's subject.
+	gaveUp, err := dbListGaveUp(r.Context(), resolveActor(r, ""))
+	if err != nil || gaveUp == nil {
+		gaveUp = []models.PendingPropagation{}
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{"pending": rows, "gave_up": gaveUp})
+}
+
+// handleMarkGaveUpSeen is the operator saying they have seen the changes
+// Syndra gave up on: Home and the rail stop raising them (owner, 5 Nov 2026:
+// a give-up stays visible until seen; 6 Nov: by each person themselves). No body; who and when are recorded on
+// the person's own row (gave_up_seen, migration 000082).
+func handleMarkGaveUpSeen(w http.ResponseWriter, r *http.Request) {
+	if err := dbMarkGaveUpSeen(r.Context(), resolveActor(r, "")); err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "seen"})
 }
 
 // handleUnconfirmedRevocations lists the withdrawals that have not reached

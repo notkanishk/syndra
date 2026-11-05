@@ -39,7 +39,7 @@ func handleGetRoleMembers(w http.ResponseWriter, r *http.Request) {
 //
 //	GET /api/v1/governance/indicators
 func handleGetGovernanceIndicators(w http.ResponseWriter, r *http.Request) {
-	indicators, err := svcGovernanceIndicators(r.Context())
+	indicators, err := svcGovernanceIndicators(r.Context(), resolveActor(r, ""))
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "INDICATORS_ERROR", err.Error())
 		return
@@ -83,7 +83,7 @@ func handleDeleteUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// role the grant carried is still covered by another source — and that is
 	// the point: nothing is queued, so nothing is sent.
 	d := svcDeliver(r.Context(), res.OutboxIDs, r.URL.Query().Get("apply") != "true")
-	res.WaitReason = d.WaitReason()
+	res.WaitReason, res.Retry = d.WaitReason(), d.Drain.Retry
 	for _, id := range d.Sent {
 		if st, serr := dbGetPropagationStatus(r.Context(), id); serr == nil && st != "" {
 			res.Status = st
@@ -101,4 +101,6 @@ var (
 	svcRoleMembers          = services.RoleMembers
 	svcGovernanceIndicators = services.GovernanceIndicators
 	svcDeleteDirectGrant    = services.DeleteDirectGrant
+	// svcPreviewDirectGrantRemoval is the removal's answer without its write.
+	svcPreviewDirectGrantRemoval = services.PreviewDirectGrantRemoval
 )

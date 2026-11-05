@@ -208,3 +208,58 @@ func TestHandleUpdateZitadelGrant_ARefusedAddChangesNothing(t *testing.T) {
 		t.Fatalf("a refused add must not leave the removal half done: %+v %v", p.enqueued, p.deleted)
 	}
 }
+
+// W8: each role reports its own outcome, not one "done" for the change.
+func TestZitadelGrantChange_EachRoleReportsItsOwnStatus(t *testing.T) {
+	newGrantPipe(t)
+	origDeliver, origStatus := svcDeliver, dbGetPropagationStatus
+	t.Cleanup(func() { svcDeliver, dbGetPropagationStatus = origDeliver, origStatus })
+	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
+		d := services.Delivery{Reason: map[string]string{}}
+		for _, id := range ids {
+			if id == "ob-add-waits" {
+				d.Waiting = append(d.Waiting, id)
+				d.Reason[id] = db.WaitReasonRoleWaits
+				continue
+			}
+			d.Sent = append(d.Sent, id)
+		}
+		return d
+	}
+	dbGetPropagationStatus = func(_ context.Context, id string) (string, error) {
+		if id == "ob-add-goes" {
+			return "applied", nil
+		}
+		return "pending", nil // requeued: Zitadel didn't take it
+	}
+
+	_, res := serveGrant(t, handleAssignZitadelGrant, http.MethodPost, "/api/v1/zitadel/users/u1/grants?apply=true",
+		`{"projectId":"p1","roleKeys":["goes","waits","later"]}`)
+
+	got := map[string]string{}
+	for _, rc := range res.Roles {
+		got[rc.Role] = rc.Change + ":" + rc.Status
+	}
+	want := map[string]string{"p1/goes": "given:applied", "p1/waits": "given:waiting", "p1/later": "given:pending"}
+	for role, w := range want {
+		if got[role] != w {
+			t.Fatalf("%s: want %s, got %s (all: %v)", role, w, got[role], got)
+		}
+	}
+	if res.Status != "pending" || res.WaitReason != db.WaitReasonRoleWaits {
+		t.Fatalf("the change is only as far as its least delivered role: %+v", res)
+	}
+}
+
+func TestZitadelGrantChange_AllKeptSendsNothing(t *testing.T) {
+	p := newGrantPipe(t)
+	dbListUserGrantsLive = func(_ context.Context, userID, grantID string) (zitadel.UserGrant, error) {
+		return zitadel.UserGrant{ID: grantID, UserID: userID, ProjectID: "p7", RoleKeys: []string{"lead"}}, nil
+	}
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { return true, nil }
+
+	_, res := serveGrant(t, handleRemoveZitadelGrant, http.MethodDelete, "/api/v1/zitadel/users/u1/grants/g1", "")
+	if len(p.enqueued) != 0 || res.Status != "unchanged" || len(res.Roles) != 1 || res.Roles[0].Status != "kept" {
+		t.Fatalf("a kept role sends nothing and says so: %+v", res)
+	}
+}

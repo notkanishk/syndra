@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"syndra/internal/textsort"
 
 	"github.com/jackc/pgx/v5"
 
@@ -250,12 +251,7 @@ func bundleOverlaps(ctx context.Context, bundles []models.Bundle) ([]models.Insi
 		ref   models.InsightBundleRef
 		roles map[roleKey]bool
 	}
-	sort.Slice(bundles, func(i, j int) bool {
-		if bundles[i].Name != bundles[j].Name {
-			return bundles[i].Name < bundles[j].Name
-		}
-		return bundles[i].ID < bundles[j].ID
-	})
+	textsort.ByName(bundles, func(b models.Bundle) string { return b.Name }, func(b models.Bundle) string { return b.ID })
 	var entries []entry
 	for _, b := range bundles {
 		_, rs, err := svcLatestVersionRoles(ctx, b.ID)
@@ -414,11 +410,20 @@ func validateWhatIf(c models.InsightsWhatIfChange) error {
 		need = map[string]string{"bundle_id": c.BundleID}
 	case "rule_gone":
 		need = map[string]string{"rule_id": c.RuleID}
+	case "rule_added":
+		need = map[string]string{"project_id": c.ProjectID, "role_key": c.RoleKey,
+			"target_project_id": c.TargetProjectID, "target_role_key": c.TargetRoleKey}
+		if c.RuleID != "" {
+			need["rule_id"] = c.RuleID // optional: the rule this one replaces
+		}
+	case "bundle_assigned", "bundle_unassigned":
+		need = map[string]string{"bundle_id": c.BundleID, "user_id": c.UserID}
 	default:
-		return whatIfInvalid("kind", fmt.Sprintf("%q is not one of bundle_gives_also, bundle_gives_not, bundle_gone, rule_gone", c.Kind))
+		return whatIfInvalid("kind", fmt.Sprintf("%q is not one of bundle_gives_also, bundle_gives_not, bundle_gone, rule_gone, rule_added, bundle_assigned, bundle_unassigned", c.Kind))
 	}
-	all := map[string]string{"bundle_id": c.BundleID, "project_id": c.ProjectID, "role_key": c.RoleKey, "rule_id": c.RuleID}
-	for _, f := range []string{"bundle_id", "project_id", "role_key", "rule_id"} {
+	all := map[string]string{"bundle_id": c.BundleID, "project_id": c.ProjectID, "role_key": c.RoleKey, "rule_id": c.RuleID,
+		"target_project_id": c.TargetProjectID, "target_role_key": c.TargetRoleKey, "user_id": c.UserID}
+	for _, f := range []string{"bundle_id", "project_id", "role_key", "rule_id", "target_project_id", "target_role_key", "user_id"} {
 		v, wanted := need[f]
 		switch {
 		case wanted && v == "":
@@ -508,6 +513,74 @@ func InsightsWhatIf(ctx context.Context, change models.InsightsWhatIfChange) (mo
 					return nil, nil, err
 				}
 				return effectiveClosure(base, rules), effectiveClosure(base, without), nil
+			}
+		case "rule_added":
+			// The rule editor's preview: everybody who would gain (or, for an
+			// edit, lose) something, down the whole chain. The editor used to
+			// walk one hop over the rule list itself.
+			if change.RuleID != "" {
+				if rule, err := svcGetMappingRuleByID(ctx, change.RuleID); err != nil || rule.RetiredAt != nil {
+					if err == nil {
+						err = pgx.ErrNoRows
+					}
+					return whatIfNotFound(err, "rule")
+				}
+			}
+			with := make([]models.MappingRule, 0, len(rules)+1)
+			for _, r := range rules {
+				if r.ID != change.RuleID || change.RuleID == "" {
+					with = append(with, r)
+				}
+			}
+			with = append(with, models.MappingRule{
+				SourceProject: change.ProjectID, SourceRole: change.RoleKey,
+				TargetProject: change.TargetProjectID, TargetRole: change.TargetRoleKey,
+			})
+			if people, err = svcGetAllKnownUserIDs(ctx); err != nil {
+				return err
+			}
+			holderChange = func(ctx context.Context, u string) (map[roleKey]bool, map[roleKey]bool, error) {
+				base, err := userBaseHoldings(ctx, u)
+				if err != nil {
+					return nil, nil, err
+				}
+				return effectiveClosure(base, rules), effectiveClosure(base, with), nil
+			}
+		case "bundle_assigned", "bundle_unassigned":
+			// One person's bundle dialog: what assigning (the latest version,
+			// what an assignment pins) or removing it would change for them,
+			// rules followed. The dialog used to name only the first rule.
+			if bundle, err := svcGetBundleByID(ctx, change.BundleID); err != nil || bundle.RetiredAt != nil {
+				if err == nil {
+					err = pgx.ErrNoRows
+				}
+				return whatIfNotFound(err, "bundle")
+			}
+			people = []string{change.UserID}
+			holderChange = func(ctx context.Context, u string) (map[roleKey]bool, map[roleKey]bool, error) {
+				before, err := userBaseHoldings(ctx, u)
+				if err != nil {
+					return nil, nil, err
+				}
+				var after map[roleKey]bool
+				if change.Kind == "bundle_unassigned" {
+					after, err = userBaseHoldingsExcludingBundle(ctx, u, change.BundleID)
+				} else {
+					var roles []models.BundleRole
+					if _, roles, err = svcLatestVersionRoles(ctx, change.BundleID); err == nil {
+						after = make(map[roleKey]bool, len(before)+len(roles))
+						for k := range before {
+							after[k] = true
+						}
+						for _, r := range roles {
+							after[roleKey{projectID: r.ProjectID, roleKey: r.RoleKey}] = true
+						}
+					}
+				}
+				if err != nil {
+					return nil, nil, err
+				}
+				return effectiveClosure(before, rules), effectiveClosure(after, rules), nil
 			}
 		default: // the three bundle kinds
 			if bundle, err := svcGetBundleByID(ctx, change.BundleID); err != nil || bundle.RetiredAt != nil {
@@ -661,10 +734,5 @@ func whatIfPerson(id, name string, keys []roleKey) models.InsightWhatIfPerson {
 }
 
 func sortWhatIfPeople(ps []models.InsightWhatIfPerson) {
-	sort.Slice(ps, func(i, j int) bool {
-		if ps[i].Name != ps[j].Name {
-			return ps[i].Name < ps[j].Name
-		}
-		return ps[i].UserID < ps[j].UserID
-	})
+	textsort.ByName(ps, func(p models.InsightWhatIfPerson) string { return p.Name }, func(p models.InsightWhatIfPerson) string { return p.UserID })
 }

@@ -98,7 +98,7 @@ describe("Degraded banner", () => {
     ["/roles", "Publishing, moving people and retiring wait until Zitadel answers."],
     ["/projects/p1", "Publishing, moving people and retiring wait until Zitadel answers."],
   ])("on %s", (path, ending) => {
-    it("ends with the sentence that route's verbs wait on", async () => {
+    it("says the sentence that route's verbs wait on, then that there is nothing to do", async () => {
       route.path = path;
       mode.value = {
         directory: "zitadel",
@@ -110,7 +110,8 @@ describe("Degraded banner", () => {
       await screen.findByText(/^Zitadel isn't answering\. This is what it held at /);
       const said = container.textContent ?? "";
       expect(said).toMatch(/Everything below is real, read 14 min ago, and may have changed since\. /);
-      expect(said.endsWith(ending)).toBe(true);
+      expect(said).toContain(ending);
+      expect(said.endsWith("Nothing for you to do. This page updates on its own when Zitadel answers.")).toBe(true);
     });
   });
 

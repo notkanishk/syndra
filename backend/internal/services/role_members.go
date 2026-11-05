@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
+	"syndra/internal/textsort"
 	"time"
 
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
+	"syndra/internal/services/propagation"
 )
 
 // RoleMembers answers "who can currently use the laser cutter?" — the reverse
@@ -229,16 +231,17 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		if grant, ok := grantsByUser[user.ID]; ok {
 			member.GrantID = grant.ID
 			member.Since = clock.Day(grant.CreatedAt)
-			if grant.ExpiresAt != nil {
-				member.Expires = clock.Day(*grant.ExpiresAt)
-			}
+		}
+		// When the role ends for them, from every source (access.Ends): a
+		// direct grant's end only when nothing else gives it for longer, a
+		// rule role's with its source. The token says the same.
+		if role.Ends != nil {
+			member.Expires = clock.Day(*role.Ends)
 		}
 		view.Members = append(view.Members, member)
 	}
 
-	sort.Slice(view.Members, func(i, j int) bool {
-		return strings.ToLower(view.Members[i].User.Name) < strings.ToLower(view.Members[j].User.Name)
-	})
+	textsort.ByName(view.Members, func(m RoleMember) string { return m.User.Name }, nil)
 	return view, nil
 }
 
@@ -361,6 +364,20 @@ type Indicators struct {
 	// wait for a person to say what happened (A-09 §3). Passwords are never in
 	// it: they settle themselves (A-13 §5). Targets with none are absent.
 	UnconfirmedOperations map[string]int `json:"unconfirmed_operations"`
+	// Retrying is the changes Zitadel didn't take that Syndra sends again on
+	// its own (a subset of PendingPropagation), and GaveUp the ones it stopped
+	// trying in the last week. Said on Home and the rail, so an automatic
+	// retry is never silent, nor its end (owner, 5 Nov 2026). The *By maps
+	// split each by the system the change was for (zitadel, truenas, ...), so a
+	// TrueNAS change is never said to be Zitadel's (re-audit R11).
+	Retrying   int            `json:"retrying"`
+	GaveUp     int            `json:"gave_up"`
+	RetryingBy map[string]int `json:"retrying_by"`
+	GaveUpBy   map[string]int `json:"gave_up_by"`
+	// AutoRetry is whether the background drain runs on this server
+	// (REVOCATION_DRAIN_ENABLED). Off, nothing is sent again on its own, so
+	// every surface says "press Send" instead of a next try.
+	AutoRetry bool `json:"auto_retry"`
 }
 
 // revocationEscalation is how long a queued revocation may age before it stops
@@ -373,7 +390,7 @@ const revocationEscalation = 24 * time.Hour
 
 // GovernanceIndicators counts the four badge signals directly, without
 // building the full GovernanceSummary payload.
-func GovernanceIndicators(ctx context.Context) (Indicators, error) {
+func GovernanceIndicators(ctx context.Context, actor string) (Indicators, error) {
 	out := Indicators{ZitadelReachable: true}
 
 	requests, err := svcGetAccessRequests(ctx, "pending")
@@ -419,6 +436,19 @@ func GovernanceIndicators(ctx context.Context) (Indicators, error) {
 	}
 	out.UnconfirmedOperations = unconfirmed
 
+	retrying, gaveUp, err := svcCountRetries(ctx, actor)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.RetryingBy, out.GaveUpBy = retrying, gaveUp
+	for _, n := range retrying {
+		out.Retrying += n
+	}
+	for _, n := range gaveUp {
+		out.GaveUp += n
+	}
+	out.AutoRetry = propagation.AutoRetry()
+
 	// Only worth probing when there is something queued: the flag exists to
 	// explain why "Resume now" is disabled, and with an empty outbox there is
 	// nothing to resume.
@@ -438,6 +468,8 @@ type DirectGrantRemoval struct {
 	OutboxIDs []string `json:"outbox_ids"`
 	// WaitReason: why the removal isn't in Zitadel yet, when it isn't.
 	WaitReason string `json:"wait_reason,omitempty"`
+	// Retry is the next try and which try, when Zitadel didn't take it.
+	Retry *extcall.RetryState `json:"retry,omitempty"`
 	// Revoked lists "project/role" pairs that lost their last source and are
 	// queued for removal from the identity provider.
 	Revoked []string `json:"revoked_roles"`
@@ -473,31 +505,10 @@ func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (Dire
 	// computed while another cascade is mid-flight is a statement about a world
 	// neither of them ends up in.
 	if err := withLockedAccess(ctx, func(ctx context.Context) error {
-		rules, err := svcGetActiveMappingRules(ctx)
-		if err != nil {
+		var err error
+		if revokes, retained, err = directGrantRemovalDelta(ctx, userID, grantID); err != nil {
 			return err
 		}
-
-		before, err := userBaseHoldings(ctx, userID)
-		if err != nil {
-			return err
-		}
-		after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
-		if err != nil {
-			return err
-		}
-
-		afterClosure := effectiveClosure(after, rules)
-		_, revokes = closureDelta(effectiveClosure(before, rules), afterClosure)
-
-		// Retained is the dialog's exact claim: the role this grant carried, still
-		// effective afterwards because a bundle or a rule also covers it. Reported,
-		// never enqueued — it is precisely the role that must NOT be revoked.
-		retained = make([]string, 0, 1)
-		if target, found := directGrantRoleKey(ctx, userID, grantID); found && afterClosure[target] {
-			retained = append(retained, target.projectID+"/"+target.roleKey)
-		}
-
 		params, err := deltaParams(ctx, userID, nil, revokes, actor, "Direct access removal", "direct", grantID)
 		if err != nil {
 			return err
@@ -520,6 +531,51 @@ func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (Dire
 		Retained:  retained,
 		Status:    "pending",
 	}, nil
+}
+
+// directGrantRemovalDelta is what removing one direct grant takes away and
+// what it leaves, by the one closure: the roles that lose their last source,
+// and the grant's own role when a bundle or a rule still covers it. Shared by
+// the removal and its preview, so the count a person consents to is the
+// removal's own (re-audit R18).
+func directGrantRemovalDelta(ctx context.Context, userID, grantID string) ([]roleKey, []string, error) {
+	rules, err := svcGetActiveMappingRules(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	before, err := userBaseHoldings(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
+	if err != nil {
+		return nil, nil, err
+	}
+	afterClosure := effectiveClosure(after, rules)
+	_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
+
+	// Retained is the dialog's exact claim: the role this grant carried, still
+	// effective afterwards because a bundle or a rule also covers it. Reported,
+	// never enqueued — it is precisely the role that must NOT be revoked.
+	retained := make([]string, 0, 1)
+	if target, found := directGrantRoleKey(ctx, userID, grantID); found && afterClosure[target] {
+		retained = append(retained, target.projectID+"/"+target.roleKey)
+	}
+	return revokes, retained, nil
+}
+
+// PreviewDirectGrantRemoval is DeleteDirectGrant's answer without the write:
+// what would be revoked and what would stay. Nothing is enqueued.
+func PreviewDirectGrantRemoval(ctx context.Context, userID, grantID, _ string) (DirectGrantRemoval, error) {
+	revokes, retained, err := directGrantRemovalDelta(ctx, userID, grantID)
+	if err != nil {
+		return DirectGrantRemoval{}, err
+	}
+	revoked := make([]string, 0, len(revokes))
+	for _, key := range revokes {
+		revoked = append(revoked, key.projectID+"/"+key.roleKey)
+	}
+	return DirectGrantRemoval{OutboxIDs: []string{}, Revoked: revoked, Retained: retained, Status: "preview"}, nil
 }
 
 // ExpiredGrantRevocation is what one expired grant produced.

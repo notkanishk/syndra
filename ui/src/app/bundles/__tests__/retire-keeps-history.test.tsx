@@ -62,7 +62,7 @@ describe("retiring a bundle", () => {
     render(<BundlePage bundleId="b1" />);
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
 
-    expect(screen.getByText(/Everyone holding it loses/)).toBeInTheDocument();
+    expect(screen.getByText(/Everyone it is assigned to loses/)).toBeInTheDocument();
     expect(screen.getByText(/can.t be given again\. Its history stays readable\./)).toBeInTheDocument();
     // The old promise was that the history went with it; it no longer does.
     expect(screen.queryByText(/history goes with it/)).toBeNull();

@@ -1,4 +1,5 @@
 import { formatShortDate } from "@/lib/format";
+import { civilDay, daysBetween, MAKERSPACE_TZ } from "@/lib/time";
 
 /**
  * Quiet hours: 22:00 up to 05:00, on the reader's own clock (A-18 §4 idea 9).
@@ -45,12 +46,12 @@ export function lastHere(
   if (!iso) return null;
   const then = new Date(iso);
   if (Number.isNaN(then.getTime())) return null;
-  const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((midnight(now) - midnight(then)) / 86_400_000);
+  // Days are the makerspace's, never the browser's (lib/time).
+  const days = daysBetween(civilDay(then), civilDay(now));
   if (days <= 0) return null;
   if (days === 1) return { since: "yesterday", on: "yesterday" };
   if (days < 7) {
-    const weekday = then.toLocaleDateString("en-GB", { weekday: "long" });
+    const weekday = then.toLocaleDateString("en-GB", { weekday: "long", timeZone: MAKERSPACE_TZ });
     return { since: weekday, on: `on ${weekday}` };
   }
   const date = formatShortDate(iso, now);

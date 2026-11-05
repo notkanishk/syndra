@@ -9,6 +9,7 @@ import { leafMatches, navFor, operatorNav, type NavLeaf } from "@/lib/nav";
 // Shared with the tab bar, because the rail and the tab bar are two renderings
 // of one tree and a count that is danger in one cannot be accent in the other.
 import { BADGE_TONE } from "@/components/shell/navTones";
+import { RetryPill } from "@/components/shell/RetryPill";
 import { useUiView } from "@/lib/ui-view";
 import { useFlashOnChange } from "@/lib/motion";
 import { Unfold } from "@/lib/motion";
@@ -163,6 +164,7 @@ function NavRow({
         />
       )}
       <span className="flex-1 truncate">{item.label}</span>
+      {item.retries && <RetryPill counts={indicators} />}
       {count !== undefined &&
         (count > 0 ? (
           <span

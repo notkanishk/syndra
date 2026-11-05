@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 	"syndra/internal/services"
 )
@@ -185,18 +187,35 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// The rows the mapping rules added go with it, under the same rule.
 	if ids := res.OutboxIDs(); len(ids) > 0 {
 		d := svcDeliver(r.Context(), ids, r.URL.Query().Get("apply") != "true")
-		res.WaitReason = d.WaitReason()
 		if len(d.Sent) > 0 && res.OutboxID != "" {
 			if st, serr := dbGetPropagationStatus(r.Context(), res.OutboxID); serr == nil && st != "" {
 				res.Status = st
 			}
 		}
-		if res.Status == "applied" && d.Reason[res.OutboxID] == "" {
-			res.WaitReason = ""
-		}
+		res.WaitReason, res.Retry, res.RuleWaiting = ownWait(d, res.OutboxID, res.Status)
 	}
 
 	jsonResponse(w, http.StatusAccepted, res)
+}
+
+// ownWait splits one delivery of a write and its rules' rows (re-audit R12):
+// why the act's OWN row isn't in Zitadel ("" once it is applied), its next
+// try when that is a retry, and how many rule-given rows wait for the
+// operator. A rule-given role that waits is never blamed on the act, and is
+// never left unsaid. With no own row, the delivery's first reason speaks.
+func ownWait(d services.Delivery, own, ownStatus string) (string, *extcall.RetryState, int) {
+	if own == "" {
+		return d.WaitReason(), d.Drain.Retry, 0
+	}
+	reason := d.ReasonFor(own)
+	if ownStatus == "applied" && d.Reason[own] == "" {
+		reason = ""
+	}
+	var retry *extcall.RetryState
+	if reason == db.WaitReasonHalted(db.HaltRetrying) {
+		retry = d.Drain.Retry
+	}
+	return reason, retry, d.WaitingBesides(own)
 }
 
 func handleGetAccessRequests(w http.ResponseWriter, r *http.Request) {
@@ -395,7 +414,7 @@ func handleWithdrawAccessRequest(w http.ResponseWriter, r *http.Request) {
 
 	request, err := dbGetAccessRequestByID(r.Context(), requestID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "No such request — it may have been withdrawn.")
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "No such request. It may have been withdrawn.")
 		return
 	}
 
@@ -461,6 +480,12 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		if decided.WaitReason != "" {
 			resp["wait_reason"] = decided.WaitReason
+		}
+		if decided.Retry != nil {
+			resp["retry"] = decided.Retry
+		}
+		if decided.RuleWaiting > 0 {
+			resp["rule_waiting"] = decided.RuleWaiting
 		}
 		jsonResponse(w, http.StatusOK, resp)
 	case errors.Is(err, errRequestNotFound):
@@ -545,8 +570,13 @@ func writeRoleOfferedError(w http.ResponseWriter, err error) {
 // Zitadel yet when it isn't.
 type decisionResult struct {
 	WaitReason string
-	Effect     approvalEffect
-	Until      *time.Time
+	// Retry is the next try and which try, when Zitadel didn't take it.
+	Retry  *extcall.RetryState
+	Effect approvalEffect
+	Until  *time.Time
+	// RuleWaiting counts the roles an automatic rule gave with the approval
+	// that wait for the operator to send (re-audit R12).
+	RuleWaiting int
 }
 
 func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, reviewNote string) error {
@@ -646,7 +676,12 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 		// a later resume; access already works via the ledger.
 		res.Effect, res.Until = plan.Effect, plan.ExpiresAt
 		if ids := queued.OutboxIDs(); len(ids) > 0 {
-			res.WaitReason = svcDeliver(ctx, ids, false).WaitReason()
+			d := svcDeliver(ctx, ids, false)
+			status := ""
+			if slices.Contains(d.Sent, queued.OutboxID) {
+				status, _ = dbGetPropagationStatus(ctx, queued.OutboxID)
+			}
+			res.WaitReason, res.Retry, res.RuleWaiting = ownWait(d, queued.OutboxID, status)
 		}
 	} else { // rejected — no grant, just the conditional resolution
 		// A declined extension remembers the end it left alone. Best-effort: a

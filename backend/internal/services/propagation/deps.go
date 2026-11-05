@@ -36,6 +36,10 @@ var (
 	// revocations or — the direction that matters — the runner's claim for
 	// everything.
 	claimRevocations = db.ClaimPendingRevocations
+	// claimRetries is the runner's other claim: rows already sent once that
+	// the target didn't take, past their backoff, never a row that waits.
+	claimRetries     = db.ClaimDueRetries
+	insertAudit      = db.InsertAuditLogDetails
 	claimOne         = db.ClaimPropagationByID
 	undispatchable   = db.UndispatchableTarget
 	awaitingDispatch = db.TargetsAwaitingDispatch
@@ -51,7 +55,10 @@ var (
 		return observe.UserWithGrants(ctx, userID)
 	}
 	markFailed = db.MarkPropagationFailed
-	requeue    = db.RequeuePropagation
+	// markRefused is markFailed for a target's outright refusal: it keeps the
+	// plain cause on the row for the stopped-sending list.
+	markRefused = db.MarkPropagationRefused
+	requeue     = db.RequeuePropagation
 	// release returns a row to pending without spending a retry, for the one
 	// case where nothing was attempted at all.
 	release = db.ReleasePropagation
@@ -206,7 +213,8 @@ func zitadelStatusCode(err error) int {
 	return 0
 }
 
-func outboxMaxRetries() int    { return envInt("OUTBOX_MAX_RETRIES", 5) }
+// The default is the shared rule's (extcall.OutboxRetry): one send plus five.
+func outboxMaxRetries() int    { return envInt("OUTBOX_MAX_RETRIES", extcall.OutboxRetry.Attempts-1) }
 func outboxRetentionDays() int { return envInt("OUTBOX_RETENTION_DAYS", 30) }
 
 func envInt(name string, def int) int {

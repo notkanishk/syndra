@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"slices"
@@ -13,8 +14,10 @@ import (
 	"time"
 
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 	"syndra/internal/services"
+	"syndra/internal/services/propagation"
 	"syndra/internal/zitadel"
 )
 
@@ -137,7 +140,7 @@ func handleListZitadelUsers(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
 	result, err := zitadelListUsers(r.Context(), p)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, paginatedResponse{
@@ -154,7 +157,7 @@ func handleGetZitadelUser(w http.ResponseWriter, r *http.Request) {
 
 	user, err := zitadelGetUser(r.Context(), userID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, user)
@@ -166,7 +169,7 @@ func handleListZitadelProjects(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
 	result, err := zitadelListProjects(r.Context(), p)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, paginatedResponse{
@@ -186,7 +189,7 @@ func handleListZitadelProjectRoles(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
 	result, err := zitadelListProjectRoles(r.Context(), projectID, p)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, paginatedResponse{
@@ -223,6 +226,27 @@ func handleCreateZitadelProjectRole(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusCreated, map[string]string{"status": "created"})
 }
 
+// roleChangeUnknownCode answers a role write whose outcome nobody knows: the
+// answer was lost and the read-back failed (services.ErrRoleChangeUnknown).
+// Syndra kept its record; the screen must not say nothing changed.
+const (
+	roleChangeUnknownCode    = "OUTCOME_UNKNOWN"
+	roleChangeUnknownMessage = "Zitadel didn't answer, and Syndra couldn't read the role back, so it can't tell whether Zitadel made the change. Syndra kept its record and wrote this to Audit."
+)
+
+// roleRecordNotRestoredCode answers a refused role write whose undo failed
+// (services.ErrRoleRecordNotRestored). The sentence ends on a next step.
+const roleRecordNotRestoredCode = "RECORD_NOT_RESTORED"
+
+func roleRecordNotRestoredMessage(err error) string {
+	var nr *services.RoleRecordNotRestoredError
+	ref := "this role"
+	if errors.As(err, &nr) {
+		ref = nr.Reference
+	}
+	return "Zitadel didn't make the change, but Syndra couldn't put its own record back. Its list of roles may show the change. Check the role under Roles, or ask whoever runs the Syndra server to look at reference " + ref + "."
+}
+
 // writeRoleWriteError answers a refused or failed role write from the one
 // role pipe (services/roles.go). A delete held by people names them and their
 // count in details, so the dialog can ask for that exact count back.
@@ -233,14 +257,18 @@ func writeRoleWriteError(w http.ResponseWriter, err error) {
 	case errors.Is(err, services.ErrInvalidRoleKey):
 		jsonValidationErrorResponse(w, "Role keys use only letters, digits, - and _.", map[string]string{"roleKey": "pattern"})
 	case errors.Is(err, db.ErrDuplicateRole):
-		jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "A role with this key already exists in this project. Nothing was changed.")
+		// Refusals: the screen adds "Nothing was changed." once (re-audit R20).
+		jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "A role with this key already exists in this project.")
 	case errors.As(err, &inUse):
 		jsonErrorResponse(w, http.StatusConflict, "ROLE_IN_USE", fmt.Sprintf(
-			"Syndra still gives this role (%s). Take it out of those first, so each removal is recorded. Nothing was changed.",
+			"Syndra still gives this role (%s). Take it out of those first, so each removal is recorded.",
 			inUseWords(inUse)))
 	case errors.As(err, &held) && held.Unknown:
+		// The guard reads the observation, which the observer refreshes on its
+		// own (OBSERVE_SWEEP_INTERVAL, 5 minutes): opening a page refreshes
+		// nothing, so the step is to wait for it.
 		jsonErrorResponse(w, http.StatusConflict, "HOLDERS_UNKNOWN",
-			"Syndra couldn't confirm who holds this role in Zitadel, so it can't say who would lose it. Open Zitadel › Users to read it again, then try once more. Nothing was changed.")
+			"Syndra couldn't confirm who holds this role in Zitadel, so it can't say who would lose it. Syndra reads Zitadel again within five minutes; try once more after that.")
 	case errors.As(err, &held):
 		names := make([]string, 0, len(held.Holders))
 		for _, h := range held.Holders {
@@ -248,12 +276,25 @@ func writeRoleWriteError(w http.ResponseWriter, err error) {
 		}
 		jsonResponse(w, http.StatusConflict, ErrorResponse{
 			Error: "ROLE_HELD",
-			Message: fmt.Sprintf("%d %s this role in Zitadel and would lose it. Nothing was changed.",
+			Message: fmt.Sprintf("%d %s this role in Zitadel and would lose it.",
 				len(names), oneOrMany(len(names), "person holds", "people hold")),
 			Details: map[string]string{"count": strconv.Itoa(len(names)), "holders": strings.Join(names, ", ")},
 		})
+	case errors.Is(err, services.ErrRoleChangeUnknown):
+		// Never "Nothing was changed": the change may have landed, and a
+		// delete may already have taken the role from everyone holding it.
+		log.Printf("[ROLES] outcome unknown: %v", err)
+		jsonErrorResponse(w, http.StatusBadGateway, roleChangeUnknownCode, roleChangeUnknownMessage)
+	case errors.Is(err, services.ErrRoleRecordNotRestored):
+		// Zitadel refused, but Syndra's undo failed too: its list of roles may
+		// still show the change. Never "put its record back".
+		log.Printf("[ROLES] record not restored: %v", err)
+		jsonErrorResponse(w, http.StatusBadGateway, roleRecordNotRestoredCode, roleRecordNotRestoredMessage(err))
 	case errors.Is(err, services.ErrRoleNotChangedInZitadel):
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		// Not writeUpstream's generic sentence: this one says what Syndra did
+		// (put its record back). The raw rpc text goes to the log only.
+		log.Printf("[ROLES] not changed: %v", err)
+		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_REFUSED", "Zitadel didn't make the change, so Syndra put its record back.")
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
@@ -409,11 +450,46 @@ type zitadelGrantChange struct {
 	Retained   []string `json:"retained_roles"`
 	Status     string   `json:"status"`
 	WaitReason string   `json:"wait_reason,omitempty"`
+	// Retry is the next try of the rows Zitadel didn't take, which Syndra
+	// sends again on its own (re-audit R3).
+	Retry *extcall.RetryState `json:"retry,omitempty"`
+	// Roles is each role's own outcome (W8): one change can send some roles,
+	// hold one that waits, and keep one a bundle still gives.
+	Roles []zitadelRoleChange `json:"roles"`
+}
+
+// zitadelRoleChange is one role's part of a change. Status, after delivery:
+// applied (in Zitadel now), waiting (held for the operator to send), pending
+// (meant to go, not taken yet), failed, or kept (nothing was sent).
+type zitadelRoleChange struct {
+	Role   string `json:"role"`   // "project/role"
+	Change string `json:"change"` // given | revoked | kept
+	Status string `json:"status"`
+	// Reason is why a failed role isn't in Zitadel: refused:<cause>, the
+	// plain cause of Zitadel's refusal (final verification N1).
+	Reason string `json:"reason,omitempty"`
+	rows   []string
 }
 
 func newZitadelGrantChange() zitadelGrantChange {
-	return zitadelGrantChange{OutboxIDs: []string{}, Given: []string{}, Revoked: []string{}, Retained: []string{}, Status: "pending"}
+	return zitadelGrantChange{OutboxIDs: []string{}, Given: []string{}, Revoked: []string{}, Retained: []string{}, Status: "pending", Roles: []zitadelRoleChange{}}
 }
+
+func (res *zitadelGrantChange) add(role, change string, rows ...string) {
+	res.Roles = append(res.Roles, zitadelRoleChange{Role: role, Change: change, rows: rows})
+	switch change {
+	case "given":
+		res.Given = append(res.Given, role)
+	case "revoked":
+		res.Revoked = append(res.Revoked, role)
+	case "kept":
+		res.Retained = append(res.Retained, role)
+	}
+}
+
+// roleStatusRank orders statuses worst first: a role carried by several rows
+// is as far along as its least delivered row.
+var roleStatusRank = map[string]int{"failed": 0, "waiting": 1, "pending": 2, "applied": 3}
 
 // handleAssignZitadelGrant gives roles from the Zitadel › Users screen through
 // the person page's pipe: each role must be offered and not already held, and
@@ -444,7 +520,7 @@ func handleAssignZitadelGrant(w http.ResponseWriter, r *http.Request) {
 	}
 	res := newZitadelGrantChange()
 	if err := giveRoles(r.Context(), resolveActor(r, ""), userID, req.ProjectID, roles, &res); err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		grantChangeFailed(w, r, userID, err, res)
 		return
 	}
 	finishZitadelGrantChange(w, r, userID, res)
@@ -488,7 +564,7 @@ func handleUpdateZitadelGrant(w http.ResponseWriter, r *http.Request) {
 
 	projectID, current, err := resolveGrantTarget(r.Context(), userID, grantID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		grantNotRead(w, err)
 		return
 	}
 	adds, removes := setDiff(want, current), setDiff(current, want)
@@ -499,14 +575,74 @@ func handleUpdateZitadelGrant(w http.ResponseWriter, r *http.Request) {
 	actor := resolveActor(r, "")
 	res := newZitadelGrantChange()
 	if err := removeRoles(r.Context(), actor, userID, projectID, removes, &res); err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		grantChangeFailed(w, r, userID, err, res)
 		return
 	}
 	if err := giveRoles(r.Context(), actor, userID, projectID, adds, &res); err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		grantChangeFailed(w, r, userID, err, res)
 		return
 	}
 	finishZitadelGrantChange(w, r, userID, res)
+}
+
+// Codes for a Zitadel › Users change that did not finish (re-audit R17).
+const (
+	// grantNotReadCode: the grant could not be read, so nothing was written.
+	grantNotReadCode = "GRANT_NOT_READ"
+	// partlyRecordedCode: some roles were recorded before a fault.
+	partlyRecordedCode = "PARTLY_RECORDED"
+)
+
+// grantNotRead answers a grant change whose grant could not be read, before
+// anything was written: a refusal to guess, so "nothing was changed" is true.
+func grantNotRead(w http.ResponseWriter, err error) {
+	log.Printf("[ZITADEL] read grant: %v", err)
+	jsonResponse(w, http.StatusBadGateway, ErrorResponse{
+		Error: grantNotReadCode,
+		// The screen adds "Nothing was changed." and the next step.
+		Message: "Syndra couldn't read this grant from Zitadel, so it didn't start.",
+	})
+}
+
+// partlyRecordedMessage says what became of the roles a faulted change had
+// recorded (final verification N6): a revocation sends on its own while this
+// server's background drain is on, unless its role waits for you; everything
+// else, and every revocation with the drain off, waits for Send.
+func partlyRecordedMessage(n int, revoking, auto bool) string {
+	lead := fmt.Sprintf("Syndra recorded %d of the roles, then hit a fault, so the rest was not recorded.", n)
+	if revoking && auto {
+		return lead + " What it recorded is in Pending changes: a revocation there sends on its own unless its role waits for you, and anything else waits for you to press Send."
+	}
+	return lead + " What it recorded waits in Pending changes until you press Send."
+}
+
+// grantChangeFailed answers a fault part-way through a change's roles. Each
+// role commits on its own, so the server knows exactly what it wrote: before
+// any role was written the fault changed nothing (DB_ERROR, whose screen says
+// so); after one was, those roles are recorded and wait in Pending changes,
+// named in details.recorded, and the screen must never say "Nothing was
+// changed" (re-audit R17).
+func grantChangeFailed(w http.ResponseWriter, r *http.Request, userID string, err error, res zitadelGrantChange) {
+	var written []string
+	revoking := false
+	for _, rc := range res.Roles {
+		if rc.Change != "kept" {
+			written = append(written, rc.Role)
+			revoking = revoking || rc.Change == "revoked"
+		}
+	}
+	if len(written) == 0 {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	rebuildUserCacheDetachedFn(r.Context(), userID)
+	ref := supportReference()
+	log.Printf("[HTTP] error status=500 ref=%s code=%s: recorded %v, then: %v", ref, partlyRecordedCode, written, err)
+	jsonResponse(w, http.StatusInternalServerError, ErrorResponse{
+		Error:   partlyRecordedCode,
+		Message: partlyRecordedMessage(len(written), revoking, propagation.AutoRetry()),
+		Details: map[string]string{"request_id": ref, "recorded": strings.Join(written, ",")},
+	})
 }
 
 // handleRemoveZitadelGrant removes the roles on one Zitadel grant the way the
@@ -522,15 +658,40 @@ func handleRemoveZitadelGrant(w http.ResponseWriter, r *http.Request) {
 
 	projectID, roleKeys, err := resolveGrantTarget(r.Context(), userID, grantID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		grantNotRead(w, err)
 		return
 	}
 	res := newZitadelGrantChange()
 	if err := removeRoles(r.Context(), resolveActor(r, ""), userID, projectID, roleKeys, &res); err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		grantChangeFailed(w, r, userID, err, res)
 		return
 	}
 	finishZitadelGrantChange(w, r, userID, res)
+}
+
+// handleRemoveZitadelGrantPreview is what revoking one Zitadel grant would
+// revoke and keep, by the removal's own code (removeRoles with nothing
+// written), so the count the revoke dialog asks consent for is the server's
+// rule and never one the browser works out (re-audit R18).
+func handleRemoveZitadelGrantPreview(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	grantID := r.PathValue("grantId")
+	if !trimmedNonEmpty(userID) || !trimmedNonEmpty(grantID) {
+		jsonValidationErrorResponse(w, "user id and grant id are required", map[string]string{"id": "required", "grantId": "required"})
+		return
+	}
+	projectID, roleKeys, err := resolveGrantTarget(r.Context(), userID, grantID)
+	if err != nil {
+		grantNotRead(w, err)
+		return
+	}
+	res := newZitadelGrantChange()
+	res.Status = "preview"
+	if err := previewRemoveRoles(r.Context(), userID, projectID, roleKeys, &res); err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, res)
 }
 
 // canGiveRoles runs the person page's two checks on every role before any is
@@ -573,7 +734,7 @@ func giveRoles(ctx context.Context, actor, userID, projectID string, roles []str
 			return err
 		}
 		res.OutboxIDs = append(res.OutboxIDs, q.OutboxID)
-		res.Given = append(res.Given, projectID+"/"+role)
+		res.add(projectID+"/"+role, "given", q.OutboxID)
 	}
 	return nil
 }
@@ -585,6 +746,22 @@ func giveRoles(ctx context.Context, actor, userID, projectID string, roles []str
 // nothing behind it, so its revoke takes nothing Syndra gives; it is recorded
 // like any other revoke.
 func removeRoles(ctx context.Context, actor, userID, projectID string, roles []string, res *zitadelGrantChange) error {
+	return walkRemoveRoles(ctx, actor, userID, projectID, roles, res, true)
+}
+
+// previewRemoveRoles is removeRoles with nothing written: the same walk and
+// the same rule for what stays, answered from the removal's own delta
+// (services.PreviewDirectGrantRemoval) instead of its write.
+func previewRemoveRoles(ctx context.Context, userID, projectID string, roles []string, res *zitadelGrantChange) error {
+	return walkRemoveRoles(ctx, "", userID, projectID, roles, res, false)
+}
+
+func walkRemoveRoles(ctx context.Context, actor, userID, projectID string, roles []string, res *zitadelGrantChange, write bool) error {
+	remove, revoke := svcDeleteDirectGrant, grantDirect
+	if !write {
+		remove = svcPreviewDirectGrantRemoval
+		revoke = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) { return db.EnqueueResult{}, nil }
+	}
 	direct, err := svcUserDirectGrants(ctx, userID)
 	if err != nil {
 		return err
@@ -597,13 +774,19 @@ func removeRoles(ctx context.Context, actor, userID, projectID string, roles []s
 	}
 	for _, role := range roles {
 		if id, ok := grantFor[role]; ok {
-			rm, err := svcDeleteDirectGrant(ctx, userID, id, actor)
+			rm, err := remove(ctx, userID, id, actor)
 			if err != nil {
 				return err
 			}
 			res.OutboxIDs = append(res.OutboxIDs, rm.OutboxIDs...)
-			res.Revoked = append(res.Revoked, rm.Revoked...)
-			res.Retained = append(res.Retained, rm.Retained...)
+			// ponytail: the removal's rows are not split by role, so each role
+			// it revoked reports the least delivered of them.
+			for _, gone := range rm.Revoked {
+				res.add(gone, "revoked", rm.OutboxIDs...)
+			}
+			for _, kept := range rm.Retained {
+				res.add(kept, "kept")
+			}
 			continue
 		}
 		// ponytail: read outside the access lock; a bundle given in the same
@@ -614,10 +797,10 @@ func removeRoles(ctx context.Context, actor, userID, projectID string, roles []s
 			return err
 		}
 		if held {
-			res.Retained = append(res.Retained, projectID+"/"+role)
+			res.add(projectID+"/"+role, "kept")
 			continue
 		}
-		q, err := grantDirect(ctx, db.EnqueueParams{
+		q, err := revoke(ctx, db.EnqueueParams{
 			UserID:      userID,
 			ProjectID:   projectID,
 			RoleKeys:    []string{role},
@@ -630,23 +813,59 @@ func removeRoles(ctx context.Context, actor, userID, projectID string, roles []s
 			return err
 		}
 		res.OutboxIDs = append(res.OutboxIDs, q.OutboxID)
-		res.Revoked = append(res.Revoked, projectID+"/"+role)
+		res.add(projectID+"/"+role, "revoked", q.OutboxID)
 	}
 	return nil
 }
 
 // finishZitadelGrantChange is the person page's tail: recompile the person's
-// claims first, then deliver by the one rule (services.Deliver).
+// claims first, then deliver by the one rule (services.Deliver). Each role
+// then reports how far its own rows got, and Status is the least delivered.
 func finishZitadelGrantChange(w http.ResponseWriter, r *http.Request, userID string, res zitadelGrantChange) {
 	rebuildUserCacheDetachedFn(r.Context(), userID)
+	row := map[string]string{}
+	refused := map[string]string{}
 	if len(res.OutboxIDs) > 0 {
 		d := svcDeliver(r.Context(), res.OutboxIDs, r.URL.Query().Get("apply") != "true")
-		res.WaitReason = d.WaitReason()
+		res.WaitReason, res.Retry = d.WaitReason(), d.Drain.Retry
+		for _, id := range d.Waiting {
+			row[id] = "waiting"
+		}
 		for _, id := range d.Sent {
-			if st, err := dbGetPropagationStatus(r.Context(), id); err == nil && st != "" {
-				res.Status = st
+			row[id] = "pending"
+			if st, err := dbGetPropagationStatus(r.Context(), id); err == nil && (st == "applied" || st == "failed") {
+				row[id] = st
+			}
+			if why := d.ReasonFor(id); db.IsRefused(why) {
+				row[id], refused[id] = "failed", why
 			}
 		}
+	}
+	worst := ""
+	for i := range res.Roles {
+		rc := &res.Roles[i]
+		if rc.Change == "kept" {
+			rc.Status = "kept"
+			continue
+		}
+		for _, id := range rc.rows {
+			if st := cmp.Or(row[id], "pending"); rc.Status == "" || roleStatusRank[st] < roleStatusRank[rc.Status] {
+				rc.Status = st
+			}
+			rc.Reason = cmp.Or(rc.Reason, refused[id])
+		}
+		rc.Status = cmp.Or(rc.Status, "pending")
+		if worst == "" || roleStatusRank[rc.Status] < roleStatusRank[worst] {
+			worst = rc.Status
+		}
+	}
+	switch worst {
+	case "applied", "failed":
+		res.Status = worst
+	case "":
+		res.Status = "unchanged" // every role was kept: nothing was sent
+	default:
+		res.Status = "pending" // waiting rows are pending in the outbox too
 	}
 	jsonResponse(w, http.StatusAccepted, res)
 }
@@ -713,12 +932,13 @@ func handleZitadelHealth(w http.ResponseWriter, r *http.Request) {
 	latency := time.Since(start).Milliseconds()
 
 	if err != nil {
+		log.Printf("[ZITADEL] health probe failed: %v", err)
 		jsonResponse(w, http.StatusBadGateway, zitadelHealthResponse{
 			Status:    "error",
 			Mode:      "live",
 			Domain:    domain,
 			LatencyMs: latency,
-			Error:     err.Error(),
+			Error:     upstreamSentence(http.StatusBadGateway),
 		})
 		return
 	}

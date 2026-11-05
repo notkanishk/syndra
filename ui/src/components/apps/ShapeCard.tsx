@@ -82,6 +82,7 @@ export function ShapeCard({
   templates,
   advanced,
   projectName,
+  heldBack,
   onSave,
   onOpenTemplate,
   onOpenCopy,
@@ -102,6 +103,8 @@ export function ShapeCard({
   templates: ClaimTemplate[];
   advanced: boolean;
   projectName: string;
+  /** Why a save would not reach the app yet (claim-words heldBackLine). */
+  heldBack?: string;
   onSave: () => void;
   onOpenTemplate: (id: string) => void;
   onOpenCopy: () => void;
@@ -128,7 +131,7 @@ export function ShapeCard({
               {projectName}&rsquo;s default
             </ArrowLink>
           </div>
-          <NewAppOffer shape={shape} draft={draft} setDraft={setDraft} templates={templates} project={projectName} onOpenTemplate={onOpenTemplate} />
+          <NewAppOffer shape={shape} draft={draft} setDraft={setDraft} templates={templates} project={projectName} heldBack={heldBack} onOpenTemplate={onOpenTemplate} />
         </>
       ) : (
         <ShapeForm
@@ -144,6 +147,7 @@ export function ShapeCard({
           templates={templates}
           advanced={advanced}
           project={projectName}
+          heldBack={heldBack}
           onSave={onSave}
           onOpenTemplate={onOpenTemplate}
           onOpenCopy={onOpenCopy}
@@ -231,6 +235,7 @@ function NewAppOffer({
   setDraft,
   templates,
   project,
+  heldBack,
   onOpenTemplate,
 }: {
   shape: AppClaimShape;
@@ -238,6 +243,7 @@ function NewAppOffer({
   setDraft: (d: ShapeDraft | null) => void;
   templates: ClaimTemplate[];
   project: string;
+  heldBack?: string;
   onOpenTemplate: (id: string) => void;
 }) {
   const app = shape.application.name;
@@ -277,6 +283,7 @@ function NewAppOffer({
         draft={draft}
         setDraft={setDraft}
         project={project}
+        heldBack={heldBack}
         onOpenTemplate={onOpenTemplate}
         footer={(verb, note, start) => (
           <div className="row-divider flex flex-wrap items-center gap-x-3.5 gap-y-2.5 px-[22px] pb-5 pt-4">
@@ -311,6 +318,7 @@ function ShapeForm({
   templates,
   advanced,
   project,
+  heldBack,
   onSave,
   onOpenTemplate,
   onOpenCopy,
@@ -327,6 +335,7 @@ function ShapeForm({
   templates: ClaimTemplate[];
   advanced: boolean;
   project: string;
+  heldBack?: string;
   onSave: () => void;
   onOpenTemplate: (id: string) => void;
   onOpenCopy: () => void;
@@ -468,7 +477,7 @@ function ShapeForm({
       ? { warn: false, text: advanced ? `Fix \`${problemPath}\` to save.` : `Fix \`${problemPath}\` in Advanced to save.` }
       : breaking.length > 0
         ? { warn: true, text: breakingLine(breaking, { app, roles: shape.project_roles, reach: preview?.reach, templateId: appTemplateId(shape, draft) }) }
-        : { warn: false, text: `Takes effect at each person's next sign-in to ${app}.` };
+        : { warn: Boolean(heldBack), text: heldBack ?? `Takes effect at each person's next sign-in to ${app}.` };
 
   const ctx: EditorContext = {
     app,

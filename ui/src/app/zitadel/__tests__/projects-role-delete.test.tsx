@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import UpstreamProjectsPage from "@/app/zitadel/projects/page";
+import { ApiError } from "@/lib/api-client";
 
 /**
  * The delete-role confirm retires on success and survives a failure, like its
@@ -74,11 +75,30 @@ describe("upstream role delete", () => {
     deleteRole.mockResolvedValueOnce({});
     renderPage();
     openConfirm();
-    expect(screen.getByText(/Syndra checks who holds it first/i)).toBeInTheDocument();
+    // C6: the lede names both refusals before the operator commits.
+    expect(screen.getByText(/It refuses while Syndra itself gives this role, or while it can’t tell who holds it/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete role in Zitadel" }));
     await screen.findByText(/deleted in Zitadel/i);
 
-    expect(screen.queryByText(/Syndra checks who holds it first/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Syndra checks first/i)).not.toBeInTheDocument();
+  });
+
+  // C6: a lost answer whose read-back failed is not known, never "Nothing was changed",
+  // and there is no armed button to press it again.
+  it("reports an unknown outcome as not known, never as nothing changed", async () => {
+    deleteRole.mockRejectedValueOnce(
+      new ApiError(502, { error: "OUTCOME_UNKNOWN", message: "Zitadel didn't answer, and Syndra couldn't read the role back." }),
+    );
+    renderPage();
+    openConfirm();
+    fireEvent.click(screen.getByRole("button", { name: "Delete role in Zitadel" }));
+
+    expect(await screen.findByText("Not known")).toBeInTheDocument();
+    expect(screen.getByText(/can't tell whether Zitadel deleted Trained/)).toBeInTheDocument();
+    expect(screen.getByText(/Open this project again in a minute/)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete role in Zitadel" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });

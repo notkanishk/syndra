@@ -200,17 +200,29 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
 	}
-	if err := attributeOneDrift(r.Context(), item, req, resolveActor(r, "")); err != nil {
+	ruleIDs, err := attributeOneDrift(r.Context(), item, req, resolveActor(r, ""))
+	if err != nil {
 		writeDriftActionError(w, err)
 		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"status": "attributed"})
+	// What the automatic rules queued on the adoption (coherence audit C1):
+	// the result says how many wait in Pending changes.
+	if ruleIDs == nil {
+		ruleIDs = []string{}
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{"status": "attributed", "rule_outbox_ids": ruleIDs})
 }
 
 // attributeOneDrift writes the ledger intent for a target_only drift and marks
-// it attributed. It enqueues nothing, and that is the whole point: adoption is
-// the operator saying "Zitadel is right, Syndra was wrong", so there is no
-// mutation owed upstream and no outbox row to carry one.
+// it attributed. It enqueues nothing of its own, and that is the whole point:
+// adoption is the operator saying "Zitadel is right, Syndra was wrong", so the
+// adopted role owes nothing upstream and no outbox row carries it.
+//
+// The automatic rules are another matter (ADR-006): adopting is when a rule
+// starting from the role fires, and what it gives is queued as rule rows that
+// wait in Pending changes for the operator. Their ids are returned, and the
+// adopt preview (services.RulesFollowing) named them before the operator
+// confirmed.
 //
 // Two versions of this got it wrong. The first left an `add` row pending
 // forever, and the governance queue then listed every adopted role as a change
@@ -230,13 +242,13 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 // concurrent-triage race returns ErrDriftNotPending (→409) with the whole tx
 // rolled back; a write failure rolls back the resolution too — the drift never
 // leaves the triage queue without its durable ledger row.
-func attributeOneDrift(ctx context.Context, item models.DriftItem, req attributeRequest, actor string) error {
+func attributeOneDrift(ctx context.Context, item models.DriftItem, req attributeRequest, actor string) ([]string, error) {
 	// Adopting records access Zitadel has. A syndra_only row is a grant Syndra
 	// records and Zitadel doesn't: adopting it wrote a second record of access
 	// nobody holds. Refused here, where every adopt path (one, bulk, a plan)
 	// passes.
 	if item.DriftType != db.DriftTargetOnly {
-		return errNothingToAdopt
+		return nil, errNothingToAdopt
 	}
 	payload, _ := json.Marshal(req)
 	return dbAttributeDriftTx(ctx, item.ID, db.EnqueueParams{
@@ -259,8 +271,8 @@ func handleRevokeDrift(w http.ResponseWriter, r *http.Request) {
 	actor := resolveActor(r, "")
 	// ONE tx: guard-transition to 'revoked' AND enqueue the revoke outbox row
 	// together. A lost race 409s with nothing written; a write failure rolls the
-	// resolution back too. Drain is best-effort AFTER commit — the durable revoke
-	// row stays pending in the worklist if Zitadel is unreachable.
+	// resolution back too. Delivery is AFTER commit — the durable revoke row
+	// stays pending in the worklist if Zitadel is unreachable.
 	outboxID, err := dbRevokeDriftAndEnqueue(r.Context(), id, db.EnqueueParams{
 		UserID: item.UserID, ProjectID: item.ProjectID, RoleKeys: item.RoleKeys,
 		GrantedBy: actor, OpType: "revoke",
@@ -270,8 +282,23 @@ func handleRevokeDrift(w http.ResponseWriter, r *http.Request) {
 		writeDriftActionError(w, err) // ErrDriftNotPending → 409, else 500
 		return
 	}
-	_, _ = svcDrainOne(r.Context(), outboxID)
-	jsonResponse(w, http.StatusOK, map[string]any{"status": "revoked", "outbox_id": outboxID})
+	// Delivered by the one rule (services.Deliver), like every other write: a
+	// role that waits holds the revoke for the operator, as its forecast said
+	// (coherence audit C5). It used to be drained by id, past that check.
+	// The answer says where the revoke stands (re-audit R5): sent says
+	// "applied" once Zitadel took it, a retry carries its next try, and a
+	// role that waits says so. "On its way" is only for one still going.
+	body := map[string]any{"status": "revoked", "outbox_id": outboxID}
+	d := svcDeliver(r.Context(), []string{outboxID}, false)
+	if why := d.WaitReason(); why != "" {
+		body["wait_reason"] = why
+		if d.Drain.Retry != nil {
+			body["retry"] = d.Drain.Retry
+		}
+	} else if st, err := dbGetPropagationStatus(r.Context(), outboxID); err == nil && st != "" {
+		body["propagation"] = st
+	}
+	jsonResponse(w, http.StatusOK, body)
 }
 
 type markExternalRequest struct {
@@ -414,7 +441,7 @@ func handleBulkMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 func handleReconcileDrift(w http.ResponseWriter, r *http.Request) {
 	res, err := svcDriftSweep(r.Context())
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "SWEEP_ERROR", err.Error())
+		writeUpstream(w, err, "SWEEP_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, res)

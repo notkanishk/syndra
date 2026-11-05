@@ -16,16 +16,17 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
-import { holdersLine, holdersToneClass } from "@/lib/holders";
+import { holdersLine, holdersToneClass, peopleSuffix } from "@/lib/holders";
 import { useCrumb } from "@/lib/page-crumb";
 import { sortByName } from "@/lib/sort";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useSeededProjectName } from "@/lib/queries/seed";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
-import { humanizeKey } from "@/lib/format";
+
 import { Tinted } from "@/lib/motion";
 import { useIsAdvanced } from "@/lib/ui-view";
+import { roleName } from "@/lib/names";
 
 /**
  * E1 detail · a project's roles. Each row's member count is the link into E2 —
@@ -59,7 +60,7 @@ export default function ProjectDetailPage({
     () =>
       sortByName(
         (roles.data ?? []).filter((role) => role.project_id === id),
-        (role) => role.display_name || humanizeKey(role.role_key),
+        (role) => roleName(role.display_name, role.role_key),
         (role) => role.role_key,
       ),
     [roles.data, id],
@@ -148,7 +149,7 @@ export default function ProjectDetailPage({
           !project ? undefined : (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>
-                {people ? `${people.headline} ${people.headline === "1" ? "person" : "people"} · ` : ""}
+                {people ? `${people.headline}${peopleSuffix(people.headline)} · ` : ""}
                 {projectRoles.length} {projectRoles.length === 1 ? "role" : "roles"}
               </span>
               <Tinted show={advanced}>
@@ -210,7 +211,7 @@ export default function ProjectDetailPage({
                       href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
                       className="link-hover"
                     >
-                      {role.display_name || humanizeKey(role.role_key)}
+                      {roleName(role.display_name, role.role_key)}
                     </Link>
                     {/* Below tablet the When given column is gone; the mark
                         stays, after the name, and says it on tap or focus. */}

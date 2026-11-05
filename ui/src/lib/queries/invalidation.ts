@@ -41,7 +41,9 @@ export type WriteKind =
   /** Term dates. */
   | "terms"
   /** The welcome-claims switch. */
-  | "welcomeClaims";
+  | "welcomeClaims"
+  /** Changes Syndra gave up on were marked seen: Home and the rail stop raising them. */
+  | "retriesSeen";
 
 export interface WriteScope {
   target?: string;
@@ -82,7 +84,8 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "request":
         return [["requests"], GOVERNANCE];
       case "drift":
-        return [["drift"], ["users"], GOVERNANCE];
+        // A revoke queues a removal, and an adopt can queue what a rule gives.
+        return [["drift"], ["users"], ["propagations"], GOVERNANCE];
       case "role":
         return [["roles"], ["roles-that-wait"], ["projects"], ["name-catalog"]];
       case "serviceAccount":
@@ -92,15 +95,18 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "claimShape":
         return [appId ? ["claim-shape", "app", appId] : ["claim-shape"], ["claim-debug"], ["applications"]];
       case "signingKey":
-        return [["zitadel", "rotation"], ["claims"]];
+        return [["zitadel", "rotation"], ["claims"], ["audit"]];
       case "target":
-        return [target ? ["targets", target] : ["targets"], GOVERNANCE];
+        return [target ? ["targets", target] : ["targets"], ["audit"], GOVERNANCE];
       case "storageCredential":
         return [["me", "targets"]];
       case "terms":
         return [["terms"], ["insights"]];
       case "welcomeClaims":
         return [];
+      case "retriesSeen":
+        // The rail's count and Pending changes' "Syndra stopped sending" list.
+        return [GOVERNANCE, ["propagations"]];
     }
   })();
   return [...keys, ...(scope.extra ?? [])];

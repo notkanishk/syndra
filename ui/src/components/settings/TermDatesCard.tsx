@@ -13,7 +13,7 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { Unfold } from "@/lib/motion";
 import { ApiError } from "@/lib/api-client";
-import { describeFailure, sentence } from "@/lib/outcome";
+import { failureMessage, sentence } from "@/lib/outcome";
 import { MAX_NAME, MAX_TERMS, shortDay, termFieldErrors, termStanding, validateTerms } from "@/lib/term-dates";
 import { useSaveTerms, useTermSetting, type Term } from "@/lib/queries/useTerms";
 
@@ -136,7 +136,7 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
       if (Object.keys(fields).length) setErrors(fields);
       else {
         const ref = e instanceof ApiError ? e.details?.request_id : undefined;
-        setFailure({ text: sentence(describeFailure(e)), reference: typeof ref === "string" ? ref : undefined });
+        setFailure({ text: sentence(failureMessage(e)), reference: typeof ref === "string" ? ref : undefined });
       }
     }
   }
@@ -168,13 +168,13 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
         ) : (
           <>
             <Unfold open={general.length > 0} gap={16}>
-              <Notice tone="danger" blocking title="That needs another look.">
+              <Notice tone="danger" blocking title="That needs another look." next="Change the dates it names, then save again.">
                 {general.map(([, m]) => m).join(" ")} Nothing was changed.
               </Notice>
             </Unfold>
             <Unfold open={Boolean(failure)} gap={16}>
               {failure && (
-                <Notice tone="danger" blocking title="The term dates didn't save." reference={failure.reference}>
+                <Notice tone="danger" blocking title="The term dates didn't save." reference={failure.reference} next="Save again. If it keeps failing, ask whoever runs the Syndra server and quote the reference.">
                   {failure.text} Nothing was changed.
                 </Notice>
               )}

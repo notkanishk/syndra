@@ -2,10 +2,11 @@
 
 import { UserName, BundleName, ProjectName } from "@/components/names";
 import { ADDON_EVENT, OPERATION_NOUN, describeAction, targetKind } from "@/lib/audit-vocabulary";
-import { formatAt, formatClock, formatClockSeconds, formatList, formatRelative, humanizeKey } from "@/lib/format";
+import { formatAt, formatClock, formatClockSeconds, formatList, formatRelative } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import type { AuditEntry, CancelledUnsentDetails } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { roleName } from "@/lib/names";
 
 /**
  * One audit event, as a sentence — THE one renderer, for every screen that
@@ -67,7 +68,7 @@ function FirstName({ id }: { id: string }) {
 
 /** "Network storage · Member": the place, then the role by its own name. */
 export function PlaceRole({ projectId, roleKey }: { projectId: string; roleKey: string }) {
-  const role = useNameResolver().resolveRole(projectId, roleKey).value?.display_name ?? humanizeKey(roleKey);
+  const role = roleName(useNameResolver().resolveRole(projectId, roleKey).value?.display_name, roleKey);
   return (
     <>
       <ProjectName id={projectId} /> · {role}

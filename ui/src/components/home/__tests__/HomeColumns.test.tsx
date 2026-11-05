@@ -61,6 +61,7 @@ vi.mock("@/lib/queries/useOperations", () => ({
   useMissedOnboarding: () => ({ data: state.onboarding, isLoading: false, error: null, refetch: vi.fn() }),
 }));
 vi.mock("@/lib/queries/useIndicators", () => ({
+  useAutoRetry: () => true,
   useIndicatorsRead: () => ({
     data: state.indicators,
     isPlaceholderData: !state.indicatorsReal,
@@ -71,7 +72,7 @@ vi.mock("@/lib/ui-view", () => ({
   useUiView: () => ({ view: "basic", setView: () => {} }),
 }));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
-vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false }));
+vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false, ApproveButton: ({ onClick }: { onClick: () => void }) => <button type="button" onClick={onClick}>Approve</button> }));
 
 const session = { id: "op", name: "Kanishk", email: "k@example.org" } as unknown as SessionUser;
 

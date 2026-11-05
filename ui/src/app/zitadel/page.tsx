@@ -17,7 +17,12 @@ import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { Unfold } from "@/lib/motion";
 import { ClaimsDelivery } from "@/components/system/ClaimsDelivery";
-import { SigningKeyGuide, replaceResult, type RotateResult } from "@/components/system/SigningKeyGuide";
+import {
+  SigningKeyGuide,
+  UNCONFIRMED_HOLD,
+  replaceResult,
+  type RotateResult,
+} from "@/components/system/SigningKeyGuide";
 import { request } from "@/lib/api-client";
 import { formatAt, formatShortDate } from "@/lib/format";
 import { FORECAST, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -27,6 +32,7 @@ import { useZitadelHealth } from "@/lib/queries/useZitadel";
 import { invalidateAfter } from "@/lib/queries/invalidation";
 import { CheckPips, zitadelReading } from "@/components/targets/TargetReading";
 import { useMissedChecks } from "@/lib/useMissedChecks";
+import { useAutoRetry } from "@/lib/queries/useIndicators";
 
 interface RotationStatus {
   key_installed?: boolean;
@@ -46,17 +52,45 @@ interface RotationStatus {
     lead_days?: number;
     window?: string;
     next_attempt_at?: string;
+    /** What keeps the schedule from acting even when the key is due (W5). */
+    waiting_for?: "test_sign_in" | "test_sign_in_setup";
   };
   rotating?: boolean;
   last_outcome?: {
     trigger: "auto" | "button";
     started_at: string;
     finished_at?: string;
-    outcome: "in_flight" | "verified" | "unverified" | "failed" | "abandoned";
+    outcome: "in_flight" | "verified" | "unverified" | "partial" | "unknown" | "failed" | "abandoned";
     replaced?: string[];
     probe?: { pass: boolean; class?: string; detail?: string };
-    error?: string;
+    /** A plain sentence (W4). */
+    reason?: string;
   };
+}
+
+/**
+ * Why the schedule won't replace the key on its own, when it won't: off, or
+ * waiting for a passing test sign-in (W5). undefined when it will, at its time.
+ */
+function wontReplaceBecause(status: RotationStatus | undefined): string | undefined {
+  const auto = status?.auto;
+  if (!auto?.on) {
+    return auto?.off_reason === "no_zitadel"
+      ? "Syndra isn't connected to Zitadel, so it can't replace the key on its own."
+      : "Replacing it on its own is switched off.";
+  }
+  if (auto.waiting_for === "test_sign_in_setup") {
+    return "Syndra replaces it on its own only after a test sign-in passes, and none can run until SYNDRA_EXTERNAL_URL is set.";
+  }
+  if (auto.waiting_for === "test_sign_in") {
+    return "Syndra replaces it on its own only after a test sign-in passes, and none has passed recently.";
+  }
+  return undefined;
+}
+
+/** The last attempt's reason, when it is a sentence. ponytail: rows from before W4 stored "HTTP 503"; this drops them, and can go once those age out. */
+function reasonOf(lo: NonNullable<RotationStatus["last_outcome"]>): string {
+  return lo.reason && !/HTTP \d|zitadel api/i.test(lo.reason) ? ` ${lo.reason}` : "";
 }
 
 /**
@@ -121,11 +155,18 @@ export default function IdentityProviderPage() {
       />
 
       <Unfold open={keyOverdue && rotation.data?.age_days !== undefined} gap={16}>
-        <Notice tone="warn" title={`The action signing key is ${rotation.data?.age_days} days old.`} live>
+        <Notice
+          tone="warn"
+          title={`The action signing key is ${rotation.data?.age_days} days old.`}
+          live
+          {...(wontReplaceBecause(rotation.data)
+            ? { next: "Press Replace now, below." }
+            : { nothingToDo: "Syndra replaces it on its own in the next quiet hours." })}
+        >
           It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works.{" "}
-          {rotation.data?.auto?.on
-            ? "Syndra replaces it on its own in the next quiet hours, and sign-ins carry on."
-            : "Replacing it on its own is switched off: Replace now, below, does it, and sign-ins carry on."}
+          {wontReplaceBecause(rotation.data)
+            ? `${wontReplaceBecause(rotation.data)} Replace now, below, does it, and sign-ins carry on.`
+            : "Syndra replaces it on its own in the next quiet hours, and sign-ins carry on."}
         </Notice>
       </Unfold>
 
@@ -262,9 +303,9 @@ const ReplaceKeyDialog = mountedWhileOpen(function ReplaceKeyDialog({
   return (
     <Modal open onClose={onClose} busy={replace.isPending} size="sm" labelledBy="replace-key-title">
       <ModalHeader
-        title="Replace the action signing key"
+        title="Replace the action signing keys"
         titleId="replace-key-title"
-        lede="Zitadel makes a new key and Syndra starts using it at once, so sign-ins carry on."
+        lede="Zitadel makes new keys for the claims action and the event listener, and Syndra starts using them at once, so sign-ins carry on."
       />
       {!result && replace.isPending && <ActionForecast className="mx-6 mb-1" word={FORECAST.replace} />}
       {result && <ActionOutcome outcome={result.outcome} word={result.word} className="mx-6 mb-1" />}
@@ -273,7 +314,7 @@ const ReplaceKeyDialog = mountedWhileOpen(function ReplaceKeyDialog({
         note={
           result
             ? undefined
-            : "Syndra then signs a test sign-in with the new key and checks it gets its claims."
+            : "Syndra then signs a test sign-in with the new keys and checks it gets its claims, when a test sign-in is set up."
         }
       >
         {done ? (
@@ -326,7 +367,7 @@ function isRotating(status: RotationStatus | undefined): boolean {
 function latestAttempt(status: RotationStatus): RotationStatus["last_outcome"] {
   const lo = status.last_outcome;
   if (!lo) return undefined;
-  const failed = lo.outcome === "failed" || lo.outcome === "abandoned";
+  const failed = lo.outcome === "failed" || lo.outcome === "abandoned" || lo.outcome === "unknown";
   const overtaken = status.last_rotated_at && Date.parse(lo.started_at) < Date.parse(status.last_rotated_at);
   if (failed && overtaken) return undefined;
   return lo;
@@ -341,6 +382,8 @@ function keyState(
   if (isRotating(status)) return { tone: "neutral", word: "Replacing" };
   const lo = latestAttempt(status);
   if (lo?.outcome === "unverified") return { tone: "warn", word: "Not confirmed" };
+  if (lo?.outcome === "partial") return { tone: "warn", word: "Partly replaced" };
+  if (lo?.outcome === "unknown") return { tone: "warn", word: "Not known" };
   if (lo?.outcome === "failed" || lo?.outcome === "abandoned") return { tone: "warn", word: "Not replaced" };
   if (status.age_days === undefined) return { tone: "warn", word: "Age unknown" };
   if (status.status === "warn" || status.status === "stale") {
@@ -367,21 +410,36 @@ function rotationSentence(status: RotationStatus | undefined, error: unknown): s
     return "Replacing… Zitadel is making a new key and Syndra starts using it the moment it arrives. Sign-ins carry on.";
   }
 
-  const auto = status.auto?.on ?? false;
+  // W5: "on its own" only when the schedule is on AND would act; otherwise why not, and what to do.
+  const wont = wontReplaceBecause(status);
   const quiet = status.auto?.window ? ` (${status.auto.window})` : "";
   const nextTry = status.auto?.next_attempt_at ? `, ${formatAt(status.auto.next_attempt_at)}` : "";
   const due = status.due_at ? formatShortDate(status.due_at) : "";
   const lo = latestAttempt(status);
+  const retry = wont
+    ? ` ${wont} Replace it now, or by hand below.`
+    : status.auto?.next_attempt_at
+      ? ` Syndra tries again on its own ${formatAt(status.auto.next_attempt_at)}.`
+      : " Replace it now, or by hand below.";
 
   if (lo?.outcome === "unverified") {
-    return `Replaced ${formatAt(lo.finished_at ?? lo.started_at)}, but the test sign-in after it didn't get its claims. Syndra still accepts the old key and the new one, and won't replace it again on its own. Claims delivery, above, says what went wrong.`;
+    const at = formatAt(lo.finished_at ?? lo.started_at);
+    // W9: with no test sign-in set up none ran, so none "didn't get its claims".
+    if (lo.probe?.class === "not_set_up") {
+      return `Replaced ${at}. No test sign-in could run, because SYNDRA_EXTERNAL_URL is not set, so Syndra can't confirm the new key. It accepts the old key and the new one for 7 days.`;
+    }
+    // W11: the hold is 7 days, and the regular test sign-in confirms it.
+    return `Replaced ${at}, but the test sign-in after it didn't get its claims. ${UNCONFIRMED_HOLD} Claims delivery, above, says what went wrong.`;
+  }
+  if (lo?.outcome === "partial") {
+    return `Syndra tried to replace the keys ${formatAt(lo.started_at)}.${reasonOf(lo)} Syndra uses the new key, and the old one still works for the other.${retry}`;
+  }
+  if (lo?.outcome === "unknown") {
+    return `Syndra tried to replace the key ${formatAt(lo.started_at)}.${reasonOf(lo) || " Zitadel didn't answer, so Syndra can't tell whether it was replaced."}${retry}`;
   }
   if (lo?.outcome === "failed" || lo?.outcome === "abandoned") {
     const what = lo.outcome === "failed" ? "Zitadel didn't replace it" : "the attempt was cut off before it finished";
-    const then = auto
-      ? ` Syndra tries again in the next quiet hours${nextTry}, at most once a day.`
-      : " Replace it now, or by hand below.";
-    return `Syndra tried to replace the key ${formatAt(lo.started_at)} and ${what}. The old key still works.${then}`;
+    return `Syndra tried to replace the key ${formatAt(lo.started_at)} and ${what}.${lo.outcome === "failed" ? reasonOf(lo) : ""} The old key still works.${retry}`;
   }
   if (lo?.outcome === "verified" && status.last_rotated_source === "syndra") {
     const when = formatShortDate(lo.finished_at ?? status.last_rotated_at);
@@ -389,13 +447,12 @@ function rotationSentence(status: RotationStatus | undefined, error: unknown): s
     return lo.trigger === "auto" ? `Replaced on its own on ${when}.${next}` : `Replaced on ${when}.${next}`;
   }
 
-  if (!auto) {
-    const why =
-      status.auto?.off_reason === "no_zitadel"
-        ? "Syndra isn't connected to Zitadel, so it can't replace the key on its own."
-        : "Replacing it on its own is switched off.";
-    if (status.status === "warn" || status.status === "stale") return `${why} Replace it now, or by hand below.`;
-    return due ? `Due on ${due}. ${why} Replace it before then.` : `${why} Syndra doesn't know when it was last replaced.`;
+  if (wont) {
+    const check = status.auto?.waiting_for === "test_sign_in" ? " Claims delivery, above, says why." : "";
+    if (status.status === "warn" || status.status === "stale") return `${wont} Replace it now, or by hand below.${check}`;
+    return due
+      ? `Due on ${due}. ${wont} Replace it before then.${check}`
+      : `${wont} Syndra doesn't know when it was last replaced.${check}`;
   }
   if (status.age_days === undefined) {
     return `Syndra doesn't know when the key was last replaced, so it replaces it on its own in the next quiet hours${quiet}.`;
@@ -433,6 +490,7 @@ function HealthLine({
   detail?: string;
   projectCount?: number;
 }) {
+  const auto = useAutoRetry();
   const word = reading.word;
   const sees = projectCount === undefined ? "" : `, and sees ${projectCount} project${projectCount === 1 ? "" : "s"}`;
   // One or two missed checks are shown as pips and raise no Notice; three in a row is Offline.
@@ -456,12 +514,25 @@ function HealthLine({
       </div>
 
       <Unfold open={notConfigured || reading.offline} gap={16}>
-        <Notice tone={notConfigured ? "warn" : "neutral"} title={`${word}.`}>
+        <Notice
+          tone={notConfigured ? "warn" : "neutral"}
+          title={`${word}.`}
+          {...(notConfigured
+            ? { next: "Ask whoever runs the Syndra server to connect it to Zitadel." }
+            : { next: "Once Zitadel answers, press Send on Pending changes for anything still waiting for you." })}
+        >
           {notConfigured
             ? "Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access. "
             : "Three checks in a row went unanswered. Syndra keeps checking. "}
+          {/* Re-audit R9: exactly what happens. Only the background drain
+              sends on its own (revocations, and changes it is already sending
+              again); a change that waits for you never goes by itself. */}
           {detail ||
-            "Syndra is showing what it last knew. Nothing is lost: changes waiting for you to send stay in order and go through when Zitadel is back."}
+            (auto === null
+              ? "Syndra is showing what it last knew. Nothing is lost: every change stays, in order, in Pending changes until it reaches Zitadel."
+              : auto
+              ? "Syndra is showing what it last knew. Nothing is lost: revocations, changes sent straight away, and changes Syndra is sending again go on their own when Zitadel answers. Changes waiting for you stay, in order, until you press Send."
+              : "Syndra is showing what it last knew. Nothing is lost: every change stays, in order, until you press Send. This Syndra server sends nothing again on its own.")}
         </Notice>
       </Unfold>
     </div>
@@ -541,7 +612,7 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
       warning: (
         <>
           <strong className="font-semibold text-ink">Recorded in Syndra, but with no preview and no reason.</strong>{" "}
-          It is written to Audit and waits in Pending changes until you send it.
+          It is sent to Zitadel straight away, unless the role waits for you.
         </>
       ),
       instead: "Inside Syndra: a person’s page, with a reason and a plan.",
@@ -555,8 +626,8 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
       warning: (
         <>
           <strong className="font-semibold text-ink">Recorded in Syndra, then changed in Zitadel at once.</strong>{" "}
-          The same as making a role under Access › Roles. Deleting a role somebody holds is refused
-          until you confirm who loses it.
+          The same as making a role under Access › Roles. Deleting a role is refused while Syndra
+          gives it, and while anybody holds it until you confirm who loses it.
         </>
       ),
       instead: "Inside Syndra: a project’s page, which keeps track of every role.",

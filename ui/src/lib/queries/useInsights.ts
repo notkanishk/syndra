@@ -60,11 +60,38 @@ export interface InsightsWhatIf {
 }
 
 export interface WhatIfChange {
-  kind: "bundle_gives_also" | "bundle_gives_not" | "bundle_gone" | "rule_gone";
+  kind:
+    | "bundle_gives_also"
+    | "bundle_gives_not"
+    | "bundle_gone"
+    | "rule_gone"
+    | "rule_added"
+    | "bundle_assigned"
+    | "bundle_unassigned";
   bundle_id?: string;
+  /** rule_added: the first role's project and key. */
   project_id?: string;
   role_key?: string;
+  /** rule_gone; rule_added: the rule the new one replaces (an edit). */
   rule_id?: string;
+  /** rule_added: the second role. */
+  target_project_id?: string;
+  target_role_key?: string;
+  /** bundle_assigned / bundle_unassigned: the one person. */
+  user_id?: string;
+}
+
+/**
+ * The backend's answer to "who would gain and lose what", computed by the same
+ * closure the change itself runs. Every preview that follows rules asks this;
+ * none walks the rule list itself.
+ */
+export async function fetchWhatIf(change: WhatIfChange): Promise<InsightsWhatIf> {
+  const d = await request<Partial<InsightsWhatIf>>("/insights/whatif", {
+    method: "POST",
+    body: { change },
+  });
+  return { gains: list(d?.gains), losses: list(d?.losses), unchanged: d?.unchanged ?? 0, read_at: d?.read_at };
 }
 
 const list = <T,>(v: T[] | null | undefined): T[] => (Array.isArray(v) ? v : []);
@@ -107,13 +134,7 @@ export function useInsightsWhatIf(change: WhatIfChange | null) {
   return useQuery({
     queryKey: ["insights", "whatif", change],
     enabled: Boolean(change),
-    queryFn: async (): Promise<InsightsWhatIf> => {
-      const d = await request<Partial<InsightsWhatIf>>("/insights/whatif", {
-        method: "POST",
-        body: { change },
-      });
-      return { gains: list(d?.gains), losses: list(d?.losses), unchanged: d?.unchanged ?? 0, read_at: d?.read_at };
-    },
+    queryFn: () => fetchWhatIf(change as WhatIfChange),
   });
 }
 

@@ -117,7 +117,7 @@ describe("a member's request rows", () => {
     fireEvent.click(screen.getByRole("button", { name: "Withdraw" }));
 
     const seat = await screen.findByRole("status");
-    expect(seat.textContent).toBe("You withdrew thisNobody will be asked to decide it");
+    expect(seat.textContent).toBe("You withdrew thisNobody will be asked to decide itNothing for you to do.");
     expect(screen.queryByText("Applied")).toBeNull();
     expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
   });
@@ -140,7 +140,7 @@ describe("a member's request rows", () => {
     state.data = [request({ status: "withdrawn" })];
     rerender(screenOf());
 
-    expect(screen.getByRole("status").textContent).toBe("You withdrew thisNobody will be asked to decide it");
+    expect(screen.getByRole("status").textContent).toBe("You withdrew thisNobody will be asked to decide itNothing for you to do.");
     expect(screen.getByText("Capstone build.")).toBeInTheDocument();
   });
 });

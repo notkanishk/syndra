@@ -757,6 +757,30 @@ describe("checking the preview against real sign-ins", () => {
     await screen.findByText(/Checked /);
     expect(screen.queryByText("NetBird gets nothing from Syndra.")).toBeNull();
   });
+
+  it("never promises the next sign-in in the save dialog while Zitadel names no app", async () => {
+    const was = api.routes["POST /applications/a1/claim-shape/preview"];
+    api.routes["POST /applications/a1/claim-shape/preview"] = (body) => {
+      const out = was(body) as { people: { now: Explanation; draft?: Explanation }[] };
+      for (const p of out.people) {
+        for (const e of [p.now, p.draft]) if (e) e.checks[3] = { state: "warn", facts: { ...e.checks[3].facts, client_id_missing: ["function/preaccesstoken"] } };
+      }
+      return out;
+    };
+    renderScreen();
+    fireEvent.change(await openRoles(), { target: { value: "network-staff" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    const dialog = await screen.findByRole("dialog");
+    const held = /Zitadel doesn.t say which app is signing in, so NetBird keeps getting Network.s default until Zitadel is upgraded\./;
+    await within(dialog).findByText(/Saved as NetBird.s shape, but not sent yet\./);
+    expect(dialog).toHaveTextContent(held);
+    expect(dialog).not.toHaveTextContent(/Reaches NetBird/);
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await within(dialog).findByText("Saved");
+    expect(dialog).toHaveTextContent(held);
+    expect(dialog).not.toHaveTextContent(/at each person.s next sign-in/);
+  });
 });
 
 describe("debug mode", () => {

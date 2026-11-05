@@ -45,7 +45,7 @@ import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Withheld } from "@/components/ui/Withheld";
-import { useNameResolver } from "@/lib/queries/useNameResolver";
+
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
@@ -54,13 +54,14 @@ import { useSeededUser } from "@/lib/queries/seed";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { EXTEND_DAYS, FORECAST, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { daysUntil, expiryLabel, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, expiryLabel, formatAgoShort, formatShortDate } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 import { useApplications } from "@/lib/queries/useApplications";
 import { usePersonSignIns } from "@/lib/queries/useSignIns";
 import { useTargets } from "@/lib/queries/useTargets";
 import { projectSignInLine } from "@/lib/sign-in-line";
 import { sortByName } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 type Tab = "access" | "requests" | "activity";
 
@@ -83,8 +84,7 @@ const TAB_LABELS: Record<Tab, string> = {
  */
 /** A role as the catalog names it, the key made readable only when the catalog does not know it. */
 function useRoleName(): (projectId: string, roleKey: string) => string {
-  const resolver = useNameResolver();
-  return (projectId, roleKey) => resolver.resolveRole(projectId, roleKey).value?.display_name || humanizeKey(roleKey);
+  return useShownNames().role;
 }
 
 function tabsFor(isOperator: boolean): Tab[] {
@@ -103,6 +103,8 @@ type Confirmation = "read" | "unreachable" | "unknown";
 interface AccessRole {
   role_key: string;
   reasons: RoleReason[];
+  /** When it ends, from every source (a rule role with its source); absent: never. */
+  ends?: string | null;
 }
 
 /**
@@ -377,7 +379,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
       ) : (
         <>
           {confirmation === "unreachable" && access.data.projects.length > 0 && (
-            <Notice tone="warn" title="Zitadel couldn’t be read just now.">
+            <Notice tone="warn" title="Zitadel couldn’t be read just now." next="Reload the page in a minute to read Zitadel again.">
               What follows is Syndra’s own record, which may be out of date.
             </Notice>
           )}
@@ -813,13 +815,13 @@ function ExtendSeat({
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
-  const done = outcome !== null && !statesNothingChanged(outcome.kind);
+  const done = outcome !== null && (!statesNothingChanged(outcome.kind) || Boolean(outcome.recorded));
   return (
     <Crossfade id={done ? "outcome" : extend.isPending ? "forecast" : "open"}>
       {extend.isPending && !done ? (
         <ActionForecast word={roleWaits(projectId, roleKey) ? FORECAST.queued : `${FORECAST.extend} by ${EXTEND_DAYS} days`} />
       ) : outcome && done ? (
-        <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} person={userId} />
+        <ActionOutcome placement="seat" word={outcome.recorded ? "Refused by Zitadel" : outcome.message} outcome={outcome} person={userId} />
       ) : (
     <>
       <Button
@@ -904,7 +906,10 @@ function RoleGroup({
         const grant = grantsByRole.get(`${projectId}::${role.role_key}`);
         const sources = orderedSources(role.reasons);
         const strongest = sources[0];
-        const expires = grant?.expires_at ?? null;
+        // When the role ends for them, from every source (the backend's
+        // access.Ends, the token's role_ends): a rule role ends with its
+        // source, and a dated grant of a role a bundle also gives never ends.
+        const expires = role.ends ?? null;
         const remaining = daysUntil(expires);
         // Nothing that gives this role has left the queue, so the row is a
         // record of a decision and not a description of their access. It takes

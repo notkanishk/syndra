@@ -127,6 +127,15 @@ func handleGetBundles(w http.ResponseWriter, r *http.Request) {
 			bundles[i].HolderCount = counts[bundles[i].ID]
 		}
 	}
+	// The holder number a screen shows is observed (services.BundleHolding);
+	// the assigned count above only explains it. Left nil ("not checked") when
+	// Zitadel has never been read or the read fails.
+	if f, err := svcBundleHolding(r.Context()); err == nil && f.Observed != nil {
+		for i := range bundles {
+			n := f.Observed[bundles[i].ID]
+			bundles[i].ObservedHolderCount = &n
+		}
+	}
 	// And for the role count: the list never carries `roles` (one query per
 	// bundle), so without this every row's Roles cell had nothing to show. A
 	// failed read leaves it unset, which the list shows as "—": a zero would

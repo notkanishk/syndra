@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"syndra/internal/extcall"
 )
 
 // EnqueueParams is the input to the transactional enqueue. RoleKeys is plural so
@@ -67,10 +68,15 @@ type EnqueueResult struct {
 	// WaitReason says why the change isn't in Zitadel yet, when it isn't:
 	// role_waits, manual, or halted:<reason> (services.Deliver).
 	WaitReason string `json:"wait_reason,omitempty"`
+	// Retry is the next try and which try, when Zitadel didn't take it.
+	Retry *extcall.RetryState `json:"retry,omitempty"`
 	// RuleOutboxIDs are the rows the mapping rules added to this write: what a
 	// chain of rules derives from the role given, or takes back with the role
 	// removed. Written in the same transaction, delivered with OutboxID.
 	RuleOutboxIDs []string `json:"rule_outbox_ids,omitempty"`
+	// RuleWaiting counts the rule rows held for the operator because their
+	// role waits: said apart from WaitReason, which is the write's own.
+	RuleWaiting int `json:"rule_waiting,omitempty"`
 }
 
 // OutboxIDs is every row this write queued: its own, then the rules'.
@@ -84,7 +90,7 @@ func (r EnqueueResult) OutboxIDs() []string {
 
 // FollowRules carries a direct write through the mapping rules. Wired by
 // services (services.followRules), which owns the one definition of what a
-// person holds and the one closure (models.RuleClosure) the token is compiled
+// person holds and the one closure (access.Closure) the token is compiled
 // from.
 //
 // enqueueWrites hands it the write as a function. It reads the person's

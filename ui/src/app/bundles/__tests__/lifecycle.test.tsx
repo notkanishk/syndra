@@ -80,7 +80,8 @@ describe("retiring a bundle", () => {
     render(<BundlePage bundleId="b1" />);
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
 
-    expect(document.body.textContent).toMatch(/11 people hold it right now/);
+    // Assigned, and said so: the retire moves assignments.
+    expect(document.body.textContent).toMatch(/It is assigned to 11 people right now/);
     expect(state.remove).not.toHaveBeenCalled();
   });
 

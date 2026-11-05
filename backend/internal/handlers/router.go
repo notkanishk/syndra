@@ -71,6 +71,9 @@ func NewRouter() http.Handler {
 	// any role (July 2026 audit SC1/SC3).
 	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withSelfOrOperatorAuth(handleGetUserDirectGrants)))
 	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withOperatorAuth(handleUpsertUserDirectGrant)))
+	// What the automatic rules would also give with a role: read by every
+	// dialog that gives one (give, approve, adopt) before it is confirmed.
+	mux.HandleFunc("GET /api/v1/users/{id}/rule-preview", withCORS(withOperatorAuth(handleRulePreview)))
 	// Removing a direct grant deletes the Syndra ledger row and queues the
 	// Zitadel revoke in one transaction. NOT the same object as
 	// DELETE /zitadel/users/{id}/grants/{grantId}, which removes the Zitadel-side
@@ -254,6 +257,7 @@ func NewRouter() http.Handler {
 	// rest drained and has come back.
 	mux.HandleFunc("POST /api/v1/targets/{target}/propagations/drain", withCORS(withOperatorAuth(withTargetProject(handleDrainTarget))))
 	mux.HandleFunc("GET /api/v1/propagations", withCORS(withOperatorAuth(handleListPendingPropagations)))
+	mux.HandleFunc("POST /api/v1/propagations/gave-up/seen", withCORS(withOperatorAuth(handleMarkGaveUpSeen)))
 	// Change history: the same rows grouped by the event that produced them,
 	// including the ones still waiting. A half-applied cascade has to be
 	// visible AS a half-applied cascade.
@@ -265,6 +269,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleAssignZitadelGrant)))
 	mux.HandleFunc("PUT /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleUpdateZitadelGrant)))
 	mux.HandleFunc("DELETE /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleRemoveZitadelGrant)))
+	// What that revoke would revoke and keep, by its own code (re-audit R18).
+	mux.HandleFunc("GET /api/v1/zitadel/users/{id}/grants/{grantId}/removal", withCORS(withOperatorAuth(handleRemoveZitadelGrantPreview)))
 
 	// Drift triage (B2): operator resolves out-of-band Zitadel grants surfaced by
 	// the webhook listener or the reconciliation sweep. Operator-gated — same
@@ -666,4 +672,3 @@ func jsonResponse(w http.ResponseWriter, status int, payload any) {
 		log.Printf("Failed to encode json: %v", err)
 	}
 }
-
