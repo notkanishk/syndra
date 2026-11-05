@@ -11,7 +11,7 @@ const miss = { value: undefined, resolved: true } as const;
 
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
-    resolveUser: (id: string) => (id === "u1" ? { value: { display_name: "Aanya Rao", email: "a@x.org" }, resolved: true } : miss),
+    resolveUser: (id: string) => (id === "u1" ? { value: { display_name: "Aanya Rao", email: "a@example.org" }, resolved: true } : miss),
     resolveProject: (id: string) => (id === "p1" ? { value: { name: "Laser Lab" }, resolved: true } : miss),
     resolveRole: () => miss,
     resolveBundle: (id: string) => (id === "b1" ? { value: { name: "Lab Tech" }, resolved: true } : miss),
@@ -52,7 +52,7 @@ describe("name parts link by default", () => {
   it("the email suffix is part of the one link, not a second", () => {
     render(<UserName id="u1" showEmail />);
     expect(screen.getAllByRole("link")).toHaveLength(1);
-    expect(screen.getByRole("link")).toHaveTextContent("Aanya Rao · a@x.org");
+    expect(screen.getByRole("link")).toHaveTextContent("Aanya Rao · a@example.org");
   });
 
   it("href sends a service account to its own page", () => {
