@@ -342,15 +342,17 @@ describe("the page in plain words (route-system-targets-id)", () => {
     ] as TargetSummary["operations"];
     renderTarget();
 
-    const row = (id: string) => screen.getByText(id).closest(".flex-wrap") as HTMLElement;
-    expect(within(row("account.provision")).getByText("Creates an account")).toBeInTheDocument();
-    expect(within(row("account.provision")).getByText("Runs by itself")).toBeInTheDocument();
-    expect(within(row("account.purge")).getByText("Deletes an account and its files")).toBeInTheDocument();
-    expect(within(row("account.purge")).getByText("Stops and asks")).toBeInTheDocument();
+    const row = (label: string) => screen.getByText(label).closest(".flex-wrap") as HTMLElement;
+    expect(within(row("Creates an account")).getByText("Runs by itself")).toBeInTheDocument();
+    expect(within(row("Deletes an account and its files")).getByText("Stops and asks")).toBeInTheDocument();
+    // The ids are under Technical detail, closed.
+    expect(screen.queryByText("account.purge")).toBeNull();
     // No scope, no secret parameter name; an id Syndra has no word for is not made the label.
     expect(screen.queryByText("elevated_key")).toBeNull();
     expect(screen.queryByText(/never logged: /)).toBeNull();
-    expect(within(row("thing.unheard_of")).getByText(/Syndra has no name for/)).toBeInTheDocument();
+    expect(screen.getByText(/Syndra has no name for/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
+    expect(screen.getByText("thing.unheard_of")).toBeInTheDocument();
     // Beside the reconciliation card, not under it.
     expect(screen.getByText("What it can do").closest(".grid")).toBe(
       screen.getByText("Check for differences").closest(".grid"),

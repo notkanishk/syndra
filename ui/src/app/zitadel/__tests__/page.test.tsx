@@ -204,18 +204,19 @@ describe("Identity provider · signing key row", () => {
     renderPage();
     expect(await screen.findByText(/accepts every request that claims to come from Zitadel without checking/)).toBeInTheDocument();
     expect(screen.getByText("Not set up")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "How to set it up" })).toBeInTheDocument();
+    expect(screen.getByText(/Set the key up on the Syndra server/)).toBeInTheDocument();
   });
 });
 
 describe("Identity provider · signing key guide", () => {
-  it("keeps the command out of the row until 'How to replace it' is pressed", async () => {
+  it("keeps the command out of the row until Technical detail is opened", async () => {
     renderPage();
-    const button = await screen.findByRole("button", { name: "How to replace it" });
-    expect(button).toHaveAttribute("aria-expanded", "false");
+    const fold = await screen.findByRole("button", { name: /Technical detail/ });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    expect(await screen.findByText(/The person who runs it has the command/)).toBeInTheDocument();
     expect(screen.queryByText("make zitadel-actions-rotate-key")).not.toBeInTheDocument();
 
-    fireEvent.click(button);
+    fireEvent.click(fold);
     expect(await screen.findByText("make zitadel-actions-rotate-key")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Copy command: make zitadel-actions-rotate-key/ }),
@@ -226,7 +227,7 @@ describe("Identity provider · signing key guide", () => {
   // still needs a restart; .env is updated at the next deploy, not urgently.
   it("says the claims key needs no restart, and which key still does", async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "How to replace it" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Technical detail/ }));
     expect(await screen.findByText(/keeps the old one working for 15 minutes, so sign-ins carry on/)).toBeInTheDocument();
     expect(screen.getByText(/ZITADEL_EVENT_SIGNING_KEY/).closest("li")).toHaveTextContent(/docker compose restart backend/);
     expect(screen.getByText(/ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT/).closest("li")).toHaveTextContent(/At the next deploy, not before/);
@@ -250,9 +251,9 @@ describe("Identity provider · signing key guide", () => {
     expect(await screen.findByRole("region", { name: "Claims delivery" })).toHaveAttribute("id", "claims-delivery");
   });
 
-  it("never offers to rotate the key itself: the only button opens the guide", async () => {
+  it("never offers to rotate the key itself: the only button opens the technical detail", async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "How to replace it" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Technical detail/ }));
     await screen.findByText("make zitadel-actions-rotate-key");
     expect(screen.queryByRole("button", { name: /^Rotate/ })).not.toBeInTheDocument();
   });
@@ -260,7 +261,7 @@ describe("Identity provider · signing key guide", () => {
   it("offers register, not rotate, when there is no key", async () => {
     rotation.value = { key_installed: false, status: "disabled", threshold_days: 90 };
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "How to set it up" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Technical detail/ }));
     expect(await screen.findByText("make zitadel-actions-register")).toBeInTheDocument();
     expect(screen.queryByText("make zitadel-actions-rotate-key")).not.toBeInTheDocument();
   });
