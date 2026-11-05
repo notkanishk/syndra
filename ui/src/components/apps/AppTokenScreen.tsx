@@ -91,11 +91,14 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
       }
     >
       {shape.error ? (
+        <div className="flex flex-col gap-4">
+        {seed && <PageHeader title={seed.name} />}
         <ErrorState
           title={shape.error instanceof ApiError && shape.error.status === 404 ? "That app doesn't exist." : "Couldn't load this app."}
           error={shape.error instanceof ApiError && shape.error.status === 404 ? new Error("It may have been removed in Zitadel.") : shape.error}
           onRetry={() => shape.refetch()}
         />
+        </div>
       ) : shape.data ? (
         <AppClaims key={applicationId} applicationId={applicationId} />
       ) : null}

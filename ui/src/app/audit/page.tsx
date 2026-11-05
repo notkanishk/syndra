@@ -151,13 +151,14 @@ export default function AuditPage() {
       )}
 
       <Card>
-        <CardColumns>
-          <span className="w-[124px]">When</span>
-          <span className="w-[150px]">Who</span>
-          <span className="flex-1">What they did</span>
-        </CardColumns>
-
         <ListStates
+          head={
+            <CardColumns>
+              <span className="w-[124px]">When</span>
+              <span className="w-[150px]">Who</span>
+              <span className="flex-1">What they did</span>
+            </CardColumns>
+          }
           isLoading={entries.isLoading}
           error={entries.error}
           isEmpty={drawn.length === 0}

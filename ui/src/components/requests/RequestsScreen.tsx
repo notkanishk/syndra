@@ -262,34 +262,38 @@ function OperatorQueue({ userId }: { userId?: string }) {
       />
 
       <Card>
-        <CardColumns>
-          {selecting && anyPending && <span className="w-11 shrink-0 desktop:w-[26px]" />}
-          <span className="w-[170px]">
-            <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
-          </span>
-          <span className="w-[250px]">What they asked for</span>
-          <span className="flex-1">Why</span>
-          <span className="w-[66px]">
-            <SortHead label="When" name="when" sort={sort} onSort={setSort} />
-          </span>
-          <span className="w-[196px]">Decision</span>
-        </CardColumns>
-        {/* Only open requests can be selected; a decided one is not part of the
-            working set, so the first number here is the open count and the
-            second is everything the current filter shows. */}
-        {selecting && openRows.length > 0 && (
-          <SelectAllRow
-            inScope={openRows.length}
-            total={rows.length}
-            noun={["request", "requests"]}
-            allSelected={selection.allSelected}
-            {...selection.headerCheckboxProps}
-          />
-        )}
 
         <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
         <div className={view.className}>
         <ListStates
+          head={
+            <>
+            <CardColumns>
+              {selecting && anyPending && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+              <span className="w-[170px]">
+                <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
+              </span>
+              <span className="w-[250px]">What they asked for</span>
+              <span className="flex-1">Why</span>
+              <span className="w-[66px]">
+                <SortHead label="When" name="when" sort={sort} onSort={setSort} />
+              </span>
+              <span className="w-[196px]">Decision</span>
+            </CardColumns>
+            {/* Only open requests can be selected; a decided one is not part of the
+                working set, so the first number here is the open count and the
+                second is everything the current filter shows. */}
+            {selecting && openRows.length > 0 && (
+              <SelectAllRow
+                inScope={openRows.length}
+                total={rows.length}
+                noun={["request", "requests"]}
+                allSelected={selection.allSelected}
+                {...selection.headerCheckboxProps}
+              />
+            )}
+            </>
+          }
           isLoading={requests.isLoading}
           error={requests.error}
           isEmpty={drawn.length === 0}

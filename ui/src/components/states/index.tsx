@@ -12,7 +12,7 @@ import { Notice } from "@/components/ui/Notice";
 // The prose a failure wears lives in one place, shared with every surface that
 // reports a mutation. A read that fails and a write that fails were describing
 // the same 403 in two files until this import existed.
-import { NOTHING_CHANGED, describeFailure, sentence } from "@/lib/outcome";
+import { NOTHING_CHANGED, describeFailure, nextStep, sentence } from "@/lib/outcome";
 import { TINT_MS, stillMotion } from "@/lib/motion";
 import { useUiView } from "@/lib/ui-view";
 
@@ -140,8 +140,9 @@ export function EmptyState({
 }
 
 /**
- * Error — names the failed thing, confirms nothing was changed, offers a
- * retry, and carries a request id the operator can paste into a message.
+ * Error — the copy guide's four parts (§8): which thing failed (and, when the
+ * caller knows it, which did not), the state of the world, the next step and
+ * where, and a reference with "Quote this if you ask for help."
  *
  * "Nothing was changed" is not reassurance copy. On a screen about who can
  * operate a laser cutter, the first question after a failed load is whether
@@ -156,9 +157,12 @@ export function ErrorState({
    * surface rather than drawing a second bordered box inside the first.
    */
   bare = false,
+  fine,
 }: {
   title: string;
   error: unknown;
+  /** Part one's other half, said only when the caller knows it: "Syndra itself is fine." */
+  fine?: string;
   onRetry?: () => void;
   bare?: boolean;
 }) {
@@ -180,7 +184,10 @@ export function ErrorState({
         action={onRetry ? { label: "Try again", onClick: onRetry } : undefined}
         reference={typeof requestId === "string" ? requestId : undefined}
       >
-        {`${sentence(describeFailure(error))} ${NOTHING_CHANGED}`}
+        {[sentence(describeFailure(error)), fine && sentence(fine), NOTHING_CHANGED, nextStep(typeof requestId === "string")]
+          .filter(Boolean)
+          .join(" ")}
+        {typeof requestId === "string" && <span className="mt-1 block text-muted">Quote this if you ask for help.</span>}
       </Notice>
     </div>
   );
@@ -233,6 +240,7 @@ export function ListStates({
   errorTitle,
   empty,
   skeleton,
+  head,
   children,
 }: {
   isLoading: boolean;
@@ -242,6 +250,8 @@ export function ListStates({
   errorTitle: string;
   empty: React.ReactNode;
   skeleton?: React.ReactNode;
+  /** Column headings (A-20 P4): drawn with rows only, so an empty list is not a table with no table. */
+  head?: React.ReactNode;
   children: React.ReactNode;
 }) {
   // S7: when the read lands, a skeleton that was on screen fades first (tint),
@@ -287,5 +297,10 @@ export function ListStates({
   // `contents` keeps the wrapper out of the layout entirely: this sits inside
   // flex and grid parents everywhere, and a real box here would collapse the
   // gaps between rows.
-  return <ArriveList startSettled={arrived}>{children}</ArriveList>;
+  return (
+    <>
+      {head}
+      <ArriveList startSettled={arrived}>{children}</ArriveList>
+    </>
+  );
 }

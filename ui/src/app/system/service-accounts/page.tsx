@@ -41,16 +41,17 @@ export default function ServiceAccountsPage() {
       {accounts.data && <ReadFreshness state={readStateOfQuery(accounts)} subject="This list" />}
 
       <Card {...leaving.listProps}>
-        <CardColumns>
-          <span className="w-[220px] shrink-0">
-            Account <span aria-hidden>↑</span>
-          </span>
-          <span className="min-w-0 flex-1">Purpose</span>
-          <span className="w-[170px] shrink-0">Owner</span>
-          <span className="w-[110px] shrink-0 text-right">Roles</span>
-        </CardColumns>
-
         <ListStates
+          head={
+            <CardColumns>
+              <span className="w-[220px] shrink-0">
+                Account <span aria-hidden>↑</span>
+              </span>
+              <span className="min-w-0 flex-1">Purpose</span>
+              <span className="w-[170px] shrink-0">Owner</span>
+              <span className="w-[110px] shrink-0 text-right">Roles</span>
+            </CardColumns>
+          }
           isLoading={accounts.isLoading}
           error={accounts.error}
           isEmpty={rows.length === 0}
