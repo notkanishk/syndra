@@ -303,6 +303,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
           template={tpl}
           shape={shape}
           project={project}
+          heldBack={heldBack}
           onClose={() => setSheet(null)}
           onStart={async () => {
             setSheet(null);

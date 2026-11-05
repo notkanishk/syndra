@@ -131,7 +131,7 @@ export function ShapeCard({
               {projectName}&rsquo;s default
             </ArrowLink>
           </div>
-          <NewAppOffer shape={shape} draft={draft} setDraft={setDraft} templates={templates} project={projectName} onOpenTemplate={onOpenTemplate} />
+          <NewAppOffer shape={shape} draft={draft} setDraft={setDraft} templates={templates} project={projectName} heldBack={heldBack} onOpenTemplate={onOpenTemplate} />
         </>
       ) : (
         <ShapeForm
@@ -235,6 +235,7 @@ function NewAppOffer({
   setDraft,
   templates,
   project,
+  heldBack,
   onOpenTemplate,
 }: {
   shape: AppClaimShape;
@@ -242,6 +243,7 @@ function NewAppOffer({
   setDraft: (d: ShapeDraft | null) => void;
   templates: ClaimTemplate[];
   project: string;
+  heldBack?: string;
   onOpenTemplate: (id: string) => void;
 }) {
   const app = shape.application.name;
@@ -281,6 +283,7 @@ function NewAppOffer({
         draft={draft}
         setDraft={setDraft}
         project={project}
+        heldBack={heldBack}
         onOpenTemplate={onOpenTemplate}
         footer={(verb, note, start) => (
           <div className="row-divider flex flex-wrap items-center gap-x-3.5 gap-y-2.5 px-[22px] pb-5 pt-4">

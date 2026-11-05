@@ -20,7 +20,7 @@ import { Unfold } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatShortDate } from "@/lib/format";
 import { holdersLine } from "@/lib/holders";
-import { describeFailure, sentence, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { NOTHING_CHANGED, failureMessage, sentence, stateLine, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { usePendingPropagations } from "@/lib/queries/usePropagation";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import {
@@ -134,7 +134,7 @@ function WaitingRoles({
   landed: ReadonlySet<string>;
 }) {
   const stop = useSetRolesWait();
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ text: string; state: string } | null>(null);
   const [stopped, setStopped] = useState<string | null>(null);
   const pending = usePendingPropagations();
   const waitingChanges = (pending.data ?? []).filter(
@@ -247,7 +247,7 @@ function WaitingRoles({
                           await stop.mutateAsync({ ids: [id], waits: false });
                           setStopped(roleName(role?.display_name, m.role_key));
                         } catch (e) {
-                          setFailure(sentence(describeFailure(e)));
+                          setFailure({ text: sentence(failureMessage(e)), state: stateLine(e) });
                         }
                       }}
                     >
@@ -284,7 +284,7 @@ function WaitingRoles({
         <Unfold open={Boolean(failure)}>
           <div className="row-divider px-5 py-3">
             <Notice tone="danger" title="That role still waits.">
-              {failure} Nothing was changed.
+              {failure?.text} {failure?.state}
             </Notice>
           </div>
         </Unfold>
@@ -310,7 +310,7 @@ function AddRoles({
     () => new Set(initial && !marked.has(initial) ? [initial] : []),
   );
   const mark = useSetRolesWait();
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ text: string; state: string } | null>(null);
   // The sheet becomes its result and ends on Close; it never closes onto the list.
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const chosen = Array.from(selected);
@@ -354,8 +354,10 @@ function AddRoles({
       <Unfold open={Boolean(failure)}>
         <div className="mx-6 mt-3">
           <Notice tone="danger" title="Not all of them were marked.">
-            {failure} The roles still ticked weren&apos;t marked; press it again
-            for the rest.
+            {failure?.text}{" "}
+            {failure?.state === NOTHING_CHANGED
+              ? "The roles still ticked weren't marked; press it again for the rest."
+              : failure?.state}
           </Notice>
         </div>
       </Unfold>
@@ -390,7 +392,7 @@ function AddRoles({
                 });
                 onMarked(chosen);
               } catch (e) {
-                setFailure(sentence(describeFailure(e)));
+                setFailure({ text: sentence(failureMessage(e)), state: stateLine(e) });
               }
             }}
           >

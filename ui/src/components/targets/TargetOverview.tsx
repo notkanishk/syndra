@@ -609,7 +609,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
                             [b.subject_id]:
                               res.warning ||
                               res.detail ||
-                              `${name} did not confirm. Nothing was changed here.`,
+                              `${name} did not confirm. Some of this may have gone through. Check this list again before trying again.`,
                           }));
                         },
                       })

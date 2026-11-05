@@ -36,8 +36,10 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: Record<string, string>;
+  /** The request's method, so a failed write is told apart from a failed read. */
+  readonly method?: string;
 
-  constructor(status: number, body: ApiErrorBody | string) {
+  constructor(status: number, body: ApiErrorBody | string, method?: string) {
     // A bare string is a gateway's page or an upstream's text, never the product's words: at 5xx
     // it is not shown. The envelope's `message` is the only copy that reaches the screen.
     const parsed: ApiErrorBody =
@@ -47,6 +49,7 @@ export class ApiError extends Error {
     this.status = status;
     this.code = parsed.error ?? "UNKNOWN_ERROR";
     this.details = parsed.details;
+    this.method = method;
   }
 }
 
@@ -192,7 +195,7 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
     if (res.status === 409 && refusal?.error === "WOULD_CANCEL_QUEUED" && refusal.cancels?.length) {
       throw new WouldCancelQueued(refusal.cancels, method, path);
     }
-    throw new ApiError(res.status, parsed as ApiErrorBody | string);
+    throw new ApiError(res.status, parsed as ApiErrorBody | string, method);
   }
 
   return parsed as T;

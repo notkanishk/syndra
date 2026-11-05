@@ -12,7 +12,7 @@ import { Notice } from "@/components/ui/Notice";
 // The prose a failure wears lives in one place, shared with every surface that
 // reports a mutation. A read that fails and a write that fails were describing
 // the same 403 in two files until this import existed.
-import { NOTHING_CHANGED, failureMessage, nextStep, sentence } from "@/lib/outcome";
+import { NOTHING_CHANGED, failureMessage, mayHaveGoneThrough, nextStep, partialSentence, sentence } from "@/lib/outcome";
 import { TINT_MS, stillMotion } from "@/lib/motion";
 import { useUiView } from "@/lib/ui-view";
 
@@ -171,6 +171,7 @@ export function ErrorState({
   if (isNeverRead(error)) return <NeverRead />;
 
   const requestId = error instanceof ApiError ? error.details?.request_id : undefined;
+  const partialWhere = mayHaveGoneThrough(error);
 
   // The danger Notice (proposed/Notice.md), in the place of what failed to
   // load. Inside a card it keeps the card's inset rather than drawing its own
@@ -184,7 +185,7 @@ export function ErrorState({
         action={onRetry ? { label: "Try again", onClick: onRetry } : undefined}
         reference={typeof requestId === "string" ? requestId : undefined}
       >
-        {[sentence(failureMessage(error)), fine && sentence(fine), NOTHING_CHANGED, nextStep(typeof requestId === "string")]
+        {[sentence(failureMessage(error)), fine && sentence(fine), partialWhere ? partialSentence(partialWhere) : NOTHING_CHANGED, nextStep(typeof requestId === "string")]
           .filter(Boolean)
           .join(" ")}
         {typeof requestId === "string" && <span className="mt-1 block text-muted">Quote this if you ask for help.</span>}

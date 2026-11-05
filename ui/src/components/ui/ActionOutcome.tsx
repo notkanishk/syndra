@@ -155,7 +155,7 @@ export function ActionOutcome({
       </div>
       <p className="text-[15px] leading-[1.55] text-ink">
         {sentence(outcome.message)}
-        {statesNothingChanged(outcome.kind) ? ` ${NOTHING_CHANGED}` : ""}
+        {statesNothingChanged(outcome.kind) && !outcome.partial ? ` ${NOTHING_CHANGED}` : ""}
       </p>
       {outcome.detail && (
         <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
