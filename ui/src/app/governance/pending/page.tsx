@@ -127,7 +127,7 @@ export default function PendingChangesPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Pending changes"
-        lede={`Changes that have not reached Zitadel or a connected system yet. Sending delivers all of them, in order, now. ${auto ? "Revocations, and changes Zitadel didn't take when they were sent, also go again on their own; a role that waits for you never does." : "This Syndra server sends nothing again on its own, so each waits for Send."}`}
+        lede={`Changes that have not reached Zitadel or a connected system yet. Sending delivers all of them, in order, now.${auto === null ? "" : auto ? " Revocations, and changes Zitadel didn't take when they were sent, also go again on their own; a role that waits for you never does." : " This Syndra server sends nothing again on its own, so each waits for Send."}`}
         actions={
           // With nothing left to send it fades out, then goes.
           cleared && folded ? null : (

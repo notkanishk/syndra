@@ -37,15 +37,29 @@ export function loudestTone(tones: (BadgeTone | undefined)[]): BadgeTone | null 
  * The retry pill a `retries` row carries (lib/nav.ts): a give-up nobody has
  * marked seen outranks a retry under way, because it needs a person and a
  * retry does not. Null when neither, so the pill takes no seat.
+ *
+ * Its words are Home's and Pending changes' (final verification N2): "Syndra
+ * stopped sending", which covers a refusal as well as running out of tries,
+ * and a retry is "again on its own" only when the server says its background
+ * drain is on (`auto_retry`, from the same indicators read). `again` says
+ * whether the pill may wear the "↻" glyph.
  */
 export function retryBadge(
-  counts: { retrying?: number; gave_up?: number } | undefined,
-): { count: number; tone: BadgeTone; label: string } | null {
+  counts: { retrying?: number; gave_up?: number; auto_retry?: boolean } | undefined,
+): { count: number; tone: BadgeTone; label: string; again: boolean } | null {
   const gaveUp = Number(counts?.gave_up ?? 0);
   const retrying = Number(counts?.retrying ?? 0);
-  if (gaveUp > 0) return { count: gaveUp, tone: "danger", label: `Syndra gave up on ${gaveUp} ${gaveUp === 1 ? "change" : "changes"}` };
+  const changes = (n: number) => `${n} ${n === 1 ? "change" : "changes"}`;
+  if (gaveUp > 0) return { count: gaveUp, tone: "danger", label: `Syndra stopped sending ${changes(gaveUp)}`, again: false };
   if (retrying > 0) {
-    return { count: retrying, tone: "warn", label: `Syndra is sending ${retrying} ${retrying === 1 ? "change" : "changes"} again on its own` };
+    const auto = counts?.auto_retry;
+    const label =
+      auto === true
+        ? `Syndra is sending ${changes(retrying)} again on its own`
+        : auto === false
+          ? `${changes(retrying)} not taken when sent, waiting for you to press Send`
+          : `${changes(retrying)} not taken when sent`;
+    return { count: retrying, tone: "warn", label: label.charAt(0).toUpperCase() + label.slice(1), again: auto === true };
   }
   return null;
 }

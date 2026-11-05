@@ -19,6 +19,8 @@ let data: AccessRequest[] = [];
 const decide = vi.fn();
 const applyBulk = vi.fn();
 
+// The rule preview answered, nothing follows: Approve is not held (N5 has its own test).
+vi.mock("@/lib/queries/useRulePreview", () => ({ useRulePreview: () => ({ data: [], isLoading: false, isError: false }) }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
   useRouter: () => ({ replace: () => {} }),

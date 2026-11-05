@@ -528,7 +528,9 @@ function HealthLine({
               sends on its own (revocations, and changes it is already sending
               again); a change that waits for you never goes by itself. */}
           {detail ||
-            (auto
+            (auto === null
+              ? "Syndra is showing what it last knew. Nothing is lost: every change stays, in order, in Pending changes until it reaches Zitadel."
+              : auto
               ? "Syndra is showing what it last knew. Nothing is lost: revocations, changes sent straight away, and changes Syndra is sending again go on their own when Zitadel answers. Changes waiting for you stay, in order, until you press Send."
               : "Syndra is showing what it last knew. Nothing is lost: every change stays, in order, until you press Send. This Syndra server sends nothing again on its own.")}
         </Notice>

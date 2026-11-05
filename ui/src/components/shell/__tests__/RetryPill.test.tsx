@@ -29,8 +29,36 @@ describe("the retry pill", () => {
   });
 
   it("says it to a screen reader, not by colour alone", () => {
-    render(<RetryPill counts={{ retrying: 3 }} />);
+    render(<RetryPill counts={{ retrying: 3, auto_retry: true }} />);
     expect(screen.getByText(/Syndra is sending 3 changes again on its own/)).toBeInTheDocument();
+  });
+
+  // Final verification N2: the pill says what Home and Pending changes say.
+  it("says Syndra stopped sending for a give-up, as Home does, refusals included", () => {
+    expect(retryBadge({ gave_up: 2 })?.label).toBe("Syndra stopped sending 2 changes");
+    expect(retryBadge({ gave_up: 1 })?.label).toBe("Syndra stopped sending 1 change");
+    expect(retryBadge({ gave_up: 1 })?.label).not.toMatch(/gave up/);
+  });
+
+  it("follows the drain switch, and promises nothing before it is read", () => {
+    const on = retryBadge({ retrying: 2, auto_retry: true })!;
+    const off = retryBadge({ retrying: 2, auto_retry: false })!;
+    const unknown = retryBadge({ retrying: 2 })!;
+    expect(on.label).toBe("Syndra is sending 2 changes again on its own");
+    expect(on.again).toBe(true);
+    expect(off.label).toBe("2 changes not taken when sent, waiting for you to press Send");
+    expect(off.again).toBe(false);
+    expect(unknown.label).toBe("2 changes not taken when sent");
+    expect(unknown.label).not.toMatch(/on its own/);
+    expect(unknown.again).toBe(false);
+  });
+
+  it("wears the ↻ glyph only while Syndra really sends again on its own", () => {
+    const { container, rerender } = render(<RetryPill counts={{ retrying: 2, auto_retry: true }} />);
+    expect(container.textContent).toContain("↻");
+    rerender(<RetryPill counts={{ retrying: 2, auto_retry: false }} />);
+    expect(container.textContent).not.toContain("↻");
+    expect(screen.getByText(/waiting for you to press Send/)).toBeInTheDocument();
   });
 
   it("lights a collapsed Changes group on a phone", () => {

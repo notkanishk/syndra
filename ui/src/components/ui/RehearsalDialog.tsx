@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { ApiError } from "@/lib/api-client";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import {
+  type AutoRetry,
+  DRAIN_UNKNOWN_NEXT,
   FORECAST,
   forecastFor,
   outcomeFromError,
@@ -15,7 +17,7 @@ import {
 } from "@/lib/outcome";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { RETRYING, retryLine, retryNextStep, type RetryState } from "@/lib/retry";
-import { waitIsChosen } from "@/lib/wait-reason";
+import { isRefused, waitIsChosen } from "@/lib/wait-reason";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -55,9 +57,10 @@ export function resultMessage(
   plan: BulkPlan,
   noun: [string, string],
   system: string = "Zitadel",
-  auto = true,
+  auto: AutoRetry = true,
 ): string {
   const { succeeded, failed, queued } = plan.summary;
+  const tail = [ruleWaitingSentence(plan), failedSentence(plan, noun, system)].filter(Boolean).join(" ");
   const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]}`;
   // A plan that reached NOBODY, applied. "Applied to 0 people." is true and
   // reads as a failure — it is the sentence an operator gets after publishing a
@@ -75,8 +78,37 @@ export function resultMessage(
   }
   const parts = [`Applied to ${of(succeeded)}.`];
   if (queued > 0) parts.push(resultSentence(plan, noun, system, auto));
-  if (failed > 0) parts.push(`${of(failed)} failed.`);
+  if (tail) parts.push(tail);
   return parts.join(" ");
+}
+
+/** Rows Zitadel refused outright (N1): failed, with the cause and step in each row's own detail. */
+export function refusedRows(plan: BulkPlan): number {
+  return plan.outcomes.filter((o) => o.effect === "failed" && isRefused(o.wait_reason)).length;
+}
+
+/** The failed rows, with the ones Zitadel refused said as refusals (N1). */
+function failedSentence(plan: BulkPlan, noun: [string, string], system: string): string {
+  const refused = refusedRows(plan);
+  const other = plan.summary.failed - refused;
+  const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]}`;
+  const parts: string[] = [];
+  if (refused > 0) parts.push(`${system} refused this for ${of(refused)}; each says why below.`);
+  if (other > 0) parts.push(`${of(other)} failed.`);
+  return parts.join(" ");
+}
+
+/** Rows automatic rules queued with the act that wait for Send, counted apart from the act (N4). */
+export function ruleWaiting(plan: BulkPlan): number {
+  return plan.outcomes.reduce((n, o) => n + (o.rule_waiting ?? 0), 0);
+}
+
+function ruleWaitingSentence(plan: BulkPlan): string {
+  const n = ruleWaiting(plan);
+  if (n === 0) return "";
+  return n === 1
+    ? "1 more change from automatic rules waits in Pending changes for you to send."
+    : `${n} more changes from automatic rules wait in Pending changes for you to send.`;
 }
 
 /**
@@ -139,15 +171,18 @@ export function resultSentence(
   plan: BulkPlan,
   noun: [string, string],
   system: string = "Zitadel",
-  auto = true,
+  auto: AutoRetry = true,
 ): string {
   const { queued } = plan.summary;
-  if (queued === 0) return "It has taken effect.";
-  const { waiting, going } = splitQueued(plan, auto);
+  const rules = ruleWaitingSentence(plan);
+  if (queued === 0) return rules ? `It has taken effect. ${rules}` : "It has taken effect.";
+  const { waiting, going, unsure } = splitQueued(plan, auto);
   const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]} ${n === 1 ? "is" : "are"}`;
   const parts: string[] = [];
   if (waiting > 0) parts.push(`${of(waiting)} waiting for you to send to ${system}.`);
   if (going > 0) parts.push(`${of(going)} not in ${system} yet; Syndra sends ${going === 1 ? "it" : "them"} on its own.`);
+  if (unsure > 0) parts.push(`${of(unsure)} not in ${system} yet.`);
+  if (rules) parts.push(rules);
   return parts.join(" ");
 }
 
@@ -158,25 +193,40 @@ export function resultSentence(
  * retry is never sent to Pending changes; rows the plan doesn't carry (an
  * older server) fall back to the op's rule. `retry` is the first next try.
  * With the background drain off (`auto` false) nothing goes by itself, so
- * every queued row waits for Send.
+ * every queued row waits for Send. Before that is known (`auto` null, N3), a
+ * row that would go on its own with the drain on is `unsure`: no promise.
  */
-export function splitQueued(plan: BulkPlan, auto = true): { waiting: number; going: number; retry?: RetryState } {
+export function splitQueued(
+  plan: BulkPlan,
+  auto: AutoRetry = true,
+): { waiting: number; going: number; unsure: number; retry?: RetryState } {
   const rows = plan.outcomes.filter((o) => o.effect === "queued");
-  const revoking = auto && REVOKING_OPS.has(plan.op);
+  const revokingOp = REVOKING_OPS.has(plan.op);
   let waiting = 0;
   let going = 0;
+  let unsure = 0;
   let retry: RetryState | undefined;
   for (const o of rows) {
-    const goes = o.wait_reason === RETRYING ? auto && o.retry?.state !== "waiting" : revoking && !waitIsChosen(o.wait_reason);
-    if (goes) {
+    // The server's own retry state says it, whatever the indicators say.
+    const goes: boolean | null =
+      o.wait_reason === RETRYING
+        ? o.retry
+          ? o.retry.state === "retrying"
+          : auto
+        : waitIsChosen(o.wait_reason) || !revokingOp
+          ? false
+          : auto;
+    if (goes === null) unsure++;
+    else if (goes) {
       going++;
       retry ??= o.retry;
     } else waiting++;
   }
   const rest = Math.max(0, plan.summary.queued - rows.length);
-  if (revoking) going += rest;
-  else waiting += rest;
-  return { waiting, going, retry };
+  if (!revokingOp || auto === false) waiting += rest;
+  else if (auto === null) unsure += rest;
+  else going += rest;
+  return { waiting, going, unsure, retry };
 }
 
 /**
@@ -214,10 +264,13 @@ const REVOKING_OPS: ReadonlySet<BulkPlan["op"]> = new Set<BulkPlan["op"]>([
  * never have to know which rule applied — so the copy says what will happen
  * rather than naming the rule that decided it.
  */
-export function queuedNote(plan: BulkPlan, system: string = "Zitadel", auto = true): string | undefined {
+export function queuedNote(plan: BulkPlan, system: string = "Zitadel", auto: AutoRetry = true): string | undefined {
   if (plan.summary.queued === 0) return undefined;
-  const { waiting, going, retry } = splitQueued(plan, auto);
+  const { waiting, going, unsure, retry } = splitQueued(plan, auto);
   const parts: string[] = [];
+  if (unsure > 0) {
+    parts.push(`Recorded in Syndra, not in ${system} yet. Pending changes lists ${unsure === 1 ? "it" : "them"} until ${unsure === 1 ? "it is" : "they are"} sent.`);
+  }
   if (going > 0) {
     parts.push(
       retry
@@ -237,17 +290,23 @@ export function queuedNote(plan: BulkPlan, system: string = "Zitadel", auto = tr
  * The step a queued result leaves: Send when anything waits for it (drawn as
  * the "Waiting for you to send" link); otherwise nothing, and when.
  */
-export function queuedStep(plan: BulkPlan, auto = true): Pick<Outcome, "sendsItself" | "next"> {
+export function queuedStep(plan: BulkPlan, auto: AutoRetry = true): Pick<Outcome, "sendsItself" | "next"> {
+  // What automatic rules queued waits for Send (N4): the link says it.
+  if (ruleWaiting(plan) > 0) return {};
   if (plan.summary.queued === 0) return {};
-  const { waiting, going, retry } = splitQueued(plan, auto);
+  const { waiting, going, unsure, retry } = splitQueued(plan, auto);
   if (waiting > 0) return {};
+  if (unsure > 0) return { sendsItself: true, next: DRAIN_UNKNOWN_NEXT };
   return { sendsItself: true, next: retry ? retryNextStep(retry, { it: going === 1 ? "it" : "them" }) : SENDS_ITSELF_NEXT };
 }
+
+/** The step a result with rows Zitadel refused leaves (N1): each row names its own. */
+export const REFUSED_ROWS_NEXT = "Follow the step on each row Zitadel refused, below.";
 
 /** An error only when something actually failed; queued rows are a warning. */
 export function resultTone(plan: BulkPlan): "success" | "warning" | "error" {
   if (plan.summary.failed > 0) return "error";
-  if (plan.summary.queued > 0) return "warning";
+  if (plan.summary.queued > 0 || ruleWaiting(plan) > 0) return "warning";
   return "success";
 }
 
@@ -261,7 +320,7 @@ export function resultTone(plan: BulkPlan): "success" | "warning" | "error" {
  */
 export function resultKind(plan: BulkPlan): OutcomeKind {
   if (plan.summary.failed > 0) return "failed";
-  if (plan.summary.queued > 0) return "queued";
+  if (plan.summary.queued > 0 || ruleWaiting(plan) > 0) return "queued";
   return "applied";
 }
 
@@ -555,11 +614,15 @@ export function RehearsalDialog({
       // removed itself after four seconds.
       const word = resultWord(result, noun);
       const kind = resultKind(result);
+      const refused = refusedRows(result) > 0;
       setOutcome({
         kind,
         message: word ? resultSentence(result, noun, system, auto) : resultMessage(result, noun, system, auto),
         detail: queuedNote(result, system, auto),
         ...(kind === "queued" ? queuedStep(result, auto) : {}),
+        // N1: a refusal was recorded in Syndra, so "Nothing was changed." is
+        // false, and its step is the one on each refused row.
+        ...(kind === "failed" && refused ? { recorded: true, next: REFUSED_ROWS_NEXT } : {}),
         word,
       });
     } catch (error) {

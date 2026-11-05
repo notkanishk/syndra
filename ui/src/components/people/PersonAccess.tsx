@@ -815,13 +815,13 @@ function ExtendSeat({
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
-  const done = outcome !== null && !statesNothingChanged(outcome.kind);
+  const done = outcome !== null && (!statesNothingChanged(outcome.kind) || Boolean(outcome.recorded));
   return (
     <Crossfade id={done ? "outcome" : extend.isPending ? "forecast" : "open"}>
       {extend.isPending && !done ? (
         <ActionForecast word={roleWaits(projectId, roleKey) ? FORECAST.queued : `${FORECAST.extend} by ${EXTEND_DAYS} days`} />
       ) : outcome && done ? (
-        <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} person={userId} />
+        <ActionOutcome placement="seat" word={outcome.recorded ? "Refused by Zitadel" : outcome.message} outcome={outcome} person={userId} />
       ) : (
     <>
       <Button

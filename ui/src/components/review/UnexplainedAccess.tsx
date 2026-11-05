@@ -76,7 +76,7 @@ import {
 } from "@/lib/drift-filters";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useRulePreview } from "@/lib/queries/useRulePreview";
-import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
+import { isRefused, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { targetLabel } from "@/lib/nav";
 import {
@@ -84,12 +84,13 @@ import {
   forecastFor,
   outcomeFromError,
   revokeQueued,
-  REVOKE_SENDS_ITSELF_WORD,
+  sendsItselfWord,
   SEND_IT,
   succeeded,
   type ActionOutcome as Outcome,
+  type AutoRetry,
 } from "@/lib/outcome";
-import { RETRYING, retryingOutcome, type RetryState } from "@/lib/retry";
+import { RETRYING, refusedOutcome, retryingOutcome, type RetryState } from "@/lib/retry";
 import dynamic from "next/dynamic";
 import { sortByName } from "@/lib/sort";
 
@@ -1223,8 +1224,10 @@ function ResolutionDialog({
         <ActionOutcome
           outcome={outcome}
           word={
-            outcome.sendsItself
-              ? REVOKE_SENDS_ITSELF_WORD
+            outcome.recorded
+              ? "Refused by Zitadel"
+              : outcome.sendsItself
+              ? sendsItselfWord(outcome)
               : resolution === "revoke" && outcome.kind === "queued"
                 ? REVOKE_WAITS_WORD
                 : succeeded(outcome)
@@ -1298,8 +1301,13 @@ export function revokeOutcome(
   waitReason: string | undefined,
   role: string,
   answer?: Pick<DriftAnswer, "propagation" | "retry">,
-  auto = true,
+  auto: AutoRetry = true,
 ): Outcome {
+  // Final verification N1: Zitadel refused the revoke outright, so the role
+  // is still there and nothing sends it again.
+  if (isRefused(waitReason) || answer?.propagation === "failed") {
+    return refusedOutcome("Revocation recorded", waitReason, { revocation: true });
+  }
   if (waitIsChosen(waitReason)) {
     return { kind: "queued", message: "Waiting for you to send", detail: `${waitReasonLine(waitReason, role)}.` };
   }

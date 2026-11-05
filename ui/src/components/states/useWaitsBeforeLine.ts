@@ -2,6 +2,7 @@
 
 import { useDegraded } from "@/components/states/DegradedBanner";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
+import type { AutoRetry } from "@/lib/outcome";
 
 /**
  * The line a dialog says BEFORE its act while Zitadel isn't answering (A-07 §9):
@@ -24,7 +25,11 @@ const WHAT: Record<WaitsOp, string> = {
   change: "the change",
 };
 
-export function waitsBeforeLine(op: WaitsOp, auto = true): string {
+export function waitsBeforeLine(op: WaitsOp, auto: AutoRetry = true): string {
+  // Not known yet whether anything goes on its own (N3): no promise either way.
+  if (auto === null) {
+    return `Zitadel isn't answering. Syndra records ${WHAT[op]} now, and it stays in Pending changes until it reaches Zitadel.`;
+  }
   // With the background drain off nothing is sent on its own once Zitadel answers.
   if (!auto) {
     return `Zitadel isn't answering. Syndra records ${WHAT[op]} now, and it waits in Pending changes until someone presses Send once Zitadel answers.`;

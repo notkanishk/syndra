@@ -66,7 +66,7 @@ vi.mock("@/lib/ui-view", () => ({
   useUiView: () => ({ view: "basic", setView: () => {} }),
 }));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
-vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false }));
+vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false, ApproveButton: ({ onClick }: { onClick: () => void }) => <button type="button" onClick={onClick}>Approve</button> }));
 
 const session = { id: "op", name: "Kanishk", email: "k@example.org" } as unknown as SessionUser;
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });

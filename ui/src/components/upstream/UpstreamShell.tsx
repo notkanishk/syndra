@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/Choice";
 import { ModalFooter } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatList } from "@/lib/format";
-import { OUTCOME_LABEL, REVOKE_SENDS_ITSELF_WORD, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { OUTCOME_LABEL, sendsItselfWord, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { sortNames } from "@/lib/sort";
 
 /**
@@ -77,12 +77,12 @@ export function WriteResult({
   className?: string;
 }) {
   const shown =
-    outcome.kind === "applied"
+    outcome.kind === "applied" || outcome.recorded
       ? word
       : outcome.kind === "no_change"
         ? neutral
         : outcome.sendsItself
-          ? REVOKE_SENDS_ITSELF_WORD
+          ? sendsItselfWord(outcome)
           : OUTCOME_LABEL[outcome.kind];
   return <ActionOutcome outcome={outcome} word={shown} className={className} />;
 }

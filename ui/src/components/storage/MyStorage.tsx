@@ -261,7 +261,11 @@ function TargetCard({ view }: { view: MyTargetView }) {
   );
 }
 
-const PAUSE_ENDS = "Syndra carries on with account changes by itself when the pause ends.";
+// Final verification: the pause ends when an operator sets the add-on back to
+// active (or a restart does), never by itself, and nothing resumes on its end
+// alone: a revocation goes on the background drain, anything else on an
+// operator's Send (handlers/my_storage.go Lifecycle). So no "by itself".
+const PAUSE_ENDS = "Makerspace staff end the pause; account changes held back wait until then.";
 const PERSON = "Need it today? Ask makerspace staff: they can see this pause and how long it should last.";
 
 function copyFor(state: State, label: string, view: MyTargetView): [string, string, React.ReactNode] {
@@ -352,8 +356,8 @@ function pausedNotice(view: MyTargetView, label: string): { title: string; body:
   if (!view.account) return null;
   if (view.lifecycle === "draining") {
     return {
-      title: "Account changes are paused for a few minutes",
-      body: `${label} is online and your access hasn't changed, so you can connect and use your files now. Syndra is only holding off on account changes while the last few finish.`,
+      title: "Account changes are paused while the last few finish",
+      body: `${label} is online and your access hasn't changed, so you can connect and use your files now. Syndra is holding off on new account changes while the last few finish, so makerspace staff can work on ${label}.`,
       person: false,
     };
   }

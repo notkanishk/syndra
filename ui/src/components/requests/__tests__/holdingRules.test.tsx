@@ -2,15 +2,15 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HoldingNote, keepLength } from "@/components/requests/Holding";
+import { ApproveButton, HoldingNote, keepLength } from "@/components/requests/Holding";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 
-const preview = vi.hoisted(() => ({ rows: [] as string[], asked: [] as Array<{ enabled: boolean; keys: string[] }> }));
+const preview = vi.hoisted(() => ({ rows: [] as string[], asked: [] as Array<{ enabled: boolean; keys: string[] }>, loading: false, error: false }));
 
 vi.mock("@/lib/queries/useRulePreview", () => ({
   useRulePreview: (_user: string, _project: string, keys: string[], enabled: boolean) => {
     preview.asked.push({ enabled, keys });
-    return { data: enabled ? preview.rows.map((sentence) => ({ sentence })) : undefined, isLoading: false, isError: false };
+    return { data: enabled ? preview.rows.map((sentence) => ({ sentence })) : undefined, isLoading: enabled && preview.loading, isError: enabled && preview.error };
   },
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
@@ -34,6 +34,8 @@ function ask(overrides: Partial<AccessRequest> = {}): AccessRequest {
 beforeEach(() => {
   preview.rows = [];
   preview.asked = [];
+  preview.loading = false;
+  preview.error = false;
 });
 
 // Audit C2: approving gives the role, and the automatic rules follow it, so
@@ -53,6 +55,47 @@ describe("approving, with automatic rules", () => {
     expect(container.textContent).toBe("");
     render(<HoldingNote request={ask({ holding: { kind: "for_good" } })} />);
     expect(preview.asked.at(-1)?.enabled).toBe(false);
+  });
+});
+
+// Final verification N5: what the rules also give is part of the consent, so
+// Approve waits for the preview and is held, with why, when it can't be read.
+describe("approving, while the rule preview is not read", () => {
+  it("holds Approve while the preview loads", () => {
+    preview.loading = true;
+    render(<ApproveButton request={ask()} onClick={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(screen.getByText("Checking what automatic rules also give.")).toBeInTheDocument();
+  });
+
+  it("holds Approve when the preview fails, and says why, beside the row's own line", () => {
+    preview.error = true;
+    const click = vi.fn();
+    render(
+      <>
+        <HoldingNote request={ask()} />
+        <ApproveButton request={ask()} onClick={click} />
+      </>,
+    );
+    const button = screen.getByRole("button", { name: "Approve" });
+    expect(button).toBeDisabled();
+    button.click();
+    expect(click).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/Syndra couldn.t read the automatic rules/).length).toBe(2);
+    expect(screen.getByText(/Reload the page to try again/)).toBeInTheDocument();
+  });
+
+  it("lets Approve go once the preview is read", () => {
+    const click = vi.fn();
+    render(<ApproveButton request={ask()} onClick={click} />);
+    screen.getByRole("button", { name: "Approve" }).click();
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it("still holds a role they already have, without asking the rules", () => {
+    preview.error = true;
+    render(<ApproveButton request={ask({ holding: { kind: "for_good" } })} onClick={vi.fn()} />);
+    expect(screen.getByText("They already have this.")).toBeInTheDocument();
   });
 });
 

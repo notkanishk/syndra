@@ -170,7 +170,9 @@ export function RevokeDialog({
       <ModalFooter
         cancel={{ onClick: onClose, disabled: revoke.isPending }}
         note={
-          auto
+          auto === null
+            ? "It is listed in Pending changes until it is sent."
+            : auto
             ? "Revocations send on their own, within a minute, not from Pending changes."
             : "This Syndra server does not send revocations on its own: it waits in Pending changes until someone presses Send."
         }

@@ -22,12 +22,18 @@ type Delivery struct {
 	retrying bool
 }
 
-// WaitReason says why the action's change isn't in Zitadel yet: the role
-// waits (or, before the switch over, its mode did), the send halted, or
-// Zitadel didn't take it and Syndra sends it again on its own
-// (halted:retrying; Drain.Retry says when, and which try). "" only when
-// everything went.
+// WaitReason says why the action's change isn't in Zitadel yet: Zitadel
+// refused it outright (refused:<cause>, said first, because it is terminal
+// and nothing sends it again: final verification N1), the role waits (or,
+// before the switch over, its mode did), the send halted, or Zitadel didn't
+// take it and Syndra sends it again on its own (halted:retrying; Drain.Retry
+// says when, and which try). "" only when everything went.
 func (d Delivery) WaitReason() string {
+	for _, id := range d.Sent {
+		if r := d.Reason[id]; db.IsRefused(r) {
+			return r
+		}
+	}
 	for _, id := range d.Waiting {
 		return d.Reason[id]
 	}
@@ -43,7 +49,7 @@ func (d Delivery) WaitReason() string {
 	return ""
 }
 
-// ReasonFor is WaitReason for one row: its own wait, or why a send that left
+// ReasonFor is WaitReason for one row: its own wait or refusal, or why a send that left
 // rows behind didn't take it. A write carries its own row and the rules' rows
 // in one delivery, and the first waiting row is not always its own (re-audit
 // R12): a rule-given role that waits must not be blamed on the act. A sent row
@@ -172,6 +178,13 @@ func Deliver(ctx context.Context, ids []string, legacyWait bool) Delivery {
 			d.Reason[id] = db.WaitReasonHalted(db.HaltRetrying)
 		}
 		d.retrying = len(scheduled) > 0
+	}
+	// A row Zitadel refused outright is terminal: it says so with the cause,
+	// set last, so no halt or retry reason above stands over it.
+	for _, id := range d.Sent {
+		if cause, ok := d.Drain.Refused[id]; ok {
+			d.Reason[id] = db.WaitReasonRefused(cause)
+		}
 	}
 	if d.Drain.Requeued > 0 || d.retrying {
 		d.Drain.Retry = nextRetry(ctx, d.Sent)

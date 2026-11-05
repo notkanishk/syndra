@@ -585,7 +585,7 @@ function ExpiringRow({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // The result takes the seat the buttons held, until the next read. A refusal does not: the
   // buttons stay beside it, so the attempt can be made again.
-  const reported = outcome !== null && !statesNothingChanged(outcome.kind);
+  const reported = outcome !== null && (!statesNothingChanged(outcome.kind) || Boolean(outcome.recorded));
 
   return (
     <div
@@ -656,7 +656,7 @@ function ExpiringRow({
             word={roleWaits(grant.project_id, grant.role_key) ? FORECAST.queued : `${FORECAST.extend} by ${EXTEND_DAYS} days`}
           />
         ) : reported ? (
-          <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />
+          <ActionOutcome placement="seat" word={outcome.recorded ? "Refused by Zitadel" : outcome.message} outcome={outcome} />
         ) : (
           <div className="flex w-full flex-wrap items-center gap-2 tablet:w-auto tablet:justify-end">
             {/* Extend stays on an acknowledged row. Changing your mind toward KEEPING somebody's

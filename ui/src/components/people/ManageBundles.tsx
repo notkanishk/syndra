@@ -10,7 +10,9 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { DRAIN_UNKNOWN_NEXT, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { refusedOutcome } from "@/lib/retry";
+import { isRefused } from "@/lib/wait-reason";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { useBundleRolesByBundle, useBundles, useRemoveBundle } from "@/lib/queries/useBundles";
 import { useInsightsWhatIf } from "@/lib/queries/useInsights";
@@ -120,6 +122,8 @@ function ManageBundlesOpen({
       // confirm an empty screen.
       let waiting = 0;
       let revoking = 0;
+      let sent = 0;
+      let refused: { reason?: string; removing: boolean } | undefined;
       for (const id of changes) {
         const removing = assignedIds.has(id);
         setActing(removing ? "remove" : "assign");
@@ -134,18 +138,43 @@ function ManageBundlesOpen({
           next.delete(id);
           return next;
         });
-        const enqueued = result?.cascade?.enqueued ?? 0;
+        const cascade = result?.cascade;
+        const enqueued = cascade?.enqueued ?? 0;
+        if (isRefused(cascade?.wait_reason)) {
+          // Final verification N1: terminal, never "waits" or "went".
+          refused ??= { reason: cascade?.wait_reason, removing };
+          continue;
+        }
+        // The server's delivery decides (services.Deliver): no wait reason
+        // means every row went to Zitadel.
+        if (!cascade?.wait_reason) {
+          sent += enqueued;
+          continue;
+        }
         waiting += enqueued;
-        // With the background drain off a revocation waits for Send like the rest.
-        if (removing && auto) revoking += enqueued;
+        // With the background drain off a revocation waits for Send like the
+        // rest, and a role that waits holds one too.
+        if (removing && auto === true && cascade.wait_reason !== "role_waits") revoking += enqueued;
       }
       const recorded =
         changes.length === 1 ? "One bundle change recorded" : `${changes.length} bundle changes recorded`;
+      if (refused) {
+        setOutcome(refusedOutcome(recorded, refused.reason, { revocation: refused.removing }));
+        setStaged(new Set());
+        return;
+      }
+      if (waiting === 0 && sent > 0) {
+        setOutcome({ kind: "applied", message: recorded, detail: `Sent to Zitadel: ${sent === 1 ? "one change" : `${sent} changes`}.` });
+        setStaged(new Set());
+        return;
+      }
       setOutcome({
         // Amber "waiting" only where something waits. A change that queued
         // nothing is done, and painting it as pending sends an operator to an
         // empty Pending changes to look for it.
         kind: waiting > 0 ? "queued" : "applied",
+        // Unknown drain (N3): no promise, and no Send link for a revocation that may go on its own.
+        ...(waiting > 0 && auto === null ? { sendsItself: true, next: DRAIN_UNKNOWN_NEXT } : {}),
         message: recorded,
         // Revocations do not wait for a person — they send on their own within a
         // minute — so telling the operator to go and send them would be
@@ -153,14 +182,16 @@ function ManageBundlesOpen({
         // Pending changes emptied by itself.
         detail:
           waiting > 0
-            ? `Nothing has reached Zitadel or a connected system yet. ${
+            ? `${sent > 0 ? `${sent === 1 ? "One change" : `${sent} changes`} went to Zitadel. ` : ""}${
                 waiting === 1 ? "One change waits" : `${waiting} changes wait`
               } under Pending changes${
-                revoking === waiting
-                  ? ". Revocations send on their own within a minute, or send them now."
-                  : revoking > 0
-                    ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a minute, the rest until you send them.`
-                    : " until you send them."
+                auto === null
+                  ? ", listed there until each reaches Zitadel."
+                  : revoking === waiting
+                    ? ". Revocations send on their own within a minute, or send them now."
+                    : revoking > 0
+                      ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a minute, the rest until you send them.`
+                      : " until you send them."
               }`
             : "Nothing is waiting for you to send: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",
       });
@@ -274,7 +305,7 @@ function ManageBundlesOpen({
         </div>
       )}
 
-      {outcome && <ActionOutcome word="Recorded" outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={outcome.recorded ? "Refused by Zitadel" : "Recorded"} outcome={outcome} className="mx-6 mb-1" />}
       {outcome && step.after}
 
       {/* The footer follows the state of the work, because the work has three

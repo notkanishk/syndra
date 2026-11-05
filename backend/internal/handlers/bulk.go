@@ -193,6 +193,14 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 		if queued == "" {
 			queued, retry = projectUpstream(r.Context(), outboxIDs)
 		}
+		if db.IsRefused(queued) {
+			// Zitadel refused it outright: terminal, never "queued" (final
+			// verification N1). Recorded in Syndra, so the row says that too.
+			out.Effect = services.EffectFailed
+			out.WaitReason = queued
+			out.Detail = refusedDetail(queued, input.Op == services.BulkOpRemoveRole || input.Op == services.BulkOpRemoveBundle)
+			continue
+		}
 		if queued != "" {
 			out.Effect = services.EffectQueued
 			out.WaitReason, out.Retry = queued, retry
@@ -203,6 +211,34 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 	}
 
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+}
+
+// refusalWords is a refusal's plain cause, said after "Zitadel refused this:".
+// The same words as the screens' (ui/src/lib/wait-reason.ts refusalCause).
+var refusalWords = map[string]string{
+	db.RefusalNotAllowed: "Syndra's service account isn't allowed to make this change",
+	db.RefusalNotFound:   "it no longer has this person, project or role",
+	db.RefusalInvalid:    "it said the change isn't valid",
+	db.RefusalOther:      "it gave a reason Syndra can't put in plain words",
+}
+
+// refusedDetail is a bulk row Zitadel refused: what it said, and the one true
+// step (ui/src/lib/retry.ts refusedNext). Terminal, so Send won't move it;
+// Pending changes lists it under "Syndra stopped sending".
+func refusedDetail(reason string, revocation bool) string {
+	cause := strings.TrimPrefix(reason, db.WaitReasonRefused(""))
+	words := refusalWords[cause]
+	if words == "" {
+		words = refusalWords[db.RefusalOther]
+	}
+	step := "Open their page to see what they hold now, then give it again once the reason is fixed."
+	if revocation {
+		step = "They may still hold it in Zitadel. It shows in Drift after Syndra's next check; revoke it there once the reason is fixed."
+	}
+	if cause == db.RefusalNotAllowed {
+		step = "Ask whoever runs Zitadel to let Syndra's service account change grants. " + step
+	}
+	return "Recorded in Syndra. Zitadel refused this: " + words + ". " + step
 }
 
 // projectUpstream drains the rows one person's operation enqueued and returns
@@ -339,6 +375,8 @@ func cascadeQueuedReason(res services.CascadeResult) (string, *extcall.RetryStat
 	switch {
 	case res.Enqueued == 0:
 		return "", nil // nothing to propagate; the closure was already correct
+	case db.IsRefused(res.WaitReason):
+		return res.WaitReason, nil // terminal, and graver than any wait (N1)
 	case res.Waiting > 0:
 		return db.WaitReasonRoleWaits, nil
 	case res.WaitReason != "":

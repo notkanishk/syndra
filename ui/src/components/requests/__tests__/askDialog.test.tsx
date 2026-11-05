@@ -31,6 +31,8 @@ const termsData = vi.hoisted(() => ({
   ] as Array<{ name: string; start: string; end: string }> | undefined,
 }));
 
+// The rule preview answered, nothing follows: Approve is not held (N5 has its own test).
+vi.mock("@/lib/queries/useRulePreview", () => ({ useRulePreview: () => ({ data: [], isLoading: false, isError: false }) }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(search.value),
   useRouter: () => ({ replace: () => {} }),

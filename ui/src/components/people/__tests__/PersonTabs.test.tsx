@@ -12,6 +12,8 @@ import type { AccessRequest } from "@/lib/queries/useRequests";
 const audit = vi.hoisted(() => ({ data: [] as AuditEntry[], filter: null as unknown }));
 const requests = vi.hoisted(() => ({ data: [] as AccessRequest[], decide: vi.fn() }));
 
+// The rule preview answered, nothing follows: Approve is not held (N5 has its own test).
+vi.mock("@/lib/queries/useRulePreview", () => ({ useRulePreview: () => ({ data: [], isLoading: false, isError: false }) }));
 vi.mock("@/lib/queries/useAudit", () => ({
   useAuditEntries: (filter: unknown) => {
     audit.filter = filter;

@@ -1,6 +1,7 @@
 "use client";
 
 import { StatusDot } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { askLengthForMember, askLengthForOperator, formatShortDate } from "@/lib/format";
 import { civilDay } from "@/lib/time";
 import type { AccessRequest } from "@/lib/queries/useRequests";
@@ -96,8 +97,58 @@ export function HoldingNote({ request }: { request: AccessRequest }) {
 function RulesLine({ request }: { request: AccessRequest }) {
   const rules = useRulePreview(request.requester_id, request.project_id, [request.role_key], !alreadyHeld(request));
   const lines = (rules.data ?? []).map((row) => row.sentence);
+  // Final verification N5: a preview that can't be read is said, never
+  // silence that reads as "nothing else follows" (the give dialog's words).
+  if (rules.isError) return <span className="w-full text-[13px] text-muted">{RULES_UNREAD}</span>;
   if (lines.length === 0) return null;
   return <span className="w-full text-[13px] text-muted">If you approve: {lines.join(" ")}</span>;
+}
+
+/** Said where the approve button is when the rule preview can't be read (N5). */
+const RULES_UNREAD = "Syndra couldn't read the automatic rules, so a role one of them also gives isn't named here.";
+
+/**
+ * Why approving is held, or undefined when it can go (N5). The consent is the
+ * row: what the rules also give is part of what approving does, so approve
+ * waits for the preview, and a preview that failed holds it with the reason,
+ * rather than approving a gift nobody was shown. The same query as RulesLine,
+ * so it is one read.
+ */
+export function useApproveHold(request: AccessRequest): string | undefined {
+  const held = alreadyHeld(request);
+  const rules = useRulePreview(request.requester_id, request.project_id, [request.role_key], !held);
+  if (held) return "They already have this.";
+  if (rules.isLoading) return "Checking what automatic rules also give.";
+  if (rules.isError) return `${RULES_UNREAD} Reload the page to try again.`;
+  return undefined;
+}
+
+/** The Approve button, held while the rule preview is unread (N5). One for Home, Requests and a person's Requests tab. */
+export function ApproveButton({
+  request,
+  onClick,
+  className,
+  isPending,
+}: {
+  request: AccessRequest;
+  onClick: () => void;
+  className?: string;
+  isPending?: boolean;
+}) {
+  const hold = useApproveHold(request);
+  return (
+    <Button
+      variant="accent"
+      size="sm"
+      className={className}
+      isPending={isPending}
+      disabled={hold !== undefined}
+      reason={hold}
+      onClick={onClick}
+    >
+      Approve
+    </Button>
+  );
 }
 
 function HeldLine({ request }: { request: AccessRequest }) {

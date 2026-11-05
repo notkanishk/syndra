@@ -5,6 +5,7 @@ import { useContext, useEffect, useRef } from "react";
 
 import { request } from "@/lib/api-client";
 import { playDriftChime } from "@/lib/driftChime";
+import type { AutoRetry } from "@/lib/outcome";
 
 /**
  * The four sidebar badge scalars.
@@ -128,14 +129,20 @@ export function useIndicatorsRead(enabled = true) {
 }
 
 /**
- * Whether this server sends changes again on its own (the background drain).
- * True until read, the shipped default; false only when the server says so.
+ * Whether this server sends changes again on its own (the background drain):
+ * the server's own answer, or null until it is read and while it can't be
+ * (final verification N3). Null promises nothing either way: the copy then
+ * says only what is known and points at Pending changes (DRAIN_UNKNOWN_NEXT).
+ * The fabricated zeros the rail holds before its first read carry no answer,
+ * so they read as null too.
  */
-export function useAutoRetry(): boolean {
+export function useAutoRetry(): AutoRetry {
   // Copy deep in a dialog reads this, and a dialog may render with no provider
   // above it (a unit render): that is the shipped default, never a throw.
   const client = useContext(QueryClientContext);
-  return useQuery(indicatorsQuery(client !== undefined), client ?? NO_CLIENT).data?.auto_retry !== false;
+  const answer = useQuery(indicatorsQuery(client !== undefined), client ?? NO_CLIENT).data?.auto_retry;
+  if (client === undefined) return true;
+  return answer ?? null;
 }
 
 /** Stands in for a missing provider; its query is disabled, so it never fetches. */

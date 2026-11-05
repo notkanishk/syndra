@@ -10,7 +10,7 @@ export function RetryPill({
   counts,
   className = "",
 }: {
-  counts: { retrying?: number; gave_up?: number } | undefined;
+  counts: { retrying?: number; gave_up?: number; auto_retry?: boolean } | undefined;
   className?: string;
 }) {
   const badge = retryBadge(counts);
@@ -20,7 +20,8 @@ export function RetryPill({
       title={badge.label}
       className={`rounded-pill px-1.5 py-0.5 text-[12.5px] font-semibold leading-none ${BADGE_TONE[badge.tone]} ${className}`}
     >
-      <span aria-hidden>{badge.tone === "danger" ? "!" : "↻"} </span>
+      {/* "↻" only while Syndra really sends them again on its own (N2). */}
+      <span aria-hidden>{badge.tone === "danger" ? "! " : badge.again ? "↻ " : ""}</span>
       {badge.count}
       <span className="sr-only">. {badge.label}.</span>
     </span>

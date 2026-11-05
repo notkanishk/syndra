@@ -59,7 +59,7 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
         name: "Leo Brooks",
         email: "leo@example.edu",
         effect: "blocked",
-        detail: "Account is departed — remove it from the selection to continue.",
+        detail: "Account is departed. Remove it from the selection to continue.",
       },
       {
         user_id: "u3",
@@ -67,7 +67,7 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
         email: "sam@example.edu",
         effect: "no_change",
         detail: "Holds no direct grant here.",
-        consequence: "Keeps the role via the Safety bundle — remove that source instead.",
+        consequence: "Keeps the role via the Safety bundle. Remove that source instead.",
       },
     ],
     // A rehearsal now returns the approval it became; the apply cites it, and

@@ -16,8 +16,9 @@ import { Mono } from "@/components/ui/Badge";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
-import { outcomeFromError, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { RETRYING, retryLine, retryNextStep } from "@/lib/retry";
+import { DRAIN_UNKNOWN_NEXT, outcomeFromError, succeeded, type ActionOutcome as Outcome, type AutoRetry } from "@/lib/outcome";
+import { RETRYING, refusedNext, retryLine, retryNextStep } from "@/lib/retry";
+import { refusalCause } from "@/lib/wait-reason";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
@@ -55,16 +56,13 @@ const roleOf = (role: string) => role.slice(role.indexOf("/") + 1);
 type Act = "given" | "revoked" | "replaced";
 const ACT_WORD: Record<Act, string> = { given: "Given", revoked: "Revoked", replaced: "Replaced" };
 
-/** The step a role Zitadel refused leaves: it is terminal, and Syndra's record now differs from Zitadel. */
-const REFUSED_NEXT = "Open their page to see what they hold now, then give or revoke the refused role again.";
-
 const sendsAny = (roles: ZitadelRoleChange[], pick: (r: ZitadelRoleChange) => boolean) => roles.some(pick);
 
 /**
  * What a change did, role by role, in the backend's words (W8): never "done"
  * for a role that waits, that Zitadel didn't take, or that was kept.
  */
-function changeResult(res: ZitadelGrantChange | undefined, act: Act, auto = true): { outcome: Outcome; word: string } {
+function changeResult(res: ZitadelGrantChange | undefined, act: Act, auto: AutoRetry = true): { outcome: Outcome; word: string } {
   const roles = res?.roles ?? [];
   const recorded = "Recorded in Syndra as a change on their page, so it is explained afterwards.";
   if (roles.length === 0) {
@@ -82,19 +80,31 @@ function changeResult(res: ZitadelGrantChange | undefined, act: Act, auto = true
   say("Revoked in Zitadel", (r) => r.change === "revoked" && r.status === "applied");
   // Re-audit R3: a give Zitadel didn't take is retried on its own (the
   // server says when); only one that isn't goes when you send it.
-  const retrying = res?.wait_reason === RETRYING && res.retry?.state !== "waiting";
-  const goesItself = (r: ZitadelRoleChange) => auto && r.status === "pending" && (r.change === "revoked" || retrying);
+  const retrying = res?.retry?.state === "retrying";
+  // Neither "on its own" nor "when you send it" is known (N3): the indicators
+  // aren't read yet, or the server couldn't read the next try.
+  const unsure = auto === null || (res?.wait_reason === RETRYING && !res?.retry);
+  const goesItself = (r: ZitadelRoleChange) => auto === true && !unsure && r.status === "pending" && (r.change === "revoked" || retrying);
   say("Waiting for you to send, because the role always waits for you", (r) => r.status === "waiting");
-  say("Not in Zitadel yet, because Zitadel didn't answer. Syndra sends it again on its own", (r) => r.change === "given" && r.status === "pending" && retrying);
-  say("Not in Zitadel yet. It goes when you send it", (r) => r.change === "given" && r.status === "pending" && !retrying);
-  say(
-    auto
-      ? "Not revoked in Zitadel yet, because Zitadel didn't take it. Revocations send on their own"
-      : "Not revoked in Zitadel yet, because Zitadel didn't take it. It waits in Pending changes until you send it",
-    (r) => r.change === "revoked" && r.status === "pending",
-  );
+  if (unsure) {
+    say("Not in Zitadel yet", (r) => r.status === "pending");
+  } else {
+    say("Not in Zitadel yet, because Zitadel didn't answer. Syndra sends it again on its own", (r) => r.change === "given" && r.status === "pending" && retrying);
+    say("Not in Zitadel yet. It goes when you send it", (r) => r.change === "given" && r.status === "pending" && !retrying);
+    say(
+      auto
+        ? "Not revoked in Zitadel yet, because Zitadel didn't take it. Revocations send on their own"
+        : "Not revoked in Zitadel yet, because Zitadel didn't take it. It waits in Pending changes until you send it",
+      (r) => r.change === "revoked" && r.status === "pending",
+    );
+  }
   if (res?.retry && sendsAny(roles, goesItself)) lines.push(retryLine(res.retry));
-  say("Zitadel refused, so it is not in Zitadel", (r) => r.status === "failed");
+  // Final verification N1: each refusal with its plain cause.
+  const refusals = roles.filter((r) => r.status === "failed");
+  for (const reason of new Set(refusals.map((r) => r.reason ?? "refused:other"))) {
+    const names = sortNames(refusals.filter((r) => (r.reason ?? "refused:other") === reason).map((r) => roleOf(r.role)));
+    lines.push(`Zitadel refused this for ${formatList(names)}: ${refusalCause(reason)}.`);
+  }
   say("Kept, because a bundle or a rule still gives it", (r) => r.change === "kept");
   const detail = [...lines, recorded].join(" ");
 
@@ -102,32 +112,44 @@ function changeResult(res: ZitadelGrantChange | undefined, act: Act, auto = true
   if (sent.length === 0) {
     return { outcome: { kind: "no_change", message: "Nothing was revoked. A bundle or a rule still gives every role", detail }, word: "Nothing revoked" };
   }
-  const refused = sent.some((r) => r.status === "failed");
+  const refused = refusals.length > 0;
+  // The step a refused role leaves: terminal, so Send won't move it.
+  const refusedStep = refusedNext(refusals.find((r) => r.reason)?.reason, { again: "give or revoke" });
   const open = sent.filter((r) => r.status === "waiting" || r.status === "pending");
   if (open.length) {
     const itself = open.every(goesItself);
+    const pendingUnsure = unsure && open.some((r) => r.status === "pending");
     return {
       outcome: {
         kind: "queued",
         message: "Recorded in Syndra. Not all of it is in Zitadel yet",
         detail,
-        sendsItself: itself || undefined,
+        sendsItself: itself || pendingUnsure || undefined,
         // What Syndra sends itself says when; a refused part needs a person.
-        next: refused
-          ? `${itself ? "" : "Press Send on Pending changes for what waits. "}${REFUSED_NEXT}`
-          : itself && res?.retry
-            ? retryNextStep(res.retry)
-            : undefined,
+        next: pendingUnsure
+          ? `${DRAIN_UNKNOWN_NEXT}${refused ? ` ${refusedStep}` : ""}`
+          : refused
+            ? `${itself ? "" : "Press Send on Pending changes for what waits. "}${refusedStep}`
+            : itself && res?.retry
+              ? retryNextStep(res.retry)
+              : undefined,
       },
       word: ACT_WORD[act],
     };
   }
   if (refused) {
     // Re-audit R4: a refused row is terminal and Syndra's record now differs
-    // from Zitadel, so there is something to do.
+    // from Zitadel, so there is something to do. N1: said as a refusal.
+    const all = refusals.length === sent.length;
     return {
-      outcome: { kind: "no_change", message: "Recorded in Syndra, but Zitadel refused part of it", detail, next: REFUSED_NEXT },
-      word: "Not all in Zitadel",
+      outcome: {
+        kind: "failed",
+        recorded: true,
+        message: `Recorded in Syndra. Zitadel refused this${all ? "" : " for some of the roles"}`,
+        detail,
+        next: refusedStep,
+      },
+      word: all ? "Refused by Zitadel" : "Not all in Zitadel",
     };
   }
   return { outcome: { kind: "applied", message: `Roles ${act} in Zitadel`, detail }, word: ACT_WORD[act] };
