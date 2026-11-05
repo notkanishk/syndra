@@ -134,7 +134,7 @@ function Tab({
     <Link
       href={destination.href}
       aria-current={active ? "page" : undefined}
-      className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 control press-scale ${
+      className={`relative flex min-h-[var(--tap)] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 control press-scale ${
         active ? "bg-accent-soft" : ""
       }`}
     >

@@ -9,6 +9,7 @@ import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { FoldChevron } from "@/components/ui/FoldChevron";
 import { FormPart } from "@/components/ui/FormPart";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -16,6 +17,7 @@ import { RoleWordsTable, type RoleWordRow } from "@/components/ui/RoleWordsTable
 import { Segmented, Select } from "@/components/ui/Select";
 import { Ticks } from "@/components/ui/TokenBlock";
 import { Unfold } from "@/lib/motion";
+import { usePlace } from "@/lib/place";
 import {
   ADD_MENU,
   addMuted,
@@ -192,12 +194,7 @@ function LineHead({
     <>
       <span className="flex size-[var(--tap)] flex-none items-center justify-center">
         {onToggle && (
-          <span
-            aria-hidden
-            className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn ${open ? "rotate-90" : ""}`}
-          >
-            ›
-          </span>
+          <FoldChevron open={!!open} />
         )}
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-0.5 pt-[11px]">
@@ -341,8 +338,13 @@ function ShapeForm({
   const template = templates.find((t) => t.id === templateId);
   const suggested = templates.find((t) => t.id === shape.suggested_template);
   const [picking, setPicking] = useState<Picking | null>(null);
-  // One line open at a time, by its first row; closed on every arrival.
-  const [open, setOpen] = useState<number | null>(null);
+  // One line open at a time, by its first row; closed on every arrival, and
+  // handed back after a Back (A-20 P19) when it is still a row that exists.
+  const [open, setOpen] = usePlace<number | null>(
+    "open-line",
+    null,
+    (kept): kept is number | null => kept === null || (Number.isInteger(kept) && (kept as number) >= 0 && (kept as number) < profile.claims.length),
+  );
   // The line a menu pick just added: it arrives as a FormPart (A-16 §6).
   const [fresh, setFresh] = useState<number | null>(null);
 
@@ -1256,8 +1258,7 @@ function PickRoles({
           }
         />
       </div>
-      <ModalFooter>
-        <Button onClick={onClose}>Cancel</Button>
+      <ModalFooter cancel={{ onClick: onClose }}>
         <Button variant="accent" disabled={chosen.size === 0} onClick={() => onDone(Array.from(chosen).map((id) => id.slice(projectId.length + 1)))}>
           {chosen.size <= 1 ? "Use this role" : `Use these ${chosen.size} roles`}
         </Button>

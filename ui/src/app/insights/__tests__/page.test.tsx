@@ -235,7 +235,10 @@ describe("tabs and the link", () => {
     insights.findings = { data: undefined, isError: false };
     renderPage();
     expect(screen.queryByText(/was read/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /drift/ })).not.toBeInTheDocument();
+    // The seats are there before the read; none says a number it has not read.
+    const chip = screen.getByRole("button", { name: "drift" });
+    expect(chip).toBeDisabled();
+    expect(chip.textContent).not.toMatch(/\d/);
   });
 });
 
@@ -286,14 +289,20 @@ describe("the finding chips", () => {
     expect(screen.getByText("in Metal Shop that nobody has.")).toBeInTheDocument();
   });
 
-  it("only counts rows that wait, and hides a chip with nothing behind it", () => {
+  it("only counts rows that wait, and keeps a chip with nothing behind it in its seat, hollow and still", () => {
     reads.drift = [];
     reads.catalog = [role("p1", "trained", 5), role("p2", "welder", 3)];
     insights.findings = { data: noFindings, isError: false };
     renderPage();
-    expect(screen.queryByRole("button", { name: /drift/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /unused/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "1 waiting for you to send" })).toBeInTheDocument();
+    // Structure never moves with data: five seats, the same five, whatever they count.
+    expect(screen.getByRole("button", { name: "0 single routes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "0 overlaps" })).toBeDisabled();
+    for (const word of ["drift", "unused"]) {
+      const empty = screen.getByRole("button", { name: `0 ${word}` });
+      expect(empty).toBeDisabled();
+      expect(empty.textContent).toContain("0");
+    }
+    expect(screen.getByRole("button", { name: "1 waiting for you to send" })).toBeEnabled();
   });
 
   it("toggles the panel off again, and Esc steps back", () => {
@@ -361,18 +370,18 @@ describe("pins", () => {
       ["Badge reader", "Three threads, side by side"],
     ] as const) {
       fireEvent.click(node(name));
-      fireEvent.click(screen.getByRole("button", { name: "Pin" }));
+      fireEvent.click(screen.getByRole("button", { name: "Keep this answer" }));
       expect(title).toBeTruthy();
     }
     expect(nav.state.search.split("&").find((p) => p.startsWith("pin="))!.split("%2C")).toHaveLength(3);
 
     // A fourth thing followed cannot be pinned.
     fireEvent.click(node("Metal Shop"));
-    expect(screen.queryByRole("button", { name: "Pin" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Keep this answer" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Unpin Lab Tech" })).toBeInTheDocument();
 
     // With nothing followed, the pins are the question.
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to the map" }));
     expect(screen.getByRole("heading", { name: "Three threads, side by side" })).toBeInTheDocument();
     expect(screen.getByText("Where they cross: Badge reader reads more than one of them.")).toBeInTheDocument();
 
@@ -437,7 +446,7 @@ describe("below tablet", () => {
       screen.getByText("Laser Lab · trained is given by Lab Tech and read by Badge reader."),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open Laser Lab/ })).toHaveAttribute("href", "/projects/p1");
-    expect(screen.getByRole("button", { name: "Pin this" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep this answer" })).toBeInTheDocument();
     expect(screen.getByText(/The map draws this on a wider screen/)).toBeInTheDocument();
   });
 });
@@ -610,7 +619,7 @@ describe("at rest", () => {
     expect(panel).toHaveTextContent("Widest reach: Laser Lab · Operator, 51 people, through Lab Tech and New members.");
     expect(panel).toHaveTextContent("Nothing reaches: Textiles. It has 1 role and nobody has it.");
     expect(panel).toHaveTextContent("Most given automatically: Laser Lab · Door, 51 people, by rule from Laser Lab · Operator.");
-    expect(within(panel).queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Back to the map" })).not.toBeInTheDocument();
   });
 
   it("drops a line it cannot compute rather than guess it", () => {
@@ -689,7 +698,7 @@ describe("the answers", () => {
     expect(lightOf("New members")).toBe("receded");
 
     // Pin this pins the thread the question is about.
-    fireEvent.click(within(panel).getByRole("button", { name: "Pin" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Keep this answer" }));
     expect(nav.state.search).toContain("pin=role%3Ap1%3Adoor");
   });
 
@@ -778,7 +787,10 @@ describe("the answers", () => {
     expect(panel).toHaveTextContent("1 person would lose something.");
     expect(panel).toHaveTextContent("Dev Patel would lose Laser Lab · Door.");
     expect(panel).toHaveTextContent("The rest: 11 people would stay as they are.");
-    expect(panel.className).toContain("border-warn-line");
+    // A warn answer is a Notice-toned line, not a tinted box.
+    expect(panel.className).not.toContain("warn-soft");
+    expect(panel.className).toContain("bg-surface-1");
+    expect(within(panel).getByText(/What if/).className).toContain("text-warn-text");
     expect(within(panel).getByRole("link", { name: /Change it on Lab Tech/ })).toHaveAttribute("href", "/bundles/b1");
   });
 
@@ -840,7 +852,7 @@ describe("the answers", () => {
 
     const panel = panelOf("Priya Nair to Laser Lab · Door");
     expect(within(panel).getByRole("link", { name: /Open Priya Nair/ })).toHaveAttribute("href", "/users/u1");
-    expect(within(panel).getByRole("button", { name: "Pin this" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Keep this answer" })).toBeInTheDocument();
     expect(screen.getByText("The map draws this on a wider screen. The link keeps the question, so it opens there as you left it.")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Access map" })).not.toBeInTheDocument();
   });
@@ -1044,7 +1056,7 @@ describe("lenses", () => {
     insights.usage = { data: usage(), isError: false };
     nav.set("lens=use");
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to the map" }));
     expect(nav.state.search).toBe("");
 
     fireEvent.click(lensPill("Ending soon"));

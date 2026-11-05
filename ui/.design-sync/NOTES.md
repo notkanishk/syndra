@@ -80,3 +80,11 @@ The canvas shows a board's frames inline (`<dc-import … frame=…>` inside a `
 - The motion code the cards describe lives in `src/lib/motion/` now (`ArriveList`, `Unfold`, `Tinted`, `UnfoldOnArrival`, `LeavingRow`, `Crossfade`, `GlideIndicator`, `useFlashOnChange`, `glideTo`, `stillMotion`), not in `src/components/ui/`. `config.json` and `entry.tsx` point there; the exports are unchanged. `bloom` and `lift` are CSS classes in `globals.css`, so their lines sit on the cards that use them (StatusDot, ActionOutcome, EmptyState).
 - The motion tokens (`--ease-*`, `--duration-*`, `--travel-cap`, `--arrive-*`) were already in `globals.css`, which ships as it is, so the bundle's `_ds_bundle.css` carries them. The design-system artifact's own `tokens.css` is what lacks them; that is the publish step, not this repo.
 - + KeysSheet (the Keys sheet, `?`). Not yet re-synced or published.
+- 5 Nov 2026: AdvancedLink added (entry, config, preview, moves row; `ArrowLink` and `NextStep` render it). In the design system there is no view provider, so it is drawn as the plain link it is there; re-sync adds the card.
+
+## P9, the design system tells the truth (5 Nov 2026)
+- `moves.json` is now read from the code, not from the A-19 guess; `src/lib/motion/__tests__` still fails when previews or MOVES.md go stale. Chip and Badge do not move (only ChosenChip). ArriveList rises 8px.
+- `SyndraRoot` provides `AppRouterContext` with a router that goes nowhere: AppShell mounts `IntentPrefetchHost`, whose `useRouter()` throws without it (that was every "This page could not render" on AppShell).
+- TouchNav is `cardMode: single` at 390px (it is `tablet:hidden`); the render check still reports `[RENDER_BLANK]` because its own page is 900px wide. Benign.
+- RoleWordsTable and SignInRow are `cardMode: column` (a table needs the width). SectionPill needs `#app-scroll` and a scrolled container, so its story scrolls its own box.
+- `--font-sans` stays (body uses it; published boards read it). `--radius-shell` is gone.

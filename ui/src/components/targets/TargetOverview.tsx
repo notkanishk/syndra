@@ -13,6 +13,8 @@ import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowled
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
@@ -27,7 +29,6 @@ import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
-import { Unfold } from "@/lib/motion";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
@@ -935,7 +936,6 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
               <span className="text-[14px]">
                 {OPERATION_LABEL[op.id] ?? `Something ${name} can do that Syndra has no name for`}
               </span>
-              <span className="type-mono text-[12.5px] text-faint">{op.id}</span>
             </span>
             {/* The manifest says which operations stop and ask, and this list is the only place an
                 operator can learn that before pressing one. The secret parameters are named in the
@@ -952,6 +952,15 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
           </CardRow>
         ))
       )}
+      {registered.callable && registered.operations.length > 0 && (
+        <div className="row-divider px-5 py-3">
+          <TechnicalDetail placeKey={`capabilities:${registered.target}`}>
+            {sortByName(registered.operations, (op) => op.id, (op) => op.id).map((op) => (
+              <CopyableValue key={op.id} value={op.id} label={`Operation ${OPERATION_LABEL[op.id] ?? "id"}`} />
+            ))}
+          </TechnicalDetail>
+        </div>
+      )}
     </Card>
   );
 }
@@ -966,7 +975,6 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
  */
 function LogFinding({ anchor }: { anchor: LogAnchor }) {
   const [resolving, setResolving] = useState(false);
-  const [detail, setDetail] = useState(false);
   const name = targetLabel(anchor.target);
   // Read from the two counts, not from the verdict.
   //
@@ -1005,25 +1013,19 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
         is the only thing that can notice entries disappearing, and resolving replaces it with a
         new <Term name="baseline">baseline</Term>.
       </p>
-      <div className="mt-2">
-        <Button variant="outline" size="sm" aria-expanded={detail} onClick={() => setDetail(!detail)}>
-          Technical detail
-        </Button>
-        <Unfold open={detail}>
-          <p className="mt-2 text-[13px] text-faint">
-            Syndra&rsquo;s note: {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
-            ending <Mono>{anchor.head.slice(0, 12)}</Mono>, made{" "}
-            <Relative iso={anchor.anchored_at} />. {name} reported{" "}
-            {anchor.violation_records ?? 0}{" "}
-            {anchor.violation_head ? (
-              <>
-                ending <Mono>{anchor.violation_head.slice(0, 12)}</Mono>{" "}
-              </>
-            ) : null}
-            <Relative iso={anchor.violation_at} />.
-          </p>
-        </Unfold>
-      </div>
+      <TechnicalDetail className="mt-2" placeKey={`log:${anchor.target}`}>
+        <p className="text-[13px] text-faint">
+          Syndra&rsquo;s note: {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
+          ending <Mono>{anchor.head.slice(0, 12)}</Mono>, made <Relative iso={anchor.anchored_at} />.{" "}
+          {name} reported {anchor.violation_records ?? 0}{" "}
+          {anchor.violation_head ? (
+            <>
+              ending <Mono>{anchor.violation_head.slice(0, 12)}</Mono>{" "}
+            </>
+          ) : null}
+          <Relative iso={anchor.violation_at} />.
+        </p>
+      </TechnicalDetail>
       {resolving && (
         <ResolveFindingDialog target={anchor.target} anchor={anchor} onClose={() => setResolving(false)} />
       )}
@@ -1059,9 +1061,9 @@ function BindingConflictFinding({
     >
       <p>
         A change for{" "}
-        <UserName id={conflict.converged_subject_id} fallback={conflict.converged_subject_id} /> was
+        <UserName id={conflict.converged_subject_id} /> was
         applied to this account, and Syndra records it as belonging to{" "}
-        <UserName id={conflict.bound_subject_id} fallback={conflict.bound_subject_id} />. The change
+        <UserName id={conflict.bound_subject_id} />. The change
         reached {targetLabel(target)}, but whose account it is could not be recorded.
       </p>
       <p className="mt-1 text-[13px] text-faint">
@@ -1129,7 +1131,7 @@ function ResolveConflictDialog({
               name="conflict-owner"
               selected={owner === claimant.id}
               onToggle={() => setOwner(claimant.id)}
-              title={<UserName id={claimant.id} fallback={claimant.id} />}
+              title={<UserName id={claimant.id} />}
               description={claimant.why}
             />
           ))}

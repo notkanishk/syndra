@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { greeting, isQuietHour } from "@/lib/greeting";
+import { greeting, isQuietHour, lastHere } from "@/lib/greeting";
 import { termDayLine } from "@/lib/term-dates";
 
 const at = (hour: number) => new Date(2026, 10, 5, hour, 0, 0);
@@ -42,5 +42,25 @@ describe("termDayLine", () => {
     expect(termDayLine(terms, new Date(2026, 10, 27))).toBe("Last day of Monsoon term");
     expect(termDayLine(terms, new Date(2026, 1, 1))).toBeNull();
     expect(termDayLine([], new Date(2026, 0, 5))).toBeNull();
+  });
+});
+
+describe("lastHere (A-20 P18)", () => {
+  // Wednesday 4 November 2026, local noon.
+  const now = new Date(2026, 10, 4, 12, 0, 0);
+  const at = (day: number, month = 10) => new Date(2026, month, day, 9, 0, 0).toISOString();
+
+  it("says nothing for today, and for what it cannot read", () => {
+    expect(lastHere(at(4), now)).toBeNull();
+    expect(lastHere(undefined, now)).toBeNull();
+    expect(lastHere("not a date", now)).toBeNull();
+  });
+  it("says yesterday, then the weekday under a week", () => {
+    expect(lastHere(at(3), now)).toEqual({ since: "yesterday", on: "yesterday" });
+    expect(lastHere(at(2), now)).toEqual({ since: "Monday", on: "on Monday" });
+    expect(lastHere(at(29, 9), now)).toEqual({ since: "Thursday", on: "on Thursday" });
+  });
+  it("says a date from a week on", () => {
+    expect(lastHere(at(28, 9), now)).toEqual({ since: "28 Oct", on: "on 28 Oct" });
   });
 });

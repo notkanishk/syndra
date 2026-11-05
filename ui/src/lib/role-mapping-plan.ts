@@ -24,6 +24,11 @@ export const FIELD_GROUP = "group";
 export const FIELD_HOME = "home";
 export const FIELD_HOME_QUOTA = "home_quota";
 
+/** A mapping's field in words, never the field's own name (A-20 P11). */
+export function fieldWords(field: string | undefined): string {
+  return field === FIELD_GROUP ? "group" : field === FIELD_HOME ? "home folder" : field === FIELD_HOME_QUOTA ? "home folder size" : "setting";
+}
+
 /** A role's rows on a system, by field. */
 export interface RoleRows {
   group?: RoleMapping;

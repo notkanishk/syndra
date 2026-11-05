@@ -104,7 +104,7 @@ describe("what the log anchor says was done to the log", () => {
   it("keeps the technical detail folded until it is asked for", () => {
     currentAnchor = anchor(10, 7);
     renderTarget();
-    const toggle = screen.getByRole("button", { name: "Technical detail" });
+    const toggle = screen.getByRole("button", { name: /Technical detail/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText(/Syndra’s note:/)).toBeNull();
 

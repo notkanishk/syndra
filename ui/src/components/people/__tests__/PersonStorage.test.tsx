@@ -12,7 +12,10 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@/lib/queries/useMyStorage", () => ({ usePersonTargets: () => state.views }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => ({ data: [{ target: "truenas" }] }) }));
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => state.advanced,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveRole: (_p: string, k: string) => ({ value: { display_name: k === "lead" ? "Fabrication lead" : k } }) }),
 }));
@@ -143,7 +146,7 @@ describe("a person's network storage (A-10 Part 1)", () => {
 
   it("no account yet: the step's status, then what they'll get, not open yet", () => {
     show(view({ account: undefined, storage: undefined, home: { subject_id: "u1", username: "", gives_home: true, roles_limit: 20 * GB, roles_limit_from: lead }, preview: [renders] }));
-    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending?q=Aanya");
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending?person=u1");
     expect(screen.getByText("Opens once their account is made")).toBeInTheDocument();
     expect(screen.getByText("Up to 20 GB, from their Fabrication lead role")).toBeInTheDocument();
     expect(screen.getByText("renders")).toBeInTheDocument();

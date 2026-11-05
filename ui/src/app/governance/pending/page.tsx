@@ -20,6 +20,7 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { Input } from "@/components/ui/Input";
 import { WaitsMark } from "@/components/ui/WaitsMark";
+import { narrow, usePendingFilters } from "@/lib/pending-filter";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RoleRef, UserName } from "@/components/names";
@@ -79,47 +80,22 @@ export default function PendingChangesPage() {
   const params = useSearchParams();
   const [query, setQuery] = useState(() => params?.get("q") ?? "");
   const needle = query.trim().toLowerCase();
-  // "Waiting for you to send →" on a person's change lands here narrowed to
-  // them (A-19 P3): an in-force chip, cleared by its own ✕.
-  const asked = params?.get("person") ?? null;
-  const [dismissed, setDismissed] = useState<string | null>(null);
-  const person = asked && asked !== dismissed ? asked : null;
-  function clearPerson() {
-    setDismissed(asked);
-    const url = new URL(window.location.href);
-    url.searchParams.delete("person");
-    window.history.replaceState(window.history.state, "", url);
-  }
-  // The same for a role (`?role=<project id>/<role key>`), from "Waiting for you to send →" on Roles that wait.
-  const askedRole = params?.get("role") ?? null;
-  const [dismissedRole, setDismissedRole] = useState<string | null>(null);
-  const roleRef = askedRole && askedRole !== dismissedRole ? askedRole : null;
-  const role = useMemo(() => {
-    const cut = roleRef ? roleRef.indexOf("/") : -1;
-    return roleRef && cut > 0 && cut < roleRef.length - 1
-      ? { projectId: roleRef.slice(0, cut), roleKey: roleRef.slice(cut + 1) }
-      : null;
-  }, [roleRef]);
-  function clearRole() {
-    setDismissedRole(askedRole);
-    const url = new URL(window.location.href);
-    url.searchParams.delete("role");
-    window.history.replaceState(window.history.state, "", url);
-  }
+  // "Waiting for you to send →" lands here narrowed to a person or a role
+  // (A-19 P3, A-20 P16): one model, one in-force chip each, cleared by its own ✕.
+  const { inForce, key: filterKey, active: filtered, clear } = usePendingFilters(params);
+  const { person, role } = inForce;
   const matched = useMemo(
-    () =>
-      rows
-        .filter((row) => !person || row.user_id === person)
-        .filter((row) => !role || (row.project_id === role.projectId && (row.role_keys ?? []).includes(role.roleKey)))
-        .filter((row) => !needle || matches(row, needle, resolver)),
-    [rows, person, role, needle, resolver],
+    () => narrow(rows, inForce).filter((row) => !needle || matches(row, needle, resolver)),
+    // inForce is rebuilt each render; filterKey is its identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, filterKey, needle, resolver],
   );
   // S5: a row that goes on a later read (cancelled by someone, sent by someone)
   // fades where it was and closes its gap after, and not under the pointer. A row
   // a search drops goes the same way, but its gap does not wait for the pointer
   // (A-05 §2.10), and the rows that still match are the same rows.
   const leaving = useLeavingRows(matched, (row) => row.id, !pending.isLoading && !pending.error, {
-    narrowedBy: needle + (person ?? "") + (roleRef ?? ""),
+    narrowedBy: needle + filterKey,
   });
   const shown = leaving.rows;
   const groups = groupByCascade(shown);
@@ -184,18 +160,39 @@ export default function PendingChangesPage() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <ReadFreshness state={readStateOfQuery(pending)} subject="The queue" />
               {person && (
-                <FilterChip onClear={clearPerson} clearLabel="Show everyone's changes">
+                <FilterChip onClear={() => clear("person")} clearLabel="Show everyone's changes">
                   <UserName id={person} link={false} />
                 </FilterChip>
               )}
               {role && (
-                <FilterChip onClear={clearRole} clearLabel="Show every role's changes">
+                <FilterChip onClear={() => clear("role")} clearLabel="Show every role's changes">
                   <RoleRef projectId={role.projectId} roleKey={role.roleKey} />
                 </FilterChip>
               )}
-              {(needle || person || role) && (
+              {(needle || filtered) && (
                 <span className="text-[13.5px] text-muted">
-                  {`${shown.length} of the ${rows.length} changes match. Sending sends all ${rows.length}, in order.`}
+                  {filtered ? (
+                    <>
+                      Showing{" "}
+                      {person ? (
+                        <>
+                          <UserName id={person} link={false} />&rsquo;s
+                        </>
+                      ) : (
+                        "the"
+                      )}{" "}
+                      {shown.length === 1 ? "1 change" : `${shown.length} changes`}
+                      {role && (
+                        <>
+                          {" "}
+                          for <RoleRef projectId={role.projectId} roleKey={role.roleKey} />
+                        </>
+                      )}
+                      . Sending sends all {rows.length}, in order.
+                    </>
+                  ) : (
+                    `${shown.length} of the ${rows.length} changes match. Sending sends all ${rows.length}, in order.`
+                  )}
                 </span>
               )}
             </div>

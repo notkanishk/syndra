@@ -78,7 +78,10 @@ vi.mock("@/components/people/BulkDialog", () => ({
     return <button onClick={props.onClose}>close the dialog</button>;
   },
 }));
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => false }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => false,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 vi.mock("@/components/names", async () => {
   const actual = await vi.importActual<typeof import("@/components/names")>("@/components/names");

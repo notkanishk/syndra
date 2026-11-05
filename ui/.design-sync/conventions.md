@@ -28,9 +28,18 @@ Prefer the components (`Button` variants, `Badge` / `Chip` tones, `StatusDot`, `
 | Text | `--ink`, `--muted`, `--faint`, `--label` |
 | Lines | `--line`, `--line-strong`, `--divider` |
 | Roles | `--accent` `--accent-text` `--accent-soft` `--accent-line`, `--healthy`, `--warn` `--warn-text` `--warn-soft`, `--danger` `--danger-text` `--danger-soft` |
+| Tints and states | `--tint-1` `--tint-2` `--tint-3` (a quiet fill, a chip, a pressed row), `--hover` (a row under the pointer), `--focus-ring` (the ring on every focused control: violet-300 in dark, the accent text tone in light) |
+| Scrim and shadows | `--scrim` (the wash behind a dialog or sheet: black in dark, violet-black in light), `--shadow-dialog`, `--shadow-popover`, `--shadow-card` |
+| Tap | `--tap` (44px): nothing a thumb must hit is smaller; from the desktop breakpoint (1080px) a control may be denser |
+| Layers | `--layer-bar` 20 (sticky bars), `--layer-pill` 30 (a floating pill), `--layer-dialog` 50 (dialogs, sheets and their scrim), `--layer-popover` 60 (over a dialog). Use `z-(--layer-dialog)`, never a number |
+| Radius | `--radius-card` 20, `--radius-panel` 18, `--radius-block` 16, `--radius-inner` 14, `--radius-nav` 12, `--radius-pill` 999 |
+| Motion | `--duration-tint` 120ms, `-press` 180, `-settle` 260, `-arrive` 420, `-flash` 900, `-breathe` 2400, `-glide` 520 (scrolling only); curves `--ease-tint` `-press` `-settle` `-arrive` `-breathe` `-flash`; `--travel-cap` 10px (nothing in the page moves further); `--arrive-step` 40ms and `--arrive-cap` 5 (rows stagger 40ms apart, capped at five) |
 | Type | `--font-sans` (Figtree, body), `--font-display` (Bricolage Grotesque, headings), `--font-mono` (JetBrains Mono, role keys / ids) |
 
 Ready-made classes: `type-page-title`, `type-section-title`, `type-card-title`, `type-label`, `type-mono`, `card`, `panel`, `warn-note`, `danger-note`, `row-divider`. Tailwind classes only exist if the app already uses them, so do not invent utility classes - use the variables above with inline styles.
+
+## Moves and Phone
+Every card opens with two lines: **Moves** (which verb moves, and its still form) and **Phone** (what changes below the 720px tablet breakpoint; `desktop:` is 1080px). Believe them: a card that says a seat is still draws a still seat. The verbs are press (3% scale), tint, settle (a sheet rises 8px from 98%), arrive (rows rise 8px, 40ms apart), unfold, leave, crossfade, glide, flash, bloom, lift (6px) and breathe, the one loop, which means "still happening". Every verb has a still form for reduced motion, and the Moves line gives it. A card marked "Internal: never mounted alone" is a helper a screen uses, not a part to place on a board.
 
 ## Where the truth lives
 - `styles.css` and its import `_ds_bundle.css`: the app's compiled `globals.css`, with every token for both themes.

@@ -47,6 +47,24 @@ function call(
 }
 
 describe("proxy route admin/member boundary", () => {
+  // Replacing the action signing key is admin-only (action-key-autorotation):
+  // no member allowlist entry, and the admin path forwards the strict body as sent.
+  it("refuses a member replacing the action signing key without hitting the backend", async () => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    const res = await call(POST, "POST", ["zitadel", "action-key", "rotate"], { body: { force: true } });
+    expect(res.status).toBe(403);
+    expect(proxy.calls.length).toBe(0);
+  });
+
+  it("passes an admin's key replacement through, body unchanged", async () => {
+    (getSession as Mock).mockResolvedValue(ADMIN);
+    const res = await call(POST, "POST", ["zitadel", "action-key", "rotate"], { body: { force: true } });
+    expect(res.status).toBe(200);
+    expect(proxy.calls).toHaveLength(1);
+    expect(proxy.calls[0].url).toMatch(/\/api\/v1\/zitadel\/action-key\/rotate$/);
+    expect(proxy.calls[0].body).toEqual({ force: true });
+  });
+
   it("returns 401 when there is no session", async () => {
     (getSession as Mock).mockResolvedValue(null);
     const res = await call(GET, "GET", ["catalog"]);

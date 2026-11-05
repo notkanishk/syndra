@@ -156,6 +156,12 @@ function soleQueuer(changes: QueuedChange[], who: Who): string | null {
   return names.size === 1 ? Array.from(names)[0] : null;
 }
 
+/** The one person every kept change is about, so Pending opens narrowed to them; none when it spans several. */
+function soleUser(changes: QueuedChange[]): string | undefined {
+  const ids = new Set(changes.map((c) => c.user_id));
+  return ids.size === 1 ? changes[0].user_id : undefined;
+}
+
 function keptNote(changes: QueuedChange[], who: Who): string {
   const by = soleQueuer(changes, who);
   if (changes.length === 1) return `Nothing changed. ${by}'s ${kindOf(changes, false)} is still waiting.`;
@@ -266,7 +272,7 @@ export function useCancelStep(options: CancelStepOptions): CancelStep {
     note: kept ? (
       <span className="tint-in flex flex-col gap-1">
         <span>{keptNote(kept, who)}</span>
-        <NextStep />
+        <NextStep person={soleUser(kept)} />
       </span>
     ) : null,
     after: cancelled ? (

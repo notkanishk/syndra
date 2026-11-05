@@ -156,7 +156,7 @@ export function CommandBlock({
               }`}
             >
               <span
-                className={`type-mono shrink-0 pt-px ${onWarn ? "text-warn-ink/60" : "text-faint"}`}
+                className={`type-mono shrink-0 pt-px ${onWarn ? "text-warn-ink" : "text-faint"}`}
               >
                 {index + 1}.
               </span>

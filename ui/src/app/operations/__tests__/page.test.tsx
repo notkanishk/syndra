@@ -156,7 +156,13 @@ describe("Incoming events — plain titles and outcomes", () => {
     // The raw type is not on the row: it is in the details, one press away.
     expect(screen.queryByText("zitadel.grant_added")).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "Show details" })[0]);
+    // Opened, the row is named facts; the raw type and JSON are still folded (A-20 P11).
+    expect(screen.getByText("What Syndra did")).toBeTruthy();
+    expect(screen.queryByText(/^zitadel\./)).toBeNull();
+    expect(screen.queryByText(/"event_type"/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
     expect(screen.getAllByText(/^zitadel\./).length).toBe(1);
+    expect(screen.getByText(/"event_type"/)).toBeTruthy();
   });
 
   it("says who and what in the sentence, naming the bundle a new person was given", () => {
@@ -190,6 +196,7 @@ describe("Incoming events — plain titles and outcomes", () => {
     expect(screen.queryByText(/role wood\.lead is not in the catalog/)).toBeNull();
     const failed = screen.getByText("Access given in Zitadel").closest("[data-event-row]") as HTMLElement;
     fireEvent.click(within(failed).getByRole("button", { name: "Show details" }));
+    fireEvent.click(within(failed).getByRole("button", { name: /Technical detail/ }));
     expect(screen.getByText(/role wood\.lead is not in the catalog/)).toBeTruthy();
     const joined = screen.getByText("Person joined").closest("[data-event-row]") as HTMLElement;
     expect(within(joined).getAllByText("Not acted on").length).toBeGreaterThan(0);

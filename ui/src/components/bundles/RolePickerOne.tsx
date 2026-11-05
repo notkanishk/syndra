@@ -201,7 +201,7 @@ export function RolePickerOne({
                             }
                             meta={operator ? <Mono className="font-normal">{role.key}</Mono> : undefined}
                             description={role.description}
-                            note={noteSeat(role, audience)}
+                            note={noteSeat(role, audience, place.id)}
                           />
                         );
                       })
@@ -228,7 +228,7 @@ function foldCount(place: PickerPlace, holdsChosen: boolean, held: number, opera
 }
 
 /** What the row says about itself on the right: the person's standing first, then (operator) how many hold it. */
-function noteSeat(role: PickerRole, audience: "member" | "operator"): ReactNode {
+function noteSeat(role: PickerRole, audience: "member" | "operator", projectId: string): ReactNode {
   const operator = audience === "operator";
   const n = role.note;
   switch (n.kind) {
@@ -249,7 +249,7 @@ function noteSeat(role: PickerRole, audience: "member" | "operator"): ReactNode 
       return operator ? (
         <>
           <span>{n.at ? `Given ${formatAgoShort(n.at)}` : "Given"}</span>
-          <NextStep dot={false} />
+          <NextStep dot={false} role={{ projectId, roleKey: role.key }} />
         </>
       ) : (
         "On its way"

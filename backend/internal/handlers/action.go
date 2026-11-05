@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"os"
 
@@ -32,8 +33,12 @@ func decodeActionV2(body []byte) (ActionV2Request, claimtel.Outcome) { return cl
 // keyring reader, its debug mode). Each hook reads its package variable at
 // call time, so a test that swaps one is heard.
 var claimDoor = &claimserve.Door{
-	Plane:      func() *claimserve.Plane { return claimPlane },
-	Keys:       actionSigningKeys,
+	Plane: func() *claimserve.Plane { return claimPlane },
+	Keys:  actionSigningKeys,
+	Refresh: func(ctx context.Context) []claimserve.SlotKey {
+		claimPlane.RefreshKeys(ctx)
+		return actionSigningKeys()
+	},
 	DevMode:    func() bool { return os.Getenv("ZITADEL_DOMAIN") == "" },
 	Record:     func(c claimtel.Call) { recordClaimCall(c) },
 	OnMiss:     func(u string) { claimRepair.enqueue(u) },

@@ -5,6 +5,8 @@ import { useState, type ReactNode } from "react";
 
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ARROW_LINK, ArrowLink } from "@/components/ui/ArrowLink";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
@@ -125,7 +127,7 @@ function AppName({ clientID, names }: { clientID: string; names: Names }) {
   if (clientID === "-") return <span>a sign-in that named no app</span>;
   return (
     <span>
-      an app Syndra doesn&rsquo;t know, <Mono>{clientID}</Mono>
+      an app Syndra doesn&rsquo;t know, <CopyableValue inline value={clientID} label="Client id" />
     </span>
   );
 }
@@ -219,6 +221,19 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
       );
       break;
     }
+    // action-key-autorotation: subject "unverified" (replaced, the test sign-in
+    // after it didn't get its claims) or "failed" (Zitadel didn't replace it).
+    case "KEY_ROTATION":
+      if (group.some((f) => f.subject === "unverified")) {
+        title = "The new signing key isn't confirmed";
+        body =
+          "Syndra replaced the action signing key, but the test sign-in after it didn't get its claims. Syndra still accepts the old key and the new one, and won't replace it again on its own. The Action signing key row, below, says when it happened.";
+      } else {
+        title = "Zitadel didn't replace the signing key";
+        body =
+          "Syndra tried to replace the action signing key and Zitadel didn't do it. The old key still works, and Syndra tries again in the next quiet hours. The Action signing key row, below, says when.";
+      }
+      break;
     default:
       title = "Claim delivery needs a look";
       body = (
@@ -339,9 +354,7 @@ function AppRow({ app }: { app: ClaimApp }) {
         ) : (
           <>
             <span className="font-semibold">Not an app in Syndra</span>
-            <Mono className="truncate text-[12.5px] text-faint" title={app.client_id}>
-              {app.client_id}
-            </Mono>
+            <CopyableValue inline value={app.client_id} label="Client id" className="truncate text-[12.5px]" />
           </>
         )}
       </span>
@@ -445,10 +458,20 @@ function ConfigLine({ row, names }: { row: ConfigRow; names: Names }) {
             </span>
           ) : (
             problem && (
-              <span className="text-[13px] leading-[1.5] text-muted [overflow-wrap:anywhere]">
-                Expected <Value v={row.check === "R5" ? landsWords(row.expected) : row.expected} /> · found{" "}
-                <Value v={row.check === "R5" ? reachWords(row.found) : row.found} />
-              </span>
+              <>
+                <span className="text-[13px] leading-[1.5] text-muted">
+                  Syndra expected something other than what Zitadel has.
+                </span>
+                {/* The machine's values, kept exact and folded (A-20 P11). */}
+                <TechnicalDetail placeKey={`claims:${row.subject}`}>
+                  <span className="text-[13px] leading-[1.5] text-muted [overflow-wrap:anywhere]">
+                    Expected <Value v={row.check === "R5" ? landsWords(row.expected) : row.expected} />
+                  </span>
+                  <span className="text-[13px] leading-[1.5] text-muted [overflow-wrap:anywhere]">
+                    Found <Value v={row.check === "R5" ? reachWords(row.found) : row.found} />
+                  </span>
+                </TechnicalDetail>
+              </>
             )
           )}
           {row.state === "info" && note(row) && <span className="text-[13px] leading-[1.5] text-muted">{note(row)}</span>}

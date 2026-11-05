@@ -27,7 +27,7 @@ import type { SessionUser } from "@/lib/session";
 import { useEffect, useState } from "react";
 import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import { ShellNotices } from "@/components/shell/ShellNotices";
-import { greeting, WELCOME } from "@/lib/greeting";
+import { greeting, lastHere, WELCOME } from "@/lib/greeting";
 import { Crossfade, glideTo } from "@/lib/motion";
 import { targetLabel } from "@/lib/nav";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
@@ -178,6 +178,12 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         read: !unread,
         now,
         firstVisit: session.firstVisit,
+        // Only said when the feed was read and holds nothing after the previous
+        // sign-in: a record of a change, never a count of access (A-20 P18).
+        quietSince:
+          !changes.isLoading && !changes.error && !feed.some((c) => new Date(c.at).getTime() > Date.parse(session.previousSignIn ?? ""))
+            ? (lastHere(session.previousSignIn, now)?.on ?? undefined)
+            : undefined,
         // Only what Zitadel holds, with the grant's end: the record supplies the date, never the count.
         ending: grantsRead
           ? (grants.data ?? []).flatMap((grant) =>

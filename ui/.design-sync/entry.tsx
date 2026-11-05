@@ -4,6 +4,7 @@ import "./process-shim";
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NameResolverProvider } from "@/lib/queries/useNameResolver";
@@ -15,6 +16,7 @@ export * from "@/components/ui/Acknowledge";
 export * from "@/components/ui/ActionOutcome";
 export * from "@/components/ui/Anchored";
 export * from "@/lib/motion";
+export * from "@/components/ui/AdvancedLink";
 export * from "@/components/ui/ArrowLink";
 export * from "@/components/ui/Avatar";
 export * from "@/components/ui/Badge";
@@ -57,6 +59,7 @@ export * from "@/components/ui/StatusSeat";
 export * from "@/components/ui/Tabs";
 export * from "@/components/ui/Term";
 export * from "@/components/ui/Time";
+export * from "@/components/ui/TechnicalDetail";
 export * from "@/components/ui/TokenBlock";
 export * from "@/components/ui/WaitsMark";
 export * from "@/components/ui/Withheld";
@@ -87,6 +90,17 @@ export { useTheme } from "@/lib/theme";
 export { UiViewProvider, useUiView } from "@/lib/ui-view";
 export { BASIC_NAV, ADVANCED_NAV } from "@/lib/nav";
 export { ApiError, WouldCancelQueued } from "@/lib/api-client";
+
+/** Next's `useRouter()` (IntentPrefetchHost, in AppShell) throws without a mounted app router: a router that goes nowhere. */
+const NO_ROUTER = {
+  back() {},
+  forward() {},
+  refresh() {},
+  push() {},
+  replace() {},
+  prefetch() {},
+  hmrRefresh() {},
+};
 
 /**
  * The app root outside Next.js: the same stack as `components/providers.tsx`
@@ -126,6 +140,7 @@ export function SyndraRoot({
   if (frame === undefined) return <span ref={probe} hidden />;
   return (
     <PortalTarget.Provider value={frame}>
+      <AppRouterContext.Provider value={NO_ROUTER}>
       <PathnameContext.Provider value={pathname}>
         <QueryClientProvider client={client}>
           <NameResolverProvider>
@@ -135,6 +150,7 @@ export function SyndraRoot({
           </NameResolverProvider>
         </QueryClientProvider>
       </PathnameContext.Provider>
+      </AppRouterContext.Provider>
     </PortalTarget.Provider>
   );
 }

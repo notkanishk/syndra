@@ -141,14 +141,27 @@ services:
       # ZITADEL_ACTION_SIGNING_KEY signs the claim-injector target (function
       # triggers); ZITADEL_EVENT_SIGNING_KEY signs the event-listener target
       # (condition.event triggers) consumed by /api/webhooks/zitadel.
+      # Bootstrap only (action-key-autorotation): Syndra follows both keys in
+      # Zitadel, keeps them in Redis, and replaces them itself, so neither is
+      # ever updated here to keep sign-ins working.
       - ZITADEL_ACTION_SIGNING_KEY=${ZITADEL_ACTION_SIGNING_KEY:-}
       - ZITADEL_EVENT_SIGNING_KEY=${ZITADEL_EVENT_SIGNING_KEY:-}
       # Rotation-status observability. ROTATED_AT is an RFC3339 UTC timestamp
-      # emitted by rotate.sh; THRESHOLD_DAYS is the age at which the /zitadel
-      # UI panel flips from ok -> warn (default 90). Both feed
-      # GET /api/v1/zitadel/action-rotation-status.
+      # emitted by rotate.sh, read only until Syndra has a replacement of its own
+      # on record; THRESHOLD_DAYS is the limit (default 90).
       - ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT=${ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT:-}
       - ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS=${ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS:-}
+      # Syndra replaces both keys itself, LEAD_DAYS (default 5) before the
+      # limit, inside WINDOW (default 03:00-05:00, local time in TZ, an IANA
+      # zone such as Asia/Kolkata; unset is UTC). AUTOROTATE=off is the kill
+      # switch.
+      - TZ=${TZ:-}
+      - SYNDRA_ACTION_KEY_AUTOROTATE=${SYNDRA_ACTION_KEY_AUTOROTATE:-}
+      - SYNDRA_ACTION_KEY_LEAD_DAYS=${SYNDRA_ACTION_KEY_LEAD_DAYS:-}
+      - SYNDRA_ACTION_KEY_WINDOW=${SYNDRA_ACTION_KEY_WINDOW:-}
+      # The checkout compose runs from, so the by-hand guide shows the command
+      # with its real path (the container cannot see the host's).
+      - SYNDRA_SERVER_DIR=${PWD:-}
       # Event-listener equivalents are written by rotate.sh for forward
       # compatibility but no backend endpoint consumes them yet — the panel
       # only reports the claim-injector key. Pass-through here so the .env

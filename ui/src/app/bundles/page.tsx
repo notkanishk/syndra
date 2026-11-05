@@ -49,7 +49,7 @@ export default function BundlesPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Bundles"
-        lede="A bundle is a set of roles given together. Give someone a bundle and they get every role in it. Publish a new version and you choose whether they move to it."
+        lede="A bundle is a set of roles given together. Give someone a bundle and they get every role in it."
         actions={
           <Button variant="accent" onClick={() => setCreating(true)}>
             New bundle
@@ -130,8 +130,14 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
       <span className="hidden min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty] tablet:block">
         {bundle.description}
       </span>
-      <span className="w-[110px] text-right text-[15px] font-semibold tabular-nums">{bundle.role_count ?? "—"}</span>
-      <span className="w-[110px] text-right text-[15px] font-semibold tabular-nums">{bundle.holder_count ?? 0}</span>
+      <span className="text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:text-right">
+        {bundle.role_count ?? "None"}
+        <span className="text-[13px] font-normal text-faint tablet:hidden">{bundle.role_count === 1 ? " role" : " roles"}</span>
+      </span>
+      <span className="text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:text-right">
+        {bundle.holder_count ?? 0}
+        <span className="text-[13px] font-normal text-faint tablet:hidden">{bundle.holder_count === 1 ? " person" : " people"}</span>
+      </span>
     </div>
   );
 }

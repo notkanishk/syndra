@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
 
-import Link from "next/link";
+import { AdvancedLink } from "@/components/ui/AdvancedLink";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { ClaimsLine } from "@/components/home/ClaimsLine";
@@ -50,7 +50,7 @@ import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
 import { ShellNotices } from "@/components/shell/ShellNotices";
-import { greeting, isQuietHour, WELCOME } from "@/lib/greeting";
+import { firstName, greeting, isQuietHour, lastHere, WELCOME } from "@/lib/greeting";
 import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine } from "@/lib/term-dates";
 import { compareNames, sortByName } from "@/lib/sort";
@@ -103,6 +103,8 @@ export function Home({ session }: { session: SessionUser }) {
   const advanced = useIsAdvanced();
   const summary = useGovernanceSummary();
   const requests = useRequestsAdmin("pending");
+  // Every request, only to say whether any came in since they were last here (A-20 P18).
+  const everyRequest = useRequestsAdmin("all");
   const onboarding = useMissedOnboarding();
   const indicators = useIndicatorsRead();
 
@@ -222,9 +224,21 @@ export function Home({ session }: { session: SessionUser }) {
   // A swap held for the pointer (S5) keeps the grid as it last was, and the
   // headline with it: what leaves is what was there.
   const held = useRef<{ grid: React.ReactNode; blocks: number }>({ grid: null, blocks: 0 });
+  // "Since Tuesday" (A-20 P18): what Syndra has a record of arriving after the
+  // previous sign-in, never access. A block is new when a request or a joiner
+  // in it arrived since; the sentence only ever lengthens in place.
+  const here = now ? lastHere(session.previousSignIn, now) : null;
+  const prevAt = session.previousSignIn ? new Date(session.previousSignIn).getTime() : NaN;
+  const after = (iso?: string | null) => !!iso && new Date(iso).getTime() > prevAt;
+  const newBlocks = Math.min(
+    blocks,
+    (pending.some((r) => after(r.created_at)) ? 1 : 0) + (missed.some((p) => after(p.joined)) ? 1 : 0),
+  );
+  const nothingCameIn =
+    here !== null && !everyRequest.isLoading && !everyRequest.error && !(everyRequest.data ?? []).some((r) => after(r.created_at));
   const headline = error
     ? "Couldn't check."
-    : workSentence(calm && !swap.showsCalm ? held.current.blocks : blocks, loading);
+    : workSentence(calm && !swap.showsCalm ? held.current.blocks : blocks, loading, here?.since, newBlocks);
   // The first visit's welcome takes the headline's seat on a calm day only
   // (A-20 P2): on a working day the work is the welcome. It is a sentence in
   // the seat that is already there, so the date line never moves.
@@ -307,8 +321,10 @@ export function Home({ session }: { session: SessionUser }) {
       {/* Basic's own sentence folds when Advanced opens (A-08 §3), by the same
           Unfold as everything else the switch moves. */}
       <Unfold open={!advanced} gap={24}>
-        <p className="max-w-[820px] text-[14px] leading-[1.55] text-faint">
-          Pending changes and Drift are in Advanced.
+        {/* Two ways there, not a sentence about them (A-20 P10): each switches the view on the way. */}
+        <p className="flex flex-wrap gap-x-6 gap-y-1">
+          <ArrowLink href="/governance/pending">Pending changes</ArrowLink>
+          <ArrowLink href="/governance/drift">Drift</ArrowLink>
         </p>
       </Unfold>
     </div>
@@ -323,7 +339,7 @@ export function Home({ session }: { session: SessionUser }) {
             sweeps rather than at a glance. It wraps rather than clipping, and
             `text-balance` keeps the two lines close in length instead of
             leaving one word stranded. */}
-        <h1 className="type-greeting max-w-[22ch] text-balance sm:max-w-[34ch]">
+        <h1 className="type-greeting max-w-[22ch] text-balance tablet:max-w-[34ch]">
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}
           <span className="text-faint">
@@ -357,9 +373,9 @@ export function Home({ session }: { session: SessionUser }) {
             {clear.map(([name, href], index) => (
               <span key={href} className="inline-flex items-center gap-2">
                 {index > 0 && <span aria-hidden>·</span>}
-                <Link href={href} className="inline-flex min-h-[var(--tap)] items-center text-ink link-hover desktop:min-h-0">
+                <AdvancedLink href={href} className="inline-flex min-h-[var(--tap)] items-center text-ink link-hover desktop:min-h-0">
                   {name}
-                </Link>
+                </AdvancedLink>
               </span>
             ))}
           </div>
@@ -401,10 +417,11 @@ export function Home({ session }: { session: SessionUser }) {
             resolved
             title="Nothing here needs you."
             guidance={
+              // Since they were last here (A-20 P18), in the guidance's own seat: no row is added.
+              (nothingCameIn && here ? `Since ${here.since}, nothing came in. ` : "") +
+              "No open requests, and no access ending in the next 14 days." +
               // Late at night, on a calm day only: permission to stop (A-18 idea 9).
-              now && isQuietHour(now)
-                ? "No open requests, and no access ending in the next 14 days. It will keep until morning."
-                : "No open requests, and no access ending in the next 14 days."
+              (now && isQuietHour(now) ? " It will keep until morning." : "")
             }
           />
         </div>
@@ -597,8 +614,8 @@ function OpenRequests({
           <LeavingRow key={entry.id} {...queue.props(entry.id)}>
             <CardRow>
               <UserAvatar id={entry.requester_id} size="list" />
-              <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={entry.requester_id} />
-            <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
+              <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={entry.requester_id} />
+            <div className="w-full tablet:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
               <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
             </div>
             <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
@@ -607,7 +624,7 @@ function OpenRequests({
             <div className="w-[66px] shrink-0 text-[13px] text-faint">
               <Relative iso={entry.created_at} />
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-[196px] sm:shrink-0">
+            <div className="flex w-full flex-col gap-2 tablet:w-[196px] tablet:shrink-0">
               <Crossfade id={resolved.has(entry.id) ? (outcomes[entry.id] ? "outcome" : "forecast") : "open"}>
               {resolved.has(entry.id) ? (
                 !outcomes[entry.id] ? (
@@ -699,8 +716,8 @@ function ExpiringRow({
   return (
     <CardRow>
       <UserAvatar id={grant.user_id} size="list" />
-      <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={grant.user_id} />
-      <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
+      <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={grant.user_id} />
+      <div className="w-full tablet:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -797,7 +814,7 @@ function OnboardingGaps({
           <LeavingRow key={person.user_id} {...gaps.props(person.user_id)}>
             <CardRow>
               <UserAvatar id={person.user_id} size="list" />
-              <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={person.user_id} />
+              <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={person.user_id} />
               <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
                 Holds no bundle
               </div>
@@ -833,13 +850,13 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
       <Capped items={accounts} href="/system/service-accounts">
         {(account) => (
           <CardRow key={account.id}>
-            <Link
+            <AdvancedLink
               href={serviceAccountHref(account.id)}
               className="min-w-0 flex-1 text-[15px] font-semibold [overflow-wrap:anywhere] link-hover"
             >
               {account.name}
-            </Link>
-            <div className="w-full sm:w-[170px] shrink-0 text-[14px]">
+            </AdvancedLink>
+            <div className="w-full tablet:w-[170px] shrink-0 text-[14px]">
               <Owner id={account.owner_id} />
             </div>
           </CardRow>
@@ -928,9 +945,9 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
         {(row) => (
           <CardRow key={row.id}>
             <UserAvatar id={row.user_id} size="list" />
-            <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={row.user_id} />
+            <UserName className="w-full tablet:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={row.user_id} />
             {row.role_keys && row.role_keys.length > 0 && (
-              <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
+              <div className="w-full tablet:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
                 {sortByName(row.role_keys, (key) => names.roleRef(row.project_id ?? "", key), (key) => key).map((key) => (
                   <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-2" />
                 ))}
@@ -1079,24 +1096,17 @@ function UnexplainedAccess({ count }: { count: number }) {
   );
 }
 
-/**
- * The greeting addresses a person, so it must never address an id. When the
- * session has no name at all the greeting simply drops the address rather than
- * greeting a Zitadel subject — "Morning." is fine; "Morning, 318...447." is not.
- */
-function firstName(session: SessionUser): string {
-  const source = session.name.trim() || (session.email.split("@")[0] ?? "");
-  return source.trim().split(/\s+/)[0] ?? "";
-}
 
 // "here" is load-bearing: the collapsed nav bar below counts PLACES elsewhere
 // that want a look, and a things-count beside a places-count with no word
 // telling them apart reads as one total that disagrees with itself.
-function workSentence(count: number, loading: boolean): string {
+function workSentence(count: number, loading: boolean, since?: string, fresh = 0): string {
   if (loading) return "Checking.";
   if (count === 0) return "Nothing needs you right now.";
-  if (count === 1) return "One thing needs you.";
-  return `${spell(count)} things need you.`;
+  const base = count === 1 ? "One thing needs you" : `${spell(count)} things need you`;
+  if (!since || fresh === 0) return `${base}.`;
+  if (fresh >= count) return `${base}, ${count === 1 ? "new" : count === 2 ? "both new" : "all new"} since ${since}.`;
+  return `${base}, ${spell(fresh).toLowerCase()} of them new since ${since}.`;
 }
 
 const WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];

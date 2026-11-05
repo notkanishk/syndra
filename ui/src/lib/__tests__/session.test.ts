@@ -260,7 +260,7 @@ describe("demo identities are gated at the source", () => {
 });
 
 describe("the first-visit flag", () => {
-  const cookie = (firstVisit?: boolean) =>
+  const cookie = (firstVisit?: boolean, previousSignIn?: string) =>
     createOidcSessionValue({
       type: "oidc",
       accessToken: "tok",
@@ -273,6 +273,7 @@ describe("the first-visit flag", () => {
       status: "active",
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
       ...(firstVisit ? { firstVisit } : {}),
+      ...(previousSignIn ? { previousSignIn } : {}),
     });
 
   it("survives a refresh (every read of the same cookie), and is absent from any other session", async () => {
@@ -281,5 +282,12 @@ describe("the first-visit flag", () => {
     expect((await getSession())?.firstVisit).toBe(true);
     mockCookieValue = cookie();
     expect((await getSession())?.firstVisit).toBeUndefined();
+  });
+
+  it("carries when they were last here, and is absent when the sign-in had none (A-20 P18)", async () => {
+    mockCookieValue = cookie(false, "2026-11-03T09:00:00Z");
+    expect((await getSession())?.previousSignIn).toBe("2026-11-03T09:00:00Z");
+    mockCookieValue = cookie();
+    expect((await getSession())?.previousSignIn).toBeUndefined();
   });
 });
