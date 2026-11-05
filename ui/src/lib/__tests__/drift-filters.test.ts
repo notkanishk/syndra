@@ -220,6 +220,12 @@ describe("sortDrift", () => {
     expect(ids(sortDrift(twins, "who", 1, names))).toEqual(["y", "x"]);
   });
 
+  it("reads names the way a person does: case aside, Lab 2 before Lab 10", () => {
+    const labs: Record<string, string> = { u1: "Lab 10", u2: "lab 2", u3: "Lab 1" };
+    const byLab = { who: (item: DriftTriageItem) => labs[item.user_id] ?? "", what: () => "" };
+    expect(ids(sortDrift(rows, "who", 1, byLab))).toEqual(["c", "b", "a"]);
+  });
+
   it("does not reorder what it was given", () => {
     const before = ids(rows);
     sortDrift(rows, "who", 1, names);

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,7 +33,11 @@ func TestUpstreamFailureNeverShowsRawText(t *testing.T) {
 		{http.StatusInternalServerError, "DB_ERROR"},
 	} {
 		rr := httptest.NewRecorder()
-		jsonErrorResponse(rr, tc.status, tc.code, zitadelRaw)
+		if tc.status == http.StatusInternalServerError {
+			jsonErrorResponse(rr, tc.status, tc.code, zitadelRaw)
+		} else {
+			writeUpstreamStatus(rr, tc.status, errors.New(zitadelRaw), tc.code)
+		}
 		body := rr.Body.String()
 		if rr.Code != tc.status || strings.Contains(body, "rpc error") || strings.Contains(body, "192.0.2.7") {
 			t.Fatalf("%s leaked or changed status: %d %s", tc.code, rr.Code, body)

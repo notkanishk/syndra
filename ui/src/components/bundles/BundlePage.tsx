@@ -28,7 +28,7 @@ import { Term } from "@/components/ui/Term";
 import { Unfold } from "@/lib/motion";
 import { glideTo } from "@/lib/motion";
 import { WaitsMark } from "@/components/ui/WaitsMark";
-import { formatList, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
+import { formatList, formatShortDate, roleLabel } from "@/lib/format";
 import {
   outcomeFromError,
   succeeded,
@@ -67,6 +67,7 @@ import { useMappingRules } from "@/lib/queries/useMappingRules";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import dynamic from "next/dynamic";
 import { compareNames, sortByName, sortNames } from "@/lib/sort";
+import { roleName } from "@/lib/names";
 
 // Opened on demand, so it stays out of the page's first load.
 const PublishVersionDialog = dynamic(() => import("@/components/bundles/PublishVersionDialog").then((m) => m.PublishVersionDialog));
@@ -410,10 +411,10 @@ function WhatItGives({
       out.set(r.zitadel_project_id, group);
     }
     // Projects A to Z, and the roles inside each A to Z by their shown name.
-    const roleName = (r: BundleRoleRow) => byId.get(idOf(r))?.display_name || humanizeKey(r.zitadel_role_key);
+    const nameOfRole = (r: BundleRoleRow) => roleName(byId.get(idOf(r))?.display_name, r.zitadel_role_key);
     return Array.from(out.entries())
       .sort(([, a], [, b]) => compareNames(projectLabel(a.name, null), projectLabel(b.name, null)))
-      .map(([id, g]) => [id, { ...g, list: sortByName(g.list, roleName, idOf) }] as const);
+      .map(([id, g]) => [id, { ...g, list: sortByName(g.list, nameOfRole, idOf) }] as const);
   }, [drawn.rows, byId]);
   const next = draft?.next_version;
   const leavingIds = new Set(leaving.map(idOf));
@@ -483,7 +484,7 @@ function WhatItGives({
                   <div className="flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3.5">
                     <div className="min-w-[min(240px,100%)] flex-1">
                       <span className="text-[15px] font-semibold">
-                        {entry?.display_name || humanizeKey(role.zitadel_role_key)}
+                        {roleName(entry?.display_name, role.zitadel_role_key)}
                       </span>{" "}
                       <Mono className="font-normal text-faint">{role.zitadel_role_key}</Mono>
                       {entry?.waits_for_send && <WaitsMark className="ml-2" />}
@@ -1113,7 +1114,7 @@ function IncludedBundleCard({
       {failure && <ActionOutcome outcome={failure} word="Not changed" className="mx-5 my-3" />}
       {sortByName(
         roles,
-        (r) => catalog.get(idOf(r))?.display_name || humanizeKey(r.zitadel_role_key),
+        (r) => roleName(catalog.get(idOf(r))?.display_name, r.zitadel_role_key),
         idOf,
       ).map((role) => {
         const entry = catalog.get(idOf(role));
@@ -1121,7 +1122,7 @@ function IncludedBundleCard({
           <div key={idOf(role)} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3">
             <div className="min-w-[min(260px,100%)] flex-1">
               <span className="text-[15px] font-semibold">
-                {entry?.display_name || humanizeKey(role.zitadel_role_key)}
+                {roleName(entry?.display_name, role.zitadel_role_key)}
               </span>
               {entry?.waits_for_send && <WaitsMark className="ml-2" />}{" "}
               <span className="text-[13.5px] text-muted">

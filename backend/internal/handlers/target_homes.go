@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"net/http"
-	"sort"
 	"strconv"
+	"syndra/internal/textsort"
 	"time"
 
 	"syndra/internal/addons"
@@ -87,7 +87,7 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 		ownEndedIfOver(r, &row, target, now)
 		out = append(out, row)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Username < out[j].Username })
+	textsort.ByName(out, func(r accountHome) string { return r.Username }, nil)
 	jsonResponse(w, http.StatusOK, map[string]any{"read": homes.Read, "usage_read": homes.UsageRead, "accounts": out})
 }
 

@@ -1,6 +1,5 @@
 "use client";
 
-
 import { projectLabel } from "@/components/names/Unresolved";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { useMemo, useState } from "react";
@@ -12,10 +11,11 @@ import { RolePickerOne, type RolePickerOneProps } from "@/components/bundles/Rol
 import { Unfold } from "@/lib/motion";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Input } from "@/components/ui/Input";
-import { formatList, humanizeKey } from "@/lib/format";
+import { formatList } from "@/lib/format";
 import { useBundleRolesByBundle, useBundles } from "@/lib/queries/useBundles";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import { sortByName } from "@/lib/sort";
+import { roleName } from "@/lib/names";
 
 /**
  * Choosing bundles in the same picker (B9, 3a): a "Bundles" fold first, and a
@@ -185,7 +185,7 @@ function Picker({
   const chosen = Array.from(selected).filter((id) => !lockedIds?.has(id));
   const label = (id: string) => {
     const r = byId.get(id);
-    return r ? r.display_name || humanizeKey(r.role_key) : humanizeKey(splitRoleId(id)[1]);
+    return roleName(r?.display_name, r ? r.role_key : splitRoleId(id)[1]);
   };
 
   // Bundles and roles together, A to Z, not in the order they were ticked.
@@ -304,7 +304,7 @@ function Picker({
                           onToggle={() => onToggle(id)}
                           title={
                             <>
-                              {role.display_name || humanizeKey(role.role_key)}
+                              {roleName(role.display_name, role.role_key)}
                               {role.waits_for_send && <WaitsMark className="ml-2" />}
                             </>
                           }

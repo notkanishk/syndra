@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"syndra/internal/textsort"
 
 	"github.com/jackc/pgx/v5"
 
@@ -250,12 +251,7 @@ func bundleOverlaps(ctx context.Context, bundles []models.Bundle) ([]models.Insi
 		ref   models.InsightBundleRef
 		roles map[roleKey]bool
 	}
-	sort.Slice(bundles, func(i, j int) bool {
-		if bundles[i].Name != bundles[j].Name {
-			return bundles[i].Name < bundles[j].Name
-		}
-		return bundles[i].ID < bundles[j].ID
-	})
+	textsort.ByName(bundles, func(b models.Bundle) string { return b.Name }, func(b models.Bundle) string { return b.ID })
 	var entries []entry
 	for _, b := range bundles {
 		_, rs, err := svcLatestVersionRoles(ctx, b.ID)
@@ -661,10 +657,5 @@ func whatIfPerson(id, name string, keys []roleKey) models.InsightWhatIfPerson {
 }
 
 func sortWhatIfPeople(ps []models.InsightWhatIfPerson) {
-	sort.Slice(ps, func(i, j int) bool {
-		if ps[i].Name != ps[j].Name {
-			return ps[i].Name < ps[j].Name
-		}
-		return ps[i].UserID < ps[j].UserID
-	})
+	textsort.ByName(ps, func(p models.InsightWhatIfPerson) string { return p.Name }, func(p models.InsightWhatIfPerson) string { return p.UserID })
 }

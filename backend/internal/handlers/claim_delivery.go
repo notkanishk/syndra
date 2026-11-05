@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syndra/internal/textsort"
 	"time"
 
 	"syndra/internal/claimserve"
@@ -350,8 +351,8 @@ func liveApps(ctx context.Context, rows []db.ClaimDeliveryRow, last []db.ClaimDe
 		if (out[i].Name == "") != (out[j].Name == "") {
 			return out[j].Name == "" // named apps first
 		}
-		if out[i].Name != out[j].Name {
-			return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+		if c := textsort.Compare(out[i].Name, out[j].Name); c != 0 {
+			return c < 0
 		}
 		return out[i].ClientID < out[j].ClientID
 	})

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
-import { UserAvatar, UserName } from "@/components/names";
+import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
 import { formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { glideTo } from "@/lib/motion";
@@ -142,7 +142,7 @@ function PersonRow({
   // type "Ada Rivera" beside a row that says "Ada" is a puzzle, not a check.
   const resolver = useNameResolver();
   const accountHref = useAccountHref();
-  const name = resolver.resolveUser(account.subject_id).value?.display_name ?? account.subject_id;
+  const name = resolver.resolveUser(account.subject_id).value?.display_name ?? UNKNOWN_ACCOUNT;
 
   return (
     <>

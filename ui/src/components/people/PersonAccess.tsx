@@ -45,7 +45,7 @@ import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Withheld } from "@/components/ui/Withheld";
-import { useNameResolver } from "@/lib/queries/useNameResolver";
+
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
@@ -54,13 +54,14 @@ import { useSeededUser } from "@/lib/queries/seed";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { EXTEND_DAYS, FORECAST, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { daysUntil, expiryLabel, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, expiryLabel, formatAgoShort, formatShortDate } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 import { useApplications } from "@/lib/queries/useApplications";
 import { usePersonSignIns } from "@/lib/queries/useSignIns";
 import { useTargets } from "@/lib/queries/useTargets";
 import { projectSignInLine } from "@/lib/sign-in-line";
 import { sortByName } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 type Tab = "access" | "requests" | "activity";
 
@@ -83,8 +84,7 @@ const TAB_LABELS: Record<Tab, string> = {
  */
 /** A role as the catalog names it, the key made readable only when the catalog does not know it. */
 function useRoleName(): (projectId: string, roleKey: string) => string {
-  const resolver = useNameResolver();
-  return (projectId, roleKey) => resolver.resolveRole(projectId, roleKey).value?.display_name || humanizeKey(roleKey);
+  return useShownNames().role;
 }
 
 function tabsFor(isOperator: boolean): Tab[] {

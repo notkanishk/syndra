@@ -98,7 +98,7 @@ export function PlanReview({
           <p className="px-4 py-3 text-[13.5px] text-muted">{emptyNote(plan.op)}</p>
         ) : (
           <>
-            {sortByName(outcomes, (o) => o.name || o.email || o.user_id, (o) => o.user_id).map((outcome) => (
+            {sortByName(outcomes, (o) => o.name || o.email || "", (o) => o.user_id).map((outcome) => (
               <PlanRow key={outcome.user_id} outcome={outcome} applied={plan.applied} />
             ))}
             {/* #32: the requester, left out of anything that takes access away. */}

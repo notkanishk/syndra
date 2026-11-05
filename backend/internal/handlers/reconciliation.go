@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 	"time"
@@ -140,7 +141,7 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		if msg == "" {
 			msg = "Zitadel did not answer"
 		}
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", msg)
+		writeUpstream(w, errors.New(msg), "ZITADEL_ERROR")
 		return
 	}
 	allZitadel := services.ObservedToUserGrants(observed)

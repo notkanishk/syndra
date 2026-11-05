@@ -41,9 +41,13 @@ Owner: "get everything in one IST time zone." Change [`changes/one-time-zone`](c
 - **Operator-gated.** Run on staging against production's copy first; read the production counts in `tasks.md` 4.5 before deploy; confirm the `[FINDINGS] sign-in totals … recounted` log line. UNVERIFIED: that the deployment's Zitadel credentials can read the event log back to 3 Nov (Zitadel keeps events; the lookup endpoint already reads them).
 - **Also resolves** the action-key change's "TZ must be set" gate: the quiet window is read in `clock.Loc`, which defaults to IST.
 ## 0d. Rules on the pipeline (5 Nov 2026)
+## 0d. One path, W2d: names (5 Nov 2026)
+
+Branch `fix/one-name-path`; detail in [`changes/one-path`](changes/one-path/proposal.md). One role-name helper (`ui/src/lib/names.ts`), ids out of the audit CSV name columns and three screens, one backend sort (`internal/textsort`), guards on both. Open: one person-fallback phrase, the six backend "id as name" returns, Go `roleLabel`, SQL `ORDER BY` collation (UNVERIFIED).
+
 ## 0d. One path, W1b: the error envelope (5 Nov 2026)
 
-Branch `fix/error-envelope`; detail in [`changes/one-path`](changes/one-path/proposal.md). Raw Zitadel and add-on text no longer reaches the screen at 502/503 for the raw codes, the proxy speaks the same envelope, and the reference is kept. Open: a `writeUpstream` at each raw call site (retire `rawUpstreamCodes`), and the remaining hand-built bodies in `bundles.go`, `access.go`, `claimserve/door.go` and the add-on.
+Branch `fix/error-envelope`; detail in [`changes/one-path`](changes/one-path/proposal.md). Raw Zitadel and add-on text no longer reaches the screen at 502/503 for the raw codes, the proxy speaks the same envelope, and the reference is kept. `writeUpstream` is now at every raw call site and `rawUpstreamCodes` is gone (branch `fix/one-name-path`). Open: the remaining hand-built bodies in `bundles.go`, `access.go`, `claimserve/door.go` and the add-on.
 ## 0d. One add-on pipe (W1e/W1f, 5 Nov 2026)
 
 Branch `fix/one-addon-pipe`; change [`changes/one-path`](changes/one-path/tasks.md). Every add-on call now goes through `addons/pipe.go` (breaker, trace before a write, idempotency key), lifecycle changes leave an `addon_operations` row and an audit line, and the TrueNAS plan and apply share one `decide`. Open from it:

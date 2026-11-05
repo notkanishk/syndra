@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
+	"syndra/internal/textsort"
 	"time"
 
 	"syndra/internal/clock"
@@ -236,9 +236,7 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		view.Members = append(view.Members, member)
 	}
 
-	sort.Slice(view.Members, func(i, j int) bool {
-		return strings.ToLower(view.Members[i].User.Name) < strings.ToLower(view.Members[j].User.Name)
-	})
+	textsort.ByName(view.Members, func(m RoleMember) string { return m.User.Name }, nil)
 	return view, nil
 }
 
