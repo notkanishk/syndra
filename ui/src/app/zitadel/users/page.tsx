@@ -9,13 +9,14 @@ import {
   UpstreamShell,
   WriteFooter,
   WriteResult,
+  sendsWhen,
 } from "@/components/upstream/UpstreamShell";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { Mono } from "@/components/ui/Badge";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { outcomeFromError, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
@@ -32,9 +33,12 @@ import {
   useUpstreamUserGrants,
   useUpstreamUsers,
   type ZitadelGrantChange,
+  type ZitadelRoleChange,
 } from "@/lib/queries/useUpstream";
+import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
+import { useUserAccess } from "@/lib/queries/useUsers";
 import { useDebounce } from "@/lib/useDebounce";
-import { humanizeKey } from "@/lib/format";
+import { formatList, humanizeKey } from "@/lib/format";
 import { sortByName, sortNames } from "@/lib/sort";
 
 /** "USER_STATE_ACTIVE" → "Active": the API's word, in ours. */
@@ -42,14 +46,99 @@ function userStateLabel(state: string): string {
   return humanizeKey(state.replace(/^USER_STATE_/, "").toLowerCase());
 }
 
+/** "project/role" → "role". */
+const roleOf = (role: string) => role.slice(role.indexOf("/") + 1);
+
+type Act = "given" | "revoked" | "replaced";
+const ACT_WORD: Record<Act, string> = { given: "Given", revoked: "Revoked", replaced: "Replaced" };
+
 /**
- * What a change recorded, and which roles it kept because a bundle or a rule
- * still gives them — the backend's words, never this screen's own guess.
+ * What a change did, role by role, in the backend's words (W8): never "done"
+ * for a role that waits, that Zitadel didn't take, or that was kept.
  */
-function changeDetail(res: ZitadelGrantChange | undefined): string {
+function changeResult(res: ZitadelGrantChange | undefined, act: Act): { outcome: Outcome; word: string } {
+  const roles = res?.roles ?? [];
   const recorded = "Recorded in Syndra as a change on their page, so it is explained afterwards.";
-  const kept = sortNames((res?.retained_roles ?? []).map((role) => role.slice(role.indexOf("/") + 1)));
-  return kept.length ? `${recorded} Kept, because a bundle or a rule still gives it: ${kept.join(", ")}.` : recorded;
+  if (roles.length === 0) {
+    if (res?.status === "unchanged") {
+      return { outcome: { kind: "no_change", message: "The new list is the same as the old one", detail: recorded }, word: "No change" };
+    }
+    return { outcome: { kind: "applied", message: `Roles ${act} in Zitadel`, detail: recorded }, word: ACT_WORD[act] };
+  }
+  const lines: string[] = [];
+  const say = (lead: string, pick: (r: ZitadelRoleChange) => boolean) => {
+    const names = sortNames(roles.filter(pick).map((r) => roleOf(r.role)));
+    if (names.length) lines.push(`${lead}: ${formatList(names)}.`);
+  };
+  say("Given in Zitadel", (r) => r.change === "given" && r.status === "applied");
+  say("Revoked in Zitadel", (r) => r.change === "revoked" && r.status === "applied");
+  say("Waiting for you to send, because the role always waits for you", (r) => r.status === "waiting");
+  say("Not in Zitadel yet, because Zitadel didn't take it. It is in Pending changes", (r) => r.change === "given" && r.status === "pending");
+  say("Not revoked in Zitadel yet, because Zitadel didn't take it. Revocations send on their own", (r) => r.change === "revoked" && r.status === "pending");
+  say("Zitadel refused, so it is not in Zitadel", (r) => r.status === "failed");
+  say("Kept, because a bundle or a rule still gives it", (r) => r.change === "kept");
+  const detail = [...lines, recorded].join(" ");
+
+  const sent = roles.filter((r) => r.change !== "kept");
+  if (sent.length === 0) {
+    return { outcome: { kind: "no_change", message: "Nothing was revoked. A bundle or a rule still gives every role", detail }, word: "Nothing revoked" };
+  }
+  const open = sent.filter((r) => r.status === "waiting" || r.status === "pending");
+  if (open.length) {
+    return {
+      outcome: {
+        kind: "queued",
+        message: "Recorded in Syndra. Not all of it is in Zitadel yet",
+        detail,
+        sendsItself: open.every((r) => r.change === "revoked" && r.status === "pending") || undefined,
+      },
+      word: ACT_WORD[act],
+    };
+  }
+  if (sent.some((r) => r.status === "failed")) {
+    return { outcome: { kind: "no_change", message: "Recorded in Syndra, but Zitadel refused part of it", detail }, word: "Not all in Zitadel" };
+  }
+  return { outcome: { kind: "applied", message: `Roles ${act} in Zitadel`, detail }, word: ACT_WORD[act] };
+}
+
+/** The roles among `keys` that wait for you; undefined until the list is read. */
+function useWaitingAmong(projectId: string, keys: string[]): string[] | undefined {
+  const waits = useRolesThatWait().data?.roles;
+  if (!waits || !projectId) return undefined;
+  return keys.filter((key) => waits.some((w) => w.project_id === projectId && w.role_key === key));
+}
+
+/**
+ * The roles on this grant a revoke keeps, from Syndra's own explanation of
+ * the person's access: those a bundle gives, or a rule whose starting role
+ * they keep (W1a's removeRoles keeps exactly what Syndra still gives).
+ * `kept` is undefined while unread or unreadable.
+ */
+function useKeptAmong(userId: string, projectId: string, keys: string[]): { kept?: string[]; reading: boolean } {
+  const access = useUserAccess(userId);
+  const project = access.data?.projects.find((p) => p.project_id === projectId);
+  if (!access.data) return { reading: access.isLoading };
+  const roles = [...(project?.source_roles ?? []), ...(project?.derived_roles ?? [])];
+  const reasonsFor = (key: string) => roles.filter((r) => r.role_key === key).flatMap((r) => r.reasons);
+  // A role held outside this grant keeps whatever a rule starts from it.
+  const held = (p: string, key: string, kept: Set<string>) => p !== projectId || !keys.includes(key) || kept.has(key);
+  const kept = new Set<string>();
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const key of keys) {
+      if (kept.has(key)) continue;
+      const stays = reasonsFor(key).some(
+        (r) =>
+          r.kind === "bundle" ||
+          (r.kind === "mapping" && Boolean(r.trigger_role) && held(r.trigger_project ?? projectId, r.trigger_role!, kept)),
+      );
+      if (stays) {
+        kept.add(key);
+        grew = true;
+      }
+    }
+  }
+  return { kept: keys.filter((key) => kept.has(key)), reading: false };
 }
 
 /** A grant's roles, wrapping: a role key is never cut short. */
@@ -269,9 +358,16 @@ function RevokeDialog({
   onClose: () => void;
 }) {
   const remove = useUpstreamRemoveGrant();
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
+  const outcome = result?.outcome ?? null;
   const [acknowledged, setAcknowledged] = useState(false);
-  const done = outcome?.kind === "applied";
+  const done = succeeded(outcome);
+  // C4: the count is the roles that go. Until Syndra's explanation of their
+  // access is read it is "up to" every role on the grant, never a guess.
+  const { kept, reading } = useKeptAmong(userId, grant.projectId, grant.roleKeys);
+  const going = kept ? grant.roleKeys.filter((key) => !kept.includes(key)) : grant.roleKeys;
+  const waiting = useWaitingAmong(grant.projectId, going);
+  const nothingGoes = going.length === 0;
 
   return (
     <Modal open onClose={onClose} busy={remove.isPending} size="sm" labelledBy="revoke-grant-title">
@@ -281,7 +377,7 @@ function RevokeDialog({
         lede={
           done
             ? undefined
-            : "Revoked as a person’s page revokes: only what Syndra gives them directly goes, and a role a bundle or a rule still gives them stays."
+            : "Revoked as a person’s page revokes. A role a bundle or a rule still gives them stays. Every other role on this grant is revoked, including any Syndra has no record of."
         }
       />
       {!done && (
@@ -289,36 +385,53 @@ function RevokeDialog({
           <div className="text-[14.5px]">
             <ProjectName id={grant.projectId} /> <RoleKeys keys={grant.roleKeys} />
           </div>
-          <AcknowledgeCount
-            checked={acknowledged}
-            onChange={setAcknowledged}
-            count={grant.roleKeys.length}
-            noun="roles"
-            verb="revokes"
-            consequence={`${name} loses these roles once the change reaches Zitadel, except any a bundle or a rule still gives them. It is sent straight away unless the role waits for you, and Syndra records it as its own, so it is explained afterwards.`}
-          />
+          {kept && kept.length > 0 && (
+            <p className="text-[13.5px] leading-[1.55] text-muted">
+              Stays, because a bundle or a rule still gives it: {formatList(sortNames(kept))}.
+            </p>
+          )}
+          {nothingGoes ? (
+            <p className="text-[13.5px] leading-[1.55] text-muted">
+              Nothing on this grant would be revoked: a bundle or a rule gives {name} every role on it.
+            </p>
+          ) : (
+            <AcknowledgeCount
+              checked={acknowledged}
+              onChange={setAcknowledged}
+              count={going.length}
+              noun="roles"
+              verb={kept ? "revokes" : "revokes up to"}
+              consequence={`${name} loses ${going.length === 1 ? "it" : "them"} once the change reaches Zitadel. ${sendsWhen(waiting)} Syndra records it as its own, so it is explained afterwards.`}
+            />
+          )}
         </div>
       )}
-      {outcome && <WriteResult outcome={outcome} word="Revoked" />}
+      {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} />}
 
       <WriteFooter outcome={outcome} onClose={onClose}>
         <Button
           variant="dangerConfirm"
-          disabled={!acknowledged}
-          reason={!acknowledged ? "Check the box above to confirm you understand the consequence." : undefined}
+          disabled={reading || nothingGoes || !acknowledged}
+          reason={
+            reading
+              ? "Reading what Syndra gives them first."
+              : nothingGoes
+                ? "Nothing here would be revoked."
+                : !acknowledged
+                  ? "Check the box above to confirm you understand the consequence."
+                  : undefined
+          }
           isPending={remove.isPending}
           onClick={async () => {
             try {
               const res = await remove.mutateAsync({ userId, grantId: grant.grantId });
-              setOutcome({ kind: "applied", message: "Roles revoked in Zitadel", detail: changeDetail(res) });
+              setResult(changeResult(res, "revoked"));
             } catch (error) {
-              setOutcome(outcomeFromError(error));
+              setResult({ outcome: outcomeFromError(error), word: "" });
             }
           }}
         >
-          {grant.roleKeys.length === 1
-            ? "Revoke this role in Zitadel"
-            : `Revoke these ${grant.roleKeys.length} roles in Zitadel`}
+          {going.length === 1 ? "Revoke this role in Zitadel" : `Revoke these ${going.length} roles in Zitadel`}
         </Button>
       </WriteFooter>
     </Modal>
@@ -331,12 +444,14 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   const roles = useUpstreamProjectRoles(projectId || null);
   const [keys, setKeys] = useState("");
   const assign = useUpstreamAssignGrant();
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
+  const outcome = result?.outcome ?? null;
   const [acknowledged, setAcknowledged] = useState(false);
-  const done = outcome?.kind === "applied";
+  const done = succeeded(outcome);
 
   const parsed = parseKeys(keys);
   const available = sortNames(roles.data?.items.map((role) => role.key) ?? []);
+  const waiting = useWaitingAmong(projectId, parsed);
 
   return (
     <Modal open onClose={onClose} busy={assign.isPending} size="sm">
@@ -384,12 +499,13 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           <DirectWriteWarning
             traced
             what="Syndra records this grant as its own, so it is explained afterwards rather than surfacing under Drift."
+            sends={sendsWhen(waiting)}
             acknowledged={acknowledged}
             onAcknowledge={setAcknowledged}
           />
         </div>
       )}
-      {outcome && <WriteResult outcome={outcome} word="Given" />}
+      {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} />}
 
       <WriteFooter outcome={outcome} onClose={onClose}>
         <Button
@@ -409,9 +525,9 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           onClick={async () => {
             try {
               const res = await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
-              setOutcome({ kind: "applied", message: "Roles given in Zitadel", detail: changeDetail(res) });
+              setResult(changeResult(res, "given"));
             } catch (error) {
-              setOutcome(outcomeFromError(error));
+              setResult({ outcome: outcomeFromError(error), word: "" });
             }
           }}
         >
@@ -432,12 +548,19 @@ function EditRolesDialog({
   onClose: () => void;
 }) {
   const update = useUpstreamUpdateGrant();
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
+  const outcome = result?.outcome ?? null;
   const [keys, setKeys] = useState(grant.roleKeys.join(", "));
   const [acknowledged, setAcknowledged] = useState(false);
-  const done = outcome?.kind === "applied";
+  const done = succeeded(outcome);
 
   const parsed = parseKeys(keys);
+  // Both halves of a replace are delivered by the same rule: what is added and what is left out.
+  const changed = [
+    ...parsed.filter((key) => !grant.roleKeys.includes(key)),
+    ...grant.roleKeys.filter((key) => !parsed.includes(key)),
+  ];
+  const waiting = useWaitingAmong(grant.projectId, changed);
 
   return (
     <Modal open onClose={onClose} busy={update.isPending} size="sm">
@@ -458,13 +581,14 @@ function EditRolesDialog({
           </div>
           <DirectWriteWarning
             traced
-            what="Replacing the roles revokes any this person holds that you leave out."
+            what="Replacing the roles revokes any you leave out, unless a bundle or a rule still gives it."
+            sends={sendsWhen(waiting)}
             acknowledged={acknowledged}
             onAcknowledge={setAcknowledged}
           />
         </div>
       )}
-      {outcome && <WriteResult outcome={outcome} word="Replaced" />}
+      {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} />}
 
       <WriteFooter outcome={outcome} onClose={onClose}>
         <Button
@@ -481,9 +605,9 @@ function EditRolesDialog({
           onClick={async () => {
             try {
               const res = await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
-              setOutcome({ kind: "applied", message: "Roles replaced in Zitadel", detail: changeDetail(res) });
+              setResult(changeResult(res, "replaced"));
             } catch (error) {
-              setOutcome(outcomeFromError(error));
+              setResult({ outcome: outcomeFromError(error), word: "" });
             }
           }}
         >

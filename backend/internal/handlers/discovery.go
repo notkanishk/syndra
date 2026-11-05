@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"slices"
@@ -223,6 +224,14 @@ func handleCreateZitadelProjectRole(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusCreated, map[string]string{"status": "created"})
 }
 
+// roleChangeUnknownCode answers a role write whose outcome nobody knows: the
+// answer was lost and the read-back failed (services.ErrRoleChangeUnknown).
+// Syndra kept its record; the screen must not say nothing changed.
+const (
+	roleChangeUnknownCode    = "OUTCOME_UNKNOWN"
+	roleChangeUnknownMessage = "Zitadel didn't answer, and Syndra couldn't read the role back, so it can't tell whether Zitadel made the change. Syndra kept its record. Open this project again in a minute to see what Zitadel holds."
+)
+
 // writeRoleWriteError answers a refused or failed role write from the one
 // role pipe (services/roles.go). A delete held by people names them and their
 // count in details, so the dialog can ask for that exact count back.
@@ -252,8 +261,14 @@ func writeRoleWriteError(w http.ResponseWriter, err error) {
 				len(names), oneOrMany(len(names), "person holds", "people hold")),
 			Details: map[string]string{"count": strconv.Itoa(len(names)), "holders": strings.Join(names, ", ")},
 		})
+	case errors.Is(err, services.ErrRoleChangeUnknown):
+		// Never "Nothing was changed": the change may have landed, and a
+		// delete may already have taken the role from everyone holding it.
+		log.Printf("[ROLES] outcome unknown: %v", err)
+		jsonErrorResponse(w, http.StatusBadGateway, roleChangeUnknownCode, roleChangeUnknownMessage)
 	case errors.Is(err, services.ErrRoleNotChangedInZitadel):
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		log.Printf("[ROLES] not changed: %v", err)
+		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_REFUSED", "Zitadel didn't make the change, so Syndra put its record back.")
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
@@ -409,11 +424,40 @@ type zitadelGrantChange struct {
 	Retained   []string `json:"retained_roles"`
 	Status     string   `json:"status"`
 	WaitReason string   `json:"wait_reason,omitempty"`
+	// Roles is each role's own outcome (W8): one change can send some roles,
+	// hold one that waits, and keep one a bundle still gives.
+	Roles []zitadelRoleChange `json:"roles"`
+}
+
+// zitadelRoleChange is one role's part of a change. Status, after delivery:
+// applied (in Zitadel now), waiting (held for the operator to send), pending
+// (meant to go, not taken yet), failed, or kept (nothing was sent).
+type zitadelRoleChange struct {
+	Role   string `json:"role"`   // "project/role"
+	Change string `json:"change"` // given | revoked | kept
+	Status string `json:"status"`
+	rows   []string
 }
 
 func newZitadelGrantChange() zitadelGrantChange {
-	return zitadelGrantChange{OutboxIDs: []string{}, Given: []string{}, Revoked: []string{}, Retained: []string{}, Status: "pending"}
+	return zitadelGrantChange{OutboxIDs: []string{}, Given: []string{}, Revoked: []string{}, Retained: []string{}, Status: "pending", Roles: []zitadelRoleChange{}}
 }
+
+func (res *zitadelGrantChange) add(role, change string, rows ...string) {
+	res.Roles = append(res.Roles, zitadelRoleChange{Role: role, Change: change, rows: rows})
+	switch change {
+	case "given":
+		res.Given = append(res.Given, role)
+	case "revoked":
+		res.Revoked = append(res.Revoked, role)
+	case "kept":
+		res.Retained = append(res.Retained, role)
+	}
+}
+
+// roleStatusRank orders statuses worst first: a role carried by several rows
+// is as far along as its least delivered row.
+var roleStatusRank = map[string]int{"failed": 0, "waiting": 1, "pending": 2, "applied": 3}
 
 // handleAssignZitadelGrant gives roles from the Zitadel › Users screen through
 // the person page's pipe: each role must be offered and not already held, and
@@ -573,7 +617,7 @@ func giveRoles(ctx context.Context, actor, userID, projectID string, roles []str
 			return err
 		}
 		res.OutboxIDs = append(res.OutboxIDs, q.OutboxID)
-		res.Given = append(res.Given, projectID+"/"+role)
+		res.add(projectID+"/"+role, "given", q.OutboxID)
 	}
 	return nil
 }
@@ -602,8 +646,14 @@ func removeRoles(ctx context.Context, actor, userID, projectID string, roles []s
 				return err
 			}
 			res.OutboxIDs = append(res.OutboxIDs, rm.OutboxIDs...)
-			res.Revoked = append(res.Revoked, rm.Revoked...)
-			res.Retained = append(res.Retained, rm.Retained...)
+			// ponytail: the removal's rows are not split by role, so each role
+			// it revoked reports the least delivered of them.
+			for _, gone := range rm.Revoked {
+				res.add(gone, "revoked", rm.OutboxIDs...)
+			}
+			for _, kept := range rm.Retained {
+				res.add(kept, "kept")
+			}
 			continue
 		}
 		// ponytail: read outside the access lock; a bundle given in the same
@@ -614,7 +664,7 @@ func removeRoles(ctx context.Context, actor, userID, projectID string, roles []s
 			return err
 		}
 		if held {
-			res.Retained = append(res.Retained, projectID+"/"+role)
+			res.add(projectID+"/"+role, "kept")
 			continue
 		}
 		q, err := grantDirect(ctx, db.EnqueueParams{
@@ -630,23 +680,54 @@ func removeRoles(ctx context.Context, actor, userID, projectID string, roles []s
 			return err
 		}
 		res.OutboxIDs = append(res.OutboxIDs, q.OutboxID)
-		res.Revoked = append(res.Revoked, projectID+"/"+role)
+		res.add(projectID+"/"+role, "revoked", q.OutboxID)
 	}
 	return nil
 }
 
 // finishZitadelGrantChange is the person page's tail: recompile the person's
-// claims first, then deliver by the one rule (services.Deliver).
+// claims first, then deliver by the one rule (services.Deliver). Each role
+// then reports how far its own rows got, and Status is the least delivered.
 func finishZitadelGrantChange(w http.ResponseWriter, r *http.Request, userID string, res zitadelGrantChange) {
 	rebuildUserCacheDetachedFn(r.Context(), userID)
+	row := map[string]string{}
 	if len(res.OutboxIDs) > 0 {
 		d := svcDeliver(r.Context(), res.OutboxIDs, r.URL.Query().Get("apply") != "true")
 		res.WaitReason = d.WaitReason()
+		for _, id := range d.Waiting {
+			row[id] = "waiting"
+		}
 		for _, id := range d.Sent {
-			if st, err := dbGetPropagationStatus(r.Context(), id); err == nil && st != "" {
-				res.Status = st
+			row[id] = "pending"
+			if st, err := dbGetPropagationStatus(r.Context(), id); err == nil && (st == "applied" || st == "failed") {
+				row[id] = st
 			}
 		}
+	}
+	worst := ""
+	for i := range res.Roles {
+		rc := &res.Roles[i]
+		if rc.Change == "kept" {
+			rc.Status = "kept"
+			continue
+		}
+		for _, id := range rc.rows {
+			if st := cmp.Or(row[id], "pending"); rc.Status == "" || roleStatusRank[st] < roleStatusRank[rc.Status] {
+				rc.Status = st
+			}
+		}
+		rc.Status = cmp.Or(rc.Status, "pending")
+		if worst == "" || roleStatusRank[rc.Status] < roleStatusRank[worst] {
+			worst = rc.Status
+		}
+	}
+	switch worst {
+	case "applied", "failed":
+		res.Status = worst
+	case "":
+		res.Status = "unchanged" // every role was kept: nothing was sent
+	default:
+		res.Status = "pending" // waiting rows are pending in the outbox too
 	}
 	jsonResponse(w, http.StatusAccepted, res)
 }

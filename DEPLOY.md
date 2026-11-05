@@ -649,9 +649,12 @@ All commands run from `/opt/syndra` as the `runner` user.
   `ZITADEL_ACTION_SIGNING_KEY_ROTATION_THRESHOLD_DAYS`).
   - **When.** `SYNDRA_ACTION_KEY_LEAD_DAYS` (5) days before the limit, inside
     `SYNDRA_ACTION_KEY_WINDOW` (`03:00-05:00`). The window is read in the
-    backend's `TZ`, so set `TZ` in `.env` (for example `TZ=Asia/Kolkata`);
-    unset, it is UTC. Syndra replaces it only when Zitadel answers and the L1
-    probe passed in the last 5 minutes.
+    makerspace's time zone, which is `TZ`, or Asia/Kolkata when `TZ` is unset
+    (or not a valid zone). Syndra replaces it only when Zitadel answers and
+    the L1 probe passed in the last 5 minutes. With `SYNDRA_EXTERNAL_URL`
+    unset no L1 probe can run, so the schedule never replaces the key; System ›
+    Zitadel says so (`auto.waiting_for` in the status), and Replace now still
+    works.
   - **What happens.** Syndra asks Zitadel for new keys for both targets. It
     verifies with each new key at once, in the backend and in the claims
     container. The old key keeps working for 15 minutes.
@@ -659,7 +662,13 @@ All commands run from `/opt/syndra` as the `runner` user.
     audit log and on System › Zitadel.
   - **If the check fails.** Both keys stay accepted for 7 days, and
     `/healthz/claims` goes degraded (`KEY_ROTATION:unverified`), which stops the
-    dead-man ping. Syndra does not try again on its own.
+    dead-man ping. Syndra does not try again on its own before the key is
+    next due; the finding settles once a regular test sign-in passes.
+  - **If only one key changes.** One key replaced and the other not is
+    `partial` (`KEY_ROTATION:partial`). A lost answer whose read-back also
+    failed is `unknown` (`KEY_ROTATION:unknown`): Syndra can't tell, and keeps
+    reading the keys from Zitadel every minute. Each has a plain reason on
+    System › Zitadel and in the audit row; Replace now finishes either.
   - **Replace now.** The button on System › Zitadel does the same on demand.
   - **Kill switch.** `SYNDRA_ACTION_KEY_AUTOROTATE=off`.
   - **No restart, no `.env` edit.** The keys live in Redis (`claims:keyring`,
@@ -1072,6 +1081,7 @@ and always consistent.
 | Tokens carry no Syndra claims | Another deployment re-registered the instance's Actions targets and repointed them. Re-run step 7. |
 | Webhook endpoint returns 401 | Syndra cannot read the event listener's key from Zitadel (the keyring line on System › Zitadel says why), and `ZITADEL_EVENT_SIGNING_KEY` in `.env` is stale. Restore Syndra's read of Actions targets; nothing needs a restart. |
 | `/healthz/claims` degraded with `KEY_ROTATION:failed` | Zitadel refused Syndra's key replacement, usually because `action.target.write` was revoked from the backend's service account. The old key still works. Restore the permission, then use Replace now on System › Zitadel. |
+| `/healthz/claims` degraded with `KEY_ROTATION:partial` or `:unknown` | Zitadel replaced one key but not the other, or its answer was lost and Syndra couldn't read the key back. The reason is on System › Zitadel's Action signing key row. Both old keys still work. Use Replace now once the cause is fixed. |
 | `/healthz/claims` degraded with `KEY_ROTATION:unverified` | The keys were replaced but the test sign-in after it failed. Both keys stay accepted for 7 days. Read the L1 and L2 lines on `/healthz/claims`; the finding settles itself once the probes pass. |
 
 ---
