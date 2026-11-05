@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services/propagation"
@@ -90,7 +91,7 @@ func (e *ErrBundleIncluded) Unwrap() error { return db.ErrBundleIncluded }
 // about it can change.
 type ErrRetired struct{ At time.Time }
 
-func (e *ErrRetired) Error() string { return "retired " + e.At.Format("2006-01-02") }
+func (e *ErrRetired) Error() string { return "retired " + clock.Day(e.At) }
 
 // refuseRetired is the one test every bundle write here makes after reading the bundle.
 func refuseRetired(b models.Bundle) error {

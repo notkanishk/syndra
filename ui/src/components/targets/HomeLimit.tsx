@@ -16,6 +16,7 @@ import { useLiftHold } from "@/lib/queries/useHolds";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { AccountHome } from "@/lib/queries/useTargets";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { endOfDayISO } from "@/lib/time";
 
 /**
  * One person's home folder limit, on the system's account list (A-03 §3): the
@@ -120,11 +121,6 @@ function useSetOwnLimit(target: string) {
   });
 }
 
-/** End of the chosen day, so "ends 30 Nov" means all of 30 Nov. */
-function endOfDay(date: string): string {
-  return new Date(`${date}T23:59:59`).toISOString();
-}
-
 export function LimitDialog({
   target,
   name,
@@ -166,8 +162,8 @@ export function LimitDialog({
         subjectId: home.subject_id,
         bytes,
         reason: reason.trim(),
-        endsOn: until === "ends" ? endOfDay(date) : undefined,
-        reviewOn: until === "review" ? endOfDay(date) : undefined,
+        endsOn: until === "ends" ? endOfDayISO(date) : undefined,
+        reviewOn: until === "review" ? endOfDayISO(date) : undefined,
       },
       {
         onSuccess: () =>

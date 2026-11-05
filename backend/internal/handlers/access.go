@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -113,7 +114,7 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 
 	var expiresAt *time.Time
 	if req.DurationDays > 0 {
-		expiry := time.Now().UTC().Add(time.Duration(req.DurationDays) * 24 * time.Hour)
+		expiry := clock.EndAfterDays(time.Now(), req.DurationDays)
 		expiresAt = &expiry
 	}
 
@@ -358,9 +359,9 @@ func alreadyHeldMessage(h models.RequestHolding, who string) string {
 	msg := fmt.Sprintf("%s already have this, with no end date.", who)
 	if h.Kind == models.HoldingUntil && h.Until != nil {
 		msg = fmt.Sprintf("%s already have this, until %s. Ask to keep it longer instead.",
-			who, h.Until.Format("2 Jan 2006"))
+			who, h.Until.In(clock.Loc).Format("2 Jan 2006"))
 		if who == "They" {
-			msg = fmt.Sprintf("They already have this, until %s. Extend it instead.", h.Until.Format("2 Jan 2006"))
+			msg = fmt.Sprintf("They already have this, until %s. Extend it instead.", h.Until.In(clock.Loc).Format("2 Jan 2006"))
 		}
 	}
 	// Given, not yet sent: still held, so not given twice, but it may not work yet.

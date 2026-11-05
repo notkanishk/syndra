@@ -19,6 +19,15 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
+## 0d. One time zone (5 Nov 2026)
+
+Owner: "get everything in one IST time zone." Change [`changes/one-time-zone`](changes/one-time-zone/tasks.md), branch `fix/history-in-ist`, migration **000079** (000078 is the rules branch's, 000080 the retries branch's: 000079 must not be applied before 000078 exists, or golang-migrate skips 000078).
+
+- **Built.** `internal/clock` and `ui/src/lib/time.ts` are the one zone (from `TZ`, default `Asia/Kolkata`). Every day, date sentence and end date goes through them; "until <date>" is the whole IST day, "N days" ends as the Nth calendar day does. Guards on both sides.
+- **History.** Snapshots re-keyed exactly from `taken_at`. Daily sign-in totals through 5 Nov are recounted exactly from Zitadel's event log by the backend, on the first daily pass after 5 Nov ends. Future hold end/review dates at exactly UTC midnight move to the end of that day. N-day grant ends are not rewritten (no day to recover).
+- **Operator-gated.** Run on staging against production's copy first; read the production counts in `tasks.md` 4.5 before deploy; confirm the `[FINDINGS] sign-in totals … recounted` log line. UNVERIFIED: that the deployment's Zitadel credentials can read the event log back to 3 Nov (Zitadel keeps events; the lookup endpoint already reads them).
+- **Also resolves** the action-key change's "TZ must be set" gate: the quiet window is read in `clock.Loc`, which defaults to IST.
+
 ## 0c. Dead-schema cleanup: stopped, and guards added (5 Nov 2026)
 
 Branch `chore/dead-schema-and-guards`. Owner approved two removals on condition that nothing still reads or writes them. Both are still read, so neither was removed and no migration 000078 was written.

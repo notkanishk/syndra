@@ -94,7 +94,7 @@ func (s *snapStore) install(t *testing.T, now *time.Time) {
 	}
 	snapshotOnOrBefore = func(context.Context, string) (*db.InsightsSnapshot, error) { return s.onOrBefore, nil }
 	snapshotBounds = func(context.Context) (*string, *string, error) { return s.first, s.last, nil }
-	trendAuditDays = func(_ context.Context, from, to time.Time, _ []string, _ int) ([]db.TrendDay, error) {
+	trendAuditDays = func(_ context.Context, from, to time.Time, _ []string) ([]db.TrendDay, error) {
 		s.asOfCalls.from, s.asOfCalls.to = from, to
 		return s.audit, nil
 	}
