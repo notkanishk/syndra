@@ -68,12 +68,11 @@ func (shapeDir) Users(context.Context) ([]models.UserProfile, error)      { retu
 
 // shapeStore is an in-memory app_claim_shape_versions.
 type shapeStore struct {
-	versions  map[string][]db.ClaimShapeVersion
-	defaults  map[string]db.ClaimProfileRow
-	overrides []db.AppClaimOverrideRow
-	stored    map[string]claims.Facts // user:project -> stored facts
-	observed  map[string][]db.ObservedGrant
-	settings  *zitadel.TokenSettings
+	versions map[string][]db.ClaimShapeVersion
+	defaults map[string]db.ClaimProfileRow
+	stored   map[string]claims.Facts // user:project -> stored facts
+	observed map[string][]db.ObservedGrant
+	settings *zitadel.TokenSettings
 }
 
 func stubClaimShapeDeps(t *testing.T) *shapeStore {
@@ -82,7 +81,7 @@ func stubClaimShapeDeps(t *testing.T) *shapeStore {
 		settings: &zitadel.TokenSettings{AccessTokenType: "JWT", IDTokenUserinfoAssertion: true, ProjectRoleAssertion: true, ProjectRoleCheck: true}}
 
 	origDir := directory.Default
-	o1, o2, o3, o4, o5, o6, o7 := svcGetClaimProfile, svcUpsertClaimProfile, svcListAppClaimOverrides, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape
+	o1, o2, o4, o5, o6, o7 := svcGetClaimProfile, svcUpsertClaimProfile, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape
 	o8, o9, o10, o11, o12, o13 := svcClaimShapeSeedCutoff, svcObservedGrantsFor, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications
 	origReach := reachOf
 	o14, o15, o16 := svcClaimDeliveryLast, svcLastSignInPerApp, svcLatestOrgObservation
@@ -101,7 +100,7 @@ func stubClaimShapeDeps(t *testing.T) *shapeStore {
 		reachOf = origReach
 		svcClaimDeliveryLast, svcLastSignInPerApp, svcLatestOrgObservation = o14, o15, o16
 		directory.Default = origDir
-		svcGetClaimProfile, svcUpsertClaimProfile, svcListAppClaimOverrides, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape = o1, o2, o3, o4, o5, o6, o7
+		svcGetClaimProfile, svcUpsertClaimProfile, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape = o1, o2, o4, o5, o6, o7
 		svcClaimShapeSeedCutoff, svcObservedGrantsFor, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications = o8, o9, o10, o11, o12, o13
 		lastSettings = map[string]tokenSettingsRead{}
 	})
@@ -112,7 +111,6 @@ func stubClaimShapeDeps(t *testing.T) *shapeStore {
 		return r, ok, nil
 	}
 	svcUpsertClaimProfile = func(_ context.Context, r db.ClaimProfileRow) error { s.defaults[r.ProjectID] = r; return nil }
-	svcListAppClaimOverrides = func(context.Context) ([]db.AppClaimOverrideRow, error) { return s.overrides, nil }
 	svcLatestClaimShapes = func(_ context.Context, pid string) ([]db.ClaimShapeVersion, error) {
 		var out []db.ClaimShapeVersion
 		for _, vs := range s.versions {
@@ -220,11 +218,9 @@ func TestResolveProjectShapes(t *testing.T) {
 }
 
 // An app that existed under Actions v1 is seeded on first read with exactly
-// v1's shape; one made after the cutoff starts on its project's default. An
-// old per-project override rides along.
+// v1's shape; one made after the cutoff starts on its project's default.
 func TestGetAppClaimShape_SeedsOnlyAppsFromBeforeTheCutoff(t *testing.T) {
 	s := stubClaimShapeDeps(t)
-	s.overrides = []db.AppClaimOverrideRow{{ApplicationID: "aInv", ProjectID: "pInv", ClaimName: "inv.roles", FormatType: "csv"}}
 	ctx := context.Background()
 
 	nb, seeded, err := GetAppClaimShape(ctx, "aNB")
@@ -239,8 +235,8 @@ func TestGetAppClaimShape_SeedsOnlyAppsFromBeforeTheCutoff(t *testing.T) {
 	}
 
 	inv, _, _ := GetAppClaimShape(ctx, "aInv") // no creation date: treated as existing
-	if len(inv.Profile.Claims) != 6 || inv.Profile.Claims[5].Path[0] != "inv.roles" || inv.Version.Note == SeedNote {
-		t.Fatalf("override folded into the seed: %+v note=%q", inv.Profile.Claims, inv.Version.Note)
+	if !reflect.DeepEqual(inv.Profile, claims.ActionsV1()) || inv.Version.Note != SeedNote {
+		t.Fatalf("an app with no date is seeded with exactly v1: %+v note=%q", inv.Profile.Claims, inv.Version.Note)
 	}
 
 	gl, seeded, _ := GetAppClaimShape(ctx, "aGL")

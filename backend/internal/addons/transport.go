@@ -207,13 +207,6 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 	if err != nil {
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}
 	}
-	if !a.br.allow(timeNow()) {
-		return CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, req.Target)}
-	}
-	cred, err := credentialFor(a.Registration)
-	if err != nil {
-		return CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", req.Target, err)}
-	}
 
 	body, err := json.Marshal(callEnvelope{
 		ContractVersion: ContractVersion,
@@ -232,19 +225,19 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 		return CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: encode call: %w", req.Target, err)}
 	}
 
-	// The claim, immediately before the request and after every other refusal.
-	// Here rather than when the token was obtained, because a token is a Go
-	// value and a Go value copies: the durable row is the only thing a copy
-	// cannot duplicate. Here rather than earlier in this function, because a
-	// call refused by the breaker or by a missing credential never left, and a
-	// record it consumed would say otherwise.
-	if err := req.Record.consume(ctx); err != nil {
-		return CallResponse{Outcome: OutcomeUnreached, Err: err}
+	// The pipe takes the claim, immediately before the request and after every
+	// other refusal. Here rather than when the token was obtained, because a
+	// token is a Go value and a Go value copies: the durable row is the only
+	// thing a copy cannot duplicate. Not earlier, because a call refused by the
+	// breaker or by a missing credential never left, and a record it consumed
+	// would say otherwise.
+	resp, err := a.send(ctx, sendSpec{
+		Method: http.MethodPost, Path: "/operations/" + req.Operation, Body: body,
+		Write: true, Claim: req.Record.consume, IdempotencyKey: req.Record.callID,
+	})
+	if err != nil {
+		return resp
 	}
-
-	url := a.Registration.BaseURL + "/operations/" + req.Operation
-	resp := doAuthenticated(ctx, cred, http.MethodPost, url, body, callTimeout)
-	a.br.record(timeNow(), resp)
 
 	if resp.Outcome != OutcomeSucceeded {
 		// Neither the request body nor the response body is logged. The request
@@ -261,6 +254,13 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 // — a manifest fetched over an unauthenticated channel is a capability set an
 // on-path attacker can edit, and capability is what the backend decides against.
 func doAuthenticated(ctx context.Context, cred *credential, method, url string, body []byte, timeout time.Duration) CallResponse {
+	return doAuthenticatedWith(ctx, cred, method, url, body, timeout, nil)
+}
+
+// doAuthenticatedWith is doAuthenticated plus extra request headers (the pipe's
+// idempotency key). The signature covers method, path and body only, so a
+// header cannot change what was signed.
+func doAuthenticatedWith(ctx context.Context, cred *credential, method, url string, body []byte, timeout time.Duration, hdr http.Header) CallResponse {
 	if err := ctx.Err(); err != nil {
 		// Already cancelled: nothing is sent, so nothing happened.
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}
@@ -287,6 +287,9 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 	// req.URL.Path rather than the string this was built from: it is what the
 	// add-on will see after its own parse, and signing anything else would be
 	// signing a value the two ends could disagree about.
+	for k, v := range hdr {
+		req.Header[k] = v
+	}
 	req.Header.Set(SignatureHeader, ComputeSignature(timeNow(), method, req.URL.Path, body, cred.signingKey))
 
 	httpResp, err := cred.client.Do(req)

@@ -50,9 +50,6 @@ func WelcomeClaims(ctx context.Context) (claimserve.Welcome, error) {
 	if bundle.RetiredAt != nil {
 		return on, nil
 	}
-	if db.NormalizeConfirmationMode(bundle.ConfirmationMode) == "manual" && !switchedOver(ctx) {
-		return on, nil
-	}
 	_, roles, err := svcLatestVersionRoles(ctx, bundleID)
 	if err != nil {
 		return claimserve.Welcome{}, fmt.Errorf("welcome claims: %w", err)

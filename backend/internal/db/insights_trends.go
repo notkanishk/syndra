@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/models"
 )
 
@@ -29,14 +30,11 @@ type TrendDay struct {
 // ponytail: the pointer is the grant's CURRENT source_ref; a grant since edited
 // by hand or deleted counts as by hand. Exact needs the audit row to carry its source.
 //
-// offsetSecs is the server's UTC offset: created_at is a timestamptz and "a day"
-// is the operator's day, not Postgres's session zone, which nothing here sets.
-// ponytail: one offset for the whole window, so a day within an hour of a DST
-// change can land a day off. Fixed-offset zones (IST) are exact; name the zone
-// and AT TIME ZONE it if this ever runs somewhere that observes DST.
-func AuditDayCounts(ctx context.Context, from, to time.Time, actions []string, offsetSecs int) ([]TrendDay, error) {
+// "A day" is the makerspace's day (clock.Name), never Postgres's session zone,
+// which nothing here sets and the cluster keeps at UTC.
+func AuditDayCounts(ctx context.Context, from, to time.Time, actions []string) ([]TrendDay, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT ((created_at AT TIME ZONE 'UTC') + $3::int * interval '1 second')::date AS day,
+		SELECT (created_at AT TIME ZONE $3)::date AS day,
 		       action, COUNT(*)
 		  FROM audit_logs a
 		 WHERE created_at >= $1 AND created_at < $2 AND action = ANY($4::text[])
@@ -45,7 +43,7 @@ func AuditDayCounts(ctx context.Context, from, to time.Time, actions []string, o
 		                          JOIN access_requests r ON r.id::text = g.source_ref
 		                         WHERE g.id::text = a.resource_id))
 		 GROUP BY 1, 2
-		 ORDER BY 1, 2`, from, to, offsetSecs, actions)
+		 ORDER BY 1, 2`, from, to, clock.Name, actions)
 	if err != nil {
 		return nil, fmt.Errorf("audit day counts: %w", err)
 	}

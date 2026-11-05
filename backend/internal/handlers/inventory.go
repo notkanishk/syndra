@@ -330,7 +330,10 @@ func handleSetTargetLifecycle(w http.ResponseWriter, r *http.Request) {
 			map[string]string{"reason": "an operator reading the health surface has only this to go on"})
 		return
 	}
-	out, err := addonsSetLifecycle(r.Context(), r.PathValue("target"), req.State, req.Reason)
+	// The pipe commits the addon_operations row and its audit line (actor, target,
+	// new state) before the call, so a flip is attributable. Which is why the
+	// actor travels with it.
+	out, err := addonsSetLifecycle(r.Context(), r.PathValue("target"), req.State, req.Reason, resolveActor(r, ""))
 	if err != nil {
 		jsonErrorResponse(w, http.StatusBadGateway, "LIFECYCLE_NOT_SET", err.Error())
 		return

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"syndra/internal/cache"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/demo"
 	"syndra/internal/zitadel"
@@ -211,7 +212,7 @@ func seedDirectGrants(ctx context.Context) error {
 		}
 	}
 
-	expiresAt := time.Now().UTC().Add(5 * 24 * time.Hour)
+	expiresAt := clock.EndAfterDays(time.Now(), 5)
 	if _, err := db.UpsertDirectGrant(ctx, "ava_guest", "printing", "member", "seed", "Temporary residency printer access", &expiresAt); err != nil {
 		return err
 	}

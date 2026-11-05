@@ -1497,27 +1497,24 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		return nil, nil, err
 	}
 
-	for i := 0; i < len(rules); i++ {
-		changed := false
-		for _, rule := range rules {
-			sourceKey := roleKey{projectID: rule.SourceProject, roleKey: rule.SourceRole}
-			if roleMap[sourceKey] == nil {
-				continue
-			}
-
-			targetKey := roleKey{projectID: rule.TargetProject, roleKey: rule.TargetRole}
-			if upsertRole(ctx, roleMap, targetKey, false, models.RoleReason{
-				Kind:           "mapping",
-				Description:    fmt.Sprintf("Derived from %s:%s", rule.SourceProject, rule.SourceRole),
-				TriggerProject: rule.SourceProject,
-				TriggerRole:    rule.SourceRole,
-			}) {
-				changed = true
-			}
+	// What the chains reach is models.RuleClosure's to say (the one
+	// implementation); this only names, for each role reached, every rule that
+	// reaches it. A rule whose source is in the closure fires, and no other.
+	held := make(map[roleKey]bool, len(roleMap))
+	for k := range roleMap {
+		held[k] = true
+	}
+	closure := effectiveClosure(held, rules)
+	for _, rule := range rules {
+		if !closure[roleKey{projectID: rule.SourceProject, roleKey: rule.SourceRole}] {
+			continue
 		}
-		if !changed {
-			break
-		}
+		upsertRole(ctx, roleMap, roleKey{projectID: rule.TargetProject, roleKey: rule.TargetRole}, false, models.RoleReason{
+			Kind:           "mapping",
+			Description:    fmt.Sprintf("Derived from %s:%s", rule.SourceProject, rule.SourceRole),
+			TriggerProject: rule.SourceProject,
+			TriggerRole:    rule.SourceRole,
+		})
 	}
 
 	return roleMap, bundles, nil

@@ -37,7 +37,6 @@ func CreateBundle(
 	ctx context.Context,
 	name string,
 	description string,
-	confirmationMode string,
 	roles []models.BundleRole,
 ) (string, error) {
 	tx, owned, err := beginOrJoin(ctx)
@@ -50,8 +49,8 @@ func CreateBundle(
 
 	var id string
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO bundles (name, description, confirmation_mode) VALUES ($1, $2, $3) RETURNING id;`,
-		name, description, NormalizeConfirmationMode(confirmationMode)).Scan(&id); err != nil {
+		`INSERT INTO bundles (name, description) VALUES ($1, $2) RETURNING id;`,
+		name, description).Scan(&id); err != nil {
 		return "", fmt.Errorf("failed to insert bundle: %w", err)
 	}
 
@@ -170,7 +169,7 @@ func RetireBundleAndEnqueue(ctx context.Context, actor, bundleID string, params 
 	return ids, nil
 }
 
-const bundleListColumns = `b.id, b.name, b.description, b.is_welcome, b.confirmation_mode, b.created_at,
+const bundleListColumns = `b.id, b.name, b.description, b.is_welcome, b.created_at,
 		       COALESCE((SELECT MAX(version) FROM bundle_versions v WHERE v.bundle_id = b.id), 0)`
 
 // GetAllBundles lists the bundles in force. A retired one is not on it; see GetRetiredBundles.
@@ -198,7 +197,7 @@ func listBundles(ctx context.Context, query string, retired bool) ([]models.Bund
 	var bundles []models.Bundle
 	for rows.Next() {
 		var b models.Bundle
-		dest := []any{&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode,
+		dest := []any{&b.ID, &b.Name, &b.Description, &b.IsWelcome,
 			&b.CreatedAt, &b.LatestVersion}
 		if retired {
 			dest = append(dest, &b.RetiredAt, &b.RetiredBy)
@@ -212,15 +211,15 @@ func listBundles(ctx context.Context, query string, retired bool) ([]models.Bund
 }
 
 // GetBundleByID fetches a single bundle by id, retired or not: the cascade orchestrator reads
-// its confirmation_mode before fanning out, and a retired bundle's page reads when it was
+// it before fanning out, and a retired bundle's page reads when it was
 // retired. Callers that write must refuse a retired one (RetiredAt != nil).
 func GetBundleByID(ctx context.Context, id string) (models.Bundle, error) {
 	var b models.Bundle
 	err := querier(ctx).QueryRow(ctx,
-		`SELECT id, name, description, is_welcome, confirmation_mode, created_at,
+		`SELECT id, name, description, is_welcome, created_at,
 		        retired_at, COALESCE(retired_by, '')
 		 FROM bundles WHERE id = $1`, id).
-		Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode, &b.CreatedAt,
+		Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.CreatedAt,
 			&b.RetiredAt, &b.RetiredBy)
 	return b, err
 }
@@ -249,7 +248,7 @@ func GetRolesForBundle(ctx context.Context, bundleID string) ([]models.BundleRol
 
 func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, error) {
 	query := `
-		SELECT b.id, b.name, b.description, b.is_welcome, b.confirmation_mode, b.created_at,
+		SELECT b.id, b.name, b.description, b.is_welcome, b.created_at,
 		       bv.version,
 		       COALESCE((SELECT MAX(version) FROM bundle_versions v WHERE v.bundle_id = b.id), 0)
 		FROM bundles b
@@ -266,7 +265,7 @@ func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, err
 	var bundles []models.Bundle
 	for rows.Next() {
 		var b models.Bundle
-		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode,
+		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome,
 			&b.CreatedAt, &b.PinnedVersion, &b.LatestVersion); err != nil {
 			return nil, err
 		}

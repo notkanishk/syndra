@@ -228,16 +228,8 @@ func bindSubjectToActor(scope addons.Scope, actor, subject string) error {
 	return nil
 }
 
-// statusFor maps a dispatch outcome onto the persisted status. Total over
-// addons.AllOutcomes, checked by a test — an outcome with no mapping would
-// otherwise be written as the empty string and rejected by the CHECK, turning a
-// missing case into a constraint violation at the worst moment.
-var statusFor = map[addons.Outcome]string{
-	addons.OutcomeSucceeded:     db.AddonOpSucceeded,
-	addons.OutcomeRejected:      db.AddonOpRejected,
-	addons.OutcomeUnreached:     db.AddonOpUnreached,
-	addons.OutcomeIndeterminate: db.AddonOpIndeterminate,
-}
+// The outcome-to-status mapping is addons.StatusFor, the one the pipe settles
+// PutSetting and SetLifecycle with too.
 
 // Dispatch performs one secret-bearing operation end to end.
 //
@@ -324,13 +316,8 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 		Params: req.Params,
 	})
 
-	status, ok := statusFor[resp.Outcome]
-	if !ok {
-		// An outcome this package has never heard of is not evidence of
-		// success. Recording it as indeterminate is the safe reading and puts
-		// the row on the surface a human already watches.
-		status = db.AddonOpIndeterminate
-	}
+	// An outcome nobody has heard of is indeterminate, never success.
+	status := addons.StatusFor(resp.Outcome)
 
 	result := Result{OperationID: id, Status: status, Outcome: resp.Outcome, Err: resp.Err}
 	// Only on success, and never fatally. A body that will not parse is not a

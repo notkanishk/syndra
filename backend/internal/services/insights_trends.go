@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -105,7 +106,7 @@ const (
 // The reads, as seams: the whole content of this report is what it does with
 // them, and a test should not need a database to move any one.
 var (
-	trendNow         = time.Now
+	trendNow         = clock.Now
 	trendTerms       = LoadTerms
 	trendFindings    = InsightsFindings
 	trendAuditDays   = db.AuditDayCounts
@@ -185,10 +186,9 @@ func InsightsTrends(ctx context.Context, period TrendPeriod) (models.InsightsTre
 		driftOpn int
 	)
 	all := accessChangeActions()
-	_, offset := now.Zone()
 	err = svcInReadSnapshot(ctx, func(ctx context.Context) error {
 		var err error
-		if days, err = trendAuditDays(ctx, from, to, all, offset); err != nil {
+		if days, err = trendAuditDays(ctx, from, to, all); err != nil {
 			return err
 		}
 		if reqs, err = trendRequests(ctx, from, to); err != nil {

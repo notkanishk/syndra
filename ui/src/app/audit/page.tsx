@@ -24,6 +24,7 @@ import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { toCsv } from "@/lib/csv";
 import { useDebounce } from "@/lib/useDebounce";
 import { formatShortDate, formatWhen, humanizeKey } from "@/lib/format";
+import { civilDay } from "@/lib/time";
 
 type Window = "7" | "30" | "all";
 
@@ -266,7 +267,7 @@ function downloadCsv(
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = `syndra-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = `syndra-audit-${civilDay()}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }

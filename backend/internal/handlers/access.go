@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -113,7 +114,7 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 
 	var expiresAt *time.Time
 	if req.DurationDays > 0 {
-		expiry := time.Now().UTC().Add(time.Duration(req.DurationDays) * 24 * time.Hour)
+		expiry := clock.EndAfterDays(time.Now(), req.DurationDays)
 		expiresAt = &expiry
 	}
 
@@ -181,15 +182,16 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// still waits as it always did. Targeted to THIS row only — giving one
 	// role must not send unrelated changes an operator left queued. A failed
 	// send is non-fatal: the row stays pending and says why.
-	if res.OutboxID != "" {
-		d := svcDeliver(r.Context(), []string{res.OutboxID}, r.URL.Query().Get("apply") != "true")
+	// The rows the mapping rules added go with it, under the same rule.
+	if ids := res.OutboxIDs(); len(ids) > 0 {
+		d := svcDeliver(r.Context(), ids, r.URL.Query().Get("apply") != "true")
 		res.WaitReason = d.WaitReason()
-		if len(d.Sent) > 0 {
+		if len(d.Sent) > 0 && res.OutboxID != "" {
 			if st, serr := dbGetPropagationStatus(r.Context(), res.OutboxID); serr == nil && st != "" {
 				res.Status = st
 			}
 		}
-		if res.Status == "applied" {
+		if res.Status == "applied" && d.Reason[res.OutboxID] == "" {
 			res.WaitReason = ""
 		}
 	}
@@ -358,9 +360,9 @@ func alreadyHeldMessage(h models.RequestHolding, who string) string {
 	msg := fmt.Sprintf("%s already have this, with no end date.", who)
 	if h.Kind == models.HoldingUntil && h.Until != nil {
 		msg = fmt.Sprintf("%s already have this, until %s. Ask to keep it longer instead.",
-			who, h.Until.Format("2 Jan 2006"))
+			who, h.Until.In(clock.Loc).Format("2 Jan 2006"))
 		if who == "They" {
-			msg = fmt.Sprintf("They already have this, until %s. Extend it instead.", h.Until.Format("2 Jan 2006"))
+			msg = fmt.Sprintf("They already have this, until %s. Extend it instead.", h.Until.In(clock.Loc).Format("2 Jan 2006"))
 		}
 	}
 	// Given, not yet sent: still held, so not given twice, but it may not work yet.
@@ -643,8 +645,8 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 		// failure (e.g. Zitadel offline) leaves the row pending in the worklist for
 		// a later resume; access already works via the ledger.
 		res.Effect, res.Until = plan.Effect, plan.ExpiresAt
-		if queued.OutboxID != "" {
-			res.WaitReason = svcDeliver(ctx, []string{queued.OutboxID}, false).WaitReason()
+		if ids := queued.OutboxIDs(); len(ids) > 0 {
+			res.WaitReason = svcDeliver(ctx, ids, false).WaitReason()
 		}
 	} else { // rejected — no grant, just the conditional resolution
 		// A declined extension remembers the end it left alone. Best-effort: a

@@ -194,11 +194,7 @@ func TestEveryDispatchOutcomeHasAnAcceptedStatus(t *testing.T) {
 		accepted[s] = true
 	}
 	for _, o := range addons.AllOutcomes {
-		status, ok := statusFor[o]
-		if !ok {
-			t.Errorf("outcome %q has no persisted status", o)
-			continue
-		}
+		status := addons.StatusFor(o)
 		if !accepted[status] {
 			t.Errorf("outcome %q maps to %q, which the status CHECK does not accept", o, status)
 		}
@@ -206,9 +202,8 @@ func TestEveryDispatchOutcomeHasAnAcceptedStatus(t *testing.T) {
 			t.Errorf("outcome %q maps to the non-terminal status; an answered call must settle", o)
 		}
 	}
-	if len(statusFor) != len(addons.AllOutcomes) {
-		t.Errorf("statusFor has %d entries for %d outcomes — one of them maps something that cannot occur",
-			len(statusFor), len(addons.AllOutcomes))
+	if got := addons.StatusFor(addons.Outcome("never-heard-of")); got != db.AddonOpIndeterminate {
+		t.Errorf("an unknown outcome maps to %q, want indeterminate", got)
 	}
 }
 

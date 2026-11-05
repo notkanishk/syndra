@@ -301,7 +301,7 @@ func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNo
 		return EnqueueResult{}, ErrRequestNotPending
 	}
 
-	outboxID, err := enqueueWrites(ctx, tx, p, key)
+	outboxID, ruleIDs, err := enqueueWrites(ctx, tx, p, key)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
@@ -311,5 +311,5 @@ func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNo
 			return EnqueueResult{}, fmt.Errorf("commit approve tx: %w", err)
 		}
 	}
-	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: enqueuedStatus(outboxID)}, nil
+	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: enqueuedStatus(outboxID), RuleOutboxIDs: ruleIDs}, nil
 }

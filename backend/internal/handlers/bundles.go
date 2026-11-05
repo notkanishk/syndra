@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
@@ -32,18 +33,16 @@ type AssignBundleRequest struct {
 // then added became "unpublished changes" against a v1 that had never described
 // anything.
 type CreateBundleRequest struct {
-	Name             string                   `json:"name"`
-	Description      string                   `json:"description"`
-	ConfirmationMode string                   `json:"confirmation_mode,omitempty"`
-	Roles            []AddRoleToBundleRequest `json:"roles"`
+	Name        string                   `json:"name"`
+	Description string                   `json:"description"`
+	Roles       []AddRoleToBundleRequest `json:"roles"`
 	// Includes are bundles to include from v1, each at its latest version
 	// (B8). A bundle may be made of includes alone.
 	Includes []string `json:"includes,omitempty"`
 }
 
-// UpdateBundleRequest carries no confirmation_mode: that is changed through
-// POST /policies/confirmation-mode, which is where every other rule and bundle changes it, and
-// a second way in would be a second thing to keep consistent.
+// UpdateBundleRequest renames and re-describes; what a bundle holds changes by
+// publishing a version.
 type UpdateBundleRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -63,7 +62,7 @@ func writeRetired(w http.ResponseWriter, what string, err error) bool {
 func writeRetiredAt(w http.ResponseWriter, what string, at time.Time) {
 	jsonResponse(w, http.StatusConflict, map[string]any{
 		"error":   "RETIRED",
-		"message": "This " + what + " was retired on " + at.Format("2 Jan 2006") + ". Nothing about it can change.",
+		"message": "This " + what + " was retired on " + at.In(clock.Loc).Format("2 Jan 2006") + ". Nothing about it can change.",
 		"details": map[string]any{"retired_at": at},
 	})
 }
@@ -182,22 +181,16 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Creating a bundle triggers no cascade — nobody holds it yet, so its roles
-	// reach no member. Mode seeds the row for the future add-role/assign
-	// cascades. Inherits the global default unless overridden.
-	mode, err := resolveConfirmationMode(r.Context(), req.ConfirmationMode)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
+	// reach no member.
 	actor := getAdminUserID(r.Context())
 	if actor == "" {
 		actor = "system"
 	}
 	// The bundle, its v1 and what it includes land together, or none do.
 	var id string
-	err = dbInTxLockingAccess(r.Context(), func(ctx context.Context) error {
+	err := dbInTxLockingAccess(r.Context(), func(ctx context.Context) error {
 		var err error
-		if id, err = dbCreateBundle(ctx, req.Name, req.Description, mode, roles); err != nil {
+		if id, err = dbCreateBundle(ctx, req.Name, req.Description, roles); err != nil {
 			return err
 		}
 		for _, child := range req.Includes {
