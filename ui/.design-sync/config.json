@@ -191,7 +191,7 @@
       "viewport": "1200x800"
     },
     "TouchNav": {
-      "cardMode": "column",
+      "cardMode": "single",
       "viewport": "390x844"
     },
     "AccountSheet": {
@@ -220,6 +220,12 @@
     "WaitsMark": {
       "cardMode": "single",
       "primaryStory": "Explained"
+    },
+    "RoleWordsTable": {
+      "cardMode": "column"
+    },
+    "SignInRow": {
+      "cardMode": "column"
     },
     "NotOpenYet": {
       "cardMode": "column"

@@ -27,6 +27,9 @@ Owner said "all yes" on 5 Nov 2026. **P1 (names link by default, G14) is built**
 ### A-20 P18 built (5 Nov 2026)
 
 Since you were last here: migration 000076 keeps previous and current sign-in per person; Home's calm panel and working headline and My access's calm rung say "since Tuesday". See `changes/second-pass/tasks.md` (P18). Open: nothing; the migration backfills current from each person's latest act, so the first sign-in after deploy names that day.
+### A-20 second pass, P9 (built 5 Nov 2026)
+
+The design system's cards tell the truth about motion and phone, the README names every token, four cards render, five gain previews: see [`changes/second-pass`](changes/second-pass/tasks.md) section P9. Open: publish the resynced bundle (BRIDGE steps 2-3, `ready-for-human`); `text-warn-ink/[.78]` in CommandBlock.
 
 ### A-20 second pass (P4, P7 built)
 

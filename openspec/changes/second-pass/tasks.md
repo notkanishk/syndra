@@ -162,3 +162,15 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 - [ ] `RoleRef` still prints the role key beside the project name outside the System group; System-group uses should read the role's display name `ready-for-agent`
 - [ ] Signing-key replacement: the owner chose a hands-off flow where Syndra rotates the key itself; a separate backend and UI change, not the four-step manual guide on the board `ready-for-human`
 - [ ] `ErrorState` Technical detail for a failure body (status, path) `needs-triage`
+### P9 · the design system tells the truth
+
+- [x] `moves.json` corrected from the code (lib/motion, globals.css utilities, component classes): Checkbox, Radio, Seat, ChoiceRow, AnchoredPanel, ConfirmByTyping, CopyableValue, ViewSwitch, SyndraMark, ChosenChip, SortHead, FilterChip, WaitsMark, ThemeToggle, StatCard, FormPart, SectionPill, ReadLine, SignInRow, CardRow, Card, Notice (breathe), Input, Term, TopBar and the rest of the cards that press or tint; regenerated with `node .design-sync/moves.mjs`
+- [x] Numbers checked against code: ArriveList rises 8px (not 10); Modal 98% / 8px / 40ms; lift 6px; popover 4px; drop 10px; copied 900ms; skeleton 200ms; typing warmth 70% at the full name. Finding correction: `Chip` and `Badge` do not move (only `ChosenChip` has `chip-in`); their lines stay still
+- [x] ArriveList, GlideIndicator, LeavingRow marked "Internal: never mounted alone" on their floor card
+- [x] README (`conventions.md`) gains tints, hover, focus ring, scrim, shadows, tap, layers, radius and motion tokens, and a Moves and Phone paragraph
+- [x] `SyndraRoot` provides Next's `AppRouterContext` (a router that goes nowhere): `IntentPrefetchHost` threw in AppShell and every card that mounts it
+- [x] AppShell, RoleWordsTable, SignInRow render; TouchNav renders at 390px (`cardMode: single`; the render check still calls it thin, benign: the check's own page is 900px wide and the bar is `tablet:hidden`); new previews RoleWordsTable, SignInRow, ReadGate, FormPart, SectionPill
+- [x] `--radius-shell` deleted (unreferenced). `--font-sans` kept and used: `body` now says `var(--font-sans)`, because 48 published boards read `var(--font-sans)` and deleting it would drop their font
+- [x] Button names G1 and G16, Notice G7 and the breathing dot, Modal G4 and its phone sheet, FilterBar G18 (card rewritten, preview leads with pills); StatCard preview drops "Paused" and "Unreachable"; `CommandBlock.tsx:159` loses its alpha (the other `warn-ink/[.NN]` on that block are fills and a border, left)
+- [ ] Publish the bundle to the design-system artifact and canvas (BRIDGE steps 2-3) `ready-for-human`
+- [ ] Task 10 candidate: `CommandBlock` still has `text-warn-ink/[.78]` on its lede and step text (G13) `needs-triage`
