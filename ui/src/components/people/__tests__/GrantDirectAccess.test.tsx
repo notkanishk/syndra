@@ -19,9 +19,19 @@ const state = vi.hoisted(() => ({
   queued: [] as string[],
   queuedAt: undefined as string | undefined,
   terms: undefined as Array<{ name: string; start: string; end: string }> | undefined,
+  // What the automatic rules also give, by role key (the backend's preview).
+  rules: {} as Record<string, string[]>,
 }));
 
 vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => state.down }));
+
+vi.mock("@/lib/queries/useRulePreview", () => ({
+  useRulePreview: (_user: string, _project: string, keys: string[]) => ({
+    data: keys.flatMap((key) => state.rules[key] ?? []).map((sentence) => ({ sentence })),
+    isLoading: false,
+    isError: false,
+  }),
+}));
 
 vi.mock("@/lib/queries/useTerms", () => ({
   useTerms: () => ({ data: state.terms }),
@@ -81,6 +91,7 @@ beforeEach(() => {
   state.queued = [];
   state.queuedAt = undefined;
   state.terms = undefined;
+  state.rules = {};
   state.mutateAsync.mockReset();
 });
 
@@ -236,6 +247,25 @@ describe("GrantDirectAccess · its result", () => {
     expect(screen.getByText("Ada can use Operator on their own now.")).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Give role" })).not.toBeInTheDocument();
+  });
+
+  // Audit C2: the person giving one role sees, before the click, every role an
+  // automatic rule also gives with it, and the result says they went with it.
+  it("names what automatic rules also give, before the give and in its result", async () => {
+    state.rules = { operator: ["Also gives Bench in Workshop, by the automatic rule from Operator."] };
+    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "applied", rule_outbox_ids: ["o2"] });
+    open();
+    choose("Operator");
+    expect(screen.getByText("Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+    expect(await screen.findByText("Ada can use Operator on their own now.")).toBeInTheDocument();
+    expect(screen.getByText(/Also gives Bench in Workshop/)).toBeInTheDocument();
+  });
+
+  it("says nothing about rules when no rule starts from the role", async () => {
+    open();
+    choose("Operator");
+    expect(screen.queryByText(/Also gives/)).not.toBeInTheDocument();
   });
 
   it("a refusal is Not given, and keeps the form", async () => {

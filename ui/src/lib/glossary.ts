@@ -146,13 +146,13 @@ export const GLOSSARY = {
   automaticRule: {
     title: "Automatic rule",
     definition:
-      "Holding one role produces another, with nobody clicking. A rule applies to everybody who holds its input today and everybody who is given it later.",
+      "Holding one role produces another, with nobody clicking. A rule applies to everybody who holds its input today and anyone given the first role through Syndra. A role added directly in Zitadel shows in Drift, and the rule follows once you adopt it.",
     kind: "syndra",
   },
   cascade: {
     title: "Cascade",
     definition:
-      "Every change one edit sets off. Editing a bundle or a rule touches everybody it reaches, and those changes are grouped under one handle (c_…) so they can be followed, and confirmed or refused, together.",
+      "Every change one edit sets off. Editing a bundle or a rule touches everybody it reaches, and those changes are grouped under one handle (c_…) so they can be followed together.",
     kind: "syndra",
     mustDefine: true,
   },

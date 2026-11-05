@@ -119,6 +119,11 @@ describe("after saving a rule", () => {
 
     await waitFor(() => expect(document.body.textContent).toMatch(/Saved/));
     expect(document.body.textContent).toMatch(/get the second at once/);
+    // Audit W6: a rule follows roles given through Syndra; one added by hand in
+    // Zitadel is drift, and the rule follows once it is adopted.
+    expect(document.body.textContent).toMatch(/anyone given the first role through Syndra/);
+    expect(document.body.textContent).toMatch(/added directly in Zitadel shows in Drift, and the rule follows once you adopt it/);
+    expect(document.body.textContent).not.toMatch(/given the first role later/);
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Close" })).toBeNull());
@@ -199,6 +204,18 @@ describe("the rule check's result", () => {
     expect(notice).toHaveTextContent("Checked: 1 thing to know");
     expect(notice).toHaveTextContent("3 people already hold the first role");
     expect(notice).toHaveClass("bg-warn-soft");
+  });
+
+  // Audit W12: the whole chain fires, not one hop, so the check names every
+  // rule the second role sets off and every role they give.
+  it("names the whole chain the rule sets off", async () => {
+    state.rules = [
+      rule(),
+      rule({ id: "r2", source_project: "pLaser", source_role: "trained", target_project: "pShop", target_role: "bench" }),
+      rule({ id: "r3", source_project: "pShop", source_role: "bench", target_project: "pShop", target_role: "key" }),
+    ];
+    await check({});
+    expect(document.body.textContent).toMatch(/Also sets off 2 more rules, which would then give them .*bench and .*key\./);
   });
 
   it("says an all-clear as a caption, with no box", async () => {

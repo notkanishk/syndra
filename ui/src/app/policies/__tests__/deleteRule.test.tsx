@@ -127,7 +127,8 @@ describe("deleting an automatic rule", () => {
     render(<AutomaticRulesPage />);
     fireEvent.click(screen.getByText("member"));
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
-    expect(document.body.textContent).toMatch(/ends at once, with no review/);
+    expect(document.body.textContent).toMatch(/ends as soon as the revocation reaches Zitadel/);
+    expect(document.body.textContent).not.toMatch(/no review/);
   });
 
   it("says nothing is taken back when nobody holds the trigger role", () => {
@@ -181,6 +182,22 @@ describe("deleting an automatic rule", () => {
     await waitFor(() =>
       expect(state.remove).toHaveBeenCalledWith("aaaabbbb-1111-2222-3333-444455556666"),
     );
+  });
+
+  // Audit W3: who sends the revocations decides the sentence. A role that waits
+  // is the operator's to send; a send that stopped is retried on its own; and
+  // the confirmation-mode words ("without review") describe nothing now.
+  it.each([
+    ["role_waits", /12 revocations waiting for you to send.*wait under Pending changes until you send them/],
+    ["halted:zitadel_offline", /12 revocations on their way.*Revocations send on their own\. Zitadel didn.t answer at .*, so they go when it does\./],
+    [undefined, /12 revocations sent.*The access it gave was revoked\./],
+  ])("says who sends the revocations, for %s", async (why, said) => {
+    state.remove = vi.fn().mockResolvedValue({ message: "ok", cascade: { enqueued: 12, wait_reason: why } });
+    openTheRule();
+    fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire rule and revoke access" }));
+    await waitFor(() => expect(document.body.textContent).toMatch(said));
+    expect(document.body.textContent).not.toMatch(/without review/);
   });
 
   // A rule that does not exist yet cannot be retired.
