@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { trueSeat } from "@/test-utils/seat";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -85,7 +86,7 @@ function renderQueue() {
 
 /** The Decision seat, once a decision is in it: the one `role="status"` in the row. */
 async function decisionSeat() {
-  return await screen.findByRole("status");
+  return await trueSeat();
 }
 
 describe("a decided request names its person and its next step", () => {
@@ -110,6 +111,32 @@ describe("a decided request names its person and its next step", () => {
     expect(seat.textContent).toBe("ApprovedSent · not yet seen in Zitadel");
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(screen.queryByText("Applied")).toBeNull();
+  });
+
+  // A-19 P2: the seat forecasts in the plan's tense until the server answers.
+  it("forecasts Will be approved in the seat while the write is in flight, then says the true word", async () => {
+    let answer!: (v: unknown) => void;
+    decide.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    const seat = await screen.findByRole("status");
+    expect(seat.textContent).toBe("Will be approved");
+    expect(seat.querySelector(".breathe")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+
+    answer({ message: "Request resolved" });
+    expect((await trueSeat()).textContent).toBe("ApprovedSent · not yet seen in Zitadel");
+  });
+
+  it("a refused decision returns the buttons beside the honest error, with no forecast left", async () => {
+    decide.mockRejectedValueOnce(new Error("The role no longer exists."));
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("The role no longer exists.");
+    expect(screen.queryByText("Will be approved")).toBeNull();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
   });
 
   // Motion v2 S4: the buttons and the decision share one seat; they crossfade, and

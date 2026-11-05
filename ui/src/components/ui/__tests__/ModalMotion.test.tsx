@@ -125,8 +125,8 @@ describe("Modal as a phone sheet (S3)", () => {
     const { dialog, panel, grabber } = sheetOf(vi.fn());
     drag(grabber, 150);
     expect(panel.style.transform).toBe("translateY(150px)");
-    // 150 of 600 is a quarter: the 55% wash is thinned by a quarter.
-    expect(dialog.style.backgroundColor).toBe("rgba(0, 0, 0, 0.413)");
+    // 150 of 600 is a quarter: the wash is thinned by a quarter.
+    expect(dialog.style.getPropertyValue("--scrim-keep")).toBe("0.75");
   });
 
   it("settles back when let go short of a third, and stays open", () => {

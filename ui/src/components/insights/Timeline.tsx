@@ -49,7 +49,7 @@ export function Timeline({
             const n = Number(e.target.value);
             onChange(n >= last ? null : addDays(from, n));
           }}
-          className="peer absolute inset-x-0 top-0 z-10 h-[42px] w-full cursor-grab opacity-0"
+          className="peer absolute inset-x-0 top-0 h-[42px] w-full cursor-grab opacity-0"
         />
         <span aria-hidden className="pointer-events-none absolute inset-x-0 top-3 h-0.5 rounded-sm bg-line-strong" />
         <span

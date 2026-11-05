@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { trueSeat } from "@/test-utils/seat";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -131,7 +132,7 @@ describe("The queue · a request to keep a role", () => {
     state.decide.mockResolvedValue({ effect: "extended", until: NEW_MONTH });
     renderAs(true);
     fireEvent.click(screen.getByRole("button", { name: /^Approve/ }));
-    const seat = await screen.findByRole("status");
+    const seat = await trueSeat();
     expect(seat).toHaveTextContent(/^ExtendedNow ends 17 Jan( 2027)?, not 18 Dec\.$/);
   });
 
@@ -140,7 +141,7 @@ describe("The queue · a request to keep a role", () => {
     state.decide.mockResolvedValue({});
     renderAs(true);
     fireEvent.click(screen.getByRole("button", { name: "Decline" }));
-    const seat = await screen.findByRole("status");
+    const seat = await trueSeat();
     expect(seat).toHaveTextContent("DeclinedNothing was sent · it still ends 18 Dec");
   });
 });

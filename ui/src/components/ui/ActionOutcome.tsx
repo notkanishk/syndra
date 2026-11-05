@@ -45,6 +45,27 @@ const SEAT_DOT: Record<Outcome["kind"], StatusTone> = {
   failed: "danger",
 };
 
+/**
+ * The first 100ms (A-19 P2): the seat forecasts in the plan's own tense while
+ * the write is in flight: an amber breathing dot and "Will be extended", no
+ * link and no arrow, because nothing is waiting for the reader yet. Swapped
+ * for the true word by a Crossfade when the server answers; it never blooms
+ * (only a true "Done" does), and an error is the honest error, not a rollback.
+ */
+export function ActionForecast({ word, className = "" }: { word: string; className?: string }) {
+  return (
+    <span role="status" className={`inline-flex items-center gap-2 text-[13.5px] font-semibold text-ink ${className}`}>
+      <StatusDot tone="warn" className="breathe" />
+      {word}
+    </span>
+  );
+}
+
+/** The dot a result wears. Queued is amber unless it sends itself, which has no step left. */
+function dotTone(outcome: Outcome): StatusTone {
+  return outcome.sendsItself ? "neutral" : SEAT_DOT[outcome.kind];
+}
+
 export function ActionOutcome({
   outcome,
   placement = "block",
@@ -71,17 +92,17 @@ export function ActionOutcome({
       >
         <span className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-ink">
           {/* It went well, because of you, and you are looking: the one dot that blooms (S4). */}
-          <StatusDot tone={SEAT_DOT[outcome.kind]} bloom={outcome.kind === "applied"} />
+          <StatusDot tone={dotTone(outcome)} bloom={outcome.kind === "applied"} />
           {word}
         </span>
         {/* Queued: why it waits, then the step left — the word above already
             wears the amber dot, so the link doesn't repeat it (route-requests). */}
-        {(grave ? outcome.message : outcome.detail) && (
+        {(grave ? outcome.message : outcome.detail ?? (outcome.sendsItself ? outcome.message : undefined)) && (
           <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">
-            {grave ? sentence(outcome.message) : outcome.detail}
+            {grave ? sentence(outcome.message) : outcome.detail ?? outcome.message}
           </span>
         )}
-        {outcome.kind === "queued" && <NextStep dot={false} className="pl-[14px]" />}
+        {outcome.kind === "queued" && !outcome.sendsItself && <NextStep dot={false} className="pl-[14px]" />}
         {outcome.kind === "failed" && outcome.requestId && (
           <CopyableValue value={outcome.requestId} label="Reference" className="pl-[14px]" />
         )}
@@ -99,11 +120,11 @@ export function ActionOutcome({
         role="status"
         className={`tint-in inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 ${className}`}
       >
-        {outcome.kind === "queued" ? (
+        {outcome.kind === "queued" && !outcome.sendsItself ? (
           <NextStep />
         ) : (
           <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink">
-            <StatusDot tone={SEAT_DOT[outcome.kind]} />
+            <StatusDot tone={dotTone(outcome)} />
             {word}
           </span>
         )}
@@ -124,7 +145,7 @@ export function ActionOutcome({
       } ${className}`}
     >
       <div className="flex items-center gap-2.5">
-        <StatusDot tone={SEAT_DOT[outcome.kind]} bloom={celebrates} />
+        <StatusDot tone={dotTone(outcome)} bloom={celebrates} />
         <span className="font-display text-[22px] font-semibold leading-[1.2] text-ink">
           {word}
         </span>
@@ -136,7 +157,7 @@ export function ActionOutcome({
       {outcome.detail && (
         <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
       )}
-      {outcome.kind === "queued" && <NextStep dot={false} />}
+      {outcome.kind === "queued" && !outcome.sendsItself && <NextStep dot={false} />}
       {outcome.sessionEnded && <SignInAgain />}
       {outcome.requestId && <QuoteThis id={outcome.requestId} />}
     </div>

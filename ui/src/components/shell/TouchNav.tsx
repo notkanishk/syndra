@@ -24,8 +24,6 @@ import { useUiView } from "@/lib/ui-view";
 /** A destination of the sheet, which draws both views' rows and folds Advanced's away in Basic. */
 type SheetDestination = TouchDestination & { advancedOnly?: boolean };
 
-/** The scrim's strength at rest (`bg-black/70`), which a drag thins from. */
-const NAV_SCRIM_ALPHA = 0.7;
 
 /**
  * Navigation for a thumb.
@@ -319,7 +317,6 @@ function NavSheet({
     busy: false,
     onClose: dismiss,
     draggedAway,
-    scrimAlpha: NAV_SCRIM_ALPHA,
   });
 
   return (
@@ -329,7 +326,7 @@ function NavSheet({
       role="dialog"
       aria-modal="true"
       aria-label="Go to a page"
-      className="settle-scrim fixed inset-0 z-50 flex items-end bg-black/70"
+      className="settle-scrim fixed inset-0 z-(--layer-dialog) flex items-end bg-scrim"
       onClick={(event) => {
         if (event.target === event.currentTarget) dismiss();
       }}

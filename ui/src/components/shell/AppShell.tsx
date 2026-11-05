@@ -60,7 +60,7 @@ export function AppShell({
               reaches the page without tabbing through the whole rail first. */}
           <a
             href="#main"
-            className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[70] focus:rounded-pill focus:border focus:border-line-strong focus:bg-surface-2 focus:px-4 focus:py-2 focus:text-[14px] focus:font-semibold focus:text-ink"
+            className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-(--layer-popover) focus:rounded-pill focus:border focus:border-line-strong focus:bg-surface-2 focus:px-4 focus:py-2 focus:text-[14px] focus:font-semibold focus:text-ink"
           >
             Skip to content
           </a>

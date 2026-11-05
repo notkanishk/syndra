@@ -77,6 +77,8 @@ import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { targetLabel } from "@/lib/nav";
 import {
   outcomeFromError,
+  REVOKE_SENDS_ITSELF,
+  REVOKE_SENDS_ITSELF_WORD,
   succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
@@ -1166,7 +1168,7 @@ function ResolutionDialog({
       {outcome && (
         <ActionOutcome
           outcome={outcome}
-          word={succeeded(outcome) ? copy.word : "Didn’t go through"}
+          word={outcome.sendsItself ? REVOKE_SENDS_ITSELF_WORD : succeeded(outcome) ? copy.word : "Didn’t go through"}
           className="mx-6 mb-1"
         />
       )}
@@ -1200,12 +1202,7 @@ function ResolutionDialog({
                 }
                 setOutcome(
                   resolution === "revoke"
-                    ? {
-                        kind: "queued",
-                        message: "It has not reached Zitadel yet.",
-                        detail:
-                          "Revocations send on their own, every few minutes. Until then the person still has the access.",
-                      }
+                    ? REVOKE_SENDS_ITSELF
                     : {
                         kind: "applied",
                         // Not "will not be listed again" — that renders right

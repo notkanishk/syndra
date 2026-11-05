@@ -235,6 +235,10 @@ The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checke
 - **Google Workspace Account Poller.** Nothing built yet. Separate container, monthly Admin SDK Directory API poll, verifies every Zitadel user still has an active Google account, deactivates suspended/deleted ones via the Management API. The deactivation then cascades through the existing webhook pipeline (`user_deactivated` → cache invalidation → LLDAP membership revocation via provisioning intents), so the downstream half is already built and tested. Design: `changes/syndra-core-architecture/design.md` §10.
 - **⌘K command palette** — optional, struck from spec in the May 2026 audit. Only if operator navigation demand shows up.
 
+### A-19 · An extension of you
+
+Wave 1 · feel is built (P2 forecast tense, P11 Appearance Device, P12 scrim/layer/tap tokens, P14 Drift revoke wording): `changes/extension-of-you/tasks.md`. Open: EOY-F9 (copy guide forecast table), EOY-F10 (dialog forecasts, rail count at the answer), EOY-F11 (`--tap` adoption). Second wave P5, P6, P7, P10; third P8, P9, P13.
+
 ---
 
 ## 2. Operator-gated
