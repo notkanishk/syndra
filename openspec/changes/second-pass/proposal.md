@@ -24,7 +24,6 @@ Each proposal is one labelled section below. Whoever builds a proposal adds its 
 - `NameLink` logs `NESTED_NAME_LINK` in development and in tests if it is ever rendered inside another link or control (the check for what a source scan cannot see: a name in a helper component used inside a row link). The whole suite runs clean of it.
 
 **Not in P1 (left as they were).** The filter chip on Pending changes names the person plain (a chip is a state, not a door). Service accounts keep reaching their page where a row already knew they were one (`useAccountHref`); the resolver carries no "is a service account" flag, so a bare `UserName` sends a service account to `/users/:id`. Teaching the resolver the kind is a separate, small change.
-# Second pass: A-20's first wave
 
 Source: `design_handoff_syndra/reconcile-2026-10/from-design/A-20-second-pass.md` (owner: "all yes", 5 Nov 2026). Each agent adds its own section below.
 
@@ -34,7 +33,6 @@ Source: `design_handoff_syndra/reconcile-2026-10/from-design/A-20-second-pass.md
 - **P3, Notices under the header.** `components/shell/ShellNotices.tsx` holds one seat: `PageHeader` (and Home and My access, which have their own heads) mount `<ShellNotices />` after the header; `AppShell` mounts only `ShellNoticesProvider`. One outlet claims the seat, so two headers say it once. A page with no header leaves the seat unclaimed and the provider paints the Notices at the top of the content, so an outage is never silent. The banners take `under` (16 above rather than 16 below). `PageHeader`'s root is now an outer div (arrival, margin) around the old flex row.
 - **P6, the phone's top bar.** `TopBar` shows the 16px `SyndraMark` at left and a 44px "Go to" button at right below tablet. The button asks the single Go to that `GoToHost` mounts, by the `OPEN_GO_TO` window event; no fifth tab, no new sheet. `SyndraMark` skips the one-shot bloom when it is not on screen (`checkVisibility`), so the rail's hidden mark cannot spend it before the phone's.
 - **Deviation from the task text, per A-20.** Operators get Go to in both views. Members get the mark but no Go to button: A-20 P6 says "Members do not get it: three pages need no jump."
-# Second pass (A-20)
 
 Source: `design_handoff_syndra/reconcile-2026-10/from-design/A-20-second-pass.md`. Owner said "all yes" on 5 Nov 2026. Other parts (P1, P2, P3, P5, P6, P8) are built on their own branches and add their sections here when they merge.
 
@@ -45,7 +43,6 @@ Source: `design_handoff_syndra/reconcile-2026-10/from-design/A-20-second-pass.md
 **P7, errors carry four parts.** `ErrorState` says what failed (and, when the caller passes `fine`, what did not), the state of the world, the next step and where, and the reference with "Quote this if you ask for help." The next-step line names the reference only when one exists. `describeFailure` maps a network fault (`TypeError`, "Failed to fetch", "Load failed", and the other engines' words) to "Syndra's server didn't answer." A project page and an app page keep their seeded name on error.
 
 Deviation: the "which did not fail" half is an optional `fine` prop, not guessed from the error. No caller passes it yet; the Zitadel pages (P5's area) can.
-# The second pass (A-20)
 
 Source: `design_handoff_syndra/reconcile-2026-10/from-design/A-20-second-pass.md`. Owner said "all yes" on 5 Nov 2026, so the first wave (P1 to P8) is built. Each part adds its own section below; the other parts' sections arrive on merge.
 

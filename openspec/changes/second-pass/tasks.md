@@ -12,7 +12,6 @@ Each proposal has its own labelled section. Tags follow `docs/agents/triage-labe
 - [x] Tests: default link, opt-out, dialog default, unresolved name; Pending, Expiring and Roles screens carry no `a a`
 - [x] `bun run test && bun run lint && bun run build` green
 - [ ] `needs-triage` Teach the name resolver which ids are service accounts so a bare `UserName` opens `/system/service-accounts/:id` (today only rows that call `useAccountHref` do)
-# Second pass: tasks
 
 Each agent adds its own section.
 
@@ -25,7 +24,6 @@ Each agent adds its own section.
 - [x] P6: `TopBar` mark and Go to below tablet; `GoToHost` listens for `OPEN_GO_TO`; `SyndraMark` blooms only where visible
 - [x] P6 tests: mark and Go to for operators in Basic and Advanced; member has the mark and no Go to; the event; tap floor by token, no tab
 - [ ] Look at it on a real phone (board `a20-first-visit-and-phone`): the mark's bloom after sign-in, the bar at 360px with the view switch and avatar beside Go to
-# Second pass tasks
 
 ## P4 P7
 
@@ -37,7 +35,6 @@ Each agent adds its own section.
 - [x] P7: project page and app page keep the seeded name on error
 - [x] P7: tests for the four parts, no raw network text, seeded name
 - [ ] P7: pass `fine` ("Syndra itself is fine.") from Zitadel-facing pages `ready-for-agent`
-# The second pass (A-20): tasks
 
 Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 
