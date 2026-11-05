@@ -13,7 +13,7 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { Unfold } from "@/lib/motion";
 import { ApiError } from "@/lib/api-client";
-import { describeFailure, sentence } from "@/lib/outcome";
+import { failureMessage, sentence } from "@/lib/outcome";
 import { MAX_NAME, MAX_TERMS, shortDay, termFieldErrors, termStanding, validateTerms } from "@/lib/term-dates";
 import { useSaveTerms, useTermSetting, type Term } from "@/lib/queries/useTerms";
 
@@ -136,7 +136,7 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
       if (Object.keys(fields).length) setErrors(fields);
       else {
         const ref = e instanceof ApiError ? e.details?.request_id : undefined;
-        setFailure({ text: sentence(describeFailure(e)), reference: typeof ref === "string" ? ref : undefined });
+        setFailure({ text: sentence(failureMessage(e)), reference: typeof ref === "string" ? ref : undefined });
       }
     }
   }
