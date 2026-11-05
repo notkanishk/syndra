@@ -34,7 +34,7 @@ describe("PageHeader first paint", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  const head = () => screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!;
+  const head = () => screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!.parentElement!;
 
   it("wears the arrival until its stagger has run, then holds still", () => {
     render(<PageHeader title="Roles" />);
@@ -56,6 +56,6 @@ describe("PageHeader owns header to content", () => {
     expect(HEADER_TO_CONTENT).toBe(28);
     expect(BELOW_HEADER.marginBottom + CONTENT_GAP).toBe(28);
     render(<PageHeader title="Roles" />);
-    expect(screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!.style.marginBottom).toBe("12px");
+    expect(screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!.parentElement!.style.marginBottom).toBe("12px");
   });
 });

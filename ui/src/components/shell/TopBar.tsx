@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { AccountSheet } from "@/components/shell/AccountSheet";
+import { OPEN_GO_TO } from "@/components/shell/GoToHost";
+import { SyndraMark } from "@/components/shell/SyndraMark";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { notePage } from "@/lib/motion";
@@ -22,7 +24,7 @@ export function TopBar({ session }: { session: SessionUser }) {
   // In render, not an effect: the page's parts render after this in the same
   // pass and ask whether they are its first paint (a Notice, A-08 §5).
   notePage(pathname);
-  const { audience } = useUiView();
+  const { audience, isOperator } = useUiView();
   const { crumb } = usePageCrumb();
 
   const crumbs = crumbsFor(pathname, audience);
@@ -30,6 +32,11 @@ export function TopBar({ session }: { session: SessionUser }) {
 
   return (
     <header className="flex h-[66px] flex-none items-center gap-2.5 border-b border-line px-4 tablet:gap-4 tablet:px-[26px]">
+      {/* The mark has a seat on a phone (A-20 P6): the rail that holds it is
+          hidden there, and the one-shot bloom lights whichever is on screen. */}
+      <span className="flex-none tablet:hidden">
+        <SyndraMark size={16} welcome />
+      </span>
       <nav aria-label="Where you are" className="min-w-0 truncate text-[14.5px]">
         {trail.length === 0 ? (
           <span className="font-semibold text-ink">Syndra</span>
@@ -61,6 +68,20 @@ export function TopBar({ session }: { session: SessionUser }) {
       </nav>
 
       <span className="flex-1" />
+
+      {/* Go to, by touch (A-20 P6): a button, not a tab — Basic keeps its four.
+          Operators only; a member's three pages need no jump. It asks the one
+          Go to that GoToHost mounts, so nothing is duplicated. */}
+      {isOperator && (
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event(OPEN_GO_TO))}
+          aria-label="Go to a person, a project, an app, or a page"
+          className="inline-flex min-h-[var(--tap)] flex-none items-center rounded-pill px-3 text-[14.5px] font-semibold text-ink control press-scale tablet:hidden"
+        >
+          Go to
+        </button>
+      )}
 
       {/* Advanced reaches the switch at the top of its nav sheet, so on a
           phone it is not also here — the same control in two places at once is

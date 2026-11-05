@@ -213,15 +213,33 @@ describe("quiet hours and the first welcome", () => {
     expect(screen.queryByText(/keep until morning/)).toBeNull();
   });
 
-  it("welcomes on the first visit only", () => {
-    const { unmount } = render(
-      <QueryClientProvider client={new QueryClient()}>
-        <Home session={{ ...session, firstVisit: true }} />
+  const first = { ...session, firstVisit: true } as SessionUser;
+  const renderAs = (who: SessionUser) =>
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Home session={who} />
       </QueryClientProvider>,
     );
-    expect(screen.getByText(/Welcome to Syndra\. It keeps the makerspace.s list of who can use what, and why\./)).toBeTruthy();
+  const dateLine = (title: HTMLElement) => title.nextElementSibling;
+
+  it("welcomes on a calm first visit, in the headline's seat, and never otherwise", () => {
+    const { unmount } = renderAs(first);
+    const title = screen.getByRole("heading", { level: 1 });
+    expect(title.textContent).toMatch(/Welcome to Syndra\./);
+    expect(title.textContent).not.toMatch(/Nothing needs you/);
+    // Nothing was inserted: the date line is still the title's next sibling.
+    expect(dateLine(title)?.textContent).toMatch(/\w+day|last checked/);
     unmount();
-    renderHome();
+    renderAs(session);
     expect(screen.queryByText(/Welcome to Syndra/)).toBeNull();
+  });
+
+  it("gives the headline to the work on a working day: the work is the welcome", () => {
+    state.governance.unreconciled_targets = [{ target: "truenas", since: new Date().toISOString(), reason: "refused" }];
+    renderAs(first);
+    const title = screen.getByRole("heading", { level: 1 });
+    expect(screen.queryByText(/Welcome to Syndra/)).toBeNull();
+    expect(title.textContent).toMatch(/needs? you/);
+    expect(dateLine(title)?.textContent).toMatch(/\w+day|last checked/);
   });
 });
