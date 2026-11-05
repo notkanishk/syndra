@@ -91,19 +91,36 @@ export default function PendingChangesPage() {
     url.searchParams.delete("person");
     window.history.replaceState(window.history.state, "", url);
   }
+  // The same for a role (`?role=<project id>/<role key>`), from "Waiting for you to send →" on Roles that wait.
+  const askedRole = params?.get("role") ?? null;
+  const [dismissedRole, setDismissedRole] = useState<string | null>(null);
+  const roleRef = askedRole && askedRole !== dismissedRole ? askedRole : null;
+  const role = useMemo(() => {
+    const cut = roleRef ? roleRef.indexOf("/") : -1;
+    return roleRef && cut > 0 && cut < roleRef.length - 1
+      ? { projectId: roleRef.slice(0, cut), roleKey: roleRef.slice(cut + 1) }
+      : null;
+  }, [roleRef]);
+  function clearRole() {
+    setDismissedRole(askedRole);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("role");
+    window.history.replaceState(window.history.state, "", url);
+  }
   const matched = useMemo(
     () =>
       rows
         .filter((row) => !person || row.user_id === person)
+        .filter((row) => !role || (row.project_id === role.projectId && (row.role_keys ?? []).includes(role.roleKey)))
         .filter((row) => !needle || matches(row, needle, resolver)),
-    [rows, person, needle, resolver],
+    [rows, person, role, needle, resolver],
   );
   // S5: a row that goes on a later read (cancelled by someone, sent by someone)
   // fades where it was and closes its gap after, and not under the pointer. A row
   // a search drops goes the same way, but its gap does not wait for the pointer
   // (A-05 §2.10), and the rows that still match are the same rows.
   const leaving = useLeavingRows(matched, (row) => row.id, !pending.isLoading && !pending.error, {
-    narrowedBy: needle + (person ?? ""),
+    narrowedBy: needle + (person ?? "") + (roleRef ?? ""),
   });
   const shown = leaving.rows;
   const groups = groupByCascade(shown);
@@ -172,7 +189,12 @@ export default function PendingChangesPage() {
                   <UserName id={person} />
                 </FilterChip>
               )}
-              {(needle || person) && (
+              {role && (
+                <FilterChip onClear={clearRole} clearLabel="Show every role's changes">
+                  <RoleRef projectId={role.projectId} roleKey={role.roleKey} />
+                </FilterChip>
+              )}
+              {(needle || person || role) && (
                 <span className="text-[13.5px] text-muted">
                   {`${shown.length} of the ${rows.length} changes match. Sending sends all ${rows.length}, in order.`}
                 </span>
@@ -223,9 +245,17 @@ export default function PendingChangesPage() {
                     title={
                       needle
                         ? `No pending change matches \u201c${query.trim()}\u201d.`
-                        : "Nothing is waiting for you to send for this person."
+                        : person
+                          ? "Nothing is waiting for you to send for this person."
+                          : "Nothing is waiting for you to send for this role."
                     }
-                    guidance={needle ? "Search by a person's name or a role." : "Their changes have reached the system they were for."}
+                    guidance={
+                      needle
+                        ? "Search by a person's name or a role."
+                        : person
+                          ? "Their changes have reached the system they were for."
+                          : "Its changes have reached the system they were for."
+                    }
                   />
                 )
               }

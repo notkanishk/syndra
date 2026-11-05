@@ -49,7 +49,7 @@ import { Crossfade } from "@/components/ui/Crossfade";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
-import { greeting } from "@/lib/greeting";
+import { greeting, isQuietHour, WELCOME } from "@/lib/greeting";
 import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine } from "@/lib/term-dates";
 import { compareNames, sortByName } from "@/lib/sort";
@@ -327,6 +327,8 @@ export function Home({ session }: { session: SessionUser }) {
             </Crossfade>
           </span>
         </h1>
+        {/* The first visit only (A-18 idea 8): from the session, so it is there at first paint. */}
+        {session.firstVisit && <div className="mt-2 text-[14.5px] text-muted">{WELCOME}</div>}
         <div className="mt-2 text-[14.5px] text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}
           {termDay && ` · ${termDay}`}
@@ -393,7 +395,12 @@ export function Home({ session }: { session: SessionUser }) {
           <EmptyState
             resolved
             title="Nothing here needs you."
-            guidance="No open requests, and no access ending in the next 14 days."
+            guidance={
+              // Late at night, on a calm day only: permission to stop (A-18 idea 9).
+              now && isQuietHour(now)
+                ? "No open requests, and no access ending in the next 14 days. It will keep until morning."
+                : "No open requests, and no access ending in the next 14 days."
+            }
           />
         </div>
         </Unfold>

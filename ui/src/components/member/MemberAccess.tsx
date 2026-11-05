@@ -26,7 +26,7 @@ import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { useEffect, useState } from "react";
 import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
-import { greeting } from "@/lib/greeting";
+import { greeting, WELCOME } from "@/lib/greeting";
 import { glideTo } from "@/lib/motion";
 import { targetLabel } from "@/lib/nav";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
@@ -221,7 +221,10 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         </h1>
         {/* One line, always there, in the same seat in every state, so nothing below it moves. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0 text-[14.5px] text-muted">
-          {line ? (
+          {session.firstVisit ? (
+            // The first visit only (A-18 idea 8): above every rung, in the line's own seat.
+            <span>{WELCOME}</span>
+          ) : line ? (
             <>
               <span className="flex items-center gap-2.5">
                 {line.tone !== "none" && <StatusDot tone={line.tone} />}

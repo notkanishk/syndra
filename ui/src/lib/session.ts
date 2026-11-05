@@ -16,6 +16,9 @@ export interface SessionUser {
   // Phase 3: present for OIDC sessions, undefined for demo sessions
   accessToken?: string;
   sessionType: "demo" | "oidc";
+  // True for the session that recorded the person's first sign-in, and for no
+  // other: the one-time welcome shows while this session lasts (A-18 Q9).
+  firstVisit?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,6 +42,7 @@ export interface OidcSessionCookie {
   team: string;
   status: string;
   expiresAt: number; // Unix seconds
+  firstVisit?: boolean;
 }
 
 type SessionCookiePayload = DemoSessionCookie | OidcSessionCookie;
@@ -208,6 +212,7 @@ function decodeSessionPayload(value: string): SessionCookiePayload | null {
         team: typeof parsed.team === "string" ? parsed.team : "",
         status: typeof parsed.status === "string" ? parsed.status : "active",
         expiresAt: parsed.expiresAt,
+        ...(parsed.firstVisit === true ? { firstVisit: true } : {}),
       };
     }
 
@@ -262,6 +267,7 @@ export async function getSession(): Promise<SessionUser | null> {
       role: payload.role,
       accessToken: payload.accessToken,
       sessionType: "oidc",
+      ...(payload.firstVisit ? { firstVisit: true } : {}),
     };
   }
 

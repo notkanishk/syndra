@@ -192,7 +192,7 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
 
 [`changes/character-and-soul`](changes/character-and-soul/proposal.md) is built. Open:
 
-- **Record a first sign-in** (one timestamp, written once), so the one-time welcome ("Welcome to Syndra. It keeps the makerspace's list of who can use what, and why.") can exist. Backend change, then UI. Q9 of A-18: yes, later.
+- ~~**Record a first sign-in** (one timestamp, written once), so the one-time welcome can exist.~~ Built 5 Nov 2026 (migration 000075; see `changes/character-and-soul` 5.1). Quiet hours built too (5.2).
 
 ### An extension of you (A-19), wave 1 navigation — what the build left open
 

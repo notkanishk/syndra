@@ -23,5 +23,11 @@
 - [x] 4.1 No-bundle hint only when the person holds something; test added
 
 ## 5. Later
-- [ ] 5.1 Record a first sign-in in the backend, then the one-time welcome (A-18 idea 8) `needs-triage`
-- [ ] 5.2 Quiet hours (idea 9) and the 404 in voice (idea 10): not building
+- [x] 5.1 Record a first sign-in in the backend, then the one-time welcome (A-18 idea 8; owner 5 Nov, Q9 yes)
+  - Migration `000075_first_sign_in`: `person_first_sign_in (user_id PK, first_sign_in_at)`, written by `RecordFirstSignIn` with `INSERT ... ON CONFLICT DO NOTHING`, so it is written once and never overwritten.
+  - `POST /me/first-sign-in` (the OIDC callback calls it once per sign-in) answers `first_visit`, true only for the call that wrote the row. The callback puts that in the session cookie as `firstVisit`, so the welcome shows for that session only, survives a refresh, and never returns. Any failure reads as "not the first visit".
+  - Backfill: Syndra kept no record of its own sign-ins (sessions are cookies), so everyone it holds a record of is marked from their earliest one (audit-log actor, access request, sign-in event in `usage_last_seen`, grant in `zitadel_grants_index`). Nobody who has used Syndra is welcomed. People with no record at all have never touched Syndra and still get the welcome.
+  - UI: "Welcome to Syndra. It keeps the makerspace's list of who can use what, and why." in My access's line seat (above every rung) and on Home under the greeting, first visit only.
+  - Tests: live-DB (written once, never overwritten, first only for the recording call, the backfill); guard mutation-checked; session cookie round trip; Home and My access render.
+- [x] 5.2 Quiet hours (idea 9; owner 5 Nov): Home's calm guidance gains "It will keep until morning." from 22:00 to 05:00 on a calm day only; `greeting()` reads Evening in those hours. `isQuietHour` in `lib/greeting.ts`, boundaries tested.
+- [ ] 5.3 The 404 in voice (idea 10): not building
