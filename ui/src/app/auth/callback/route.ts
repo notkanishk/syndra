@@ -7,6 +7,7 @@ import {
   exchangeCodeForToken,
   extractSessionFields,
   fetchProfileMetadata,
+  recordFirstSignIn,
   parseJwtClaims,
   resolveDisplayName,
   PKCE_COOKIE_NAME,
@@ -113,6 +114,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const backendUrl = process.env.BACKEND_URL || "http://backend:8080";
   const profile = await fetchProfileMetadata(tokenResponse.access_token, backendUrl);
+  const firstVisit = await recordFirstSignIn(tokenResponse.access_token, backendUrl);
 
   // Name resolution is layered because no single source is reliable: the
   // access token carries profile claims only if the Zitadel instance inlines
@@ -131,6 +133,7 @@ export async function GET(request: Request): Promise<Response> {
     team: profile.team,
     status: profile.status,
     expiresAt: fields.expiresAt,
+    ...(firstVisit ? { firstVisit: true } : {}),
   };
 
   const sessionValue = createOidcSessionValue(payload);

@@ -154,6 +154,11 @@ function WaitingRoles({
   const waitingChanges = (pending.data ?? []).filter(
     (r) => r.wait_reason === "role_waits",
   ).length;
+  // Changes waiting on each role, so a role's own row can open Pending narrowed to it.
+  const waitingOn = (projectId: string, roleKey: string) =>
+    (pending.data ?? []).some(
+      (r) => r.wait_reason === "role_waits" && r.project_id === projectId && (r.role_keys ?? []).includes(roleKey),
+    );
 
   // Rows gathered by project (a quiet label and its count), A to Z; the heading in force orders
   // them inside each project. Two projects nobody could name sort by id, so they never interleave.
@@ -231,6 +236,9 @@ function WaitingRoles({
                       {roleName(role, m.role_key)}
                     </Link>{" "}
                     <Mono className="font-normal text-faint">{m.role_key}</Mono>
+                    {waitingOn(m.project_id, m.role_key) && (
+                      <NextStep className="mt-1 block" role={{ projectId: m.project_id, roleKey: m.role_key }} />
+                    )}
                   </div>
                   <span className="hidden w-[200px] text-[13.5px] text-muted tablet:block">
                     <UserName id={m.marked_by} fallback="Someone" />,{" "}

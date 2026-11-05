@@ -258,3 +258,28 @@ describe("demo identities are gated at the source", () => {
     expect(getDemoUser("dev_admin")).not.toBeNull();
   });
 });
+
+describe("the first-visit flag", () => {
+  const cookie = (firstVisit?: boolean) =>
+    createOidcSessionValue({
+      type: "oidc",
+      accessToken: "tok",
+      userId: "z-1",
+      role: "user",
+      name: "New Person",
+      email: "n@x.test",
+      title: "",
+      team: "",
+      status: "active",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      ...(firstVisit ? { firstVisit } : {}),
+    });
+
+  it("survives a refresh (every read of the same cookie), and is absent from any other session", async () => {
+    mockCookieValue = cookie(true);
+    expect((await getSession())?.firstVisit).toBe(true);
+    expect((await getSession())?.firstVisit).toBe(true);
+    mockCookieValue = cookie();
+    expect((await getSession())?.firstVisit).toBeUndefined();
+  });
+});
