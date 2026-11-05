@@ -98,7 +98,7 @@ function wording(op: UnconfirmedOperation, who: string, name: string) {
         question: `Did ${name} assign ${account} to ${who}?`,
         tell: `If ${account} is under Accounts Syndra manages, it happened.`,
         yes: `${account} is ${who}'s account, and Syndra manages it.`,
-        no: `${account} is still under Not made by Syndra.`,
+        no: `${account} is still under Not created by Syndra.`,
         done: `${account} is ${who}'s account on ${name}.`,
         notDone: `You recorded that ${name} didn't assign ${account} to ${who}.`,
       };
@@ -106,7 +106,7 @@ function wording(op: UnconfirmedOperation, who: string, name: string) {
       return {
         asked: [`Let go of `, `'s account on ${name}, keeping it`],
         question: `Did ${name} let go of ${who}'s account?`,
-        tell: `If ${account} is under Not made by Syndra, it happened.`,
+        tell: `If ${account} is under Not created by Syndra, it happened.`,
         yes: `${account} stays on ${name}, and Syndra no longer manages it.`,
         no: `Syndra still manages ${account}.`,
         done: `Syndra no longer manages ${account}. It stays on ${name}.`,

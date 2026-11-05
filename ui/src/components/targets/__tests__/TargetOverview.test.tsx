@@ -89,6 +89,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useMergeFindings: () => ({ data: undefined, isLoading: false, error: state.findingsError }),
+    useUnconfirmedOperations: () => ({ data: [], isLoading: false, error: null }),
     useTargetInventory: () => ({
       data: state.inventory,
       isLoading: false,
@@ -624,6 +625,28 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
     renderTarget();
 
     expect(screen.getAllByLabelText("count could not be read").length).toBeGreaterThan(0);
+  });
+
+  // A-20 P5: the region keeps one card, and the card says so when it is true.
+  it("says Nothing is waiting on you, in its card, when every read answered and nothing is waiting", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    const region = document.getElementById("waiting")!;
+    expect(within(region).getByText("Nothing is waiting on you.")).toBeInTheDocument();
+    expect(within(region).getByText("Nothing is waiting on you.").closest(".card")).not.toBeNull();
+  });
+
+  it("does not say nothing is waiting when a read failed: an unread region is not an empty one", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.findingsError = new Error("boom");
+    renderTarget();
+
+    expect(screen.queryByText("Nothing is waiting on you.")).toBeNull();
   });
 
   it("names the maintenance state in the Maintenance card, matching its action rows", () => {

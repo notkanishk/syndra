@@ -205,6 +205,10 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 | Remove | Will be removed | Removed |
 | Keep | Will be kept | Kept |
 | Lift a hold | Will be lifted | Lifted |
+| Give | Will be given | Given |
+| Cancel a queued change | Will be cancelled | Cancelled |
+| Adopt | Will be adopted | Adopted |
+| Mark as owned elsewhere | Will be marked | Marked |
 | Anything Syndra knows will wait | Will wait for you to send | Waiting for you to send |
 
 ## 6. Vocabulary

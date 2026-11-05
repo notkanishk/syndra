@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api-client";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import {
+  FORECAST,
+  forecastFor,
   outcomeFromError,
   type ActionOutcome as Outcome,
   OUTCOME_LABEL,
@@ -99,6 +101,31 @@ export function resultWord(plan: BulkPlan, noun: [string, string]): string | und
       return `Extended for ${who}`;
     default:
       return undefined;
+  }
+}
+
+/**
+ * The first 100ms of an apply, in Syndra's own tense (A-20 P8). The rehearsal
+ * already marked every row that will wait (`effect: "queued"`), so when all the
+ * rows that act will wait the forecast is the wait; otherwise it is the act's
+ * own word, from the op or from `fallback` for the surfaces whose op has none.
+ * Words only: no number, because nothing has been counted by the server yet.
+ */
+export function bulkForecast(plan: BulkPlan, fallback?: string): string | undefined {
+  const acting = plan.outcomes.filter((o) => o.effect === "apply" || o.effect === "queued");
+  const waiting = acting.filter((o) => o.effect === "queued");
+  if (acting.length > 0 && waiting.length === acting.length) return FORECAST.queued;
+  switch (plan.op) {
+    case "assign_role":
+    case "assign_bundle":
+      return FORECAST.give;
+    case "remove_role":
+    case "remove_bundle":
+      return FORECAST.remove;
+    case "extend":
+      return forecastFor("extend");
+    default:
+      return fallback;
   }
 }
 
@@ -254,6 +281,8 @@ interface RehearsalDialogProps {
    * down pass it (A-07 §9); Drift stays off and says nothing here.
    */
   waits?: string;
+  /** The act's forecast word where the plan's op does not say it (Drift's adopt, a request's approve). */
+  forecast?: string;
   /**
    * Computes the plan. Takes the scope acknowledgement rather than reading it
    * from the caller, so a surface cannot acknowledge on the operator's behalf.
@@ -343,6 +372,7 @@ export function RehearsalDialog({
   consequence,
   system = "Zitadel",
   waits,
+  forecast,
   onRehearse,
   onApply,
   onClose,
@@ -601,6 +631,9 @@ export function RehearsalDialog({
       {/* The plan's own result, on the step that exists for it. A refusal
           appears on whichever step the operator is standing on, because that
           is where they will look for the reason the button did nothing. */}
+      {step === "review" && busy && !outcome && plan && bulkForecast(plan, forecast) && (
+        <ActionForecast className="mx-6 mb-1" word={bulkForecast(plan, forecast)!} />
+      )}
       {outcome && <ActionOutcome outcome={outcome} word={outcome.word ?? OUTCOME_LABEL[outcome.kind]} className="mx-6 mb-1" />}
 
       <ModalFooter
