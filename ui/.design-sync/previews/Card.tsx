@@ -8,7 +8,7 @@ export const OpenRequests = () => (
     <CardHeader
       title="Open requests"
       count={3}
-      action={<CardHeaderLink href="/requests">See all →</CardHeaderLink>}
+      action={<CardHeaderLink href="/requests">All requests</CardHeaderLink>}
     />
     <CardRow first>
       <div style={name}>Aanya Rao</div>

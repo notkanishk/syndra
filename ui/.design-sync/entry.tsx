@@ -33,6 +33,7 @@ export * from "@/components/ui/FilterChip";
 export * from "@/components/ui/FilterPanel";
 export * from "@/components/ui/FormPart";
 export * from "@/components/ui/GlideIndicator";
+export * from "@/components/ui/FoldChevron";
 export * from "@/components/ui/GoTo";
 export * from "@/components/ui/Input";
 export * from "@/components/ui/Kbd";

@@ -47,7 +47,7 @@ describe("the selection bar below tablet", () => {
     render(bar({ primary: "remove_role" }));
     const lead = within(region()).getByRole("button", { name: "Revoke a role" });
     expect(lead.className).toContain("border-danger-line");
-    expect(lead.className).toContain("min-h-[44px]");
+    expect(lead.className).toContain("min-h-[var(--tap)]");
     expect(within(region()).queryByRole("button", { name: "Give a role" })).toBeNull();
   });
 

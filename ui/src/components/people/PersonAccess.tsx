@@ -518,7 +518,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                     aria-expanded={open}
                     aria-label={`${open ? "Fold" : "Open"} ${project.project_name}`}
                     onClick={() => toggleProject(project.project_id)}
-                    className="group -my-2 -ml-2 flex size-11 flex-none items-center justify-center"
+                    className="group -my-2 -ml-2 flex size-[var(--tap)] flex-none items-center justify-center"
                   >
                     <FoldChevron open={open} />
                   </button>

@@ -266,7 +266,7 @@ function DirectDialog({
           )}
         </div>
       </div>
-      {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
@@ -411,7 +411,7 @@ function BundleDialog({
           </>
         )}
       </div>
-      {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter

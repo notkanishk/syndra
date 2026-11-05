@@ -11,6 +11,6 @@ export const InCardHeader = () => (
 
 export const WithCount = () => (
   <Card>
-    <CardHeader title="Open requests" count={7} action={<CardHeaderLink href="/requests">See all →</CardHeaderLink>} />
+    <CardHeader title="Open requests" count={7} action={<CardHeaderLink href="/requests">All requests</CardHeaderLink>} />
   </Card>
 );

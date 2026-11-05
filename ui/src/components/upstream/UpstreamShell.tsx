@@ -40,7 +40,7 @@ export function UpstreamShell({
         eyebrow={
           <Link
             href="/zitadel"
-            className="inline-flex min-h-11 items-center font-semibold link-hover desktop:min-h-0"
+            className="inline-flex min-h-[var(--tap)] items-center font-semibold link-hover desktop:min-h-0"
           >
             Zitadel
           </Link>
@@ -146,8 +146,8 @@ export function DirectWriteWarning({
   // tick counts what changes; here the count is beside the point and the
   // absence is the entire risk.
   const tick = onAcknowledge ? (
-    <label className="mt-2 flex min-h-[44px] cursor-pointer items-center gap-3 text-[13.5px] text-ink">
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center desktop:h-auto desktop:w-auto">
+    <label className="mt-2 flex min-h-[var(--tap)] cursor-pointer items-center gap-3 text-[13.5px] text-ink">
+      <span className="flex size-[var(--tap)] shrink-0 items-center justify-center desktop:h-auto desktop:w-auto">
         <Checkbox checked={Boolean(acknowledged)} onChange={(event) => onAcknowledge(event.target.checked)} />
       </span>
       <span>I understand this changes Zitadel now, with no preview and no record in Syndra.</span>

@@ -35,6 +35,7 @@ import {
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import { useCrumb } from "@/lib/page-crumb";
+import { useSeededBundleName } from "@/lib/queries/seed";
 import {
   draftChangeCount,
   useBundleDraft,
@@ -95,7 +96,9 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
   const [remembered, setRemembered] = useState<BundleRow | null>(null);
   if (live && live.id !== remembered?.id) setRemembered(live);
   const bundle = live ?? remembered;
-  useCrumb(bundle?.name);
+  // The name from the list the reader came from, before this page's own read lands (A-19 P1).
+  const seeded = useSeededBundleName(bundleId);
+  useCrumb(bundle?.name ?? seeded);
 
   const [tab, setTab] = useState<Tab>("grants");
   const [publishing, setPublishing] = useState(false);
@@ -131,7 +134,7 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
     if (bundles.isLoading || bundles.error) {
       return (
         <div className="flex flex-col gap-4">
-          <PageHeader title="Bundle" lede="What it gives, who has it, and its history." />
+          <PageHeader title={seeded ?? "Bundle"} lede="What it gives, who has it, and its history." />
           <Card>
             <ListStates
               isLoading={bundles.isLoading}

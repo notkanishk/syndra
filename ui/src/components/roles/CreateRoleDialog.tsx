@@ -74,7 +74,7 @@ export function CreateRoleDialog({
               // Stated, not editable: the dialog was opened from this project's own page, and a
               // select here would invite changing it by accident. Named through the shared
               // resolver, never a raw id. Plain text, not a fake input.
-              <div className="flex min-h-11 items-center text-[15px]">
+              <div className="flex min-h-[var(--tap)] items-center text-[15px]">
                 <ProjectName id={pinnedProjectId} />
               </div>
             ) : (

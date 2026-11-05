@@ -5,7 +5,6 @@ const row = { display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 
 export const Variants = () => (
   <div style={row}>
     <Button variant="accent">Approve request</Button>
-    <Button variant="accentSoft">Add to bundle</Button>
     <Button variant="outline">Edit role</Button>
     <Button variant="ghost">Cancel</Button>
     <Button variant="danger">Remove access</Button>

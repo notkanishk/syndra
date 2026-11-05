@@ -1,0 +1,9 @@
+import { RunLabel } from "ui";
+
+/** The label above a run of rows in a sorted list: its value and, quieter, how many are in it. */
+export const Runs = () => (
+  <div style={{ maxWidth: 480 }}>
+    <RunLabel label="Laser cutter" size={14} />
+    <RunLabel label="Wood shop" size={6} />
+  </div>
+);
