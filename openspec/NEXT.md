@@ -52,6 +52,10 @@ thing to do before this deploys.
 
 [`changes/second-pass`](changes/second-pass/tasks.md): the welcome as the title's second sentence (Home on a calm day only), the shell's Notices under the page header, the phone top bar's mark and Go to. Open: a look on a real phone (bar at 360px, the bloom). Go to for members is deliberately not built (A-20 P6).
 
+### A-20 second pass, P10 P14 P15 P19 (built 5 Nov 2026)
+
+[`changes/second-pass`](changes/second-pass/tasks.md): `AdvancedLink` (Basic to an Advanced page switches the view on the way; `ArrowLink`, `NextStep`, tiles and Home's footnote use it), one breakpoint (`tablet:`) and the tap floor as `var(--tap)`, the phone form on three more lists, the top bar's chip as the first name, no drift sound for members, and Back keeping a person's folds, the claims editor's open line, a query-only change's scroll and a remembered Requests status. Open: a look on a real phone at 360 and 700px, the tab bar now at 44px; Select mode's place; EOY-P5.4 and P5.5 are closed.
+
 ### Basic / Advanced IA — what the redesign left open
 
 - **BIA-35** — exercise the claim editor, the simulator, role → members and `DELETE /users/{id}/grants/{grantId}` against a live Postgres + Redis + Zitadel. Unit-tested only; the write paths have never run against a real database.

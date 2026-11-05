@@ -245,8 +245,11 @@ function WaitingRoles({
                     <UserName id={m.marked_by} fallback="Someone" />,{" "}
                     {formatShortDate(m.marked_at)}
                   </span>
-                  <span className="w-[110px] text-right text-[15px] font-semibold tabular-nums">
+                  <span className="w-full text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:shrink-0 tablet:text-right">
                     {peopleOf(role)}
+                    <span className="text-[13px] font-normal text-faint tablet:hidden">
+                      {peopleOf(role) === "1" ? " person" : " people"}
+                    </span>
                   </span>
                   <span className="flex w-[140px] justify-end whitespace-nowrap">
                     <Button
@@ -394,8 +397,11 @@ function OneTimeMove({
               meta={<Mono className="font-normal">{s.role_key}</Mono>}
               description={givenBy(s)}
               aside={
-                <span className="block w-[110px] text-right text-[15px] font-semibold tabular-nums">
+                <span className="block w-full text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:text-right">
                   {peopleOf(role)}
+                  <span className="text-[13px] font-normal text-faint tablet:hidden">
+                    {peopleOf(role) === "1" ? " person" : " people"}
+                  </span>
                 </span>
               }
             />

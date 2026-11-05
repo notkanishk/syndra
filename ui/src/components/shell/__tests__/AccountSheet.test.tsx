@@ -95,6 +95,27 @@ describe("the account sheet", () => {
     expect(within(sheet).getByText("In this browser only")).toBeTruthy();
   });
 
+  // A-20 P15: drift is an operator's page; a member is not offered its sound.
+  it("does not offer a member the drift sound", () => {
+    render(<AccountSheet session={{ ...session, role: "user" } as SessionUser} />);
+    fireEvent.click(screen.getByRole("button", { name: /Account/ }));
+    expect(screen.queryByText("Sound when drift is found")).toBeNull();
+    expect(screen.queryByText("In this browser only")).toBeNull();
+  });
+
+  // A-20 P15: the chip says "Kabir", as RULES does; the sheet keeps the full name.
+  it("shows the first name on the chip and never the full name", () => {
+    render(<AccountSheet session={session} />);
+    const chip = screen.getByRole("button", { name: /Account/ });
+    expect(within(chip).getByText("Kabir")).toBeTruthy();
+    expect(within(chip).queryByText("Kabir Rao")).toBeNull();
+  });
+
+  it("falls back to the start of the address, never an id, when there is no name", () => {
+    render(<AccountSheet session={{ ...session, name: "" } as SessionUser} />);
+    expect(within(screen.getByRole("button", { name: /Account/ })).getByText("kabir")).toBeTruthy();
+  });
+
   // Every control in here is something a thumb has to land on.
   it("gives every control a real target", () => {
     open();
