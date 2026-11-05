@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"syndra/internal/claims"
+	"syndra/internal/claimtel"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -469,6 +470,120 @@ func TestPreview_Checks(t *testing.T) {
 	}
 	if _, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{}); err == nil {
 		t.Fatal("at least one person")
+	}
+}
+
+// Zitadel lists a project in the token only for someone it holds a grant for
+// there. With none, the door answers nothing, so the preview does too and
+// says why; a grant with no roles still lists the project.
+func TestPreview_ZitadelDoesNotListTheProject(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	ctx := context.Background()
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: netbirdShape(), TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	s.observed = map[string][]db.ObservedGrant{
+		"grace": {{UserID: "grace", ProjectID: "pElse", RoleKeys: []string{"staff"}}},
+		"aanya": {{UserID: "aanya", ProjectID: "pNet"}},
+	}
+	pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"grace", "aanya"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok := func(o any) string { b, _ := json.Marshal(o); return string(b) }
+	grace := pv.People[0].Now
+	if c5 := grace.Checks[4]; c5.State != CheckNone || c5.Facts["unlisted"] != true || tok(grace.Token) != `{}` || grace.WouldReceive != nil {
+		t.Fatalf("unlisted: %+v token=%s", c5, tok(grace.Token))
+	}
+	aanya := pv.People[1].Now
+	if aanya.Checks[4].Facts["unlisted"] != nil || tok(aanya.Token) != `{"groups":[]}` {
+		t.Fatalf("a grant with no roles lists the project: %+v token=%s", aanya.Checks[4], tok(aanya.Token))
+	}
+}
+
+// Without application.client_id the data plane can't tell the app, so an app
+// with its own shape gets the project's default: check 4 says so, from the
+// newest call per step. A call that names the app means Zitadel sends it.
+func TestPreview_ClientIDMissing(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	ctx := context.Background()
+	nb := netbirdShape()
+	nb.Lands = claims.LandsAccessToken
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: nb, TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	s.stored["ada:pNet"] = claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"staff"}, CompiledAt: "x"}
+	now := time.Now()
+	older, newer := now.Add(-time.Hour), now.Add(-time.Minute)
+	set := func(rows ...db.ClaimDeliveryLastRow) {
+		svcClaimDeliveryLast = func(context.Context) ([]db.ClaimDeliveryLastRow, error) { return rows, nil }
+	}
+	c4 := func() Check {
+		pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pv.People[0].Now.Checks[3]
+	}
+
+	set(db.ClaimDeliveryLastRow{ClientID: claimtel.None, Function: claims.FunctionPreAccessToken, LastAt: newer, LastOutcome: "served"},
+		db.ClaimDeliveryLastRow{ClientID: "cNB", Function: claims.FunctionPreAccessToken, LastAt: older, LastOutcome: "served"})
+	if c := c4(); c.State != CheckWarn || tok2(c.Facts["client_id_missing"]) != `["function/preaccesstoken"]` {
+		t.Fatalf("missing: %+v", c)
+	}
+
+	set(db.ClaimDeliveryLastRow{ClientID: claimtel.None, Function: claims.FunctionPreAccessToken, LastAt: older, LastOutcome: "served"},
+		db.ClaimDeliveryLastRow{ClientID: "cNB", Function: claims.FunctionPreAccessToken, LastAt: newer, LastOutcome: "served"})
+	if c := c4(); c.State != CheckPass || c.Facts["client_id_missing"] != nil {
+		t.Fatalf("present: %+v", c)
+	}
+
+	// Missing only at a step the shape doesn't land in: nothing changes.
+	set(db.ClaimDeliveryLastRow{ClientID: claimtel.None, Function: claims.FunctionPreUserinfo, LastAt: newer, LastOutcome: "served"})
+	if c := c4(); c.State != CheckPass {
+		t.Fatalf("this shape lands in the access token only: %+v", c)
+	}
+	// A day old says nothing about now.
+	set(db.ClaimDeliveryLastRow{ClientID: claimtel.None, Function: claims.FunctionPreAccessToken, LastAt: now.Add(-48 * time.Hour), LastOutcome: "served"})
+	if c := c4(); c.State != CheckPass {
+		t.Fatalf("old call: %+v", c)
+	}
+}
+
+func tok2(o any) string { b, _ := json.Marshal(o); return string(b) }
+
+// The live check: a captured answer equal to the preview matches, whatever a
+// nested object's key order; a different one, one at a step the shape
+// doesn't land in, or a degraded empty answer, does not.
+func TestCompareServed(t *testing.T) {
+	tokObj := claims.NewObject()
+	tokObj.Set("groups", []any{"netbird-staff"})
+	tokObj.Set("x", map[string]any{"a": 1, "b": 2})
+	e := Explanation{Token: tokObj, Checks: []Check{{}, {}, {}, {}, {Facts: map[string]any{"lands": claims.LandsAccessToken}}}}
+	at := time.Now()
+
+	same := []byte(`{"append_claims":[{"key":"groups","value":["netbird-staff"]},{"key":"x","value":{"b":2,"a":1}}]}`)
+	if lc := CompareServed(e, claims.FunctionPreAccessToken, same, at); !lc.Match || len(lc.Expected) != 2 {
+		t.Fatalf("same: %+v", lc)
+	}
+	other := []byte(`{"append_claims":[{"key":"groups","value":["netbird-admins"]},{"key":"x","value":{"a":1,"b":2}}]}`)
+	if lc := CompareServed(e, claims.FunctionPreAccessToken, other, at); lc.Match {
+		t.Fatalf("a different role matched: %+v", lc)
+	}
+	reordered := []byte(`{"append_claims":[{"key":"x","value":{"a":1,"b":2}},{"key":"groups","value":["netbird-staff"]}]}`)
+	if lc := CompareServed(e, claims.FunctionPreAccessToken, reordered, at); lc.Match {
+		t.Fatal("the claims' order is the token's, and counts")
+	}
+	empty := []byte(`{"append_claims":[]}`)
+	if lc := CompareServed(e, claims.FunctionPreAccessToken, empty, at); lc.Match {
+		t.Fatal("a degraded empty answer matched a preview with claims")
+	}
+	// Userinfo: the shape lands in the access token only, so nothing is right.
+	if lc := CompareServed(e, claims.FunctionPreUserinfo, empty, at); !lc.Match || len(lc.Expected) != 0 {
+		t.Fatalf("not landing: %+v", lc)
+	}
+	if lc := CompareServed(e, claims.FunctionPreUserinfo, same, at); lc.Match {
+		t.Fatal("claims served where the shape doesn't land matched")
 	}
 }
 
