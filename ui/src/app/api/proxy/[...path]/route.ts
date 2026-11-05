@@ -14,8 +14,22 @@ const UPSTREAM_TIMEOUT_MS = 120_000;
 // Per-member data, and a session-bound response: never kept by a shared cache.
 const NO_STORE = { "Cache-Control": "private, no-store" };
 
-function reply(body: unknown, status: number) {
-  return NextResponse.json(body, { status, headers: NO_STORE });
+/**
+ * The proxy's own refusals speak the backend's envelope (handlers/errors.go): a stable code in
+ * `error`, a plain sentence in `message`. Prose in `error` is what made the UI say "gave no reason".
+ */
+function refuse(status: number, error: string, message: string, extra?: { details?: Record<string, string>; headers?: Record<string, string> }) {
+  return NextResponse.json(
+    { error, message, ...(extra?.details ? { details: extra.details } : {}) },
+    { status, headers: { ...NO_STORE, ...extra?.headers } },
+  );
+}
+
+/** A 5xx the proxy itself speaks: raw text goes to the log under a reference, never to the screen. */
+function upstreamFailure(status: number, code: string, message: string, raw: string, headers?: Record<string, string>) {
+  const ref = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
+  console.error(`[proxy] upstream failure status=${status} ref=${ref} code=${code}: ${raw.slice(0, 500)}`);
+  return refuse(status, code, message, { details: { request_id: ref }, headers });
 }
 
 /**
@@ -117,31 +131,31 @@ async function proxy(request: NextRequest, method: Method, path: string[]) {
   // must come from this deployment's own origin. A request with no Origin (curl, server-side) is
   // not a browser cross-site request and carries no ambient cookie to ride.
   if (method !== "GET" && isForeignOrigin(request)) {
-    return reply({ error: "Forbidden" }, 403);
+    return refuse(403, "FORBIDDEN", "You don't have permission to do this.");
   }
 
   const session = await getSession();
   if (!session) {
-    return reply({ error: "Unauthorized" }, 401);
+    return refuse(401, "UNAUTHORIZED", "Your session ended before this ran.");
   }
 
   if (hasUnsafeSegment(path)) {
-    return reply({ error: "Bad request" }, 400);
+    return refuse(400, "BAD_REQUEST", "That request could not be read. Nothing was changed.");
   }
 
   if (session.role !== "admin" && !isMemberAllowed(method, path, session.id)) {
-    return reply({ error: "Forbidden" }, 403);
+    return refuse(403, "FORBIDDEN", "You don't have permission to do this.");
   }
 
   if (method !== "GET" && Number(request.headers.get("content-length")) > MAX_BODY_BYTES) {
-    return reply({ error: "Request too large" }, 413);
+    return refuse(413, "REQUEST_TOO_LARGE", "That request is too large. Nothing was changed.");
   }
 
   const target = new URL(`${BACKEND_URL}/api/v1/${path.join("/")}`);
   target.search = request.nextUrl.search;
 
   if (session.sessionType === "oidc" && !session.accessToken) {
-    return reply({ error: "Unauthorized" }, 401);
+    return refuse(401, "UNAUTHORIZED", "Your session ended before this ran.");
   }
 
   const authToken = session.sessionType === "oidc" && session.accessToken
@@ -229,8 +243,8 @@ async function proxy(request: NextRequest, method: Method, path: string[]) {
   try {
     res = await fetch(target, { ...init, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) });
     text = await res.text();
-  } catch {
-    return reply({ error: "Backend unreachable" }, 502);
+  } catch (e) {
+    return upstreamFailure(502, "BACKEND_UNREACHABLE", "Syndra's server didn't answer.", String(e));
   }
 
   // The backend's own status and Retry-After are the answer; the proxy only decides the shape.
@@ -245,7 +259,9 @@ async function proxy(request: NextRequest, method: Method, path: string[]) {
   try {
     data = JSON.parse(text);
   } catch {
-    // A gateway's HTML error page or a plain-text body: pass it on under its real status.
+    // A gateway's HTML error page or a plain-text body is the gateway's words, not the product's:
+    // an error keeps its real status and Retry-After but speaks the envelope.
+    if (!res.ok) return upstreamFailure(res.status, "UPSTREAM_ERROR", "Syndra's server could not answer that just now.", text, outHeaders);
     return new Response(text, {
       status: res.status,
       headers: { ...outHeaders, "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff" },

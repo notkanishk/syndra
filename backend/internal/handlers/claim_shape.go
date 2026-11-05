@@ -200,9 +200,15 @@ func claimShapeError(w http.ResponseWriter, err error) {
 	var breaking *services.BreakingUnacknowledged
 	switch {
 	case errors.As(err, &breaking):
-		jsonResponse(w, http.StatusConflict, map[string]any{
-			"error": "BREAKING_UNACKNOWLEDGED", "message": breaking.Error(),
-			"breaking": breaking.Breaking, "reach": breaking.Reach,
+		// The envelope with its two typed extras, not a free-form map.
+		jsonResponse(w, http.StatusConflict, struct {
+			ErrorResponse
+			Breaking []claims.Change `json:"breaking"`
+			Reach    *services.Reach `json:"reach,omitempty"`
+		}{
+			ErrorResponse{Error: "BREAKING_UNACKNOWLEDGED",
+				Message: "This changes what people receive when they sign in. Confirm you understand to save it."},
+			breaking.Breaking, breaking.Reach,
 		})
 	case errors.As(err, &invalid):
 		jsonValidationErrorResponse(w, invalid.Msg, map[string]string{"row": strconv.Itoa(invalid.Row)})
