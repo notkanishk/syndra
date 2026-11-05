@@ -179,7 +179,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
           <div className="flex flex-col">
             {["Account", "Password", "Home folder", "Folders", "Hold"].map((l, i) => (
               <Row key={l} label={l} first={i === 0}>
-                <span className="text-muted">—</span>
+                <span className="text-muted">Not yet</span>
               </Row>
             ))}
           </div>
@@ -197,7 +197,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
     body = (
       <>
         <Row label="Account" first>
-          <NextStep href={`/governance/pending?q=${encodeURIComponent(name)}`} />
+          <NextStep person={userId} />
           <Faint>
             {roles.length
               ? `Their ${formatList(roles)} ${rolesWord(roles.length)} ${label}.`
@@ -224,7 +224,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
             </div>
           </NotOpenYet>
         </div>
-        <HoldRow view={view} seat={onPage} />
+        <HoldRow view={view} seat={onPage} page={page} />
       </>
     );
   } else {
@@ -285,7 +285,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
             )}
           </Row>
         )}
-        <HoldRow view={view} seat={onPage} />
+        <HoldRow view={view} seat={onPage} page={page} />
       </>
     );
   }
@@ -490,7 +490,7 @@ function FolderList({ places, roleNames }: { places: StoragePlace[]; roleNames: 
   );
 }
 
-function HoldRow({ view, seat }: { view: PersonTargetView; seat: ReactNode }) {
+function HoldRow({ view, seat, page }: { view: PersonTargetView; seat: ReactNode; page: string }) {
   const hold = view.holds.find((h) => h.field === "enabled") ?? view.holds[0];
   return (
     <Row label="Hold" seat={seat}>
@@ -512,7 +512,14 @@ function HoldRow({ view, seat }: { view: PersonTargetView; seat: ReactNode }) {
               : hold.review_date
                 ? ` · review on ${formatShortDate(hold.review_date)}`
                 : ""}
-            {view.holds.length > 1 ? ` · and ${view.holds.length - 1} more` : ""}
+            {view.holds.length > 1 && (
+              <>
+                {" · "}
+                <Link href={page} className="font-semibold text-accent-text link-hover">
+                  and {view.holds.length - 1} more
+                </Link>
+              </>
+            )}
           </Faint>
         </>
       )}

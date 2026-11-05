@@ -175,7 +175,7 @@ describe("RolePicker · single choice", () => {
     expect(screen.getByText("1 person")).toBeInTheDocument();
     expect(screen.getByText("Has this")).toBeInTheDocument();
     expect(screen.getByText("Given 2h ago")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", expect.stringMatching(/^\/governance\/pending\?role=/));
   });
 
   it("an operator can't pick a role held with an end, and is offered Extend", () => {

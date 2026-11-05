@@ -64,3 +64,32 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 - [x] Tests: `forecastReach.test.tsx`, `requestForecast.test.tsx`, `RemovalForecast.test.tsx`, `GrantForecast.test.tsx`, `CancelForecast.test.tsx`, `RehearsalForecast.test.tsx`, Drift cases in `UnexplainedAccess.test.tsx`
 - [ ] Remove's rail count: only a withdrawn queued grant moves it; a direct revoke's count is left to the refetch (`needs-triage`)
 - [ ] Bulk decision and bulk extend rail counts (`ready-for-agent`)
+
+## P13 P16 P17
+
+### P13 · the claims page's leftovers
+
+- [x] Client ID row is Advanced only (`AppTokenScreen`)
+- [x] `FoldChevron` on every claim line (`ShapeCard`)
+- [x] Cancel in the footer's `cancel` slot, ghost, in the copy, save and roles sheets (`ShapeSheets`, `ShapeCard`)
+- [x] A failed re-run keeps the prior preview receded and inert, with a danger Notice that names its age (`ClaimPreview`)
+- [x] The page error keeps the seeded header, meta included (`SeedHeader`)
+- [x] Tests: `AppClaims.test.tsx` (client id by view, failed re-run keeps the preview)
+- [ ] TrueNAS offer and Debug mode's copy: neither names Advanced today; the offer's link to an Advanced page switches the view once `AdvancedLink` (P10) lands in `ArrowLink` (`blocked` on P10)
+
+### P16 · Pending's narrowings become one
+
+- [x] `lib/pending-filter.ts`: one `usePendingFilters` (read, clear, drop the URL parameter) and one `narrow`; `?q=` stays the search
+- [x] One FilterChip per filter in force; read line "Showing Priya Nair's 2 changes. Sending sends all 7."; search alone keeps "N of the M changes match."
+- [x] The three `NextStep` callers carry a person or a role: `CancelQueuedStep` (when every kept change is one person's), `RolePickerOne` (the role), `PersonStorage` (the person)
+- [x] Tests: `person.test.tsx` (the combined line, each chip clears only its own parameter), the three callers' link assertions
+
+### P17 · the small sweep
+
+- [x] Lone dashes become "Not yet" or "None" (Connected systems, `PersonStorage`, Bundles, Roles that wait)
+- [x] "and N more" is a violet link: Change history to the one edit (which lists every write), the storage card's hold to the system page
+- [x] Keys sheet: "In a list, the arrows move between rows." and a Go to chord row printed with this keyboard's modifier
+- [x] Go to placeholder by session (member "A page", Basic without bundles, Advanced with)
+- [x] Role page's raw key leaves Basic; bundles lede loses its third sentence
+- [x] Tests: `GoTo`, `KeysHost`, cascades, bundles list, role page
+- [ ] "Nothing matches that." for every emptied search (`ready-for-agent`: left to code's taste by A-20, not unified here)
