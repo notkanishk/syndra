@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First visit and phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Drawn inline until built (BRIDGE): the phone top bar with the mark and Go to (P6), the jump link, and the name link (P1). */
+.a20-jump{display:inline-flex;align-items:center;gap:4px;color:var(--accent-text);font-size:14.5px;font-weight:600;text-decoration:none}
+.a20-name{color:var(--ink);font-weight:600;text-decoration-line:underline;text-decoration-color:transparent}
+.a20-name:hover{color:var(--accent-text);text-decoration-color:currentColor}
+.a20-line{display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;font-size:14.5px;color:var(--muted);min-height:22px}
+.a20-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:14px 20px}
+.a20-phone{display:flex;flex-direction:column;height:100%;background:var(--ground);color:var(--ink)}
+.a20-bar{display:flex;align-items:center;gap:10px;height:66px;flex:none;padding:0 16px;border-bottom:1px solid var(--line)}
+.a20-bar .crumb{flex:1 1 auto;min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.a20-goto{display:inline-flex;align-items:center;justify-content:center;min-height:var(--tap);min-width:var(--tap);padding:0 12px;border:1px solid var(--line-strong);border-radius:var(--radius-pill);font-size:13.5px;font-weight:600;color:var(--ink);background:transparent}
+.a20-tabs{display:flex;flex:none;justify-content:space-around;padding:6px 16px calc(6px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface-0)}
+.a20-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;min-width:64px;border-radius:var(--radius-nav);font-size:12.5px;font-weight:600;color:var(--muted)}
+.a20-tab .dot{width:6px;height:6px;border-radius:999px;background:var(--line-strong)}
+.a20-tab[aria-current="page"]{color:var(--accent-text);background:var(--accent-soft)}
+.a20-tab[aria-current="page"] .dot{background:var(--accent)}
+.a20-moment{display:flex;flex-direction:column;gap:8px}
+.a20-moment .k{font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="First visit and phone board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Across the product · Proposed 5 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">The first visit, the phone, and the first 100ms</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-20, part two of three. Four things that are nearly right: the welcome adds a row on Home and hides the ladder on My access (P2); a phone in Basic has no way to Go to, and no mark to light once (P6); an error names the thing that failed and stops (P7); the two acts with the highest stakes, Drift and Remove, are the two with no forecast (P8).</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What you asked</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Go over everything again. The app as an extension of the user, on every device and in the first frame of every act.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What I recommend here</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">The welcome keeps its seat</strong>: it is the title's second sentence, and the line below still says the one thing worth knowing. <strong style="color:var(--ink)">The phone's top bar</strong> gains the mark at left and Go to at right; the four tabs stay four. <strong style="color:var(--ink)">Errors finish the sentence</strong>: which failed, which did not, what is true, what to do, and the reference. <strong style="color:var(--ink)">The forecast everywhere</strong>: Drift, Remove, Give, bulk and Cancel say what Syndra will do in the first frame.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · The welcome keeps its seat (P2)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">My access on Priya's first visit, the day her welcome roles were given. Today the welcome takes the ladder's line (MemberAccess.tsx:226), so she is not told she can use Laser cutting from today. Proposed, "Welcome to Syndra." is the title's second sentence, in the seat "Here's what you can use." holds on every later visit, and the line below keeps the ladder. When nothing is on the ladder, its calm rung reads the About sentence that day. Nothing moves between the first visit and the second.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ welcomeFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:400px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:800px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Welcome phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:2px solid var(--accent-line);background:var(--canvas)"><dc-import name="Frame" frame-src="a20-first-visit-and-phone.dc.html?frame=welcome-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · proposed</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The title wraps; the line wraps to two at most with the jump on the second, as A-18 drew it.</span></figcaption>
+      </figure>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Home, on the operator's first visit, when the day is calm: the greeting's second sentence is the welcome, and the calm panel carries the About sentence once. On a working day the headline wins and the welcome is not said: the work is the welcome.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ homeFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:360px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:720px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">2 · The phone's top bar (P6, P15)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Basic, on a phone. The bar gains the SyndraMark at its left, the same drawing as the rail's, so the one-shot bloom after sign-in has a seat on a phone; and a Go to button at its right, beside the avatar, for operators in both views. It opens the sheet the Advanced nav sheet already holds, Input at the top. The four tabs stay four: Go to is not a destination, so it is not a tab. Members get neither: three pages need no jump. Drawn inline; the bar is the TopBar's own change.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ barFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:{{ f.edge }};background:var(--canvas)"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">3 · An error that finishes the sentence (P7)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">People, failing to load. Today ErrorState names the thing and says "Nothing was changed.", then stops; a network fault passes the browser's own words through. Proposed, the four parts the copy guide asks for: which thing failed and which did not, the state of the world, the next step and where, and the reference with "Quote this if you ask for help." The page keeps its title and lede on error, as the rule says.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ errorFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:380px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:760px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">4 · The forecast on Drift (P8)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">One Drift row in four moments: at rest, pressed and busy, forecasting, and the true word. The forecast is Syndra's own next step in the plan row's tense: "Will be revoked", amber dot, no link. Revocations send on their own, so the true word is "On its way" with a neutral dot, as A-19 P14 settled; it does not bloom, because nothing has landed yet. The same four moments reach Remove, Give a role, the bulk dialogs and Cancel a queued change. A role that waits forecasts "Will wait for you to send", never "Will be approved".</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ forecastFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:460px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:920px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you (this board)</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="4">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:90ch">The full list of twelve questions is in from-design/A-20-second-pass.md §6.</p>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isWelcome }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/me" data="{{ memberData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ member }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
+      <h1 class="type-page-title" style="margin:0">Morning, Priya. <span style="color:var(--faint)">Here&rsquo;s what you can use.</span></h1>
+      <div class="a20-line"><span>Welcome to Syndra. It keeps the makerspace&rsquo;s list of who can use what, and why.</span></div>
+    </sc-if>
+    <sc-if value="{{ isProposed }}" hint-placeholder-val="{{ true }}">
+      <h1 class="type-page-title" style="margin:0">Morning, Priya. <span style="color:var(--faint)">Welcome to Syndra.</span></h1>
+      <div class="a20-line"><span style="display:inline-flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>From today, you can use Laser cutting.</span><a class="a20-jump" href="#card">Laser cutting <span aria-hidden>↓</span></a></div>
+    </sc-if>
+  </div>
+  <div style="margin-top:12px;display:flex;flex-direction:column;gap:16px">
+    <sc-for list="{{ memberCards }}" as="c" hint-placeholder-count="2">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,130px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="{{ c.project }}" note="{{ c.note }}" hint-size="100%,56px"></x-import>
+        <div class="a20-row row-divider"><span style="flex:1 1 240px;font-size:15px;font-weight:600">{{ c.role }}</span><span style="flex:1 1 200px;font-size:14px;color:var(--muted)">{{ c.how }}</span><span style="flex:0 0 150px;font-size:12.5px;color:var(--faint);text-align:right">{{ c.since }}</span></div>
+      </x-import>
+    </sc-for>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <h1 class="type-greeting" style="margin:0;max-width:34ch">Morning, Kanishk. <span style="color:var(--faint)">Welcome to Syndra.</span></h1>
+    <div style="font-size:14.5px;color:var(--faint)">Thursday 5 Nov · last checked 09:14</div>
+  </div>
+  <div class="panel" style="margin-top:12px"><x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ true }}" title="Nothing here needs you." guidance="It keeps the makerspace's list of who can use what, and why. No open requests, and no access ending in the next 14 days." hint-size="100%,120px"></x-import></div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isBar }}" hint-placeholder-val="{{ false }}">
+<div class="a20-phone">
+  <div class="a20-bar">
+    <x-import component-from-global-scope="Syndra.SyndraMark" size="{{ 16 }}" welcome="{{ true }}" hint-size="16px,16px"></x-import>
+    <span class="crumb">People</span>
+    <button type="button" class="a20-goto" aria-label="Go to a person, a project, an app, or a page">Go to</button>
+    <x-import component-from-global-scope="Syndra.Avatar" name="Kanishk Singh" hint-size="32px,32px"></x-import>
+  </div>
+  <div style="flex:1 1 auto;overflow:hidden;padding:20px 16px;display:flex;flex-direction:column;gap:28px">
+    <x-import component-from-global-scope="Syndra.PageHeader" title="People" lede="Everyone Syndra knows, and what each can use." hint-size="100%,90px"></x-import>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <x-import component-from-global-scope="Syndra.Input" placeholder="Search by name or email" aria-label="Search people" hint-size="100%,44px"></x-import>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,260px">
+        <sc-for list="{{ phonePeople }}" as="p" hint-placeholder-count="4">
+          <div class="a20-row row-divider" style="padding:12px 16px"><x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" hint-size="28px,28px"></x-import><span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column"><span class="a20-name">{{ p.name }}</span><span style="font-size:12.5px;color:var(--faint)">{{ p.bundle }} · {{ p.roles }} roles</span></span></div>
+        </sc-for>
+      </x-import>
+    </div>
+  </div>
+  <nav class="a20-tabs" aria-label="Pages">
+    <a class="a20-tab" href="#top"><span class="dot"></span>Home</a>
+    <a class="a20-tab" href="#top" aria-current="page"><span class="dot"></span>People</a>
+    <a class="a20-tab" href="#top"><span class="dot"></span>Access</a>
+    <a class="a20-tab" href="#top"><span class="dot"></span>Requests</a>
+  </nav>
+</div>
+</sc-if>
+
+<sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="People" lede="Everyone Syndra knows, and what each can use." hint-size="100%,90px"></x-import>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
+      <x-import component-from-global-scope="Syndra.ErrorState" title="Couldn't load people." error="{{ fetchError }}" on-retry="{{ noop }}" hint-size="100%,150px"></x-import>
+    </sc-if>
+    <sc-if value="{{ isProposed }}" hint-placeholder-val="{{ true }}">
+      <x-import component-from-global-scope="Syndra.Notice" tone="danger" blocking="{{ true }}" title="Couldn't load people." reference="req_7c1f0e2a" hint-size="100%,190px">
+        <span style="display:block">Syndra&rsquo;s server didn&rsquo;t answer. Zitadel wasn&rsquo;t asked, and nothing was changed.</span>
+        <span style="display:block;margin-top:6px">Try again in a minute. If it keeps failing, ask the person who runs the Syndra server and quote the reference below.</span>
+        <span style="display:block;margin-top:6px;font-size:12.5px;color:var(--faint)">Quote this if you ask for help.</span>
+        <span style="display:block;margin-top:12px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Try again</x-import></span>
+      </x-import>
+    </sc-if>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isForecast }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/governance/drift" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Drift" lede="Access with no record explaining it. Each row waits for you to keep it or revoke it." hint-size="100%,90px"></x-import>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,460px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="In Zitadel, not in Syndra" count="{{ 4 }}" hint-size="100%,56px"></x-import>
+    <sc-for list="{{ moments }}" as="m" hint-placeholder-count="4">
+      <div class="a20-row row-divider" style="align-items:flex-start">
+        <span style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <span class="type-label" style="color:var(--label)">{{ m.k }}</span>
+          <span style="font-size:15px"><a class="a20-name" href="#person">Rohan Iyer</a> <span style="color:var(--muted)">holds Operator in</span> <a class="a20-name" href="#project">Laser cutting</a></span>
+          <span style="font-size:12.5px;color:var(--faint)">Found 2 hours ago · nothing in Syndra explains it</span>
+        </span>
+        <span style="flex:0 0 260px;display:flex;justify-content:flex-end;gap:8px">
+          <sc-if value="{{ m.buttons }}" hint-placeholder-val="{{ true }}">
+            <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ m.busy }}" hint-size="80px,34px">Keep it</x-import>
+            <x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" disabled="{{ m.busy }}" hint-size="90px,34px">{{ m.revoke }}</x-import>
+          </sc-if>
+          <sc-if value="{{ m.seat }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="Syndra.StatusSeat" tone="{{ m.tone }}" word="{{ m.word }}" note="{{ m.note }}" hint-size="240px,40px"></x-import>
+          </sc-if>
+        </span>
+      </div>
+    </sc-for>
+  </x-import>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":5600}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.member = { id: "u2", name: "Priya Nair", email: "priya.nair@example.edu", title: "Student", team: "Design", status: "active", avatar: "PN", role: "user", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 4, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 0 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u3", display_name: "Rohan Iyer" }], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+    this.memberData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+    ];
+  }
+  renderVals() {
+    const noop = () => {};
+    const parts = this.st.split("-");
+    const kind = parts[0];
+    const variant = parts[1] || "";
+    const DIV = "1px solid var(--divider)";
+    const f = (frame, label, note, rec) => ({ src: "a20-first-visit-and-phone.dc.html?frame=" + frame, label, note: note || "", edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+
+    // A to Z by project name: the cards are alphabetical, always.
+    const memberCards = [
+      { project: "Laser cutting", note: "1 role · given today", role: "Operator", how: "Because you're in Member", since: "From today" },
+      { project: "Wood shop", note: "1 role", role: "Hand tools", how: "Because you're in Member", since: "Since 3 Nov" },
+    ];
+    const phonePeople = [
+      { name: "Aanya Rao", bundle: "Lab tech", roles: "4" },
+      { name: "Kabir Mehta", bundle: "Member", roles: "2" },
+      { name: "Prisha Menon", bundle: "Member", roles: "1" },
+      { name: "Priya Nair", bundle: "Lab tech", roles: "3" },
+    ];
+    const moments = [
+      { k: "At rest", buttons: true, seat: false, busy: false, revoke: "Revoke it" },
+      { k: "Pressed, busy", buttons: true, seat: false, busy: true, revoke: "Revoke it" },
+      { k: "Forecasting, the same frame", buttons: false, seat: true, tone: "warn", word: "Will be revoked", note: "Revocations send on their own" },
+      { k: "The true word, on the answer", buttons: false, seat: true, tone: "neutral", word: "On its way", note: "Revocations send on their own" },
+    ];
+    const fetchError = new Error("Failed to fetch");
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("Should the welcome never add a row: the title's second sentence on My access and Home, with the ladder still speaking below?", "Yes. A first-visit member with a role given today is told so on the same visit; the date line never moves."),
+      Q("Should the phone's top bar gain the mark at left and a Go to button at right for operators, with no fifth tab?", "Yes. Go to is not a destination. The bar is where a phone user already looks for the account."),
+      Q("Should ErrorState carry the four parts, and a network fault read \"Syndra's server didn't answer.\"?", "Yes. One surface follows the copy guide's section 8 today; sixty do not."),
+      Q("Should the forecast reach Drift, Remove, Give, bulk and Cancel, and say \"Will wait for you to send\" for a role that waits?", "Yes. The two acts with the highest stakes are the two with no forecast, and a forecast that is sometimes wrong is worse than none."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame,
+      isWelcome: kind === "welcome",
+      isHome: kind === "home",
+      isBar: kind === "bar",
+      isError: kind === "error",
+      isForecast: kind === "forecast",
+      isToday: variant === "today",
+      isProposed: variant !== "today",
+      operator: this.operator, member: this.member, rootData: this.rootData, memberData: this.memberData, noop,
+      memberCards, phonePeople, moments, fetchError, questions,
+      welcomeFrames: [
+        f("welcome-today", "Today · the welcome in the ladder's seat", "The sentence is right and the seat is wrong: it hides \"From today, you can use Laser cutting.\" on the one day it is true.", false),
+        f("welcome", "Proposed · the title's second sentence · dark", "\"Welcome to Syndra.\" where \"Here's what you can use.\" sits on every later visit. The ladder keeps its line and its jump.", true),
+        f("welcome-light", "Proposed · light", "The same in daylight.", true),
+      ],
+      homeFrames: [
+        f("home", "Home · calm first visit · dark", "The greeting's faint sentence is the welcome; the calm panel says the About sentence once. The date line is where it always is.", true),
+        f("home-light", "Home · light", "The same in daylight.", true),
+      ],
+      barFrames: [
+        f("bar", "Phone · Basic · dark", "The mark at left, lit once after sign-in; Go to at right, 44px, beside the avatar. Four tabs below, as today.", true),
+        f("bar-light", "Phone · light", "The same in daylight.", true),
+      ],
+      errorFrames: [
+        f("error-today", "Today · half the sentence", "\"Couldn't load people.\" and \"Nothing was changed.\", with the browser's \"Failed to fetch\" between them.", false),
+        f("error", "Proposed · the whole sentence · dark", "Which failed, which did not, what is true, what to do and where, and the reference with its line. The title and lede stay.", true),
+        f("error-light", "Proposed · light", "The same in daylight.", true),
+      ],
+      forecastFrames: [
+        f("forecast", "Drift in four moments · dark", "At rest; pressed and busy, the label and width fixed; forecasting in the same frame, amber, no link; the true word on the answer, neutral, no bloom.", true),
+        f("forecast-light", "The same · light", "The same in daylight.", true),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

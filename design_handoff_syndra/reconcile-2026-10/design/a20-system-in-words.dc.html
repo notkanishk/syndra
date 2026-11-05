@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The System group in words</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Drawn inline until built (BRIDGE): TechnicalDetail (proposed/TechnicalDetail.md), the check pips, and the name link (P1). */
+.a20-name{color:var(--ink);font-weight:600;text-decoration-line:underline;text-decoration-color:transparent}
+.a20-name:hover{color:var(--accent-text);text-decoration-color:currentColor}
+.a20-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:14px 20px}
+.a20-health{display:flex;flex-direction:column;gap:16px;padding:18px 20px}
+.a20-pips{display:inline-flex;align-items:center;gap:5px;margin-left:6px}
+.a20-pip{width:6px;height:6px;border-radius:999px;background:var(--healthy)}
+.a20-pip.missed{background:transparent;border:1.5px solid var(--warn)}
+.a20-facts{display:grid;grid-template-columns:150px 1fr;gap:8px 16px;padding:4px 20px 14px 64px;font-size:14px}
+.a20-facts dt{color:var(--muted);margin:0}
+.a20-facts dd{margin:0;color:var(--ink)}
+.a20-detail{display:flex;flex-direction:column;gap:10px;padding:0 20px 16px 64px}
+.a20-detail-head{display:inline-flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--ink);background:transparent;border:0;padding:0;cursor:pointer}
+.a20-detail-head .for{font-size:12.5px;font-weight:400;color:var(--faint)}
+.a20-mono{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-inner);background:var(--surface-2);font-family:var(--font-mono);font-size:12.5px;line-height:1.55;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+.a20-raw{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-inner);background:var(--surface-2);font-family:var(--font-mono);font-size:12.5px;line-height:1.55;color:var(--ink);white-space:pre}
+.a20-chev{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;border:1px solid var(--line-strong);color:var(--muted);flex:none}
+.a20-chev svg{width:14px;height:14px}
+.a20-chev.open{transform:rotate(90deg)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="System in words board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">System · Proposed 5 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">The System group, in words</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-20, part three of three. The screens the owner opens when something is wrong were never designed to the rules the rest of the product follows: Zitadel's health says "Not answering" in its seat and "Unreachable" in the Notice beside it; a system's Waiting on you has no empty state; Incoming events shows a JSON dump under "Show details". One word per state, a sentence where there was a code, and one fold, Technical detail, for the machine's words.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What you asked</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Go over everything again, including the areas never deeply designed: TrueNAS and storage, Zitadel and the System group, service accounts, Incoming events.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What I recommend here</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">One word per state</strong>: Zitadel uses the connected-system words, Answering, Not answering, Offline, Waiting to retry, Not connected, with the check pips, and a Check again. <strong style="color:var(--ink)">Nothing is waiting on you</strong> is said, in its card, when it is true. <strong style="color:var(--ink)">Technical detail</strong> is the one fold for ids, JSON and commands, for whoever runs the server; everything outside it is a sentence.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · Zitadel's health line, one word (P5)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The Zitadel page's health region in three states, stacked so they can be compared. The seat's word and the Notice's title are the same word. One or two missed checks show as pips under a lime Answering and never raise a Notice (Q-01); three in a row is Offline, a neutral Notice, and Syndra keeps checking. Check again is the outline sm beside the read line, as Connected systems has it. The meta never says a count it has not read.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ zitadelFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:620px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:1240px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">2 · Nothing is waiting on you (P5, P11)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">TrueNAS's page, the Waiting on you region, with nothing waiting. Today the region shows its label and nothing under it, and the Unconfirmed changes card exists only when it has rows. Proposed, the region keeps one card, and the card says so with the words A-09 already wrote. The chip in the read line reads "Waiting on you 0", hollow, where it always is.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ waitingFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:360px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:720px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">3 · Incoming events, with Technical detail folded (P11)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">One event, opened. Today "Show details" reveals the raw event type and a JSON dump (operations/page.tsx:434-438). Proposed, the row opens by the 28px round chevron into named facts: who, what, where it came from, when, and what Syndra did. Under them, one fold, Technical detail, closed, marked "for whoever runs the Syndra server", holding the raw event. The same part takes the capability ids on a system's page, the mapping's field and value, the Zitadel key's commands and Claims delivery's expected and found values. Drawn inline; proposed/TechnicalDetail.md says what it is.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ eventFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:460px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:920px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Events phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:2px solid var(--accent-line);background:var(--canvas)"><dc-import name="Frame" frame-src="a20-system-in-words.dc.html?frame=events-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · proposed</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The facts stack as label over value. Technical detail stays folded; opened, its block wraps rather than scrolling sideways.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you (this board)</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:90ch">The full list of twelve questions is in from-design/A-20-second-pass.md §6.</p>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isZitadel }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/zitadel" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Zitadel" lede="Whether Syndra can reach Zitadel, and what it holds right now. Nothing on this page changes anyone's access." hint-size="100%,90px"></x-import>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <sc-for list="{{ health }}" as="h" hint-placeholder-count="3">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+        <div class="a20-health">
+          <span class="type-label" style="color:var(--label)">{{ h.k }}</span>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px">
+            <span style="display:inline-flex;align-items:center"><x-import component-from-global-scope="Syndra.StatusSeat" tone="{{ h.tone }}" word="{{ h.word }}" hint-size="140px,24px"></x-import><sc-if value="{{ h.pips }}" hint-placeholder-val="{{ false }}"><span class="a20-pips" aria-label="Last three checks"><span class="a20-pip"></span><span class="a20-pip"></span><span class="a20-pip missed"></span></span></sc-if></span>
+            <span style="font-size:13.5px;color:var(--muted)">{{ h.note }}</span>
+            <span style="margin-left:auto"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,34px">Check again</x-import></span>
+          </div>
+          <sc-if value="{{ h.notice }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="Syndra.Notice" tone="{{ h.ntone }}" live="{{ h.live }}" title="{{ h.ntitle }}" hint-size="100%,80px">{{ h.nbody }}</x-import>
+          </sc-if>
+        </div>
+      </x-import>
+    </sc-for>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isWaiting }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/system/targets/truenas" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="TrueNAS" lede="Whether Syndra can reach TrueNAS and what it says about itself, who has an account there, and anything waiting on you." hint-size="100%,90px"></x-import>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;font-size:13.5px;color:var(--muted)">
+      <span style="display:inline-flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>Read 2 minutes ago</span>
+      <span style="margin-left:auto;display:inline-flex;gap:8px"><x-import component-from-global-scope="Syndra.Chip" hint-size="120px,28px">Waiting on you 0 ↓</x-import><x-import component-from-global-scope="Syndra.Chip" hint-size="110px,28px">Accounts 38 ↓</x-import></span>
+    </div>
+    <span class="type-label" style="color:var(--label);margin-top:8px">Waiting on you</span>
+    <sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
+      <div style="min-height:80px"></div>
+    </sc-if>
+    <sc-if value="{{ isProposed }}" hint-placeholder-val="{{ true }}">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px"><x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ true }}" title="Nothing is waiting on you." guidance="A change TrueNAS never answered, an account two records disagree about, or a password that needs a new one appears here." hint-size="100%,130px"></x-import></x-import>
+    </sc-if>
+    <span class="type-label" style="color:var(--label);margin-top:8px">Accounts Syndra manages</span>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px">
+      <sc-for list="{{ accounts }}" as="a" hint-placeholder-count="3">
+        <div class="a20-row row-divider"><span style="flex:1 1 220px;display:flex;flex-direction:column"><a class="a20-name" href="#person">{{ a.name }}</a><span style="font-size:12.5px;color:var(--faint);font-family:var(--font-mono)">{{ a.account }}</span></span><span style="flex:1 1 200px;font-size:14px;color:var(--muted)">{{ a.since }}</span><span style="flex:0 0 110px;text-align:right;font-size:14px">{{ a.used }}</span></div>
+      </sc-for>
+    </x-import>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isEvents }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/operations" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Incoming events" lede="Things that happened outside Syndra and reached it: access changed in Zitadel, and people joining. Nothing here needs a decision." hint-size="100%,90px"></x-import>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;font-size:13.5px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>Read just now</span></div>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+      <div class="a20-row row-divider" style="align-items:center">
+        <span class="a20-chev open" aria-hidden><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3.5 10.5 8 6 12.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+        <span style="flex:1 1 320px;min-width:0;font-size:15px"><a class="a20-name" href="#person">Priya Nair</a> <span style="color:var(--muted)">was given Operator in</span> <a class="a20-name" href="#project">Laser cutting</a></span>
+        <span style="flex:0 0 200px"><x-import component-from-global-scope="Syndra.StatusSeat" tone="neutral" word="Recorded" note="Nothing for Syndra to do" hint-size="200px,40px"></x-import></span>
+        <span style="flex:0 0 110px;text-align:right;font-size:12.5px;color:var(--faint)">09:12 today</span>
+      </div>
+      <sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
+        <div class="a20-detail">
+          <span style="font-size:12.5px;color:var(--faint);font-family:var(--font-mono)">zitadel.grant_added</span>
+          <pre class="a20-raw">{{ rawEvent }}</pre>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isProposed }}" hint-placeholder-val="{{ true }}">
+        <dl class="a20-facts">
+          <dt>Who</dt><dd><a class="a20-name" href="#person">Priya Nair</a></dd>
+          <dt>What</dt><dd>Operator in Laser cutting, given</dd>
+          <dt>From</dt><dd>Zitadel, by Kanishk Singh in its console</dd>
+          <dt>When</dt><dd>Today at 09:12:41</dd>
+          <dt>What Syndra did</dt><dd>Recorded it. The role already matches what Syndra holds for her.</dd>
+        </dl>
+        <div class="a20-detail">
+          <button type="button" class="a20-detail-head" aria-expanded="{{ detailOpen }}"><span class="a20-chev {{ detailCls }}" aria-hidden><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3.5 10.5 8 6 12.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>Technical detail <span class="for">for whoever runs the Syndra server</span></button>
+          <sc-if value="{{ detailOpen }}" hint-placeholder-val="{{ false }}">
+            <pre class="a20-mono">{{ rawEvent }}</pre>
+          </sc-if>
+        </div>
+      </sc-if>
+      <sc-for list="{{ moreEvents }}" as="e" hint-placeholder-count="2">
+        <div class="a20-row row-divider" style="align-items:center">
+          <span class="a20-chev" aria-hidden><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3.5 10.5 8 6 12.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+          <span style="flex:1 1 320px;min-width:0;font-size:15px"><a class="a20-name" href="#person">{{ e.name }}</a> <span style="color:var(--muted)">{{ e.what }}</span></span>
+          <span style="flex:0 0 200px"><x-import component-from-global-scope="Syndra.StatusSeat" tone="neutral" word="{{ e.word }}" note="{{ e.note }}" hint-size="200px,40px"></x-import></span>
+          <span style="flex:0 0 110px;text-align:right;font-size:12.5px;color:var(--faint)">{{ e.when }}</span>
+        </div>
+      </sc-for>
+    </x-import>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":4400}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 0 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Priya Nair" }], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const noop = () => {};
+    const parts = this.st.split("-");
+    const kind = parts[0];
+    const variant = parts[1] || "";
+    const DIV = "1px solid var(--divider)";
+    const f = (frame, label, note, rec) => ({ src: "a20-system-in-words.dc.html?frame=" + frame, label, note: note || "", edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+
+    const health = [
+      { k: "Answering", tone: "healthy", word: "Answering", pips: false, note: "in 42 ms, and sees 5 projects · checked 09:14", notice: false },
+      { k: "One missed check", tone: "healthy", word: "Answering", pips: true, note: "missed one check at 09:14 · last answered 09:13 · sees 5 projects", notice: false },
+      { k: "Three missed checks", tone: "neutral", word: "Offline", pips: false, note: "since 09:12 · Syndra checks every 30 seconds", notice: true, ntone: "neutral", live: false, ntitle: "Offline.", nbody: "Zitadel hasn't answered three checks in a row, since 09:12. Below is what it held at 09:12. Anything you give or revoke now waits until Zitadel answers, and nothing is lost." },
+    ];
+    // A to Z by shown name.
+    const accounts = [
+      { name: "Aanya Rao", account: "aanya.rao", since: "Made by Syndra on 3 Sept", used: "Today" },
+      { name: "Kabir Mehta", account: "kabir.mehta", since: "Made by Syndra on 12 Oct", used: "2 days ago" },
+      { name: "Priya Nair", account: "priya.nair", since: "Made by Syndra on 1 Nov", used: "Today" },
+    ];
+    const rawEvent = [
+      "{",
+      "  \"type\": \"zitadel.grant_added\",",
+      "  \"subject\": \"284019337710552099\",",
+      "  \"project\": \"284019337710552100\",",
+      "  \"role_key\": \"operator\",",
+      "  \"at\": \"2026-11-05T09:12:41Z\"",
+      "}",
+    ].join("\n");
+    const moreEvents = [
+      { name: "Kabir Mehta", what: "signed in for the first time", word: "Welcome roles given", note: "Member, in Wood shop", when: "08:50 today" },
+      { name: "Rohan Iyer", what: "lost Member in Wood shop in Zitadel", word: "Recorded", note: "Syndra chose not to act", when: "Yesterday 17:40" },
+    ];
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("Should Zitadel use the connected-system words, Answering, Not answering, Offline, Waiting to retry, Not connected, with the pips and a Check again?", "Yes. One word per state, and the seat and the Notice say the same word."),
+      Q("Should a system's Waiting on you always show its card, with \"Nothing is waiting on you.\" when it is true?", "Yes. Structure never moves; A-09 already wrote the sentence."),
+      Q("Should Technical detail become the one fold for the machine's words, and the System group's raw ids, JSON and commands move inside it?", "Yes, third wave. Everything outside it is a sentence."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    const detailOpen = variant === "light";
+    return {
+      isBoard: !this.frame,
+      isZitadel: kind === "zitadel",
+      isWaiting: kind === "waiting",
+      isEvents: kind === "events",
+      isToday: variant === "today",
+      isProposed: variant !== "today",
+      detailOpen, detailCls: detailOpen ? "open" : "",
+      operator: this.operator, rootData: this.rootData, noop,
+      health, accounts, rawEvent, moreEvents, questions,
+      zitadelFrames: [
+        f("zitadel", "Three states, one vocabulary · dark", "Answering with its latency and count; Answering with one missed pip, no Notice; Offline after three, a neutral Notice, and Check again on every line.", true),
+        f("zitadel-light", "The same · light", "The same in daylight.", true),
+      ],
+      waitingFrames: [
+        f("waiting-today", "Today · a label over nothing", "The region's label with no card under it; the chip and the card come and go with the rows.", false),
+        f("waiting", "Proposed · the card says so · dark", "One card, lime dot, \"Nothing is waiting on you.\", and one sentence saying what would put something here.", true),
+      ],
+      eventFrames: [
+        f("events-today", "Today · a JSON dump", "\"Show details\" reveals the raw event type and the payload, in the content column, for every reader.", false),
+        f("events", "Proposed · facts, then Technical detail folded · dark", "Who, what, from, when and what Syndra did, as sentences; one fold for the raw event, closed.", true),
+        f("events-light", "Proposed · light, Technical detail opened", "Opened, the block sits in surface-2 with a hairline, mono at 12.5, and wraps.", true),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
