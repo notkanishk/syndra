@@ -90,7 +90,7 @@ function renderPage() {
 const UNDECIDED = "Undecided";
 const LAPSE = "Let lapse";
 const peopleIn = (card: HTMLElement) =>
-  Array.from(card.querySelectorAll("a[href^='/users/']")).map((a) => a.textContent);
+  Array.from(card.querySelectorAll("a[href^='/users/'].font-semibold")).map((a) => a.textContent);
 
 beforeEach(() => {
   state.rows = mixed();

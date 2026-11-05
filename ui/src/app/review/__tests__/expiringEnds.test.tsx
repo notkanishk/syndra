@@ -84,5 +84,8 @@ describe("Expiring: the person is a link (P10.3)", () => {
     renderPage();
     const link = document.querySelector('a[href="/users/u1"]');
     expect(link).not.toBeNull();
+    // A-20 P1: one link for the person per row (the project's own link is another), none inside another.
+    expect(document.querySelectorAll('a[href="/users/u1"]')).toHaveLength(1);
+    expect(document.querySelector("a a")).toBeNull();
   });
 });

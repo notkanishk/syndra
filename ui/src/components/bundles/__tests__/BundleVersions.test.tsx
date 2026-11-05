@@ -34,7 +34,7 @@ vi.mock("@/lib/queries/useBundleVersions", () => ({
 vi.mock("@/components/names", () => ({
   RoleRef: ({ roleKey }: { roleKey: string }) => <span>{roleKey}</span>,
   UserAvatar: () => null,
-  UserName: ({ id }: { id: string }) => <>{id === "u0" ? "Kanishk Singh" : id}</>,
+  UserName: ({ id }: { id: string }) => <a href={`/users/${id}`}>{id === "u0" ? "Kanishk Singh" : id}</a>,
 }));
 
 afterEach(cleanup);

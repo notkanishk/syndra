@@ -1,5 +1,6 @@
 "use client";
 
+import { NameLink, nameHref, useNameLinks } from "@/components/names/NameLink";
 import { Unresolved, UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { SHOW_DEBUG_IDS } from "@/components/names/UserName";
@@ -15,9 +16,13 @@ interface ProjectNameProps {
   name?: string | null;
   fallback?: React.ReactNode;
   className?: string;
+  /** Links to the project's page (G14). Only a page's own subject passes false. */
+  link?: boolean;
 }
 
-export function ProjectName({ id, name, fallback, className = "" }: ProjectNameProps) {
+export function ProjectName({ id, name, fallback, className = "", link: linkProp }: ProjectNameProps) {
+  const inDialog = useNameLinks();
+  const link = linkProp ?? inDialog;
   const resolver = useNameResolver();
   const lookup = Boolean(id) && !(name && name !== id) && id !== "-";
   const { value, resolved } = lookup ? resolver.resolveProject(id ?? "") : { value: undefined, resolved: true };
@@ -28,7 +33,7 @@ export function ProjectName({ id, name, fallback, className = "" }: ProjectNameP
     return <span className={className}>{fallback ?? "—"}</span>;
   }
   if (name && name !== id) {
-    return <span className={className}>{name}</span>;
+    return linked(id, name, className, link);
   }
   if (id === "-") {
     return <span className={`text-muted ${className}`}>—</span>;
@@ -42,12 +47,20 @@ export function ProjectName({ id, name, fallback, className = "" }: ProjectNameP
     );
   }
   if (!value?.name) {
-    return <Unresolved label={fallback ?? UNKNOWN_PROJECT} id={id} idLabel="project id" className={`${className} ${tint}`} />;
+    return <Unresolved label={fallback ?? UNKNOWN_PROJECT} id={id} idLabel="project id" href={link ? nameHref.project(id) : undefined} className={`${className} ${tint}`} />;
   }
 
-  return (
-    <span className={`${className} ${tint}`} title={SHOW_DEBUG_IDS ? id : undefined}>
-      {value.name}
+  return linked(id, value.name, `${className} ${tint}`, link, SHOW_DEBUG_IDS ? id : undefined);
+}
+
+function linked(id: string, text: string, className: string, link: boolean, title?: string) {
+  return link ? (
+    <NameLink href={nameHref.project(id)} className={className} title={title}>
+      {text}
+    </NameLink>
+  ) : (
+    <span className={className} title={title}>
+      {text}
     </span>
   );
 }
@@ -65,14 +78,18 @@ export function ResolvedProjectName({
   resolved,
   id,
   className = "",
+  link: linkProp,
 }: {
   name: string;
   resolved: boolean;
   id?: string;
   className?: string;
+  link?: boolean;
 }) {
+  const inDialog = useNameLinks();
+  const link = linkProp ?? inDialog;
   if (resolved) {
-    return <span className={className}>{name}</span>;
+    return id ? linked(id, name, className, link) : <span className={className}>{name}</span>;
   }
   return <Unresolved label={UNKNOWN_PROJECT} id={id ?? name} idLabel="project id" className={className} />;
 }

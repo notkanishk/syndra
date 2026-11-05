@@ -592,7 +592,7 @@ function OpenRequests({
           <LeavingRow key={entry.id} {...queue.props(entry.id)}>
             <CardRow>
               <UserAvatar id={entry.requester_id} size="list" />
-              <PersonLink id={entry.requester_id} />
+              <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={entry.requester_id} />
             <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
               <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
             </div>
@@ -694,7 +694,7 @@ function ExpiringRow({
   return (
     <CardRow>
       <UserAvatar id={grant.user_id} size="list" />
-      <PersonLink id={grant.user_id} />
+      <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={grant.user_id} />
       <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
@@ -792,7 +792,7 @@ function OnboardingGaps({
           <LeavingRow key={person.user_id} {...gaps.props(person.user_id)}>
             <CardRow>
               <UserAvatar id={person.user_id} size="list" />
-              <PersonLink id={person.user_id} />
+              <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={person.user_id} />
               <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
                 Holds no bundle
               </div>
@@ -923,7 +923,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
         {(row) => (
           <CardRow key={row.id}>
             <UserAvatar id={row.user_id} size="list" />
-            <PersonLink id={row.user_id} />
+            <UserName className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold" id={row.user_id} />
             {row.role_keys && row.role_keys.length > 0 && (
               <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
                 {sortByName(row.role_keys, (key) => names.roleRef(row.project_id ?? "", key), (key) => key).map((key) => (
@@ -938,15 +938,6 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
         )}
       </Capped>
     </Card>
-  );
-}
-
-/** A person's name, linking to their page (G14). */
-function PersonLink({ id }: { id: string }) {
-  return (
-    <Link href={`/users/${id}`} className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold link-hover">
-      <UserName id={id} />
-    </Link>
   );
 }
 

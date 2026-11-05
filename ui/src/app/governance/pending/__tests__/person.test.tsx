@@ -88,6 +88,9 @@ describe("Pending changes opened for a person", () => {
     expect(screen.queryByRole("button", { name: "Show everyone's changes" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Ada Lovelace" })).toHaveLength(1);
     expect(screen.getAllByRole("link", { name: "Priya Nair" })).toHaveLength(2);
+    // A-20 P1: the name is the row's one link to the person, and nothing nests.
+    expect(screen.getByRole("link", { name: "Ada Lovelace" })).toHaveAttribute("href", "/users/u1");
+    expect(document.querySelector("a a")).toBeNull();
   });
 
   it("narrows to that person under an in-force chip, and says Send still sends all", () => {

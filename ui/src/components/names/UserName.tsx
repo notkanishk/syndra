@@ -1,5 +1,6 @@
 "use client";
 
+import { NameLink, nameHref, useNameLinks } from "@/components/names/NameLink";
 import { Unresolved, UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -18,6 +19,10 @@ interface UserNameProps {
   showEmail?: boolean;
   /** Optional className applied to the wrapper span. */
   className?: string;
+  /** Links to the person's page (G14). Only a page's own subject passes false. */
+  link?: boolean;
+  /** Where the link goes when it is not a person's page: a service account's own page. */
+  href?: string;
 }
 
 // With ?debug in the URL, Name components expose the raw id via `title` for
@@ -34,7 +39,9 @@ export const SHOW_DEBUG_IDS =
  * context value is memoized on the catalog query state, so consumers re-render
  * exactly when resolution data changes.
  */
-export function UserName({ id, fallback = "—", showEmail = false, className = "" }: UserNameProps) {
+export function UserName({ id, fallback = "—", showEmail = false, className = "", link: linkProp, href }: UserNameProps) {
+  const inDialog = useNameLinks();
+  const link = linkProp ?? inDialog;
   const resolver = useNameResolver();
   const named = Boolean(id) && id !== "system" && id !== "-";
   const { value, resolved } = named ? resolver.resolveUser(id ?? "") : { value: undefined, resolved: true };
@@ -67,17 +74,31 @@ export function UserName({ id, fallback = "—", showEmail = false, className = 
         label={fallback === "—" ? UNKNOWN_ACCOUNT : fallback}
         id={id}
         idLabel="account id"
+        href={link ? (href ?? nameHref.user(id)) : undefined}
         className={`${className} ${tint}`}
       />
     );
   }
 
-  return (
-    <span className={`${className} ${tint}`} title={SHOW_DEBUG_IDS ? id : undefined}>
+  const body = (
+    <>
       {value.display_name || (fallback as React.ReactNode)}
       {showEmail && value.email ? (
         <span className="text-muted"> · {value.email}</span>
       ) : null}
+    </>
+  );
+  const title = SHOW_DEBUG_IDS ? id : undefined;
+  if (link) {
+    return (
+      <NameLink href={href ?? nameHref.user(id)} className={`${className} ${tint}`} title={title}>
+        {body}
+      </NameLink>
+    );
+  }
+  return (
+    <span className={`${className} ${tint}`} title={title}>
+      {body}
     </span>
   );
 }

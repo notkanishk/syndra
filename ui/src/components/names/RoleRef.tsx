@@ -7,6 +7,8 @@ interface RoleRefProps {
   projectId: string | null | undefined;
   roleKey: string | null | undefined;
   className?: string;
+  /** Passed to the project half (G14); the role key never links. */
+  link?: boolean;
 }
 
 /**
@@ -27,14 +29,14 @@ interface RoleRefProps {
  * list under a project heading, the roles index with its Project column. The
  * pair is established there by structure, and repeating it reads as a stutter.
  */
-export function RoleRef({ projectId, roleKey, className = "" }: RoleRefProps) {
+export function RoleRef({ projectId, roleKey, className = "", link }: RoleRefProps) {
   if (!projectId || !roleKey) {
     return <span className={className}>—</span>;
   }
 
   return (
     <span className={className}>
-      <ProjectName id={projectId} /> / <Mono>{roleKey}</Mono>
+      <ProjectName id={projectId} link={link} /> / <Mono>{roleKey}</Mono>
     </span>
   );
 }
