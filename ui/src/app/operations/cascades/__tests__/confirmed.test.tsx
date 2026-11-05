@@ -97,4 +97,21 @@ describe("Change history: sent vs. confirmed", () => {
     expect(screen.getAllByText("A bundle edit reached one person")).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: /Pending changes/ })).toHaveLength(1);
   });
+
+  it("'and N more' is a violet link to the one edit, which lists every write (A-20 P17)", () => {
+    const writes = Array.from({ length: 9 }, (_, n) => ({
+      id: `w${n}`,
+      op_type: "add" as const,
+      user_id: `user-${n}`,
+      project_id: "p1",
+      role_keys: ["maker"],
+      source: "bundle" as const,
+      status: "applied" as const,
+    }));
+    groups = [group({ cascade_id: "cas 1", writes })];
+    renderPage();
+
+    expect(screen.getByRole("link", { name: "and 3 more" })).toHaveAttribute("href", "/operations/cascades?cascade=cas%201");
+    expect(screen.queryByText("user-8")).not.toBeInTheDocument();
+  });
 });

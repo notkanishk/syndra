@@ -132,7 +132,7 @@ describe("the step pushed inside the host sheet", () => {
     expect(screen.getByLabelText("Reason")).toHaveValue("capstone");
     const note = screen.getByTestId("footer-note");
     expect(note).toHaveTextContent("Nothing changed. Sam's removal is still waiting.");
-    expect(within(note).getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
+    expect(within(note).getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending?person=u1");
     expect(takeAck("POST", "/users/u1/grants")).toBeUndefined();
   });
 

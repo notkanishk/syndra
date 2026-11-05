@@ -48,6 +48,10 @@ not have been converted anyway — TrueNAS takes plaintext and nothing else. The
 member view renders the re-enrolment state; the operator communication is the
 thing to do before this deploys.
 
+### A-20 second pass, P13 P16 P17 (built 5 Nov 2026)
+
+[`changes/second-pass`](changes/second-pass/tasks.md): the claims page's leftovers, Pending's person and role filters as one model, and the small sweep. Open: the TrueNAS offer's Advanced link waits on P10's `AdvancedLink`; one "Nothing matches that." for every emptied search.
+
 ### A-20 second pass, P2 P3 P6 (built 5 Nov 2026)
 
 [`changes/second-pass`](changes/second-pass/tasks.md): the welcome as the title's second sentence (Home on a calm day only), the shell's Notices under the page header, the phone top bar's mark and Go to. Open: a look on a real phone (bar at 360px, the bloom). Go to for members is deliberately not built (A-20 P6).

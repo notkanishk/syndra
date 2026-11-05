@@ -121,7 +121,7 @@ function peopleOf(r: CatalogRole | undefined) {
         r.confirmed_user_count,
         r.observed_user_count,
       ).headline
-    : "—";
+    : "Not yet";
 }
 
 type WaitSort = "role" | "marked" | "people";

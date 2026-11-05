@@ -22,6 +22,7 @@ import { FilterPills } from "@/components/ui/Select";
 import { WithheldInline } from "@/components/ui/Withheld";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { useIsAdvanced } from "@/lib/ui-view";
 import { useCrumb } from "@/lib/page-crumb";
 import { sortByName } from "@/lib/sort";
 import { driftHref } from "@/lib/drift-filters";
@@ -46,6 +47,7 @@ export default function RoleMembersPage({
 }) {
   const { id, key } = use(params);
   const roleKey = decodeURIComponent(key);
+  const advanced = useIsAdvanced();
   const members = useRoleMembers(id, roleKey);
 
   const [filter, setFilter] = useState<Filter>("all");
@@ -77,7 +79,7 @@ export default function RoleMembersPage({
         lede="Everyone who holds this role, and how each came to hold it: directly, through a bundle, or by an automatic rule."
         meta={
           <span className="flex flex-wrap items-center gap-3">
-            <Mono className="text-faint">{roleKey}</Mono>
+            {advanced && <Mono className="text-faint">{roleKey}</Mono>}
             {view?.group && <span className="text-[13.5px] text-faint">Group: {view.group}</span>}
             {view?.cloned_from && (
               <span className="text-[13.5px] text-faint">cloned from {view.cloned_from}</span>

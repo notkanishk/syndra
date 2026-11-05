@@ -99,7 +99,7 @@ describe("Pending changes opened for a person", () => {
     expect(screen.queryByText("Ada Lovelace", { selector: "a *, a" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Priya Nair" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Show everyone's changes" })).toBeInTheDocument();
-    expect(screen.getByText("2 of the 3 changes match. Sending sends all 3, in order.")).toBeInTheDocument();
+    expect(document.body).toHaveTextContent("Showing Priya Nair’s 2 changes. Sending sends all 3, in order.");
   });
 
   it("clears with the chip's own ✕: everyone returns and the address is clean", () => {
@@ -132,6 +132,33 @@ describe("Pending changes opened for a person", () => {
   });
 });
 
+describe("Pending changes' one narrowing model (A-20 P16)", () => {
+  it("a person and a role are two chips on one model: each clears alone and drops only its own parameter", () => {
+    vi.useFakeTimers();
+    pending.data = [
+      row("o1", "u2", { role_keys: ["laser.operator"] }),
+      row("o2", "u2", { role_keys: ["laser.door"] }),
+      row("o3", "u1", { role_keys: ["laser.operator"] }),
+    ];
+    try {
+      nav.search = "person=u2&role=p1%2Flaser.operator";
+      window.history.replaceState(null, "", "/governance/pending?q=&person=u2&role=p1%2Flaser.operator");
+      renderPending();
+      expect(document.body).toHaveTextContent(/Showing Priya Nair’s 1 change for .*\. Sending sends all 3, in order\./);
+      fireEvent.click(screen.getByRole("button", { name: "Show every role's changes" }));
+      vi.advanceTimersByTime(500);
+      expect(window.location.search).toBe("?q=&person=u2");
+      expect(document.body).toHaveTextContent("Showing Priya Nair’s 2 changes. Sending sends all 3, in order.");
+      fireEvent.click(screen.getByRole("button", { name: "Show everyone's changes" }));
+      vi.advanceTimersByTime(500);
+      expect(window.location.search).toBe("?q=");
+      expect(document.body).not.toHaveTextContent(/Showing/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("Pending changes opened for a role", () => {
   beforeEach(() => {
     pending.data = [
@@ -152,7 +179,7 @@ describe("Pending changes opened for a role", () => {
     expect(screen.getAllByRole("link", { name: "Ada Lovelace" })).toHaveLength(1);
     expect(screen.queryByRole("link", { name: "Priya Nair" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show every role's changes" })).toBeInTheDocument();
-    expect(screen.getByText("1 of the 3 changes match. Sending sends all 3, in order.")).toBeInTheDocument();
+    expect(screen.getByText(/^Showing the 1 change for .*\. Sending sends all 3, in order\.$/)).toBeInTheDocument();
   });
 
   it("clears with the chip's own x: everything returns and the parameter is gone", () => {
