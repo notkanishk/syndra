@@ -14,7 +14,7 @@ import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { StatusSeat } from "@/components/ui/StatusSeat";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { ClaimsDelivery } from "@/components/system/ClaimsDelivery";
 import { request } from "@/lib/api-client";
 import { formatAt } from "@/lib/format";

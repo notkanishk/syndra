@@ -17,7 +17,7 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";
 import { Notice } from "@/components/ui/Notice";
 import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui/SortHead";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { holdersLine } from "@/lib/holders";

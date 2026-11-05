@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
 import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { GoToPanel } from "@/components/ui/GoTo";
 import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavEntry, type NavLeaf } from "@/lib/nav";
 import { useIndicatorsRead } from "@/lib/queries/useIndicators";

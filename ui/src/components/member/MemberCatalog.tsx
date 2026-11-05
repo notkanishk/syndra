@@ -7,7 +7,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card } from "@/components/ui/Card";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Input } from "@/components/ui/Input";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";

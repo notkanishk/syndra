@@ -1,6 +1,6 @@
 "use client";
 
-import { ArriveList } from "@/components/ui/ArriveList";
+import { ArriveList } from "@/lib/motion";
 import { LANES, type Highlight, type Model } from "@/components/insights/model";
 import { NodeGlyph, nodeSurface } from "@/components/insights/tone";
 

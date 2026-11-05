@@ -111,6 +111,7 @@ export default function AppsPage() {
             const subLine = [kindOf(entry), shapeLine(entry, all, templates)].filter(Boolean);
             return (
             <Link
+              data-row
               key={entry.application.id}
               href={`/applications/${entry.application.id}`}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"

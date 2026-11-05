@@ -42,6 +42,8 @@ export interface UserListEntry {
   expiring_count: number;
   open_request_count: number;
   unexplained_count: number;
+  /** Changes Zitadel accepted for this person that no read has shown back yet. Absent reads as none. */
+  unseen_count?: number;
   soonest_expiry?: string | null;
   /**
    * What Zitadel shows this person holding right now — not Syndra's record of

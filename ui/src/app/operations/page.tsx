@@ -15,7 +15,7 @@ import { FilterChip } from "@/components/ui/FilterChip";
 import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
 import { Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";

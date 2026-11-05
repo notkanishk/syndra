@@ -233,6 +233,84 @@ describe("a save NetBird will act on", () => {
   });
 });
 
+// A-19 P10.6: a claims draft and "Preview for" outlive leaving the page, for this tab only.
+describe("what the page keeps while you are away", () => {
+  const NOTE = /You have an unsaved draft from \d\d:\d\d\./;
+
+  it("keeps an unsaved draft per app and says so when it comes back, with Discard beside Save", async () => {
+    const first = renderScreen();
+    fireEvent.change(await openRoles(), { target: { value: "network-staff" } });
+    await screen.findByRole("button", { name: "Save" });
+    // The reader is looking at their own edit: no note.
+    expect(screen.queryByText(NOTE)).toBeNull();
+    first.unmount();
+
+    renderScreen();
+    expect(await screen.findByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Discard the draft" })).toBeInTheDocument();
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    fireEvent.click(await rolesLine());
+    expect(await screen.findByLabelText("NetBird calls Staff")).toHaveValue("network-staff");
+  });
+
+  it("keeps it under the app's own key, so another app never finds it", async () => {
+    renderScreen();
+    fireEvent.change(await openRoles(), { target: { value: "network-staff" } });
+    await screen.findByRole("button", { name: "Save" });
+    expect(window.sessionStorage.getItem("syndra:claims-draft:a1")).not.toBeNull();
+    expect(window.sessionStorage.getItem("syndra:claims-draft:other")).toBeNull();
+  });
+
+  it("forgets a draft that was discarded", async () => {
+    const first = renderScreen();
+    fireEvent.change(await openRoles(), { target: { value: "network-staff" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Discard the draft" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).toBeNull());
+    first.unmount();
+
+    renderScreen();
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText(NOTE)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("remembers who Preview for was showing, per app", async () => {
+    const first = renderScreen();
+    const who = (await screen.findByLabelText("Preview for")) as HTMLSelectElement;
+    await waitFor(() => expect(who.value).toBe("me"));
+    fireEvent.change(who, { target: { value: "ada" } });
+    first.unmount();
+
+    renderScreen();
+    const again = (await screen.findByLabelText("Preview for")) as HTMLSelectElement;
+    await waitFor(() => expect(again.value).toBe("ada"));
+  });
+
+  it("falls back to the usual first choice when the remembered person is no longer listed", async () => {
+    window.sessionStorage.setItem("syndra:claims-person:a1", "gone");
+    renderScreen();
+    const who = (await screen.findByLabelText("Preview for")) as HTMLSelectElement;
+    await waitFor(() => expect(who.value).toBe("me"));
+  });
+
+  it("survives storage that throws", async () => {
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("full");
+    });
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    try {
+      renderScreen();
+      fireEvent.change(await openRoles(), { target: { value: "network-staff" } });
+      expect(await screen.findByRole("button", { name: "Save" })).toBeInTheDocument();
+    } finally {
+      set.mockRestore();
+      get.mockRestore();
+    }
+  });
+});
+
 /** A seeded v1 shape on Custom: `groups`, then `custom_claims` holding four, one of them its own groups. */
 const v1: Profile = {
   claims: [

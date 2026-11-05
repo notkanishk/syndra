@@ -37,7 +37,7 @@ import { Button, PILL } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills, Segmented, Select } from "@/components/ui/Select";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
 import { useInsightsAsOf, useInsightsLens, useInsightsTimeline, useInsightsUsage } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
@@ -229,7 +229,10 @@ export function MapTab({ url }: { url: InsightsUrl }) {
         wantInput.current = true;
         ask(null);
       } else input.current?.focus();
-    } else if (e.key === "?") setKeysOpen((o) => !o);
+    } else if (e.key === "?") {
+      e.preventDefault(); // the map's own sheet: the shell's Keys sheet stands aside
+      setKeysOpen((o) => !o);
+    }
     else if (k === "t") (scrubbing ? toToday : earlier)();
     else if (k === "l" && !asOn) chooseLens(LENSES[(LENSES.findIndex((l) => l.value === lens) + 1) % LENSES.length].value);
     else if (k === "p" && target) togglePin();

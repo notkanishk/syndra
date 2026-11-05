@@ -2,8 +2,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ARRIVE_MEMORY_MS, armArrive } from "@/components/ui/ArriveList";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { ARRIVE_MEMORY_MS, armArrive } from "@/lib/motion";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { setMediaQuery } from "@/test-utils/media";
 import { gapSettled } from "@/test-utils/leaving";
 import { motionInTests } from "@/test-utils/motion";

@@ -9,7 +9,7 @@ import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAc
 import { RevokeDialog } from "@/components/targets/RevokeDialog";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UserAvatar, UserName } from "@/components/names";
 import { formatShortDate } from "@/lib/format";

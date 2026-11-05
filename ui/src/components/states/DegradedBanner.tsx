@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { CommandBlock } from "@/components/ui/CommandBlock";
 import { Notice } from "@/components/ui/Notice";
 import { Relative } from "@/components/ui/Time";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { request } from "@/lib/api-client";
 import { useZitadelReachable } from "@/lib/queries/useIndicators";
 import { formatWhen } from "@/lib/format";

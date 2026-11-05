@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
-import { armArrive } from "@/components/ui/ArriveList";
+import { armArrive } from "@/lib/motion";
 import { Button } from "@/components/ui/Button";
 import { glideTo, stillMotion } from "@/lib/motion";
 

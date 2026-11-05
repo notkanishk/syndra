@@ -18,7 +18,7 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { SignInRow } from "@/components/ui/SignInRow";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { TokenBlock, type TokenBlockLine } from "@/components/ui/TokenBlock";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { clockOf, literal, minutesLeft } from "@/lib/claims";
 import { useClipboardAvailable } from "@/lib/clipboard";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";

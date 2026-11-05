@@ -6,12 +6,12 @@ import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
-import { Crossfade } from "@/components/ui/Crossfade";
+import { Crossfade } from "@/lib/motion";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card, CardRow } from "@/components/ui/Card";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";

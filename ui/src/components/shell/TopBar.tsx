@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { AccountSheet } from "@/components/shell/AccountSheet";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { ViewSwitch } from "@/components/shell/ViewSwitch";
-import { notePage } from "@/components/ui/ArriveList";
+import { notePage } from "@/lib/motion";
 import { usePageCrumb } from "@/lib/page-crumb";
 import { crumbsFor } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";

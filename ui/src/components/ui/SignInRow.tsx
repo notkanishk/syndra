@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { FoldChevron } from "@/components/ui/FoldChevron";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 
 /**
  * One captured sign-in in debug mode's live list (A-14 §6): chevron · Time ·

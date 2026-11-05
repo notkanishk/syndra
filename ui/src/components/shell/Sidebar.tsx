@@ -10,8 +10,8 @@ import { leafMatches, navFor, operatorNav, type NavLeaf } from "@/lib/nav";
 // of one tree and a count that is danger in one cannot be accent in the other.
 import { BADGE_TONE } from "@/components/shell/navTones";
 import { useUiView } from "@/lib/ui-view";
-import { useFlashOnChange } from "@/lib/useFlashOnChange";
-import { Unfold } from "@/components/ui/Unfold";
+import { useFlashOnChange } from "@/lib/motion";
+import { Unfold } from "@/lib/motion";
 import { SyndraMark } from "./SyndraMark";
 
 /**

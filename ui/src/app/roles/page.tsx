@@ -15,7 +15,7 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Select } from "@/components/ui/Select";
@@ -281,6 +281,7 @@ export default function RolesPage() {
             >
             {run && <RunLabel {...run} />}
             <Link
+              data-row
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >

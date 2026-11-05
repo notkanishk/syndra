@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import { UserName } from "@/components/names/UserName";
-import { Crossfade } from "@/components/ui/Crossfade";
+import { Crossfade } from "@/lib/motion";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 
 /** The person who answers for it, linked; or a warn dot and "No owner" (A-07 §31). */

@@ -9,7 +9,7 @@ import { ChosenChip, Mono } from "@/components/ui/Badge";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FoldHeading } from "@/components/bundles/FoldHeading";
 import { RolePickerOne, type RolePickerOneProps } from "@/components/bundles/RolePickerOne";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Input } from "@/components/ui/Input";
 import { formatList, humanizeKey } from "@/lib/format";

@@ -4,8 +4,8 @@ import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { CopyableValue } from "@/components/ui/CopyableValue";
-import { pageSettled } from "@/components/ui/ArriveList";
-import { UnfoldOnArrival, useUnfoldOpening } from "@/components/ui/Unfold";
+import { pageSettled } from "@/lib/motion";
+import { UnfoldOnArrival, useUnfoldOpening } from "@/lib/motion";
 
 /**
  * The one way Syndra says something is wrong with what you are looking at
