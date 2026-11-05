@@ -68,7 +68,7 @@ function waitsFor(pathname: string | null): string {
  * Amber rather than red: the data is old, not wrong. And the sentence says so
  * in words — colour is never the only signal.
  */
-export function DegradedBanner() {
+export function DegradedBanner({ under = false }: { under?: boolean } = {}) {
   const { data, degraded } = useSystemMode();
   const pathname = usePathname();
 
@@ -101,7 +101,7 @@ export function DegradedBanner() {
 
   return (
     <Unfold open={open}>
-      <div className="pb-4">
+      <div className={under ? "pt-4" : "pb-4"}>
         {degraded ? (
           data?.last_read_at ? (
             <Notice

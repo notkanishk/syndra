@@ -1,5 +1,6 @@
 import type { StatusTone } from "@/components/ui/Badge";
 import { daysUntil, formatShortDate } from "@/lib/format";
+import { ABOUT } from "@/lib/greeting";
 import { sortByName } from "@/lib/sort";
 
 /**
@@ -42,6 +43,8 @@ export interface HeaderFacts {
   /** Zitadel has been read (the observation has a time). */
   read: boolean;
   now: Date;
+  /** This session is the person's first: the calm rung says what Syndra is. */
+  firstVisit?: boolean;
   /** Roles Zitadel holds that end, with when. Empty until the grants are read. */
   ending: Array<NamedRole & { endsAt: string }>;
   /** Given, not on the account after a full read. */
@@ -156,6 +159,9 @@ export function headerLine(facts: HeaderFacts): HeaderLine {
     };
   }
 
-  // 7 · The same words as the operator's Home.
+  // 7 · The same words as the operator's Home; on a first visit, what Syndra is
+  // instead (A-20 P2), because there is nothing else to say and the title has
+  // already welcomed them.
+  if (facts.firstVisit) return { tone: "none", text: ABOUT };
   return { tone: "healthy", text: "Nothing needs you right now." };
 }

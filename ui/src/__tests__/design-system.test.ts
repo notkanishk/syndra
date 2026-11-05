@@ -827,8 +827,14 @@ describe("design system", () => {
       expect(source, `${name} must use the Notice anatomy`).toContain("<Notice");
     }
     const shell = readFileSync(resolve(SRC_ROOT, "components/shell/AppShell.tsx"), "utf8");
-    const slot = /<main[^>]*>\s*<OfflineBanner \/>\s*<DegradedBanner \/>\s*\{children\}/;
-    expect(slot.test(shell), "AppShell must open both Notices inside <main>, above the page").toBe(true);
+    // A-20 P3, G7: under the page's header, in the seat ShellNotices holds.
+    expect(
+      /<main[^>]*>\s*<ShellNoticesProvider>\{children\}<\/ShellNoticesProvider>/.test(shell),
+      "AppShell must wrap the page in the Notices' provider inside <main>, and mount no banner itself",
+    ).toBe(true);
+    expect(shell).not.toMatch(/<(Offline|Degraded)Banner/);
+    const seat = readFileSync(resolve(SRC_ROOT, "components/shell/ShellNotices.tsx"), "utf8");
+    expect(seat.indexOf("<OfflineBanner"), "offline above degraded").toBeLessThan(seat.indexOf("<DegradedBanner"));
   });
 
   // iOS ignores manifest icons entirely and rasterises nothing, so without a

@@ -37,6 +37,10 @@ not have been converted anyway — TrueNAS takes plaintext and nothing else. The
 member view renders the re-enrolment state; the operator communication is the
 thing to do before this deploys.
 
+### A-20 second pass, P2 P3 P6 (built 5 Nov 2026)
+
+[`changes/second-pass`](changes/second-pass/tasks.md): the welcome as the title's second sentence (Home on a calm day only), the shell's Notices under the page header, the phone top bar's mark and Go to. Open: a look on a real phone (bar at 360px, the bloom). Go to for members is deliberately not built (A-20 P6).
+
 ### Basic / Advanced IA — what the redesign left open
 
 - **BIA-35** — exercise the claim editor, the simulator, role → members and `DELETE /users/{id}/grants/{grantId}` against a live Postgres + Redis + Zitadel. Unit-tested only; the write paths have never run against a real database.

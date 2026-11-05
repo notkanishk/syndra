@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * The mark: a contained orb, and a miniature of the login's arch-and-orb.
@@ -29,8 +29,13 @@ export function SyndraMark({
   welcome?: boolean;
 }) {
   const [bloom, setBloom] = useState(false);
+  const seat = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!welcome) return;
+    // The rail's mark and the phone bar's both mount; only the one on screen
+    // may spend the one-shot (checkVisibility is absent in old engines: then
+    // the first to mount wins, as before).
+    if (seat.current?.checkVisibility?.() === false) return;
     try {
       if (window.sessionStorage.getItem(WELCOMED)) return;
       window.sessionStorage.setItem(WELCOMED, "1");
@@ -41,6 +46,7 @@ export function SyndraMark({
   }, [welcome]);
   return (
     <span
+      ref={seat}
       aria-hidden
       className={`syndra-mark ${className}`}
       style={{ "--mark-size": `${size}px` } as React.CSSProperties}

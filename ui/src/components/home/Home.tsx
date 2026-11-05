@@ -49,6 +49,7 @@ import { Crossfade } from "@/lib/motion";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
+import { ShellNotices } from "@/components/shell/ShellNotices";
 import { greeting, isQuietHour, WELCOME } from "@/lib/greeting";
 import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine } from "@/lib/term-dates";
@@ -224,6 +225,10 @@ export function Home({ session }: { session: SessionUser }) {
   const headline = error
     ? "Couldn't check."
     : workSentence(calm && !swap.showsCalm ? held.current.blocks : blocks, loading);
+  // The first visit's welcome takes the headline's seat on a calm day only
+  // (A-20 P2): on a working day the work is the welcome. It is a sentence in
+  // the seat that is already there, so the date line never moves.
+  const welcome = session.firstVisit && !error && !loading && calm && swap.showsCalm;
 
   // One wrapper, so the Basic footnote's Unfold is not a direct child of the
   // arriving list (its settled rule would stop the unfold playing). It is also
@@ -322,13 +327,11 @@ export function Home({ session }: { session: SessionUser }) {
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}
           <span className="text-faint">
-            <Crossfade id={headline} inline>
-              {headline}
+            <Crossfade id={welcome ? WELCOME : headline} inline>
+              {welcome ? WELCOME : headline}
             </Crossfade>
           </span>
         </h1>
-        {/* The first visit only (A-18 idea 8): from the session, so it is there at first paint. */}
-        {session.firstVisit && <div className="mt-2 text-[14.5px] text-muted">{WELCOME}</div>}
         <div className="mt-2 text-[14.5px] text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}
           {termDay && ` · ${termDay}`}
@@ -362,6 +365,8 @@ export function Home({ session }: { session: SessionUser }) {
           </div>
           </Unfold>
         )}
+        {/* The shell's Notices, under the whole head (A-20 P3, G7). */}
+        <ShellNotices />
       </div>
 
       {error ? (
