@@ -10,7 +10,6 @@ const row = { display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 
 export const Variants = () => (
   <div style={row}>
     <ButtonLink href="/requests/new" variant="accent">Request access</ButtonLink>
-    <ButtonLink href="/bundles/new" variant="accentSoft">New bundle</ButtonLink>
     <ButtonLink href="/users/aanya" variant="outline">Open profile</ButtonLink>
     <ButtonLink href="/audit" variant="ghost">View audit log</ButtonLink>
   </div>

@@ -117,7 +117,7 @@ export function QuestionSeat({
               aria-selected={i === at}
               onClick={() => ask(q)}
               onMouseEnter={() => setActive(i)}
-              className={`motion-tint flex min-h-[44px] w-full flex-wrap items-center gap-[7px] rounded-inner px-3 py-2 text-left desktop:min-h-0 ${i === at ? "bg-[var(--hover)]" : ""}`}
+              className={`motion-tint flex min-h-[var(--tap)] w-full flex-wrap items-center gap-[7px] rounded-inner px-3 py-2 text-left desktop:min-h-0 ${i === at ? "bg-[var(--hover)]" : ""}`}
             >
               <Parts parts={sentence(q, node, person)} />
             </button>

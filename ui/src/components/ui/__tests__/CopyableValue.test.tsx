@@ -135,7 +135,7 @@ describe("a value somebody has to transport", () => {
 
   it("gives the affordance a real target", () => {
     render(<CopyableValue value="x" label="X" />);
-    expect(screen.getByRole("button").className).toContain("min-h-[44px]");
+    expect(screen.getByRole("button").className).toContain("min-h-[var(--tap)]");
   });
 });
 

@@ -164,7 +164,7 @@ function Unreached({ unreached }: { unreached?: string }) {
 function NoRoles({ app, first }: { app: string; first: boolean }) {
   return (
     <div className={`flex items-start gap-x-3 pb-2 pl-[11px] pr-[22px] pt-1.5 ${first ? "" : "row-divider"}`}>
-      <span className="size-11 flex-none" />
+      <span className="size-[var(--tap)] flex-none" />
       <span className="pt-[11px] text-[14.5px] leading-[1.5] text-ink">No roles. {app} gets none from Syndra.</span>
     </div>
   );
@@ -190,7 +190,7 @@ function LineHead({
 }) {
   const body = (
     <>
-      <span className="flex size-11 flex-none items-center justify-center">
+      <span className="flex size-[var(--tap)] flex-none items-center justify-center">
         {onToggle && (
           <span
             aria-hidden
@@ -1178,7 +1178,7 @@ function AddClaim({
                 aria-selected={false}
                 aria-disabled={muted ? true : undefined}
                 onClick={muted ? undefined : () => pick(e)}
-                className={`motion-tint flex min-h-[44px] w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-inner px-3 py-2 text-left desktop:min-h-0 ${
+                className={`motion-tint flex min-h-[var(--tap)] w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-inner px-3 py-2 text-left desktop:min-h-0 ${
                   muted ? "cursor-default" : "hover:bg-[var(--hover)] focus-visible:bg-[var(--hover)]"
                 }`}
               >

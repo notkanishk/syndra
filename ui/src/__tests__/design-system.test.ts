@@ -408,6 +408,18 @@ describe("design system", () => {
     expect(css.indexOf("--layer-dialog")).toBeLessThan(css.indexOf("--layer-popover"));
   });
 
+  // A-19 EOY-F11: the touch floor is --tap, spelled once.
+  it("no component spells the touch floor as 44px or 11", () => {
+    const found = patternOffenders(
+      /(?:min-[hw]|\bh|\bsize)-(?:\[44px\]|11\b)|before:h-11/,
+      "touch floor typed out",
+    ).filter((entry) => !/\.(?:test|spec)\./.test(entry.file) && !entry.file.includes("__tests__"));
+    expect(
+      found,
+      `Write the touch floor as min-h-[var(--tap)] (or size-[var(--tap)]):\n${describeOffenders(found)}`,
+    ).toEqual([]);
+  });
+
   it("no component writes a raw z-index number or a black overlay", () => {
     const found = patternOffenders(
       /\bz-(?:\[?\d|auto)|zIndex:\s*\d|z-index:\s*\d|\bbg-(?:black|white)\/\d|rgba\(\s*0\s*,\s*0\s*,\s*0/,
@@ -723,7 +735,7 @@ describe("design system", () => {
         if (!height || Number(height[1]) >= 44) continue;
         // An explicit 44 anywhere in the string is the escape: a small ring
         // inside a full-size box is the fix, not a violation.
-        if (/min-h-\[44px\]|min-h-11|(?:^|\s)h-11/.test(classes)) continue;
+        if (/min-h-\[var\(--tap\)\]|(?:^|\s)h-\[var\(--tap\)\]/.test(classes)) continue;
         const line = source.slice(0, tag.at).split("\n").length;
         under.push(`${file.replace(SRC_ROOT, "src")}:${line} h-[${height[1]}px]`);
       }

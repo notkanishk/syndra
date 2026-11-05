@@ -8,6 +8,7 @@ import ProjectDetailPage from "@/app/projects/[id]/page";
 const state = vi.hoisted(() => ({ loading: true, failed: false, advanced: false }));
 
 vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
+vi.mock("@/lib/queries/seed", () => ({ useSeededProjectName: () => undefined }));
 vi.mock("@/lib/page-crumb", () => ({ useCrumb: () => {} }));
 vi.mock("@/components/projects/ProjectClaimDefault", () => ({ ProjectClaimDefault: () => null }));
 vi.mock("@/lib/queries/useProjects", () => ({

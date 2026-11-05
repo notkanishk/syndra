@@ -38,6 +38,8 @@
     "Avatar": "src/components/ui/Avatar.tsx",
     "Badge": "src/components/ui/Badge.tsx",
     "Chip": "src/components/ui/Badge.tsx",
+    "ChosenChip": "src/components/ui/Badge.tsx",
+    "FoldChevron": "src/components/ui/FoldChevron.tsx",
     "Mono": "src/components/ui/Badge.tsx",
     "StatusDot": "src/components/ui/Badge.tsx",
     "CountChip": "src/components/ui/Badge.tsx",

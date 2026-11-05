@@ -255,7 +255,7 @@ function MoreSourcesButton({
       type="button"
       onClick={onClick}
       aria-expanded={expanded}
-      className="inline-flex h-11 items-center motion-tint desktop:h-[26px]"
+      className="inline-flex h-[var(--tap)] items-center motion-tint desktop:h-[26px]"
     >
       <Badge hollow>{children}</Badge>
     </button>

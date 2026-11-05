@@ -89,7 +89,7 @@ export function ChosenChip({
         disabled={disabled}
         onClick={onRemove}
         aria-label={removeLabel}
-        className="group -my-1 -mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center desktop:m-0 desktop:min-h-0 desktop:min-w-0"
+        className="group -my-1 -mr-2 flex min-h-[var(--tap)] min-w-[var(--tap)] items-center justify-center desktop:m-0 desktop:min-h-0 desktop:min-w-0"
       >
         <span
           aria-hidden
