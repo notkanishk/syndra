@@ -1,16 +1,29 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApproveButton, HoldingNote, keepLength } from "@/components/requests/Holding";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 
-const preview = vi.hoisted(() => ({ rows: [] as string[], asked: [] as Array<{ enabled: boolean; keys: string[] }>, loading: false, error: false }));
+const preview = vi.hoisted(() => ({
+  rows: [] as string[],
+  asked: [] as Array<{ enabled: boolean; keys: string[] }>,
+  loading: false,
+  error: false,
+  refetching: false,
+  refetch: vi.fn(),
+}));
 
 vi.mock("@/lib/queries/useRulePreview", () => ({
   useRulePreview: (_user: string, _project: string, keys: string[], enabled: boolean) => {
     preview.asked.push({ enabled, keys });
-    return { data: enabled ? preview.rows.map((sentence) => ({ sentence })) : undefined, isLoading: enabled && preview.loading, isError: enabled && preview.error };
+    return {
+      data: enabled ? preview.rows.map((sentence) => ({ sentence })) : undefined,
+      isLoading: enabled && preview.loading,
+      isError: enabled && preview.error,
+      isFetching: enabled && (preview.loading || preview.refetching),
+      refetch: preview.refetch,
+    };
   },
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
@@ -36,6 +49,8 @@ beforeEach(() => {
   preview.asked = [];
   preview.loading = false;
   preview.error = false;
+  preview.refetching = false;
+  preview.refetch = vi.fn();
 });
 
 // Audit C2: approving gives the role, and the automatic rules follow it, so
@@ -81,8 +96,25 @@ describe("approving, while the rule preview is not read", () => {
     expect(button).toBeDisabled();
     button.click();
     expect(click).not.toHaveBeenCalled();
-    expect(screen.getAllByText(/Syndra couldn.t read the automatic rules/).length).toBe(2);
-    expect(screen.getByText(/Reload the page to try again/)).toBeInTheDocument();
+    // The row says why and offers Try again; the button says it is held.
+    expect(screen.getByText(/Syndra couldn.t read the automatic rules/)).toBeInTheDocument();
+    expect(screen.getByText("Held until Syndra can read the automatic rules.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(preview.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("is checking, not failed, while Try again reads the preview", () => {
+    preview.error = true;
+    preview.refetching = true;
+    render(
+      <>
+        <HoldingNote request={ask()} />
+        <ApproveButton request={ask()} onClick={vi.fn()} />
+      </>,
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(screen.getByText("Checking what automatic rules also give.")).toBeInTheDocument();
   });
 
   it("lets Approve go once the preview is read", () => {

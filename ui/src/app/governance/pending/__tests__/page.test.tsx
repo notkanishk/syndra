@@ -11,6 +11,7 @@ import type { BundleRow } from "@/lib/queries/useBundles";
 import type { MappingRuleRow } from "@/lib/queries/useMappingRules";
 
 const pending = vi.hoisted(() => ({ data: [] as PendingRow[] }));
+const gaveUp = vi.hoisted(() => ({ data: [] as PendingRow[] }));
 const summary = vi.hoisted(() => ({ reachable: true }));
 const bundles = vi.hoisted(() => ({ data: [] as BundleRow[] }));
 const rules = vi.hoisted(() => ({ data: [] as MappingRuleRow[] }));
@@ -31,7 +32,8 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 }));
 
 vi.mock("@/lib/queries/usePropagation", () => ({
-  useGaveUpPropagations: () => ({ data: [], isLoading: false }),  usePendingPropagations: () => ({ ...pending, isLoading: load.loading, error: null, refetch: () => {} }),
+  useGaveUpPropagations: () => ({ data: gaveUp.data, isLoading: false }),
+  usePendingPropagations: () => ({ ...pending, isLoading: load.loading, error: null, refetch: () => {} }),
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -77,6 +79,7 @@ function renderPending() {
 
 beforeEach(() => {
   pending.data = [];
+  gaveUp.data = [];
   summary.reachable = true;
   bundles.data = [];
   rules.data = [];
@@ -98,6 +101,21 @@ describe("Pending changes", () => {
     expect(chosen).toHaveClass("text-muted");
     const stopped = screen.getByText(/^Zitadel didn't answer at \d\d:\d\d$/);
     expect(stopped).toHaveClass("text-warn-text");
+  });
+
+  it("says why Zitadel refused a change Syndra stopped sending, and keeps the try count for the ones that ran out", () => {
+    gaveUp.data = [
+      row({ id: "g1", status: "failed", wait_reason: "refused:not_allowed", last_error: "zitadel api 403" }),
+      row({ id: "g2", status: "failed", wait_reason: "refused:not_found", last_error: "zitadel api 404", cascade_id: "c2" }),
+      row({ id: "g3", status: "failed", attempts: 5, last_error: "out of retries after 5 attempts", cascade_id: "c3" }),
+      row({ id: "g4", status: "failed", last_error: "unknown", cascade_id: "c4" }),
+    ];
+    renderPending();
+    expect(screen.getByText("Zitadel refused it: Syndra's service account isn't allowed to make this change, so Syndra stopped sending it.")).toBeInTheDocument();
+    expect(screen.getByText("Zitadel refused it: it no longer has this person, project or role, so Syndra stopped sending it.")).toBeInTheDocument();
+    expect(screen.getByText("Zitadel didn't answer after 5 tries, so Syndra stopped sending it.")).toBeInTheDocument();
+    // A row from before the cause was kept says what it always said.
+    expect(screen.getByText("Zitadel refused it, so Syndra stopped sending it.")).toBeInTheDocument();
   });
 
   it("says two writes belong to one cascade rather than leaving them looking unrelated", () => {

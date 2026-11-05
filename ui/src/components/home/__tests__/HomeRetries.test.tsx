@@ -13,7 +13,7 @@ import type { SessionUser } from "@/lib/session";
  * go unnoticed or vanish silently.
  */
 const state = vi.hoisted(() => ({
-  pending: 0, retrying: 0, gaveUp: 0, advanced: true, seen: vi.fn(),
+  pending: 0, retrying: 0, gaveUp: 0, advanced: true, seen: vi.fn(), stopped: [] as { wait_reason?: string }[],
   auto: true, retryingBy: undefined as Record<string, number> | undefined, gaveUpBy: undefined as Record<string, number> | undefined,
 }));
 
@@ -71,6 +71,7 @@ vi.mock("@/lib/queries/useRequests", () => {
 vi.mock("@/lib/queries/usePropagation", () => ({
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useMarkGaveUpSeen: () => ({ mutateAsync: state.seen, isPending: false }),
+  useGaveUpPropagations: () => ({ data: state.stopped }),
 }));
 vi.mock("@/lib/queries/useUsers", () => ({
   useCreateGrant: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -101,6 +102,7 @@ beforeEach(() => {
   state.pending = 0;
   state.retrying = 0;
   state.gaveUp = 0;
+  state.stopped = [];
   state.advanced = true;
   state.auto = true;
   state.retryingBy = undefined;
@@ -119,6 +121,18 @@ describe("Home says what Syndra is sending again, and what it gave up on", () =>
     ).toBeTruthy();
     // The retrying ones are not "waiting for you to send": only the third is.
     if (advanced) expect(screen.getByText(/1 change is waiting for you to send/)).toBeTruthy();
+  });
+
+  it("says why Zitadel refused what Syndra stopped sending, once per cause", async () => {
+    state.gaveUp = 3;
+    state.stopped = [
+      { wait_reason: "refused:not_allowed" },
+      { wait_reason: "refused:not_allowed" },
+      { wait_reason: undefined },
+    ];
+    renderHome();
+    expect(await screen.findByText(/2 were refused: Syndra's service account isn't allowed to make this change\./)).toBeTruthy();
+    expect(screen.queryByText(/One was refused/)).toBeNull();
   });
 
   it.each([true, false])("keeps a give-up on Home until it is marked seen (advanced: %s)", async (advanced) => {

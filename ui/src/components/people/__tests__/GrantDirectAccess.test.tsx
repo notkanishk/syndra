@@ -22,6 +22,8 @@ const state = vi.hoisted(() => ({
   terms: undefined as Array<{ name: string; start: string; end: string }> | undefined,
   // What the automatic rules also give, by role key (the backend's preview).
   rules: {} as Record<string, string[]>,
+  rulesError: false,
+  refetch: vi.fn(),
 }));
 
 vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => state.down }));
@@ -30,7 +32,9 @@ vi.mock("@/lib/queries/useRulePreview", () => ({
   useRulePreview: (_user: string, _project: string, keys: string[]) => ({
     data: keys.flatMap((key) => state.rules[key] ?? []).map((sentence) => ({ sentence })),
     isLoading: false,
-    isError: false,
+    isError: state.rulesError,
+    isFetching: false,
+    refetch: state.refetch,
   }),
 }));
 
@@ -93,6 +97,8 @@ beforeEach(() => {
   state.queuedAt = undefined;
   state.terms = undefined;
   state.rules = {};
+  state.rulesError = false;
+  state.refetch = vi.fn();
   state.mutateAsync.mockReset();
 });
 
@@ -278,6 +284,19 @@ describe("GrantDirectAccess · its result", () => {
     fireEvent.click(screen.getByRole("button", { name: "Give role" }));
     expect(await screen.findByText("Ada can use Operator on their own now.")).toBeInTheDocument();
     expect(screen.getByText(/Also gives Bench in Workshop/)).toBeInTheDocument();
+  });
+
+  // One consent rule with Approve (RuleConsent): a preview that can't be read
+  // holds the give, with the reason and a Try again, never a give with a warning.
+  it("holds the give when the rule preview fails, and Try again reads it again", () => {
+    state.rulesError = true;
+    open();
+    choose("Operator");
+    expect(screen.getByRole("button", { name: "Give role" })).toBeDisabled();
+    expect(screen.getByText("Held until Syndra can read the automatic rules.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(state.refetch).toHaveBeenCalledTimes(1);
+    expect(state.mutateAsync).not.toHaveBeenCalled();
   });
 
   it("says nothing about rules when no rule starts from the role", async () => {

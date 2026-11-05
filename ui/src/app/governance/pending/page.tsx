@@ -40,7 +40,7 @@ import {
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
 import { Relative } from "@/components/ui/Time";
-import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
+import { isRefused, refusalCause, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 
 /** Q2 (A-17): an empty queue still says "Send 0 changes". The owner's answer is a change to this one function. */
 const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
@@ -353,7 +353,7 @@ function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; load
                   <span className="text-danger-text">
                     {outOfTries
                       ? `${system} didn't answer after ${row.attempts} ${row.attempts === 1 ? "try" : "tries"}, so Syndra stopped sending it.`
-                      : `${system} refused it, so Syndra stopped sending it.`}
+                      : `${system} refused it${isRefused(row.wait_reason) ? `: ${refusalCause(row.wait_reason ?? "")}` : ""}, so Syndra stopped sending it.`}
                   </span>
                 </span>
                 <span className="text-[12.5px] text-faint">

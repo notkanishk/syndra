@@ -25,7 +25,8 @@ import {
 } from "@/lib/queries/useGovernance";
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestDecisions } from "@/lib/request-decisions";
-import { useDrainPropagations, useMarkGaveUpSeen } from "@/lib/queries/usePropagation";
+import { isRefused, refusalCause } from "@/lib/wait-reason";
+import { useDrainPropagations, useGaveUpPropagations, useMarkGaveUpSeen } from "@/lib/queries/usePropagation";
 import { useAutoRetry, useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -909,6 +910,13 @@ export function Retries({
   auto?: AutoRetry;
 }) {
   const seen = useMarkGaveUpSeen();
+  const stopped = useGaveUpPropagations();
+  // What each refusal was, once per cause with how many: the same words as
+  // Pending changes' stopped list (lib/wait-reason.ts).
+  const causes = new Map<string, number>();
+  for (const r of stopped.data ?? []) {
+    if (isRefused(r.wait_reason)) causes.set(r.wait_reason ?? "", (causes.get(r.wait_reason ?? "") ?? 0) + 1);
+  }
   const [failure, setFailure] = useState<Outcome | null>(null);
   const one = (n: number) => (n === 1 ? "one change" : `${n} changes`);
   return (
@@ -941,6 +949,11 @@ export function Retries({
               {systemsOf(gaveUpBy)}. Pending changes lists {gaveUp === 1 ? "it" : "them"} and what to do: give a role
               again from the person&apos;s page; a revocation shows in Drift after Syndra&apos;s next check, to revoke
               there. Then mark this seen. It marks it for you only; each person marks their own.
+              {[...causes].map(([reason, n]) => (
+                <span key={reason} className="mt-1 block">
+                  {n === 1 ? "One was" : `${n} were`} refused: {refusalCause(reason)}.
+                </span>
+              ))}
             </span>
           </span>
           <AdvancedLink href="/governance/pending?gave_up=1" className={ARROW_LINK}>

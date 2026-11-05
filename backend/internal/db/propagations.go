@@ -723,6 +723,17 @@ func MarkPropagationFailed(ctx context.Context, id, errMsg string) error {
 		 WHERE id=$1 AND status='in_flight'`, errMsg)
 }
 
+// MarkPropagationRefused is MarkPropagationFailed for a row the target refused
+// outright: it also keeps the plain cause (Refusal*) as wait_reason
+// "refused:<cause>", so Pending changes and Home can say why Syndra stopped
+// sending it. No new column: wait_reason already carries this vocabulary
+// (WaitReasonRefused) and nothing reads it on a failed row for anything else.
+func MarkPropagationRefused(ctx context.Context, id, errMsg, cause string) error {
+	return settleOne(ctx, "mark propagation refused", id,
+		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2, wait_reason=$3
+		 WHERE id=$1 AND status='in_flight'`, errMsg, WaitReasonRefused(cause))
+}
+
 // outboxBackoff spaces a row's tries: 1m doubling to a 30m cap, jittered. With
 // the default budget of five that is roughly 1+2+4+8+16 minutes before a row
 // lands in failed, long enough to outlast a Zitadel blip, which an unspaced
