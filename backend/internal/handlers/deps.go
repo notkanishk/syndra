@@ -80,11 +80,11 @@ var (
 	dbGetBundlesForUser     = db.GetBundlesForUser
 	dbSetWelcomeBundle      = db.SetWelcomeBundle
 	dbGetBundleHolderCounts = db.GetBundleHolderCounts
-	dbGetBundleRoleCounts   = db.GetBundleRoleCounts
-	// The one holder-count path, shared with the role catalog. It used to be a
-	// SQL union of its own, which is how a rule's holder count and the role
-	// page's holder list came to be two different numbers.
-	dbGetAssignedUserCounts = services.RoleHolderCounts
+	// svcBundleHolding and svcRuleHolding are the observed holder numbers for
+	// the bundle and rule lists, from the one snapshot (services/holding.go).
+	svcBundleHolding      = services.BundleHolding
+	svcRuleHolding        = services.RuleHolding
+	dbGetBundleRoleCounts = db.GetBundleRoleCounts
 
 	// Lookup handler injectable var (single-role accessor, used for UID→name resolution).
 	dbGetRole = db.GetRole
@@ -422,7 +422,7 @@ var (
 	dbCreateRoleMapping      = db.CreateRoleMapping
 	dbUpdateRoleMappingValue = db.UpdateRoleMappingValue
 	dbDeleteRoleMapping      = db.DeleteRoleMapping
-	dbMappingHolders         = db.MappingHolders
+	dbMappingHolders         = services.MappingHolders
 	dbPublishMappingVersion  = db.PublishMappingVersion
 	dbRollbackMappingVersion = db.RollbackMappingVersion
 	addonsEntitlementSchema  = addons.EntitlementSchema
@@ -568,7 +568,9 @@ var (
 	directoryApplications = func(ctx context.Context) ([]models.ApplicationCatalog, error) {
 		return directory.Default.Applications(ctx)
 	}
-	dbListMappingHistory  = db.ListMappingHistory
+	dbListMappingHistory = func(ctx context.Context, target string) (db.MappingHistory, error) {
+		return db.ListMappingHistory(ctx, target, services.MappingHolders)
+	}
 	dbForgetTargetBinding = db.ForgetTargetBinding
 	// The merge base goes with the binding, always. One left behind is a claim
 	// about an account nobody manages any more — and if that subject is later

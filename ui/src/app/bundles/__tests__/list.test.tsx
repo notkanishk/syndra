@@ -97,12 +97,15 @@ describe("the bundles list", () => {
     expect(screen.queryByText(/was read/)).toBeNull();
   });
 
-  it("shows the Roles and People counts", () => {
+  it("shows the Roles and People counts, People being who Zitadel shows holding it", () => {
+    state.bundles = [bundle({ observed_holder_count: 9 })];
     render(<BundlesPage />);
 
     const row = screen.getByRole("link", { name: "Lab Tech" }).closest(".row-divider") as HTMLElement;
     expect(row).toHaveTextContent("3");
-    expect(row).toHaveTextContent("11");
+    expect(row).toHaveTextContent("9");
+    // The 11 assignments explain it: two never reached Zitadel.
+    expect(row).toHaveTextContent("2 not in Zitadel yet");
     expect(screen.getByText("Roles")).toBeInTheDocument();
     expect(screen.getByText("People")).toBeInTheDocument();
   });
@@ -115,16 +118,27 @@ describe("the bundles list", () => {
 
     const row = screen.getByRole("link", { name: "Lab Tech" }).closest(".row-divider") as HTMLElement;
     expect(row).toHaveTextContent("7");
-    expect(row).not.toHaveTextContent("—");
+    expect(row).not.toHaveTextContent("None");
   });
 
-  it("shows the word None for roles when the server sends no count, and 0 people", () => {
-    state.bundles = [bundle({ role_count: undefined, holder_count: undefined })];
+  it("shows the word None for roles when the server sends no count", () => {
+    state.bundles = [bundle({ role_count: undefined, holder_count: undefined, observed_holder_count: 0 })];
     render(<BundlesPage />);
 
     const row = screen.getByRole("link", { name: "Lab Tech" }).closest(".row-divider") as HTMLElement;
     expect(row).toHaveTextContent("None");
     expect(row).toHaveTextContent("0");
+  });
+
+  // Zitadel not read: the assignments are never shown as the people count.
+  it("says not checked, never the assignment count, when Zitadel has not been read", () => {
+    state.bundles = [bundle({ observed_holder_count: null })];
+    render(<BundlesPage />);
+
+    const row = screen.getByRole("link", { name: "Lab Tech" }).closest(".row-divider") as HTMLElement;
+    expect(row).toHaveTextContent("—");
+    expect(row).toHaveTextContent("not checked yet · 11 given by Syndra");
+    expect(row).not.toHaveTextContent(/11 people/);
   });
 
   it("the lede is two sentences: it no longer explains versions here (A-20 P17)", () => {

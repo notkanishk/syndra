@@ -19,7 +19,7 @@ import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui
 import { Unfold } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatShortDate } from "@/lib/format";
-import { holdersLine } from "@/lib/holders";
+import { heldSortKey, holdersLine, peopleSuffix } from "@/lib/holders";
 import { NOTHING_CHANGED, failureMessage, sentence, stateLine, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { usePendingPropagations } from "@/lib/queries/usePropagation";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
@@ -155,7 +155,7 @@ function WaitingRoles({
       marked: (m) => Date.parse(m.marked_at) || 0,
       people: (m) => {
         const r = byId.get(roleId(m.project_id, m.role_key));
-        return r ? (r.observed_user_count ?? r.assigned_user_count) : 0;
+        return heldSortKey(r?.observed_user_count);
       },
     };
     const label = (m: (typeof marked)[number]) =>
@@ -234,7 +234,7 @@ function WaitingRoles({
                   <span className="w-full text-[15px] font-semibold tabular-nums tablet:w-[110px] tablet:shrink-0 tablet:text-right">
                     {peopleOf(role)}
                     <span className="text-[13px] font-normal text-faint tablet:hidden">
-                      {peopleOf(role) === "1" ? " person" : " people"}
+                      {peopleSuffix(peopleOf(role))}
                     </span>
                   </span>
                   <span className="flex w-[140px] justify-end whitespace-nowrap">
@@ -317,9 +317,11 @@ function AddRoles({
   const names = chosen.map((id) =>
     roleName(byId.get(id)?.display_name, id.slice(id.indexOf(":") + 1)),
   );
-  const people = chosen.reduce((sum, id) => {
-    const r = byId.get(id);
-    return sum + (r ? (r.observed_user_count ?? r.assigned_user_count) : 0);
+  // What Zitadel shows, summed; undefined when any of them was not checked,
+  // so the sentence never states a recorded number as who has them.
+  const people = chosen.reduce<number | undefined>((sum, id) => {
+    const seen = byId.get(id)?.observed_user_count;
+    return sum === undefined || seen === undefined || seen === null ? undefined : sum + seen;
   }, 0);
 
   return (
@@ -368,9 +370,13 @@ function AddRoles({
           outcome
             ? undefined
             : chosen.length
-            ? `From now on, ${listOf(names)} ${chosen.length > 1 ? "wait" : "waits"} for you. ${people} ${
-                people === 1 ? "person has" : "people have"
-              } ${chosen.length > 1 ? "them" : "it"} today, and nothing changes for them now.`
+            ? `From now on, ${listOf(names)} ${chosen.length > 1 ? "wait" : "waits"} for you. ${
+                people === undefined
+                  ? `Nothing changes now for the people who have ${chosen.length > 1 ? "them" : "it"} today.`
+                  : `${people} ${people === 1 ? "person has" : "people have"} ${
+                      chosen.length > 1 ? "them" : "it"
+                    } today, and nothing changes for them now.`
+              }`
             : "Choose the roles that should always wait for you."
         }
       >

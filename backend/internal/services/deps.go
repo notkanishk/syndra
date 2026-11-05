@@ -173,6 +173,10 @@ var (
 	}
 	svcGetBundlesForUser = db.GetBundlesForUser
 	svcGetRolesForBundle = db.GetRolesForBundle
+	// svcGetBundleRolesGiven is what every live bundle gives (working copy,
+	// includes, latest and held versions): the reader for counts and the map,
+	// never the working copy alone.
+	svcGetBundleRolesGiven = db.GetBundleRolesGiven
 	// What a bundle grants TODAY: the latest published version, which is what a
 	// new assignment pins to.
 	svcLatestVersionRoles     = db.LatestVersionRoles

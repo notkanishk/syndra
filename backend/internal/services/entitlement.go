@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 )
 
@@ -254,12 +255,11 @@ func applyDirectoryStanding(ctx context.Context, subjectID string, set *Entitlem
 	if err != nil || !found {
 		return
 	}
-	switch strings.ToLower(profile.Status) {
-	case "inactive", "locked", "deleted":
+	if access.Left(profile.Status) {
 		set.Lifecycle.Enabled = false
 		set.Lifecycle.SMBEnabled = false
 		set.Lifecycle.NotAMember = true
-		set.Lifecycle.Reason = "the directory reports this person as " + strings.ToLower(profile.Status)
+		set.Lifecycle.Reason = "the directory reports this person as " + strings.ToLower(strings.TrimSpace(profile.Status))
 	}
 }
 

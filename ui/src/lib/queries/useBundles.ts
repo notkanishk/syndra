@@ -16,8 +16,10 @@ export interface BundleRow {
   roles?: string[];
   /** How many distinct roles the latest version grants. The list never carries `roles` itself. */
   role_count?: number;
-  /** How many people currently hold this bundle. Editing it changes all of them. */
+  /** How many people the bundle is ASSIGNED to (recorded). Publishing or retiring moves all of them; never shown as holding. */
   holder_count?: number;
+  /** How many of them Zitadel shows holding every role it gives them: the holder number. null: not checked. */
+  observed_holder_count?: number | null;
   /** Highest published version. */
   latest_version?: number;
   /** Holders pinned to something older than the latest version. */

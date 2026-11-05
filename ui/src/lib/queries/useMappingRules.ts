@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { RetryState } from "@/lib/retry";
 import { invalidateAfter } from "./invalidation";
 
 export interface MappingRuleRow {
@@ -11,8 +12,10 @@ export interface MappingRuleRow {
   source_role: string;
   target_project: string;
   target_role: string;
-  /** How many people hold the input role — i.e. how many this rule acts on. */
+  /** How many people the rule applies to: they hold its first role in Syndra's records, so should have the second. Recorded. */
   holder_count: number;
+  /** How many of them Zitadel shows holding the second role. null: not checked. */
+  observed_holder_count?: number | null;
   created_at: string;
   /** Retired: no longer applied, kept in the history. Only the retired list carries it. */
   retired_at?: string | null;
@@ -101,7 +104,10 @@ export function useDeleteMappingRule() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) =>
-      request<{ message: string; cascade: { enqueued: number; waiting?: number; wait_reason?: string } }>(
+      request<{
+        message: string;
+        cascade: { enqueued: number; waiting?: number; wait_reason?: string; drain?: { retry?: RetryState } };
+      }>(
         `/rules/mapping/${id}`,
         { method: "DELETE" },
       ),

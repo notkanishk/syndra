@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"syndra/internal/models"
+	"syndra/internal/access"
 	"syndra/internal/services"
 )
 
@@ -17,8 +17,8 @@ import (
 func TestRulePreview_ListsTheRuleRows(t *testing.T) {
 	orig := svcRulesFollowing
 	t.Cleanup(func() { svcRulesFollowing = orig })
-	var asked []models.HeldRole
-	svcRulesFollowing = func(_ context.Context, uid string, roles []models.HeldRole) ([]services.RuleRow, error) {
+	var asked []access.Role
+	svcRulesFollowing = func(_ context.Context, uid string, roles []access.Role) ([]services.RuleRow, error) {
 		if uid != "u1" {
 			t.Errorf("asked about %q", uid)
 		}
@@ -34,7 +34,7 @@ func TestRulePreview_ListsTheRuleRows(t *testing.T) {
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Also gives Bench in Workshop") {
 		t.Fatalf("got %d %s", w.Code, w.Body)
 	}
-	if len(asked) != 2 || asked[1] != (models.HeldRole{ProjectID: "p_laser", RoleKey: "advanced"}) {
+	if len(asked) != 2 || asked[1] != (access.Role{ProjectID: "p_laser", RoleKey: "advanced"}) {
 		t.Fatalf("every role_key is previewed together, got %v", asked)
 	}
 }
@@ -42,7 +42,7 @@ func TestRulePreview_ListsTheRuleRows(t *testing.T) {
 func TestRulePreview_NoRowsIsAnEmptyListAndNoRoleIs422(t *testing.T) {
 	orig := svcRulesFollowing
 	t.Cleanup(func() { svcRulesFollowing = orig })
-	svcRulesFollowing = func(context.Context, string, []models.HeldRole) ([]services.RuleRow, error) { return nil, nil }
+	svcRulesFollowing = func(context.Context, string, []access.Role) ([]services.RuleRow, error) { return nil, nil }
 
 	req := httptest.NewRequest("GET", "/api/v1/users/u1/rule-preview?project_id=p&role_key=a", nil)
 	req.SetPathValue("id", "u1")

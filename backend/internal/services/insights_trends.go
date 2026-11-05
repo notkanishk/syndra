@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/access"
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
@@ -92,11 +93,6 @@ func accessChangeActions() []string {
 	return append(append(append(append([]string{}, actionsThroughBundle...), actionsByRequest...), actionsByHand...), actionsTakenAway...)
 }
 
-// leftStatuses are the directory states that mean a person is no longer a
-// member: the ones the entitlement path already treats as "not a member"
-// (applyDirectoryStanding), plus "departed", the word the drift queue uses.
-var leftStatuses = map[string]bool{"inactive": true, "locked": true, "deleted": true, "departed": true}
-
 const (
 	trendTopN      = 5
 	noReasonGiven  = "No reason given"
@@ -154,7 +150,7 @@ func InsightsTrends(ctx context.Context, period TrendPeriod) (models.InsightsTre
 	// read the findings' snapshot makes — not per member. A handful at this size.
 	left := 0
 	for _, u := range users {
-		if !leftStatuses[strings.ToLower(u.Status)] {
+		if !access.Left(u.Status) {
 			continue
 		}
 		n, err := trendRoleHolders(ctx, u.ID)

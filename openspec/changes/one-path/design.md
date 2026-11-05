@@ -87,3 +87,28 @@ Both conclude only from a complete read.
 - `services/roles.go:80-84` still rolls back when the read-back cannot confirm the role. That is W1a's.
 - The add-on transport's own retries are W1e's to move onto `extcall`.
 - `PutSetting` has no idempotency key (family 2).
+
+## W2a · One access core (`backend/internal/access`)
+
+```
+records (direct grants with ends, pinned bundle versions incl. includes)
+   └─ access.Ends(base, rules)     ← the one fixpoint; Closure = Ends without dates
+        ├─ cache/compiler.go       token roles + role_ends
+        ├─ services.collectUserRoles  person view (+ Fired for reasons, + Ends per role)
+        │     └─ accessSnapshot → HolderFacts, BundleHolding, RuleHolding, role members
+        ├─ services/cascade.go effectiveClosure  every cascade, followRules, what-if, welcome
+        ├─ services.RuleDerived    drift sweep + reconciliation (records only)
+        └─ services.MappingHolders db.HeldRecords + Closure − access.Left
+```
+
+**Seed policy, stated once.** What a person holds in Syndra's records: unexpired direct grants and the roles of the bundle versions they are pinned to (own and included). Readers differ only in two deliberate ways: the cascades subtract queued revocations (they simulate the next state, so a queued revoke is already gone), and nothing seeds from observed grants (a rule never fires from a grant Syndra did not record, ADR-006). The audit's single `BaseHoldings(opts)` reader was not built: the compiler, the person view and the cohort read the same tables three ways for cost reasons (per person, per person with names, all at once), and the parity tests pin them together instead.
+
+**Ends.** The zero time means never. `Later(a, b)` is the end of a role held two ways: never wins, else the later date. Along a rule the end is carried unchanged, so a role's end is the latest end among every base role that reaches it. Passes are bounded by `len(rules)`: the best path is simple.
+
+**Departed.** Counts of who holds a role stay observed and include people who have left: they still hold it in Zitadel, and hiding them would hide real access. Only the mapping cohort drops them, because the entitlement path already disables their account.
+
+**Counts.** A bundle is held when Zitadel shows every role the person's pinned version gives (own and included); a rule is held when Zitadel shows its target for a person it applies to. Both use `HolderFacts{Given, Confirmed, Observed, Basis}` from one snapshot; `Confirmed = Observed`, since both are measured among the given set.
+
+**Previews.** The three UI previews ask `POST /insights/whatif`, which already ran the cascade's readers and closure. New kinds: `rule_added` (project/role = source, `target_project_id`/`target_role_key`, optional `rule_id` replaced), `bundle_assigned` and `bundle_unassigned` (`user_id`, `bundle_id`). BundlePage uses the existing `bundle_gives_not`.
+
+**Evidence.** `access/closure_test.go`; `cache/compiler_ends_test.go`; `services/access_parity_test.go` (cohort = person view minus people who left; person view = core closure; rule roles end with their source; bundle and rule counts observed; never read is nil); `services/expected_test.go` `TestRuleDerived_AgreesWithThePersonView`; `drift/intent_sources_test.go` `TestSweep_ARuleTargetFromAnUnrecordedSourceIsDrift`; `services/insights_whatif_preview_test.go`; `handlers/holder_counts_test.go`; UI `holders.test.ts`, `list.test.tsx`, `removal-impact.test.tsx`, `saveRule.test.tsx`, `ManageBundlesPublished.test.tsx`, `Makerspace.test.tsx`. Mutation-checked: dropping the departed filter fails three parity assertions; making rule targets endless in `access.Ends` fails three `Ends` tests.

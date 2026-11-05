@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
-import { holdersLine, holdersToneClass } from "@/lib/holders";
+import { heldSortKey, holdersLine, holdersToneClass, peopleSuffix } from "@/lib/holders";
 import { sortNames } from "@/lib/sort";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useProjects, type ProjectSummaryRow } from "@/lib/queries/useProjects";
@@ -31,8 +31,8 @@ type ProjectSort = "project" | "people";
 
 const PROJECT_SORT: Record<ProjectSort, (row: ProjectSummaryRow) => string | number> = {
   project: (row) => row.project.name,
-  // The number the row shows: what Zitadel holds, else what Syndra recorded.
-  people: (row) => row.observed_member_count ?? row.member_count,
+  // What Zitadel holds; not checked sorts last, never by the recorded number.
+  people: (row) => heldSortKey(row.observed_member_count),
 };
 
 export default function ProjectsPage() {
@@ -200,7 +200,7 @@ export default function ProjectsPage() {
               <span className="shrink-0 text-[15px] tablet:w-[110px] tablet:text-right">
                 {people.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
-                  {people.headline === "1" ? " person" : " people"}
+                  {peopleSuffix(people.headline)}
                 </span>
                 {/* Recorded is what Syndra decided; this is what Zitadel shows
                     right now — never the same word, never the same line. */}
