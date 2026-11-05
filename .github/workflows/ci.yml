@@ -1,0 +1,119 @@
+name: ci
+
+# The gate every change passes before it can reach main, and so before it can
+# reach staging or production. Runs on GitHub-hosted runners only: this file
+# may take `pull_request` precisely because nothing here touches our machines
+# or holds a secret. Never give it a self-hosted runner (see deploy.yml).
+#
+# Branch protection on main requires `ci-ok`, which needs every job below.
+
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: syndra
+          POSTGRES_PASSWORD: syndra
+          POSTGRES_DB: syndra_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U syndra -d syndra_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # The live-DB tests (backend/internal/db/livedb_test.go) run for real
+      # here, migrations included, instead of being skipped.
+      SYNDRA_TEST_DATABASE_URL: postgres://syndra:syndra@localhost:5432/syndra_test?sslmode=disable
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+
+  addon-truenas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: addons/truenas
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: addons/truenas/go.mod
+          cache-dependency-path: addons/truenas/go.sum
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3"
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+      - run: bun run lint
+      - run: bun run build
+
+  # The images production builds, built the same way, so a Dockerfile or
+  # dependency break fails here and not on the LXC. Nothing is pushed.
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: backend, context: backend, file: backend/Dockerfile }
+          - { name: claims, context: backend, file: backend/Dockerfile.claims }
+          - { name: ui, context: ui, file: ui/Dockerfile }
+          - { name: truenas-addon, context: addons/truenas, file: addons/truenas/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # The one check branch protection requires, so adding or renaming a job
+  # above never needs a settings change.
+  ci-ok:
+    if: always()
+    needs: [backend, addon-truenas, ui, images]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          [ "${{ needs.backend.result }}" = success ] && [ "${{ needs.addon-truenas.result }}" = success ] \
+            && [ "${{ needs.ui.result }}" = success ] && [ "${{ needs.images.result }}" = success ] \
+            || { echo "a required job did not pass"; exit 1; }
