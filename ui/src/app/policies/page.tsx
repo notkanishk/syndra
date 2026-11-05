@@ -118,7 +118,7 @@ export default function AutomaticRulesPage() {
               >
                 <span className="w-full text-[14.5px] tablet:min-w-[320px] tablet:flex-1">
                   <span className="text-muted">
-                    <ProjectName id={rule.source_project} /> /{" "}
+                    <ProjectName id={rule.source_project} link={false} /> /{" "}
                     <Mono>{rule.source_role}</Mono>
                   </span>
                   <span aria-hidden className="mx-2.5 text-faint">
@@ -126,7 +126,7 @@ export default function AutomaticRulesPage() {
                   </span>
                   <span className="sr-only">then </span>
                   <span className="font-semibold">
-                    <ProjectName id={rule.target_project} /> /{" "}
+                    <ProjectName id={rule.target_project} link={false} /> /{" "}
                     <Mono>{rule.target_role}</Mono>
                     {waits(rule.target_project, rule.target_role) && (
                       <WaitsMark className="ml-2" />

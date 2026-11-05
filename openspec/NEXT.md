@@ -17,6 +17,10 @@ Four buckets, in the order they actually unblock each other:
 
 ## 1. Code
 
+### A-20 second pass — [`changes/second-pass`](changes/second-pass/proposal.md)
+
+Owner said "all yes" on 5 Nov 2026. **P1 (names link by default, G14) is built** on `feat/a20-names-link`; P2 to P8 are in other branches and add their own sections to that change. Open from P1: the resolver does not know which ids are service accounts, so a bare `UserName` opens `/users/:id`; only rows that call `useAccountHref` reach `/system/service-accounts/:id`.
+
 ### LDAP / sync — **gone**
 
 Deleted on 2026-08-10 by [`changes/addon-platform`](changes/addon-platform/proposal.md),

@@ -131,7 +131,7 @@ export default function AppsPage() {
               </span>
 
               <span className="w-full text-[14px] text-muted tablet:min-w-[140px] tablet:flex-1">
-                <ProjectName id={entry.application.project_id} />
+                <ProjectName id={entry.application.project_id} link={false} />
               </span>
 
               <span className="text-[13px] tablet:w-[220px] tablet:shrink-0 tablet:text-right">

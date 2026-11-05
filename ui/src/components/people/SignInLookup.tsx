@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useId, useState } from "react";
 
 import { UserName } from "@/components/names/UserName";
@@ -78,9 +77,7 @@ export function SignInLookup({
                     {forPerson ? (
                       <span>{appName(s.app_id) ?? <span className="text-faint">App unknown</span>}</span>
                     ) : (
-                      <Link href={`/users/${encodeURIComponent(s.user_id)}`} className="font-semibold text-ink link-hover">
-                        <UserName id={s.user_id} />
-                      </Link>
+                      <UserName id={s.user_id} className="font-semibold text-ink" />
                     )}
                   </li>
                 ))}

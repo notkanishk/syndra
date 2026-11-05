@@ -150,6 +150,8 @@ describe("the roles index, as drawn", () => {
     expect(screen.getAllByText("Unknown project")).toHaveLength(3);
     expect(document.body.textContent).toContain("Unknown project 365951028870251526");
     expect(document.body.textContent).toContain("Unknown project 382075332397630470");
+    // A-20 P1: the row is the one link; the project inside it is plain words, never a second link.
+    expect(document.querySelector("a a")).toBeNull();
   });
 });
 

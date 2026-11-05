@@ -1,7 +1,6 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import { useState } from "react";
 
 import { UserName } from "@/components/names";
@@ -161,9 +160,7 @@ function UnconfirmedRow({
             {pre}
             {post !== null && (
               <>
-                <Link href={accountHref(op.subject_id)} className="text-ink link-hover">
-                  <UserName id={op.subject_id} />
-                </Link>
+                <UserName id={op.subject_id} href={accountHref(op.subject_id)} className="text-ink" />
                 {post}
               </>
             )}

@@ -219,16 +219,7 @@ function Holds({ userId, name }: { userId: string; name: string }) {
           return (
             <CardRow key={`${project.project_id}::${roleKey}`} first={index === 0}>
               <span className="min-w-0 flex-1 text-[15px] font-semibold tablet:flex-none tablet:basis-[260px]">
-                <Link
-                  href={`/projects/${encodeURIComponent(project.project_id)}`}
-                  className="link-hover"
-                >
-                  <ResolvedProjectName
-                    name={project.project_name}
-                    resolved={project.project_name_resolved}
-                    id={project.project_id}
-                  />
-                </Link>
+                <ResolvedProjectName name={project.project_name} resolved={project.project_name_resolved} id={project.project_id} />
                 <span aria-hidden className="text-faint"> · </span>
                 <span>{roleName}</span>
               </span>

@@ -21,7 +21,7 @@ vi.mock("@/lib/queries/useSignIns", () => ({
 vi.mock("@/lib/queries/useApplications", () => ({
   useApplications: () => ({ data: [{ application: { id: "app-1", name: "Fab queue" } }] }),
 }));
-vi.mock("@/components/names/UserName", () => ({ UserName: ({ id }: { id: string }) => <span>{id}</span> }));
+vi.mock("@/components/names/UserName", () => ({ UserName: ({ id }: { id: string }) => <a href={`/users/${id}`}>{id}</a> }));
 
 beforeEach(() => {
   state.asked = [];

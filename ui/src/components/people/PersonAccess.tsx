@@ -522,17 +522,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                   >
                     <FoldChevron open={open} />
                   </button>
-                  <Link
-                    href={`/projects/${encodeURIComponent(project.project_id)}`}
-                    className="link-hover"
-                  >
-                    <ResolvedProjectName
-                      className="type-card-title"
-                      name={project.project_name}
-                      resolved={project.project_name_resolved}
-                      id={project.project_id}
-                    />
-                  </Link>
+                  <ResolvedProjectName className="type-card-title" name={project.project_name} resolved={project.project_name_resolved} id={project.project_id} />
                   <ProjectRoleTally
                     recorded={project.effective_role_keys.length}
                     unexplained={unexplainedIn(project).length}
