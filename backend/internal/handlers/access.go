@@ -13,6 +13,7 @@ import (
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 	"syndra/internal/services"
 )
@@ -185,14 +186,14 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// The rows the mapping rules added go with it, under the same rule.
 	if ids := res.OutboxIDs(); len(ids) > 0 {
 		d := svcDeliver(r.Context(), ids, r.URL.Query().Get("apply") != "true")
-		res.WaitReason = d.WaitReason()
+		res.WaitReason, res.Retry = d.WaitReason(), d.Drain.Retry
 		if len(d.Sent) > 0 && res.OutboxID != "" {
 			if st, serr := dbGetPropagationStatus(r.Context(), res.OutboxID); serr == nil && st != "" {
 				res.Status = st
 			}
 		}
 		if res.Status == "applied" && d.Reason[res.OutboxID] == "" {
-			res.WaitReason = ""
+			res.WaitReason, res.Retry = "", nil
 		}
 	}
 
@@ -462,6 +463,9 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		if decided.WaitReason != "" {
 			resp["wait_reason"] = decided.WaitReason
 		}
+		if decided.Retry != nil {
+			resp["retry"] = decided.Retry
+		}
 		jsonResponse(w, http.StatusOK, resp)
 	case errors.Is(err, errRequestNotFound):
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
@@ -545,8 +549,10 @@ func writeRoleOfferedError(w http.ResponseWriter, err error) {
 // Zitadel yet when it isn't.
 type decisionResult struct {
 	WaitReason string
-	Effect     approvalEffect
-	Until      *time.Time
+	// Retry is the next try and which try, when Zitadel didn't take it.
+	Retry  *extcall.RetryState
+	Effect approvalEffect
+	Until  *time.Time
 }
 
 func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, reviewNote string) error {
@@ -646,7 +652,8 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 		// a later resume; access already works via the ledger.
 		res.Effect, res.Until = plan.Effect, plan.ExpiresAt
 		if ids := queued.OutboxIDs(); len(ids) > 0 {
-			res.WaitReason = svcDeliver(ctx, ids, false).WaitReason()
+			d := svcDeliver(ctx, ids, false)
+			res.WaitReason, res.Retry = d.WaitReason(), d.Drain.Retry
 		}
 	} else { // rejected — no grant, just the conditional resolution
 		// A declined extension remembers the end it left alone. Best-effort: a

@@ -191,6 +191,15 @@ both halves.
 Syndra and waiting to be sent to Zitadel. Nothing has changed there yet; send
 it from *Pending changes*."
 
+**A change the system didn't take says when it goes again** (owner, 5 Nov
+2026). One retry model, one sentence, wherever it was sent and on its row:
+"Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)." The time
+is in the makerspace's zone. It is queued, never "Sent", and carries no "send
+it" link: Syndra sends it on its own, unless the role waits for you. When the
+tries run out: "Syndra gave up after 6 tries." A member's own password says
+"Not confirmed yet. Syndra is trying again at 14:05. Keep this page open." The
+words live in `ui/src/lib/retry.ts` and nowhere else.
+
 **The first 100ms is said in the future tense.** While a write is in flight the
 seat says what Syndra *will* do, never that it did (A-19 P2). The forecast is a
 sentence about Syndra's own next step, never a claim about the target, and it

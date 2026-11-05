@@ -32,6 +32,8 @@ import {
 } from "@/lib/queries/useMyStorage";
 import { oneShot } from "@/lib/secret";
 import dynamic from "next/dynamic";
+import { RetryStatus } from "@/components/ui/RetryStatus";
+import { retryLine, type RetryState } from "@/lib/retry";
 
 // Opened on demand, so it stays out of the page's first load.
 const ConnectionGuide = dynamic(() => import("@/components/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
@@ -688,7 +690,9 @@ function PasswordForm({
   accent?: boolean;
 }) {
   const [password, setPassword] = useState("");
-  const set = useSetStorageCredential(view.target);
+  // Said while the page waits to send it again: never "done" before Syndra knows.
+  const [retrying, setRetrying] = useState<RetryState | null>(null);
+  const set = useSetStorageCredential(view.target, setRetrying);
   const status = set.data?.status;
   const changed = status === "set";
   const noAnswer = status === "indeterminate";
@@ -703,6 +707,7 @@ function PasswordForm({
       className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
+        setRetrying(null);
         // The field clears only on a confirmed done: otherwise it still holds
         // what was typed, so one press sends it again.
         set.mutate(oneShot(password), {
@@ -738,16 +743,24 @@ function PasswordForm({
           </span>
         </div>
       </div>
-      <Unfold open={slow}>
+      <Unfold open={slow && !retrying}>
         <p role="status" className="max-w-[62ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
           Still waiting for {label}. Keep this page open until it answers.
         </p>
       </Unfold>
+      {retrying && set.isPending && (
+        // The one retry model's seat (RetryStatus), in the member's voice.
+        <RetryStatus retry={retrying} system={label} own />
+      )}
       {noAnswer && !set.isPending && (
         // Step 2: a failure appears still; it never lifts.
         <Result
           tone="warn"
-          title={`${label} didn't answer, so your password may not have changed.`}
+          title={
+            set.data?.retry
+              ? `${retryLine(set.data.retry, label)} Your password may not have changed.`
+              : `${label} didn't answer, so your password may not have changed.`
+          }
           body={`Try again in a minute: press ${submitLabel}. Sending the same password twice is safe, and ${label} then has the one you set.`}
         />
       )}

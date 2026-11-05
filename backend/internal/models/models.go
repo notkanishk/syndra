@@ -3,6 +3,8 @@ package models
 import (
 	"encoding/json"
 	"time"
+
+	"syndra/internal/extcall"
 )
 
 // Project represents a downstream application in Zitadel
@@ -592,6 +594,13 @@ type PendingPropagation struct {
 	// manual (a bundle or rule set to wait, before the switch over). Empty for
 	// rows from before roles that wait.
 	WaitReason string `json:"wait_reason,omitempty"`
+	// NotBefore is when a row Zitadel didn't take is tried again: set by a
+	// requeue, nil on a row never tried. The background drain sends it then,
+	// unless it waits for the operator.
+	NotBefore *time.Time `json:"not_before,omitempty"`
+	// Retry is where it stands under the one retry model (extcall): filled by
+	// the Pending changes read for a row Syndra sends again on its own.
+	Retry *extcall.RetryState `json:"retry,omitempty"`
 }
 
 // CascadeSummary is one cascade-originated outbox write, as it appears inside

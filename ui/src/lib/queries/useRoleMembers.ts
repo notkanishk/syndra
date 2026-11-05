@@ -8,6 +8,7 @@ import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { UserProfile } from "@/lib/types";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
+import type { RetryState } from "@/lib/retry";
 
 /** One holder of a (project, role) pair, with the sources that produced it. */
 export interface RoleMember {
@@ -112,6 +113,12 @@ export interface DirectGrantRemoval {
   revoked_roles?: string[];
   /** Roles kept, because something else still supplies them. */
   retained_roles?: string[];
+  /** Why the revocation isn't in Zitadel yet, when it isn't: role_waits, halted:<reason>. */
+  wait_reason?: string;
+  /** The revocation's outbox status: "applied" once Zitadel took it. Empty when nothing was queued. */
+  status?: string;
+  /** With halted:retrying: when Syndra sends it again, and which try. */
+  retry?: RetryState;
 }
 
 export function useRemoveDirectGrant() {

@@ -13,6 +13,7 @@ import { FieldLabel, Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { WaitsMark } from "@/components/ui/WaitsMark";
+import { RETRYING, retryingOutcome } from "@/lib/retry";
 import { waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
@@ -263,7 +264,10 @@ function GrantDirectAccessOpen({
                   // `wait_reason` is the backend's account of why this isn't
                   // in Zitadel yet; without one the grant went straight through.
                   const why = waitReasonLine(made.wait_reason, roleName, new Date().toISOString());
-                  if (made.status !== "applied" || made.wait_reason) {
+                  if (made.wait_reason === RETRYING) {
+                    // Zitadel didn't take it; Syndra sends it again on its own (lib/retry.ts).
+                    setResult({ word: "Given", outcome: retryingOutcome(`${roleName} is given to ${first} in Syndra`, made.retry) });
+                  } else if (made.status !== "applied" || made.wait_reason) {
                     setResult({
                       word: "Given",
                       outcome: {

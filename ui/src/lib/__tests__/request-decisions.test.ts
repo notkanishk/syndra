@@ -13,6 +13,31 @@ describe("approvalOutcome", () => {
     });
   });
 
+  // W1: since PR 108 a 503 or a lost answer is requeued, not resent inline,
+  // and the background drain sends it again. Never "Sent", never "can use it
+  // now": it says when it is sent again (IST) and which try, and needs no Send.
+  it("Zitadel didn't take it: says it is sent again at its next try, never Sent", () => {
+    const out = approvalOutcome("halted:retrying", "Ada", "Trained", {
+      retry: { state: "retrying", try: 2, of: 6, next_try: "2099-11-05T08:35:00Z" },
+    });
+    expect(out).toMatchObject({ kind: "queued", sendsItself: true });
+    expect(out.message).toBe("Approved. Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6).");
+    expect(`${out.message} ${out.detail}`).toMatch(/sends it again at 14:05/);
+    expect(`${out.message} ${out.detail}`).not.toMatch(/\bSent\b|can use it now/);
+  });
+
+  // C2: an approval's whole effect — the roles automatic rules also gave.
+  it("names what automatic rules also gave with the approval", () => {
+    const one = approvalOutcome(undefined, "Ada", "Trained", undefined, [{ role: "Bench", project: "Workshop" }]);
+    expect(one.message).toBe("Approved. Ada can use it now. An automatic rule also gave them Bench in Workshop.");
+    const two = approvalOutcome("halted:retrying", "Ada", "Trained", undefined, [
+      { role: "Bench", project: "Workshop" },
+      { role: "Laser", project: "Fabrication" },
+    ]);
+    expect(two.message).toMatch(/Automatic rules also gave them Bench in Workshop and Laser in Fabrication\.$/);
+    expect(approvalOutcome(undefined, "Ada", "Trained").message).not.toMatch(/automatic rule/i);
+  });
+
   it("a role that waits: queued, and names the role", () => {
     expect(approvalOutcome("role_waits", "Ada", "Supervisor")).toMatchObject({
       kind: "queued",

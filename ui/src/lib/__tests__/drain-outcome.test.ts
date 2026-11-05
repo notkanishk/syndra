@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeDrain } from "@/lib/drain-outcome";
+import { outcomeFromDrain, describeDrain } from "@/lib/drain-outcome";
 import type { DrainResult } from "@/lib/queries/usePropagation";
 
 function result(overrides: Partial<DrainResult> = {}): DrainResult {
@@ -16,23 +16,28 @@ describe("describeDrain", () => {
 
   // The regression this exists for: a pass that requeued eight changes used to
   // report "0 sent, 0 failed" and read as an idle queue.
-  it("never reports a requeue as success", () => {
+  // And, since the background drain retries them (owner, 5 Nov 2026), it
+  // never tells the operator to send again: Syndra does, at each row's next try.
+  it("never reports a requeue as success, nor as the operator's to resend", () => {
     const outcome = describeDrain(result({ requeued: 8 }));
     expect(outcome.tone).toBe("warning");
-    expect(outcome.message).toContain("8 waiting for you to send");
-    expect(outcome.message).toContain("Send again");
+    expect(outcome.message).toContain("8 to be sent again");
+    expect(outcome.message).not.toMatch(/Send again|waiting for you/);
+    expect(outcome.detail).toMatch(/Syndra sends them again on its own; each change below says when/);
+    expect(outcome.sendsItself).toBe(true);
+    expect(outcomeFromDrain(result({ requeued: 8 }))).toMatchObject({ kind: "queued", sendsItself: true });
   });
 
-  it("says a decided-but-unrecorded change needs another pass", () => {
+  it("says a decided-but-unrecorded change is settled at its next try", () => {
     const outcome = describeDrain(result({ applied: 3, errored: 1 }));
     expect(outcome.tone).toBe("warning");
-    expect(outcome.message).toBe("3 sent · 1 not recorded. Send again.");
+    expect(outcome.message).toBe("3 sent · 1 not recorded.");
     expect(outcome.detail).toMatch(/could not record/);
   });
 
   it("reports every non-zero count, in a fixed order", () => {
     const outcome = describeDrain(result({ applied: 1, failed: 2, requeued: 3, errored: 4 }));
-    expect(outcome.message).toBe("1 sent · 2 failed · 3 waiting for you to send · 4 not recorded. Send again.");
+    expect(outcome.message).toBe("1 sent · 2 failed · 3 to be sent again · 4 not recorded.");
   });
 
   it("does not celebrate a terminal failure", () => {

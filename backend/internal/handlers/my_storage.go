@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
@@ -410,7 +411,8 @@ func restoredAt(ctx context.Context, subject, target string) *time.Time {
 
 type setCredentialRequest struct {
 	Password string `json:"password"`
-	// Resend is the page sending the same password once more, at once, after
+	// Resend is the page sending the same password once more, at the next try
+	// the first answer named (`retry.next_try`, extcall.AddonResend), after
 	// the first send's reply was lost (A-13 §4 step 1). Only the page can: it
 	// is the only place the value still is. The server keeps no copy and never
 	// retries a member's password by itself.
@@ -524,11 +526,15 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		// three apart: indeterminate is a lost reply, which it sends again once
 		// with the value it still holds; rejected and unreached are clear
 		// answers that nothing changed, and are not resent.
-		jsonResponse(w, http.StatusAccepted, map[string]any{
+		body := map[string]any{
 			"status":    string(res.Outcome),
 			"operation": res.OperationID,
 			"detail":    unconfirmedCredentialCopy[res.Outcome],
-		})
+		}
+		if res.Outcome == addons.OutcomeIndeterminate {
+			body["retry"] = credentialRetry(req.Resend, time.Now())
+		}
+		jsonResponse(w, http.StatusAccepted, body)
 		return
 	}
 
@@ -553,6 +559,19 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		// is not their Syndra password and not their Google password.
 		"detail": "Your storage password is set. It is used only for this system.",
 	})
+}
+
+// credentialRetry is where a lost-reply password change stands under the one
+// retry model (extcall.AddonResend): after the first send, retrying, with the
+// moment the page sends it again and "try 2 of 2"; after the resend, nothing
+// tries again until the member does (waiting).
+func credentialRetry(resend bool, now time.Time) extcall.RetryState {
+	p := extcall.AddonResend
+	if resend {
+		return p.Retrying(p.Attempts, nil)
+	}
+	next := p.NextTryAfter(now, 1)
+	return p.Retrying(1, &next)
 }
 
 // unconfirmedCredentialCopy is the backend's sentence for each answer that is

@@ -11,6 +11,7 @@ import (
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 )
 
@@ -361,6 +362,12 @@ type Indicators struct {
 	// wait for a person to say what happened (A-09 §3). Passwords are never in
 	// it: they settle themselves (A-13 §5). Targets with none are absent.
 	UnconfirmedOperations map[string]int `json:"unconfirmed_operations"`
+	// Retrying is the changes Zitadel didn't take that Syndra sends again on
+	// its own (a subset of PendingPropagation), and GaveUp the ones it stopped
+	// trying in the last week. Said on Home and the rail, so an automatic
+	// retry is never silent, nor its end (owner, 5 Nov 2026).
+	Retrying int `json:"retrying"`
+	GaveUp   int `json:"gave_up"`
 }
 
 // revocationEscalation is how long a queued revocation may age before it stops
@@ -419,6 +426,12 @@ func GovernanceIndicators(ctx context.Context) (Indicators, error) {
 	}
 	out.UnconfirmedOperations = unconfirmed
 
+	retrying, gaveUp, err := svcCountRetries(ctx)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.Retrying, out.GaveUp = retrying, gaveUp
+
 	// Only worth probing when there is something queued: the flag exists to
 	// explain why "Resume now" is disabled, and with an empty outbox there is
 	// nothing to resume.
@@ -438,6 +451,8 @@ type DirectGrantRemoval struct {
 	OutboxIDs []string `json:"outbox_ids"`
 	// WaitReason: why the removal isn't in Zitadel yet, when it isn't.
 	WaitReason string `json:"wait_reason,omitempty"`
+	// Retry is the next try and which try, when Zitadel didn't take it.
+	Retry *extcall.RetryState `json:"retry,omitempty"`
 	// Revoked lists "project/role" pairs that lost their last source and are
 	// queued for removal from the identity provider.
 	Revoked []string `json:"revoked_roles"`

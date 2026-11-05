@@ -293,10 +293,36 @@ describe("Pending changes · board layout", () => {
     expect(screen.getByText(/also sends on its own within a few minutes/)).toBeInTheDocument();
   });
 
-  it("shows a failed change's status in its own row with what the system said", () => {
+  // S4: this list holds only pending and in-flight rows; a failed row is
+  // terminal, so no line here may promise to try it again or show raw text.
+  it("never promises to retry a failed row, nor shows the system's raw text", () => {
     pending.data = [row({ status: "failed", last_error: "no such role" })];
     renderPending();
-    expect(screen.getByText(/Failed, and Syndra will try again: no such role/)).toBeInTheDocument();
+    expect(screen.queryByText(/Syndra will try again/)).toBeNull();
+    expect(screen.queryByText(/no such role/)).toBeNull();
+  });
+
+  // The one retry model: a change Zitadel didn't take says why, when Syndra
+  // sends it again (in IST, whatever the browser's zone), and which try.
+  it("shows a retrying change's next try in IST, and which try", () => {
+    pending.data = [
+      row({
+        id: "o1",
+        attempts: 1,
+        not_before: "2026-11-05T08:35:00Z",
+        retry: { state: "retrying", try: 2, of: 6, next_try: "2099-11-05T08:35:00Z" },
+      }),
+    ];
+    renderPending();
+    expect(
+      screen.getByText("Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)."),
+    ).toBeInTheDocument();
+  });
+
+  it("a revocation that waits for you does not claim to send on its own", () => {
+    pending.data = [row({ id: "o2", op_type: "revoke", wait_reason: "role_waits", cascade_id: "c2" })];
+    renderPending();
+    expect(screen.queryByText(/also sends on its own/)).toBeNull();
   });
 
   it("says a batch's shared reason once, in its band, not on every row", () => {
