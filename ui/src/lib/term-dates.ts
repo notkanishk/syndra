@@ -1,4 +1,5 @@
 import { formatShortDate } from "@/lib/format";
+import { civilDay, endOfDayISO } from "@/lib/time";
 import type { Term } from "@/lib/queries/useTerms";
 
 /** The server's own limits (PUT /terms), so the dialog can say them first. */
@@ -7,11 +8,10 @@ export const MAX_NAME = 40;
 
 /**
  * A calendar day, "YYYY-MM-DD", as "1 Aug" (the year only when it isn't this
- * year). Read as local midnight: a bare date string parses as UTC, which
- * shows the day before west of Greenwich.
+ * year). Never `new Date(ymd)`: a bare date string parses as UTC midnight.
  */
 export function shortDay(ymd: string): string {
-  return formatShortDate(`${ymd}T00:00:00`);
+  return formatShortDate(endOfDayISO(ymd));
 }
 
 /**
@@ -72,8 +72,7 @@ export function termFieldErrors(details: Record<string, string> | undefined): Re
  * calendar days, compared as text like `validateTerms` does.
  */
 export function termStanding(terms: Term[], now: Date = new Date()): (string | null)[] {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const today = civilDay(now);
   let next = -1;
   terms.forEach((t, i) => {
     if (t.start > today && (next < 0 || t.start < terms[next].start)) next = i;
@@ -86,12 +85,10 @@ export function termStanding(terms: Term[], now: Date = new Date()): (string | n
 /**
  * "First day of Spring term" / "Last day of Monsoon term" on the one day each
  * is true, else null (A-18 §4 idea 1). Six days a year, read from the terms
- * setting, said where the date already is. Days are local, as the dates are.
+ * setting, said where the date already is. Days are the makerspace's, as the dates are.
  */
 export function termDayLine(terms: Term[], now: Date = new Date()): string | null {
-  const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
-    .map((n, i) => String(n).padStart(i === 0 ? 4 : 2, "0"))
-    .join("-");
+  const today = civilDay(now);
   const named = (term: Term) => (/\bterm$/i.test(term.name.trim()) ? term.name.trim() : `${term.name.trim()} term`);
   const first = terms.find((term) => term.start === today);
   if (first) return `First day of ${named(first)}`;

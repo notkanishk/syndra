@@ -182,7 +182,6 @@ type trendWorld struct {
 	failAt string
 
 	gotFrom, gotTo time.Time
-	gotOffset      int
 	gotActions     []string
 	snapshots      int
 	askedHolds     []string
@@ -215,8 +214,8 @@ func (w *trendWorld) install(t *testing.T, now time.Time) {
 		w.askedHolds = append(w.askedHolds, id)
 		return w.holds[id], nil
 	}
-	trendAuditDays = func(_ context.Context, from, to time.Time, actions []string, off int) ([]db.TrendDay, error) {
-		w.gotFrom, w.gotTo, w.gotOffset, w.gotActions = from, to, off, actions
+	trendAuditDays = func(_ context.Context, from, to time.Time, actions []string) ([]db.TrendDay, error) {
+		w.gotFrom, w.gotTo, w.gotActions = from, to, actions
 		return w.days, fail("days")
 	}
 	trendRequests = func(context.Context, time.Time, time.Time) (db.RequestTrendRows, error) {
@@ -281,8 +280,8 @@ func TestInsightsTrends_AssemblesEveryPart(t *testing.T) {
 		t.Errorf("window = %+v", got.Window)
 	}
 	// The query window is [first day 00:00, day after last 00:00) in local time.
-	if !w.gotFrom.Equal(at(2026, 8, 1, 0, 0)) || !w.gotTo.Equal(at(2027, 1, 1, 0, 0)) || w.gotOffset != 5*3600+1800 {
-		t.Errorf("queried %s .. %s offset %d", w.gotFrom, w.gotTo, w.gotOffset)
+	if !w.gotFrom.Equal(at(2026, 8, 1, 0, 0)) || !w.gotTo.Equal(at(2027, 1, 1, 0, 0)) {
+		t.Errorf("queried %s .. %s", w.gotFrom, w.gotTo)
 	}
 	// Weekly runs through today's week, not on to the end of a term that has not happened.
 	if n := len(got.Weekly); got.Weekly[0].WeekStart != "2026-07-27" || got.Weekly[n-1].WeekStart != "2026-10-12" {

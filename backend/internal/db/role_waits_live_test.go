@@ -65,7 +65,4 @@ func TestRoleWaits_MarkReadAndRecordAgainstTheSchema(t *testing.T) {
 	if got[res.OutboxID] {
 		t.Fatal("unmarked, the role no longer waits")
 	}
-	if _, err := ListWaitSuggestions(ctx); err != nil {
-		t.Fatalf("suggestions query: %v", err)
-	}
 }

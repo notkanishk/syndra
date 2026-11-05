@@ -43,13 +43,10 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
   // One row per change: the page's automatic resend is told inside the change
   // it repeats, never as a second change (A-13 §4). Audit keeps both rows.
   const rows = useMemo(() => (entries.data ?? []).filter((e) => e.operation?.attempt !== 2), [entries.data]);
-  // Keyed by `formatShortDate`, the SAME local-time source the row's own
-  // clock (`formatClock`) reads against. `audit-vocabulary`'s `groupByDay`
-  // keys on `created_at.slice(0, 10)` — the UTC calendar date — so an entry a
-  // few hours either side of UTC midnight landed under yesterday's heading
-  // while its own clock read local time: "10 Sept 04:18" for an instant the
-  // Audit page (which formats each row from its own timestamp, no shared key)
-  // correctly showed as 11 Sept.
+  // Keyed by `formatShortDate`, the SAME makerspace-zone source the row's own
+  // clock (`formatClock`) reads against. A key of `created_at.slice(0, 10)`
+  // (the UTC date) once put an entry a few hours either side of UTC midnight
+  // under yesterday's heading while its own clock read 04:18 the next day.
   const days = useMemo(() => groupByLocalDay(rows), [rows]);
   // The backend caps at 200. Past that the feed is genuinely partial, and
   // saying so beats a "Load more" button that quietly stops working.
@@ -123,8 +120,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
 /**
  * Groups already-sorted entries by their local calendar day, labelled with
  * the same `formatShortDate` string used as the key — so the heading and the
- * grouping boundary can never disagree with each other the way the UTC-keyed
- * `groupByDay` disagreed with the row's local-time clock.
+ * grouping boundary can never disagree with each other, or with the row's clock.
  */
 function groupByLocalDay(rows: AuditEntry[]): Array<{ day: string; entries: AuditEntry[] }> {
   const groups: Array<{ day: string; entries: AuditEntry[] }> = [];

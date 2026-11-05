@@ -1,0 +1,73 @@
+// Package clock is the makerspace's time zone: the one zone every calendar day,
+// and every clock window, in Syndra is counted in (owner, 5 Nov 2026: "get
+// everything in one IST time zone").
+//
+// Instants are stored as timestamptz and never move. Only a DAY (or a time of
+// day) depends on a zone, and it is always this one:
+//
+//   - Go: Day(t), or t.In(Loc) before reading a date or a clock off it.
+//   - SQL: (ts AT TIME ZONE $n)::date with Name passed in. Never the session's
+//     TimeZone (the cluster's is UTC), never 'UTC'. A migration, which has no
+//     Go to ask, writes the zone's name: 'Asia/Kolkata'.
+//
+// repoguard's TestDaysAreCountedInTheMakerspaceZone holds every caller to it.
+package clock
+
+import (
+	"os"
+	"strings"
+	"time"
+	_ "time/tzdata" // the zone must load in a minimal image with no zoneinfo
+)
+
+// Default is the makerspace's zone, used when TZ is unset or names no zone.
+const Default = "Asia/Kolkata"
+
+// Name is the zone's IANA name, the form Postgres's AT TIME ZONE takes; Loc is
+// the zone itself. Both are read from TZ once, at start.
+var Name, Loc = load(os.Getenv("TZ"))
+
+func load(tz string) (string, *time.Location) {
+	tz = strings.TrimPrefix(tz, ":") // POSIX allows TZ=":Asia/Kolkata"
+	if tz != "" && tz != "Local" {
+		if loc, err := time.LoadLocation(tz); err == nil {
+			return tz, loc
+		}
+	}
+	loc, err := time.LoadLocation(Default)
+	if err != nil {
+		panic("zone: " + err.Error()) // unreachable: time/tzdata is embedded
+	}
+	return Default, loc
+}
+
+// Now is the current time, read in the makerspace's zone.
+func Now() time.Time { return time.Now().In(Loc) }
+
+// Day is t's calendar day in the makerspace's zone, YYYY-MM-DD.
+func Day(t time.Time) string { return t.In(Loc).Format(time.DateOnly) }
+
+// Midnight is the instant `day` (YYYY-MM-DD) starts in the makerspace's zone.
+func Midnight(day string) (time.Time, error) { return time.ParseInLocation(time.DateOnly, day, Loc) }
+
+// Every end date means one thing (owner, 5 Nov 2026): access "until 30 Nov"
+// lasts through the whole of 30 Nov in the makerspace's zone, and "for 7 days"
+// is seven calendar days, ending as the 7th one does. An end is stored as the
+// last second of its day, so it still reads as that day wherever it is shown.
+// ui/src/lib/time.ts (endOfDayISO, endAfterDaysISO) is the same rule.
+
+// EndOfDay is the last second of `day` (YYYY-MM-DD) in the makerspace's zone.
+func EndOfDay(day string) (time.Time, error) {
+	m, err := Midnight(day)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return m.AddDate(0, 0, 1).Add(-time.Second), nil
+}
+
+// EndAfterDays is the last second of the n-th day after t's own (both in the
+// makerspace's zone): 7 days from any time on 5 Nov ends at 23:59:59 on 12 Nov.
+func EndAfterDays(t time.Time, n int) time.Time {
+	y, m, d := t.In(Loc).Date()
+	return time.Date(y, m, d+n+1, 0, 0, 0, 0, Loc).Add(-time.Second)
+}

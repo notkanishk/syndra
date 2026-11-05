@@ -27,32 +27,40 @@ When an operator changes bundle membership, bundle role composition, or a mappin
 - **THEN** the revoke MUST be suppressed — no outbox row is enqueued for that triple — and the role MUST persist
 - **AND** the bundle/rule membership change (the "originating source was removed") still applies on its own table, independent of the suppressed grant
 
-### Requirement: Each mapping rule and bundle MUST carry a confirmation mode that governs whether its cascade drains automatically
+### Requirement: A direct write MUST carry its mapping-rule consequences through the outbox, in its own transaction
 
-`mapping_rules` and `bundles` MUST each have a `confirmation_mode` (`auto` | `manual`), defaulting from `config_settings.global.default_rule_confirmation_mode`. Auto-mode cascades drain immediately; manual-mode cascades and operator point mutations wait for explicit resume. Expiry sweeps are hardcoded auto — their authoring is the pre-authorization, and there is no `confirmation_mode` to gate against.
+Every direct write (`db.enqueueWrites`: a direct grant, a replace or revoke by grant id, an approved request, a bulk give or extend, an adopted drift) MUST run through `db.FollowRules`. It reads the person's effective closure (direct grants ∪ pinned bundle versions − queued revocations, folded through `models.RuleClosure`) before and after the write, inside the write's transaction and under the access-mutation lock. It MUST enqueue the difference, beyond the write's own base change, as outbox rows with `source='rule'`, `source_ref` = a rule reaching the role, and no ledger row. `models.RuleClosure` is the only implementation that follows rules: the claims compiler, every cascade, the access views and the mapping cohort call it (change `rules-on-the-pipeline`, ADR-006).
 
-#### Scenario: Auto-mode rule fire drains without operator intervention
+#### Scenario: Syndra's own grant reaches the end of a chain
 
-- **WHEN** a mapping rule with `confirmation_mode='auto'` fires and enqueues outbox rows
-- **THEN** the backend MUST drain those rows immediately without waiting for an operator resume
-- **AND** the outbox rows MUST still be persisted first, so a crash mid-drain is recoverable
+- **WHEN** Syndra gives A directly, and active rules map A→B and B→C
+- **THEN** the same transaction MUST enqueue `add` rows for B and C with `source='rule'`, pending before anything is sent
+- **AND** the roles enqueued MUST equal what the claims compiler derives for that person
 
-#### Scenario: Manual-mode rule fire waits in the Pending tier
+#### Scenario: Removal follows the chain and keeps what is held another way
 
-- **WHEN** a mapping rule with `confirmation_mode='manual'` fires
-- **THEN** the enqueued outbox rows MUST remain `status='pending'` and surface in the Pending Propagation tier alongside operator point mutations
-- **AND** the rows MUST NOT drain until the operator explicitly resumes
+- **WHEN** a direct grant of A is revoked, and C is also held through a bundle or a direct grant
+- **THEN** a `revoke` row MUST be enqueued for B and none for C
 
-#### Scenario: Global default applies to new rules unless overridden
+#### Scenario: The webhook fires no rule
 
-- **WHEN** an operator creates a new mapping rule via the UI without specifying a confirmation mode
-- **THEN** the rule MUST inherit `config_settings.global.default_rule_confirmation_mode`
-- **AND** a bulk "Set confirmation mode" action on the Policies UI MUST update the selected rules' `confirmation_mode` in one transaction
+- **WHEN** a grant event survives the self-mutation guard (a change made outside Syndra)
+- **THEN** no mapping rule MUST fire from it. It is drift, and adopting that drift is a direct write, which fires the rules.
+
+### Requirement: Only a role that waits MUST hold a cascade's change
+
+Since the switch over (migration 000058, `confirmation.model = 'roles'`), a row waits in Pending changes only when a role it carries is marked in Roles that wait. Every other row is delivered at once. Bundles and rules carry no confirmation mode: it was inert under roles and was dropped by migration 000078, which refuses to run unless the model is `roles`.
+
+#### Scenario: A rule or bundle change delivers its rows unless the role waits
+
+- **WHEN** a cascade enqueues rows and none of their roles waits
+- **THEN** the backend MUST deliver them immediately, the rows having been persisted first so a crash mid-drain is recoverable
+- **AND** a row whose role waits MUST stay `pending` with `wait_reason='role_waits'`
 
 #### Scenario: Expiry sweep revocation bypasses the outbox and confirmation mode entirely
 
 - **WHEN** the expiry scheduler revokes an expired grant's Zitadel role
 - **THEN** the sweep MUST call the Management API directly (best-effort), NOT enqueue a `pending_zitadel_propagations` row
-- **AND** the revocation therefore MUST NOT appear in "Recent automated cascades" (which lists only applied outbox rows with `source IN ('bundle','rule','lifecycle_cascade')`) and MUST NOT be gated by any rule's or bundle's `confirmation_mode`
+- **AND** the revocation therefore MUST NOT appear in "Recent automated cascades" (which lists only applied outbox rows with `source IN ('bundle','rule','lifecycle_cascade')`)
 - **AND** `source='lifecycle_cascade'` remains reserved in the outbox `source` enum for a future outbox-routed lifecycle trigger; nothing writes it yet
 

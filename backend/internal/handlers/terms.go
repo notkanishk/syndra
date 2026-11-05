@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/services"
 )
 
@@ -12,7 +13,7 @@ import (
 
 // GET /api/v1/terms
 func handleGetTerms(w http.ResponseWriter, r *http.Request) {
-	view, err := svcLoadTerms(r.Context(), time.Now())
+	view, err := svcLoadTerms(r.Context(), clock.Now())
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
