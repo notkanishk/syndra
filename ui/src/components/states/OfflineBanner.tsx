@@ -30,7 +30,7 @@ export function OfflineBanner({ under = false }: { under?: boolean } = {}) {
   return (
     <Unfold open={!online}>
       <div className={under ? "pt-4" : "pb-4"}>
-        <Notice tone="neutral" title="No network connection.">
+        <Notice tone="neutral" title="No network connection." next="Check your connection. This page carries on when it is back.">
           What you see is the last thing Syndra loaded, and it may be out of date. You can&apos;t
           make changes until the connection is back. Anything you try is stopped before it is
           sent, so nothing is sent twice.

@@ -237,13 +237,18 @@ function AppClaims({ applicationId }: { applicationId: string }) {
       {lookingUp && <SignInLookup appId={applicationId} name={app} onClose={() => setLookingUp(false)} />}
 
       {listing && (
-        <Notice tone="warn" title={listing.title}>
-          <Ticks text={listing.body} />
-          {listing.link && (
-            <span className="mt-1.5 block">
+        <Notice
+          tone="warn"
+          title={listing.title}
+          next={
+            listing.link ? (
               <ArrowLink href={listing.link.href}>{listing.link.label}</ArrowLink>
-            </span>
-          )}
+            ) : (
+              "Make the change the notice names, then check again."
+            )
+          }
+        >
+          <Ticks text={listing.body} />
         </Notice>
       )}
 

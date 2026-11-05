@@ -254,7 +254,7 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
       );
   }
   return (
-    <Notice tone={tone} title={title} live>
+    <Notice tone={tone} title={title} live next="The matching row below says what to do, and whether Syndra tries again on its own.">
       {body}
     </Notice>
   );

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { CopyableValue } from "@/components/ui/CopyableValue";
+import { NOTHING_TO_DO } from "@/lib/outcome";
 import { pageSettled } from "@/lib/motion";
 import { UnfoldOnArrival, useUnfoldOpening } from "@/lib/motion";
 
@@ -50,6 +51,17 @@ if (typeof window !== "undefined") {
   );
 }
 
+/**
+ * Owner, 6 Nov 2026: every outcome ends on a clear next step or an explicit
+ * "nothing for you to do". A Notice states which, through its types: `next`
+ * (what to do, or where to go, as a sentence or a link) or `nothingToDo` (why
+ * there is nothing: "Syndra sends it again on its own."). Neither is a compile
+ * error, so a caller cannot leave the reader at a dead end.
+ */
+export type NoticeNextStep =
+  | { next: ReactNode; nothingToDo?: never }
+  | { nothingToDo: string; next?: never };
+
 export function Notice({
   tone,
   title,
@@ -59,7 +71,9 @@ export function Notice({
   action,
   reference,
   className = "",
-}: {
+  next,
+  nothingToDo,
+}: NoticeNextStep & {
   tone: keyof typeof TONES;
   title: string;
   children: ReactNode;
@@ -88,6 +102,9 @@ export function Notice({
         <div className="max-w-[72ch] text-[14.5px] leading-[1.55] text-ink [text-wrap:pretty]">
           {children}
         </div>
+        <p data-notice-next className="max-w-[72ch] text-[14.5px] font-semibold leading-[1.55] text-ink [text-wrap:pretty]">
+          {nothingToDo !== undefined ? `${NOTHING_TO_DO} ${nothingToDo}` : next}
+        </p>
         {(action || reference) && (
           <div className="mt-1.5 flex flex-wrap items-center gap-3">
             {action && (

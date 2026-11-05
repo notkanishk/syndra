@@ -349,6 +349,8 @@ export const MAY_HAVE_GONE_THROUGH: Record<string, string> = {
   TARGET_UNCONFIRMED: "the system's page under System",
   TARGET_ANSWER_UNREADABLE: "the system's page under System",
   SWEEP_ERROR: "Audit",
+  // A refused role write whose undo failed: Zitadel did not change, but Syndra's own list of roles may still show it (services/roles.go writeRole).
+  RECORD_NOT_RESTORED: "the role under Roles",
   // Writes the answer and its audit line in one transaction (db/addon_operations.go:382-419); a failed commit is unknowable from here.
   ANSWER_NOT_RECORDED: "Unconfirmed changes on the system's page",
   // Read on most screens, write on a few (WRITE_ONLY).

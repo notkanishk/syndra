@@ -858,28 +858,20 @@ const retryingRow = `status = 'pending' AND attempts > 0 AND not_before IS NOT N
 	AND NOT EXISTS (SELECT 1 FROM role_waits w WHERE w.project_id = propagation_outbox.project_id
 	                AND w.role_key = ANY(propagation_outbox.role_keys))`
 
-// ConfigKeyGaveUpSeenAt is when an operator last said they had seen the
-// changes Syndra gave up on (MarkGaveUpSeen). A change it gave up on stays on
-// Home and the rail until then (owner, 5 Nov 2026: "the user should always be
-// in the know"). ponytail: one marker for the team, not per person; the
-// makerspace runs one operator team, and per-person is the upgrade if not.
-const ConfigKeyGaveUpSeenAt = "retries_gave_up_seen_at"
-
-// gaveUpBefore is how far back an unseen give-up counts before anyone has
+// gaveUpBefore is how far back an unseen give-up counts before a person has
 // ever marked one seen: a week, so the first deploy does not raise every
 // give-up the outbox ever recorded.
 const gaveUpBefore = "7 days"
 
 // MarkGaveUpSeen records that actor has seen every change Syndra gave up on
-// so far; CountRetries stops counting them. Stamped by the database clock, so
-// it compares with completed_at on the same clock; the text carries its offset.
+// so far; CountRetries stops counting them for that person only (owner,
+// 6 Nov 2026: each operator sees a give-up until they themselves mark it
+// seen). Stamped by the database clock, so it compares with completed_at on
+// the same clock. Table gave_up_seen, migration 000082.
 func MarkGaveUpSeen(ctx context.Context, actor string) error {
 	_, err := querier(ctx).Exec(ctx, `
-		INSERT INTO config_settings (key, value, updated_by, updated_at)
-		VALUES ($1, NOW()::text, $2, NOW())
-		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value,
-			updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-		ConfigKeyGaveUpSeenAt, actor)
+		INSERT INTO gave_up_seen (actor, seen_at) VALUES ($1, NOW())
+		ON CONFLICT (actor) DO UPDATE SET seen_at = NOW()`, actor)
 	if err != nil {
 		return fmt.Errorf("mark gave-up seen: %w", err)
 	}
@@ -887,17 +879,17 @@ func MarkGaveUpSeen(ctx context.Context, actor string) error {
 }
 
 // CountRetries counts the changes Syndra is sending again on its own, and the
-// ones it gave up on (out of retries) that nobody has marked seen, so neither
-// goes unnoticed.
-func CountRetries(ctx context.Context) (retrying, gaveUp int, err error) {
+// ones it gave up on (out of retries) that actor has not marked seen, so
+// neither goes unnoticed. A give-up stays until that person marks it seen.
+func CountRetries(ctx context.Context, actor string) (retrying, gaveUp int, err error) {
 	q := `SELECT
 		COUNT(*) FILTER (WHERE ` + retryingRow + `),
 		COUNT(*) FILTER (WHERE status = 'failed' AND last_error LIKE 'out of retries%'
 		                   AND completed_at > COALESCE(
-		                       (SELECT value::timestamptz FROM config_settings WHERE key = '` + ConfigKeyGaveUpSeenAt + `'),
+		                       (SELECT seen_at FROM gave_up_seen WHERE actor = $1),
 		                       NOW() - INTERVAL '` + gaveUpBefore + `'))
 		FROM propagation_outbox`
-	if err := querier(ctx).QueryRow(ctx, q).Scan(&retrying, &gaveUp); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q, actor).Scan(&retrying, &gaveUp); err != nil {
 		return 0, 0, fmt.Errorf("count retries: %w", err)
 	}
 	return retrying, gaveUp, nil

@@ -599,6 +599,7 @@ export function RehearsalDialog({
               // Blocking: this has to be read BEFORE the next click.
               blocking
               title={staleHeadline(stalePlan.code)}
+              next="Read the preview below, then apply."
               className="mx-6 mb-3"
             >
               <p>

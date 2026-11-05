@@ -180,6 +180,7 @@ export function RoleMappingDialog({
                     tone="neutral"
                     title={neverRead ? `${name} hasn't listed its groups yet.` : `${name} has no groups of its own yet.`}
                     action={{ label: "Read again", onClick: () => void values.refetch() }}
+                    next={neverRead ? "Press Read again in a minute." : `Press Read again once ${name} has groups of its own.`}
                   >
                     {neverRead
                       ? `Syndra asks for the list when this opens, and ${name} hasn't answered${
@@ -211,7 +212,7 @@ export function RoleMappingDialog({
                 </FieldHint>
                 {value && <OpensLine name={name} places={reach.data?.read ? reach.data.groups?.[value] : undefined} />}
                 {!list.current && (
-                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`}>
+                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`} next={`Preview as usual. If you doubt a group still exists, check it on ${name} first.`}>
                     Syndra can&apos;t read {name}&apos;s groups right now. You can still preview. A group deleted since{" "}
                     {formatClock(list.read_at)} fails when the mapping is applied, and the failure is reported.
                   </Notice>

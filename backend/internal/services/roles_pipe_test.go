@@ -264,6 +264,33 @@ func TestCreateRole_RefusedAndUnreadable_StillUndoes(t *testing.T) {
 	}
 }
 
+// A final refusal whose undo fails must not say the record was put back: it is
+// its own error, with its own audit row (the undo's transaction rolled back,
+// so role.not_changed was never written) and a reference to quote.
+func TestCreateRole_RefusedAndUndoFails_SaysTheRecordIsNotRestored(t *testing.T) {
+	p := newRolePipe(t)
+	p.sendErr = &zitadel.StatusError{Code: 400, Message: "invalid"}
+	svcDbDeleteRole = func(context.Context, string) error { return errors.New("db down") }
+
+	_, err := CreateRole(context.Background(), CreateRoleRequest{ProjectID: "p1", RoleKey: "trained"}, "op")
+	if !errors.Is(err, ErrRoleRecordNotRestored) {
+		t.Fatalf("want ErrRoleRecordNotRestored, got %v", err)
+	}
+	if errors.Is(err, ErrRoleNotChangedInZitadel) {
+		t.Fatalf("must not claim the record was put back: %v", err)
+	}
+	var nr *RoleRecordNotRestoredError
+	if !errors.As(err, &nr) || nr.Reference != "p1/trained" {
+		t.Fatalf("want the reference p1/trained, got %v", err)
+	}
+	if !slices.Equal(p.audits, []string{auditRoleCreated, auditRoleNotRestored}) {
+		t.Fatalf("want created then not_restored (never not_changed), got %v", p.audits)
+	}
+	if p.audit["undo_error"] == nil || p.audit["error"] == nil {
+		t.Fatalf("the audit row must carry both errors: %v", p.audit)
+	}
+}
+
 func TestUpdateRole_RefusalRestoresTheOldName(t *testing.T) {
 	p := newRolePipe(t)
 	p.roles["trained"] = zitadel.ProjectRoleResult{Key: "trained", DisplayName: "Old name"}

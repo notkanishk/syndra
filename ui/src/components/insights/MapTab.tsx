@@ -384,7 +384,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
         />
       )}
       {asOn && asof.isError && !asof.data && (
-        <Notice tone="danger" title="Couldn’t load that day.">
+        <Notice tone="danger" title="Couldn’t load that day." next="Choose the date again.">
           Syndra couldn’t read the picture for {dayLabel(url.asof!)}. Choose the date again.
         </Notice>
       )}

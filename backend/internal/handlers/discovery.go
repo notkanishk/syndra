@@ -232,6 +232,19 @@ const (
 	roleChangeUnknownMessage = "Zitadel didn't answer, and Syndra couldn't read the role back, so it can't tell whether Zitadel made the change. Syndra kept its record. Open this project again in a minute to see what Zitadel holds."
 )
 
+// roleRecordNotRestoredCode answers a refused role write whose undo failed
+// (services.ErrRoleRecordNotRestored). The sentence ends on a next step.
+const roleRecordNotRestoredCode = "RECORD_NOT_RESTORED"
+
+func roleRecordNotRestoredMessage(err error) string {
+	var nr *services.RoleRecordNotRestoredError
+	ref := "this role"
+	if errors.As(err, &nr) {
+		ref = nr.Reference
+	}
+	return "Zitadel didn't make the change, but Syndra couldn't put its own record back. Its list of roles may show the change. Check the role under Roles, or ask whoever runs the Syndra server to look at reference " + ref + "."
+}
+
 // writeRoleWriteError answers a refused or failed role write from the one
 // role pipe (services/roles.go). A delete held by people names them and their
 // count in details, so the dialog can ask for that exact count back.
@@ -266,6 +279,11 @@ func writeRoleWriteError(w http.ResponseWriter, err error) {
 		// delete may already have taken the role from everyone holding it.
 		log.Printf("[ROLES] outcome unknown: %v", err)
 		jsonErrorResponse(w, http.StatusBadGateway, roleChangeUnknownCode, roleChangeUnknownMessage)
+	case errors.Is(err, services.ErrRoleRecordNotRestored):
+		// Zitadel refused, but Syndra's undo failed too: its list of roles may
+		// still show the change. Never "put its record back".
+		log.Printf("[ROLES] record not restored: %v", err)
+		jsonErrorResponse(w, http.StatusBadGateway, roleRecordNotRestoredCode, roleRecordNotRestoredMessage(err))
 	case errors.Is(err, services.ErrRoleNotChangedInZitadel):
 		// Not writeUpstream's generic sentence: this one says what Syndra did
 		// (put its record back). The raw rpc text goes to the log only.

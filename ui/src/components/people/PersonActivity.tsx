@@ -225,7 +225,7 @@ function TargetActivityCard({
         </div>
       ) : data && !data.readable ? (
         <div className="border-t border-line p-5">
-          <Notice tone="warn" title={`${label}\u2019s audit log could not be read.`}>
+          <Notice tone="warn" title={`${label}\u2019s audit log could not be read.`} next="Reload the page in a minute. If it keeps failing, ask whoever runs the Syndra server.">
             This is not a claim that nothing happened.{data.detail ? ` ${data.detail}` : ""}
           </Notice>
         </div>

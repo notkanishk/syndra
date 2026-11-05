@@ -77,7 +77,7 @@ export function WelcomeClaimsCard() {
         <Unfold open={Boolean(failure)} gap={16}>
           {failure && (
             <div className="px-5 pt-3">
-              <Notice tone="danger" title="The setting didn't save." reference={failure.reference}>
+              <Notice tone="danger" title="The setting didn't save." reference={failure.reference} next="Try the switch again. If it keeps failing, ask whoever runs the Syndra server and quote the reference.">
                 {failure.text} Nothing was changed.
               </Notice>
             </div>

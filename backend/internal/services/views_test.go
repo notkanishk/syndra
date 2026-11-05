@@ -45,7 +45,7 @@ func resetGovernanceDeps(t *testing.T) {
 	// And the automatic retries, the eighth.
 	origRetries := svcCountRetries
 	t.Cleanup(func() { svcCountRetries = origRetries })
-	svcCountRetries = func(context.Context) (int, int, error) { return 0, 0, nil }
+	svcCountRetries = func(context.Context, string) (int, int, error) { return 0, 0, nil }
 	// And the observation store, same reason again: the access view now reports
 	// what Zitadel holds beside what was decided. The default is the honest one
 	// — nothing has ever been observed — so a test that says nothing about the

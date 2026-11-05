@@ -428,7 +428,7 @@ function AlreadyDecided({
   const agree = picked !== null && picked === taken.decision;
 
   return (
-    <Notice tone="neutral" title="This was decided while the page was open.">
+    <Notice tone="neutral" title="This was decided while the page was open." nothingToDo="Syndra checks the account again and clears the finding when it matches.">
       <p>
         <Person id={taken.decided_by} fallback={personOr(null, true)} />
         {taken.decided_at ? (

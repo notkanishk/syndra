@@ -379,7 +379,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
       ) : (
         <>
           {confirmation === "unreachable" && access.data.projects.length > 0 && (
-            <Notice tone="warn" title="Zitadel couldn’t be read just now.">
+            <Notice tone="warn" title="Zitadel couldn’t be read just now." next="Reload the page in a minute to read Zitadel again.">
               What follows is Syndra’s own record, which may be out of date.
             </Notice>
           )}

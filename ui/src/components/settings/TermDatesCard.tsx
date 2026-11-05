@@ -168,13 +168,13 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
         ) : (
           <>
             <Unfold open={general.length > 0} gap={16}>
-              <Notice tone="danger" blocking title="That needs another look.">
+              <Notice tone="danger" blocking title="That needs another look." next="Change the dates it names, then save again.">
                 {general.map(([, m]) => m).join(" ")} Nothing was changed.
               </Notice>
             </Unfold>
             <Unfold open={Boolean(failure)} gap={16}>
               {failure && (
-                <Notice tone="danger" blocking title="The term dates didn't save." reference={failure.reference}>
+                <Notice tone="danger" blocking title="The term dates didn't save." reference={failure.reference} next="Save again. If it keeps failing, ask whoever runs the Syndra server and quote the reference.">
                   {failure.text} Nothing was changed.
                 </Notice>
               )}

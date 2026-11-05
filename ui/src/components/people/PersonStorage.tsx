@@ -65,6 +65,7 @@ export function PersonStorage({ userId, name }: { userId: string; name: string }
           tone="danger"
           title={`Couldn't load ${name}'s storage${systems.length === 1 ? ` on ${targetLabel(systems[0])}` : ""}.`}
           action={{ label: "Try again", onClick: () => views.refetch() }}
+          next="Press Try again. If it keeps failing, ask whoever runs the Syndra server."
         >
           Syndra didn&apos;t answer when this page asked. Nothing was changed.
         </Notice>
@@ -293,7 +294,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
       <CardTop target={view.target} status={<Status view={view} />} />
       {offline && (
         <div className="px-5 pb-3">
-          <Notice tone="warn" live title={`${label} is offline`}>
+          <Notice tone="warn" live title={`${label} is offline`} nothingToDo="Their folders open again on their own when it is back.">
             {view.reachable_since ? `It stopped answering at ${formatClock(view.reachable_since)}. ` : ""}
             {view.last_known
               ? `Home folder and Folders below are what it said at ${formatClock(view.last_known.read_at)}, ${formatRelative(view.last_known.read_at)}. `

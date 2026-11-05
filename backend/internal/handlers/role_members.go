@@ -39,7 +39,7 @@ func handleGetRoleMembers(w http.ResponseWriter, r *http.Request) {
 //
 //	GET /api/v1/governance/indicators
 func handleGetGovernanceIndicators(w http.ResponseWriter, r *http.Request) {
-	indicators, err := svcGovernanceIndicators(r.Context())
+	indicators, err := svcGovernanceIndicators(r.Context(), resolveActor(r, ""))
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "INDICATORS_ERROR", err.Error())
 		return

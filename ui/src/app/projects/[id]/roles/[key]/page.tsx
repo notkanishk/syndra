@@ -103,7 +103,7 @@ export default function RoleMembersPage({
       {view?.withheld_unavailable && (
         // A zero the page cannot stand behind. Saying "none" from a read that did not happen is
         // the failure this column exists to close, reproduced on the screen that closes it.
-        <Notice tone="warn" title="Holds could not be read.">
+        <Notice tone="warn" title="Holds could not be read." next="Reload the page in a minute to read them again.">
           This list does not say who has something withheld.
         </Notice>
       )}

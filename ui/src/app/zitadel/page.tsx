@@ -154,7 +154,14 @@ export default function IdentityProviderPage() {
       />
 
       <Unfold open={keyOverdue && rotation.data?.age_days !== undefined} gap={16}>
-        <Notice tone="warn" title={`The action signing key is ${rotation.data?.age_days} days old.`} live>
+        <Notice
+          tone="warn"
+          title={`The action signing key is ${rotation.data?.age_days} days old.`}
+          live
+          {...(wontReplaceBecause(rotation.data)
+            ? { next: "Press Replace now, below." }
+            : { nothingToDo: "Syndra replaces it on its own in the next quiet hours." })}
+        >
           It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works.{" "}
           {wontReplaceBecause(rotation.data)
             ? `${wontReplaceBecause(rotation.data)} Replace now, below, does it, and sign-ins carry on.`
@@ -505,7 +512,13 @@ function HealthLine({
       </div>
 
       <Unfold open={notConfigured || reading.offline} gap={16}>
-        <Notice tone={notConfigured ? "warn" : "neutral"} title={`${word}.`}>
+        <Notice
+          tone={notConfigured ? "warn" : "neutral"}
+          title={`${word}.`}
+          {...(notConfigured
+            ? { next: "Ask whoever runs the Syndra server to connect it to Zitadel." }
+            : { nothingToDo: "Syndra keeps checking and sends what is waiting when Zitadel answers." })}
+        >
           {notConfigured
             ? "Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access. "
             : "Three checks in a row went unanswered. Syndra keeps checking. "}

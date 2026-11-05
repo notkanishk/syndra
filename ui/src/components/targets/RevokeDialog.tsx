@@ -113,7 +113,7 @@ export function RevokeDialog({
         {/* Amber, and above the form rather than beside the button: it is what
             the reader needs to know BEFORE deciding, not a caveat attached to
             the decision. */}
-        <Notice tone="warn" title="Anyone connected stays connected for now.">
+        <Notice tone="warn" title="Anyone connected stays connected for now." nothingToDo="Their next connection is refused on its own.">
           {sessionSentence(name)}
         </Notice>
 
