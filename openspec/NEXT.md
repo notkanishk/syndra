@@ -17,7 +17,7 @@ Four buckets, in the order they actually unblock each other:
 
 ## 0. The second pass (A-20), first wave
 
-Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. P11 (Technical detail) is the third wave.
+Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
 ## 1. Code
 

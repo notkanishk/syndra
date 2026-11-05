@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
@@ -219,6 +221,11 @@ function OpensNote({ name, reach }: { name: string; reach: TargetReach | undefin
   );
 }
 
+/** What a mapping gives, in words: the group's name, never `field = value`. */
+function gives(mapping: RoleMapping): string {
+  return mapping.field === FIELD_GROUP ? `the ${mapping.value} group` : `${mapping.value}, as its ${mapping.field}`;
+}
+
 function MappingRow({
   mapping,
   home,
@@ -259,12 +266,9 @@ function MappingRow({
         >
           {label}
         </Link>
-        <span className="type-mono text-[12.5px] text-faint">{mapping.role_key}</span>
       </span>
       <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-[3px]">
-        <span className="type-mono text-[13.5px]">
-          {mapping.field} → {mapping.value}
-        </span>
+        <span className="text-[14px]">Gives {gives(mapping)}</span>
         {opens && (
           <span className="flex flex-col gap-0.5">
             {opens.length === 0 ? (
@@ -299,6 +303,12 @@ function MappingRow({
             )}
           </span>
         )}
+      </span>
+      <span className="basis-full">
+        <TechnicalDetail placeKey={`mapping:${mapping.id}`}>
+          <CopyableValue value={mapping.role_key} label="Role key" />
+          <CopyableValue value={`${mapping.field} → ${mapping.value}`} label="Field and value" />
+        </TechnicalDetail>
       </span>
       <span className="w-[110px] flex-none text-right text-[15px]">
         {holders.isLoading ? "…" : cohort.length}
@@ -358,12 +368,12 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
     <RehearsalDialog
       title="Change what this role gives"
       definitionLabel="Save the change"
-      lede={`${roleName} currently gives ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Change it and everybody holding the role is moved too.`}
+      lede={`${roleName} currently gives ${gives(mapping)} on ${targetLabel(mapping.target)}. Change it and everybody holding the role is moved too.`}
       noun={["person", "people"]}
       ready={value.trim() !== "" && value !== mapping.value}
       compose={
         <div>
-          <FieldLabel htmlFor="mapping-new-value">New value for {mapping.field}</FieldLabel>
+          <FieldLabel htmlFor="mapping-new-value">New value</FieldLabel>
           {/* Same reason as the revoke dialog: on touch, focusing on mount
               raises the keyboard over the lede saying that everybody holding
               this role moves with the change. */}
@@ -439,7 +449,7 @@ function DeleteMappingDialog({
     <RehearsalDialog
       title="Remove this mapping"
       definitionLabel="Remove the mapping"
-      lede={`${roleName} will no longer give ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.${
+      lede={`${roleName} will no longer give ${gives(mapping)} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.${
         rows.home ? " New home folders stop; the ones already made stay, with their files." : ""
       }`}
       noun={["person", "people"]}

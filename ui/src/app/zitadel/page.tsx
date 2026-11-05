@@ -10,6 +10,7 @@ import { Mono, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { CommandBlock } from "@/components/ui/CommandBlock";
+import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
@@ -159,7 +160,6 @@ function SigningKey({
   error: unknown;
   keyring?: Delivery["keyring"];
 }) {
-  const [open, setOpen] = useState(false);
   const rotateCommand = status?.rotate_command ?? "make zitadel-actions-rotate-key";
   const notSetUp = !status?.key_installed && !error;
   const { tone, word } = keyState(status, error);
@@ -178,22 +178,17 @@ function SigningKey({
           {!loading && keyring && (
             <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{keyringSentence(keyring)}</p>
           )}
+          {!loading && !error && (
+            <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
+              {notSetUp ? "Set the key up" : "Rotate the key"} on the Syndra server. The person who runs it has the command.
+            </p>
+          )}
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-        >
-          {notSetUp ? "How to set it up" : "How to replace it"}
-        </Button>
       </div>
 
-      <Unfold open={open}>
-        <div className="row-divider flex flex-col gap-4 px-5 py-4">
-          <p className="max-w-[84ch] text-[13.5px] leading-[1.55] text-muted">
-            This is for the person who runs the Syndra server.
-          </p>
+      <div className="row-divider px-5 py-3">
+        <TechnicalDetail placeKey="signing-key">
+        <div className="flex flex-col gap-4">
 
           {notSetUp ? (
             <CommandBlock
@@ -242,7 +237,8 @@ function SigningKey({
             />
           )}
         </div>
-      </Unfold>
+        </TechnicalDetail>
+      </div>
     </Card>
   );
 }
@@ -293,7 +289,7 @@ function rotationSentence(status: RotationStatus | undefined, error: unknown): s
   const age = status.age_days;
 
   if (age === undefined) {
-    return `The key works, but Syndra does not know when it was last replaced, so it cannot warn you when the ${threshold}-day limit is reached. Set ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT to the date the rotate command printed.`;
+    return `The key works, but Syndra does not know when it was last replaced, so it cannot warn you when the ${threshold}-day limit is reached. Set the date the rotate command printed in Syndra's settings.`;
   }
   if (status.status === "stale") {
     return `The key is more than twice the ${threshold}-day limit. Replace it now.`;

@@ -275,7 +275,7 @@ function AccountLine({ account }: { account: DormantAccount }) {
       <span className="font-mono text-[13.5px]">{account.account}</span>
       {account.subject_id && (
         <span className="text-[13.5px] text-muted">
-          <UserName id={account.subject_id} fallback={account.display_name || account.subject_id} />
+          <UserName id={account.subject_id} fallback={account.display_name || undefined} />
         </span>
       )}
       <span className="flex-1" />
