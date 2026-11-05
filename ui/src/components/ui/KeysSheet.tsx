@@ -14,7 +14,7 @@ export function KeysSheet({ open, onClose }: { open: boolean; onClose: () => voi
       <ModalHeader title="Keys" lede="These work on every page. A key pressed in a field belongs to the field." />
       <dl data-keys-sheet className="flex flex-col px-6 pb-5">
         {KEY_ROWS.map(({ keys, does }) => (
-          <div key={does} className="row-divider flex min-h-[44px] items-center gap-4 py-2">
+          <div key={does} className="row-divider flex min-h-[var(--tap)] items-center gap-4 py-2">
             <dt className="flex w-24 flex-none items-center gap-1">
               {keys.map((key) => (
                 <Kbd key={key}>{key}</Kbd>
