@@ -10,16 +10,19 @@ export interface DrainOutcome {
   message: string;
   /** The nuance behind it, when there is any. */
   detail?: string;
+  /** What is left goes on its own: no "send it" step for the reader. */
+  sendsItself?: boolean;
 }
 
 /**
  * What one send actually did, said in a sentence.
  *
  * A send has five outcomes, not two. `applied` and `failed` are terminal;
- * `requeued` and `errored` are not, and both mean "send again" — a row that
- * transiently failed will retry, and a row whose outcome could not be written
- * down is sitting in_flight waiting to be reclaimed. `halted` means the pass
- * stopped early and everything behind that point is untouched.
+ * `requeued` and `errored` are not, and neither needs the operator: a row
+ * Zitadel didn't take is sent again on its own at its next try (each row on
+ * Pending changes says when), and a row whose outcome could not be written
+ * down is reclaimed the same way. `halted` means the pass stopped early and
+ * everything behind that point is untouched.
  *
  * Reporting only the two terminal numbers turns every non-terminal outcome into
  * silence on an HTTP 200: an operator reads "0 sent, 0 failed" after a pass
@@ -35,7 +38,7 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   const parts: string[] = [];
   if (applied) parts.push(`${applied} sent`);
   if (failed) parts.push(`${failed} failed`);
-  if (requeued) parts.push(`${requeued} waiting for you to send`);
+  if (requeued) parts.push(`${requeued} to be sent again`);
   if (errored) parts.push(`${errored} not recorded`);
   const counts = parts.join(" · ");
 
@@ -76,7 +79,8 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
         return {
           tone: "error",
           message: "Zitadel is not answering. Nothing was sent.",
-          detail: "Every change is still waiting for you to send, in order.",
+          detail:
+            "Nothing counts against the retry limit. Revocations, and changes Zitadel didn't take before, go again on their own once it answers; the rest wait for you to send.",
         };
       case "target_unreachable":
         return {
@@ -118,13 +122,16 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   }
 
   // Neither of these is terminal, and both are invisible unless said out loud.
+  // Neither asks anything of the operator: the background drain sends them
+  // again at their next try, which each row below names.
   if (requeued || errored) {
     return {
       tone: "warning",
-      message: `${counts}. Send again.`,
+      sendsItself: true,
+      message: `${counts}.`,
       detail: errored
-        ? "A change reached Zitadel but Syndra could not record the outcome. Sending again settles it."
-        : "Those changes hit a temporary error, and Syndra will try them again.",
+        ? "Syndra could not record how a change went. It settles it on its own at the next try; each change below says when."
+        : `Zitadel didn't answer for ${requeued === 1 ? "one change" : `${requeued} changes`}. Syndra sends ${requeued === 1 ? "it" : "them"} again on its own; each change below says when.`,
     };
   }
 
@@ -151,10 +158,10 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
  * machine instead of pressing the button again.
  */
 export function outcomeFromDrain(result: DrainResult | undefined): ActionOutcome {
-  const { tone, message, detail } = describeDrain(result);
+  const { tone, message, detail, sendsItself } = describeDrain(result);
   const kind: OutcomeKind =
     tone === "success" ? "applied" : tone === "warning" ? "queued" : tone === "error" ? "failed" : "no_change";
-  return { kind, message, detail };
+  return sendsItself ? { kind, message, detail, sendsItself } : { kind, message, detail };
 }
 
 /**

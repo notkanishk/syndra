@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/services/propagation"
 )
 
@@ -18,14 +19,19 @@ type Delivery struct {
 }
 
 // WaitReason says why the action's change isn't in Zitadel yet: the role
-// waits (or, before the switch over, its mode did), or the send halted. ""
-// when everything went.
+// waits (or, before the switch over, its mode did), the send halted, or
+// Zitadel didn't take it and Syndra sends it again on its own
+// (halted:retrying; Drain.Retry says when, and which try). "" only when
+// everything went.
 func (d Delivery) WaitReason() string {
 	for _, id := range d.Waiting {
 		return d.Reason[id]
 	}
 	if d.Drain.Halted {
 		return db.WaitReasonHalted(d.Drain.Reason)
+	}
+	if d.Drain.Requeued+d.Drain.Errored > 0 {
+		return db.WaitReasonHalted(db.HaltRetrying)
 	}
 	return ""
 }
@@ -35,6 +41,7 @@ var (
 	svcOutboxRowsWaitForRole = db.OutboxRowsWaitForRole
 	svcSetWaitReason         = db.SetWaitReason
 	svcGetConfigSetting      = db.GetConfigSetting
+	svcGetPendingRows        = db.GetPendingPropagations
 )
 
 // switchedOver reports whether the operator has moved to roles that wait. An
@@ -113,7 +120,36 @@ func Deliver(ctx context.Context, ids []string, legacyWait bool) Delivery {
 		// only on the rows still pending.
 		d.wait(ctx, d.Sent, db.WaitReasonHalted(d.Drain.Reason))
 	}
+	if d.Drain.Requeued > 0 {
+		d.Drain.Retry = nextRetry(ctx, d.Sent)
+	}
 	return d
+}
+
+// nextRetry is where the first of these rows Zitadel didn't take stands: its
+// next try and which try of how many, read from the row itself so the words
+// the operator sees are the schedule the background drain keeps. nil when it
+// can't be read; the outcome then says only that Syndra sends it again.
+//
+// ponytail: reads the whole unresolved queue (tens of rows) to find a few ids.
+func nextRetry(ctx context.Context, ids []string) *extcall.RetryState {
+	rows, err := svcGetPendingRows(ctx)
+	if err != nil {
+		log.Printf("[DELIVERY] read the next try of %d row(s): %v", len(ids), err)
+		return nil
+	}
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	for _, row := range rows {
+		if want[row.ID] {
+			if s := propagation.RowRetry(row); s != nil {
+				return s
+			}
+		}
+	}
+	return nil
 }
 
 // wait records reason on rows still pending. Role and manual waits are

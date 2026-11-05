@@ -21,7 +21,9 @@ import { Button } from "@/components/ui/Button";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { useRemoveDirectGrant } from "@/lib/queries/useRoleMembers";
+import { useRemoveDirectGrant, type DirectGrantRemoval } from "@/lib/queries/useRoleMembers";
+import { RETRYING, retryingOutcome } from "@/lib/retry";
+import { waitReasonLine } from "@/lib/wait-reason";
 import { useRemoveBundle } from "@/lib/queries/useBundles";
 import {
   forecastFor,
@@ -79,6 +81,41 @@ function useRoleLabel() {
 
 /** The act's own word on the result, never "Applied" (A-17 G4). */
 const resultWord = (outcome: Outcome | null) => (succeeded(outcome) ? "Removed" : "Not removed");
+
+/**
+ * What removing a direct grant did, from the server's answer (W7). "The access
+ * is gone" only when nothing was queued or Zitadel took the revocation; a role
+ * that waits, a send that stopped, and a send Zitadel didn't take each say so.
+ */
+export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel: string): Outcome {
+  const retained = result?.retained_roles ?? [];
+  const kept = retained.length ? ` They still hold ${retained.join(", ")}, from a bundle or a rule.` : "";
+  const reason = result?.wait_reason;
+  if (reason === RETRYING) return retryingOutcome(`Removed in Syndra`, result?.retry);
+  if (reason === "role_waits") {
+    return {
+      kind: "queued",
+      message: `Removed in Syndra. ${roleLabel} always waits for you, so it leaves Zitadel when you send it.${kept}`,
+      detail: waitReasonLine(reason, roleLabel),
+    };
+  }
+  if (reason) {
+    // Halted: a revocation the background drain sends on its own.
+    const why = waitReasonLine(reason, roleLabel, new Date().toISOString());
+    return {
+      kind: "queued",
+      message: `Removed in Syndra. ${why ? `${why}. ` : ""}Revocations send on their own, so it leaves Zitadel when Zitadel answers.${kept}`,
+      sendsItself: true,
+    };
+  }
+  return {
+    kind: "applied",
+    message: `Direct access to ${roleLabel} removed`,
+    detail: retained.length
+      ? `They still hold ${retained.join(", ")}, from a bundle or a rule.`
+      : "Nothing else was supplying it, so the access is gone.",
+  };
+}
 
 export function RemovalDialog({
   removal,
@@ -267,7 +304,10 @@ function DirectDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel. Revocations send on their own, every few minutes.
+                No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel.{" "}
+                {roleWaits(removal.projectId, removal.roleKey)
+                  ? `${roleLabel} always waits for you, so the change waits in Pending changes until you send it.`
+                  : "Revocations send on their own, every few minutes."}
               </span>
             </>
           )}
@@ -336,14 +376,7 @@ function DirectDialog({
                 // survives the removal, and which ones those are is a closure
                 // diff the server does — the UI must not hold a second opinion
                 // about somebody's access.
-                const retained = result?.retained_roles ?? [];
-                setOutcome({
-                  kind: "applied",
-                  message: `Direct access to ${roleLabel} removed`,
-                  detail: retained.length
-                    ? `They still hold ${retained.join(", ")}, from a bundle or a rule.`
-                    : "Nothing else was supplying it, so the access is gone.",
-                });
+                setOutcome(removalOutcome(result, roleLabel));
               } catch (error) {
                 setOutcome(outcomeFromError(error));
               }

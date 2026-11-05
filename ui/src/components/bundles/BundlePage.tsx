@@ -26,6 +26,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
 import { Unfold } from "@/lib/motion";
+import { retireOutcome } from "@/lib/retry";
 import { glideTo } from "@/lib/motion";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { formatList, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
@@ -823,8 +824,8 @@ function DeleteBundleDialog({
               if (result === KEPT) return;
               const n = result.cascade?.enqueued ?? 0;
               // What the server says happened: any wait reason means some
-              // of it is not in Zitadel yet.
-              const auto = !result.cascade?.wait_reason;
+              // of it is not in Zitadel yet, and which one says who moves it.
+              const reason = result.cascade?.wait_reason;
               // The welcome-bundle consequence is folded into the same report
               // rather than fired as a second notification. It is the same
               // event, and it is the half an operator most needs: from now on
@@ -839,15 +840,7 @@ function DeleteBundleDialog({
                       message: `Nobody's access changed. It carried nothing anybody held.`,
                       detail: `Its history stays readable.${orphaned}`,
                     }
-                  : {
-                      kind: auto ? "applied" : "queued",
-                      message: auto
-                        ? `${n} ${n === 1 ? "change went" : "changes went"} to Zitadel.`
-                        : `${n} ${n === 1 ? "change waits" : "changes wait"} for you to send.`,
-                      detail: auto
-                        ? `The revocations it set off went with it.${orphaned}`
-                        : `The revocations it set off wait under Pending changes until you send them.${orphaned}`,
-                    },
+                  : retireOutcome(n, reason, result.cascade?.drain?.retry, orphaned),
               );
             } catch (error) {
               setOutcome(outcomeFromError(error));

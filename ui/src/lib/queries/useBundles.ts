@@ -6,6 +6,7 @@ import { request } from "@/lib/api-client";
 import { sortByName } from "@/lib/sort";
 import type { CascadeOutcome } from "@/lib/types";
 import { invalidateAfter } from "./invalidation";
+import type { RetryState } from "@/lib/retry";
 
 export interface BundleRow {
   id: string;
@@ -256,7 +257,7 @@ export function useDeleteBundle() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) =>
-      request<{ message: string; was_welcome: boolean; cascade: { enqueued: number; waiting?: number; wait_reason?: string } }>(
+      request<{ message: string; was_welcome: boolean; cascade: { enqueued: number; waiting?: number; wait_reason?: string; drain?: { retry?: RetryState } } }>(
         `/bundles/${id}`,
         { method: "DELETE" },
       ),

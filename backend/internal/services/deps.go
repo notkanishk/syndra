@@ -318,6 +318,9 @@ var svcAllowancesDueForReview = db.AllowancesDueForReview
 // system page's Waiting on you chip and lede, and Home's Not confirmed block.
 var svcCountUnresolvedAddonOperations = db.CountUnresolvedAddonOperations
 
+// svcCountRetries counts automatic retries under way and recently given up.
+var svcCountRetries = db.CountRetries
+
 // The dormant listing's four reads (change `addon-platform` 9.11; design §29).
 //
 // Separate seams rather than one, because each answers a different question and

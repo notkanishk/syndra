@@ -35,16 +35,20 @@ func TestBackoffSchedule_GrowsAndStopsAtTheCap(t *testing.T) {
 	}
 }
 
-// Both batch claims carry the gate; the by-id claim deliberately does not.
+// The background claims carry the gate; the operator's claims (Send, and the
+// by-id apply) deliberately do not: pressing Send asks for it now, rows in
+// backoff included (owner, 5 Nov 2026).
 func TestBatchClaimsRespectNotBefore(t *testing.T) {
 	src := readDBSource(t, "propagations.go")
-	for _, fn := range []string{"ClaimPendingPropagations", "ClaimPendingRevocations"} {
+	for _, fn := range []string{"ClaimPendingRevocations", "ClaimDueRetries"} {
 		if !strings.Contains(funcBody(t, src, fn), "notBeforeDue") {
 			t.Errorf("%s must skip a row whose backoff has not passed", fn)
 		}
 	}
-	if strings.Contains(funcBody(t, src, "ClaimPropagationByID"), "notBeforeDue") {
-		t.Error("ClaimPropagationByID is an operator's explicit apply of one row; it is not gated")
+	for _, fn := range []string{"ClaimPendingPropagations", "ClaimPropagationByID"} {
+		if strings.Contains(funcBody(t, src, fn), "notBeforeDue") {
+			t.Errorf("%s is the operator asking for it now; it must include rows in backoff", fn)
+		}
 	}
 	if !strings.Contains(funcBody(t, src, "RequeuePropagation"), "not_before = NOW() +") {
 		t.Error("RequeuePropagation must set not_before; a requeue without it is claimable at once")
@@ -125,15 +129,16 @@ func revokeRow(t *testing.T, ctx context.Context) string {
 	return id
 }
 
-// Live: a requeued row is skipped by both batch claims until not_before
-// passes, the spacing is at least half the base wait, the by-id claim is not
-// gated, and a row whose budget is spent lands in failed, where the
-// unfinished-revocations surface lists it as spent.
+// Live: a requeued row is skipped by the background claims until not_before
+// passes, the spacing is at least half the base wait, the operator's claims
+// (Send, and by id) are not gated, and a row whose budget is spent lands in
+// failed, where the unfinished-revocations surface lists it as spent.
 func TestRequeuedRowWaitsOutItsBackoffThenFails(t *testing.T) {
 	ctx := liveDB(t)
 	id := revokeRow(t, ctx)
 	const budget = 5 // OUTBOX_MAX_RETRIES default
 
+	// The background drain's two claims.
 	claimBoth := func() int {
 		a, err := ClaimPendingRevocations(ctx, TargetZitadel, 10)
 		if err != nil {
@@ -142,9 +147,9 @@ func TestRequeuedRowWaitsOutItsBackoffThenFails(t *testing.T) {
 		if len(a) > 0 {
 			return len(a)
 		}
-		b, err := ClaimPendingPropagations(ctx, TargetZitadel, 10)
+		b, err := ClaimDueRetries(ctx, TargetZitadel, 10)
 		if err != nil {
-			t.Fatalf("claim pending: %v", err)
+			t.Fatalf("claim due retries: %v", err)
 		}
 		return len(b)
 	}
@@ -173,7 +178,14 @@ func TestRequeuedRowWaitsOutItsBackoffThenFails(t *testing.T) {
 			t.Fatalf("try %d: row waits %s, past the %s cap", try, wait, outboxBackoff.Max)
 		}
 		if n := claimBoth(); n != 0 {
-			t.Fatalf("try %d: a batch claim took a row inside its backoff", try)
+			t.Fatalf("try %d: a background claim took a row inside its backoff", try)
+		}
+		// Send is the operator asking now: it takes the row inside its backoff.
+		if sent, err := ClaimPendingPropagations(ctx, TargetZitadel, 10); err != nil || len(sent) != 1 {
+			t.Fatalf("try %d: Send must include a row in backoff (got %d, err %v)", try, len(sent), err)
+		}
+		if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET status='pending' WHERE id=$1`, id); err != nil {
+			t.Fatalf("put back: %v", err)
 		}
 		// The operator's explicit apply of this one row is not gated.
 		if _, found, err := ClaimPropagationByID(ctx, TargetZitadel, id); err != nil || !found {

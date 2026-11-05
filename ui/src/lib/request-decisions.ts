@@ -3,17 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
+import { request } from "@/lib/api-client";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { FORECAST, forecastFor, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
 import { FLASH_MS } from "@/lib/motion";
+import { RETRYING, retryingOutcome } from "@/lib/retry";
 import { waitReasonLine } from "@/lib/wait-reason";
 
 /**
  * What approving one request reports. The response says only whether the
  * approval is in Zitadel yet (`wait_reason`), so that is all this can claim.
+ * A send Zitadel didn't take is never "Sent": it says when Syndra sends it
+ * again, and which try (`retry`, lib/retry.ts).
  *
  * `message` is the sentence; `detail` is the one faint line the row's
  * Decision seat shows under the word (route-requests, #96).
@@ -22,8 +26,59 @@ export function approvalOutcome(
   waitReason: string | undefined,
   name: string,
   role: string,
-  result?: Pick<DecisionResult, "effect" | "until">,
+  result?: Pick<DecisionResult, "effect" | "until" | "retry">,
+  alsoGave: RuleGift[] = [],
 ): ActionOutcome {
+  const outcome = approvalOnly(waitReason, name, role, result);
+  const rules = ruleGiftLine(alsoGave);
+  return rules ? { ...outcome, message: `${outcome.message} ${rules}` } : outcome;
+}
+
+/** A role an automatic rule also gave with the approval, by name. */
+export interface RuleGift {
+  role: string;
+  project: string;
+}
+
+/**
+ * "An automatic rule also gave them Bench in Workshop." The approval's whole
+ * effect, not only the role asked for (coherence audit C2): the rules fire on
+ * the same write, under the same delivery.
+ */
+export function ruleGiftLine(gifts: RuleGift[]): string {
+  if (gifts.length === 0) return "";
+  const names = gifts.map((g) => `${g.role} in ${g.project}`);
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${gifts.length === 1 ? "An automatic rule" : "Automatic rules"} also gave them ${list}.`;
+}
+
+/**
+ * What the automatic rules would also give with this approval, asked BEFORE
+ * the approval is written (afterwards they already hold it, and the answer is
+ * empty). The backend's own closure (`GET /users/{id}/rule-preview`), never one
+ * walked here. A failed read says nothing rather than something wrong.
+ */
+export async function previewRuleGifts(
+  entry: Pick<AccessRequest, "requester_id" | "project_id" | "role_key">,
+): Promise<Array<{ project_id: string; role_key: string }>> {
+  const query = new URLSearchParams({ project_id: entry.project_id, role_key: entry.role_key });
+  try {
+    const data = await request<{ rows?: Array<{ project_id: string; role_key: string }> }>(
+      `/users/${encodeURIComponent(entry.requester_id)}/rule-preview?${query}`,
+    );
+    return data?.rows ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function approvalOnly(
+  waitReason: string | undefined,
+  name: string,
+  role: string,
+  result?: Pick<DecisionResult, "effect" | "until" | "retry">,
+): ActionOutcome {
+  if (waitReason === RETRYING) return retryingOutcome("Approved", result?.retry);
   if (!waitReason) {
     const ends = result?.until ? `until ${formatShortDate(result.until)}` : "with no end date";
     return {
@@ -140,6 +195,8 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
         ? FORECAST.decline
         : forecastFor(entry.kind === "extend" ? "extend" : "approve", roleWaits(entry.project_id, entry.role_key)),
     );
+    // Asked before the write: once approved, the rules' roles are already held.
+    const gifts = next === "approved" && entry.kind !== "extend" ? previewRuleGifts(entry) : Promise.resolve([]);
     try {
       const result = await step.run(() => decide.mutateAsync({ id: entry.id, status: next }));
       if (result === KEPT) {
@@ -167,6 +224,10 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
             resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
               humanizeKey(entry.role_key),
             result,
+            (await gifts).map((row) => ({
+              role: resolver.resolveRole(row.project_id, row.role_key).value?.display_name || humanizeKey(row.role_key),
+              project: resolver.resolveProject(row.project_id).value?.name || "its project",
+            })),
           ),
         };
       }
