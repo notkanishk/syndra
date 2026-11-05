@@ -82,7 +82,8 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "request":
         return [["requests"], GOVERNANCE];
       case "drift":
-        return [["drift"], ["users"], GOVERNANCE];
+        // A revoke queues a removal, and an adopt can queue what a rule gives.
+        return [["drift"], ["users"], ["propagations"], GOVERNANCE];
       case "role":
         return [["roles"], ["roles-that-wait"], ["projects"], ["name-catalog"]];
       case "serviceAccount":
@@ -92,9 +93,9 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "claimShape":
         return [appId ? ["claim-shape", "app", appId] : ["claim-shape"], ["claim-debug"], ["applications"]];
       case "signingKey":
-        return [["zitadel", "rotation"], ["claims"]];
+        return [["zitadel", "rotation"], ["claims"], ["audit"]];
       case "target":
-        return [target ? ["targets", target] : ["targets"], GOVERNANCE];
+        return [target ? ["targets", target] : ["targets"], ["audit"], GOVERNANCE];
       case "storageCredential":
         return [["me", "targets"]];
       case "terms":

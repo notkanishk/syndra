@@ -2,11 +2,13 @@
 
 import { StatusDot } from "@/components/ui/Badge";
 import { askLengthForMember, askLengthForOperator, formatShortDate } from "@/lib/format";
+import { civilDay } from "@/lib/time";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { useMyChanges } from "@/lib/queries/useMyChanges";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { useRulePreview } from "@/lib/queries/useRulePreview";
 import type { Term } from "@/lib/queries/useTerms";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 
@@ -29,11 +31,9 @@ export function alreadyHeld(request: AccessRequest): boolean {
   return Boolean(kind && kind !== "none");
 }
 
-/** The same calendar day, in local time: a term's last day against an end counted in days. */
+/** The same makerspace day: a term's last day against an end counted in days. */
 function sameDay(ymd: string, iso: string): boolean {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const end = new Date(iso);
-  return end.getFullYear() === y && end.getMonth() === m - 1 && end.getDate() === d;
+  return civilDay(new Date(iso)) === ymd;
 }
 
 /**
@@ -79,6 +79,28 @@ export function describeAskForMember(request: AccessRequest, terms?: Term[]): st
  * row says why and what closes it.
  */
 export function HoldingNote({ request }: { request: AccessRequest }) {
+  return (
+    <>
+      <HeldLine request={request} />
+      <RulesLine request={request} />
+    </>
+  );
+}
+
+/**
+ * What an automatic rule also gives if this is approved, said where the
+ * approve button is (audit C2): approving gives the role, and the rules
+ * follow it. From the backend's preview, the same closure the approval
+ * follows; nothing when nothing follows or there is nothing to approve.
+ */
+function RulesLine({ request }: { request: AccessRequest }) {
+  const rules = useRulePreview(request.requester_id, request.project_id, [request.role_key], !alreadyHeld(request));
+  const lines = (rules.data ?? []).map((row) => row.sentence);
+  if (lines.length === 0) return null;
+  return <span className="w-full text-[13px] text-muted">If you approve: {lines.join(" ")}</span>;
+}
+
+function HeldLine({ request }: { request: AccessRequest }) {
   const holding = request.holding;
   const resolver = useNameResolver();
   if (request.kind === "extend" && holding && holding.kind !== "for_good") {

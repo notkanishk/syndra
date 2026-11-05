@@ -50,6 +50,9 @@ var (
 	// or waits for the operator (roles that wait, N14 B).
 	svcDeliver    = services.Deliver
 	svcDrainAddon = propagation.DrainAddon
+	// svcRulesFollowing names what the automatic rules would give with a give
+	// or an adoption, before anyone confirms it (coherence audit C1, C2).
+	svcRulesFollowing = services.RulesFollowing
 
 	dbCreateAccessRequestOfKind = db.CreateAccessRequestOfKind
 	dbGetAccessRequestByID      = db.GetAccessRequestByID
@@ -390,7 +393,6 @@ var (
 	dbRevokeDriftAndEnqueue = db.RevokeDriftAndEnqueue
 	dbMarkDriftExternalTx   = db.MarkDriftExternalTx
 	svcDriftSweep           = drift.Sweep
-	svcDrainOne             = propagation.DrainOne
 	svcDriftTriageQueue     = services.DriftTriageQueue
 	svcDriftTriageRows      = services.DriftTriageRows
 

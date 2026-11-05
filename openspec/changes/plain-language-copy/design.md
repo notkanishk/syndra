@@ -203,6 +203,7 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 | Decline | Will be declined | Declined |
 | Extend | Will be extended | Extended |
 | Remove | Will be removed | Removed |
+| Revoke under Drift | Will be removed | On its way: Revocations send on their own. A role that waits: Waits for you, Waiting for you to send |
 | Keep | Will be kept | Kept |
 | Lift a hold | Will be lifted | Lifted |
 | Give | Will be given | Given |

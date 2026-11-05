@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"syndra/internal/clock"
 )
 
 // A member's month against the real schema (B10, N19): every kind, newest
@@ -146,6 +148,45 @@ func TestListMyChanges_AgainstTheSchema(t *testing.T) {
 	}
 }
 
+// Audit S8: an approval whose grant row is gone falls back to the decision
+// plus its days, and that is clock.EndAfterDays (the last second of the n-th
+// makerspace day), never n×24h from the instant.
+func TestListMyChanges_FallbackEndIsEndAfterDays(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	seven := 7
+	id, err := CreateAccessRequest(ctx, user, "pLab", "member", "need it", &seven)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveAccessRequest(ctx, id, "approved", "op", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	// 00:30 on yesterday's makerspace day: n×24h lands at 00:30, the rule at 23:59:59.
+	midnight, err := clock.Midnight(clock.Day(time.Now()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decided := midnight.Add(-24*time.Hour + 30*time.Minute)
+	if _, err := PG.Exec(ctx, `UPDATE access_requests SET resolved_at = $2, asked_until = NULL WHERE id = $1`, id, decided); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ListMyChanges(ctx, user, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := clock.EndAfterDays(decided, 7)
+	for _, c := range got {
+		if c.Kind == "request_approved" {
+			if c.Until == nil || !c.Until.Equal(want) {
+				t.Fatalf("until = %v, want %v (clock.EndAfterDays)", c.Until, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("no approval in %+v", got)
+}
+
 // Without a database, the statement still has to say the three things the
 // live test proves: cancelled sends aren't changes, a fulfilled request is its
 // grant's row, and an approval's own queued row isn't repeated.
@@ -157,6 +198,8 @@ func TestListMyChanges_StatementShape(t *testing.T) {
 		"o.status = 'pending'",
 		"ar.requester_user_id = $1",
 		"o.user_id = $1",
+		// S8: the fallback end is counted in makerspace days.
+		"AT TIME ZONE $3::text",
 	} {
 		if !strings.Contains(myChangesSQL, want) {
 			t.Errorf("the feed lost %q", want)
