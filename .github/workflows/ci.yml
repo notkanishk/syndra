@@ -5,7 +5,7 @@ name: ci
 # may take `pull_request` precisely because nothing here touches our machines
 # or holds a secret. Never give it a self-hosted runner (see deploy.yml).
 #
-# Branch protection on main requires every job below.
+# Branch protection on main requires `ci-ok`, which needs every job below.
 
 on:
   pull_request:
@@ -105,3 +105,15 @@ jobs:
           push: false
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # The one check branch protection requires, so adding or renaming a job
+  # above never needs a settings change.
+  ci-ok:
+    if: always()
+    needs: [backend, addon-truenas, ui, images]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          [ "${{ needs.backend.result }}" = success ] && [ "${{ needs.addon-truenas.result }}" = success ] \
+            && [ "${{ needs.ui.result }}" = success ] && [ "${{ needs.images.result }}" = success ] \
+            || { echo "a required job did not pass"; exit 1; }

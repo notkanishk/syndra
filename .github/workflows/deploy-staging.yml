@@ -1,0 +1,30 @@
+name: deploy-staging
+
+# An experiment on staging only: any branch, tag or commit, by hand
+# (Actions › deploy-staging › Run workflow, or
+#  `gh workflow run deploy-staging.yml -f ref=<branch>`).
+# It never goes on to production. It stays on staging until the next merge
+# to main, whose own staging deploy replaces it and resets the database to
+# production's copy, so an experiment cannot leak into a release.
+#
+# Manual trigger only: it needs write access, so a fork can never reach the
+# self-hosted runner through it. Do not add other triggers.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to try on staging
+        required: true
+        type: string
+      restore_prod_data:
+        description: Reset staging's database to last night's copy of production first
+        type: boolean
+        default: true
+
+jobs:
+  staging:
+    uses: ./.github/workflows/_staging.yml
+    with:
+      ref: ${{ inputs.ref }}
+      restore_prod_data: ${{ inputs.restore_prod_data }}
