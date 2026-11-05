@@ -74,9 +74,9 @@ export function anchoredStyle(box: ReturnType<typeof useAnchoredBox>): CSSProper
     // Opening upward, it is placed by its bottom edge so its height needs no
     // measuring.
     ...(box.above ? { bottom: window.innerHeight - box.top } : { top: box.top }),
-    // Over the page, and over a dialog's z-50: a popover opened inside a
-    // dialog must show over it.
-    zIndex: 60,
+    // Over the page, and over a dialog: a popover opened inside a dialog
+    // must show over it.
+    zIndex: "var(--layer-popover)",
   };
 }
 

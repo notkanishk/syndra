@@ -38,6 +38,12 @@ export interface ActionOutcome {
   requestId?: string;
   /** The session ended before this ran: offer to sign in again in a new tab (N21). */
   sessionEnded?: boolean;
+  /**
+   * Queued, but nobody has to send it: a revocation drains on its own (the
+   * background revocation drain, design §7). Said as "On its way", with a
+   * neutral dot and no link, because there is no step left for the reader.
+   */
+  sendsItself?: boolean;
 }
 
 /**
@@ -166,6 +172,38 @@ export function outcomeFromExtend(
     detail: waiting ? undefined : leaves,
   };
 }
+
+/**
+ * The first 100ms, in the plan's own tense (A-19 P2). While a write is in
+ * flight the seat says what Syndra WILL do, never that it did: a forecast is a
+ * sentence about Syndra's own next step, which Syndra knows; whether the target
+ * has the change is observed later and said in the true word. Words, not
+ * counts: no number on screen moves until the server has answered.
+ */
+export const FORECAST = {
+  /** An act Syndra already knows will wait for the operator. Same words as a plan row. */
+  queued: PLAN_EFFECT_LABEL.queued,
+  approve: "Will be approved",
+  decline: "Will be declined",
+  extend: "Will be extended",
+  remove: "Will be removed",
+  keep: "Will be kept",
+  lift: "Will be lifted",
+} as const;
+
+/**
+ * A Drift revoke, as an outcome. Code decides, and code says it sends by
+ * itself: the revoke is enqueued as op_type "revoke", which the background
+ * drain claims within minutes with no operator in the loop (internal/db
+ * ClaimPendingRevocations). So this never wears the amber "Waiting for you to
+ * send" link: there is nothing for the reader to do.
+ */
+export const REVOKE_SENDS_ITSELF: ActionOutcome = {
+  kind: "queued",
+  message: "Revocations send on their own",
+  sendsItself: true,
+};
+export const REVOKE_SENDS_ITSELF_WORD = "On its way";
 
 /**
  * Every refusal and every failure ends the same way, and it is the sentence an

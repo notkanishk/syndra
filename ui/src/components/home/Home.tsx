@@ -30,7 +30,7 @@ import { useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
 import { serviceAccountHref, useServiceAccounts } from "@/lib/queries/useServiceAccounts";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCreateGrant } from "@/lib/queries/useUsers";
@@ -561,7 +561,7 @@ function Capped<T>({
 /** Approve / Deny resolve in place, on the row. They never navigate. */
 function OpenRequests({
   rows,
-  decisions: { act, resolved, outcomes, cancelStep },
+  decisions: { act, resolved, outcomes, forecasts, cancelStep },
   queue,
 }: {
   rows: AccessRequest[];
@@ -596,9 +596,11 @@ function OpenRequests({
               <Relative iso={entry.created_at} />
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-[196px] sm:shrink-0">
-              <Crossfade id={resolved.has(entry.id) ? "outcome" : "open"}>
+              <Crossfade id={resolved.has(entry.id) ? (outcomes[entry.id] ? "outcome" : "forecast") : "open"}>
               {resolved.has(entry.id) ? (
-                outcomes[entry.id] && (
+                !outcomes[entry.id] ? (
+                  forecasts[entry.id] && <ActionForecast word={forecasts[entry.id]} />
+                ) : (
                   <ActionOutcome
                     placement="seat"
                     word={outcomes[entry.id].word ?? "Decided"}

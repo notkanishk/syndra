@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { trueSeat } from "@/test-utils/seat";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -165,7 +166,7 @@ describe("PersonRequests", () => {
     requests.decide.mockResolvedValueOnce({ message: "ok", wait_reason: "role_waits" });
     renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    const seat = await screen.findByRole("status");
+    const seat = await trueSeat();
     expect(seat.textContent).toContain("Approved");
     expect(seat.textContent).toContain("Trained always waits for you");
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
