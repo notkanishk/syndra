@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AdvancedLink } from "@/components/ui/AdvancedLink";
 
 import { StatusDot } from "@/components/ui/Badge";
 
@@ -41,12 +41,12 @@ export function NextStep({
     <span className={`inline-flex flex-col gap-0.5 ${className}`}>
       <span className="inline-flex items-center gap-2">
         {dot && <StatusDot tone="warn" />}
-        <Link
+        <AdvancedLink
           href={to}
           className="text-[13.5px] font-semibold text-accent-text link-hover"
         >
           Waiting for you to send <span aria-hidden>→</span>
-        </Link>
+        </AdvancedLink>
       </span>
       {why && <span className="pl-[15px] text-[12.5px] text-faint">{why}</span>}
     </span>

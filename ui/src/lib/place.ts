@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { returnedToThisPage } from "@/lib/motion";
 
@@ -111,7 +111,8 @@ export function usePill<T extends string>(list: string, initial: T, values: read
  * changes, before the reset to the top can overwrite it. A touch, wheel or key
  * from the reader ends the restoring: it never fights a hand.
  */
-export function usePlaceScroll(pathname: string) {
+export function usePlaceScroll(route: string) {
+  const lastPath = useRef<string | null>(null);
   useLayoutEffect(() => {
     const box = document.getElementById("app-scroll");
     if (!box) return;
@@ -119,7 +120,11 @@ export function usePlaceScroll(pathname: string) {
     const kept = recallPlace("scroll");
     const target = typeof kept === "number" && kept > 0 ? kept : 0;
     // A fresh visit starts at the top and says so, so an older visit's place is gone.
-    write("session", key, target);
+    // A query-only change is the same page: it keeps where the reader is (A-20 P19).
+    const path = route.split("?")[0];
+    const samePage = lastPath.current === path;
+    lastPath.current = path;
+    write("session", key, target === 0 && samePage ? box.scrollTop : target);
 
     let live = true;
     let frame = 0;
@@ -153,6 +158,6 @@ export function usePlaceScroll(pathname: string) {
       box.removeEventListener("scroll", save);
       for (const type of ends) box.removeEventListener(type, stop);
     };
-    // ponytail: re-armed by path; a query-only change keeps the page, so keeps its scroll.
-  }, [pathname]);
+    // Re-armed by path and query: a query-only change is a place of its own, so a Back to it returns its scroll (A-20 P19).
+  }, [route]);
 }

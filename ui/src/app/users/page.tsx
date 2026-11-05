@@ -403,7 +403,7 @@ export default function PeoplePage() {
           head={
             <>
             <CardColumns>
-              {bulkMode && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+              {bulkMode && <span className="w-[var(--tap)] shrink-0 desktop:w-[26px]" />}
               <span className="w-[250px] min-w-[180px]">
                 <SortHead label="Person" name="person" sort={sort} onSort={setSort} />
               </span>
@@ -645,7 +645,7 @@ function PersonRow({
       className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft" : ""}`}
       {...selection.rowProps(entry.user.id)}
     >
-      <span className="w-11 desktop:w-[26px]">
+      <span className="w-[var(--tap)] desktop:w-[26px]">
         <RowCheckbox
           label={`Select ${entry.user.name}`}
           {...selection.checkboxProps(entry.user.id)}

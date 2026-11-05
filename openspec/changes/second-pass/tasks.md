@@ -64,3 +64,35 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 - [x] Tests: `forecastReach.test.tsx`, `requestForecast.test.tsx`, `RemovalForecast.test.tsx`, `GrantForecast.test.tsx`, `CancelForecast.test.tsx`, `RehearsalForecast.test.tsx`, Drift cases in `UnexplainedAccess.test.tsx`
 - [ ] Remove's rail count: only a withdrawn queued grant moves it; a direct revoke's count is left to the refetch (`needs-triage`)
 - [ ] Bulk decision and bulk extend rail counts (`ready-for-agent`)
+
+## P10 P14 P15 P19
+
+### P10 · one jump from Basic to Advanced
+
+- [x] `AdvancedLink` (`components/ui/AdvancedLink.tsx`): a plain link that sets the view to Advanced on the click when the view is Basic and the destination is Advanced-only; `isAdvancedOnly(href)` in `lib/nav.ts` reads it from the two rails (Basic's rows win; the System group's dynamic pages are named), query and hash never decide
+- [x] `ArrowLink`, `NextStep` and `CardHeaderLink` are `AdvancedLink`; `StatCard`, the Makerspace row, Home's "Checked, nothing waiting" names, its service-account rows and a system's name on the storage card are `AdvancedLink`s
+- [x] Home's "Pending changes and Drift are in Advanced." is two links, Pending changes and Drift, each switching the view
+- [x] Design system: `AdvancedLink` in `.design-sync` (entry, config, preview, moves row)
+- [x] Tests: `AdvancedLink.test.tsx`, `nav-advanced.test.ts`; the Home tests' `ui-view` mocks gain `useUiView`
+- [ ] A plain `<Link>` from a Basic surface to an Advanced page written by hand elsewhere is not caught by a guard; `isAdvancedOnly` is the one place to add one (`needs-triage`)
+
+### P14 · one breakpoint, and the phone's number seats
+
+- [x] `sm:` is `tablet:` in `FilterBar`, `Home` and `PersonAccess` (`Modal`'s `sm` is a size, not a breakpoint); a guard in `design-system.test.ts` fails on any `sm:` variant
+- [x] The tap floor is `var(--tap)`: the five literals (`users` x2, `TouchNav`, `MemberCatalog` x2) and the same `w-11` seat on Requests, Drift and Expiring; the guard fails on `w-11` and `min-h-[44|48|52px]` (`CopyableValue`'s read-only row excepted). The tab bar's tabs are 44px, not 52
+- [x] Roles that wait (two seats), Bundles (Roles, People) and Recent changes take the phone form: the number with its word under the name, the 110px seat from `tablet:`
+- [ ] A look on a real phone at 360 and 700px (`ready-for-human`)
+
+### P15 · who you are, on the top bar
+
+- [x] The account chip at tablet and up shows the first name (`firstName` moved to `lib/greeting.ts`, shared with Home); the sheet keeps the full name and address; the phone shows the mark (P6) and the avatar
+- [x] "Sound when drift is found" is for operators only (`AccountSheet`)
+- [x] Tests: `AccountSheet.test.tsx` (member, first name, no name)
+
+### P19 · Back keeps the rest of its place
+
+- [x] A person's project folds (`PersonAccess`) and the claims editor's open line (`ShapeCard`) are `usePlace`; a stale open line (a row that no longer exists) is ignored (EOY-P5.4)
+- [x] `usePlaceScroll` is keyed by path and query: a forward query-only change keeps the scroll and saves it under its own query, and Back to an earlier query returns that query's place (EOY-P5.5); `PlaceHost` reads the query under a `Suspense`
+- [x] Requests: a remembered status other than Open is also said as an in-force chip, "Showing declined requests", with the way back to Open
+- [x] Tests: `place.test.tsx` (query-only change), `PersonAccessGroups.test.tsx` (folds on Back and not on a fresh visit), `requestPill.test.tsx`
+- [ ] Select mode and Pending's other query narrowings are not remembered (`needs-triage`)

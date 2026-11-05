@@ -34,6 +34,7 @@
     "ActionOutcome": "src/components/ui/ActionOutcome.tsx",
     "AnchoredPanel": "src/components/ui/Anchored.tsx",
     "ArriveList": "src/lib/motion/arrive.tsx",
+    "AdvancedLink": "src/components/ui/AdvancedLink.tsx",
     "ArrowLink": "src/components/ui/ArrowLink.tsx",
     "Avatar": "src/components/ui/Avatar.tsx",
     "Badge": "src/components/ui/Badge.tsx",

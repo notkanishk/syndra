@@ -267,6 +267,20 @@ export function leafMatches(item: NavLeaf, pathname: string): boolean {
   return item.href !== "/" && pathname.startsWith(`${item.href}/`);
 }
 
+/**
+ * True when `href` goes to a page only Advanced's rail has a row for. Judged by
+ * the two lists above, never restated: a route Basic's rail claims is Basic's,
+ * one only Advanced's rail claims is Advanced-only. A connected system's own
+ * pages are dynamic rows `targetNav` adds, so the System group is named here.
+ * Query and hash never decide it (A-20 P10).
+ */
+export function isAdvancedOnly(href: string): boolean {
+  const path = href.split(/[?#]/)[0];
+  if (!path.startsWith("/")) return false;
+  if (navLeaves(BASIC_NAV).some((entry) => leafMatches(entry, path))) return false;
+  return /^\/system(\/|$)/.test(path) || navLeaves(ADVANCED_NAV).some((entry) => leafMatches(entry, path));
+}
+
 /** Flattens a nav tree to its leaves, preserving order. */
 export function navLeaves(entries: NavEntry[]): NavLeaf[] {
   return entries.flatMap((entry) => (entry.kind === "leaf" ? [entry] : entry.children));

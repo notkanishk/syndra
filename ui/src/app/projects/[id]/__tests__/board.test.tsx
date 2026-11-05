@@ -10,7 +10,10 @@ const state = vi.hoisted(() => ({
   roles: [] as Array<Record<string, unknown>>,
 }));
 
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => false }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => false,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/lib/queries/seed", () => ({ useSeededProjectName: () => undefined }));
 vi.mock("@/lib/page-crumb", () => ({ useCrumb: () => {} }));
 vi.mock("@/components/projects/ProjectClaimDefault", () => ({ ProjectClaimDefault: () => null }));

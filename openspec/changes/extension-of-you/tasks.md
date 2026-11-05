@@ -78,8 +78,8 @@ The owner approved all of it on 5 Nov 2026 (Q8, Q9, Q10, Q11). P5, P8, P9 and P1
 - [x] EOY-P8.1 `useSort(initial, { list, keys, when })` and `usePill`: sort and pill kept in `localStorage["syndra:view:<list>"]`, only after the reader's own press; a stale key from an older build is ignored; search text and filter chips are never stored. Wired on People (not when a filter or link chose the view), Requests (sort and status), Expiring (sort and window; a link's `?within=` wins), Projects, Apps, Roles, Roles that wait, Operations, Drift, Withdrawn.
 - [x] EOY-P9.1 `IntentPrefetchHost` in `AppShell`: 80ms hover or focus on an in-app link warms the Next route and, for `/users/<id>` and `/applications/<id>`, the page's first read (`prefetchUserAccess`, `prefetchAppClaimShape`); once per address; nothing with Data Saver or a 2g connection; a touch is not a hover.
 - [x] EOY-P5.3 Tests: `lib/__tests__/place.test.tsx` (Back restores fold, open section and scroll; a fresh visit does not; route-keyed; never in localStorage; sort and pill persist and search does not; stale and unreadable values; storage that throws), `shell/__tests__/IntentPrefetchHost.test.tsx`.
-- [ ] EOY-P5.4 Place for the other open folds (`Unfold` owners other than Expiring, the claims editor's tab) `ready-for-agent`
-- [ ] EOY-P5.5 Scroll is keyed by path at mount; a query-only change on the same page keeps its scroll rather than keying its own `needs-triage`
+- [x] EOY-P5.4 (built in A-20 P19: a person's project folds, the claims editor's open line) Place for the other open folds (`Unfold` owners other than Expiring, the claims editor's tab) `ready-for-agent`
+- [x] EOY-P5.5 (built in A-20 P19) Scroll is keyed by path at mount; a query-only change on the same page keeps its scroll rather than keying its own `needs-triage`
 - [ ] EOY-P9.2 Prefetch the other detail pages (project, bundle) once their reads have a shared fetcher `ready-for-agent`
 - [x] EOY-F11 Every touch floor is `var(--tap)` (`min-h-`, `min-w-`, `h-`, `size-`, `before:h-`); `design-system.test.ts` fails on a typed `44px` or `11`.
 

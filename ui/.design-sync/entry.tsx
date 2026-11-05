@@ -15,6 +15,7 @@ export * from "@/components/ui/Acknowledge";
 export * from "@/components/ui/ActionOutcome";
 export * from "@/components/ui/Anchored";
 export * from "@/lib/motion";
+export * from "@/components/ui/AdvancedLink";
 export * from "@/components/ui/ArrowLink";
 export * from "@/components/ui/Avatar";
 export * from "@/components/ui/Badge";

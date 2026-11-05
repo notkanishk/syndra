@@ -5,6 +5,10 @@
     "phone": "The same at every width."
   },
   "cards": {
+    "AdvancedLink": {
+      "moves": "The underline tints in on hover. From Basic to an Advanced-only page it sets the view first: the switch glides and the Advanced rail unfolds. Still: the switch is instant.",
+      "phone": "44px tap floor, through the tablet range; it returns to its dense size at the desktop breakpoint."
+    },
     "Button": {
       "moves": "Presses 3%, colour on tint. Busy, its dot breathes and the label and width hold. Still: no scale, the dot holds.",
       "phone": "44px tap floor, through the tablet range; it returns to its dense size at the desktop breakpoint."
