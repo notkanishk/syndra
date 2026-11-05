@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/services"
 )
@@ -242,21 +243,21 @@ func projectUpstream(ctx context.Context, outboxIDs []string) string {
 // outbox rows the caller must drain, plus a reason when the work is already
 // known to be queued rather than applied.
 //
-// Bundle ops go down the second path: the cascade decides for itself whether to
-// drain, from the bundle's own confirmation mode, so it reports its verdict
-// instead of handing back rows. A bundle its owner set to manual is *meant* to
-// leave work queued — that is not a failure, but it is not "applied" either, and
-// the operator has to be told which one they got.
+// Bundle ops go down the second path: the cascade delivers its own rows (each
+// goes unless its role waits), so it reports its verdict instead of handing
+// back rows. A role that waits is *meant* to leave work queued — that is not a
+// failure, but it is not "applied" either, and the operator has to be told
+// which one they got.
 func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out services.BulkOutcome) ([]string, string, error) {
 	ctx := r.Context()
 
 	switch input.Op {
 	case services.BulkOpAssignRole:
-		id, err := enqueueBulkGrant(ctx, actor, out.UserID, input.ProjectID, input.RoleKey, input.Reason, input.DurationDays, db.EndKept)
+		ids, err := enqueueBulkGrant(ctx, actor, out.UserID, input.ProjectID, input.RoleKey, input.Reason, input.DurationDays, db.EndKept)
 		if err != nil {
 			return nil, "", err
 		}
-		return []string{id}, "", nil
+		return ids, "", nil
 
 	case services.BulkOpRemoveRole:
 		var ids []string
@@ -297,11 +298,11 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 			if _, ok := wanted[g.ID]; !ok {
 				continue
 			}
-			id, err := enqueueBulkGrant(ctx, actor, out.UserID, g.ProjectID, g.RoleKey, input.Reason, input.DurationDays, db.EndSet)
+			queued, err := enqueueBulkGrant(ctx, actor, out.UserID, g.ProjectID, g.RoleKey, input.Reason, input.DurationDays, db.EndSet)
 			if err != nil {
 				return nil, "", err
 			}
-			ids = append(ids, id)
+			ids = append(ids, queued...)
 		}
 		return ids, "", nil
 	}
@@ -315,11 +316,8 @@ func cascadeQueuedReason(res services.CascadeResult) string {
 	switch {
 	case res.Enqueued == 0:
 		return "" // nothing to propagate; the closure was already correct
-	case res.Waiting > 0 && res.WaitReason == db.WaitReasonRoleWaits:
-		return "a role it gives always waits for you"
 	case res.Waiting > 0:
-		// Before the switch over: the bundle's own mode held it.
-		return "this bundle applies on confirmation"
+		return "a role it gives always waits for you"
 	case res.Drain.Halted && res.Drain.Reason != "":
 		return res.Drain.Reason
 	case res.Drain.Applied < res.Enqueued:
@@ -329,13 +327,14 @@ func cascadeQueuedReason(res services.CascadeResult) string {
 }
 
 // enqueueBulkGrant writes the ledger + audit + outbox row in one transaction,
-// exactly as the single-grant handler does, and returns the outbox id. The
+// exactly as the single-grant handler does, and returns the outbox ids: its
+// own and the rows the mapping rules added (db.FollowRules). The
 // Zitadel mutation itself happens on the drain the caller runs afterwards — a
 // bulk write is still not allowed to call the Management API from a handler.
-func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, reason string, durationDays int, endRule db.EndRule) (string, error) {
+func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, reason string, durationDays int, endRule db.EndRule) ([]string, error) {
 	var expiresAt *time.Time
 	if durationDays > 0 {
-		expiry := time.Now().UTC().Add(time.Duration(durationDays) * 24 * time.Hour)
+		expiry := clock.EndAfterDays(time.Now(), durationDays)
 		expiresAt = &expiry
 	}
 
@@ -362,7 +361,7 @@ func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, re
 		PayloadJSON: string(payload),
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return res.OutboxID, nil
+	return res.OutboxIDs(), nil
 }

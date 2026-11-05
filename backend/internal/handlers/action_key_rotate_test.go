@@ -17,6 +17,7 @@ import (
 	"syndra/internal/claimserve"
 	"syndra/internal/claimserve/claimservetest"
 	"syndra/internal/claimtel"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/zitadel"
 )
@@ -543,7 +544,7 @@ func TestConfirmUnverified_ByTheProbesNotAnotherReplacement(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func localAt(s string) time.Time {
-	t, err := time.ParseInLocation("2006-01-02 15:04", s, time.Local)
+	t, err := time.ParseInLocation("2006-01-02 15:04", s, clock.Loc)
 	if err != nil {
 		panic(err)
 	}
@@ -594,7 +595,7 @@ func withOldKeyDue(t *testing.T) {
 	t.Setenv(envActionKeyRotatedAt, time.Now().Add(-92*24*time.Hour).UTC().Format(time.RFC3339))
 	// The window is the whole day but this minute's neighbour, so the test
 	// never depends on the hour it runs at.
-	now := time.Now()
+	now := clock.Now()
 	t.Setenv(envQuietWindow, fmt.Sprintf("%s-%s", now.Add(-time.Minute).Format("15:04"), now.Add(2*time.Hour).Format("15:04")))
 }
 
@@ -626,7 +627,7 @@ func TestRunAuto_FirstRunOnAnOverdueKey(t *testing.T) {
 	}
 
 	t.Setenv(envAutoRotate, "")
-	now := time.Now()
+	now := clock.Now()
 	t.Setenv(envQuietWindow, fmt.Sprintf("%s-%s", now.Add(time.Hour).Format("15:04"), now.Add(2*time.Hour).Format("15:04")))
 	_ = RunActionKeyAutoRotate(context.Background())
 	if g.ev.count("zitadel:rotate:") != 0 {

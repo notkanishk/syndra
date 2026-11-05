@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -9,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/zitadel"
 )
@@ -214,4 +217,111 @@ func handleLookUpSignIns(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{
 		"sign_ins": found, "truncated": truncated, "since": since, "until": until,
 	})
+}
+
+// ── Recount daily totals onto the makerspace's day (000079) ──────────────
+
+// RecountSignInDays answers migration 000079. Until 5 Nov 2026 the daily
+// sign-in totals were kept on the UTC day, and the sign-ins they counted are
+// not kept in Syndra, so SQL cannot move them. Zitadel's own log still holds
+// every sign-in event: each day from the first total through `through` is
+// recounted from it, on the makerspace's day, and swapped in at once.
+//
+// Exact, by the webhook's own rule: the same two event types, the same app
+// resolution (against today's directory, so an app deleted since reads as
+// "app unknown"), and one sign-in per person, app and moment.
+//
+// Runs with the daily usage pass, and does nothing once the request is gone.
+// It waits for `through` to end, so no total it replaces is still being
+// written. Any failure (Zitadel or the directory unreachable) leaves the old
+// totals and the request in place for the next pass.
+func RecountSignInDays(ctx context.Context) error {
+	first, through, err := dbSignInRecountPending(ctx)
+	if err != nil || through == nil {
+		return err
+	}
+	if clock.Day(time.Now()) <= *through {
+		return nil
+	}
+	from := *through
+	if first != nil && *first < from {
+		from = *first
+	}
+	apps, err := directoryApplications(ctx)
+	if err != nil {
+		return fmt.Errorf("recount sign-ins: apps unreadable: %w", err)
+	}
+	start, err := clock.Midnight(from)
+	if err != nil {
+		return err
+	}
+	end, err := clock.Midnight(*through)
+	if err != nil {
+		return err
+	}
+	events, err := readSignInEvents(ctx, start, end.AddDate(0, 0, 1))
+	if err != nil {
+		return fmt.Errorf("recount sign-ins: %w", err)
+	}
+	counts := map[db.SignInDayKey]int{}
+	seen := map[string]bool{}
+	total := 0
+	for _, e := range events {
+		p := translateEventName(zitadelEventPayload{
+			EventType: e.Type, AggregateID: e.AggregateID, AggregateType: e.AggregateType, EventPayload: e.Payload,
+		})
+		if p.EventType != "user_signed_in" {
+			continue
+		}
+		app := matchSignInApp(apps, p.ClientRefs)
+		once := p.UserID + "\x00" + app.ID + "\x00" + e.At.UTC().Format(time.RFC3339Nano)
+		if seen[once] {
+			continue
+		}
+		seen[once] = true
+		counts[db.SignInDayKey{AppID: app.ID, Day: clock.Day(e.At)}]++
+		total++
+	}
+	if err := dbReplaceSignInDays(ctx, from, *through, counts); err != nil {
+		return err
+	}
+	log.Printf("[FINDINGS] sign-in totals %s to %s recounted on the makerspace's day from Zitadel's log: %d sign-ins", from, *through, total)
+	return nil
+}
+
+// readSignInEvents is every sign-in event in [since, until). Zitadel answers
+// at most lookupReadLimit per read and its range is inclusive, to the second,
+// so a full answer is halved until each half fits, and each half keeps only
+// its own events.
+// ponytail: halving stops at one minute; more sign-ins than the limit in one
+// minute is an error, not a guess.
+func readSignInEvents(ctx context.Context, since, until time.Time) ([]zitadel.LoggedEvent, error) {
+	events, truncated, err := zitadelSearchEvents(ctx, zitadel.EventSearch{
+		Types: signInEventTypes, Since: since, Until: until, Limit: lookupReadLimit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if truncated {
+		if until.Sub(since) <= time.Minute {
+			return nil, fmt.Errorf("more than %d sign-ins between %s and %s", lookupReadLimit, since.Format(time.RFC3339), until.Format(time.RFC3339))
+		}
+		mid := since.Add(until.Sub(since) / 2).Truncate(time.Second)
+		a, err := readSignInEvents(ctx, since, mid)
+		if err != nil {
+			return nil, err
+		}
+		b, err := readSignInEvents(ctx, mid, until)
+		if err != nil {
+			return nil, err
+		}
+		return append(a, b...), nil
+	}
+	out := events[:0]
+	for _, e := range events {
+		if !e.At.Before(since) && e.At.Before(until) {
+			out = append(out, e)
+		}
+	}
+	return out, nil
 }

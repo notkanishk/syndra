@@ -18,7 +18,6 @@ var (
 	dbListRoleWaits        = db.ListRoleWaits
 	dbMarkRoleWaits        = db.MarkRoleWaits
 	dbUnmarkRoleWaits      = db.UnmarkRoleWaits
-	dbListWaitSuggestions  = db.ListWaitSuggestions
 	dbGetConfigSettingMeta = db.GetConfigSettingMeta
 )
 
@@ -33,12 +32,10 @@ type switchOver struct {
 
 type rolesThatWaitResponse struct {
 	Roles []db.RoleWait `json:"roles"`
-	// SwitchedOver: only these roles decide whether a change waits. Until
-	// then, bundles and rules set to wait still hold their changes too, and
-	// Suggestions is the one-time move.
-	SwitchedOver bool                `json:"switched_over"`
-	Switch       *switchOver         `json:"switch,omitempty"`
-	Suggestions  []db.WaitSuggestion `json:"suggestions"`
+	// SwitchedOver: only these roles decide whether a change waits. Every
+	// deployment is (migration 000058, required by 000078).
+	SwitchedOver bool        `json:"switched_over"`
+	Switch       *switchOver `json:"switch,omitempty"`
 }
 
 // GET /api/v1/roles-that-wait
@@ -49,7 +46,7 @@ func handleListRolesThatWait(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	resp := rolesThatWaitResponse{Roles: roles, Suggestions: []db.WaitSuggestion{}}
+	resp := rolesThatWaitResponse{Roles: roles}
 	if resp.Roles == nil {
 		resp.Roles = []db.RoleWait{}
 	}
@@ -61,15 +58,6 @@ func handleListRolesThatWait(w http.ResponseWriter, r *http.Request) {
 	if set && model.Value == db.ConfirmationModelRoles {
 		resp.SwitchedOver = true
 		resp.Switch = &switchOver{SetBy: model.UpdatedBy, SetAt: model.UpdatedAt}
-	} else {
-		sugg, err := dbListWaitSuggestions(ctx)
-		if err != nil {
-			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-			return
-		}
-		if sugg != nil {
-			resp.Suggestions = sugg
-		}
 	}
 	jsonResponse(w, http.StatusOK, resp)
 }

@@ -145,8 +145,6 @@ var (
 	cacheRebuildUser = cache.RebuildUserCache
 
 	// Webhook handler injectable vars.
-	webhookEnforceMappingRules             = zitadel.EnforceMappingRules
-	webhookRevokeMappingRules              = zitadel.RevokeMappingRules
 	webhookTriggerOnboarding               = services.TriggerOnboarding
 	dbInsertWebhookEvent                   = db.InsertWebhookEvent
 	dbCompleteWebhookEvent                 = db.CompleteWebhookEvent
@@ -396,13 +394,10 @@ var (
 	svcDriftTriageQueue     = services.DriftTriageQueue
 	svcDriftTriageRows      = services.DriftTriageRows
 
-	// Confirmation-mode surfaces (Task 22): global default read/write, bulk toggle, and
-	// Change history.
-	dbGetConfigSetting          = db.GetConfigSetting
-	dbSetConfigSetting          = db.SetConfigSetting
-	dbSetRuleConfirmationMode   = db.SetRuleConfirmationMode
-	dbSetBundleConfirmationMode = db.SetBundleConfirmationMode
-	dbGetCascadeGroups          = db.GetCascadeGroups
+	// Config settings and Change history.
+	dbGetConfigSetting = db.GetConfigSetting
+	dbSetConfigSetting = db.SetConfigSetting
+	dbGetCascadeGroups = db.GetCascadeGroups
 
 	// Bulk access changes. Rehearsal is its own injectable so the handler's
 	// central contract — apply never acts on a diff nobody approved — is
@@ -552,9 +547,12 @@ var (
 	dbGetUserUsage          = db.GetUserUsage
 	// Sign-ins per app (A-10 Part 2): the reads, and the audited lookup of
 	// Zitadel's own log.
-	dbUsageLatestByKind     = db.UsageLatestByKind
-	dbSignInsSince          = db.SignInsSince
-	dbGetAppUsage           = db.GetAppUsage
+	dbUsageLatestByKind = db.UsageLatestByKind
+	dbSignInsSince      = db.SignInsSince
+	dbGetAppUsage       = db.GetAppUsage
+	// The one-off recount of daily sign-in totals onto the makerspace's day (000079).
+	dbSignInRecountPending  = db.SignInRecountPending
+	dbReplaceSignInDays     = db.ReplaceSignInDays
 	dbInsertAuditLogDetails = db.InsertAuditLogDetails
 	zitadelSearchEvents     = func(ctx context.Context, q zitadel.EventSearch) ([]zitadel.LoggedEvent, bool, error) {
 		if zitadel.MgmtClient == nil {

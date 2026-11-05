@@ -14,13 +14,12 @@ type Project struct {
 
 // Bundle represents a group of roles (e.g. "Student", "Lab Assistant")
 type Bundle struct {
-	ID               string    `json:"id"`
-	Name             string    `json:"name"`
-	Description      string    `json:"description"`
-	IsWelcome        bool      `json:"is_welcome"`
-	Roles            []string  `json:"roles"` // The underlying raw roles it applies
-	ConfirmationMode string    `json:"confirmation_mode"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	IsWelcome   bool      `json:"is_welcome"`
+	Roles       []string  `json:"roles"` // The underlying raw roles it applies
+	CreatedAt   time.Time `json:"created_at"`
 
 	// RetiredAt/RetiredBy: the bundle stopped being given and keeps its
 	// history. nil is live. Only the single read and the retired list carry
@@ -131,13 +130,12 @@ type BundleInclude struct {
 // MappingRule defines absolute policy logic
 // IF SourceProject + SourceRole THEN ADD TargetProject + TargetRole
 type MappingRule struct {
-	ID               string    `json:"id"`
-	SourceProject    string    `json:"source_project"`
-	SourceRole       string    `json:"source_role"`
-	TargetProject    string    `json:"target_project"`
-	TargetRole       string    `json:"target_role"`
-	ConfirmationMode string    `json:"confirmation_mode"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID            string    `json:"id"`
+	SourceProject string    `json:"source_project"`
+	SourceRole    string    `json:"source_role"`
+	TargetProject string    `json:"target_project"`
+	TargetRole    string    `json:"target_role"`
+	CreatedAt     time.Time `json:"created_at"`
 
 	// RetiredAt/RetiredBy: as on Bundle. nil is in force.
 	RetiredAt *time.Time `json:"retired_at,omitempty"`

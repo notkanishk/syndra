@@ -404,7 +404,7 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) erro
 	if err != nil {
 		return err
 	}
-	if _, err := enqueueWrites(ctx, tx, p, key); err != nil {
+	if _, _, err := enqueueWrites(ctx, tx, p, key); err != nil {
 		return fmt.Errorf("attribute ledger writes: %w", err)
 	}
 	if !owned {
@@ -432,7 +432,9 @@ func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams)
 	if err != nil {
 		return "", err
 	}
-	outboxID, err := enqueueWrites(ctx, tx, p, key)
+	// The rules' rows, if any, are revocations: the background runner drains
+	// those without being asked.
+	outboxID, _, err := enqueueWrites(ctx, tx, p, key)
 	if err != nil {
 		return "", fmt.Errorf("revoke enqueue writes: %w", err)
 	}

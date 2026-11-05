@@ -28,7 +28,6 @@ import {
   type MappingRuleRow,
 } from "@/lib/queries/useMappingRules";
 import { useProjects } from "@/lib/queries/useProjects";
-import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { humanizeKey } from "@/lib/format";
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
@@ -563,18 +562,14 @@ function DeleteRuleConfirm({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const step = useCancelStep({ host: "Retire this rule", goAhead: "retire it", tone: "danger" });
   const holders = rule.holder_count ?? 0;
-  // What the backend decides (services.Deliver): the role waits, or, until
-  // the switch over to roles that wait, the rule's own mode did.
+  // What the backend decides (services.Deliver): only whether the role waits.
   const catalog = useGlobalRoleCatalog();
-  const switched = useRolesThatWait().data?.switched_over ?? false;
-  const roleWaits = Boolean(
+  const waitsForYou = Boolean(
     (catalog.data ?? []).find(
       (r) =>
         r.project_id === rule.target_project && r.role_key === rule.target_role,
     )?.waits_for_send,
   );
-  const waitsForYou =
-    roleWaits || (!switched && rule.confirmation_mode === "manual");
   // The rule is gone in both: `queued` describes the withdrawals it caused,
   // not the delete.
   const gone = outcome?.kind === "applied" || outcome?.kind === "queued";
@@ -643,7 +638,9 @@ function DeleteRuleConfirm({
                 const result = await step.run(() => remove.mutateAsync(rule.id));
                 if (result === KEPT) return;
                 const n = result.cascade?.enqueued ?? 0;
-                const auto = result.cascade?.mode === "auto";
+                // What the server says happened, not a guess from settings:
+                // any wait reason means some of it is not in Zitadel yet.
+                const auto = !result.cascade?.wait_reason;
                 setOutcome(
                   n === 0
                     ? {

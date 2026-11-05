@@ -30,8 +30,9 @@ Contract: `design.md`. Tags per `docs/agents/triage-labels.md`.
 - [x] 4.6 Zitadel `TokenSettings` (accessTokenType, idTokenUserinfoAssertion, projectRoleAssertion, projectRoleCheck): read-only, faked in tests, with the last answer kept for a degraded check 1
 - [x] 4.7 The project default stays at `/projects/{id}/claim-profile`; the per-app override endpoints are removed
 - [x] 4.8 Drop `overrides`, `emitted_keys` and `conflicts` from `GET /projects/{id}/claim-shape` (the UI slice replaced the app's token screen)
-- [ ] 4.9 [ready-for-human] Drop `app_claim_overrides` once every environment has been seeded (check that `app_claim_shape_versions` has a version 1 for each app)
+- [x] 4.9 Drop `app_claim_overrides` once every environment has been seeded (check that `app_claim_shape_versions` has a version 1 for each app)
   - Checked 5 Nov 2026, NOT done: nothing writes the table, but `ListAppClaimOverrides` (db/claim_profiles.go) is read by `seedApp` (services/claim_shape.go), which runs at start and hourly. Remove that reader, then drop with a guard refusing while an override's app has no shape version. See NEXT.md 0c.
+  - Done 5 Nov 2026 in `rules-on-the-pipeline`. Production had 0 rows (verified read-only). `seedApp`'s fold and `ListAppClaimOverrides` are removed. Migration 000078 drops the table and refuses while it has any row, a stricter guard than the one proposed above (`TestMigration000078_RefusalsAgainstTheSchema`, case "an override row").
 - [ ] 4.10 [ready-for-human] Run `TestClaimShapeVersions_Live` against a `_test` database (it is skipped without `SYNDRA_TEST_DATABASE_URL`)
 
 ## 5. The seed

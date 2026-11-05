@@ -14,6 +14,7 @@ import (
 	"syndra/internal/claimcheck"
 	"syndra/internal/claimserve"
 	"syndra/internal/claimtel"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/zitadel"
 )
@@ -364,8 +365,9 @@ func parseQuietWindow(s string) (start, end int, ok bool) {
 	return start, end, ok1 && ok2 && start != end
 }
 
-// inWindow is whether t's local clock falls in the window.
+// inWindow is whether t's clock in the makerspace's zone falls in the window.
 func (c autoRotateConfig) inWindow(t time.Time) bool {
+	t = t.In(clock.Loc)
 	m := t.Hour()*60 + t.Minute()
 	if c.start < c.end {
 		return m >= c.start && m < c.end
@@ -378,7 +380,8 @@ func (c autoRotateConfig) windowFrom(t time.Time) time.Time {
 	if c.inWindow(t) {
 		return t
 	}
-	start := time.Date(t.Year(), t.Month(), t.Day(), c.start/60, c.start%60, 0, 0, t.Location())
+	t = t.In(clock.Loc)
+	start := time.Date(t.Year(), t.Month(), t.Day(), c.start/60, c.start%60, 0, 0, clock.Loc)
 	if start.After(t) {
 		return start
 	}

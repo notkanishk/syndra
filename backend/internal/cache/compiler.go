@@ -16,6 +16,7 @@ import (
 
 	"syndra/internal/claims"
 	"syndra/internal/claimserve"
+	"syndra/internal/clock"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -218,24 +219,26 @@ func compileUser(ctx context.Context, userID string, ps *pass) (userRoles, error
 		return userRoles{}, fmt.Errorf("cache compile: %w", err)
 	}
 
-	// Iterative role resolution: a fixed point, at most one pass per rule.
-	changed := true
-	for i := 0; i < len(ps.rules) && changed; i++ {
-		changed = false
-		for _, rule := range ps.rules {
-			if activeRoles[rule.SourceProject] != nil && activeRoles[rule.SourceProject][rule.SourceRole] {
-				if activeRoles[rule.TargetProject] == nil {
-					activeRoles[rule.TargetProject] = make(map[string]bool)
-				}
-				if !activeRoles[rule.TargetProject][rule.TargetRole] {
-					activeRoles[rule.TargetProject][rule.TargetRole] = true
-					// ponytail: a role a rule gives has no end, even when its
-					// source does; carry the source's end once an app needs it.
-					endless[rule.TargetProject+"\x00"+rule.TargetRole] = true
-					changed = true
-				}
-			}
+	// What the rules derive is models.RuleClosure's answer, the same function
+	// the cascades use to decide what Zitadel is sent: the token and Zitadel
+	// follow one chain, not two copies of it.
+	base := map[models.HeldRole]bool{}
+	for pid, byRole := range activeRoles {
+		for role := range byRole {
+			base[models.HeldRole{ProjectID: pid, RoleKey: role}] = true
 		}
+	}
+	for k := range models.RuleClosure(base, ps.rules, models.NewHeldRole) {
+		if base[k] {
+			continue
+		}
+		if activeRoles[k.ProjectID] == nil {
+			activeRoles[k.ProjectID] = make(map[string]bool)
+		}
+		activeRoles[k.ProjectID][k.RoleKey] = true
+		// ponytail: a role a rule gives has no end, even when its source
+		// does; carry the source's end once an app needs it (NEXT.md).
+		endless[k.ProjectID+"\x00"+k.RoleKey] = true
 	}
 
 	for pid, byRole := range ends {
@@ -301,7 +304,7 @@ func (u userRoles) facts(projectID string) claims.Facts {
 		if facts.RoleEnds == nil {
 			facts.RoleEnds = map[string]string{}
 		}
-		facts.RoleEnds[role] = end.UTC().Format(time.DateOnly)
+		facts.RoleEnds[role] = clock.Day(end)
 	}
 	return facts
 }

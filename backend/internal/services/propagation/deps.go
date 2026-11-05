@@ -22,6 +22,7 @@ import (
 	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/directory"
+	"syndra/internal/extcall"
 	"syndra/internal/observe"
 	"syndra/internal/zitadel"
 )
@@ -180,14 +181,15 @@ const (
 //   - 429 Too Many Requests, 408 Timeout → ackTransient (despite being 4xx)
 //   - all other 4xx                      → ackFailed (terminal)
 //   - 5xx / network / no status          → ackTransient
+//
+// Which statuses are worth another try is extcall's one classification; the
+// drain adds only what a 409 means for an add.
 func classifyZitadelError(err error) ackClass {
 	code := zitadelStatusCode(err)
 	switch {
 	case code == 409:
 		return ackApplied
-	case code == 429 || code == 408:
-		return ackTransient
-	case code >= 400 && code < 500:
+	case code >= 400 && code < 500 && !extcall.RetryableStatus(code):
 		return ackFailed
 	default: // 5xx, network errors, or unknown
 		return ackTransient

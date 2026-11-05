@@ -9,7 +9,7 @@ import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { Ticks } from "@/components/ui/TokenBlock";
 import { Unfold } from "@/lib/motion";
 import { TEMPLATE_FOR, TEMPLATE_META, TEMPLATE_SHEET } from "@/lib/claims";
-import { outcomeFromError } from "@/lib/outcome";
+import { outcomeFromError, sentence } from "@/lib/outcome";
 import { useApplications, type ApplicationView } from "@/lib/queries/useApplications";
 import { useDraftFrom, type AppClaimShape, type ClaimTemplate } from "@/lib/queries/useClaimShape";
 
@@ -55,7 +55,8 @@ export function ShapeChooser({
       setDraft(draftFrom(d, mode, name));
     } catch (e) {
       setDraft(null);
-      setError(outcomeFromError(e).message);
+      const o = outcomeFromError(e);
+      setError(o.requestId ? `${sentence(o.message)} Reference ${o.requestId}.` : o.message);
     }
   };
 

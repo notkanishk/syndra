@@ -47,14 +47,16 @@ func TestWebhook_ARetakenFailedDeliveryIsProcessedAgain(t *testing.T) {
 		return "evt", true, nil
 	}
 	calls := 0
-	webhookEnforceMappingRules = func(context.Context, string, string, string) error {
+	// A grant event cannot fail any more (it only recompiles and raises
+	// drift); onboarding on user_created still can.
+	webhookTriggerOnboarding = func(context.Context, string, string, string) error {
 		calls++
 		if calls == 1 {
 			return context.DeadlineExceeded
 		}
 		return nil
 	}
-	body := []byte(`{"event_type":"grant_added","event_id":"e1","user_id":"u1","source_project":"p1","role_key":"editor"}`)
+	body := []byte(`{"event_type":"user_created","event_id":"e1","user_id":"u1"}`)
 
 	if rr := postWebhook(t, body); rr.Code != http.StatusInternalServerError {
 		t.Fatalf("first delivery should fail so Zitadel retries; got %d", rr.Code)
