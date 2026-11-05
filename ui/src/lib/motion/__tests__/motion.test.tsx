@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as motion from "@/lib/motion";
 import { installMatchMedia, setMediaQuery } from "@/test-utils/media";
 import { motionInTests } from "@/test-utils/motion";
-// @ts-expect-error the generator is plain JS beside the previews it writes
 import { blockFor, linesFor, withBlock } from "../../../../.design-sync/moves.mjs";
 
 /**

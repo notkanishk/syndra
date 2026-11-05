@@ -9,7 +9,7 @@ import { SYSTEM_WORDS, targetReading, zitadelReading } from "@/components/target
  */
 describe("one word per state", () => {
   const answered = ["answered", "answered", "answered"] as const;
-  const system = (status: Parameters<typeof targetReading>[0]["status"], recent = [...answered]) =>
+  const system = (status: Parameters<typeof targetReading>[0]["status"], recent: Array<"answered" | "missed"> = [...answered]) =>
     targetReading({
       status,
       name: "TrueNAS",
@@ -45,7 +45,7 @@ describe("one word per state", () => {
   });
 
   it("a missed check does not make a system anything but Answering until the third", () => {
-    const missed = ["answered", "missed", "missed"] as const;
-    expect(system(undefined, [...missed])).toBe(SYSTEM_WORDS.answering);
+    const missed = ["answered", "missed", "missed"] as ("answered" | "missed")[];
+    expect(system(undefined, missed)).toBe(SYSTEM_WORDS.answering);
   });
 });

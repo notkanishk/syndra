@@ -93,7 +93,7 @@ describe("the opt-out", () => {
 
   it("a dialog makes names plain by default, and an explicit link still wins", () => {
     render(
-      <Modal open onClose={() => {}} title="Remove access">
+      <Modal open onClose={() => {}}>
         <UserName id="u1" /> <ProjectName id="p1" link />
       </Modal>,
     );
