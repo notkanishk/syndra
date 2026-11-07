@@ -206,19 +206,31 @@ func userBaseHoldings(ctx context.Context, userID string) (map[roleKey]bool, err
 // to simulate "after bundle removal" from a PRE-mutation read (the bundle is still assigned in
 // svcGetBundlesForUser at read time; the exclusion is the simulation).
 func userBaseHoldingsExcludingBundle(ctx context.Context, userID, excludeBundleID string) (map[roleKey]bool, error) {
-	base := make(map[roleKey]bool)
 	directs, err := svcGetDirectGrantsForUser(ctx, userID, false)
 	if err != nil {
 		return nil, err
-	}
-	for _, g := range directs {
-		base[roleKey{projectID: g.ProjectID, roleKey: g.RoleKey}] = true
 	}
 	byBundle, err := svcGetUserBundleRolesGrouped(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	for bundleID, roles := range byBundle {
+	revoking, err := svcQueuedRevocations(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return baseFrom(db.PersonAccess{Direct: directs, ByBundle: byBundle, Revoking: revoking}, excludeBundleID), nil
+}
+
+// baseFrom is a person's base holdings from what was read: their direct
+// grants and what their bundles give them (leaving out one bundle, to
+// simulate its removal), less what a queued revocation is taking away. The
+// one definition the cascades here and the planner share.
+func baseFrom(p db.PersonAccess, excludeBundleID string) map[roleKey]bool {
+	base := make(map[roleKey]bool)
+	for _, g := range p.Direct {
+		base[roleKey{projectID: g.ProjectID, roleKey: g.RoleKey}] = true
+	}
+	for bundleID, roles := range p.ByBundle {
 		if bundleID == excludeBundleID {
 			continue
 		}
@@ -226,10 +238,10 @@ func userBaseHoldingsExcludingBundle(ctx context.Context, userID, excludeBundleI
 			base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
 		}
 	}
-	if err := subtractQueuedRevocations(ctx, userID, base); err != nil {
-		return nil, err
+	for _, r := range p.Revoking {
+		delete(base, roleKey{projectID: r.ProjectID, roleKey: r.RoleKey})
 	}
-	return base, nil
+	return base
 }
 
 // userBaseHoldingsWithBundleAt is userBaseHoldings with ONE bundle's

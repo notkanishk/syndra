@@ -139,6 +139,10 @@ type BulkOutcome struct {
 	// to give, and a client that can send one is a client the comparison is no
 	// longer about.
 	Fingerprint string `json:"-"`
+	// CancelIDs are the queued changes this row said it cancels (planned ops
+	// only): stored on the plan, and the only ones its apply admits. Never
+	// serialised, like Fingerprint; the row's words say them.
+	CancelIDs []string `json:"-"`
 }
 
 // BulkPlan is the whole rehearsal: every selected person, in a stable order,
@@ -249,6 +253,9 @@ const BulkMaxUsers = 500
 // reuses the same per-user resolver the rest of the product reads from, so the
 // rehearsal cannot disagree with the screen it was launched from.
 func RehearseBulk(ctx context.Context, req BulkRequest) (BulkPlan, error) {
+	if PlannedOp(req.Op) {
+		return rehearsePlanned(ctx, req)
+	}
 	snap, err := newAccessSnapshot(ctx)
 	if err != nil {
 		return BulkPlan{}, err
@@ -259,21 +266,14 @@ func RehearseBulk(ctx context.Context, req BulkRequest) (BulkPlan, error) {
 		profiles[u.ID] = u
 	}
 
-	var bundleName string
-	if req.BundleID != "" {
-		if b, err := svcGetBundleByID(ctx, req.BundleID); err == nil {
-			bundleName = b.Name
-		}
-	}
-
 	plan := BulkPlan{Op: req.Op}
-	takesAway := req.Op == BulkOpRemoveRole || req.Op == BulkOpRemoveBundle
+	takesAway := req.Op == BulkOpRemoveRole
 	for _, uid := range dedupeIDs(req.UserIDs) {
 		if takesAway && req.Actor != "" && uid == req.Actor {
 			plan.Excluded = append(plan.Excluded, BulkExclusion{UserID: uid, Reason: "self"})
 			continue
 		}
-		outcome, err := rehearseOne(ctx, snap, profiles, req, bundleName, uid)
+		outcome, err := rehearseOne(ctx, snap, profiles, req, uid)
 		if err != nil {
 			return BulkPlan{}, err
 		}
@@ -290,7 +290,6 @@ func rehearseOne(
 	snap *accessSnapshot,
 	profiles map[string]models.UserProfile,
 	req BulkRequest,
-	bundleName string,
 	uid string,
 ) (BulkOutcome, error) {
 	out := BulkOutcome{UserID: uid}
@@ -314,7 +313,7 @@ func rehearseOne(
 	}
 	out.Name, out.Email = profile.Name, profile.Email
 
-	if isDepartedStatus(profile.Status) && (req.Op == BulkOpAssignRole || req.Op == BulkOpAssignBundle || req.Op == BulkOpExtend) {
+	if isDepartedStatus(profile.Status) && (req.Op == BulkOpAssignRole || req.Op == BulkOpExtend) {
 		// Granting access to someone who has left is the single most common way
 		// a bulk selection goes wrong — they match the filter that found the
 		// cohort and nobody notices in a count.
@@ -324,7 +323,7 @@ func rehearseOne(
 		return out, nil
 	}
 
-	roleMap, bundles, err := snap.For(uid)
+	roleMap, _, err := snap.For(uid)
 	if err != nil {
 		return BulkOutcome{}, err
 	}
@@ -342,12 +341,6 @@ func rehearseOne(
 		out = rehearseAssignRole(out, req, roleMap, grants)
 	case BulkOpRemoveRole:
 		out = rehearseRemoveRole(out, req, roleMap, grants)
-	case BulkOpAssignBundle:
-		if out, err = rehearseAssignBundle(ctx, out, req, bundleName, bundles); err != nil {
-			return BulkOutcome{}, err
-		}
-	case BulkOpRemoveBundle:
-		out = rehearseRemoveBundle(out, req, bundleName, bundles)
 	case BulkOpExtend:
 		return rehearseExtend(out, req, grants), nil
 	default:
@@ -400,8 +393,9 @@ func WithRules(out BulkOutcome, rows []RuleRow) BulkOutcome {
 
 // cancellingWrites are the single-role writes this row's apply would make
 // that can cancel a queued change: an add for each role it gives, a revoke
-// for each role it takes away from its only source.
-func cancellingWrites(ctx context.Context, uid string, req BulkRequest, roleMap map[roleKey]*models.EffectiveRole) ([]db.EnqueueParams, error) {
+// for each role it takes away from its only source. Role ops only: bundle ops
+// go through the planner (planner.go), which decides the writes themselves.
+func cancellingWrites(_ context.Context, uid string, req BulkRequest, roleMap map[roleKey]*models.EffectiveRole) ([]db.EnqueueParams, error) {
 	add := func(projectID, role string) db.EnqueueParams {
 		return db.EnqueueParams{UserID: uid, ProjectID: projectID, RoleKeys: []string{role}, OpType: "add"}
 	}
@@ -413,35 +407,6 @@ func cancellingWrites(ctx context.Context, uid string, req BulkRequest, roleMap 
 			return nil, nil
 		}
 		return []db.EnqueueParams{{UserID: uid, ProjectID: req.ProjectID, RoleKeys: []string{req.RoleKey}, OpType: "revoke", Source: "direct"}}, nil
-	case BulkOpAssignBundle:
-		_, roles, err := svcLatestVersionRoles(ctx, req.BundleID)
-		if err != nil {
-			return nil, err
-		}
-		params := make([]db.EnqueueParams, 0, len(roles))
-		for _, r := range roles {
-			params = append(params, add(r.ProjectID, r.RoleKey))
-		}
-		return params, nil
-	case BulkOpRemoveBundle:
-		var params []db.EnqueueParams
-		for key, role := range roleMap {
-			only := len(role.Reasons) > 0
-			for _, reason := range role.Reasons {
-				if reason.BundleID != req.BundleID {
-					only = false
-				}
-			}
-			if only {
-				params = append(params, db.EnqueueParams{UserID: uid, ProjectID: key.projectID, RoleKeys: []string{key.roleKey},
-					OpType: "revoke", Source: "bundle", SourceRef: req.BundleID})
-			}
-		}
-		// The map has no order; the row's words should.
-		sort.Slice(params, func(i, j int) bool {
-			return params[i].ProjectID+"/"+params[i].RoleKeys[0] < params[j].ProjectID+"/"+params[j].RoleKeys[0]
-		})
-		return params, nil
 	}
 	return nil, nil
 }
@@ -507,49 +472,6 @@ func rehearseRemoveRole(
 	} else {
 		out.Detail = "Loses this role."
 	}
-	return out
-}
-
-func rehearseAssignBundle(
-	ctx context.Context,
-	out BulkOutcome,
-	req BulkRequest,
-	bundleName string,
-	bundles []models.Bundle,
-) (BulkOutcome, error) {
-	if hasBundle(bundles, req.BundleID) {
-		out.Effect = EffectNoChange
-		out.Detail = fmt.Sprintf("Already in %s.", displayBundle(bundleName))
-		return out, nil
-	}
-
-	// The rehearsal has to count what the assignment will actually pin — the
-	// latest published version. Counting the working copy would promise roles
-	// an unpublished edit added and the apply pass would never grant.
-	_, roles, err := svcLatestVersionRoles(ctx, req.BundleID)
-	if err != nil {
-		return BulkOutcome{}, err
-	}
-	out.Effect = EffectApply
-	out.Detail = fmt.Sprintf("Joins %s.", displayBundle(bundleName))
-	out.Consequence = fmt.Sprintf("Cascades %s.", pluralRoles(len(roles)))
-	return out, nil
-}
-
-func rehearseRemoveBundle(
-	out BulkOutcome,
-	req BulkRequest,
-	bundleName string,
-	bundles []models.Bundle,
-) BulkOutcome {
-	if !hasBundle(bundles, req.BundleID) {
-		out.Effect = EffectNoChange
-		out.Detail = fmt.Sprintf("Not in %s.", displayBundle(bundleName))
-		return out
-	}
-	out.Effect = EffectApply
-	out.Detail = fmt.Sprintf("Leaves %s.", displayBundle(bundleName))
-	out.Consequence = "Loses every role this bundle was their only source for."
 	return out
 }
 
@@ -680,15 +602,6 @@ func sourcePhrase(reasons []models.RoleReason) string {
 	}
 }
 
-func hasBundle(bundles []models.Bundle, bundleID string) bool {
-	for _, b := range bundles {
-		if b.ID == bundleID {
-			return true
-		}
-	}
-	return false
-}
-
 func displayBundle(name string) string {
 	if strings.TrimSpace(name) == "" {
 		return "this bundle"
@@ -719,13 +632,6 @@ func expiryPhrase(current *time.Time, durationDays int) string {
 }
 
 func formatDay(t time.Time) string { return t.In(clock.Loc).Format("2 Jan 2006") }
-
-func pluralRoles(n int) string {
-	if n == 1 {
-		return "1 role"
-	}
-	return fmt.Sprintf("%d roles", n)
-}
 
 func pluralGrants(n int) string {
 	if n == 1 {

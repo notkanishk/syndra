@@ -148,25 +148,43 @@ func GetRolesForVersion(ctx context.Context, versionID string) ([]models.BundleR
 // it asked what the bundle holds, when the question is what this person's
 // version holds.
 func GetUserBundleRolesGrouped(ctx context.Context, userID string) (map[string][]models.BundleRole, error) {
+	byUser, err := bundleRolesFor(ctx, []string{userID})
+	if err != nil {
+		return nil, err
+	}
+	if byUser[userID] == nil {
+		return map[string][]models.BundleRole{}, nil
+	}
+	return byUser[userID], nil
+}
+
+// bundleRolesFor is GetUserBundleRolesGrouped for several people in one read,
+// keyed by person then bundle: the one statement of it, which the planner's
+// snapshot reads too.
+func bundleRolesFor(ctx context.Context, userIDs []string) (map[string]map[string][]models.BundleRole, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT DISTINCT ON (uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key)
-		       uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key, COALESCE(r.via_bundle_id::text, '')
+		SELECT DISTINCT ON (uba.user_id, uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key)
+		       uba.user_id, uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key, COALESCE(r.via_bundle_id::text, '')
 		FROM user_bundle_assignments uba
 		JOIN bundle_version_effective_roles r ON r.version_id = uba.version_id
-		WHERE uba.user_id = $1
-		ORDER BY uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key, r.via_bundle_id NULLS FIRST`, userID)
+		WHERE uba.user_id = ANY($1)
+		ORDER BY uba.user_id, uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key, r.via_bundle_id NULLS FIRST`, userIDs)
 	if err != nil {
 		return nil, fmt.Errorf("user bundle roles: %w", err)
 	}
 	defer rows.Close()
 
-	out := make(map[string][]models.BundleRole)
+	out := make(map[string]map[string][]models.BundleRole)
 	for rows.Next() {
+		var user string
 		var r models.BundleRole
-		if err := rows.Scan(&r.BundleID, &r.ProjectID, &r.RoleKey, &r.ViaBundleID); err != nil {
+		if err := rows.Scan(&user, &r.BundleID, &r.ProjectID, &r.RoleKey, &r.ViaBundleID); err != nil {
 			return nil, fmt.Errorf("scan user bundle role: %w", err)
 		}
-		out[r.BundleID] = append(out[r.BundleID], r)
+		if out[user] == nil {
+			out[user] = make(map[string][]models.BundleRole)
+		}
+		out[user][r.BundleID] = append(out[user][r.BundleID], r)
 	}
 	return out, rows.Err()
 }

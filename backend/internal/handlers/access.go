@@ -527,12 +527,9 @@ var (
 var checkRoleOffered = roleOfferedInDirectory
 
 func roleOfferedInDirectory(ctx context.Context, projectID, roleKey string) error {
-	if systemZitadelConfigured() && directorySource().Tag() != "zitadel" {
-		return errCatalogueUnread
-	}
-	projects, err := directoryProjects(ctx)
+	projects, err := offeredCatalogue(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errCatalogueUnread, err)
+		return err
 	}
 	for _, p := range projects {
 		if p.ID != projectID {
@@ -545,6 +542,25 @@ func roleOfferedInDirectory(ctx context.Context, projectID, roleKey string) erro
 		}
 	}
 	return errRoleNotOffered
+}
+
+// offeredCatalogue is Zitadel's catalogue as the role-offered guard reads it,
+// or errCatalogueUnread: unreadable, or the demo one served while Zitadel is
+// configured. The planner reads the same (services.PlannerCatalogue), so a
+// bulk bundle give and a single give refuse the same roles.
+func offeredCatalogue(ctx context.Context) ([]models.ProjectCatalog, error) {
+	if systemZitadelConfigured() && directorySource().Tag() != "zitadel" {
+		return nil, errCatalogueUnread
+	}
+	projects, err := directoryProjects(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errCatalogueUnread, err)
+	}
+	return projects, nil
+}
+
+func init() {
+	services.PlannerCatalogue = func(ctx context.Context) ([]models.ProjectCatalog, error) { return offeredCatalogue(ctx) }
 }
 
 // writeRoleOfferedError says why, and that nothing changed.
