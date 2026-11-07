@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The result after Apply</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Drawn inline until built (BRIDGE): FoldHeading, the plan's folds, and the row's NextStep link. The outcome block, dots, badges, the dialog and its footer are the real parts. */
+.a21-box{max-height:46vh;overflow-y:auto;border:1px solid var(--line-strong);border-radius:var(--radius-inner)}
+.a21-fold{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:10px;padding:10px 14px 10px 10px;background:var(--surface-0);border-bottom:1px solid var(--divider)}
+.a21-chev{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:var(--radius-pill);border:0;background:transparent;color:var(--muted);cursor:pointer}
+.a21-chev:hover{background:var(--tint-2)}
+.a21-word{font-size:14.5px;font-weight:600}
+.a21-count{font-size:13px;color:var(--faint)}
+.a21-cause{margin:0;padding:8px 16px 2px 48px;font-size:12.5px;color:var(--faint)}
+.a21-row{display:flex;align-items:flex-start;gap:16px;padding:12px 16px 12px 48px}
+.a21-name{font-size:14.5px;font-weight:600;text-wrap:pretty}
+.a21-words{font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty}
+.a21-seat{flex:0 0 220px;min-width:0;display:flex;flex-direction:column;gap:3px;margin-left:auto}
+.a21-link{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration-line:underline;text-decoration-color:transparent;transition:text-decoration-color var(--duration-tint) var(--ease-tint)}
+.a21-link:hover{text-decoration-color:currentColor}
+.a21-why{font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty}
+.a21-retry{display:inline-flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty}
+.a21-refused{display:inline-flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty}
+@container syndra-frame (max-width: 719px){.a21-row{flex-wrap:wrap;padding-left:16px} .a21-cause{padding-left:16px} .a21-seat{flex:1 1 100%}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Plan result board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Every bulk op · Proposed 7 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">The result after Apply</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-21, Q1 continued. The same box, the same rows, re-grouped by what happened, in the same order so nothing swaps places under the reader. Done, Waiting for you to send, Zitadel didn't answer, Zitadel refused, Left as they were. Each row keeps the words it had in the plan; the fold and the seat say the state. The outcome block above composes one clause per fold with people in it, and ends on one step.</p>
+  </header>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · What went, what waits, what Zitadel didn't answer, what it refused</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The Safety plan from a21-plan-grouped, applied. Five are done, including Kabir and Lena, whose rows sent nothing and whose words still say so. Four wait, each with the link that lands on Pending changes filtered to them. Meera's change didn't get an answer; Syndra sends it again on its own, and her row says when. Wei's was refused, and his row carries the step. Dev and Sam are as they were. The re-grouping is the re-sort motion: rows fade out and in, never travel.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ resultFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:1200px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Result phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:2px solid var(--accent-line);background:var(--canvas)"><dc-import name="Frame" frame-src="a21-plan-result.dc.html?frame=result-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · the result</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The outcome block first, then the box. A row's seat wraps under its words. Close is the only button.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">The outcome block, case by case</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The word counts the people written, "of N" only when something was refused or failed. The sentence composes left to right in fold order. The healthy dot blooms only when every written row reached Zitadel; otherwise the dot is amber and still, or danger and still. Every case ends on a step or on "Nothing for you to do."</p>
+    <div class="card" style="overflow:hidden">
+      <div style="display:flex;gap:18px;padding:10px 22px;border-bottom:1px solid var(--line)"><span class="type-label" style="flex:0 0 160px;color:var(--label)">Case</span><span class="type-label" style="flex:0 0 200px;color:var(--label)">Word</span><span class="type-label" style="flex:1 1 300px;color:var(--label)">Sentence</span><span class="type-label" style="flex:1 1 240px;color:var(--label)">Next step</span></div>
+      <sc-for list="{{ cases }}" as="c" hint-placeholder-count="6">
+        <div style="display:flex;flex-wrap:wrap;gap:6px 18px;padding:12px 22px;border-top:{{ c.rule }};font-size:14px;line-height:1.5">
+          <span style="flex:0 0 160px;font-weight:600">{{ c.name }}</span>
+          <span style="flex:0 0 200px;display:inline-flex;align-items:flex-start;gap:8px"><span style="padding-top:6px"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ c.tone }}" hint-size="6px,6px"></x-import></span><span>{{ c.word }}</span></span>
+          <span style="flex:1 1 300px;min-width:0;color:var(--muted);text-wrap:pretty">{{ c.sentence }}</span>
+          <span style="flex:1 1 240px;min-width:0;color:var(--muted);text-wrap:pretty">{{ c.next }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you (this board)</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="2">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:90ch">The full answer is from-design/A-21-plans-that-show-the-way.md §2.6. The plan before Apply is a21-plan-grouped.</p>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isResult }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="People" lede="Everyone Syndra knows, and what each can use." hint-size="100%,90px"></x-import>
+  <p style="margin:0;font-size:14.5px;color:var(--muted)">13 people selected · Give a bundle</p>
+</div>
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="lg" labelled-by="result-title" hint-size="800px,1000px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Give the Safety bundle to 13 people" lede="Finished. Here is what happened." title-id="result-title" hint-size="100%,96px"></x-import>
+  <x-import component-from-global-scope="Syndra.ActionOutcome" placement="block" word="{{ outcome.word }}" outcome="{{ outcome.outcome }}" class-name="mx-6 mb-1" hint-size="100%,120px"></x-import>
+  <div style="padding:0 24px">
+    <div class="a21-box">
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+        <div class="a21-fold" role="group" aria-label="{{ g.aria }}">
+          <button type="button" class="a21-chev" aria-label="{{ g.foldLabel }}"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg></button>
+          <sc-if value="{{ g.dot }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ g.dot }}" bloom="{{ g.bloom }}" hint-size="6px,6px"></x-import></sc-if>
+          <sc-if value="{{ g.href }}" hint-placeholder-val="{{ false }}"><a class="a21-link" href="#pending">{{ g.word }} <span aria-hidden="true">→</span></a></sc-if>
+          <sc-if value="{{ g.plain }}" hint-placeholder-val="{{ true }}"><span class="a21-word">{{ g.word }}</span></sc-if>
+          <span class="a21-count">{{ g.count }}</span>
+        </div>
+        <sc-if value="{{ g.cause }}" hint-placeholder-val="{{ false }}"><p class="a21-cause">{{ g.cause }}</p></sc-if>
+        <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+          <div class="a21-row row-divider">
+            <span style="min-width:0;flex:1 1 300px;display:flex;flex-direction:column;gap:3px">
+              <span class="a21-name">{{ r.name }}</span>
+              <span class="a21-words">{{ r.words }}</span>
+            </span>
+            <sc-if value="{{ r.seat }}" hint-placeholder-val="{{ false }}">
+              <span class="a21-seat">
+                <sc-if value="{{ r.waiting }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import><a class="a21-link" href="#pending-person">Waiting for you to send <span aria-hidden="true">→</span></a></span><span class="a21-why">{{ r.why }}</span></sc-if>
+                <sc-if value="{{ r.retry }}" hint-placeholder-val="{{ false }}"><span class="a21-retry"><span style="padding-top:6px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import></span><span>Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6).</span></span><span class="a21-why">Nothing for you to do. Syndra sends it again at 14:05 and says on Home if it stops sending it.</span></sc-if>
+                <sc-if value="{{ r.refused }}" hint-placeholder-val="{{ false }}"><span class="a21-refused"><span style="padding-top:6px"><x-import component-from-global-scope="Syndra.StatusDot" tone="danger" hint-size="6px,6px"></x-import></span><span>Recorded in Syndra. Zitadel refused this: it no longer has this person, project or role.</span></span><span class="a21-why">Open their page to see what they hold now, then give it again once the reason is fixed.</span></sc-if>
+                <sc-if value="{{ r.badge }}" hint-placeholder-val="{{ false }}"><span style="display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Badge" tone="{{ r.tone }}" hint-size="80px,24px">{{ r.badge }}</x-import></span></sc-if>
+              </span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </sc-for>
+    </div>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px">
+    <x-import component-from-global-scope="Syndra.Button" variant="outline" on-click="{{ noop }}" hint-size="90px,40px">Close</x-import>
+  </x-import>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":3000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 6 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const noop = () => {};
+    const parts = this.st.split("-");
+    const kind = parts[0];
+    const variant = parts[1] || "";
+    const allWell = variant === "all";
+    const DIV = "1px solid var(--divider)";
+    const f = (frame, label, note, rec) => ({ src: "a21-plan-result.dc.html?frame=" + frame, label, note: note || "", edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+
+    // The rows keep their plan words. The fold and the seat say the state.
+    const R = (name, words, o) => Object.assign({ name, words, seat: false, waiting: false, retry: false, refused: false, badge: "", tone: "neutral", why: "" }, o || {});
+    const G = (word, count, o) => Object.assign({ word, count, dot: "", bloom: false, href: false, plain: true, cause: "", aria: word + ", " + count, foldLabel: "Fold these " + count, rows: [] }, o || {});
+    const done = [
+      R("Aanya Rao", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
+      R("Ishaan Kapoor", "Joins Safety. Gains Trained in Laser Lab."),
+      R("Kabir Mehta", "Joins Safety. The removal of Trained in Laser Lab that was waiting is cancelled, so nothing is sent to Zitadel. They keep it."),
+      R("Lena Brandt", "Joins Safety. Already holds every role it gives, so nothing is sent to Zitadel."),
+      R("Omar Haddad", "Joins Safety. Gains Trained in Laser Lab. The removal of Member in Laser Lab that was waiting is cancelled."),
+    ];
+    const waiting = [
+      R("Jules Fontaine", "Joins Safety. Gains Member in Laser Lab, Supervisor in Laser Lab and Trained in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
+      R("Priya Nair", "Joins Safety. Gains Supervisor in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
+      R("Rohan Mehta", "Joins Safety. Gains Supervisor in Laser Lab and Trained in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
+      R("Tara Bose", "Joins Safety. Gains Member in Laser Lab and Supervisor in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
+    ];
+    const groups = allWell ? [
+      G("Done", "7 people", { dot: "healthy", bloom: true, rows: done.concat([
+        R("Meera Iyer", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
+        R("Wei Chen", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
+      ]).sort((a, b) => a.name.localeCompare(b.name)) }),
+      G("Waiting for you to send", "4 people", { dot: "warn", href: true, plain: false, cause: "Because Supervisor in Laser Lab always waits for you.", rows: waiting }),
+      G("Left as they were", "2 people", { rows: [
+        R("Dev Sharma", "Already in Safety.", { seat: true, badge: "No change", tone: "neutral" }),
+        R("Sam Lee", "Account is deactivated. Remove it from the selection to continue.", { seat: true, badge: "Refused", tone: "warnSoft" }),
+      ] }),
+    ] : [
+      G("Done", "5 people", { dot: "healthy", rows: done }),
+      G("Waiting for you to send", "4 people", { dot: "warn", href: true, plain: false, cause: "Because Supervisor in Laser Lab always waits for you.", rows: waiting }),
+      G("Zitadel didn't answer", "1 person", { dot: "warn", cause: "Syndra sends it again at 14:05 (try 2 of 6).", rows: [
+        R("Meera Iyer", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab.", { seat: true, retry: true }),
+      ] }),
+      G("Zitadel refused", "1 person", { dot: "danger", rows: [
+        R("Wei Chen", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab.", { seat: true, refused: true }),
+      ] }),
+      G("Left as they were", "2 people", { rows: [
+        R("Dev Sharma", "Already in Safety.", { seat: true, badge: "No change", tone: "neutral" }),
+        R("Sam Lee", "Account is deactivated. Remove it from the selection to continue.", { seat: true, badge: "Refused", tone: "warnSoft" }),
+      ] }),
+    ];
+
+    const outcome = allWell
+      ? { word: "Given to 11 people", outcome: { kind: "queued", message: "7 are in Zitadel now. 4 wait for you to send." } }
+      : { word: "Given to 10 of 11 people", outcome: { kind: "failed", recorded: true, message: "5 are in Zitadel now. 4 wait for you to send. 1 isn't in Zitadel yet; Syndra sends it again on its own. Zitadel refused 1; the row says why.", next: "Follow the step on the row Zitadel refused, below." } };
+
+    const C = (name, tone, word, sentence, next) => ({ name, tone, word, sentence, next });
+    const cases = [
+      C("All reached", "healthy", "Given to 11 people", "All 11 are in Zitadel now.", "Nothing for you to do."),
+      C("Some wait", "warn", "Given to 11 people", "7 are in Zitadel now. 4 wait for you to send.", "Waiting for you to send → (the fold's link)"),
+      C("All wait", "warn", "Given to 11 people", "All 11 wait for you to send. Nothing has reached Zitadel yet.", "Waiting for you to send →"),
+      C("Some not answered", "warn", "Given to 11 people", "9 are in Zitadel now. 2 aren't yet; Syndra sends them again on its own.", "Nothing for you to do. Syndra sends them again at 14:05 and says on Home if it stops sending them."),
+      C("Some refused", "danger", "Given to 9 of 11 people", "9 are in Zitadel now. Zitadel refused 2; each row says why.", "Follow the step on each row Zitadel refused, below."),
+      C("Nobody held it", "healthy", "Done", "Nobody's access changed, because nobody holds it yet.", "Nothing for you to do."),
+    ];
+    cases.forEach((x, i) => { x.rule = i === 0 ? "0" : DIV; });
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("Keep each row's plan words after Apply, and let the fold and the seat say the state (the settle stops rewriting the row)?", "Yes. The sentence that was true before Apply is still true after it, and the reader finds the person where they left them."),
+      Q("The first fold after Apply reads \"Done\", holding rows that reached Zitadel and rows that had nothing to send?", "Yes. It answers the question the fold is for: nothing of theirs is still yours to do. The row says whether anything was sent."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame,
+      isResult: kind === "result",
+      operator: this.operator, rootData: this.rootData, noop,
+      groups, outcome, cases, questions,
+      resultFrames: [
+        f("result", "The result, with every fold · dark", "Five folds in the plan's order. The word says 10 of 11 because Wei's was refused; the block ends on the refused step. Each waiting row links to Pending changes filtered to that person.", true),
+        f("result-light", "The result · light", "The same in daylight.", true),
+        f("result-all", "The common result · dark", "Everything reached or waits. The amber dot is still; the one next step is the fold's own link. The healthy dot would bloom only if every written row had reached.", true),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

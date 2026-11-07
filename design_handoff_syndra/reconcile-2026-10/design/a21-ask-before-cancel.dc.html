@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asking before a cancel</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Drawn inline until built (BRIDGE): the pushed CancelQueuedStep's list (the part exists in code and is not in the bundle yet), the role picker's chosen row, and the NextStep link. The dialog, its header, footer, Notice, outcome block, dots and buttons are the real parts. */
+.a21-field{display:flex;flex-direction:column;gap:8px}
+.a21-label{font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label)}
+.a21-chosen{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--accent-line);background:var(--accent-soft)}
+.a21-radio{width:16px;height:16px;border-radius:var(--radius-pill);background:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.a21-radio::after{content:"";width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent-ink)}
+.a21-held{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--surface-0)}
+.a21-tick{width:16px;height:16px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--faint);display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:11px}
+.a21-list{border:1px solid var(--line-strong);border-radius:var(--radius-inner);padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.a21-link{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration-line:underline;text-decoration-color:transparent}
+.a21-link:hover{text-decoration-color:currentColor}
+.a21-body{padding:0 24px 8px;display:flex;flex-direction:column;gap:18px}
+.a21-note{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.5;text-wrap:pretty}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Ask before cancel board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Give · Revoke · Approve · Manage bundles · Proposed 7 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">A single action that asks before it cancels</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-21, Q2 (planner decision 9). The sheet plans as soon as it has enough to plan, so it says before the press that giving will cancel a removal that is waiting. The press pushes the existing cancel step at once, filled from the plan, with no round trip; Keep it is first, and the confirm names what goes ahead. A give that cancels nothing stays one step. When the person's access moved while the sheet was open, nothing is written: one Notice says so, and the note under the form is already the fresh one.</p>
+  </header>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · Give a role: foretold, then asked</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Give Rohan Mehta a role. Member in Laser Lab is chosen; Sam Lee queued its removal two hours ago. The footer note says what giving does today: the date line, the delivery line, then the cancel in one sentence. The button stays Give role. On the press, the form fades and the step settles into the sheet (S2): the removal, who queued it, when, and the reason, with Keep it first and the confirm naming the act. When nothing is cancelled, there is no step at all.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ giveFrames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:520px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:1040px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">2 · When the plan went stale</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Between the plan and the press, Sam's removal was sent. The write is refused, nothing is written, and the sheet says it where the act was taken: a Notice between the header and the form, and the note already refreshed (the cancel sentence has left it). The step never shows, because there is nothing to cancel now. No "stale" and no "plan" on screen: the reader had a sheet, and what moved was a person's access.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ staleFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:560px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:1120px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">3 · Revoke, when the give never reached Zitadel</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The planner's delivery is none: revoking only cancels the waiting give, and sends nothing. The dialog says so plainly, and its button is the queue's own verb, "Cancel the waiting give", accent, in place of "Withdraw the queued grant". The result word is Cancelled, and it ends on "Nothing for you to do."</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ removeFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:440px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:880px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Step phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:2px solid var(--accent-line);background:var(--canvas)"><dc-import name="Frame" frame-src="a21-ask-before-cancel.dc.html?frame=give-step-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · the step</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The same step in the sheet from the bottom edge. Keep it and the confirm stack, Keep it first.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you (this board)</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:90ch">The full answer is from-design/A-21-plans-that-show-the-way.md §3. Approve and Manage bundles follow the same pattern; their words are in §3.2.</p>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isGive }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u2" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Rohan Mehta" lede="rohan.mehta@example.edu · Member" hint-size="100%,90px"></x-import>
+</div>
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="give-title" hint-size="640px,760px">
+  <sc-if value="{{ isStep }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.ModalHeader" chip="Give Rohan Mehta a role" title="This cancels a removal that's waiting" lede="It hasn't reached Zitadel, so Rohan still has Member in Laser Lab today." title-id="give-title" hint-size="100%,120px"></x-import>
+    <div class="a21-body">
+      <div class="a21-list">
+        <span style="font-size:14.5px;font-weight:600">Removing Laser Lab · Member from Rohan Mehta</span>
+        <span style="font-size:13px;color:var(--muted)">Queued by Sam Lee · 2 hours ago</span>
+        <span style="font-size:14px">“Left the project”</span>
+      </div>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="Nothing changes until you choose." cancel="{{ keepBtn }}" hint-size="100%,90px">
+      <x-import component-from-global-scope="Syndra.Button" variant="accent" on-click="{{ noop }}" hint-size="220px,40px">Cancel it and give Member</x-import>
+    </x-import>
+  </sc-if>
+  <sc-if value="{{ isForm }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="Give a role" lede="Rohan Mehta" title-id="give-title" hint-size="100%,90px"></x-import>
+    <sc-if value="{{ isStale }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:0 24px 16px"><x-import component-from-global-scope="Syndra.Notice" tone="warn" blocking="{{ true }}" title="Nothing was changed. Rohan's access moved while this was open." next="Read the note under the form, then press Give role again." hint-size="100%,96px">Sam Lee's removal of Member in Laser Lab was sent while you were here.</x-import></div>
+    </sc-if>
+    <div class="a21-body">
+      <div class="a21-field">
+        <span class="a21-label">Role</span>
+        <x-import component-from-global-scope="Syndra.Input" default-value="laser" placeholder="Search roles" aria-label="Search roles" hint-size="100%,44px"></x-import>
+        <div class="a21-chosen"><span class="a21-radio" aria-hidden="true"></span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:14.5px;font-weight:600">Member <span style="font-weight:400;color:var(--muted)">in Laser Lab</span></span><span style="font-size:12.5px;color:var(--muted)">Removal waiting for you to send, queued by Sam Lee</span></span></div>
+        <div class="a21-held"><span class="a21-tick" aria-hidden="true">✓</span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:14.5px;color:var(--muted)">Trained <span style="font-weight:400">in Laser Lab</span></span><span style="font-size:12.5px;color:var(--faint)">Already has it, via Safety</span></span></div>
+      </div>
+      <div class="a21-field">
+        <span class="a21-label">Ends</span>
+        <x-import component-from-global-scope="Syndra.Segmented" label="Ends" size="sm" value="term" options="{{ endsOptions }}" on-change="{{ noop }}" hint-size="100%,36px"></x-import>
+        <span style="font-size:13px;color:var(--muted)">31 Dec · End of Monsoon term</span>
+      </div>
+      <div class="a21-field">
+        <span class="a21-label">Reason</span>
+        <x-import component-from-global-scope="Syndra.Input" default-value="Capstone build, through end of term" placeholder="Capstone build, through end of term" aria-label="Reason" hint-size="100%,44px"></x-import>
+      </div>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ note }}" cancel="{{ cancelBtn }}" hint-size="100%,130px">
+      <x-import component-from-global-scope="Syndra.Button" variant="accent" on-click="{{ noop }}" hint-size="110px,40px">Give role</x-import>
+    </x-import>
+  </sc-if>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isRemove }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u2" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Rohan Mehta" lede="rohan.mehta@example.edu · Member" hint-size="100%,90px"></x-import>
+</div>
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="remove-title" hint-size="640px,520px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Revoke direct access to Laser Lab / Member?" lede="Given to Rohan on 3 Nov by Sam Lee, and still waiting for you to send." title-id="remove-title" hint-size="100%,100px"></x-import>
+  <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.ActionOutcome" placement="block" word="Cancelled" outcome="{{ cancelledOutcome }}" class-name="mx-6 mb-1" hint-size="100%,120px"></x-import>
+    <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px">
+      <x-import component-from-global-scope="Syndra.Button" variant="outline" on-click="{{ noop }}" hint-size="90px,40px">Close</x-import>
+    </x-import>
+  </sc-if>
+  <sc-if value="{{ isAsk }}" hint-placeholder-val="{{ true }}">
+    <div class="a21-body">
+      <div class="a21-note"><span style="padding-top:6px"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import></span><span><strong style="font-weight:600">Nothing to take back.</strong> It hasn't reached Zitadel, so Rohan never had it. This cancels that give and sends nothing.</span></div>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="Change history records the give and its cancel." cancel="{{ cancelBtn }}" hint-size="100%,90px">
+      <x-import component-from-global-scope="Syndra.Button" variant="accent" on-click="{{ noop }}" hint-size="190px,40px">Cancel the waiting give</x-import>
+    </x-import>
+  </sc-if>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":3400}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 1 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Rohan Mehta" }], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const noop = () => {};
+    const parts = this.st.split("-");
+    const kind = parts[0];
+    const variant = parts[1] || "";
+    const DIV = "1px solid var(--divider)";
+    const f = (frame, label, note, rec) => ({ src: "a21-ask-before-cancel.dc.html?frame=" + frame, label, note: note || "", edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+
+    const isGive = kind === "give";
+    const isStep = isGive && variant === "step";
+    const isStale = isGive && variant === "stale";
+    const isPlain = isGive && variant === "plain";
+    const dateLine = "The sweep removes it on that date. Two weeks before, it shows under Expiring access, where the only action is to extend.";
+    const note = isStale || isPlain
+      ? [dateLine, "Rohan can use it as soon as you give it."]
+      : [dateLine, "Rohan can use it as soon as you give it.", "Giving it cancels the removal Sam Lee queued 2 hours ago. Nothing is cancelled until you choose on the next step."];
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("Single actions: the step is pushed by the press, filled from the plan, and the sheet says before the press that it will cancel; no inline fold of the ledger into the form?", "Yes. One pattern for Give, Revoke, Approve and Manage bundles; Keep it stays the first focus; nothing that cancels nothing gains a step."),
+      Q("\"Cancel the waiting give\" and \"Cancel the waiting change\" replace the two \"Withdraw …\" buttons, with the result word Cancelled?", "Yes. Withdraw belongs to a member taking back a request; the queue's own verb is cancel."),
+      Q("A stale write is one Notice inside the sheet and a refreshed note, with the same button pressed again; on a row (Approve), one line beside the returned buttons?", "Yes. The reader never had a plan; they had a sheet, and what moved was a person's access."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame,
+      isGive, isStep, isForm: isGive && !isStep, isStale,
+      isRemove: kind === "remove", isDone: kind === "remove" && variant === "done", isAsk: kind === "remove" && variant !== "done",
+      operator: this.operator, rootData: this.rootData, noop,
+      note: note.join(" "),
+      questions,
+      endsOptions: [{ value: "30", label: "30 days" }, { value: "term", label: "End of term" }, { value: "date", label: "Pick a date" }, { value: "never", label: "Never" }],
+      cancelBtn: { onClick: noop, label: "Cancel" },
+      keepBtn: { onClick: noop, label: "Keep it" },
+      cancelledOutcome: { kind: "applied", message: "The give of Member in Laser Lab that was waiting is cancelled. Rohan never had it, so nothing goes to Zitadel.", next: "Nothing for you to do." },
+      giveFrames: [
+        f("give-plain", "Nothing cancelled · one step", "The form as built: the date line and the delivery line. No step follows the press.", false),
+        f("give", "Foretold · dark", "The chosen row's note says a removal is waiting. The footer gains one sentence: giving cancels it, and nothing is cancelled until you choose. The button is still Give role.", true),
+        f("give-light", "Foretold · light", "The same in daylight.", true),
+        f("give-step", "Asked, on the press · dark", "The pushed step, filled from the plan the sheet already had. Keep it is first and takes focus; the confirm names what goes ahead.", true),
+      ],
+      staleFrames: [
+        f("give-stale", "Stale · dark", "Nothing was written. The Notice says whose access moved and what to do; the note under the form is already the fresh one, with no cancel sentence.", true),
+        f("give-stale-light", "Stale · light", "The same in daylight.", true),
+      ],
+      removeFrames: [
+        f("remove", "Revoke, delivery none · dark", "One neutral dot and one sentence: nothing to take back. The button is the queue's verb, accent, not danger: nobody loses anything.", true),
+        f("remove-light", "Revoke · light", "The same in daylight.", true),
+        f("remove-done", "After · Cancelled", "The result word is Cancelled; the sentence says the person never had it; the step is none.", true),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
