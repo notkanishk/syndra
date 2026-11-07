@@ -96,6 +96,10 @@ func TestPlanAct_GiveRefusesWhatTheyHoldAndWhatZitadelDoesNotOffer(t *testing.T)
 	if ch := give(s); ch.Refusal != "departed:Departed" || ch.Row.Effect != EffectBlocked {
 		t.Fatalf("departed: %+v", ch)
 	}
+	// A refusal ends on its step, never on a dead end.
+	if ch := give(s); ch.Row.Consequence != "If they still need it, make the account active in Zitadel first." {
+		t.Fatalf("departed refusal has no step: %+v", ch.Row)
+	}
 }
 
 // Giving back a role whose removal is still waiting cancels the removal and
