@@ -57,14 +57,17 @@ func CancellationsReviewed(ctx context.Context) context.Context {
 	return ctx
 }
 
-// CancellationsNamed admits exactly these queued changes on a plan apply:
+// CancellationsNamed admits exactly these queued changes on a planned apply:
 // the ones its rows named and the operator saw (architecture deepening,
-// decision 4). Any other cancellation is still refused. The planner's apply
-// refuses a plan whose fresh read names any other first; this is the second
-// safety, at the one place cancellations happen.
+// decision 4). Any other cancellation is still refused, whatever the
+// request's X-Syndra-Cancel-Ack said: a planned act is admitted by its plan,
+// never by that header. The planner's apply refuses a plan whose fresh read
+// names any other first; this is the second safety, at the one place
+// cancellations happen.
 func CancellationsNamed(ctx context.Context, ids []string) {
 	if g, ok := ctx.Value(cancelGateKey{}).(*CancelGate); ok && g != nil {
 		g.mu.Lock()
+		g.acked = make(map[string]bool, len(ids))
 		for _, id := range ids {
 			g.acked[id] = true
 		}

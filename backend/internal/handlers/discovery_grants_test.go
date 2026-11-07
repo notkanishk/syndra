@@ -37,7 +37,7 @@ func newGrantPipe(t *testing.T) *grantPipe {
 	})
 
 	p := &grantPipe{}
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, ep db.EnqueueParams) (db.EnqueueResult, error) {
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, ep db.EnqueueParams, _ ...db.EnqueueParams) (db.EnqueueResult, error) {
 		p.enqueued = append(p.enqueued, ep)
 		return db.EnqueueResult{OutboxID: "ob-" + ep.OpType + "-" + ep.RoleKeys[0], Status: "pending"}, nil
 	}

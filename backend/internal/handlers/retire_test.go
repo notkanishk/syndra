@@ -96,13 +96,11 @@ func TestHandleRetireBundle_AlreadyRetiredIs409(t *testing.T) {
 	}
 }
 
-// The service refuses assigning a retired bundle; the handler turns that into the same 409
-// rather than a 500 the operator would read as a fault.
+// The planner refuses assigning a retired bundle ("retired"); the handler turns that into the
+// same 409 rather than a 500 the operator would read as a fault.
 func TestHandleAssignBundle_RetiredIs409(t *testing.T) {
 	resetCascadeHandlerDeps(t)
-	svcCascadeBundleAssigned = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
-		return services.CascadeResult{}, &services.ErrRetired{At: retiredOn}
-	}
+	stubAct(t).Err = &services.Refused{Change: services.Change{Refusal: "retired"}}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/bundles", strings.NewReader(`{"bundle_id":"b1"}`))
 	req.SetPathValue("id", "u1")
 	rr := httptest.NewRecorder()

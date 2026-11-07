@@ -25,7 +25,7 @@ import (
 func TestZitadelGrantChange_FailureSaysExactlyWhatWasWritten(t *testing.T) {
 	p := newGrantPipe(t)
 	calls := 0
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, ep db.EnqueueParams) (db.EnqueueResult, error) {
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, ep db.EnqueueParams, _ ...db.EnqueueParams) (db.EnqueueResult, error) {
 		calls++
 		if calls == 2 {
 			return db.EnqueueResult{}, errors.New("connection reset")
@@ -159,10 +159,9 @@ func TestBulkApprove_NamesRuleGiftsAndSaysWhatWaits(t *testing.T) {
 		t.Fatalf("the plan must name the rule gift: %+v", plan.Outcomes[0])
 	}
 
-	origDeliver := svcDeliver
-	t.Cleanup(func() { svcDeliver = origDeliver })
-	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
-		return services.Delivery{Waiting: ids, Reason: map[string]string{ids[0]: db.WaitReasonRoleWaits}}
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		id := ch.Writes[0].OutboxID
+		return services.Delivery{Waiting: []string{id}, Reason: map[string]string{id: db.WaitReasonRoleWaits}}
 	}
 	plan.Outcomes[0].Effect = services.EffectApply
 	applyDecisionPlan(bulkDecisionReq(t, `{"ids":["r1"],"status":"approved"}`, true), &plan, "approved", "")

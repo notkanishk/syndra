@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +11,7 @@ import (
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
-	"syndra/internal/services/propagation"
+	"syndra/internal/services"
 )
 
 // An ask "until the end of term" carries the term's end date. Approving it late
@@ -29,36 +28,36 @@ func TestPlanApproval_AskedUntil(t *testing.T) {
 
 	t.Run("a late approval lands on the term end, not now plus the days", func(t *testing.T) {
 		// Asked in September: 90 days then. Decided three days before term end.
-		plan, err := planApproval(models.AccessRequest{Kind: requestKindAccess, DurationDays: days(90), AskedUntil: &termEnd}, none, now)
+		plan, err := services.PlanApproval(models.AccessRequest{Kind: services.RequestKindAccess, DurationDays: days(90), AskedUntil: &termEnd}, none, now)
 		if err != nil || plan.ExpiresAt == nil || !plan.ExpiresAt.Equal(termEnd) {
 			t.Fatalf("want %v, got %v (%v)", termEnd, plan.ExpiresAt, err)
 		}
-		if plan.Effect != effectGive || plan.EndRule != db.EndKept {
+		if plan.Effect != services.EffectGive || plan.EndRule != db.EndKept {
 			t.Fatalf("an ask still gives the role: %s/%s", plan.Effect, plan.EndRule)
 		}
 	})
 
 	t.Run("keeping it to a date lands on that date", func(t *testing.T) {
-		plan, err := planApproval(models.AccessRequest{Kind: requestKindExtend, DurationDays: days(90), AskedUntil: &termEnd}, held, now)
-		if err != nil || plan.ExpiresAt == nil || !plan.ExpiresAt.Equal(termEnd) || plan.Effect != effectExtend {
+		plan, err := services.PlanApproval(models.AccessRequest{Kind: services.RequestKindExtend, DurationDays: days(90), AskedUntil: &termEnd}, held, now)
+		if err != nil || plan.ExpiresAt == nil || !plan.ExpiresAt.Equal(termEnd) || plan.Effect != services.EffectExtend {
 			t.Fatalf("want extend to %v, got %v/%v (%v)", termEnd, plan.Effect, plan.ExpiresAt, err)
 		}
 	})
 
 	t.Run("a date that has passed is refused, for either kind", func(t *testing.T) {
-		for _, kind := range []string{requestKindAccess, requestKindExtend} {
+		for _, kind := range []string{services.RequestKindAccess, services.RequestKindExtend} {
 			h := none
-			if kind == requestKindExtend {
+			if kind == services.RequestKindExtend {
 				h = held
 			}
-			if _, err := planApproval(models.AccessRequest{Kind: kind, DurationDays: days(30), AskedUntil: &gone}, h, now); !errors.Is(err, errAskEnded) {
-				t.Fatalf("%s: want errAskEnded, got %v", kind, err)
+			if _, err := services.PlanApproval(models.AccessRequest{Kind: kind, DurationDays: days(30), AskedUntil: &gone}, h, now); !errors.Is(err, services.ErrAskEnded) {
+				t.Fatalf("%s: want services.ErrAskEnded, got %v", kind, err)
 			}
 		}
 	})
 
 	t.Run("a days ask is unchanged: it counts from the decision", func(t *testing.T) {
-		plan, err := planApproval(models.AccessRequest{Kind: requestKindAccess, DurationDays: days(30)}, none, now)
+		plan, err := services.PlanApproval(models.AccessRequest{Kind: services.RequestKindAccess, DurationDays: days(30)}, none, now)
 		if want := clock.EndAfterDays(now, 30); err != nil || plan.ExpiresAt == nil || !plan.ExpiresAt.Equal(want) {
 			t.Fatalf("want %v, got %v (%v)", want, plan.ExpiresAt, err)
 		}
@@ -67,105 +66,37 @@ func TestPlanApproval_AskedUntil(t *testing.T) {
 
 func ptrTime(t time.Time) *time.Time { return &t }
 
-// decideAsk runs the decision endpoint for a pending request and returns the
-// grant's end as it reached the queue, and whether anything was approved.
-func decideAsk(t *testing.T, request models.AccessRequest) (code int, body string, expiresAt *time.Time, approved bool) {
-	t.Helper()
-	resetAccessDeps(t)
-	request.ID, request.RequesterID, request.ProjectID, request.RoleKey, request.Status = "r1", "u1", "p1", "r", "pending"
-	dbGetAccessRequestByID = func(context.Context, string) (models.AccessRequest, error) { return request, nil }
-	dbApproveRequestAndEnqueue = func(_ context.Context, _, _, _ string, p db.EnqueueParams, _, _ *time.Time) (db.EnqueueResult, error) {
-		expiresAt, approved = p.ExpiresAt, true
-		return db.EnqueueResult{OutboxID: "ob", Status: "pending"}, nil
-	}
-	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
-		return propagation.DrainResult{Applied: 1}, nil
-	}
-	cacheRebuildUser = func(context.Context, string, []string) {}
-	origConverge := svcConvergeProjectChange
-	t.Cleanup(func() { svcConvergeProjectChange = origConverge })
-	svcConvergeProjectChange = func(context.Context, string, string, string) error { return nil }
-	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/decision",
-		strings.NewReader(`{"status":"approved","reviewer_id":"op-2","review_note":"x"}`))
-	req.SetPathValue("id", "r1")
-	rr := httptest.NewRecorder()
-	handleResolveAccessRequest(rr, req)
-	return rr.Code, rr.Body.String(), expiresAt, approved
-}
-
-func TestApprovingALateTermAskGrantsToTheTermEnd(t *testing.T) {
-	termEnd := clock.EndAfterDays(time.Now(), 5)
-	// Asked with 120 days; approved with five left in the term.
-	code, body, got, approved := decideAsk(t, models.AccessRequest{Kind: requestKindAccess, DurationDays: days(120), AskedUntil: &termEnd})
-	if code != http.StatusOK || !approved || got == nil || !got.Equal(termEnd) {
-		t.Fatalf("want 200 and a grant ending %v, got %d %s (end %v)", termEnd, code, body, got)
-	}
-}
-
 // An ask sent as UTC midnight (the old date picker) still means the whole of
 // that day in the makerspace's zone, not until 05:30 IST.
 func TestAskedEndIsTheWholeOfItsDay(t *testing.T) {
 	sent := time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC) // 05:30 IST on 30 Nov
 	want, _ := clock.EndOfDay("2026-11-30")
-	if got := askedEnd(&sent); !got.Equal(want) {
-		t.Fatalf("askedEnd(UTC midnight 30 Nov) = %v, want %v", got, want)
+	if got := services.AskedEnd(&sent); !got.Equal(want) {
+		t.Fatalf("services.AskedEnd(UTC midnight 30 Nov) = %v, want %v", got, want)
 	}
 	if !want.Equal(time.Date(2026, 11, 30, 18, 29, 59, 0, time.UTC)) {
 		t.Fatalf("the end of 30 Nov is 23:59:59 IST, got %v", want)
 	}
 }
 
+// The planner's refusal for an ask whose end passed is said in plain words, as a 409 END_PASSED
+// (the dates themselves: TestPlanApproval_AskedUntil, and services' tests).
 func TestApprovingAfterTheAskedEndIsRefused(t *testing.T) {
-	over := time.Now().AddDate(0, 0, -1) // yesterday: an ask covers its whole last day
-	code, body, _, approved := decideAsk(t, models.AccessRequest{Kind: requestKindAccess, DurationDays: days(30), AskedUntil: &over})
-	if code != http.StatusConflict || !strings.Contains(body, "END_PASSED") || approved {
-		t.Fatalf("want 409 END_PASSED and nothing approved, got %d %s (approved %v)", code, body, approved)
-	}
-	if !strings.Contains(body, "has already passed") {
-		t.Fatalf("the refusal should say why in plain words: %s", body)
-	}
-}
+	resetAccessDeps(t)
+	probe := stubDecide(t)
+	probe.DecideErr = services.ErrAskEnded
 
-func TestApprovingADaysAskStillCountsFromTheDecision(t *testing.T) {
-	before := time.Now().UTC()
-	code, body, got, approved := decideAsk(t, models.AccessRequest{Kind: requestKindAccess, DurationDays: days(30)})
-	want := clock.EndAfterDays(before, 30)
-	if code != http.StatusOK || !approved || got == nil || got.Before(want) || got.After(want.Add(24*time.Hour)) {
-		t.Fatalf("want a grant ending about %v, got %d %s (end %v)", want, code, body, got)
-	}
-}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/decision",
+		strings.NewReader(`{"status":"approved","reviewer_id":"op-2","review_note":"x"}`))
+	req.SetPathValue("id", "r1")
+	rr := httptest.NewRecorder()
+	handleResolveAccessRequest(rr, req)
 
-func TestCreatingAnAskWithAnEndDate(t *testing.T) {
-	future := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
-	for _, tc := range []struct {
-		name   string
-		body   string
-		status int
-		until  *time.Time
-	}{
-		{"an end date is filed with the ask", `{"requester_id":"u1","project_id":"p","role_key":"r","justification":"x","duration_days":3,"until":"` + future.Format(time.RFC3339) + `"}`, http.StatusCreated, &future},
-		{"days only, as older clients send it, files no end date", `{"requester_id":"u1","project_id":"p","role_key":"r","justification":"x","duration_days":30}`, http.StatusCreated, nil},
-		{"an end date that has passed is refused", `{"requester_id":"u1","project_id":"p","role_key":"r","justification":"x","until":"2020-01-01T00:00:00Z"}`, http.StatusBadRequest, nil},
-		{"an end date that isn't a date is refused", `{"requester_id":"u1","project_id":"p","role_key":"r","justification":"x","until":"end of term"}`, http.StatusBadRequest, nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			resetAccessDeps(t)
-			dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
-			var filed *time.Time
-			dbCreateAccessRequestOfKind = func(_ context.Context, _ string, _, _, _, _ string, _ *int, until *time.Time) (string, error) {
-				filed = until
-				return "req-1", nil
-			}
-			rr := httptest.NewRecorder()
-			handleCreateAccessRequest(rr, httptest.NewRequest(http.MethodPost, "/api/v1/requests", strings.NewReader(tc.body)))
-			if rr.Code != tc.status {
-				t.Fatalf("want %d, got %d: %s", tc.status, rr.Code, rr.Body.String())
-			}
-			if (tc.until == nil) != (filed == nil) || (tc.until != nil && !filed.Equal(*tc.until)) {
-				t.Fatalf("filed end %v, want %v", filed, tc.until)
-			}
-		})
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "END_PASSED") {
+		t.Fatalf("want 409 END_PASSED, got %d %s", rr.Code, rr.Body.String())
 	}
+	if !strings.Contains(rr.Body.String(), "has already passed") {
+		t.Fatalf("the refusal should say why in plain words: %s", rr.Body.String())
+	}
+	probe.wantOrder(t, "decide")
 }

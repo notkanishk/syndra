@@ -113,7 +113,7 @@ func stubNoWrites(t *testing.T) *int {
 	stubDrain(t)
 
 	writes := 0
-	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams, ...db.EnqueueParams) (db.EnqueueResult, error) {
 		writes++
 		return db.EnqueueResult{OutboxID: "ob_1", Status: "pending"}, nil
 	}
@@ -240,7 +240,7 @@ func TestHandleBulkGrants_PartialFailureIsIsolatedAndReported(t *testing.T) {
 	stubDrain(t)
 	var rebuilt []string
 	rebuildUserCacheDetachedFn = func(_ context.Context, uid string) { rebuilt = append(rebuilt, uid) }
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams, _ ...db.EnqueueParams) (db.EnqueueResult, error) {
 		if p.UserID == "u_bad" {
 			return db.EnqueueResult{}, errors.New("ledger write rejected")
 		}
@@ -343,7 +343,7 @@ func TestHandleBulkGrants_ApplyProjectsEachRowUpstream(t *testing.T) {
 	rebuildUserCacheDetachedFn = func(context.Context, string) {}
 	drained := stubDrain(t)
 
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams, _ ...db.EnqueueParams) (db.EnqueueResult, error) {
 		return db.EnqueueResult{OutboxID: "ob_" + p.UserID, Status: "pending"}, nil
 	}
 
@@ -388,7 +388,7 @@ func TestHandleBulkGrants_UnconfirmedDrainReportsQueuedNotApplied(t *testing.T) 
 				svcDrainPropagationRow = origDrain
 			})
 			rebuildUserCacheDetachedFn = func(context.Context, string) {}
-			dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
+			dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams, ...db.EnqueueParams) (db.EnqueueResult, error) {
 				return db.EnqueueResult{OutboxID: "ob_1", Status: "pending"}, nil
 			}
 			svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {

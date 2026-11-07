@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 
 	"syndra/internal/models"
 	"syndra/internal/services"
+	"syndra/internal/services/propagation"
 )
 
 // resetBundleDeps captures and restores all bundle-related injectable vars.
@@ -51,15 +53,13 @@ func resetBundleDeps(t *testing.T) {
 	})
 }
 
-// resetCascadeHandlerDeps captures and restores the bundle-side add-cascade injectables
-// (sub-phase 3, Task 20).
+// resetCascadeHandlerDeps captures and restores the bundle working-copy injectables
+// (sub-phase 3, Task 20). Assigning to a person goes through svcApplyAct: see stubAct.
 func resetCascadeHandlerDeps(t *testing.T) {
 	t.Helper()
-	origAssigned := svcCascadeBundleAssigned
 	origEdit := svcEditBundleWorkingCopy
 	origDraft := svcBundleDraft
 	t.Cleanup(func() {
-		svcCascadeBundleAssigned = origAssigned
 		svcEditBundleWorkingCopy = origEdit
 		svcBundleDraft = origDraft
 	})
@@ -498,87 +498,115 @@ func TestHandleAssignBundleToUser_EmptyBundleID(t *testing.T) {
 	}
 }
 
-func TestHandleAssignBundleToUser_Idempotent(t *testing.T) {
-	resetBundleDeps(t)
-	resetCascadeHandlerDeps(t)
-
-	// The atomic AssignBundleAndEnqueue is itself ON CONFLICT DO NOTHING — the cascade stub
-	// always succeeds, second call is a no-op from the handler's perspective.
-	svcCascadeBundleAssigned = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
-		return services.CascadeResult{}, nil
-	}
-
-	call := func() int {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/bundles", strings.NewReader(`{"bundle_id":"b1"}`))
-		req.SetPathValue("id", "u1")
-		rr := httptest.NewRecorder()
-		handleAssignBundleToUser(rr, req)
-		return rr.Code
-	}
-
-	if got := call(); got != http.StatusOK {
-		t.Fatalf("first call: expected 200, got %d", got)
-	}
-	if got := call(); got != http.StatusOK {
-		t.Fatalf("second call: expected 200, got %d", got)
-	}
-}
-
-// TestHandleAssignBundleToUser_CallsCascadeWithActorAndTarget asserts the handler resolves the
-// actor (falling back to "system" in dev-mode API-key auth, since no principal is stashed in
-// this test's request context) and passes userID/bundleID straight through to the cascade. Audit
-// logging now happens inside the atomic db.AssignBundleAndEnqueue tx (not a separate handler-level
-// dbInsertAuditLog call), so it is no longer observable at this layer — see
-// db.TestCascadeAndEnqueue_WriteNoDirectRoleGrants and cascade.go's own audit insert for that.
-func TestHandleAssignBundleToUser_CallsCascadeWithActorAndTarget(t *testing.T) {
-	resetBundleDeps(t)
-	resetCascadeHandlerDeps(t)
-
-	var gotActor, gotUserID, gotBundleID string
-	svcCascadeBundleAssigned = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
-		gotActor, gotUserID, gotBundleID = actor, userID, bundleID
-		return services.CascadeResult{}, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/bundles", strings.NewReader(`{"bundle_id":"b2"}`))
+func assignBundle(body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/bundles", strings.NewReader(body))
 	req.SetPathValue("id", "u1")
 	rr := httptest.NewRecorder()
 	handleAssignBundleToUser(rr, req)
+	return rr
+}
+
+// Already holding it is the planner's refusal "held"; the handler answers 200 and says it was a
+// no-op, so a repeat press is never read as a second change.
+func TestHandleAssignBundleToUser_HeldIsAnIdempotentNoOp(t *testing.T) {
+	resetBundleDeps(t)
+	resetCascadeHandlerDeps(t)
+	probe := stubAct(t)
+	probe.Err = &services.Refused{Change: services.Change{Refusal: "held"}}
+
+	for i := 0; i < 2; i++ {
+		rr := assignBundle(`{"bundle_id":"b1"}`)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("call %d: expected 200, got %d: %s", i, rr.Code, rr.Body.String())
+		}
+		resp := decodeMap(t, rr.Body.String())
+		if c, _ := resp["cascade"].(map[string]any); c["no_op"] != true {
+			t.Fatalf("expected cascade.no_op=true, got %v", resp["cascade"])
+		}
+		if !strings.Contains(resp["message"].(string), "Already holds") {
+			t.Fatalf("a no-op must say so: %v", resp["message"])
+		}
+	}
+	probe.wantOrder(t, "apply", "apply") // nothing rebuilt, nothing sent
+}
+
+// The handler resolves the actor (falling back to "system" in dev-mode API-key auth, since no
+// principal is stashed in this test's request context), passes userID/bundleID straight through
+// to the planner, and, with no fingerprint in the body, no Seen. The cache is rebuilt before the
+// send, on a detached context.
+func TestHandleAssignBundleToUser_AppliesThePlannedActThenRebuildsThenSends(t *testing.T) {
+	resetBundleDeps(t)
+	resetCascadeHandlerDeps(t)
+	probe := stubAct(t)
+	probe.Change = services.Change{Writes: []services.Write{{OutboxID: "ob1"}, {OutboxID: "ob2"}, {}}}
+	probe.Delivery = services.Delivery{Sent: []string{"ob1", "ob2"}, Drain: propagation.DrainResult{Applied: 2}}
+
+	rr := assignBundle(`{"bundle_id":"b2"}`)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if gotActor != "system" {
-		t.Fatalf("expected actor to fall back to system, got %q", gotActor)
+	a, w, seen := probe.only(t)
+	if a != (services.Action{Op: services.BulkOpAssignBundle, UserID: "u1", BundleID: "b2"}) {
+		t.Fatalf("planned %+v", a)
 	}
-	if gotUserID != "u1" || gotBundleID != "b2" {
-		t.Fatalf("expected userID=u1 bundleID=b2, got userID=%q bundleID=%q", gotUserID, gotBundleID)
+	if w.Actor != "system" {
+		t.Fatalf("expected actor to fall back to system, got %q", w.Actor)
+	}
+	if seen != nil {
+		t.Fatalf("no fingerprint was sent, so nothing was seen: %+v", seen)
+	}
+	probe.wantOrder(t, "apply", "rebuild", "deliver")
+	if !probe.RebuildDetached || len(probe.RebuildUsers) != 1 || probe.RebuildUsers[0] != "u1" {
+		t.Fatalf("rebuild users=%v detached=%v", probe.RebuildUsers, probe.RebuildDetached)
+	}
+	var resp struct {
+		Message string                 `json:"message"`
+		Cascade services.CascadeResult `json:"cascade"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Message != "Bundle assigned to user" || resp.Cascade.Enqueued != 2 || resp.Cascade.Drain.Applied != 2 || resp.Cascade.NoOp {
+		t.Fatalf("unexpected answer: %+v", resp)
 	}
 }
 
-func TestHandleAssignBundleToUser_CascadeErrorIs500(t *testing.T) {
+// The plan the sheet was shown rides in the body and becomes the Seen.
+func TestHandleAssignBundleToUser_CarriesWhatTheSheetWasShown(t *testing.T) {
 	resetBundleDeps(t)
 	resetCascadeHandlerDeps(t)
+	probe := stubAct(t)
 
-	svcCascadeBundleAssigned = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
-		return services.CascadeResult{}, errors.New("assign tx failed")
+	const id = "11111111-1111-1111-1111-111111111111"
+	rr := assignBundle(`{"bundle_id":"b2","fingerprint":"fp-9","cancel_ids":["` + id + `"]}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
+	_, _, seen := probe.only(t)
+	if seen == nil || seen.Fingerprint != "fp-9" || !reflect.DeepEqual(seen.CancelIDs, []string{id}) {
+		t.Fatalf("seen = %+v", seen)
+	}
+}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/bundles", strings.NewReader(`{"bundle_id":"b2"}`))
-	req.SetPathValue("id", "u1")
-	rr := httptest.NewRecorder()
-	handleAssignBundleToUser(rr, req)
+func TestHandleAssignBundleToUser_StaleIs409AndNothingFollows(t *testing.T) {
+	resetBundleDeps(t)
+	resetCascadeHandlerDeps(t)
+	probe := stubAct(t)
+	probe.Err = &services.StalePlan{IDs: []string{"q1"}}
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] != "CASCADE_ERROR" {
-		t.Fatalf("expected CASCADE_ERROR, got %v", resp["error"])
-	}
+	wantError(t, assignBundle(`{"bundle_id":"b2","fingerprint":"old"}`), http.StatusConflict, "PLAN_STALE")
+	probe.wantOrder(t, "apply")
+}
+
+func TestHandleAssignBundleToUser_FailureIs500(t *testing.T) {
+	resetBundleDeps(t)
+	resetCascadeHandlerDeps(t)
+	probe := stubAct(t)
+	probe.Err = errors.New("assign tx failed")
+
+	wantError(t, assignBundle(`{"bundle_id":"b2"}`), http.StatusInternalServerError, "DB_ERROR")
+	probe.wantOrder(t, "apply")
 }
 
 // --- handleSetWelcomeBundle ---
