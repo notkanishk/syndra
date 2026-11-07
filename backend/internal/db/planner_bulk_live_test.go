@@ -24,7 +24,7 @@ func (f plannerFixture) issueRows(t *testing.T, ctx context.Context, surface, fp
 	t.Helper()
 	subjects := make([]db.NewPlanSubject, 0, len(changes))
 	for _, ch := range changes {
-		subjects = append(subjects, db.NewPlanSubject{SubjectID: ch.Row.UserID, Fingerprint: ch.Row.Fingerprint,
+		subjects = append(subjects, db.NewPlanSubject{SubjectID: ch.Row.UserID, Person: ch.Row.Person, Fingerprint: ch.Row.Fingerprint,
 			Outcome: db.PlanOutcome{Effect: ch.Row.Effect, CancelIDs: ch.Row.CancelIDs}})
 	}
 	plan, err := db.CreatePlan(ctx, db.NewPlan{Target: db.TargetZitadel, Surface: surface, CreatedBy: f.actor,
@@ -48,6 +48,11 @@ func bulkStaleThenThePlan(t *testing.T, f plannerFixture, req services.BulkReque
 		}
 		for _, ch := range changes {
 			if ch.Row.Effect != services.EffectApply {
+				working, _ := db.GetRolesForBundle(ctx, f.bundle)
+				held, _ := db.GetUserBundleRolesGrouped(ctx, f.alice)
+				draft, derr := services.BundleDraft(ctx, f.bundle)
+				t.Logf("working %+v; held %+v; draft working %+v effective %+v next v%d (%v)",
+					working, held, draft.Working, draft.WorkingEffective, draft.NextVersion, derr)
 				t.Fatalf("every row goes ahead: %+v", ch.Row)
 			}
 		}

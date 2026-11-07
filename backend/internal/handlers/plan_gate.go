@@ -161,6 +161,7 @@ func issuePlan(ctx context.Context, surface, actor, requestFP string, ack bool, 
 		}
 		subjects = append(subjects, db.NewPlanSubject{
 			SubjectID:   out.UserID,
+			Person:      out.Person,
 			Fingerprint: out.Fingerprint,
 			Outcome:     db.PlanOutcome{Effect: effect, GrantIDs: out.GrantIDs, CancelIDs: out.CancelIDs},
 		})
