@@ -16,7 +16,6 @@ import { describeDrain } from "@/lib/drain-outcome";
 import {
   DRAIN_UNKNOWN_NEXT,
   nextStepOf,
-  outcomeFromExtend,
   revokeQueued,
   sendsItselfWord,
   succeeded,
@@ -108,12 +107,6 @@ describe("N1: a refusal, with its plain cause, on every result surface", () => {
     expect(said(o)).toContain("Zitadel refused this: Syndra's service account isn't allowed to make this change");
     expect(said(o)).not.toMatch(/went to Zitadel|nothing waits for you/);
     expect(nextStepOf(o)).toMatch(/Drift/);
-  });
-
-  it("extend: never 'Extended by 90 days'; extended again from their page", () => {
-    const o = outcomeFromExtend({ status: "failed", wait_reason: NOT_FOUND }, 90);
-    expectRefusal(o);
-    expect(o.message).toMatch(/^Extended by 90 days in Syndra\. Zitadel refused this/);
   });
 
   it("a refusal Syndra recorded never ends on 'Nothing was changed.'", () => {

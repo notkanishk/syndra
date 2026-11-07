@@ -5,9 +5,10 @@
  *
  * `request()` throws that refusal as a `WouldCancelQueued` to whoever made the
  * write, and the dialog that made it pushes the step into its own sheet
- * (`CancelQueuedStep`, A-04 §14). Going ahead sends the same request again
- * with `armAck` naming the ids it showed; no screen can cancel silently,
- * because the backend refuses until it has been told.
+ * (`CancelQueuedStep`, A-04 §14). Going ahead sends the same write again
+ * naming the ids it showed in its own `cancel_ids` (a planned act carries
+ * its plan's; any other write, a `?cancel_ids=` query); no screen can cancel
+ * silently, because the backend refuses until the write names them.
  */
 
 /** A change Syndra queued and hasn't sent, which an action would cancel. */
@@ -27,26 +28,12 @@ export interface QueuedChange {
   new?: boolean;
 }
 
-export const CANCEL_ACK_HEADER = "X-Syndra-Cancel-Ack";
-
 /**
- * The ids to send with the next request to exactly this method and path.
- * Keyed by the request, not ambient: a different write made meanwhile never
- * carries an acknowledgement it wasn't given. Consumed by one request.
+ * A write not on the planner (a mapping rule's create, update and retire,
+ * retiring a bundle) names the queued changes it was shown in its query:
+ * `?cancel_ids=a,b`. No ids, the path as it is: the backend admits no
+ * cancellation and answers 409 WOULD_CANCEL_QUEUED if it would make one.
  */
-const armed = new Map<string, string[]>();
-
-const keyOf = (method: string, path: string) => `${method.toUpperCase()} ${path}`;
-
-/** The next `method path` request names these changes as seen and agreed to. */
-export function armAck(method: string, path: string, ids: string[]): void {
-  armed.set(keyOf(method, path), ids);
-}
-
-/** What `request()` takes for the request it is about to send. */
-export function takeAck(method: string, path: string): string[] | undefined {
-  const key = keyOf(method, path);
-  const ids = armed.get(key);
-  armed.delete(key);
-  return ids;
+export function withCancelIds(path: string, cancelIds?: string[]): string {
+  return cancelIds?.length ? `${path}?${new URLSearchParams({ cancel_ids: cancelIds.join(",") })}` : path;
 }

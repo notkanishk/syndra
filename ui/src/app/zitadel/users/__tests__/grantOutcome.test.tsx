@@ -3,18 +3,36 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import UpstreamUsersPage from "@/app/zitadel/users/page";
+import { planWords, type PlanConsent } from "@/lib/usePlanConsent";
 
 const state = vi.hoisted(() => ({
   update: vi.fn(),
   assign: vi.fn(),
   waits: undefined as Array<{ project_id: string; role_key: string }> | undefined,
-  rulePreview: vi.fn(),
+  plans: vi.fn(),
 }));
 
-// The same endpoint the person page's give reads (useRulePreview).
-vi.mock("@/lib/queries/useRulePreview", () => ({
-  useRulePreview: (...args: unknown[]) => state.rulePreview(...args),
+// The planner, one give plan per role: the read the person page's give makes (A-21 §Q3).
+vi.mock("@/lib/usePlanConsent", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/usePlanConsent")>()),
+  usePlanConsents: (...args: unknown[]) => state.plans(...args),
 }));
+
+const words = planWords("giving them");
+/** One role's consent, as usePlanConsents answers it. */
+const consent = (over: Partial<PlanConsent> = {}): PlanConsent => ({
+  plan: undefined,
+  rules: [],
+  cancels: [],
+  seen: undefined,
+  hold: undefined,
+  checking: false,
+  failed: false,
+  unread: words.unread,
+  retry: vi.fn(),
+  ...over,
+});
+const each = (c: (key: string) => PlanConsent) => (actions: Array<{ roleKey: string }>) => actions.map((a) => c(a.roleKey));
 
 vi.mock("@/lib/queries/useUpstream", () => ({
   useUpstreamUsers: () => ({
@@ -50,42 +68,47 @@ beforeEach(() => {
   state.update = vi.fn();
   state.assign = vi.fn();
   state.waits = [];
-  state.rulePreview = vi.fn().mockReturnValue({ data: [], isLoading: false, isError: false });
+  state.plans = vi.fn(each(() => consent()));
 });
 
 // Coherence audit C2: the give names what the automatic rules also give,
-// before the click, as the person page's give does.
+// before the click, as the person page's give does, in the planner's words.
 describe("giving roles in Zitadel names what rules also give", () => {
-  it("asks the shared preview for the roles that exist and lists its sentences", () => {
-    state.rulePreview = vi.fn().mockReturnValue({
-      data: [{ project_id: "pShop", role_key: "bench", rule_id: "r1", sentence: "Also gives Bench in Workshop, by the automatic rule from Trained." }],
-      isLoading: false,
-      isError: false,
-    });
+  it("plans a give for each role that exists and lists their rule sentences once each, alphabetically", () => {
+    const bench = "Also gives Bench in Workshop, by the automatic rule from Trained.";
+    const alarm = "Also gives Alarm code in Workshop, by the automatic rule from Keyholder.";
+    state.plans = vi.fn(each((key) => consent({ rules: key === "trained" ? [bench] : [bench, alarm] })));
     render(<UpstreamUsersPage />);
-    const dialog = openGive("trained, nonsense");
-    expect(state.rulePreview).toHaveBeenLastCalledWith("u1", "pLaser", ["trained"], true);
-    expect(within(dialog).getByTestId("rule-preview")).toHaveTextContent("Also gives Bench in Workshop, by the automatic rule from Trained.");
+    const dialog = openGive("trained, keyholder, nonsense");
+    expect(state.plans).toHaveBeenLastCalledWith(
+      [
+        { op: "give", userId: "u1", projectId: "pLaser", roleKey: "trained" },
+        { op: "give", userId: "u1", projectId: "pLaser", roleKey: "keyholder" },
+      ],
+      "giving them",
+    );
+    const lines = within(dialog).getByTestId("rule-preview").querySelectorAll(":scope > span");
+    expect(Array.from(lines, (l) => l.textContent)).toEqual([alarm, bench]);
   });
 
-  it("holds the give while the preview is loading", () => {
-    state.rulePreview = vi.fn().mockReturnValue({ data: undefined, isLoading: true, isError: false });
+  it("holds the give while a plan is read", () => {
+    state.plans = vi.fn(each(() => consent({ checking: true, hold: words.checking })));
     render(<UpstreamUsersPage />);
     const dialog = openGive("trained");
     fireEvent.click(within(dialog).getByRole("checkbox"));
     expect(within(dialog).getByRole("button", { name: "Give roles in Zitadel" })).toBeDisabled();
   });
 
-  it("holds the give when the preview fails, says why, and Try again reads it again", () => {
-    const refetch = vi.fn();
-    state.rulePreview = vi.fn().mockReturnValue({ data: undefined, isLoading: false, isError: true, isFetching: false, refetch });
+  it("holds the give when a plan can't be read, says why, and Try again reads it again", () => {
+    const retry = vi.fn();
+    state.plans = vi.fn(each(() => consent({ failed: true, hold: words.held, retry })));
     render(<UpstreamUsersPage />);
     const dialog = openGive("trained");
     fireEvent.click(within(dialog).getByRole("checkbox"));
     expect(within(dialog).getByRole("button", { name: "Give roles in Zitadel" })).toBeDisabled();
-    expect(within(dialog).getByText(/Syndra couldn.t read the automatic rules/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Syndra couldn.t read what giving them does/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Try again" }));
-    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 });
 

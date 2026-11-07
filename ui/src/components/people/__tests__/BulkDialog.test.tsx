@@ -53,7 +53,16 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
     op: "assign_role",
     applied: false,
     outcomes: [
-      { user_id: "u1", name: "Ada Lovelace", email: "ada@example.edu", effect: "apply", detail: "Gains this role." },
+      {
+        user_id: "u1",
+        name: "Ada Lovelace",
+        email: "ada@example.edu",
+        effect: "apply",
+        detail: "Gains Member in Laser Lab.",
+        delivery: "straight_away",
+        waits: [],
+        goes: ["Member in Laser Lab"],
+      },
       {
         user_id: "u2",
         name: "Leo Brooks",
@@ -67,7 +76,7 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
         email: "sam@example.edu",
         effect: "no_change",
         detail: "Holds no direct grant here.",
-        consequence: "Keeps the role via the Safety bundle. Remove that source instead.",
+        consequence: "Keeps the role another way, through a bundle or an automatic rule. Remove that instead.",
       },
     ],
     // A rehearsal now returns the approval it became; the apply cites it, and
@@ -135,7 +144,7 @@ describe("BulkDialog", () => {
     expect(screen.getByText("Leo Brooks")).toBeInTheDocument();
     expect(screen.getByText(/Account is departed/)).toBeInTheDocument();
     // The consequence — who keeps the role anyway — is the part a count hides.
-    expect(screen.getByText(/Keeps the role via the Safety bundle/)).toBeInTheDocument();
+    expect(screen.getByText(/Keeps the role another way, through a bundle or an automatic rule/)).toBeInTheDocument();
   });
 
   it("counts only the rows that will actually change on the confirm button", async () => {

@@ -829,7 +829,7 @@ function DeleteBundleDialog({
           isPending={remove.isPending}
           onClick={async () => {
             try {
-              const result = await step.run(() => remove.mutateAsync(bundleId));
+              const result = await step.run((cancelIds) => remove.mutateAsync({ id: bundleId, cancelIds }));
               if (result === KEPT) return;
               const n = result.cascade?.enqueued ?? 0;
               // What the server says happened: any wait reason means some

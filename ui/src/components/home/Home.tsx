@@ -13,7 +13,6 @@ import { Owner } from "@/components/system/ServiceAccountOwner";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Button } from "@/components/ui/Button";
-import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
@@ -33,8 +32,8 @@ import { useTargets } from "@/lib/queries/useTargets";
 import { serviceAccountHref, useServiceAccounts } from "@/lib/queries/useServiceAccounts";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
-import { EXTEND_DAYS, NOTHING_TO_DO, outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome, type AutoRetry } from "@/lib/outcome";
-import { useCreateGrant } from "@/lib/queries/useUsers";
+import { NOTHING_TO_DO, outcomeFromError, type ActionOutcome as Outcome, type AutoRetry } from "@/lib/outcome";
+import { useExtend } from "@/lib/useExtend";
 import type { SessionUser } from "@/lib/session";
 import type { ServiceAccount } from "@/lib/types";
 import { useIsAdvanced } from "@/lib/ui-view";
@@ -715,12 +714,10 @@ function ExpiringRow({
 }: {
   grant: { id: string; user_id: string; project_id: string; role_key: string; expires_at?: string | null };
 }) {
-  // Extending re-submits the grant with a later date: POST upserts on
-  // (user, project, role), so this renews in place rather than duplicating.
-  const extend = useCreateGrant(grant.user_id);
-  // A row has no sheet of its own: if extending would cancel a change still
-  // waiting for you to send, a small sheet holds the step (A-04 §14).
-  const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
+  // Extending moves the grant's end in Syndra, through the planner; nothing is
+  // sent to Zitadel. A row has no sheet of its own: if extending would cancel a
+  // removal still waiting for you to send, a small sheet holds the step (A-04 §14).
+  const extend = useExtend(grant.user_id, grant.project_id, grant.role_key, "Extended from Home", "The row leaves this block on the next read.");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Extending again would add another 90 days to the same grant.
   const [extended, setExtended] = useState(false);
@@ -743,25 +740,13 @@ function ExpiringRow({
       </div>
       <Button
         size="sm"
-        isPending={extend.isPending}
+        isPending={extend.busy}
         disabled={extended}
         onClick={async () => {
-          try {
-            const made = await step.run(() =>
-              extend.mutateAsync({
-                project_id: grant.project_id,
-                role_key: grant.role_key,
-                reason: "Extended from Home",
-                duration_days: EXTEND_DAYS,
-                extend: true,
-              }),
-            );
-            if (made === KEPT) return;
-            setExtended(true);
-            setOutcome(outcomeFromExtend(made, EXTEND_DAYS,"The row leaves this block on the next read."));
-          } catch (error) {
-            setOutcome(outcomeFromError(error));
-          }
+          const made = await extend.press();
+          if (!made) return;
+          if (made.kind === "applied") setExtended(true);
+          setOutcome(made);
         }}
       >
         Extend
@@ -775,7 +760,7 @@ function ExpiringRow({
           word={outcomeWord(outcome, "Extended", "Not extended")}
         />
       )}
-      {step.element}
+      {extend.step.element}
     </CardRow>
   );
 }

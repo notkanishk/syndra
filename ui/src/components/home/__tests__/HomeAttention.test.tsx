@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
 import type { SessionUser } from "@/lib/session";
+import type { ActPlan } from "@/lib/usePlanConsent";
+import { actPlan } from "@/test-utils/plan";
 import { setMediaQuery } from "@/test-utils/media";
 
 /**
@@ -20,7 +22,14 @@ const state = vi.hoisted(() => ({
   missed: [] as Array<{ user_id: string; name: string; email: string; joined?: string }>,
   dialog: null as null | { op: string; userIds: string[] },
   expiring: [] as unknown[],
-  extended: { outbox_id: "o1", status: "done" } as { outbox_id: string; status: string },
+  extended: { outbox_id: "", status: "applied" } as { outbox_id: string; status: string },
+  plan: undefined as unknown as ActPlan,
+}));
+
+// Extend reads its plan at the press (GET /users/{id}/plan?op=extend).
+vi.mock("@/lib/usePlanConsent", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/usePlanConsent")>()),
+  fetchPlan: () => Promise.resolve(state.plan),
 }));
 
 vi.mock("@/lib/queries/useGovernance", () => ({
@@ -111,7 +120,8 @@ beforeEach(() => {
   state.missed = [];
   state.dialog = null;
   state.expiring = [];
-  state.extended = { outbox_id: "o1", status: "done" };
+  state.extended = { outbox_id: "", status: "applied" };
+  state.plan = actPlan({ delivery: "none" });
   setMediaQuery("(max-width: 44.99rem)", false);
 });
 
@@ -186,20 +196,24 @@ describe("Extend on Home says what the grant endpoint answered", () => {
     expires_at: "2026-11-01T00:00:00Z",
   };
 
-  it("says extended when it went through", async () => {
+  // Planned (task 1.2a): a ledger edit, so nothing is sent and nothing waits.
+  it("says extended, and never that it waits to be sent", async () => {
     state.expiring = [grant];
     renderHome();
     fireEvent.click(await screen.findByRole("button", { name: "Extend" }));
     expect(await screen.findByText("Extended by 90 days.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Extend" })).toBeDisabled();
+    expect(document.body.textContent).not.toMatch(/once sent|Waiting for you to send/);
   });
 
-  it("says it waits to be sent when the endpoint answers pending", async () => {
+  it("a plan that refuses writes nothing, says why, and leaves Extend to press again", async () => {
     state.expiring = [grant];
-    state.extended = { outbox_id: "o1", status: "pending" };
+    state.plan = actPlan({ effect: "no_change", refusal: "runs_past", detail: "Already ends later than this would make it." });
     renderHome();
     fireEvent.click(await screen.findByRole("button", { name: "Extend" }));
-    expect(await screen.findByText("Will extend by 90 days once sent.")).toBeTruthy();
-    expect(screen.queryByText("Extended by 90 days.")).toBeNull();
+    expect(await screen.findByText("Already ends later than this would make it. Nothing was changed.")).toBeTruthy();
+    expect(screen.getByText("Nothing for you to do.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Extend" })).toBeEnabled();
   });
 });
 
