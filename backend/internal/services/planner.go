@@ -161,7 +161,11 @@ func Plan(a Action, s PlanSnapshot) Change {
 		}
 	}
 
-	for _, p := range deltaWrites(a.UserID, adds, revokes, "bundle", a.BundleID) {
+	// The bundle's own roles are its rows; a role a rule follows with is the
+	// rule's row, with the rule that reaches it (decision 7).
+	writes := asRuleRows(deltaWrites(a.UserID, adds, revokes, "bundle", a.BundleID),
+		ruleRefs(before, after, closureBefore, closureAfter, rules))
+	for _, p := range writes {
 		w := Write{EnqueueParams: p, Delivery: DeliveryStraightAway}
 		ref := db.RoleRef{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]}
 		answered := db.AnsweredBy(p, person.Queued)

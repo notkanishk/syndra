@@ -22,10 +22,12 @@ vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
   BundleName: ({ id }: { id: string }) => <span>{id}</span>,
   RoleRef: ({ roleKey }: { roleKey: string }) => <span>{roleKey}</span>,
+  RoleInPlace: ({ roleKey }: { roleKey: string }) => <span>{roleKey}</span>,
 }));
 
+const rules = vi.hoisted(() => ({ data: [] as { id: string; source_project: string; source_role: string; target_project: string; target_role: string }[] }));
 vi.mock("@/lib/queries/useMappingRules", () => ({
-  useMappingRules: () => ({ data: [] }),
+  useMappingRules: () => ({ data: rules.data }),
 }));
 
 let groups: CascadeGroupRow[] = [];
@@ -121,5 +123,23 @@ describe("Change history: sent vs. confirmed", () => {
 
     expect(screen.getByRole("link", { name: "and 3 more" })).toHaveAttribute("href", "/operations/cascades?cascade=cas%201");
     expect(screen.queryByText("user-8")).not.toBeInTheDocument();
+  });
+
+  // Task 1.6: a bundle's change carries the rows of the rules it set off. The
+  // entry is the bundle's, whichever write comes first; the rule's write names
+  // the role that set it off.
+  it("names a bundle's change by the bundle, and a rule's write by the role that set it off", () => {
+    rules.data = [{ id: "r1", source_project: "p1", source_role: "trained", target_project: "p1", target_role: "advanced" }];
+    const write = (id: string, role: string, source: string, ref: string) => ({
+      id, op_type: "add", user_id: "u1", project_id: "p1", role_keys: [role], source, source_ref: ref, status: "pending",
+    });
+    groups = [group({ waiting: 2, writes: [write("w1", "advanced", "rule", "r1"), write("w2", "trained", "bundle", "b1")] })];
+    renderPage();
+
+    expect(screen.getByText("A bundle edit reached one person")).toBeInTheDocument();
+    expect(screen.getByText(/^from/)).toHaveTextContent("from b1");
+    expect(screen.getByText(/^by the automatic rule from/)).toHaveTextContent("by the automatic rule from trained");
+    expect(screen.queryByText(/An automatic rule applied/)).toBeNull();
+    rules.data = [];
   });
 });
