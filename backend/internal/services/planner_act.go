@@ -54,7 +54,8 @@ func planRole(ch Change, a Action, s PlanSnapshot, profile models.UserProfile, p
 	case OpGive, OpApprove:
 		if access.Left(profile.Status) {
 			return ch.decided(a, EffectBlocked, "departed:"+profile.Status,
-				fmt.Sprintf("Account is %s, so it can't be given access.", strings.ToLower(profile.Status)), "")
+				fmt.Sprintf("Their account is %s in Zitadel, so it can't be given access.", strings.ToLower(profile.Status)),
+				"If they still need it, make the account active in Zitadel first.")
 		}
 		p := db.EnqueueParams{UserID: a.UserID, ProjectID: a.ProjectID, RoleKeys: []string{a.RoleKey},
 			Source: "direct", OpType: "add", EndRule: db.EndKept}
