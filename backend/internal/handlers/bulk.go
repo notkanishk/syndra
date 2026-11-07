@@ -355,7 +355,7 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 	case services.BulkOpRemoveRole:
 		var ids []string
 		for _, grantID := range out.GrantIDs {
-			res, err := svcDeleteDirectGrant(ctx, out.UserID, grantID, actor)
+			res, err := svcDeleteDirectGrant(ctx, out.UserID, grantID, actor, input.Reason)
 			if err != nil {
 				return nil, "", nil, err
 			}

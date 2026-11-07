@@ -62,7 +62,7 @@ func handleDeleteUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := svcDeleteDirectGrant(r.Context(), userID, grantID, resolveActor(r, ""))
+	res, err := svcDeleteDirectGrant(r.Context(), userID, grantID, resolveActor(r, ""), "")
 	if errors.Is(err, db.ErrGrantNotFound) {
 		jsonErrorResponse(w, http.StatusNotFound, "GRANT_NOT_FOUND",
 			"No direct grant with that id belongs to this user. It may already have been removed or expired.")

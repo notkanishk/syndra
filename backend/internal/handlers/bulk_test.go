@@ -295,9 +295,9 @@ func TestHandleBulkGrants_RemoveActsOnRehearsedGrantIDs(t *testing.T) {
 	rebuildUserCacheDetachedFn = func(context.Context, string) {}
 	drained := stubDrain(t)
 
-	var gotUser, gotGrant string
-	svcDeleteDirectGrant = func(_ context.Context, uid, gid, _ string) (services.DirectGrantRemoval, error) {
-		gotUser, gotGrant = uid, gid
+	var gotUser, gotGrant, gotReason string
+	svcDeleteDirectGrant = func(_ context.Context, uid, gid, _, reason string) (services.DirectGrantRemoval, error) {
+		gotUser, gotGrant, gotReason = uid, gid, reason
 		return services.DirectGrantRemoval{Status: "pending", OutboxIDs: []string{"ob_rm"}}, nil
 	}
 
@@ -309,6 +309,10 @@ func TestHandleBulkGrants_RemoveActsOnRehearsedGrantIDs(t *testing.T) {
 	}
 	if gotUser != "u1" || gotGrant != "g_77" {
 		t.Errorf("wrong grant removed: user=%q grant=%q", gotUser, gotGrant)
+	}
+	// The dialog requires a reason; a bulk removal must keep it, not drop it.
+	if gotReason != "x" {
+		t.Errorf("the operator's reason must reach the removal, got %q", gotReason)
 	}
 	// The removal's own outbox rows must be projected, not left queued. Reporting
 	// access as removed while the role is still live in Zitadel is the worst

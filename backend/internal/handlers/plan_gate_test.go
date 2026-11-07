@@ -520,7 +520,7 @@ func TestApplyActsOnTheApprovedGrantRows(t *testing.T) {
 	origDelete := svcDeleteDirectGrant
 	t.Cleanup(func() { svcDeleteDirectGrant = origDelete })
 	var deleted []string
-	svcDeleteDirectGrant = func(_ context.Context, _, grantID, _ string) (services.DirectGrantRemoval, error) {
+	svcDeleteDirectGrant = func(_ context.Context, _, grantID, _, _ string) (services.DirectGrantRemoval, error) {
 		deleted = append(deleted, grantID)
 		return services.DirectGrantRemoval{}, nil
 	}

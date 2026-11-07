@@ -441,7 +441,7 @@ var ErrGrantNotFound = errors.New("direct grant not found")
 // This is the Syndra-side delete. The Zitadel-side grant delete
 // (DELETE /zitadel/users/{id}/grants/{grantId}) removes a different object and
 // leaves this row behind, so the next cache compile would restore the access.
-func DeleteDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID string, params []EnqueueParams) ([]string, error) {
+func DeleteDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID, reason string, params []EnqueueParams) ([]string, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin delete grant tx: %w", err)
@@ -466,7 +466,7 @@ func DeleteDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID str
 	}
 
 	ids, err := enqueueWrites(ctx, tx,
-		[]CascadeAudit{{Actor: actor, Target: userID, Action: "direct_grant.removed", ResourceID: projectID + "/" + roleKey}},
+		[]CascadeAudit{{Actor: actor, Target: userID, Action: "direct_grant.removed", ResourceID: projectID + "/" + roleKey, Reason: reason}},
 		params, "")
 	if err != nil {
 		return nil, err
