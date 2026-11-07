@@ -476,7 +476,9 @@ func TestPlanner_RuleRetiredCancelsTheRowItSetOffUnderABundle(t *testing.T) {
 
 	revoke := db.EnqueueParams{UserID: f.alice, ProjectID: f.project, RoleKeys: []string{"advanced"}, OpType: "revoke",
 		Source: "rule", SourceRef: rule, GrantedBy: f.actor, PayloadJSON: "{}"}
-	ids, err := db.RetireMappingRuleAndEnqueue(ctx, f.actor, rule, []db.EnqueueParams{revoke})
+	// Not a plan: the retirement runs outside the plan's cancel gate, which
+	// refuses any cancellation the plan didn't name.
+	ids, err := db.RetireMappingRuleAndEnqueue(f.ctx, f.actor, rule, []db.EnqueueParams{revoke})
 	if err != nil {
 		t.Fatal(err)
 	}
