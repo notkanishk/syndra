@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRef, useState } from "react";
+
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
-import { OUTCOME_LABEL, PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
+import { OUTCOME_LABEL, PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE, type AutoRetry } from "@/lib/outcome";
+import { groupPlan, onlyCancels, refusedSeat, splitCancels, type PlanGroup } from "@/lib/plan-groups";
 import { Badge, StatusDot } from "@/components/ui/Badge";
+import { FoldHeading } from "@/components/ui/FoldHeading";
+import { NextStep } from "@/components/ui/NextStep";
+import { PAGE_FIRST, PAGE_MORE, PaginationRow } from "@/components/ui/PaginationRow";
+import { RetryStatus } from "@/components/ui/RetryStatus";
 import { UserName } from "@/components/names/UserName";
 import { sortByName } from "@/lib/sort";
 
@@ -13,30 +20,6 @@ import { sortByName } from "@/lib/sort";
 // how a plan and the row that ran it could have come to describe the same
 // result in two vocabularies. `queued` keeps the warning tone rather than the
 // accent one — recorded here, not yet at the target.
-
-/**
- * The last sentence of a row's consequence is the backend's: "Cancels a change
- * waiting for you to send: the removal of … queued 12 Oct (reason)."
- * (`services.DescribeCancels`). The plan says it once more under the rows, and
- * splits it from whatever else the row said. An older backend said "waiting to
- * be sent"; both are read. The backend's own words stopped matching this
- * pattern once, and the line under the plan silently never showed.
- */
-const CANCELS =
-  /(?:^|\s)Cancels (a change|(\d+) changes) waiting\s+(?:to\s+be\s+sent|for\s+you\s+to\s+send): ([\s\S]*?)\.?$/;
-
-export function splitCancels(consequence: string | undefined): { rest: string; count: number; parts: string; line: string } | null {
-  const match = consequence ? CANCELS.exec(consequence) : null;
-  if (!consequence || !match) return null;
-  const count = match[2] ? Number(match[2]) : 1;
-  const parts = match[3].replace(/ \(([^()]*)\)/g, " “$1”");
-  return {
-    rest: consequence.slice(0, match.index).trim(),
-    count,
-    parts,
-    line: `Cancels ${count === 1 ? "a change that is" : `${count} changes that are`} waiting for you to send: ${parts}.`,
-  };
-}
 
 /**
  * The rehearsal, rendered.
@@ -54,8 +37,11 @@ export function splitCancels(consequence: string | undefined): { rest: string; c
 export function PlanReview({
   plan,
   noun = ["person", "people"],
+  auto = true,
 }: {
   plan: BulkPlan | null;
+  /** Whether this server sends changes again on its own: which fold a queued row sits in after Apply. */
+  auto?: AutoRetry;
   /**
    * What this plan's rows ARE, in the caller's own vocabulary.
    *
@@ -88,6 +74,9 @@ export function PlanReview({
   // another change first, because the rows named exactly these.
   const cancels = outcomes.map((o) => splitCancels(o.consequence)).filter((c) => c !== null);
   const cancelled = cancels.reduce((n, c) => n + c.count, 0);
+  // Grouped by how each change travels when every row that goes ahead says
+  // so (A-21 §Q1); flat otherwise, as every plan was before.
+  const groups = missing ? null : groupPlan(plan, noun, auto);
 
   return (
     <div className="px-6">
@@ -101,9 +90,11 @@ export function PlanReview({
           <p className="px-4 py-3 text-[13.5px] text-muted">{emptyNote(plan.op)}</p>
         ) : (
           <>
-            {sortByName(outcomes, (o) => o.name || o.email || "", (o) => o.user_id).map((outcome) => (
-              <PlanRow key={outcome.user_id} outcome={outcome} applied={plan.applied} />
-            ))}
+            {groups
+              ? groups.map((group) => <PlanFold key={group.key} group={group} plan={plan} />)
+              : sortByName(outcomes, (o) => o.name || o.email || "", (o) => o.user_id).map((outcome) => (
+                  <PlanRow key={outcome.user_id} outcome={outcome} applied={plan.applied} />
+                ))}
             {/* #32: the requester, left out of anything that takes access away. */}
             {plan.excluded?.map((left) => (
               <div key={left.user_id} className="row-divider flex items-start gap-4 px-4 py-3">
@@ -183,6 +174,84 @@ function PlanRow({ outcome, applied }: { outcome: BulkOutcome; applied: boolean 
 }
 
 /**
+ * One fold of a grouped plan (A-21 §2.2, §2.6): its heading, sticky at the
+ * top of the box so the glance survives scrolling, then its people, ten at a
+ * time. Open by default; the heading says which, the row says what.
+ */
+function PlanFold({ group, plan }: { group: PlanGroup; plan: BulkPlan }) {
+  const [open, setOpen] = useState(true);
+  const [limit, setLimit] = useState(PAGE_FIRST);
+  const anchor = useRef<HTMLDivElement>(null);
+  const shown = group.rows.slice(0, limit);
+  return (
+    <div role="group" aria-label={`${group.heading}, ${group.count}`}>
+      <div ref={anchor} className="row-divider sticky top-0 bg-surface-0">
+        <FoldHeading
+          open={open}
+          onClick={() => setOpen(!open)}
+          title={group.heading}
+          count={group.count}
+          dot={group.dot}
+          bloom={group.bloom}
+          note={group.note}
+          href={group.link ? "/governance/pending" : undefined}
+        />
+      </div>
+      {open && (
+        <>
+          {shown.map((outcome) => (
+            <FoldRow key={outcome.user_id} outcome={outcome} group={group.key} op={plan.op} />
+          ))}
+          <PaginationRow
+            shown={shown.length}
+            total={group.rows.length}
+            onMore={() => setLimit((n) => n + PAGE_MORE)}
+            onAll={() => setLimit(group.rows.length)}
+            onBack={() => setLimit(PAGE_FIRST)}
+            anchor={anchor}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A person in a fold: the name, then the planner's words exactly as written,
+ * before Apply and after (the settle keeps them). No badge except under "Left
+ * as they are", where each row keeps its own word. After Apply, the row's seat
+ * says its state: the link to send it, its retry, or the refusal and its step.
+ */
+function FoldRow({ outcome, group, op }: { outcome: BulkOutcome; group: PlanGroup["key"]; op: BulkPlan["op"] }) {
+  const said = splitCancels(outcome.consequence);
+  // A row that only cancels says so in its own one sentence (A-21 §2.4); the
+  // cancels line under the box still names what it cancels.
+  const words = said ? (onlyCancels(outcome) ? said.rest : [said.rest, said.line].filter(Boolean).join(" ")) : outcome.consequence;
+  const applied = outcome.effect !== "apply" && outcome.effect !== "no_change" && outcome.effect !== "blocked";
+  return (
+    <div className="row-divider px-4 py-3">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-1">
+        <span className="min-w-0 flex-1 text-[14.5px] font-semibold">
+          {outcome.name || outcome.email || <UserName id={outcome.user_id} />}
+        </span>
+        {group === "left" && (
+          <Badge tone={PLAN_EFFECT_TONE[outcome.effect] ?? PLAN_EFFECT_TONE.no_change} className="ml-auto shrink-0">
+            {PLAN_EFFECT_LABEL[outcome.effect] ?? PLAN_EFFECT_LABEL.no_change}
+          </Badge>
+        )}
+      </div>
+      <span className="block text-[13px] text-muted">
+        {outcome.detail}
+        {words ? <> {words}</> : null}
+      </span>
+      {applied && group === "wait" && <NextStep person={outcome.person || outcome.user_id} className="mt-1.5" />}
+      {applied && group === "unanswered" && outcome.retry && <RetryStatus retry={outcome.retry} className="mt-1.5" />}
+      {group === "refused" && <p className="mt-1.5 text-[13px] leading-[1.5] text-danger-text">{refusedSeat(outcome, op)}</p>}
+    </div>
+  );
+}
+
+/**
  * What the empty-cohort sentence is ABOUT, from the plan's own op.
  *
  * The sentence said "this role" to everybody, which was true while only the
@@ -231,42 +300,4 @@ function emptyNote(op: BulkPlan["op"]): string {
     case "delete_mapping":
       return "Nobody holds this role yet, so nobody's access changes today. This only changes what the role gives to people who hold it later.";
   }
-}
-
-/**
- * The note under the confirm button says what the button does NOT cover — the
- * rows already in the target state and the rows that were refused. Both are
- * counts an operator would otherwise discover only by reading the whole table.
- */
-export function planNote(plan: BulkPlan, noun: [string, string] = ["person", "people"]): string {
-  const parts: string[] = [];
-  if (plan.summary.no_change > 0) parts.push(`No change for ${plan.summary.no_change}`);
-  if (plan.summary.blocked > 0) parts.push(`${plan.summary.blocked} refused`);
-  // Empty `parts` means no_change and blocked are both zero, and that shape
-  // fits two opposite plans: everybody selected will change (apply > 0), or
-  // the plan reaches nobody at all (apply === 0 too). This used to return the
-  // first sentence for both, so a plan for nobody was captioned "Every
-  // selected person will change" beside a button reading "Nothing to apply".
-  if (parts.length === 0) {
-    return plan.summary.apply === 0
-      ? "This reaches nobody, so there is nothing to apply."
-      : `Every selected ${noun[0]} will change.`;
-  }
-  return `${parts.join(" · ")}. Syndra leaves those as they are.`;
-}
-
-/** "Apply to 4 people" / "Apply to 0 people". The button's own label states its scope. */
-export function applyLabel(plan: BulkPlan, noun: [string, string]): string {
-  const n = plan.summary?.apply;
-  // A count that did not arrive is not a count. Rendering it produces "Apply to
-  // undefined people" on the button that performs the change — which is both
-  // the screen inventing a number and the screen lying about one, on the
-  // control where it can least afford to. The action stays available, because a
-  // backend that renamed a field should not block work; only the claim goes.
-  if (typeof n !== "number") return "Apply the change";
-  // No special case for zero: the label stays an action ("Apply to 0 people")
-  // at every count, because the disabled button already carries its own
-  // `reason` explaining why zero can't be pressed. A label that announces its
-  // own emptiness ("Nothing to apply") reads as the control being broken.
-  return `Apply to ${n} ${n === 1 ? noun[0] : noun[1]}`;
 }

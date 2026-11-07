@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { FoldHeading } from "@/components/bundles/FoldHeading";
+import { FoldHeading } from "@/components/ui/FoldHeading";
 import { RetiredStatus } from "@/components/bundles/RetiredBundle";
 import { ProjectName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
