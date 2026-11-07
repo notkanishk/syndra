@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"testing"
@@ -26,28 +27,19 @@ func TestMain(m *testing.M) {
 	dbInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 	// The welcome switch is off unless a test says so (it reads Postgres).
 	svcWelcomeClaims = func(context.Context) (claimserve.Welcome, error) { return claimserve.Welcome{}, nil }
-	// No role waits and nobody has switched over: a change held by its own
-	// mode waits, anything else is sent row by row through the stubbable
-	// DrainOne, as before roles that wait. delivery tests stub their own.
-	svcDeliver = func(ctx context.Context, ids []string, legacyWait bool) services.Delivery {
+	// A Change is delivered as its plan said, with nothing sent anywhere: a
+	// write that waits waits with its reason, every other row is sent and
+	// taken. Delivery tests stub their own.
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
 		d := services.Delivery{Reason: map[string]string{}}
-		for _, id := range ids {
-			if legacyWait {
-				d.Waiting = append(d.Waiting, id)
-				d.Reason[id] = db.WaitReasonManual
-				continue
-			}
-			d.Sent = append(d.Sent, id)
-			dr, err := svcDrainPropagationRow(ctx, id)
-			if err != nil {
-				d.Drain.Halted, d.Drain.Reason = true, err.Error()
-				return d
-			}
-			d.Drain.Applied += dr.Applied
-			d.Drain.Requeued += dr.Requeued
-			if dr.Halted {
-				d.Drain.Halted, d.Drain.Reason = true, dr.Reason
-				return d
+		for _, w := range ch.Writes {
+			switch {
+			case w.OutboxID == "":
+			case w.Delivery == services.DeliveryWaits:
+				d.Waiting = append(d.Waiting, w.OutboxID)
+				d.Reason[w.OutboxID] = cmp.Or(w.WaitReason, db.WaitReasonRoleWaits)
+			default:
+				d.Sent = append(d.Sent, w.OutboxID)
 			}
 		}
 		return d

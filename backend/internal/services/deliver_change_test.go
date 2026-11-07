@@ -16,12 +16,8 @@ import (
 // which roles wait. A role marked to wait between the plan and the send can't
 // hold a write the plan showed going.
 func TestDeliverChange_SendsWhatThePlanSaidAndNothingElse(t *testing.T) {
-	// Every role "waits" now: a Deliver would hold all three.
-	drained, recorded := deliveryFixture(t, map[string]bool{"go": true, "wait": true}, db.ConfirmationModelRoles, "")
-	svcOutboxRowsWaitForRole = func(context.Context, []string) (map[string]bool, error) {
-		t.Error("DeliverChange must not read which roles wait again")
-		return nil, errors.New("asked")
-	}
+	// Nothing reads which roles wait again (TestTheAfterCommitRoleWaitsReadIsGone).
+	drained, recorded := deliveryFixture(t, "")
 	write := func(id, delivery, wait string) Write {
 		w := Write{Delivery: delivery, OutboxID: id}
 		w.WaitReason = wait
@@ -53,7 +49,7 @@ func TestDeliverChange_SendsWhatThePlanSaidAndNothingElse(t *testing.T) {
 // A straight-away write Zitadel didn't take is retried on its own, through
 // the same send as every other row.
 func TestDeliverChange_AHaltedSendIsRetried(t *testing.T) {
-	deliveryFixture(t, nil, db.ConfirmationModelRoles, "zitadel_offline")
+	deliveryFixture(t, "zitadel_offline")
 	svcGetPendingRows = func(context.Context) ([]models.PendingPropagation, error) { return nil, nil }
 	d := DeliverChange(context.Background(), Change{Writes: []Write{{Delivery: DeliveryStraightAway, OutboxID: "go"}}})
 	if d.WaitReason() != db.WaitReasonHalted(db.HaltRetrying) {

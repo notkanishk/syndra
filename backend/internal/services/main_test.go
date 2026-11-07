@@ -9,10 +9,9 @@ import (
 	"syndra/internal/models"
 )
 
-// TestMain: no role waits and nobody has switched over, so delivery follows
-// each caller's own mode; delivery_test.go stubs its own.
+// TestMain: no role waits, and nothing is recorded on a row after a send;
+// delivery_test.go stubs its own.
 func TestMain(m *testing.M) {
-	svcOutboxRowsWaitForRole = func(context.Context, []string) (map[string]bool, error) { return map[string]bool{}, nil }
 	svcSetWaitReason = func(context.Context, []string, string) error { return nil }
 	// A halted send's rows are scheduled for a retry (db.ScheduleRetry), and
 	// nothing is pending unless a test says so.

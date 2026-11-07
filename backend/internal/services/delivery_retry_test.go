@@ -14,14 +14,12 @@ import (
 // A send Zitadel didn't take (503, no answer, 429) is requeued with a backoff
 // and sent again by the background drain. The outcome must not say "Sent": it
 // says halted:retrying, with the next try and which try, read from the row.
-func TestDeliver_ARequeuedSendSaysItIsSentAgainAndWhen(t *testing.T) {
-	deliveryFixture(t, map[string]bool{}, db.ConfirmationModelRoles, "")
+func TestDeliverChange_ARequeuedSendSaysItIsSentAgainAndWhen(t *testing.T) {
+	deliveryFixture(t, "")
 	svcDrainBatch = func(_ context.Context, ids []string) (propagation.DrainResult, error) {
 		return propagation.DrainResult{Requeued: len(ids)}, nil
 	}
 	next := time.Date(2026, 11, 5, 8, 35, 0, 0, time.UTC) // 14:05 IST
-	origRows := svcGetPendingRows
-	t.Cleanup(func() { svcGetPendingRows = origRows })
 	svcGetPendingRows = func(context.Context) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{
 			{ID: "other", Status: "pending", Attempts: 3, NotBefore: &next},
@@ -29,7 +27,7 @@ func TestDeliver_ARequeuedSendSaysItIsSentAgainAndWhen(t *testing.T) {
 		}, nil
 	}
 
-	d := Deliver(context.Background(), []string{"r1"}, false)
+	d := DeliverChange(context.Background(), planned([]string{"r1"}, nil))
 	if got := d.WaitReason(); got != "halted:retrying" {
 		t.Fatalf("WaitReason = %q, want halted:retrying (never \"\", which reads as Sent)", got)
 	}
@@ -41,26 +39,23 @@ func TestDeliver_ARequeuedSendSaysItIsSentAgainAndWhen(t *testing.T) {
 
 // A state write that failed (Errored) leaves the row for the next drain to
 // reclaim: still not "Sent".
-func TestDeliver_AnUnrecordedSendIsNotSent(t *testing.T) {
-	deliveryFixture(t, map[string]bool{}, db.ConfirmationModelRoles, "")
+func TestDeliverChange_AnUnrecordedSendIsNotSent(t *testing.T) {
+	deliveryFixture(t, "")
 	svcDrainBatch = func(context.Context, []string) (propagation.DrainResult, error) {
 		return propagation.DrainResult{Errored: 1}, nil
 	}
-	if got := Deliver(context.Background(), []string{"r1"}, false).WaitReason(); got != "halted:retrying" {
+	if got := DeliverChange(context.Background(), planned([]string{"r1"}, nil)).WaitReason(); got != "halted:retrying" {
 		t.Fatalf("WaitReason = %q, want halted:retrying", got)
 	}
 }
 
 // A role that waits still outranks a retry: the operator's wait is the reason.
-func TestDeliver_ARoleThatWaitsOutranksARetry(t *testing.T) {
-	deliveryFixture(t, map[string]bool{"r1": true}, db.ConfirmationModelRoles, "")
+func TestDeliverChange_ARoleThatWaitsOutranksARetry(t *testing.T) {
+	deliveryFixture(t, "")
 	svcDrainBatch = func(_ context.Context, ids []string) (propagation.DrainResult, error) {
 		return propagation.DrainResult{Requeued: len(ids)}, nil
 	}
-	origRows := svcGetPendingRows
-	t.Cleanup(func() { svcGetPendingRows = origRows })
-	svcGetPendingRows = func(context.Context) ([]models.PendingPropagation, error) { return nil, nil }
-	if got := Deliver(context.Background(), []string{"r1", "r2"}, false).WaitReason(); got != db.WaitReasonRoleWaits {
+	if got := DeliverChange(context.Background(), planned([]string{"r1", "r2"}, map[string]bool{"r1": true})).WaitReason(); got != db.WaitReasonRoleWaits {
 		t.Fatalf("WaitReason = %q, want role_waits", got)
 	}
 }
