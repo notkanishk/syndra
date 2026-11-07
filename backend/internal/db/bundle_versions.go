@@ -333,13 +333,13 @@ func PublishVersionAndEnqueue(
 		}
 	}
 
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{
 			Actor:      actor,
 			Action:     "bundle.version_published",
 			ResourceID: fmt.Sprintf("%s@v%d", bundleID, out.Version),
 		}},
-		params)
+		params, "")
 	if err != nil {
 		return out, nil, err
 	}
@@ -405,9 +405,9 @@ func DiscardBundleDraft(ctx context.Context, actor, bundleID string) error {
 	}
 	// The audit row through the one cascade writer, with no params: no outbox
 	// rows, no cascade id — this reached nobody.
-	if _, err := enqueueCascadeRows(ctx, tx, []CascadeAudit{{
+	if _, err := enqueueWrites(ctx, tx, []CascadeAudit{{
 		Actor: actor, Target: bundleID, Action: "bundle.draft_discarded", ResourceID: latestID,
-	}}, nil); err != nil {
+	}}, nil, ""); err != nil {
 		return fmt.Errorf("audit discard: %w", err)
 	}
 	if owned {
@@ -459,7 +459,7 @@ func MoveHoldersAndEnqueue(
 		})
 	}
 
-	ids, err := enqueueCascadeRows(ctx, tx, audits, params)
+	ids, err := enqueueWrites(ctx, tx, audits, params, "")
 	if err != nil {
 		return nil, err
 	}

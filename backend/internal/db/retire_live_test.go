@@ -42,7 +42,7 @@ func TestRetireBundle_KeepsHistoryAndLeavesEveryList(t *testing.T) {
 	if err != nil || len(roles) != 1 {
 		t.Fatalf("latest version: %+v %v", roles, err)
 	}
-	if _, assigned, err := AssignBundleAndEnqueue(ctx, "op", "u-retire-"+stamp, id, v.ID, nil); err != nil || !assigned {
+	if _, assigned, err := AssignBundleAndEnqueue(ctx, "op", "", "u-retire-"+stamp, id, v.ID, nil); err != nil || !assigned {
 		t.Fatalf("assign: %v %v", assigned, err)
 	}
 	if err := SetWelcomeBundle(ctx, id); err != nil {

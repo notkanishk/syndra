@@ -774,7 +774,7 @@ func walkRemoveRoles(ctx context.Context, actor, userID, projectID string, roles
 	}
 	for _, role := range roles {
 		if id, ok := grantFor[role]; ok {
-			rm, err := remove(ctx, userID, id, actor)
+			rm, err := remove(ctx, userID, id, actor, "")
 			if err != nil {
 				return err
 			}

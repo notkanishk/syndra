@@ -198,18 +198,52 @@ func TestPlanner_AssignBundle_OutboxIsThePlan(t *testing.T) {
 		t.Fatalf("Alice's row: %q", shown[f.alice].Row.Consequence)
 	}
 
-	result, sent, err := services.ApplyPlannedBulk(ctx, req, f.issue(t, ctx, req, changes))
+	result, written, err := services.ApplyPlannedBulk(ctx, req, f.issue(t, ctx, req, changes))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(gate.Refused()) != 0 {
 		t.Fatalf("a named cancellation was refused: %+v", gate.Refused())
 	}
+	deliveries := map[string]int{}
 	for _, who := range []string{f.alice, f.bob} {
-		got, want := sentRows(t, ctx, sent[who]), shownWrites(shown[who])
+		got, want := sentRows(t, ctx, outboxIDs(written[who])), shownWrites(shown[who])
 		if strings.Join(got, "|") != strings.Join(want, "|") || len(got) == 0 {
 			t.Errorf("%s: outbox %v, plan showed %v", who, got, want)
 		}
+		// Each row as the plan decided its delivery (decision 11): a write
+		// that waits lands waiting, with role_waits, and one sent straight
+		// away carries no wait. Both with the operator's reason (task 1.8).
+		for _, w := range written[who].Writes {
+			if w.OutboxID == "" {
+				continue
+			}
+			deliveries[w.Delivery]++
+			wait, why := rowWaitAndReason(t, ctx, w.OutboxID)
+			wantWait := ""
+			if w.Delivery == services.DeliveryWaits {
+				wantWait = db.WaitReasonRoleWaits
+			}
+			if wait != wantWait || why != "term start" {
+				t.Errorf("%s %s (%s): wait_reason %q reason %q, want %q and the operator's reason", who, w.RoleKeys[0], w.Delivery, wait, why, wantWait)
+			}
+		}
+		if said := auditReason(t, ctx, who, "bundle.assigned"); said != "term start" {
+			t.Errorf("%s: the audit row's reason is %q, want the operator's", who, said)
+		}
+	}
+	// "member" goes straight away, "trained" waits for you.
+	if deliveries[services.DeliveryStraightAway] == 0 || deliveries[services.DeliveryWaits] == 0 {
+		t.Fatalf("want both deliveries in this plan, got %v", deliveries)
+	}
+	// The dialog says the reason lands in Change history: it does.
+	var cascade string
+	if err := db.PG.QueryRow(ctx, `SELECT cascade_id::text FROM propagation_outbox WHERE id = $1::uuid`,
+		outboxIDs(written[f.alice])[0]).Scan(&cascade); err != nil {
+		t.Fatal(err)
+	}
+	if groups, err := db.GetCascadeGroups(ctx, 0, cascade); err != nil || len(groups) != 1 || groups[0].Reason != "term start" {
+		t.Fatalf("Change history for Alice's change: %+v %v, want the operator's reason", groups, err)
 	}
 	if s := status(t, ctx, revoke); s != "superseded" {
 		t.Errorf("the named removal is cancelled, got %s", s)
@@ -225,7 +259,7 @@ func TestPlanner_RemoveBundle_UnnamedCancellationIsStaleThenOutboxIsThePlan(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, f.alice, f.bundle, v.ID, nil); err != nil || !ok {
+	if _, ok, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, "", f.alice, f.bundle, v.ID, nil); err != nil || !ok {
 		t.Fatalf("assign: %v %v", ok, err)
 	}
 	ctx, _ := db.GuardCancellations(f.ctx, nil, func(context.Context) bool { return true })
@@ -268,17 +302,50 @@ func TestPlanner_RemoveBundle_UnnamedCancellationIsStaleThenOutboxIsThePlan(t *t
 	if ids := changes[0].Row.CancelIDs; len(ids) != 1 || ids[0] != unnamed {
 		t.Fatalf("the fresh plan names the change: %v", ids)
 	}
-	_, sent, err := services.ApplyPlannedBulk(ctx, req, f.issue(t, ctx, req, changes))
+	_, written, err := services.ApplyPlannedBulk(ctx, req, f.issue(t, ctx, req, changes))
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, want := sentRows(t, ctx, sent[f.alice]), shownWrites(changes[0])
+	if said := auditReason(t, ctx, f.alice, "bundle.unassigned"); said != "term start" {
+		t.Errorf("the removal's audit row says %q, want the operator's reason", said)
+	}
+	got, want := sentRows(t, ctx, outboxIDs(written[f.alice])), shownWrites(changes[0])
 	if strings.Join(got, "|") != strings.Join(want, "|") || len(got) == 0 {
 		t.Errorf("outbox %v, plan showed %v", got, want)
 	}
 	if s := status(t, ctx, unnamed); s != "superseded" {
 		t.Errorf("the now-named change is cancelled, got %s", s)
 	}
+}
+
+// outboxIDs is the rows the apply wrote for a Change.
+func outboxIDs(ch services.Change) []string {
+	var ids []string
+	for _, w := range ch.Writes {
+		if w.OutboxID != "" {
+			ids = append(ids, w.OutboxID)
+		}
+	}
+	return ids
+}
+
+func rowWaitAndReason(t *testing.T, ctx context.Context, id string) (wait, why string) {
+	t.Helper()
+	if err := db.PG.QueryRow(ctx, `SELECT COALESCE(wait_reason, ''), COALESCE(reason, '') FROM propagation_outbox WHERE id = $1::uuid`,
+		id).Scan(&wait, &why); err != nil {
+		t.Fatal(err)
+	}
+	return wait, why
+}
+
+func auditReason(t *testing.T, ctx context.Context, user, action string) string {
+	t.Helper()
+	var why string
+	if err := db.PG.QueryRow(ctx, `SELECT COALESCE(details->>'reason', '') FROM audit_logs WHERE target_zitadel_user_id = $1 AND action = $2`,
+		user, action).Scan(&why); err != nil {
+		t.Fatal(err)
+	}
+	return why
 }
 
 func sentRowsFor(t *testing.T, ctx context.Context, user string) []string {
