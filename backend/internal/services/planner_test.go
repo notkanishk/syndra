@@ -165,9 +165,26 @@ func TestPlan_RoleNoLongerOffered(t *testing.T) {
 	if ch.Row.Effect != EffectNoChange || !strings.HasPrefix(ch.Refusal, "not_offered:") || len(ch.Writes) != 0 {
 		t.Fatalf("change = %+v", ch)
 	}
-	if ch.Row.Detail != "This would give trained in pLab, which no longer exists in Zitadel." ||
+	// The role is gone but its project is still listed: named by the project.
+	if ch.Row.Detail != "This would give trained in Laser Lab, which no longer exists in Zitadel." ||
 		ch.Row.Consequence != "Take it out of the Safety bundle and publish, then give the bundle again." {
 		t.Errorf("row = %q / %q", ch.Row.Detail, ch.Row.Consequence)
+	}
+
+	// The whole project is gone: never its raw id, and one name said once.
+	s = plannerSnap()
+	delete(s.Catalogue, member)
+	delete(s.Catalogue, trained)
+	delete(s.Catalogue, advanced)
+	ch = assign(s)
+	if ch.Row.Detail != "This would give member in a project Zitadel no longer lists and trained in a project Zitadel no longer lists, which no longer exist in Zitadel." {
+		t.Errorf("unlisted project: %q", ch.Row.Detail)
+	}
+	if ch.Row.Consequence != "Take them out of the Safety bundle and publish, then give the bundle again." {
+		t.Errorf("plural step: %q", ch.Row.Consequence)
+	}
+	if strings.Contains(ch.Row.Detail, "pLab") {
+		t.Errorf("a raw project id reached the words: %q", ch.Row.Detail)
 	}
 
 	s = plannerSnap()

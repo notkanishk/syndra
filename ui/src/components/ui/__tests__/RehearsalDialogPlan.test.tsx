@@ -406,7 +406,7 @@ describe("applying a change that reaches nobody", () => {
     onRehearse = vi.fn().mockResolvedValue(empty());
     open();
 
-    const apply = await screen.findByRole("button", { name: /Apply to 0/ });
+    const apply = await screen.findByRole("button", { name: "Apply" });
     expect(apply).toBeDisabled();
   });
 
@@ -441,7 +441,7 @@ describe("applying a change that reaches nobody", () => {
     onRehearse = vi.fn().mockResolvedValue(empty());
     open();
 
-    expect(await screen.findByRole("button", { name: "Apply to 0 people" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Apply" })).toBeDisabled();
     expect(screen.queryByText("Nothing to apply")).toBeNull();
   });
 
@@ -524,7 +524,7 @@ describe("applying a change that reaches nobody", () => {
       );
       open({ definitionLabel: "Save mapping" });
 
-      expect(await screen.findByRole("button", { name: /Apply to 0/ })).toBeDisabled();
+      expect(await screen.findByRole("button", { name: "Apply" })).toBeDisabled();
       expect(screen.getByText(/came back incomplete/)).toBeInTheDocument();
     });
 
@@ -533,7 +533,7 @@ describe("applying a change that reaches nobody", () => {
       onRehearse = vi.fn().mockResolvedValue(shaped({ outcomes: undefined }));
       open({ definitionLabel: "Save mapping" });
 
-      expect(await screen.findByRole("button", { name: /Apply to 0/ })).toBeDisabled();
+      expect(await screen.findByRole("button", { name: "Apply" })).toBeDisabled();
       expect(screen.getByText(/The list of people did not load/)).toBeInTheDocument();
     });
   });
@@ -573,7 +573,7 @@ describe("applying a change that reaches nobody", () => {
       onRehearse = vi.fn().mockResolvedValue(empty());
       open();
 
-      await screen.findByRole("button", { name: /Apply to 0/ });
+      await screen.findByRole("button", { name: "Apply" });
       expect(screen.getByText(/Nothing here would change/)).toBeInTheDocument();
     });
 

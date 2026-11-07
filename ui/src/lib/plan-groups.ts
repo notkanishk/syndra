@@ -241,6 +241,8 @@ export function applyLabel(plan: BulkPlan, noun: [string, string]): string {
   // A count that did not arrive is not a count: never "Apply to undefined people".
   if (typeof n !== "number") return "Apply the change";
   const cancels = (plan.outcomes ?? []).reduce((k, o) => k + cancelsOf(o), 0);
+  // Nobody to apply to: the button is held, and the line under it says why.
+  if (n === 0) return "Apply";
   return cancels > 0 ? `Cancel ${cancels} and apply to ${count(n, noun)}` : `Apply to ${count(n, noun)}`;
 }
 

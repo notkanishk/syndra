@@ -148,8 +148,8 @@ func planAdopt(ch Change, a Action, s PlanSnapshot, person db.PersonAccess) Chan
 			"Syndra couldn't read Zitadel's list of roles to check the ones the rules give still exist. Try again shortly.", "")
 	} else if len(gone) > 0 {
 		return ch.decided(a, EffectNoChange, "not_offered:"+keysField(gone),
-			fmt.Sprintf("Adopting it would give %s, which no longer exists in Zitadel.", s.list(gone)),
-			"Retire the automatic rule that gives it, then adopt it again.")
+			fmt.Sprintf("Adopting it would give %s.", s.goneWords(gone)),
+			fmt.Sprintf("Retire the automatic rule that gives %s, then adopt it again.", s.them(gone)))
 	}
 	ch = ch.deliver(append([]db.EnqueueParams{own}, asRuleRows(deltaWrites(a.UserID, adds, revokes, "rule", ""), refs)...), person, s)
 	for _, r := range adds {
@@ -209,12 +209,12 @@ func planMove(ch Change, a Action, s PlanSnapshot, person db.PersonAccess) Chang
 		return ch.decided(a, EffectBlocked, "catalogue_unread",
 			"Syndra couldn't read Zitadel's list of roles to check the ones this gives still exist. Try again shortly.", "")
 	} else if len(gone) > 0 {
-		step := "Take it out of the bundle and publish again."
+		step := fmt.Sprintf("Take %s out of the bundle and publish again.", s.them(gone))
 		if !bundleGives(s.VersionRoles, gone[0]) {
-			step = "Retire the automatic rule that gives it, then move them again."
+			step = fmt.Sprintf("Retire the automatic rule that gives %s, then move them again.", s.them(gone))
 		}
 		return ch.decided(a, EffectNoChange, "not_offered:"+keysField(gone),
-			fmt.Sprintf("Moving them would give %s, which no longer exists in Zitadel. They stay on v%d.", s.list(gone), h.Version), step)
+			fmt.Sprintf("Moving them would give %s. They stay on v%d.", s.goneWords(gone), h.Version), step)
 	}
 	if len(adds) == 0 && len(revokes) == 0 {
 		return ch.decided(a, EffectNoChange, "", detail,

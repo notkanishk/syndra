@@ -210,7 +210,7 @@ describe("BulkDialog", () => {
     });
     open();
     await rehearse();
-    const button = screen.getByRole("button", { name: "Apply to 0 people" });
+    const button = screen.getByRole("button", { name: "Apply" });
     expect(button).toBeDisabled();
   });
 
