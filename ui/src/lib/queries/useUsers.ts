@@ -9,6 +9,7 @@ import type { CascadeOutcome } from "@/lib/types";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
 import type { RetryState } from "@/lib/retry";
+import type { PlanSeen } from "@/lib/usePlanConsent";
 
 // Shapes mirror the backend `users.go` handler responses. Kept narrow to what
 // the Users page renders; widen if more fields are needed.
@@ -228,10 +229,11 @@ export function useUserGrants(userId: string) {
 export function useAssignBundle(userId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (bundleId: string) => {
+    // `seen` is the plan the sheet was shown (usePlanConsent): the backend writes only that.
+    mutationFn: async ({ bundleId, seen }: { bundleId: string; seen?: PlanSeen }) => {
       return await request<CascadeOutcome>(`/users/${userId}/bundles`, {
         method: "POST",
-        body: { bundle_id: bundleId },
+        body: { bundle_id: bundleId, ...seen },
       });
     },
     onSuccess: () => invalidateAfter(qc, "access"),
@@ -248,6 +250,9 @@ export interface CreateGrantInput {
    * giving a role they already have is refused (owner, 15 Oct).
    */
   extend?: boolean;
+  /** The plan the sheet was shown (usePlanConsent), for a give. */
+  fingerprint?: string;
+  cancel_ids?: string[];
 }
 
 /** The outbox handle the direct-grant endpoint returns. `status` is "pending"

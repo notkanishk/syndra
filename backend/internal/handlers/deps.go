@@ -71,8 +71,8 @@ var (
 
 	// Bundle handler injectable vars. dbAddRoleToBundle/dbAssignBundleToUser were removed
 	// (sub-phase 3, Task 20): the cascade OWNS the source mutation now — see
-	// svcCascadeRoleAdded/svcCascadeBundleAssigned below, which call the atomic
-	// db.AddRoleToBundleAndEnqueue/db.AssignBundleAndEnqueue instead.
+	// the planner (svcApplyAct) for one person's bundle, which calls the atomic
+	// db.AssignBundleAndEnqueue / db.RemoveBundleFromUserAndEnqueue.
 	dbCreateBundle      = db.CreateBundle
 	dbUpdateBundle      = db.UpdateBundle
 	dbGetBundleByID     = db.GetBundleByID
@@ -101,7 +101,6 @@ var (
 
 	// Add-side cascade injectables (sub-phase 3, Task 20): the cascade OWNS the source
 	// mutation (assign/add-role/create happen inside the atomic *AndEnqueue tx).
-	svcCascadeBundleAssigned = services.CascadeBundleAssignedToUser // (ctx, actor, userID, bundleID)
 	// Working-copy edits. These reach nobody — adding or removing a role
 	// changes what the bundle WILL grant when its next version is published,
 	// which is the whole point of versioning.
@@ -111,7 +110,6 @@ var (
 	// Revoke-side + rule-update cascade injectables (sub-phase 3, Task 21): same ownership —
 	// remove/update happen inside the atomic *AndEnqueue tx, no separate dbRemove*/dbUpdate*
 	// injectable in the handler layer.
-	svcCascadeBundleRemoved = services.CascadeBundleRemovedFromUser // (ctx, actor, userID, bundleID)
 	// Retiring the bundle itself: the same revoke, computed once per holder.
 	svcCascadeBundleRetired = services.CascadeBundleRetired // (ctx, actor, bundleID)
 	svcCascadeRuleUpdated   = services.CascadeRuleUpdated   // (ctx, actor, old, sp, sr, tp, tr)

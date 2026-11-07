@@ -20,10 +20,6 @@ func TestRetiredBundleRefusesEveryCascade(t *testing.T) {
 			_, err := CascadeBundleAssignedToUser(ctx, "admin", "u1", "b1")
 			return err
 		},
-		"remove": func(ctx context.Context) error {
-			_, err := CascadeBundleRemovedFromUser(ctx, "admin", "u1", "b1")
-			return err
-		},
 		"retire again": func(ctx context.Context) error {
 			_, err := CascadeBundleRetired(ctx, "admin", "b1")
 			return err

@@ -24,6 +24,8 @@ type AddRoleToBundleRequest struct {
 
 type AssignBundleRequest struct {
 	BundleID string `json:"bundle_id"`
+	// The plan the sheet was shown (GET /users/{id}/plan?op=assign_bundle).
+	planFields
 }
 
 // CreateBundleRequest creates a bundle AND its first published version.
@@ -495,32 +497,7 @@ func handleAssignBundleToUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor := getAdminUserID(r.Context())
-	if actor == "" {
-		actor = "system"
-	}
-	// The cascade owns the mutation now (assign + per-role outbox rows commit in one tx), then
-	// (auto mode) drains those rows. Enqueue failure rolls back the mutation → 500; a drain
-	// failure rides in cascade.drain and is not fatal.
-	cascade, err := svcCascadeBundleAssigned(r.Context(), actor, userID, req.BundleID)
-	if err != nil {
-		if writeRetired(w, "bundle", err) {
-			return
-		}
-		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
-		return
-	}
-	// Idempotent, and it says which of the two happened. "Bundle assigned"
-	// after a no-op reads as a change that was made, which is what the caller
-	// will tell the operator.
-	message := "Bundle assigned to user"
-	if cascade.NoOp {
-		message = "Already holds this bundle — nothing changed."
-	}
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"message": message,
-		"cascade": cascade,
-	})
+	bundlePlanned(w, r, services.BulkOpAssignBundle, userID, req.BundleID, req.seen())
 }
 
 // handleSetWelcomeBundle marks a bundle as the welcome bundle. Clears any

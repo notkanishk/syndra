@@ -12,6 +12,7 @@ import (
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 func days(n int) *int { return &n }
@@ -31,20 +32,20 @@ func TestPlanApproval_KindForKind(t *testing.T) {
 		kind    string
 		held    models.RequestHolding
 		days    *int
-		effect  approvalEffect
+		effect  services.ApprovalEffect
 		endRule db.EndRule
 		err     error
 	}{
-		{"an ask for a role they don't have gives it", requestKindAccess, none, days(30), effectGive, db.EndKept, nil},
-		{"an ask for a role they have is refused", requestKindAccess, until, days(30), "", "", errRequestAlreadyHeld},
-		{"keeping it longer moves the end", requestKindExtend, until, days(30), effectExtend, db.EndSet, nil},
-		{"keeping it with no end moves the end to none", requestKindExtend, until, nil, effectExtend, db.EndSet, nil},
-		{"keeping it longer when it lapsed meanwhile gives it back", requestKindExtend, none, days(30), effectGiveAgain, db.EndKept, nil},
-		{"keeping it longer when it now has no end changes nothing", requestKindExtend, forGood, days(30), "", "", errRequestAlreadyHeld},
-		{"keeping it counts from the end they have, so a far end stays extended", requestKindExtend, untilFar, days(30), effectExtend, db.EndSet, nil},
+		{"an ask for a role they don't have gives it", services.RequestKindAccess, none, days(30), services.EffectGive, db.EndKept, nil},
+		{"an ask for a role they have is refused", services.RequestKindAccess, until, days(30), "", "", services.ErrRequestAlreadyHeld},
+		{"keeping it longer moves the end", services.RequestKindExtend, until, days(30), services.EffectExtend, db.EndSet, nil},
+		{"keeping it with no end moves the end to none", services.RequestKindExtend, until, nil, services.EffectExtend, db.EndSet, nil},
+		{"keeping it longer when it lapsed meanwhile gives it back", services.RequestKindExtend, none, days(30), services.EffectGiveAgain, db.EndKept, nil},
+		{"keeping it longer when it now has no end changes nothing", services.RequestKindExtend, forGood, days(30), "", "", services.ErrRequestAlreadyHeld},
+		{"keeping it counts from the end they have, so a far end stays extended", services.RequestKindExtend, untilFar, days(30), services.EffectExtend, db.EndSet, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			plan, err := planApproval(models.AccessRequest{Kind: tc.kind, DurationDays: tc.days}, tc.held, now)
+			plan, err := services.PlanApproval(models.AccessRequest{Kind: tc.kind, DurationDays: tc.days}, tc.held, now)
 			if !errors.Is(err, tc.err) {
 				t.Fatalf("err: want %v, got %v", tc.err, err)
 			}
@@ -103,7 +104,7 @@ func TestHandleCreateAccessRequest_AskToKeepItLonger(t *testing.T) {
 			if tc.code != "" && !strings.Contains(rr.Body.String(), tc.code) {
 				t.Fatalf("want %s, got %s", tc.code, rr.Body.String())
 			}
-			if tc.status == http.StatusCreated && filed != requestKindExtend {
+			if tc.status == http.StatusCreated && filed != services.RequestKindExtend {
 				t.Fatalf("filed as %q, want extend", filed)
 			}
 			if tc.code == "ALREADY_HELD" && !strings.Contains(rr.Body.String(), "Ask to keep it longer instead") {
@@ -138,14 +139,14 @@ func TestExtendCountsFromTheCurrentEnd(t *testing.T) {
 		{"lapsed and gone: given again from now", models.RequestHolding{Kind: models.HoldingNone}, endOf("2026-11-17")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			plan, err := planApproval(models.AccessRequest{Kind: requestKindExtend, DurationDays: days(31)}, tc.held, now)
+			plan, err := services.PlanApproval(models.AccessRequest{Kind: services.RequestKindExtend, DurationDays: days(31)}, tc.held, now)
 			if err != nil || plan.ExpiresAt == nil || !plan.ExpiresAt.Equal(tc.want) {
 				t.Fatalf("want %v, got %v (%v)", tc.want, plan.ExpiresAt, err)
 			}
 		})
 	}
 	// Asking agrees with deciding.
-	if err := checkRequestKind(requestKindExtend, models.RequestHolding{Kind: models.HoldingUntil, Until: &dec18}, days(31), nil, now); err != nil {
+	if err := services.CheckRequestKind(services.RequestKindExtend, models.RequestHolding{Kind: models.HoldingUntil, Until: &dec18}, days(31), nil, now); err != nil {
 		t.Fatalf("asking: %v", err)
 	}
 }
@@ -154,7 +155,7 @@ func TestExtendCountsFromTheCurrentEnd(t *testing.T) {
 func TestCheckExtension_RefusesAnEndThatIsNotLater(t *testing.T) {
 	end := time.Date(2026, 12, 18, 0, 0, 0, 0, time.UTC)
 	h := models.RequestHolding{Kind: models.HoldingUntil, Until: &end}
-	if err := checkExtension(h, &end); !errors.Is(err, errExtensionShortens) {
+	if err := services.CheckExtension(h, &end); !errors.Is(err, services.ErrExtensionShortens) {
 		t.Fatalf("an equal end: got %v", err)
 	}
 }
@@ -168,9 +169,9 @@ func TestWithHolding_ExtendCarriesCurrentAndNewEnd(t *testing.T) {
 		return models.RequestHolding{Kind: models.HoldingUntil, Until: &dec18}, nil
 	}
 	out := withHolding(context.Background(), []models.AccessRequest{
-		{ID: "a", Kind: requestKindExtend, Status: "pending", DurationDays: days(31)},
-		{ID: "b", Kind: requestKindAccess, Status: "pending", DurationDays: days(31)},
-		{ID: "c", Kind: requestKindExtend, Status: "approved", DurationDays: days(31)},
+		{ID: "a", Kind: services.RequestKindExtend, Status: "pending", DurationDays: days(31)},
+		{ID: "b", Kind: services.RequestKindAccess, Status: "pending", DurationDays: days(31)},
+		{ID: "c", Kind: services.RequestKindExtend, Status: "approved", DurationDays: days(31)},
 	})
 	a := out[0]
 	if a.CurrentUntil == nil || !a.CurrentUntil.Equal(dec18) {

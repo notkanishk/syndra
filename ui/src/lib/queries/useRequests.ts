@@ -63,6 +63,9 @@ export interface CreateRequestInput {
 export interface DecisionInput {
   status: "approved" | "rejected";
   review_note?: string;
+  /** The plan the row was shown (usePlanConsent), for an approval. */
+  fingerprint?: string;
+  cancel_ids?: string[];
 }
 
 /** What deciding returns: an approval that isn't in Zitadel yet says why. */

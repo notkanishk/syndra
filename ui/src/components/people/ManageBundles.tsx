@@ -2,23 +2,21 @@
 
 import { useMemo, useState } from "react";
 
-import { StatusDot } from "@/components/ui/Badge";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
-import { RoleRef } from "@/components/names";
 import { Button } from "@/components/ui/Button";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
-import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
+import { KEPT, PushedStep, useCancelStep, useForetell } from "@/components/ui/CancelQueuedStep";
+import { Notice } from "@/components/ui/Notice";
+import { RuleConsentFailed } from "@/components/requests/RuleConsent";
+import { isStale, usePlanConsents, type ActPlan } from "@/lib/usePlanConsent";
 import { DRAIN_UNKNOWN_NEXT, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { refusedOutcome } from "@/lib/retry";
 import { isRefused } from "@/lib/wait-reason";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { useBundleRolesByBundle, useBundles, useRemoveBundle } from "@/lib/queries/useBundles";
-import { useInsightsWhatIf } from "@/lib/queries/useInsights";
 import { useAssignBundle } from "@/lib/queries/useUsers";
-import { compareNames, sortByName } from "@/lib/sort";
-import { useShownNames } from "@/components/names/shownNames";
 
 /**
  * E4 · Assign / unassign a bundle.
@@ -62,12 +60,13 @@ function ManageBundlesOpen({
   const waits = useWaitsBeforeLine("change");
   const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  // Which way the change being sent goes, so a step says "assign" or "remove".
-  const [acting, setActing] = useState<"assign" | "remove">("assign");
+  // One step for every staged change: its confirm names what goes ahead,
+  // "Cancel all 3 and apply 2 changes" (A-21 §3.2).
+  const onlyRemoving = staged.size > 0 && Array.from(staged).every((id) => assignedIds.has(id));
   const step = useCancelStep({
     host: `Manage bundles for ${userName}`,
-    goAhead: acting,
-    tone: acting === "remove" ? "danger" : "accent",
+    goAhead: `apply ${staged.size} ${staged.size === 1 ? "change" : "changes"}`,
+    tone: onlyRemoving ? "danger" : "accent",
   });
 
   const allIds = (bundles.data ?? []).map((bundle) => bundle.id);
@@ -80,56 +79,46 @@ function ManageBundlesOpen({
   }, [assignedIds, staged]);
 
   const changes = Array.from(staged);
-  const previewFor = changes[0];
-
-
-  const previewBundle = (bundles.data ?? []).find((bundle) => bundle.id === previewFor);
-  const previewAdding = previewFor ? !assignedIds.has(previewFor) : false;
-  const names = useShownNames();
-  // What the change does for this person, rules followed, from the backend.
-  const preview = useInsightsWhatIf(
-    previewFor
-      ? { kind: previewAdding ? "bundle_assigned" : "bundle_unassigned", bundle_id: previewFor, user_id: userId }
-      : null,
+  // What each staged change does for this person, from the planner before the
+  // press (A-21 §3.2): the row's words, rules followed, whether it goes now or
+  // waits, and the waiting changes it cancels. One source with the bulk plan.
+  const consents = usePlanConsents(
+    changes.map((id) => ({ op: assignedIds.has(id) ? "remove_bundle" : "assign_bundle", userId, bundleId: id })),
+    "this",
   );
-  const changed = useMemo(() => {
-    if (!preview.data) return null;
-    const people = previewAdding ? preview.data.gains : preview.data.losses;
-    const keys = new Set<string>();
-    for (const p of people) if (p.user_id === userId) for (const r of p.roles) keys.add(`${r.project_id}:${r.role_key}`);
-    return keys;
-  }, [preview.data, previewAdding, userId]);
-  const previewRoles = sortByName(previewFor ? (bundleRoles[previewFor] ?? []) : [], (r) => names.roleRef(r.zitadel_project_id, r.zitadel_role_key), (r) => `${r.zitadel_project_id}:${r.zitadel_role_key}`);
-
-  const throughRules = useMemo(() => {
-    if (!changed) return [];
-    const own = new Set(previewRoles.map((r) => `${r.zitadel_project_id}:${r.zitadel_role_key}`));
-    return Array.from(changed)
-      .filter((k) => !own.has(k))
-      .map((k) => ({ project_id: k.slice(0, k.indexOf(":")), role_key: k.slice(k.indexOf(":") + 1) }))
-      .sort((a, b) => compareNames(names.roleRef(a.project_id, a.role_key), names.roleRef(b.project_id, b.role_key)));
-  }, [changed, previewRoles, names]);
+  const hold = consents.find((c) => c.hold)?.hold;
+  const unread = consents.find((c) => c.failed);
+  const refusedRow = consents.find((c) => c.plan && c.plan.effect !== "apply")?.plan;
+  // Every staged change's cancels, gathered into one ask before the first write.
+  const cancels = consents.flatMap((c) => c.cancels).filter((c, i, all) => all.findIndex((d) => d.id === c.id) === i);
+  const foretell = useForetell();
+  const [stale, setStale] = useState(false);
+  const first = userName.trim().split(/\s+/)[0] || userName;
 
   async function apply() {
-    try {
-      // What is WAITING afterwards, summed from the backend rather than
-      // assumed from the number of boxes ticked. The two are different every
-      // time a change leaves nothing to send: a removal whose delivery had
-      // never gone out withdraws the queued rows instead of queueing their
-      // opposite, and a change that reaches nobody's effective access queues
-      // nothing either. Both used to be reported as "the changes wait under
-      // Pending changes until you send them" — an instruction to go and
-      // confirm an empty screen.
-      let waiting = 0;
-      let revoking = 0;
-      let sent = 0;
-      let refused: { reason?: string; removing: boolean } | undefined;
-      for (const id of changes) {
+    // What is WAITING afterwards, summed from the backend rather than assumed
+    // from the number of boxes ticked: a change that only cancels a waiting
+    // one, or that reaches nobody's effective access, queues nothing.
+    let waiting = 0;
+    let revoking = 0;
+    let sent = 0;
+    let applied = 0;
+    let refused: { reason?: string; removing: boolean } | undefined;
+    let movedAt = -1;
+    const write = async () => {
+      for (const [i, id] of changes.entries()) {
         const removing = assignedIds.has(id);
-        setActing(removing ? "remove" : "assign");
-        const result = await step.run(() => (removing ? remove.mutateAsync(id) : assign.mutateAsync(id)));
-        // Kept: what was waiting stays, the rest stays ticked, and the form is as it was.
-        if (result === KEPT) return;
+        const seen = consents[i]?.seen;
+        let result;
+        try {
+          result = await (removing ? remove.mutateAsync({ bundleId: id, seen }) : assign.mutateAsync({ bundleId: id, seen }));
+        } catch (error) {
+          // Their access moved since the plans were read: this one and the
+          // rest are not written.
+          if (isStale(error)) movedAt = i;
+          throw error;
+        }
+        applied++;
         // Out of the staged set as soon as it is applied. Left in, a retry after
         // a later one fails would read it against the new state and send the
         // opposite (an assign becomes a remove).
@@ -145,8 +134,7 @@ function ManageBundlesOpen({
           refused ??= { reason: cascade?.wait_reason, removing };
           continue;
         }
-        // The server's delivery decides (services.Deliver): no wait reason
-        // means every row went to Zitadel.
+        // The planner decided delivery: no wait reason means every row went.
         if (!cascade?.wait_reason) {
           sent += enqueued;
           continue;
@@ -156,49 +144,67 @@ function ManageBundlesOpen({
         // rest, and a role that waits holds one too.
         if (removing && auto === true && cascade.wait_reason !== "role_waits") revoking += enqueued;
       }
-      const recorded =
-        changes.length === 1 ? "One bundle change recorded" : `${changes.length} bundle changes recorded`;
-      if (refused) {
-        setOutcome(refusedOutcome(recorded, refused.reason, { revocation: refused.removing }));
-        setStaged(new Set());
-        return;
-      }
-      if (waiting === 0 && sent > 0) {
-        setOutcome({ kind: "applied", message: recorded, detail: `Sent to Zitadel: ${sent === 1 ? "one change" : `${sent} changes`}.` });
-        setStaged(new Set());
-        return;
-      }
-      setOutcome({
-        // Amber "waiting" only where something waits. A change that queued
-        // nothing is done, and painting it as pending sends an operator to an
-        // empty Pending changes to look for it.
-        kind: waiting > 0 ? "queued" : "applied",
-        // Unknown drain (N3): no promise, and no Send link for a revocation that may go on its own.
-        ...(waiting > 0 && auto === null ? { sendsItself: true, next: DRAIN_UNKNOWN_NEXT } : {}),
-        message: recorded,
-        // Revocations do not wait for a person — they send on their own within a
-        // minute — so telling the operator to go and send them would be
-        // false, and saying nothing about it would leave them wondering why
-        // Pending changes emptied by itself.
-        detail:
-          waiting > 0
-            ? `${sent > 0 ? `${sent === 1 ? "One change" : `${sent} changes`} went to Zitadel. ` : ""}${
-                waiting === 1 ? "One change waits" : `${waiting} changes wait`
-              } under Pending changes${
-                auto === null
-                  ? ", listed there until each reaches Zitadel."
-                  : revoking === waiting
-                    ? ". Revocations send on their own within a minute, or send them now."
-                    : revoking > 0
-                      ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a minute, the rest until you send them.`
-                      : " until you send them."
-              }`
-            : "Nothing is waiting for you to send: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",
-      });
-      setStaged(new Set());
+    };
+    try {
+      // One ask for every waiting change the staged changes cancel (A-21 §3.2).
+      if ((await step.confirm(cancels, write)) === KEPT) return;
+      setStale(false);
     } catch (error) {
-      setOutcome(outcomeFromError(error));
+      if (movedAt < 0) {
+        setOutcome(outcomeFromError(error));
+        return;
+      }
+      setStale(true);
+      consents.forEach((c) => c.retry());
+      if (applied === 0) return;
     }
+    const recorded = applied === 1 ? "One bundle change recorded" : `${applied} bundle changes recorded`;
+    // Their access moved partway through: what was written is the result, and
+    // the result says what wasn't and what to do, so it never ends on "Nothing
+    // for you to do." while changes are still ticked and unwritten.
+    const rest = changes.length - applied;
+    const tellRest = (o: Outcome): Outcome => {
+      if (movedAt < 0) return o;
+      const restLine = `${rest === 1 ? "One change wasn't" : `${rest} changes weren't`} applied: ${first}'s access moved while this was open.`;
+      const again = "Read the note under each bundle, then press Apply again.";
+      const join = (...parts: Array<string | undefined>) => parts.filter(Boolean).join(" ");
+      return o.kind === "applied" ? { ...o, detail: join(o.detail, restLine), next: again } : { ...o, detail: join(o.detail, restLine, again) };
+    };
+    if (refused) {
+      setOutcome(tellRest(refusedOutcome(recorded, refused.reason, { revocation: refused.removing })));
+      return;
+    }
+    if (waiting === 0 && sent > 0) {
+      setOutcome(tellRest({ kind: "applied", message: recorded, detail: `Sent to Zitadel: ${sent === 1 ? "one change" : `${sent} changes`}.` }));
+      return;
+    }
+    setOutcome(tellRest({
+      // Amber "waiting" only where something waits. A change that queued
+      // nothing is done, and painting it as pending sends an operator to an
+      // empty Pending changes to look for it.
+      kind: waiting > 0 ? "queued" : "applied",
+      // Unknown drain (N3): no promise, and no Send link for a revocation that may go on its own.
+      ...(waiting > 0 && auto === null ? { sendsItself: true, next: DRAIN_UNKNOWN_NEXT } : {}),
+      message: recorded,
+      // Revocations do not wait for a person — they send on their own within a
+      // minute — so telling the operator to go and send them would be
+      // false, and saying nothing about it would leave them wondering why
+      // Pending changes emptied by itself.
+      detail:
+        waiting > 0
+          ? `${sent > 0 ? `${sent === 1 ? "One change" : `${sent} changes`} went to Zitadel. ` : ""}${
+              waiting === 1 ? "One change waits" : `${waiting} changes wait`
+            } under Pending changes${
+              auto === null
+                ? ", listed there until each reaches Zitadel."
+                : revoking === waiting
+                  ? ". Revocations send on their own within a minute, or send them now."
+                  : revoking > 0
+                    ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a minute, the rest until you send them.`
+                    : " until you send them."
+            }`
+          : "Nothing is waiting for you to send: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",
+    }));
   }
 
   const busy = assign.isPending || remove.isPending;
@@ -236,72 +242,63 @@ function ManageBundlesOpen({
         })}
       </div>
 
-      {previewBundle && (
-        <div className="mx-6 mt-5 border-t border-line pt-4">
-          <div className="mb-2.5 type-label">
-            {previewAdding ? `Adding ${previewBundle.name} would give` : `Removing ${previewBundle.name} would revoke`}
-          </div>
-          <div className="flex flex-col gap-[7px] text-[14px]">
-            {previewRoles.length === 0 && (
-              <span className="text-faint">
-                {previewBundle.latest_version
-                  ? `v${previewBundle.latest_version} of this bundle carries no roles, so this gives nothing.`
-                  : "This bundle carries no roles yet."}
-              </span>
-            )}
-            {previewRoles.map((role) => {
-              const projectId = role.zitadel_project_id;
-              const roleKey = role.zitadel_role_key;
-              // No change for this role, by the backend's answer: already held
-              // (adding), or still given by something else (removing).
-              const unchanged = changed !== null && !changed.has(`${projectId}:${roleKey}`);
-              return (
-                <div
-                  key={`${projectId}:${roleKey}`}
-                  className={`flex items-center gap-2.5 ${unchanged ? "text-faint" : ""}`}
-                >
-                  <StatusDot tone={unchanged ? "neutral" : "accent"} />
-                  <RoleRef projectId={projectId} roleKey={roleKey} />
-                  {unchanged && (
-                    <span className="text-[13px]">
-                      {previewAdding ? "already held, no change" : "kept, something else gives it"}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-            {/* Every role the automatic rules add or take with it, down the
-                whole chain: the backend's answer, never a walk of the rule
-                list here (which used to name the first matching rule only). */}
-            {throughRules.map((r) => (
-              <div key={`${r.project_id}:${r.role_key}`} className="flex items-center gap-2.5 text-muted">
-                <StatusDot tone="neutral" />
-                and, through an automatic rule, <RoleRef projectId={r.project_id} roleKey={r.role_key} />
-              </div>
-            ))}
-            {preview.error && (
-              <span className="text-[13px] text-faint">
-                Couldn&rsquo;t work out what the automatic rules add. The roles above are the bundle&rsquo;s own.
-              </span>
-            )}
-          </div>
+      {stale && !outcome && (
+        <Notice
+          tone="warn"
+          blocking
+          className="mx-6 mt-4"
+          title={`Nothing was changed. ${first}'s access moved while this was open.`}
+          next={`Read the note under each bundle, then press Apply again.`}
+        >
+          {null}
+        </Notice>
+      )}
 
-          {/*
-            Said here, on the screen that would otherwise be contradicted. A
-            bundle with unpublished edits grants its published version, so this
-            list is right and the bundle screen's role list is a different set —
-            and an operator who has just added those roles will read their
-            absence as this panel being stale rather than as the truth about
-            what an assignment pins.
-          */}
-          {previewAdding && (previewBundle.unpublished_changes ?? 0) > 0 && (
-            <p className="mt-3 border-t border-line pt-2.5 text-[13px] leading-[1.5] text-muted">
-              {previewBundle.name} has {previewBundle.unpublished_changes} unpublished{" "}
-              {previewBundle.unpublished_changes === 1 ? "change" : "changes"}. Those are not part
-              of this. An assignment gives v{previewBundle.latest_version}, and publishing is
-              what decides whether the people holding it move.
-            </p>
-          )}
+      {changes.length > 0 && (
+        <div className="mx-6 mt-5 flex flex-col gap-3.5 border-t border-line pt-4">
+          {changes.map((id, i) => {
+            const bundle = (bundles.data ?? []).find((b) => b.id === id);
+            if (!bundle) return null;
+            const adding = !assignedIds.has(id);
+            const plan = consents[i]?.plan;
+            const empty = adding && (bundleRoles[id] ?? []).length === 0;
+            // The planner's words for this change, rules followed (A-21 §3.2):
+            // the same sentences a bulk plan's row says.
+            const words = plan
+              ? [plan.detail, ...(plan.effect === "apply" ? plan.said : [plan.consequence ?? ""])].filter(Boolean).join(" ")
+              : consents[i]?.checking
+                ? consents[i]?.hold
+                : undefined;
+            return (
+              <div key={id} className="flex flex-col gap-1.5">
+                <div className="type-label">{bundle.name}</div>
+                {empty ? (
+                  <span className="text-[14px] text-faint">
+                    {bundle.latest_version
+                      ? `v${bundle.latest_version} of this bundle carries no roles, so this gives nothing.`
+                      : "This bundle carries no roles yet."}
+                  </span>
+                ) : (
+                  words && <p className={`text-[14px] leading-[1.5] ${plan ? "" : "text-faint"}`}>{words}</p>
+                )}
+                {/*
+                  Said here, on the screen that would otherwise be contradicted. A
+                  bundle with unpublished edits grants its published version, so
+                  what this says is right and the bundle screen's role list is a
+                  different set.
+                */}
+                {adding && (bundle.unpublished_changes ?? 0) > 0 && (
+                  <p className="text-[13px] leading-[1.5] text-muted">
+                    {bundle.name} has {bundle.unpublished_changes} unpublished{" "}
+                    {bundle.unpublished_changes === 1 ? "change" : "changes"}. Those are not part of this. An
+                    assignment gives v{bundle.latest_version}, and publishing is what decides whether the people
+                    holding it move.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+          {unread && <RuleConsentFailed consent={unread} />}
         </div>
       )}
 
@@ -321,11 +318,18 @@ function ManageBundlesOpen({
         note={
           step.note ??
           ((!outcome && waits) ||
-            (changes.length > 1
-              ? "Each change is applied in order. Any that fail stay unapplied and are reported."
-              : undefined)) ??
-          // Only where it is true: this button records the change and sends nothing.
-          (staging > 0 ? "Recorded in Syndra first, not sent yet." : undefined)
+            (staging > 0 && !hold ? (
+              // Whether this finishes now or waits, from the plans (A-21 §3.2),
+              // and what it cancels, before the press.
+              <>
+                <span className="block">{bundlesBeforeLine(consents.map((c) => c.plan))}</span>
+                {cancels.length > 0 && (
+                  <span className="block">
+                    {foretell("Applying", cancels)} Nothing is cancelled until you choose on the next step.
+                  </span>
+                )}
+              </>
+            ) : undefined))
         }
         cancel={done ? undefined : { onClick: onClose }}
       >
@@ -338,7 +342,7 @@ function ManageBundlesOpen({
         ) : (
           <Button
             variant="accent"
-            disabled={staging === 0}
+            disabled={staging === 0 || hold !== undefined || refusedRow !== undefined}
             isPending={busy}
             onClick={apply}
             // Never a bare disabled control. The label stays an ACTION at
@@ -349,7 +353,8 @@ function ManageBundlesOpen({
                 ? outcome
                   ? "Recorded. Tick another bundle to make a further change."
                   : "Tick a bundle above to add or remove it."
-                : undefined
+                : (hold ??
+                  (refusedRow ? [refusedRow.detail, refusedRow.consequence].filter(Boolean).join(" ") : undefined))
             }
           >
             {staging === 0 ? "Apply changes" : `Apply ${staging} ${staging === 1 ? "change" : "changes"}`}
@@ -362,3 +367,22 @@ function ManageBundlesOpen({
 }
 
 export const ManageBundles = mountedWhileOpen(ManageBundlesOpen);
+
+/**
+ * Whether the staged changes finish now or wait, from their plans (A-21 §3.2,
+ * the bulk before-line's shapes): "Apply sends 2 changes to Zitadel now. 1
+ * waits for you to send." A change that only cancels a waiting one sends
+ * nothing, and says so.
+ */
+export function bundlesBeforeLine(plans: Array<ActPlan | undefined>): string {
+  const going = plans.filter((p): p is ActPlan => p?.effect === "apply");
+  const now = going.filter((p) => p.delivery === "straight_away").length;
+  const wait = going.filter((p) => p.delivery === "waits_for_you").length;
+  const cancelOnly = going.filter((p) => p.delivery === "none").length;
+  if (going.length === 1 && (now || wait)) return now ? "This goes to Zitadel when you apply." : "This waits for you to send.";
+  const parts: string[] = [];
+  if (now) parts.push(`Apply sends ${now} ${now === 1 ? "change" : "changes"} to Zitadel now.`);
+  if (wait) parts.push(wait === going.length ? "Every change waits for you to send." : `${wait} ${wait === 1 ? "waits" : "wait"} for you to send.`);
+  if (cancelOnly) parts.push(`For ${cancelOnly}, this only cancels ${cancelOnly === 1 ? "a change that's waiting" : "changes that are waiting"}; nothing is sent.`);
+  return parts.join(" ") || "Nothing here is sent to Zitadel.";
+}

@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { trueSeat } from "@/test-utils/seat";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { actPlan } from "@/test-utils/plan";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -27,6 +28,14 @@ const state = vi.hoisted(() => ({
   ],
 }));
 
+// Approve asks the planner before the press (A-21 §3); nothing follows here.
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return actPlan();
+    throw new Error(`unmocked request ${path}`);
+  },
+}));
 vi.mock("@/lib/queries/useServiceAccounts", () => ({
   useServiceAccounts: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
   serviceAccountHref: (id: string) => `/system/service-accounts/${id}`,

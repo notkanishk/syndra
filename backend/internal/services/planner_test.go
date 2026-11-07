@@ -30,6 +30,7 @@ func plannerSnap() PlanSnapshot {
 			advanced: {Role: "Advanced", Project: "Laser Lab"},
 		},
 		Profiles: map[string]models.UserProfile{"u1": {ID: "u1", Name: "Ada Lovelace", Status: "active"}},
+		Holding:  models.RequestHolding{Kind: models.HoldingNone},
 		Access: db.AccessSnapshot{
 			People:    map[string]db.PersonAccess{"u1": {}},
 			RoleWaits: map[db.RoleRef]bool{},

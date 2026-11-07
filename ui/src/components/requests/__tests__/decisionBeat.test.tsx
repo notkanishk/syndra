@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RequestsScreen } from "@/components/requests/RequestsScreen";
 import type { AccessRequest } from "@/lib/queries/useRequests";
+import { planKey } from "@/lib/usePlanConsent";
 import { gapSettled } from "@/test-utils/leaving";
+import { actPlan } from "@/test-utils/plan";
 import { motionInTests } from "@/test-utils/motion";
 
 /**
@@ -19,8 +21,14 @@ let data: AccessRequest[] = [];
 const decide = vi.fn();
 const applyBulk = vi.fn();
 
-// The rule preview answered, nothing follows: Approve is not held (N5 has its own test).
-vi.mock("@/lib/queries/useRulePreview", () => ({ useRulePreview: () => ({ data: [], isLoading: false, isError: false }) }));
+// The planner has answered, nothing follows: Approve is not held (N5 has its own test).
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return actPlan();
+    throw new Error(`unmocked request ${path}`);
+  },
+}));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
   useRouter: () => ({ replace: () => {} }),
@@ -91,6 +99,11 @@ const fadeOf = rowOf;
 const list = () => document.querySelector("[data-selection-scope]")!;
 
 beforeEach(() => {
+  // The plans are read already, as they are by the time a row is pressed: the
+  // fake clock this file runs on would stall a fresh read (A-21 §3).
+  for (const [id, user] of [["r1", "u1"], ["r2", "u2"], ["r9", "u9"]]) {
+    client.setQueryData(planKey({ op: "approve", userId: user, requestId: id }), actPlan());
+  }
   vi.useFakeTimers();
   motionInTests();
   data = [ask("r1", "u1"), ask("r2", "u2")];
@@ -144,7 +157,7 @@ describe("a decided request keeps its seat for a beat", () => {
     tick(300);
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await flush();
-    expect(decide).toHaveBeenLastCalledWith({ id: "r2", status: "approved" });
+    expect(decide).toHaveBeenLastCalledWith({ id: "r2", status: "approved", fingerprint: "fp-1", cancel_ids: [] });
     // r2's own beat starts when it is decided, not with r1's.
     tick(600);
     expect(fadeOf(/why r1/)).toHaveAttribute("data-leaving");

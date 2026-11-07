@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { FORECAST } from "@/lib/outcome";
 import type { Indicators } from "@/lib/queries/useIndicators";
+import { actPlan } from "@/test-utils/plan";
 
 /**
  * A-20 P8: Give forecasts in the first frame. A role that waits (the role
@@ -19,9 +20,13 @@ const wire = vi.hoisted(() => ({
 
 vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => false }));
 vi.mock("@/lib/queries/useTerms", () => ({ useTerms: () => ({ data: undefined }) }));
-// No automatic rule follows these roles (the preview has answered).
-vi.mock("@/lib/queries/useRulePreview", () => ({
-  useRulePreview: () => ({ data: [], isLoading: false, isError: false }),
+// The planner has answered: nothing cancels and no rule follows these roles.
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return actPlan();
+    throw new Error(`unmocked request ${path}`);
+  },
 }));
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({ data: [{ project: { id: "p1", name: "Printing Lab" } }] }),
@@ -67,7 +72,7 @@ beforeEach(() => {
   client.setQueryData(["governance", "indicators"], rail);
 });
 
-function give(role: string) {
+async function give(role: string) {
   render(
     <QueryClientProvider client={client}>
       <GrantDirectAccess userId="u1" userName="Ada Lovelace" open onClose={vi.fn()} />
@@ -77,12 +82,14 @@ function give(role: string) {
   fireEvent.click(within(dialog).getByRole("button", { name: /Printing Lab/ }));
   fireEvent.click(within(dialog).getByRole("radio", { name: new RegExp(role) }));
   fireEvent.change(screen.getByPlaceholderText(/Capstone build/), { target: { value: "test" } });
+  // The press waits on the plan (A-21 §3).
+  await waitFor(() => expect(screen.getByRole("button", { name: "Give role" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Give role" }));
 }
 
 describe("Give: the first 100ms", () => {
   it("says 'Will be given' for an ordinary role, and nothing on the rail moves ahead of the answer", async () => {
-    give("Operator");
+    await give("Operator");
     expect(await screen.findByText(FORECAST.give)).toBeInTheDocument();
     expect(pendingNow()).toBe(2);
     wire.settle!.resolve({ outbox_id: "o1", status: "pending", wait_reason: "manual" });
@@ -92,7 +99,7 @@ describe("Give: the first 100ms", () => {
   });
 
   it("says 'Will wait for you to send' for a role that waits, never 'Will be given'", async () => {
-    give("Supervisor");
+    await give("Supervisor");
     expect(await screen.findByText(FORECAST.queued)).toBeInTheDocument();
     expect(screen.queryByText(FORECAST.give)).toBeNull();
     wire.settle!.resolve({ outbox_id: "o1", status: "pending", wait_reason: "role_waits" });
@@ -100,7 +107,7 @@ describe("Give: the first 100ms", () => {
   });
 
   it("an error is the honest error: the forecast goes, the rail does not move", async () => {
-    give("Operator");
+    await give("Operator");
     await screen.findByText(FORECAST.give);
     wire.settle!.reject(new Error("boom"));
     await waitFor(() => expect(screen.getByText(/Nothing was changed/i)).toBeInTheDocument());

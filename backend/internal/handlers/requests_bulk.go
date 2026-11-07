@@ -145,7 +145,7 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 		// The plan agrees with the decision: a request for a role they have
 		// come to hold since asking can't be approved (resolveOneAccessRequest
 		// refuses it), only declined.
-		var approval approvalPlan
+		var approval services.ApprovalPlan
 		if status == "approved" {
 			h, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey)
 			switch {
@@ -156,15 +156,15 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 			default:
 				// The same plan the decision runs (planApproval), so the
 				// rehearsal says what approving will do, kind for kind.
-				plan, perr := planApproval(request, h, time.Now())
+				plan, perr := services.PlanApproval(request, h, time.Now())
 				switch {
-				case errors.Is(perr, errRequestAlreadyHeld):
+				case errors.Is(perr, services.ErrRequestAlreadyHeld):
 					out.Effect = services.EffectBlocked
 					out.Detail = "Already has this, so approving would change nothing. Decline it to close the request."
-				case errors.Is(perr, errExtensionShortens):
+				case errors.Is(perr, services.ErrExtensionShortens):
 					out.Effect = services.EffectBlocked
 					out.Detail = "Already has this past the end this asks for, so approving would shorten it. Decline it to close the request."
-				case errors.Is(perr, errAskEnded):
+				case errors.Is(perr, services.ErrAskEnded):
 					out.Effect = services.EffectBlocked
 					out.Detail = "The end date this asked for has already passed, so approving would give access that has already ended. Decline it, and they can ask again."
 				case perr == nil:
@@ -201,11 +201,11 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 					*request.DurationDays)
 			}
 			switch approval.Effect {
-			case effectExtend:
-				out.Detail = fmt.Sprintf("Keeps %s longer, %s.", request.RoleKey, endPhrase(approval.ExpiresAt))
+			case services.EffectExtend:
+				out.Detail = fmt.Sprintf("Keeps %s longer, %s.", request.RoleKey, services.EndPhrase(approval.ExpiresAt))
 				out.Consequence = "Approving moves the end of the grant they have, the same as extending it from Expiring access."
-			case effectGiveAgain:
-				out.Detail = fmt.Sprintf("Gets %s back, %s.", request.RoleKey, endPhrase(approval.ExpiresAt))
+			case services.EffectGiveAgain:
+				out.Detail = fmt.Sprintf("Gets %s back, %s.", request.RoleKey, services.EndPhrase(approval.ExpiresAt))
 				out.Consequence = "It ended while this waited, so approving gives it again for the time asked."
 			}
 			// Never invisibly (owner, 15 Oct): a queued removal this approval
@@ -312,5 +312,5 @@ func ruleWaitingLine(n int) string {
 // the race guard, the cache rebuild and the inline drain cannot drift apart
 // between the one-at-a-time path and the bulk one.
 func decideOneRequest(r *http.Request, id, status, note string) (decisionResult, error) {
-	return resolveAccessRequestOutcome(r.Context(), id, status, resolveActor(r, ""), note)
+	return resolveAccessRequestOutcome(r.Context(), id, status, resolveActor(r, ""), note, nil)
 }

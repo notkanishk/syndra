@@ -1,4 +1,4 @@
-package handlers
+package services
 
 import (
 	"errors"
@@ -22,32 +22,32 @@ import (
 // approving one, approving in bulk and an operator's own extension all decide
 // the same way.
 const (
-	requestKindAccess = "access"
-	requestKindExtend = "extend"
+	RequestKindAccess = "access"
+	RequestKindExtend = "extend"
 )
 
 var (
-	// errNothingToExtend: an extension asked of a role held with no end.
-	errNothingToExtend = errors.New("there is no end to extend: they have this with no end date")
-	// errExtensionShortens: the new end would not be later than the one they
+	// ErrNothingToExtend: an extension asked of a role held with no end.
+	ErrNothingToExtend = errors.New("there is no end to extend: they have this with no end date")
+	// ErrExtensionShortens: the new end would not be later than the one they
 	// have. Counting from the current end, only a malformed ask can reach it.
-	errExtensionShortens = errors.New("it already runs past that date, so extending would shorten it")
-	// errAskEnded: the end date the ask names has already passed, so approving
+	ErrExtensionShortens = errors.New("it already runs past that date, so extending would shorten it")
+	// ErrAskEnded: the end date the ask names has already passed, so approving
 	// would give access that has already ended.
-	errAskEnded = errors.New("the end date this asks for has passed, so approving would give access that has already ended")
+	ErrAskEnded = errors.New("the end date this asks for has passed, so approving would give access that has already ended")
 )
 
-// approvalEffect is what approving a request will do.
-type approvalEffect string
+// ApprovalEffect is what approving a request will do.
+type ApprovalEffect string
 
 const (
-	effectGive      approvalEffect = "given"       // a role they don't have
-	effectExtend    approvalEffect = "extended"    // a later end on the grant they have
-	effectGiveAgain approvalEffect = "given_again" // asked to keep it, and it lapsed meanwhile
+	EffectGive      ApprovalEffect = "given"       // a role they don't have
+	EffectExtend    ApprovalEffect = "extended"    // a later end on the grant they have
+	EffectGiveAgain ApprovalEffect = "given_again" // asked to keep it, and it lapsed meanwhile
 )
 
-type approvalPlan struct {
-	Effect    approvalEffect
+type ApprovalPlan struct {
+	Effect    ApprovalEffect
 	ExpiresAt *time.Time // nil: no end date
 	EndRule   db.EndRule
 }
@@ -68,7 +68,7 @@ func endAfter(now time.Time, days *int) *time.Time {
 // it has passed or there is none. Zero days or fewer means no end. (A-04 §2)
 func extendEnd(now time.Time, h models.RequestHolding, days *int, until *time.Time) *time.Time {
 	if until != nil {
-		return askedEnd(until)
+		return AskedEnd(until)
 	}
 	base := now
 	if h.Kind == models.HoldingUntil && h.Until != nil && h.Until.After(now) {
@@ -77,51 +77,51 @@ func extendEnd(now time.Time, h models.RequestHolding, days *int, until *time.Ti
 	return endAfter(base, days)
 }
 
-// askedEnd is the fixed end date an ask carries: the end of its day in the
+// AskedEnd is the fixed end date an ask carries: the end of its day in the
 // makerspace's zone (clock.EndOfDay), whatever instant on that day was sent. A
 // client that sent UTC midnight ("until 30 Nov" as 05:30 IST) still gets all
 // of 30 Nov.
-func askedEnd(until *time.Time) *time.Time {
+func AskedEnd(until *time.Time) *time.Time {
 	t, _ := clock.EndOfDay(clock.Day(*until)) // a Day is always a valid day
 	return &t
 }
 
-// checkExtension says whether a new end extends what is held: there must be an
+// CheckExtension says whether a new end extends what is held: there must be an
 // end to move, and the new one must be later (or none at all).
-func checkExtension(h models.RequestHolding, newEnd *time.Time) error {
+func CheckExtension(h models.RequestHolding, newEnd *time.Time) error {
 	if h.Kind != models.HoldingUntil || h.Until == nil {
-		return errNothingToExtend
+		return ErrNothingToExtend
 	}
 	if newEnd != nil && !newEnd.After(*h.Until) {
-		return errExtensionShortens
+		return ErrExtensionShortens
 	}
 	return nil
 }
 
-// checkRequestKind refuses a request that doesn't fit what they hold, when it
-// is asked. The holding is read again when it is decided (planApproval).
-func checkRequestKind(kind string, h models.RequestHolding, days *int, until *time.Time, now time.Time) error {
-	if until != nil && !askedEnd(until).After(now) { // an ask covers its whole last day
-		return errAskEnded
+// CheckRequestKind refuses a request that doesn't fit what they hold, when it
+// is asked. The holding is read again when it is decided (PlanApproval).
+func CheckRequestKind(kind string, h models.RequestHolding, days *int, until *time.Time, now time.Time) error {
+	if until != nil && !AskedEnd(until).After(now) { // an ask covers its whole last day
+		return ErrAskEnded
 	}
 	switch kind {
-	case requestKindExtend:
+	case RequestKindExtend:
 		if h.Kind == models.HoldingNone {
-			return errNothingHeldToExtend
+			return ErrNothingHeldToExtend
 		}
-		return checkExtension(h, extendEnd(now, h, days, until))
+		return CheckExtension(h, extendEnd(now, h, days, until))
 	default:
 		if h.Kind != models.HoldingNone {
-			return errRequestAlreadyHeld
+			return ErrRequestAlreadyHeld
 		}
 		return nil
 	}
 }
 
-// errNothingHeldToExtend: asked to keep a role they don't have.
-var errNothingHeldToExtend = errors.New("you don't have this, so there's nothing to keep longer; ask for it instead")
+// ErrNothingHeldToExtend: asked to keep a role they don't have.
+var ErrNothingHeldToExtend = errors.New("you don't have this, so there's nothing to keep longer; ask for it instead")
 
-// planApproval is what approving will do, given what they hold now.
+// PlanApproval is what approving will do, given what they hold now.
 //
 // An extension whose grant lapsed while it waited gives the role back for the
 // time asked: that is what they asked for, and refusing it would leave them
@@ -131,57 +131,57 @@ var errNothingHeldToExtend = errors.New("you don't have this, so there's nothing
 // An ask that names an end date (until the end of term) gives the grant that
 // date, not now plus the days it was worth when asked; one whose date has
 // passed is refused rather than given already ended.
-func planApproval(r models.AccessRequest, h models.RequestHolding, now time.Time) (approvalPlan, error) {
-	if r.AskedUntil != nil && !askedEnd(r.AskedUntil).After(now) {
-		return approvalPlan{}, errAskEnded
+func PlanApproval(r models.AccessRequest, h models.RequestHolding, now time.Time) (ApprovalPlan, error) {
+	if r.AskedUntil != nil && !AskedEnd(r.AskedUntil).After(now) {
+		return ApprovalPlan{}, ErrAskEnded
 	}
 	end := endAfter(now, r.DurationDays)
 	if r.AskedUntil != nil {
-		end = askedEnd(r.AskedUntil)
+		end = AskedEnd(r.AskedUntil)
 	}
-	if r.Kind == requestKindExtend {
+	if r.Kind == RequestKindExtend {
 		end = extendEnd(now, h, r.DurationDays, r.AskedUntil)
 	}
-	if r.Kind != requestKindExtend {
+	if r.Kind != RequestKindExtend {
 		if h.Kind != models.HoldingNone {
-			return approvalPlan{}, errRequestAlreadyHeld
+			return ApprovalPlan{}, ErrRequestAlreadyHeld
 		}
-		return approvalPlan{Effect: effectGive, ExpiresAt: end, EndRule: db.EndKept}, nil
+		return ApprovalPlan{Effect: EffectGive, ExpiresAt: end, EndRule: db.EndKept}, nil
 	}
 	if h.Kind == models.HoldingNone {
-		return approvalPlan{Effect: effectGiveAgain, ExpiresAt: end, EndRule: db.EndKept}, nil
+		return ApprovalPlan{Effect: EffectGiveAgain, ExpiresAt: end, EndRule: db.EndKept}, nil
 	}
-	if err := checkExtension(h, end); err != nil {
-		if errors.Is(err, errNothingToExtend) {
-			return approvalPlan{}, errRequestAlreadyHeld
+	if err := CheckExtension(h, end); err != nil {
+		if errors.Is(err, ErrNothingToExtend) {
+			return ApprovalPlan{}, ErrRequestAlreadyHeld
 		}
-		return approvalPlan{}, err
+		return ApprovalPlan{}, err
 	}
-	return approvalPlan{Effect: effectExtend, ExpiresAt: end, EndRule: db.EndSet}, nil
+	return ApprovalPlan{Effect: EffectExtend, ExpiresAt: end, EndRule: db.EndSet}, nil
 }
 
-// holdingEnd is the end a holding has, nil when it has none.
-func holdingEnd(h models.RequestHolding) *time.Time {
+// HoldingEnd is the end a holding has, nil when it has none.
+func HoldingEnd(h models.RequestHolding) *time.Time {
 	if h.Kind == models.HoldingUntil {
 		return h.Until
 	}
 	return nil
 }
 
-// endPhrase is "until 3 Nov 2026", or "with no end date".
-func endPhrase(t *time.Time) string {
+// EndPhrase is "until 3 Nov 2026", or "with no end date".
+func EndPhrase(t *time.Time) string {
 	if t == nil {
 		return "with no end date"
 	}
 	return fmt.Sprintf("until %s", t.In(clock.Loc).Format("2 Jan 2006"))
 }
 
-// approvalReason is the grant's recorded reason for what the approval did.
-func approvalReason(e approvalEffect) string {
+// ApprovalReason is the grant's recorded reason for what the approval did.
+func ApprovalReason(e ApprovalEffect) string {
 	switch e {
-	case effectExtend:
+	case EffectExtend:
 		return "Kept longer, from a request"
-	case effectGiveAgain:
+	case EffectGiveAgain:
 		return "Given again, from a request to keep it longer"
 	default:
 		return "Approved from access request"

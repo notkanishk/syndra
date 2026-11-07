@@ -119,18 +119,22 @@ var FollowRules func(ctx context.Context, p EnqueueParams, write func() error) (
 // happens later, during the operator-triggered drain. This is the doctrine seam:
 // the ledger is durable BEFORE any Zitadel mutation (B4/D3 single mutation
 // authority).
-func EnqueueDirectGrantPropagation(ctx context.Context, p EnqueueParams) (EnqueueResult, error) {
+//
+// planned is the rule rows the planner decided for this write (task 1.2): they
+// are written as decided, each with its delivery, instead of asking the rules
+// again. None means the rules follow here (FollowRules).
+func EnqueueDirectGrantPropagation(ctx context.Context, p EnqueueParams, planned ...EnqueueParams) (EnqueueResult, error) {
 	key, err := newOutboxIdempotencyKey()
 	if err != nil {
 		return EnqueueResult{}, err
 	}
-	return enqueueTx(ctx, p, key)
+	return enqueueTx(ctx, p, key, planned...)
 }
 
 // enqueueTx is the tx body with the idempotency key injected, so tests (and the
 // rollback path) can pin a fixed key. All writes share one transaction: a
 // failure on any insert rolls back the ledger, audit, and outbox together.
-func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult, error) {
+func enqueueTx(ctx context.Context, p EnqueueParams, key string, planned ...EnqueueParams) (EnqueueResult, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("begin enqueue tx: %w", err)
@@ -139,7 +143,7 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 		defer tx.Rollback(ctx) // no-op after a successful Commit
 	}
 
-	ids, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{p}, key)
+	ids, err := enqueueWrites(ctx, tx, nil, append([]EnqueueParams{p}, planned...), key)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
@@ -161,12 +165,14 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 //
 // A change comes in one of two shapes:
 //
-//   - A write a person named (key set; params is that one write): a grant, a
+//   - A write a person named (key set; params[0] is that write): a grant, a
 //     revoke by grant id, an approved request, an adopted drift. Its ledger
 //     and audit rows are written here (enqueueLedger), its own outbox row
 //     carries key and no cascade id, an identical add already waiting answers
-//     it, and the mapping rules follow it (FollowRules, ADR-006). ids[0] is its
-//     own row ("" when none is owed), the rest are the rules' (ownAndRules).
+//     it, and the mapping rules follow it (FollowRules, ADR-006), unless the
+//     planner already decided the rules' rows (params[1:], task 1.2). ids[0]
+//     is its own row ("" when none is owed), the rest are the rules'
+//     (ownAndRules).
 //   - A cascade (key empty): the rows one triggering event computed, with that
 //     event's audit rows. Cascade intent lives in the bundle and rule tables,
 //     so no ledger row is written.
@@ -290,10 +296,15 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 			return err
 		}
 		// What the rules owe beyond the write's own roles becomes the rows
-		// below: source 'rule', no ledger row, one cascade.
-		if FollowRules == nil {
+		// below: source 'rule', no ledger row, one cascade. A write the
+		// planner decided carries them already (params[1:], with how each is
+		// delivered), and nothing here decides them again.
+		switch {
+		case len(params) > 1:
+			params, err = params[1:], write()
+		case FollowRules == nil:
 			params, err = nil, write()
-		} else {
+		default:
 			params, err = FollowRules(context.WithValue(ctx, txKey, tx), p, write)
 		}
 		if err != nil {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // cascadeGroupsLimit caps Change history — a glance list, not a paginated worklist.
@@ -32,10 +33,9 @@ func handleGetCascadeGroups(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{"cascades": groups})
 }
 
-// handleRemoveBundleFromUser is the revoke-side counterpart to handleAssignBundleToUser. The
-// cascade OWNS the mutation (delete assignment + per-role revoke outbox rows commit in one tx via
-// db.RemoveBundleFromUserAndEnqueue), then (auto mode) drains those rows. The handler only
-// validates path params, resolves the actor, and reports the cascade outcome.
+// handleRemoveBundleFromUser is the revoke-side counterpart to handleAssignBundleToUser: the
+// planner decides the Change (bundlePlanned) and the write carries the plan the sheet was shown
+// (?fingerprint=&cancel_ids=).
 // DELETE /api/v1/users/{id}/bundles/{bundleId}
 func handleRemoveBundleFromUser(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
@@ -48,22 +48,7 @@ func handleRemoveBundleFromUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor := getAdminUserID(r.Context())
-	if actor == "" {
-		actor = "system"
-	}
-	cascade, err := svcCascadeBundleRemoved(r.Context(), actor, userID, bundleID)
-	if err != nil {
-		if writeRetired(w, "bundle", err) {
-			return
-		}
-		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"message": "Bundle removed from user",
-		"cascade": cascade,
-	})
+	bundlePlanned(w, r, services.BulkOpRemoveBundle, userID, bundleID, seenFromQuery(r))
 }
 
 // handleRemoveRoleFromBundle is the revoke-side counterpart to handleAddRoleToBundle. The cascade
