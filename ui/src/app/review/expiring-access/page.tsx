@@ -35,6 +35,7 @@ import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { RoleRef, UserName } from "@/components/names";
+import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
   useAcknowledgeExpiry,
@@ -108,6 +109,10 @@ export default function ExpiringAccessPage() {
   const [kept, setKept] = useState<string | undefined>(() => recallView("expiring", "pill", isString));
   const within = windowDays(useSearchParams().get("within") ?? kept ?? null);
   const grants = useExpiringGrants(within);
+  const roleWaits = useRoleWaits();
+  // A role that waits for you is not ended by the sweep alone: its removal
+  // waits in Pending changes from that date (planner decision 11).
+  const anyWaits = (grants.data ?? []).some((g) => roleWaits(g.project_id, g.role_key));
   const rows = useMemo(() => [...(grants.data ?? [])].sort(sortBySoonest), [grants.data]);
 
   // Search finds a row; it is not in the link, which carries only how far ahead (`?within=`). Names are the ones the rows show, so what is typed
@@ -260,7 +265,7 @@ export default function ExpiringAccessPage() {
             </MetaRow>
           ) : undefined
         }
-        lede={`Direct access that ends in the next ${within} days. Syndra ends each on its date whether or not you visit; Extend gives ${EXTEND_DAYS} more days, and Let it lapse changes nothing but records that you looked.`}
+        lede={`Direct access that ends in the next ${within} days. Syndra ends each on its date whether or not you visit; Extend gives ${EXTEND_DAYS} more days, and Let it lapse changes nothing but records that you looked.${anyWaits ? " A role that waits for you goes to Pending changes on its date instead, for you to send." : ""}`}
       />
 
       {/* A filter, not an action, so FilterPills and not a Segmented. Select is an action on the
@@ -714,6 +719,7 @@ function LetItLapseDialog({
   onClose: () => void;
 }) {
   const acknowledge = useAcknowledgeExpiry();
+  const waits = useRoleWaits()(grant.project_id, grant.role_key);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [note, setNote] = useState("");
 
@@ -727,9 +733,11 @@ function LetItLapseDialog({
         lede={
           <>
             <RoleRef projectId={grant.project_id} roleKey={grant.role_key} /> for{" "}
-            <UserName id={grant.user_id} />, ending {formatShortDate(expiresAt)}. The access ends on
-            that date as it would have; this records that you looked, and the row asks again if
-            somebody changes the date.
+            <UserName id={grant.user_id} />, ending {formatShortDate(expiresAt)}.{" "}
+            {waits
+              ? "This role always waits for you, so on that date its removal goes to Pending changes for you to send; "
+              : "The access ends on that date as it would have; "}
+            this records that you looked, and the row asks again if somebody changes the date.
           </>
         }
       />
@@ -786,9 +794,10 @@ function LetItLapseDialog({
                 });
                 setOutcome({
                   kind: "applied",
-                  message: "It will end on its date.",
+                  message: waits ? "Its removal goes to Pending changes on its date, for you to send." : "It will end on its date.",
                   detail:
                     "Nothing about the access changed. The list stops asking your colleagues a question you have answered.",
+                  ...(waits ? { next: `On ${formatShortDate(expiresAt)}, press Send on Pending changes.` } : {}),
                 });
               } catch (error) {
                 // A 409 here is the reopen rule arriving early: the grant was

@@ -14,6 +14,11 @@ const state = vi.hoisted(() => ({
   acknowledge: vi.fn(),
   clear: vi.fn(),
   extend: vi.fn(),
+  waits: false,
+}));
+
+vi.mock("@/lib/queries/useRoleWaits", () => ({
+  useRoleWaits: () => () => state.waits,
 }));
 
 // A ceiling of four, so the unit logic can be exercised without rendering six
@@ -93,6 +98,7 @@ function renderPage() {
 
 beforeEach(() => {
   state.rows = [grant()];
+  state.waits = false;
   state.acknowledge = vi.fn().mockResolvedValue({ message: "ok" });
   state.clear = vi.fn().mockResolvedValue({ message: "ok" });
   // An extension is a ledger edit: no outbox row, done when the write answers.
@@ -191,6 +197,22 @@ describe("Expiring access — acknowledgement (C4)", () => {
         note: "Cohort ends",
       }),
     );
+  });
+
+  // A role that waits is not ended by the sweep alone: every place that says
+  // "it ends on its date" says where it goes instead, and what to do then.
+  it("a role that waits: its removal goes to Pending changes on the date, for you to send", async () => {
+    state.waits = true;
+    state.acknowledge.mockResolvedValue({});
+    renderPage();
+    expect(document.body.textContent).toMatch(/A role that waits for you goes to Pending changes on its date instead, for you to send\./);
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    expect(within(screen.getByRole("dialog")).getByText(/its removal goes to Pending changes for you to send/)).toBeTruthy();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Let it lapse" }));
+    expect(await screen.findByText("Its removal goes to Pending changes on its date, for you to send.")).toBeTruthy();
+    expect(screen.getByText(/press Send on Pending changes\./)).toBeTruthy();
+    expect(screen.queryByText("Nothing for you to do.")).toBeNull();
+    state.waits = false;
   });
 
   it("does not require a note", async () => {
