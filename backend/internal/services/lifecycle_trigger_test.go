@@ -310,7 +310,7 @@ func TestAssigningABundleQueuesTheStateAFTERTheAssignment(t *testing.T) {
 	svcGetDirectGrantsForUser = noDirects
 	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
-	svcAssignBundleAndEnqueue = func(context.Context, string, string, string, string, []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(context.Context, string, string, string, string, string, []db.EnqueueParams) ([]string, bool, error) {
 		assigned = true
 		return []string{"o1"}, true, nil
 	}

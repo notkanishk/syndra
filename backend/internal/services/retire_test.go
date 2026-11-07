@@ -35,11 +35,11 @@ func TestRetiredBundleRefusesEveryCascade(t *testing.T) {
 				return models.Bundle{ID: id, Name: "Old", RetiredAt: &at, RetiredBy: "admin"}, nil
 			}
 			wrote := false
-			svcAssignBundleAndEnqueue = func(context.Context, string, string, string, string, []db.EnqueueParams) ([]string, bool, error) {
+			svcAssignBundleAndEnqueue = func(context.Context, string, string, string, string, string, []db.EnqueueParams) ([]string, bool, error) {
 				wrote = true
 				return nil, false, nil
 			}
-			svcRemoveBundleFromUserAndEnqueue = func(context.Context, string, string, string, []db.EnqueueParams) ([]string, error) {
+			svcRemoveBundleFromUserAndEnqueue = func(context.Context, string, string, string, string, []db.EnqueueParams) ([]string, error) {
 				wrote = true
 				return nil, nil
 			}

@@ -31,10 +31,10 @@ func TestBundleHolderSourceAndDiscardDraft_AgainstTheSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, ok, err := AssignBundleAndEnqueue(ctx, "op-1", alice, bundleID, v1.ID, nil); err != nil || !ok {
+	if _, ok, err := AssignBundleAndEnqueue(ctx, "op-1", "", alice, bundleID, v1.ID, nil); err != nil || !ok {
 		t.Fatalf("assign: %v %v", ok, err)
 	}
-	if _, ok, err := AssignBundleAndEnqueue(ctx, WelcomeActor, bob, bundleID, v1.ID, nil); err != nil || !ok {
+	if _, ok, err := AssignBundleAndEnqueue(ctx, WelcomeActor, "", bob, bundleID, v1.ID, nil); err != nil || !ok {
 		t.Fatalf("welcome: %v %v", ok, err)
 	}
 	holders := holdersByUser(t, ctx, bundleID)
