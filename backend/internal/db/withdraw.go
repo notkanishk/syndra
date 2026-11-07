@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -69,8 +70,7 @@ const withdrawnReason = "withdrawn before it was sent: the change that queued it
 // source: a cascade queues a revoke only when nothing else holds the role, so
 // whatever gives it back answers that revoke.
 func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p EnqueueParams) (owed bool, err error) {
-	args, ok := answeredArgs(target, p)
-	if !ok {
+	if !answersAny(p) {
 		return true, nil
 	}
 	reason := withdrawnReason
@@ -79,10 +79,12 @@ func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p Enqueu
 	}
 	// Read, decide, then cancel: under the access-mutation lock nothing moves
 	// in between, and the rows refused are the rows that would have gone.
-	answered, err := scanQueuedChanges(tx.Query(ctx, queuedChangeColumns+answeredWhere+` ORDER BY created_at FOR UPDATE`, args...))
+	candidates, err := scanQueuedChanges(tx.Query(ctx,
+		queuedChangeColumns+candidateWhere+` ORDER BY created_at FOR UPDATE`, target, p.UserID, p.ProjectID, p.RoleKeys))
 	if err != nil {
 		return false, fmt.Errorf("withdraw queued delivery: %w", err)
 	}
+	answered := AnsweredBy(p, candidates)
 	if len(answered) == 0 {
 		return true, nil
 	}
@@ -117,27 +119,57 @@ func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p Enqueu
 		}
 	}
 
-	// Is a delivery still standing? Only the LAST applied row decides: an add
-	// after the last revoke means the grant is live in Zitadel and this revoke
-	// is the only thing that takes it back. A revoke after the last add means
-	// it is already gone, and the row just cancelled was a re-delivery that
-	// never went out — so there is nothing left to undo.
-	//
-	// `MAX ... FILTER`, not `EXISTS`: existence is what the first version of
-	// this asked, and existence cannot tell an order.
-	const standing = `
-		SELECT COALESCE(MAX(intent_seq) FILTER (WHERE op_type IN ('add','replace')), 0)
-		     > COALESCE(MAX(intent_seq) FILTER (WHERE op_type = 'revoke'), 0)
-		  FROM propagation_outbox
-		 WHERE target = $1 AND user_id = $2 AND project_id = $3
-		   AND role_keys @> $4::text[] AND status = 'applied'`
-	var live bool
-	if err := tx.QueryRow(ctx, standing, target, p.UserID, p.ProjectID, p.RoleKeys).
-		Scan(&live); err != nil {
+	// Is a delivery still standing? See standingFor.
+	standing, err := standingFor(ctx, tx, target, []string{p.UserID})
+	if err != nil {
 		return false, fmt.Errorf("withdraw queued delivery: %w", err)
 	}
-	// A revoke is owed while the grant stands; an add, only once it doesn't.
-	return live == (p.OpType == "revoke"), nil
+	return OwedAfterCancel(p, standing[p.UserID][RoleRef{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]}]), nil
+}
+
+// standingFor is, per person, the roles whose delivery still stands on target.
+// Only the LAST applied row decides: an add after the last revoke means the
+// grant is live there and a revoke is the only thing that takes it back. A
+// revoke after the last add means it is already gone, and a queued row just
+// cancelled was a re-delivery that never went out, so there is nothing left
+// to undo.
+//
+// `MAX ... FILTER`, not `EXISTS`: existence is what the first version of this
+// asked, and existence cannot tell an order. One statement for the write
+// (withdrawUndelivered) and the plan (ReadAccessSnapshot).
+func standingFor(ctx context.Context, q Querier, target string, userIDs []string) (map[string]map[RoleRef]bool, error) {
+	rows, err := q.Query(ctx, `
+		SELECT user_id, project_id, rk
+		  FROM propagation_outbox, UNNEST(role_keys) AS rk
+		 WHERE target = $1 AND user_id = ANY($2) AND status = 'applied' AND project_id IS NOT NULL
+		 GROUP BY user_id, project_id, rk
+		HAVING COALESCE(MAX(intent_seq) FILTER (WHERE op_type IN ('add','replace')), 0)
+		     > COALESCE(MAX(intent_seq) FILTER (WHERE op_type = 'revoke'), 0)`, target, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]map[RoleRef]bool{}
+	for rows.Next() {
+		var user string
+		var r RoleRef
+		if err := rows.Scan(&user, &r.ProjectID, &r.RoleKey); err != nil {
+			return nil, err
+		}
+		if out[user] == nil {
+			out[user] = map[RoleRef]bool{}
+		}
+		out[user][r] = true
+	}
+	return out, rows.Err()
+}
+
+// OwedAfterCancel says whether a write that cancelled a queued change is
+// still owed: a revoke while the grant stands in Zitadel, an add only once it
+// doesn't. standing is the last applied delivery of the role being an add.
+// The planner says it ahead of time from the same fact.
+func OwedAfterCancel(p EnqueueParams, standing bool) bool {
+	return standing == (p.OpType == "revoke")
 }
 
 // cancelledUnsentAudit is the Change history action for each cancellation.
@@ -204,53 +236,71 @@ func CancelledUnsentDetails(c models.QueuedChange, p EnqueueParams) ([]byte, err
 
 const givenBackReason = "cancelled before it was sent: the role was given back"
 
-// answeredWhere is the one statement of which queued changes an action
-// cancels. WouldCancel (the preview) and withdrawUndelivered (the action)
-// both use it, so what an operator is told is what happens.
+// Answers is the one statement of which queued change a write cancels.
+// WouldCancel (the preview), the planner (a plan's row) and
+// withdrawUndelivered (the action) all ask it, so what an operator is told is
+// what happens. c is a pending row on the write's target; the SQL only
+// narrows to the person, project and role.
 //
-// A revoke answers adds from its own source. For a direct grant the source is
-// enough: there is one direct grant per person and role, and its add carries
-// the request id or nothing while its removal carries the grant id, so
-// matching the reference too meant removing an unsent direct grant queued the
-// removal behind the add.
-const answeredWhere = `target = $1 AND status = 'pending' AND op_type = ANY($7::text[])
-		   AND user_id = $2 AND project_id = $3 AND role_keys = $4::text[]
-		   AND (NOT $8 OR (source = $5 AND (source = 'direct' OR source_ref IS NOT DISTINCT FROM NULLIF($6,''))))`
-
-// answeredArgs are answeredWhere's eight arguments, or false when the change
-// answers nothing (more than one role, or not an add or a revoke).
-func answeredArgs(target string, p EnqueueParams) ([]any, bool) {
-	if len(p.RoleKeys) != 1 {
-		return nil, false
+// Single-role writes only, adds and revokes only. An add answers a queued
+// revoke from any source: a cascade queues a revoke only when nothing else
+// holds the role, so whatever gives it back answers it. A revoke answers adds
+// from its own source. For a direct grant the source is enough: there is one
+// direct grant per person and role, and its add carries the request id or
+// nothing while its removal carries the grant id, so matching the reference
+// too meant removing an unsent direct grant queued the removal behind the add.
+func Answers(p EnqueueParams, c models.QueuedChange) bool {
+	if !answersAny(p) || c.UserID != p.UserID || c.ProjectID != p.ProjectID || !slices.Equal(c.RoleKeys, p.RoleKeys) {
+		return false
 	}
-	var answers []string
-	switch p.OpType {
-	case "revoke":
-		answers = []string{"add", "replace"}
-	case "add":
-		answers = []string{"revoke"}
-	default:
-		return nil, false
+	if p.OpType == "add" {
+		return c.OpType == "revoke"
 	}
-	source := p.Source
-	if source == "" {
-		source = "direct"
+	if c.OpType != "add" && c.OpType != "replace" {
+		return false
 	}
-	return []any{target, p.UserID, p.ProjectID, p.RoleKeys, source, p.SourceRef, answers, p.OpType == "revoke"}, true
+	source := outboxSource(p)
+	return c.Source == source && (source == "direct" || c.SourceRef == p.SourceRef)
 }
+
+// AnsweredBy is the changes among queued that p cancels, in their order.
+func AnsweredBy(p EnqueueParams, queued []models.QueuedChange) []models.QueuedChange {
+	var out []models.QueuedChange
+	for _, c := range queued {
+		if Answers(p, c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// answersAny is false for a change that cancels nothing: more than one role,
+// or not an add or a revoke.
+func answersAny(p EnqueueParams) bool {
+	return len(p.RoleKeys) == 1 && (p.OpType == "add" || p.OpType == "revoke")
+}
+
+// candidateWhere narrows the pending rows to the write's person, project and
+// role; Answers decides.
+const candidateWhere = `target = $1 AND status = 'pending'
+		   AND user_id = $2 AND project_id = $3 AND role_keys = $4::text[]`
 
 // WouldCancel is the queued, unsent changes this one would cancel, said before
 // anyone confirms it.
 func WouldCancel(ctx context.Context, p EnqueueParams) ([]models.QueuedChange, error) {
-	args, ok := answeredArgs("zitadel", p)
-	if !ok {
+	if !answersAny(p) {
 		return nil, nil
 	}
-	return scanQueuedChanges(querier(ctx).Query(ctx, queuedChangeColumns+answeredWhere+` ORDER BY created_at`, args...))
+	candidates, err := scanQueuedChanges(querier(ctx).Query(ctx,
+		queuedChangeColumns+candidateWhere+` ORDER BY created_at`, "zitadel", p.UserID, p.ProjectID, p.RoleKeys))
+	if err != nil {
+		return nil, err
+	}
+	return AnsweredBy(p, candidates), nil
 }
 
 const queuedChangeColumns = `
-		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(initiated_by, ''), COALESCE(reason, ''), created_at
+		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref, ''), COALESCE(initiated_by, ''), COALESCE(reason, ''), created_at
 		  FROM propagation_outbox
 		 WHERE `
 
@@ -262,7 +312,7 @@ func scanQueuedChanges(rows pgx.Rows, err error) ([]models.QueuedChange, error) 
 	var out []models.QueuedChange
 	for rows.Next() {
 		var c models.QueuedChange
-		if err := rows.Scan(&c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys, &c.Source, &c.InitiatedBy, &c.Reason, &c.QueuedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys, &c.Source, &c.SourceRef, &c.InitiatedBy, &c.Reason, &c.QueuedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

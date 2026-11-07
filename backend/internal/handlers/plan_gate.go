@@ -162,7 +162,7 @@ func issuePlan(ctx context.Context, surface, actor, requestFP string, ack bool, 
 		subjects = append(subjects, db.NewPlanSubject{
 			SubjectID:   out.UserID,
 			Fingerprint: out.Fingerprint,
-			Outcome:     db.PlanOutcome{Effect: effect, GrantIDs: out.GrantIDs},
+			Outcome:     db.PlanOutcome{Effect: effect, GrantIDs: out.GrantIDs, CancelIDs: out.CancelIDs},
 		})
 	}
 	if len(subjects) == 0 {
@@ -222,13 +222,7 @@ func claimPlan(
 	surface, actor, requestFP, planID string,
 	live func() map[string]services.BulkOutcome,
 ) ([]db.PlanSubject, error) {
-	citation := db.PlanCitation{
-		PlanID:             strings.TrimSpace(planID),
-		Target:             db.TargetZitadel,
-		Surface:            surface,
-		Actor:              actor,
-		RequestFingerprint: requestFP,
-	}
+	citation := planCitation(surface, actor, requestFP, planID)
 
 	_, subjects, err := dbClaimPlanVerified(ctx, citation, func(rows []db.PlanSubject) error {
 		current := live()
@@ -253,6 +247,19 @@ func claimPlan(
 		return nil, err
 	}
 	return subjects, nil
+}
+
+// planCitation is an apply's citation of the plan it applies: the one shape
+// every surface claims with, whether the claim runs here (claimPlan) or inside
+// the planner's own locked transaction (applyPlannedBulk).
+func planCitation(surface, actor, requestFP, planID string) db.PlanCitation {
+	return db.PlanCitation{
+		PlanID:             strings.TrimSpace(planID),
+		Target:             db.TargetZitadel,
+		Surface:            surface,
+		Actor:              actor,
+		RequestFingerprint: requestFP,
+	}
 }
 
 // indexOutcomes keys a fresh rehearsal by subject, for verification and for

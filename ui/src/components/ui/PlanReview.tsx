@@ -16,11 +16,14 @@ import { sortByName } from "@/lib/sort";
 
 /**
  * The last sentence of a row's consequence is the backend's: "Cancels a change
- * …: the removal of … queued 12 Oct (reason)." Its wording reads as automatic, so
- * the plan says it the operator's way ("waiting for you to send") and splits it
- * from whatever else the row said.
+ * waiting for you to send: the removal of … queued 12 Oct (reason)."
+ * (`services.DescribeCancels`). The plan says it once more under the rows, and
+ * splits it from whatever else the row said. An older backend said "waiting to
+ * be sent"; both are read. The backend's own words stopped matching this
+ * pattern once, and the line under the plan silently never showed.
  */
-const CANCELS = /(?:^|\s)Cancels (a change|(\d+) changes) waiting\s+to\s+be\s+sent: ([\s\S]*?)\.?$/;
+const CANCELS =
+  /(?:^|\s)Cancels (a change|(\d+) changes) waiting\s+(?:to\s+be\s+sent|for\s+you\s+to\s+send): ([\s\S]*?)\.?$/;
 
 export function splitCancels(consequence: string | undefined): { rest: string; count: number; parts: string; line: string } | null {
   const match = consequence ? CANCELS.exec(consequence) : null;

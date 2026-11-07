@@ -415,72 +415,101 @@ func TestHandleBulkGrants_UnconfirmedDrainReportsQueuedNotApplied(t *testing.T) 
 	}
 }
 
-// A bundle carrying a role that waits is *meant* to leave work queued. That is
-// not a failure, and it is not "applied" either.
-func TestHandleBulkGrants_WaitingBundleReportsQueued(t *testing.T) {
-	stubRehearsal(t, services.BulkPlan{
-		Op:       services.BulkOpAssignBundle,
-		Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}},
-	})
-
-	origCascade, origRebuild := svcCascadeBundleAssigned, rebuildUserCacheDetachedFn
+// stubPlannedApply stands in for the planner's apply (bundle ops) and records
+// the citation the handler passed, and stubs what delivery answers.
+func stubPlannedApply(t *testing.T, op string, sent []string, applyErr error, deliver func([]string) services.Delivery) *db.PlanCitation {
+	t.Helper()
+	stubRehearsal(t, services.BulkPlan{Op: op, Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}}})
+	origApply, origDeliver, origRebuild := svcApplyPlannedBulk, svcDeliver, rebuildUserCacheDetachedFn
 	t.Cleanup(func() {
-		svcCascadeBundleAssigned = origCascade
-		rebuildUserCacheDetachedFn = origRebuild
+		svcApplyPlannedBulk, svcDeliver, rebuildUserCacheDetachedFn = origApply, origDeliver, origRebuild
 	})
 	rebuildUserCacheDetachedFn = func(context.Context, string) {}
-	stubDrain(t)
-	svcCascadeBundleAssigned = func(context.Context, string, string, string) (services.CascadeResult, error) {
-		return services.CascadeResult{Enqueued: 3, Waiting: 3, WaitReason: db.WaitReasonRoleWaits}, nil
+	cited := &db.PlanCitation{}
+	svcApplyPlannedBulk = func(_ context.Context, req services.BulkRequest, c db.PlanCitation) (services.BulkPlan, map[string][]string, error) {
+		*cited = c
+		if applyErr != nil {
+			return services.BulkPlan{}, nil, applyErr
+		}
+		return services.BulkPlan{Op: req.Op, Applied: true, Outcomes: []services.BulkOutcome{
+			{UserID: "u1", Effect: services.EffectApply, Detail: "Joins the Safety bundle."},
+		}}, map[string][]string{"u1": sent}, nil
 	}
+	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery { return deliver(ids) }
+	return cited
+}
 
-	rr := httptest.NewRecorder()
-	handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_bundle","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`, true))
-
-	plan := decodePlan(t, rr)
-	if plan.Outcomes[0].Effect != services.EffectQueued {
-		t.Fatalf("effect = %q, want queued for a bundle whose role waits", plan.Outcomes[0].Effect)
+// A bundle carrying a role that waits is *meant* to leave work queued. That is
+// not a failure, and it is not "applied" either; and a removal says the role
+// it removes waits, not one it gives.
+func TestHandleBulkGrants_WaitingBundleReportsQueued(t *testing.T) {
+	waits := func(ids []string) services.Delivery {
+		d := services.Delivery{Waiting: ids, Reason: map[string]string{}}
+		for _, id := range ids {
+			d.Reason[id] = db.WaitReasonRoleWaits
+		}
+		return d
 	}
-	if !strings.Contains(plan.Outcomes[0].Detail, "always waits for you") {
-		t.Errorf("the row must say a role waits, got %q", plan.Outcomes[0].Detail)
+	for _, tc := range []struct{ op, want string }{
+		{services.BulkOpAssignBundle, "A role it gives always waits for you"},
+		{services.BulkOpRemoveBundle, "A role it removes always waits for you"},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			cited := stubPlannedApply(t, tc.op, []string{"ob_1", "ob_2"}, nil, waits)
+
+			rr := httptest.NewRecorder()
+			handleBulkGrants(rr, bulkRequest(t, `{"op":"`+tc.op+`","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`, true))
+
+			plan := decodePlan(t, rr)
+			if rr.Code != http.StatusAccepted || plan.Outcomes[0].Effect != services.EffectQueued {
+				t.Fatalf("status %d, effect %q, want 202 and queued for a bundle whose role waits", rr.Code, plan.Outcomes[0].Effect)
+			}
+			if !strings.Contains(plan.Outcomes[0].Detail, tc.want) {
+				t.Errorf("the row must say %q, got %q", tc.want, plan.Outcomes[0].Detail)
+			}
+			// The citation the planner claims is the one claimPlan would have.
+			if cited.Surface != planSurfaceBulkGrants || cited.PlanID == "" || cited.RequestFingerprint == "" {
+				t.Errorf("citation = %+v", *cited)
+			}
+		})
 	}
 }
 
-// An auto bundle whose cascade drained everything is applied, and a cascade with
-// nothing to send is applied too — the closure was already correct.
-func TestHandleBulkGrants_DrainedCascadeIsApplied(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		res  services.CascadeResult
-	}{
-		{"auto bundle, fully drained", services.CascadeResult{Enqueued: 2, Drain: propagation.DrainResult{Applied: 2}}},
-		{"nothing to propagate", services.CascadeResult{Enqueued: 0}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			stubRehearsal(t, services.BulkPlan{
-				Op:       services.BulkOpAssignBundle,
-				Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}},
-			})
-
-			origCascade, origRebuild := svcCascadeBundleAssigned, rebuildUserCacheDetachedFn
-			t.Cleanup(func() {
-				svcCascadeBundleAssigned = origCascade
-				rebuildUserCacheDetachedFn = origRebuild
-			})
-			rebuildUserCacheDetachedFn = func(context.Context, string) {}
-			stubDrain(t)
-			svcCascadeBundleAssigned = func(context.Context, string, string, string) (services.CascadeResult, error) {
-				return tc.res, nil
-			}
-
+// A planned row whose rows all reached Zitadel is applied, and so is one with
+// nothing to send (the closure was already right).
+func TestHandleBulkGrants_DeliveredPlannedRowIsApplied(t *testing.T) {
+	sentAll := func(ids []string) services.Delivery {
+		return services.Delivery{Sent: ids, Drain: propagation.DrainResult{Applied: len(ids)}}
+	}
+	for name, sent := range map[string][]string{"sent": {"ob_1"}, "nothing to send": nil} {
+		t.Run(name, func(t *testing.T) {
+			stubPlannedApply(t, services.BulkOpAssignBundle, sent, nil, sentAll)
 			rr := httptest.NewRecorder()
 			handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_bundle","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`, true))
-
-			plan := decodePlan(t, rr)
-			if plan.Outcomes[0].Effect != services.EffectApplied {
-				t.Fatalf("effect = %q, want applied", plan.Outcomes[0].Effect)
+			if plan := decodePlan(t, rr); plan.Outcomes[0].Effect != services.EffectApplied || plan.Summary.Succeeded != 1 {
+				t.Fatalf("effect = %q succeeded = %d, want applied", plan.Outcomes[0].Effect, plan.Summary.Succeeded)
 			}
 		})
+	}
+}
+
+// A plan the planner found stale is the same 409 every surface answers, with
+// the people who moved, and nothing is delivered: nothing was written.
+func TestHandleBulkGrants_StalePlannedPlanIsRefused(t *testing.T) {
+	delivered := 0
+	stubPlannedApply(t, services.BulkOpRemoveBundle, nil, &services.StalePlan{IDs: []string{"u1"}},
+		func([]string) services.Delivery { delivered++; return services.Delivery{} })
+
+	rr := httptest.NewRecorder()
+	handleBulkGrants(rr, bulkRequest(t, `{"op":"remove_bundle","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`, true))
+
+	var body ErrorResponse
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if rr.Code != http.StatusConflict || body.Error != "PLAN_STALE" || body.Details["u1"] != "moved" {
+		t.Fatalf("status %d body %s, want 409 PLAN_STALE naming u1", rr.Code, rr.Body.String())
+	}
+	if delivered != 0 {
+		t.Errorf("a stale plan delivered %d time(s)", delivered)
 	}
 }
 
@@ -518,25 +547,35 @@ func TestHandleBulkGrants_RejectsInvalidRequests(t *testing.T) {
 
 // A bundle whose role waits says so, rather than blaming the bundle's mode or
 // calling it merely "still queued".
-func TestCascadeQueuedReason_SaysTheRoleWaits(t *testing.T) {
-	got, _ := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Waiting: 1, WaitReason: db.WaitReasonRoleWaits})
-	if got != db.WaitReasonRoleWaits || !strings.Contains(queuedDetail(got), "always waits for you") {
-		t.Fatalf("got %q", got)
+func TestSettleBulkRow_SaysWhyItIsQueued(t *testing.T) {
+	out := services.BulkOutcome{Effect: services.EffectApply}
+	settleBulkRow(&out, db.WaitReasonRoleWaits, nil, services.BulkOpAssignBundle)
+	if out.Effect != services.EffectQueued || !strings.Contains(out.Detail, "A role it gives always waits for you") {
+		t.Fatalf("role waits: %+v", out)
 	}
-	if got, _ := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Drain: propagation.DrainResult{Applied: 2}}); got != "" {
-		t.Fatalf("everything sent says nothing: %q", got)
+	out = services.BulkOutcome{Effect: services.EffectApply}
+	settleBulkRow(&out, "", nil, services.BulkOpRemoveBundle)
+	if out.Effect != services.EffectApplied {
+		t.Fatalf("everything sent is applied: %+v", out)
 	}
-	// A cascade Zitadel didn't take is retrying, with its next try, and says
-	// it goes on its own (re-audit R2).
+	// A send Zitadel didn't take is retrying, with its next try, and says it
+	// goes on its own (re-audit R2).
 	next := &extcall.RetryState{State: extcall.RetryRetrying, Try: 2, Of: 6}
-	got, retry := cascadeQueuedReason(services.CascadeResult{Enqueued: 1, WaitReason: "halted:retrying", Drain: propagation.DrainResult{Requeued: 1, Retry: next}})
-	if got != "halted:retrying" || retry != next || !strings.Contains(queuedDetail(got), "sends it again on its own") {
-		t.Fatalf("retrying cascade: %q %v %q", got, retry, queuedDetail(got))
+	out = services.BulkOutcome{Effect: services.EffectApply}
+	settleBulkRow(&out, "halted:retrying", next, services.BulkOpAssignBundle)
+	if out.Retry != next || !strings.Contains(out.Detail, "sends it again on its own") {
+		t.Fatalf("retrying: %+v", out)
+	}
+	// Refused by Zitadel is terminal and failed, never queued (N1).
+	out = services.BulkOutcome{Effect: services.EffectApply}
+	settleBulkRow(&out, db.WaitReasonRefused(db.RefusalNotFound), nil, services.BulkOpRemoveBundle)
+	if out.Effect != services.EffectFailed || !strings.Contains(out.Detail, "Drift") {
+		t.Fatalf("refused removal: %+v", out)
 	}
 	// With the background drain off, nothing sends it on its own.
 	propagation.SetAutoRetry(false)
 	t.Cleanup(func() { propagation.SetAutoRetry(true) })
-	if d := queuedDetail("halted:retrying"); !strings.Contains(d, "until you send it") {
+	if d := queuedDetail("halted:retrying", false); !strings.Contains(d, "until you send it") {
 		t.Fatalf("drain off: %q", d)
 	}
 }

@@ -408,6 +408,7 @@ var (
 	// central contract — apply never acts on a diff nobody approved — is
 	// assertable without a database.
 	svcRehearseBulk     = services.RehearseBulk
+	svcApplyPlannedBulk = services.ApplyPlannedBulk
 	svcUserDirectGrants = services.UserDirectGrants
 
 	// Plan-then-apply. The rehearsal persists what it showed; the apply cites
