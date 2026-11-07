@@ -288,7 +288,7 @@ func applyDecisionPlan(r *http.Request, plan *services.BulkPlan, status, note st
 		case decided.WaitReason != "":
 			out.Effect = services.EffectQueued
 			out.WaitReason, out.Retry = decided.WaitReason, decided.Retry
-			out.Detail = queuedDetail(decided.WaitReason)
+			out.Detail = queuedDetail(decided.WaitReason, false)
 		default:
 			out.Effect = services.EffectApplied
 		}

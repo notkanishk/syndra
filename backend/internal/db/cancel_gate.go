@@ -57,6 +57,21 @@ func CancellationsReviewed(ctx context.Context) context.Context {
 	return ctx
 }
 
+// CancellationsNamed admits exactly these queued changes on a plan apply:
+// the ones its rows named and the operator saw (architecture deepening,
+// decision 4). Any other cancellation is still refused. The planner's apply
+// refuses a plan whose fresh read names any other first; this is the second
+// safety, at the one place cancellations happen.
+func CancellationsNamed(ctx context.Context, ids []string) {
+	if g, ok := ctx.Value(cancelGateKey{}).(*CancelGate); ok && g != nil {
+		g.mu.Lock()
+		for _, id := range ids {
+			g.acked[id] = true
+		}
+		g.mu.Unlock()
+	}
+}
+
 // Refused is what the request would have cancelled, if it was refused.
 func (g *CancelGate) Refused() []models.QueuedChange {
 	g.mu.Lock()

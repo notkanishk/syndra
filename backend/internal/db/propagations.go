@@ -1139,42 +1139,53 @@ type RoleRef struct {
 // every delta from the moment it is queued rather than from the moment it is
 // confirmed.
 func QueuedRevocations(ctx context.Context, userID string) ([]RoleRef, error) {
+	byUser, err := queuedRevocationsFor(ctx, []string{userID})
+	if err != nil {
+		return nil, fmt.Errorf("queued revocations for %s: %w", userID, err)
+	}
+	return byUser[userID], nil
+}
+
+// queuedRevocationsFor is QueuedRevocations for several people in one read:
+// the one statement of it, which the planner's snapshot reads too.
+func queuedRevocationsFor(ctx context.Context, userIDs []string) (map[string][]RoleRef, error) {
 	// `replace` names the roles that SURVIVE, not the ones being taken away, so
 	// it cannot be unioned with revoke's role_keys. Its removals are the
 	// direct-sourced ledger roles on that project which the new set omits —
 	// the same predicate ReconcileLedgerOnApplied deletes by, asked ahead of
 	// time instead of after.
 	const q = `
-		SELECT project_id, UNNEST(role_keys) AS role_key
+		SELECT user_id, project_id, UNNEST(role_keys) AS role_key
 		FROM propagation_outbox
-		WHERE user_id = $1
+		WHERE user_id = ANY($1)
 		  AND op_type = 'revoke'
 		  AND status IN ('pending', 'in_flight')
 		  AND project_id IS NOT NULL AND role_keys IS NOT NULL
 		UNION
-		SELECT g.zitadel_project_id, g.zitadel_role_key
+		SELECT o.user_id, g.zitadel_project_id, g.zitadel_role_key
 		FROM propagation_outbox o
 		JOIN direct_role_grants g
 		  ON g.user_id = o.user_id
 		 AND g.zitadel_project_id = o.project_id
 		 AND g.source = 'direct'
-		WHERE o.user_id = $1
+		WHERE o.user_id = ANY($1)
 		  AND o.op_type = 'replace'
 		  AND o.status IN ('pending', 'in_flight')
 		  AND o.project_id IS NOT NULL AND o.role_keys IS NOT NULL
 		  AND NOT (g.zitadel_role_key = ANY(o.role_keys))`
-	rows, err := querier(ctx).Query(ctx, q, userID)
+	rows, err := querier(ctx).Query(ctx, q, userIDs)
 	if err != nil {
-		return nil, fmt.Errorf("queued revocations for %s: %w", userID, err)
+		return nil, err
 	}
 	defer rows.Close()
-	var out []RoleRef
+	out := map[string][]RoleRef{}
 	for rows.Next() {
+		var user string
 		var r RoleRef
-		if err := rows.Scan(&r.ProjectID, &r.RoleKey); err != nil {
+		if err := rows.Scan(&user, &r.ProjectID, &r.RoleKey); err != nil {
 			return nil, fmt.Errorf("scan queued revocation: %w", err)
 		}
-		out = append(out, r)
+		out[user] = append(out[user], r)
 	}
 	return out, rows.Err()
 }

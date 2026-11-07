@@ -866,12 +866,15 @@ const (
 // QueuedChange is a change Syndra queued and hasn't sent, which an action
 // would cancel. Said to the operator before they confirm (owner, 15 Oct).
 type QueuedChange struct {
-	ID          string    `json:"id"`
-	OpType      string    `json:"op_type"`
-	UserID      string    `json:"user_id"`
-	ProjectID   string    `json:"project_id"`
-	RoleKeys    []string  `json:"role_keys"`
-	Source      string    `json:"source"`
+	ID        string   `json:"id"`
+	OpType    string   `json:"op_type"`
+	UserID    string   `json:"user_id"`
+	ProjectID string   `json:"project_id"`
+	RoleKeys  []string `json:"role_keys"`
+	Source    string   `json:"source"`
+	// SourceRef is the bundle or rule the change came from: a revoke answers
+	// only an add from the same one (db.Answers). Not said to anyone.
+	SourceRef   string    `json:"-"`
 	InitiatedBy string    `json:"initiated_by"`
 	Reason      string    `json:"reason,omitempty"`
 	QueuedAt    time.Time `json:"queued_at"`

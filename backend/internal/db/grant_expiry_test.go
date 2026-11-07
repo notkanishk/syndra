@@ -395,7 +395,7 @@ func indicesOf(hay, needle string) []int {
 // as removals they would subtract exactly the access being kept, and every
 // cascade would queue an add for roles nothing was removing.
 func TestQueuedRevocationsReadsReplaceAsItsComplement(t *testing.T) {
-	body := funcBody(t, readDBSource(t, "propagations.go"), "QueuedRevocations")
+	body := funcBody(t, readDBSource(t, "propagations.go"), "queuedRevocationsFor")
 	if regexp.MustCompile(`op_type IN \('revoke', 'replace'\)`).MatchString(body) {
 		t.Fatal("replace's role_keys are the surviving set; unioning them with revoke's subtracts the wrong roles")
 	}

@@ -6,8 +6,8 @@ The common thread is the project's own rule, "a preview computed by different co
 
 ## What Changes
 
-Nothing yet. Each candidate in `tasks.md` is taken one at a time: grilled with the owner, then designed in `design.md` before any code. The order matters: 1 gives 4 its apply step, and 5 is cheaper after 1 and 4.
+Candidate 1, the access-change planner, is designed (`design.md`) and its first slice is built: bulk assign and remove bundle are planned and applied by one pure planner over one locked snapshot (`tasks.md` 1.1). Each candidate in `tasks.md` is taken one at a time: grilled with the owner, then designed in `design.md` before any code. The order matters: 1 gives 4 its apply step, and 5 is cheaper after 1 and 4.
 
 ## Impact
 
-Backend `handlers`, `services`, `db`; `addons/truenas`; `ui/src` screens that judge a person's holding. No migration or contract change is decided yet.
+Backend `handlers`, `services`, `db`; `addons/truenas`; `ui/src` screens that judge a person's holding. Slice 1 needs no migration: a plan row's `cancel_ids` live in `plan_subjects.outcome_json`. The bulk endpoint's contract is unchanged; a bundle row's words are new.

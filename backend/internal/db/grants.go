@@ -37,28 +37,39 @@ func UpsertDirectGrant(ctx context.Context, userID, projectID, roleKey, grantedB
 }
 
 func GetDirectGrantsForUser(ctx context.Context, userID string, includeExpired bool) ([]models.DirectGrant, error) {
+	byUser, err := directGrantsFor(ctx, []string{userID}, includeExpired)
+	if err != nil {
+		return nil, err
+	}
+	return byUser[userID], nil
+}
+
+// directGrantsFor is GetDirectGrantsForUser for several people in one read:
+// the one statement of it, which the planner's snapshot reads too. Newest
+// first within each person.
+func directGrantsFor(ctx context.Context, userIDs []string, includeExpired bool) (map[string][]models.DirectGrant, error) {
 	query := `
 		SELECT id, user_id, zitadel_project_id, zitadel_role_key, granted_by, COALESCE(reason, ''), expires_at, created_at, updated_at, COALESCE(source, 'direct'), COALESCE(source_ref, '')
 		FROM direct_role_grants
-		WHERE user_id = $1`
+		WHERE user_id = ANY($1)`
 	if !includeExpired {
 		query += ` AND (expires_at IS NULL OR expires_at > NOW())`
 	}
 	query += ` ORDER BY created_at DESC`
 
-	rows, err := querier(ctx).Query(ctx, query, userID)
+	rows, err := querier(ctx).Query(ctx, query, userIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var grants []models.DirectGrant
+	grants := map[string][]models.DirectGrant{}
 	for rows.Next() {
 		var grant models.DirectGrant
 		if err := rows.Scan(&grant.ID, &grant.UserID, &grant.ProjectID, &grant.RoleKey, &grant.GrantedBy, &grant.Reason, &grant.ExpiresAt, &grant.CreatedAt, &grant.UpdatedAt, &grant.Source, &grant.SourceRef); err != nil {
 			return nil, err
 		}
-		grants = append(grants, grant)
+		grants[grant.UserID] = append(grants[grant.UserID], grant)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
