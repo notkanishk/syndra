@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { KEPT, PushedStep, useCancelStep, useForetell, type CancelStepOptions } from "@/components/ui/CancelQueuedStep";
 import { Modal } from "@/components/ui/Modal";
 import { WouldCancelQueued } from "@/lib/api-client";
-import { takeAck, type QueuedChange } from "@/lib/cancel-confirm";
+import type { QueuedChange } from "@/lib/cancel-confirm";
 import { motionInTests } from "@/test-utils/motion";
 
 vi.mock("@/lib/queries/useNameResolver", () => ({
@@ -47,7 +47,7 @@ function Host({
   options,
   onResult,
 }: {
-  write: () => Promise<unknown>;
+  write: (cancelIds?: string[]) => Promise<unknown>;
   options?: Partial<CancelStepOptions>;
   onResult?: (result: unknown) => void;
 }) {
@@ -81,7 +81,6 @@ function Host({
 
 afterEach(() => {
   cleanup();
-  takeAck("POST", "/users/u1/grants");
 });
 
 function refusedOnce(...lists: QueuedChange[][]) {
@@ -133,7 +132,7 @@ describe("the step pushed inside the host sheet", () => {
     const note = screen.getByTestId("footer-note");
     expect(note).toHaveTextContent("Nothing changed. Sam's removal is still waiting.");
     expect(within(note).getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending?person=u1");
-    expect(takeAck("POST", "/users/u1/grants")).toBeUndefined();
+    expect(write).toHaveBeenCalledWith(undefined);
   });
 
   it("Escape is Keep it, and the host stays open", async () => {
@@ -154,7 +153,7 @@ describe("the step pushed inside the host sheet", () => {
 
     await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("sent"));
     expect(write).toHaveBeenCalledTimes(2);
-    expect(takeAck("POST", "/users/u1/grants")).toEqual([idOf(1)]);
+    expect(write.mock.calls.map((c) => c[0])).toEqual([undefined, [idOf(1)]]);
     expect(screen.getByTestId("after")).toHaveTextContent(
       "The removal Sam queued 2h ago is cancelled, so nothing goes to Zitadel. Change history records both.",
     );
@@ -226,7 +225,7 @@ describe("the step pushed inside the host sheet", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel all 2 and give Member" }));
     await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("sent"));
-    expect(takeAck("POST", "/users/u1/grants")).toEqual([idOf(1), idOf(2)]);
+    expect(write.mock.calls.map((c) => c[0])).toEqual([undefined, [idOf(1)], [idOf(1), idOf(2)]]);
   });
 
   it("an error that is not the refusal passes through and closes the step", async () => {
@@ -298,7 +297,7 @@ describe("the pushed step's height", () => {
 });
 
 describe("a write with no sheet of its own", () => {
-  function Row({ write }: { write: () => Promise<unknown> }) {
+  function Row({ write }: { write: (cancelIds?: string[]) => Promise<unknown> }) {
     const step = useCancelStep({ host: "Approve Priya's request", goAhead: "approve", standalone: true });
     const [done, setDone] = useState("");
     return (

@@ -3,13 +3,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/extcall"
 	"syndra/internal/models"
@@ -24,32 +22,35 @@ func resetDriftDeps(t *testing.T) {
 	stubPlanStore(t)
 	origGetItems := dbGetDriftItems
 	origGetItem := dbGetDriftItem
-	origAttribute := dbAttributeDriftTx
+	origApply, origDeliverChange, origRebuild := svcApplyAct, svcDeliverChange, rebuildUserCacheDetachedFn
 	origRevoke := dbRevokeDriftAndEnqueue
 	origMarkExternal := dbMarkDriftExternalTx
 	origSweep := svcDriftSweep
 	origDeliver := svcDeliver
-	origRules := svcRulesFollowing
 	origRuleByID := dbGetMappingRuleByID
 	t.Cleanup(func() {
 		dbGetDriftItems = origGetItems
 		dbGetDriftItem = origGetItem
-		dbAttributeDriftTx = origAttribute
+		svcApplyAct, svcDeliverChange, rebuildUserCacheDetachedFn = origApply, origDeliverChange, origRebuild
 		dbRevokeDriftAndEnqueue = origRevoke
 		dbMarkDriftExternalTx = origMarkExternal
 		svcDriftSweep = origSweep
 		svcDeliver = origDeliver
-		svcRulesFollowing = origRules
 		dbGetMappingRuleByID = origRuleByID
 	})
+	// Adopting is the planner's (services.ApplyAct); its Change here is the
+	// adopted role alone, recorded and sent nowhere.
+	rebuildUserCacheDetachedFn = func(context.Context, string) {}
+	svcApplyAct = func(context.Context, services.Action, services.ActWrite, *services.Seen) (services.Change, error) {
+		return services.Change{UserID: "u1", Writes: []services.Write{{EnqueueParams: db.EnqueueParams{NoPropagation: true}, Delivery: services.DeliveryNone}}}, nil
+	}
+	svcDeliverChange = func(context.Context, services.Change) services.Delivery { return services.Delivery{} }
 	// Revocation delivers its own outbox row, so the default has to send it
 	// without the real drain reaching for a database that isn't there.
 	// Adoption enqueues nothing of its own and must never reach this at all.
 	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
 		return services.Delivery{Sent: ids, Drain: propagation.DrainResult{Applied: len(ids)}}
 	}
-	// No automatic rules unless a test says so.
-	svcRulesFollowing = func(context.Context, string, []access.Role) ([]services.RuleRow, error) { return nil, nil }
 	origStatus := dbGetPropagationStatus
 	t.Cleanup(func() { dbGetPropagationStatus = origStatus })
 	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
@@ -105,21 +106,20 @@ func pendingDrift() models.DriftItem {
 
 // attributeAttempt runs one attribution and reports the status plus whether the
 // ledger write happened. Nothing may be written when validation fails.
-func attributeAttempt(t *testing.T, body string) (int, bool, db.EnqueueParams) {
+func attributeAttempt(t *testing.T, body string) (int, bool, services.Action) {
 	t.Helper()
 	var wrote bool
-	var params db.EnqueueParams
+	var act services.Action
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	dbAttributeDriftTx = func(_ context.Context, _ string, p db.EnqueueParams) ([]string, error) {
-		wrote = true
-		params = p
-		return nil, nil
+	svcApplyAct = func(_ context.Context, a services.Action, _ services.ActWrite, _ *services.Seen) (services.Change, error) {
+		wrote, act = true, a
+		return services.Change{UserID: "u1"}, nil
 	}
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute", strings.NewReader(body))
 	req.SetPathValue("id", "d1")
 	w := httptest.NewRecorder()
 	handleAttributeDrift(w, req)
-	return w.Code, wrote, params
+	return w.Code, wrote, act
 }
 
 func TestAttributeDrift_BundleSourceIsRejected(t *testing.T) {
@@ -174,28 +174,14 @@ func TestAttributeDrift_SourceRefIsNoLongerAccepted(t *testing.T) {
 
 func TestAttributeDrift_ExternalBackfillRecordsADirectGrantWithNoRef(t *testing.T) {
 	resetDriftDeps(t)
-	code, wrote, params := attributeAttempt(t, `{"source":"external_backfill"}`)
+	code, wrote, act := attributeAttempt(t, `{"source":"external_backfill"}`)
 	if code != http.StatusOK {
 		t.Fatalf("external_backfill is the supported attribution, got %d", code)
 	}
-	if !wrote {
-		t.Fatal("a valid attribution must reach the ledger")
-	}
-	if params.Source != "external_backfill" {
-		t.Fatalf("recorded source = %q, want external_backfill", params.Source)
-	}
-	// The ledger must not carry a reference to an owner that does not exist.
-	if params.SourceRef != "" {
-		t.Fatalf("recorded source_ref = %q, want empty", params.SourceRef)
-	}
-	// The op_type still says "add" — the ledger row it writes is an addition to
-	// what Syndra knows. What must not follow is an outbox row carrying it back
-	// to Zitadel, which already has it.
-	if params.OpType != "add" {
-		t.Fatalf("adoption records an add against the ledger, got op %q", params.OpType)
-	}
-	if !params.NoPropagation {
-		t.Fatal("adoption must not queue a write back to Zitadel")
+	// What it records (external_backfill, no ref, an add on the ledger and no
+	// outbox row) is the planner's: TestPlanner_AdoptRecordsTheRoleAndSendsNothingForIt.
+	if !wrote || act != (services.Action{Op: services.OpAdopt, DriftID: "d1"}) {
+		t.Fatalf("a valid attribution must reach the planner as an adoption of the row, got %+v", act)
 	}
 }
 
@@ -291,136 +277,56 @@ func TestHandleRevokeDrift_ARoleThatWaitsIsNotSent(t *testing.T) {
 	}
 }
 
-// C1: adopting returns the rows the automatic rules queued, so the result can
-// say they wait in Pending changes.
-func TestHandleAttributeDrift_ReturnsTheRuleRowsItQueued(t *testing.T) {
+// Adopting goes through the planner (task 1.3): the write carries the plan it
+// was shown, what the rules gave is sent as the plan decided, and the answer
+// counts what waits, so the result ends on Send only when something does.
+func TestHandleAttributeDrift_SendsWhatTheRulesGaveAsPlanned(t *testing.T) {
 	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) {
-		return []string{"rule-o1", "rule-o2"}, nil
+	var seen *services.Seen
+	svcApplyAct = func(_ context.Context, a services.Action, _ services.ActWrite, s *services.Seen) (services.Change, error) {
+		seen = s
+		return services.Change{UserID: "u1", Writes: []services.Write{
+			{EnqueueParams: db.EnqueueParams{NoPropagation: true}, Delivery: services.DeliveryNone},
+			{Delivery: services.DeliveryStraightAway, OutboxID: "rule-o1"},
+			{Delivery: services.DeliveryWaits, OutboxID: "rule-o2"},
+		}}, nil
+	}
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		return services.Delivery{Sent: []string{"rule-o1"}, Waiting: []string{"rule-o2"},
+			Reason: map[string]string{"rule-o2": db.WaitReasonRoleWaits}}
 	}
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
-		strings.NewReader(`{"source":"external_backfill"}`))
+		strings.NewReader(`{"source":"external_backfill","fingerprint":"fp","cancel_ids":[]}`))
 	req.SetPathValue("id", "d1")
 	w := httptest.NewRecorder()
 	handleAttributeDrift(w, req)
 
 	var body struct {
 		RuleOutboxIDs []string `json:"rule_outbox_ids"`
+		RuleWaiting   int      `json:"rule_waiting"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &body)
-	if w.Code != http.StatusOK || len(body.RuleOutboxIDs) != 2 {
-		t.Fatalf("adopt must return the rule rows it queued, got %d %s", w.Code, w.Body)
+	if w.Code != http.StatusOK || len(body.RuleOutboxIDs) != 2 || body.RuleWaiting != 1 {
+		t.Fatalf("adopt returns the rule rows and how many wait, got %d %s", w.Code, w.Body)
+	}
+	if seen == nil || seen.Fingerprint != "fp" {
+		t.Fatalf("the write carries the plan it was shown: %+v", seen)
 	}
 }
 
-// C1: the bulk adopt plan names what the automatic rules give, as rows that
-// wait for the operator, before the apply; and the apply says how many it
-// queued.
-func TestBulkAdoptPlan_NamesTheRuleRows(t *testing.T) {
+// A different Change under the lock writes nothing and says so.
+func TestHandleAttributeDrift_StaleIs409(t *testing.T) {
 	resetDriftDeps(t)
-	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
-		item := pendingDrift()
-		item.ID = id
-		return item, nil
+	svcApplyAct = func(context.Context, services.Action, services.ActWrite, *services.Seen) (services.Change, error) {
+		return services.Change{}, &services.StalePlan{IDs: []string{"u1"}}
 	}
-	svcRulesFollowing = func(_ context.Context, uid string, roles []access.Role) ([]services.RuleRow, error) {
-		if uid != "u1" || len(roles) != 1 || roles[0] != (access.Role{ProjectID: "p_laser", RoleKey: "trained"}) {
-			t.Errorf("the preview must be asked about the adopted role, got %s %v", uid, roles)
-		}
-		return []services.RuleRow{{ProjectID: "p_shop", RoleKey: "bench", RuleID: "r1",
-			Sentence: "Also gives Bench in Workshop, by the automatic rule from Trained."}}, nil
-	}
-	plan := rehearseDriftBatch(context.Background(), []string{"d1"}, driftOpAdopt)
-	got := plan.Outcomes[0].Consequence
-	if !strings.Contains(got, "Also gives Bench in Workshop, by the automatic rule from Trained.") ||
-		!strings.Contains(got, "These wait in Pending changes for you to send.") {
-		t.Fatalf("the adopt plan must list the rule rows as waiting, got %q", got)
-	}
-	if adoptedRuleRows(1) != "1 more change from automatic rules waits in Pending changes for you to send." ||
-		adoptedRuleRows(3) != "3 more changes from automatic rules wait in Pending changes for you to send." {
-		t.Fatal("the apply line counts the rule rows")
-	}
-	// Re-audit R1: an adoption that queued rule rows is not done for the
-	// operator, so the result ends on "send it". N4: the adoption itself took
-	// effect, so the row stays applied and the rule rows are counted apart.
-	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) {
-		return []string{"rule-o1"}, nil
-	}
-	applyDriftPlan(httptest.NewRequest("POST", "/", nil), &plan, driftOpAdopt, "op", "")
-	if o := plan.Outcomes[0]; o.Effect != services.EffectApplied || o.RuleWaiting != 1 || !strings.Contains(o.Consequence, "for you to send") {
-		t.Fatalf("an adoption that queued rule rows is applied, with the rule rows counted apart, got %+v", o)
-	}
-}
-
-// Adoption must leave nothing behind that could later write to Zitadel.
-//
-// An outbox row is not a receipt, it is an instruction. Leaving one pending told
-// the operator Syndra still owed Zitadel forty grants it did not owe; draining
-// it inline only narrowed the window, because a drain that cannot reach Zitadel
-// leaves the row for later. Either way an operator who adopts a role and then
-// removes it upstream by hand gets it re-created. So: no outbox row, and no
-// drain to make one safe.
-func TestHandleAttributeDrift_WritesNoPropagation(t *testing.T) {
-	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	var params db.EnqueueParams
-	dbAttributeDriftTx = func(_ context.Context, _ string, p db.EnqueueParams) ([]string, error) {
-		params = p
-		return nil, nil
-	}
-	drained := false
-	svcDeliver = func(context.Context, []string, bool) services.Delivery {
-		drained = true
-		return services.Delivery{}
-	}
-
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
-		strings.NewReader(`{"source":"external_backfill"}`))
+		strings.NewReader(`{"source":"external_backfill","fingerprint":"fp"}`))
 	req.SetPathValue("id", "d1")
 	w := httptest.NewRecorder()
 	handleAttributeDrift(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d: %s", w.Code, w.Body)
-	}
-	if !params.NoPropagation {
-		t.Error("adoption owes Zitadel nothing and must not leave an add instruction behind")
-	}
-	if drained {
-		t.Error("nothing was enqueued, so there is nothing to drain")
-	}
-}
-
-// The bulk path shares attributeOneDrift, so it inherits the property — but it
-// is the path the operator actually used to adopt forty roles at once, and forty
-// live `add` instructions is the shape the bug took in production.
-func TestHandleBulkAttributeDrift_WritesNoPropagation(t *testing.T) {
-	resetDriftDeps(t)
-	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
-		item := pendingDrift()
-		item.ID = id
-		return item, nil
-	}
-	propagating := 0
-	dbAttributeDriftTx = func(_ context.Context, _ string, p db.EnqueueParams) ([]string, error) {
-		if !p.NoPropagation {
-			propagating++
-		}
-		return nil, nil
-	}
-	drained := 0
-	svcDeliver = func(context.Context, []string, bool) services.Delivery {
-		drained++
-		return services.Delivery{}
-	}
-
-	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2","d3"],"source":"external_backfill"}`)
-	w := httptest.NewRecorder()
-	handleBulkAttributeDrift(w, req)
-
-	if propagating != 0 || drained != 0 {
-		t.Fatalf("adopting in bulk must queue nothing upstream (propagating=%d drained=%d)", propagating, drained)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "PLAN_STALE") {
+		t.Fatalf("expected 409 PLAN_STALE, got %d %s", w.Code, w.Body)
 	}
 }
 
@@ -505,16 +411,10 @@ func TestHandleMarkExternal_EmptyBodyIsAllowed(t *testing.T) {
 
 func TestHandleBulkAttributeDrift_MissingSourceIs400(t *testing.T) {
 	resetDriftDeps(t)
-	var attributed bool
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "target_only", Status: "pending_triage"}, nil
-	}
-	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) {
-		attributed = true
-		return nil, nil
-	}
+	writes := 0
+	p := stubPlannedBulk(t, &writes)
 
-	// Source omitted → must 400 before the loop, never defaulting to "direct".
+	// Source omitted → must 400 before anything is planned, never defaulting to "direct".
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute", strings.NewReader(`{"ids":["d1"]}`))
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
@@ -522,31 +422,43 @@ func TestHandleBulkAttributeDrift_MissingSourceIs400(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("bulk-attribute with missing source must be 400, got %d", w.Code)
 	}
-	if attributed {
-		t.Fatal("bulk-attribute must not enqueue anything when source is invalid")
+	if writes != 0 || p.rehearsed.Op != "" {
+		t.Fatal("bulk-attribute must not plan or write anything when source is invalid")
 	}
 }
 
-func TestHandleBulkAttributeDrift_ValidSourceAttributes(t *testing.T) {
+// Bulk adoption goes through the planner (task 1.3): each drift id is the
+// Change a single adoption is. The rehearsal and the apply hand it the same
+// request, and the apply cites the adopt screen's plan bound to the cohort and
+// the source. What each adoption records is the planner's (services' tests).
+func TestHandleBulkAttributeDrift_GoesThroughThePlannerCitingThePlan(t *testing.T) {
 	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "target_only", Status: "pending_triage"}, nil
-	}
-	var gotSource string
-	dbAttributeDriftTx = func(_ context.Context, _ string, p db.EnqueueParams) ([]string, error) {
-		gotSource = p.Source
-		return nil, nil
+	writes := 0
+	p := stubPlannedBulk(t, &writes)
+	var delivered []string
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		delivered = append(delivered, ch.Writes[0].OutboxID)
+		return services.Delivery{}
 	}
 
-	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1"],"source":"external_backfill"}`)
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2"],"source":"external_backfill"}`)
 	w := httptest.NewRecorder()
 	handleBulkAttributeDrift(w, req)
 
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"succeeded":1`) {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"succeeded":2`) {
 		t.Fatalf("valid bulk-attribute must succeed, got %d %s", w.Code, w.Body)
 	}
-	if gotSource != "external_backfill" {
-		t.Fatalf("bulk-attribute must pass the validated source through, got %q", gotSource)
+	for name, got := range map[string]services.BulkRequest{"rehearsal": p.rehearsed, "apply": p.applied} {
+		if got.Op != services.OpAdopt || strings.Join(got.UserIDs, ",") != "d1,d2" || got.Actor == "" {
+			t.Fatalf("the %s reached the planner as %+v", name, got)
+		}
+	}
+	fp := services.FingerprintIDCohort(driftOpAdopt, []string{"d1", "d2"}, "source", "external_backfill")
+	if p.cite.Surface != planSurfaceDriftAdopt || p.cite.PlanID == "" || p.cite.RequestFingerprint != fp {
+		t.Fatalf("the apply must cite the adopt screen's plan for this cohort and source: %+v", p.cite)
+	}
+	if strings.Join(delivered, ",") != "own-d1,own-d2" {
+		t.Fatalf("each adoption is sent as its Change decided: %v", delivered)
 	}
 }
 
@@ -555,16 +467,8 @@ func TestHandleBulkAttributeDrift_ValidSourceAttributes(t *testing.T) {
 // and a triage queue is exactly where an operator is moving fast.
 func TestBulkDrift_RehearsesByDefaultAndWritesNothing(t *testing.T) {
 	resetDriftDeps(t)
-	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
-		item := pendingDrift()
-		item.ID = id
-		return item, nil
-	}
 	writes := 0
-	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) {
-		writes++
-		return nil, nil
-	}
+	stubPlannedBulk(t, &writes)
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/bulk-attribute",
 		strings.NewReader(`{"ids":["d1","d2"],"source":"external_backfill"}`))
@@ -587,43 +491,10 @@ func TestBulkDrift_RehearsesByDefaultAndWritesNothing(t *testing.T) {
 	if plan.Summary.Apply != 2 {
 		t.Errorf("both rows are actionable, got %+v", plan.Summary)
 	}
-	// The same plan shape bulk grants uses, so one renderer serves both.
-	if len(plan.Outcomes) != 2 || plan.Outcomes[0].Detail == "" {
-		t.Errorf("every row must state what would happen: %+v", plan.Outcomes)
-	}
-}
-
-// A queue two people are working produces this constantly, and it is
-// information rather than an error.
-func TestBulkDrift_ReportsRowsSomebodyElseAlreadyResolved(t *testing.T) {
-	resetDriftDeps(t)
-	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
-		item := pendingDrift()
-		item.ID = id
-		if id == "d2" {
-			item.Status = "marked_external"
-		}
-		return item, nil
-	}
-	writes := 0
-	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) {
-		writes++
-		return nil, nil
-	}
-
-	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2"],"source":"external_backfill"}`)
-	w := httptest.NewRecorder()
-	handleBulkAttributeDrift(w, req)
-
-	var plan services.BulkPlan
-	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
-		t.Fatal(err)
-	}
-	if plan.Summary.NoChange != 1 || plan.Summary.Succeeded != 1 {
-		t.Fatalf("want 1 already-resolved / 1 applied, got %+v", plan.Summary)
-	}
-	if writes != 1 {
-		t.Errorf("an already-resolved row must not be re-written, got %d writes", writes)
+	// The same plan shape bulk grants uses, so one renderer serves both; what
+	// each row says is the planner's.
+	if len(plan.Outcomes) != 2 || plan.PlanID == "" {
+		t.Errorf("every row is planned and the plan issued: %+v", plan)
 	}
 }
 
@@ -639,44 +510,7 @@ func TestHandleReconcileNow_TriggersSweep(t *testing.T) {
 }
 
 // --- Bulk resolutions must report what happened, per id ---
-
-func TestBulkAttributeDrift_NamesTheIdsThatFailed(t *testing.T) {
-	resetDriftDeps(t)
-	// d2 was resolved by somebody else a moment ago and no longer loads.
-	dbGetDriftItem = func(_ context.Context, id string) (models.DriftItem, error) {
-		if id == "d2" {
-			return models.DriftItem{}, errors.New("no rows in result set")
-		}
-		item := pendingDrift()
-		item.ID = id
-		return item, nil
-	}
-	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) { return nil, nil }
-
-	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d2","d3"],"source":"external_backfill"}`)
-	w := httptest.NewRecorder()
-	handleBulkAttributeDrift(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("a partially-failing batch is still a 200, got %d", w.Code)
-	}
-	var plan services.BulkPlan
-	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
-		t.Fatal(err)
-	}
-	if plan.Summary.Succeeded != 2 || plan.Summary.Blocked != 1 {
-		t.Fatalf("want 2 applied / 1 blocked, got %+v", plan.Summary)
-	}
-	// A count alone would leave the operator unable to retry only what failed;
-	// the row itself carries the id and says why.
-	blocked := outcomeByID(t, plan, "d2")
-	if blocked.Effect != services.EffectBlocked {
-		t.Fatalf("the vanished row must be named and blocked, got %+v", blocked)
-	}
-	if !strings.Contains(blocked.Detail, "No longer in the queue") {
-		t.Errorf("it must say why, got %q", blocked.Detail)
-	}
-}
+// (Bulk adoption's rows are the planner's: services' tests.)
 
 func outcomeByID(t *testing.T, plan services.BulkPlan, id string) services.BulkOutcome {
 	t.Helper()
@@ -731,11 +565,11 @@ func TestBulkResolutions_AlwaysReturnARowPerRequestedID(t *testing.T) {
 		item.ID = id
 		return item, nil
 	}
-	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) { return nil, nil }
+	dbMarkDriftExternalTx = func(context.Context, string, string, string, []string, string, string, string) error { return nil }
 
-	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-attribute", `{"ids":["d1","d1",""],"source":"external_backfill"}`)
+	req := driftApplyRequest(t, "/api/v1/governance/drift/bulk-mark-external", `{"ids":["d1","d1",""],"reason":""}`)
 	w := httptest.NewRecorder()
-	handleBulkAttributeDrift(w, req)
+	handleBulkMarkDriftExternal(w, req)
 
 	var plan services.BulkPlan
 	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
@@ -860,9 +694,8 @@ func TestListDrift_FilteredRowsComeBackEnriched(t *testing.T) {
 // the operator to retry something that can never work.
 func TestDriftAction_UnsupportedTargetIsNotAConflict(t *testing.T) {
 	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) {
-		return nil, db.ErrDriftTargetUnsupported
+	svcApplyAct = func(context.Context, services.Action, services.ActWrite, *services.Seen) (services.Change, error) {
+		return services.Change{}, db.ErrDriftTargetUnsupported
 	}
 
 	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/attribute",
@@ -906,19 +739,40 @@ func driftApplyRequest(t *testing.T, path, body string) *http.Request {
 	return httptest.NewRequest("POST", path+"?apply=true", strings.NewReader(string(cited)))
 }
 
-// Adopting records access Zitadel has; a syndra_only row has none to record.
-func TestAdoptingAFindingZitadelDoesNotHoldIsRefused(t *testing.T) {
-	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "syndra_only", Status: "pending_triage"}, nil
-	}
-	attributed := false
-	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) { attributed = true; return nil, nil }
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/governance/drift/d1/attribute", strings.NewReader(`{"source":"external_backfill"}`))
-	req.SetPathValue("id", "d1")
-	w := httptest.NewRecorder()
-	handleAttributeDrift(w, req)
-	if w.Code != http.StatusUnprocessableEntity || attributed {
-		t.Fatalf("want 422 and nothing written, got %d (written %v) %s", w.Code, attributed, w.Body.String())
+// The planner refuses an adoption it can't make (services' tests say when);
+// the handler answers each refusal as the adopt screens read it. Adopting
+// records access Zitadel has, so a syndra_only row (nothing_to_adopt) is 422,
+// never a conflict to retry.
+func TestHandleAttributeDrift_RefusalsAreAnsweredAsTheScreensRead(t *testing.T) {
+	for _, tc := range []struct {
+		refusal string
+		status  int
+		code    string
+	}{
+		{"absent", http.StatusNotFound, "NOT_FOUND"},
+		{"resolved:attributed", http.StatusConflict, "DRIFT_NOT_PENDING"},
+		{"nothing_to_adopt", http.StatusUnprocessableEntity, "NOTHING_TO_ADOPT"},
+		{"departed", http.StatusConflict, "DEPARTED"},
+	} {
+		t.Run(tc.refusal, func(t *testing.T) {
+			resetDriftDeps(t)
+			delivered := false
+			svcApplyAct = func(context.Context, services.Action, services.ActWrite, *services.Seen) (services.Change, error) {
+				return services.Change{}, &services.Refused{Change: services.Change{Refusal: tc.refusal}}
+			}
+			svcDeliverChange = func(context.Context, services.Change) services.Delivery {
+				delivered = true
+				return services.Delivery{}
+			}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/governance/drift/d1/attribute", strings.NewReader(`{"source":"external_backfill"}`))
+			req.SetPathValue("id", "d1")
+			w := httptest.NewRecorder()
+			handleAttributeDrift(w, req)
+			var body struct{ Error string }
+			_ = json.Unmarshal(w.Body.Bytes(), &body)
+			if w.Code != tc.status || body.Error != tc.code || delivered {
+				t.Fatalf("want %d %s and nothing sent, got %d %s (sent %v)", tc.status, tc.code, w.Code, w.Body, delivered)
+			}
+		})
 	}
 }

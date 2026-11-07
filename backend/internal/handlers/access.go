@@ -119,85 +119,46 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 
 	grantedBy := resolveActor(r, req.GrantedBy)
 
-	var expiresAt *time.Time
-	if req.DurationDays > 0 {
-		expiry := clock.EndAfterDays(time.Now(), req.DurationDays)
-		expiresAt = &expiry
-	}
-
 	if !req.Extend {
+		var expiresAt *time.Time
+		if req.DurationDays > 0 {
+			expiry := clock.EndAfterDays(clock.Now(), req.DurationDays)
+			expiresAt = &expiry
+		}
 		givePlanned(w, r, userID, grantedBy, expiresAt, req)
 		return
 	}
+	extendPlanned(w, r, userID, grantedBy, req)
+}
 
-	if err := checkRoleOffered(r.Context(), req.ProjectID, req.RoleKey); err != nil {
-		writeRoleOfferedError(w, err)
-		return
-	}
-
-	// Extending is for a role that ends, and never merges into what is there
-	// (owner, 15 Oct). It is not on the planner yet (task 1.3).
-	holding, err := dbRequestHolding(r.Context(), userID, req.ProjectID, req.RoleKey)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	switch err := services.CheckExtension(holding, expiresAt); {
-	case errors.Is(err, services.ErrNothingToExtend):
+// extendPlanned moves the end of a grant they have through the planner (task
+// 1.2a): a ledger edit, nothing sent to Zitadel (it has no end dates; Syndra
+// ends access on the day), unless the new end cancels a removal still waiting,
+// which the sheet asked about before the press. Extending is for a role that
+// ends, and never shortens (owner, 15 Oct).
+func extendPlanned(w http.ResponseWriter, r *http.Request, userID, actor string, req UpsertDirectGrantRequest) {
+	payload, _ := json.Marshal(req)
+	ch, err := svcApplyAct(r.Context(),
+		services.Action{Op: services.OpExtend, UserID: userID, ProjectID: req.ProjectID, RoleKey: req.RoleKey, Days: req.DurationDays},
+		services.ActWrite{Actor: actor, Reason: req.Reason, Give: db.EnqueueParams{PayloadJSON: string(payload)}},
+		req.seen())
+	switch refusedAs(err) {
+	case "nothing_to_extend":
 		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND",
-			"There is no end to extend: they have this with no end, or don't have it.")
+			"There is no end to extend: they have this with no end, or don't have it. Nothing was changed.")
 		return
-	case errors.Is(err, services.ErrExtensionShortens):
+	case "runs_past":
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST",
 			"It already runs past that date, so extending would shorten it. Nothing was changed.")
 		return
 	}
-	endRule := db.EndSet
-
-	// The grant is recorded in the durable ledger + outbox in one transaction
-	// (audit included); the Zitadel mutation happens later during the
-	// operator-triggered drain. This is the B4/D3 single-mutation-authority
-	// path — no direct Zitadel call from the handler.
-	payload, _ := json.Marshal(req)
-	res, err := grantDirect(r.Context(), db.EnqueueParams{
-		UserID:      userID,
-		ProjectID:   req.ProjectID,
-		RoleKeys:    []string{req.RoleKey},
-		GrantedBy:   grantedBy,
-		Reason:      req.Reason,
-		ExpiresAt:   expiresAt,
-		Source:      "direct",
-		OpType:      "add",
-		EndRule:     endRule,
-		PayloadJSON: string(payload),
-	})
 	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		writeActError(w, err)
 		return
 	}
-
-	// Rebuild the compiled cache from the just-committed ledger row FIRST, so
-	// access is effective immediately — before (and independent of) the
-	// best-effort inline drain, and on a context detached from the request so a
-	// client disconnect after commit cannot leave access ineffective.
 	rebuildUserCacheDetached(r.Context(), userID)
-
-	// Delivered by the one rule (services.Deliver): it goes now unless the
-	// role waits. Before the switch over, a grant sent without ?apply=true
-	// still waits as it always did. Targeted to THIS row only — giving one
-	// role must not send unrelated changes an operator left queued. A failed
-	// send is non-fatal: the row stays pending and says why.
-	// The rows the mapping rules added go with it, under the same rule.
-	if ids := res.OutboxIDs(); len(ids) > 0 {
-		d := svcDeliver(r.Context(), ids, r.URL.Query().Get("apply") != "true")
-		if len(d.Sent) > 0 && res.OutboxID != "" {
-			if st, serr := dbGetPropagationStatus(r.Context(), res.OutboxID); serr == nil && st != "" {
-				res.Status = st
-			}
-		}
-		res.WaitReason, res.Retry, res.RuleWaiting = ownWait(d, res.OutboxID, res.Status)
-	}
-
+	res := actResult(ch)
+	deliverAct(r, ch, &res)
 	jsonResponse(w, http.StatusAccepted, res)
 }
 

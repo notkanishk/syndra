@@ -3,6 +3,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { withCancelIds } from "@/lib/cancel-confirm";
 import { sortByName } from "@/lib/sort";
 import type { CascadeOutcome } from "@/lib/types";
 import { invalidateAfter } from "./invalidation";
@@ -259,9 +260,9 @@ export function useUpdateBundle() {
 export function useDeleteBundle() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) =>
+    mutationFn: async ({ id, cancelIds }: { id: string; cancelIds?: string[] }) =>
       request<{ message: string; was_welcome: boolean; cascade: { enqueued: number; waiting?: number; wait_reason?: string; drain?: { retry?: RetryState } } }>(
-        `/bundles/${id}`,
+        withCancelIds(`/bundles/${id}`, cancelIds),
         { method: "DELETE" },
       ),
     onSuccess: () => invalidateAfter(qc, "access"),

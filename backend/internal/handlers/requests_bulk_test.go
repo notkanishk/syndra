@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"syndra/internal/access"
 	"syndra/internal/auth"
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
 )
@@ -59,10 +59,11 @@ func decodeBulkPlan(t *testing.T, rr *httptest.ResponseRecorder) services.BulkPl
 	return plan
 }
 
-// stubRequestLookup stands in for what a bulk decision reads (the rehearsal) and for the
-// decision itself (svcDecideRequest: what it writes is services' tests' subject, so here it
-// answers as a settled request would, and counts a write per request it decides) and the
-// send (svcDeliverChange, every row applied). The count it returns is the decisions made.
+// stubRequestLookup stands in for what a bulk decision reads (the decline rehearsal), for
+// the planner an approval goes through (stubPlannedBulk), for a decline's decision
+// (svcDecideRequest: what it writes is services' tests' subject, so here it answers as a
+// settled request would) and for the send (svcDeliverChange, every row applied). The count
+// it returns is every write: a decline decided, or an approval the planner applied.
 func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int {
 	t.Helper()
 	// An apply cites an approval now, so every rehearsal needs somewhere to land.
@@ -70,17 +71,16 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 	origGet := dbGetAccessRequestByID
 	origRebuild := cacheRebuildUser
 	origHolding := dbRequestHolding
-	origStatus, origRules := dbGetPropagationStatus, svcRulesFollowing
+	origStatus := dbGetPropagationStatus
 	origDecide, origDeliver := svcDecideRequest, svcDeliverChange
 	// Nobody holds anything unless a test says so.
 	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
 		return models.RequestHolding{Kind: models.HoldingNone}, nil
 	}
-	// A sent row is applied, and no rule follows, unless a test says so.
+	// A sent row is applied unless a test says so.
 	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
-	svcRulesFollowing = func(context.Context, string, []access.Role) ([]services.RuleRow, error) { return nil, nil }
 	t.Cleanup(func() {
-		dbGetPropagationStatus, svcRulesFollowing = origStatus, origRules
+		dbGetPropagationStatus = origStatus
 		dbRequestHolding = origHolding
 		cacheRebuildUser = origRebuild
 		dbGetAccessRequestByID = origGet
@@ -119,7 +119,51 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 		return d
 	}
 	cacheRebuildUser = func(context.Context, string, []string) {}
+	stubPlannedBulk(t, &writes)
 	return &writes
+}
+
+// plannedBulkProbe is what a bulk surface handed the planner.
+type plannedBulkProbe struct {
+	rehearsed, applied services.BulkRequest
+	cite               db.PlanCitation
+}
+
+// stubPlannedBulk stands in for the planner a bulk approval or adoption goes
+// through (task 1.3): the rehearsal plans every named id as one Change, and
+// the apply writes each with its own row "own-<id>", counted in writes. What
+// the planner decides per id is services' tests' subject.
+func stubPlannedBulk(t *testing.T, writes *int) *plannedBulkProbe {
+	t.Helper()
+	origRehearse, origApply, origRebuild := svcRehearseBulk, svcApplyPlannedBulk, rebuildUserCacheDetachedFn
+	t.Cleanup(func() {
+		svcRehearseBulk, svcApplyPlannedBulk, rebuildUserCacheDetachedFn = origRehearse, origApply, origRebuild
+	})
+	rebuildUserCacheDetachedFn = func(context.Context, string) {}
+	p := &plannedBulkProbe{}
+	rows := func(ids []string) []services.BulkOutcome {
+		out := []services.BulkOutcome{}
+		for _, id := range ids {
+			out = append(out, services.BulkOutcome{UserID: id, Effect: services.EffectApply, Fingerprint: "fp:" + id})
+		}
+		return out
+	}
+	svcRehearseBulk = func(_ context.Context, req services.BulkRequest) (services.BulkPlan, error) {
+		p.rehearsed = req
+		plan := services.BulkPlan{Op: req.Op, Outcomes: rows(req.UserIDs)}
+		plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+		return plan, nil
+	}
+	svcApplyPlannedBulk = func(_ context.Context, req services.BulkRequest, c db.PlanCitation) (services.BulkPlan, map[string]services.Change, error) {
+		p.applied, p.cite = req, c
+		written := map[string]services.Change{}
+		for _, id := range req.UserIDs {
+			*writes++
+			written[id] = services.Change{UserID: "user-" + id, Writes: []services.Write{{OutboxID: "own-" + id, Delivery: services.DeliveryStraightAway}}}
+		}
+		return services.BulkPlan{Op: req.Op, Applied: true, Outcomes: rows(req.UserIDs)}, written, nil
+	}
+	return p
 }
 
 func pendingRequest(id, requester, role string) models.AccessRequest {
@@ -147,12 +191,48 @@ func TestBulkDecide_RehearsesByDefaultAndWritesNothing(t *testing.T) {
 		t.Errorf("a rehearsal must not write, got %d", *writes)
 	}
 	plan := decodeBulkPlan(t, rr)
-	if plan.Applied || plan.Summary.Apply != 2 {
-		t.Errorf("expected an unapplied plan of 2, got %+v", plan.Summary)
+	if plan.Applied || plan.Summary.Apply != 2 || plan.Op != "decide_requests" || plan.PlanID == "" {
+		t.Errorf("expected an unapplied, issued plan of 2, got %+v", plan)
 	}
-	// The part an inbox action hides: this grants access.
-	if !strings.Contains(plan.Outcomes[0].Consequence, "direct grant") {
-		t.Errorf("the plan must say an approval mints a grant, got %q", plan.Outcomes[0].Consequence)
+}
+
+// Approving goes through the planner (task 1.3): the rehearsal and the apply
+// hand it the same request (each request id an approval, the reviewer, the
+// note), and the apply cites this screen's plan, bound to the cohort and the
+// decision. What each approval gives is the planner's (services' tests).
+func TestBulkDecide_ApprovingGoesThroughThePlannerCitingThePlan(t *testing.T) {
+	writes := stubRequestLookup(t, map[string]models.AccessRequest{
+		"r1": pendingRequest("r1", "u1", "trained"),
+		"r2": pendingRequest("r2", "u2", "operator"),
+	})
+	p := stubPlannedBulk(t, writes)
+	decided := 0
+	svcDecideRequest = func(context.Context, string, string, string, string, *services.Seen) (services.Decision, error) {
+		decided++
+		return services.Decision{}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1","r2"],"status":"approved","review_note":"term start"}`, true))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	want := services.BulkRequest{Op: services.OpApprove, UserIDs: []string{"r1", "r2"}, Actor: "op_1", Note: "term start"}
+	for name, got := range map[string]services.BulkRequest{"rehearsal": p.rehearsed, "apply": p.applied} {
+		if got.Op != want.Op || strings.Join(got.UserIDs, ",") != "r1,r2" || got.Actor != want.Actor || got.Note != want.Note {
+			t.Fatalf("the %s reached the planner as %+v, want %+v", name, got, want)
+		}
+	}
+	fp := services.FingerprintIDCohort("decide_requests", []string{"r1", "r2"}, "status", "approved")
+	if p.cite.Surface != planSurfaceBulkDecision || p.cite.PlanID == "" || p.cite.Actor != "op_1" || p.cite.RequestFingerprint != fp {
+		t.Fatalf("the apply must cite this screen's plan for this cohort and decision: %+v", p.cite)
+	}
+	plan := decodeBulkPlan(t, rr)
+	if plan.Op != "decide_requests" || plan.Summary.Succeeded != 2 || *writes != 2 {
+		t.Fatalf("both approvals applied, reported as a decision: %+v (writes %d)", plan, *writes)
+	}
+	if decided != 0 {
+		t.Fatalf("an approval is the planner's, never decided row by row: %d", decided)
 	}
 }
 
@@ -165,13 +245,13 @@ func TestBulkDecide_SkipsRequestsSomebodyElseAlreadyDecided(t *testing.T) {
 	})
 
 	rr := httptest.NewRecorder()
-	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1","r2"],"status":"approved"}`, true))
+	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1","r2"],"status":"rejected"}`, true))
 
 	plan := decodeBulkPlan(t, rr)
 	if plan.Summary.Succeeded != 1 || plan.Summary.NoChange != 1 {
-		t.Fatalf("want 1 applied / 1 already-decided, got %+v", plan.Summary)
+		t.Fatalf("want 1 declined / 1 already-decided, got %+v", plan.Summary)
 	}
-	// Re-approving would mint a second grant for access the person already has.
+	// Deciding it again would overwrite somebody else's decision.
 	if *writes != 1 {
 		t.Errorf("an already-decided request must not be re-written, got %d writes", *writes)
 	}
@@ -201,6 +281,24 @@ func TestBulkDecide_DecliningChangesNoAccess(t *testing.T) {
 	plan := decodeBulkPlan(t, rr)
 	if !strings.Contains(plan.Outcomes[0].Consequence, "Nothing about their current access changes") {
 		t.Errorf("a decline must say it takes nothing away, got %q", plan.Outcomes[0].Consequence)
+	}
+}
+
+// A decline names the role as every plan row does, never by its key.
+func TestBulkDecide_DeclineNamesTheRole(t *testing.T) {
+	stubRequestLookup(t, map[string]models.AccessRequest{"r1": pendingRequest("r1", "u1", "trained")})
+	orig := services.PlannerCatalogue
+	t.Cleanup(func() { services.PlannerCatalogue = orig })
+	services.PlannerCatalogue = func(context.Context) ([]models.ProjectCatalog, error) {
+		return []models.ProjectCatalog{{ID: "pLaser", Name: "Laser Lab", Roles: []models.ProjectRole{{Key: "trained", Label: "Trained"}}}}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1"],"status":"rejected"}`, false))
+
+	plan := decodeBulkPlan(t, rr)
+	if got := plan.Outcomes[0].Detail; got != "Their request for Trained in Laser Lab is declined." {
+		t.Errorf("decline row = %q", got)
 	}
 }
 
@@ -244,20 +342,5 @@ func TestBulkDecide_RejectsInvalidRequests(t *testing.T) {
 	}
 	if *writes != 0 {
 		t.Errorf("a rejected request must not write, got %d", *writes)
-	}
-}
-
-// The plan agrees with the decision: a request for a role they have come to
-// hold since asking is blocked for approval, never approved over what they have.
-func TestBulkDecide_BlocksApprovingARoleTheyAlreadyHave(t *testing.T) {
-	stubRequestLookup(t, map[string]models.AccessRequest{"r1": pendingRequest("r1", "u1", "trained")})
-	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
-		return models.RequestHolding{Kind: models.HoldingForGood}, nil
-	}
-	rr := httptest.NewRecorder()
-	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1"],"status":"approved"}`, false))
-	plan := decodeBulkPlan(t, rr)
-	if len(plan.Outcomes) != 1 || plan.Outcomes[0].Effect != services.EffectBlocked {
-		t.Fatalf("want the approval blocked, got %+v", plan.Outcomes)
 	}
 }

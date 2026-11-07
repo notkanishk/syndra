@@ -7,7 +7,6 @@ import (
 
 	"syndra/internal/claimserve"
 	"syndra/internal/db"
-	"syndra/internal/models"
 	"syndra/internal/services"
 )
 
@@ -21,7 +20,6 @@ func TestMain(m *testing.M) {
 	svcConvergeSubjectOn = func(context.Context, string, string, string) error { return nil }
 	dbTargetProjects = func(context.Context) (map[string]string, error) { return map[string]string{}, nil }
 	checkRoleOffered = func(context.Context, string, string) error { return nil }
-	dbWouldCancel = func(context.Context, db.EnqueueParams) ([]models.QueuedChange, error) { return nil, nil }
 	// No bundle includes another unless a test says so (B8).
 	dbBundleIncludesAnything = func(context.Context, string) (bool, error) { return false, nil }
 	dbRetireBlockers = func(context.Context, string) ([]string, error) { return nil, nil }

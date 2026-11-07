@@ -3,10 +3,10 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
@@ -43,11 +43,16 @@ func TestOwnWait_ARefusalIsTheActsOnlyWhenItsOwnRowWasRefused(t *testing.T) {
 
 // N1: a bulk row Zitadel refused is failed, never queued for Send, and its
 // detail says the refusal, the cause and the step.
-func TestProjectUpstream_ARefusalIsFailedWithItsCauseAndStep(t *testing.T) {
-	refusedDelivery(t, "o1", db.RefusalNotAllowed)
-	reason, retry := projectUpstream(context.Background(), []string{"o1"})
+func TestDelivered_ARefusalIsFailedWithItsCauseAndStep(t *testing.T) {
+	reason, retry := delivered(services.Delivery{Sent: []string{"o1"},
+		Reason: map[string]string{"o1": db.WaitReasonRefused(db.RefusalNotAllowed)}})
 	if reason != db.WaitReasonRefused(db.RefusalNotAllowed) || retry != nil {
 		t.Fatalf("got %q %v", reason, retry)
+	}
+	var out services.BulkOutcome
+	settleBulkRow(&out, reason, retry, services.BulkOpAssignRole)
+	if out.Effect != services.EffectFailed {
+		t.Fatalf("a refused row is failed, never queued for Send: %+v", out)
 	}
 	give := refusedDetail(reason, false)
 	for _, want := range []string{"Zitadel refused this", "isn't allowed", "Ask whoever runs Zitadel", "give it again"} {
@@ -68,23 +73,12 @@ func TestProjectUpstream_ARefusalIsFailedWithItsCauseAndStep(t *testing.T) {
 // approval whose own row went is applied even when a rule's row waits, and
 // the rule row is counted apart.
 func TestBulkApprove_RefusedIsFailedAndARuleWaitIsNotTheApprovals(t *testing.T) {
+	// The planner writes one row per approval, "own-<id>" (stubPlannedBulk);
+	// the send is the plan's.
 	stubRequestLookup(t, map[string]models.AccessRequest{
 		"r1": pendingRequest("r1", "u1", "trained"),
 		"r2": pendingRequest("r2", "u2", "trained"),
 	})
-	origOffered := checkRoleOffered
-	t.Cleanup(func() { checkRoleOffered = origOffered })
-	checkRoleOffered = func(context.Context, string, string) error { return nil }
-	svcRulesFollowing = func(context.Context, string, []access.Role) ([]services.RuleRow, error) { return nil, nil }
-
-	plan := rehearseDecisionBatch(context.Background(), []string{"r1", "r2"}, "approved")
-	// The decision (services.DecideRequest) writes one row per approval; the send is the plan's.
-	probe := stubDecide(t)
-	svcDecideRequest = func(_ context.Context, id, _, _, _ string, _ *services.Seen) (services.Decision, error) {
-		return services.Decision{UserID: "user-" + id,
-			Change:   services.Change{Writes: []services.Write{{OutboxID: "own-" + id}}},
-			Approval: services.ApprovalPlan{Effect: services.EffectGive}}, nil
-	}
 	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
 		own := ch.Writes[0].OutboxID
 		if own == "own-r1" { // r1: Zitadel refused the approved role itself
@@ -94,11 +88,9 @@ func TestBulkApprove_RefusedIsFailedAndARuleWaitIsNotTheApprovals(t *testing.T) 
 		return services.Delivery{Sent: []string{own}, Waiting: []string{"rule-" + own},
 			Reason: map[string]string{"rule-" + own: db.WaitReasonRoleWaits}}
 	}
-	_ = probe
-	for i := range plan.Outcomes {
-		plan.Outcomes[i].Effect = services.EffectApply
-	}
-	applyDecisionPlan(bulkDecisionReq(t, `{"ids":["r1","r2"],"status":"approved"}`, true), &plan, "approved", "")
+	rr := httptest.NewRecorder()
+	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1","r2"],"status":"approved"}`, true))
+	plan := decodeBulkPlan(t, rr)
 
 	byUser := map[string]services.BulkOutcome{}
 	for _, o := range plan.Outcomes {
@@ -107,7 +99,8 @@ func TestBulkApprove_RefusedIsFailedAndARuleWaitIsNotTheApprovals(t *testing.T) 
 	if o := byUser["r1"]; o.Effect != services.EffectFailed || !db.IsRefused(o.WaitReason) || !strings.Contains(o.Detail, "Zitadel refused this") {
 		t.Fatalf("refused approval: %+v", o)
 	}
-	if o := byUser["r2"]; o.Effect != services.EffectApplied || o.RuleWaiting != 1 || !strings.Contains(o.Consequence, "automatic rule") {
+	// How the rule's wait is worded is the screen's; the row counts it apart.
+	if o := byUser["r2"]; o.Effect != services.EffectApplied || o.RuleWaiting != 1 || o.WaitReason != "" {
 		t.Fatalf("an approval that went, with a rule's role waiting, stays applied: %+v", o)
 	}
 }

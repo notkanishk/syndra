@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UnexplainedAccess } from "@/components/review/UnexplainedAccess";
+import { ApiError } from "@/lib/api-client";
 import type { DriftTriageItem } from "@/lib/queries/useDrift";
 
 const drift = vi.hoisted(() => ({ data: [] as DriftTriageItem[] }));
@@ -66,22 +67,57 @@ const revokeCtl = vi.hoisted(() => ({
 // Which roles are Roles that wait; the shared setup answers "none".
 vi.mock("@/lib/queries/useRoleWaits", () => ({ useRoleWaits: () => () => revokeCtl.waits }));
 
-// What the automatic rules give on adopting (the backend's preview), and the
-// rule rows the adoption answered with.
-const adoptCtl = vi.hoisted(() => ({ rules: [] as string[], answer: {} as Record<string, unknown>, error: false, refetch: vi.fn() }));
-vi.mock("@/lib/queries/useRulePreview", () => ({
-  useRulePreview: (_u: string, _p: string, _k: string[], enabled: boolean) => ({
-    data: enabled ? adoptCtl.rules.map((sentence) => ({ sentence })) : undefined,
-    isLoading: false,
-    isError: enabled && adoptCtl.error,
-    isFetching: false,
-    refetch: adoptCtl.refetch,
-  }),
+// What adopting does, from the planner (GET /users/{id}/plan?op=adopt): the
+// rules' sentences, a plan that couldn't be read, what it was asked; and what
+// the adoption's write was sent and answered.
+const ADOPT_SAID = "Records a direct grant, so the access stops being unexplained and starts being owned. Nothing is sent to Zitadel for it.";
+const adoptCtl = vi.hoisted(() => ({
+  rules: [] as string[],
+  answer: {} as Record<string, unknown>,
+  error: false,
+  refetch: vi.fn(),
+  asked: [] as unknown[],
+  writes: [] as unknown[],
+  reject: null as unknown,
 }));
+vi.mock("@/lib/usePlanConsent", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/usePlanConsent")>();
+  const { actPlan } = await import("@/test-utils/plan");
+  return {
+    ...original,
+    usePlanConsent: (action: { op: string } | null, doing: string) => {
+      if (action) adoptCtl.asked.push(action);
+      const failed = Boolean(action) && adoptCtl.error;
+      const plan =
+        action && !failed
+          ? actPlan({ detail: "Adopted into Syndra (operator).", said: [ADOPT_SAID, ...adoptCtl.rules], rules: adoptCtl.rules })
+          : undefined;
+      const words = original.planWords(doing);
+      return {
+        plan,
+        rules: plan?.rules ?? [],
+        cancels: plan?.cancels ?? [],
+        seen: original.seenOf(plan),
+        hold: failed ? words.held : undefined,
+        checking: false,
+        failed,
+        unread: words.unread,
+        retry: adoptCtl.refetch,
+      };
+    },
+  };
+});
 
 vi.mock("@/lib/queries/useDrift", () => ({
   useDriftItems: () => ({ ...drift, isLoading: false, error: null, refetch: () => {} }),
-  useAttributeDrift: () => ({ mutateAsync: async () => adoptCtl.answer, isPending: false }),
+  useAttributeDrift: () => ({
+    mutateAsync: async (args: unknown) => {
+      adoptCtl.writes.push(args);
+      if (adoptCtl.reject) throw adoptCtl.reject;
+      return adoptCtl.answer;
+    },
+    isPending: false,
+  }),
   useRevokeDrift: () =>
     useMutation({
       mutationFn: async () => {
@@ -186,7 +222,12 @@ beforeEach(() => {
   revokeCtl.waits = false;
   revokeCtl.answer = {};
   adoptCtl.rules = [];
-  adoptCtl.answer = { status: "attributed", rule_outbox_ids: [] };
+  adoptCtl.answer = { status: "attributed", rule_outbox_ids: [], rule_waiting: 0 };
+  adoptCtl.error = false;
+  adoptCtl.refetch = vi.fn();
+  adoptCtl.asked = [];
+  adoptCtl.writes = [];
+  adoptCtl.reject = null;
   NAMES.current = {};
 });
 
@@ -827,31 +868,51 @@ describe("the adopt confirm, with automatic rules", () => {
     return screen.getByRole("dialog");
   }
 
-  it("names the roles the rules give, and drops 'stays exactly as it is'", async () => {
+  // Task 1.3: one source for what rules add, the planner's; the write carries the plan.
+  it("names what adopting does and what the rules give, in the planner's words, and writes the plan back", async () => {
     adoptCtl.rules = ["Also gives Bench in Workshop, by the automatic rule from Operator."];
-    adoptCtl.answer = { status: "attributed", rule_outbox_ids: ["o2"] };
+    adoptCtl.answer = { status: "attributed", rule_outbox_ids: ["o2"], rule_waiting: 0 };
     const dialog = openAdopt();
+    expect(adoptCtl.asked).toContainEqual({ op: "adopt", userId: "u1", driftId: "d1" });
+    expect(within(dialog).getByText(ADOPT_SAID)).toBeInTheDocument();
     expect(within(dialog).getByText("Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
-    expect(dialog.textContent).not.toMatch(/stays exactly as it is/);
-    expect(dialog.textContent).toMatch(/add what they give to Pending changes, for you to send/);
+    expect(dialog.textContent).toMatch(/stays exactly as it is/);
+    expect(dialog.textContent).not.toMatch(/Pending changes, for you to send/);
 
+    fireEvent.click(within(dialog).getByRole("button", { name: "Adopt in Syndra" }));
+    const result = await within(dialog).findByRole("status");
+    expect(adoptCtl.writes).toEqual([{ id: "d1", body: { source: "external_backfill", fingerprint: "fp-1", cancel_ids: [] } }]);
+    // What the rules gave was sent straight away: nothing waits, so nothing is said to.
+    expect(result.textContent).not.toMatch(/wait/);
+    expect(result.textContent).toContain("Nothing for you to do.");
+  });
+
+  it("says what the rules left waiting only when some of it waits for you", async () => {
+    adoptCtl.rules = ["Also gives Bench in Workshop, by the automatic rule from Operator."];
+    adoptCtl.answer = { status: "attributed", rule_outbox_ids: ["o2"], rule_waiting: 1, wait_reason: "role_waits" };
+    const dialog = openAdopt();
     fireEvent.click(within(dialog).getByRole("button", { name: "Adopt in Syndra" }));
     const result = await within(dialog).findByRole("status");
     expect(result.textContent).toContain("1 more change from automatic rules waits in Pending changes for you to send.");
   });
 
-  it("holds the adopt when the rule preview fails, and Try again reads it again", () => {
+  it("holds the adopt when the plan can't be read, and Try again reads it again", () => {
     adoptCtl.error = true;
-    adoptCtl.refetch = vi.fn();
-    try {
-      const dialog = openAdopt();
-      expect(within(dialog).getByRole("button", { name: "Adopt in Syndra" })).toBeDisabled();
-      expect(within(dialog).getByText(/Syndra couldn.t read the automatic rules/)).toBeInTheDocument();
-      fireEvent.click(within(dialog).getByRole("button", { name: "Try again" }));
-      expect(adoptCtl.refetch).toHaveBeenCalledTimes(1);
-    } finally {
-      adoptCtl.error = false;
-    }
+    const dialog = openAdopt();
+    expect(within(dialog).getByRole("button", { name: "Adopt in Syndra" })).toBeDisabled();
+    expect(within(dialog).getByText(/Syndra couldn.t read what adopting it does/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Try again" }));
+    expect(adoptCtl.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("their access moved before the write: nothing changed, it says so and reads the plan again", async () => {
+    adoptCtl.reject = new ApiError(409, { error: "PLAN_STALE", message: "Nothing was changed." });
+    const dialog = openAdopt();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Adopt in Syndra" }));
+    expect(await within(dialog).findByText(/access moved while this was open\./)).toBeInTheDocument();
+    expect(within(dialog).getByText(/press Adopt in Syndra again/)).toBeInTheDocument();
+    expect(adoptCtl.refetch).toHaveBeenCalled();
+    expect(within(dialog).getByRole("button", { name: "Adopt in Syndra" })).toBeEnabled();
   });
 
   it("says the access stays exactly as it is when no rule follows", async () => {

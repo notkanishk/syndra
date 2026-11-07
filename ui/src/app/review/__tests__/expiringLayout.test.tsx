@@ -24,6 +24,15 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
   useCreateGrant: () => ({ mutateAsync: state.extend, isPending: false }),
 }));
 
+// Extend reads its plan at the press (task 1.2a): one that applies and cancels nothing.
+vi.mock("@/lib/usePlanConsent", async (importOriginal) => {
+  const { actPlan } = await import("@/test-utils/plan");
+  return {
+    ...(await importOriginal<typeof import("@/lib/usePlanConsent")>()),
+    fetchPlan: () => Promise.resolve(actPlan({ delivery: "none" })),
+  };
+});
+
 const days = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
 
 function grant(over: Partial<ExpiringGrantRow> = {}): ExpiringGrantRow {

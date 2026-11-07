@@ -294,8 +294,8 @@ func deltaParams(ctx context.Context, userID string, adds, revokes []roleKey, ac
 	return params, nil
 }
 
-// deltaWrites are a delta's single-role writes, without side effects: what a
-// rehearsal asks db.WouldCancel about is what the apply then enqueues.
+// deltaWrites are a delta's single-role writes, without side effects: what the
+// planner decides (and asks db.Answers about) is what the apply enqueues.
 func deltaWrites(userID string, adds, revokes []roleKey, source, sourceRef string) []db.EnqueueParams {
 	params := make([]db.EnqueueParams, 0, len(adds)+len(revokes))
 	for _, k := range adds {

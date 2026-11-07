@@ -1,7 +1,6 @@
 "use client";
 
 import { usePlace } from "@/lib/place";
-import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -33,7 +32,6 @@ import { Notice } from "@/components/ui/Notice";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
-import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Crossfade } from "@/lib/motion";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Card } from "@/components/ui/Card";
@@ -52,8 +50,9 @@ import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useSeededUser } from "@/lib/queries/seed";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
-import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { EXTEND_DAYS, FORECAST, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
+import { EXTEND_DAYS, FORECAST, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { useExtend } from "@/lib/useExtend";
 import { daysUntil, expiryLabel, formatAgoShort, formatShortDate } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 import { useApplications } from "@/lib/queries/useApplications";
@@ -807,19 +806,17 @@ function ExtendSeat({
   projectName: string;
   roleKey: string;
 }) {
-  const extend = useCreateGrant(userId);
-  const roleWaits = useRoleWaits();
+  // Through the planner; nothing is sent to Zitadel. No sheet of its own: a small one holds the
+  // step if extending would cancel a removal still waiting for you to send (A-04 §14).
+  const extend = useExtend(userId, projectId, roleKey, "Extended from the person's page");
   const roleName = useRoleName();
-  // No sheet of its own: a small one holds the step if extending would cancel a change still
-  // waiting for you to send (A-04 §14).
-  const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const done = outcome !== null && (!statesNothingChanged(outcome.kind) || Boolean(outcome.recorded));
   return (
-    <Crossfade id={done ? "outcome" : extend.isPending ? "forecast" : "open"}>
-      {extend.isPending && !done ? (
-        <ActionForecast word={roleWaits(projectId, roleKey) ? FORECAST.queued : `${FORECAST.extend} by ${EXTEND_DAYS} days`} />
+    <Crossfade id={done ? "outcome" : extend.writing ? "forecast" : "open"}>
+      {extend.writing && !done ? (
+        <ActionForecast word={`${FORECAST.extend} by ${EXTEND_DAYS} days`} />
       ) : outcome && done ? (
         <ActionOutcome placement="seat" word={outcome.recorded ? "Refused by Zitadel" : outcome.message} outcome={outcome} person={userId} />
       ) : (
@@ -827,29 +824,18 @@ function ExtendSeat({
       <Button
         size="sm"
         variant="outline"
-        isPending={extend.isPending}
+        isPending={extend.busy}
         aria-label={`Extend ${roleName(projectId, roleKey)} in ${projectName}`}
         onClick={async () => {
-          try {
-            const result = await step.run(() =>
-              extend.mutateAsync({
-                project_id: projectId,
-                role_key: roleKey,
-                reason: "Extended from the person's page",
-                duration_days: EXTEND_DAYS,
-                extend: true,
-              }),
-            );
-            if (result === KEPT) return;
-            setOutcome(outcomeFromExtend(result, EXTEND_DAYS));
-          } catch (error) {
-            setOutcome(outcomeFromError(error));
-          }
+          const made = await extend.press();
+          if (made) setOutcome(made);
         }}
       >
         Extend
       </Button>
-      {step.element}
+      {extend.step.element}
+      {/* A refusal (their access moved, it already ends later) stays beside the button, to press again. */}
+      {outcome && <ActionOutcome placement="seat" className="tint-in" word="Not extended" outcome={outcome} person={userId} />}
     </>
       )}
     </Crossfade>

@@ -12,6 +12,7 @@ export const actPlan = (over: Partial<ActPlan> = {}): ActPlan => ({
   rules: [],
   delivery: "straight_away",
   waits: [],
+  goes: [],
   cancels: [],
   fingerprint: "fp-1",
   cancel_ids: [],

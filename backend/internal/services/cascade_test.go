@@ -27,6 +27,7 @@ func resetCascadeDeps(t *testing.T) {
 		return fn(ctx)
 	}
 	t.Helper()
+	plannerFromStubs(t)
 	origGetBundle := svcGetBundleByID
 	origGetRoles := svcCascGetRolesForBundle
 	origGetUsersForBundle := svcGetUsersForBundle
@@ -630,7 +631,7 @@ func TestPublish_SuppressesRevokeWhenAnotherRuleStillGrantsIt(t *testing.T) {
 		return models.BundleVersion{ID: "v-new", Version: 3}, nil, nil
 	}
 
-	plan, _, err := PublishBundleVersion(context.Background(), "admin",
+	plan, _, err := publishNow(t,
 		PublishRequest{BundleID: "b1", Migrate: true})
 	if err != nil {
 		t.Fatal(err)
@@ -664,7 +665,7 @@ func TestPublish_RevokesHoldersNothingElseCovers(t *testing.T) {
 		return models.BundleVersion{ID: "v-new", Version: 3}, []string{"o1", "o2"}, nil
 	}
 
-	plan, _, err := PublishBundleVersion(context.Background(), "admin",
+	plan, _, err := publishNow(t,
 		PublishRequest{BundleID: "b1", Migrate: true})
 	if err != nil {
 		t.Fatal(err)
@@ -678,7 +679,7 @@ func TestPublish_RevokesHoldersNothingElseCovers(t *testing.T) {
 		}
 	}
 	// Applied, not Apply: the plan has been through the apply pass.
-	if plan.Summary.Succeeded != 2 {
+	if plan.Summary.Apply != 2 {
 		t.Fatalf("both holders should be acted on, got %+v", plan.Summary)
 	}
 }
@@ -703,7 +704,7 @@ func TestPublish_WithoutMigrateWritesTheVersionAndTouchesNobody(t *testing.T) {
 		return models.BundleVersion{ID: "v-new", Version: 3}, nil, nil
 	}
 
-	plan, version, err := PublishBundleVersion(context.Background(), "admin",
+	plan, version, err := publishNow(t,
 		PublishRequest{BundleID: "b1", Migrate: false})
 	if err != nil {
 		t.Fatal(err)
@@ -739,7 +740,7 @@ func TestPublish_RefusesWhenThereIsNothingToPublish(t *testing.T) {
 		return models.BundleVersion{}, nil, nil
 	}
 
-	if _, _, err := PublishBundleVersion(context.Background(), "admin",
+	if _, _, err := publishNow(t,
 		PublishRequest{BundleID: "b1", Migrate: true}); err == nil {
 		t.Fatal("expected publishing an unchanged bundle to be refused")
 	}
@@ -906,7 +907,7 @@ func TestPublish_ReadFailureIsNotAnEmptyBundle(t *testing.T) {
 		return models.BundleVersion{}, nil, nil
 	}
 
-	if _, _, err := PublishBundleVersion(context.Background(), "admin",
+	if _, _, err := publishNow(t,
 		PublishRequest{BundleID: "b1", Migrate: true}); err == nil {
 		t.Fatal("expected the read error to propagate")
 	}
@@ -960,7 +961,7 @@ func TestMoveHolders_TargetVersionComesFromTheVersionList(t *testing.T) {
 	if strings.Contains(plan.Outcomes[0].Detail, "v0") {
 		t.Fatalf("the target version was inferred from holders and came out as v0: %q", plan.Outcomes[0].Detail)
 	}
-	if !strings.Contains(plan.Outcomes[0].Detail, "v2 → v3") {
+	if plan.Outcomes[0].Detail != "Moves from v2 to v3." {
 		t.Fatalf("expected the move to name both versions, got %q", plan.Outcomes[0].Detail)
 	}
 }

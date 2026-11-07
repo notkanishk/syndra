@@ -1,7 +1,4 @@
 import { ApiError, LostReply } from "@/lib/api-client";
-// A cycle (retry.ts reads NOTHING_TO_DO): both sides use the other only inside functions.
-import { RETRYING, refusedOutcome, retryingOutcome, type RetryState } from "@/lib/retry";
-import { isRefused } from "@/lib/wait-reason";
 
 /**
  * What happened, in six words, everywhere in the product.
@@ -269,32 +266,16 @@ export function outcomeFromError(error: unknown): ActionOutcome {
 export const EXTEND_DAYS = 90;
 
 /**
- * The result of extending a grant, as an outcome. The grant endpoint enqueues to
- * the outbox in manual mode ("pending") rather than applying inline, so reporting
- * "extended" unconditionally would say Zitadel has it when only Syndra's own
- * ledger does. `leaves` is the closing line for a surface whose row goes on the
- * next read; it is not said while the change is still held back.
+ * The result of extending a grant, as an outcome. Extending is a ledger edit
+ * (architecture deepening 1.2a): Zitadel has no end dates and Syndra ends the
+ * access on the day, so nothing is sent and nothing waits; it is done when the
+ * write answers. `said` is the plan's own sentence ("Keeps Member in Laser Lab
+ * until 3 Dec 2026."); `leaves` is the closing line for a surface whose row
+ * goes on the next read.
  */
-export function outcomeFromExtend(
-  result: { status?: string; outbox_id?: string; wait_reason?: string; retry?: RetryState } | undefined,
-  days: number,
-  leaves?: string,
-): ActionOutcome {
-  // Re-audit R14: the end date is Syndra's and has already moved; only what
-  // reaches Zitadel waits, and why decides who sends it.
-  const done = `Extended by ${days} days in Syndra`;
-  // Final verification N1: a refusal is terminal, never "Extended".
-  if (isRefused(result?.wait_reason) || result?.status === "failed") {
-    return refusedOutcome(done, result?.wait_reason);
-  }
-  if (result?.status !== "pending") {
-    return { kind: "applied", message: `Extended by ${days} days`, detail: leaves };
-  }
-  if (result.wait_reason === RETRYING) return retryingOutcome(done, result.retry);
-  if (result.wait_reason === "role_waits" || result.wait_reason === "manual" || !result.wait_reason) {
-    return { kind: "queued", message: `Will extend by ${days} days once sent` };
-  }
-  return { kind: "queued", message: `${done}. Zitadel didn't take it when it was sent; it goes when you send it` };
+export function outcomeFromExtend(days: number, said?: string, leaves?: string): ActionOutcome {
+  const detail = [said, leaves].filter(Boolean).join(" ");
+  return { kind: "applied", message: `Extended by ${days} days`, ...(detail ? { detail } : {}) };
 }
 
 /**

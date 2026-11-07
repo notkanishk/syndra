@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, WouldCancelQueued, request } from "@/lib/api-client";
-import { armAck, takeAck, type QueuedChange } from "@/lib/cancel-confirm";
+import { withCancelIds, type QueuedChange } from "@/lib/cancel-confirm";
 
 // Never invisibly (owner, 15 Oct): a refusal to cancel unshown queued changes
 // reaches the dialog that made the write, and a retry names only what it showed.
@@ -25,7 +25,6 @@ const refusal = { error: "WOULD_CANCEL_QUEUED", message: "This would cancel 1 ch
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  takeAck("POST", "/users/u1/grants");
 });
 
 describe("an action that would cancel queued changes", () => {
@@ -45,27 +44,19 @@ describe("an action that would cancel queued changes", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("an armed acknowledgement rides exactly the next request to that method and path", async () => {
-    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(respond(202, { status: "pending" })));
-    vi.stubGlobal("fetch", fetchMock);
-
-    armAck("POST", "/users/u1/grants", [queued.id, "second"]);
-    await request("/users/u1/grants", { method: "POST", body: { role_key: "community" } });
-    expect(new Headers(fetchMock.mock.calls[0][1].headers).get("X-Syndra-Cancel-Ack")).toBe(`${queued.id},second`);
-    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ role_key: "community" }));
-
-    await request("/users/u1/grants", { method: "POST", body: {} });
-    expect(new Headers(fetchMock.mock.calls[1][1].headers).has("X-Syndra-Cancel-Ack")).toBe(false);
+  it("a write not on the planner names the ids it was shown in its own query, encoded", () => {
+    expect(withCancelIds("/bundles/b1", [queued.id, "second"])).toBe(`/bundles/b1?cancel_ids=${queued.id}%2Csecond`);
+    // None shown: the path as it is, so the backend admits no cancellation.
+    expect(withCancelIds("/bundles/b1")).toBe("/bundles/b1");
+    expect(withCancelIds("/bundles/b1", [])).toBe("/bundles/b1");
   });
 
-  it("another write made meanwhile never carries it", async () => {
-    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(respond(202, {})));
+  it("the ids ride the request's URL", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(respond(200, { message: "ok" })));
     vi.stubGlobal("fetch", fetchMock);
 
-    armAck("POST", "/users/u1/grants", [queued.id]);
-    await request("/users/u2/grants", { method: "POST", body: {} });
-    expect(new Headers(fetchMock.mock.calls[0][1].headers).has("X-Syndra-Cancel-Ack")).toBe(false);
-    expect(takeAck("POST", "/users/u1/grants")).toEqual([queued.id]);
+    await request(withCancelIds("/rules/mapping/r1", [queued.id]), { method: "DELETE" });
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/proxy/rules/mapping/r1?cancel_ids=${queued.id}`);
   });
 
   it("a refusal with no list is an ordinary conflict", async () => {

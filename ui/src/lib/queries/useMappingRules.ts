@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { withCancelIds } from "@/lib/cancel-confirm";
 import type { RetryState } from "@/lib/retry";
 import { invalidateAfter } from "./invalidation";
 
@@ -67,12 +68,8 @@ export function useRetiredMappingRules(enabled = true) {
 export function useCreateMappingRule() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateMappingRuleInput) => {
-      return await request<MappingRuleRow>("/rules/mapping", {
-        method: "POST",
-        body: input,
-      });
-    },
+    mutationFn: async ({ cancelIds, ...input }: CreateMappingRuleInput & { cancelIds?: string[] }) =>
+      request<MappingRuleRow>(withCancelIds("/rules/mapping", cancelIds), { method: "POST", body: input }),
     onSuccess: () => invalidateAfter(qc, "access", { extra: [KEYS.list] }),
   });
 }
@@ -86,8 +83,8 @@ export function useCreateMappingRule() {
 export function useUpdateMappingRule() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...input }: CreateMappingRuleInput & { id: string }) =>
-      request<MappingRuleRow>(`/rules/mapping/${id}`, { method: "PUT", body: input }),
+    mutationFn: async ({ id, cancelIds, ...input }: CreateMappingRuleInput & { id: string; cancelIds?: string[] }) =>
+      request<MappingRuleRow>(withCancelIds(`/rules/mapping/${id}`, cancelIds), { method: "PUT", body: input }),
     onSuccess: () => invalidateAfter(qc, "access", { extra: [KEYS.list] }),
   });
 }
@@ -103,12 +100,12 @@ export function useUpdateMappingRule() {
 export function useDeleteMappingRule() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) =>
+    mutationFn: async ({ id, cancelIds }: { id: string; cancelIds?: string[] }) =>
       request<{
         message: string;
         cascade: { enqueued: number; waiting?: number; wait_reason?: string; drain?: { retry?: RetryState } };
       }>(
-        `/rules/mapping/${id}`,
+        withCancelIds(`/rules/mapping/${id}`, cancelIds),
         { method: "DELETE" },
       ),
     onSuccess: () => invalidateAfter(qc, "access", { extra: [KEYS.list] }),

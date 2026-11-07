@@ -49,14 +49,11 @@ describe("R5: a drift revoke says where it stands", () => {
   });
 });
 
-describe("R14: an extension Zitadel didn't take is retried, not waiting for Send", () => {
-  it("retrying says when, and draws no Send link", () => {
-    const o = outcomeFromExtend({ status: "pending", wait_reason: "halted:retrying", retry }, 90);
-    expect(o.message).toMatch(/^Extended by 90 days in Syndra\. Zitadel didn't answer\. Syndra sends it again at 14:05/);
+describe("R14, task 1.2a: an extension sends nothing to Zitadel, so it never waits for Send", () => {
+  it("is done, with no Send link, whatever the role", () => {
+    const o = outcomeFromExtend(90);
+    expect(o.kind).toBe("applied");
     expect(waitsForSend(o)).toBe(false);
-  });
-  it("a role that waits still waits for Send", () => {
-    expect(waitsForSend(outcomeFromExtend({ status: "pending", wait_reason: "role_waits" }, 90))).toBe(true);
   });
 });
 

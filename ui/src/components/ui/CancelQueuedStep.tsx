@@ -11,7 +11,7 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";
 import { PaginationRow } from "@/components/ui/PaginationRow";
 import { WouldCancelQueued } from "@/lib/api-client";
-import { armAck, type QueuedChange } from "@/lib/cancel-confirm";
+import type { QueuedChange } from "@/lib/cancel-confirm";
 import { formatAgoShort } from "@/lib/format";
 import { SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 import { settleIndicators } from "@/lib/queries/useIndicators";
@@ -30,15 +30,18 @@ import { personOr, roleName } from "@/lib/names";
  * stack, and no route can skip it because the backend refuses until told.
  *
  *   const step = useCancelStep({ host: "Give Rohan a role", goAhead: "give Member" });
- *   const done = await step.run(() => grant.mutateAsync(input));   // KEPT, or the write's result
+ *   const done = await step.run((ids) => retire.mutateAsync({ id, cancelIds: ids }));   // KEPT, or the write's result
  *   <PushedStep step={step}>…the form…</PushedStep>
  *
- * An act the planner plans (give, revoke, approve, a person's bundles; A-21
- * §3) knows what it cancels before the press: the sheet says so
+ * An act the planner plans (give, revoke, approve, extend, adopt, a person's
+ * bundles; A-21 §3) knows what it cancels before the press: the sheet says so
  * (`useForetell`), and the press pushes the step at once with the plan's
  * changes (`step.confirm(plan.cancels, write)`); the write carries the
  * plan's cancel ids, and the backend admits exactly those. `run`, the 409
- * path, stays for acts not on the planner yet.
+ * path, is for writes not on the planner (a mapping rule's create, update
+ * and retire, retiring a bundle): `write` is called first with no ids, and
+ * after the operator goes ahead, again with the ids the step showed, which
+ * the write sends as its `?cancel_ids=` query.
  *
  * A write with no sheet of its own (Approve on a queue row) passes
  * `standalone` and renders `step.element`, a small sheet holding only the step.
@@ -69,7 +72,8 @@ interface Asking {
 }
 
 export interface CancelStep {
-  run: <T>(write: () => Promise<T>) => Promise<T | typeof KEPT>;
+  /** A write not on the planner: on its 409, the step, then `write(the ids shown)`. */
+  run: <T>(write: (cancelIds?: string[]) => Promise<T>) => Promise<T | typeof KEPT>;
   /**
    * The press of an act the planner planned (A-21 §3.1): the step is pushed at
    * once with the plan's `changes`, no round trip; going ahead sends `write`
@@ -234,13 +238,13 @@ export function useCancelStep(options: CancelStepOptions): CancelStep {
   const client = useContext(QueryClientContext);
   const returnFocus = useRef<HTMLElement | null>(null);
 
-  const run = useCallback(async function run<T>(write: () => Promise<T>): Promise<T | typeof KEPT> {
+  const run = useCallback(async function run<T>(write: (cancelIds?: string[]) => Promise<T>): Promise<T | typeof KEPT> {
     setKept(null);
     setCancelled(null);
     let shown: QueuedChange[] = [];
     for (;;) {
       try {
-        const result = await write();
+        const result = await write(shown.length ? shown.map((c) => c.id) : undefined);
         if (shown.length) {
           setCancelled(shown);
           // They are off the queue now that the server said so; the rail follows the answer.
@@ -272,7 +276,6 @@ export function useCancelStep(options: CancelStepOptions): CancelStep {
           return KEPT;
         }
         shown = changes;
-        armAck(error.method, error.path, changes.map((c) => c.id));
         setAsking((a) => (a ? { ...a, busy: true } : a));
       }
     }

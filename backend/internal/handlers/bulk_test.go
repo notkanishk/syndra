@@ -3,9 +3,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 
@@ -86,38 +86,69 @@ func stubRehearsal(t *testing.T, plan services.BulkPlan) *services.BulkRequest {
 	return seen
 }
 
-// stubDrain captures the outbox rows the handler projects upstream. Applying is
-// not "wrote it down": every row a bulk apply enqueues has to reach Zitadel in
-// the same request, exactly as the single-person handlers do on ?apply=true.
-func stubDrain(t *testing.T) *[]string {
-	t.Helper()
-	orig := svcDrainPropagationRow
-	t.Cleanup(func() { svcDrainPropagationRow = orig })
-
-	var drained []string
-	svcDrainPropagationRow = func(_ context.Context, id string) (propagation.DrainResult, error) {
-		drained = append(drained, id)
-		return propagation.DrainResult{Applied: 1}, nil
-	}
-	return &drained
-}
-
+// stubNoWrites stands in for the planner's apply (services.ApplyPlannedBulk)
+// as the protocol it keeps with the plan store: it claims the cited plan
+// (stubPlanStore enforces surface, operator, request, once, lifetime),
+// verifying each approved subject against a fresh rehearsal before the
+// approval is spent, so a stale plan is refused unspent with nothing written;
+// then it writes each approved row, one outbox row "ob_<id>". How the real
+// apply re-plans and writes under the lock is services' tests' subject. Each
+// row it writes is delivered whole (svcDeliverChange) unless a test says
+// otherwise. The count it returns is the rows written.
 func stubNoWrites(t *testing.T) *int {
 	t.Helper()
-	origEnqueue := dbEnqueueDirectGrantPropagation
-	origRebuild := rebuildUserCacheDetachedFn
+	stubPlanStore(t)
+	origApply, origRebuild := svcApplyPlannedBulk, rebuildUserCacheDetachedFn
+	origDeliver, origStatus := svcDeliverChange, dbGetPropagationStatus
 	t.Cleanup(func() {
-		dbEnqueueDirectGrantPropagation = origEnqueue
-		rebuildUserCacheDetachedFn = origRebuild
+		svcApplyPlannedBulk, rebuildUserCacheDetachedFn = origApply, origRebuild
+		svcDeliverChange, dbGetPropagationStatus = origDeliver, origStatus
 	})
-	stubDrain(t)
+	rebuildUserCacheDetachedFn = func(context.Context, string) {}
+	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		var ids []string
+		for _, w := range ch.Writes {
+			ids = append(ids, w.OutboxID)
+		}
+		return services.Delivery{Sent: ids, Drain: propagation.DrainResult{Applied: len(ids)}}
+	}
 
 	writes := 0
-	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams, ...db.EnqueueParams) (db.EnqueueResult, error) {
-		writes++
-		return db.EnqueueResult{OutboxID: "ob_1", Status: "pending"}, nil
+	svcApplyPlannedBulk = func(ctx context.Context, req services.BulkRequest, c db.PlanCitation) (services.BulkPlan, map[string]services.Change, error) {
+		var live map[string]services.BulkOutcome
+		_, subjects, err := dbClaimPlanVerified(ctx, c, func(rows []db.PlanSubject) error {
+			fresh, err := svcRehearseBulk(ctx, req)
+			if err != nil {
+				return err
+			}
+			live = indexOutcomes(fresh.Outcomes)
+			var moved []string
+			for _, row := range rows {
+				if o, ok := live[row.SubjectID]; !ok || o.Fingerprint != row.Fingerprint {
+					moved = append(moved, row.SubjectID)
+				}
+			}
+			if len(moved) > 0 {
+				sort.Strings(moved)
+				return &services.StalePlan{IDs: moved}
+			}
+			return nil
+		})
+		if err != nil {
+			return services.BulkPlan{}, nil, err
+		}
+		plan := planApprovedRows(req.Op, subjects, live)
+		written := map[string]services.Change{}
+		for _, o := range plan.Outcomes {
+			if o.Effect == services.EffectApply {
+				writes++
+				written[o.UserID] = services.Change{UserID: o.UserID, Writes: []services.Write{
+					{OutboxID: "ob_" + o.UserID, Delivery: services.DeliveryStraightAway}}}
+			}
+		}
+		return plan, written, nil
 	}
-	rebuildUserCacheDetachedFn = func(context.Context, string) {}
 	return &writes
 }
 
@@ -147,31 +178,53 @@ func TestHandleBulkGrants_DefaultsToRehearsalAndWritesNothing(t *testing.T) {
 	}
 }
 
-// Apply acts on the approval the backend issued, never on a cohort the client
-// asserts. The selection still reaches the rehearsal verbatim — that is what is
-// being reviewed — but what the apply executes is what was recorded.
-func TestHandleBulkGrants_ApplyActsOnTheApprovalNotTheClientsClaim(t *testing.T) {
-	seen := stubRehearsal(t, services.BulkPlan{
-		Op:       services.BulkOpAssignRole,
-		Outcomes: []services.BulkOutcome{{UserID: "u_server_says", Effect: services.EffectApply}},
-	})
-	writes := stubNoWrites(t)
+// Every bulk op applies through the planner (task 1.3): the request reaches
+// the rehearsal and the apply as the client sent it, and the apply cites this
+// screen's plan bound to that request.
+func TestHandleBulkGrants_EveryOpAppliesThroughThePlannerCitingThePlan(t *testing.T) {
+	for op, body := range map[string]string{
+		services.BulkOpAssignRole:   `{"op":"assign_role","user_ids":["u1"],"project_id":"p","role_key":"r","reason":"x","duration_days":30}`,
+		services.BulkOpRemoveRole:   `{"op":"remove_role","user_ids":["u1"],"project_id":"p","role_key":"r","reason":"x"}`,
+		services.BulkOpExtend:       `{"op":"extend","user_ids":["u1"],"reason":"x","duration_days":30,"grant_ids":["g1"]}`,
+		services.BulkOpAssignBundle: `{"op":"assign_bundle","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`,
+		services.BulkOpRemoveBundle: `{"op":"remove_bundle","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`,
+	} {
+		t.Run(op, func(t *testing.T) {
+			cited := stubPlannedApply(t, op, []string{"ob_1"}, nil, func(ids []string) services.Delivery {
+				return services.Delivery{Sent: ids, Drain: propagation.DrainResult{Applied: len(ids)}}
+			})
+			seen := stubRehearsal(t, services.BulkPlan{Op: op, Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}}})
+			origStatus := dbGetPropagationStatus
+			t.Cleanup(func() { dbGetPropagationStatus = origStatus })
+			dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
+			var applied services.BulkRequest
+			stubbed := svcApplyPlannedBulk
+			svcApplyPlannedBulk = func(ctx context.Context, req services.BulkRequest, c db.PlanCitation) (services.BulkPlan, map[string]services.Change, error) {
+				applied = req
+				return stubbed(ctx, req, c)
+			}
 
-	rr := httptest.NewRecorder()
-	handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_role","user_ids":["u_client_says"],"project_id":"pLaser","role_key":"trained","reason":"x"}`, true))
-
-	if rr.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d (%s)", rr.Code, rr.Body.String())
-	}
-	if len(seen.UserIDs) != 1 || seen.UserIDs[0] != "u_client_says" {
-		t.Errorf("the selection must reach the rehearsal verbatim: %v", seen.UserIDs)
-	}
-	plan := decodePlan(t, rr)
-	if len(plan.Outcomes) != 1 || plan.Outcomes[0].UserID != "u_server_says" {
-		t.Errorf("apply must act on the server's plan, not the client's: %+v", plan.Outcomes)
-	}
-	if *writes != 1 {
-		t.Errorf("expected exactly one write, got %d", *writes)
+			rr := httptest.NewRecorder()
+			handleBulkGrants(rr, bulkRequest(t, body, true))
+			if rr.Code != http.StatusAccepted {
+				t.Fatalf("expected 202, got %d (%s)", rr.Code, rr.Body.String())
+			}
+			var want BulkGrantRequest
+			_ = json.Unmarshal([]byte(body), &want)
+			input := services.BulkRequest{Op: want.Op, UserIDs: want.UserIDs, ProjectID: want.ProjectID, RoleKey: want.RoleKey,
+				BundleID: want.BundleID, Reason: want.Reason, DurationDays: want.DurationDays, GrantIDs: want.GrantIDs, Actor: "system"}
+			for name, got := range map[string]services.BulkRequest{"rehearsal": *seen, "apply": applied} {
+				if services.FingerprintBulkRequest(got) != services.FingerprintBulkRequest(input) || got.Actor != "system" {
+					t.Fatalf("the %s reached the planner as %+v, want %+v", name, got, input)
+				}
+			}
+			if cited.Surface != planSurfaceBulkGrants || cited.PlanID == "" || cited.RequestFingerprint != services.FingerprintBulkRequest(input) {
+				t.Fatalf("the apply must cite this screen's plan for this request: %+v", *cited)
+			}
+			if plan := decodePlan(t, rr); plan.Outcomes[0].Effect != services.EffectApplied {
+				t.Fatalf("a row whose write reached Zitadel is applied: %+v", plan.Outcomes)
+			}
+		})
 	}
 }
 
@@ -217,115 +270,10 @@ func TestHandleBulkGrants_ApplySkipsBlockedAndNoChangeRows(t *testing.T) {
 	}
 }
 
-// One person's failure must not abort the batch. Stopping halfway leaves the
-// operator unable to tell which half landed, which is worse than a partial
-// result that names the failures.
-func TestHandleBulkGrants_PartialFailureIsIsolatedAndReported(t *testing.T) {
-	stubRehearsal(t, services.BulkPlan{
-		Op: services.BulkOpAssignRole,
-		Outcomes: []services.BulkOutcome{
-			{UserID: "u_ok1", Effect: services.EffectApply},
-			{UserID: "u_bad", Effect: services.EffectApply},
-			{UserID: "u_ok2", Effect: services.EffectApply},
-		},
-	})
-
-	origEnqueue := dbEnqueueDirectGrantPropagation
-	origRebuild := rebuildUserCacheDetachedFn
-	t.Cleanup(func() {
-		dbEnqueueDirectGrantPropagation = origEnqueue
-		rebuildUserCacheDetachedFn = origRebuild
-	})
-
-	stubDrain(t)
-	var rebuilt []string
-	rebuildUserCacheDetachedFn = func(_ context.Context, uid string) { rebuilt = append(rebuilt, uid) }
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams, _ ...db.EnqueueParams) (db.EnqueueResult, error) {
-		if p.UserID == "u_bad" {
-			return db.EnqueueResult{}, errors.New("ledger write rejected")
-		}
-		return db.EnqueueResult{OutboxID: "ob", Status: "pending"}, nil
-	}
-
-	rr := httptest.NewRecorder()
-	handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_role","user_ids":["u_ok1","u_bad","u_ok2"],"project_id":"p","role_key":"r","reason":"x"}`, true))
-
-	if rr.Code != http.StatusAccepted {
-		t.Fatalf("a partial failure is still an accepted batch, got %d", rr.Code)
-	}
-	plan := decodePlan(t, rr)
-	byID := map[string]services.BulkOutcome{}
-	for _, o := range plan.Outcomes {
-		byID[o.UserID] = o
-	}
-	if byID["u_bad"].Effect != services.EffectFailed {
-		t.Errorf("the failing row must be marked failed: %+v", byID["u_bad"])
-	}
-	if !strings.Contains(byID["u_bad"].Detail, "ledger write rejected") {
-		t.Errorf("the failure must carry its cause: %q", byID["u_bad"].Detail)
-	}
-	if byID["u_ok1"].Effect != services.EffectApplied || byID["u_ok2"].Effect != services.EffectApplied {
-		t.Error("a failure in the middle must not abort the rows around it")
-	}
-	if plan.Summary.Failed != 1 || plan.Summary.Succeeded != 2 {
-		t.Errorf("summary must separate failures from successes: %+v", plan.Summary)
-	}
-	// A failed write leaves nothing to recompile; recompiling anyway would be
-	// harmless but claiming it happened would not.
-	if len(rebuilt) != 2 {
-		t.Errorf("only successful rows recompile, got %v", rebuilt)
-	}
-}
-
-// Removal acts on the grant ids the rehearsal identified, not on a fresh guess
-// at which grant matches — the ledger may have moved since.
-func TestHandleBulkGrants_RemoveActsOnRehearsedGrantIDs(t *testing.T) {
-	stubRehearsal(t, services.BulkPlan{
-		Op: services.BulkOpRemoveRole,
-		Outcomes: []services.BulkOutcome{
-			{UserID: "u1", Effect: services.EffectApply, GrantIDs: []string{"g_77"}},
-		},
-	})
-
-	origDelete, origRebuild := svcDeleteDirectGrant, rebuildUserCacheDetachedFn
-	t.Cleanup(func() {
-		svcDeleteDirectGrant = origDelete
-		rebuildUserCacheDetachedFn = origRebuild
-	})
-	rebuildUserCacheDetachedFn = func(context.Context, string) {}
-	drained := stubDrain(t)
-
-	var gotUser, gotGrant, gotReason string
-	svcDeleteDirectGrant = func(_ context.Context, uid, gid, _, reason string) (services.DirectGrantRemoval, error) {
-		gotUser, gotGrant, gotReason = uid, gid, reason
-		return services.DirectGrantRemoval{Status: "pending", OutboxIDs: []string{"ob_rm"}}, nil
-	}
-
-	rr := httptest.NewRecorder()
-	handleBulkGrants(rr, bulkRequest(t, `{"op":"remove_role","user_ids":["u1"],"project_id":"p","role_key":"r","reason":"x"}`, true))
-
-	if rr.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d (%s)", rr.Code, rr.Body.String())
-	}
-	if gotUser != "u1" || gotGrant != "g_77" {
-		t.Errorf("wrong grant removed: user=%q grant=%q", gotUser, gotGrant)
-	}
-	// The dialog requires a reason; a bulk removal must keep it, not drop it.
-	if gotReason != "x" {
-		t.Errorf("the operator's reason must reach the removal, got %q", gotReason)
-	}
-	// The removal's own outbox rows must be projected, not left queued. Reporting
-	// access as removed while the role is still live in Zitadel is the worst
-	// version of this bug: the screen and the door disagree.
-	if len(*drained) != 1 || (*drained)[0] != "ob_rm" {
-		t.Errorf("removal must drain its own outbox rows, drained=%v", *drained)
-	}
-}
-
-// Applying a bulk grant has to reach Zitadel in the same request. Enqueuing and
-// stopping there marked every row "applied" while the roles sat in the
-// governance queue, waiting for somebody to notice them.
-func TestHandleBulkGrants_ApplyProjectsEachRowUpstream(t *testing.T) {
+// Applying a bulk grant has to reach Zitadel in the same request. Each row the
+// planner wrote is recompiled and sent as its Change decided; a blocked row
+// was written by nobody and sends nothing.
+func TestHandleBulkGrants_ApplySendsEachRowItWrote(t *testing.T) {
 	stubRehearsal(t, services.BulkPlan{
 		Op: services.BulkOpAssignRole,
 		Outcomes: []services.BulkOutcome{
@@ -334,65 +282,45 @@ func TestHandleBulkGrants_ApplyProjectsEachRowUpstream(t *testing.T) {
 			{UserID: "u_blocked", Effect: services.EffectBlocked},
 		},
 	})
-
-	origEnqueue, origRebuild := dbEnqueueDirectGrantPropagation, rebuildUserCacheDetachedFn
-	t.Cleanup(func() {
-		dbEnqueueDirectGrantPropagation = origEnqueue
-		rebuildUserCacheDetachedFn = origRebuild
-	})
-	rebuildUserCacheDetachedFn = func(context.Context, string) {}
-	drained := stubDrain(t)
-
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams, _ ...db.EnqueueParams) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob_" + p.UserID, Status: "pending"}, nil
+	stubNoWrites(t)
+	var sent, rebuilt []string
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		sent = append(sent, ch.Writes[0].OutboxID)
+		return services.Delivery{Sent: []string{ch.Writes[0].OutboxID}, Drain: propagation.DrainResult{Applied: 1}}
 	}
+	rebuildUserCacheDetachedFn = func(_ context.Context, uid string) { rebuilt = append(rebuilt, uid) }
 
 	rr := httptest.NewRecorder()
 	handleBulkGrants(rr, bulkRequest(t, `{"op":"assign_role","user_ids":["u1","u2","u_blocked"],"project_id":"p","role_key":"r","reason":"x"}`, true))
 
-	if len(*drained) != 2 || (*drained)[0] != "ob_u1" || (*drained)[1] != "ob_u2" {
-		t.Fatalf("each applied row drains its own outbox row and a blocked row drains nothing, got %v", *drained)
+	if strings.Join(sent, ",") != "ob_u1,ob_u2" || strings.Join(rebuilt, ",") != "u1,u2" {
+		t.Fatalf("each applied row is recompiled and sent and a blocked row neither: sent %v rebuilt %v", sent, rebuilt)
 	}
 }
 
-// A drain that does not land must not be reported as applied. The ledger write
-// is committed and must stand — this is not a failure — but the role is still
-// whatever it was in Zitadel, and a bulk revoke reading "Applied" while the
-// access is live is the worst thing this screen can say.
-//
-// Both shapes of not-landing are covered. A drain returns an error OR comes back
-// Halted with a nil error, and reading only the error treats an unreachable
-// Zitadel as success.
-func TestHandleBulkGrants_UnconfirmedDrainReportsQueuedNotApplied(t *testing.T) {
+// A send that does not land must not be reported as applied. The write is
+// committed and stands (this is not a failure), but the role is still whatever
+// it was in Zitadel, and a bulk revoke reading "Applied" while the access is
+// live is the worst thing this screen can say.
+func TestHandleBulkGrants_UnconfirmedDeliveryReportsQueuedNotApplied(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		res  propagation.DrainResult
-		err  error
-		want string
+		name  string
+		drain propagation.DrainResult
+		want  string
 	}{
-		{"drain errors", propagation.DrainResult{}, errors.New("zitadel unreachable"), "halted:"},
-		{"zitadel offline halts with no error", propagation.DrainResult{Halted: true, Reason: "zitadel_offline"}, nil, "halted:"},
-		{"another drain holds the lock", propagation.DrainResult{Halted: true, Reason: "drain_in_progress"}, nil, "halted:"},
-		{"requeued rather than applied", propagation.DrainResult{Requeued: 1}, nil, "halted:retrying"},
+		{"zitadel unreachable", propagation.DrainResult{Halted: true, Reason: "zitadel unreachable"}, "halted:"},
+		{"zitadel offline", propagation.DrainResult{Halted: true, Reason: "zitadel_offline"}, "halted:"},
+		{"another drain holds the lock", propagation.DrainResult{Halted: true, Reason: "drain_in_progress"}, "halted:"},
+		{"requeued rather than applied", propagation.DrainResult{Requeued: 1}, "halted:retrying"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stubRehearsal(t, services.BulkPlan{
 				Op:       services.BulkOpAssignRole,
 				Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}},
 			})
-
-			origEnqueue, origRebuild, origDrain := dbEnqueueDirectGrantPropagation, rebuildUserCacheDetachedFn, svcDrainPropagationRow
-			t.Cleanup(func() {
-				dbEnqueueDirectGrantPropagation = origEnqueue
-				rebuildUserCacheDetachedFn = origRebuild
-				svcDrainPropagationRow = origDrain
-			})
-			rebuildUserCacheDetachedFn = func(context.Context, string) {}
-			dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams, ...db.EnqueueParams) (db.EnqueueResult, error) {
-				return db.EnqueueResult{OutboxID: "ob_1", Status: "pending"}, nil
-			}
-			svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
-				return tc.res, tc.err
+			stubNoWrites(t)
+			svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+				return services.Delivery{Sent: []string{ch.Writes[0].OutboxID}, Drain: tc.drain}
 			}
 
 			rr := httptest.NewRecorder()
@@ -400,7 +328,7 @@ func TestHandleBulkGrants_UnconfirmedDrainReportsQueuedNotApplied(t *testing.T) 
 
 			plan := decodePlan(t, rr)
 			if plan.Outcomes[0].Effect != services.EffectQueued {
-				t.Fatalf("effect = %q, want queued — the change has not reached Zitadel", plan.Outcomes[0].Effect)
+				t.Fatalf("effect = %q, want queued: the change has not reached Zitadel", plan.Outcomes[0].Effect)
 			}
 			// Why, as a reason the result reads (re-audit R2), and a sentence
 			// in plain words: never the raw code, never an em dash.

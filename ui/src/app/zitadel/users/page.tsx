@@ -40,7 +40,8 @@ import {
 } from "@/lib/queries/useUpstream";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
-import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
+import { RuleConsentFailed } from "@/components/requests/RuleConsent";
+import { usePlanConsents } from "@/lib/usePlanConsent";
 import { useDebounce } from "@/lib/useDebounce";
 import { formatList, humanizeKey } from "@/lib/format";
 import { sortByName, sortNames } from "@/lib/sort";
@@ -493,11 +494,19 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   const available = sortNames(roles.data?.items.map((role) => role.key) ?? []);
   const waiting = useWaitingAmong(projectId, parsed);
   // What the automatic rules also give with these roles, said before the
-  // click, from the endpoint the person page's give reads (audit C2): this
-  // give goes through the same write (giveRoles → grantDirect), so the same
-  // rules follow it. Only for keys that exist, so typing doesn't ask.
-  const rules = useRuleConsent(userId, projectId, parsed.filter((key) => available.includes(key)));
-  const ruleLines = rules.lines;
+  // click, in the planner's words: one give plan per role, the read the
+  // person page's give makes (audit C2, A-21 §Q3). This give goes through the
+  // same write, so the same rules follow it. Only for keys that exist, so
+  // typing doesn't ask. Several roles can reach one rule: each line once.
+  const consents = usePlanConsents(
+    parsed.filter((key) => available.includes(key)).map((roleKey) => ({ op: "give" as const, userId, projectId, roleKey })),
+    "giving them",
+  );
+  const ruleLines = sortNames(Array.from(new Set(consents.flatMap((c) => c.rules))));
+  const rules = {
+    hold: consents.find((c) => c.hold)?.hold,
+    unread: consents.find((c) => c.failed),
+  };
 
   return (
     <Modal open onClose={onClose} busy={assign.isPending} size="sm">
@@ -542,12 +551,12 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
               <p className="mt-1.5 text-[12.5px] text-faint">Available: {available.join(", ")}</p>
             )}
           </div>
-          {(ruleLines.length > 0 || rules.failed) && (
+          {(ruleLines.length > 0 || rules.unread) && (
             <div className="flex flex-col gap-1 text-[13px] leading-[1.5] text-muted" data-testid="rule-preview">
               {ruleLines.map((line) => (
                 <span key={line}>{line}</span>
               ))}
-              <RuleConsentFailed consent={rules} className="flex flex-wrap items-center gap-x-3 gap-y-1" />
+              {rules.unread && <RuleConsentFailed consent={rules.unread} className="flex flex-wrap items-center gap-x-3 gap-y-1" />}
             </div>
           )}
           <DirectWriteWarning

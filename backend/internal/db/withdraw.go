@@ -237,8 +237,8 @@ func CancelledUnsentDetails(c models.QueuedChange, p EnqueueParams) ([]byte, err
 const givenBackReason = "cancelled before it was sent: the role was given back"
 
 // Answers is the one statement of which queued change a write cancels.
-// WouldCancel (the preview), the planner (a plan's row) and
-// withdrawUndelivered (the action) all ask it, so what an operator is told is
+// The planner (a plan's row, the preview) and withdrawUndelivered (the
+// action) both ask it, so what an operator is told is
 // what happens. c is a pending row on the write's target; the SQL only
 // narrows to the person, project and role.
 //
@@ -293,20 +293,6 @@ func answersAny(p EnqueueParams) bool {
 // role; Answers decides.
 const candidateWhere = `target = $1 AND status = 'pending'
 		   AND user_id = $2 AND project_id = $3 AND role_keys = $4::text[]`
-
-// WouldCancel is the queued, unsent changes this one would cancel, said before
-// anyone confirms it.
-func WouldCancel(ctx context.Context, p EnqueueParams) ([]models.QueuedChange, error) {
-	if !answersAny(p) {
-		return nil, nil
-	}
-	candidates, err := scanQueuedChanges(querier(ctx).Query(ctx,
-		queuedChangeColumns+candidateWhere+` ORDER BY created_at`, "zitadel", p.UserID, p.ProjectID, p.RoleKeys))
-	if err != nil {
-		return nil, err
-	}
-	return AnsweredBy(p, candidates), nil
-}
 
 const queuedChangeColumns = `
 		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref, ''), COALESCE(initiated_by, ''), COALESCE(reason, ''), created_at

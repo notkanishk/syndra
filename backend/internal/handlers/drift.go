@@ -7,7 +7,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,6 +76,8 @@ func handleListDrift(w http.ResponseWriter, r *http.Request) {
 
 type attributeRequest struct {
 	Source string `json:"source"` // external_backfill — the only attribution this endpoint can honour
+	// The plan the adopt sheet was shown (GET /users/{id}/plan?op=adopt).
+	planFields
 }
 
 // validAttributionSource gates the source an operator may attribute drift to.
@@ -184,6 +185,17 @@ func handleDriftOrigin(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, body)
 }
 
+// handleAttributeDrift adopts one drift row through the planner (task 1.3):
+// Syndra records the access Zitadel has as a direct grant, nothing is sent
+// for it, and what the automatic rules give with it is written and sent as
+// the plan said (GET /users/{id}/plan?op=adopt&drift_id=). The write carries
+// the plan it was shown; a different Change under the lock is 409
+// PLAN_STALE with nothing written.
+//
+// Adoption is the operator saying "Zitadel is right": an `add` row for the
+// adopted role would be a live instruction to re-create it after somebody
+// removed it upstream by hand, so none is written (db.AttributeDriftTx). The
+// recorded source is always external_backfill (validAttributionSource).
 func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req attributeRequest
@@ -195,70 +207,42 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusBadRequest, "BAD_SOURCE", badSourceMessage)
 		return
 	}
-	item, err := dbGetDriftItem(r.Context(), id)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+	actor := resolveActor(r, "")
+	ch, err := svcApplyAct(r.Context(), services.Action{Op: services.OpAdopt, DriftID: id},
+		services.ActWrite{Actor: actor}, req.seen())
+	switch refusedAs(err) {
+	case "absent":
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "No longer in the queue. Somebody may have resolved it already.")
 		return
+	case "resolved":
+		err = db.ErrDriftNotPending
+	case "nothing_to_adopt":
+		err = errNothingToAdopt
 	}
-	ruleIDs, err := attributeOneDrift(r.Context(), item, req, resolveActor(r, ""))
 	if err != nil {
+		if refusedAs(err) != "" || errors.As(err, new(*services.StalePlan)) {
+			writeActError(w, err)
+			return
+		}
 		writeDriftActionError(w, err)
 		return
 	}
-	// What the automatic rules queued on the adoption (coherence audit C1):
-	// the result says how many wait in Pending changes.
-	if ruleIDs == nil {
-		ruleIDs = []string{}
+	rebuildUserCacheDetachedFn(r.Context(), ch.UserID)
+	// What the automatic rules gave with the adoption is sent as the plan
+	// decided (straight away, or waiting for you); the answer counts what
+	// waits, so the result ends on Send when something does.
+	d := svcDeliverChange(r.Context(), ch)
+	ruleIDs := []string{}
+	for _, wr := range ch.Writes {
+		if wr.OutboxID != "" {
+			ruleIDs = append(ruleIDs, wr.OutboxID)
+		}
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"status": "attributed", "rule_outbox_ids": ruleIDs})
-}
-
-// attributeOneDrift writes the ledger intent for a target_only drift and marks
-// it attributed. It enqueues nothing of its own, and that is the whole point:
-// adoption is the operator saying "Zitadel is right, Syndra was wrong", so the
-// adopted role owes nothing upstream and no outbox row carries it.
-//
-// The automatic rules are another matter (ADR-006): adopting is when a rule
-// starting from the role fires, and what it gives is queued as rule rows that
-// wait in Pending changes for the operator. Their ids are returned, and the
-// adopt preview (services.RulesFollowing) named them before the operator
-// confirmed.
-//
-// Two versions of this got it wrong. The first left an `add` row pending
-// forever, and the governance queue then listed every adopted role as a change
-// Syndra still owed Zitadel — accepting what Zitadel already had produced a
-// queue of writes back to Zitadel. The second drained that row inline, which
-// only narrowed the window: an outbox row is a live instruction, and a drain
-// that cannot reach Zitadel leaves it behind. Either way, an operator who adopts
-// a role and then removes it upstream by hand gets it re-created by a later
-// drain. The row must not exist.
-//
-// The recorded source is always external_backfill and carries no source_ref:
-// there is no bundle or rule owning this access, and saying otherwise would be
-// a provenance the ledger cannot honour. See validAttributionSource.
-//
-// Atomicity: a SINGLE transaction (db.AttributeDriftTx) guard-transitions the
-// drift row to 'attributed' AND writes the ledger+audit rows together. A lost
-// concurrent-triage race returns ErrDriftNotPending (→409) with the whole tx
-// rolled back; a write failure rolls back the resolution too — the drift never
-// leaves the triage queue without its durable ledger row.
-func attributeOneDrift(ctx context.Context, item models.DriftItem, req attributeRequest, actor string) ([]string, error) {
-	// Adopting records access Zitadel has. A syndra_only row is a grant Syndra
-	// records and Zitadel doesn't: adopting it wrote a second record of access
-	// nobody holds. Refused here, where every adopt path (one, bulk, a plan)
-	// passes.
-	if item.DriftType != db.DriftTargetOnly {
-		return nil, errNothingToAdopt
+	body := map[string]any{"status": "attributed", "rule_outbox_ids": ruleIDs, "rule_waiting": len(d.Waiting)}
+	if why := d.WaitReason(); why != "" {
+		body["wait_reason"] = why
 	}
-	payload, _ := json.Marshal(req)
-	return dbAttributeDriftTx(ctx, item.ID, db.EnqueueParams{
-		UserID: item.UserID, ProjectID: item.ProjectID, RoleKeys: item.RoleKeys,
-		GrantedBy: actor, Reason: "drift attribution", Source: req.Source,
-		OpType: "add", ZitadelGrantID: item.ZitadelGrantID, PayloadJSON: string(payload),
-		// Stated here, where the intent is, and enforced again inside
-		// AttributeDriftTx, which must never propagate whoever calls it.
-		NoPropagation: true,
-	})
+	jsonResponse(w, http.StatusOK, body)
 }
 
 func handleRevokeDrift(w http.ResponseWriter, r *http.Request) {
@@ -364,8 +348,15 @@ func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 	actor := resolveActor(r, "")
 	requestFP := services.FingerprintIDCohort(driftOpAdopt, req.IDs, "source", req.Source)
 
+	// Through the planner (task 1.3): each row is the Change a single
+	// adoption is, on one snapshot for the batch.
+	input := services.BulkRequest{Op: services.OpAdopt, UserIDs: req.IDs, Actor: actor}
 	if r.URL.Query().Get("apply") != "true" {
-		plan := rehearseDriftBatch(r.Context(), req.IDs, driftOpAdopt)
+		plan, err := svcRehearseBulk(r.Context(), input)
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "BULK_REHEARSAL_ERROR", err.Error())
+			return
+		}
 		if err := issuePlan(r.Context(), planSurfaceDriftAdopt, actor, requestFP, req.AcknowledgeScope, &plan); err != nil {
 			writePlanIssueError(w, err)
 			return
@@ -373,14 +364,11 @@ func handleBulkAttributeDrift(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, http.StatusOK, plan)
 		return
 	}
-
-	plan, err := claimDriftPlan(r, planSurfaceDriftAdopt, driftOpAdopt, actor, requestFP, req.PlanID, req.IDs)
-	if err != nil {
-		writePlanCitationError(w, err)
+	if strings.TrimSpace(req.PlanID) == "" {
+		missingPlanCitation(w)
 		return
 	}
-	applyDriftPlan(r, &plan, driftOpAdopt, actor, "")
-	jsonResponse(w, http.StatusOK, plan)
+	applyPlannedBulk(w, r, input, planCitation(planSurfaceDriftAdopt, actor, requestFP, req.PlanID), http.StatusOK)
 }
 
 type bulkMarkExternalRequest struct {
