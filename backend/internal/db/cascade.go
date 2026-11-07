@@ -51,7 +51,7 @@ func outboxSource(p EnqueueParams) string {
 // cascadeGroupVisible reports whether these writes will appear in Change history, which is the
 // only thing an audit row's cascade id is a handle for.
 //
-// A direct grant's removal is the case that matters. It goes through enqueueCascadeRows because
+// A direct grant's removal is the case that matters. It goes through enqueueWrites as a cascade because
 // its ledger delete, audit row and outbox rows must commit together — but its writes carry
 // source='direct', and the surface for those is Pending changes. Stamping an id here would put a
 // trace link on the audit row pointing at a screen that filters the write out.
@@ -72,116 +72,6 @@ type CascadeAudit struct {
 	Target     string // "-" when the event is about an object rather than a person
 	Action     string
 	ResourceID string
-}
-
-// enqueueCascadeRows writes the cascade's audit rows and one outbox row per param (with
-// source/source_ref) on an EXISTING tx, and returns the outbox ids. It writes NO
-// direct_role_grants row — cascade intent lives in the bundle/rule tables (see design pivot in
-// global-constraints.md). Each outbox row still gets an idempotency key, same as the
-// direct-grant enqueue path.
-//
-// The audit insert lives HERE rather than in each caller, and that is the whole point of C6
-// (ISC-44). Every *AndEnqueue function used to write its audit row on the line immediately above
-// its call to this one, which made "the audit row names the cascade it caused" a convention
-// eleven functions had to remember. It is now structural: the id is minted, stamped on the audit
-// rows and stamped on the outbox rows in one place, and a cascade added later cannot forget.
-//
-// The cascade id is stamped only when the writes will actually appear in Change history — see
-// cascadeGroupVisible. It is a handle into that screen and nothing else, so a cascade that
-// produced no writes, or writes that screen does not group, gets NULL. "This change reached
-// nobody" is better said by an honest blank than by a dead link.
-//
-// A "revoke" param computed from a (user, project, role) triple (bundle/rule cascade revokes)
-// never arrives with ZitadelGrantID set — unlike drift/discovery revokes, which already know the
-// grant id from the triggering event or URL param. Resolve it here from the webhook-maintained
-// grant index before the insert; a cache miss leaves it empty (the drain then fails just that
-// row, non-fatally — see GetGrantIndexByUserProject).
-func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params []EnqueueParams) ([]string, error) {
-	// Every access change passes through here or through enqueueWrites, which
-	// is what makes this the place to take the subject lock: a caller that
-	// forgot it would still be serialised against one that took it. Taken here
-	// the lock does not protect THIS caller's delta — that was computed before
-	// the call, and only a caller that locks before its own reads is safe — but
-	// it does hold every writer back for as long as such a caller holds it,
-	// which is what makes locking before the read worth anything at all.
-	if err := LockAccessMutationTx(ctx, tx); err != nil {
-		return nil, err
-	}
-
-	const insertOutbox = `
-		INSERT INTO propagation_outbox
-			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json,
-			 idempotency_key, initiated_by, source, source_ref, cascade_id, target)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),$11,'zitadel')
-		RETURNING id`
-
-	// One id for the whole batch: these rows are the writes ONE triggering
-	// event produced, including the ones a chained rule contributed (the
-	// closure diff is computed before this call, so a chain arrives here as a
-	// single set). Grouping by it is what lets Pending changes say "they
-	// confirm together or not at all" — a half-applied cascade is the thing
-	// that creates unexplained access, and it has to be visible as one.
-	cascadeID, err := newOutboxIdempotencyKey()
-	if err != nil {
-		return nil, err
-	}
-
-	// NULL, not the empty string: the column is UUID, and "this event caused no cascade" is
-	// exactly what NULL means.
-	var auditCascadeID *string
-	if cascadeGroupVisible(params) {
-		auditCascadeID = &cascadeID
-	}
-	const insertAudit = `
-		INSERT INTO audit_logs
-			(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, cascade_id)
-		VALUES ($1,$2,$3,$4,$5)`
-	for _, a := range audits {
-		target := a.Target
-		if target == "" {
-			target = "-"
-		}
-		if _, err := tx.Exec(ctx, insertAudit, a.Actor, target, a.Action, a.ResourceID,
-			auditCascadeID); err != nil {
-			return nil, err
-		}
-	}
-
-	ids := make([]string, 0, len(params))
-	for _, p := range params {
-		if err := closeGivenRequests(ctx, tx, p); err != nil {
-			return nil, err
-		}
-		// Countermand before compensate. A revoke answering a delivery that is
-		// still in this queue cancels it instead of queueing its opposite —
-		// see withdrawUndelivered for why that is narrower than it sounds.
-		owed, err := withdrawUndelivered(ctx, tx, "zitadel", p)
-		if err != nil {
-			return nil, err
-		}
-		if !owed {
-			continue
-		}
-		if p.OpType == "revoke" && p.ZitadelGrantID == "" {
-			if idx, err := GetGrantIndexByUserProject(ctx, p.UserID, p.ProjectID); err == nil {
-				p.ZitadelGrantID = idx.GrantID
-			} else if !errors.Is(err, ErrGrantIndexNotFound) {
-				return nil, err
-			}
-		}
-		key, err := newOutboxIdempotencyKey()
-		if err != nil {
-			return nil, err
-		}
-		var id string
-		if err := tx.QueryRow(ctx, insertOutbox, p.OpType, p.UserID, p.ProjectID, p.RoleKeys,
-			p.ZitadelGrantID, jsonOrEmpty(p.PayloadJSON), key, p.GrantedBy, outboxSource(p), p.SourceRef,
-			cascadeID).Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
 }
 
 // jsonOrEmpty defaults an empty payload to "{}" — payload_json is JSONB NOT NULL.
@@ -291,9 +181,9 @@ func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID, versio
 		return nil, false, err
 	}
 
-	ids, err = enqueueCascadeRows(ctx, tx,
+	ids, err = enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Target: userID, Action: "bundle.assigned", ResourceID: bundleID}},
-		params)
+		params, "")
 	if err != nil {
 		return nil, false, err
 	}
@@ -320,9 +210,9 @@ func AddRoleToBundleAndEnqueue(ctx context.Context, actor, bundleID, projectID, 
 		 ON CONFLICT DO NOTHING`, bundleID, projectID, roleKey); err != nil {
 		return nil, err
 	}
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Target: bundleID, Action: "bundle.role_added", ResourceID: projectID + "/" + roleKey}},
-		params)
+		params, "")
 	if err != nil {
 		return nil, err
 	}
@@ -361,9 +251,9 @@ func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sour
 	for i := range params {
 		params[i].SourceRef = ruleID
 	}
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.created", ResourceID: ruleID}},
-		params)
+		params, "")
 	if err != nil {
 		return "", nil, err
 	}
@@ -391,9 +281,9 @@ func RemoveBundleFromUserAndEnqueue(ctx context.Context, actor, userID, bundleID
 		`DELETE FROM user_bundle_assignments WHERE user_id=$1 AND bundle_id=$2`, userID, bundleID); err != nil {
 		return nil, err
 	}
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Target: userID, Action: "bundle.unassigned", ResourceID: bundleID}},
-		params)
+		params, "")
 	if err != nil {
 		return nil, err
 	}
@@ -421,9 +311,9 @@ func RemoveRoleFromBundleAndEnqueue(ctx context.Context, actor, bundleID, projec
 		bundleID, projectID, roleKey); err != nil {
 		return nil, err
 	}
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Target: bundleID, Action: "bundle.role_removed", ResourceID: projectID + "/" + roleKey}},
-		params)
+		params, "")
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +341,7 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 		limit = 50
 	}
 	// $1 is cascadeGroupSources throughout, in both the outer query and the subquery — the same
-	// list enqueueCascadeRows consults before stamping an audit row, passed rather than spelled
+	// list enqueueWrites consults before stamping an audit row, passed rather than spelled
 	// out, so a source added to one is added to all three at once.
 	const columns = `
 		SELECT COALESCE(cascade_id::text, id::text) AS group_id,
@@ -572,9 +462,9 @@ func UpdateMappingRuleAndEnqueue(ctx context.Context, actor, id, sp, sr, tp, tr 
 	if tag.RowsAffected() == 0 {
 		return nil, pgx.ErrNoRows
 	}
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.updated", ResourceID: id}},
-		params)
+		params, "")
 	if err != nil {
 		return nil, err
 	}
@@ -615,9 +505,9 @@ func RetireMappingRuleAndEnqueue(ctx context.Context, actor, id string, params [
 	if tag.RowsAffected() == 0 {
 		return nil, pgx.ErrNoRows
 	}
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.retired", ResourceID: id}},
-		params)
+		params, "")
 	if err != nil {
 		return nil, err
 	}

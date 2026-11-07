@@ -374,10 +374,10 @@ func DeleteExpiredDirectGrantAndEnqueue(ctx context.Context, actor, userID, gran
 		return "", "", nil, fmt.Errorf("delete expired direct grant %s: %w", grantID, err)
 	}
 
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Target: userID, Action: "direct_grant.revoked_by_expiry",
 			ResourceID: projectID + "/" + roleKey}},
-		params)
+		params, "")
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -465,9 +465,9 @@ func DeleteDirectGrantAndEnqueue(ctx context.Context, actor, userID, grantID str
 		return nil, fmt.Errorf("delete direct grant %s: %w", grantID, err)
 	}
 
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Target: userID, Action: "direct_grant.removed", ResourceID: projectID + "/" + roleKey}},
-		params)
+		params, "")
 	if err != nil {
 		return nil, err
 	}
