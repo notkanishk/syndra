@@ -232,6 +232,10 @@ describe("applyLabel", () => {
     expect(applyLabel(plan([row("K", { delivery: "none", consequence: CANCEL })]), ["person", "people"])).toBe("Cancel 1 and apply to 1 person");
     expect(applyLabel({ ...board(), summary: undefined } as unknown as BulkPlan, ["person", "people"])).toBe("Apply the change");
   });
+
+  it("nobody to apply to is plain Apply; the held button's reason says why", () => {
+    expect(applyLabel(plan([row("Dev", { effect: "no_change", delivery: undefined })]), ["person", "people"])).toBe("Apply");
+  });
 });
 
 describe("resultOutcome", () => {

@@ -510,7 +510,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
     // The label stays an ACTION at every count — a button named after its own
     // emptiness reads as broken rather than as waiting. What it would do to
     // nobody is said in the reason beside it, not in the label.
-    expect(await screen.findByRole("button", { name: /Apply to 0/ })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Apply" })).toBeDisabled();
     expect(screen.getByText(/nothing to apply/i)).toBeInTheDocument();
   });
 
