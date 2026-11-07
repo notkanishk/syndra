@@ -71,7 +71,8 @@ func TestEveryOutboxWriterNamesItsTarget(t *testing.T) {
 			}
 		}
 	}
-	if seen < 4 {
+	// One Zitadel insert (enqueueWrites, decision 8) and the add-on ones.
+	if seen < 3 {
 		t.Fatalf("expected to inspect every outbox writer; found only %d", seen)
 	}
 }

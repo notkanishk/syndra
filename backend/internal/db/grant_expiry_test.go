@@ -38,7 +38,7 @@ func TestExpiryWriteCarriesItsOwnGuard(t *testing.T) {
 	// all. Enqueuing outside this transaction would leave a revoke queued for a
 	// grant that is still valid, and an audit row about a deletion that did not
 	// happen.
-	if !strings.Contains(body, "enqueueCascadeRows(ctx, tx,") {
+	if !strings.Contains(body, "enqueueWrites(ctx, tx,") {
 		t.Error("the outbox and audit writes must run on this transaction")
 	}
 	if !strings.Contains(body, `Action: "direct_grant.revoked_by_expiry"`) {
@@ -180,7 +180,6 @@ func TestEveryAccessWriteJoinsAnAmbientTransaction(t *testing.T) {
 // serialised against one that has.
 func TestEveryEnqueueTakesTheAccessLock(t *testing.T) {
 	for _, tc := range []struct{ file, fn string }{
-		{"cascade.go", "enqueueCascadeRows"},
 		{"propagation_enqueue.go", "enqueueWrites"},
 	} {
 		body := funcBody(t, readDBSource(t, tc.file), tc.fn)

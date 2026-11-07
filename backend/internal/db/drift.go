@@ -408,7 +408,7 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) ([]s
 	if err != nil {
 		return nil, err
 	}
-	_, ruleIDs, err := enqueueWrites(ctx, tx, p, key)
+	ids, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{p}, key)
 	if err != nil {
 		return nil, fmt.Errorf("attribute ledger writes: %w", err)
 	}
@@ -417,6 +417,7 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) ([]s
 			return nil, err
 		}
 	}
+	_, ruleIDs := ownAndRules(ids)
 	return ruleIDs, nil
 }
 
@@ -441,7 +442,7 @@ func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams)
 	}
 	// The rules' rows, if any, are revocations: the background runner drains
 	// those without being asked.
-	outboxID, _, err := enqueueWrites(ctx, tx, p, key)
+	ids, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{p}, key)
 	if err != nil {
 		return "", fmt.Errorf("revoke enqueue writes: %w", err)
 	}
@@ -450,7 +451,7 @@ func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams)
 			return "", fmt.Errorf("commit revoke tx: %w", err)
 		}
 	}
-	return outboxID, nil
+	return ids[0], nil
 }
 
 // MarkDriftExternalTx claims a pending drift (→marked_external) and inserts the

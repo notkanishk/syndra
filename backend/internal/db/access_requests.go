@@ -301,10 +301,11 @@ func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNo
 		return EnqueueResult{}, ErrRequestNotPending
 	}
 
-	outboxID, ruleIDs, err := enqueueWrites(ctx, tx, p, key)
+	ids, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{p}, key)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
+	outboxID, ruleIDs := ownAndRules(ids)
 
 	if owned {
 		if err := tx.Commit(ctx); err != nil {

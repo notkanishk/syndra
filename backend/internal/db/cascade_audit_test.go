@@ -9,7 +9,7 @@ import (
 )
 
 // The four files that own atomic cascade mutations. Every one of them used to write its own audit
-// row on the line above its enqueueCascadeRows call.
+// row on the line above its call to the outbox insert (enqueueWrites, propagation_enqueue.go).
 var cascadeMutationFiles = []string{
 	"cascade.go", "bundles.go", "grants.go", "bundle_versions.go",
 }
@@ -19,7 +19,7 @@ var auditInsertPattern = regexp.MustCompile(`(?i)INSERT\s+INTO\s+audit_logs`)
 // C6 (ISC-44) — the structural half of the fix.
 //
 // The audit row and the outbox rows a cascade produces describe the same event, and only
-// enqueueCascadeRows knows the id that ties them together. Before this, eleven *AndEnqueue
+// enqueueWrites knows the id that ties them together. Before this, eleven *AndEnqueue
 // functions each wrote their own audit row immediately before calling it, and the id was minted
 // and discarded — so "the audit row names its cascade" could only ever be a convention that
 // eleven separate functions had to keep, and a twelfth would not have known about.
@@ -33,31 +33,26 @@ func TestCascadeMutationsDoNotWriteTheirOwnAuditRows(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", file, err)
 		}
-		body := string(src)
-
-		// enqueueCascadeRows is the one legitimate writer, and it lives in cascade.go.
-		if file == "cascade.go" {
-			body = strings.Replace(body, funcBody(t, body, "enqueueCascadeRows"), "", 1)
-		}
-		if auditInsertPattern.MatchString(body) {
-			t.Errorf("%s writes an audit row outside enqueueCascadeRows — it will carry no "+
+		// enqueueWrites is the one legitimate writer, and it lives in propagation_enqueue.go.
+		if auditInsertPattern.MatchString(string(src)) {
+			t.Errorf("%s writes an audit row outside enqueueWrites — it will carry no "+
 				"cascade id, and the console's trace link for that event will be a dash", file)
 		}
 	}
 }
 
-// The other half: enqueueCascadeRows must actually stamp the column, and must leave it NULL when
+// The other half: enqueueWrites must actually stamp the column, and must leave it NULL when
 // the event cascaded to nobody. A cascade id pointing at zero outbox rows would render in the
 // audit log as a link to a Change history entry that does not exist.
-func TestEnqueueCascadeRowsStampsTheAuditRow(t *testing.T) {
-	src, err := os.ReadFile("cascade.go")
+func TestEnqueueWritesStampsTheAuditRow(t *testing.T) {
+	src, err := os.ReadFile("propagation_enqueue.go")
 	if err != nil {
-		t.Fatalf("read cascade.go: %v", err)
+		t.Fatalf("read propagation_enqueue.go: %v", err)
 	}
-	fb := funcBody(t, string(src), "enqueueCascadeRows")
+	fb := funcBody(t, string(src), "enqueueWrites")
 
 	if !auditInsertPattern.MatchString(fb) {
-		t.Fatal("enqueueCascadeRows must write the cascade's audit rows")
+		t.Fatal("enqueueWrites must write the cascade's audit rows")
 	}
 	if !strings.Contains(fb, "cascade_id") {
 		t.Error("the audit insert must carry cascade_id, or the trace column is an inference again")
@@ -82,7 +77,7 @@ func TestCascadeGroupVisibilityMatchesTheHistoryFilter(t *testing.T) {
 		{"a bundle cascade", []EnqueueParams{{Source: "bundle"}}, true},
 		{"a rule cascade", []EnqueueParams{{Source: "rule"}}, true},
 		{"a lifecycle cascade", []EnqueueParams{{Source: "lifecycle_cascade"}}, true},
-		// The P1. DeleteDirectGrantAndEnqueue goes through enqueueCascadeRows because its ledger
+		// The P1. DeleteDirectGrantAndEnqueue goes through enqueueWrites as a cascade because its ledger
 		// delete, audit row and outbox rows must commit together — not because it is a cascade.
 		{"a direct grant's removal", []EnqueueParams{{Source: "direct"}}, false},
 		// Empty defaults to direct, and must be read the same way as the explicit value.

@@ -192,9 +192,9 @@ func SetWorkingInclude(ctx context.Context, actor, parentID, childID string, chi
 		parentID, childID, versionID); err != nil {
 		return out, fmt.Errorf("set include: %w", err)
 	}
-	if _, err := enqueueCascadeRows(ctx, tx, []CascadeAudit{{
+	if _, err := enqueueWrites(ctx, tx, []CascadeAudit{{
 		Actor: actor, Target: parentID, Action: "bundle.include_set", ResourceID: childID,
-	}}, nil); err != nil {
+	}}, nil, ""); err != nil {
 		return out, fmt.Errorf("audit include: %w", err)
 	}
 	ins, err := GetWorkingIncludes(context.WithValue(ctx, txKey, tx), parentID)
@@ -258,9 +258,9 @@ func RemoveWorkingInclude(ctx context.Context, actor, parentID, childID string) 
 	if tag.RowsAffected() == 0 {
 		return false, nil
 	}
-	if _, err := enqueueCascadeRows(ctx, tx, []CascadeAudit{{
+	if _, err := enqueueWrites(ctx, tx, []CascadeAudit{{
 		Actor: actor, Target: parentID, Action: "bundle.include_removed", ResourceID: childID,
-	}}, nil); err != nil {
+	}}, nil, ""); err != nil {
 		return false, fmt.Errorf("audit include removal: %w", err)
 	}
 	if owned {

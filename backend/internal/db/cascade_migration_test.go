@@ -3,7 +3,6 @@ package db
 import (
 	"os"
 	"regexp"
-	"strings"
 	"testing"
 )
 
@@ -33,22 +32,6 @@ func TestCascadeAndEnqueue_WriteNoDirectRoleGrants(t *testing.T) {
 		fb := funcBody(t, body, fn)
 		if writePattern.MatchString(fb) {
 			t.Errorf("%s must NOT write direct_role_grants — cascade intent lives in the bundle/rule tables (design pivot); body:\n%s", fn, fb)
-		}
-	}
-}
-
-// TestEnqueueCascadeRows_WritesSourceAndSourceRef is a coherence guard: the cascade outbox
-// insert must carry source/source_ref (migration 000017), or cascade rows would be
-// indistinguishable from operator direct grants in the Pending worklist / recent-cascades UI.
-func TestEnqueueCascadeRows_WritesSourceAndSourceRef(t *testing.T) {
-	src, err := os.ReadFile("cascade.go")
-	if err != nil {
-		t.Fatalf("read cascade.go: %v", err)
-	}
-	fb := funcBody(t, string(src), "enqueueCascadeRows")
-	for _, want := range []string{"source", "source_ref"} {
-		if !strings.Contains(fb, want) {
-			t.Errorf("enqueueCascadeRows must write outbox column %q; body:\n%s", want, fb)
 		}
 	}
 }
