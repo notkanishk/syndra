@@ -215,7 +215,7 @@ func TestPlanBulkApprove_EachRequestFromTheSnapshot(t *testing.T) {
 	s.Holdings = map[string]models.RequestHolding{"req1": {Kind: models.HoldingNone}, "req2": {Kind: models.HoldingNone}}
 
 	ch := Plan(Action{Op: OpApprove, RequestID: "req1"}, s)
-	if ch.Row.UserID != "req1" || ch.UserID != "u1" || ch.Row.Effect != EffectApply || ch.Row.Detail != "Gains Member in Laser Lab." {
+	if ch.Row.UserID != "req1" || ch.UserID != "u1" || ch.Row.Person != "u1" || ch.Row.Effect != EffectApply || ch.Row.Detail != "Gains Member in Laser Lab." {
 		t.Fatalf("the row is the request, the change the requester's: %+v", ch)
 	}
 	if ch.Row.Name != "Ada Lovelace" {
@@ -247,7 +247,7 @@ func TestPlanner_AdoptRecordsTheRoleAndSendsNothingForIt(t *testing.T) {
 	s := adoptSnap()
 	memberGivesTrained(&s)
 	ch := Plan(Action{Op: OpAdopt, DriftID: "d1"}, s)
-	if ch.Row.UserID != "d1" || ch.UserID != "u1" || ch.Row.Effect != EffectApply {
+	if ch.Row.UserID != "d1" || ch.UserID != "u1" || ch.Row.Person != "u1" || ch.Row.Effect != EffectApply {
 		t.Fatalf("change = %+v", ch)
 	}
 	own := ch.Writes[0]

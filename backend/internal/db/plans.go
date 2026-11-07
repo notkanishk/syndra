@@ -212,6 +212,10 @@ type NewPlanSubject struct {
 	DesiredState map[string]json.RawMessage
 	Fingerprint  string
 	Outcome      PlanOutcome
+	// Person is whose queued changes the row may cancel, when the subject is
+	// not a person (a request a decision approves, a drift row an adoption
+	// resolves). Empty: the subject is the person. Checked, not stored.
+	Person string
 }
 
 // PlanCitation is an apply naming the plan it is executing.
@@ -513,8 +517,12 @@ func verifyCancelProvenance(ctx context.Context, tx pgx.Tx, subjects []NewPlanSu
 		return fmt.Errorf("read cited queued changes: %w", err)
 	}
 	for _, s := range subjects {
+		person := s.Person
+		if person == "" {
+			person = s.SubjectID
+		}
 		for i, id := range s.Outcome.CancelIDs {
-			if holder, known := owner[id]; !known || holder != s.SubjectID {
+			if holder, known := owner[id]; !known || holder != person {
 				// Position, never the value or the other person's id.
 				return fmt.Errorf("%w: subject %s cites cancel_ids[%d], which is not a queued change of theirs", ErrInvalidPlan, s.SubjectID, i)
 			}

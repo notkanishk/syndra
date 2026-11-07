@@ -160,6 +160,9 @@ type roleWords struct{ Role, Project string }
 func Plan(a Action, s PlanSnapshot) Change {
 	a, s, refused := s.resolve(a)
 	ch := Change{UserID: a.UserID, Row: BulkOutcome{UserID: a.subject()}}
+	if a.subject() != a.UserID {
+		ch.Row.Person = a.UserID
+	}
 	profile, known := s.Profiles[a.UserID]
 	if known {
 		ch.Row.Name, ch.Row.Email = profile.Name, profile.Email
