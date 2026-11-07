@@ -271,8 +271,8 @@ func userBaseHoldingsWithBundleAt(
 }
 
 // deltaParams converts a closure delta into enqueue params, all attributed to the ONE triggering
-// source (bundle or rule) — every row from a single cascade trigger carries the same
-// Source/SourceRef, whether it is an add or a revoke.
+// source (bundle or rule), whether it is an add or a revoke. A bundle's cascade then hands the
+// roles a rule follows with to asRuleRows: those rows are the rule's (decision 7).
 // It also REGISTERS the lifecycle trigger, and that placement is the point:
 // this is the ONE function every closure delta in this package passes through,
 // so a cascade added later reaches its mapped targets without anybody
@@ -359,11 +359,13 @@ func CascadeBundleAssignedToUser(ctx context.Context, actor, userID, bundleID st
 		for _, ro := range roles {
 			after[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
 		}
-		adds, revokes := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
+		closureBefore, closureAfter := effectiveClosure(before, rules), effectiveClosure(after, rules)
+		adds, revokes := closureDelta(closureBefore, closureAfter)
 		params, err := deltaParams(ctx, userID, adds, revokes, actor, "Bundle membership cascade", "bundle", bundleID)
 		if err != nil {
 			return err
 		}
+		params = asRuleRows(params, ruleRefs(before, after, closureBefore, closureAfter, rules))
 
 		ids, assigned, err = svcAssignBundleAndEnqueue(ctx, actor, "", userID, bundleID, version.ID, params)
 		return err // enqueue+assign rolled back together → handler returns 500
@@ -485,11 +487,13 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 		if err != nil {
 			return err
 		}
-		adds, revokes := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
+		closureBefore, closureAfter := effectiveClosure(before, rules), effectiveClosure(after, rules)
+		adds, revokes := closureDelta(closureBefore, closureAfter)
 		params, err := deltaParams(ctx, userID, adds, revokes, actor, "Bundle removal cascade", "bundle", bundleID)
 		if err != nil {
 			return err
 		}
+		params = asRuleRows(params, ruleRefs(before, after, closureBefore, closureAfter, rules))
 
 		ids, err = svcRemoveBundleFromUserAndEnqueue(ctx, actor, "", userID, bundleID, params)
 		return err
@@ -552,7 +556,8 @@ func CascadeBundleRetired(ctx context.Context, actor, bundleID string) (CascadeR
 			if err != nil {
 				return err
 			}
-			adds, revokes := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
+			closureBefore, closureAfter := effectiveClosure(before, rules), effectiveClosure(after, rules)
+			adds, revokes := closureDelta(closureBefore, closureAfter)
 			if len(adds) == 0 && len(revokes) == 0 {
 				continue
 			}
@@ -560,7 +565,7 @@ func CascadeBundleRetired(ctx context.Context, actor, bundleID string) (CascadeR
 			if err != nil {
 				return err
 			}
-			params = append(params, rows...)
+			params = append(params, asRuleRows(rows, ruleRefs(before, after, closureBefore, closureAfter, rules))...)
 		}
 
 		ids, err = svcRetireBundleAndEnqueue(ctx, actor, bundleID, params)

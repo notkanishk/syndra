@@ -249,6 +249,15 @@ const givenBackReason = "cancelled before it was sent: the role was given back"
 // direct grant per person and role, and its add carries the request id or
 // nothing while its removal carries the grant id, so matching the reference
 // too meant removing an unsent direct grant queued the removal behind the add.
+//
+// A rule's revoke answers every queued rule give of the role, whichever rule
+// row it was (task 1.6). A rule row is only ever a closure difference, so a
+// rule revoke is queued only when no grant, bundle or rule reaches the role any
+// more, and then no queued rule give of it is still wanted. Matching the rule
+// id too would let two rules reaching one role, picked in a different order on
+// the way in and out, queue the removal behind the give. A bundle's own rows
+// still match on the bundle; a direct or bundle revoke never cancels a rule's
+// row, and any give answers a rule's queued revoke, as for every source.
 func Answers(p EnqueueParams, c models.QueuedChange) bool {
 	if !answersAny(p) || c.UserID != p.UserID || c.ProjectID != p.ProjectID || !slices.Equal(c.RoleKeys, p.RoleKeys) {
 		return false
@@ -260,7 +269,7 @@ func Answers(p EnqueueParams, c models.QueuedChange) bool {
 		return false
 	}
 	source := outboxSource(p)
-	return c.Source == source && (source == "direct" || c.SourceRef == p.SourceRef)
+	return c.Source == source && (source == "direct" || source == "rule" || c.SourceRef == p.SourceRef)
 }
 
 // AnsweredBy is the changes among queued that p cancels, in their order.

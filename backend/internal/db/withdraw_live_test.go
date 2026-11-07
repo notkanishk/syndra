@@ -414,3 +414,48 @@ func TestACancellationKeepsWhatItCancelledAndTheMemberHearsOfIt(t *testing.T) {
 		}
 	}
 }
+
+// Rule rows (task 1.6): source 'rule', source_ref the rule that reaches the
+// role. A rule's removal cancels the rule's queued give of the role, whichever
+// rule row it was: it is queued only once nothing reaches the role any more.
+func TestARulesRemovalCancelsTheRulesQueuedGive(t *testing.T) {
+	ctx := liveDB(t)
+	give := seedOutbox(t, ctx, "add", "pending", "u1", "p1", "rule", "r1", []string{"advanced"})
+
+	if owed := runWithdraw(t, ctx, revokeParams("u1", "p1", "advanced", "rule", "r2")); owed {
+		t.Fatal("nothing was ever sent, yet a revoke is still owed")
+	}
+	if status, _ := statusOf(t, ctx, give); status != "superseded" {
+		t.Fatalf("the rule's queued give is %q, want superseded", status)
+	}
+}
+
+// A direct removal never cancels a rule's queued give, as it never cancelled
+// a bundle's: the revoke is still owed and the give stays.
+func TestADirectRemovalLeavesARulesQueuedGive(t *testing.T) {
+	ctx := liveDB(t)
+	give := seedOutbox(t, ctx, "add", "pending", "u1", "p1", "rule", "r1", []string{"advanced"})
+
+	if owed := runWithdraw(t, ctx, revokeParams("u1", "p1", "advanced", "direct", "grant-1")); !owed {
+		t.Fatal("a direct removal dropped its revoke against a rule's give")
+	}
+	if status, _ := statusOf(t, ctx, give); status != "pending" {
+		t.Fatalf("a direct removal moved the rule's queued give to %q", status)
+	}
+}
+
+// Any give answers a rule's queued removal, as for every source: giving the
+// role back cancels the removal, and the give is still owed while nothing stands.
+func TestADirectGiveCancelsARulesQueuedRemoval(t *testing.T) {
+	ctx := liveDB(t)
+	removal := seedOutbox(t, ctx, "revoke", "pending", "u1", "p1", "rule", "r1", []string{"advanced"})
+
+	p := revokeParams("u1", "p1", "advanced", "direct", "")
+	p.OpType = "add"
+	if owed := runWithdraw(t, ctx, p); !owed {
+		t.Fatal("the give is owed: nothing of it stands in Zitadel")
+	}
+	if status, _ := statusOf(t, ctx, removal); status != "superseded" {
+		t.Fatalf("the rule's queued removal is %q, want superseded", status)
+	}
+}

@@ -72,17 +72,45 @@ func followRules(ctx context.Context, p db.EnqueueParams, write func() error) ([
 		return nil, err
 	}
 
-	params := deltaWrites(p.UserID, adds, revokes, "rule", "")
+	params := asRuleRows(deltaWrites(p.UserID, adds, revokes, "rule", ""), ruleRefs(before, after, closureBefore, closureAfter, rules))
 	for i := range params {
-		k := roleKey{projectID: params[i].ProjectID, roleKey: params[i].RoleKeys[0]}
-		reached := closureAfter
-		if params[i].OpType == "revoke" {
-			reached = closureBefore
-		}
-		params[i].SourceRef = ruleReaching(rules, reached, k)
 		params[i].GrantedBy, params[i].Reason, params[i].PayloadJSON = p.GrantedBy, "Mapping rule cascade", "{}"
 	}
 	return params, nil
+}
+
+// ruleRefs is, for each role a change to a person's base moves only through the
+// mapping rules, the rule that reaches it: in the closure after for a role
+// given, before for one taken away. A role the base itself moved is absent: it
+// is the change's own (the bundle's, the grant's). That rule's first role is
+// the role that set it off (decision 7, task 1.6).
+func ruleRefs(before, after, closureBefore, closureAfter map[roleKey]bool, rules []models.MappingRule) map[roleKey]string {
+	refs := map[roleKey]string{}
+	for _, c := range []map[roleKey]bool{closureBefore, closureAfter} {
+		for k := range c {
+			if closureBefore[k] != closureAfter[k] && before[k] == after[k] {
+				reached := closureAfter
+				if closureBefore[k] {
+					reached = closureBefore
+				}
+				refs[k] = ruleReaching(rules, reached, k)
+			}
+		}
+	}
+	return refs
+}
+
+// asRuleRows gives the writes refs names the one shape a rule's row has,
+// wherever it is written (FollowRules, a bundle cascade, the planner, a
+// publish or move): source 'rule', source_ref the rule that reaches the role.
+// db.Answers matches a rule's rows on that source.
+func asRuleRows(params []db.EnqueueParams, refs map[roleKey]string) []db.EnqueueParams {
+	for i := range params {
+		if ref, ok := refs[roleKey{projectID: params[i].ProjectID, roleKey: params[i].RoleKeys[0]}]; ok {
+			params[i].Source, params[i].SourceRef = "rule", ref
+		}
+	}
+	return params
 }
 
 // ruleDelta is what the rules owe beyond a change to a person's base: the

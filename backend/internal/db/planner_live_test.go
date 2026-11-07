@@ -83,7 +83,7 @@ func newPlannerFixture(t *testing.T) plannerFixture {
 	dir := plannerDirectory{
 		users: []models.UserProfile{{ID: f.alice, Name: "Alice Example", Status: "active"}, {ID: f.bob, Name: "Bob Example", Status: "active"}},
 		project: models.ProjectCatalog{ID: f.project, Name: "Laser Lab", Roles: []models.ProjectRole{
-			{Key: f.member, Label: "Member"}, {Key: f.trains, Label: "Trained"},
+			{Key: f.member, Label: "Member"}, {Key: f.trains, Label: "Trained"}, {Key: "advanced", Label: "Advanced"},
 		}},
 	}
 	directory.Default = dir
@@ -364,4 +364,134 @@ func sentRowsFor(t *testing.T, ctx context.Context, user string) []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// withRule adds the rule "trained gives advanced" in the fixture's project.
+func (f plannerFixture) withRule(t *testing.T) string {
+	t.Helper()
+	id, _, err := db.CreateMappingRuleAndEnqueue(f.ctx, f.actor, f.project, f.trains, f.project, "advanced", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = db.PG.Exec(f.ctx, `DELETE FROM mapping_rules WHERE id = $1::uuid`, id) })
+	return id
+}
+
+// assignWithRule gives Alice the bundle through the planner and returns the
+// rows it queued, none of them sent yet.
+func (f plannerFixture) assignWithRule(t *testing.T, ctx context.Context, rule string) []string {
+	t.Helper()
+	req := f.request(services.BulkOpAssignBundle, f.alice)
+	changes, _, err := services.PlanBulk(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, written, err := services.ApplyPlannedBulk(ctx, req, f.issue(t, ctx, req, changes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := outboxIDs(written[f.alice])
+	// The bundle's roles are its rows; the role the rule follows with is the
+	// rule's, with the rule (task 1.6), the shape FollowRules writes.
+	want := []string{"add advanced rule " + rule, "add member bundle " + f.bundle, "add trained bundle " + f.bundle}
+	if got := sentRows(t, ctx, ids); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("assign queued %v, want %v", got, want)
+	}
+	return ids
+}
+
+// A bundle's removal cancels exactly the queued changes the bundle and the
+// rules it set off produced, and nothing else: not another bundle's give of the
+// same role, not a direct give of the role the rule gives (task 1.6).
+func TestPlanner_RemoveBundle_CancelsItsOwnAndItsRulesQueuedRows(t *testing.T) {
+	f := newPlannerFixture(t)
+	rule := f.withRule(t)
+	ctx, gate := db.GuardCancellations(f.ctx, nil, func(context.Context) bool { return true })
+	queued := f.assignWithRule(t, ctx, rule)
+
+	// Change history names the change by the bundle, not by the rule row
+	// written in the same instant.
+	var cascade string
+	if err := db.PG.QueryRow(ctx, `SELECT cascade_id::text FROM propagation_outbox WHERE id = $1::uuid`, queued[0]).Scan(&cascade); err != nil {
+		t.Fatal(err)
+	}
+	groups, err := db.GetCascadeGroups(ctx, 0, cascade)
+	if err != nil || len(groups) != 1 || groups[0].Source != "bundle" || groups[0].SourceRef != f.bundle || len(groups[0].Writes) != 3 {
+		t.Fatalf("Change history: %+v %v, want one bundle entry with its 3 writes", groups, err)
+	}
+
+	otherBundle := f.queue(t, f.alice, "add", f.member, "bundle", "another-bundle")
+	direct := f.queue(t, f.alice, "add", "advanced", "direct", "")
+
+	req := f.request(services.BulkOpRemoveBundle, f.alice)
+	changes, _, err := services.PlanBulk(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := append([]string(nil), changes[0].Row.CancelIDs...)
+	sort.Strings(named)
+	want := append([]string(nil), queued...)
+	sort.Strings(want)
+	if strings.Join(named, "|") != strings.Join(want, "|") {
+		t.Fatalf("the plan names %v, want exactly the assign's rows %v", named, want)
+	}
+	if !strings.Contains(changes[0].Row.Consequence, "Also loses Advanced in Laser Lab, which the automatic rule from Trained in Laser Lab gave.") {
+		t.Errorf("row: %q", changes[0].Row.Consequence)
+	}
+	_, written, err := services.ApplyPlannedBulk(ctx, req, f.issue(t, ctx, req, changes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gate.Refused()) != 0 {
+		t.Fatalf("a named cancellation was refused: %+v", gate.Refused())
+	}
+	for _, id := range queued {
+		if s := status(t, ctx, id); s != "superseded" {
+			t.Errorf("the assign's row %s is %s, want superseded", id, s)
+		}
+	}
+	for _, id := range []string{otherBundle, direct} {
+		if s := status(t, ctx, id); s != "pending" {
+			t.Errorf("an unrelated queued change %s is %s, want pending", id, s)
+		}
+	}
+	// Nothing had reached Zitadel, so nothing is sent to take it back.
+	if ids := outboxIDs(written[f.alice]); len(ids) != 0 {
+		t.Errorf("the removal queued %v, want nothing", sentRows(t, ctx, ids))
+	}
+}
+
+// A rule's own retirement cancels the give the rule queued under a bundle's
+// change, and leaves the bundle's own rows: before task 1.6 that row said
+// 'bundle' and the retirement queued its removal behind it.
+func TestPlanner_RuleRetiredCancelsTheRowItSetOffUnderABundle(t *testing.T) {
+	f := newPlannerFixture(t)
+	rule := f.withRule(t)
+	ctx, _ := db.GuardCancellations(f.ctx, nil, func(context.Context) bool { return true })
+	queued := f.assignWithRule(t, ctx, rule)
+	row := map[string]string{}
+	for _, id := range queued {
+		row[id] = sentRows(t, ctx, []string{id})[0]
+	}
+
+	revoke := db.EnqueueParams{UserID: f.alice, ProjectID: f.project, RoleKeys: []string{"advanced"}, OpType: "revoke",
+		Source: "rule", SourceRef: rule, GrantedBy: f.actor, PayloadJSON: "{}"}
+	// Not a plan: the retirement runs outside the plan's cancel gate, which
+	// refuses any cancellation the plan didn't name.
+	ids, err := db.RetireMappingRuleAndEnqueue(f.ctx, f.actor, rule, []db.EnqueueParams{revoke})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 0 {
+		t.Errorf("the retirement queued %v, want nothing: the give it answers was never sent", sentRows(t, ctx, ids))
+	}
+	for _, id := range queued {
+		want := "pending"
+		if strings.HasPrefix(row[id], "add advanced") {
+			want = "superseded"
+		}
+		if s := status(t, ctx, id); s != want {
+			t.Errorf("row %s is %s, want %s", id, s, want)
+		}
+	}
 }

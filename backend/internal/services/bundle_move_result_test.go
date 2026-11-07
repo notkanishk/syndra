@@ -85,3 +85,44 @@ func TestMoveHolders_ReportsWhatItMoved(t *testing.T) {
 		t.Error("a completed apply must say it was applied")
 	}
 }
+
+// A move's rows are the bundle's for its own roles and the rule's for a role a
+// rule follows with (task 1.6): the shape every rule row has.
+func TestMoveHolders_RuleRowsAreTheRules(t *testing.T) {
+	resetCascadeDeps(t)
+	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) { return nil, nil }
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) { return nil, nil }
+	svcVersionBelongsTo = func(context.Context, string, string) (bool, error) { return true, nil }
+	svcGetRolesForVersion = func(context.Context, string) ([]models.BundleRole, error) {
+		return []models.BundleRole{{BundleID: "b1", ProjectID: "p1", RoleKey: "laser"}}, nil
+	}
+	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{{ID: "r1", SourceProject: "p1", SourceRole: "laser", TargetProject: "p1", TargetRole: "cutter"}}, nil
+	}
+	svcGetBundleHoldersByVersion = func(context.Context, string) ([]models.BundleHolder, error) {
+		return []models.BundleHolder{{BundleID: "b1", UserID: "u1", VersionID: "version-3", Version: 3}}, nil
+	}
+	svcListBundleVersions = func(context.Context, string) ([]models.BundleVersion, error) {
+		return []models.BundleVersion{{ID: "version-4", BundleID: "b1", Version: 4}}, nil
+	}
+	svcGetBundleByID = func(context.Context, string) (models.Bundle, error) { return models.Bundle{ID: "b1"}, nil }
+	var got []db.EnqueueParams
+	svcMoveHoldersAndEnqueue = func(_ context.Context, _, _, _ string, _ []string, ps []db.EnqueueParams) ([]string, error) {
+		got = ps
+		return nil, nil
+	}
+	svcDrainBatch = func(context.Context, []string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{}, nil
+	}
+
+	if _, err := MoveHolders(context.Background(), "operator", MoveHoldersRequest{BundleID: "b1", VersionID: "version-4", UserIDs: []string{"u1"}}); err != nil {
+		t.Fatalf("MoveHolders: %v", err)
+	}
+	sources := map[string]string{}
+	for _, p := range got {
+		sources[p.RoleKeys[0]] = p.Source + "/" + p.SourceRef
+	}
+	if sources["laser"] != "bundle/b1" || sources["cutter"] != "rule/r1" || len(sources) != 2 {
+		t.Fatalf("rows = %v, want laser from the bundle and cutter from the rule", sources)
+	}
+}

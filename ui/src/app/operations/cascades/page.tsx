@@ -9,7 +9,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { BundleName, RoleRef, UserName } from "@/components/names";
+import { BundleName, RoleInPlace, RoleRef, UserName } from "@/components/names";
 import { humanizeKey } from "@/lib/format";
 import { useMappingRules, type MappingRuleRow } from "@/lib/queries/useMappingRules";
 import { useCascadeGroups, type CascadeGroupRow } from "@/lib/queries/useConfirmationMode";
@@ -107,9 +107,10 @@ export default function ChangeHistoryPage() {
 
 /** `one`: this is the single-edit view, so every write is listed; otherwise the rest are one click away. */
 function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: MappingRuleRow[]; one: boolean }) {
-  const first = group.writes[0];
   // The rule by what it does: it has no name of its own. A bundle by its name.
-  const rule = group.source === "rule" ? rules?.find((entry) => entry.id === first?.source_ref) : undefined;
+  // The entry is named by the act that set it off (group.source_ref), never by
+  // whichever write came first: a bundle's change carries its rules' rows too.
+  const rule = group.source === "rule" ? rules?.find((entry) => entry.id === group.source_ref) : undefined;
 
   return (
     <Card>
@@ -133,6 +134,9 @@ function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: Ma
             {(write.role_keys ?? []).map((key) => (
               <RoleRef key={key} projectId={write.project_id} roleKey={key} className="mr-2" />
             ))}
+            {group.source !== "rule" && write.source === "rule" && (
+              <RuleFrom rule={rules?.find((entry) => entry.id === write.source_ref)} />
+            )}
           </span>
         ))}
         {!one && group.writes.length > 6 && (
@@ -143,9 +147,9 @@ function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: Ma
             and {group.writes.length - 6} more
           </Link>
         )}
-        {group.source === "bundle" && first?.source_ref && (
+        {group.source === "bundle" && group.source_ref && (
           <span className="text-faint">
-            from <BundleName id={first.source_ref} fallback="a bundle that is gone" />
+            from <BundleName id={group.source_ref} fallback="a bundle that is gone" />
           </span>
         )}
         {rule && (
@@ -155,6 +159,24 @@ function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: Ma
         )}
       </div>
     </Card>
+  );
+}
+
+/**
+ * A write a rule gave inside a bundle's change, with the role that set it off
+ * (A-21 §Q3): "by the automatic rule from Member in Laser Lab".
+ */
+function RuleFrom({ rule }: { rule?: MappingRuleRow }) {
+  return (
+    <span className="text-faint">
+      {rule ? (
+        <>
+          by the automatic rule from <RoleInPlace projectId={rule.source_project} roleKey={rule.source_role} />
+        </>
+      ) : (
+        "by an automatic rule"
+      )}
+    </span>
   );
 }
 

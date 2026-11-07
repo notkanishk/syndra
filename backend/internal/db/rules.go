@@ -31,7 +31,7 @@ func GetMappingRuleByID(ctx context.Context, id string) (models.MappingRule, err
 func GetActiveMappingRules(ctx context.Context) ([]models.MappingRule, error) {
 	return listMappingRules(ctx, `
 		SELECT id, source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key, created_at
-		FROM mapping_rules WHERE retired_at IS NULL;`, false)
+		FROM mapping_rules WHERE retired_at IS NULL ORDER BY created_at, id;`, false)
 }
 
 // GetRetiredMappingRules lists the rules that stopped being given, most recently retired first.
