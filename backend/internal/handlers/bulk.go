@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -100,6 +101,12 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bundle ops go through the access-change planner (services/planner.go).
+	if services.PlannedOp(input.Op) {
+		applyPlannedBulk(w, r, input, planCitation(planSurfaceBulkGrants, actor, requestFP, req.PlanID))
+		return
+	}
+
 	// Re-rehearsed for its FINGERPRINTS, not for its verdicts. The stored
 	// outcomes are what the apply acts on; this read is how the backend asks
 	// whether the state behind them still holds. Where the two agree the fresh
@@ -180,37 +187,64 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 		// the roles were still whatever they had been in Zitadel until somebody
 		// happened to visit the governance queue. Bulk removal was the sharp
 		// end — access reported as gone that was still live.
-		//
-		// Bundle ops have already answered for themselves in `queued`: their
-		// cascade drains according to the bundle's own confirmation mode, and
-		// overriding that from the bulk path would apply a bundle the owner
-		// marked manual.
-		//
-		// The drain's answer is read, not discarded. Draining and then marking
-		// the row applied regardless is the same lie one step later: with Zitadel
-		// offline every row still reported success while a bulk revoke sat
-		// unexecuted in the outbox.
 		if queued == "" {
 			queued, retry = projectUpstream(r.Context(), outboxIDs)
 		}
-		if db.IsRefused(queued) {
-			// Zitadel refused it outright: terminal, never "queued" (final
-			// verification N1). Recorded in Syndra, so the row says that too.
-			out.Effect = services.EffectFailed
-			out.WaitReason = queued
-			out.Detail = refusedDetail(queued, input.Op == services.BulkOpRemoveRole || input.Op == services.BulkOpRemoveBundle)
-			continue
-		}
-		if queued != "" {
-			out.Effect = services.EffectQueued
-			out.WaitReason, out.Retry = queued, retry
-			out.Detail = queuedDetail(queued)
-			continue
-		}
-		out.Effect = services.EffectApplied
+		settleBulkRow(out, queued, retry, input.Op)
 	}
 
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+}
+
+// settleBulkRow says what became of a row whose writes are committed, from
+// its delivery's answer. The answer is read, not discarded: draining and then
+// marking the row applied regardless is the same lie one step later. With
+// Zitadel offline every row once reported success while a bulk revoke sat
+// unexecuted in the outbox.
+func settleBulkRow(out *services.BulkOutcome, queued string, retry *extcall.RetryState, op string) {
+	revocation := op == services.BulkOpRemoveRole || op == services.BulkOpRemoveBundle
+	switch {
+	case db.IsRefused(queued):
+		// Zitadel refused it outright: terminal, never "queued" (final
+		// verification N1). Recorded in Syndra, so the row says that too.
+		out.Effect = services.EffectFailed
+		out.WaitReason = queued
+		out.Detail = refusedDetail(queued, revocation)
+	case queued != "":
+		out.Effect = services.EffectQueued
+		out.WaitReason, out.Retry = queued, retry
+		out.Detail = queuedDetail(queued, revocation)
+	default:
+		out.Effect = services.EffectApplied
+	}
+}
+
+// applyPlannedBulk applies a bulk op the planner decides (bundle assign and
+// remove). The service spends the plan, re-reads and re-plans under the lock,
+// and writes only if every row's Change is the reviewed one; a stale plan is
+// refused unspent with nothing written. Delivery follows the commit, outside
+// the lock, and each row is settled from its own outbox rows.
+func applyPlannedBulk(w http.ResponseWriter, r *http.Request, input services.BulkRequest, cite db.PlanCitation) {
+	plan, sent, err := svcApplyPlannedBulk(r.Context(), input, cite)
+	var stale *services.StalePlan
+	if errors.As(err, &stale) {
+		err = &staleSubjects{IDs: stale.IDs}
+	}
+	if err != nil {
+		writePlanCitationError(w, err)
+		return
+	}
+	for i := range plan.Outcomes {
+		out := &plan.Outcomes[i]
+		if out.Effect != services.EffectApply {
+			continue
+		}
+		rebuildUserCacheDetachedFn(r.Context(), out.UserID)
+		queued, retry := projectUpstream(r.Context(), sent[out.UserID])
+		settleBulkRow(out, queued, retry, input.Op)
+	}
+	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+	jsonResponse(w, http.StatusAccepted, plan)
 }
 
 // refusalWords is a refusal's plain cause, said after "Zitadel refused this:".
@@ -280,8 +314,10 @@ func projectUpstream(ctx context.Context, outboxIDs []string) (string, *extcall.
 // queuedDetail is a queued bulk row's sentence, by why it isn't in Zitadel
 // yet: plain words, never the raw reason (re-audit R2). A retry's time and
 // try are said by the result from the row's retry.
-func queuedDetail(reason string) string {
+func queuedDetail(reason string, revocation bool) string {
 	switch {
+	case reason == db.WaitReasonRoleWaits && revocation:
+		return "Recorded in Syndra. A role it removes always waits for you, so it is in Pending changes until you send it."
 	case reason == db.WaitReasonRoleWaits:
 		return "Recorded in Syndra. A role it gives always waits for you, so it is in Pending changes until you send it."
 	case reason == db.WaitReasonManual:
@@ -296,15 +332,9 @@ func queuedDetail(reason string) string {
 	}
 }
 
-// applyBulkOne performs one person's share of the operation. It returns the
-// outbox rows the caller must drain, plus a reason when the work is already
-// known to be queued rather than applied.
-//
-// Bundle ops go down the second path: the cascade delivers its own rows (each
-// goes unless its role waits), so it reports its verdict instead of handing
-// back rows. A role that waits is *meant* to leave work queued — that is not a
-// failure, but it is not "applied" either, and the operator has to be told
-// which one they got.
+// applyBulkOne performs one person's share of the operation and returns the
+// outbox rows the caller must drain. Bundle ops never reach it: the planner
+// applies them (applyPlannedBulk).
 func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out services.BulkOutcome) ([]string, string, *extcall.RetryState, error) {
 	ctx := r.Context()
 
@@ -328,16 +358,6 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 			ids = append(ids, res.OutboxIDs...)
 		}
 		return ids, "", nil, nil
-
-	case services.BulkOpAssignBundle:
-		res, err := svcCascadeBundleAssigned(ctx, actor, out.UserID, input.BundleID)
-		why, retry := cascadeQueuedReason(res)
-		return nil, why, retry, err
-
-	case services.BulkOpRemoveBundle:
-		res, err := svcCascadeBundleRemoved(ctx, actor, out.UserID, input.BundleID)
-		why, retry := cascadeQueuedReason(res)
-		return nil, why, retry, err
 
 	case services.BulkOpExtend:
 		// The grant ledger upserts on (user, project, role), so re-enqueuing
@@ -367,24 +387,6 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 	}
 
 	return nil, "", nil, nil
-}
-
-// cascadeQueuedReason reports why a cascade's rows have not reached Zitadel, or
-// "" when they have (or when there were none to send).
-func cascadeQueuedReason(res services.CascadeResult) (string, *extcall.RetryState) {
-	switch {
-	case res.Enqueued == 0:
-		return "", nil // nothing to propagate; the closure was already correct
-	case db.IsRefused(res.WaitReason):
-		return res.WaitReason, nil // terminal, and graver than any wait (N1)
-	case res.Waiting > 0:
-		return db.WaitReasonRoleWaits, nil
-	case res.WaitReason != "":
-		return res.WaitReason, res.Drain.Retry
-	case res.Drain.Applied < res.Enqueued:
-		return db.WaitReasonHalted("not_confirmed"), nil
-	}
-	return "", nil
 }
 
 // enqueueBulkGrant writes the ledger + audit + outbox row in one transaction,

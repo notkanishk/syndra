@@ -99,6 +99,10 @@ func validPlanEffect(e string) bool {
 type PlanOutcome struct {
 	Effect   string   `json:"effect"`
 	GrantIDs []string `json:"grant_ids,omitempty"`
+	// CancelIDs are the queued changes the row said it cancels: the apply
+	// admits these and no other (architecture deepening, decision 4). Each
+	// must be a queued change of the subject's, checked like a grant id.
+	CancelIDs []string `json:"cancel_ids,omitempty"`
 }
 
 func (o PlanOutcome) validate() error {
@@ -122,6 +126,11 @@ func (o PlanOutcome) validate() error {
 			// thing in the struct to be a misplaced secret — and an error
 			// string is logged, returned, and traced.
 			return fmt.Errorf("%w: grant_ids[%d] is not shaped like an identifier", ErrInvalidPlan, i)
+		}
+	}
+	for i, id := range o.CancelIDs {
+		if !looksLikeUUID(id) {
+			return fmt.Errorf("%w: cancel_ids[%d] is not shaped like an identifier", ErrInvalidPlan, i)
 		}
 	}
 	return nil
@@ -338,6 +347,9 @@ func createPlanTx(ctx context.Context, tx pgx.Tx, p NewPlan) (Plan, error) {
 	if err := verifyGrantProvenance(ctx, tx, subjects); err != nil {
 		return Plan{}, err
 	}
+	if err := verifyCancelProvenance(ctx, tx, subjects); err != nil {
+		return Plan{}, err
+	}
 	if err := verifySnapshotProvenance(ctx, tx, p.Target, subjects); err != nil {
 		return Plan{}, err
 	}
@@ -472,6 +484,45 @@ func matchGrantOwners(subjects []NewPlanSubject, owner map[string]string) error 
 	return nil
 }
 
+// verifyCancelProvenance refuses a plan naming a queued change this database
+// did not queue, or one queued for somebody else: the same rule as a grant id,
+// for the same reason. A row naming another person's queued change would let
+// the apply cancel it under a heading with the wrong name on it.
+func verifyCancelProvenance(ctx context.Context, tx pgx.Tx, subjects []NewPlanSubject) error {
+	var cited []string
+	for _, s := range subjects {
+		cited = append(cited, s.Outcome.CancelIDs...)
+	}
+	if len(cited) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `SELECT id::text, user_id FROM propagation_outbox WHERE id = ANY($1::text[]::uuid[])`, cited)
+	if err != nil {
+		return fmt.Errorf("read cited queued changes: %w", err)
+	}
+	defer rows.Close()
+	owner := make(map[string]string, len(cited))
+	for rows.Next() {
+		var id, userID string
+		if err := rows.Scan(&id, &userID); err != nil {
+			return fmt.Errorf("scan cited queued change: %w", err)
+		}
+		owner[strings.ToLower(id)] = userID
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read cited queued changes: %w", err)
+	}
+	for _, s := range subjects {
+		for i, id := range s.Outcome.CancelIDs {
+			if holder, known := owner[id]; !known || holder != s.SubjectID {
+				// Position, never the value or the other person's id.
+				return fmt.Errorf("%w: subject %s cites cancel_ids[%d], which is not a queued change of theirs", ErrInvalidPlan, s.SubjectID, i)
+			}
+		}
+	}
+	return nil
+}
+
 // verifySnapshotProvenance refuses a plan citing a snapshot that is not this
 // subject's desired state for this target.
 //
@@ -560,6 +611,13 @@ func canonicalSubjects(subjects []NewPlanSubject) []NewPlanSubject {
 			}
 			s.Outcome.GrantIDs = ids
 		}
+		if len(s.Outcome.CancelIDs) > 0 {
+			ids := make([]string, len(s.Outcome.CancelIDs))
+			for j, id := range s.Outcome.CancelIDs {
+				ids[j] = strings.ToLower(id)
+			}
+			s.Outcome.CancelIDs = ids
+		}
 		out[i] = s
 	}
 	return out
@@ -618,6 +676,17 @@ func ClaimPlanTx(ctx context.Context, tx pgx.Tx, c PlanCitation) (Plan, []PlanSu
 		return Plan{}, nil, fmt.Errorf("%w: %s", ErrPlanNoSubject, plan.ID)
 	}
 	return plan, subjects, nil
+}
+
+// ClaimPlanJoined is ClaimPlanTx on the caller's access-mutation transaction
+// (InTxLockingAccess): the planner's apply claims, re-reads, checks and writes
+// in one transaction, so a stale plan rolls back unspent with nothing written.
+func ClaimPlanJoined(ctx context.Context, c PlanCitation) (Plan, []PlanSubject, error) {
+	tx, ok := ctx.Value(txKey).(pgx.Tx)
+	if !ok || tx == nil {
+		return Plan{}, nil, errors.New("db: ClaimPlanJoined runs inside InTxLockingAccess")
+	}
+	return ClaimPlanTx(ctx, tx, c)
 }
 
 // ClaimPlanVerified spends an approval only if the world it describes is still

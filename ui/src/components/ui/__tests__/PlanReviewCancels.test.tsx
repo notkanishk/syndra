@@ -62,6 +62,21 @@ describe("PlanReview cancellations", () => {
     expect(screen.getByText(/Revoked once you send it\./)).toBeTruthy();
   });
 
+  // What the backend says today (services.DescribeCancels). This pattern once
+  // matched only the older wording, so the line under the plan never showed.
+  it("reads the backend's current sentence, 'waiting for you to send'", () => {
+    render(
+      <PlanReview
+        plan={plan([
+          "Gains Member in Laser Lab. Cancels a change waiting for you to send: the removal of member queued 2 Nov 2026.",
+        ])}
+      />,
+    );
+    const line = screen.getByRole("note");
+    expect(line.textContent).toContain("Cancels a change that is waiting for you to send: the removal of member queued 2 Nov 2026.");
+    expect(screen.getByText(/Gains Member in Laser Lab\./)).toBeTruthy();
+  });
+
   it("a plan that cancels nothing has no amber line", () => {
     render(<PlanReview plan={plan([undefined, "Revoked once you send it."])} />);
     expect(screen.queryByRole("note")).toBeNull();

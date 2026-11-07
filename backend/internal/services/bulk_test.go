@@ -68,7 +68,31 @@ func setupBulk(t *testing.T, fx bulkFixture) {
 		return models.Bundle{ID: id, Name: "Safety"}, nil
 	}
 	svcLatestVersionRoles = func(context.Context, string) (models.BundleVersion, []models.BundleRole, error) {
-		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{{}, {}, {}}, nil
+		return models.BundleVersion{ID: "v-latest", Version: 2}, []models.BundleRole{
+			{ProjectID: "pLaser", RoleKey: "member"}, {ProjectID: "pLaser", RoleKey: "trained"}, {ProjectID: "pWood", RoleKey: "member"},
+		}, nil
+	}
+
+	// Bundle ops go through the planner: its snapshot, from the same fixture.
+	origLock, origSnap, origCat := svcInTxLockingAccess, svcReadAccessSnapshot, PlannerCatalogue
+	t.Cleanup(func() { svcInTxLockingAccess, svcReadAccessSnapshot, PlannerCatalogue = origLock, origSnap, origCat })
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
+	svcReadAccessSnapshot = func(_ context.Context, ids []string) (db.AccessSnapshot, error) {
+		snap := db.AccessSnapshot{People: map[string]db.PersonAccess{}, Rules: fx.rules}
+		for _, id := range ids {
+			p := db.PersonAccess{Direct: fx.grants[id], Bundles: map[string]bool{}}
+			for _, b := range fx.bundle[id] {
+				p.Bundles[b.ID] = true
+			}
+			snap.People[id] = p
+		}
+		return snap, nil
+	}
+	PlannerCatalogue = func(context.Context) ([]models.ProjectCatalog, error) {
+		return []models.ProjectCatalog{
+			{ID: "pLaser", Name: "Laser Lab", Roles: []models.ProjectRole{{Key: "member", Label: "Member"}, {Key: "trained", Label: "Trained"}}},
+			{ID: "pWood", Name: "Wood Shop", Roles: []models.ProjectRole{{Key: "member", Label: "Member"}}},
+		}, nil
 	}
 }
 
@@ -376,8 +400,10 @@ func TestRehearseBulk_BundleMembershipIsIdempotent(t *testing.T) {
 	if got := outcomeFor(t, assign, "u_in").Effect; got != EffectNoChange {
 		t.Errorf("already a member: %q", got)
 	}
-	if out := outcomeFor(t, assign, "u_out"); out.Effect != EffectApply || !strings.Contains(out.Consequence, "3 roles") {
-		t.Errorf("joining must state the cascade size: %+v", out)
+	// Joining names what they gain, alphabetically, not a count.
+	if out := outcomeFor(t, assign, "u_out"); out.Effect != EffectApply ||
+		out.Consequence != "Gains Member in Laser Lab, Member in Wood Shop and Trained in Laser Lab." {
+		t.Errorf("joining must name what it gives: %+v", out)
 	}
 
 	remove, err := RehearseBulk(context.Background(), BulkRequest{

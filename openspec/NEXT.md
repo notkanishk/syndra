@@ -266,7 +266,7 @@ Design answers A-04 to A-06 (17 Oct 2026) are built on `feat/design-answers-04-0
 
 ### Architecture deepening — the 16 Oct review
 
-Seven candidates where one question is answered by several copies, ranked, in [`changes/architecture-deepening`](changes/architecture-deepening/tasks.md) with the review page beside them. Top: one access-change planner, so a plan's preview and its apply are the same code.
+Seven candidates where one question is answered by several copies, ranked, in [`changes/architecture-deepening`](changes/architecture-deepening/tasks.md) with the review page beside them. Top: one access-change planner, so a plan's preview and its apply are the same code. Its first slice (bulk assign and remove bundle) is built on `feat/planner-bundles` (tasks 1.1); the follow-ups are tasks 1.2 to 1.9.
 
 ### Design answers of 3 Nov — A-09 to A-12, ready to build
 
