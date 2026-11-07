@@ -71,10 +71,9 @@ func NewRouter() http.Handler {
 	// any role (July 2026 audit SC1/SC3).
 	mux.HandleFunc("GET /api/v1/users/{id}/grants", withCORS(withSelfOrOperatorAuth(handleGetUserDirectGrants)))
 	mux.HandleFunc("POST /api/v1/users/{id}/grants", withCORS(withOperatorAuth(handleUpsertUserDirectGrant)))
-	// What the automatic rules would also give with a role: read by every
-	// dialog that gives one (give, approve, adopt) before it is confirmed.
-	mux.HandleFunc("GET /api/v1/users/{id}/rule-preview", withCORS(withOperatorAuth(handleRulePreview)))
-	// What one act on this person would do, before anything is written (task 1.2).
+	// What one act on this person would do, before anything is written: give,
+	// remove, approve, extend, adopt, a bundle (tasks 1.2, 1.3). The one source
+	// of the rule sentences every give, approve and adopt shows.
 	mux.HandleFunc("GET /api/v1/users/{id}/plan", withCORS(withOperatorAuth(handleActPlan)))
 	// Removing a direct grant deletes the Syndra ledger row and queues the
 	// Zitadel revoke in one transaction. NOT the same object as

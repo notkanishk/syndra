@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,10 +40,11 @@ type ActPlan struct {
 	Said        []string `json:"said"`
 	Consequence string   `json:"consequence,omitempty"`
 	Rules       []string `json:"rules"`
-	// Delivery is straight_away, waits_for_you or none (it only cancels);
-	// Waits names the roles that wait.
+	// Delivery is straight_away, waits_for_you or none (nothing is sent);
+	// Waits names the roles that wait for you, Goes the ones sent straight away.
 	Delivery string   `json:"delivery,omitempty"`
 	Waits    []string `json:"waits"`
+	Goes     []string `json:"goes"`
 	// Cancels are the queued changes it cancels, as the cancel step reads them.
 	Cancels []WouldCancelChange `json:"cancels"`
 	// Fingerprint and CancelIDs go back with the write.
@@ -68,7 +70,7 @@ func seenFromQuery(r *http.Request) *services.Seen {
 	q := r.URL.Query()
 	f := planFields{Fingerprint: q.Get("fingerprint")}
 	if ids := q.Get("cancel_ids"); ids != "" {
-		f.CancelIDs = parseCancelAck(ids)
+		f.CancelIDs = parseCancelIDs(ids)
 	}
 	return f.seen()
 }
@@ -82,10 +84,19 @@ func handleActPlan(w http.ResponseWriter, r *http.Request) {
 		Op: q.Get("op"), UserID: r.PathValue("id"), BundleID: strings.TrimSpace(q.Get("bundle_id")),
 		ProjectID: strings.TrimSpace(q.Get("project_id")), RoleKey: strings.TrimSpace(q.Get("role_key")),
 		GrantID: strings.TrimSpace(q.Get("grant_id")), RequestID: strings.TrimSpace(q.Get("request_id")),
+		DriftID: strings.TrimSpace(q.Get("drift_id")),
 	}
 	if field, ok := missingActField(a); !ok {
 		jsonValidationErrorResponse(w, field+" is required for this op", map[string]string{field: "required"})
 		return
+	}
+	if days := q.Get("duration_days"); days != "" {
+		n, err := strconv.Atoi(days)
+		if err != nil || n < 0 {
+			jsonValidationErrorResponse(w, "duration_days must be zero or greater", map[string]string{"duration_days": "min=0"})
+			return
+		}
+		a.Days = n
 	}
 	ch, err := svcPlanAct(r.Context(), a)
 	switch {
@@ -102,7 +113,7 @@ func handleActPlan(w http.ResponseWriter, r *http.Request) {
 // missingActField names what an op needs and the query left out.
 func missingActField(a services.Action) (string, bool) {
 	switch a.Op {
-	case services.OpGive:
+	case services.OpGive, services.OpExtend:
 		if a.ProjectID == "" {
 			return "project_id", false
 		}
@@ -121,6 +132,10 @@ func missingActField(a services.Action) (string, bool) {
 		if a.BundleID == "" {
 			return "bundle_id", false
 		}
+	case services.OpAdopt:
+		if a.DriftID == "" {
+			return "drift_id", false
+		}
 	default:
 		return "op", false
 	}
@@ -130,14 +145,14 @@ func missingActField(a services.Action) (string, bool) {
 func actPlanOf(r *http.Request, ch services.Change) ActPlan {
 	p := ActPlan{
 		Effect: ch.Row.Effect, Refusal: ch.Refusal, Detail: ch.Row.Detail, Said: ch.Said,
-		Rules: ch.Rules, Delivery: ch.Delivery(), Waits: ch.Waits,
+		Rules: ch.Rules, Delivery: ch.Delivery(), Waits: ch.Waits, Goes: ch.Goes,
 		Cancels: nameCancels(r.Context(), ch.Cancels, nil), Fingerprint: ch.Row.Fingerprint, CancelIDs: ch.Row.CancelIDs,
 	}
 	if ch.Row.Effect != services.EffectApply {
 		p.Consequence = ch.Row.Consequence
 	}
 	// Lists, never null: the sheet reads them without asking.
-	for _, s := range []*[]string{&p.Said, &p.Rules, &p.Waits, &p.CancelIDs} {
+	for _, s := range []*[]string{&p.Said, &p.Rules, &p.Waits, &p.Goes, &p.CancelIDs} {
 		if *s == nil {
 			*s = []string{}
 		}

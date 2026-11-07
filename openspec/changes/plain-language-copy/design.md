@@ -323,6 +323,33 @@ then "Read the line above, then approve again." Never "stale" or "plan".
 this only cancels a change that's waiting; nothing is sent." Every staged
 change's cancels are one step: "Cancel all 3 and apply 2 changes".
 
+**Extending says nothing goes to Zitadel, because nothing does** (architecture
+deepening 1.2a; settled 5 Nov: Zitadel has no end dates, Syndra ends access on
+the day). The plan: "Keeps Member in Laser Lab until 3 Dec 2026." then
+"Nothing is sent to Zitadel, which has no end dates. Syndra ends the access on
+the day." An extension never waits for you and is never "queued"; its forecast
+is the act's own ("Will be extended"). It asks before it cancels a removal
+still waiting, like every other act ("Extending it cancels the removal Sam Lee
+queued 2h ago."). Refused: "Already ends later than this would make it.", "Has
+no direct grant with an end to extend." or, ticked rows that have gone, "None
+of the selected grants are theirs any more." with "Read the list again to see
+what they have now."
+
+**Every bulk row is the planner's sentence** (architecture deepening 1.3),
+the same words the single act says: a give "Gains Member in Laser Lab." then
+"Expires 3 Dec 2026." / "No expiry."; a removal "Loses …" or, with no direct
+grant, "Holds no direct grant here." with "Keeps the role another way, through
+a bundle or an automatic rule. Remove that instead."; an approval the single
+approval's words, a refusal ending "Decline it to close the request."; an
+adoption "Adopted into Syndra (Member in Laser Lab)." then "Records a direct
+grant, so the access stops being unexplained and starts being owned. Nothing
+is sent to Zitadel for it."; a publish or move "Moves from v2 to v3." then
+"Gains …" / "Loses …", "Stays on v2.", "Already on v3.", or "Everything in
+this version they already hold another way, so nothing is sent to Zitadel."
+What the rules add, what waits ("Giving Trained in Laser Lab waits for you to
+send.") and what it cancels follow, in that order. Role names, never keys; no
+arrows.
+
 **The drain switch is said only once it is read.** Until the indicators answer (or when they can't), nothing says "on its own" or "until you press Send": the sentence says what is known and ends on "Open Pending changes to see what has not reached Zitadel yet." The rail pill says "Syndra stopped sending N changes" for a give-up, the same words as Home and Pending changes.
 
 ## 6. Vocabulary

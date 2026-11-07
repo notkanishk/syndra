@@ -1,6 +1,9 @@
 package services
 
-import "testing"
+import (
+	"syndra/internal/access"
+	"testing"
+)
 
 // The departed guard has to speak the vocabulary the directory produces.
 //
@@ -34,7 +37,7 @@ func TestIsDepartedStatus_CoversWhatTheDirectoryEmits(t *testing.T) {
 	}
 
 	for state, wantDeparted := range emitted {
-		if got := isDepartedStatus(state); got != wantDeparted {
+		if got := access.Left(state); got != wantDeparted {
 			t.Errorf("isDepartedStatus(%q) = %v, want %v — the directory emits this state and the "+
 				"guard has not been taught what it means", state, got, wantDeparted)
 		}
@@ -45,7 +48,7 @@ func TestIsDepartedStatus_CoversWhatTheDirectoryEmits(t *testing.T) {
 // slips through on " Deleted " is a leaver who slipped through.
 func TestIsDepartedStatus_IgnoresCaseAndSpacing(t *testing.T) {
 	for _, s := range []string{"DELETED", " deleted ", "Locked", "  INACTIVE"} {
-		if !isDepartedStatus(s) {
+		if !access.Left(s) {
 			t.Errorf("isDepartedStatus(%q) = false, want true", s)
 		}
 	}

@@ -2,13 +2,11 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
-	"time"
 
-	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/extcall"
 	"syndra/internal/services"
@@ -100,100 +98,9 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 		missingPlanCitation(w)
 		return
 	}
-
-	// Bundle ops go through the access-change planner (services/planner.go).
-	if services.PlannedOp(input.Op) {
-		applyPlannedBulk(w, r, input, planCitation(planSurfaceBulkGrants, actor, requestFP, req.PlanID))
-		return
-	}
-
-	// Re-rehearsed for its FINGERPRINTS, not for its verdicts. The stored
-	// outcomes are what the apply acts on; this read is how the backend asks
-	// whether the state behind them still holds. Where the two agree the fresh
-	// verdicts equal the stored ones anyway — same inputs, same function — and
-	// where they disagree the apply is refused rather than quietly re-decided.
-	//
-	// Deferred until the citation is accepted: a bogus plan id must not cost a
-	// full cohort read.
-	var current map[string]services.BulkOutcome
-	var rehearsalErr error
-	subjects, err := claimPlan(r.Context(), planSurfaceBulkGrants, actor, requestFP, req.PlanID,
-		func() map[string]services.BulkOutcome {
-			live, err := svcRehearseBulk(r.Context(), input)
-			if err != nil {
-				// Nothing verifies. An empty index reports every subject as
-				// moved, which is the fail-closed direction, and the error is
-				// reported over the staleness below.
-				rehearsalErr = err
-				return nil
-			}
-			current = indexOutcomes(live.Outcomes)
-			return current
-		})
-	if rehearsalErr != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "BULK_REHEARSAL_ERROR", rehearsalErr.Error())
-		return
-	}
-	if err != nil {
-		writePlanCitationError(w, err)
-		return
-	}
-
-	plan := planApprovedRows(input.Op, subjects, current)
-	// Reviewed: the plan's rows named every queued change this cancels.
-	db.CancellationsReviewed(r.Context())
-	applyBulkPlan(r, &plan, input)
-	// 202, not 200, and the rule is the same everywhere in this API: 202 when
-	// the write is RECORDED and something else has to carry it to the target,
-	// 200 when it is done by the time the response is written. A bulk grant
-	// lands in the outbox, so the honest code is the one that says "accepted"
-	// — the drift resolutions below answer 200 because their write is finished.
-	jsonResponse(w, http.StatusAccepted, plan)
-}
-
-// applyBulkPlan executes the actionable rows in place, rewriting each outcome
-// to what actually happened. Rows the rehearsal blocked or found already-done
-// are left exactly as they are — a report an operator can diff against the plan
-// they approved.
-//
-// Per-person failure is isolated: one person's error marks that row failed and
-// the rest continue. A bulk operation that aborts halfway leaves the operator
-// with no idea which half landed, which is strictly worse than a partial result
-// that says so.
-func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.BulkRequest) {
-	actor := resolveActor(r, "")
-	plan.Applied = true
-
-	for i := range plan.Outcomes {
-		out := &plan.Outcomes[i]
-		if out.Effect != services.EffectApply {
-			continue
-		}
-		outboxIDs, queued, retry, err := applyBulkOne(r, actor, input, *out)
-		if err != nil {
-			out.Effect = services.EffectFailed
-			out.Detail = "Didn't go through: " + err.Error()
-			continue
-		}
-
-		// Recompile from the just-committed ledger so access is effective
-		// immediately, on a context detached from the request — a client that
-		// disconnects mid-batch must not leave people with stale claims.
-		rebuildUserCacheDetachedFn(r.Context(), out.UserID)
-
-		// Then project the rows upstream, exactly as the single-person handlers
-		// do on ?apply=true. Without this, apply meant "wrote it down": the
-		// operator read a plan, confirmed it, saw every row marked applied, and
-		// the roles were still whatever they had been in Zitadel until somebody
-		// happened to visit the governance queue. Bulk removal was the sharp
-		// end — access reported as gone that was still live.
-		if queued == "" {
-			queued, retry = projectUpstream(r.Context(), outboxIDs)
-		}
-		settleBulkRow(out, queued, retry, input.Op)
-	}
-
-	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+	// Every bulk op goes through the access-change planner (task 1.3). 202:
+	// the write is recorded and the outbox carries it to Zitadel.
+	applyPlannedBulk(w, r, input, planCitation(planSurfaceBulkGrants, actor, requestFP, req.PlanID), http.StatusAccepted)
 }
 
 // settleBulkRow says what became of a row whose writes are committed, from
@@ -219,33 +126,85 @@ func settleBulkRow(out *services.BulkOutcome, queued string, retry *extcall.Retr
 	}
 }
 
-// applyPlannedBulk applies a bulk op the planner decides (bundle assign and
-// remove). The service spends the plan, re-reads and re-plans under the lock,
-// and writes only if every row's Change is the reviewed one; a stale plan is
-// refused unspent with nothing written. Delivery follows the commit, outside
-// the lock, as each row's Change decided it (services.DeliverChange), and
-// each row is settled from its own outbox rows.
-func applyPlannedBulk(w http.ResponseWriter, r *http.Request, input services.BulkRequest, cite db.PlanCitation) {
+// applyPlannedBulk applies a bulk plan through the planner. The service
+// spends the plan, re-reads and re-plans under the lock, and writes only if
+// every row's Change is the reviewed one; a stale plan is refused unspent
+// with nothing written. Delivery follows the commit, outside the lock, as
+// each row's Change decided it (services.DeliverChange), and each row is
+// settled from its own outbox rows.
+func applyPlannedBulk(w http.ResponseWriter, r *http.Request, input services.BulkRequest, cite db.PlanCitation, status int) {
+	plan, ok := applyPlanned(w, r, input, cite)
+	if ok {
+		jsonResponse(w, status, plan)
+	}
+}
+
+// applyPlanned is applyPlannedBulk's work, for a surface that answers with
+// more than the plan (a publish adds its version). False when it answered
+// with the refusal.
+func applyPlanned(w http.ResponseWriter, r *http.Request, input services.BulkRequest, cite db.PlanCitation) (services.BulkPlan, bool) {
 	plan, written, err := svcApplyPlannedBulk(r.Context(), input, cite)
 	var stale *services.StalePlan
-	if errors.As(err, &stale) {
+	switch {
+	case errors.As(err, &stale):
 		err = &staleSubjects{IDs: stale.IDs}
+	case errors.Is(err, services.ErrPlanRequired):
+		err = errPlanCitationMissing
 	}
-	if err != nil {
+	var unanswered *services.ErrIncludersUnanswered
+	switch {
+	case err == nil:
+	case strings.HasPrefix(err.Error(), "nothing to publish"):
+		// Somebody else published while the dialog was open, or the draft was
+		// discarded: a conflict with the world, not a server fault.
+		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_PUBLISH", err.Error()+". Nothing was changed.")
+		return plan, false
+	case errors.As(err, &unanswered):
+		jsonErrorResponse(w, http.StatusConflict, "INCLUDERS_UNANSWERED",
+			"Say whether each bundle that includes this one takes the new version: "+strings.Join(unanswered.Names, ", ")+". Nothing was changed.")
+		return plan, false
+	default:
 		writePlanCitationError(w, err)
-		return
+		return plan, false
 	}
 	for i := range plan.Outcomes {
 		out := &plan.Outcomes[i]
-		if out.Effect != services.EffectApply {
+		ch, wrote := written[out.UserID]
+		if out.Effect != services.EffectApply || !wrote {
 			continue
 		}
-		rebuildUserCacheDetachedFn(r.Context(), out.UserID)
-		queued, retry := delivered(svcDeliverChange(r.Context(), written[out.UserID]))
-		settleBulkRow(out, queued, retry, input.Op)
+		rebuildUserCacheDetachedFn(r.Context(), ch.UserID)
+		settlePlannedRow(r.Context(), out, ch, svcDeliverChange(r.Context(), ch), input.Op)
 	}
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
-	jsonResponse(w, http.StatusAccepted, plan)
+	return plan, true
+}
+
+// settlePlannedRow says what became of one row from its delivery. A row
+// with an act of its own (a give, an approval) is judged by its own write,
+// and the roles a rule gave that wait are counted apart, never blamed on it
+// (final verification N4).
+func settlePlannedRow(ctx context.Context, out *services.BulkOutcome, ch services.Change, d services.Delivery, op string) {
+	own := ""
+	if op == services.BulkOpAssignRole || op == services.OpApprove {
+		own = ch.Writes[0].OutboxID
+	}
+	if own == "" {
+		queued, retry := delivered(d)
+		settleBulkRow(out, queued, retry, op)
+		return
+	}
+	queued, retry := d.ReasonFor(own), (*extcall.RetryState)(nil)
+	if queued == db.WaitReasonHalted(db.HaltRetrying) {
+		retry = d.Drain.Retry
+	}
+	if queued == "" && slices.Contains(d.Sent, own) {
+		if st, err := dbGetPropagationStatus(ctx, own); err == nil && st != "" && st != "applied" {
+			queued = db.WaitReasonHalted("not_confirmed")
+		}
+	}
+	out.RuleWaiting = d.WaitingBesides(own)
+	settleBulkRow(out, queued, retry, op)
 }
 
 // refusalWords is a refusal's plain cause, said after "Zitadel refused this:".
@@ -274,33 +233,6 @@ func refusedDetail(reason string, revocation bool) string {
 		step = "Ask whoever runs Zitadel to let Syndra's service account change grants. " + step
 	}
 	return "Recorded in Syndra. Zitadel refused this: " + words + ". " + step
-}
-
-// projectUpstream drains the rows one person's operation enqueued and returns
-// an empty string when every one of them reached Zitadel, or a short reason when
-// any did not.
-//
-// A drain reports failure two ways and only one of them is an error: an
-// unreachable Zitadel or a drain already in progress comes back as Halted with a
-// nil error, so checking `err` alone reads a halted batch as success. Anything
-// that is not a confirmed apply is treated as not-yet-applied, which is the
-// conservative direction — under-claiming sends an operator to a queue that
-// turns out to be empty, over-claiming tells them a door is locked when it is
-// open.
-func projectUpstream(ctx context.Context, outboxIDs []string) (string, *extcall.RetryState) {
-	ids := make([]string, 0, len(outboxIDs))
-	for _, id := range outboxIDs {
-		// An empty id is nothing queued for this one: nothing to watch land.
-		if id != "" {
-			ids = append(ids, id)
-		}
-	}
-	if len(ids) == 0 {
-		return "", nil
-	}
-	// The one rule (services.Deliver): a role that waits waits here too, and
-	// a send Zitadel didn't take is retried on its own (halted:retrying).
-	return delivered(svcDeliver(ctx, ids, false))
 }
 
 // delivered is a delivery's answer for one bulk row: "" when every row it
@@ -336,101 +268,4 @@ func queuedDetail(reason string, revocation bool) string {
 	default:
 		return "Recorded in Syndra, not in Zitadel yet. It is in Pending changes until you send it."
 	}
-}
-
-// applyBulkOne performs one person's share of the operation and returns the
-// outbox rows the caller must drain. Bundle ops never reach it: the planner
-// applies them (applyPlannedBulk).
-func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out services.BulkOutcome) ([]string, string, *extcall.RetryState, error) {
-	ctx := r.Context()
-
-	switch input.Op {
-	case services.BulkOpAssignRole:
-		ids, err := enqueueBulkGrant(ctx, actor, out.UserID, input.ProjectID, input.RoleKey, input.Reason, input.DurationDays, db.EndKept)
-		if err != nil {
-			return nil, "", nil, err
-		}
-		return ids, "", nil, nil
-
-	case services.BulkOpRemoveRole:
-		var ids []string
-		for _, grantID := range out.GrantIDs {
-			res, err := svcDeleteDirectGrant(ctx, out.UserID, grantID, actor, input.Reason)
-			if err != nil {
-				return nil, "", nil, err
-			}
-			// There may be none — every role the grant carried is still covered
-			// by another source, so nothing is queued and nothing is drained.
-			ids = append(ids, res.OutboxIDs...)
-		}
-		return ids, "", nil, nil
-
-	case services.BulkOpExtend:
-		// The grant ledger upserts on (user, project, role), so re-enqueuing
-		// each expiring grant with a later date renews it in place rather than
-		// creating a duplicate. The rehearsal already identified exactly which
-		// grants those are.
-		grants, err := svcUserDirectGrants(ctx, out.UserID)
-		if err != nil {
-			return nil, "", nil, err
-		}
-		wanted := map[string]struct{}{}
-		for _, id := range out.GrantIDs {
-			wanted[id] = struct{}{}
-		}
-		var ids []string
-		for _, g := range grants {
-			if _, ok := wanted[g.ID]; !ok {
-				continue
-			}
-			queued, err := enqueueBulkGrant(ctx, actor, out.UserID, g.ProjectID, g.RoleKey, input.Reason, input.DurationDays, db.EndSet)
-			if err != nil {
-				return nil, "", nil, err
-			}
-			ids = append(ids, queued...)
-		}
-		return ids, "", nil, nil
-	}
-
-	return nil, "", nil, nil
-}
-
-// enqueueBulkGrant writes the ledger + audit + outbox row in one transaction,
-// exactly as the single-grant handler does, and returns the outbox ids: its
-// own and the rows the mapping rules added (db.FollowRules). The
-// Zitadel mutation itself happens on the drain the caller runs afterwards — a
-// bulk write is still not allowed to call the Management API from a handler.
-func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, reason string, durationDays int, endRule db.EndRule) ([]string, error) {
-	var expiresAt *time.Time
-	if durationDays > 0 {
-		expiry := clock.EndAfterDays(time.Now(), durationDays)
-		expiresAt = &expiry
-	}
-
-	payload, _ := json.Marshal(map[string]any{
-		"project_id":    projectID,
-		"role_key":      roleKey,
-		"reason":        reason,
-		"duration_days": durationDays,
-		"bulk":          true,
-	})
-
-	res, err := grantDirect(ctx, db.EnqueueParams{
-		UserID:    userID,
-		ProjectID: projectID,
-		RoleKeys:  []string{roleKey},
-		GrantedBy: actor,
-		Reason:    reason,
-		ExpiresAt: expiresAt,
-		Source:    "direct",
-		OpType:    "add",
-		// Assign reaches only people without the role (the plan says no change
-		// for the rest); extend sets the later end its plan chose.
-		EndRule:     endRule,
-		PayloadJSON: string(payload),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return res.OutboxIDs(), nil
 }

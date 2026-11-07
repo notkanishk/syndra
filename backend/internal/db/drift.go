@@ -391,8 +391,9 @@ func CloseGoneDrift(ctx context.Context, driftID, target string) error {
 //
 // The adopted row itself never goes out, but the rules still follow it
 // (ADR-006: adopting is when a rule fires): the returned ids are the rows the
-// mapping rules queued, which wait in Pending changes for the operator.
-func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) ([]string, error) {
+// mapping rules queued. planned is those rows as the planner decided them
+// (task 1.3), each with its delivery; none means the rules follow here.
+func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams, planned ...EnqueueParams) ([]string, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin attribute tx: %w", err)
@@ -408,7 +409,7 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams) ([]s
 	if err != nil {
 		return nil, err
 	}
-	ids, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{p}, key)
+	ids, err := enqueueWrites(ctx, tx, nil, append([]EnqueueParams{p}, planned...), key)
 	if err != nil {
 		return nil, fmt.Errorf("attribute ledger writes: %w", err)
 	}

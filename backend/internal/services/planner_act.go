@@ -32,11 +32,19 @@ const (
 	OpApprove     = "approve"
 )
 
-func roleOp(op string) bool { return op == OpGive || op == OpRemoveGrant || op == OpApprove }
+// OpExtend moves the end of grants a person has (a ledger edit: Zitadel has
+// no end dates, Syndra ends access on the day; settled 5 Nov). The bulk op
+// and the single act share it.
+const OpExtend = BulkOpExtend
+
+func roleOp(op string) bool {
+	return op == OpGive || op == OpRemoveGrant || op == OpApprove || op == BulkOpAssignRole || op == BulkOpRemoveRole
+}
 
 // SingleOp reports whether op is an act the planner plans for one person.
 func SingleOp(op string) bool {
-	return roleOp(op) || op == BulkOpAssignBundle || op == BulkOpRemoveBundle
+	return op == OpGive || op == OpRemoveGrant || op == OpApprove || op == OpExtend ||
+		op == BulkOpAssignBundle || op == BulkOpRemoveBundle
 }
 
 // planRole is the planner for an act on one role: the same guards, closure,
@@ -50,9 +58,14 @@ func planRole(ch Change, a Action, s PlanSnapshot, profile models.UserProfile, p
 	var own *db.EnqueueParams
 	var detail string
 
+	var said []string
 	switch a.Op {
-	case OpGive, OpApprove:
+	case OpGive, OpApprove, BulkOpAssignRole:
 		if access.Left(profile.Status) {
+			if a.Op == BulkOpAssignRole {
+				return ch.decided(a, EffectBlocked, "departed:"+profile.Status,
+					fmt.Sprintf("Account is %s. Remove it from the selection to continue.", strings.ToLower(profile.Status)), "")
+			}
 			return ch.decided(a, EffectBlocked, "departed:"+profile.Status,
 				fmt.Sprintf("Their account is %s in Zitadel, so it can't be given access.", strings.ToLower(profile.Status)),
 				"If they still need it, make the account active in Zitadel first.")
@@ -60,19 +73,37 @@ func planRole(ch Change, a Action, s PlanSnapshot, profile models.UserProfile, p
 		p := db.EnqueueParams{UserID: a.UserID, ProjectID: a.ProjectID, RoleKeys: []string{a.RoleKey},
 			Source: "direct", OpType: "add", EndRule: db.EndKept}
 		detail = fmt.Sprintf("Gains %s.", role)
+		if a.Op == BulkOpAssignRole {
+			// Giving is for people without the role (owner, 15 Oct); an end
+			// that needs moving is an extension, its own operation. Judged
+			// from the plan's one snapshot, not a read per person.
+			if g := findGrant(person.Direct, a.ProjectID, a.RoleKey); g != nil && g.ExpiresAt == nil {
+				return ch.decided(a, EffectNoChange, "held", "Already has this, with no end.", "")
+			} else if g != nil {
+				return ch.decided(a, EffectNoChange, "held",
+					fmt.Sprintf("Already has this, until %s.", formatDay(*g.ExpiresAt)), "Extend it instead.")
+			}
+			if effectiveClosure(before, s.Access.Rules)[k] {
+				return ch.decided(a, EffectNoChange, "held", "Already has this another way, through a bundle or an automatic rule.", "")
+			}
+			p.ExpiresAt = endAfter(s.Now, &a.Days)
+			said = append(said, expiryLine(p.ExpiresAt))
+		}
 		if a.Op == OpApprove {
 			if s.Request.Status != "pending" {
-				return ch.decided(a, EffectBlocked, "resolved", fmt.Sprintf("Already %s.", s.Request.Status), "")
+				return ch.decided(a, EffectNoChange, "resolved", SettledDetail(s.Request.Status), "")
 			}
 			plan, err := PlanApproval(s.Request, s.Holding, s.Now)
 			switch {
 			case errors.Is(err, ErrRequestAlreadyHeld):
-				return ch.decided(a, EffectNoChange, "held", fmt.Sprintf("Already has %s.", role), "")
+				return ch.decided(a, EffectNoChange, "held", fmt.Sprintf("Already has %s.", role),
+					"Decline it to close the request.")
 			case errors.Is(err, ErrExtensionShortens):
 				return ch.decided(a, EffectNoChange, "runs_past",
-					fmt.Sprintf("Already has %s past the end this asks for.", role), "")
+					fmt.Sprintf("Already has %s past the end this asks for.", role), "Decline it to close the request.")
 			case err != nil:
-				return ch.decided(a, EffectBlocked, "ask_ended", "The end date this asked for has already passed.", "")
+				return ch.decided(a, EffectBlocked, "ask_ended", "The end date this asked for has already passed.",
+					"Decline it, and they can ask again.")
 			}
 			ch.Approval = plan
 			p.SourceRef, p.ExpiresAt, p.EndRule, p.Reason = s.Request.ID, plan.ExpiresAt, plan.EndRule, ApprovalReason(plan.Effect)
@@ -82,12 +113,27 @@ func planRole(ch Change, a Action, s PlanSnapshot, profile models.UserProfile, p
 			case EffectGiveAgain:
 				detail = fmt.Sprintf("Gains %s again.", role)
 			}
-		} else if s.Holding.Kind != models.HoldingNone {
+		} else if a.Op == OpGive && s.Holding.Kind != models.HoldingNone {
 			return ch.decided(a, EffectNoChange, "held", fmt.Sprintf("Already has %s.", role), "")
 		}
 		own = &p
 		after[k] = true
-	case OpRemoveGrant:
+	case OpRemoveGrant, BulkOpRemoveRole:
+		if a.Op == BulkOpRemoveRole {
+			// Removal in bulk is source-specific by design: it removes a direct
+			// grant and nothing else. Holding the role only another way is
+			// untouched, and saying so is the whole point.
+			g := findGrant(person.Direct, a.ProjectID, a.RoleKey)
+			switch {
+			case g == nil && effectiveClosure(before, s.Access.Rules)[k]:
+				return ch.decided(a, EffectNoChange, "not_held", "Holds no direct grant here.",
+					"Keeps the role another way, through a bundle or an automatic rule. Remove that instead.")
+			case g == nil:
+				return ch.decided(a, EffectNoChange, "not_held", "Doesn't hold this role.", "")
+			}
+			a.GrantID = g.ID
+			ch.Row.GrantIDs = []string{g.ID}
+		}
 		var kept []models.DirectGrant
 		for _, g := range person.Direct {
 			if g.ID == a.GrantID {
@@ -162,7 +208,6 @@ func planRole(ch Change, a Action, s PlanSnapshot, profile models.UserProfile, p
 		}
 	}
 
-	var said []string
 	switch {
 	case own != nil && ch.Writes[0].Delivery == DeliveryNone:
 		detail = fmt.Sprintf("The removal of %s that was waiting is cancelled, so nothing is sent to Zitadel. They keep it.", role)
@@ -238,6 +283,8 @@ var (
 	svcApproveRequestAndEnqueue = db.ApproveRequestAndEnqueue
 	svcEnqueueDirectGrant       = db.EnqueueDirectGrantPropagation
 	svcResolveAccessRequest     = db.ResolveAccessRequest
+	svcGetDriftItem             = db.GetDriftItem
+	svcAttributeDriftTx         = db.AttributeDriftTx
 )
 
 // actDirectory is what the act reads from Zitadel, before the lock: the
@@ -271,8 +318,8 @@ func actDirectory(ctx context.Context, a Action) PlanSnapshot {
 // decided it since.
 func actSnapshot(ctx context.Context, a Action, s PlanSnapshot) (PlanSnapshot, error) {
 	var err error
-	if !roleOp(a.Op) {
-		s, err = planSnapshot(ctx, BulkRequest{Op: a.Op, BundleID: a.BundleID}, s, []string{a.UserID})
+	if a.Op == BulkOpAssignBundle || a.Op == BulkOpRemoveBundle || a.Op == OpAdopt {
+		s, _, err = planSnapshot(ctx, BulkRequest{Op: a.Op, BundleID: a.BundleID}, s, []string{a.subject()})
 		return s, err
 	}
 	s.Now = clock.Now()
@@ -281,7 +328,7 @@ func actSnapshot(ctx context.Context, a Action, s PlanSnapshot) (PlanSnapshot, e
 			return s, fmt.Errorf("%w: %v", ErrRequestNotFound, err)
 		}
 	}
-	if a.Op != OpRemoveGrant {
+	if a.Op == OpGive || a.Op == OpApprove {
 		if s.Holding, err = svcRequestHolding(ctx, a.UserID, a.ProjectID, a.RoleKey); err != nil {
 			return s, err
 		}
@@ -293,6 +340,14 @@ func actSnapshot(ctx context.Context, a Action, s PlanSnapshot) (PlanSnapshot, e
 // resolveAction fills an approval's person and role from its request, and a
 // removal's role from the grant, so the act names what it is about.
 func resolveAction(ctx context.Context, a Action) (Action, error) {
+	if a.Op == OpAdopt {
+		// The person behind the drift row, for the directory; a row that has
+		// gone is the plan's to say ("No longer in the queue").
+		if item, err := svcGetDriftItem(ctx, a.DriftID); err == nil {
+			a.UserID = item.UserID
+		}
+		return a, nil
+	}
 	if a.Op != OpApprove {
 		return a, nil
 	}
@@ -367,8 +422,13 @@ func ApplyAct(ctx context.Context, a Action, w ActWrite, seen *Seen) (Change, er
 // writeAct writes one act's Change in the caller's transaction and returns it
 // with each write's outbox row.
 func writeAct(ctx context.Context, a Action, w ActWrite, ch Change, snap PlanSnapshot) (Change, error) {
-	if !roleOp(a.Op) {
-		return writeChange(ctx, BulkRequest{Op: a.Op, Actor: w.Actor, BundleID: a.BundleID}, ch)
+	switch a.Op {
+	case BulkOpAssignBundle, BulkOpRemoveBundle:
+		return writeChange(ctx, BulkRequest{Op: a.Op, Actor: w.Actor, Reason: w.Reason, BundleID: a.BundleID}, ch)
+	case OpExtend:
+		return writeExtend(ctx, w, ch)
+	case OpAdopt:
+		return writeAdopt(ctx, a, w, ch)
 	}
 	if err := deferTargetConvergence(ctx, w.Actor, a.UserID, ch.changed()); err != nil {
 		return ch, err
@@ -376,16 +436,20 @@ func writeAct(ctx context.Context, a Action, w ActWrite, ch Change, snap PlanSna
 	params := ch.params(w.Actor, w.Reason)
 	var ids []string
 	switch a.Op {
-	case OpRemoveGrant:
+	case OpRemoveGrant, BulkOpRemoveRole:
 		reason := w.Reason
 		if reason == "" {
 			reason = "Direct access removal"
 		}
+		grantID := a.GrantID
+		if a.Op == BulkOpRemoveRole {
+			grantID = ch.Row.GrantIDs[0]
+		}
 		var err error
-		if ids, err = svcDeleteDirectGrantAndEnqueue(ctx, w.Actor, a.UserID, a.GrantID, reason, ch.params(w.Actor, reason)); err != nil {
+		if ids, err = svcDeleteDirectGrantAndEnqueue(ctx, w.Actor, a.UserID, grantID, reason, ch.params(w.Actor, reason)); err != nil {
 			return ch, err
 		}
-	case OpGive, OpApprove:
+	case OpGive, OpApprove, BulkOpAssignRole:
 		// The act's own write keeps what the planner and the operator set on
 		// it; the rule rows are FollowRules' shape, decided by the planner.
 		own := ch.Writes[0].EnqueueParams
@@ -395,10 +459,17 @@ func writeAct(ctx context.Context, a Action, w ActWrite, ch Change, snap PlanSna
 		}
 		var res db.EnqueueResult
 		var err error
-		if a.Op == OpGive {
+		switch a.Op {
+		case OpGive:
 			own.Reason, own.ExpiresAt, own.EndRule, own.PayloadJSON = w.Reason, w.Give.ExpiresAt, w.Give.EndRule, w.Give.PayloadJSON
 			res, err = svcEnqueueDirectGrant(ctx, own, params[1:]...)
-		} else {
+		case BulkOpAssignRole:
+			// The end is the plan's (from the snapshot's day).
+			payload, _ := json.Marshal(map[string]any{"project_id": a.ProjectID, "role_key": a.RoleKey,
+				"reason": w.Reason, "duration_days": a.Days, "bulk": true})
+			own.Reason, own.PayloadJSON = w.Reason, string(payload)
+			res, err = svcEnqueueDirectGrant(ctx, own, params[1:]...)
+		default:
 			payload, _ := json.Marshal(map[string]string{"user_id": a.UserID, "project_id": a.ProjectID, "role_key": a.RoleKey, "from_request": a.RequestID})
 			own.PayloadJSON = string(payload)
 			var endedBefore, endsAfter *time.Time

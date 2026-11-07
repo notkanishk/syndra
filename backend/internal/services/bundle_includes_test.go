@@ -100,14 +100,14 @@ func TestPublish_AsksEveryIncludingBundleAndUpdatesOnlyDrafts(t *testing.T) {
 		return models.BundleInclude{}, nil
 	}
 
-	_, _, err := PublishBundleVersion(context.Background(), "admin", PublishRequest{BundleID: "b1",
+	_, _, err := publishNow(t, PublishRequest{BundleID: "b1",
 		Includers: []IncluderChoice{{BundleID: "new-members", Action: "update"}}})
 	var unanswered *ErrIncludersUnanswered
 	if !errors.As(err, &unanswered) || len(unanswered.Names) != 1 || unanswered.Names[0] != "Staff" {
 		t.Fatalf("Staff was not answered: %v", err)
 	}
 
-	_, _, err = PublishBundleVersion(context.Background(), "admin", PublishRequest{BundleID: "b1",
+	_, _, err = publishNow(t, PublishRequest{BundleID: "b1",
 		Includers: []IncluderChoice{{BundleID: "new-members", Action: "update"}, {BundleID: "staff", Action: "leave"}}})
 	if err != nil {
 		t.Fatal(err)

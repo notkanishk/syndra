@@ -181,7 +181,7 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string, planned ...Enqu
 // which the audit rows carry too when Change history shows the writes
 // (cascadeGroupVisible). Every row passes withdrawUndelivered first, the one
 // place a queued change is cancelled and the cancel gate is asked
-// (CancellationsNamed / CancellationsReviewed): a row that only cancelled one
+// (CancellationsNamed): a row that only cancelled one
 // is not written. A row carries the operator's reason when the change's
 // audit rows give one (CascadeAudit.Reason), and a write the planner decided
 // waits for you is written waiting (EnqueueParams.WaitReason).

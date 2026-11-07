@@ -148,6 +148,10 @@ func TestHandleActPlan_RequiredFieldsPerOp(t *testing.T) {
 		{"op=approve", "request_id"},
 		{"op=assign_bundle", "bundle_id"},
 		{"op=remove_bundle", "bundle_id"},
+		{"op=extend&role_key=r&duration_days=30", "project_id"},
+		{"op=extend&project_id=p&duration_days=30", "role_key"},
+		{"op=adopt", "drift_id"},
+		{"op=adopt&drift_id=%20", "drift_id"},
 		{"op=nonsense", "op"},
 		{"", "op"},
 	}
@@ -183,6 +187,9 @@ func TestHandleActPlan_PassesTheActionThrough(t *testing.T) {
 		{"op=approve&request_id=r1", services.Action{Op: "approve", UserID: "u1", RequestID: "r1"}},
 		{"op=assign_bundle&bundle_id=b1", services.Action{Op: "assign_bundle", UserID: "u1", BundleID: "b1"}},
 		{"op=remove_bundle&bundle_id=b1", services.Action{Op: "remove_bundle", UserID: "u1", BundleID: "b1"}},
+		{"op=extend&project_id=p1&role_key=trained&duration_days=30",
+			services.Action{Op: services.OpExtend, UserID: "u1", ProjectID: "p1", RoleKey: "trained", Days: 30}},
+		{"op=adopt&drift_id=%20d1%20", services.Action{Op: services.OpAdopt, UserID: "u1", DriftID: "d1"}},
 	}
 	for _, c := range cases {
 		t.Run(c.query, func(t *testing.T) {
@@ -195,6 +202,28 @@ func TestHandleActPlan_PassesTheActionThrough(t *testing.T) {
 			}
 			if got != c.want {
 				t.Fatalf("planned %+v, want %+v", got, c.want)
+			}
+		})
+	}
+}
+
+// An extension's days are a count: anything else is refused before the planner.
+func TestHandleActPlan_ABadDurationIs400(t *testing.T) {
+	orig := svcPlanAct
+	t.Cleanup(func() { svcPlanAct = orig })
+	svcPlanAct = func(context.Context, services.Action) (services.Change, error) {
+		t.Fatal("a bad duration must not reach the planner")
+		return services.Change{}, nil
+	}
+	for _, days := range []string{"soon", "-1", "3.5"} {
+		t.Run(days, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/users/u1/plan?op=extend&project_id=p&role_key=r&duration_days="+days, nil)
+			req.SetPathValue("id", "u1")
+			rr := httptest.NewRecorder()
+			handleActPlan(rr, req)
+			wantError(t, rr, http.StatusBadRequest, "VALIDATION_FAILED")
+			if details, _ := decodeMap(t, rr.Body.String())["details"].(map[string]any); details["duration_days"] != "min=0" {
+				t.Fatalf("expected details.duration_days=min=0, got %v", details)
 			}
 		})
 	}
@@ -250,7 +279,7 @@ func TestHandleActPlan_SerialisesTheSheetAndNeverNullLists(t *testing.T) {
 		},
 		Rules: []string{"Also gives Safety, by the automatic rule from trained."},
 		Said:  []string{"Also gives Safety, by the automatic rule from trained."},
-		Waits: []string{"p/safety"},
+		Waits: []string{"p/safety"}, Goes: []string{"p/laser"},
 		Row: services.BulkOutcome{
 			Effect: services.EffectApply, Detail: "gains trained", Fingerprint: "fp-1", CancelIDs: []string{cancelID},
 		},
@@ -261,7 +290,7 @@ func TestHandleActPlan_SerialisesTheSheetAndNeverNullLists(t *testing.T) {
 	if full["delivery"] != services.DeliveryWaits {
 		t.Errorf("delivery = %v, want %s", full["delivery"], services.DeliveryWaits)
 	}
-	for k, n := range map[string]int{"cancel_ids": 1, "cancels": 1, "rules": 1, "waits": 1, "said": 1} {
+	for k, n := range map[string]int{"cancel_ids": 1, "cancels": 1, "rules": 1, "waits": 1, "goes": 1, "said": 1} {
 		if l, ok := full[k].([]any); !ok || len(l) != n {
 			t.Errorf("%s = %v, want a list of %d", k, full[k], n)
 		}
@@ -278,7 +307,7 @@ func TestHandleActPlan_SerialisesTheSheetAndNeverNullLists(t *testing.T) {
 		Refusal: "held",
 		Row:     services.BulkOutcome{Effect: services.EffectBlocked, Detail: "already holds it", Consequence: "Nothing to give."},
 	})
-	for _, k := range []string{"cancel_ids", "cancels", "rules", "waits", "said"} {
+	for _, k := range []string{"cancel_ids", "cancels", "rules", "waits", "goes", "said"} {
 		if l, ok := refused[k].([]any); !ok || len(l) != 0 {
 			t.Errorf("%s = %v, want []", k, refused[k])
 		}
