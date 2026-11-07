@@ -146,10 +146,12 @@ MUST be reported conservatively: under-claiming sends an operator to a queue
 that turns out to be empty, over-claiming tells them a door is locked when it is
 open.
 
-Bundle operations MUST answer the same question through their own cascade, which
-drains according to the bundle's confirmation mode. The bulk path MUST NOT
-override an owner who set that bundle to manual — but a bundle that applies on
-confirmation MUST be reported as not-yet-applied rather than as applied.
+Bundle operations MUST answer the same question through the access-change
+planner (`changes/architecture-deepening`, candidate 1, slice 1, 7 Nov 2026;
+confirmation modes are gone). The plan marks each write "straight away" or
+"waits for you" from the role's `waits_for_send`; apply drains the rows that go
+straight away, and a row holding a role that waits MUST be reported as waiting
+for you to send rather than as applied.
 
 A drain that fails MUST NOT undo the committed ledger write.
 
@@ -172,8 +174,13 @@ A drain that fails MUST NOT undo the committed ledger write.
 - **AND** the confirmation does not announce success
 
 #### Scenario: Applying a bulk bundle assignment
-- **THEN** the cascade decides whether to drain, from the bundle's confirmation mode
-- **AND** a bundle that applies on confirmation is reported as not yet applied
+- **THEN** the outbox rows written are exactly the writes the plan showed
+- **AND** a role marked to wait is reported as waiting for you to send, not applied
+
+#### Scenario: A change queued after the bulk bundle plan was shown
+- **WHEN** the apply would cancel a queued change the plan's row did not name
+- **THEN** the plan is stale: nothing is written and the plan is not spent
+- **AND** the dialog shows the fresh plan, which names it, to apply again
 
 ### Requirement: Triage MUST offer selection by cluster
 
