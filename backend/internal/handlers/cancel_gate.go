@@ -11,10 +11,6 @@ import (
 	"syndra/internal/models"
 )
 
-// cancelAckHeader carries the queued change ids an operator was shown and
-// agreed to cancel. The UI proxy forwards it; nothing else sets it.
-const cancelAckHeader = "X-Syndra-Cancel-Ack"
-
 var queuedChangeID = regexp.MustCompile(`^[0-9a-fA-F-]{36}$`)
 
 // WouldCancelResponse is the refusal an operator's client turns into a
@@ -39,6 +35,13 @@ type WouldCancelChange struct {
 // place cancellations happen refused, the response is that refusal, whatever
 // the handler then wrote: its transaction rolled back, so nothing changed,
 // and a handler that reported success or a generic failure would be wrong.
+//
+// A write names the queued changes it was shown and goes ahead cancelling in
+// its own `cancel_ids` (the query; a planned act's body carries them too).
+// A planned act is admitted by its plan alone (db.CancellationsNamed
+// replaces these); a write not on the planner (a rule's own edit, a bundle
+// retired) is admitted by the ids it names, which the step showed after a
+// first 409. Nothing ambient: no header carries an acknowledgement any more.
 func withCancelGate(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
@@ -47,15 +50,16 @@ func withCancelGate(next http.HandlerFunc) http.HandlerFunc {
 		}
 		// Only an operator is asked: a member's own request (the welcome bundle
 		// on first sign-in) has nobody to ask, and is audited like system work.
-		acked := parseCancelAck(r.Header.Get(cancelAckHeader))
-		ctx, gate := db.GuardCancellations(r.Context(), acked, isOperatorCtx)
-		next(&gateWriter{ResponseWriter: w, gate: gate, ctx: ctx, acked: acked}, r.WithContext(ctx))
+		named := parseCancelIDs(r.URL.Query().Get("cancel_ids"))
+		ctx, gate := db.GuardCancellations(r.Context(), named, isOperatorCtx)
+		next(&gateWriter{ResponseWriter: w, gate: gate, ctx: ctx, acked: named}, r.WithContext(ctx))
 	}
 }
 
-func parseCancelAck(header string) []string {
+// parseCancelIDs reads a list of queued change ids: ids and commas only.
+func parseCancelIDs(list string) []string {
 	var ids []string
-	for _, part := range strings.Split(header, ",") {
+	for _, part := range strings.Split(list, ",") {
 		if id := strings.TrimSpace(part); queuedChangeID.MatchString(id) && len(ids) < 200 {
 			ids = append(ids, id)
 		}

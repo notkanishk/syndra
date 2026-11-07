@@ -7,10 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"syndra/internal/access"
 	"syndra/internal/clock"
-	"syndra/internal/db"
-	"syndra/internal/directory"
 	"syndra/internal/extcall"
 	"syndra/internal/models"
 )
@@ -94,6 +91,13 @@ type BulkRequest struct {
 	// out (#32, B4): an operator never takes access from themselves in bulk;
 	// their own page is where they change their own access.
 	Actor string
+	// Note is a publish's version note, or a request decision's review note.
+	Note string
+	// A publish moves its holders (Migrate) and says what each bundle that
+	// includes this one does (B8); a move repins onto VersionID.
+	Migrate   bool
+	Includers []IncluderChoice
+	VersionID string
 }
 
 // BulkExclusion is a selected person a plan leaves out, and why.
@@ -126,6 +130,13 @@ type BulkOutcome struct {
 	// on the act (final verification N4): an approval or an adoption that
 	// took effect stays applied, and the result still ends on Send.
 	RuleWaiting int `json:"rule_waiting,omitempty"`
+	// Delivery is how the row reaches Zitadel, as the planner decided it
+	// (straight_away, waits_for_you, or none when nothing is sent); Waits and
+	// Goes name the roles that wait for you and the ones sent straight away.
+	// On the plan and on the result, so a screen can group rows by them.
+	Delivery string   `json:"delivery,omitempty"`
+	Waits    []string `json:"waits,omitempty"`
+	Goes     []string `json:"goes,omitempty"`
 	// Grants the row would act on. Populated for remove_role and extend so the
 	// apply pass acts on identified rows rather than re-guessing.
 	GrantIDs []string `json:"grant_ids,omitempty"`
@@ -168,8 +179,11 @@ type BulkPlan struct {
 	//
 	// Not serialised: it is the backend's own record of what it computed, never
 	// something a client sends back.
-	RequestFingerprint string        `json:"-"`
-	Outcomes           []BulkOutcome `json:"outcomes"`
+	RequestFingerprint string `json:"-"`
+	// Version is the version a publish cut. Not serialised: the publish
+	// answers with it beside the plan.
+	Version  models.BundleVersion `json:"-"`
+	Outcomes []BulkOutcome        `json:"outcomes"`
 	// Excluded are selected people the plan leaves out: today only the
 	// requester, from an operation that takes access away.
 	Excluded []BulkExclusion `json:"excluded,omitempty"`
@@ -248,294 +262,10 @@ func ValidateBulkRequest(req BulkRequest) map[string]string {
 // a legitimate thing to want; doing it in one un-paged transaction is not.
 const BulkMaxUsers = 500
 
-// RehearseBulk evaluates the request against current state without writing
-// anything. One directory read is shared across every person; role resolution
-// reuses the same per-user resolver the rest of the product reads from, so the
-// rehearsal cannot disagree with the screen it was launched from.
+// RehearseBulk is the plan: every selected person's Change from the planner,
+// on one snapshot read under the lock (planner_bulk.go). Nothing is written.
 func RehearseBulk(ctx context.Context, req BulkRequest) (BulkPlan, error) {
-	if PlannedOp(req.Op) {
-		return rehearsePlanned(ctx, req)
-	}
-	snap, err := newAccessSnapshot(ctx)
-	if err != nil {
-		return BulkPlan{}, err
-	}
-
-	profiles := make(map[string]models.UserProfile, len(snap.Users()))
-	for _, u := range snap.Users() {
-		profiles[u.ID] = u
-	}
-
-	plan := BulkPlan{Op: req.Op}
-	takesAway := req.Op == BulkOpRemoveRole
-	for _, uid := range dedupeIDs(req.UserIDs) {
-		if takesAway && req.Actor != "" && uid == req.Actor {
-			plan.Excluded = append(plan.Excluded, BulkExclusion{UserID: uid, Reason: "self"})
-			continue
-		}
-		outcome, err := rehearseOne(ctx, snap, profiles, req, uid)
-		if err != nil {
-			return BulkPlan{}, err
-		}
-		plan.Outcomes = append(plan.Outcomes, outcome)
-	}
-
-	sortOutcomes(plan.Outcomes)
-	plan.Summary = summarize(plan.Outcomes)
-	return plan, nil
-}
-
-func rehearseOne(
-	ctx context.Context,
-	snap *accessSnapshot,
-	profiles map[string]models.UserProfile,
-	req BulkRequest,
-	uid string,
-) (BulkOutcome, error) {
-	out := BulkOutcome{UserID: uid}
-
-	profile, known := profiles[uid]
-	if !known {
-		// Fall through to the directory's own lookup: the list is cached and a
-		// person created since the last fill is a real person, not a bad id.
-		if p, found, err := directory.Default.FindUser(ctx, uid); err == nil && found {
-			profile, known = p, true
-		}
-	}
-	if !known {
-		out.Effect = EffectBlocked
-		out.Detail = "No such account in the directory."
-		// Absence is reviewed state like any other: an account created between
-		// the review and the apply must invalidate the approval rather than be
-		// acted on under a row that said it did not exist.
-		out.Fingerprint = FingerprintUserAccess(uid, "absent", nil, nil)
-		return out, nil
-	}
-	out.Name, out.Email = profile.Name, profile.Email
-
-	if isDepartedStatus(profile.Status) && (req.Op == BulkOpAssignRole || req.Op == BulkOpExtend) {
-		// Granting access to someone who has left is the single most common way
-		// a bulk selection goes wrong — they match the filter that found the
-		// cohort and nobody notices in a count.
-		out.Effect = EffectBlocked
-		out.Detail = fmt.Sprintf("Account is %s. Remove it from the selection to continue.", strings.ToLower(profile.Status))
-		out.Fingerprint = FingerprintUserAccess(uid, profile.Status, nil, nil)
-		return out, nil
-	}
-
-	roleMap, _, err := snap.For(uid)
-	if err != nil {
-		return BulkOutcome{}, err
-	}
-	grants, err := svcGetDirectGrantsForUser(ctx, uid, true)
-	if err != nil {
-		return BulkOutcome{}, err
-	}
-	// Taken from exactly what the rehearsal below reads, and recomputed at apply
-	// by the same function over a fresh read. A fingerprint the two sides
-	// compute differently verifies nothing.
-	out.Fingerprint = FingerprintUserAccess(uid, profile.Status, effectiveRoleKeys(roleMap), grants)
-
-	switch req.Op {
-	case BulkOpAssignRole:
-		out = rehearseAssignRole(out, req, roleMap, grants)
-	case BulkOpRemoveRole:
-		out = rehearseRemoveRole(out, req, roleMap, grants)
-	case BulkOpExtend:
-		return rehearseExtend(out, req, grants), nil
-	default:
-		out.Effect = EffectBlocked
-		out.Detail = "Unsupported operation."
-		return out, nil
-	}
-	if out.Effect != EffectApply {
-		return out, nil
-	}
-	params, err := cancellingWrites(ctx, uid, req, roleMap)
-	if err != nil {
-		return BulkOutcome{}, err
-	}
-	cancels, err := cancelsLine(ctx, params)
-	if err != nil {
-		return BulkOutcome{}, err
-	}
-	// What the automatic rules give on top of the roles chosen, named per
-	// person before the apply (coherence audit C2).
-	var given []access.Role
-	for _, p := range params {
-		if p.OpType == "add" {
-			given = append(given, access.Role{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]})
-		}
-	}
-	rules, err := RulesFollowing(ctx, uid, given)
-	if err != nil {
-		return BulkOutcome{}, err
-	}
-	// The cancels line stays last: the plan renderer splits it off the end.
-	return WithCancels(WithRules(out, rules), cancels), nil
-}
-
-// WithRules adds what the rules give to a plan row: its consequence names
-// each, and its fingerprint binds them, so an apply after a rule changed is a
-// moved row rather than a give nobody read.
-func WithRules(out BulkOutcome, rows []RuleRow) BulkOutcome {
-	if len(rows) == 0 {
-		return out
-	}
-	fields := []string{out.Fingerprint, "rules"}
-	for _, r := range rows {
-		fields = append(fields, r.RuleID, r.ProjectID, r.RoleKey)
-	}
-	out.Fingerprint = Fingerprint(fields...)
-	out.Consequence = strings.TrimSpace(out.Consequence + " " + RuleSentences(rows))
-	return out
-}
-
-// cancellingWrites are the single-role writes this row's apply would make
-// that can cancel a queued change: an add for each role it gives, a revoke
-// for each role it takes away from its only source. Role ops only: bundle ops
-// go through the planner (planner.go), which decides the writes themselves.
-func cancellingWrites(_ context.Context, uid string, req BulkRequest, roleMap map[roleKey]*models.EffectiveRole) ([]db.EnqueueParams, error) {
-	add := func(projectID, role string) db.EnqueueParams {
-		return db.EnqueueParams{UserID: uid, ProjectID: projectID, RoleKeys: []string{role}, OpType: "add"}
-	}
-	switch req.Op {
-	case BulkOpAssignRole:
-		return []db.EnqueueParams{add(req.ProjectID, req.RoleKey)}, nil
-	case BulkOpRemoveRole:
-		if otherSources(roleMap, req.ProjectID, req.RoleKey) != "" {
-			return nil, nil
-		}
-		return []db.EnqueueParams{{UserID: uid, ProjectID: req.ProjectID, RoleKeys: []string{req.RoleKey}, OpType: "revoke", Source: "direct"}}, nil
-	}
-	return nil, nil
-}
-
-func rehearseAssignRole(
-	out BulkOutcome,
-	req BulkRequest,
-	roleMap map[roleKey]*models.EffectiveRole,
-	grants []models.DirectGrant,
-) BulkOutcome {
-	key := roleKey{projectID: req.ProjectID, roleKey: req.RoleKey}
-	existing := findGrant(grants, req.ProjectID, req.RoleKey)
-	effective := roleMap[key]
-
-	out.Effect = EffectApply
-	switch {
-	case existing != nil:
-		// Giving is for people without the role (owner, 15 Oct); an end that
-		// needs moving is an extension, its own operation.
-		out.Effect = EffectNoChange
-		out.GrantIDs = []string{existing.ID}
-		if existing.ExpiresAt == nil {
-			out.Detail = "Already has this, with no end."
-		} else {
-			out.Detail = fmt.Sprintf("Already has this, until %s. Extend it instead.", formatDay(*existing.ExpiresAt))
-		}
-	case effective != nil:
-		out.Effect = EffectNoChange
-		out.Detail = fmt.Sprintf("Already has this %s.", sourcePhrase(effective.Reasons))
-	default:
-		out.Detail = "Gains this role."
-		out.Consequence = expiryPhrase(nil, req.DurationDays)
-	}
-	return out
-}
-
-func rehearseRemoveRole(
-	out BulkOutcome,
-	req BulkRequest,
-	roleMap map[roleKey]*models.EffectiveRole,
-	grants []models.DirectGrant,
-) BulkOutcome {
-	existing := findGrant(grants, req.ProjectID, req.RoleKey)
-	if existing == nil {
-		// Removal here is source-specific by design: this operation removes a
-		// direct grant and nothing else. Someone holding the role only through
-		// a bundle or a rule is untouched, and saying so is the whole point.
-		out.Effect = EffectNoChange
-		if effective := roleMap[roleKey{projectID: req.ProjectID, roleKey: req.RoleKey}]; effective != nil {
-			out.Detail = "Holds no direct grant here."
-			out.Consequence = fmt.Sprintf("Keeps the role %s. Remove that source instead.", sourcePhrase(effective.Reasons))
-		} else {
-			out.Detail = "Doesn't hold this role."
-		}
-		return out
-	}
-
-	out.Effect = EffectApply
-	out.GrantIDs = []string{existing.ID}
-	if other := otherSources(roleMap, req.ProjectID, req.RoleKey); other != "" {
-		out.Detail = "Direct grant removed."
-		out.Consequence = fmt.Sprintf("Keeps the role %s, so this does not take their access away.", other)
-	} else {
-		out.Detail = "Loses this role."
-	}
-	return out
-}
-
-func rehearseExtend(out BulkOutcome, req BulkRequest, grants []models.DirectGrant) BulkOutcome {
-	// When the caller named grants, those and nothing else. The set is flat across every selected
-	// person, and a grant id belongs to exactly one of them, so this per-user pass cannot let one
-	// person's selection reach another's access — an id that is not theirs simply matches nothing.
-	var selected map[string]bool
-	if len(req.GrantIDs) > 0 {
-		selected = make(map[string]bool, len(req.GrantIDs))
-		for _, id := range req.GrantIDs {
-			selected[id] = true
-		}
-	}
-
-	// Only direct grants that actually expire. A permanent grant has nothing to
-	// extend, and quietly stamping an expiry onto one would be the opposite of
-	// what the operator asked for.
-	var ids []string
-	alreadyLater := 0
-	for _, g := range grants {
-		if g.ExpiresAt == nil {
-			continue
-		}
-		if selected != nil && !selected[g.ID] {
-			continue
-		}
-		if req.ProjectID != "" && g.ProjectID != req.ProjectID {
-			continue
-		}
-		if req.RoleKey != "" && g.RoleKey != req.RoleKey {
-			continue
-		}
-		// One that already ends later is left as it is (db.EndLater): an
-		// extension never shortens.
-		if !lengthens(g.ExpiresAt, req.DurationDays) {
-			alreadyLater++
-			continue
-		}
-		ids = append(ids, g.ID)
-	}
-
-	if len(ids) == 0 && alreadyLater > 0 {
-		out.Effect = EffectNoChange
-		out.Detail = "Already ends later than this would make it."
-		return out
-	}
-	if len(ids) == 0 {
-		out.Effect = EffectNoChange
-		// Two different facts, and an operator acting on a plan needs to know which. "None
-		// selected" after ticking a row means the grant moved or was removed underneath them.
-		if selected != nil {
-			out.Detail = "None of the selected grants are theirs any more."
-		} else {
-			out.Detail = "No expiring direct grants."
-		}
-		return out
-	}
-
-	out.Effect = EffectApply
-	out.GrantIDs = ids
-	out.Detail = fmt.Sprintf("Extends %s.", pluralGrants(len(ids)))
-	out.Consequence = fmt.Sprintf("New expiry %s.", formatDay(clock.EndAfterDays(time.Now(), req.DurationDays)))
-	return out
+	return rehearsePlanned(ctx, req)
 }
 
 // ---------------------------------------------------------------------------
@@ -552,56 +282,6 @@ func findGrant(grants []models.DirectGrant, projectID, roleKey string) *models.D
 	return nil
 }
 
-// otherSources names the non-direct sources for a role, or "" when the direct
-// grant is the only one. This is what turns "remove from 12 people" into "3 of
-// them keep it anyway".
-func otherSources(roleMap map[roleKey]*models.EffectiveRole, projectID, rk string) string {
-	role := roleMap[roleKey{projectID: projectID, roleKey: rk}]
-	if role == nil {
-		return ""
-	}
-	var kept []models.RoleReason
-	for _, reason := range role.Reasons {
-		if reason.Kind != "direct" {
-			kept = append(kept, reason)
-		}
-	}
-	if len(kept) == 0 {
-		return ""
-	}
-	return sourcePhrase(kept)
-}
-
-// sourcePhrase renders reasons as a prepositional phrase: "via the Safety
-// bundle", "via an automatic rule", "via 2 other sources".
-func sourcePhrase(reasons []models.RoleReason) string {
-	var named []string
-	rules := 0
-	for _, reason := range reasons {
-		switch {
-		case reason.BundleName != "":
-			named = append(named, fmt.Sprintf("the %s bundle", reason.BundleName))
-		case reason.Kind == "rule":
-			rules++
-		}
-	}
-	if rules == 1 {
-		named = append(named, "an automatic rule")
-	} else if rules > 1 {
-		named = append(named, fmt.Sprintf("%d automatic rules", rules))
-	}
-	switch len(named) {
-	case 0:
-		return "through another source"
-	case 1:
-		return "via " + named[0]
-	case 2:
-		return "via " + named[0] + " and " + named[1]
-	default:
-		return fmt.Sprintf("via %s and %d more", named[0], len(named)-1)
-	}
-}
-
 func displayBundle(name string) string {
 	if strings.TrimSpace(name) == "" {
 		return "this bundle"
@@ -609,42 +289,7 @@ func displayBundle(name string) string {
 	return "the " + name + " bundle"
 }
 
-// lengthens reports whether giving a grant for durationDays (0 is no end)
-// makes an existing end later: the only change db.EndLater lets a write make.
-func lengthens(current *time.Time, durationDays int) bool {
-	if current == nil {
-		return false
-	}
-	if durationDays <= 0 {
-		return true
-	}
-	return clock.EndAfterDays(time.Now(), durationDays).After(*current)
-}
-
-func expiryPhrase(current *time.Time, durationDays int) string {
-	if durationDays <= 0 {
-		if current != nil {
-			return "Expiry removed, so the grant becomes permanent."
-		}
-		return "No expiry."
-	}
-	return fmt.Sprintf("Expires %s.", formatDay(clock.EndAfterDays(time.Now(), durationDays)))
-}
-
 func formatDay(t time.Time) string { return t.In(clock.Loc).Format("2 Jan 2006") }
-
-func pluralGrants(n int) string {
-	if n == 1 {
-		return "1 grant"
-	}
-	return fmt.Sprintf("%d grants", n)
-}
-
-// isDepartedStatus reports whether an account is one a bulk grant must refuse:
-// access.Left, the one definition of somebody who has gone. Zitadel emits
-// `active | inactive | initial | locked | deleted`; a LOCKED or DELETED account
-// once passed this guard because the list here named words Zitadel never sends.
-func isDepartedStatus(status string) bool { return access.Left(status) }
 
 func dedupeIDs(ids []string) []string {
 	seen := make(map[string]struct{}, len(ids))

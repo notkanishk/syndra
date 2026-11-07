@@ -2,13 +2,8 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"maps"
-	"strings"
 
-	"syndra/internal/access"
 	"syndra/internal/db"
-	"syndra/internal/directory"
 	"syndra/internal/models"
 )
 
@@ -115,8 +110,8 @@ func asRuleRows(params []db.EnqueueParams, refs map[roleKey]string) []db.Enqueue
 
 // ruleDelta is what the rules owe beyond a change to a person's base: the
 // closure difference, less the roles the change itself moved (those are the
-// caller's own row). followRules queues it; RulesFollowing names it before
-// anyone confirms. One function, so the preview is the queue.
+// caller's own row). followRules queues it; the planner (planRole, planAdopt)
+// decides it before anyone confirms. One function, so the preview is the queue.
 func ruleDelta(before, after map[roleKey]bool, rules []models.MappingRule) (adds, revokes []roleKey, closureBefore, closureAfter map[roleKey]bool) {
 	closureBefore, closureAfter = effectiveClosure(before, rules), effectiveClosure(after, rules)
 	adds, revokes = closureDelta(closureBefore, closureAfter)
@@ -149,87 +144,4 @@ func ruleReachingRule(rules []models.MappingRule, closure map[roleKey]bool, k ro
 		}
 	}
 	return nil
-}
-
-// RuleRow is one role an automatic rule gives with a write, said before the
-// operator confirms it (coherence audit C1, C2): every consent surface that
-// gives a role (give, approve, bulk give, drift adopt) lists these.
-type RuleRow struct {
-	ProjectID string `json:"project_id"`
-	RoleKey   string `json:"role_key"`
-	RuleID    string `json:"rule_id"`
-	// Sentence is the row in the operator's words: "Also gives Laser cutter in
-	// Workshop, by the automatic rule from Trained."
-	Sentence string `json:"sentence"`
-}
-
-// RulesFollowing is followRules asked in advance: the roles the rules would
-// queue if userID were given roles now. The same reads (userBaseHoldings), the
-// same delta (ruleDelta), the same closure (access.Closure), so what the
-// dialog names is what the write queues. Nil when no rule follows.
-func RulesFollowing(ctx context.Context, userID string, roles []access.Role) ([]RuleRow, error) {
-	rules, err := svcGetActiveMappingRules(ctx)
-	if err != nil || len(rules) == 0 {
-		return nil, err
-	}
-	before, err := userBaseHoldings(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	after := maps.Clone(before)
-	for _, r := range roles {
-		after[roleKey{projectID: r.ProjectID, roleKey: r.RoleKey}] = true
-	}
-	adds, _, _, closureAfter := ruleDelta(before, after, rules)
-	if len(adds) == 0 {
-		return nil, nil
-	}
-	name := roleNamer(ctx)
-	rows := make([]RuleRow, 0, len(adds))
-	for _, k := range adds {
-		row := RuleRow{ProjectID: k.projectID, RoleKey: k.roleKey}
-		role, project := name(k.projectID, k.roleKey)
-		row.Sentence = fmt.Sprintf("Also gives %s in %s, by an automatic rule.", role, project)
-		if r := ruleReachingRule(rules, closureAfter, k); r != nil {
-			from, _ := name(r.SourceProject, r.SourceRole)
-			row.RuleID = r.ID
-			row.Sentence = fmt.Sprintf("Also gives %s in %s, by the automatic rule from %s.", role, project, from)
-		}
-		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
-// RuleSentences is rows' sentences, joined: a plan row's consequence.
-func RuleSentences(rows []RuleRow) string {
-	parts := make([]string, len(rows))
-	for i, r := range rows {
-		parts[i] = r.Sentence
-	}
-	return strings.Join(parts, " ")
-}
-
-// roleNamer names a role and its project as the directory does, falling back
-// to the keys: a plan an operator reads must never fail for want of a label.
-func roleNamer(ctx context.Context) func(projectID, roleKey string) (role, project string) {
-	seen := map[string]models.ProjectCatalog{}
-	return func(projectID, key string) (string, string) {
-		p, ok := seen[projectID]
-		if !ok {
-			if found, has, err := directory.Default.FindProject(ctx, projectID); err == nil && has {
-				p = found
-			}
-			seen[projectID] = p
-		}
-		role, project := key, projectID
-		if p.Name != "" {
-			project = p.Name
-		}
-		for _, r := range p.Roles {
-			if r.Key == key && r.Label != "" {
-				role = r.Label
-			}
-		}
-		return role, project
-	}
 }

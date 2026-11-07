@@ -2,15 +2,10 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
-	"syndra/internal/access"
-	"syndra/internal/clock"
-	"syndra/internal/db"
 	"syndra/internal/services"
 )
 
@@ -77,8 +72,22 @@ func handleBulkDecideRequests(w http.ResponseWriter, r *http.Request) {
 	// note is not bound — it is written at apply time and changes nothing.
 	requestFP := services.FingerprintIDCohort("decide_requests", ids, "status", status)
 
+	// Approving goes through the planner (task 1.3): each request is the same
+	// Change a single approval is, on one snapshot for the batch. Declining
+	// changes nobody's access and is not planned.
+	input := services.BulkRequest{Op: services.OpApprove, UserIDs: ids, Actor: actor, Note: req.ReviewNote}
 	if r.URL.Query().Get("apply") != "true" {
-		plan := rehearseDecisionBatch(r.Context(), ids, status)
+		var plan services.BulkPlan
+		if status != "approved" {
+			plan = rehearseDeclines(r.Context(), ids)
+		} else {
+			var err error
+			if plan, err = svcRehearseBulk(r.Context(), input); err != nil {
+				jsonErrorResponse(w, http.StatusInternalServerError, "BULK_REHEARSAL_ERROR", err.Error())
+				return
+			}
+		}
+		plan.Op = "decide_requests"
 		if err := issuePlan(r.Context(), planSurfaceBulkDecision, actor, requestFP, req.AcknowledgeScope, &plan); err != nil {
 			writePlanIssueError(w, err)
 			return
@@ -91,226 +100,65 @@ func handleBulkDecideRequests(w http.ResponseWriter, r *http.Request) {
 		missingPlanCitation(w)
 		return
 	}
+	if status == "approved" {
+		if plan, ok := applyPlanned(w, r, input, planCitation(planSurfaceBulkDecision, actor, requestFP, req.PlanID)); ok {
+			plan.Op = "decide_requests"
+			jsonResponse(w, http.StatusOK, plan)
+		}
+		return
+	}
 	var live map[string]services.BulkOutcome
 	subjects, err := claimPlan(r.Context(), planSurfaceBulkDecision, actor, requestFP, req.PlanID,
 		func() map[string]services.BulkOutcome {
-			live = indexOutcomes(rehearseDecisionBatch(r.Context(), ids, status).Outcomes)
+			live = indexOutcomes(rehearseDeclines(r.Context(), ids).Outcomes)
 			return live
 		})
 	if err != nil {
 		writePlanCitationError(w, err)
 		return
 	}
-
 	plan := planApprovedRows("decide_requests", subjects, live)
-	// Reviewed: the plan's rows named every queued change this cancels.
-	db.CancellationsReviewed(r.Context())
-	applyDecisionPlan(r, &plan, status, req.ReviewNote)
-	jsonResponse(w, http.StatusOK, plan)
-}
-
-func rehearseDecisionBatch(ctx context.Context, ids []string, status string) services.BulkPlan {
-	plan := services.BulkPlan{Op: "decide_requests"}
-
-	for _, id := range ids {
-		out := services.BulkOutcome{UserID: id}
-
-		request, err := dbGetAccessRequestByID(ctx, id)
-		if err != nil {
-			out.Effect = services.EffectBlocked
-			out.Detail = "No such request. It may have been withdrawn."
-			out.Fingerprint = services.Fingerprint("request", id, "absent")
-			plan.Outcomes = append(plan.Outcomes, out)
-			continue
-		}
-
-		// The request's own status is in here for the reason a drift row's is:
-		// a shared queue means a second reviewer deciding first is ordinary, and
-		// no fingerprint over the requester's access would see it.
-		out.Fingerprint = services.FingerprintAccessRequest(request)
-		out.Name = driftSubject(ctx, request.RequesterID)
-		out.Email = request.RequesterID
-
-		if request.Status != "pending" {
-			// A queue worked by two people produces this constantly, and it is
-			// information rather than an error: somebody already decided. Any
-			// settled status, not only the two decisions: a withdrawn or
-			// fulfilled request read "will change" here and was then refused.
-			out.Effect = services.EffectNoChange
-			out.Detail = settledDetail(request.Status)
-			plan.Outcomes = append(plan.Outcomes, out)
-			continue
-		}
-
-		// The plan agrees with the decision: a request for a role they have
-		// come to hold since asking can't be approved (resolveOneAccessRequest
-		// refuses it), only declined.
-		var approval services.ApprovalPlan
-		if status == "approved" {
-			h, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey)
-			switch {
-			case err != nil:
-				// Unread is not "doesn't have it": the decision would refuse.
-				out.Effect = services.EffectBlocked
-				out.Detail = "Syndra couldn't read what they already have, so it won't approve this blind. Try again."
-			default:
-				// The same plan the decision runs (planApproval), so the
-				// rehearsal says what approving will do, kind for kind.
-				plan, perr := services.PlanApproval(request, h, time.Now())
-				switch {
-				case errors.Is(perr, services.ErrRequestAlreadyHeld):
-					out.Effect = services.EffectBlocked
-					out.Detail = "Already has this, so approving would change nothing. Decline it to close the request."
-				case errors.Is(perr, services.ErrExtensionShortens):
-					out.Effect = services.EffectBlocked
-					out.Detail = "Already has this past the end this asks for, so approving would shorten it. Decline it to close the request."
-				case errors.Is(perr, services.ErrAskEnded):
-					out.Effect = services.EffectBlocked
-					out.Detail = "The end date this asked for has already passed, so approving would give access that has already ended. Decline it, and they can ask again."
-				case perr == nil:
-					approval = plan
-				}
-			}
-			if out.Effect == "" {
-				if err := checkRoleOffered(ctx, request.ProjectID, request.RoleKey); errors.Is(err, errRoleNotOffered) {
-					out.Effect = services.EffectBlocked
-					out.Detail = "This role no longer exists in Zitadel, so it can't be approved. Decline it to close the request."
-				} else if err != nil {
-					out.Effect = services.EffectBlocked
-					out.Detail = "Syndra couldn't read Zitadel's list of roles to check this one exists. Try again shortly."
-				}
-			}
-			if out.Effect != "" {
-				plan.Outcomes = append(plan.Outcomes, out)
-				continue
-			}
-		}
-
-		out.Effect = services.EffectApply
-		if status == "approved" {
-			out.Detail = fmt.Sprintf("Gains %s.", request.RoleKey)
-			// The part an inbox action hides: this is an access change.
-			out.Consequence = "Approving mints a direct grant, the same as granting it by hand."
-			if request.AskedUntil != nil {
-				out.Consequence = fmt.Sprintf(
-					"Approving mints a direct grant until %s, the end date they asked for, the same as granting it by hand.",
-					request.AskedUntil.In(clock.Loc).Format("2 Jan 2006"))
-			} else if request.DurationDays != nil && *request.DurationDays > 0 {
-				out.Consequence = fmt.Sprintf(
-					"Approving mints a direct grant for %d days, the same as granting it by hand.",
-					*request.DurationDays)
-			}
-			switch approval.Effect {
-			case services.EffectExtend:
-				out.Detail = fmt.Sprintf("Keeps %s longer, %s.", request.RoleKey, services.EndPhrase(approval.ExpiresAt))
-				out.Consequence = "Approving moves the end of the grant they have, the same as extending it from Expiring access."
-			case services.EffectGiveAgain:
-				out.Detail = fmt.Sprintf("Gets %s back, %s.", request.RoleKey, services.EndPhrase(approval.ExpiresAt))
-				out.Consequence = "It ended while this waited, so approving gives it again for the time asked."
-			}
-			// Never invisibly (owner, 15 Oct): a queued removal this approval
-			// would cancel is named here, since the apply is marked reviewed.
-			cancels, err := dbWouldCancel(ctx, db.EnqueueParams{UserID: request.RequesterID, ProjectID: request.ProjectID,
-				RoleKeys: []string{request.RoleKey}, OpType: "add", Source: "direct"})
-			if err != nil {
-				out.Effect = services.EffectBlocked
-				out.Detail = "Syndra couldn't read the changes waiting for you to send for them, so it won't approve this blind. Try again."
-				plan.Outcomes = append(plan.Outcomes, out)
-				continue
-			}
-			// What the automatic rules give with the approval, named before
-			// the apply as a single approval names them (re-audit C2).
-			rules, err := svcRulesFollowing(ctx, request.RequesterID,
-				[]access.Role{{ProjectID: request.ProjectID, RoleKey: request.RoleKey}})
-			if err != nil {
-				out.Effect = services.EffectBlocked
-				out.Detail = "Syndra couldn't read the automatic rules, so what approving sets off is unknown. Try again."
-				out.Consequence = ""
-				plan.Outcomes = append(plan.Outcomes, out)
-				continue
-			}
-			out = services.WithCancels(services.WithRules(out, rules), cancels)
-		} else {
-			out.Detail = fmt.Sprintf("Declined for %s.", request.RoleKey)
-			out.Consequence = "Nothing about their current access changes."
-		}
-		plan.Outcomes = append(plan.Outcomes, out)
-	}
-
-	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
-	return plan
-}
-
-// settledDetail names how a request was already settled, in the queue's words.
-func settledDetail(status string) string {
-	switch status {
-	case "approved":
-		return "Already approved."
-	case "rejected":
-		return "Already declined."
-	case "withdrawn":
-		return "Withdrawn by the person who asked."
-	case "fulfilled":
-		return "Already closed: the role was given another way."
-	default:
-		return fmt.Sprintf("Already %s.", status)
-	}
-}
-
-func applyDecisionPlan(r *http.Request, plan *services.BulkPlan, status, note string) {
-	plan.Applied = true
-
 	for i := range plan.Outcomes {
 		out := &plan.Outcomes[i]
 		if out.Effect != services.EffectApply {
 			continue
 		}
-		decided, err := decideOneRequest(r, out.UserID, status, note)
-		if err != nil {
-			out.Effect = services.EffectFailed
-			out.Detail = "Didn't go through: " + err.Error()
+		if _, err := svcDecideRequest(r.Context(), out.UserID, "rejected", actor, req.ReviewNote, nil); err != nil {
+			out.Effect, out.Detail = services.EffectFailed, "Didn't go through: "+err.Error()
 			continue
 		}
-		// What the approval's delivery did to the approved role's OWN row
-		// (ReasonFor, as the single path), not "applied" regardless (re-audit
-		// R2): Zitadel refused it, a role that waits, or a send Zitadel
-		// didn't take. A role an automatic rule gave that waits is counted
-		// apart and never blamed on the approval (final verification N4).
-		out.RuleWaiting = decided.RuleWaiting
-		if decided.RuleWaiting > 0 {
-			out.Consequence = ruleWaitingLine(decided.RuleWaiting)
-		}
-		switch {
-		case db.IsRefused(decided.WaitReason):
-			out.Effect = services.EffectFailed
-			out.WaitReason = decided.WaitReason
-			out.Detail = refusedDetail(decided.WaitReason, false)
-		case decided.WaitReason != "":
-			out.Effect = services.EffectQueued
-			out.WaitReason, out.Retry = decided.WaitReason, decided.Retry
-			out.Detail = queuedDetail(decided.WaitReason, false)
-		default:
-			out.Effect = services.EffectApplied
-		}
+		out.Effect = services.EffectApplied
 	}
-
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+	jsonResponse(w, http.StatusOK, plan)
 }
 
-// ruleWaitingLine is a bulk row's line for the roles automatic rules gave
-// with the act that wait for Send (the same words as request-decisions.ts
-// withRuleWaits).
-func ruleWaitingLine(n int) string {
-	if n == 1 {
-		return "One role an automatic rule also gives always waits for you, so it is in Pending changes."
+// rehearseDeclines is the plan for declining: who asked, and that their
+// access stays as it is.
+func rehearseDeclines(ctx context.Context, ids []string) services.BulkPlan {
+	plan := services.BulkPlan{Op: "decide_requests", Outcomes: []services.BulkOutcome{}}
+	for _, id := range ids {
+		out := services.BulkOutcome{UserID: id}
+		request, err := dbGetAccessRequestByID(ctx, id)
+		switch {
+		case err != nil:
+			out.Effect, out.Detail = services.EffectBlocked, "No such request. It may have been withdrawn."
+			out.Consequence = "Nothing for you to do."
+			out.Fingerprint = services.Fingerprint("request", id, "absent")
+		case request.Status != "pending":
+			// A queue worked by two people produces this constantly: somebody
+			// already decided. Information, not an error.
+			out.Name, out.Email = driftSubject(ctx, request.RequesterID), request.RequesterID
+			out.Fingerprint = services.FingerprintAccessRequest(request)
+			out.Effect, out.Detail = services.EffectNoChange, services.SettledDetail(request.Status)
+		default:
+			out.Name, out.Email = driftSubject(ctx, request.RequesterID), request.RequesterID
+			out.Fingerprint = services.FingerprintAccessRequest(request)
+			out.Effect, out.Detail = services.EffectApply, fmt.Sprintf("Declined for %s.", request.RoleKey)
+			out.Consequence = "Nothing about their current access changes."
+		}
+		plan.Outcomes = append(plan.Outcomes, out)
 	}
-	return fmt.Sprintf("%d roles automatic rules also give always wait for you, so they are in Pending changes.", n)
-}
-
-// decideOneRequest runs the very same decision the single-request endpoint
-// runs — extracted rather than replayed over HTTP, so the approval transaction,
-// the race guard, the cache rebuild and the inline drain cannot drift apart
-// between the one-at-a-time path and the bulk one.
-func decideOneRequest(r *http.Request, id, status, note string) (decisionResult, error) {
-	return resolveAccessRequestOutcome(r.Context(), id, status, resolveActor(r, ""), note, nil)
+	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+	return plan
 }

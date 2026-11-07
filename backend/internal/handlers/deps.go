@@ -55,9 +55,6 @@ var (
 	// svcDeliverChange sends what the planner decided, as it decided it.
 	svcDeliverChange = services.DeliverChange
 	svcDrainAddon    = propagation.DrainAddon
-	// svcRulesFollowing names what the automatic rules would give with a give
-	// or an adoption, before anyone confirms it (coherence audit C1, C2).
-	svcRulesFollowing = services.RulesFollowing
 
 	dbCreateAccessRequestOfKind = db.CreateAccessRequestOfKind
 	dbGetAccessRequestByID      = db.GetAccessRequestByID
@@ -130,21 +127,11 @@ var (
 	svcGetRolesForVersion = db.GetRolesForVersion
 	svcBundleHolders      = db.GetBundleHoldersByVersion
 	svcDiscardBundleDraft = db.DiscardBundleDraft
-	// Decoration happens here rather than inside the rehearsal: the apply path
-	// runs the same rehearsal under the access lock, and looking a name up in
-	// the directory there would hold that lock across a call to Zitadel.
-	svcRehearsePublish = func(ctx context.Context, req services.PublishRequest) (services.BulkPlan, services.DraftDiff, error) {
-		plan, draft, err := services.RehearseBundlePublish(ctx, req)
-		services.DecoratePlan(ctx, &plan)
-		return plan, draft, err
-	}
-	svcPublishBundleVersion = services.PublishBundleVersion
-	svcRehearseMoveHolders  = func(ctx context.Context, req services.MoveHoldersRequest) (services.BulkPlan, error) {
-		plan, err := services.RehearseMoveHolders(ctx, req)
-		services.DecoratePlan(ctx, &plan)
-		return plan, err
-	}
-	svcMoveHolders          = services.MoveHolders
+	// Planned (services.planMove); the planner names the people from the
+	// directory before the lock, never under it. The applies are the bulk
+	// planner's (svcApplyPlannedBulk).
+	svcRehearsePublish      = services.RehearseBundlePublish
+	svcRehearseMoveHolders  = services.RehearseMoveHolders
 	dbGetStaleHolderCounts  = db.GetStaleHolderCounts
 	dbGetUserBundleVersions = db.GetUserBundleVersions
 
@@ -392,7 +379,6 @@ var (
 	// the drift handlers never resolve a drift row outside that transaction.
 	dbGetDriftItems         = db.GetDriftItems
 	dbGetDriftItem          = db.GetDriftItem
-	dbAttributeDriftTx      = db.AttributeDriftTx
 	dbRevokeDriftAndEnqueue = db.RevokeDriftAndEnqueue
 	dbMarkDriftExternalTx   = db.MarkDriftExternalTx
 	svcDriftSweep           = drift.Sweep
@@ -594,17 +580,17 @@ var (
 	dbReleaseMergeDecision    = db.ReleaseMergeDecision
 	// The roles a subject actually holds, for scoping a policy hint to the
 	// mappings that produce THEIR value rather than every mapping on the field.
-	svcHeldRoles               = services.HeldRoles
-	dbCountMergeFindings       = db.CountStandingMergeFindings
-	dbGetLogAnchor             = db.GetLogAnchor
-	dbTargetProject            = db.TargetProject
-	dbTargetProjects           = db.TargetProjects
-	dbRequireTargetProject     = db.RequireTargetProject
-	dbSetTargetProject         = db.SetTargetProject
-	resolveMappingProject      = mappingProject
-	svcConvergeProjectChange   = services.ConvergeProjectChange
-	svcConvergeSubjectOn       = services.ConvergeSubjectOn
-	dbWouldCancel              = db.WouldCancel
+	svcHeldRoles             = services.HeldRoles
+	dbCountMergeFindings     = db.CountStandingMergeFindings
+	dbGetLogAnchor           = db.GetLogAnchor
+	dbTargetProject          = db.TargetProject
+	dbTargetProjects         = db.TargetProjects
+	dbRequireTargetProject   = db.RequireTargetProject
+	dbSetTargetProject       = db.SetTargetProject
+	resolveMappingProject    = mappingProject
+	svcConvergeProjectChange = services.ConvergeProjectChange
+	svcConvergeSubjectOn     = services.ConvergeSubjectOn
+
 	directoryUsers             = func(ctx context.Context) ([]models.UserProfile, error) { return directory.Default.Users(ctx) }
 	directoryProjects          = func(ctx context.Context) ([]models.ProjectCatalog, error) { return directory.Default.Projects(ctx) }
 	dbStandingBindingConflicts = db.StandingBindingConflicts

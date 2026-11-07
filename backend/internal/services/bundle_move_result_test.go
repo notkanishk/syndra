@@ -60,7 +60,7 @@ func TestMoveHolders_ReportsWhatItMoved(t *testing.T) {
 		return propagation.DrainResult{Applied: 1}, nil
 	}
 
-	plan, err := MoveHolders(context.Background(), "operator", MoveHoldersRequest{
+	plan, err := moveNow(t, MoveHoldersRequest{
 		BundleID:  bundleID,
 		VersionID: targetID,
 		UserIDs:   []string{"u1"},
@@ -109,13 +109,13 @@ func TestMoveHolders_RuleRowsAreTheRules(t *testing.T) {
 	var got []db.EnqueueParams
 	svcMoveHoldersAndEnqueue = func(_ context.Context, _, _, _ string, _ []string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
-		return nil, nil
+		return []string{"o1", "o2"}, nil
 	}
 	svcDrainBatch = func(context.Context, []string) (propagation.DrainResult, error) {
 		return propagation.DrainResult{}, nil
 	}
 
-	if _, err := MoveHolders(context.Background(), "operator", MoveHoldersRequest{BundleID: "b1", VersionID: "version-4", UserIDs: []string{"u1"}}); err != nil {
+	if _, err := moveNow(t, MoveHoldersRequest{BundleID: "b1", VersionID: "version-4", UserIDs: []string{"u1"}}); err != nil {
 		t.Fatalf("MoveHolders: %v", err)
 	}
 	sources := map[string]string{}

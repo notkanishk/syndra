@@ -51,8 +51,7 @@ func TestACancellationNobodyWasShownIsRefusedWithTheList(t *testing.T) {
 
 func TestACancellationTheOperatorWasShownGoesAhead(t *testing.T) {
 	var admitted bool
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants", nil)
-	req.Header.Set(cancelAckHeader, queuedID)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/rules/mapping?cancel_ids="+queuedID, nil)
 	rr := httptest.NewRecorder()
 	withCancelGate(cancellingHandler(&admitted))(rr, req)
 	if !admitted || rr.Code != http.StatusAccepted {
@@ -60,8 +59,7 @@ func TestACancellationTheOperatorWasShownGoesAhead(t *testing.T) {
 	}
 
 	// An acknowledgement of something else doesn't stretch to this.
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants", nil)
-	req.Header.Set(cancelAckHeader, "11111111-2222-3333-4444-555555555555")
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/rules/mapping?cancel_ids=11111111-2222-3333-4444-555555555555", nil)
 	rr = httptest.NewRecorder()
 	withCancelGate(cancellingHandler(&admitted))(rr, req)
 	if admitted || rr.Code != http.StatusConflict {
@@ -69,16 +67,26 @@ func TestACancellationTheOperatorWasShownGoesAhead(t *testing.T) {
 	}
 }
 
-func TestAReviewedPlanAndSystemWorkNeedNoAcknowledgement(t *testing.T) {
+// A plan admits exactly the cancellations its rows named (decision 4): never
+// every one, and never what the request's own cancel_ids said beside it.
+func TestAPlanAdmitsOnlyWhatItNamedAndSystemWorkNeedsNoAcknowledgement(t *testing.T) {
 	var admitted bool
-	reviewed := func(w http.ResponseWriter, r *http.Request) {
-		db.CancellationsReviewed(r.Context())
-		cancellingHandler(&admitted)(w, r)
+	planned := func(named string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			db.CancellationsNamed(r.Context(), []string{named})
+			cancellingHandler(&admitted)(w, r)
+		}
 	}
 	rr := httptest.NewRecorder()
-	withCancelGate(reviewed)(rr, httptest.NewRequest(http.MethodPost, "/api/v1/grants/bulk?apply=true", nil))
+	withCancelGate(planned(queuedID))(rr, httptest.NewRequest(http.MethodPost, "/api/v1/grants/bulk?apply=true", nil))
 	if !admitted || rr.Code != http.StatusAccepted {
-		t.Fatalf("a reviewed plan's rows named its cancellations: %d", rr.Code)
+		t.Fatalf("a plan's rows named its cancellation: %d", rr.Code)
+	}
+	admitted = false
+	rr = httptest.NewRecorder()
+	withCancelGate(planned(laterQueuedID))(rr, httptest.NewRequest(http.MethodPost, "/api/v1/grants/bulk?apply=true&cancel_ids="+queuedID, nil))
+	if admitted || rr.Code != http.StatusConflict {
+		t.Fatalf("a plan that named something else is refused, whatever the query said: %d", rr.Code)
 	}
 	// No gate at all (expiry, onboarding): admitted, and audited by the chokepoint.
 	if !db.AdmitCancellations(httptest.NewRequest(http.MethodGet, "/", nil).Context(), []models.QueuedChange{{ID: queuedID}}) {
@@ -116,10 +124,7 @@ func TestARepeatedRefusalMarksWhatWasQueuedSinceAndNamesWhoStartedIt(t *testing.
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", db.ErrWouldCancel.Error())
 	}
 	refusal := func(ack string) []map[string]any {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants", nil)
-		if ack != "" {
-			req.Header.Set(cancelAckHeader, ack)
-		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/rules/mapping?cancel_ids="+ack, nil)
 		rr := httptest.NewRecorder()
 		withCancelGate(two)(rr, req)
 		var body struct {

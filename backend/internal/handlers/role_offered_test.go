@@ -98,24 +98,3 @@ func TestARoleNotOfferedIsRefusedWhenAskedGivenOrApproved(t *testing.T) {
 	wantError(t, giveRole("u1", "", `{"project_id":"pLaser","role_key":"gone"}`), http.StatusConflict, "ROLE_NOT_OFFERED")
 	probe.wantOrder(t, "decide", "apply")
 }
-
-func TestTheDecisionPlanAgreesWithTheDecision(t *testing.T) {
-	withdrawn := pendingRequest("r2", "u2", "trained")
-	withdrawn.Status = "withdrawn"
-	stubRequestLookup(t, map[string]models.AccessRequest{
-		"r1": pendingRequest("r1", "u1", "gone"),
-		"r2": withdrawn,
-	})
-	offering(t, "zitadel", laser, nil)
-
-	rr := httptest.NewRecorder()
-	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1","r2"],"status":"approved"}`, false))
-	plan := decodeBulkPlan(t, rr)
-	byID := map[string]string{}
-	for _, o := range plan.Outcomes {
-		byID[o.Email+string(o.Effect)] = o.Detail
-	}
-	if plan.Summary.Blocked != 1 || plan.Summary.NoChange != 1 || plan.Summary.Apply != 0 {
-		t.Fatalf("a role not offered is blocked and a withdrawn request is no change, got %+v %v", plan.Summary, byID)
-	}
-}
