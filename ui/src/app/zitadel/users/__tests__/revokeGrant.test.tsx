@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import UpstreamUsersPage from "@/app/zitadel/users/page";
+import type { ActPlan } from "@/lib/usePlanConsent";
+import { actPlan, cancelling, queuedChange } from "@/test-utils/plan";
 
 const state = vi.hoisted(() => ({
   remove: vi.fn(),
@@ -10,7 +12,7 @@ const state = vi.hoisted(() => ({
   // The server's own answer to "what would this revoke" (re-audit R18):
   // undefined data is a preview that couldn't be read.
   preview: { revoked_roles: ["pLaser/trained"], retained_roles: [] as string[] } as
-    | { revoked_roles: string[]; retained_roles: string[] }
+    | { revoked_roles: string[]; retained_roles: string[]; plans?: Record<string, ActPlan> }
     | undefined,
   waits: [] as Array<{ project_id: string; role_key: string }>,
 }));
@@ -72,13 +74,40 @@ describe("revoking a person's roles in Zitadel", () => {
     // reference goes stale.
     fireEvent.click(screen.getByRole("button", { name: "Revoke this role in Zitadel" }));
 
-    await waitFor(() => expect(state.remove).toHaveBeenCalledWith({ userId: "u1", grantId: "g1" }));
+    await waitFor(() => expect(state.remove).toHaveBeenCalledWith({ userId: "u1", grantId: "g1", plans: {} }));
     // The result is in the sheet, in the act's word, and the sheet stays until Close.
     await waitFor(() => expect(screen.getByText("Revoked")).toBeTruthy());
     expect(document.body.textContent).toMatch(/Roles revoked in Zitadel/);
     expect(screen.getByRole("dialog")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  // Task 1.9: each role's revoke is a planned act. What the roles' plans
+  // cancel is said before the press, the press asks about exactly that, and
+  // the write carries each role's plan.
+  it("says what it cancels before the press, asks, and carries each role's plan", async () => {
+    state.roleKeys = ["trained", "stray"];
+    const give = queuedChange({ id: "00000000-0000-0000-0000-0000000000b2", op_type: "add", role_keys: ["stray"] });
+    state.preview = {
+      revoked_roles: ["pLaser/trained", "pLaser/stray"],
+      retained_roles: [],
+      plans: { trained: actPlan({ fingerprint: "fp-t" }), stray: cancelling([give], { fingerprint: "fp-s" }) },
+    };
+    openRevoke();
+    expect(document.body.textContent).toMatch(/Revoking them cancels the give Sam Lee queued .*Nothing is cancelled until you choose on the next step\./);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this revokes 2 roles/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Revoke these 2 roles in Zitadel" }));
+    // The step, pushed at once from the plans; nothing is written until the operator chooses.
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and revoke" }));
+    await waitFor(() =>
+      expect(state.remove).toHaveBeenCalledWith({
+        userId: "u1",
+        grantId: "g1",
+        plans: { trained: { fingerprint: "fp-t", cancel_ids: [] }, stray: { fingerprint: "fp-s", cancel_ids: [give.id] } },
+      }),
+    );
   });
 
   it("keeps the roles when backed out of", () => {

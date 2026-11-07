@@ -11,9 +11,9 @@ import type { QueuedChange } from "@/lib/cancel-confirm";
  * Change: the planner's words for it, what the automatic rules add (the one
  * source of those sentences, A-21 §4), whether it goes now or waits, and the
  * queued changes it would cancel, with the fingerprint and cancel ids the
- * write carries back. Give, Revoke, Approve, Extend, Drift's Adopt, Manage
- * bundles and Zitadel › Users read it; it replaced the rule preview,
- * `previewRuleGifts` and Manage bundles' what-if.
+ * write carries back. Give, Revoke, Approve, Extend, Drift's Adopt and
+ * Revoke, Manage bundles and Zitadel › Users read it; it replaced the rule
+ * preview, `previewRuleGifts` and Manage bundles' what-if.
  */
 
 export type PlanAction =
@@ -22,7 +22,8 @@ export type PlanAction =
   | { op: "approve"; userId: string; requestId: string }
   | { op: "assign_bundle" | "remove_bundle"; userId: string; bundleId: string }
   | { op: "extend"; userId: string; projectId: string; roleKey: string; days: number }
-  | { op: "adopt"; userId: string; driftId: string };
+  | { op: "adopt"; userId: string; driftId: string }
+  | { op: "revoke"; userId: string; driftId: string };
 
 /** The act's Change as a sheet reads it (handlers.ActPlan). */
 export interface ActPlan {
@@ -57,6 +58,19 @@ export interface PlanSeen {
 export const seenOf = (plan: ActPlan | undefined): PlanSeen | undefined =>
   plan ? { fingerprint: plan.fingerprint, cancel_ids: plan.cancel_ids } : undefined;
 
+/** What each role's write carries of the plan it was shown, by role key (Zitadel › Users). */
+export type RolePlans = Record<string, PlanSeen>;
+
+/** Plans by role key, as the write carries them back. */
+export function seenByRole(plans: Record<string, ActPlan> | undefined): RolePlans {
+  const out: RolePlans = {};
+  for (const [role, plan] of Object.entries(plans ?? {})) {
+    const seen = seenOf(plan);
+    if (seen) out[role] = seen;
+  }
+  return out;
+}
+
 /** The query string a DELETE carries the plan in. */
 export function seenQuery(seen: PlanSeen | undefined): string {
   if (!seen) return "";
@@ -79,7 +93,7 @@ function planURL(action: PlanAction): string {
     if (action.op === "extend") q.set("duration_days", String(action.days));
   } else if (action.op === "remove") q.set("grant_id", action.grantId);
   else if (action.op === "approve") q.set("request_id", action.requestId);
-  else if (action.op === "adopt") q.set("drift_id", action.driftId);
+  else if (action.op === "adopt" || action.op === "revoke") q.set("drift_id", action.driftId);
   else q.set("bundle_id", action.bundleId);
   return `/users/${encodeURIComponent(action.userId)}/plan?${q}`;
 }
@@ -92,6 +106,7 @@ function ready(action: PlanAction | null): action is PlanAction {
     case "extend":
       return Boolean(action.projectId && action.roleKey && action.days > 0);
     case "adopt":
+    case "revoke":
       return Boolean(action.driftId);
     case "remove":
       return Boolean(action.grantId);

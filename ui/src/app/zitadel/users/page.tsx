@@ -41,7 +41,10 @@ import {
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
 import { RuleConsentFailed } from "@/components/requests/RuleConsent";
-import { usePlanConsents } from "@/lib/usePlanConsent";
+import { isStale, seenByRole, usePlanConsents, type PlanConsent, type RolePlans } from "@/lib/usePlanConsent";
+import { KEPT, PushedStep, useCancelStep, useForetell } from "@/components/ui/CancelQueuedStep";
+import { Notice } from "@/components/ui/Notice";
+import type { QueuedChange } from "@/lib/cancel-confirm";
 import { useDebounce } from "@/lib/useDebounce";
 import { formatList, humanizeKey } from "@/lib/format";
 import { sortByName, sortNames } from "@/lib/sort";
@@ -368,6 +371,54 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
   );
 }
 
+/** Each queued change once, by id: several roles' plans can name the same one. */
+function uniqueCancels(changes: QueuedChange[]): QueuedChange[] {
+  const seen = new Set<string>();
+  return changes.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)));
+}
+
+/**
+ * A write here is one planned act per role, as on a person's page (task 1.9):
+ * the sheet says before the press what the roles' plans cancel between them,
+ * the press pushes the cancel step with exactly those, and the write carries
+ * each role's plan. If their access moved since the plans were read, nothing
+ * was written: the sheet says so and reads the plans again.
+ */
+function usePlannedWrite(host: string, goAhead: string, tone: "accent" | "danger") {
+  const step = useCancelStep({ host, goAhead, tone });
+  const foretell = useForetell();
+  const [stale, setStale] = useState(false);
+  const run = async <T,>(cancels: QueuedChange[], write: () => Promise<T>, reread: () => void): Promise<T | typeof KEPT> => {
+    try {
+      const made = await step.confirm(cancels, write);
+      if (made !== KEPT) setStale(false);
+      return made;
+    } catch (error) {
+      if (!isStale(error)) throw error;
+      setStale(true);
+      reread();
+      return KEPT;
+    }
+  };
+  const line = (lead: string, cancels: QueuedChange[]) =>
+    cancels.length > 0 ? `${foretell(lead, cancels)} Nothing is cancelled until you choose on the next step.` : "";
+  return { step, stale, run, line };
+}
+
+function StaleNotice({ name, press }: { name: string; press: string }) {
+  return (
+    <Notice
+      tone="warn"
+      blocking
+      className="mx-6 mb-3"
+      title={`Nothing was changed. ${name === "this person" ? "Their" : `${name}'s`} access moved while this was open.`}
+      next={`Read the lines above again, then press ${press} again.`}
+    >
+      {null}
+    </Notice>
+  );
+}
+
 function RevokeDialog({
   userId,
   name,
@@ -385,10 +436,9 @@ function RevokeDialog({
   const outcome = result?.outcome ?? null;
   const [acknowledged, setAcknowledged] = useState(false);
   const done = succeeded(outcome);
-  // C4, re-audit R18: the count is the roles that go, by the server's own
-  // removal rule (a preview of the very walk the revoke runs), including a
-  // role a rule gave from one that goes. Never worked out here; unread, the
-  // revoke waits for it.
+  // C4, re-audit R18: the count is the roles that go, by each role's plan on
+  // the server (the very acts the revoke runs), including a role a rule gave
+  // from one that goes. Never worked out here; unread, the revoke waits for it.
   const preview = useGrantRemovalPreview(userId, grant.grantId);
   const reading = preview.isLoading;
   const unread = !reading && !preview.data;
@@ -400,9 +450,14 @@ function RevokeDialog({
     goingPairs.filter((pair) => pair.startsWith(`${grant.projectId}/`)).map(roleOf),
   );
   const nothingGoes = Boolean(preview.data) && going.length === 0;
+  const cancels = uniqueCancels(Object.values(preview.data?.plans ?? {}).flatMap((p) => p.cancels));
+  const press = going.length === 1 ? "Revoke this role in Zitadel" : `Revoke these ${going.length} roles in Zitadel`;
+  const w = usePlannedWrite(`Revoke ${name}'s roles in Zitadel`, "revoke", "danger");
+  const cancelLine = w.line(going.length === 1 ? "Revoking it" : "Revoking them", cancels);
 
   return (
     <Modal open onClose={onClose} busy={remove.isPending} size="sm" labelledBy="revoke-grant-title">
+      <PushedStep step={w.step}>
       <ModalHeader
         title={`Revoke ${grant.roleKeys.length === 1 ? "this role" : "these roles"} from ${name} in Zitadel?`}
         titleId="revoke-grant-title"
@@ -412,6 +467,7 @@ function RevokeDialog({
             : "Revoked as a person’s page revokes. A role a bundle or a rule still gives them stays. Every other role on this grant is revoked, including any Syndra has no record of."
         }
       />
+      {w.stale && !done && <StaleNotice name={name} press={press} />}
       {!done && (
         <div className="flex flex-col gap-3.5 px-6">
           <div className="text-[14.5px]">
@@ -422,6 +478,7 @@ function RevokeDialog({
               Stays, because a bundle or a rule still gives it: {formatList(sortNames(kept))}.
             </p>
           )}
+          {cancelLine && <p className="text-[13.5px] leading-[1.55] text-muted">{cancelLine}</p>}
           {nothingGoes ? (
             <p className="text-[13.5px] leading-[1.55] text-muted">
               Nothing on this grant would be revoked: a bundle or a rule gives {name} every role on it.
@@ -445,8 +502,9 @@ function RevokeDialog({
         </div>
       )}
       {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} />}
+      {done && w.step.after}
 
-      <WriteFooter outcome={outcome} onClose={onClose}>
+      <WriteFooter outcome={outcome} onClose={onClose} note={w.step.note}>
         <Button
           variant="dangerConfirm"
           disabled={reading || unread || nothingGoes || !acknowledged}
@@ -464,8 +522,13 @@ function RevokeDialog({
           isPending={remove.isPending}
           onClick={async () => {
             try {
-              const res = await remove.mutateAsync({ userId, grantId: grant.grantId });
-              setResult(changeResult(res, "revoked", auto));
+              const made = await w.run(
+                cancels,
+                () => remove.mutateAsync({ userId, grantId: grant.grantId, plans: seenByRole(preview.data?.plans) }),
+                () => void preview.refetch(),
+              );
+              if (made === KEPT) return;
+              setResult(changeResult(made, "revoked", auto));
             } catch (error) {
               setResult({ outcome: outcomeFromError(error), word: "" });
             }
@@ -474,8 +537,19 @@ function RevokeDialog({
           {going.length === 1 ? "Revoke this role in Zitadel" : `Revoke these ${going.length} roles in Zitadel`}
         </Button>
       </WriteFooter>
+      </PushedStep>
     </Modal>
   );
+}
+
+/** The give plans' seen, by role key, for the roles that have one. */
+function seenOfGives(keys: string[], consents: PlanConsent[]): RolePlans {
+  const out: RolePlans = {};
+  keys.forEach((key, i) => {
+    const seen = consents[i]?.seen;
+    if (seen) out[key] = seen;
+  });
+  return out;
 }
 
 function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void }) {
@@ -493,13 +567,14 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   const parsed = parseKeys(keys);
   const available = sortNames(roles.data?.items.map((role) => role.key) ?? []);
   const waiting = useWaitingAmong(projectId, parsed);
-  // What the automatic rules also give with these roles, said before the
-  // click, in the planner's words: one give plan per role, the read the
-  // person page's give makes (audit C2, A-21 §Q3). This give goes through the
-  // same write, so the same rules follow it. Only for keys that exist, so
-  // typing doesn't ask. Several roles can reach one rule: each line once.
+  // What each give does, said before the click, in the planner's words: one
+  // give plan per role, the read the person page's give makes (audit C2,
+  // A-21 §Q3), and the plan the write carries back (task 1.9). Only for keys
+  // that exist, so typing doesn't ask. Several roles can reach one rule: each
+  // line once.
+  const planned = parsed.filter((key) => available.includes(key));
   const consents = usePlanConsents(
-    parsed.filter((key) => available.includes(key)).map((roleKey) => ({ op: "give" as const, userId, projectId, roleKey })),
+    planned.map((roleKey) => ({ op: "give" as const, userId, projectId, roleKey })),
     "giving them",
   );
   const ruleLines = sortNames(Array.from(new Set(consents.flatMap((c) => c.rules))));
@@ -507,9 +582,13 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
     hold: consents.find((c) => c.hold)?.hold,
     unread: consents.find((c) => c.failed),
   };
+  const cancels = uniqueCancels(consents.flatMap((c) => c.cancels));
+  const w = usePlannedWrite("Give roles in Zitadel", "give them", "accent");
+  const cancelLine = w.line("Giving them", cancels);
 
   return (
     <Modal open onClose={onClose} busy={assign.isPending} size="sm">
+      <PushedStep step={w.step}>
       <ModalHeader
         title="Give roles in Zitadel"
         lede={
@@ -518,6 +597,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
             : "Given as a person’s page gives them: each role must still exist in Zitadel, and they must not already have it."
         }
       />
+      {w.stale && !done && <StaleNotice name="this person" press="Give roles in Zitadel" />}
       {!done && (
         <div className="flex flex-col gap-3.5 px-6">
           <div>
@@ -551,11 +631,12 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
               <p className="mt-1.5 text-[12.5px] text-faint">Available: {available.join(", ")}</p>
             )}
           </div>
-          {(ruleLines.length > 0 || rules.unread) && (
+          {(ruleLines.length > 0 || rules.unread || cancelLine) && (
             <div className="flex flex-col gap-1 text-[13px] leading-[1.5] text-muted" data-testid="rule-preview">
               {ruleLines.map((line) => (
                 <span key={line}>{line}</span>
               ))}
+              {cancelLine && <span>{cancelLine}</span>}
               {rules.unread && <RuleConsentFailed consent={rules.unread} className="flex flex-wrap items-center gap-x-3 gap-y-1" />}
             </div>
           )}
@@ -568,8 +649,9 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
         </div>
       )}
       {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} />}
+      {done && w.step.after}
 
-      <WriteFooter outcome={outcome} onClose={onClose}>
+      <WriteFooter outcome={outcome} onClose={onClose} note={w.step.note}>
         <Button
           // Granting, not revoking: accent, so it cannot be mistaken for "Revoke roles".
           variant="accent"
@@ -588,8 +670,13 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           isPending={assign.isPending}
           onClick={async () => {
             try {
-              const res = await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
-              setResult(changeResult(res, "given", auto));
+              const made = await w.run(
+                cancels,
+                () => assign.mutateAsync({ userId, projectId, roleKeys: parsed, plans: seenOfGives(planned, consents) }),
+                () => consents.forEach((c) => c.retry()),
+              );
+              if (made === KEPT) return;
+              setResult(changeResult(made, "given", auto));
             } catch (error) {
               setResult({ outcome: outcomeFromError(error), word: "" });
             }
@@ -598,6 +685,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           Give roles in Zitadel
         </Button>
       </WriteFooter>
+      </PushedStep>
     </Modal>
   );
 }
@@ -620,15 +708,36 @@ function EditRolesDialog({
   const done = succeeded(outcome);
 
   const parsed = parseKeys(keys);
+  const adds = parsed.filter((key) => !grant.roleKeys.includes(key));
+  const removes = grant.roleKeys.filter((key) => !parsed.includes(key));
   // Both halves of a replace are delivered by the same rule: what is added and what is left out.
-  const changed = [
-    ...parsed.filter((key) => !grant.roleKeys.includes(key)),
-    ...grant.roleKeys.filter((key) => !parsed.includes(key)),
-  ];
+  const changed = [...adds, ...removes];
   const waiting = useWaitingAmong(grant.projectId, changed);
+  // Each half is planned as on a person's page (task 1.9): the left-out
+  // roles' removal plans and the new roles' give plans, which say what the
+  // replace cancels before the press and go back with the write.
+  const removal = useGrantRemovalPreview(userId, grant.grantId, removes, removes.length > 0 && !done);
+  const consents = usePlanConsents(
+    adds.map((roleKey) => ({ op: "give" as const, userId, projectId: grant.projectId, roleKey })),
+    "replacing them",
+  );
+  const hold =
+    consents.find((c) => c.hold)?.hold ??
+    (removes.length > 0 && removal.isLoading
+      ? "Checking what replacing them does."
+      : removes.length > 0 && removal.isError
+        ? "Held until Syndra can read what replacing them does."
+        : undefined);
+  const cancels = uniqueCancels([
+    ...Object.values(removal.data?.plans ?? {}).flatMap((p) => p.cancels),
+    ...consents.flatMap((c) => c.cancels),
+  ]);
+  const w = usePlannedWrite("Replace this person's roles in Zitadel", "replace them", "danger");
+  const cancelLine = w.line("Replacing them", cancels);
 
   return (
     <Modal open onClose={onClose} busy={update.isPending} size="sm">
+      <PushedStep step={w.step}>
       <ModalHeader
         title="Replace this person's roles in Zitadel"
         lede={
@@ -637,6 +746,7 @@ function EditRolesDialog({
             : "The new set replaces the old one. Any role you leave out is revoked, unless a bundle or a rule still gives it."
         }
       />
+      {w.stale && !done && <StaleNotice name="this person" press="Replace roles in Zitadel" />}
       {!done && (
         <div className="flex flex-col gap-3.5 px-6">
           <div>
@@ -644,6 +754,7 @@ function EditRolesDialog({
             <Input id="edit-roles" value={keys} onChange={(event) => setKeys(event.target.value)} />
             <FieldHint>The short name other systems see, e.g. trained, comma separated.</FieldHint>
           </div>
+          {cancelLine && <p className="text-[13.5px] leading-[1.55] text-muted">{cancelLine}</p>}
           <DirectWriteWarning
             what="Replacing the roles revokes any you leave out, unless a bundle or a rule still gives it."
             sends={sendsWhen(waiting)}
@@ -653,23 +764,40 @@ function EditRolesDialog({
         </div>
       )}
       {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} />}
+      {done && w.step.after}
 
-      <WriteFooter outcome={outcome} onClose={onClose}>
+      <WriteFooter outcome={outcome} onClose={onClose} note={w.step.note}>
         <Button
           variant="dangerConfirm"
-          disabled={parsed.length === 0 || !acknowledged}
+          disabled={parsed.length === 0 || !acknowledged || Boolean(hold)}
           reason={
             parsed.length === 0
               ? "Enter at least one role key."
-              : !acknowledged
-                ? "Check the box above to confirm any role left out is revoked."
-                : undefined
+              : hold
+                ? hold
+                : !acknowledged
+                  ? "Check the box above to confirm any role left out is revoked."
+                  : undefined
           }
           isPending={update.isPending}
           onClick={async () => {
             try {
-              const res = await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
-              setResult(changeResult(res, "replaced", auto));
+              const made = await w.run(
+                cancels,
+                () =>
+                  update.mutateAsync({
+                    userId,
+                    grantId: grant.grantId,
+                    roleKeys: parsed,
+                    plans: { ...seenByRole(removal.data?.plans), ...seenOfGives(adds, consents) },
+                  }),
+                () => {
+                  void removal.refetch();
+                  consents.forEach((c) => c.retry());
+                },
+              );
+              if (made === KEPT) return;
+              setResult(changeResult(made, "replaced", auto));
             } catch (error) {
               setResult({ outcome: outcomeFromError(error), word: "" });
             }
@@ -678,6 +806,7 @@ function EditRolesDialog({
           Replace roles in Zitadel
         </Button>
       </WriteFooter>
+      </PushedStep>
     </Modal>
   );
 }

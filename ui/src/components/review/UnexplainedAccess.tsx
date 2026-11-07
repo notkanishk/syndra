@@ -1121,14 +1121,22 @@ function ResolutionDialog({
   const resolver = useNameResolver();
   // Adopting is when a rule starting from the role fires (ADR-006), so the
   // dialog says what adopting does before the operator confirms (audit C1),
-  // from the planner: the same Change the adoption writes (task 1.3).
+  // from the planner: the same Change the adoption writes (task 1.3). A
+  // revoke is planned too (task 1.9): it says before the press what it
+  // cancels, and writes only the Change it was shown.
+  const planned = pending?.resolution === "attribute" ? "adopt" : pending?.resolution === "revoke" ? "revoke" : null;
+  const revoking = planned === "revoke";
   const consent = usePlanConsent(
-    pending?.resolution === "attribute" ? { op: "adopt", userId: pending.item.user_id, driftId: pending.item.id } : null,
-    "adopting it",
+    pending && planned ? { op: planned, userId: pending.item.user_id, driftId: pending.item.id } : null,
+    revoking ? "revoking it" : "adopting it",
   );
   const foretell = useForetell();
-  // An adoption that would cancel a change still waiting pushes the step inside this sheet.
-  const step = useCancelStep({ host: "Adopt this access", goAhead: "adopt" });
+  // An act that would cancel a change still waiting pushes the step inside this sheet.
+  const step = useCancelStep(
+    revoking
+      ? { host: "Revoke this access", goAhead: "revoke", tone: "danger" }
+      : { host: "Adopt this access", goAhead: "adopt" },
+  );
   // The write found their access moved since the plan was read: nothing was written.
   const [stale, setStale] = useState(false);
 
@@ -1136,14 +1144,15 @@ function ResolutionDialog({
   const { item, resolution } = pending;
   const busy = attribute.isPending || revoke.isPending || external.isPending;
   const role = item.role_keys[0] ?? "";
-  const plan = resolution === "attribute" ? consent.plan : undefined;
+  const plan = planned ? consent.plan : undefined;
   const refused = plan && plan.effect !== "apply" ? plan : undefined;
-  // The planner's own sentences: what adopting records, what the rules also give, what waits.
-  const planLines = plan && !refused ? plan.said : [];
+  // The planner's own sentences: what adopting records, what the rules also
+  // give, what waits. A revoke's are the dialog's own lines below.
+  const planLines = plan && !refused && !revoking ? plan.said : [];
   const refusedReason = refused ? [refused.detail, refused.consequence].filter(Boolean).join(" ") : undefined;
   const cancelLine =
     plan && !refused && consent.cancels.length > 0
-      ? `${foretell("Adopting it", consent.cancels)} Nothing is cancelled until you choose on the next step.`
+      ? `${foretell(revoking ? "Revoking it" : "Adopting it", consent.cancels)} Nothing is cancelled until you choose on the next step.`
       : "";
   const first = resolver.resolveUser(item.user_id).value?.display_name?.trim().split(/\s+/)[0];
   const waits = roleWaits(item.project_id, role);
@@ -1186,7 +1195,7 @@ function ResolutionDialog({
           blocking
           className="mx-6 mb-3"
           title={`Nothing was changed. ${first ? `${first}'s` : "Their"} access moved while this was open.`}
-          next="Read the lines under the role, then press Adopt in Syndra again."
+          next={`Read the lines under the role, then press ${copy.confirm} again.`}
         >
           {null}
         </Notice>
@@ -1205,7 +1214,7 @@ function ResolutionDialog({
           </ul>
         )}
         {refusedReason && <p className="text-[13.5px] leading-[1.55] text-ink">{refusedReason}</p>}
-        {resolution === "attribute" && (
+        {planned && (
           <RuleConsentFailed consent={consent} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] leading-[1.55] text-muted" />
         )}
 
@@ -1287,23 +1296,23 @@ function ResolutionDialog({
             // places Cancel.
             data-skip-initial-focus={resolution === "revoke" ? "" : undefined}
             isPending={busy}
-            // Adopting is consent to what it does, so it waits for the plan
-            // that says so, and the planner's refusal holds it.
-            disabled={resolution === "attribute" && Boolean(consent.hold || refused)}
-            reason={resolution === "attribute" ? (consent.hold ?? refusedReason) : undefined}
+            // Adopting and revoking are consent to what they do, so each
+            // waits for the plan that says so, and the planner's refusal holds it.
+            disabled={Boolean(planned) && Boolean(consent.hold || refused)}
+            reason={planned ? (consent.hold ?? refusedReason) : undefined}
             onClick={async () => {
               try {
                 let answer: DriftAnswer | undefined;
-                if (resolution === "attribute") {
+                if (planned) {
                   // One that cancels a waiting change pushes the step at once, from the plan.
                   const made = await step.confirm(consent.cancels, () =>
-                    attribute.mutateAsync({ id: item.id, body: { source: "external_backfill", ...consent.seen } }),
+                    revoking
+                      ? revoke.mutateAsync({ id: item.id, body: { ...consent.seen } })
+                      : attribute.mutateAsync({ id: item.id, body: { source: "external_backfill", ...consent.seen } }),
                   );
                   if (made === KEPT) return;
                   setStale(false);
                   answer = made as DriftAnswer;
-                } else if (resolution === "revoke") {
-                  answer = (await revoke.mutateAsync({ id: item.id })) as typeof answer;
                 } else {
                   await external.mutateAsync({ id: item.id, body: {} });
                 }
@@ -1315,7 +1324,7 @@ function ResolutionDialog({
               } catch (error) {
                 // Their access moved since the plan was read: nothing was
                 // written. The sheet says so and reads the plan again.
-                if (resolution === "attribute" && isStale(error)) {
+                if (planned && isStale(error)) {
                   setStale(true);
                   consent.retry();
                   return;
