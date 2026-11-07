@@ -456,54 +456,6 @@ func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, t
 	return ruleID, res, err
 }
 
-// CascadeBundleRemovedFromUser computes the user's closure delta with the bundle simulated as
-// already removed (userBaseHoldingsExcludingBundle), then atomically deletes the assignment +
-// enqueues the delta, then (auto) drains. Because the delta is computed over the FULL effective
-// closure, a role still reachable via another bundle/rule/direct grant simply never leaves
-// `after` — no separate coverage check is needed (replaces the old OtherSourceCovers scan). Any
-// concurrent change between the read and the delete is a reconciliation-tolerated race (design §7
-// Q4).
-func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID string) (CascadeResult, error) {
-	var bundle models.Bundle
-	var ids []string
-	err := withLockedAccess(ctx, func(ctx context.Context) error {
-		var err error
-		bundle, err = svcGetBundleByID(ctx, bundleID)
-		if err != nil {
-			return err
-		}
-		if err := refuseRetired(bundle); err != nil {
-			return err
-		}
-		rules, err := svcGetActiveMappingRules(ctx)
-		if err != nil {
-			return err
-		}
-		before, err := userBaseHoldings(ctx, userID)
-		if err != nil {
-			return err
-		}
-		after, err := userBaseHoldingsExcludingBundle(ctx, userID, bundleID)
-		if err != nil {
-			return err
-		}
-		closureBefore, closureAfter := effectiveClosure(before, rules), effectiveClosure(after, rules)
-		adds, revokes := closureDelta(closureBefore, closureAfter)
-		params, err := deltaParams(ctx, userID, adds, revokes, actor, "Bundle removal cascade", "bundle", bundleID)
-		if err != nil {
-			return err
-		}
-		params = asRuleRows(params, ruleRefs(before, after, closureBefore, closureAfter, rules))
-
-		ids, err = svcRemoveBundleFromUserAndEnqueue(ctx, actor, "", userID, bundleID, params)
-		return err
-	})
-	if err != nil {
-		return CascadeResult{}, err
-	}
-	return applyMode(ctx, ids)
-}
-
 // CascadeBundleRetired retires a bundle and takes back what only it was granting.
 //
 // It is CascadeBundleRemovedFromUser run over every holder and committed with the deletion, and

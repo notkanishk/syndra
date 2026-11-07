@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"syndra/internal/access"
 	"syndra/internal/db"
@@ -24,7 +25,9 @@ import (
 // when the Change is the one the operator reviewed. A preview computed by
 // different code from the write it previews is a preview of nothing.
 //
-// First slice: bulk assign and remove bundle. Every other action still goes
+// Planned: bulk assign and remove bundle (task 1.1), and the single acts on
+// one person: give and remove a direct grant, approve a request, assign and
+// remove a bundle (task 1.2, planner_act.go). Every other action still goes
 // its old way (tasks.md, candidate 1).
 
 // Action is one person's part of an access change.
@@ -32,6 +35,12 @@ type Action struct {
 	Op       string
 	UserID   string
 	BundleID string
+	// ProjectID and RoleKey are the role a give or an approval gives.
+	ProjectID, RoleKey string
+	// GrantID is the direct grant a removal takes back.
+	GrantID string
+	// RequestID is the request an approval decides.
+	RequestID string
 }
 
 // How a write reaches Zitadel (decision 11): sent in the same request, held
@@ -66,6 +75,21 @@ type Change struct {
 	Cancels []models.QueuedChange
 	// VersionID is the bundle version an assignment pins.
 	VersionID string
+	// Approval is what approving a request does (given, extended, given
+	// again), with the end it sets.
+	Approval ApprovalPlan
+	// Rules are the row's sentences for what the automatic rules add or take
+	// away with it ("Also gives …, by the automatic rule from …"): the one
+	// source of those words (A-21 §4), said apart for the single acts.
+	Rules []string
+	// Said is the row's sentences after Detail, without the cancels line,
+	// which a single act says in its own step.
+	Said []string
+	// Waits names the roles whose write waits for you to send, alphabetical.
+	Waits []string
+	// ProjectID and RoleKey are a single act's own role (for a removal, the
+	// grant's).
+	ProjectID, RoleKey string
 	// Row is the plan row: its words, effect, cancel ids and fingerprint. The
 	// fingerprint is the Change's identity (its writes and cancel ids, and the
 	// decision around them; see decided): the apply refuses when it differs.
@@ -84,6 +108,13 @@ type PlanSnapshot struct {
 	// Profiles is the directory's people; absent means no such account.
 	Profiles map[string]models.UserProfile
 	Access   db.AccessSnapshot
+	// Holding is what a give or an approval's person holds of its role
+	// (db.RequestHolding), read under the lock with the rest.
+	Holding models.RequestHolding
+	// Request is the request an approval decides, read under the lock.
+	Request models.AccessRequest
+	// Now is when the snapshot was read: the day an approval's end counts from.
+	Now time.Time
 }
 
 type roleWords struct{ Role, Project string }
@@ -98,6 +129,9 @@ func Plan(a Action, s PlanSnapshot) Change {
 	}
 	ch.Row.Name, ch.Row.Email = profile.Name, profile.Email
 	person := s.Access.People[a.UserID]
+	if roleOp(a.Op) {
+		return planRole(ch, a, s, profile, person)
+	}
 	bundle := displayBundle(s.Bundle.Name)
 	holds := person.Bundles[a.BundleID]
 
@@ -163,21 +197,8 @@ func Plan(a Action, s PlanSnapshot) Change {
 
 	// The bundle's own roles are its rows; a role a rule follows with is the
 	// rule's row, with the rule that reaches it (decision 7).
-	writes := asRuleRows(deltaWrites(a.UserID, adds, revokes, "bundle", a.BundleID),
-		ruleRefs(before, after, closureBefore, closureAfter, rules))
-	for _, p := range writes {
-		w := Write{EnqueueParams: p, Delivery: DeliveryStraightAway}
-		ref := db.RoleRef{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]}
-		answered := db.AnsweredBy(p, person.Queued)
-		ch.Cancels = append(ch.Cancels, answered...)
-		switch {
-		case len(answered) > 0 && !db.OwedAfterCancel(p, person.Standing[ref]):
-			w.Delivery = DeliveryNone
-		case s.Access.RoleWaits[ref]:
-			w.Delivery, w.WaitReason = DeliveryWaits, db.WaitReasonRoleWaits
-		}
-		ch.Writes = append(ch.Writes, w)
-	}
+	ch = ch.deliver(asRuleRows(deltaWrites(a.UserID, adds, revokes, "bundle", a.BundleID),
+		ruleRefs(before, after, closureBefore, closureAfter, rules)), person, s)
 
 	var detail string
 	var said []string
@@ -191,7 +212,7 @@ func Plan(a Action, s PlanSnapshot) Change {
 			said = append(said, "Already holds every role it gives, so nothing is sent to Zitadel.")
 		}
 		for _, k := range byRule {
-			said = append(said, fmt.Sprintf("Also gives %s, by the automatic rule from %s.", s.words(k), s.ruleSource(rules, closureAfter, k)))
+			ch.Rules = append(ch.Rules, fmt.Sprintf("Also gives %s, by the automatic rule from %s.", s.words(k), s.ruleSource(rules, closureAfter, k)))
 		}
 	} else {
 		detail = fmt.Sprintf("Leaves %s.", bundle)
@@ -217,27 +238,63 @@ func Plan(a Action, s PlanSnapshot) Change {
 			}
 		}
 		for _, k := range byRule {
-			said = append(said, fmt.Sprintf("Also loses %s, which the automatic rule from %s gave.", s.words(k), s.ruleSource(rules, closureBefore, k)))
+			ch.Rules = append(ch.Rules, fmt.Sprintf("Also loses %s, which the automatic rule from %s gave.", s.words(k), s.ruleSource(rules, closureBefore, k)))
 		}
 	}
-	var waiting []roleKey
-	for _, w := range ch.Writes {
-		if w.Delivery == DeliveryWaits {
-			waiting = append(waiting, roleKey{projectID: w.ProjectID, roleKey: w.RoleKeys[0]})
+	return ch.said(a, s, detail, said)
+}
+
+// said finishes a row that goes ahead: its own sentences, then the rules'
+// (A-21 §4.1), then which writes wait for you, then what it cancels.
+func (ch Change) said(a Action, s PlanSnapshot, detail string, said []string) Change {
+	said = append(said, ch.Rules...)
+	if waiting := ch.waiting(); len(waiting) > 0 {
+		for _, k := range waiting {
+			ch.Waits = append(ch.Waits, s.words(k))
 		}
-	}
-	if len(waiting) > 0 {
+		sort.SliceStable(ch.Waits, func(i, j int) bool { return strings.ToLower(ch.Waits[i]) < strings.ToLower(ch.Waits[j]) })
 		verb := "Giving"
-		if a.Op == BulkOpRemoveBundle {
+		if a.Op == BulkOpRemoveBundle || a.Op == OpRemoveGrant {
 			verb = "Removing"
 		}
 		said = append(said, fmt.Sprintf("%s %s waits for you to send.", verb, s.list(waiting)))
 	}
+	ch.Said = said
 	// The cancels line stays last: the plan renderer splits it off the end.
 	if line := DescribeCancels(ch.Cancels); line != "" {
-		said = append(said, line)
+		said = append(slices.Clone(said), line)
 	}
 	return ch.decided(a, EffectApply, "", detail, strings.Join(said, " "))
+}
+
+// waiting is the roles whose write waits for you to send.
+func (ch Change) waiting() []roleKey {
+	var out []roleKey
+	for _, w := range ch.Writes {
+		if w.Delivery == DeliveryWaits {
+			out = append(out, roleKey{projectID: w.ProjectID, roleKey: w.RoleKeys[0]})
+		}
+	}
+	return out
+}
+
+// deliver adds the writes, each with how it is delivered (decision 11), and
+// the queued changes they cancel (db.Answers, the one predicate).
+func (ch Change) deliver(writes []db.EnqueueParams, person db.PersonAccess, s PlanSnapshot) Change {
+	for _, p := range writes {
+		w := Write{EnqueueParams: p, Delivery: DeliveryStraightAway}
+		ref := db.RoleRef{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]}
+		answered := db.AnsweredBy(p, person.Queued)
+		ch.Cancels = append(ch.Cancels, answered...)
+		switch {
+		case len(answered) > 0 && !db.OwedAfterCancel(p, person.Standing[ref]):
+			w.Delivery = DeliveryNone
+		case s.Access.RoleWaits[ref]:
+			w.Delivery, w.WaitReason = DeliveryWaits, db.WaitReasonRoleWaits
+		}
+		ch.Writes = append(ch.Writes, w)
+	}
+	return ch
 }
 
 // decided fills the row and its fingerprint: the decision, the writes and the
@@ -247,6 +304,9 @@ func (ch Change) decided(a Action, effect, refusal, detail, consequence string) 
 	ch.Refusal = refusal
 	ch.Row.Effect, ch.Row.Detail, ch.Row.Consequence = effect, detail, consequence
 	fields := []string{"planner/1", a.Op, a.UserID, a.BundleID, effect, refusal, ch.VersionID}
+	if roleOp(a.Op) {
+		fields = append(fields, a.ProjectID, a.RoleKey, a.GrantID, a.RequestID, string(ch.Approval.Effect))
+	}
 	for _, w := range ch.Writes {
 		fields = append(fields, w.OpType, w.ProjectID, w.RoleKeys[0], w.Source, w.SourceRef, w.Delivery)
 	}

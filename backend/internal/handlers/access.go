@@ -32,6 +32,8 @@ type UpsertDirectGrantRequest struct {
 	// Extend says this changes the end of a grant they already have, to a
 	// later one. Without it, giving a role they already have is refused.
 	Extend bool `json:"extend,omitempty"`
+	// The plan the giving sheet was shown (GET /users/{id}/plan?op=give).
+	planFields
 }
 
 type CreateAccessRequestRequest struct {
@@ -55,6 +57,9 @@ type ResolveAccessRequestRequest struct {
 	// authenticated subject from the bearer token is used instead.
 	ReviewerID string `json:"reviewer_id,omitempty"`
 	ReviewNote string `json:"review_note"`
+	// The plan the row was shown (GET /users/{id}/plan?op=approve), for an
+	// approval.
+	planFields
 }
 
 // resolveActor prefers the authenticated principal from the request context
@@ -120,36 +125,34 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		expiresAt = &expiry
 	}
 
+	if !req.Extend {
+		givePlanned(w, r, userID, grantedBy, expiresAt, req)
+		return
+	}
+
 	if err := checkRoleOffered(r.Context(), req.ProjectID, req.RoleKey); err != nil {
 		writeRoleOfferedError(w, err)
 		return
 	}
 
-	// Giving is for a role they don't have; extending is for one that ends.
-	// Neither merges into what is there (owner, 15 Oct).
+	// Extending is for a role that ends, and never merges into what is there
+	// (owner, 15 Oct). It is not on the planner yet (task 1.3).
 	holding, err := dbRequestHolding(r.Context(), userID, req.ProjectID, req.RoleKey)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	endRule := db.EndKept
-	switch {
-	case !req.Extend && holding.Kind != models.HoldingNone:
-		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", alreadyHeldMessage(holding, "They"))
+	switch err := services.CheckExtension(holding, expiresAt); {
+	case errors.Is(err, services.ErrNothingToExtend):
+		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND",
+			"There is no end to extend: they have this with no end, or don't have it.")
 		return
-	case req.Extend:
-		switch err := checkExtension(holding, expiresAt); {
-		case errors.Is(err, errNothingToExtend):
-			jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND",
-				"There is no end to extend: they have this with no end, or don't have it.")
-			return
-		case errors.Is(err, errExtensionShortens):
-			jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST",
-				"It already runs past that date, so extending would shorten it. Nothing was changed.")
-			return
-		}
-		endRule = db.EndSet
+	case errors.Is(err, services.ErrExtensionShortens):
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST",
+			"It already runs past that date, so extending would shorten it. Nothing was changed.")
+		return
 	}
+	endRule := db.EndSet
 
 	// The grant is recorded in the durable ledger + outbox in one transaction
 	// (audit included); the Zitadel mutation happens later during the
@@ -262,10 +265,10 @@ func withHolding(ctx context.Context, requests []models.AccessRequest) []models.
 			continue
 		}
 		requests[i].Holding = &h
-		if requests[i].Kind == requestKindExtend {
+		if requests[i].Kind == services.RequestKindExtend {
 			// The same end approving will set (planApproval), for the queue.
 			requests[i].CurrentUntil = h.Until
-			if p, err := planApproval(requests[i], h, time.Now()); err == nil {
+			if p, err := services.PlanApproval(requests[i], h, time.Now()); err == nil {
 				requests[i].Until = p.ExpiresAt
 			}
 		}
@@ -306,9 +309,9 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Kind == "" {
-		req.Kind = requestKindAccess
+		req.Kind = services.RequestKindAccess
 	}
-	if req.Kind != requestKindAccess && req.Kind != requestKindExtend {
+	if req.Kind != services.RequestKindAccess && req.Kind != services.RequestKindExtend {
 		jsonValidationErrorResponse(w, `kind must be "access" or "extend"`, map[string]string{"kind": "enum"})
 		return
 	}
@@ -330,22 +333,22 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	switch err := checkRequestKind(req.Kind, holding, durationDays, req.Until, now); {
-	case errors.Is(err, errAskEnded):
+	switch err := services.CheckRequestKind(req.Kind, holding, durationDays, req.Until, now); {
+	case errors.Is(err, services.ErrAskEnded):
 		jsonValidationErrorResponse(w, "until must be a date that hasn't passed yet", map[string]string{"until": "future"})
 		return
-	case errors.Is(err, errRequestAlreadyHeld):
+	case errors.Is(err, services.ErrRequestAlreadyHeld):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", alreadyHeldMessage(holding, "You"))
 		return
-	case errors.Is(err, errNothingHeldToExtend):
+	case errors.Is(err, services.ErrNothingHeldToExtend):
 		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND", "You don't have this, so there's nothing to keep longer. Ask for it instead.")
 		return
-	case errors.Is(err, errNothingToExtend):
+	case errors.Is(err, services.ErrNothingToExtend):
 		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND", "You already have this with no end date, so there's nothing to keep longer.")
 		return
-	case errors.Is(err, errExtensionShortens):
+	case errors.Is(err, services.ErrExtensionShortens):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST",
-			fmt.Sprintf("You already have this %s, which is later than that. Choose a longer time.", endPhrase(holding.Until)))
+			fmt.Sprintf("You already have this %s, which is later than that. Choose a longer time.", services.EndPhrase(holding.Until)))
 		return
 	}
 
@@ -465,7 +468,7 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decided, err := resolveAccessRequestOutcome(r.Context(), requestID, status, reviewer, req.ReviewNote)
+	decided, err := resolveAccessRequestOutcome(r.Context(), requestID, status, reviewer, req.ReviewNote, req.seen())
 	switch {
 	case err == nil:
 		// For an approval: effect (given, extended, given_again), until (the
@@ -488,29 +491,24 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 			resp["rule_waiting"] = decided.RuleWaiting
 		}
 		jsonResponse(w, http.StatusOK, resp)
-	case errors.Is(err, errRequestNotFound):
+	case errors.Is(err, services.ErrRequestNotFound):
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
-	case errors.Is(err, errRequestAlreadyResolved):
+	case errors.Is(err, services.ErrRequestAlreadyResolved):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", err.Error())
-	case errors.Is(err, errRequestAlreadyHeld):
+	case errors.Is(err, services.ErrRequestAlreadyHeld):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", "They already have this, so approving would change nothing. Decline it to close the request.")
-	case errors.Is(err, errExtensionShortens):
+	case errors.Is(err, services.ErrExtensionShortens):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST", "They already have this past the end this asks for, so approving would shorten it. Decline it to close the request.")
-	case errors.Is(err, errAskEnded):
+	case errors.Is(err, services.ErrAskEnded):
 		jsonErrorResponse(w, http.StatusConflict, "END_PASSED", "The end date this asked for has already passed, so approving would give access that has already ended. Decline it, and they can ask again.")
-	case errors.Is(err, errRoleNotOffered), errors.Is(err, errCatalogueUnread):
-		writeRoleOfferedError(w, err)
 	default:
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		// Stale, a role Zitadel no longer offers, the catalogue unread, a
+		// departed account: the planner's refusals, said as every act says them.
+		writeActError(w, err)
 	}
 }
 
 var (
-	errRequestNotFound        = errors.New("access request not found")
-	errRequestAlreadyResolved = errors.New("access request is already resolved")
-	// errRequestAlreadyHeld is approving a request for a role the person has
-	// come to hold since asking. Nothing is granted; declining closes it.
-	errRequestAlreadyHeld = errors.New("they already have this, so approving would change nothing; decline it to close the request")
 	// errRoleNotOffered: the role isn't in Zitadel's catalogue (removed since,
 	// or never there). Nothing is given; a grant of it would fail at send with
 	// the request already approved.
@@ -574,13 +572,6 @@ func writeRoleOfferedError(w http.ResponseWriter, err error) {
 		"Syndra couldn't read Zitadel's list of roles to check this one exists, so nothing was changed. Try again shortly.")
 }
 
-// resolveOneAccessRequest is the decision itself, with no HTTP in it.
-//
-// Extracted so the bulk endpoint runs exactly this code rather than a second
-// implementation of it. The sequence below — conditional transaction, race
-// guard, cache rebuild, inline drain — is the part that must not diverge: a
-// second copy that drifted would leave requests approved but ungranted, which
-// re-surfaces later as syndra_only drift and is diagnosed by nobody.
 // decisionResult is what deciding a request did: for an approval, what it
 // gave (given, extended, given_again), until when, and why it isn't in
 // Zitadel yet when it isn't.
@@ -588,7 +579,7 @@ type decisionResult struct {
 	WaitReason string
 	// Retry is the next try and which try, when Zitadel didn't take it.
 	Retry  *extcall.RetryState
-	Effect approvalEffect
+	Effect services.ApprovalEffect
 	Until  *time.Time
 	// RuleWaiting counts the roles an automatic rule gave with the approval
 	// that wait for the operator to send (re-audit R12).
@@ -596,136 +587,34 @@ type decisionResult struct {
 }
 
 func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, reviewNote string) error {
-	_, err := resolveAccessRequestOutcome(ctx, requestID, status, reviewer, reviewNote)
+	_, err := resolveAccessRequestOutcome(ctx, requestID, status, reviewer, reviewNote, nil)
 	return err
 }
 
-// resolveAccessRequestOutcome decides the request, and for an approval says
-// why the access isn't in Zitadel yet when it isn't (services.Deliver), so
-// the outcome can say "This role always waits for you" or "Zitadel didn't
-// answer".
-func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewer, reviewNote string) (res decisionResult, err error) {
-	request, err := dbGetAccessRequestByID(ctx, requestID)
-	if err != nil {
-		return decisionResult{}, fmt.Errorf("%w: %s", errRequestNotFound, err.Error())
+// resolveAccessRequestOutcome decides the request (services.DecideRequest, the
+// one decision the single and the bulk paths share) and, for an approval,
+// makes it effective and sends what the plan says goes now: the compiled
+// cache is rebuilt first, on a context detached from the request, so access
+// works whatever the send does; then DeliverChange, targeted to this
+// approval's rows only. It says why the access isn't in Zitadel yet when it
+// isn't, so the outcome can say "This role always waits for you" or "Zitadel
+// didn't answer".
+func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewer, reviewNote string, seen *services.Seen) (decisionResult, error) {
+	decided, err := svcDecideRequest(ctx, requestID, status, reviewer, reviewNote, seen)
+	if err != nil || status != "approved" {
+		return decisionResult{}, err
 	}
-
-	// Anything that is not pending is already settled — including 'withdrawn', which the
-	// member settled themselves. Enumerating the decided statuses instead would mean every new
-	// terminal state silently became decidable again.
-	if request.Status != "pending" {
-		return decisionResult{}, fmt.Errorf("%w (already %s)", errRequestAlreadyResolved, request.Status)
+	rebuildUserCacheDetached(ctx, decided.UserID)
+	res := decisionResult{Effect: decided.Approval.Effect, Until: decided.Approval.ExpiresAt}
+	queued := actResult(decided.Change)
+	if ids := queued.OutboxIDs(); len(ids) > 0 {
+		d := svcDeliverChange(ctx, decided.Change)
+		own := ""
+		if slices.Contains(d.Sent, queued.OutboxID) {
+			own, _ = dbGetPropagationStatus(ctx, queued.OutboxID)
+		}
+		res.WaitReason, res.Retry, res.RuleWaiting = ownWait(d, queued.OutboxID, own)
 	}
-
-	if status == "approved" {
-		// They may have come to hold it since asking (granted directly, a
-		// bundle). Approving then would write over what they have, so it is
-		// refused and the request is left for a decline.
-		holding, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey)
-		if err != nil {
-			return decisionResult{}, err
-		}
-		// What approving does depends on what they hold now, not when they
-		// asked: an ask needs them not to have it; keeping it longer moves the
-		// end of the grant they have, or, if it lapsed while waiting, gives it
-		// back for the time asked (planApproval).
-		plan, err := planApproval(request, holding, time.Now())
-		if err != nil {
-			return decisionResult{}, err
-		}
-		if err := checkRoleOffered(ctx, request.ProjectID, request.RoleKey); err != nil {
-			return decisionResult{}, err
-		}
-		expiresAt := plan.ExpiresAt
-		// An approval creates the same kind of direct grant as the operator grant
-		// endpoint, so it flows through the durable ledger+outbox (B4/D3 single
-		// mutation authority) rather than the bare upsert — otherwise the grant is
-		// invisible to the Pending UI, never projected to Zitadel, and later
-		// re-surfaces as syndra_only drift. source_ref ties the grant to the
-		// originating request. Resolution + enqueue are ONE conditional
-		// transaction: either the request flips to approved AND the grant is
-		// enqueued, or neither happens (no approved-but-ungranted state), and the
-		// status='pending' guard closes the concurrent approve/reject race.
-		payload, _ := json.Marshal(map[string]string{
-			"user_id":      request.RequesterID,
-			"project_id":   request.ProjectID,
-			"role_key":     request.RoleKey,
-			"from_request": requestID,
-		})
-		// An extension remembers both ends with its resolution: the end they
-		// had (read just above) and the end approving sets. Any other request
-		// records neither.
-		var endedBefore, endsAfter *time.Time
-		if request.Kind == requestKindExtend {
-			endedBefore, endsAfter = holdingEnd(holding), expiresAt
-		}
-		queued, err := dbApproveRequestAndEnqueue(ctx, requestID, reviewer, reviewNote, db.EnqueueParams{
-			UserID:      request.RequesterID,
-			ProjectID:   request.ProjectID,
-			RoleKeys:    []string{request.RoleKey},
-			GrantedBy:   reviewer,
-			Reason:      approvalReason(plan.Effect),
-			ExpiresAt:   expiresAt,
-			EndRule:     plan.EndRule,
-			Source:      "direct",
-			SourceRef:   requestID,
-			OpType:      "add",
-			PayloadJSON: string(payload),
-		}, endedBefore, endsAfter)
-		if err != nil {
-			if errors.Is(err, db.ErrRequestNotPending) {
-				return decisionResult{}, errRequestAlreadyResolved
-			}
-			return decisionResult{}, err
-		}
-		// Rebuild the compiled cache from the just-committed ledger row FIRST, so
-		// access is effective immediately — independent of the best-effort inline
-		// drain below, and on a context detached from the request so a client
-		// disconnect after commit cannot leave access ineffective.
-		rebuildUserCacheDetached(ctx, request.RequesterID)
-		convergeAfterGrant(ctx, reviewer, request.RequesterID, request.ProjectID)
-
-		// Apply inline: the approval is the operator's confirmation, so project the
-		// grant to Zitadel now rather than waiting for a separate resume. Targeted
-		// to THIS row only (never the global batch), and non-fatal — a drain
-		// failure (e.g. Zitadel offline) leaves the row pending in the worklist for
-		// a later resume; access already works via the ledger.
-		res.Effect, res.Until = plan.Effect, plan.ExpiresAt
-		if ids := queued.OutboxIDs(); len(ids) > 0 {
-			d := svcDeliver(ctx, ids, false)
-			status := ""
-			if slices.Contains(d.Sent, queued.OutboxID) {
-				status, _ = dbGetPropagationStatus(ctx, queued.OutboxID)
-			}
-			res.WaitReason, res.Retry, res.RuleWaiting = ownWait(d, queued.OutboxID, status)
-		}
-	} else { // rejected — no grant, just the conditional resolution
-		// A declined extension remembers the end it left alone. Best-effort: a
-		// failed read must not stop a decline, it only leaves the end unsaid.
-		var endedBefore *time.Time
-		if request.Kind == requestKindExtend {
-			if h, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey); err != nil {
-				log.Printf("[ACCESS] could not read the end %s has for declined request %s: %v", request.RequesterID, requestID, err)
-			} else {
-				endedBefore = holdingEnd(h)
-			}
-		}
-		if err := dbResolveAccessRequest(ctx, requestID, status, reviewer, reviewNote, endedBefore); err != nil {
-			if errors.Is(err, db.ErrRequestNotPending) {
-				return decisionResult{}, errRequestAlreadyResolved
-			}
-			return decisionResult{}, err
-		}
-	}
-
-	action := "access_request." + status
-	if status == "approved" && reviewer == request.RequesterID {
-		// Allowed, and said (owner, 15 Oct): an operator approving their own
-		// request is recorded as that, so Change history and the request row
-		// show it rather than reading like a second person's decision.
-		action = "access_request.self_approved"
-	}
-	_ = dbInsertAuditLog(ctx, reviewer, request.RequesterID, action, requestID)
 	return res, nil
 }
 

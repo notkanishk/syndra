@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,14 +15,13 @@ import (
 	"syndra/internal/services/propagation"
 )
 
-// resetRemoveCascadeDeps captures and restores the revoke-side cascade injectables (Task 21).
+// resetRemoveCascadeDeps captures and restores the revoke-side injectables (Task 21). Removing a
+// bundle from a person goes through svcApplyAct: see stubAct.
 func resetRemoveCascadeDeps(t *testing.T) {
 	t.Helper()
-	origBundleRemoved := svcCascadeBundleRemoved
 	origEdit := svcEditBundleWorkingCopy
 	origDraft := svcBundleDraft
 	t.Cleanup(func() {
-		svcCascadeBundleRemoved = origBundleRemoved
 		svcEditBundleWorkingCopy = origEdit
 		svcBundleDraft = origDraft
 	})
@@ -53,51 +53,68 @@ func TestHandleRemoveBundleFromUser_EmptyPathParams(t *testing.T) {
 	}
 }
 
-func TestHandleRemoveBundleFromUser_DeletesThenCascades(t *testing.T) {
-	resetRemoveCascadeDeps(t)
-
-	var gotActor, gotUserID, gotBundleID string
-	svcCascadeBundleRemoved = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
-		gotActor, gotUserID, gotBundleID = actor, userID, bundleID
-		return services.CascadeResult{Enqueued: 1, Drain: propagation.DrainResult{Applied: 1}}, nil
-	}
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u1/bundles/b1", nil)
+func removeBundle(query string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u1/bundles/b1"+query, nil)
 	req.SetPathValue("id", "u1")
 	req.SetPathValue("bundleId", "b1")
 	rr := httptest.NewRecorder()
 	handleRemoveBundleFromUser(rr, req)
+	return rr
+}
+
+func TestHandleRemoveBundleFromUser_PlansTheRemovalThenRebuildsThenSends(t *testing.T) {
+	resetRemoveCascadeDeps(t)
+	probe := stubAct(t)
+	probe.Change = services.Change{Writes: []services.Write{{OutboxID: "ob1"}}}
+	probe.Delivery = services.Delivery{Sent: []string{"ob1"}, Drain: propagation.DrainResult{Applied: 1}}
+
+	rr := removeBundle("")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if gotActor != "system" || gotUserID != "u1" || gotBundleID != "b1" {
-		t.Fatalf("cascade called with actor=%q userID=%q bundleID=%q", gotActor, gotUserID, gotBundleID)
+	a, w, seen := probe.only(t)
+	if a != (services.Action{Op: services.BulkOpRemoveBundle, UserID: "u1", BundleID: "b1"}) || w.Actor != "system" || seen != nil {
+		t.Fatalf("planned %+v %+v seen=%+v", a, w, seen)
 	}
-	var resp map[string]any
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
+	probe.wantOrder(t, "apply", "rebuild", "deliver")
+	if !probe.RebuildDetached {
+		t.Fatal("the rebuild must run on a context the request cannot cancel")
 	}
-	if resp["message"] != "Bundle removed from user" {
-		t.Fatalf("unexpected message: %v", resp["message"])
+	var resp struct {
+		Message string                 `json:"message"`
+		Cascade services.CascadeResult `json:"cascade"`
 	}
-	if resp["cascade"] == nil {
-		t.Fatal("expected a cascade field in the response")
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Message != "Bundle removed from user" || resp.Cascade.Enqueued != 1 || resp.Cascade.Drain.Applied != 1 {
+		t.Fatalf("unexpected answer: %+v", resp)
 	}
 }
 
+// ?fingerprint= and ?cancel_ids= on the DELETE are what the sheet was shown.
+func TestHandleRemoveBundleFromUser_CarriesWhatTheSheetWasShownInTheQuery(t *testing.T) {
+	resetRemoveCascadeDeps(t)
+	probe := stubAct(t)
+
+	const id = "22222222-2222-2222-2222-222222222222"
+	if rr := removeBundle("?fingerprint=fp-3&cancel_ids=" + id); rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	_, _, seen := probe.only(t)
+	if seen == nil || seen.Fingerprint != "fp-3" || !reflect.DeepEqual(seen.CancelIDs, []string{id}) {
+		t.Fatalf("seen = %+v", seen)
+	}
+}
+
+// A role the person still holds another way is not revoked: the write happened and changed
+// nobody's effective access, which is not the same answer as a no-op.
 func TestHandleRemoveBundleFromUser_CoveredRoleYieldsZeroEnqueued(t *testing.T) {
 	resetRemoveCascadeDeps(t)
+	stubAct(t).Change = services.Change{}
 
-	svcCascadeBundleRemoved = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
-		return services.CascadeResult{Enqueued: 0}, nil
-	}
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u1/bundles/b1", nil)
-	req.SetPathValue("id", "u1")
-	req.SetPathValue("bundleId", "b1")
-	rr := httptest.NewRecorder()
-	handleRemoveBundleFromUser(rr, req)
+	rr := removeBundle("")
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -108,34 +125,42 @@ func TestHandleRemoveBundleFromUser_CoveredRoleYieldsZeroEnqueued(t *testing.T) 
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp.Cascade.Enqueued != 0 {
-		t.Fatalf("expected cascade.enqueued=0, got %d", resp.Cascade.Enqueued)
+	if resp.Cascade.Enqueued != 0 || resp.Cascade.NoOp {
+		t.Fatalf("expected enqueued=0 and not a no-op, got %+v", resp.Cascade)
 	}
 }
 
-func TestHandleRemoveBundleFromUser_CascadeErrorIs500(t *testing.T) {
+// Not holding it is the planner's "not_held": 200, and it says nothing changed.
+func TestHandleRemoveBundleFromUser_NotHeldIsAnIdempotentNoOp(t *testing.T) {
 	resetRemoveCascadeDeps(t)
+	probe := stubAct(t)
+	probe.Err = &services.Refused{Change: services.Change{Refusal: "not_held"}}
 
-	svcCascadeBundleRemoved = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
-		return services.CascadeResult{}, errors.New("remove tx failed")
-	}
+	rr := removeBundle("")
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/u1/bundles/b1", nil)
-	req.SetPathValue("id", "u1")
-	req.SetPathValue("bundleId", "b1")
-	rr := httptest.NewRecorder()
-	handleRemoveBundleFromUser(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	resp := decodeMap(t, rr.Body.String())
+	if c, _ := resp["cascade"].(map[string]any); c["no_op"] != true {
+		t.Fatalf("expected cascade.no_op=true, got %v", resp["cascade"])
+	}
+	if !strings.Contains(resp["message"].(string), "Doesn't hold") {
+		t.Fatalf("unexpected message: %v", resp["message"])
+	}
+	probe.wantOrder(t, "apply")
+}
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] != "CASCADE_ERROR" {
-		t.Fatalf("expected CASCADE_ERROR, got %v", resp["error"])
-	}
+func TestHandleRemoveBundleFromUser_StaleIs409AndFailureIs500(t *testing.T) {
+	resetRemoveCascadeDeps(t)
+	probe := stubAct(t)
+
+	probe.Err = &services.StalePlan{IDs: []string{"q1"}}
+	wantError(t, removeBundle("?fingerprint=old"), http.StatusConflict, "PLAN_STALE")
+
+	probe.Err = errors.New("remove tx failed")
+	wantError(t, removeBundle(""), http.StatusInternalServerError, "DB_ERROR")
+	probe.wantOrder(t, "apply", "apply")
 }
 
 // --- handleRemoveRoleFromBundle ---

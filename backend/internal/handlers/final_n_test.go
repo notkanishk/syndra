@@ -78,18 +78,23 @@ func TestBulkApprove_RefusedIsFailedAndARuleWaitIsNotTheApprovals(t *testing.T) 
 	svcRulesFollowing = func(context.Context, string, []access.Role) ([]services.RuleRow, error) { return nil, nil }
 
 	plan := rehearseDecisionBatch(context.Background(), []string{"r1", "r2"}, "approved")
-	origDeliver := svcDeliver
-	t.Cleanup(func() { svcDeliver = origDeliver })
-	calls := 0
-	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
-		calls++
-		if calls == 1 { // r1: Zitadel refused the approved role itself
-			return services.Delivery{Sent: ids, Reason: map[string]string{ids[0]: db.WaitReasonRefused(db.RefusalInvalid)}}
+	// The decision (services.DecideRequest) writes one row per approval; the send is the plan's.
+	probe := stubDecide(t)
+	svcDecideRequest = func(_ context.Context, id, _, _, _ string, _ *services.Seen) (services.Decision, error) {
+		return services.Decision{UserID: "user-" + id,
+			Change:   services.Change{Writes: []services.Write{{OutboxID: "own-" + id}}},
+			Approval: services.ApprovalPlan{Effect: services.EffectGive}}, nil
+	}
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		own := ch.Writes[0].OutboxID
+		if own == "own-r1" { // r1: Zitadel refused the approved role itself
+			return services.Delivery{Sent: []string{own}, Reason: map[string]string{own: db.WaitReasonRefused(db.RefusalInvalid)}}
 		}
 		// r2: the approved role went; a rule's role waits.
-		rule := "rule-" + ids[0]
-		return services.Delivery{Sent: ids, Waiting: []string{rule}, Reason: map[string]string{rule: db.WaitReasonRoleWaits}}
+		return services.Delivery{Sent: []string{own}, Waiting: []string{"rule-" + own},
+			Reason: map[string]string{"rule-" + own: db.WaitReasonRoleWaits}}
 	}
+	_ = probe
 	for i := range plan.Outcomes {
 		plan.Outcomes[i].Effect = services.EffectApply
 	}
