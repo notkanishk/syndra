@@ -183,7 +183,7 @@ func TestEnqueue_ACascade(t *testing.T) {
 		VALUES ('add', $1, 'p1', ARRAY['door'], '{}', gen_random_uuid(), 'op', 'direct', 'zitadel', 'applied')`, user); err != nil {
 		t.Fatal(err)
 	}
-	removed, err := DeleteDirectGrantAndEnqueue(ctx, "op", user, grantID, []EnqueueParams{{UserID: user, ProjectID: "p1",
+	removed, err := DeleteDirectGrantAndEnqueue(ctx, "op", user, grantID, "", []EnqueueParams{{UserID: user, ProjectID: "p1",
 		RoleKeys: []string{"door"}, OpType: "revoke", Source: "direct", SourceRef: grantID, GrantedBy: "op", PayloadJSON: "{}"}})
 	if err != nil || len(removed) != 1 {
 		t.Fatalf("remove the grant: %v %v", removed, err)

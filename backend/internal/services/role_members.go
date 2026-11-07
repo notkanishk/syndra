@@ -497,7 +497,12 @@ type DirectGrantRemoval struct {
 // different object and leaves the Syndra row behind, so the next cache compile
 // puts the access straight back. Deleting the ledger row is what actually ends
 // the access; the outbox rows are what carry it upstream.
-func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (DirectGrantRemoval, error) {
+// DeleteDirectGrant removes one direct grant. reason is the operator's why
+// (a bulk removal requires one); empty keeps the general wording.
+func DeleteDirectGrant(ctx context.Context, userID, grantID, actor, reason string) (DirectGrantRemoval, error) {
+	if reason == "" {
+		reason = "Direct access removal"
+	}
 	var ids, retained []string
 	var revokes []roleKey
 
@@ -509,12 +514,12 @@ func DeleteDirectGrant(ctx context.Context, userID, grantID, actor string) (Dire
 		if revokes, retained, err = directGrantRemovalDelta(ctx, userID, grantID); err != nil {
 			return err
 		}
-		params, err := deltaParams(ctx, userID, nil, revokes, actor, "Direct access removal", "direct", grantID)
+		params, err := deltaParams(ctx, userID, nil, revokes, actor, reason, "direct", grantID)
 		if err != nil {
 			return err
 		}
 
-		ids, err = svcDeleteDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
+		ids, err = svcDeleteDirectGrantAndEnqueue(ctx, actor, userID, grantID, reason, params)
 		return err
 	}); err != nil {
 		return DirectGrantRemoval{}, err
@@ -566,7 +571,7 @@ func directGrantRemovalDelta(ctx context.Context, userID, grantID string) ([]rol
 
 // PreviewDirectGrantRemoval is DeleteDirectGrant's answer without the write:
 // what would be revoked and what would stay. Nothing is enqueued.
-func PreviewDirectGrantRemoval(ctx context.Context, userID, grantID, _ string) (DirectGrantRemoval, error) {
+func PreviewDirectGrantRemoval(ctx context.Context, userID, grantID, _, _ string) (DirectGrantRemoval, error) {
 	revokes, retained, err := directGrantRemovalDelta(ctx, userID, grantID)
 	if err != nil {
 		return DirectGrantRemoval{}, err
