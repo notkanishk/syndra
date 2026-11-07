@@ -413,6 +413,12 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 			order = append(order, groupID)
 			seenUser[groupID] = make(map[string]bool)
 		}
+		// The entry is named by the act that set it off. A bundle's change
+		// carries the rows of the rules it set off too (task 1.6), written in
+		// the same instant, so a rule row read first never names it.
+		if g.Source == "rule" && c.Source != "rule" {
+			g.Source, g.SourceRef = c.Source, c.SourceRef
+		}
 		if createdAt.Before(g.StartedAt) {
 			g.StartedAt = createdAt
 		}

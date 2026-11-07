@@ -34,6 +34,16 @@ func TestAnswers(t *testing.T) {
 		{"another role", w("add", "", ""), models.QueuedChange{OpType: "revoke", UserID: "u1", ProjectID: "p", RoleKeys: []string{"s"}}, false},
 		{"a multi-role write answers nothing", EnqueueParams{UserID: "u1", ProjectID: "p", RoleKeys: []string{"r", "s"}, OpType: "add"}, q("revoke", "direct", ""), false},
 		{"a replace answers nothing", w("replace", "", ""), q("revoke", "direct", ""), false},
+		// Rule rows (task 1.6): source 'rule', source_ref the rule that reaches the role.
+		{"a rule's removal answers the rule's add", w("revoke", "rule", "r1"), q("add", "rule", "r1"), true},
+		{"a rule's removal answers another rule's add of the role", w("revoke", "rule", "r2"), q("add", "rule", "r1"), true},
+		{"a rule's removal is not a bundle's", w("revoke", "rule", "r1"), q("add", "bundle", "b1"), false},
+		{"a rule's removal is not a direct grant's", w("revoke", "rule", "r1"), q("add", "direct", ""), false},
+		{"a bundle's removal does not answer a rule's add", w("revoke", "bundle", "b1"), q("add", "rule", "r1"), false},
+		{"a direct removal does not answer a rule's add", w("revoke", "", "grant-1"), q("add", "rule", "r1"), false},
+		{"a direct give answers a rule's removal", w("add", "", ""), q("revoke", "rule", "r1"), true},
+		{"a bundle's give answers a rule's removal", w("add", "bundle", "b1"), q("revoke", "rule", "r1"), true},
+		{"a rule's give answers any removal", w("add", "rule", "r1"), q("revoke", "bundle", "b1"), true},
 	} {
 		if got := Answers(tc.p, tc.c); got != tc.want {
 			t.Errorf("%s: Answers = %v, want %v", tc.name, got, tc.want)
