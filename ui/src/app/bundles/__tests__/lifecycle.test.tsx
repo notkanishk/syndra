@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/queries/seed", () => ({ useSeededBundleName: () => undefined }));
 
 import { BundlePage } from "@/components/bundles/BundlePage";
+import { WouldCancelQueued } from "@/lib/api-client";
+import type { QueuedChange } from "@/lib/cancel-confirm";
 import type { BundleRow } from "@/lib/queries/useBundles";
 
 const state = vi.hoisted(() => ({
@@ -118,7 +120,37 @@ describe("retiring a bundle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
     fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
 
-    await waitFor(() => expect(state.remove).toHaveBeenCalledWith("b1"));
+    await waitFor(() => expect(state.remove).toHaveBeenCalledWith({ id: "b1" }));
+  });
+
+  // Not on the planner: refused with a give it would cancel, the step shows
+  // it, and going ahead retires again naming exactly that id (`?cancel_ids=`).
+  it("retires again naming the waiting change it showed, after the operator goes ahead", async () => {
+    const waiting: QueuedChange = {
+      id: "00000000-0000-0000-0000-0000000000b2",
+      op_type: "add",
+      user_id: "u1",
+      project_id: "p1",
+      role_keys: ["trained"],
+      source: "bundle",
+      initiated_by: "op-2",
+      initiated_by_name: "Sam Lee",
+      queued_at: new Date(Date.now() - 3_600_000).toISOString(),
+    };
+    state.remove = vi
+      .fn()
+      .mockRejectedValueOnce(new WouldCancelQueued([waiting], "DELETE", "/bundles/b1"))
+      .mockResolvedValue({ message: "ok", was_welcome: false, cascade: { enqueued: 4 } });
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Cancel it and / }));
+
+    await waitFor(() => expect(state.remove).toHaveBeenCalledTimes(2));
+    expect(state.remove.mock.calls.map((c) => c[0])).toEqual([
+      { id: "b1", cancelIds: undefined },
+      { id: "b1", cancelIds: [waiting.id] },
+    ]);
   });
 });
 
@@ -187,7 +219,7 @@ describe("after a bundle is retired", () => {
     render(<BundlePage bundleId="b2" />);
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
     fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
-    await waitFor(() => expect(state.remove).toHaveBeenCalledWith("b2"));
+    await waitFor(() => expect(state.remove).toHaveBeenCalledWith({ id: "b2" }));
     // The refetch the mutation triggers, which the mocked list cannot do itself.
     state.bundles = [bundle()];
   }

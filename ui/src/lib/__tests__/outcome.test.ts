@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError } from "@/lib/api-client";
 import {
+  NOTHING_TO_DO,
   OUTCOME_LABEL,
   OUTCOME_TONE,
   PLAN_EFFECT_LABEL,
+  nextStepOf,
   outcomeFromError,
   outcomeFromExtend,
   sentence,
   statesNothingChanged,
+  waitsForSend,
 } from "@/lib/outcome";
 
 describe("the outcome vocabulary", () => {
@@ -118,22 +121,21 @@ describe("sentence", () => {
   });
 });
 
-// This endpoint enqueues to the outbox in manual mode ("pending"); saying
-// "Extended" then would report Zitadel as holding what only Syndra's ledger does.
+// Extending is a ledger edit (task 1.2a): Zitadel has no end dates, so nothing
+// is sent and nothing waits. It is done when the write answers, never queued.
 describe("outcomeFromExtend", () => {
-  it("says it was extended when the grant went through", () => {
-    expect(outcomeFromExtend({ outbox_id: "o1", status: "done" }, 90, "It leaves on the next read.")).toEqual({
+  it("is done, with the plan's sentence and the row's closing line", () => {
+    expect(outcomeFromExtend(90, "Keeps Member in Laser Lab until 3 Dec 2026.", "It leaves on the next read.")).toEqual({
       kind: "applied",
       message: "Extended by 90 days",
-      detail: "It leaves on the next read.",
+      detail: "Keeps Member in Laser Lab until 3 Dec 2026. It leaves on the next read.",
     });
   });
 
-  it("says it waits to be sent when the outbox holds it, and drops the leaves-on-next-read line", () => {
-    expect(outcomeFromExtend({ outbox_id: "o1", status: "pending" }, 90, "It leaves on the next read.")).toEqual({
-      kind: "queued",
-      message: "Will extend by 90 days once sent",
-      detail: undefined,
-    });
+  it("never waits for Send, so it ends on nothing for you to do", () => {
+    const o = outcomeFromExtend(90);
+    expect(o).toEqual({ kind: "applied", message: "Extended by 90 days" });
+    expect(waitsForSend(o)).toBe(false);
+    expect(nextStepOf(o)).toBe(NOTHING_TO_DO);
   });
 });

@@ -11,15 +11,18 @@ import type { QueuedChange } from "@/lib/cancel-confirm";
  * Change: the planner's words for it, what the automatic rules add (the one
  * source of those sentences, A-21 §4), whether it goes now or waits, and the
  * queued changes it would cancel, with the fingerprint and cancel ids the
- * write carries back. Give, Revoke, Approve and Manage bundles read it; it
- * replaces the rule preview, `previewRuleGifts` and Manage bundles' what-if.
+ * write carries back. Give, Revoke, Approve, Extend, Drift's Adopt, Manage
+ * bundles and Zitadel › Users read it; it replaced the rule preview,
+ * `previewRuleGifts` and Manage bundles' what-if.
  */
 
 export type PlanAction =
   | { op: "give"; userId: string; projectId: string; roleKey: string }
   | { op: "remove"; userId: string; grantId: string }
   | { op: "approve"; userId: string; requestId: string }
-  | { op: "assign_bundle" | "remove_bundle"; userId: string; bundleId: string };
+  | { op: "assign_bundle" | "remove_bundle"; userId: string; bundleId: string }
+  | { op: "extend"; userId: string; projectId: string; roleKey: string; days: number }
+  | { op: "adopt"; userId: string; driftId: string };
 
 /** The act's Change as a sheet reads it (handlers.ActPlan). */
 export interface ActPlan {
@@ -34,9 +37,12 @@ export interface ActPlan {
   consequence?: string;
   /** "Also gives Trained in Laser Lab, by the automatic rule from Member in Laser Lab." */
   rules: string[];
-  /** straight_away, waits_for_you, or none (it only cancels a waiting change). */
+  /** straight_away, waits_for_you, or none (nothing is sent: it only cancels, or an extend). */
   delivery?: "straight_away" | "waits_for_you" | "none";
+  /** The roles that wait for you to send. */
   waits: string[];
+  /** The roles sent straight away. */
+  goes: string[];
   cancels: QueuedChange[];
   fingerprint: string;
   cancel_ids: string[];
@@ -67,11 +73,13 @@ export function planKey(action: PlanAction) {
 
 function planURL(action: PlanAction): string {
   const q = new URLSearchParams({ op: action.op });
-  if (action.op === "give") {
+  if (action.op === "give" || action.op === "extend") {
     q.set("project_id", action.projectId);
     q.set("role_key", action.roleKey);
+    if (action.op === "extend") q.set("duration_days", String(action.days));
   } else if (action.op === "remove") q.set("grant_id", action.grantId);
   else if (action.op === "approve") q.set("request_id", action.requestId);
+  else if (action.op === "adopt") q.set("drift_id", action.driftId);
   else q.set("bundle_id", action.bundleId);
   return `/users/${encodeURIComponent(action.userId)}/plan?${q}`;
 }
@@ -81,6 +89,10 @@ function ready(action: PlanAction | null): action is PlanAction {
   switch (action.op) {
     case "give":
       return Boolean(action.projectId && action.roleKey);
+    case "extend":
+      return Boolean(action.projectId && action.roleKey && action.days > 0);
+    case "adopt":
+      return Boolean(action.driftId);
     case "remove":
       return Boolean(action.grantId);
     case "approve":

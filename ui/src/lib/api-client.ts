@@ -9,7 +9,7 @@
  * code (`error.code`) or human message (`error.message`).
  */
 
-import { CANCEL_ACK_HEADER, takeAck, type QueuedChange } from "@/lib/cancel-confirm";
+import type { QueuedChange } from "@/lib/cancel-confirm";
 import { SESSION_ENDED } from "@/lib/login-error";
 
 const API_BASE = "/api/proxy";
@@ -72,7 +72,7 @@ export class ApiError extends Error {
  * The backend refused because this write would cancel changes still waiting for
  * you to send (409 WOULD_CANCEL_QUEUED). Nothing was changed. The dialog that
  * made the write shows `cancels` as a step inside itself, then sends the same
- * request again after `armAck(method, path, ids)`. Any other caller reads it
+ * write again naming those ids in its `cancel_ids`. Any other caller reads it
  * as the refusal it is.
  */
 export class WouldCancelQueued extends ApiError {
@@ -144,8 +144,6 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
   }
 
   const headers = new Headers(init?.headers);
-  const acked = method === "GET" ? undefined : takeAck(method, path);
-  if (acked?.length) headers.set(CANCEL_ACK_HEADER, acked.join(","));
   let body: BodyInit | undefined;
   if (init?.body !== undefined) {
     body = JSON.stringify(init.body);
@@ -211,7 +209,7 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
       }
     }
     // The action would cancel changes still waiting for you to send. The caller
-    // shows them; its retry names exactly the ids it showed (see armAck), and if
+    // shows them; its retry names exactly the ids it showed (`cancel_ids`), and if
     // more was queued meanwhile the backend refuses again with the longer list.
     const refusal = parsed as ApiErrorBody;
     if (res.status === 409 && refusal?.error === "WOULD_CANCEL_QUEUED" && refusal.cancels?.length) {

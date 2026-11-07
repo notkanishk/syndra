@@ -291,7 +291,10 @@ as it has enough to plan, and its before-line says it: "Giving it cancels the
 removal Sam Lee queued 2h ago. Nothing is cancelled until you choose on the
 next step." (several: "Giving it cancels 2 changes that are waiting.");
 "Revoking it cancels the give …", "Approving cancels the removal …" (in the
-row's "If you approve:" line), "Applying cancels …" (Manage bundles). The press
+row's "If you approve:" line), "Applying cancels …" (Manage bundles),
+"Adopting it cancels …" (Drift's Adopt). Extend on a row (Expiring access,
+Home, a person's page) reads its plan at the press, so it pushes the step
+then ("Cancel it and extend"). The press
 pushes the cancel step at once; an act that cancels nothing gains no step.
 While the plan is read the act is held: "Checking what giving it does." /
 "Checking what approving does."; unread: "Held until Syndra can read what
@@ -315,7 +318,26 @@ you to do."
 moved while this was open." with "Read the note under the form, then press
 Give role again." (the button's own label), and the note is the fresh plan. In
 a row (Approve): "Nothing was changed. Rohan's access moved while you looked."
-then "Read the line above, then approve again." Never "stale" or "plan".
+then "Read the line above, then approve again." Extend on a row: "Nothing was
+changed. Rohan's access moved while you looked." then "Press Extend again to
+read it afresh." Drift's Adopt sheet: "Nothing was changed. Rohan's access
+moved while this was open." with "Read the lines under the role, then press
+Adopt in Syndra again." Never "stale" or "plan".
+
+**Extending sends nothing to Zitadel** (architecture deepening 1.2a): Zitadel
+has no end dates, so an extension is never "queued", never "waits for you" and
+never "once sent". The result is **Extended**, "Extended by 90 days", then the
+plan's own sentence ("Keeps Member in Laser Lab until 3 Dec 2026.") and the
+row's closing line; then "Nothing for you to do.". A plan that refuses says
+the planner's words ("Already ends later than this would make it. Nothing was
+changed.") and its step.
+
+**Adopting says the planner's sentences** (1.3): what it records ("Records a
+direct grant, so the access stops being unexplained and starts being owned.
+Nothing is sent to Zitadel for it."), then each "Also gives …" and "Giving …
+waits for you to send.". What the rules give is sent straight away, so the
+result says "1 more change from automatic rules waits in Pending changes for
+you to send." only when some of it waits.
 
 **Manage bundles says whether it finishes now or waits**, from the plans:
 "This goes to Zitadel when you apply." / "This waits for you to send." /
@@ -329,8 +351,8 @@ the day). The plan: "Keeps Member in Laser Lab until 3 Dec 2026." then
 "Nothing is sent to Zitadel, which has no end dates. Syndra ends the access on
 the day." An extension never waits for you and is never "queued"; its forecast
 is the act's own ("Will be extended"). It asks before it cancels a removal
-still waiting, like every other act ("Extending it cancels the removal Sam Lee
-queued 2h ago."). Refused: "Already ends later than this would make it.", "Has
+still waiting: the press reads the plan and pushes the step ("Cancel it and
+extend"). Refused: "Already ends later than this would make it.", "Has
 no direct grant with an end to extend." or, ticked rows that have gone, "None
 of the selected grants are theirs any more." with "Read the list again to see
 what they have now."
