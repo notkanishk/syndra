@@ -353,6 +353,25 @@ describe("ManageBundles", () => {
   });
 });
 
+describe("when their access moved partway through", () => {
+  it("the result names what was written, what wasn't, and the step", async () => {
+    // Lab Tech (ticked first) is written; Door Crew then finds their access moved.
+    state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 1 } });
+    state.removeAsync = vi.fn().mockRejectedValue(new ApiError(409, { error: "PLAN_STALE", message: "Moved." }));
+    open([{ id: "b2", name: "Door Crew" }]);
+    tick(/Lab Tech/);
+    tick(/Door Crew/);
+    await applyReady("Apply 2 changes");
+    fireEvent.click(screen.getByRole("button", { name: "Apply 2 changes" }));
+
+    expect(await screen.findByText(/One bundle change recorded/)).toBeInTheDocument();
+    expect(screen.getByText(/One change wasn't applied: Ada's access moved while this was open\./)).toBeInTheDocument();
+    expect(screen.getByText("Read the note under each bundle, then press Apply again.")).toBeInTheDocument();
+    // Never "Nothing for you to do." while a change is still ticked and unwritten.
+    expect(screen.queryByText("Nothing for you to do.")).not.toBeInTheDocument();
+  });
+});
+
 describe("bundlesBeforeLine", () => {
   const now = actPlan({ delivery: "straight_away" });
   const wait = actPlan({ delivery: "waits_for_you" });

@@ -159,15 +159,26 @@ function ManageBundlesOpen({
       if (applied === 0) return;
     }
     const recorded = applied === 1 ? "One bundle change recorded" : `${applied} bundle changes recorded`;
+    // Their access moved partway through: what was written is the result, and
+    // the result says what wasn't and what to do, so it never ends on "Nothing
+    // for you to do." while changes are still ticked and unwritten.
+    const rest = changes.length - applied;
+    const tellRest = (o: Outcome): Outcome => {
+      if (movedAt < 0) return o;
+      const restLine = `${rest === 1 ? "One change wasn't" : `${rest} changes weren't`} applied: ${first}'s access moved while this was open.`;
+      const again = "Read the note under each bundle, then press Apply again.";
+      const join = (...parts: Array<string | undefined>) => parts.filter(Boolean).join(" ");
+      return o.kind === "applied" ? { ...o, detail: join(o.detail, restLine), next: again } : { ...o, detail: join(o.detail, restLine, again) };
+    };
     if (refused) {
-      setOutcome(refusedOutcome(recorded, refused.reason, { revocation: refused.removing }));
+      setOutcome(tellRest(refusedOutcome(recorded, refused.reason, { revocation: refused.removing })));
       return;
     }
     if (waiting === 0 && sent > 0) {
-      setOutcome({ kind: "applied", message: recorded, detail: `Sent to Zitadel: ${sent === 1 ? "one change" : `${sent} changes`}.` });
+      setOutcome(tellRest({ kind: "applied", message: recorded, detail: `Sent to Zitadel: ${sent === 1 ? "one change" : `${sent} changes`}.` }));
       return;
     }
-    setOutcome({
+    setOutcome(tellRest({
       // Amber "waiting" only where something waits. A change that queued
       // nothing is done, and painting it as pending sends an operator to an
       // empty Pending changes to look for it.
@@ -193,7 +204,7 @@ function ManageBundlesOpen({
                     : " until you send them."
             }`
           : "Nothing is waiting for you to send: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",
-    });
+    }));
   }
 
   const busy = assign.isPending || remove.isPending;
