@@ -320,6 +320,25 @@ func TestPlanMove_GainsAndLosesTheVersionsDifference(t *testing.T) {
 	}
 }
 
+// A role whose removal is queued is not held, so a version that gives it
+// gives it again and cancels the removal, as an assignment does (found by the
+// live test: the move read the queued removal as cancelling its own give).
+func TestPlanMove_GivesARoleWhoseRemovalIsQueuedAndCancelsIt(t *testing.T) {
+	s := moveSnap()
+	withQueued(&s, models.QueuedChange{ID: "q1", OpType: "revoke", ProjectID: "pLab", RoleKeys: []string{"advanced"}, Source: "direct"})
+	p := s.Access.People["u1"]
+	p.Revoking = []db.RoleRef{{ProjectID: "pLab", RoleKey: "advanced"}}
+	p.Standing = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "advanced"}: true}
+	s.Access.People["u1"] = p
+	ch := Plan(Action{Op: OpMove, UserID: "u1", BundleID: "b1"}, s)
+	if got := plannedWrites(ch); !slices.Equal(got, []sentWrite{{"add", "advanced", DeliveryNone}, {"revoke", "trained", DeliveryStraightAway}}) {
+		t.Fatalf("writes = %+v", got)
+	}
+	if !slices.Equal(ch.Row.CancelIDs, []string{"q1"}) {
+		t.Fatalf("the queued removal is named and cancelled: %v", ch.Row.CancelIDs)
+	}
+}
+
 func TestPlanMove_RowsThatDontMoveAnything(t *testing.T) {
 	s := moveSnap()
 	s.Holders["u1"] = models.BundleHolder{UserID: "u1", VersionID: "v3", Version: 3}
