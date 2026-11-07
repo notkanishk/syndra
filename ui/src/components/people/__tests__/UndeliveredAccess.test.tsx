@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Zitadel answering: what the dialogs say before the act is not under test here.
 vi.mock("@/components/states/useWaitsBeforeLine", () => ({ useWaitsBeforeLine: () => undefined }));
 
-import { RemovalDialog } from "@/components/people/RemovalDialog";
+import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
+import type { ActPlan } from "@/lib/usePlanConsent";
+import { actPlan, withPlanClient } from "@/test-utils/plan";
 
 /**
  * Recorded is not delivered, and the screens must not say otherwise.
@@ -23,6 +25,16 @@ import { RemovalDialog } from "@/components/people/RemovalDialog";
 const removed = vi.hoisted(() => ({
   calls: 0,
   enqueued: 0,
+  // What the planner answers: a give that never went says it only cancels (A-21 §3).
+  plan: undefined as unknown as ActPlan,
+}));
+
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return removed.plan;
+    throw new Error(`unmocked request ${path}`);
+  },
 }));
 
 vi.mock("@/lib/queries/useBundles", () => ({
@@ -38,6 +50,16 @@ vi.mock("@/lib/queries/useRoleMembers", () => ({
   useRemoveDirectGrant: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+beforeEach(() => {
+  removed.plan = actPlan();
+});
+
+/** The dialog, with the plan the backend would give for what it shows. */
+function show(removal: Removal, neverSent: boolean) {
+  removed.plan = actPlan(neverSent ? { delivery: "none" } : {});
+  return render(withPlanClient(<RemovalDialog removal={removal} userId="shikha" userName="Shikha Yadav" onClose={vi.fn()} />));
+}
+
 const bundleSource = (queued: boolean) => ({
   projectId: "p-audio",
   projectName: "Audio-Dash",
@@ -48,16 +70,10 @@ const bundleSource = (queued: boolean) => ({
 });
 
 describe("removing a bundle whose grants were never sent", () => {
-  it("does not claim they lose access they never received", () => {
-    render(
-      <RemovalDialog
-        removal={bundleSource(true)}
-        userId="shikha"
-        userName="Shikha Yadav"
-        onClose={vi.fn()}
-      />,
-    );
+  it("does not claim they lose access they never received", async () => {
+    show(bundleSource(true), true);
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel the waiting change" })).toBeEnabled());
     expect(screen.getByText(/Nothing to take back/i)).toBeInTheDocument();
     expect(screen.getByText(/recorded, never sent/i)).toBeInTheDocument();
     // The two sentences that were false, verbatim.
@@ -65,30 +81,17 @@ describe("removing a bundle whose grants were never sent", () => {
     expect(screen.queryByText(/no other source gives it/i)).toBeNull();
   });
 
-  it("says nothing of its own about the waiting grants: the step is the one place that is said", () => {
-    render(
-      <RemovalDialog
-        removal={bundleSource(true)}
-        userId="shikha"
-        userName="Shikha Yadav"
-        onClose={vi.fn()}
-      />,
-    );
+  it("says nothing of its own about the waiting grants: the step is the one place that is said", async () => {
+    show(bundleSource(true), true);
 
     expect(screen.queryByText(/Pending changes will be empty afterwards/i)).toBeNull();
     expect(screen.queryByText(/none of them had been sent/i)).toBeNull();
   });
 
-  it("still says what a delivered bundle takes away", () => {
-    render(
-      <RemovalDialog
-        removal={bundleSource(false)}
-        userId="shikha"
-        userName="Shikha Yadav"
-        onClose={vi.fn()}
-      />,
-    );
+  it("still says what a delivered bundle takes away", async () => {
+    show(bundleSource(false), false);
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove bundle" })).toBeEnabled());
     expect(screen.getByText(/They will lose/i)).toBeInTheDocument();
     expect(screen.getByText(/no other source gives it/i)).toBeInTheDocument();
     expect(screen.queryByText(/Nothing to take back/i)).toBeNull();
@@ -105,46 +108,27 @@ describe("revoking a direct grant that was never sent", () => {
     sources: [{ kind: "direct", description: "", queued }],
   });
 
-  it("says there is nothing at the door to close", () => {
-    render(
-      <RemovalDialog
-        removal={directSource(true)}
-        userId="shikha"
-        userName="Shikha Yadav"
-        onClose={vi.fn()}
-      />,
-    );
+  it("says there is nothing at the door to close, and the button is the cancel", async () => {
+    show(directSource(true), true);
 
+    expect(await screen.findByRole("button", { name: "Cancel the waiting give" })).toBeInTheDocument();
     expect(screen.getByText(/Nothing to take back/i)).toBeInTheDocument();
     expect(screen.queryByText(/will lose this role/i)).toBeNull();
   });
 
-  it("keeps the real consequence when the grant has been delivered", () => {
-    render(
-      <RemovalDialog
-        removal={directSource(false)}
-        userId="shikha"
-        userName="Shikha Yadav"
-        onClose={vi.fn()}
-      />,
-    );
+  it("keeps the real consequence when the grant has been delivered", async () => {
+    show(directSource(false), false);
 
     expect(screen.getByText(/will lose this role/i)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Revoke access" })).toBeInTheDocument();
   });
 });
 
 describe("the action, once it has run", () => {
-  it("names withdrawal rather than removal while nothing has been sent", () => {
-    render(
-      <RemovalDialog
-        removal={bundleSource(true)}
-        userId="shikha"
-        userName="Shikha Yadav"
-        onClose={vi.fn()}
-      />,
-    );
+  it("names the cancel rather than a removal while nothing has been sent", async () => {
+    show(bundleSource(true), true);
 
-    const act = screen.getByRole("button", { name: /Withdraw the queued change/ });
+    const act = await screen.findByRole("button", { name: /Cancel the waiting change/ });
     // Red is a promise about consequence, and this one takes nothing away.
     expect(act.className).not.toMatch(/danger/);
     expect(screen.queryByRole("button", { name: "Remove bundle" })).toBeNull();
@@ -153,22 +137,16 @@ describe("the action, once it has run", () => {
   it("cannot be pressed a second time", async () => {
     removed.calls = 0;
     removed.enqueued = 0;
-    render(
-      <RemovalDialog
-        removal={bundleSource(true)}
-        userId="shikha"
-        userName="Shikha Yadav"
-        onClose={vi.fn()}
-      />,
-    );
+    show(bundleSource(true), true);
 
-    fireEvent.click(screen.getByRole("button", { name: /Withdraw the queued change/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Cancel the waiting change/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Cancel the waiting change/ }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
 
     // The dialog stays open to report what happened, and a destructive
     // confirm left armed inside it queues another cascade on the next click —
     // which is what a person does when the dialog does not close.
-    expect(screen.queryByRole("button", { name: /Withdraw the queued change/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Cancel the waiting change/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(removed.calls).toBe(1);
   });
@@ -176,17 +154,14 @@ describe("the action, once it has run", () => {
   it("reports the queue it actually left behind", async () => {
     removed.calls = 0;
     removed.enqueued = 0;
-    render(
-      <RemovalDialog
-        removal={bundleSource(true)}
-        userId="shikha"
-        userName="Shikha Yadav"
-        onClose={vi.fn()}
-      />,
-    );
+    show(bundleSource(true), true);
 
-    fireEvent.click(screen.getByRole("button", { name: /Withdraw the queued change/ }));
-    await waitFor(() => expect(screen.getByText(/were withdrawn/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /Cancel the waiting change/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Cancel the waiting change/ }));
+    await waitFor(() => expect(screen.getByText("Cancelled")).toBeInTheDocument());
+    expect(
+      screen.getByText("The Ops Admin bundle that was waiting is cancelled. Nothing it carried had reached Shikha, so nothing goes to Zitadel."),
+    ).toBeInTheDocument();
     // The sentence that contradicted the dialog one centimetre above it.
     expect(screen.queryByText(/are revoked once you send/i)).toBeNull();
   });
@@ -194,15 +169,9 @@ describe("the action, once it has run", () => {
   it("still says what a delivered removal queued", async () => {
     removed.calls = 0;
     removed.enqueued = 3;
-    render(
-      <RemovalDialog
-        removal={bundleSource(false)}
-        userId="shikha"
-        userName="Shikha Yadav"
-        onClose={vi.fn()}
-      />,
-    );
+    show(bundleSource(false), false);
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove bundle" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
     // No wait reason: the server delivered all three (services.Deliver), so it
     // says they went, never "once you send" (final verification N1).

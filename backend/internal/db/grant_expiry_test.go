@@ -226,25 +226,25 @@ func TestEveryClosureDiffRunsUnderTheAccessLock(t *testing.T) {
 	// directGrantRemovalDelta reads and writes nothing of its own: DeleteDirectGrant
 	// (wrapped below) calls it under the lock, and the revoke preview (re-audit
 	// R18) calls it to write nothing at all.
-	pure := map[string]bool{"closureDelta": true, "holderDelta": true, "directGrantRemovalDelta": true}
+	pure := map[string]bool{"closureDelta": true, "holderDelta": true, "directGrantRemovalDelta": true, "planRole": true}
 	wrapped := map[string]bool{
-		"CascadeBundleAssignedToUser":  true,
-		"CascadeRuleCreated":           true,
-		"CascadeBundleRemovedFromUser": true,
-		"CascadeBundleRetired":         true,
-		"CascadeRuleUpdated":           true,
-		"CascadeRuleRetired":           true,
-		"DeleteDirectGrant":            true,
-		"ExpireDirectGrant":            true,
-		"PublishBundleVersion":         true,
-		"MoveHolders":                  true,
+		"CascadeBundleAssignedToUser": true,
+		"CascadeRuleCreated":          true,
+		"CascadeBundleRetired":        true,
+		"CascadeRuleUpdated":          true,
+		"CascadeRuleRetired":          true,
+		"DeleteDirectGrant":           true,
+		"ApplyAct":                    true,
+		"ExpireDirectGrant":           true,
+		"PublishBundleVersion":        true,
+		"MoveHolders":                 true,
 	}
 	// Every name in the set is checked directly, not only the ones that happen
 	// to call closureDelta themselves. PublishBundleVersion computes its delta
 	// through a rehearsal, so a scan for the call site alone would have declared
 	// it wrapped while it was not — which is exactly what happened.
 	sources := map[string]string{}
-	for _, file := range []string{"cascade.go", "role_members.go", "bundle_publish.go"} {
+	for _, file := range []string{"cascade.go", "role_members.go", "bundle_publish.go", "planner_act.go"} {
 		sources[file] = readServicesSource(t, file)
 	}
 	found := map[string]bool{}

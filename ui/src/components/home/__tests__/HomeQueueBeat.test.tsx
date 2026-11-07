@@ -4,6 +4,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
+import { planKey } from "@/lib/usePlanConsent";
+import { actPlan } from "@/test-utils/plan";
 import type { SessionUser } from "@/lib/session";
 
 // 6.71: a decided request on Home keeps its seat for Motion 5b's beat, as it does
@@ -79,8 +81,12 @@ const EMPTY_REPORT = { welcome_bundle_configured: true, missed: [] };
 
 const session = { id: "op", name: "Kanishk", email: "k@example.org" } as unknown as SessionUser;
 
+// One cache across rerenders, with the plan already read as it is by the time a
+// row is pressed: the fake clock this file runs on would stall a fresh read.
+const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+client.setQueryData(planKey({ op: "approve", userId: "u7", requestId: "r1" }), actPlan());
+
 function Screen() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={client}>
       <Home session={session} />

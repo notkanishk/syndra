@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { request } from "@/lib/api-client";
+import { useQueryClient } from "@tanstack/react-query";
 import { formatShortDate } from "@/lib/format";
 import { personOr, roleName } from "@/lib/names";
 import { FORECAST, forecastFor, outcomeFromError, SEND_IT, type ActionOutcome } from "@/lib/outcome";
@@ -13,6 +13,7 @@ import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib
 import { FLASH_MS } from "@/lib/motion";
 import { RETRYING, refusedOutcome, retryingOutcome } from "@/lib/retry";
 import { isRefused, waitReasonLine } from "@/lib/wait-reason";
+import { fetchPlan, isStale, planKey, seenOf, type ActPlan } from "@/lib/usePlanConsent";
 
 /**
  * What approving one request reports. The response says only whether the
@@ -28,10 +29,10 @@ export function approvalOutcome(
   name: string,
   role: string,
   result?: Pick<DecisionResult, "effect" | "until" | "retry" | "rule_waiting">,
-  alsoGave: RuleGift[] = [],
+  alsoGives: string[] = [],
 ): ActionOutcome {
   const outcome = approvalOnly(waitReason, name, role, result);
-  const rules = ruleGiftLine(alsoGave);
+  const rules = alsoGives.join(" ");
   const withRules = rules ? { ...outcome, message: `${outcome.message} ${rules}` } : outcome;
   return withRuleWaits(withRules, result?.rule_waiting);
 }
@@ -52,44 +53,6 @@ export function withRuleWaits(outcome: ActionOutcome, ruleWaiting: number | unde
   // A refusal stays a refusal (N1): the rule's wait is one more step after it.
   if (outcome.recorded) return { ...outcome, message: `${outcome.message}. ${line}`, next: `${outcome.next ?? ""} Then press Send on Pending changes for the rule's role.`.trim() };
   return { ...outcome, kind: "queued", sendsItself: undefined, message: `${outcome.message} ${line}`, next: SEND_IT };
-}
-
-/** A role an automatic rule also gave with the approval, by name. */
-export interface RuleGift {
-  role: string;
-  project: string;
-}
-
-/**
- * "An automatic rule also gave them Bench in Workshop." The approval's whole
- * effect, not only the role asked for (coherence audit C2): the rules fire on
- * the same write, under the same delivery.
- */
-export function ruleGiftLine(gifts: RuleGift[]): string {
-  if (gifts.length === 0) return "";
-  const names = gifts.map((g) => `${g.role} in ${g.project}`);
-  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-  return `${gifts.length === 1 ? "An automatic rule" : "Automatic rules"} also gave them ${list}.`;
-}
-
-/**
- * What the automatic rules would also give with this approval, asked BEFORE
- * the approval is written (afterwards they already hold it, and the answer is
- * empty). The backend's own closure (`GET /users/{id}/rule-preview`), never one
- * walked here. A failed read says nothing rather than something wrong.
- */
-export async function previewRuleGifts(
-  entry: Pick<AccessRequest, "requester_id" | "project_id" | "role_key">,
-): Promise<Array<{ project_id: string; role_key: string }>> {
-  const query = new URLSearchParams({ project_id: entry.project_id, role_key: entry.role_key });
-  try {
-    const data = await request<{ rows?: Array<{ project_id: string; role_key: string }> }>(
-      `/users/${encodeURIComponent(entry.requester_id)}/rule-preview?${query}`,
-    );
-    return data?.rows ?? [];
-  } catch {
-    return [];
-  }
 }
 
 function approvalOnly(
@@ -129,6 +92,8 @@ function approvalOnly(
       waitReason === "halted:zitadel_offline" ? "Zitadel didn't answer when it was approved" : why,
   };
 }
+
+const firstOf = (name: string | undefined) => name?.trim().split(/\s+/)[0] ?? "";
 
 /** A decline never reaches Zitadel: nobody had the access yet. */
 export const DECLINED: ActionOutcome = {
@@ -184,6 +149,7 @@ export interface Decided {
  */
 export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean } = {}) {
   const decide = useDecideRequest();
+  const client = useQueryClient();
   const resolver = useNameResolver();
   const roleWaits = useRoleWaits();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
@@ -217,10 +183,18 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
         ? FORECAST.decline
         : forecastFor(entry.kind === "extend" ? "extend" : "approve", roleWaits(entry.project_id, entry.role_key)),
     );
-    // Asked before the write: once approved, the rules' roles are already held.
-    const gifts = next === "approved" && entry.kind !== "extend" ? previewRuleGifts(entry) : Promise.resolve([]);
+    // What approving does, from the plan the row read before the press (A-21
+    // §3.2): the step it pushes at once when it cancels a waiting change, the
+    // rules' words for the outcome, and the fingerprint the write carries.
+    const action = { op: "approve" as const, userId: entry.requester_id, requestId: entry.id };
     try {
-      const result = await step.run(() => decide.mutateAsync({ id: entry.id, status: next }));
+      const plan =
+        next === "approved"
+          ? (client.getQueryData<ActPlan>(planKey(action)) ?? (await fetchPlan(client, action)))
+          : undefined;
+      const result = await step.confirm(plan?.cancels ?? [], () =>
+        decide.mutateAsync({ id: entry.id, status: next, ...seenOf(plan) }),
+      );
       if (result === KEPT) {
         forecast(entry.id, null);
         // Kept: the request is still waiting, in its seat, and nothing was decided.
@@ -245,10 +219,8 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
             personOr(resolver.resolveUser(entry.requester_id).value?.display_name, true),
             roleName(resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name, entry.role_key),
             result,
-            (await gifts).map((row) => ({
-              role: roleName(resolver.resolveRole(row.project_id, row.role_key).value?.display_name, row.role_key),
-              project: resolver.resolveProject(row.project_id).value?.name || "its project",
-            })),
+            // The rules' roles, in the planner's words: the sentence the row said before the press.
+            plan?.rules ?? [],
           ),
         };
       }
@@ -261,6 +233,23 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
         copy.delete(entry.id);
         return copy;
       });
+      // Their access moved while the row was read: nothing was decided, the
+      // "If you approve:" line reads the plan again, and the row says so (A-21 §3.3).
+      if (isStale(error)) {
+        void client.invalidateQueries({ queryKey: planKey(action) });
+        const name = firstOf(resolver.resolveUser(entry.requester_id).value?.display_name);
+        setOutcomes((prev) => ({
+          ...prev,
+          [entry.id]: {
+            outcome: {
+              kind: "failed",
+              message: `Nothing was changed. ${name ? `${name}'s` : "Their"} access moved while you looked.`,
+              next: "Read the line above, then approve again.",
+            },
+          },
+        }));
+        return;
+      }
       setOutcomes((prev) => ({ ...prev, [entry.id]: { outcome: outcomeFromError(error) } }));
     }
   }

@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/directory"
 	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // The API took any project and role key; only the pickers kept to the
@@ -83,12 +84,19 @@ func TestARoleNotOfferedIsRefusedWhenAskedGivenOrApproved(t *testing.T) {
 		t.Fatalf("asking: want 409 ROLE_NOT_OFFERED and nothing filed, got %d %s", rr.Code, rr.Body.String())
 	}
 
-	dbGetAccessRequestByID = func(context.Context, string) (models.AccessRequest, error) {
-		return models.AccessRequest{ID: "r1", RequesterID: "u1", ProjectID: "pLaser", RoleKey: "gone", Status: "pending"}, nil
-	}
-	if err := resolveOneAccessRequest(context.Background(), "r1", "approved", "op", ""); !errors.Is(err, errRoleNotOffered) {
-		t.Fatalf("approving: want errRoleNotOffered, got %v", err)
-	}
+	// Giving and approving are the planner's: it refuses the role (services' tests), and the
+	// handler says it as every act does.
+	probe := stubDecide(t)
+	probe.DecideErr = &services.Refused{Change: services.Change{Refusal: "not_offered:pLaser/gone"}}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/decision", strings.NewReader(`{"status":"approved","reviewer_id":"op"}`))
+	req.SetPathValue("id", "r1")
+	rr = httptest.NewRecorder()
+	handleResolveAccessRequest(rr, req)
+	wantError(t, rr, http.StatusConflict, "ROLE_NOT_OFFERED")
+
+	probe.Err = &services.Refused{Change: services.Change{Refusal: "not_offered:pLaser/gone"}}
+	wantError(t, giveRole("u1", "", `{"project_id":"pLaser","role_key":"gone"}`), http.StatusConflict, "ROLE_NOT_OFFERED")
+	probe.wantOrder(t, "decide", "apply")
 }
 
 func TestTheDecisionPlanAgreesWithTheDecision(t *testing.T) {

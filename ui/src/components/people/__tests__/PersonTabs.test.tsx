@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { trueSeat } from "@/test-utils/seat";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { actPlan } from "@/test-utils/plan";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonActivity } from "@/components/people/PersonActivity";
@@ -12,8 +13,14 @@ import type { AccessRequest } from "@/lib/queries/useRequests";
 const audit = vi.hoisted(() => ({ data: [] as AuditEntry[], filter: null as unknown }));
 const requests = vi.hoisted(() => ({ data: [] as AccessRequest[], decide: vi.fn() }));
 
-// The rule preview answered, nothing follows: Approve is not held (N5 has its own test).
-vi.mock("@/lib/queries/useRulePreview", () => ({ useRulePreview: () => ({ data: [], isLoading: false, isError: false }) }));
+// The planner has answered, nothing follows: Approve is not held (N5 has its own test).
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return actPlan();
+    throw new Error(`unmocked request ${path}`);
+  },
+}));
 vi.mock("@/lib/queries/useAudit", () => ({
   useAuditEntries: (filter: unknown) => {
     audit.filter = filter;
@@ -167,6 +174,8 @@ describe("PersonRequests", () => {
     requests.data = [request()];
     requests.decide.mockResolvedValueOnce({ message: "ok", wait_reason: "role_waits" });
     renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
+    // Held until the plan is read (A-21 §3).
+    await waitFor(() => expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     const seat = await trueSeat();
     expect(seat.textContent).toContain("Approved");

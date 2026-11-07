@@ -15,77 +15,31 @@ import (
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services"
 	"syndra/internal/services/propagation"
 )
 
-// Approving a request creates the same kind of direct grant the operator grant
-// endpoint does, so it MUST flow through the outbox (enqueue), not the bare
-// ledger upsert — otherwise the grant is invisible to the Pending UI, never
-// projected to Zitadel, and later re-surfaces as syndra_only drift. The chosen
-// semantics are enqueue + apply inline (the approval is the operator's confirm).
-func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *testing.T) {
+// Approving a request is services.DecideRequest (the planner's approval, the
+// audit row, the ledger and outbox rows: services' tests). What the handler owns
+// is what it hands the decision, the order after it (the compiled cache is
+// rebuilt first, then what the plan says goes now is sent) and what it answers.
+func TestHandleResolveAccessRequestApprovedRebuildsCacheThenSendsAndSaysWhatHappened(t *testing.T) {
 	resetAccessDeps(t)
-
-	duration := 5
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{
-			ID:           id,
-			RequesterID:  "u1",
-			ProjectID:    "p1",
-			RoleKey:      "admin",
-			Status:       "pending",
-			DurationDays: &duration,
-		}, nil
+	until := time.Now().Add(5 * 24 * time.Hour)
+	probe := stubDecide(t)
+	probe.Decision = services.Decision{
+		UserID:   "u1",
+		Change:   services.Change{Writes: []services.Write{{OutboxID: "ob-appr"}, {OutboxID: "ob-rule"}}},
+		Approval: services.ApprovalPlan{Effect: services.EffectGive, ExpiresAt: &until},
 	}
-
-	upsertCalled := false
-	dbUpsertDirectGrant = func(context.Context, string, string, string, string, string, *time.Time) (string, error) {
-		upsertCalled = true
-		return "", nil
-	}
-	plainResolveCalled := false
-	dbResolveAccessRequest = func(context.Context, string, string, string, string, *time.Time) error {
-		plainResolveCalled = true
-		return nil
-	}
-
-	// Resolution + enqueue are ONE conditional transaction: the handler must use
-	// the combined path, not resolve-then-enqueue across two transactions.
-	var gotID, gotReviewer, gotNote string
-	var gotParams db.EnqueueParams
-	dbApproveRequestAndEnqueue = func(_ context.Context, id, reviewer, note string, p db.EnqueueParams, _, _ *time.Time) (db.EnqueueResult, error) {
-		gotID, gotReviewer, gotNote, gotParams = id, reviewer, note, p
-		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
-	}
-
-	var drainedRow string
-	svcDrainPropagationRow = func(_ context.Context, outboxID string) (propagation.DrainResult, error) {
-		drainedRow = outboxID
-		return propagation.DrainResult{Applied: 1}, nil
-	}
-	svcDrainPropagations = func(context.Context) (propagation.DrainResult, error) {
-		t.Fatal("approval must drain ONLY its own row, not the global batch")
-		return propagation.DrainResult{}, nil
-	}
-
-	rebuiltFor := ""
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {
-		rebuiltFor = userID
-	}
-
-	auditAction := ""
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error {
-		auditAction = action
-		return nil
-	}
-
-	// An approval reaches the system its project serves, as a cascade does.
-	origConverge := svcConvergeProjectChange
-	t.Cleanup(func() { svcConvergeProjectChange = origConverge })
-	converged := ""
-	svcConvergeProjectChange = func(_ context.Context, _, user, project string) error {
-		converged = user + "|" + project
-		return nil
+	// The approval's own row went and applied; the rule's row waits for Send.
+	probe.Delivery = services.Delivery{Sent: []string{"ob-appr"}, Waiting: []string{"ob-rule"},
+		Reason: map[string]string{"ob-rule": "role_waits"}}
+	dbGetPropagationStatus = func(_ context.Context, id string) (string, error) {
+		if id != "ob-appr" {
+			t.Fatalf("the status read is this approval's own row, got %q", id)
+		}
+		return "applied", nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-1/decision", strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1","review_note":"ok"}`))
@@ -94,142 +48,173 @@ func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *test
 	handleResolveAccessRequest(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if upsertCalled {
-		t.Fatal("approval must enqueue through the outbox, not the bare ledger upsert")
+	if len(probe.Calls) != 1 || probe.Calls[0] != (decideCall{"req-1", "approved", "reviewer-1", "ok", nil}) {
+		t.Fatalf("decision called with %+v", probe.Calls)
 	}
-	if plainResolveCalled {
-		t.Fatal("approval must resolve+enqueue in one transaction, not via the standalone resolve")
+	probe.wantOrder(t, "decide", "rebuild", "deliver")
+	if len(probe.RebuildUsers) != 1 || probe.RebuildUsers[0] != "u1" {
+		t.Fatalf("expected cache rebuild for the requester u1, got %v", probe.RebuildUsers)
 	}
-	if drainedRow != "ob-appr" {
-		t.Fatalf("approval must apply inline by draining ONLY its own outbox row, got %q", drainedRow)
+	if len(probe.Delivered) != 1 || len(probe.Delivered[0].Writes) != 2 {
+		t.Fatalf("what is sent is the decision's Change: %+v", probe.Delivered)
 	}
-	if rebuiltFor != "u1" {
-		t.Fatalf("expected cache rebuild for u1, got %s", rebuiltFor)
+	body := decodeMap(t, rr.Body.String())
+	if body["effect"] != string(services.EffectGive) || body["until"] == nil {
+		t.Fatalf("an approval says what it did and until when: %v", body)
 	}
-	if converged != "u1|p1" {
-		t.Fatalf("an approval must converge its project's system, got %q", converged)
+	if _, has := body["wait_reason"]; has {
+		t.Fatalf("its own row applied, so the rule's wait is not blamed on it: %v", body)
 	}
-	if auditAction != "access_request.approved" {
-		t.Fatalf("unexpected audit action %s", auditAction)
-	}
-	if gotID != "req-1" || gotReviewer != "reviewer-1" || gotNote != "ok" {
-		t.Fatalf("combined approve must pass request id/reviewer/note, got id=%q reviewer=%q note=%q", gotID, gotReviewer, gotNote)
-	}
-	// The enqueue must carry the request's grant, attributed to the reviewer, and
-	// linked back to the originating request via source_ref.
-	if gotParams.OpType != "add" || gotParams.Source != "direct" || gotParams.SourceRef != "req-1" {
-		t.Fatalf("enqueue must be add/direct with source_ref=request id, got %+v", gotParams)
-	}
-	if gotParams.UserID != "u1" || gotParams.ProjectID != "p1" ||
-		len(gotParams.RoleKeys) != 1 || gotParams.RoleKeys[0] != "admin" {
-		t.Fatalf("enqueue must target the requested user/project/role, got %+v", gotParams)
-	}
-	if gotParams.GrantedBy != "reviewer-1" || gotParams.Reason != "Approved from access request" {
-		t.Fatalf("enqueue attribution wrong, got grantedBy=%q reason=%q", gotParams.GrantedBy, gotParams.Reason)
-	}
-	if gotParams.PayloadJSON == "" {
-		t.Fatal("payload_json must be non-empty (JSONB NOT NULL)")
-	}
-	if gotParams.ExpiresAt == nil {
-		t.Fatalf("expected expiry for duration-backed request")
-	}
-	// "5 days" ends as the 5th calendar day does, in the makerspace's zone.
-	expected := clock.EndAfterDays(time.Now(), 5)
-	if diff := gotParams.ExpiresAt.Sub(expected); diff != 0 && diff != 24*time.Hour { // the day may turn mid-test
-		t.Fatalf("expiresAt %v not within 1 minute of expected %v", gotParams.ExpiresAt, expected)
+	if body["rule_waiting"] != float64(1) {
+		t.Fatalf("a rule's row waits for Send and the answer says so: %v", body)
 	}
 }
 
-// A lost approve/reject race (request resolved between the read and the
-// conditional resolve) surfaces as ErrRequestNotPending, which the handler must
-// map to 409 rather than a 500 or a silent success.
-func TestHandleResolveAccessRequest_ApproveRace_Returns409(t *testing.T) {
+// An approval whose own row waits says why.
+func TestHandleResolveAccessRequest_AnApprovalThatWaitsSaysWhy(t *testing.T) {
 	resetAccessDeps(t)
+	probe := stubDecide(t)
+	probe.Decision = services.Decision{UserID: "u1",
+		Change:   services.Change{Writes: []services.Write{{OutboxID: "ob-appr", Delivery: services.DeliveryWaits}}},
+		Approval: services.ApprovalPlan{Effect: services.EffectGive}}
+	probe.Delivery = services.Delivery{Waiting: []string{"ob-appr"}, Reason: map[string]string{"ob-appr": "role_waits"}}
 
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
-	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
-		return db.EnqueueResult{}, db.ErrRequestNotPending
-	}
-	drainCalled := false
-	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
-		drainCalled = true
-		return propagation.DrainResult{}, nil
-	}
-	cacheRebuildUser = func(context.Context, string, []string) {}
-	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-9/decision",
-		strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1"}`))
-	req.SetPathValue("id", "req-9")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-1/decision", strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1"}`))
+	req.SetPathValue("id", "req-1")
 	rr := httptest.NewRecorder()
 	handleResolveAccessRequest(rr, req)
 
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("a lost approve race must return 409, got %d: %s", rr.Code, rr.Body.String())
+	body := decodeMap(t, rr.Body.String())
+	if rr.Code != http.StatusOK || body["wait_reason"] != "role_waits" {
+		t.Fatalf("want 200 with wait_reason=role_waits, got %d %v", rr.Code, body)
 	}
-	if drainCalled {
-		t.Fatal("must not drain when the conditional resolve found nothing to approve")
+	if _, has := body["until"]; has {
+		t.Fatalf("no end, no until: %v", body)
 	}
 }
 
-// The compiled cache (which the claim path reads) must be rebuilt from the
-// committed ledger row BEFORE the best-effort inline drain, so a slow or canceled
-// Zitadel call cannot starve the rebuild via the shared request context — access
-// must be effective regardless of the projection outcome.
-func TestHandleResolveAccessRequest_RebuildsCacheBeforeInlineDrain(t *testing.T) {
+// The plan the row was shown rides in the body and becomes the Seen; the decision
+// refuses a stale one.
+func TestHandleResolveAccessRequest_ApprovalCarriesWhatTheRowWasShown(t *testing.T) {
 	resetAccessDeps(t)
-
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
-	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
-	}
-	var order []string
-	cacheRebuildUser = func(context.Context, string, []string) { order = append(order, "rebuild") }
-	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
-		order = append(order, "drain")
-		return propagation.DrainResult{Applied: 1}, nil
-	}
-	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
+	probe := stubDecide(t)
+	const id = "33333333-3333-3333-3333-333333333333"
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-1/decision",
-		strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1"}`))
+		strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1","fingerprint":"fp-7","cancel_ids":["`+id+`"]}`))
 	req.SetPathValue("id", "req-1")
 	handleResolveAccessRequest(httptest.NewRecorder(), req)
 
-	if len(order) != 2 || order[0] != "rebuild" || order[1] != "drain" {
-		t.Fatalf("cache rebuild must run BEFORE the inline drain, got %v", order)
+	if len(probe.Calls) != 1 || probe.Calls[0].Seen == nil || probe.Calls[0].Seen.Fingerprint != "fp-7" ||
+		len(probe.Calls[0].Seen.CancelIDs) != 1 || probe.Calls[0].Seen.CancelIDs[0] != id {
+		t.Fatalf("seen = %+v", probe.Calls)
 	}
 }
 
-// The grant is durable once the enqueue tx commits, so the compiled-cache
-// rebuild that makes access effective MUST run even if the client disconnects
-// before it — it runs on a context detached from the request lifecycle.
+// What a decision refuses with, and what the handler says for each: 409 for a lost race, a
+// request already decided or withdrawn, a role they hold or that already runs past the ask,
+// an end that passed, a stale plan; the planner's refusals as every act says them.
+func TestHandleResolveAccessRequest_RefusalsAreSaidWithTheirCodes(t *testing.T) {
+	resetAccessDeps(t)
+	probe := stubDecide(t)
+	refused := func(code string) error { return &services.Refused{Change: services.Change{Refusal: code}} }
+	cases := []struct {
+		name, status string
+		err          error
+		code         int
+		want         string
+	}{
+		{"already approved", "approved", fmt.Errorf("%w (already approved)", services.ErrRequestAlreadyResolved), 409, "ALREADY_RESOLVED"},
+		{"lost the approve race", "approved", services.ErrRequestAlreadyResolved, 409, "ALREADY_RESOLVED"},
+		{"lost the reject race", "rejected", services.ErrRequestAlreadyResolved, 409, "ALREADY_RESOLVED"},
+		{"held", "approved", services.ErrRequestAlreadyHeld, 409, "ALREADY_HELD"},
+		{"runs past", "approved", services.ErrExtensionShortens, 409, "ALREADY_RUNS_PAST"},
+		{"ask ended", "approved", services.ErrAskEnded, 409, "END_PASSED"},
+		{"stale", "approved", &services.StalePlan{IDs: []string{"q"}}, 409, "PLAN_STALE"},
+		{"not offered", "approved", refused("not_offered:p/r"), 409, "ROLE_NOT_OFFERED"},
+		{"catalogue unread", "approved", refused("catalogue_unread"), 503, "CATALOGUE_UNREAD"},
+		{"departed", "approved", refused("departed:Departed"), 409, "DEPARTED"},
+		{"no such request", "approved", fmt.Errorf("%w: no rows", services.ErrRequestNotFound), 404, "NOT_FOUND"},
+		{"failure", "approved", errors.New("tx failed"), 500, "DB_ERROR"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			probe.Order, probe.DecideErr = nil, c.err
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-9/decision",
+				strings.NewReader(`{"status":"`+c.status+`","reviewer_id":"reviewer-1"}`))
+			req.SetPathValue("id", "req-9")
+			rr := httptest.NewRecorder()
+			handleResolveAccessRequest(rr, req)
+			wantError(t, rr, c.code, c.want)
+			probe.wantOrder(t, "decide") // nothing rebuilt, nothing sent
+		})
+	}
+}
+
+// A request that was withdrawn names the state it is in.
+func TestHandleResolveAccessRequest_TheConflictNamesTheState(t *testing.T) {
+	resetAccessDeps(t)
+	stubDecide(t).DecideErr = fmt.Errorf("%w (already withdrawn)", services.ErrRequestAlreadyResolved)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/decision",
+		strings.NewReader(`{"status":"rejected","reviewer_id":"reviewer-1","review_note":"no"}`))
+	req.SetPathValue("id", "r1")
+	rr := httptest.NewRecorder()
+	handleResolveAccessRequest(rr, req)
+
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "already withdrawn") {
+		t.Fatalf("the conflict must name the state it is in: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+// Declining is the decision alone: no cache rebuild, nothing sent.
+func TestHandleResolveAccessRequestRejectedChangesNoAccess(t *testing.T) {
+	resetAccessDeps(t)
+	probe := stubDecide(t)
+	probe.Decision = services.Decision{UserID: "u1"}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-2/decision", strings.NewReader(`{"status":"rejected","reviewer_id":"reviewer-2","review_note":"deny"}`))
+	req.SetPathValue("id", "req-2")
+	rr := httptest.NewRecorder()
+	handleResolveAccessRequest(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(probe.Calls) != 1 || probe.Calls[0] != (decideCall{"req-2", "rejected", "reviewer-2", "deny", nil}) {
+		t.Fatalf("decision called with %+v", probe.Calls)
+	}
+	probe.wantOrder(t, "decide")
+	if body := decodeMap(t, rr.Body.String()); body["effect"] != nil || body["until"] != nil {
+		t.Fatalf("a decline gives nothing, so it says no effect: %v", body)
+	}
+}
+
+// Approving needs a named reviewer: the one account that is nobody is "system".
+func TestHandleResolveAccessRequest_ApprovingNeedsAReviewer(t *testing.T) {
+	resetAccessDeps(t)
+	probe := stubDecide(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-2/decision", strings.NewReader(`{"status":"approved"}`))
+	req.SetPathValue("id", "req-2")
+	rr := httptest.NewRecorder()
+	handleResolveAccessRequest(rr, req)
+
+	wantError(t, rr, http.StatusBadRequest, "VALIDATION_FAILED")
+	if len(probe.Calls) != 0 {
+		t.Fatal("nothing is decided without a reviewer")
+	}
+}
+
+// The grant is durable once the decision commits, so the compiled-cache rebuild that makes
+// access effective MUST run even if the client disconnects before it: on a context detached
+// from the request lifecycle.
 func TestHandleResolveAccessRequest_RebuildDetachedFromClientCancel(t *testing.T) {
 	resetAccessDeps(t)
-
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
-	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
-	}
-	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
-		return propagation.DrainResult{}, nil
-	}
-	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
-
-	var rebuilt bool
-	var rebuildCtxErr error
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {
-		rebuilt = true
-		rebuildCtxErr = ctx.Err()
-	}
+	probe := stubDecide(t)
+	probe.Decision = services.Decision{UserID: "u1", Change: services.Change{Writes: []services.Write{{OutboxID: "ob-appr"}}}}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // client already disconnected
@@ -238,33 +223,11 @@ func TestHandleResolveAccessRequest_RebuildDetachedFromClientCancel(t *testing.T
 	req.SetPathValue("id", "req-1")
 	handleResolveAccessRequest(httptest.NewRecorder(), req)
 
-	if !rebuilt {
+	if len(probe.RebuildUsers) != 1 {
 		t.Fatal("cache rebuild must run even after the client disconnected (the grant is already durable)")
 	}
-	if rebuildCtxErr != nil {
-		t.Fatalf("cache rebuild must run on a context detached from client cancellation, got %v", rebuildCtxErr)
-	}
-}
-
-func TestHandleResolveAccessRequest_RejectRace_Returns409(t *testing.T) {
-	resetAccessDeps(t)
-
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
-	}
-	dbResolveAccessRequest = func(context.Context, string, string, string, string, *time.Time) error {
-		return db.ErrRequestNotPending
-	}
-	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-9/decision",
-		strings.NewReader(`{"status":"rejected","reviewer_id":"reviewer-2"}`))
-	req.SetPathValue("id", "req-9")
-	rr := httptest.NewRecorder()
-	handleResolveAccessRequest(rr, req)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("a lost reject race must return 409, got %d: %s", rr.Code, rr.Body.String())
+	if !probe.RebuildDetached {
+		t.Fatal("cache rebuild must run on a context detached from client cancellation")
 	}
 }
 
@@ -380,35 +343,41 @@ func TestHandleCreateAccessRequest_BindsRequesterToPrincipal(t *testing.T) {
 // durable ledger+outbox and returns 202 Accepted with {outbox_id, status}. The
 // Zitadel mutation happens later during the operator-triggered drain.
 
-func TestHandleUpsertUserDirectGrant_EnqueuesAndReturns202(t *testing.T) {
-	resetAccessDeps(t)
-
-	var gotParams db.EnqueueParams
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
-		gotParams = p
-		return db.EnqueueResult{OutboxID: "ob1", IdempotencyKey: "key1", Status: "pending"}, nil
-	}
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants",
-		strings.NewReader(`{"project_id":"p1","role_key":"r1","reason":"lab access","duration_days":30}`))
-	req.SetPathValue("id", "u1")
+func giveRole(userID, query, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/"+userID+"/grants"+query, strings.NewReader(body))
+	req.SetPathValue("id", userID)
 	rr := httptest.NewRecorder()
 	handleUpsertUserDirectGrant(rr, req)
+	return rr
+}
+
+// A give is the planner's act (services.ApplyAct writes the ledger row, its own
+// outbox row and the rules' rows). The handler hands it the Action and the
+// ActWrite, answers 202 with the row, and rebuilds the cache before it sends.
+func TestHandleUpsertUserDirectGrant_AppliesThePlannedGiveAndReturns202(t *testing.T) {
+	resetAccessDeps(t)
+	probe := stubAct(t)
+	probe.Change = services.Change{Writes: []services.Write{{OutboxID: "ob1"}}}
+
+	rr := giveRole("u1", "", `{"project_id":"p1","role_key":"r1","reason":"lab access","duration_days":30}`)
 
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("want 202, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if gotParams.OpType != "add" || len(gotParams.RoleKeys) != 1 || gotParams.RoleKeys[0] != "r1" || gotParams.Source != "direct" {
-		t.Fatalf("unexpected enqueue params: %+v", gotParams)
+	a, w, seen := probe.only(t)
+	if a != (services.Action{Op: services.OpGive, UserID: "u1", ProjectID: "p1", RoleKey: "r1"}) {
+		t.Fatalf("unexpected action: %+v", a)
 	}
-	if gotParams.UserID != "u1" || gotParams.ProjectID != "p1" || gotParams.Reason != "lab access" {
-		t.Fatalf("unexpected enqueue identity/reason: %+v", gotParams)
+	if w.Actor != "system" || w.Reason != "lab access" || w.Give.EndRule != db.EndKept {
+		t.Fatalf("unexpected write: %+v", w)
 	}
-	var body map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode body: %v", err)
+	if !strings.Contains(w.Give.PayloadJSON, `"reason":"lab access"`) {
+		t.Fatalf("the request body is kept as sent (JSONB NOT NULL): %q", w.Give.PayloadJSON)
 	}
+	if seen != nil {
+		t.Fatalf("no fingerprint was sent, so nothing was seen: %+v", seen)
+	}
+	body := decodeMap(t, rr.Body.String())
 	if body["outbox_id"] != "ob1" || body["status"] != "pending" {
 		t.Fatalf("unexpected body: %v", body)
 	}
@@ -416,23 +385,15 @@ func TestHandleUpsertUserDirectGrant_EnqueuesAndReturns202(t *testing.T) {
 
 func TestHandleUpsertUserDirectGrant_ExpiryCalculation(t *testing.T) {
 	resetAccessDeps(t)
+	probe := stubAct(t)
 
-	var capturedExpiry *time.Time
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
-		capturedExpiry = p.ExpiresAt
-		return db.EnqueueResult{OutboxID: "ob1", Status: "pending"}, nil
-	}
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants",
-		strings.NewReader(`{"project_id":"printing","role_key":"member","duration_days":7}`))
-	req.SetPathValue("id", "u1")
-	rr := httptest.NewRecorder()
-	handleUpsertUserDirectGrant(rr, req)
+	rr := giveRole("u1", "", `{"project_id":"printing","role_key":"member","duration_days":7}`)
 
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
 	}
+	_, w, _ := probe.only(t)
+	capturedExpiry := w.Give.ExpiresAt
 	if capturedExpiry == nil {
 		t.Fatalf("expected non-nil expiresAt for DurationDays=7")
 	}
@@ -445,181 +406,185 @@ func TestHandleUpsertUserDirectGrant_ExpiryCalculation(t *testing.T) {
 
 func TestHandleUpsertUserDirectGrant_ZeroDuration_NoExpiry(t *testing.T) {
 	resetAccessDeps(t)
+	probe := stubAct(t)
 
-	var capturedExpiry *time.Time
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
-		capturedExpiry = p.ExpiresAt
-		return db.EnqueueResult{OutboxID: "ob2", Status: "pending"}, nil
-	}
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants",
-		strings.NewReader(`{"project_id":"printing","role_key":"member","duration_days":0}`))
-	req.SetPathValue("id", "u1")
-	rr := httptest.NewRecorder()
-	handleUpsertUserDirectGrant(rr, req)
+	rr := giveRole("u1", "", `{"project_id":"printing","role_key":"member","duration_days":0}`)
 
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if capturedExpiry != nil {
-		t.Fatalf("expected nil expiresAt for DurationDays=0, got %v", capturedExpiry)
+	if _, w, _ := probe.only(t); w.Give.ExpiresAt != nil {
+		t.Fatalf("expected nil expiresAt for DurationDays=0, got %v", w.Give.ExpiresAt)
 	}
 }
 
 func TestHandleUpsertUserDirectGrant_CacheRebuilt(t *testing.T) {
 	resetAccessDeps(t)
+	probe := stubAct(t)
 
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob3", Status: "pending"}, nil
-	}
-
-	rebuiltUserID := ""
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {
-		rebuiltUserID = userID
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u42/grants",
-		strings.NewReader(`{"project_id":"printing","role_key":"member"}`))
-	req.SetPathValue("id", "u42")
-	rr := httptest.NewRecorder()
-	handleUpsertUserDirectGrant(rr, req)
+	rr := giveRole("u42", "", `{"project_id":"printing","role_key":"member"}`)
 
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if rebuiltUserID != "u42" {
-		t.Fatalf("expected cache rebuild for u42, got %s", rebuiltUserID)
+	if len(probe.RebuildUsers) != 1 || probe.RebuildUsers[0] != "u42" {
+		t.Fatalf("expected cache rebuild for u42, got %v", probe.RebuildUsers)
 	}
 }
 
-func TestHandleUpsertUserDirectGrant_ApplyNowDrains(t *testing.T) {
+// The row the send reports as sent is the one whose status is read back: this
+// request's own, whatever else went with it.
+func TestHandleUpsertUserDirectGrant_SentRowReportsItsOwnStatus(t *testing.T) {
 	resetAccessDeps(t)
-
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob4", Status: "pending"}, nil
-	}
-	var drainedRow string
-	svcDrainPropagationRow = func(_ context.Context, outboxID string) (propagation.DrainResult, error) {
-		drainedRow = outboxID
-		return propagation.DrainResult{Applied: 1}, nil
-	}
-	svcDrainPropagations = func(context.Context) (propagation.DrainResult, error) {
-		t.Fatal("apply=true must drain ONLY this row, not the global batch")
-		return propagation.DrainResult{}, nil
-	}
-	// This request's row (ob4) actually applied.
+	probe := stubAct(t)
+	probe.Change = services.Change{Writes: []services.Write{{OutboxID: "ob4"}, {OutboxID: "ob-rule"}}}
+	probe.Delivery = services.Delivery{Sent: []string{"ob4", "ob-rule"}, Drain: propagation.DrainResult{Applied: 2}}
 	dbGetPropagationStatus = func(_ context.Context, id string) (string, error) {
 		if id != "ob4" {
-			t.Fatalf("inline apply must read THIS request's outbox row, got %q", id)
+			t.Fatalf("the status read must be THIS request's outbox row, got %q", id)
 		}
 		return "applied", nil
 	}
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants?apply=true",
-		strings.NewReader(`{"project_id":"p1","role_key":"r1"}`))
-	req.SetPathValue("id", "u1")
-	rr := httptest.NewRecorder()
-	handleUpsertUserDirectGrant(rr, req)
+	rr := giveRole("u1", "", `{"project_id":"p1","role_key":"r1"}`)
 
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if drainedRow != "ob4" {
-		t.Fatalf("apply=true must drain THIS row (ob4), got %q", drainedRow)
-	}
-	var body map[string]any
-	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	body := decodeMap(t, rr.Body.String())
 	if body["status"] != "applied" {
-		t.Fatalf("apply=true must report THIS row's status=applied, got %v", body["status"])
+		t.Fatalf("must report THIS row's status=applied, got %v", body["status"])
+	}
+	if ids, _ := body["rule_outbox_ids"].([]any); len(ids) != 1 || ids[0] != "ob-rule" {
+		t.Fatalf("the rules' rows follow the give's own: %v", body)
 	}
 }
 
-func TestHandleUpsertUserDirectGrant_RebuildsCacheBeforeInlineDrain(t *testing.T) {
+// The planner's cancel-only or no-row give has no outbox row: it is applied, and sends
+// nothing worth waiting on.
+func TestHandleUpsertUserDirectGrant_ARowlessGiveIsApplied(t *testing.T) {
 	resetAccessDeps(t)
+	probe := stubAct(t)
+	probe.Change = services.Change{Writes: []services.Write{{}}}
 
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob6", Status: "pending"}, nil
-	}
-	var order []string
-	cacheRebuildUser = func(context.Context, string, []string) { order = append(order, "rebuild") }
-	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
-		order = append(order, "drain")
-		return propagation.DrainResult{Applied: 1}, nil
-	}
-	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
+	rr := giveRole("u1", "", `{"project_id":"p1","role_key":"r1"}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants?apply=true",
-		strings.NewReader(`{"project_id":"p1","role_key":"r1"}`))
-	req.SetPathValue("id", "u1")
-	handleUpsertUserDirectGrant(httptest.NewRecorder(), req)
-
-	if len(order) != 2 || order[0] != "rebuild" || order[1] != "drain" {
-		t.Fatalf("cache rebuild must run BEFORE the inline drain so access is effective regardless of the drain outcome, got %v", order)
+	body := decodeMap(t, rr.Body.String())
+	if rr.Code != http.StatusAccepted || body["status"] != "applied" || body["outbox_id"] != nil && body["outbox_id"] != "" {
+		t.Fatalf("got %d %v", rr.Code, body)
 	}
+}
+
+// The compiled cache (which the claim path reads) is rebuilt from the committed
+// ledger row BEFORE the send, so a slow or canceled Zitadel call cannot starve the
+// rebuild: access is effective whatever the projection does.
+func TestHandleUpsertUserDirectGrant_RebuildsCacheBeforeTheSend(t *testing.T) {
+	resetAccessDeps(t)
+	probe := stubAct(t)
+	probe.Change = services.Change{Writes: []services.Write{{OutboxID: "ob6"}}}
+
+	giveRole("u1", "", `{"project_id":"p1","role_key":"r1"}`)
+
+	probe.wantOrder(t, "apply", "rebuild", "deliver")
 }
 
 func TestHandleUpsertUserDirectGrant_RebuildDetachedFromClientCancel(t *testing.T) {
 	resetAccessDeps(t)
-
-	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob7", Status: "pending"}, nil
-	}
-	var rebuilt bool
-	var rebuildCtxErr error
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {
-		rebuilt = true
-		rebuildCtxErr = ctx.Err()
-	}
+	probe := stubAct(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // client already disconnected (no ?apply, so no drain is involved)
+	cancel() // client already disconnected
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants",
 		strings.NewReader(`{"project_id":"p1","role_key":"r1"}`)).WithContext(ctx)
 	req.SetPathValue("id", "u1")
 	handleUpsertUserDirectGrant(httptest.NewRecorder(), req)
 
-	if !rebuilt {
+	if len(probe.RebuildUsers) != 1 {
 		t.Fatal("cache rebuild must run even after the client disconnected (the grant is already durable)")
 	}
-	if rebuildCtxErr != nil {
-		t.Fatalf("cache rebuild must run on a context detached from client cancellation, got %v", rebuildCtxErr)
+	if !probe.RebuildDetached {
+		t.Fatal("cache rebuild must run on a context detached from client cancellation")
 	}
 }
 
-// The batch drain reports the aggregate outcome of the OLDEST rows; this
-// request's freshly-enqueued row may not be in that batch (or may requeue). The
-// response must reflect THIS row's actual status, not the batch's Applied count.
-func TestHandleUpsertUserDirectGrant_ApplyReportsThisRowNotBatch(t *testing.T) {
+// The send's outcome for this row is said: why it isn't in Zitadel yet, and what the rules
+// left waiting.
+func TestHandleUpsertUserDirectGrant_SaysWhyItWaitsAndWhatTheRulesLeftWaiting(t *testing.T) {
 	resetAccessDeps(t)
+	probe := stubAct(t)
+	probe.Change = services.Change{Writes: []services.Write{
+		{OutboxID: "ob-own", Delivery: services.DeliveryWaits},
+		{OutboxID: "ob-rule", Delivery: services.DeliveryWaits},
+	}}
+	probe.Delivery = services.Delivery{Waiting: []string{"ob-own", "ob-rule"},
+		Reason: map[string]string{"ob-own": "role_waits", "ob-rule": "role_waits"}}
 
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob5", Status: "pending"}, nil
-	}
-	// The targeted drain ran, but ob5 itself requeued (transient Zitadel error).
-	svcDrainPropagationRow = func(_ context.Context, outboxID string) (propagation.DrainResult, error) {
-		return propagation.DrainResult{Requeued: 1}, nil
-	}
-	dbGetPropagationStatus = func(_ context.Context, id string) (string, error) {
-		if id != "ob5" {
-			t.Fatalf("must query THIS request's outbox row, got %q", id)
-		}
-		return "pending", nil
-	}
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {}
+	body := decodeMap(t, giveRole("u1", "", `{"project_id":"p1","role_key":"r1"}`).Body.String())
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants?apply=true",
-		strings.NewReader(`{"project_id":"p1","role_key":"r1"}`))
-	req.SetPathValue("id", "u1")
-	rr := httptest.NewRecorder()
-	handleUpsertUserDirectGrant(rr, req)
-
-	var body map[string]any
-	_ = json.Unmarshal(rr.Body.Bytes(), &body)
-	if body["status"] != "pending" {
-		t.Fatalf("must report THIS row's status (pending), not the batch aggregate, got %v", body["status"])
+	if body["wait_reason"] != "role_waits" || body["rule_waiting"] != float64(1) || body["status"] != "pending" {
+		t.Fatalf("unexpected body: %v", body)
 	}
+}
+
+// The plan the sheet was shown rides in the body: fingerprint and cancel_ids become
+// the Seen the planner checks against a fresh plan.
+func TestHandleUpsertUserDirectGrant_CarriesWhatTheSheetWasShown(t *testing.T) {
+	resetAccessDeps(t)
+	probe := stubAct(t)
+	const id = "44444444-4444-4444-4444-444444444444"
+
+	rr := giveRole("u1", "", `{"project_id":"p1","role_key":"r1","fingerprint":"fp-1","cancel_ids":["`+id+`"]}`)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+	_, _, seen := probe.only(t)
+	if seen == nil || seen.Fingerprint != "fp-1" || len(seen.CancelIDs) != 1 || seen.CancelIDs[0] != id {
+		t.Fatalf("seen = %+v", seen)
+	}
+}
+
+// A stale plan or a refusal writes nothing and answers with its code; no rebuild, no send.
+func TestHandleUpsertUserDirectGrant_RefusalsAreSaidAndNothingFollows(t *testing.T) {
+	resetAccessDeps(t)
+	probe := stubAct(t)
+	refused := func(code string) error { return &services.Refused{Change: services.Change{Refusal: code}} }
+	for _, c := range []struct {
+		name string
+		err  error
+		code int
+		want string
+	}{
+		{"stale", &services.StalePlan{IDs: []string{"q"}}, 409, "PLAN_STALE"},
+		{"not offered", refused("not_offered:p1/r1"), 409, "ROLE_NOT_OFFERED"},
+		{"catalogue unread", refused("catalogue_unread"), 503, "CATALOGUE_UNREAD"},
+		{"departed", refused("departed:Departed"), 409, "DEPARTED"},
+		{"failure", errors.New("tx failed"), 500, "DB_ERROR"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			probe.Order, probe.Err = nil, c.err
+			wantError(t, giveRole("u1", "", `{"project_id":"p1","role_key":"r1"}`), c.code, c.want)
+			probe.wantOrder(t, "apply")
+		})
+	}
+}
+
+// Held says what they hold, in the words the request queue uses.
+func TestHandleUpsertUserDirectGrant_HeldSaysWhatTheyHold(t *testing.T) {
+	resetAccessDeps(t)
+	probe := stubAct(t)
+	probe.Err = &services.Refused{Change: services.Change{Refusal: "held"}}
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		return models.RequestHolding{Kind: models.HoldingForGood}, nil
+	}
+
+	rr := giveRole("u1", "", `{"project_id":"p1","role_key":"r1"}`)
+
+	wantError(t, rr, http.StatusConflict, "ALREADY_HELD")
+	if !strings.Contains(rr.Body.String(), alreadyHeldMessage(models.RequestHolding{Kind: models.HoldingForGood}, "They")) {
+		t.Fatalf("held must say what they hold: %s", rr.Body.String())
+	}
+	probe.wantOrder(t, "apply")
 }
 
 // --- handleCreateAccessRequest ---
@@ -676,132 +641,6 @@ func TestHandleCreateAccessRequest_ZeroDuration_NilPointer(t *testing.T) {
 	}
 	if capturedDuration != nil {
 		t.Fatalf("expected nil durationDays for DurationDays=0, got %v", *capturedDuration)
-	}
-}
-
-// --- handleResolveAccessRequest (idempotency) ---
-
-func TestHandleResolveAccessRequest_AlreadyApproved_Returns409(t *testing.T) {
-	resetAccessDeps(t)
-
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{
-			ID:          id,
-			RequesterID: "u1",
-			ProjectID:   "p1",
-			RoleKey:     "admin",
-			Status:      "approved",
-		}, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-1/decision",
-		strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1"}`))
-	req.SetPathValue("id", "req-1")
-	rr := httptest.NewRecorder()
-	handleResolveAccessRequest(rr, req)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] != "ALREADY_RESOLVED" {
-		t.Fatalf("expected ALREADY_RESOLVED, got %v", resp["error"])
-	}
-}
-
-func TestHandleResolveAccessRequest_AlreadyRejected_Returns409(t *testing.T) {
-	resetAccessDeps(t)
-
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{
-			ID:          id,
-			RequesterID: "u1",
-			ProjectID:   "p1",
-			RoleKey:     "admin",
-			Status:      "rejected",
-		}, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-2/decision",
-		strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1"}`))
-	req.SetPathValue("id", "req-2")
-	rr := httptest.NewRecorder()
-	handleResolveAccessRequest(rr, req)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
-	}
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] != "ALREADY_RESOLVED" {
-		t.Fatalf("expected ALREADY_RESOLVED, got %v", resp["error"])
-	}
-}
-
-func TestHandleResolveAccessRequestRejectedDoesNotCreateGrant(t *testing.T) {
-	resetAccessDeps(t)
-
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{
-			ID:          id,
-			RequesterID: "u1",
-			ProjectID:   "p1",
-			RoleKey:     "admin",
-			Status:      "pending",
-		}, nil
-	}
-	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string, _ *time.Time) error {
-		return nil
-	}
-
-	grantCreated := false
-	dbUpsertDirectGrant = func(ctx context.Context, userID, projectID, roleKey, grantedBy, reason string, expiresAt *time.Time) (string, error) {
-		grantCreated = true
-		return "", nil
-	}
-	enqueued := false
-	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
-		enqueued = true
-		return db.EnqueueResult{}, nil
-	}
-	defer func() {
-		if enqueued {
-			t.Fatal("rejection must not enqueue a grant propagation")
-		}
-	}()
-
-	rebuilt := false
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {
-		rebuilt = true
-	}
-
-	auditAction := ""
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error {
-		auditAction = action
-		return nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-2/decision", strings.NewReader(`{"status":"rejected","reviewer_id":"reviewer-2","review_note":"deny"}`))
-	req.SetPathValue("id", "req-2")
-	rr := httptest.NewRecorder()
-	handleResolveAccessRequest(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	if grantCreated {
-		t.Fatalf("did not expect direct grant on rejection")
-	}
-	if rebuilt {
-		t.Fatalf("did not expect cache rebuild on rejection")
-	}
-	if auditAction != "access_request.rejected" {
-		t.Fatalf("unexpected audit action %s", auditAction)
 	}
 }
 
@@ -891,71 +730,6 @@ func TestHandleWithdrawAccessRequest_AlreadyDecidedIs409(t *testing.T) {
 
 // A withdrawn request is settled. Deciding one afterwards would resurrect an ask its author had
 // already taken back — the guard is "not pending", not a list of decided statuses.
-func TestHandleResolveAccessRequest_WithdrawnCannotBeDecided(t *testing.T) {
-	resetAccessDeps(t)
-
-	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin",
-			Status: "withdrawn"}, nil
-	}
-	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string, _ *time.Time) error {
-		t.Fatal("a withdrawn request must not be decidable")
-		return nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/decision",
-		strings.NewReader(`{"status":"rejected","reviewer_id":"reviewer-1","review_note":"no"}`))
-	req.SetPathValue("id", "r1")
-	rr := httptest.NewRecorder()
-	handleResolveAccessRequest(rr, req)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if !strings.Contains(rr.Body.String(), "already withdrawn") {
-		t.Fatalf("the conflict must name the state it is in: %s", rr.Body.String())
-	}
-}
-
-// Owner, 15 Oct: an operator may approve their own request, and Change history
-// records it as exactly that, never as a second person's decision.
-func TestApprovingYourOwnRequestIsRecordedAsSelfApproved(t *testing.T) {
-	resetAccessDeps(t)
-	dbGetAccessRequestByID = func(_ context.Context, id string) (models.AccessRequest, error) {
-		return models.AccessRequest{ID: id, RequesterID: "op-1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
-	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "ob", Status: "pending"}, nil
-	}
-	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
-		return propagation.DrainResult{Applied: 1}, nil
-	}
-	cacheRebuildUser = func(context.Context, string, []string) {}
-	origConverge := svcConvergeProjectChange
-	t.Cleanup(func() { svcConvergeProjectChange = origConverge })
-	svcConvergeProjectChange = func(context.Context, string, string, string) error { return nil }
-	var actions []string
-	dbInsertAuditLog = func(_ context.Context, _, _, action, _ string) error {
-		actions = append(actions, action)
-		return nil
-	}
-
-	for _, tc := range []struct{ reviewer, want string }{
-		{"op-1", "access_request.self_approved"},
-		{"op-2", "access_request.approved"},
-	} {
-		actions = nil
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/decision",
-			strings.NewReader(`{"status":"approved","reviewer_id":"`+tc.reviewer+`","review_note":"ok"}`))
-		req.SetPathValue("id", "r1")
-		rr := httptest.NewRecorder()
-		handleResolveAccessRequest(rr, req)
-		if rr.Code != http.StatusOK || len(actions) != 1 || actions[0] != tc.want {
-			t.Fatalf("reviewer %s: %d %v, want %s", tc.reviewer, rr.Code, actions, tc.want)
-		}
-	}
-}
-
 // Found on production, 15 Oct: a member asked five times for a role they held
 // for good. Each copy reached the queue, and approving any of them would have
 // cut their access to 64 days.
@@ -1048,22 +822,15 @@ func TestASecondIdenticalAskPointsAtTheWaitingOne(t *testing.T) {
 
 func TestApprovingARoleTheyHaveSinceComeToHoldIsRefused(t *testing.T) {
 	resetAccessDeps(t)
-	days := 64
-	dbGetAccessRequestByID = func(context.Context, string) (models.AccessRequest, error) {
-		return models.AccessRequest{ID: "r1", RequesterID: "u1", ProjectID: "p1", RoleKey: "community", Status: "pending", DurationDays: &days}, nil
-	}
-	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
-		return models.RequestHolding{Kind: models.HoldingForGood}, nil
-	}
-	granted := false
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
-		granted = true
-		return db.EnqueueResult{}, nil
-	}
+	probe := stubDecide(t)
+	probe.DecideErr = services.ErrRequestAlreadyHeld
+
 	err := resolveOneAccessRequest(context.Background(), "r1", "approved", "op1", "")
-	if !errors.Is(err, errRequestAlreadyHeld) || granted {
-		t.Fatalf("approving a role they hold must be refused and grant nothing: %v (granted %v)", err, granted)
+
+	if !errors.Is(err, services.ErrRequestAlreadyHeld) {
+		t.Fatalf("approving a role they hold must be refused: %v", err)
 	}
+	probe.wantOrder(t, "decide") // nothing made effective, nothing sent
 }
 
 // Giving a role someone has is refused; Extend is the one way to change an
@@ -1074,12 +841,14 @@ func TestGivingARoleTheyHaveIsRefusedAndExtendOnlyLengthens(t *testing.T) {
 	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
 		return models.RequestHolding{Kind: models.HoldingUntil, Until: &until}, nil
 	}
+	// A plain give is the planner's: it refuses a role they have. Extend is not on the planner yet.
+	probe := stubAct(t)
+	probe.Err = &services.Refused{Change: services.Change{Refusal: "held"}}
 	var got []db.EnqueueParams
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams, _ ...db.EnqueueParams) (db.EnqueueResult, error) {
 		got = append(got, p)
 		return db.EnqueueResult{OutboxID: "o1"}, nil
 	}
-	cacheRebuildUser = func(context.Context, string, []string) {}
 	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) { return propagation.DrainResult{}, nil }
 	call := func(body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants", strings.NewReader(body))

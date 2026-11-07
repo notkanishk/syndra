@@ -9,6 +9,7 @@ import type { UserProfile } from "@/lib/types";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
 import type { RetryState } from "@/lib/retry";
+import { seenQuery, type PlanSeen } from "@/lib/usePlanConsent";
 
 /** One holder of a (project, role) pair, with the sources that produced it. */
 export interface RoleMember {
@@ -124,10 +125,13 @@ export interface DirectGrantRemoval {
 export function useRemoveDirectGrant() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ userId, grantId }: { userId: string; grantId: string }) =>
-      request<DirectGrantRemoval>(`/users/${userId}/grants/${grantId}?apply=true`, {
+    // `seen` is the plan the sheet was shown (usePlanConsent), on the query.
+    mutationFn: ({ userId, grantId, seen }: { userId: string; grantId: string; seen?: PlanSeen }) => {
+      const query = seenQuery(seen);
+      return request<DirectGrantRemoval>(`/users/${userId}/grants/${grantId}?apply=true${query ? `&${query}` : ""}`, {
         method: "DELETE",
-      }),
+      });
+    },
     onSuccess: () => invalidateAfter(qc, "access"),
   });
 }

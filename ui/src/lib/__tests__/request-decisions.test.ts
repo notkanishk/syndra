@@ -26,15 +26,15 @@ describe("approvalOutcome", () => {
     expect(`${out.message} ${out.detail}`).not.toMatch(/\bSent\b|can use it now/);
   });
 
-  // C2: an approval's whole effect — the roles automatic rules also gave.
+  // C2: an approval's whole effect, in the planner's words: the sentences
+  // the row said before the press (A-21 §4.4, one voice).
   it("names what automatic rules also gave with the approval", () => {
-    const one = approvalOutcome(undefined, "Ada", "Trained", undefined, [{ role: "Bench", project: "Workshop" }]);
-    expect(one.message).toBe("Approved. Ada can use it now. An automatic rule also gave them Bench in Workshop.");
-    const two = approvalOutcome("halted:retrying", "Ada", "Trained", undefined, [
-      { role: "Bench", project: "Workshop" },
-      { role: "Laser", project: "Fabrication" },
-    ]);
-    expect(two.message).toMatch(/Automatic rules also gave them Bench in Workshop and Laser in Fabrication\.$/);
+    const bench = "Also gives Bench in Workshop, by the automatic rule from Trained in Workshop.";
+    const one = approvalOutcome(undefined, "Ada", "Trained", undefined, [bench]);
+    expect(one.message).toBe(`Approved. Ada can use it now. ${bench}`);
+    const laser = "Also gives Laser in Fabrication, by the automatic rule from Bench in Workshop.";
+    const two = approvalOutcome("halted:retrying", "Ada", "Trained", undefined, [bench, laser]);
+    expect(two.message).toMatch(new RegExp(`${laser.replace(/[.]/g, "\\.")}$`));
     expect(approvalOutcome(undefined, "Ada", "Trained").message).not.toMatch(/automatic rule/i);
   });
 

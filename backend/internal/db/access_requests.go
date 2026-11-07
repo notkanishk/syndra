@@ -274,8 +274,9 @@ func WithdrawAccessRequest(ctx context.Context, id, requesterID string) error {
 // ErrRequestNotPending if the request was already resolved.
 //
 // endedBefore and endsAfter are an extension's two ends, written with the
-// resolution (nil, nil for any other request).
-func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNote string, p EnqueueParams, endedBefore, endsAfter *time.Time) (EnqueueResult, error) {
+// resolution (nil, nil for any other request). planned is the rule rows the
+// planner decided for it (EnqueueDirectGrantPropagation).
+func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNote string, p EnqueueParams, endedBefore, endsAfter *time.Time, planned ...EnqueueParams) (EnqueueResult, error) {
 	key, err := newOutboxIdempotencyKey()
 	if err != nil {
 		return EnqueueResult{}, err
@@ -301,7 +302,7 @@ func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNo
 		return EnqueueResult{}, ErrRequestNotPending
 	}
 
-	ids, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{p}, key)
+	ids, err := enqueueWrites(ctx, tx, nil, append([]EnqueueParams{p}, planned...), key)
 	if err != nil {
 		return EnqueueResult{}, err
 	}

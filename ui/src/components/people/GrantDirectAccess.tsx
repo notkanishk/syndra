@@ -8,7 +8,8 @@ import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
+import { KEPT, PushedStep, useCancelStep, useForetell } from "@/components/ui/CancelQueuedStep";
+import { Notice } from "@/components/ui/Notice";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
@@ -18,7 +19,8 @@ import { isRefused, waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
+import { RuleConsentFailed } from "@/components/requests/RuleConsent";
+import { isStale, usePlanConsent } from "@/lib/usePlanConsent";
 import { forecastFor, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { withRuleWaits } from "@/lib/request-decisions";
 import { expiryLabel, formatShortDate } from "@/lib/format";
@@ -110,13 +112,24 @@ function GrantDirectAccessOpen({
   // sheet to a step first (A-04 §14); Keep it comes back here as it was.
   const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${grantedRole}` });
   const waits = useWaitsBeforeLine("give");
-  // What the automatic rules also give with this role, said before the click
-  // (audit C2), from the closure the write itself follows.
-  const rules = useRuleConsent(userId, projectId, [roleKey]);
-  const ruleLines = rules.lines;
+  // What giving it does, from the planner before the press (A-21 §3): what the
+  // automatic rules also give (the planner's words, audit C2) and the waiting
+  // changes it would cancel, said in the footer; the write carries the plan.
+  const consent = usePlanConsent(value ? { op: "give", userId, projectId, roleKey } : null, "giving it");
+  const ruleLines = consent.rules;
+  const foretell = useForetell();
+  // The write found their access moved since the plan was read: nothing was
+  // written, and the note below is the fresh plan (A-21 §3.3).
+  const [stale, setStale] = useState(false);
+  const refused = consent.plan && consent.plan.effect !== "apply" ? consent.plan : undefined;
+  const refusedReason = refused
+    ? refused.refusal === "held"
+      ? `${first} already has ${grantedRole}.`
+      : [refused.detail, refused.consequence].filter(Boolean).join(" ")
+    : undefined;
 
-  // Held while the rules are read, and held when they can't be (RuleConsent).
-  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate)) && !rules.hold;
+  // Held while the plan is read, when it can't be, and when the planner refuses.
+  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate)) && !consent.hold && !refused;
   // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
   const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued" || Boolean(result?.outcome.recorded);
 
@@ -125,6 +138,17 @@ function GrantDirectAccessOpen({
       <PushedStep step={step}>
       <ModalHeader title={GIVE_ROLE_LABEL} titleId="grant-title" />
       <div className="-mt-2 px-6 pb-3 text-[13px] text-faint">{userName}</div>
+      {stale && !result && (
+        <Notice
+          tone="warn"
+          blocking
+          className="mx-6 mb-3"
+          title={`Nothing was changed. ${first}'s access moved while this was open.`}
+          next="Read the note under the form, then press Give role again."
+        >
+          {null}
+        </Notice>
+      )}
 
       <div className="flex flex-col gap-3.5 px-6">
         {!done && (
@@ -225,7 +249,9 @@ function GrantDirectAccessOpen({
               {selectedRole &&
                 // A role that waits waits for Send whatever Zitadel is doing,
                 // so its own line outranks the degraded one.
-                (selectedRole.waits_for_send ? (
+                (refused?.refusal === "held" ? (
+                  <span className="block">Nothing to give.</span>
+                ) : selectedRole.waits_for_send ? (
                   <span className="block">
                     <WaitsMark className="mr-1.5" />
                     {grantedRole} always waits for you, so {first} gets it once you send it.
@@ -235,13 +261,19 @@ function GrantDirectAccessOpen({
                 ) : (
                   <span className="block">{first} can use it as soon as you give it.</span>
                 ))}
+              {selectedRole && consent.cancels.length > 0 && !refused && (
+                // Foretold before the press: the press pushes the step (A-21 §3.2).
+                <span className="block">
+                  {foretell("Giving it", consent.cancels)} Nothing is cancelled until you choose on the next step.
+                </span>
+              )}
               {selectedRole &&
                 ruleLines.map((line) => (
                   <span key={line} className="block">
                     {line}
                   </span>
                 ))}
-              {selectedRole && <RuleConsentFailed consent={rules} className="flex flex-wrap items-center gap-x-3 gap-y-1" />}
+              {selectedRole && <RuleConsentFailed consent={consent} className="flex flex-wrap items-center gap-x-3 gap-y-1" />}
             </>
           ))
         }
@@ -261,23 +293,27 @@ function GrantDirectAccessOpen({
                 !ready
                   ? !value
                     ? "Choose a role to give."
-                    : rules.hold ?? "Pick the date the access should end."
+                    : consent.hold ?? refusedReason ?? "Pick the date the access should end."
                   : undefined
               }
               isPending={grant.isPending}
               onClick={async () => {
                 setResult(null);
                 try {
-                  const made = await step.run(() =>
+                  // A give that cancels a waiting change pushes the step at once,
+                  // from the plan; one that cancels nothing gains no step.
+                  const made = await step.confirm(consent.cancels, () =>
                     grant.mutateAsync({
                       project_id: projectId,
                       role_key: roleKey,
                       reason,
                       duration_days: resolved.days,
+                      ...consent.seen,
                     }),
                   );
                   // Kept: the form is back as it was and nothing changed.
                   if (made === KEPT) return;
+                  setStale(false);
                   // `wait_reason` is the backend's account of why this isn't
                   // in Zitadel yet; without one the grant went straight through.
                   const why = waitReasonLine(made.wait_reason, grantedRole, new Date().toISOString());
@@ -322,6 +358,13 @@ function GrantDirectAccessOpen({
                     });
                   }
                 } catch (error) {
+                  // Their access moved since the plan was read: nothing was
+                  // written. The sheet says so and reads the plan again.
+                  if (isStale(error)) {
+                    setStale(true);
+                    consent.retry();
+                    return;
+                  }
                   setResult({ word: "Not given", outcome: outcomeFromError(error) });
                 }
               }}

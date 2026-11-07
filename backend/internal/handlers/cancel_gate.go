@@ -99,12 +99,18 @@ func (g *gateWriter) decide() {
 // each change. Names come from the directory's cached list; if it can't answer
 // the refusal is sent without them rather than not at all.
 func (g *gateWriter) describe(refused []models.QueuedChange) []WouldCancelChange {
-	seen := make(map[string]bool, len(g.acked))
-	for _, id := range g.acked {
+	return nameCancels(g.ctx, refused, g.acked)
+}
+
+// nameCancels is queued changes as an operator is shown them: who started
+// each, and which are new since the ids acked.
+func nameCancels(ctx context.Context, refused []models.QueuedChange, acked []string) []WouldCancelChange {
+	seen := make(map[string]bool, len(acked))
+	for _, id := range acked {
 		seen[id] = true
 	}
 	var names map[string]string
-	if users, err := directoryUsers(g.ctx); err == nil {
+	if users, err := directoryUsers(ctx); err == nil {
 		names = make(map[string]string, len(users))
 		for _, u := range users {
 			names[u.ID] = u.Name

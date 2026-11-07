@@ -74,6 +74,8 @@ func NewRouter() http.Handler {
 	// What the automatic rules would also give with a role: read by every
 	// dialog that gives one (give, approve, adopt) before it is confirmed.
 	mux.HandleFunc("GET /api/v1/users/{id}/rule-preview", withCORS(withOperatorAuth(handleRulePreview)))
+	// What one act on this person would do, before anything is written (task 1.2).
+	mux.HandleFunc("GET /api/v1/users/{id}/plan", withCORS(withOperatorAuth(handleActPlan)))
 	// Removing a direct grant deletes the Syndra ledger row and queues the
 	// Zitadel revoke in one transaction. NOT the same object as
 	// DELETE /zitadel/users/{id}/grants/{grantId}, which removes the Zitadel-side

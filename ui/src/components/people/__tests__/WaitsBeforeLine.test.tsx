@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RemovalDialog } from "@/components/people/RemovalDialog";
+import { seedAutoRetry } from "@/test-utils/drain";
+import { actPlan, planClient } from "@/test-utils/plan";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 
 import { waitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
@@ -32,6 +35,13 @@ describe("the line itself", () => {
   });
 });
 
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return actPlan();
+    throw new Error(`unmocked request ${path}`);
+  },
+}));
 vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => true }));
 vi.mock("@/lib/queries/useBundles", () => ({
   useRemoveBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -41,8 +51,9 @@ vi.mock("@/lib/queries/useRoleMembers", () => ({
 }));
 
 describe("a revoke dialog while Zitadel is not answering", () => {
-  it("says the change will wait, and leaves Revoke pressable", () => {
+  it("says the change will wait, and leaves Revoke pressable", async () => {
     render(
+      <QueryClientProvider client={seedAutoRetry(planClient(), true)}>
       <RemovalDialog
         removal={{
           projectId: "p1",
@@ -55,14 +66,17 @@ describe("a revoke dialog while Zitadel is not answering", () => {
         userId="u1"
         userName="Shikha Yadav"
         onClose={vi.fn()}
-      />,
+      />
+      </QueryClientProvider>,
     );
     expect(screen.getByText(LINE)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Revoke/ })).toBeEnabled();
+    // The press waits on the plan, then stays live though Zitadel is down.
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Revoke/ })).toBeEnabled());
   });
 
   it("says it for a bundle removal too, ahead of what else the bundle carries", () => {
     render(
+      <QueryClientProvider client={seedAutoRetry(planClient(), true)}>
       <RemovalDialog
         removal={{
           projectId: "p1",
@@ -73,7 +87,8 @@ describe("a revoke dialog while Zitadel is not answering", () => {
         userId="u1"
         userName="Shikha Yadav"
         onClose={vi.fn()}
-      />,
+      />
+      </QueryClientProvider>,
     );
     expect(screen.getByText(LINE)).toBeInTheDocument();
   });

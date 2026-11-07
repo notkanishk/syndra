@@ -9,7 +9,9 @@ import { useRequestsMine } from "@/lib/queries/useRequests";
 import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { useMyChanges } from "@/lib/queries/useMyChanges";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
-import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
+import { RuleConsentFailed } from "@/components/requests/RuleConsent";
+import { useForetell } from "@/components/ui/CancelQueuedStep";
+import { usePlanConsent } from "@/lib/usePlanConsent";
 import type { Term } from "@/lib/queries/useTerms";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 
@@ -89,31 +91,43 @@ export function HoldingNote({ request }: { request: AccessRequest }) {
 }
 
 /**
- * What an automatic rule also gives if this is approved, said where the
- * approve button is (audit C2): approving gives the role, and the rules
- * follow it. From the backend's preview, the same closure the approval
- * follows; nothing when nothing follows or there is nothing to approve.
+ * What approving does, said where the approve button is, before the press
+ * (A-21 §3.2): what the automatic rules also give (audit C2) and the waiting
+ * change it would cancel, from the planner, the same Change the approval
+ * writes. Nothing when nothing follows or there is nothing to approve.
  */
 function RulesLine({ request }: { request: AccessRequest }) {
-  const consent = useRuleConsent(request.requester_id, request.project_id, [request.role_key], !alreadyHeld(request));
-  // Final verification N5: a preview that can't be read is said, never
-  // silence that reads as "nothing else follows" (RuleConsent: the one rule).
+  const consent = useApprovePlan(request);
+  const foretell = useForetell();
+  // Final verification N5: a plan that can't be read is said, never silence
+  // that reads as "nothing else follows" (the one consent rule).
   if (consent.failed) return <RuleConsentFailed consent={consent} />;
-  if (consent.lines.length === 0) return null;
-  return <span className="w-full text-[13px] text-muted">If you approve: {consent.lines.join(" ")}</span>;
+  const lines = [...consent.rules, foretell("Approving", consent.cancels)].filter(Boolean);
+  if (lines.length === 0) return null;
+  return <span className="w-full text-[13px] text-muted">If you approve: {lines.join(" ")}</span>;
+}
+
+/** The plan for approving this request: one read, shared by the line and the button. */
+export function useApprovePlan(request: AccessRequest) {
+  return usePlanConsent(
+    alreadyHeld(request) ? null : { op: "approve", userId: request.requester_id, requestId: request.id },
+    "approving",
+  );
 }
 
 /**
  * Why approving is held, or undefined when it can go (N5). The consent is the
- * row: what the rules also give is part of what approving does, so approve
- * waits for the preview, and a preview that failed holds it with the reason,
- * rather than approving a gift nobody was shown. The same query as RulesLine,
- * so it is one read.
+ * row: what approving does is part of what the person decides, so approve
+ * waits for the plan, and a plan that failed holds it with the reason, rather
+ * than approving a gift or a cancel nobody was shown. The same query as
+ * RulesLine, so it is one read.
  */
 export function useApproveHold(request: AccessRequest): string | undefined {
   const held = alreadyHeld(request);
-  const consent = useRuleConsent(request.requester_id, request.project_id, [request.role_key], !held);
+  const consent = useApprovePlan(request);
   if (held) return "They already have this.";
+  const plan = consent.plan;
+  if (plan && plan.effect !== "apply") return [plan.detail, plan.consequence].filter(Boolean).join(" ");
   return consent.hold;
 }
 

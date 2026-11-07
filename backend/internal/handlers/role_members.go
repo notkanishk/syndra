@@ -1,10 +1,8 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 
-	"syndra/internal/db"
 	"syndra/internal/services"
 )
 
@@ -62,35 +60,7 @@ func handleDeleteUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := svcDeleteDirectGrant(r.Context(), userID, grantID, resolveActor(r, ""), "")
-	if errors.Is(err, db.ErrGrantNotFound) {
-		jsonErrorResponse(w, http.StatusNotFound, "GRANT_NOT_FOUND",
-			"No direct grant with that id belongs to this user. It may already have been removed or expired.")
-		return
-	}
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-
-	// Recompile before returning, on a context detached from the request, so
-	// the access is gone from the token path even if the caller disconnects.
-	rebuildUserCacheDetachedFn(r.Context(), userID)
-
-	// The same one rule as the grant path (services.Deliver): these rows go
-	// now unless the role waits; before the switch over, a removal sent
-	// without ?apply=true waits as it always did. There may be none — every
-	// role the grant carried is still covered by another source — and that is
-	// the point: nothing is queued, so nothing is sent.
-	d := svcDeliver(r.Context(), res.OutboxIDs, r.URL.Query().Get("apply") != "true")
-	res.WaitReason, res.Retry = d.WaitReason(), d.Drain.Retry
-	for _, id := range d.Sent {
-		if st, serr := dbGetPropagationStatus(r.Context(), id); serr == nil && st != "" {
-			res.Status = st
-		}
-	}
-
-	jsonResponse(w, http.StatusAccepted, res)
+	removeGrantPlanned(w, r, userID, grantID)
 }
 
 var (

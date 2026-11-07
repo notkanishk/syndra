@@ -33,6 +33,13 @@ import { personOr, roleName } from "@/lib/names";
  *   const done = await step.run(() => grant.mutateAsync(input));   // KEPT, or the write's result
  *   <PushedStep step={step}>…the form…</PushedStep>
  *
+ * An act the planner plans (give, revoke, approve, a person's bundles; A-21
+ * §3) knows what it cancels before the press: the sheet says so
+ * (`useForetell`), and the press pushes the step at once with the plan's
+ * changes (`step.confirm(plan.cancels, write)`); the write carries the
+ * plan's cancel ids, and the backend admits exactly those. `run`, the 409
+ * path, stays for acts not on the planner yet.
+ *
  * A write with no sheet of its own (Approve on a queue row) passes
  * `standalone` and renders `step.element`, a small sheet holding only the step.
  */
@@ -63,6 +70,13 @@ interface Asking {
 
 export interface CancelStep {
   run: <T>(write: () => Promise<T>) => Promise<T | typeof KEPT>;
+  /**
+   * The press of an act the planner planned (A-21 §3.1): the step is pushed at
+   * once with the plan's `changes`, no round trip; going ahead sends `write`
+   * (which carries the plan's cancel ids). Nothing to cancel, no step. A
+   * change not shown the last time the step was up is marked new.
+   */
+  confirm: <T>(changes: QueuedChange[], write: () => Promise<T>) => Promise<T | typeof KEPT>;
   /** The step is on screen (or fading back to the form). */
   asking: Asking | null;
   open: boolean;
@@ -98,6 +112,21 @@ function useWho() {
 }
 type Who = ReturnType<typeof useWho>;
 
+/**
+ * The sentence that foretells the step, said in the sheet before the press
+ * from the act's plan (A-21 §3.2): "Giving it cancels the removal Sam Lee
+ * queued 2h ago." `lead` is the act: "Giving it", "Revoking it", "Approving".
+ */
+export function useForetell() {
+  const who = useWho();
+  return (lead: string, changes: QueuedChange[]): string => {
+    if (changes.length === 0) return "";
+    if (changes.length > 1) return `${lead} cancels ${changes.length} changes that are waiting.`;
+    const change = changes[0];
+    return `${lead} cancels the ${isRemoval(change) ? "removal" : "give"} ${who.queuer(change)} queued ${formatAgoShort(change.queued_at)}.`;
+  };
+}
+
 interface Group {
   key: string;
   fresh: boolean;
@@ -125,7 +154,7 @@ function kindOf(changes: QueuedChange[], plural: boolean): string {
   const removal = changes.every(isRemoval);
   const give = changes.every((c) => !isRemoval(c));
   if (removal) return plural ? "removals" : "removal";
-  if (give) return plural ? "grants" : "grant";
+  if (give) return plural ? "gives" : "give";
   return plural ? "changes" : "change";
 }
 
@@ -249,6 +278,46 @@ export function useCancelStep(options: CancelStepOptions): CancelStep {
     }
   }, [client]);
 
+  // What the step showed last, so a change queued since is marked new.
+  const lastShown = useRef<Set<string>>(new Set());
+  const confirm = useCallback(async function confirm<T>(
+    changes: QueuedChange[],
+    write: () => Promise<T>,
+  ): Promise<T | typeof KEPT> {
+    setKept(null);
+    setCancelled(null);
+    if (changes.length > 0) {
+      const before = lastShown.current;
+      const fresh = new Set(before.size > 0 ? changes.filter((c) => !before.has(c.id)).map((c) => c.id) : []);
+      lastShown.current = new Set(changes.map((c) => c.id));
+      if (!returnFocus.current) returnFocus.current = document.activeElement as HTMLElement | null;
+      const goAhead = await new Promise<boolean>((answer) =>
+        setAsking({ changes, fresh, busy: false, closed: false, answer }),
+      );
+      if (!goAhead) {
+        setAsking((a) => (a ? { ...a, closed: true } : a));
+        setKept(changes);
+        const back = returnFocus.current;
+        returnFocus.current = null;
+        setTimeout(() => back?.isConnected && back.focus(), TINT_MS + 20);
+        return KEPT;
+      }
+      setAsking((a) => (a ? { ...a, busy: true } : a));
+    }
+    try {
+      const result = await write();
+      if (changes.length > 0) {
+        setCancelled(changes);
+        lastShown.current = new Set();
+        if (client) settleIndicators(client, { pending_propagation: -changes.length });
+      }
+      return result;
+    } finally {
+      returnFocus.current = null;
+      setAsking((a) => (a ? { ...a, closed: true, busy: false } : a));
+    }
+  }, [client]);
+
   const open = asking !== null && !asking.closed;
 
   // Escape means keep them, whichever sheet it would otherwise close.
@@ -268,6 +337,7 @@ export function useCancelStep(options: CancelStepOptions): CancelStep {
 
   return {
     run,
+    confirm,
     asking,
     open,
     note: kept ? (

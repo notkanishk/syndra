@@ -8,14 +8,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"syndra/internal/access"
 	"syndra/internal/auth"
-	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
-	"syndra/internal/services/propagation"
 )
 
 // bulkDecisionReq builds the request a test makes. An apply is the SECOND of
@@ -62,18 +59,19 @@ func decodeBulkPlan(t *testing.T, rr *httptest.ResponseRecorder) services.BulkPl
 	return plan
 }
 
+// stubRequestLookup stands in for what a bulk decision reads (the rehearsal) and for the
+// decision itself (svcDecideRequest: what it writes is services' tests' subject, so here it
+// answers as a settled request would, and counts a write per request it decides) and the
+// send (svcDeliverChange, every row applied). The count it returns is the decisions made.
 func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int {
 	t.Helper()
 	// An apply cites an approval now, so every rehearsal needs somewhere to land.
 	stubPlanStore(t)
 	origGet := dbGetAccessRequestByID
-	origApprove := dbApproveRequestAndEnqueue
-	origResolve := dbResolveAccessRequest
-	origAudit := dbInsertAuditLog
-	origDrain := svcDrainPropagationRow
 	origRebuild := cacheRebuildUser
 	origHolding := dbRequestHolding
 	origStatus, origRules := dbGetPropagationStatus, svcRulesFollowing
+	origDecide, origDeliver := svcDecideRequest, svcDeliverChange
 	// Nobody holds anything unless a test says so.
 	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
 		return models.RequestHolding{Kind: models.HoldingNone}, nil
@@ -86,10 +84,7 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 		dbRequestHolding = origHolding
 		cacheRebuildUser = origRebuild
 		dbGetAccessRequestByID = origGet
-		dbApproveRequestAndEnqueue = origApprove
-		dbResolveAccessRequest = origResolve
-		dbInsertAuditLog = origAudit
-		svcDrainPropagationRow = origDrain
+		svcDecideRequest, svcDeliverChange = origDecide, origDeliver
 	})
 
 	dbGetAccessRequestByID = func(_ context.Context, id string) (models.AccessRequest, error) {
@@ -100,19 +95,30 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 		return req, nil
 	}
 	writes := 0
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
+	svcDecideRequest = func(_ context.Context, id, status, _, _ string, _ *services.Seen) (services.Decision, error) {
+		req, ok := byID[id]
+		switch {
+		case !ok:
+			return services.Decision{}, services.ErrRequestNotFound
+		case req.Status != "pending":
+			return services.Decision{}, services.ErrRequestAlreadyResolved
+		}
 		writes++
-		return db.EnqueueResult{OutboxID: "ob_1", Status: "pending"}, nil
+		d := services.Decision{UserID: req.RequesterID}
+		if status == "approved" {
+			d.Change = services.Change{Writes: []services.Write{{OutboxID: "ob_1"}}}
+			d.Approval = services.ApprovalPlan{Effect: services.EffectGive}
+		}
+		return d, nil
 	}
-	dbResolveAccessRequest = func(context.Context, string, string, string, string, *time.Time) error {
-		writes++
-		return nil
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		d := services.Delivery{Reason: map[string]string{}}
+		for _, w := range ch.Writes {
+			d.Sent = append(d.Sent, w.OutboxID)
+		}
+		return d
 	}
-	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
 	cacheRebuildUser = func(context.Context, string, []string) {}
-	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
-		return propagation.DrainResult{Applied: 1}, nil
-	}
 	return &writes
 }
 

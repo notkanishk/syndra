@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { actPlan } from "@/test-utils/plan";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RequestsScreen } from "@/components/requests/RequestsScreen";
@@ -31,8 +32,14 @@ const termsData = vi.hoisted(() => ({
   ] as Array<{ name: string; start: string; end: string }> | undefined,
 }));
 
-// The rule preview answered, nothing follows: Approve is not held (N5 has its own test).
-vi.mock("@/lib/queries/useRulePreview", () => ({ useRulePreview: () => ({ data: [], isLoading: false, isError: false }) }));
+// The planner has answered, nothing follows: Approve is not held (N5 has its own test).
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return actPlan();
+    throw new Error(`unmocked request ${path}`);
+  },
+}));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(search.value),
   useRouter: () => ({ replace: () => {} }),
@@ -463,13 +470,14 @@ describe("The queue · a request to keep a role longer", () => {
     },
   ];
 
-  it("reads as an extension, and can be approved while they hold it until a date", () => {
+  it("reads as an extension, and can be approved while they hold it until a date", async () => {
     mine.data = extendRow({ kind: "until", until: "2026-11-03T12:00:00Z" });
     renderAs(true);
     expect(screen.getByText("Another month")).toBeInTheDocument();
     expect(screen.getByText("Has it until 3 Nov.")).toBeInTheDocument();
     expect(screen.queryByText(/Already has this/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeEnabled();
+    // Enabled once the plan is read (A-21 §3).
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Approve/ })).toBeEnabled());
   });
 
   it("can't be approved once they hold it with no end", () => {
@@ -479,13 +487,13 @@ describe("The queue · a request to keep a role longer", () => {
     expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
   });
 
-  it("says it ended while it waited", () => {
+  it("says it ended while it waited", async () => {
     mine.data = extendRow({ kind: "none" });
     renderAs(true);
     expect(
       screen.getByText("It ended while this waited. Approving gives it back for the time asked."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Approve/ })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Approve/ })).toBeEnabled());
   });
 });
 

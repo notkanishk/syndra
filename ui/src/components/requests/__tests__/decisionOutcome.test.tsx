@@ -2,18 +2,29 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { trueSeat } from "@/test-utils/seat";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RequestsScreen } from "@/components/requests/RequestsScreen";
-import { WouldCancelQueued } from "@/lib/api-client";
+import { ApiError } from "@/lib/api-client";
+import { actPlan, cancelling, queuedChange } from "@/test-utils/plan";
+import type { ActPlan } from "@/lib/usePlanConsent";
 import { motionInTests } from "@/test-utils/motion";
-import type { QueuedChange } from "@/lib/cancel-confirm";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 
 const decide = vi.fn().mockResolvedValue({ message: "Request resolved" });
 
-// The rule preview answered, nothing follows: Approve is not held (N5 has its own test).
-vi.mock("@/lib/queries/useRulePreview", () => ({ useRulePreview: () => ({ data: [], isLoading: false, isError: false }) }));
+// What the planner answers about approving (A-21 §3); by default nothing follows, so Approve is not held.
+const wire = vi.hoisted(() => ({ plan: undefined as unknown as ActPlan, calls: [] as string[] }));
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) {
+      wire.calls.push(path);
+      return wire.plan;
+    }
+    throw new Error(`unmocked request ${path}`);
+  },
+}));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
   useRouter: () => ({ replace: () => {} }),
@@ -77,6 +88,17 @@ function request(): AccessRequest {
 // leaving-rows pass treats a new array as a new read.
 const queue = [request()];
 
+beforeEach(() => {
+  wire.plan = actPlan();
+  wire.calls = [];
+});
+
+// Approve is held until the plan is read; then the press goes.
+async function approve() {
+  await waitFor(() => expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+}
+
 function renderQueue() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -107,8 +129,8 @@ describe("a decided request names its person and its next step", () => {
   // in place of the buttons, never a pill reading "Applied".
   it("approving with nothing waiting says Approved, sent and not yet seen", async () => {
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    await waitFor(() => expect(decide).toHaveBeenCalledWith({ id: "r1", status: "approved" }));
+    await approve();
+    await waitFor(() => expect(decide).toHaveBeenCalledWith({ id: "r1", status: "approved", fingerprint: "fp-1", cancel_ids: [] }));
     const seat = await decisionSeat();
     expect(seat.textContent).toBe("ApprovedSent · not yet seen in ZitadelNothing for you to do.");
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
@@ -120,7 +142,7 @@ describe("a decided request names its person and its next step", () => {
     let answer!: (v: unknown) => void;
     decide.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await approve();
 
     const seat = await screen.findByRole("status");
     expect(seat.textContent).toBe("Will be approved");
@@ -134,7 +156,7 @@ describe("a decided request names its person and its next step", () => {
   it("a refused decision returns the buttons beside the honest error, with no forecast left", async () => {
     decide.mockRejectedValueOnce(new Error("The role no longer exists."));
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await approve();
 
     expect((await screen.findByRole("alert")).textContent).toContain("The role no longer exists.");
     expect(screen.queryByText("Will be approved")).toBeNull();
@@ -146,7 +168,7 @@ describe("a decided request names its person and its next step", () => {
   it("approving fades the decision in, in the seat the buttons held, and blooms once", async () => {
     motionInTests();
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await approve();
     const seat = await decisionSeat();
     expect(seat.closest(".tint-in")).not.toBeNull();
     expect(seat.querySelector(".bloom")).not.toBeNull();
@@ -156,7 +178,7 @@ describe("a decided request names its person and its next step", () => {
   it("approving a role that always waits says why and points at Pending changes", async () => {
     decide.mockResolvedValueOnce({ message: "Request resolved", wait_reason: "role_waits" });
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await approve();
     const seat = await decisionSeat();
     expect(seat.textContent).toContain("Approved");
     expect(seat.textContent).toContain("Trained always waits for you");
@@ -166,7 +188,7 @@ describe("a decided request names its person and its next step", () => {
   it("approving while Zitadel was offline says so, in the board's words", async () => {
     decide.mockResolvedValueOnce({ message: "Request resolved", wait_reason: "halted:zitadel_offline" });
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await approve();
     const seat = await decisionSeat();
     expect(seat.textContent).toContain("Zitadel didn't answer when it was approved");
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeTruthy();
@@ -175,7 +197,7 @@ describe("a decided request names its person and its next step", () => {
   it("approving after another stop uses that stop's words", async () => {
     decide.mockResolvedValueOnce({ message: "Request resolved", wait_reason: "halted:drain_in_progress" });
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await approve();
     const seat = await decisionSeat();
     expect(seat.textContent).toMatch(/Another send was running at \d\d:\d\d/);
   });
@@ -192,53 +214,91 @@ describe("a decided request names its person and its next step", () => {
   it("a failed decision puts the buttons back and says why under them", async () => {
     decide.mockRejectedValueOnce(new Error("boom"));
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await approve();
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
   });
 });
 
 describe("approving a request that would cancel a change still waiting", () => {
-  const waiting: QueuedChange = {
+  const waiting = queuedChange({
     id: "00000000-0000-0000-0000-000000000042",
-    op_type: "revoke",
     user_id: "u1",
     project_id: "pLaser",
     role_keys: ["trained"],
-    source: "direct",
-    initiated_by: "op-2",
     initiated_by_name: "Sam Iyer",
-    reason: "left the course",
-    queued_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
-  };
-  const refusal = () => new WouldCancelQueued([waiting], "POST", "/requests/r1/decision");
+  });
 
-  it("opens a small sheet holding only the step; Keep it leaves the request waiting in its seat", async () => {
+  it("says before the press what approving cancels, in the row's If you approve line", async () => {
     decide.mockClear();
-    decide.mockRejectedValueOnce(refusal());
+    wire.plan = cancelling([waiting]);
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("If you approve: Approving cancels the removal Sam Iyer queued 2h ago.")).toBeTruthy();
+    expect(decide).not.toHaveBeenCalled();
+  });
+
+  it("the press opens a small sheet holding only the step at once, with no write; Keep it leaves the request waiting in its seat", async () => {
+    decide.mockClear();
+    wire.plan = cancelling([waiting]);
+    renderQueue();
+    await approve();
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog.textContent).toContain("This cancels a removal that's waiting");
     expect(screen.getByRole("button", { name: "Cancel it and approve" })).toBeTruthy();
+    // The step came from the plan: nothing was written to learn it.
+    expect(decide).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(decide).toHaveBeenCalledTimes(1);
+    expect(decide).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("going ahead approves, and the seat says Approved", async () => {
+  it("going ahead approves once, carrying the fingerprint and the cancel ids, and the seat says Approved", async () => {
     decide.mockClear();
-    decide.mockRejectedValueOnce(refusal()).mockResolvedValueOnce({ message: "Request resolved" });
+    decide.mockResolvedValueOnce({ message: "Request resolved" });
+    wire.plan = cancelling([waiting], { fingerprint: "fp-42" });
     renderQueue();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await approve();
     fireEvent.click(await screen.findByRole("button", { name: "Cancel it and approve" }));
 
     const seat = await decisionSeat();
     expect(seat.textContent).toContain("Approved");
-    expect(decide).toHaveBeenCalledTimes(2);
+    expect(decide).toHaveBeenCalledTimes(1);
+    expect(decide).toHaveBeenCalledWith({ id: "r1", status: "approved", fingerprint: "fp-42", cancel_ids: [waiting.id] });
+  });
+
+  it("a plan that cancels nothing pushes no step", async () => {
+    decide.mockClear();
+    renderQueue();
+    await approve();
+    await decisionSeat();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(decide).toHaveBeenCalledTimes(1);
+  });
+
+  it("declining reads and sends no plan, and pushes no step", async () => {
+    decide.mockClear();
+    wire.plan = cancelling([waiting]);
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+    await decisionSeat();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(decide).toHaveBeenCalledWith({ id: "r1", status: "rejected" });
+  });
+
+  it("when their access moved: the seat says nothing was changed and what to do, and the plan is read again", async () => {
+    decide.mockClear();
+    decide.mockRejectedValueOnce(new ApiError(409, { error: "PLAN_STALE", message: "Moved." }));
+    renderQueue();
+    await approve();
+
+    expect(await screen.findByText(/^Nothing was changed\. .* access moved while you looked\.$/)).toBeTruthy();
+    expect(screen.getByText("Read the line above, then approve again.")).toBeTruthy();
+    // Nothing was decided; the plan is invalidated, so it is read again.
+    await waitFor(() => expect(wire.calls.length).toBeGreaterThan(1));
+    expect(decide).toHaveBeenCalledTimes(1);
   });
 });

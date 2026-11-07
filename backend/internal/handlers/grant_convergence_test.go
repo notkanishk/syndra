@@ -21,7 +21,7 @@ func TestADirectGrantConvergesItsProjectsSystem(t *testing.T) {
 		return nil
 	}
 
-	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams, ...db.EnqueueParams) (db.EnqueueResult, error) {
 		return db.EnqueueResult{OutboxID: "o1"}, nil
 	}
 	if _, err := grantDirect(context.Background(), db.EnqueueParams{UserID: "u1", ProjectID: "pNet", GrantedBy: "op_1"}); err != nil {
@@ -33,7 +33,7 @@ func TestADirectGrantConvergesItsProjectsSystem(t *testing.T) {
 
 	// A grant that did not commit converges nothing.
 	asked = nil
-	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams, ...db.EnqueueParams) (db.EnqueueResult, error) {
 		return db.EnqueueResult{}, errors.New("refused")
 	}
 	if _, err := grantDirect(context.Background(), db.EnqueueParams{UserID: "u1", ProjectID: "pNet"}); err == nil || len(asked) != 0 {

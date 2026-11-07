@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { KEPT, PushedStep, useCancelStep, type CancelStepOptions } from "@/components/ui/CancelQueuedStep";
+import { KEPT, PushedStep, useCancelStep, useForetell, type CancelStepOptions } from "@/components/ui/CancelQueuedStep";
 import { Modal } from "@/components/ui/Modal";
 import { WouldCancelQueued } from "@/lib/api-client";
 import { takeAck, type QueuedChange } from "@/lib/cancel-confirm";
@@ -113,7 +113,7 @@ describe("the step pushed inside the host sheet", () => {
   it("a waiting grant is Giving ... to, and the person doesn't have it yet", async () => {
     render(<Host write={refusedOnce([change({ op_type: "add" })])} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByRole("heading", { name: "This cancels a grant that's waiting" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "This cancels a give that's waiting" })).toBeInTheDocument();
     expect(screen.getByText("Giving").closest("p")).toHaveTextContent("Giving Network storage · Member to Rohan Mehta");
     expect(screen.getByText("It hasn't reached Zitadel, so Rohan doesn't have Member yet.")).toBeInTheDocument();
   });
@@ -165,7 +165,7 @@ describe("the step pushed inside the host sheet", () => {
     const same = (n: number) => change({ id: idOf(n), op_type: "add", role_keys: ["member"] });
     render(<Host write={refusedOnce([same(1), same(2), same(3)])} options={{ goAhead: "remove", tone: "danger" }} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByRole("heading", { name: "This cancels 3 grants that are waiting" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "This cancels 3 gives that are waiting" })).toBeInTheDocument();
     expect(screen.getAllByText(/Queued by Sam Iyer/)).toHaveLength(1);
     expect(screen.getAllByText("“left the course”")).toHaveLength(1);
     expect(screen.getAllByText(/Giving/)).toHaveLength(3);
@@ -315,7 +315,7 @@ describe("a write with no sheet of its own", () => {
     render(<Row write={write} />);
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("heading", { name: "This cancels a grant that's waiting" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "This cancels a give that's waiting" })).toBeInTheDocument();
     expect(within(dialog).getByText("Approve Priya's request")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Cancel it and approve" })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Keep it" }));
@@ -330,5 +330,102 @@ describe("a write with no sheet of its own", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancel it and approve" }));
     await waitFor(() => expect(screen.getByTestId("seat")).toHaveTextContent("approved"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+// An act the planner planned (A-21 §3.1): the step is pushed at once from the
+// plan's changes. No refused write is needed to learn what it cancels.
+describe("a step pushed from the plan (confirm)", () => {
+  function Planned({ changes, write }: { changes: QueuedChange[]; write: () => Promise<unknown> }) {
+    const step = useCancelStep({ host: "Give Rohan Mehta a role", goAhead: "give Member" });
+    const foretell = useForetell();
+    const [done, setDone] = useState("");
+    return (
+      <Modal open onClose={() => undefined} size="md" labelledBy="host-title">
+        <PushedStep step={step}>
+          <h2 id="host-title">Give a role</h2>
+          <p data-testid="before">{foretell("Giving it", changes)}</p>
+          <button
+            onClick={async () => setDone((await step.confirm(changes, write)) === KEPT ? "kept" : "sent")}
+          >
+            Send
+          </button>
+          <div data-testid="after">{step.after}</div>
+          <div data-testid="result">{done}</div>
+        </PushedStep>
+      </Modal>
+    );
+  }
+
+  it("shows the step before any write, and goes ahead with one write that follows the answer", async () => {
+    const write = vi.fn().mockResolvedValue({ status: "applied" });
+    render(<Planned changes={[change()]} write={write} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("heading", { name: "This cancels a removal that's waiting" })).toBeInTheDocument();
+    expect(write).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel it and give Member" }));
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("sent"));
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("after")).toHaveTextContent("cancelled, so nothing goes to Zitadel");
+  });
+
+  it("Keep it sends nothing at all", async () => {
+    const write = vi.fn();
+    render(<Planned changes={[change()]} write={write} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("kept"));
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("with nothing to cancel runs the write at once and pushes no step", async () => {
+    const write = vi.fn().mockResolvedValue({ status: "applied" });
+    render(<Planned changes={[]} write={write} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("sent"));
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("heading", { name: /This cancels/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId("after")).toBeEmptyDOMElement();
+  });
+
+  it("a write that fails after the step is shown rethrows, and the step is put away", async () => {
+    const write = vi.fn().mockRejectedValue(new Error("boom"));
+    function Fails() {
+      const step = useCancelStep({ host: "h", goAhead: "give" });
+      const [done, setDone] = useState("");
+      return (
+        <Modal open onClose={() => undefined} size="md" labelledBy="t">
+          <PushedStep step={step}>
+            <h2 id="t">t</h2>
+            <button onClick={() => step.confirm([change()], write).catch(() => setDone("failed"))}>Send</button>
+            <span data-testid="r">{done}</span>
+          </PushedStep>
+        </Modal>
+      );
+    }
+    render(<Fails />);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and give" }));
+    await waitFor(() => expect(screen.getByTestId("r")).toHaveTextContent("failed"));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /This cancels/ })).not.toBeInTheDocument());
+  });
+
+  it("says the before-line for one removal, one give and several, with who queued it and when", () => {
+    const { rerender } = render(<Planned changes={[change()]} write={vi.fn()} />);
+    expect(screen.getByTestId("before")).toHaveTextContent("Giving it cancels the removal Sam Iyer queued 2h ago.");
+    rerender(<Planned changes={[change({ op_type: "add" })]} write={vi.fn()} />);
+    expect(screen.getByTestId("before")).toHaveTextContent("Giving it cancels the give Sam Iyer queued 2h ago.");
+    rerender(<Planned changes={[change({ id: idOf(1) }), change({ id: idOf(2) })]} write={vi.fn()} />);
+    expect(screen.getByTestId("before")).toHaveTextContent("Giving it cancels 2 changes that are waiting.");
+    rerender(<Planned changes={[]} write={vi.fn()} />);
+    expect(screen.getByTestId("before")).toBeEmptyDOMElement();
+  });
+
+  it("the after line says give, not grant", async () => {
+    render(<Planned changes={[change({ op_type: "add" })]} write={vi.fn().mockResolvedValue({})} />);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and give Member" }));
+    await waitFor(() => expect(screen.getByTestId("after")).toHaveTextContent("The give Sam queued 2h ago is cancelled"));
   });
 });
