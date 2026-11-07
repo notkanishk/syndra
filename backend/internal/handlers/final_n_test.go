@@ -41,31 +41,19 @@ func TestOwnWait_ARefusalIsTheActsOnlyWhenItsOwnRowWasRefused(t *testing.T) {
 	}
 }
 
-// N1: a bulk row Zitadel refused is failed, never queued for Send, and its
-// detail says the refusal, the cause and the step.
-func TestDelivered_ARefusalIsFailedWithItsCauseAndStep(t *testing.T) {
+// N1: a bulk row Zitadel refused is failed, never queued for Send, and
+// carries its cause in the wait reason; the screen says the refusal and its
+// step from it (ui/src/lib/plan-groups.ts refusedSeat), under the plan's words.
+func TestDelivered_ARefusalIsFailedWithItsCause(t *testing.T) {
 	reason, retry := delivered(services.Delivery{Sent: []string{"o1"},
 		Reason: map[string]string{"o1": db.WaitReasonRefused(db.RefusalNotAllowed)}})
 	if reason != db.WaitReasonRefused(db.RefusalNotAllowed) || retry != nil {
 		t.Fatalf("got %q %v", reason, retry)
 	}
-	var out services.BulkOutcome
-	settleBulkRow(&out, reason, retry, services.BulkOpAssignRole)
-	if out.Effect != services.EffectFailed {
-		t.Fatalf("a refused row is failed, never queued for Send: %+v", out)
-	}
-	give := refusedDetail(reason, false)
-	for _, want := range []string{"Zitadel refused this", "isn't allowed", "Ask whoever runs Zitadel", "give it again"} {
-		if !strings.Contains(give, want) {
-			t.Fatalf("give detail %q lacks %q", give, want)
-		}
-	}
-	revoke := refusedDetail(db.WaitReasonRefused(db.RefusalNotFound), true)
-	if !strings.Contains(revoke, "Drift") || strings.Contains(revoke, "Ask whoever runs Zitadel") || strings.Contains(revoke, "Pending changes until you send") {
-		t.Fatalf("revoke detail: %q", revoke)
-	}
-	if strings.Contains(give+revoke, "—") || strings.Contains(give+revoke, "!") {
-		t.Fatal("plain-language copy: no em dash, no exclamation mark")
+	out := services.BulkOutcome{Effect: services.EffectApply, Detail: "Gains Member in Laser Lab."}
+	settleBulkRow(&out, reason, retry)
+	if out.Effect != services.EffectFailed || out.WaitReason != reason || out.Detail != "Gains Member in Laser Lab." {
+		t.Fatalf("a refused row is failed with its cause and keeps its words: %+v", out)
 	}
 }
 
@@ -96,7 +84,7 @@ func TestBulkApprove_RefusedIsFailedAndARuleWaitIsNotTheApprovals(t *testing.T) 
 	for _, o := range plan.Outcomes {
 		byUser[o.UserID] = o
 	}
-	if o := byUser["r1"]; o.Effect != services.EffectFailed || !db.IsRefused(o.WaitReason) || !strings.Contains(o.Detail, "Zitadel refused this") {
+	if o := byUser["r1"]; o.Effect != services.EffectFailed || !db.IsRefused(o.WaitReason) || strings.Contains(o.Detail, "Recorded in Syndra") {
 		t.Fatalf("refused approval: %+v", o)
 	}
 	// How the rule's wait is worded is the screen's; the row counts it apart.

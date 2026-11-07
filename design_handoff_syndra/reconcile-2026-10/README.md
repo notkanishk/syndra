@@ -16,7 +16,7 @@ High fidelity. Copy is final and verbatim: use the exact strings on the boards a
 2. **BUILD-LIST.md**: what to change, by screen. Backend changes first (B1–B11); frontend items refer back to them.
 3. **00-CONSENSUS.md**: the ledger, each row with its verdict and the boards that draw it, plus the New differences table.
 4. **verdicts.md**: the reasoning, one paragraph per verdict.
-5. **proposed/**: components to add to the DS once and use everywhere (Notice, NextStep, SelectionSeat, DegradedBanner, ActionOutcome seat, StatCard href, VersionBand, ConnectionGuide, Expiry sweep run, Deliberate later), plus implementation notes for Connected systems (Mapping-implementation-notes.md) and Zitadel (Zitadel-code-notes.md).
+5. **proposed/**: components to add to the DS once and use everywhere (Notice, NextStep, FoldHeading, SelectionSeat, DegradedBanner, ActionOutcome seat, StatCard href, VersionBand, ConnectionGuide, Expiry sweep run, Deliberate later), plus implementation notes for Connected systems (Mapping-implementation-notes.md) and Zitadel (Zitadel-code-notes.md).
 
 ## Kinds of verdict
 - **KEEP-CODE**: as built; the board was updated to match.

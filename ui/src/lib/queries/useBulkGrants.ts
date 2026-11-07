@@ -109,6 +109,8 @@ export interface BulkOutcome {
   waits?: string[];
   /** The roles sent straight away. */
   goes?: string[];
+  /** Whose access the row changes, when the row is not the person (a request, a drift row). */
+  person?: string;
 }
 
 export interface BulkSummary {

@@ -135,9 +135,10 @@ type BulkOutcome struct {
 	// Goes name the roles that wait for you and the ones sent straight away.
 	// On the plan and on the result, so a screen can group rows by them.
 	// Person is who the row changes when the row is not a person (a
-	// request, a drift row): whose queued changes it may cancel. Not
-	// serialised.
-	Person   string   `json:"-"`
+	// request, a drift row): whose queued changes it may cancel, and whose
+	// Pending changes a result row's "Waiting for you to send" opens (A-21
+	// §2.6). Absent when the row is the person.
+	Person   string   `json:"person,omitempty"`
 	Delivery string   `json:"delivery,omitempty"`
 	Waits    []string `json:"waits,omitempty"`
 	Goes     []string `json:"goes,omitempty"`

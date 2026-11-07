@@ -11,7 +11,8 @@ import { decidedByBulk } from "@/components/requests/RequestsScreen";
 import { revokeOutcome } from "@/components/review/UnexplainedAccess";
 import { waitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { queuedStep, refusedRows, resultKind, resultMessage, splitQueued } from "@/components/ui/RehearsalDialog";
+import { queuedStep, refusedRows, resultMessage, splitQueued } from "@/components/ui/RehearsalDialog";
+import { groupPlan, resultOutcome } from "@/lib/plan-groups";
 import { describeDrain } from "@/lib/drain-outcome";
 import {
   DRAIN_UNKNOWN_NEXT,
@@ -19,6 +20,7 @@ import {
   revokeQueued,
   sendsItselfWord,
   succeeded,
+  waitsForSend,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
@@ -148,13 +150,16 @@ describe("N1 and N4: bulk rows", () => {
     expect(nextStepOf(decided.outcome)).toBe("Press Send on Pending changes.");
   });
 
-  it("N4: a bulk adoption that took effect is applied; the rules' rows are counted apart and end on Send", () => {
-    const p = plan("adopt" as BulkPlan["op"], [row({ effect: "applied", rule_waiting: 1 })]);
-    expect(resultMessage(p, ["item", "items"])).toBe(
-      "Applied to 1 item. 1 more change from automatic rules waits in Pending changes for you to send.",
-    );
-    expect(resultKind(p)).toBe("queued");
-    expect(queuedStep(p)).toEqual({}); // the Send link
+  // A-21 §4.2: the rules' rows are no longer counted apart. A rule's role
+  // that waits is the person's step left, so the row sits under the wait fold
+  // and the result ends on Send.
+  it("N4: a bulk adoption that took effect, with a rule's role waiting, sits under Waiting and ends on Send", () => {
+    const p = { ...plan("adopt" as BulkPlan["op"], [row({ effect: "applied", rule_waiting: 1, delivery: "waits_for_you" })]), applied: true };
+    expect(groupPlan(p, ["item", "items"])?.map((g) => g.key)).toEqual(["wait"]);
+    const r = resultOutcome(p, ["item", "items"]);
+    expect(r?.outcome.message).toBe("It waits for you to send. Nothing has reached Zitadel yet.");
+    expect(r?.outcome.message).not.toMatch(/automatic rules/);
+    expect(waitsForSend(r!.outcome)).toBe(true); // the Send link
   });
 });
 
