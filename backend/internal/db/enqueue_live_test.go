@@ -142,7 +142,7 @@ func TestEnqueue_ACascade(t *testing.T) {
 		return EnqueueParams{UserID: user, ProjectID: "p1", RoleKeys: []string{role}, OpType: op, Source: "bundle", SourceRef: bundle,
 			GrantedBy: "op", Reason: "Bundle membership cascade", PayloadJSON: "{}"}
 	}
-	ids, assigned, err := AssignBundleAndEnqueue(ctx, "op", user, bundle, v.ID, []EnqueueParams{write("member", "add"), write("trained", "add")})
+	ids, assigned, err := AssignBundleAndEnqueue(ctx, "op", "", user, bundle, v.ID, []EnqueueParams{write("member", "add"), write("trained", "add")})
 	if err != nil || !assigned || len(ids) != 2 {
 		t.Fatalf("assign: ids %v assigned %v err %v", ids, assigned, err)
 	}
@@ -161,7 +161,7 @@ func TestEnqueue_ACascade(t *testing.T) {
 	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET status = 'applied' WHERE id = $1`, ids[1]); err != nil {
 		t.Fatal(err)
 	}
-	gone, err := RemoveBundleFromUserAndEnqueue(ctx, "op", user, bundle, []EnqueueParams{write("trained", "revoke")})
+	gone, err := RemoveBundleFromUserAndEnqueue(ctx, "op", "", user, bundle, []EnqueueParams{write("trained", "revoke")})
 	if err != nil || len(gone) != 1 {
 		t.Fatalf("remove: %v %v", gone, err)
 	}

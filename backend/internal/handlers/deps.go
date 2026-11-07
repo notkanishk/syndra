@@ -51,8 +51,10 @@ var (
 	svcDrainPropagationRow          = propagation.DrainOne
 	// svcDeliver is the one rule for whether a just-written change goes now
 	// or waits for the operator (roles that wait, N14 B).
-	svcDeliver    = services.Deliver
-	svcDrainAddon = propagation.DrainAddon
+	svcDeliver = services.Deliver
+	// svcDeliverChange sends what the planner decided, as it decided it.
+	svcDeliverChange = services.DeliverChange
+	svcDrainAddon    = propagation.DrainAddon
 	// svcRulesFollowing names what the automatic rules would give with a give
 	// or an adoption, before anyone confirms it (coherence audit C1, C2).
 	svcRulesFollowing = services.RulesFollowing

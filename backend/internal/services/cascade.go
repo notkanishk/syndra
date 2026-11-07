@@ -365,7 +365,7 @@ func CascadeBundleAssignedToUser(ctx context.Context, actor, userID, bundleID st
 			return err
 		}
 
-		ids, assigned, err = svcAssignBundleAndEnqueue(ctx, actor, userID, bundleID, version.ID, params)
+		ids, assigned, err = svcAssignBundleAndEnqueue(ctx, actor, "", userID, bundleID, version.ID, params)
 		return err // enqueue+assign rolled back together → handler returns 500
 	})
 	if err != nil {
@@ -491,7 +491,7 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 			return err
 		}
 
-		ids, err = svcRemoveBundleFromUserAndEnqueue(ctx, actor, userID, bundleID, params)
+		ids, err = svcRemoveBundleFromUserAndEnqueue(ctx, actor, "", userID, bundleID, params)
 		return err
 	})
 	if err != nil {

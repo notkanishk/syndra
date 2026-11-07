@@ -50,6 +50,11 @@ type EnqueueParams struct {
 	//
 	// A new grant always takes ExpiresAt as given.
 	EndRule EndRule
+	// WaitReason is set by the planner on a write it decided waits for you
+	// (role_waits, decision 11): the row is written waiting, with its reason,
+	// in the same statement. Nothing after the commit decides it again, and
+	// no drain can send it before the reason is on the row.
+	WaitReason string
 }
 
 // EndRule decides what a write does to an existing grant's end.
@@ -171,7 +176,9 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 // (cascadeGroupVisible). Every row passes withdrawUndelivered first, the one
 // place a queued change is cancelled and the cancel gate is asked
 // (CancellationsNamed / CancellationsReviewed): a row that only cancelled one
-// is not written.
+// is not written. A row carries the operator's reason when the change's
+// audit rows give one (CascadeAudit.Reason), and a write the planner decided
+// waits for you is written waiting (EnqueueParams.WaitReason).
 //
 // The audit rows live HERE rather than in each caller (C6, ISC-44): the
 // cascade id is minted, stamped on the audit rows and stamped on the outbox
@@ -197,6 +204,14 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 	cascadeID, err := newOutboxIdempotencyKey()
 	if err != nil {
 		return nil, err
+	}
+	// The operator's words, when the change came with some: on its audit row
+	// and on every row it queues.
+	var why string
+	for _, a := range audits {
+		if why == "" {
+			why = a.Reason
+		}
 	}
 
 	// row writes p's outbox row if one is still owed, and returns its id.
@@ -252,10 +267,11 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 		if err := tx.QueryRow(ctx, `
 			INSERT INTO propagation_outbox
 				(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json,
-				 idempotency_key, initiated_by, source, source_ref, cascade_id, target)
-			VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),$11,'zitadel')
+				 idempotency_key, initiated_by, source, source_ref, cascade_id, reason, wait_reason, target)
+			VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),$11,NULLIF($12,''),NULLIF($13,''),'zitadel')
 			RETURNING id`, p.OpType, p.UserID, p.ProjectID, p.RoleKeys, p.ZitadelGrantID,
-			jsonOrEmpty(p.PayloadJSON), ownKey, p.GrantedBy, outboxSource(p), p.SourceRef, cascade).Scan(&id); err != nil {
+			jsonOrEmpty(p.PayloadJSON), ownKey, p.GrantedBy, outboxSource(p), p.SourceRef, cascade,
+			why, p.WaitReason).Scan(&id); err != nil {
 			return "", fmt.Errorf("insert outbox: %w", err)
 		}
 		return id, nil
@@ -298,8 +314,9 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 			}
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO audit_logs
-					(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, cascade_id)
-				VALUES ($1,$2,$3,$4,$5)`, a.Actor, target, a.Action, a.ResourceID, auditCascadeID); err != nil {
+					(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, cascade_id, details)
+				VALUES ($1,$2,$3,$4,$5, CASE WHEN $6 = '' THEN NULL ELSE jsonb_build_object('reason', $6::text) END)`,
+				a.Actor, target, a.Action, a.ResourceID, auditCascadeID, a.Reason); err != nil {
 				return nil, err
 			}
 		}

@@ -72,6 +72,11 @@ type CascadeAudit struct {
 	Target     string // "-" when the event is about an object rather than a person
 	Action     string
 	ResourceID string
+	// Reason is the operator's own words for the change, when they gave some
+	// (a bulk bundle assign or remove asks for them). Kept in the audit row's
+	// details and on every outbox row the change queues, so Change history
+	// and Pending changes can say why.
+	Reason string
 }
 
 // jsonOrEmpty defaults an empty payload to "{}" — payload_json is JSONB NOT NULL.
@@ -132,7 +137,8 @@ const WelcomeActor = "system:onboarding"
 // direct_role_grants write — bundle membership already lives in user_bundle_assignments).
 // It reports `assigned = false` when the person already held the bundle, in
 // which case NOTHING is written: no outbox rows, no audit row, no repin.
-func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID, versionID string, params []EnqueueParams) (ids []string, assigned bool, err error) {
+// reason is the operator's words for it, "" when they gave none.
+func AssignBundleAndEnqueue(ctx context.Context, actor, reason, userID, bundleID, versionID string, params []EnqueueParams) (ids []string, assigned bool, err error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, false, err
@@ -182,7 +188,7 @@ func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID, versio
 	}
 
 	ids, err = enqueueWrites(ctx, tx,
-		[]CascadeAudit{{Actor: actor, Target: userID, Action: "bundle.assigned", ResourceID: bundleID}},
+		[]CascadeAudit{{Actor: actor, Target: userID, Action: "bundle.assigned", ResourceID: bundleID, Reason: reason}},
 		params, "")
 	if err != nil {
 		return nil, false, err
@@ -269,7 +275,7 @@ func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sour
 // so a committed removal always has its revoke rows (mirrors AssignBundleAndEnqueue). params may
 // be empty (every role stayed covered by another source) — the assignment is still deleted; an
 // empty enqueue is a no-op.
-func RemoveBundleFromUserAndEnqueue(ctx context.Context, actor, userID, bundleID string, params []EnqueueParams) ([]string, error) {
+func RemoveBundleFromUserAndEnqueue(ctx context.Context, actor, reason, userID, bundleID string, params []EnqueueParams) ([]string, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
@@ -282,7 +288,7 @@ func RemoveBundleFromUserAndEnqueue(ctx context.Context, actor, userID, bundleID
 		return nil, err
 	}
 	ids, err := enqueueWrites(ctx, tx,
-		[]CascadeAudit{{Actor: actor, Target: userID, Action: "bundle.unassigned", ResourceID: bundleID}},
+		[]CascadeAudit{{Actor: actor, Target: userID, Action: "bundle.unassigned", ResourceID: bundleID, Reason: reason}},
 		params, "")
 	if err != nil {
 		return nil, err
@@ -346,7 +352,8 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 	const columns = `
 		SELECT COALESCE(cascade_id::text, id::text) AS group_id,
 		       id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
-		       COALESCE(cascade_id::text,''), status, created_at, completed_at, confirmed_at
+		       COALESCE(cascade_id::text,''), status, created_at, completed_at, confirmed_at,
+		       COALESCE(reason,'')
 		FROM propagation_outbox
 		WHERE source = ANY($1::text[])`
 
@@ -385,12 +392,12 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 	seenUser := make(map[string]map[string]bool)
 
 	for rows.Next() {
-		var groupID string
+		var groupID, reason string
 		var c models.CascadeSummary
 		var createdAt time.Time
 		if err := rows.Scan(&groupID, &c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys,
 			&c.Source, &c.SourceRef, &c.CascadeID, &c.Status, &createdAt, &c.CompletedAt,
-			&c.ConfirmedAt); err != nil {
+			&c.ConfirmedAt, &reason); err != nil {
 			return nil, fmt.Errorf("scan cascade group row: %w", err)
 		}
 
@@ -408,6 +415,9 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 		}
 		if createdAt.Before(g.StartedAt) {
 			g.StartedAt = createdAt
+		}
+		if g.Reason == "" {
+			g.Reason = reason
 		}
 		switch c.Status {
 		case "applied":

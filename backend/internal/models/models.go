@@ -650,9 +650,12 @@ type CascadeGroup struct {
 	CascadeID string `json:"cascade_id"`
 	Source    string `json:"source"`               // bundle | rule | lifecycle_cascade
 	SourceRef string `json:"source_ref,omitempty"` // originating bundle/rule id
-	Applied   int    `json:"applied"`
-	Waiting   int    `json:"waiting"`
-	Failed    int    `json:"failed"`
+	// Reason is the operator's words for the change, when they gave some
+	// (a bulk bundle assign or remove asks for them).
+	Reason  string `json:"reason,omitempty"`
+	Applied int    `json:"applied"`
+	Waiting int    `json:"waiting"`
+	Failed  int    `json:"failed"`
 	// Confirmed counts the Applied writes that also have a ConfirmedAt — read
 	// back from Zitadel and found actually there, not just sent. Always <=
 	// Applied; the gap is what "sent" and "confirmed" disagree about.

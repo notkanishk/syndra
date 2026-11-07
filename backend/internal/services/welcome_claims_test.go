@@ -147,7 +147,7 @@ func TestWelcomeClaims_EqualsWhatOnboardingWouldSend(t *testing.T) {
 	svcGetDirectGrantsForUser = noDirects
 	svcGetUserBundleRolesGrouped = noBundleRoles
 	var sent []string
-	svcAssignBundleAndEnqueue = func(_ context.Context, _, _, _, _ string, ps []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(_ context.Context, _, _, _, _, _ string, ps []db.EnqueueParams) ([]string, bool, error) {
 		for _, p := range ps {
 			for _, r := range p.RoleKeys {
 				sent = append(sent, p.ProjectID+":"+r)
