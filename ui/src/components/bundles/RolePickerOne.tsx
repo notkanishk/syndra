@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 
-import { FoldHeading } from "@/components/bundles/FoldHeading";
+import { FoldHeading } from "@/components/ui/FoldHeading";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { ChosenChip, Mono } from "@/components/ui/Badge";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";

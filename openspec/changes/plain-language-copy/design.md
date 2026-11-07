@@ -172,7 +172,9 @@ bullet per consequence and the alternative named beneath it.
 **Confirmation follows the three rungs** (`one-control-surface`), and the copy
 of each rung is fixed:
 
-- *Rung 1* — the button carries the number: "Apply to 12 people".
+- *Rung 1* — the button carries the number: "Apply to 12 people"; a plan
+  that cancels waiting changes carries that too, in the cancel step's shape:
+  "Cancel 2 and apply to 12 people" (A-21 §2.5).
 - *Rung 2* — a sentence to tick, with the number inside it:
   "I understand this revokes access for 12 people."
 - *Rung 3* — type the name. The label says what unlocks: "Type **Laser
@@ -283,7 +285,7 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 
 **Anything Zitadel refused outright** has no forecast of its own (the act's own forecast stands) and, once it happened, reads Refused by Zitadel: "{Done} in Syndra. Zitadel refused this: {cause}." Then "It isn't in Zitadel, and Syndra won't send it again. Pending changes lists it under Syndra stopped sending." The step: give or extend it again from their page once the reason is fixed; a revocation shows in Drift after the next check, to revoke there. Never "Nothing was changed.": Syndra recorded it.
 
-**A refusal's cause is said in plain words** (`refused:<cause>`, `lib/wait-reason.ts refusalCause`, the same words as `handlers/bulk.go refusalWords`): not allowed, "Syndra's service account isn't allowed to make this change" (and the step starts "Ask whoever runs Zitadel to let Syndra's service account change grants."); not found, "it no longer has this person, project or role"; not valid, "it said the change isn't valid"; anything else, "it gave a reason Syndra can't put in plain words".
+**A refusal's cause is said in plain words** (`refused:<cause>`, `lib/wait-reason.ts refusalCause`; a plan row's seat under "Zitadel refused" is `lib/plan-groups.ts refusedSeat`, "Zitadel refused this: {cause}. {step}", under the row's own plan words): not allowed, "Syndra's service account isn't allowed to make this change" (and the step starts "Ask whoever runs Zitadel to let Syndra's service account change grants."); not found, "it no longer has this person, project or role"; not valid, "it said the change isn't valid"; anything else, "it gave a reason Syndra can't put in plain words".
 
 **A single act that would cancel a waiting change says so before the press**
 (A-21 §3, architecture deepening 1.2). The sheet reads the act's plan as soon
@@ -312,6 +314,43 @@ Laser Lab that was waiting is cancelled. Rohan never had it, so nothing goes
 to Zitadel." / "The Safety bundle that was waiting is cancelled. Nothing it
 carried had reached Rohan, so nothing goes to Zitadel.", then "Nothing for
 you to do."
+
+**A plan is grouped by how each change travels** (A-21 §Q1, architecture
+deepening 1.7, `lib/plan-groups.ts`). People, not writes; one row per person;
+the heading says which, the row says what, in the planner's words, before and
+after Apply. Folds, in this order, and a fold with nobody in it is not drawn:
+
+| Before Apply | After Apply | Dot | Faint line under it |
+|---|---|---|---|
+| Straight away | Done | none; after, healthy, blooms once when every written row reached | none |
+| Will wait for you to send | Waiting for you to send → (the link) | amber | "Because Trained in Laser Lab always waits for you." / "Because A and B always wait for you." |
+| (after only) | Zitadel didn't answer | amber, still | the retry line ("Zitadel didn't answer. Syndra sends them again at 14:05 (try 2 of 6).") |
+| (after only) | Zitadel refused | danger, still | none; each row: "Zitadel refused this: {cause}. {step}" |
+| Left as they are | Left as they were | none | none; each row keeps its Badge, No change or Refused |
+
+Counts: "1 person" / "4 people" (the dialog's own noun). The footer's
+before-line: "Every change goes to Zitadel when you apply." · "Every change
+waits for you to send. Nothing reaches Zitadel until you press Send on Pending
+changes." · "Apply sends 7 people's changes to Zitadel now. 4 people's changes
+wait for you to send." · then, with a row that only cancels, "For 1, this only
+cancels a change that's waiting; nothing is sent." / "For 2, this only cancels
+changes that are waiting; nothing is sent." · nothing to apply: "Nothing here
+would change, so there is nothing to apply." (said once, as the disabled
+button's reason). The result: the word ("Given to 11 people", "Given to 9 of
+11 people", "Revoked from …", "Extended for …"), then one clause per fold in
+fold order: "All 11 are in Zitadel now." / "7 are in Zitadel now." · "4 wait
+for you to send." / "All 11 wait for you to send. Nothing has reached Zitadel
+yet." · "1 isn't in Zitadel yet; Syndra sends it again on its own." / "2
+aren't in Zitadel yet; Syndra sends them again on its own." · "Zitadel refused
+1; the row says why." / "Zitadel refused 2; each row says why."; then one
+step: the Send link, "Follow the step on each row Zitadel refused, below.",
+the retry's "Nothing for you to do. Syndra sends them again at 14:05 …", or
+"Nothing for you to do." Retired: the "Will change" badge on a grouped plan
+(flat plans keep it), "No change for N · N refused. Syndra leaves those as they
+are.", "Every selected person will change.", "N more changes from automatic
+rules wait in Pending changes for you to send." (a rule's role counts in the
+person's fold), and the sentences that overwrote a row after Apply ("Recorded
+in Syndra. A role it gives always waits for you, …").
 
 **When a person's access moved while the sheet was open, nothing is written**
 (A-21 §3.3). In a sheet, one Notice: "Nothing was changed. Rohan's access

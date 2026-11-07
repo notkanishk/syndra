@@ -179,10 +179,10 @@ func planRole(ch Change, a Action, s PlanSnapshot, profile models.UserProfile, p
 		if len(gone) > 0 {
 			step := ""
 			if gone[0] != k {
-				step = "Retire the automatic rule that gives it, then try again."
+				step = fmt.Sprintf("Retire the automatic rule that gives %s, then try again.", s.them(gone))
 			}
 			return ch.decided(a, EffectNoChange, "not_offered:"+keysField(gone),
-				fmt.Sprintf("This would give %s, which no longer exists in Zitadel.", s.list(gone)), step)
+				fmt.Sprintf("This would give %s.", s.goneWords(gone)), step)
 		}
 	}
 

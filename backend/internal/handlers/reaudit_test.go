@@ -154,8 +154,9 @@ func TestBulkApprove_SaysWhatWaits(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1"],"status":"approved"}`, true))
 	plan := decodeBulkPlan(t, rr)
+	// Why is the reason; the row keeps the planner's words (A-21 §2.6).
 	if o := plan.Outcomes[0]; o.Effect != services.EffectQueued || o.WaitReason != db.WaitReasonRoleWaits ||
-		!strings.Contains(o.Detail, "always waits for you") {
+		strings.Contains(o.Detail, "Recorded in Syndra") {
 		t.Fatalf("an approval whose role waits is queued and says why: %+v", o)
 	}
 }

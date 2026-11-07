@@ -152,7 +152,12 @@ describe("BulkDialog", () => {
     await rehearse();
     // 3 selected, 1 actionable. Offering "Apply to 3" would be a lie.
     expect(screen.getByRole("button", { name: "Apply to 1 person" })).toBeInTheDocument();
-    expect(screen.getByText(/No change for 1 · 1 refused/)).toBeInTheDocument();
+    // The folds carry the counts the retired note did (A-21 §2.5), and the
+    // footer says whether it finishes now.
+    expect(screen.getByRole("group", { name: "Straight away, 1 person" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Left as they are, 2 people" })).toBeInTheDocument();
+    expect(screen.getByText("Every change goes to Zitadel when you apply.")).toBeInTheDocument();
+    expect(screen.queryByText(/No change for 1/)).toBeNull();
   });
 
   it("applies the request it rehearsed, citing the approval that rehearsal became", async () => {
@@ -205,7 +210,7 @@ describe("BulkDialog", () => {
     });
     open();
     await rehearse();
-    const button = screen.getByRole("button", { name: "Apply to 0 people" });
+    const button = screen.getByRole("button", { name: "Apply" });
     expect(button).toBeDisabled();
   });
 

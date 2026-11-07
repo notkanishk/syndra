@@ -239,12 +239,12 @@ func Plan(a Action, s PlanSnapshot) Change {
 			}
 		}
 		if len(gone) > 0 {
-			step := fmt.Sprintf("Take it out of %s and publish, then give the bundle again.", bundle)
+			step := fmt.Sprintf("Take %s out of %s and publish, then give the bundle again.", s.them(gone), bundle)
 			if !bundleGives(s.VersionRoles, gone[0]) {
-				step = "Retire the automatic rule that gives it, then give the bundle again."
+				step = fmt.Sprintf("Retire the automatic rule that gives %s, then give the bundle again.", s.them(gone))
 			}
 			return ch.decided(a, EffectNoChange, "not_offered:"+keysField(gone),
-				fmt.Sprintf("This would give %s, which no longer exists in Zitadel.", s.list(gone)), step)
+				fmt.Sprintf("This would give %s.", s.goneWords(gone)), step)
 		}
 	}
 
@@ -340,11 +340,16 @@ func (ch Change) delivered(how string) []roleKey {
 	return out
 }
 
-// names is roles in words, alphabetical; nil for none.
+// names is roles in words, alphabetical, each name said once (two unlisted
+// projects can read the same); nil for none.
 func (s PlanSnapshot) names(ks []roleKey) []string {
 	var out []string
+	seen := map[string]bool{}
 	for _, k := range ks {
-		out = append(out, s.words(k))
+		if w := s.words(k); !seen[w] {
+			seen[w] = true
+			out = append(out, w)
+		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
 	return out
@@ -407,6 +412,15 @@ func (ch Change) decided(a Action, effect, refusal, detail, consequence string) 
 	// straight away, waits for you, or nothing sent; which roles go now and
 	// which wait.
 	ch.Row.Delivery, ch.Row.Waits, ch.Row.Goes = ch.Delivery(), ch.Waits, ch.Goes
+	if effect == EffectApply && ch.Row.Delivery == "" {
+		// Goes ahead and writes nothing (they already hold it another way):
+		// nothing is sent, so the row sits under Straight away like any other
+		// row that sends nothing. Every row that goes ahead carries a
+		// delivery, which is what lets the screen group a plan at all (A-21
+		// §2.9). Delivery() keeps "" for the single acts, whose sheets read
+		// "none" as "this only cancels".
+		ch.Row.Delivery = DeliveryNone
+	}
 	return ch
 }
 
@@ -463,23 +477,32 @@ func splitByBundle(ks []roleKey, roles []models.BundleRole) (own, byRule []roleK
 // falling back to its keys: a plan must never fail for want of a label.
 func (s PlanSnapshot) words(k roleKey) string {
 	w, ok := s.Catalogue[k]
-	role, project := k.roleKey, k.projectID
+	role, project := k.roleKey, ""
 	if ok && w.Role != "" {
 		role = w.Role
 	}
 	if ok && w.Project != "" {
 		project = w.Project
 	}
+	if project == "" {
+		// The role is gone; its project may still be listed under another role.
+		for other, ow := range s.Catalogue {
+			if other.projectID == k.projectID && ow.Project != "" {
+				project = ow.Project
+				break
+			}
+		}
+	}
+	if project == "" {
+		// Never a raw project id as a label (owner, rule "no raw ids").
+		project = "a project Zitadel no longer lists"
+	}
 	return role + " in " + project
 }
 
 // list names roles alphabetically, case-insensitively: "A, B and C".
 func (s PlanSnapshot) list(ks []roleKey) string {
-	names := make([]string, len(ks))
-	for i, k := range ks {
-		names[i] = s.words(k)
-	}
-	sort.SliceStable(names, func(i, j int) bool { return strings.ToLower(names[i]) < strings.ToLower(names[j]) })
+	names := s.names(ks)
 	if len(names) == 1 {
 		return names[0]
 	}
@@ -600,4 +623,20 @@ func RoleWords(ctx context.Context, projectID, roleKeyStr string) string {
 		}
 	}
 	return s.words(roleKey{projectID: projectID, roleKey: roleKeyStr})
+}
+
+// goneWords says which roles Zitadel no longer has, in agreement with how many.
+func (s PlanSnapshot) goneWords(ks []roleKey) string {
+	if len(s.names(ks)) > 1 {
+		return s.list(ks) + ", which no longer exist in Zitadel"
+	}
+	return s.list(ks) + ", which no longer exists in Zitadel"
+}
+
+// them is "it" or "them" for the roles a step names.
+func (s PlanSnapshot) them(ks []roleKey) string {
+	if len(s.names(ks)) > 1 {
+		return "them"
+	}
+	return "it"
 }
