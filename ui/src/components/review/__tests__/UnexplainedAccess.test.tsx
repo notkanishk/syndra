@@ -63,6 +63,8 @@ const revokeCtl = vi.hoisted(() => ({
   waits: false,
   // What the server answered: a wait_reason when the revoke was held.
   answer: {} as Record<string, unknown>,
+  // What the last revoke was sent: the plan it was shown (task 1.9).
+  sent: undefined as unknown,
 }));
 // Which roles are Roles that wait; the shared setup answers "none".
 vi.mock("@/lib/queries/useRoleWaits", () => ({ useRoleWaits: () => () => revokeCtl.waits }));
@@ -120,8 +122,9 @@ vi.mock("@/lib/queries/useDrift", () => ({
   }),
   useRevokeDrift: () =>
     useMutation({
-      mutationFn: async () => {
+      mutationFn: async (args: unknown) => {
         revokeCtl.calls += 1;
+        revokeCtl.sent = args;
         if (revokeCtl.hold) await revokeCtl.hold;
         if (revokeCtl.fails) throw new Error("revoke failed");
         return revokeCtl.answer;
@@ -720,6 +723,21 @@ describe("who made it", () => {
 });
 
 describe("the revoke confirm, once it has run", () => {
+  // Task 1.9: a drift revoke is a planned act. The sheet reads its plan
+  // (op=revoke on the drift row) and the write carries the fingerprint and
+  // cancel ids it was shown, so the server writes only that Change.
+  it("reads the revoke's plan and sends the plan it was shown", async () => {
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    expect(adoptCtl.asked).toContainEqual({ op: "revoke", userId: "u1", driftId: "d1" });
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+    await waitFor(() => expect(revokeCtl.calls).toBe(1));
+    expect(revokeCtl.sent).toEqual({ id: "d1", body: { fingerprint: "fp-1", cancel_ids: [] } });
+  });
+
   it("cannot be pressed a second time on the highest-stakes screen", async () => {
     drift.data = [item({ id: "d1" })];
     renderTriage();
