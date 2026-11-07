@@ -48,22 +48,6 @@ func bulkStaleThenThePlan(t *testing.T, f plannerFixture, req services.BulkReque
 		}
 		for _, ch := range changes {
 			if ch.Row.Effect != services.EffectApply {
-				working, _ := db.GetRolesForBundle(ctx, f.bundle)
-				held, _ := db.GetUserBundleRolesGrouped(ctx, f.alice)
-				draft, derr := services.BundleDraft(ctx, f.bundle)
-				t.Logf("working %+v; held %+v; draft working %+v effective %+v next v%d (%v)",
-					working, held, draft.Working, draft.WorkingEffective, draft.NextVersion, derr)
-				_ = db.InTxLockingAccess(ctx, func(ctx context.Context) error {
-					snap, err := db.ReadAccessSnapshot(ctx, []string{f.alice})
-					var mine []string
-					for _, r := range snap.Rules {
-						if r.SourceProject == f.project || r.TargetProject == f.project {
-							mine = append(mine, r.SourceRole+">"+r.TargetRole)
-						}
-					}
-					t.Logf("snapshot %+v rules here %v (%v)", snap.People[f.alice], mine, err)
-					return nil
-				})
 				t.Fatalf("every row goes ahead: %+v", ch.Row)
 			}
 		}

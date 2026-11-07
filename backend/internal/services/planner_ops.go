@@ -194,14 +194,14 @@ func planMove(ch Change, a Action, s PlanSnapshot, person db.PersonAccess) Chang
 		return ch.decided(a, EffectNoChange, "held", fmt.Sprintf("Already on v%d.", h.Version), "")
 	}
 	detail := fmt.Sprintf("Moves from v%d to v%d.", h.Version, s.Version.Version)
+	// As an assignment does: what the new version gives is held after, even
+	// a role whose removal is queued (the give answers that removal), and
+	// what the old version gave counts only if something else still gives it.
 	before := baseFrom(person, "")
-	moved := person
-	moved.ByBundle = maps.Clone(person.ByBundle)
-	if moved.ByBundle == nil {
-		moved.ByBundle = map[string][]models.BundleRole{}
+	after := baseFrom(person, a.BundleID)
+	for _, r := range s.VersionRoles {
+		after[roleKey{projectID: r.ProjectID, roleKey: r.RoleKey}] = true
 	}
-	moved.ByBundle[a.BundleID] = s.VersionRoles
-	after := baseFrom(moved, "")
 	rules := s.Access.Rules
 	closureBefore, closureAfter := effectiveClosure(before, rules), effectiveClosure(after, rules)
 	adds, revokes := closureDelta(closureBefore, closureAfter)
