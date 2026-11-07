@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GIVE_ROLE_LABEL, GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ApiError } from "@/lib/api-client";
 import { waitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
+import { actPlan, cancelling, queuedChange, withPlanClient } from "@/test-utils/plan";
+import type { ActPlan } from "@/lib/usePlanConsent";
 
 /**
  * The direct-grant endpoint always enqueues to the outbox for the
@@ -20,22 +22,24 @@ const state = vi.hoisted(() => ({
   queued: [] as string[],
   queuedAt: undefined as string | undefined,
   terms: undefined as Array<{ name: string; start: string; end: string }> | undefined,
-  // What the automatic rules also give, by role key (the backend's preview).
-  rules: {} as Record<string, string[]>,
-  rulesError: false,
-  refetch: vi.fn(),
+  // What the planner answers (GET /users/{id}/plan), and the reads it was asked.
+  plan: undefined as unknown as ActPlan,
+  planFails: false,
+  planCalls: [] as string[],
 }));
 
 vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => state.down }));
 
-vi.mock("@/lib/queries/useRulePreview", () => ({
-  useRulePreview: (_user: string, _project: string, keys: string[]) => ({
-    data: keys.flatMap((key) => state.rules[key] ?? []).map((sentence) => ({ sentence })),
-    isLoading: false,
-    isError: state.rulesError,
-    isFetching: false,
-    refetch: state.refetch,
-  }),
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    // The waits-before line asks whether Zitadel's queue drains on its own.
+    if (path === "/governance/indicators") return { auto_retry: true };
+    if (!path.includes("/plan?")) throw new Error(`unmocked request ${path}`);
+    state.planCalls.push(path);
+    if (state.planFails) throw new Error("plan unreadable");
+    return state.plan;
+  },
 }));
 
 vi.mock("@/lib/queries/useTerms", () => ({
@@ -96,14 +100,14 @@ beforeEach(() => {
   state.queued = [];
   state.queuedAt = undefined;
   state.terms = undefined;
-  state.rules = {};
-  state.rulesError = false;
-  state.refetch = vi.fn();
+  state.plan = actPlan();
+  state.planFails = false;
+  state.planCalls = [];
   state.mutateAsync.mockReset();
 });
 
 function open() {
-  return render(<GrantDirectAccess userId="u1" userName="Ada Lovelace" open onClose={vi.fn()} />);
+  return render(withPlanClient(<GrantDirectAccess userId="u1" userName="Ada Lovelace" open onClose={vi.fn()} />));
 }
 
 function choose(role: string) {
@@ -114,8 +118,14 @@ function choose(role: string) {
   fireEvent.click(within(dialog).getByRole("radio", { name: new RegExp(role) }));
 }
 
+// The plan is read once a role is chosen; the press waits on it (A-21 §3).
+async function planRead() {
+  await waitFor(() => expect(screen.getByRole("button", { name: "Give role" })).toBeEnabled());
+}
+
 async function grant(role = "Operator") {
   choose(role);
+  await planRead();
   fireEvent.change(screen.getByPlaceholderText(/Capstone build/), { target: { value: "test" } });
   fireEvent.click(screen.getByRole("button", { name: "Give role" }));
   // "Close" only replaces "Give role"/"Cancel" once an outcome (either kind)
@@ -276,32 +286,50 @@ describe("GrantDirectAccess · its result", () => {
   // Audit C2: the person giving one role sees, before the click, every role an
   // automatic rule also gives with it, and the result says they went with it.
   it("names what automatic rules also give, before the give and in its result", async () => {
-    state.rules = { operator: ["Also gives Bench in Workshop, by the automatic rule from Operator."] };
+    state.plan = actPlan({ rules: ["Also gives Bench in Workshop, by the automatic rule from Operator."] });
     state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "applied", rule_outbox_ids: ["o2"] });
     open();
     choose("Operator");
-    expect(screen.getByText("Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
+    expect(await screen.findByText("Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
+    await planRead();
     fireEvent.click(screen.getByRole("button", { name: "Give role" }));
     expect(await screen.findByText("Ada can use Operator on their own now.")).toBeInTheDocument();
     expect(screen.getByText(/Also gives Bench in Workshop/)).toBeInTheDocument();
   });
 
-  // One consent rule with Approve (RuleConsent): a preview that can't be read
+  // One consent rule with Approve (usePlanConsent): a plan that can't be read
   // holds the give, with the reason and a Try again, never a give with a warning.
-  it("holds the give when the rule preview fails, and Try again reads it again", () => {
-    state.rulesError = true;
+  it("holds the give while the plan is read, and when it can't be, and Try again reads it again", async () => {
+    state.planFails = true;
     open();
     choose("Operator");
     expect(screen.getByRole("button", { name: "Give role" })).toBeDisabled();
-    expect(screen.getByText("Held until Syndra can read the automatic rules.")).toBeInTheDocument();
+    expect(screen.getByText("Checking what giving it does.")).toBeInTheDocument();
+    expect(await screen.findByText("Held until Syndra can read what giving it does.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Syndra couldn't read what giving it does, so it can't show what else this would give or cancel. Try again to read it.",
+      ),
+    ).toBeInTheDocument();
+    const reads = state.planCalls.length;
+    state.planFails = false;
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(state.refetch).toHaveBeenCalledTimes(1);
+    await planRead();
+    expect(state.planCalls.length).toBeGreaterThan(reads);
     expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("asks the planner for this person, project and role, and reads no rule preview", async () => {
+    open();
+    choose("Operator");
+    await planRead();
+    expect(state.planCalls).toEqual(["/users/u1/plan?op=give&project_id=p1&role_key=operator"]);
   });
 
   it("says nothing about rules when no rule starts from the role", async () => {
     open();
     choose("Operator");
+    await planRead();
     expect(screen.queryByText(/Also gives/)).not.toBeInTheDocument();
   });
 
@@ -309,6 +337,7 @@ describe("GrantDirectAccess · its result", () => {
     state.mutateAsync.mockRejectedValue(new ApiError(409, { error: "ALREADY_HELD", message: "They already have this." }));
     open();
     choose("Operator");
+    await planRead();
     fireEvent.click(screen.getByRole("button", { name: "Give role" }));
     expect(await screen.findByText("Not given")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Give role" })).toBeEnabled();
@@ -318,10 +347,11 @@ describe("GrantDirectAccess · its result", () => {
 // A-07 §9: a person's page stays on while Zitadel is down, and says before the
 // operator acts that the change will wait.
 describe("GrantDirectAccess · while Zitadel is not answering", () => {
-  it("says before the grant that it will wait, instead of promising it works at once", () => {
+  it("says before the grant that it will wait, instead of promising it works at once", async () => {
     state.down = true;
     open();
     choose("Operator");
+    await planRead();
     const dialog = screen.getByRole("dialog");
     expect(
       within(dialog).getByText(waitsBeforeLine("give")),
@@ -347,5 +377,103 @@ describe("GrantDirectAccess · wording and the end date", () => {
     fireEvent.click(within(dialog).getByRole("radio", { name: "Never" }));
     expect(within(dialog).getByText("It stays until someone removes it.")).toBeInTheDocument();
     expect(within(dialog).getByText("No end date")).toBeInTheDocument();
+  });
+});
+
+// A-21 §3: the plan is read before the press, so the sheet foretells what the
+// give cancels and the press shows it at once: no write is sent to find out.
+describe("GrantDirectAccess · what the plan says before the press", () => {
+  const removal = queuedChange();
+
+  it("foretells the cancel in the footer, before anything is chosen on the next step", async () => {
+    state.plan = cancelling([removal]);
+    open();
+    choose("Operator");
+    expect(
+      await screen.findByText(
+        "Giving it cancels the removal Sam Lee queued 2h ago. Nothing is cancelled until you choose on the next step.",
+      ),
+    ).toBeInTheDocument();
+    expect(state.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("counts several waiting changes in the one sentence", async () => {
+    state.plan = cancelling([removal, queuedChange({ id: "00000000-0000-0000-0000-0000000000a2" })]);
+    open();
+    choose("Operator");
+    expect(await screen.findByText(/Giving it cancels 2 changes that are waiting\./)).toBeInTheDocument();
+  });
+
+  it("pushes the step at once from the plan, sends no write first, and then carries the plan", async () => {
+    state.plan = cancelling([removal], { fingerprint: "fp-9" });
+    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "applied" });
+    open();
+    choose("Operator");
+    await planRead();
+    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+
+    const step = await screen.findByRole("heading", { name: "This cancels a removal that's waiting" });
+    expect(step).toBeInTheDocument();
+    // Nothing was written to learn this: the step came from the plan.
+    expect(state.mutateAsync).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel it and give Operator" }));
+    await screen.findByRole("button", { name: "Close" });
+    expect(state.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(state.mutateAsync.mock.calls[0][0]).toMatchObject({
+      project_id: "p1",
+      role_key: "operator",
+      fingerprint: "fp-9",
+      cancel_ids: [removal.id],
+    });
+  });
+
+  it("Keep it sends nothing and leaves the form as it was", async () => {
+    state.plan = cancelling([removal]);
+    open();
+    choose("Operator");
+    await planRead();
+    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+    expect(state.mutateAsync).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Give role" })).toBeVisible());
+  });
+
+  it("gains no step when the plan cancels nothing, and the write still carries the fingerprint", async () => {
+    state.plan = actPlan({ fingerprint: "fp-3" });
+    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "applied" });
+    open();
+    await grant();
+    expect(screen.queryByText(/This cancels/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Giving it cancels/)).not.toBeInTheDocument();
+    expect(state.mutateAsync.mock.calls[0][0]).toMatchObject({ fingerprint: "fp-3", cancel_ids: [] });
+  });
+
+  it("when their access moved: nothing was changed, the plan is read again, and the note says so", async () => {
+    state.plan = actPlan({ fingerprint: "fp-1" });
+    state.mutateAsync.mockRejectedValueOnce(new ApiError(409, { error: "PLAN_STALE", message: "Moved." }));
+    open();
+    choose("Operator");
+    await planRead();
+    const reads = state.planCalls.length;
+    // What the next read finds.
+    state.plan = cancelling([removal], { fingerprint: "fp-2" });
+    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+
+    expect(await screen.findByText("Nothing was changed. Ada's access moved while this was open.")).toBeInTheDocument();
+    expect(screen.getByText("Read the note under the form, then press Give role again.")).toBeInTheDocument();
+    await waitFor(() => expect(state.planCalls.length).toBeGreaterThan(reads));
+    expect(await screen.findByText(/Giving it cancels the removal Sam Lee queued 2h ago\./)).toBeInTheDocument();
+    // The form is still here, not a result.
+    expect(screen.queryByText("Not given")).not.toBeInTheDocument();
+  });
+
+  it("when the planner refuses because they already have it: held, with the reason and no give", async () => {
+    state.plan = actPlan({ effect: "no_change", refusal: "held", detail: "Ada already has Operator." });
+    open();
+    choose("Operator");
+    expect(await screen.findByText("Nothing to give.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Give role" })).toBeDisabled();
+    expect(screen.getByText("Ada already has Operator.")).toBeInTheDocument();
   });
 });

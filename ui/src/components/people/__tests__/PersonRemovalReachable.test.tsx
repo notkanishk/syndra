@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 // Zitadel answering: what the dialogs say before the act is not under test here.
 vi.mock("@/components/states/useWaitsBeforeLine", () => ({ useWaitsBeforeLine: () => undefined }));
 
 import { RemovalDialog } from "@/components/people/RemovalDialog";
+import { actPlan, withPlanClient } from "@/test-utils/plan";
 
 /**
  * The removal flow has to be reachable from the person page.
@@ -23,6 +24,13 @@ import { RemovalDialog } from "@/components/people/RemovalDialog";
  * about what the dialog does with a person missing versus present.
  */
 
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return actPlan();
+    throw new Error(`unmocked request ${path}`);
+  },
+}));
 vi.mock("@/lib/queries/useBundles", () => ({
   useRemoveBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -40,12 +48,9 @@ const bundleRemoval = {
 describe("RemovalDialog with a bundle source", () => {
   it("is dead, and says so, when the caller passes no person", () => {
     render(
-      <RemovalDialog
-        removal={bundleRemoval}
-        userId={undefined}
-        userName={undefined}
-        onClose={vi.fn()}
-      />,
+      withPlanClient(
+        <RemovalDialog removal={bundleRemoval} userId={undefined} userName={undefined} onClose={vi.fn()} />,
+      ),
     );
 
     // The fingerprint of the defect, exactly as it appeared on screen.
@@ -57,19 +62,17 @@ describe("RemovalDialog with a bundle source", () => {
     expect(screen.getByText(/could not tell which person this is/)).toBeInTheDocument();
   });
 
-  it("names the person and offers a live button when the caller passes one", () => {
+  it("names the person and offers a live button when the caller passes one", async () => {
     render(
-      <RemovalDialog
-        removal={bundleRemoval}
-        userId="shikha"
-        userName="Shikha Rao"
-        onClose={vi.fn()}
-      />,
+      withPlanClient(
+        <RemovalDialog removal={bundleRemoval} userId="shikha" userName="Shikha Rao" onClose={vi.fn()} />,
+      ),
     );
 
     expect(screen.getByText(/from Shikha Rao/)).toBeInTheDocument();
     expect(screen.queryByText(/from this person/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Remove bundle" })).toBeEnabled();
+    // Live once the plan is read.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove bundle" })).toBeEnabled());
     expect(screen.queryByText(/could not tell which person this is/)).toBeNull();
   });
 });

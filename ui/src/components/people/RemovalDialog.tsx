@@ -21,7 +21,11 @@ import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
-import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
+import { KEPT, PushedStep, useCancelStep, useForetell } from "@/components/ui/CancelQueuedStep";
+import { Notice } from "@/components/ui/Notice";
+import { RuleConsentFailed } from "@/components/requests/RuleConsent";
+import { isStale, usePlanConsent } from "@/lib/usePlanConsent";
+import { formatShortDate } from "@/lib/format";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useRemoveDirectGrant, type DirectGrantRemoval } from "@/lib/queries/useRoleMembers";
 import { RETRYING, refusedOutcome, retireOutcome, retryingOutcome } from "@/lib/retry";
@@ -286,21 +290,35 @@ function DirectDialog({
   const waits = useWaitsBeforeLine("remove");
   const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [word, setWord] = useState<string | null>(null);
   const retained = others.length > 0;
   const roleLabel = useRoleLabel()(removal);
   const shown = useShownNames();
+  const first = firstName(subject);
 
   // `grantsResolved === false` is the third state, and the reason this is not
   // a boolean: "no grant id" and "no answer yet" are different facts and the
   // operator needs to be told which one they are looking at.
   const grantListPending = removal.grantsResolved === false;
   const blocked = !removal.grantId || !userId;
-  // Taking back a grant that is still waiting cancels it: the sheet turns to the
-  // step first (A-04 §14), and Keep it comes back to this dialog as it was.
+  // What revoking it does, from the planner before the press (A-21 §3.2).
+  const consent = usePlanConsent(
+    removal.grantId && userId ? { op: "remove", userId, grantId: removal.grantId } : null,
+    "revoking it",
+  );
+  const foretell = useForetell();
+  const [stale, setStale] = useState(false);
+  // The give never reached Zitadel: the dialog is the cancel, said plainly, and
+  // nothing is sent. The plan says so; until it is read, the source does.
+  const cancelOnly = consent.plan ? consent.plan.delivery === "none" : Boolean(source?.queued);
+  const waitingGive = consent.cancels.find((c) => c.op_type !== "revoke");
+  const actLabel = cancelOnly ? "Cancel the waiting give" : "Revoke access";
+  // A revoke that also cancels someone's waiting change asks first: the press
+  // pushes the step, filled from the plan. Keep it comes back here as it was.
   const step = useCancelStep({
     host: `Revoke direct access to ${roleLabel}`,
     goAhead: "revoke",
-    tone: source?.queued ? "accent" : "danger",
+    tone: cancelOnly ? "accent" : "danger",
   });
 
   return (
@@ -310,9 +328,40 @@ function DirectDialog({
         chip={<SourceChip kind="direct" />}
         title={`Revoke direct access to ${roleLabel}?`}
         titleId="removal-title"
-        lede={`Given directly to ${subject}.`}
+        lede={
+          cancelOnly && waitingGive
+            ? `Given to ${first} on ${formatShortDate(waitingGive.queued_at)}${
+                waitingGive.initiated_by_name ? ` by ${waitingGive.initiated_by_name}` : ""
+              }, and still waiting for you to send.`
+            : `Given directly to ${subject}.`
+        }
       />
+      {stale && !outcome && (
+        <Notice
+          tone="warn"
+          blocking
+          className="mx-6 mb-3"
+          title={`Nothing was changed. ${first}'s access moved while this was open.`}
+          next={`Read the note under the form, then press ${actLabel} again.`}
+        >
+          {null}
+        </Notice>
+      )}
       <div className="px-6">
+        {cancelOnly ? (
+          // Never delivered, so there is nothing at the door to close: no box,
+          // because nothing is wrong (RULES). The removal does not queue a
+          // revocation; it cancels the give that was still waiting.
+          <p className="flex items-start gap-2.5 text-[15px] leading-[1.5]">
+            <StatusDot tone="neutral" className="mt-[8px]" />
+            <span>
+              <strong className="font-semibold text-ink">Nothing to take back.</strong>{" "}
+              <span className="text-muted">
+                It hasn&rsquo;t reached Zitadel, so {first} never had it. This cancels that give and sends nothing.
+              </span>
+            </span>
+          </p>
+        ) : (
         <div className="danger-note px-4 py-3.5 text-[15px] leading-[1.5]">
           {retained ? (
             <>
@@ -322,20 +371,6 @@ function DirectDialog({
               <br />
               <span className="text-[14px] text-muted">
                 It also comes from {describeOthers(others)}, so nothing changes at the door today.
-              </span>
-            </>
-          ) : source?.queued ? (
-            // Never delivered, so there is nothing at the door to close. Saying
-            // "they will lose this role" here would describe an effect this
-            // grant never had — and the removal does not queue a revocation,
-            // it withdraws the delivery that was still waiting.
-            <>
-              <strong className="font-semibold text-ink">
-                Nothing to take back.
-              </strong>
-              <br />
-              <span className="text-[14px] text-muted">
-                This grant is still waiting for you to send, so {subject} never received it. Removing it withdraws the queued change; nothing reaches Zitadel.
               </span>
             </>
           ) : (
@@ -356,17 +391,24 @@ function DirectDialog({
               </span>
             </>
           )}
+          {consent.cancels.length > 0 && (
+            <span className="mt-1.5 block text-[14px] text-muted">{foretell("Revoking it", consent.cancels)}</span>
+          )}
+          {consent.rules.length > 0 && (
+            <span className="mt-1.5 block text-[14px] text-muted">{consent.rules.join(" ")}</span>
+          )}
         </div>
+        )}
       </div>
-      {/* The first 100ms. Withdrawing a grant that is still waiting cancels it; a role
-          that waits holds its own removal; anything else is simply removed. */}
+      {/* The first 100ms. Cancelling a give that is still waiting; a role that
+          waits holds its own removal; anything else is simply removed. */}
       {!outcome && remove.isPending && (
         <ActionForecast
           className="mx-6 mb-1"
-          word={source?.queued ? FORECAST.cancel : forecastFor("remove", roleWaits(removal.projectId, removal.roleKey))}
+          word={cancelOnly ? FORECAST.cancel : forecastFor("remove", roleWaits(removal.projectId, removal.roleKey))}
         />
       )}
-      {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={word ?? resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
@@ -379,7 +421,7 @@ function DirectDialog({
           // what the person page did for the whole life of this dialog. A note
           // that blames the data for a wiring fault sends an operator to check
           // the wrong thing.
-          !userId
+          (!userId
             ? "Refused · Syndra could not tell which person this is. Reload the page."
             : grantListPending
               ? "Waiting · Syndra is still reading this person's direct grants, so it cannot yet tell whether there is one to revoke."
@@ -387,7 +429,9 @@ function DirectDialog({
                 ? "Refused · this role was not given directly, so there is no direct access to revoke. Only direct access can be revoked here."
                 : outcome
                   ? undefined
-                  : waits
+                  : consent.failed
+                    ? <RuleConsentFailed consent={consent} className="flex flex-wrap items-center gap-x-3 gap-y-1" />
+                    : waits)
         }
       >
         {/* The act never takes the dialog's initial focus (`data-skip-initial-focus`,
@@ -402,20 +446,28 @@ function DirectDialog({
         ) : (
           <Button
             data-skip-initial-focus
-            variant={source?.queued ? "accent" : "dangerConfirm"}
-            disabled={blocked}
+            variant={cancelOnly ? "accent" : "dangerConfirm"}
+            disabled={blocked || consent.hold !== undefined}
+            reason={blocked ? undefined : consent.hold}
             isPending={remove.isPending}
             onClick={async () => {
               try {
-                const result = await step.run(() =>
-                  remove.mutateAsync({
-                    userId: userId!,
-                    grantId: removal.grantId!,
-                  }),
+                const result = await step.confirm(cancelOnly ? [] : consent.cancels, () =>
+                  remove.mutateAsync({ userId: userId!, grantId: removal.grantId!, seen: consent.seen }),
                 );
                 if (result === KEPT) return;
-                // A withdrawn grant leaves the queue; the rail follows the answer.
-                if (source?.queued && client) settleIndicators(client, { pending_propagation: -1 });
+                setStale(false);
+                if (cancelOnly) {
+                  // The give leaves the queue; the rail follows the answer.
+                  if (client) settleIndicators(client, { pending_propagation: -Math.max(1, consent.cancels.length) });
+                  setWord("Cancelled");
+                  setOutcome({
+                    kind: "applied",
+                    message: `The give of ${shown.role(removal.projectId, removal.roleKey)} in ${removal.projectName} that was waiting is cancelled. ${first} never had it, so nothing goes to Zitadel.`,
+                    next: "Nothing for you to do.",
+                  });
+                  return;
+                }
                 // The residual outcome, from the backend that computed it. A
                 // role this person also holds through a bundle or a rule
                 // survives the removal, and which ones those are is a closure
@@ -423,11 +475,17 @@ function DirectDialog({
                 // about somebody's access.
                 setOutcome(removalOutcome(result, roleLabel, shown, auto));
               } catch (error) {
+                // Their access moved since the plan was read: nothing was written.
+                if (isStale(error)) {
+                  setStale(true);
+                  consent.retry();
+                  return;
+                }
                 setOutcome(outcomeFromError(error));
               }
             }}
           >
-            {source?.queued ? "Withdraw the queued grant" : "Revoke access"}
+            {actLabel}
           </Button>
         )}
       </ModalFooter>
@@ -435,6 +493,8 @@ function DirectDialog({
     </Modal>
   );
 }
+
+const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 /**
  * Bundle removal. Two explicit lists — what they lose, and what they keep and
@@ -461,10 +521,22 @@ function BundleDialog({
   const waits = useWaitsBeforeLine("remove");
   const auto = useAutoRetry();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [word, setWord] = useState<string | null>(null);
+  const first = firstName(subject);
+  // What removing it does, from the planner before the press (A-21 §3.2).
+  const consent = usePlanConsent(
+    userId && source.bundle_id ? { op: "remove_bundle", userId, bundleId: source.bundle_id } : null,
+    "removing it",
+  );
+  const foretell = useForetell();
+  const [stale, setStale] = useState(false);
+  // Nothing it carries reached them: the dialog is the cancel, and nothing is sent.
+  const cancelOnly = consent.plan ? consent.plan.delivery === "none" : Boolean(source.queued);
+  const actLabel = cancelOnly ? "Cancel the waiting change" : "Remove bundle";
   const step = useCancelStep({
     host: `Remove the ${bundleName} bundle from ${subject}`,
     goAhead: "remove",
-    tone: source.queued ? "accent" : "danger",
+    tone: cancelOnly ? "accent" : "danger",
   });
 
   return (
@@ -475,22 +547,33 @@ function BundleDialog({
         title={`Remove the ${bundleName} bundle from ${subject}?`}
         titleId="removal-title"
         lede={
-          source.queued
+          cancelOnly
             ? `${bundleName} is still waiting for you to send, so nothing it carries has reached ${subject} yet.`
             : `Everything ${bundleName} carries goes with it, except what another source also gives them.`
         }
       />
+      {stale && !outcome && (
+        <Notice
+          tone="warn"
+          blocking
+          className="mx-6 mb-3"
+          title={`Nothing was changed. ${first}'s access moved while this was open.`}
+          next={`Read the note under the form, then press ${actLabel} again.`}
+        >
+          {null}
+        </Notice>
+      )}
       <div className="flex flex-col gap-2 px-6">
         {/* "They will lose" is a claim about an effect, and this bundle has not
             had one yet. The assignment was recorded and never sent, so removing
-            it withdraws the queued delivery rather than queueing its opposite —
+            it cancels the queued delivery rather than queueing its opposite —
             which is also what the backend now does, instead of enqueueing a
             revocation for access nobody ever received. */}
-        <div className="type-label">{source.queued ? "Nothing to take back" : "They will lose"}</div>
+        <div className="type-label">{cancelOnly ? "Nothing to take back" : "They will lose"}</div>
         <div className="flex flex-wrap items-center gap-2.5 text-[14px]">
-          <StatusDot tone={source.queued ? "neutral" : "danger"} />
+          <StatusDot tone={cancelOnly ? "neutral" : "danger"} />
           <RoleRef projectId={removal.projectId} roleKey={removal.roleKey} />
-          {source.queued ? (
+          {cancelOnly ? (
             <span className="text-[13px] text-muted">· recorded, never sent</span>
           ) : (
             others.length === 0 && <span className="text-[13px] text-muted">· no other source gives it</span>
@@ -511,23 +594,30 @@ function BundleDialog({
       {!outcome && removeBundle.isPending && (
         <ActionForecast
           className="mx-6 mb-1"
-          word={source.queued ? FORECAST.cancel : forecastFor("remove", roleWaits(removal.projectId, removal.roleKey))}
+          word={cancelOnly ? FORECAST.cancel : forecastFor("remove", roleWaits(removal.projectId, removal.roleKey))}
         />
       )}
-      {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={word ?? resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
         cancel={succeeded(outcome) ? undefined : { onClick: onClose }}
-        // A bundle whose grants are still waiting says nothing about them here:
-        // the step is the one place that is said, because only it carries who
-        // queued each change and why (A-04 §13.4).
+        // A bundle whose grants are still waiting says nothing more about them
+        // here: it is the cancel. One that also cancels someone else's waiting
+        // change says so before the press, and the press pushes the step.
         note={
           step.note ??
-          (source.queued
-            ? undefined
-            : ((!outcome && waits) ||
-              "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."))
+          (consent.failed ? (
+            <RuleConsentFailed consent={consent} className="flex flex-wrap items-center gap-x-3 gap-y-1" />
+          ) : cancelOnly ? undefined : (
+            <>
+              {(!outcome && waits) ||
+                "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."}
+              {!outcome && consent.cancels.length > 0 && (
+                <span className="block">{foretell("Removing it", consent.cancels)}</span>
+              )}
+            </>
+          ))
         }
       >
         {/* Gone once it has run. A destructive confirm that stays armed after
@@ -542,12 +632,12 @@ function BundleDialog({
         ) : (
           <Button
             data-skip-initial-focus
-            // Red is a promise about consequence. Withdrawing a delivery that
+            // Red is a promise about consequence. Cancelling a delivery that
             // never went out takes nothing from anybody, and dressing it as
             // destruction contradicts the sentence directly above it.
-            variant={source.queued ? "accent" : "dangerConfirm"}
+            variant={cancelOnly ? "accent" : "dangerConfirm"}
             isPending={removeBundle.isPending}
-            disabled={!userId || !source.bundle_id}
+            disabled={!userId || !source.bundle_id || consent.hold !== undefined}
           // It was disabled in silence, which is how a dead removal flow went
           // unnoticed: the cause was upstream (the person page passed no
           // userId) and the button said nothing at all. Now it names which
@@ -558,12 +648,24 @@ function BundleDialog({
                 ? "Syndra could not tell which person this is, so it will not remove a bundle from them. Reload the page."
                 : !source.bundle_id
                   ? "Syndra could not tell which bundle gives this role. Manage bundles can remove it by name."
-                  : undefined
+                  : consent.hold
             }
             onClick={async () => {
               try {
-                const result = await step.run(() => removeBundle.mutateAsync(source.bundle_id!));
+                const result = await step.confirm(cancelOnly ? [] : consent.cancels, () =>
+                  removeBundle.mutateAsync({ bundleId: source.bundle_id!, seen: consent.seen }),
+                );
                 if (result === KEPT) return;
+                setStale(false);
+                if (cancelOnly) {
+                  setWord("Cancelled");
+                  setOutcome({
+                    kind: "applied",
+                    message: `The ${bundleName} bundle that was waiting is cancelled. Nothing it carried had reached ${first}, so nothing goes to Zitadel.`,
+                    next: "Nothing for you to do.",
+                  });
+                  return;
+                }
                 const waiting = result?.cascade?.enqueued ?? 0;
                 if (waiting > 0) {
                   // What the server's delivery did with the revocations, in
@@ -588,15 +690,21 @@ function BundleDialog({
                   // apart.
                   detail:
                     waiting === 0
-                      ? "The grants it queued were withdrawn. Nothing is waiting under Pending changes, because nothing had been sent."
+                      ? "Every role it carries is still given another way, so nothing is sent to Zitadel."
                       : "The roles it supplied are revoked once you send Pending changes, except any that another source still gives.",
                 });
               } catch (error) {
+                // Their access moved since the plan was read: nothing was written.
+                if (isStale(error)) {
+                  setStale(true);
+                  consent.retry();
+                  return;
+                }
                 setOutcome(outcomeFromError(error));
               }
             }}
           >
-            {source.queued ? "Withdraw the queued change" : "Remove bundle"}
+            {actLabel}
           </Button>
         )}
       </ModalFooter>

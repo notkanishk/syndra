@@ -90,8 +90,10 @@ describe("R20: a refusal says 'Nothing was changed.' once", () => {
 
 describe("R12: a rule-given role that waits is said, and ends on Send", () => {
   it("an approval that went says the rule's role waits for you", () => {
-    const o = approvalOutcome(undefined, "Ada", "Trained", { rule_waiting: 1 }, [{ role: "Bench", project: "Workshop" }]);
-    expect(o.message).toMatch(/^Approved\. Ada can use it now\. An automatic rule also gave them Bench in Workshop\. One role an automatic rule also gives always waits for you/);
+    const o = approvalOutcome(undefined, "Ada", "Trained", { rule_waiting: 1 }, [
+      "Also gives Bench in Workshop, by the automatic rule from Trained in Workshop.",
+    ]);
+    expect(o.message).toMatch(/^Approved\. Ada can use it now\. Also gives Bench in Workshop, by the automatic rule from Trained in Workshop\. One role an automatic rule also gives always waits for you/);
     expect(waitsForSend(o)).toBe(true);
   });
   it("is never blamed on the asked-for role", () => {

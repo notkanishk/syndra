@@ -1,29 +1,27 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApproveButton, HoldingNote, keepLength } from "@/components/requests/Holding";
 import type { AccessRequest } from "@/lib/queries/useRequests";
+import type { ActPlan } from "@/lib/usePlanConsent";
+import { actPlan, cancelling, queuedChange, withPlanClient } from "@/test-utils/plan";
 
-const preview = vi.hoisted(() => ({
-  rows: [] as string[],
-  asked: [] as Array<{ enabled: boolean; keys: string[] }>,
-  loading: false,
-  error: false,
-  refetching: false,
-  refetch: vi.fn(),
+// What the planner answers (GET /users/{id}/plan?op=approve), and the reads it was asked.
+const wire = vi.hoisted(() => ({
+  plan: undefined as unknown as ActPlan,
+  calls: [] as string[],
+  fail: false,
+  hang: false,
 }));
 
-vi.mock("@/lib/queries/useRulePreview", () => ({
-  useRulePreview: (_user: string, _project: string, keys: string[], enabled: boolean) => {
-    preview.asked.push({ enabled, keys });
-    return {
-      data: enabled ? preview.rows.map((sentence) => ({ sentence })) : undefined,
-      isLoading: enabled && preview.loading,
-      isError: enabled && preview.error,
-      isFetching: enabled && (preview.loading || preview.refetching),
-      refetch: preview.refetch,
-    };
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: (path: string) => {
+    if (!path.includes("/plan?")) return Promise.reject(new Error(`unmocked request ${path}`));
+    wire.calls.push(path);
+    if (wire.hang) return new Promise(() => {});
+    return wire.fail ? Promise.reject(new Error("plan unreadable")) : Promise.resolve(wire.plan);
   },
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
@@ -45,89 +43,138 @@ function ask(overrides: Partial<AccessRequest> = {}): AccessRequest {
 }
 
 beforeEach(() => {
-  preview.rows = [];
-  preview.asked = [];
-  preview.loading = false;
-  preview.error = false;
-  preview.refetching = false;
-  preview.refetch = vi.fn();
+  wire.plan = actPlan();
+  wire.calls = [];
+  wire.fail = false;
+  wire.hang = false;
 });
 
 // Audit C2: approving gives the role, and the automatic rules follow it, so
-// the row the operator approves from names what they also give.
+// the row the operator approves from names what they also give: the planner's
+// sentences, and the waiting change approving would cancel (A-21 §3.2).
 describe("approving, with automatic rules", () => {
-  it("names what the rules also give before the approve", () => {
-    preview.rows = ["Also gives Bench in Workshop, by the automatic rule from Operator."];
-    render(<HoldingNote request={ask()} />);
+  it("names what the rules also give before the approve", async () => {
+    wire.plan = actPlan({ rules: ["Also gives Bench in Workshop, by the automatic rule from Operator."] });
+    render(withPlanClient(<HoldingNote request={ask()} />));
     expect(
-      screen.getByText("If you approve: Also gives Bench in Workshop, by the automatic rule from Operator."),
+      await screen.findByText("If you approve: Also gives Bench in Workshop, by the automatic rule from Operator."),
     ).toBeInTheDocument();
-    expect(preview.asked.at(-1)).toEqual({ enabled: true, keys: ["operator"] });
+    expect(wire.calls).toEqual(["/users/u1/plan?op=approve&request_id=r1"]);
   });
 
-  it("says nothing when no rule follows, and does not ask about a role already held", () => {
-    const { container } = render(<HoldingNote request={ask()} />);
+  it("says the removal approving cancels, after the rules, in the same line", async () => {
+    wire.plan = cancelling([queuedChange()], { rules: ["Also gives Bench in Workshop, by the automatic rule from Operator."] });
+    render(withPlanClient(<HoldingNote request={ask()} />));
+    expect(
+      await screen.findByText(
+        "If you approve: Also gives Bench in Workshop, by the automatic rule from Operator. Approving cancels the removal Sam Lee queued 2h ago.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says only the cancel when no rule follows", async () => {
+    wire.plan = cancelling([queuedChange()]);
+    render(withPlanClient(<HoldingNote request={ask()} />));
+    expect(await screen.findByText("If you approve: Approving cancels the removal Sam Lee queued 2h ago.")).toBeInTheDocument();
+  });
+
+  it("says nothing when no rule follows, and does not ask about a role already held", async () => {
+    const { container } = render(withPlanClient(<HoldingNote request={ask()} />));
+    await waitFor(() => expect(wire.calls).toHaveLength(1));
     expect(container.textContent).toBe("");
-    render(<HoldingNote request={ask({ holding: { kind: "for_good" } })} />);
-    expect(preview.asked.at(-1)?.enabled).toBe(false);
+    render(withPlanClient(<HoldingNote request={ask({ holding: { kind: "for_good" } })} />));
+    expect(wire.calls).toHaveLength(1);
+  });
+
+  it("reads no rule preview any more: one plan read serves the line and the button", async () => {
+    render(
+      withPlanClient(
+        <>
+          <HoldingNote request={ask()} />
+          <ApproveButton request={ask()} onClick={vi.fn()} />
+        </>,
+      ),
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled());
+    expect(wire.calls).toEqual(["/users/u1/plan?op=approve&request_id=r1"]);
   });
 });
 
-// Final verification N5: what the rules also give is part of the consent, so
-// Approve waits for the preview and is held, with why, when it can't be read.
-describe("approving, while the rule preview is not read", () => {
-  it("holds Approve while the preview loads", () => {
-    preview.loading = true;
-    render(<ApproveButton request={ask()} onClick={vi.fn()} />);
+// Final verification N5: what approving does is part of the consent, so
+// Approve waits for the plan and is held, with why, when it can't be read.
+describe("approving, while the plan is not read", () => {
+  it("holds Approve while the plan loads", () => {
+    wire.hang = true;
+    render(withPlanClient(<ApproveButton request={ask()} onClick={vi.fn()} />));
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
-    expect(screen.getByText("Checking what automatic rules also give.")).toBeInTheDocument();
+    expect(screen.getByText("Checking what approving does.")).toBeInTheDocument();
   });
 
-  it("holds Approve when the preview fails, and says why, beside the row's own line", () => {
-    preview.error = true;
+  it("holds Approve when the plan fails, and says why, beside the row's own line", async () => {
+    wire.fail = true;
     const click = vi.fn();
     render(
-      <>
-        <HoldingNote request={ask()} />
-        <ApproveButton request={ask()} onClick={click} />
-      </>,
+      withPlanClient(
+        <>
+          <HoldingNote request={ask()} />
+          <ApproveButton request={ask()} onClick={click} />
+        </>,
+      ),
     );
+    expect(await screen.findByText("Held until Syndra can read what approving does.")).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Approve" });
     expect(button).toBeDisabled();
     button.click();
     expect(click).not.toHaveBeenCalled();
     // The row says why and offers Try again; the button says it is held.
-    expect(screen.getByText(/Syndra couldn.t read the automatic rules/)).toBeInTheDocument();
-    expect(screen.getByText("Held until Syndra can read the automatic rules.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Syndra couldn't read what approving does, so it can't show what else this would give or cancel. Try again to read it.",
+      ),
+    ).toBeInTheDocument();
+    wire.fail = false;
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(preview.refetch).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled());
   });
 
-  it("is checking, not failed, while Try again reads the preview", () => {
-    preview.error = true;
-    preview.refetching = true;
+  it("is checking, not failed, while Try again reads the plan", async () => {
+    wire.fail = true;
     render(
-      <>
-        <HoldingNote request={ask()} />
-        <ApproveButton request={ask()} onClick={vi.fn()} />
-      </>,
+      withPlanClient(
+        <>
+          <HoldingNote request={ask()} />
+          <ApproveButton request={ask()} onClick={vi.fn()} />
+        </>,
+      ),
     );
-    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    wire.hang = true;
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull());
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
-    expect(screen.getByText("Checking what automatic rules also give.")).toBeInTheDocument();
+    expect(screen.getByText("Checking what approving does.")).toBeInTheDocument();
   });
 
-  it("lets Approve go once the preview is read", () => {
+  it("lets Approve go once the plan is read", async () => {
     const click = vi.fn();
-    render(<ApproveButton request={ask()} onClick={click} />);
+    render(withPlanClient(<ApproveButton request={ask()} onClick={click} />));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled());
     screen.getByRole("button", { name: "Approve" }).click();
     expect(click).toHaveBeenCalledTimes(1);
   });
 
-  it("still holds a role they already have, without asking the rules", () => {
-    preview.error = true;
-    render(<ApproveButton request={ask({ holding: { kind: "for_good" } })} onClick={vi.fn()} />);
+  it("holds it, with the planner's reason, when the planner refuses the approval", async () => {
+    wire.plan = actPlan({ effect: "blocked", detail: "Ada has left.", consequence: "Decline the request to close it." });
+    render(withPlanClient(<ApproveButton request={ask()} onClick={vi.fn()} />));
+    expect(await screen.findByText("Ada has left. Decline the request to close it.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+  });
+
+  it("still holds a role they already have, without asking the planner", () => {
+    wire.fail = true;
+    render(withPlanClient(<ApproveButton request={ask({ holding: { kind: "for_good" } })} onClick={vi.fn()} />));
     expect(screen.getByText("They already have this.")).toBeInTheDocument();
+    expect(wire.calls).toEqual([]);
   });
 });
 
