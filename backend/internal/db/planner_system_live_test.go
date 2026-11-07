@@ -27,7 +27,7 @@ func (f plannerFixture) grant(t *testing.T, user, role string, ends *time.Time) 
 		t.Fatal(err)
 	}
 	var id string
-	if err := db.PG.QueryRow(f.ctx, `UPDATE direct_role_grants SET expires_at = $3
+	if err := db.PG.QueryRow(f.ctx, `UPDATE direct_role_grants SET created_at = LEAST(created_at, COALESCE($3, created_at) - interval '1 day'), expires_at = $3
 		WHERE user_id = $1 AND zitadel_role_key = $2 RETURNING id::text`, user, role, ends).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
