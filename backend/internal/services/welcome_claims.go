@@ -16,6 +16,8 @@ import (
 // else off. Edited only on /settings.
 const ConfigKeyWelcomeClaims = "claims.welcome_on_first_sign_in"
 
+var svcGetConfigSetting = db.GetConfigSetting
+
 // WelcomeClaims is what the data plane may send a brand-new member before
 // onboarding has given them anything (assessment SC4 option b).
 //

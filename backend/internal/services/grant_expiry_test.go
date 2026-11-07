@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -20,6 +21,96 @@ import (
 // obvious implementation produces: base holdings already exclude expired
 // grants, so reading "before" and "after" from the database compares a world
 // without this grant against a world without this grant.
+
+// revokedRoles is every role the params revoke, "project/role".
+func revokedRoles(params []db.EnqueueParams) []string {
+	out := []string{}
+	for _, p := range params {
+		if p.OpType == "revoke" {
+			for _, r := range p.RoleKeys {
+				out = append(out, p.ProjectID+"/"+r)
+			}
+		}
+	}
+	return out
+}
+
+// lapsedGrant is the sweep's candidate: g_88, pLaser/trained, ended an hour ago.
+func lapsedGrant() models.DirectGrant {
+	ended := time.Now().Add(-time.Hour)
+	return models.DirectGrant{ID: "g_88", UserID: "u1", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &ended}
+}
+
+// The planner decides an expiry on plain data (task 1.9). "Until 30 Nov" is
+// the whole of 30 Nov in the makerspace's zone (IST): at 23:59:58 that night
+// the grant still stands and nothing is planned; at midnight it has ended and
+// its role is revoked.
+func TestPlanExpiry_EndsAtMidnightInTheMakerspacesZone(t *testing.T) {
+	ist, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		t.Skip("no tz data")
+	}
+	end := time.Date(2026, 11, 30, 23, 59, 59, 0, ist) // clock.EndOfDay("2026-11-30") in IST
+	g := models.DirectGrant{ID: "g1", UserID: "u1", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &end}
+	s := PlanSnapshot{Access: db.AccessSnapshot{}}
+
+	s.Now = time.Date(2026, 11, 30, 23, 59, 58, 0, ist)
+	if ch := planExpiry(g, db.PersonAccess{}, s); ch.Refusal != "renewed" || len(ch.Writes) != 0 {
+		t.Fatalf("on its last day the grant stands: %+v", ch)
+	}
+	s.Now = time.Date(2026, 12, 1, 0, 0, 0, 0, ist)
+	ch := planExpiry(g, db.PersonAccess{}, s)
+	if ch.Refusal != "" || len(ch.Writes) != 1 || ch.Writes[0].OpType != "revoke" || ch.Writes[0].SourceRef != "g1" ||
+		ch.Writes[0].Delivery != DeliveryStraightAway {
+		t.Fatalf("at midnight its role is revoked, straight away: %+v", ch.Writes)
+	}
+	// In UTC that midnight is still 30 Nov (18:30): the day is the makerspace's.
+	if s.Now.UTC().Day() != 30 {
+		t.Fatal("fixture: the boundary must fall on a different UTC day")
+	}
+}
+
+// A grant renewed since the sweep read it is held under the lock with its new
+// end, and the planner reads that, not the sweep's stale candidate.
+func TestPlanExpiry_ARenewedGrantIsNotEnded(t *testing.T) {
+	past, later := time.Now().Add(-time.Hour), time.Now().AddDate(0, 0, 7)
+	stale := models.DirectGrant{ID: "g1", UserID: "u1", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &past}
+	person := db.PersonAccess{Direct: []models.DirectGrant{{ID: "g1", UserID: "u1", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &later}}}
+	if ch := planExpiry(stale, person, PlanSnapshot{Now: time.Now()}); ch.Refusal != "renewed" {
+		t.Fatalf("a renewed grant is not ended: %+v", ch)
+	}
+}
+
+// An expiry's writes are delivered as its role says (decision 11), and the
+// give of the lapsed role still waiting to be sent is the one queued change
+// it cancels: sending it later would restore access that ended. Nothing else
+// is cancelled (system work cancels only what it planned).
+func TestPlanExpiry_WaitsAsItsRoleDoesAndCancelsOnlyItsOwnWaitingGive(t *testing.T) {
+	past := time.Now().Add(-time.Hour)
+	g := models.DirectGrant{ID: "g1", UserID: "u1", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &past}
+	rules := []models.MappingRule{{ID: "r1", SourceProject: "pLaser", SourceRole: "trained", TargetProject: "pWiki", TargetRole: "editor"}}
+	person := db.PersonAccess{Queued: []models.QueuedChange{
+		{ID: "q-give", UserID: "u1", OpType: "add", ProjectID: "pLaser", RoleKeys: []string{"trained"}, Source: "direct", SourceRef: "g1"},
+		{ID: "q-other", UserID: "u1", OpType: "add", ProjectID: "pShop", RoleKeys: []string{"member"}, Source: "direct"},
+	}}
+	s := PlanSnapshot{Now: time.Now(), Access: db.AccessSnapshot{Rules: rules,
+		RoleWaits: map[db.RoleRef]bool{{ProjectID: "pWiki", RoleKey: "editor"}: true}}}
+
+	ch := planExpiry(g, person, s)
+	by := map[string]Write{}
+	for _, w := range ch.Writes {
+		by[w.ProjectID+"/"+w.RoleKeys[0]] = w
+	}
+	if w := by["pLaser/trained"]; w.Delivery != DeliveryNone {
+		t.Errorf("the lapsed role's give never went, so its revoke only cancels it: %+v", w)
+	}
+	if w := by["pWiki/editor"]; w.Delivery != DeliveryWaits || w.Source != "rule" || w.SourceRef != "r1" {
+		t.Errorf("the rule's role waits for you, as the rule's row: %+v", w)
+	}
+	if len(ch.Row.CancelIDs) != 1 || ch.Row.CancelIDs[0] != "q-give" {
+		t.Errorf("cancels only its own waiting give, got %v", ch.Row.CancelIDs)
+	}
+}
 
 // expiryFixture wires the closure-diff injectables and captures what the expiry
 // enqueues, alongside the error the guarded delete returns.
@@ -79,7 +170,7 @@ func expiryFixture(
 func TestExpireDirectGrant_LapsedRoleIsRevoked(t *testing.T) {
 	captured := expiryFixture(t, nil, nil, nil, nil)
 
-	res, err := ExpireDirectGrant(context.Background(), "u1", "g_88", "pLaser", "trained", "system:scheduler")
+	res, err := ExpireDirectGrant(context.Background(), lapsedGrant(), "system:scheduler")
 	if err != nil {
 		t.Fatalf("ExpireDirectGrant: %v", err)
 	}
@@ -111,7 +202,7 @@ func TestExpireDirectGrant_RoleAlsoInBundle_RevokesNothing(t *testing.T) {
 		map[string][]models.BundleRole{"b_lab": {{ProjectID: "pLaser", RoleKey: "trained"}}},
 		nil, nil)
 
-	res, err := ExpireDirectGrant(context.Background(), "u1", "g_88", "pLaser", "trained", "system:scheduler")
+	res, err := ExpireDirectGrant(context.Background(), lapsedGrant(), "system:scheduler")
 	if err != nil {
 		t.Fatalf("ExpireDirectGrant: %v", err)
 	}
@@ -133,7 +224,7 @@ func TestExpireDirectGrant_DerivedRolesFollowTheirSupport(t *testing.T) {
 
 	// Nothing else derives pWiki/editor: it lapses with the grant.
 	captured := expiryFixture(t, nil, nil, rules, nil)
-	if _, err := ExpireDirectGrant(context.Background(), "u1", "g_88", "pLaser", "trained", "system:scheduler"); err != nil {
+	if _, err := ExpireDirectGrant(context.Background(), lapsedGrant(), "system:scheduler"); err != nil {
 		t.Fatal(err)
 	}
 	got := revokedRoles(*captured)
@@ -145,7 +236,7 @@ func TestExpireDirectGrant_DerivedRolesFollowTheirSupport(t *testing.T) {
 	captured = expiryFixture(t,
 		[]models.DirectGrant{{ID: "g_other", UserID: "u1", ProjectID: "pShop", RoleKey: "member"}},
 		nil, rules, nil)
-	if _, err := ExpireDirectGrant(context.Background(), "u1", "g_88", "pLaser", "trained", "system:scheduler"); err != nil {
+	if _, err := ExpireDirectGrant(context.Background(), lapsedGrant(), "system:scheduler"); err != nil {
 		t.Fatal(err)
 	}
 	got = revokedRoles(*captured)
@@ -160,7 +251,7 @@ func TestExpireDirectGrant_DerivedRolesFollowTheirSupport(t *testing.T) {
 func TestExpireDirectGrant_RenewedGrantSurfacesAsSuch(t *testing.T) {
 	captured := expiryFixture(t, nil, nil, nil, db.ErrGrantRenewed)
 
-	res, err := ExpireDirectGrant(context.Background(), "u1", "g_88", "pLaser", "trained", "system:scheduler")
+	res, err := ExpireDirectGrant(context.Background(), lapsedGrant(), "system:scheduler")
 	if !errors.Is(err, db.ErrGrantRenewed) {
 		t.Fatalf("a renewed grant must surface as ErrGrantRenewed, got %v", err)
 	}
@@ -189,7 +280,7 @@ func contains(hay []string, needle string) bool {
 func TestExpireDirectGrant_MissingGrantIsNotARenewal(t *testing.T) {
 	expiryFixture(t, nil, nil, nil, db.ErrGrantNotFound)
 
-	_, err := ExpireDirectGrant(context.Background(), "u1", "g_88", "pLaser", "trained", "system:scheduler")
+	_, err := ExpireDirectGrant(context.Background(), lapsedGrant(), "system:scheduler")
 	if !errors.Is(err, db.ErrGrantNotFound) {
 		t.Fatalf("an absent grant must surface as ErrGrantNotFound, got %v", err)
 	}
@@ -228,13 +319,13 @@ func TestExpireDirectGrant_ComputesTheDeltaUnderTheAccessLock(t *testing.T) {
 		return nil, nil
 	}
 	svcDeleteExpiredDirectGrantAndEnqueue = func(
-		context.Context, string, string, string, []db.EnqueueParams,
+		_ context.Context, _, _, _ string, ps []db.EnqueueParams,
 	) (string, string, []string, error) {
 		order = append(order, "write")
-		return "pLaser", "trained", nil, nil
+		return "pLaser", "trained", oneIDEach(ps), nil
 	}
 
-	if _, err := ExpireDirectGrant(context.Background(), "u1", "g_88", "pLaser", "trained", "system:scheduler"); err != nil {
+	if _, err := ExpireDirectGrant(context.Background(), lapsedGrant(), "system:scheduler"); err != nil {
 		t.Fatal(err)
 	}
 	if len(order) < 3 || order[0] != "lock" || order[len(order)-1] != "write" {
@@ -300,8 +391,8 @@ func TestClosureTreatsAQueuedRevocationAsAlreadyGone(t *testing.T) {
 		"excluding bundle": func() (map[roleKey]bool, error) {
 			return userBaseHoldingsExcludingBundle(context.Background(), "u1", "b_other")
 		},
-		"excluding grant": func() (map[roleKey]bool, error) {
-			return userBaseHoldingsExcludingGrant(context.Background(), "u1", "g_other")
+		"with a bundle at a version": func() (map[roleKey]bool, error) {
+			return userBaseHoldingsWithBundleAt(context.Background(), "u1", "b_other", nil)
 		},
 	} {
 		got, err := read()

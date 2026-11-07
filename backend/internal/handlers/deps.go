@@ -49,10 +49,8 @@ var (
 	dbGetPropagationStatus          = db.GetPropagationStatus
 	svcDrainPropagations            = propagation.Drain
 	svcDrainPropagationRow          = propagation.DrainOne
-	// svcDeliver is the one rule for whether a just-written change goes now
-	// or waits for the operator (roles that wait, N14 B).
-	svcDeliver = services.Deliver
-	// svcDeliverChange sends what the planner decided, as it decided it.
+	// svcDeliverChange sends what the planner decided, as it decided it: the
+	// one delivery (whether a write waits for you is the plan's, task 1.9).
 	svcDeliverChange = services.DeliverChange
 	svcDrainAddon    = propagation.DrainAddon
 

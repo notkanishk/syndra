@@ -28,6 +28,11 @@ const (
 	// OpMove moves named holders onto a published version.
 	OpPublish = "publish_bundle_version"
 	OpMove    = "move_bundle_holders"
+	// OpRevoke takes back access Zitadel has that Syndra gives no way: a
+	// drift row's roles (DriftID), or one role on the Zitadel › Users page
+	// (ProjectID, RoleKey) held by no direct grant, bundle or rule. Nothing
+	// on Syndra's ledger changes, so no rule follows it (task 1.9).
+	OpRevoke = "revoke"
 )
 
 // refusal is a guard that stopped an action before its person was read.
@@ -44,7 +49,7 @@ func (s PlanSnapshot) resolve(a Action) (Action, PlanSnapshot, *refusal) {
 		}
 		s.Request, s.Holding = r, s.Holdings[a.RequestID]
 		a.UserID, a.ProjectID, a.RoleKey = r.RequesterID, r.ProjectID, r.RoleKey
-	case a.Op == OpAdopt:
+	case a.Op == OpAdopt || (a.Op == OpRevoke && a.DriftID != ""):
 		item, ok := s.Drift[a.DriftID]
 		if !ok {
 			return a, s, &refusal{EffectBlocked, "absent", "No longer in the queue. Somebody may have resolved it already.", "Nothing for you to do."}
@@ -53,7 +58,7 @@ func (s PlanSnapshot) resolve(a Action) (Action, PlanSnapshot, *refusal) {
 		if item.Status != "" && item.Status != "pending_triage" {
 			return a, s, &refusal{EffectNoChange, "resolved", fmt.Sprintf("Already resolved as %s.", HumanDriftStatus(item.Status)), ""}
 		}
-		if item.DriftType != db.DriftTargetOnly {
+		if a.Op == OpAdopt && item.DriftType != db.DriftTargetOnly {
 			// Only access Zitadel has can be adopted.
 			return a, s, &refusal{EffectBlocked, "nothing_to_adopt", "Zitadel doesn't have this, so there's nothing to adopt.",
 				"Revoke it or mark it as owned elsewhere from its row in Drift."}
@@ -296,6 +301,58 @@ func writeAdopt(ctx context.Context, a Action, w ActWrite, ch Change) (Change, e
 		return ch, err
 	}
 	return ch.written(ids)
+}
+
+// planRevoke revokes in Zitadel the roles of an OpRevoke, one write per role,
+// each delivered as its role says and naming the queued changes it cancels.
+// On the Zitadel › Users page a role Syndra still gives (a bundle, a grant, a
+// rule) is kept, read under the lock: revoking it would take away access
+// Syndra says they hold. A drift row's roles are revoked as the operator
+// decided, as before.
+func planRevoke(ch Change, a Action, s PlanSnapshot, person db.PersonAccess) Change {
+	keys, grant := []string{a.RoleKey}, ""
+	if a.DriftID != "" {
+		item := s.Drift[a.DriftID]
+		keys, grant = item.RoleKeys, item.ZitadelGrantID
+	}
+	held := effectiveClosure(baseFrom(person, ""), s.Access.Rules)
+	var writes []db.EnqueueParams
+	var gone, kept []roleKey
+	for _, rk := range keys {
+		k := roleKey{projectID: a.ProjectID, roleKey: rk}
+		if a.DriftID == "" && held[k] {
+			kept = append(kept, k)
+			continue
+		}
+		gone = append(gone, k)
+		writes = append(writes, db.EnqueueParams{UserID: a.UserID, ProjectID: a.ProjectID, RoleKeys: []string{rk},
+			Source: "direct", OpType: "revoke", ZitadelGrantID: grant})
+	}
+	ch.ProjectID, ch.RoleKey = a.ProjectID, a.RoleKey
+	if len(writes) == 0 {
+		return ch.decided(a, EffectNoChange, "held",
+			fmt.Sprintf("Keeps %s, because a bundle, a direct grant or an automatic rule still gives it.", s.list(kept)), "")
+	}
+	return ch.deliver(writes, person, s).said(a, s, fmt.Sprintf("Loses %s.", s.list(gone)), nil)
+}
+
+// writeRevoke writes a revoke's rows, each its own named write with no
+// ledger row: a drift row's in one transaction with the row's resolution, a
+// role's on its own. Nothing Syndra gives moved, so no target converges.
+func writeRevoke(ctx context.Context, a Action, w ActWrite, ch Change) (Change, error) {
+	params := ch.params(w.Actor, w.Reason)
+	if a.DriftID != "" {
+		ids, err := svcRevokeDriftAndEnqueue(ctx, a.DriftID, params)
+		if err != nil {
+			return ch, err
+		}
+		return ch.written(ids)
+	}
+	res, err := svcEnqueueDirectGrant(ctx, params[0])
+	if err != nil {
+		return ch, err
+	}
+	return ch.written(res.OutboxIDs())
 }
 
 // decisionAudit records who decided a request: an operator approving their

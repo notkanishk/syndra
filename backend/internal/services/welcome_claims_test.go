@@ -153,7 +153,7 @@ func TestWelcomeClaims_EqualsWhatOnboardingWouldSend(t *testing.T) {
 				sent = append(sent, p.ProjectID+":"+r)
 			}
 		}
-		return []string{"o1"}, true, nil
+		return oneIDEach(ps), true, nil
 	}
 	svcDrainBatch = func(context.Context, []string) (propagation.DrainResult, error) {
 		return propagation.DrainResult{}, nil

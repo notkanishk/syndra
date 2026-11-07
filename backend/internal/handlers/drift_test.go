@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,19 +24,15 @@ func resetDriftDeps(t *testing.T) {
 	origGetItems := dbGetDriftItems
 	origGetItem := dbGetDriftItem
 	origApply, origDeliverChange, origRebuild := svcApplyAct, svcDeliverChange, rebuildUserCacheDetachedFn
-	origRevoke := dbRevokeDriftAndEnqueue
 	origMarkExternal := dbMarkDriftExternalTx
 	origSweep := svcDriftSweep
-	origDeliver := svcDeliver
 	origRuleByID := dbGetMappingRuleByID
 	t.Cleanup(func() {
 		dbGetDriftItems = origGetItems
 		dbGetDriftItem = origGetItem
 		svcApplyAct, svcDeliverChange, rebuildUserCacheDetachedFn = origApply, origDeliverChange, origRebuild
-		dbRevokeDriftAndEnqueue = origRevoke
 		dbMarkDriftExternalTx = origMarkExternal
 		svcDriftSweep = origSweep
-		svcDeliver = origDeliver
 		dbGetMappingRuleByID = origRuleByID
 	})
 	// Adopting is the planner's (services.ApplyAct); its Change here is the
@@ -45,12 +42,6 @@ func resetDriftDeps(t *testing.T) {
 		return services.Change{UserID: "u1", Writes: []services.Write{{EnqueueParams: db.EnqueueParams{NoPropagation: true}, Delivery: services.DeliveryNone}}}, nil
 	}
 	svcDeliverChange = func(context.Context, services.Change) services.Delivery { return services.Delivery{} }
-	// Revocation delivers its own outbox row, so the default has to send it
-	// without the real drain reaching for a database that isn't there.
-	// Adoption enqueues nothing of its own and must never reach this at all.
-	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
-		return services.Delivery{Sent: ids, Drain: propagation.DrainResult{Applied: len(ids)}}
-	}
 	origStatus := dbGetPropagationStatus
 	t.Cleanup(func() { dbGetPropagationStatus = origStatus })
 	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "applied", nil }
@@ -61,8 +52,7 @@ func resetDriftDeps(t *testing.T) {
 // already done, nor silent about when the next try is.
 func TestHandleRevokeDrift_SaysWhereTheRevokeStands(t *testing.T) {
 	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	dbRevokeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) { return "o1", nil }
+	revokePlanned(t, services.DeliveryStraightAway, nil)
 	revoke := func() map[string]any {
 		req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/revoke", nil)
 		req.SetPathValue("id", "d1")
@@ -75,8 +65,8 @@ func TestHandleRevokeDrift_SaysWhereTheRevokeStands(t *testing.T) {
 	if body := revoke(); body["propagation"] != "applied" || body["wait_reason"] != nil {
 		t.Fatalf("a revoke Zitadel took says applied: %v", body)
 	}
-	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
-		return services.Delivery{Sent: ids, Drain: propagation.DrainResult{Requeued: 1,
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		return services.Delivery{Sent: []string{ch.Writes[0].OutboxID}, Drain: propagation.DrainResult{Requeued: 1,
 			Retry: &extcall.RetryState{State: extcall.RetryRetrying, Try: 2, Of: 6}}}
 	}
 	body := revoke()
@@ -212,71 +202,6 @@ func TestHandleMarkExternal_ResolvesAtomically(t *testing.T) {
 	}
 }
 
-func TestHandleRevokeDrift_EnqueuesRevokeAtomicallyThenDrains(t *testing.T) {
-	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, ZitadelGrantID: "g1", DriftType: "target_only", Status: "pending_triage"}, nil
-	}
-	var gotOp string
-	dbRevokeDriftAndEnqueue = func(_ context.Context, _ string, p db.EnqueueParams) (string, error) {
-		gotOp = p.OpType
-		return "o1", nil
-	}
-	var drained string
-	svcDeliver = func(_ context.Context, ids []string, legacyWait bool) services.Delivery {
-		if legacyWait {
-			t.Error("a drift revoke is never held by the old modes")
-		}
-		drained = strings.Join(ids, ",")
-		return services.Delivery{Sent: ids}
-	}
-
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/revoke", nil)
-	req.SetPathValue("id", "d1")
-	w := httptest.NewRecorder()
-	handleRevokeDrift(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d: %s", w.Code, w.Body)
-	}
-	if gotOp != "revoke" || drained != "o1" {
-		t.Fatalf("revoke must enqueue op=revoke atomically then deliver that row (op=%q delivered=%q)", gotOp, drained)
-	}
-	if strings.Contains(w.Body.String(), "wait_reason") {
-		t.Fatalf("a revoke that went says no wait: %s", w.Body)
-	}
-}
-
-// C5: a drift revoke on a role that waits waits. It used to be drained by id
-// (DrainOne), past the role-waits check, so the forecast "Will wait for you to
-// send" was broken by the server a moment later. It now goes through
-// services.Deliver like every other write, and says why it is not in Zitadel.
-func TestHandleRevokeDrift_ARoleThatWaitsIsNotSent(t *testing.T) {
-	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) { return pendingDrift(), nil }
-	dbRevokeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) { return "o1", nil }
-	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
-		// What Deliver does for a role marked to wait: nothing sent.
-		return services.Delivery{Waiting: ids, Reason: map[string]string{ids[0]: db.WaitReasonRoleWaits}}
-	}
-
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/revoke", nil)
-	req.SetPathValue("id", "d1")
-	w := httptest.NewRecorder()
-	handleRevokeDrift(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d: %s", w.Code, w.Body)
-	}
-	var body struct {
-		WaitReason string `json:"wait_reason"`
-	}
-	_ = json.Unmarshal(w.Body.Bytes(), &body)
-	if body.WaitReason != db.WaitReasonRoleWaits {
-		t.Fatalf("the result must say the revoke waits for its role, got %s", w.Body)
-	}
-}
-
 // Adopting goes through the planner (task 1.3): the write carries the plan it
 // was shown, what the rules gave is sent as the plan decided, and the answer
 // counts what waits, so the result ends on Send only when something does.
@@ -327,33 +252,6 @@ func TestHandleAttributeDrift_StaleIs409(t *testing.T) {
 	handleAttributeDrift(w, req)
 	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "PLAN_STALE") {
 		t.Fatalf("expected 409 PLAN_STALE, got %d %s", w.Code, w.Body)
-	}
-}
-
-func TestHandleRevokeDrift_LostRaceIs409(t *testing.T) {
-	resetDriftDeps(t)
-	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, ZitadelGrantID: "g1", DriftType: "target_only", Status: "pending_triage"}, nil
-	}
-	// The atomic claim+enqueue's guarded UPDATE matched nothing (already resolved
-	// by another operator); the whole tx rolled back — nothing was written.
-	dbRevokeDriftAndEnqueue = func(context.Context, string, db.EnqueueParams) (string, error) { return "", db.ErrDriftNotPending }
-	var drained bool
-	svcDeliver = func(context.Context, []string, bool) services.Delivery {
-		drained = true
-		return services.Delivery{}
-	}
-
-	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/revoke", nil)
-	req.SetPathValue("id", "d1")
-	w := httptest.NewRecorder()
-	handleRevokeDrift(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("a lost triage race must be 409, got %d", w.Code)
-	}
-	if drained {
-		t.Fatal("no drain when the atomic claim+enqueue tx rolled back")
 	}
 }
 
@@ -772,6 +670,126 @@ func TestHandleAttributeDrift_RefusalsAreAnsweredAsTheScreensRead(t *testing.T) 
 			_ = json.Unmarshal(w.Body.Bytes(), &body)
 			if w.Code != tc.status || body.Error != tc.code || delivered {
 				t.Fatalf("want %d %s and nothing sent, got %d %s (sent %v)", tc.status, tc.code, w.Code, w.Body, delivered)
+			}
+		})
+	}
+}
+
+// revokePlanned stands in for the planner's drift revoke (task 1.9): one
+// revoke of "viewer", row o1, delivered as delivery says; err, when set, is
+// the apply's answer instead. It returns what the apply was asked.
+func revokePlanned(t *testing.T, delivery string, err error) (*services.Action, **services.Seen) {
+	t.Helper()
+	var asked services.Action
+	var seen *services.Seen
+	svcApplyAct = func(_ context.Context, a services.Action, _ services.ActWrite, s *services.Seen) (services.Change, error) {
+		asked, seen = a, s
+		if err != nil {
+			return services.Change{}, err
+		}
+		w := services.Write{Delivery: delivery, OutboxID: "o1",
+			EnqueueParams: db.EnqueueParams{UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, OpType: "revoke"}}
+		if delivery == services.DeliveryWaits {
+			w.WaitReason = db.WaitReasonRoleWaits
+		}
+		return services.Change{UserID: "u1", Writes: []services.Write{w}}, nil
+	}
+	return &asked, &seen
+}
+
+func postRevoke(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	var r io.Reader
+	if body != "" {
+		r = strings.NewReader(body)
+	}
+	req := httptest.NewRequest("POST", "/api/v1/governance/drift/d1/revoke", r)
+	req.SetPathValue("id", "d1")
+	w := httptest.NewRecorder()
+	handleRevokeDrift(w, req)
+	return w
+}
+
+// A drift revoke is the planner's act (task 1.9): the drift row's revoke,
+// carrying the plan it was shown, written as planned and sent as planned.
+func TestHandleRevokeDrift_GoesThroughThePlannerAndSendsItsChange(t *testing.T) {
+	resetDriftDeps(t)
+	asked, seen := revokePlanned(t, services.DeliveryStraightAway, nil)
+	var sent []string
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		for _, w := range ch.Writes {
+			sent = append(sent, w.OutboxID)
+		}
+		return services.Delivery{Sent: sent}
+	}
+
+	w := postRevoke(t, `{"fingerprint":"fp","cancel_ids":["11111111-1111-1111-1111-111111111111"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body)
+	}
+	if asked.Op != services.OpRevoke || asked.DriftID != "d1" {
+		t.Fatalf("the act is the drift row's revoke: %+v", *asked)
+	}
+	if *seen == nil || (*seen).Fingerprint != "fp" || len((*seen).CancelIDs) != 1 {
+		t.Fatalf("the write carries the plan it was shown: %+v", *seen)
+	}
+	if strings.Join(sent, ",") != "o1" || strings.Contains(w.Body.String(), "wait_reason") {
+		t.Fatalf("the planned row is sent and says no wait: sent %v body %s", sent, w.Body)
+	}
+	// An older client sends no body: planned fresh, admitting no cancellation.
+	if w := postRevoke(t, ""); w.Code != http.StatusOK || *seen != nil {
+		t.Fatalf("no body is a plan read fresh: %d %+v", w.Code, *seen)
+	}
+	if w := postRevoke(t, `{"nope":1}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("an unknown field is refused, got %d", w.Code)
+	}
+}
+
+// C5: a drift revoke on a role that waits waits, as its plan said, and the
+// result says why it is not in Zitadel.
+func TestHandleRevokeDrift_ARoleThatWaitsIsNotSent(t *testing.T) {
+	resetDriftDeps(t)
+	revokePlanned(t, services.DeliveryWaits, nil)
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		id := ch.Writes[0].OutboxID
+		return services.Delivery{Waiting: []string{id}, Reason: map[string]string{id: ch.Writes[0].WaitReason}}
+	}
+	w := postRevoke(t, "")
+	var body struct {
+		WaitReason string `json:"wait_reason"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if w.Code != http.StatusOK || body.WaitReason != db.WaitReasonRoleWaits {
+		t.Fatalf("the result must say the revoke waits for its role, got %d %s", w.Code, w.Body)
+	}
+}
+
+// Nothing written is nothing sent: a lost race (another operator resolved it,
+// or the plan finds it resolved) is 409, a row gone is 404, a plan that moved
+// is 409 PLAN_STALE.
+func TestHandleRevokeDrift_WhatWroteNothingSaysSo(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		code int
+		want string
+	}{
+		{"lost race", db.ErrDriftNotPending, http.StatusConflict, ""},
+		{"resolved", &services.Refused{Change: services.Change{Refusal: "resolved"}}, http.StatusConflict, ""},
+		{"gone", &services.Refused{Change: services.Change{Refusal: "absent"}}, http.StatusNotFound, "No longer in the queue"},
+		{"stale", &services.StalePlan{IDs: []string{"u1"}}, http.StatusConflict, "PLAN_STALE"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetDriftDeps(t)
+			revokePlanned(t, "", tc.err)
+			sent := false
+			svcDeliverChange = func(context.Context, services.Change) services.Delivery {
+				sent = true
+				return services.Delivery{}
+			}
+			w := postRevoke(t, "")
+			if w.Code != tc.code || !strings.Contains(w.Body.String(), tc.want) || sent {
+				t.Fatalf("want %d %q and nothing sent, got %d %s sent=%v", tc.code, tc.want, w.Code, w.Body, sent)
 			}
 		})
 	}

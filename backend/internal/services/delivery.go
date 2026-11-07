@@ -84,82 +84,24 @@ func (d Delivery) WaitingBesides(own string) int {
 
 // --- injectable deps (swapped in tests) ---
 var (
-	svcOutboxRowsWaitForRole = db.OutboxRowsWaitForRole
-	svcSetWaitReason         = db.SetWaitReason
-	svcGetConfigSetting      = db.GetConfigSetting
-	svcGetPendingRows        = db.GetPendingPropagations
-	svcScheduleRetry         = db.ScheduleRetry
+	svcSetWaitReason  = db.SetWaitReason
+	svcGetPendingRows = db.GetPendingPropagations
+	svcScheduleRetry  = db.ScheduleRetry
 )
-
-// switchedOver reports whether the operator has moved to roles that wait. An
-// unreadable setting counts as not yet: the old modes are the slower rule,
-// and the slower rule is the safe one to fall back to.
-func switchedOver(ctx context.Context) bool {
-	v, err := svcGetConfigSetting(ctx, db.ConfigKeyConfirmationModel)
-	if err != nil {
-		log.Printf("[DELIVERY] read %s: %v (keeping the old modes)", db.ConfigKeyConfirmationModel, err)
-		return false
-	}
-	return v == db.ConfirmationModelRoles
-}
-
-// Deliver decides, for rows just written by a path the planner doesn't take
-// yet, whether each goes to Zitadel straight away or waits in Pending changes
-// (N14 B, N15). A row waits when any role it carries is marked to wait,
-// however it arrived. A planned Change was decided already: DeliverChange.
-//
-// Until the operator switches over, the old rule still holds as well:
-// legacyWait is what the caller's own mode said (a bundle or rule set to
-// wait, a grant sent without apply). So nothing reaches Zitadel sooner than
-// it did before the switch. After it, only the role decides.
-//
-// Rows meant to go that a halted send left behind record why
-// (halted:zitadel_offline, …), so the outcome and Pending changes can say it.
-// A failure to decide or record is non-fatal: the rows are already committed
-// and stay pending, which is the safe way to be wrong.
-func Deliver(ctx context.Context, ids []string, legacyWait bool) Delivery {
-	d := Delivery{Reason: map[string]string{}}
-	if len(ids) == 0 {
-		return d
-	}
-	waits, err := svcOutboxRowsWaitForRole(ctx, ids)
-	if err != nil {
-		log.Printf("[DELIVERY] read roles that wait for %d row(s): %v (left waiting)", len(ids), err)
-		d.Waiting = ids
-		reason := db.WaitReasonHalted("delivery_unread")
-		for _, id := range ids {
-			d.Reason[id] = reason
-		}
-		if err := svcSetWaitReason(ctx, ids, reason); err != nil {
-			log.Printf("[DELIVERY] record %s on %d row(s): %v", reason, len(ids), err)
-		}
-		return d
-	}
-	legacy := legacyWait && !switchedOver(ctx)
-
-	var roleWaits, manual []string
-	for _, id := range ids {
-		switch {
-		case waits[id]:
-			roleWaits = append(roleWaits, id)
-		case legacy:
-			manual = append(manual, id)
-		default:
-			d.Sent = append(d.Sent, id)
-		}
-	}
-	d.wait(ctx, roleWaits, db.WaitReasonRoleWaits)
-	d.wait(ctx, manual, db.WaitReasonManual)
-	d.send(ctx)
-	return d
-}
 
 // DeliverChange delivers a Change the planner decided and the apply just
 // wrote (decision 11): its "straight away" writes go now, through the same
 // send as every other row, and its "waits for you" writes stay in Pending
 // changes with the reason their rows were written with. Nothing reads which
 // roles wait again, so what the plan showed is what happens. Every write was
-// on the outbox before this (decision 12).
+// on the outbox before this (decision 12). It is the only delivery: every
+// access change, the operator's and the system's (task 1.9), is planned, and
+// the after-commit re-read of which roles wait (Deliver) is gone.
+//
+// Rows meant to go that a halted send left behind record why
+// (halted:zitadel_offline, …), so the outcome and Pending changes can say it.
+// A failure to record is non-fatal: the rows are already committed and stay
+// pending, which is the safe way to be wrong.
 func DeliverChange(ctx context.Context, ch Change) Delivery {
 	d := Delivery{Reason: map[string]string{}}
 	for _, w := range ch.Writes {
@@ -245,17 +187,11 @@ func nextRetry(ctx context.Context, ids []string) *extcall.RetryState {
 	return nil
 }
 
-// wait records reason on rows still pending. Role and manual waits are
-// Waiting; a halted send's rows stay in Sent, since some may have gone.
+// wait records why a halted send's rows are still pending. They stay in
+// Sent, since some may have gone.
 func (d *Delivery) wait(ctx context.Context, ids []string, reason string) {
-	if len(ids) == 0 {
-		return
-	}
 	if err := svcSetWaitReason(ctx, ids, reason); err != nil {
 		log.Printf("[DELIVERY] record %s on %d row(s): %v", reason, len(ids), err)
-	}
-	if reason == db.WaitReasonRoleWaits || reason == db.WaitReasonManual {
-		d.Waiting = append(d.Waiting, ids...)
 	}
 	for _, id := range ids {
 		d.Reason[id] = reason
