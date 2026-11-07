@@ -154,7 +154,7 @@ func rehearseDeclines(ctx context.Context, ids []string) services.BulkPlan {
 		default:
 			out.Name, out.Email = driftSubject(ctx, request.RequesterID), request.RequesterID
 			out.Fingerprint = services.FingerprintAccessRequest(request)
-			out.Effect, out.Detail = services.EffectApply, fmt.Sprintf("Declined for %s.", request.RoleKey)
+			out.Effect, out.Detail = services.EffectApply, fmt.Sprintf("Their request for %s is declined.", services.RoleWords(ctx, request.ProjectID, request.RoleKey))
 			out.Consequence = "Nothing about their current access changes."
 		}
 		plan.Outcomes = append(plan.Outcomes, out)

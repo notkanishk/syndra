@@ -586,3 +586,18 @@ func (ch Change) written(ids []string) (Change, error) {
 	}
 	return ch, nil
 }
+
+// RoleWords names one role the way plan rows do ("Member in Laser Lab"), from
+// the same catalogue; a role Zitadel no longer lists falls back to its key, as
+// words does.
+func RoleWords(ctx context.Context, projectID, roleKeyStr string) string {
+	s := PlanSnapshot{Catalogue: map[roleKey]roleWords{}}
+	if projects, err := PlannerCatalogue(ctx); err == nil {
+		for _, p := range projects {
+			for _, r := range p.Roles {
+				s.Catalogue[roleKey{projectID: p.ID, roleKey: r.Key}] = roleWords{Role: r.Label, Project: p.Name}
+			}
+		}
+	}
+	return s.words(roleKey{projectID: projectID, roleKey: roleKeyStr})
+}
