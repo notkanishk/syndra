@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A plan grouped by how each change travels</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Drawn inline until built (BRIDGE): FoldHeading (proposed/FoldHeading.md) and the plan's folds. Rows, dots, badges, the dialog and its footer are the real parts. */
+.a21-box{max-height:46vh;overflow-y:auto;border:1px solid var(--line-strong);border-radius:var(--radius-inner)}
+.a21-fold{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:10px;padding:10px 14px 10px 10px;background:var(--surface-0);border-bottom:1px solid var(--divider)}
+.a21-chev{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:var(--radius-pill);border:0;background:transparent;color:var(--muted);cursor:pointer}
+.a21-chev:hover{background:var(--tint-2)}
+.a21-word{font-size:14.5px;font-weight:600}
+.a21-count{font-size:13px;color:var(--faint)}
+.a21-cause{margin:0;padding:8px 16px 2px 48px;font-size:12.5px;color:var(--faint)}
+.a21-row{display:flex;align-items:flex-start;gap:16px;padding:12px 16px 12px 48px}
+.a21-name{font-size:14.5px;font-weight:600;text-wrap:pretty}
+.a21-words{font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty}
+.a21-cancels{font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty}
+.a21-note{margin:12px 0 0;font-size:13px;line-height:1.5;color:var(--warn-text);text-wrap:pretty}
+.a21-seat{flex:none;margin-left:auto}
+@container syndra-frame (max-width: 719px){.a21-row{flex-wrap:wrap;padding-left:16px} .a21-cause{padding-left:16px} .a21-seat{width:100%;display:flex;justify-content:flex-end}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Plan grouped board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Every bulk op · Proposed 7 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">A plan grouped by how each change travels</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-21, Q1 (planner decision 11). The preview groups people, not writes, into three folds in a fixed order: Straight away, Will wait for you to send, Left as they are. The heading says which; the row says what, in the planner's own words. The amber heading is the only colour in the box, so the glance is one dot and one count. One row per person, so nobody appears twice and a person with some of each reads as one sentence.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What you asked</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">A person sees at a glance what goes now and what waits for them, without losing the per-person reading. Cover a person with some of each, rows that only cancel, refused and No change rows, the apply consent, phone, both themes.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What I recommend here</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">Group people by whether a step is left for them.</strong> Any role that waits puts the person under the amber fold; their row names which role waits and which go now. <strong style="color:var(--ink)">A cancel-only row sits under Straight away</strong>, because it is finished when you apply, and says that nothing is sent. <strong style="color:var(--ink)">The button carries the cancels</strong>: "Cancel 2 and apply to 11 people", the same shape as the cancel step's confirm.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · The plan, person by person, in three folds</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Give the Safety bundle to 13 people. Safety gives Member and Trained in Laser Lab, which go straight away, and Supervisor in Laser Lab, which always waits for you. Seven already hold Supervisor, so everything of theirs goes now; four do not, so a step is left for them. Kabir's row only cancels a removal that was waiting; Lena already holds every role; Omar's row cancels and sends. Dev is already in the bundle; Sam's account is deactivated. The before-line says whether this finishes now or waits, and the button names the cancels.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ planFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:560px;overflow:hidden;border-radius:var(--radius-inner);border:2px solid var(--accent-line);background:var(--canvas)"><div style="width:1440px;height:1120px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Plan phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:2px solid var(--accent-line);background:var(--canvas)"><dc-import name="Frame" frame-src="a21-plan-grouped.dc.html?frame=plan-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · the same plan</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The sheet from the bottom edge. Fold headings stay at the top of the box while you scroll inside it; a row's badge wraps under the name and stays right. The before-line wraps to two lines; the button is full width.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">The consent, line by line</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The footer note always has the same shape and says whether this finishes now or waits, by people. The button carries the number, and the cancels when there are any. Both are pure functions of the plan's rows, so every bulk op says them the same way.</p>
+    <div class="card" style="overflow:hidden">
+      <div style="display:flex;gap:18px;padding:10px 22px;border-bottom:1px solid var(--line)"><span class="type-label" style="flex:0 0 220px;color:var(--label)">The plan</span><span class="type-label" style="flex:1 1 320px;color:var(--label)">Before-line</span><span class="type-label" style="flex:0 0 260px;color:var(--label)">Button</span></div>
+      <sc-for list="{{ consents }}" as="c" hint-placeholder-count="5">
+        <div style="display:flex;flex-wrap:wrap;gap:6px 18px;padding:12px 22px;border-top:{{ c.rule }};font-size:14px;line-height:1.5">
+          <span style="flex:0 0 220px;font-weight:600">{{ c.plan }}</span>
+          <span style="flex:1 1 320px;min-width:0;color:var(--muted);text-wrap:pretty">{{ c.line }}</span>
+          <span style="flex:0 0 260px;min-width:0;text-wrap:pretty">{{ c.button }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you (this board)</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:90ch">The full answer is from-design/A-21-plans-that-show-the-way.md. The other boards are a21-plan-result, a21-ask-before-cancel and a21-rule-rows.</p>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="People" lede="Everyone Syndra knows, and what each can use." hint-size="100%,90px"></x-import>
+  <p style="margin:0;font-size:14.5px;color:var(--muted)">13 people selected · Give a bundle</p>
+</div>
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="lg" labelled-by="plan-title" hint-size="800px,900px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Give the Safety bundle to 13 people" lede="Syndra first shows exactly what would change, person by person. Nothing changes until you press Apply." title-id="plan-title" hint-size="100%,96px"></x-import>
+  <div style="padding:0 24px">
+    <div class="a21-box">
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+        <div class="a21-fold" role="group" aria-label="{{ g.aria }}">
+          <button type="button" class="a21-chev" aria-label="{{ g.foldLabel }}"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg></button>
+          <sc-if value="{{ g.dot }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import></sc-if>
+          <span class="a21-word">{{ g.word }}</span>
+          <span class="a21-count">{{ g.count }}</span>
+        </div>
+        <sc-if value="{{ g.cause }}" hint-placeholder-val="{{ false }}"><p class="a21-cause">{{ g.cause }}</p></sc-if>
+        <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+          <div class="a21-row row-divider">
+            <span style="min-width:0;flex:1 1 320px;display:flex;flex-direction:column;gap:3px">
+              <span class="a21-name">{{ r.name }}</span>
+              <span class="a21-words">{{ r.words }}</span>
+              <sc-if value="{{ r.cancels }}" hint-placeholder-val="{{ false }}"><span class="a21-cancels">{{ r.cancels }}</span></sc-if>
+            </span>
+            <sc-if value="{{ r.badge }}" hint-placeholder-val="{{ false }}"><span class="a21-seat"><x-import component-from-global-scope="Syndra.Badge" tone="{{ r.tone }}" hint-size="80px,24px">{{ r.badge }}</x-import></span></sc-if>
+          </div>
+        </sc-for>
+      </sc-for>
+    </div>
+    <p class="a21-note" role="note">Cancels 2 changes that are waiting for you to send: the removal of Trained in Laser Lab from Kabir Mehta queued 3 Nov (“Left the project”); the removal of Member in Laser Lab from Omar Haddad queued 3 Nov (“Left the project”). If anyone queues another first, this plan goes stale and nothing is cancelled unseen.</p>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" note="Apply sends 7 people's changes to Zitadel now. 4 people's changes wait for you to send. For 1, this only cancels a change that's waiting; nothing is sent." cancel="{{ cancelBtn }}" hint-size="100%,110px">
+    <x-import component-from-global-scope="Syndra.Button" variant="accent" on-click="{{ noop }}" hint-size="260px,40px">Cancel 2 and apply to 11 people</x-import>
+  </x-import>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":2900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 2 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const noop = () => {};
+    const kind = this.st.split("-")[0];
+    const DIV = "1px solid var(--divider)";
+    const f = (frame, label, note) => ({ src: "a21-plan-grouped.dc.html?frame=" + frame, label, note: note || "" });
+
+    // One row per person, alphabetical inside each fold. The words are the planner's (services/planner.go).
+    const R = (name, words, o) => Object.assign({ name, words, cancels: "", badge: "", tone: "neutral" }, o || {});
+    const groups = [
+      { word: "Straight away", count: "7 people", dot: false, cause: "", aria: "Straight away, 7 people", foldLabel: "Fold these 7 people", rows: [
+        R("Aanya Rao", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
+        R("Ishaan Kapoor", "Joins Safety. Gains Trained in Laser Lab."),
+        R("Kabir Mehta", "Joins Safety. The removal of Trained in Laser Lab that was waiting is cancelled, so nothing is sent to Zitadel. They keep it."),
+        R("Lena Brandt", "Joins Safety. Already holds every role it gives, so nothing is sent to Zitadel."),
+        R("Meera Iyer", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
+        R("Omar Haddad", "Joins Safety. Gains Trained in Laser Lab.", { cancels: "Cancels a change that is waiting for you to send: the removal of Member in Laser Lab queued 3 Nov (“Left the project”)." }),
+        R("Wei Chen", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
+      ] },
+      { word: "Will wait for you to send", count: "4 people", dot: true, cause: "Because Supervisor in Laser Lab always waits for you.", aria: "Will wait for you to send, 4 people", foldLabel: "Fold these 4 people", rows: [
+        R("Jules Fontaine", "Joins Safety. Gains Member in Laser Lab, Supervisor in Laser Lab and Trained in Laser Lab. Giving Supervisor in Laser Lab waits for you to send."),
+        R("Priya Nair", "Joins Safety. Gains Supervisor in Laser Lab. Giving Supervisor in Laser Lab waits for you to send."),
+        R("Rohan Mehta", "Joins Safety. Gains Supervisor in Laser Lab and Trained in Laser Lab. Giving Supervisor in Laser Lab waits for you to send."),
+        R("Tara Bose", "Joins Safety. Gains Member in Laser Lab and Supervisor in Laser Lab. Giving Supervisor in Laser Lab waits for you to send."),
+      ] },
+      { word: "Left as they are", count: "2 people", dot: false, cause: "", aria: "Left as they are, 2 people", foldLabel: "Fold these 2 people", rows: [
+        R("Dev Sharma", "Already in Safety.", { badge: "No change", tone: "neutral" }),
+        R("Sam Lee", "Account is deactivated. Remove it from the selection to continue.", { badge: "Refused", tone: "warnSoft" }),
+      ] },
+    ];
+
+    const C = (plan, line, button) => ({ plan, line, button });
+    const consents = [
+      C("All straight away", "Every change goes to Zitadel when you apply.", "Apply to 12 people"),
+      C("All wait", "Every change waits for you to send. Nothing reaches Zitadel until you press Send on Pending changes.", "Apply to 12 people"),
+      C("Some of each", "Apply sends 7 people's changes to Zitadel now. 4 people's changes wait for you to send.", "Apply to 11 people"),
+      C("With a cancel-only row", "… For 1, this only cancels a change that's waiting; nothing is sent.", "Cancel 2 and apply to 11 people"),
+      C("Nothing to apply", "Nothing here would change, so there is nothing to apply.", "Apply to 0 people, disabled, with that reason"),
+    ];
+    consents.forEach((x, i) => { x.rule = i === 0 ? "0" : DIV; });
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("Group people, not writes, and put a person with any role that waits under \"Will wait for you to send\"?", "Yes. One row per person; the step left is a fact about the person, and their row says which role waits."),
+      Q("\"Left as they are\" for the third fold, holding No change and Refused rows, instead of the v5 caption's \"Unchanged\"?", "Yes. A refusal is not a non-event; the row keeps its own word in the seat."),
+      Q("The Apply button names the cancels (\"Cancel 2 and apply to 11 people\"), as the cancel step's confirm does?", "Yes. The one thing in a plan that undoes someone's work is on the button that does it."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame,
+      isPlan: kind === "plan",
+      operator: this.operator, rootData: this.rootData, noop,
+      groups, consents, questions,
+      cancelBtn: { onClick: noop, label: "Cancel" },
+      planFrames: [
+        f("plan", "The plan · dark", "Three folds, open. Kabir's row only cancels; Omar's cancels and sends, with the cancel in faint under his words; Lena sends nothing. Dev and Sam keep their own word in the seat. The amber heading is the only colour in the box."),
+        f("plan-light", "The plan · light", "The same in daylight. The fold heading sits on surface-0; the box edge is line-strong."),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
