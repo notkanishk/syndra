@@ -47,7 +47,7 @@ func newGrantPipe(t *testing.T) *grantPipe {
 	checkRoleOffered = func(context.Context, string, string) error { return nil }
 	rebuildUserCacheDetachedFn = func(context.Context, string) {}
 	svcUserDirectGrants = func(context.Context, string) ([]models.DirectGrant, error) { return nil, nil }
-	svcDeleteDirectGrant = func(_ context.Context, _, grantID, _ string) (services.DirectGrantRemoval, error) {
+	svcDeleteDirectGrant = func(_ context.Context, _, grantID, _, _ string) (services.DirectGrantRemoval, error) {
 		p.deleted = append(p.deleted, grantID)
 		return services.DirectGrantRemoval{OutboxIDs: []string{"ob-del-" + grantID}, Revoked: []string{}, Retained: []string{}}, nil
 	}

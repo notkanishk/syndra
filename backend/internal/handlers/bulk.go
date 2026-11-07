@@ -223,9 +223,10 @@ func settleBulkRow(out *services.BulkOutcome, queued string, retry *extcall.Retr
 // remove). The service spends the plan, re-reads and re-plans under the lock,
 // and writes only if every row's Change is the reviewed one; a stale plan is
 // refused unspent with nothing written. Delivery follows the commit, outside
-// the lock, and each row is settled from its own outbox rows.
+// the lock, as each row's Change decided it (services.DeliverChange), and
+// each row is settled from its own outbox rows.
 func applyPlannedBulk(w http.ResponseWriter, r *http.Request, input services.BulkRequest, cite db.PlanCitation) {
-	plan, sent, err := svcApplyPlannedBulk(r.Context(), input, cite)
+	plan, written, err := svcApplyPlannedBulk(r.Context(), input, cite)
 	var stale *services.StalePlan
 	if errors.As(err, &stale) {
 		err = &staleSubjects{IDs: stale.IDs}
@@ -240,7 +241,7 @@ func applyPlannedBulk(w http.ResponseWriter, r *http.Request, input services.Bul
 			continue
 		}
 		rebuildUserCacheDetachedFn(r.Context(), out.UserID)
-		queued, retry := projectUpstream(r.Context(), sent[out.UserID])
+		queued, retry := delivered(svcDeliverChange(r.Context(), written[out.UserID]))
 		settleBulkRow(out, queued, retry, input.Op)
 	}
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
@@ -299,7 +300,12 @@ func projectUpstream(ctx context.Context, outboxIDs []string) (string, *extcall.
 	}
 	// The one rule (services.Deliver): a role that waits waits here too, and
 	// a send Zitadel didn't take is retried on its own (halted:retrying).
-	d := svcDeliver(ctx, ids, false)
+	return delivered(svcDeliver(ctx, ids, false))
+}
+
+// delivered is a delivery's answer for one bulk row: "" when every row it
+// sent reached Zitadel, or why not.
+func delivered(d services.Delivery) (string, *extcall.RetryState) {
 	if why := d.WaitReason(); why != "" {
 		return why, d.Drain.Retry
 	}
@@ -349,7 +355,7 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 	case services.BulkOpRemoveRole:
 		var ids []string
 		for _, grantID := range out.GrantIDs {
-			res, err := svcDeleteDirectGrant(ctx, out.UserID, grantID, actor)
+			res, err := svcDeleteDirectGrant(ctx, out.UserID, grantID, actor, input.Reason)
 			if err != nil {
 				return nil, "", nil, err
 			}

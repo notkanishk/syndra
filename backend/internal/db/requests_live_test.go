@@ -333,10 +333,10 @@ func TestABundleClosesTheRequestItAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := enqueueCascadeRows(ctx, tx, nil, []EnqueueParams{{
+	if _, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{{
 		UserID: user, ProjectID: "pLaser", RoleKeys: []string{"trained"}, GrantedBy: "op",
 		OpType: "add", PayloadJSON: `{}`, Source: "bundle", SourceRef: "b1",
-	}}); err != nil {
+	}}, ""); err != nil {
 		_ = tx.Rollback(ctx)
 		t.Fatal(err)
 	}

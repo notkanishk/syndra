@@ -229,8 +229,7 @@ describe("BulkDialog", () => {
       open();
       chooseRole();
       expect(screen.getByText(/Say why/)).toBeInTheDocument();
-      // The log is named as the page names it, never "audit log".
-      expect(screen.getByText(/Change history/)).toBeInTheDocument();
+      expect(screen.getByText("Say why. Syndra keeps it with each person's change.")).toBeInTheDocument();
     });
   });
 

@@ -43,11 +43,13 @@ const (
 	DeliveryNone         = "none"
 )
 
-// Write is one single-role outbox write, with how it is delivered.
+// Write is one single-role outbox write, with how it is delivered. A write
+// that waits carries its reason (EnqueueParams.WaitReason) onto its row.
 type Write struct {
 	db.EnqueueParams
-	Delivery   string
-	WaitReason string
+	Delivery string
+	// OutboxID is the row the apply wrote for it; none for DeliveryNone.
+	OutboxID string
 }
 
 // Change is what the planner decided for one action.
@@ -256,6 +258,7 @@ func (ch Change) decided(a Action, effect, refusal, detail, consequence string) 
 
 // params are the writes as the outbox takes them, every one of them: a write
 // that only cancels still has to reach the one place cancellations happen.
+// reason is the operator's, from the request.
 func (ch Change) params(actor, reason string) []db.EnqueueParams {
 	out := make([]db.EnqueueParams, len(ch.Writes))
 	for i, w := range ch.Writes {
@@ -476,11 +479,12 @@ func (e *StalePlan) Error() string {
 // whole plan, unspent and with nothing written, if any row's Change differs
 // from the one stored. Otherwise it writes every row, admitting only the
 // cancellations the rows named. It returns the rows' words and, per person,
-// the outbox rows to deliver: sending is the caller's, after the commit,
-// because the lock is never held across a call to Zitadel.
-func ApplyPlannedBulk(ctx context.Context, req BulkRequest, cite db.PlanCitation) (BulkPlan, map[string][]string, error) {
+// the Change as written, each write with its outbox row: sending it is the
+// caller's (DeliverChange), after the commit, because the lock is never held
+// across a call to Zitadel.
+func ApplyPlannedBulk(ctx context.Context, req BulkRequest, cite db.PlanCitation) (BulkPlan, map[string]Change, error) {
 	plan := BulkPlan{Op: req.Op, Applied: true}
-	sent := map[string][]string{}
+	written := map[string]Change{}
 	var subjects []db.PlanSubject
 	var changes map[string]Change
 
@@ -525,11 +529,9 @@ func ApplyPlannedBulk(ctx context.Context, req BulkRequest, cite db.PlanCitation
 			if ch.Row.Effect != EffectApply {
 				continue
 			}
-			ids, err := writeChange(ctx, req, ch)
-			if err != nil {
+			if written[s.SubjectID], err = writeChange(ctx, req, ch); err != nil {
 				return err
 			}
-			sent[s.SubjectID] = ids
 		}
 		return nil
 	})
@@ -544,7 +546,7 @@ func ApplyPlannedBulk(ctx context.Context, req BulkRequest, cite db.PlanCitation
 	}
 	sortOutcomes(plan.Outcomes)
 	plan.Summary = summarize(plan.Outcomes)
-	return plan, sent, nil
+	return plan, written, nil
 }
 
 // errNotAssigned: the assignment found them already holding the bundle, which
@@ -552,22 +554,57 @@ func ApplyPlannedBulk(ctx context.Context, req BulkRequest, cite db.PlanCitation
 var errNotAssigned = errors.New("they already hold this bundle, which the plan said they didn't")
 
 // writeChange writes one row's Change: the bundle assignment or its removal,
-// its audit row and its outbox rows, in the caller's transaction.
-func writeChange(ctx context.Context, req BulkRequest, ch Change) ([]string, error) {
+// its audit row and its outbox rows, in the caller's transaction, all with
+// the operator's reason. It returns the Change with each write's row.
+func writeChange(ctx context.Context, req BulkRequest, ch Change) (Change, error) {
 	if err := deferTargetConvergence(ctx, req.Actor, ch.UserID, ch.changed()); err != nil {
-		return nil, err
+		return ch, err
 	}
+	var ids []string
+	var err error
 	switch req.Op {
 	case BulkOpAssignBundle:
-		ids, assigned, err := svcAssignBundleAndEnqueue(ctx, req.Actor, ch.UserID, req.BundleID, ch.VersionID,
-			ch.params(req.Actor, "Bundle membership cascade"))
+		var assigned bool
+		ids, assigned, err = svcAssignBundleAndEnqueue(ctx, req.Actor, req.Reason, ch.UserID, req.BundleID, ch.VersionID,
+			ch.params(req.Actor, req.Reason))
 		if err == nil && !assigned {
 			err = errNotAssigned
 		}
-		return ids, err
 	case BulkOpRemoveBundle:
-		return svcRemoveBundleFromUserAndEnqueue(ctx, req.Actor, ch.UserID, req.BundleID,
-			ch.params(req.Actor, "Bundle removal cascade"))
+		ids, err = svcRemoveBundleFromUserAndEnqueue(ctx, req.Actor, req.Reason, ch.UserID, req.BundleID,
+			ch.params(req.Actor, req.Reason))
+	default:
+		err = fmt.Errorf("the planner does not apply %q", req.Op)
 	}
-	return nil, fmt.Errorf("the planner does not apply %q", req.Op)
+	if err != nil {
+		return ch, err
+	}
+	return ch.written(ids)
+}
+
+// errWrittenOtherwise: the outbox wrote other rows than the Change says, in
+// the transaction that is about to roll back. The planner and the outbox ask
+// the same questions of the same snapshot under the same lock, so this is
+// unreachable; refused, not trusted.
+var errWrittenOtherwise = errors.New("the outbox wrote other rows than the plan said, so nothing was written")
+
+// written pairs the rows the outbox wrote, in order, with the writes that
+// leave one: every write but one that only cancels a queued change.
+func (ch Change) written(ids []string) (Change, error) {
+	ch.Writes = slices.Clone(ch.Writes)
+	next := 0
+	for i := range ch.Writes {
+		if ch.Writes[i].Delivery == DeliveryNone {
+			continue
+		}
+		if next == len(ids) {
+			return ch, errWrittenOtherwise
+		}
+		ch.Writes[i].OutboxID = ids[next]
+		next++
+	}
+	if next != len(ids) {
+		return ch, errWrittenOtherwise
+	}
+	return ch, nil
 }

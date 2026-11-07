@@ -50,6 +50,11 @@ type EnqueueParams struct {
 	//
 	// A new grant always takes ExpiresAt as given.
 	EndRule EndRule
+	// WaitReason is set by the planner on a write it decided waits for you
+	// (role_waits, decision 11): the row is written waiting, with its reason,
+	// in the same statement. Nothing after the commit decides it again, and
+	// no drain can send it before the reason is on the row.
+	WaitReason string
 }
 
 // EndRule decides what a write does to an existing grant's end.
@@ -134,10 +139,11 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 		defer tx.Rollback(ctx) // no-op after a successful Commit
 	}
 
-	outboxID, ruleIDs, err := enqueueWrites(ctx, tx, p, key)
+	ids, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{p}, key)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
+	outboxID, ruleIDs := ownAndRules(ids)
 
 	if owned {
 		if err := tx.Commit(ctx); err != nil {
@@ -147,52 +153,201 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: enqueuedStatus(outboxID), RuleOutboxIDs: ruleIDs}, nil
 }
 
-// enqueueWrites performs the ledger upsert (add/replace) + audit + outbox insert
-// on an EXISTING transaction, returning the new outbox id. Extracted so callers
-// that must bundle extra writes into the same atomic unit — e.g.
-// ApproveRequestAndEnqueue, which also resolves the access request — can share
-// one transaction with the enqueue rather than splitting it across two.
+// enqueueWrites is the one outbox insert (architecture deepening, decision 8):
+// every access change reaches propagation_outbox here, on an EXISTING
+// transaction, so callers that must commit other writes with it (resolving a
+// request, deleting a grant, assigning a bundle) share one atomic unit. It
+// returns the ids of the rows it wrote, in order.
 //
-// It returns the write's own outbox id and the ids of the rows the mapping
-// rules owe on top of it (FollowRules), all in tx.
-func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) (string, []string, error) {
-	// The second of the two enqueue chokepoints. See enqueueCascadeRows: a
-	// writer that computed its delta under this lock is only protected while
-	// every other writer has to wait for it.
+// A change comes in one of two shapes:
+//
+//   - A write a person named (key set; params is that one write): a grant, a
+//     revoke by grant id, an approved request, an adopted drift. Its ledger
+//     and audit rows are written here (enqueueLedger), its own outbox row
+//     carries key and no cascade id, an identical add already waiting answers
+//     it, and the mapping rules follow it (FollowRules, ADR-006). ids[0] is its
+//     own row ("" when none is owed), the rest are the rules' (ownAndRules).
+//   - A cascade (key empty): the rows one triggering event computed, with that
+//     event's audit rows. Cascade intent lives in the bundle and rule tables,
+//     so no ledger row is written.
+//
+// Every other row gets a key of its own and the change's one cascade id,
+// which the audit rows carry too when Change history shows the writes
+// (cascadeGroupVisible). Every row passes withdrawUndelivered first, the one
+// place a queued change is cancelled and the cancel gate is asked
+// (CancellationsNamed / CancellationsReviewed): a row that only cancelled one
+// is not written. A row carries the operator's reason when the change's
+// audit rows give one (CascadeAudit.Reason), and a write the planner decided
+// waits for you is written waiting (EnqueueParams.WaitReason).
+//
+// The audit rows live HERE rather than in each caller (C6, ISC-44): the
+// cascade id is minted, stamped on the audit rows and stamped on the outbox
+// rows in one place, so a cascade added later cannot forget it.
+func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params []EnqueueParams, key string) ([]string, error) {
+	// Every access change passes here, which is what makes this the place to
+	// take the subject lock: a caller that forgot it is still serialised
+	// against one that took it. Taken here it does not protect THIS caller's
+	// delta, computed before the call; only a caller that locks before its own
+	// reads is safe. But it holds every writer back for as long as such a
+	// caller holds it, which is what makes locking before the read worth
+	// anything at all.
 	if err := LockAccessMutationTx(ctx, tx); err != nil {
-		return "", nil, err
+		return nil, err
 	}
-	if FollowRules == nil {
-		id, err := enqueueOwn(ctx, tx, p, key)
-		return id, nil, err
-	}
-	var own string
-	derived, err := FollowRules(context.WithValue(ctx, txKey, tx), p, func() error {
-		var err error
-		own, err = enqueueOwn(ctx, tx, p, key)
-		return err
-	})
+
+	// One id for the change: its rows are the writes ONE triggering event
+	// produced, including the ones a chained rule contributed (the closure diff
+	// is computed before this call, so a chain arrives as a single set).
+	// Grouping by it is what lets Pending changes say "they confirm together
+	// or not at all": a half-applied cascade is the thing that creates
+	// unexplained access, and it has to be visible as one.
+	cascadeID, err := newOutboxIdempotencyKey()
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
-	if len(derived) == 0 {
-		return own, nil, nil
+	// The operator's words, when the change came with some: on its audit row
+	// and on every row it queues.
+	var why string
+	for _, a := range audits {
+		if why == "" {
+			why = a.Reason
+		}
 	}
-	ruleIDs, err := enqueueCascadeRows(ctx, tx, nil, derived)
-	if err != nil {
-		return "", nil, fmt.Errorf("enqueue rule writes: %w", err)
+
+	// row writes p's outbox row if one is still owed, and returns its id.
+	// ownKey is set only for a named write's own row.
+	row := func(p EnqueueParams, ownKey string) (string, error) {
+		// Countermand before compensate. A write answering a change still in
+		// this queue cancels it instead of queueing its opposite; see
+		// withdrawUndelivered for why that is narrower than it sounds.
+		owed, err := withdrawUndelivered(ctx, tx, "zitadel", p)
+		if err != nil || !owed {
+			return "", err
+		}
+		cascade := &cascadeID
+		if ownKey != "" {
+			cascade = nil
+			// The same add already waiting for you to send delivers this one
+			// too. Extending a grant before its first send queued a second,
+			// identical add: two rows in Pending changes for one role. The
+			// ledger carries the new end; the queued row is what sends it, so
+			// its id is the answer.
+			if p.OpType == "add" {
+				var queued string
+				err := tx.QueryRow(ctx, `
+					SELECT id FROM propagation_outbox
+					 WHERE target = 'zitadel' AND status = 'pending' AND op_type = 'add'
+					   AND user_id = $1 AND project_id = $2 AND role_keys = $3::text[]
+					 ORDER BY created_at LIMIT 1`, p.UserID, p.ProjectID, p.RoleKeys).Scan(&queued)
+				if err == nil {
+					return queued, nil
+				}
+				if !errors.Is(err, pgx.ErrNoRows) {
+					return "", fmt.Errorf("find a queued add: %w", err)
+				}
+			}
+		} else {
+			// A revoke computed from a (user, project, role) triple never
+			// arrives with a grant id, unlike drift and discovery revokes,
+			// which know it from the event or the URL. Resolve it from the
+			// webhook-maintained grant index; a miss leaves it empty, and the
+			// drain then fails just that row (GetGrantIndexByUserProject).
+			if p.OpType == "revoke" && p.ZitadelGrantID == "" {
+				if idx, err := GetGrantIndexByUserProject(ctx, p.UserID, p.ProjectID); err == nil {
+					p.ZitadelGrantID = idx.GrantID
+				} else if !errors.Is(err, ErrGrantIndexNotFound) {
+					return "", err
+				}
+			}
+			if ownKey, err = newOutboxIdempotencyKey(); err != nil {
+				return "", err
+			}
+		}
+		var id string
+		if err := tx.QueryRow(ctx, `
+			INSERT INTO propagation_outbox
+				(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json,
+				 idempotency_key, initiated_by, source, source_ref, cascade_id, reason, wait_reason, target)
+			VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),$11,NULLIF($12,''),NULLIF($13,''),'zitadel')
+			RETURNING id`, p.OpType, p.UserID, p.ProjectID, p.RoleKeys, p.ZitadelGrantID,
+			jsonOrEmpty(p.PayloadJSON), ownKey, p.GrantedBy, outboxSource(p), p.SourceRef, cascade,
+			why, p.WaitReason).Scan(&id); err != nil {
+			return "", fmt.Errorf("insert outbox: %w", err)
+		}
+		return id, nil
 	}
-	return own, ruleIDs, nil
+
+	ids := make([]string, 0, len(params))
+	if key != "" {
+		p := params[0]
+		var own string
+		write := func() error {
+			if err := enqueueLedger(ctx, tx, p); err != nil || p.NoPropagation {
+				return err
+			}
+			var err error
+			own, err = row(p, key)
+			return err
+		}
+		// What the rules owe beyond the write's own roles becomes the rows
+		// below: source 'rule', no ledger row, one cascade.
+		if FollowRules == nil {
+			params, err = nil, write()
+		} else {
+			params, err = FollowRules(context.WithValue(ctx, txKey, tx), p, write)
+		}
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, own)
+	} else {
+		// NULL, not the empty string: the column is UUID, and "this event
+		// caused nothing Change history shows" is exactly what NULL means.
+		var auditCascadeID *string
+		if cascadeGroupVisible(params) {
+			auditCascadeID = &cascadeID
+		}
+		for _, a := range audits {
+			target := a.Target
+			if target == "" {
+				target = "-"
+			}
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO audit_logs
+					(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, cascade_id, details)
+				VALUES ($1,$2,$3,$4,$5, CASE WHEN $6 = '' THEN NULL ELSE jsonb_build_object('reason', $6::text) END)`,
+				a.Actor, target, a.Action, a.ResourceID, auditCascadeID, a.Reason); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	for _, p := range params {
+		if err := closeGivenRequests(ctx, tx, p); err != nil {
+			return nil, err
+		}
+		id, err := row(p, "")
+		if err != nil {
+			return nil, err
+		}
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
 }
 
-// enqueueOwn is the write itself: ledger, audit and outbox for exactly the
-// roles the caller named.
-func enqueueOwn(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) (string, error) {
-	source := p.Source
-	if source == "" {
-		source = "direct"
+// ownAndRules splits a named write's ids: its own row, then the rules'.
+func ownAndRules(ids []string) (string, []string) {
+	if len(ids) < 2 {
+		return ids[0], nil
 	}
+	return ids[0], ids[1:]
+}
 
+// enqueueLedger is a named write's own record: the ledger rows for exactly
+// the roles it names, the requests it answers closed, and its audit row.
+func enqueueLedger(ctx context.Context, tx pgx.Tx, p EnqueueParams) error {
 	// The ledger only records grants for add/replace. A revoke removes access;
 	// the direct_role_grants row (if any) is cleaned up on the applied drain or
 	// by expiry — we never write a grant row for a revoke intent.
@@ -212,8 +367,8 @@ func enqueueOwn(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) (st
 		for i, role := range p.RoleKeys {
 			var id string
 			if err := tx.QueryRow(ctx, upsertGrant, p.UserID, p.ProjectID, role,
-				p.GrantedBy, p.Reason, p.ExpiresAt, source, p.SourceRef, string(p.EndRule)).Scan(&id); err != nil {
-				return "", fmt.Errorf("upsert direct grant (%s): %w", role, err)
+				p.GrantedBy, p.Reason, p.ExpiresAt, outboxSource(p), p.SourceRef, string(p.EndRule)).Scan(&id); err != nil {
+				return fmt.Errorf("upsert direct grant (%s): %w", role, err)
 			}
 			if i == 0 {
 				firstGrantID = id
@@ -222,64 +377,19 @@ func enqueueOwn(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) (st
 	}
 
 	if err := closeGivenRequests(ctx, tx, p); err != nil {
-		return "", err
+		return err
 	}
 
+	// With NoPropagation no outbox row follows: the ledger row is the durable
+	// intent and this audit row the durable trace. Adopting drift creates no
+	// work for the queue.
 	const insertAudit = `INSERT INTO audit_logs
 		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id) VALUES ($1,$2,$3,$4)`
 	action := "direct_grant." + opTypeAuditVerb(p.OpType)
 	if _, err := tx.Exec(ctx, insertAudit, p.GrantedBy, p.UserID, action, firstGrantID); err != nil {
-		return "", fmt.Errorf("insert audit: %w", err)
+		return fmt.Errorf("insert audit: %w", err)
 	}
-
-	// No outbox row when nothing is owed upstream. The ledger row is the durable
-	// intent and the audit row is the durable trace; the outbox is the work
-	// queue, and adopting drift creates no work. See EnqueueParams.NoPropagation.
-	if p.NoPropagation {
-		return "", nil
-	}
-
-	// The same countermand the cascade path takes, for the same reason: a
-	// direct grant revoked before it was ever sent should leave an empty queue,
-	// not two rows an operator has to approve to arrive back where they were.
-	owed, err := withdrawUndelivered(ctx, tx, "zitadel", p)
-	if err != nil {
-		return "", err
-	}
-	if !owed {
-		return "", nil
-	}
-
-	// The same add already waiting for you to send delivers this one too. Extending
-	// a grant before its first send queued a second, identical add: two rows
-	// in Pending changes for one role. The ledger carries the new end; the
-	// queued row is what sends it, so its id is the answer.
-	if p.OpType == "add" {
-		var queued string
-		err := tx.QueryRow(ctx, `
-			SELECT id FROM propagation_outbox
-			 WHERE target = 'zitadel' AND status = 'pending' AND op_type = 'add'
-			   AND user_id = $1 AND project_id = $2 AND role_keys = $3::text[]
-			 ORDER BY created_at LIMIT 1`, p.UserID, p.ProjectID, p.RoleKeys).Scan(&queued)
-		if err == nil {
-			return queued, nil
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return "", fmt.Errorf("find a queued add: %w", err)
-		}
-	}
-
-	const insertOutbox = `
-		INSERT INTO propagation_outbox
-			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by, source, source_ref, target)
-		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),'zitadel')
-		RETURNING id`
-	var outboxID string
-	if err := tx.QueryRow(ctx, insertOutbox, p.OpType, p.UserID, p.ProjectID, p.RoleKeys,
-		p.ZitadelGrantID, p.PayloadJSON, key, p.GrantedBy, source, p.SourceRef).Scan(&outboxID); err != nil {
-		return "", fmt.Errorf("insert outbox: %w", err)
-	}
-	return outboxID, nil
+	return nil
 }
 
 // enqueuedStatus: no row queued means nothing is owed upstream (a queued

@@ -72,12 +72,12 @@ func TestRemoveZitadelGrantPreview_IsTheRemovalsOwnAnswer(t *testing.T) {
 	}
 	svcUserExpectsRole = func(_ context.Context, _, _, role string) (bool, error) { return role == "bundled", nil }
 	answer := services.DirectGrantRemoval{Revoked: []string{"p1/direct", "p2/derived"}, Retained: []string{}}
-	svcDeleteDirectGrant = func(context.Context, string, string, string) (services.DirectGrantRemoval, error) {
+	svcDeleteDirectGrant = func(context.Context, string, string, string, string) (services.DirectGrantRemoval, error) {
 		out := answer
 		out.OutboxIDs = []string{"ob-del"}
 		return out, nil
 	}
-	svcPreviewDirectGrantRemoval = func(context.Context, string, string, string) (services.DirectGrantRemoval, error) {
+	svcPreviewDirectGrantRemoval = func(context.Context, string, string, string, string) (services.DirectGrantRemoval, error) {
 		return answer, nil
 	}
 

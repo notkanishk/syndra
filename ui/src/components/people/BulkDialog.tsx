@@ -108,7 +108,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
           ? "Enter how many days to extend by."
           : reason.trim().length > 0
             ? undefined
-            : "Say why. This lands in Change history.";
+            : "Say why. Syndra keeps it with each person's change.";
 
   const people = `${userIds.length} ${userIds.length === 1 ? "person" : "people"}`;
 
@@ -198,7 +198,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
               id="bulk-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Why. This lands in Change history for every person"
+              placeholder="Why. Syndra keeps it with each person's change"
             />
           </div>
         </>

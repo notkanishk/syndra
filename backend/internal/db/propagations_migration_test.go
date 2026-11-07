@@ -66,26 +66,22 @@ func TestReconcileLedgerOnApplied_RevokeIsSourceScoped(t *testing.T) {
 	}
 }
 
-// TestEnqueueWrites_WritesSourceAndSourceRef is a coherence guard for the shared
-// direct/drift enqueue path (enqueueWrites in propagation_enqueue.go): its outbox INSERT must
-// carry source/source_ref, same as the cascade path's enqueueCascadeRows
-// (TestEnqueueCascadeRows_WritesSourceAndSourceRef in cascade_migration_test.go). Without this,
-// callers that route through enqueueWrites with a non-default Source/SourceRef — e.g.
-// handlers/drift.go's *AndEnqueue variant — would have their pending-worklist attribution
-// silently dropped (source always 'direct', source_ref always NULL) even though the
-// direct_role_grants ledger upsert on the same tx got it right.
+// TestEnqueueWrites_WritesSourceAndSourceRef is a coherence guard for the one outbox insert
+// (enqueueWrites in propagation_enqueue.go, decision 8): its INSERT must carry
+// source/source_ref (migration 000017), or a bundle's or a rule's rows would read as an
+// operator's direct grants in Pending changes and Change history, and a drift adoption's
+// attribution would be dropped while the ledger upsert on the same tx got it right.
 func TestEnqueueWrites_WritesSourceAndSourceRef(t *testing.T) {
 	src, err := os.ReadFile("propagation_enqueue.go")
 	if err != nil {
 		t.Fatalf("read propagation_enqueue.go: %v", err)
 	}
-	// The write itself lives in enqueueOwn; enqueueWrites wraps it with the
-	// mapping rules (FollowRules), which must see the write, never bypass it.
-	wrap := funcBody(t, string(src), "enqueueWrites")
-	if !strings.Contains(wrap, "FollowRules(") || !strings.Contains(wrap, "enqueueOwn(ctx, tx, p, key)") {
-		t.Fatalf("enqueueWrites must run the write through FollowRules; body:\n%s", wrap)
+	// A named write goes through the mapping rules (FollowRules), which must
+	// see the write, never bypass it.
+	fb := funcBody(t, string(src), "enqueueWrites")
+	if !strings.Contains(fb, "FollowRules(context.WithValue(ctx, txKey, tx), p, write)") {
+		t.Fatalf("enqueueWrites must run a named write through FollowRules; body:\n%s", fb)
 	}
-	fb := funcBody(t, string(src), "enqueueOwn")
 	for _, want := range []string{"source", "source_ref"} {
 		if !strings.Contains(fb, want) {
 			t.Errorf("enqueueWrites must write outbox column %q; body:\n%s", want, fb)

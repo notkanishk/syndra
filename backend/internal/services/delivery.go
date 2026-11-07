@@ -103,9 +103,10 @@ func switchedOver(ctx context.Context) bool {
 	return v == db.ConfirmationModelRoles
 }
 
-// Deliver is the one place that decides, for rows just written, whether each
-// goes to Zitadel straight away or waits in Pending changes (N14 B, N15). A
-// row waits when any role it carries is marked to wait, however it arrived.
+// Deliver decides, for rows just written by a path the planner doesn't take
+// yet, whether each goes to Zitadel straight away or waits in Pending changes
+// (N14 B, N15). A row waits when any role it carries is marked to wait,
+// however it arrived. A planned Change was decided already: DeliverChange.
 //
 // Until the operator switches over, the old rule still holds as well:
 // legacyWait is what the caller's own mode said (a bundle or rule set to
@@ -149,9 +150,36 @@ func Deliver(ctx context.Context, ids []string, legacyWait bool) Delivery {
 	}
 	d.wait(ctx, roleWaits, db.WaitReasonRoleWaits)
 	d.wait(ctx, manual, db.WaitReasonManual)
+	d.send(ctx)
+	return d
+}
 
+// DeliverChange delivers a Change the planner decided and the apply just
+// wrote (decision 11): its "straight away" writes go now, through the same
+// send as every other row, and its "waits for you" writes stay in Pending
+// changes with the reason their rows were written with. Nothing reads which
+// roles wait again, so what the plan showed is what happens. Every write was
+// on the outbox before this (decision 12).
+func DeliverChange(ctx context.Context, ch Change) Delivery {
+	d := Delivery{Reason: map[string]string{}}
+	for _, w := range ch.Writes {
+		switch {
+		case w.OutboxID == "":
+		case w.Delivery == DeliveryWaits:
+			d.Waiting = append(d.Waiting, w.OutboxID)
+			d.Reason[w.OutboxID] = w.WaitReason
+		default:
+			d.Sent = append(d.Sent, w.OutboxID)
+		}
+	}
+	d.send(ctx)
+	return d
+}
+
+// send sends d.Sent now and records what became of them.
+func (d *Delivery) send(ctx context.Context) {
 	if len(d.Sent) == 0 {
-		return d
+		return
 	}
 	dr, derr := svcDrainBatch(ctx, d.Sent)
 	d.Drain = dr
@@ -189,7 +217,6 @@ func Deliver(ctx context.Context, ids []string, legacyWait bool) Delivery {
 	if d.Drain.Requeued > 0 || d.retrying {
 		d.Drain.Retry = nextRetry(ctx, d.Sent)
 	}
-	return d
 }
 
 // nextRetry is where the first of these rows Zitadel didn't take stands: its

@@ -155,9 +155,9 @@ func RetireBundleAndEnqueue(ctx context.Context, actor, bundleID string, params 
 	if _, err := tx.Exec(ctx, `DELETE FROM user_bundle_assignments WHERE bundle_id = $1`, bundleID); err != nil {
 		return nil, fmt.Errorf("take back the retired bundle's assignments (id=%s): %w", bundleID, err)
 	}
-	ids, err := enqueueCascadeRows(ctx, tx,
+	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Action: "bundle.retired", ResourceID: bundleID}},
-		params)
+		params, "")
 	if err != nil {
 		return nil, err
 	}

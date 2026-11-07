@@ -48,7 +48,7 @@ func grantRemovalFixture(
 
 	captured := &[]db.EnqueueParams{}
 	svcDeleteDirectGrantAndEnqueue = func(
-		_ context.Context, _, _, _ string, params []db.EnqueueParams,
+		_ context.Context, _, _, _, _ string, params []db.EnqueueParams,
 	) ([]string, error) {
 		*captured = params
 		ids := make([]string, len(params))
@@ -83,7 +83,7 @@ func TestDeleteDirectGrant_RoleAlsoInBundle_EnqueuesNoRevoke(t *testing.T) {
 		nil,
 	)
 
-	res, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya")
+	res, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya", "")
 	if err != nil {
 		t.Fatalf("DeleteDirectGrant: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestDeleteDirectGrant_RoleAlsoFromRule_EnqueuesNoRevoke(t *testing.T) {
 		}},
 	)
 
-	res, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya")
+	res, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya", "")
 	if err != nil {
 		t.Fatalf("DeleteDirectGrant: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestDeleteDirectGrant_OnlySource_EnqueuesTheRevoke(t *testing.T) {
 		nil, nil, nil,
 	)
 
-	res, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya")
+	res, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya", "")
 	if err != nil {
 		t.Fatalf("DeleteDirectGrant: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestDeleteDirectGrant_RevokesRolesTheGrantAloneSupported(t *testing.T) {
 		}},
 	)
 
-	if _, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya"); err != nil {
+	if _, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya", ""); err != nil {
 		t.Fatalf("DeleteDirectGrant: %v", err)
 	}
 
@@ -188,7 +188,7 @@ func TestDeleteDirectGrant_AttributesEveryQueuedRow(t *testing.T) {
 		nil, nil, nil,
 	)
 
-	if _, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya"); err != nil {
+	if _, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya", ""); err != nil {
 		t.Fatalf("DeleteDirectGrant: %v", err)
 	}
 
@@ -228,7 +228,7 @@ func TestDeleteDirectGrant_QueuesNothingChangeHistoryWouldGroup(t *testing.T) {
 		}},
 	)
 
-	if _, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya"); err != nil {
+	if _, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya", ""); err != nil {
 		t.Fatalf("DeleteDirectGrant: %v", err)
 	}
 	if len(*captured) == 0 {
@@ -249,10 +249,35 @@ func TestDeleteDirectGrant_QueuesNothingChangeHistoryWouldGroup(t *testing.T) {
 func TestDeleteDirectGrant_ExpiredGrant_EnqueuesNothing(t *testing.T) {
 	captured := grantRemovalFixture(t, nil, nil, nil, nil)
 
-	if _, err := DeleteDirectGrant(context.Background(), "u1", "g_expired", "priya"); err != nil {
+	if _, err := DeleteDirectGrant(context.Background(), "u1", "g_expired", "priya", ""); err != nil {
 		t.Fatalf("DeleteDirectGrant: %v", err)
 	}
 	if len(*captured) != 0 {
 		t.Fatalf("expected no queued writes, got %#v", *captured)
+	}
+}
+
+// A bulk removal requires a reason and must keep it on what it queues; a
+// single removal, which asks for none, keeps the general wording.
+func TestDeleteDirectGrant_KeepsTheOperatorsReason(t *testing.T) {
+	for _, tc := range []struct{ reason, want string }{
+		{"term ended", "term ended"},
+		{"", "Direct access removal"},
+	} {
+		captured := grantRemovalFixture(t,
+			[]models.DirectGrant{{ID: "g_88", UserID: "u1", ProjectID: "pLaser", RoleKey: "trained"}},
+			nil, nil, nil,
+		)
+		if _, err := DeleteDirectGrant(context.Background(), "u1", "g_88", "priya", tc.reason); err != nil {
+			t.Fatalf("DeleteDirectGrant: %v", err)
+		}
+		if len(*captured) == 0 {
+			t.Fatalf("reason %q: the revoke was not queued", tc.reason)
+		}
+		for _, p := range *captured {
+			if p.Reason != tc.want {
+				t.Errorf("reason %q: queued with %q, want %q", tc.reason, p.Reason, tc.want)
+			}
+		}
 	}
 }

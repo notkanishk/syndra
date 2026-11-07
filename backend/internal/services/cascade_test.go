@@ -170,7 +170,7 @@ func TestCascadeBundleAssignedToUser_AutoEnqueuesPerRoleAndDrains(t *testing.T) 
 	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
 	var enqueued []db.EnqueueParams
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		enqueued = ps
 		return []string{"o1", "o2"}, true, nil
 	}
@@ -214,7 +214,7 @@ func TestCascadeBundleAssignedToUser_ARoleThatWaitsQueuesWithoutDrain(t *testing
 	svcGetDirectGrantsForUser = noDirects
 	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		return []string{"o1"}, true, nil
 	}
 	drainCalled := false
@@ -246,7 +246,7 @@ func TestCascadeBundleAssignedToUser_EnqueueErrorPropagates(t *testing.T) {
 	svcGetUserBundleRolesGrouped = noBundleRoles
 	svcGetActiveMappingRules = noRules
 	wantErr := errors.New("assign tx failed")
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		return nil, false, wantErr
 	}
 	drainCalled := false
@@ -282,7 +282,7 @@ func TestCascadeBundleAssignedToUser_ClosureDiffIncludesRuleDerivedTarget(t *tes
 		return []models.MappingRule{{ID: "rule1", SourceProject: "p1", SourceRole: "A", TargetProject: "p1", TargetRole: "B2"}}, nil
 	}
 	var enqueued []db.EnqueueParams
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		enqueued = ps
 		return []string{"o1", "o2"}, true, nil
 	}
@@ -326,7 +326,7 @@ func TestCascadeBundleAssignedToUser_IdempotentWhenAlreadyEffectivelyGranted(t *
 	svcGetActiveMappingRules = noRules
 	var enqueued []db.EnqueueParams
 	assignCalled := false
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		assignCalled = true
 		enqueued = ps
 		return nil, true, nil
@@ -545,7 +545,7 @@ func TestCascadeBundleRemoved_ClosureCoverageSuppressesRevoke(t *testing.T) {
 	}
 	svcGetActiveMappingRules = noRules
 	var passed []db.EnqueueParams
-	svcRemoveBundleFromUserAndEnqueue = func(ctx context.Context, actor, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
+	svcRemoveBundleFromUserAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
 		passed = ps // the atomic fn still deletes the assignment even when ps is empty
 		return nil, nil
 	}
@@ -581,7 +581,7 @@ func TestCascadeBundleRemoved_ClosureRevokeSymmetry(t *testing.T) {
 		return []models.MappingRule{{ID: "rule1", SourceProject: "p1", SourceRole: "A", TargetProject: "p1", TargetRole: "B2"}}, nil
 	}
 	var got []db.EnqueueParams
-	svcRemoveBundleFromUserAndEnqueue = func(ctx context.Context, actor, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
+	svcRemoveBundleFromUserAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
 		return []string{"o1", "o2"}, nil
 	}
@@ -625,7 +625,7 @@ func TestCascadeBundleRemoved_RevokesWhenUncovered(t *testing.T) {
 	}
 	svcGetActiveMappingRules = noRules
 	var got []db.EnqueueParams
-	svcRemoveBundleFromUserAndEnqueue = func(ctx context.Context, actor, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
+	svcRemoveBundleFromUserAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
 		return []string{"o1"}, nil
 	}
@@ -659,7 +659,7 @@ func TestCascadeBundleRemoved_EnqueueErrorPropagates(t *testing.T) {
 	}
 	svcGetActiveMappingRules = noRules
 	wantErr := errors.New("remove tx failed")
-	svcRemoveBundleFromUserAndEnqueue = func(ctx context.Context, actor, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
+	svcRemoveBundleFromUserAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID string, ps []db.EnqueueParams) ([]string, error) {
 		return nil, wantErr
 	}
 
@@ -697,7 +697,7 @@ func TestCascadeBundleAssigned_ProjectsThePublishedVersionNotTheWorkingCopy(t *t
 	}
 
 	var passed []db.EnqueueParams
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		passed = ps
 		return nil, true, nil
 	}
@@ -1133,7 +1133,7 @@ func TestCascadeBundleAssigned_PinsTheVersionItProjected(t *testing.T) {
 
 	var pinned string
 	var projected []db.EnqueueParams
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		pinned, projected = versionID, ps
 		return nil, true, nil
 	}
@@ -1178,7 +1178,7 @@ func TestCascadeBundleAssigned_ExistingHolderIsANoOp(t *testing.T) {
 
 	// The transaction reports the conflict: nothing was inserted.
 	var offered []db.EnqueueParams
-	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
+	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		offered = ps
 		return nil, false, nil
 	}

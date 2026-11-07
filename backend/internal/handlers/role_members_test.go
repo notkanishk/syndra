@@ -20,7 +20,7 @@ func TestHandleDeleteUserDirectGrant_DeletesAndQueuesRevoke(t *testing.T) {
 	})
 
 	var gotUser, gotGrant, gotActor string
-	svcDeleteDirectGrant = func(_ context.Context, userID, grantID, actor string) (services.DirectGrantRemoval, error) {
+	svcDeleteDirectGrant = func(_ context.Context, userID, grantID, actor, _ string) (services.DirectGrantRemoval, error) {
 		gotUser, gotGrant, gotActor = userID, grantID, actor
 		return services.DirectGrantRemoval{
 			OutboxIDs: []string{"ob_1"},
@@ -67,7 +67,7 @@ func TestHandleDeleteUserDirectGrant_DeletesAndQueuesRevoke(t *testing.T) {
 func TestHandleDeleteUserDirectGrant_MissingGrantIs404(t *testing.T) {
 	orig := svcDeleteDirectGrant
 	t.Cleanup(func() { svcDeleteDirectGrant = orig })
-	svcDeleteDirectGrant = func(context.Context, string, string, string) (services.DirectGrantRemoval, error) {
+	svcDeleteDirectGrant = func(context.Context, string, string, string, string) (services.DirectGrantRemoval, error) {
 		return services.DirectGrantRemoval{}, db.ErrGrantNotFound
 	}
 
@@ -85,7 +85,7 @@ func TestHandleDeleteUserDirectGrant_MissingGrantIs404(t *testing.T) {
 func TestHandleDeleteUserDirectGrant_RequiresBothPathValues(t *testing.T) {
 	orig := svcDeleteDirectGrant
 	t.Cleanup(func() { svcDeleteDirectGrant = orig })
-	svcDeleteDirectGrant = func(context.Context, string, string, string) (services.DirectGrantRemoval, error) {
+	svcDeleteDirectGrant = func(context.Context, string, string, string, string) (services.DirectGrantRemoval, error) {
 		t.Error("service called without a grant id")
 		return services.DirectGrantRemoval{}, nil
 	}
