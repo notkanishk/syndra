@@ -16,13 +16,22 @@ import {
   SENDS_ITSELF_NEXT,
 } from "@/lib/outcome";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
-import { RETRYING, retryLine, retryNextStep, type RetryState } from "@/lib/retry";
-import { isRefused, waitIsChosen } from "@/lib/wait-reason";
+import { retryLine, retryNextStep, type RetryState } from "@/lib/retry";
+import { isRefused } from "@/lib/wait-reason";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
-import { PlanReview, applyLabel, planNote } from "@/components/ui/PlanReview";
+import { PlanReview } from "@/components/ui/PlanReview";
+import {
+  NOTHING_TO_APPLY,
+  REFUSED_ROWS_NEXT,
+  REVOKING_OPS,
+  applyLabel,
+  beforeLine,
+  goesItself,
+  resultOutcome,
+} from "@/lib/plan-groups";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 
 /**
@@ -60,7 +69,7 @@ export function resultMessage(
   auto: AutoRetry = true,
 ): string {
   const { succeeded, failed, queued } = plan.summary;
-  const tail = [ruleWaitingSentence(plan), failedSentence(plan, noun, system)].filter(Boolean).join(" ");
+  const tail = failedSentence(plan, noun, system);
   const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]}`;
   // A plan that reached NOBODY, applied. "Applied to 0 people." is true and
   // reads as a failure — it is the sentence an operator gets after publishing a
@@ -98,19 +107,6 @@ function failedSentence(plan: BulkPlan, noun: [string, string], system: string):
   return parts.join(" ");
 }
 
-/** Rows automatic rules queued with the act that wait for Send, counted apart from the act (N4). */
-export function ruleWaiting(plan: BulkPlan): number {
-  return plan.outcomes.reduce((n, o) => n + (o.rule_waiting ?? 0), 0);
-}
-
-function ruleWaitingSentence(plan: BulkPlan): string {
-  const n = ruleWaiting(plan);
-  if (n === 0) return "";
-  return n === 1
-    ? "1 more change from automatic rules waits in Pending changes for you to send."
-    : `${n} more changes from automatic rules wait in Pending changes for you to send.`;
-}
-
 /**
  * The result block's word: the act, in the past tense, with the count in it
  * ("Given to 12 people"). Queued people are counted, because the word then
@@ -142,15 +138,16 @@ export function resultWord(plan: BulkPlan, noun: [string, string]): string | und
 }
 
 /**
- * The first 100ms of an apply, in Syndra's own tense (A-20 P8). The rehearsal
- * already marked every row that will wait (`effect: "queued"`), so when all the
- * rows that act will wait the forecast is the wait; otherwise it is the act's
- * own word, from the op or from `fallback` for the surfaces whose op has none.
- * Words only: no number, because nothing has been counted by the server yet.
+ * The first 100ms of an apply, in Syndra's own tense (A-20 P8), read from the
+ * plan (A-21 §2.5): when every row that acts sits under "Will wait for you to
+ * send" (its delivery waits, or an older row already said `queued`), the
+ * forecast is the wait; otherwise it is the act's own word, from the op or from
+ * `fallback` for the surfaces whose op has none. Words only: no number,
+ * because nothing has been counted by the server yet.
  */
 export function bulkForecast(plan: BulkPlan, fallback?: string): string | undefined {
   const acting = plan.outcomes.filter((o) => o.effect === "apply" || o.effect === "queued");
-  const waiting = acting.filter((o) => o.effect === "queued");
+  const waiting = acting.filter((o) => o.effect === "queued" || o.delivery === "waits_for_you");
   if (acting.length > 0 && waiting.length === acting.length) return FORECAST.queued;
   switch (plan.op) {
     case "assign_role":
@@ -174,15 +171,13 @@ export function resultSentence(
   auto: AutoRetry = true,
 ): string {
   const { queued } = plan.summary;
-  const rules = ruleWaitingSentence(plan);
-  if (queued === 0) return rules ? `It has taken effect. ${rules}` : "It has taken effect.";
+  if (queued === 0) return "It has taken effect.";
   const { waiting, going, unsure } = splitQueued(plan, auto);
   const of = (n: number) => `${n} ${n === 1 ? noun[0] : noun[1]} ${n === 1 ? "is" : "are"}`;
   const parts: string[] = [];
   if (waiting > 0) parts.push(`${of(waiting)} waiting for you to send to ${system}.`);
   if (going > 0) parts.push(`${of(going)} not in ${system} yet; Syndra sends ${going === 1 ? "it" : "them"} on its own.`);
   if (unsure > 0) parts.push(`${of(unsure)} not in ${system} yet.`);
-  if (rules) parts.push(rules);
   return parts.join(" ");
 }
 
@@ -207,15 +202,7 @@ export function splitQueued(
   let unsure = 0;
   let retry: RetryState | undefined;
   for (const o of rows) {
-    // The server's own retry state says it, whatever the indicators say.
-    const goes: boolean | null =
-      o.wait_reason === RETRYING
-        ? o.retry
-          ? o.retry.state === "retrying"
-          : auto
-        : waitIsChosen(o.wait_reason) || !revokingOp
-          ? false
-          : auto;
+    const goes = goesItself(o, plan.op, auto);
     if (goes === null) unsure++;
     else if (goes) {
       going++;
@@ -228,31 +215,6 @@ export function splitQueued(
   else going += rest;
   return { waiting, going, unsure, retry };
 }
-
-/**
- * The operations whose queued rows drain themselves.
- *
- * The backend's rule is on the OUTBOX ROW — `op_type = 'revoke' OR
- * withdraws_only` — and this set is the client's honest reading of which plans
- * produce only such rows.
- *
- * `delete_mapping` was missing, and that is a wrong instruction rather than a
- * missing one: deleting a mapping only takes access away, so its rows drain on
- * the background runner, and the operator was told to go and send them from
- * Pending changes — a queue that would empty on its own before they arrived.
- *
- * `rollback_mappings` is deliberately NOT here. A rollback restores a SET, so
- * it both grants and revokes, and neither sentence is true of the whole plan.
- * It keeps the "go and send it" copy because that is the safe direction: the
- * codebase's own rule is that under-claiming sends somebody to a queue that
- * turns out to be empty, while over-claiming tells them a door is locked when
- * it is open.
- */
-const REVOKING_OPS: ReadonlySet<BulkPlan["op"]> = new Set<BulkPlan["op"]>([
-  "remove_role",
-  "remove_bundle",
-  "delete_mapping",
-]);
 
 /**
  * What happens to the queued rows, without making the operator know the rule.
@@ -291,8 +253,6 @@ export function queuedNote(plan: BulkPlan, system: string = "Zitadel", auto: Aut
  * the "Waiting for you to send" link); otherwise nothing, and when.
  */
 export function queuedStep(plan: BulkPlan, auto: AutoRetry = true): Pick<Outcome, "sendsItself" | "next"> {
-  // What automatic rules queued waits for Send (N4): the link says it.
-  if (ruleWaiting(plan) > 0) return {};
   if (plan.summary.queued === 0) return {};
   const { waiting, going, unsure, retry } = splitQueued(plan, auto);
   if (waiting > 0) return {};
@@ -300,13 +260,12 @@ export function queuedStep(plan: BulkPlan, auto: AutoRetry = true): Pick<Outcome
   return { sendsItself: true, next: retry ? retryNextStep(retry, { it: going === 1 ? "it" : "them" }) : SENDS_ITSELF_NEXT };
 }
 
-/** The step a result with rows Zitadel refused leaves (N1): each row names its own. */
-export const REFUSED_ROWS_NEXT = "Follow the step on each row Zitadel refused, below.";
+export { REFUSED_ROWS_NEXT };
 
 /** An error only when something actually failed; queued rows are a warning. */
 export function resultTone(plan: BulkPlan): "success" | "warning" | "error" {
   if (plan.summary.failed > 0) return "error";
-  if (plan.summary.queued > 0 || ruleWaiting(plan) > 0) return "warning";
+  if (plan.summary.queued > 0) return "warning";
   return "success";
 }
 
@@ -320,7 +279,7 @@ export function resultTone(plan: BulkPlan): "success" | "warning" | "error" {
  */
 export function resultKind(plan: BulkPlan): OutcomeKind {
   if (plan.summary.failed > 0) return "failed";
-  if (plan.summary.queued > 0 || ruleWaiting(plan) > 0) return "queued";
+  if (plan.summary.queued > 0) return "queued";
   return "applied";
 }
 
@@ -561,8 +520,16 @@ export function RehearsalDialog({
       : citationRequired && !plan.plan_id
         ? "This preview did not come back with an approval, so it cannot be applied. Close this and try again."
         : nothingWillAct && !definitionLabel
-          ? "Nothing here would change, so there is nothing to apply."
+          ? NOTHING_TO_APPLY
           : undefined;
+  /**
+   * The footer's before-line (A-21 §2.5): Zitadel not answering first, then
+   * whether this finishes now or waits. A definition that moves nobody is
+   * still an act, so it isn't told there is nothing to apply; and a line the
+   * disabled button already says as its reason is said once, there.
+   */
+  const before = plan && !isDefinitionApply ? beforeLine(plan, noun) : undefined;
+  const reviewNote = [waits, before === applyBlocked ? undefined : before].filter(Boolean).join(" ") || undefined;
 
   /**
    * Rehearse. A blast-radius refusal is not a failure — it is the backend
@@ -612,6 +579,13 @@ export function RehearsalDialog({
       // On the result step, which already existed — the notification was a
       // second surface reporting what this step is for, and the one that
       // removed itself after four seconds.
+      // A grouped plan says one clause per fold and one step (A-21 §2.6);
+      // a flat one keeps the counts it always said.
+      const grouped = resultOutcome(result, noun, auto);
+      if (grouped) {
+        setOutcome({ ...grouped.outcome, word: grouped.word });
+        return;
+      }
       const word = resultWord(result, noun);
       const kind = resultKind(result);
       const refused = refusedRows(result) > 0;
@@ -747,7 +721,7 @@ export function RehearsalDialog({
               its rows are — accounts, items, requests — and not passing it on
               meant the plan itself reported a missing list of "people" on
               screens that act on none. */}
-          <PlanReview plan={plan} noun={noun} />
+          <PlanReview plan={plan} noun={noun} auto={auto} />
           {consequence && (
             <div className="px-6">
               <p className="text-[13.5px] leading-[1.55] text-warn-text">{consequence}</p>
@@ -780,9 +754,7 @@ export function RehearsalDialog({
         }
         note={
           step === "review" && plan
-            ? waits
-              ? `${waits} ${planNote(plan, noun) ?? ""}`.trim()
-              : planNote(plan, noun)
+            ? reviewNote
             : step === "compose"
               ? waits
                 ? `${waits} ${PREVIEW_LEDE}`

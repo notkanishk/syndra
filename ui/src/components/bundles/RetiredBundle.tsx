@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { BundleVersions } from "@/components/bundles/BundleVersions";
-import { FoldHeading } from "@/components/bundles/FoldHeading";
+import { FoldHeading } from "@/components/ui/FoldHeading";
 import { TabLabel } from "@/components/bundles/TabLabel";
 import { RoleRef, UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
