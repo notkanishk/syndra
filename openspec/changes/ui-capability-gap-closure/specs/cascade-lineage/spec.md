@@ -9,11 +9,11 @@
 `audit_logs.cascade_id` (migration `000023`) names the cascade an event produced,
 matching `CascadeGroup.CascadeID` exactly.
 
-It MUST be written by `enqueueCascadeRows` and nowhere else. That function
+It MUST be written by `enqueueWrites` (the one outbox insert since architecture-deepening decision 8; `enqueueCascadeRows` until 7 Nov 2026) and nowhere else. That function
 already mints one id per batch — it is what groups the writes one triggering
 event produced — and the audit row describing the same event has no other way to
 learn it. Every atomic `*AndEnqueue` function previously wrote its own audit row
-on the line immediately above its call to `enqueueCascadeRows`, which made this
+on the line immediately above its call to the outbox insert, which made this
 a convention eleven functions had to keep rather than an invariant.
 
 A cascade audit is therefore a parameter, not a separate statement, and it is a
@@ -33,7 +33,7 @@ Two cases therefore get NULL:
 - **The event produced no writes.** An id with no rows behind it would link to a
   page with nothing on it.
 - **The writes are not cascade-sourced.** `DeleteDirectGrantAndEnqueue` goes
-  through `enqueueCascadeRows` because its ledger delete, audit row and outbox
+  through `enqueueWrites` as a cascade because its ledger delete, audit row and outbox
   rows must commit together — not because it is a cascade. Its writes carry
   `source='direct'`, whose surface is Pending changes. This held true even for a
   direct removal that revokes a second role a mapping rule derived from it: the
@@ -68,7 +68,7 @@ queue that carried out its consequence.
 
 #### Scenario: A cascade mutation grows its own audit insert
 - **WHEN** any of `cascade.go`, `bundles.go`, `grants.go`, `bundle_versions.go` writes an
-  `INSERT INTO audit_logs` outside `enqueueCascadeRows`
+  `INSERT INTO audit_logs` (the one writer, `enqueueWrites`, lives in `propagation_enqueue.go`)
 - **THEN** the source-coherence guard fails, because that row would carry no cascade id
 
 ### Requirement: The Trace column MUST state only what the row carries
