@@ -293,12 +293,12 @@ func RehearseBundlePublish(ctx context.Context, req PublishRequest) (BulkPlan, D
 			continue
 		}
 
-		adds, revokes, err := holderDelta(ctx, h.UserID, req.BundleID, next, rules)
+		adds, revokes, refs, err := holderDelta(ctx, h.UserID, req.BundleID, next, rules)
 		if err != nil {
 			return plan, draft, err
 		}
 		out.Effect, out.Detail, out.Consequence = describeMove(h.Version, draft.NextVersion, adds, revokes)
-		cancels, err := cancelsLine(ctx, deltaWrites(h.UserID, adds, revokes, "bundle", req.BundleID))
+		cancels, err := cancelsLine(ctx, asRuleRows(deltaWrites(h.UserID, adds, revokes, "bundle", req.BundleID), refs))
 		if err != nil {
 			return plan, draft, err
 		}
@@ -425,17 +425,18 @@ func holderDelta(
 	userID, bundleID string,
 	next []models.BundleRole,
 	rules []models.MappingRule,
-) (adds, revokes []roleKey, err error) {
+) (adds, revokes []roleKey, refs map[roleKey]string, err error) {
 	before, err := userBaseHoldings(ctx, userID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	after, err := userBaseHoldingsWithBundleAt(ctx, userID, bundleID, next)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	a, r := closureDelta(effectiveClosure(before, rules), effectiveClosure(after, rules))
-	return a, r, nil
+	closureBefore, closureAfter := effectiveClosure(before, rules), effectiveClosure(after, rules)
+	a, r := closureDelta(closureBefore, closureAfter)
+	return a, r, ruleRefs(before, after, closureBefore, closureAfter, rules), nil
 }
 
 // describeMove turns one holder's delta into the three sentences the rehearsal
@@ -520,7 +521,7 @@ func PublishBundleVersion(ctx context.Context, actor string, req PublishRequest)
 			}
 			for _, h := range holders {
 				moved = append(moved, h.UserID)
-				adds, revokes, err := holderDelta(ctx, h.UserID, req.BundleID, next, rules)
+				adds, revokes, refs, err := holderDelta(ctx, h.UserID, req.BundleID, next, rules)
 				if err != nil {
 					return err
 				}
@@ -529,7 +530,7 @@ func PublishBundleVersion(ctx context.Context, actor string, req PublishRequest)
 				if err != nil {
 					return err
 				}
-				params = append(params, rows...)
+				params = append(params, asRuleRows(rows, refs)...)
 			}
 		}
 
@@ -650,12 +651,12 @@ func RehearseMoveHolders(ctx context.Context, req MoveHoldersRequest) (BulkPlan,
 			plan.Outcomes = append(plan.Outcomes, out)
 			continue
 		}
-		adds, revokes, err := holderDelta(ctx, id, req.BundleID, target, rules)
+		adds, revokes, refs, err := holderDelta(ctx, id, req.BundleID, target, rules)
 		if err != nil {
 			return plan, err
 		}
 		out.Effect, out.Detail, out.Consequence = describeMove(h.Version, targetVersion, adds, revokes)
-		cancels, err := cancelsLine(ctx, deltaWrites(id, adds, revokes, "bundle", req.BundleID))
+		cancels, err := cancelsLine(ctx, asRuleRows(deltaWrites(id, adds, revokes, "bundle", req.BundleID), refs))
 		if err != nil {
 			return plan, err
 		}
@@ -719,7 +720,7 @@ func MoveHolders(ctx context.Context, actor string, req MoveHoldersRequest) (Bul
 				continue
 			}
 			actionable = append(actionable, out.UserID)
-			adds, revokes, err := holderDelta(ctx, out.UserID, req.BundleID, target, rules)
+			adds, revokes, refs, err := holderDelta(ctx, out.UserID, req.BundleID, target, rules)
 			if err != nil {
 				return err
 			}
@@ -728,7 +729,7 @@ func MoveHolders(ctx context.Context, actor string, req MoveHoldersRequest) (Bul
 			if err != nil {
 				return err
 			}
-			params = append(params, rows...)
+			params = append(params, asRuleRows(rows, refs)...)
 		}
 		if len(actionable) == 0 {
 			return errNothingToMove

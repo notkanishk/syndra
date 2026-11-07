@@ -297,8 +297,11 @@ func TestCascadeBundleAssignedToUser_ClosureDiffIncludesRuleDerivedTarget(t *tes
 		t.Fatalf("enqueued %d params, want 2 (A + rule-derived B2): %+v", len(enqueued), enqueued)
 	}
 	got := map[string]bool{}
+	// The bundle's role is its row; the role the rule follows with is the
+	// rule's (task 1.6), the shape FollowRules writes.
+	want := map[string][2]string{"A": {"bundle", "b1"}, "B2": {"rule", "rule1"}}
 	for _, p := range enqueued {
-		if p.Source != "bundle" || p.SourceRef != "b1" || p.OpType != "add" {
+		if w := want[p.RoleKeys[0]]; p.Source != w[0] || p.SourceRef != w[1] || p.OpType != "add" {
 			t.Fatalf("bad param: %+v", p)
 		}
 		got[p.RoleKeys[0]] = true
@@ -597,8 +600,9 @@ func TestCascadeBundleRemoved_ClosureRevokeSymmetry(t *testing.T) {
 		t.Fatalf("expected 2 revokes (A + rule-derived B2), got %+v", got)
 	}
 	revoked := map[string]bool{}
+	want := map[string][2]string{"A": {"bundle", "b1"}, "B2": {"rule", "rule1"}}
 	for _, p := range got {
-		if p.OpType != "revoke" || p.Source != "bundle" || p.SourceRef != "b1" {
+		if w := want[p.RoleKeys[0]]; p.OpType != "revoke" || p.Source != w[0] || p.SourceRef != w[1] {
 			t.Fatalf("bad revoke param: %+v", p)
 		}
 		revoked[p.RoleKeys[0]] = true
