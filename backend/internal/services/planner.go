@@ -60,6 +60,9 @@ func (a Action) subject() string {
 	case OpAdopt:
 		return a.DriftID
 	}
+	if a.DriftID != "" {
+		return a.DriftID // a drift row's revoke
+	}
 	return a.UserID
 }
 
@@ -182,6 +185,8 @@ func Plan(a Action, s PlanSnapshot) Change {
 		return planExtend(ch, a, s, profile, person)
 	case a.Op == OpAdopt:
 		return planAdopt(ch, a, s, person)
+	case a.Op == OpRevoke:
+		return planRevoke(ch, a, s, person)
 	case a.Op == OpPublish || a.Op == OpMove:
 		return planMove(ch, a, s, person)
 	}

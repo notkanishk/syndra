@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"slices"
 	"sort"
 	"syndra/internal/textsort"
 	"time"
@@ -479,110 +480,6 @@ type DirectGrantRemoval struct {
 	Status   string   `json:"status"`
 }
 
-// DeleteDirectGrant removes one Syndra direct grant and enqueues only the
-// access the person actually loses.
-//
-// The delta is computed the same way every other cascade computes it: the
-// effective-role closure before the deletion versus the closure after it, from
-// pre-mutation reads plus an in-memory simulation of the removal. A role still
-// carried by a bundle or produced by a mapping rule stays in `after` and is
-// never revoked; a rule-derived role this grant alone supported falls out of
-// `after` and is.
-//
-// Enqueuing an unconditional revoke — which is what this did before — removed
-// access upstream that the person demonstrably still held, contradicting the
-// dialog and taking the role away until the next compile restored it.
-//
-// This is deliberately NOT the Zitadel-side grant delete: that removes a
-// different object and leaves the Syndra row behind, so the next cache compile
-// puts the access straight back. Deleting the ledger row is what actually ends
-// the access; the outbox rows are what carry it upstream.
-// DeleteDirectGrant removes one direct grant. reason is the operator's why
-// (a bulk removal requires one); empty keeps the general wording.
-func DeleteDirectGrant(ctx context.Context, userID, grantID, actor, reason string) (DirectGrantRemoval, error) {
-	if reason == "" {
-		reason = "Direct access removal"
-	}
-	var ids, retained []string
-	var revokes []roleKey
-
-	// Read and write under one lock, for the same reason expiry does: a delta
-	// computed while another cascade is mid-flight is a statement about a world
-	// neither of them ends up in.
-	if err := withLockedAccess(ctx, func(ctx context.Context) error {
-		var err error
-		if revokes, retained, err = directGrantRemovalDelta(ctx, userID, grantID); err != nil {
-			return err
-		}
-		params, err := deltaParams(ctx, userID, nil, revokes, actor, reason, "direct", grantID)
-		if err != nil {
-			return err
-		}
-
-		ids, err = svcDeleteDirectGrantAndEnqueue(ctx, actor, userID, grantID, reason, params)
-		return err
-	}); err != nil {
-		return DirectGrantRemoval{}, err
-	}
-
-	revoked := make([]string, 0, len(revokes))
-	for _, key := range revokes {
-		revoked = append(revoked, key.projectID+"/"+key.roleKey)
-	}
-
-	return DirectGrantRemoval{
-		OutboxIDs: ids,
-		Revoked:   revoked,
-		Retained:  retained,
-		Status:    "pending",
-	}, nil
-}
-
-// directGrantRemovalDelta is what removing one direct grant takes away and
-// what it leaves, by the one closure: the roles that lose their last source,
-// and the grant's own role when a bundle or a rule still covers it. Shared by
-// the removal and its preview, so the count a person consents to is the
-// removal's own (re-audit R18).
-func directGrantRemovalDelta(ctx context.Context, userID, grantID string) ([]roleKey, []string, error) {
-	rules, err := svcGetActiveMappingRules(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	before, err := userBaseHoldings(ctx, userID)
-	if err != nil {
-		return nil, nil, err
-	}
-	after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
-	if err != nil {
-		return nil, nil, err
-	}
-	afterClosure := effectiveClosure(after, rules)
-	_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
-
-	// Retained is the dialog's exact claim: the role this grant carried, still
-	// effective afterwards because a bundle or a rule also covers it. Reported,
-	// never enqueued — it is precisely the role that must NOT be revoked.
-	retained := make([]string, 0, 1)
-	if target, found := directGrantRoleKey(ctx, userID, grantID); found && afterClosure[target] {
-		retained = append(retained, target.projectID+"/"+target.roleKey)
-	}
-	return revokes, retained, nil
-}
-
-// PreviewDirectGrantRemoval is DeleteDirectGrant's answer without the write:
-// what would be revoked and what would stay. Nothing is enqueued.
-func PreviewDirectGrantRemoval(ctx context.Context, userID, grantID, _, _ string) (DirectGrantRemoval, error) {
-	revokes, retained, err := directGrantRemovalDelta(ctx, userID, grantID)
-	if err != nil {
-		return DirectGrantRemoval{}, err
-	}
-	revoked := make([]string, 0, len(revokes))
-	for _, key := range revokes {
-		revoked = append(revoked, key.projectID+"/"+key.roleKey)
-	}
-	return DirectGrantRemoval{OutboxIDs: []string{}, Revoked: revoked, Retained: retained, Status: "preview"}, nil
-}
-
 // ExpiredGrantRevocation is what one expired grant produced.
 //
 // ProjectID and RoleKey come from the row the delete actually removed, not from
@@ -596,88 +493,68 @@ type ExpiredGrantRevocation struct {
 	// Retained lists pairs a bundle or a mapping rule still covers. Nothing is
 	// queued for these — the grant lapsed, the access did not.
 	Retained []string
+	// Change is what the planner decided and the delete wrote, each write
+	// with its row: the sweep sends it (DeliverChange).
+	Change Change
 }
 
-// ExpireDirectGrant ends one expired grant the way an operator's removal ends a
-// live one: same closure delta, same single transaction, same outbox.
+// ExpireDirectGrant ends one grant whose end has passed the way an operator's
+// removal ends a live one, through the planner (task 1.9): the closure delta
+// planned on the snapshot read under the access lock (planExpiry), written
+// with the guarded ledger delete in one transaction, each write marked to go
+// straight away or to wait for you because its role waits. It returns the
+// Change; the caller sends it after the commit.
 //
-// Expiry used to delete the ledger row and then call Zitadel directly to revoke
-// whatever mapping rules derived from it. Two things were wrong with that. The
-// grant itself was never revoked upstream at all, so an expiring grant left the
-// access live in Zitadel with no Syndra record explaining it — and the next
-// drift sweep, correctly, raised it as unexplained access for a human to
-// triage. Expiry manufactured drift out of its own inaction. And the derived
-// revocations it did issue were unconditional: a rule-derived role the subject
-// still holds through a bundle, or through another grant of the same source
-// role, was taken away anyway, with nothing durable recording that it had been.
+// Expiry used to compute no delta at all: base holdings exclude an ended
+// grant, so reading both sides compared a world without it against a world
+// without it, and the access stayed live in Zitadel with no record (drift
+// manufactured by expiry). The delta is now every removal's.
 //
-// Both follow from the same omission — expiry was computing no delta. It has
-// one now, and it is the delta every other removal computes.
-//
-// `before` is built from `after` plus the expiring grant's own role rather than
-// read separately, because the "before" read would not contain it: base
-// holdings exclude expired grants by definition, so reading both sides would
-// compare a world without this grant against a world without this grant and
-// find nothing to revoke. The one fact that distinguishes the two states is the
-// grant being expired, and that fact is the input, not something to rediscover.
-func ExpireDirectGrant(ctx context.Context, userID, grantID, projectID, role, actor string) (ExpiredGrantRevocation, error) {
+// It cancels only the queued changes its plan named (systemGate): a give of
+// the lapsed role still waiting to be sent is cancelled, as before (sending
+// it later would restore access that ended), and nothing else. The DELETE's
+// own predicate stays the authority on whether the grant ended: a grant
+// renewed since the sweep read it is db.ErrGrantRenewed, a vanished one
+// db.ErrGrantNotFound.
+func ExpireDirectGrant(ctx context.Context, g models.DirectGrant, actor string) (ExpiredGrantRevocation, error) {
+	ctx = systemGate(ctx)
 	var out ExpiredGrantRevocation
 
-	// The lock is taken before the reads, not around the write. A delta is a
-	// statement about a world, and the window that matters runs from the read
-	// that observed that world to the commit that acts on it — a bundle
-	// assignment landing in the middle makes the revoke a statement about a
-	// world that no longer exists, and the add it queued lands first, so the
-	// subject ends up without access they are currently owed.
-	//
-	// The reads deliberately stay on the pool rather than on this transaction.
-	// What they need is not to see this transaction's own writes — there are
-	// none yet — but for nothing that could invalidate them to be able to
-	// commit while they run, and every enqueue must take this same lock.
+	// The lock is taken before the reads, not around the write: a delta is a
+	// statement about a world, and a bundle assignment landing between the read
+	// and the commit would make the revoke one about a world that no longer
+	// exists.
 	err := withLockedAccess(ctx, func(ctx context.Context) error {
-		rules, err := svcGetActiveMappingRules(ctx)
+		s, err := systemSnapshot(ctx, []string{g.UserID})
 		if err != nil {
 			return err
 		}
-		after, err := userBaseHoldingsExcludingGrant(ctx, userID, grantID)
+		ch := planExpiry(g, s.Access.People[g.UserID], s)
+		if ch.Refusal == "renewed" {
+			return db.ErrGrantRenewed
+		}
+		db.CancellationsNamed(ctx, ch.Row.CancelIDs)
+		params, err := systemParams(ctx, actor, "Grant expired", []Change{ch})
 		if err != nil {
 			return err
 		}
-		lapsed := roleKey{projectID: projectID, roleKey: role}
-		before := make(map[roleKey]bool, len(after)+1)
-		for k := range after {
-			before[k] = true
-		}
-		before[lapsed] = true
-
-		afterClosure := effectiveClosure(after, rules)
-		_, revokes := closureDelta(effectiveClosure(before, rules), afterClosure)
-
-		retained := make([]string, 0, 1)
-		if afterClosure[lapsed] {
-			retained = append(retained, lapsed.projectID+"/"+lapsed.roleKey)
-		}
-
-		params, err := deltaParams(ctx, userID, nil, revokes, actor, "Grant expired", "direct", grantID)
+		deletedProject, deletedRole, ids, err := svcDeleteExpiredDirectGrantAndEnqueue(ctx, actor, g.UserID, g.ID, params)
 		if err != nil {
 			return err
 		}
-
-		deletedProject, deletedRole, ids, err := svcDeleteExpiredDirectGrantAndEnqueue(ctx, actor, userID, grantID, params)
-		if err != nil {
+		if ch, err = ch.written(ids); err != nil {
 			return err
 		}
-
-		revoked := make([]string, 0, len(revokes))
-		for _, key := range revokes {
-			revoked = append(revoked, key.projectID+"/"+key.roleKey)
+		// Retained is the lapsed role when a bundle or a rule still gives it:
+		// nothing is queued for it, the grant lapsed and the access did not.
+		lapsed := g.ProjectID + "/" + g.RoleKey
+		out = ExpiredGrantRevocation{ProjectID: deletedProject, RoleKey: deletedRole, OutboxIDs: ids,
+			Revoked: []string{}, Retained: []string{lapsed}, Change: ch}
+		for _, w := range ch.Writes {
+			out.Revoked = append(out.Revoked, w.ProjectID+"/"+w.RoleKeys[0])
 		}
-		out = ExpiredGrantRevocation{
-			ProjectID: deletedProject,
-			RoleKey:   deletedRole,
-			OutboxIDs: ids,
-			Revoked:   revoked,
-			Retained:  retained,
+		if slices.Contains(out.Revoked, lapsed) {
+			out.Retained = []string{}
 		}
 		return nil
 	})

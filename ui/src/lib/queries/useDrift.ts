@@ -178,7 +178,9 @@ export const useAttributeDrift = () =>
   useDriftMutation<{ source: AttributionSource; fingerprint?: string; cancel_ids?: string[] }>(
     (id) => `/governance/drift/${id}/attribute`,
   );
-export const useRevokeDrift = () => useDriftMutation<undefined>((id) => `/governance/drift/${id}/revoke`);
+export const useRevokeDrift = () =>
+  // The plan it was shown (GET /users/{id}/plan?op=revoke): its fingerprint and cancel ids.
+  useDriftMutation<{ fingerprint?: string; cancel_ids?: string[] }>((id) => `/governance/drift/${id}/revoke`);
 export const useMarkExternalDrift = () =>
   useDriftMutation<{ reason?: string }>((id) => `/governance/drift/${id}/mark-external`);
 

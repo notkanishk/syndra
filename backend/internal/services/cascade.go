@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -101,26 +103,6 @@ func refuseRetired(b models.Bundle) error {
 	return nil
 }
 
-// applyMode delivers the JUST-enqueued rows (Deliver): each goes to Zitadel
-// now unless its role waits. A bundle's or rule's own mode used to decide this
-// too; under roles that wait it decided nothing and was dropped (migration
-// 000078). The rows were already persisted atomically
-// with the source mutation by the caller, so a send failure is NON-FATAL: it
-// is captured in res.Drain (Halted/Reason) and applyMode returns nil, so the
-// handler still responds 200 and the rows sit pending in the worklist,
-// recoverable via "Resume now". (Returning an error here would 500 AFTER the
-// mutation committed, inviting a retry that re-runs the whole cascade and
-// mints duplicate outbox rows.)
-func applyMode(ctx context.Context, ids []string) (CascadeResult, error) {
-	d := Deliver(ctx, ids, false)
-	return CascadeResult{
-		Enqueued:   len(ids),
-		Drain:      d.Drain,
-		Waiting:    len(d.Waiting),
-		WaitReason: d.WaitReason(),
-	}, nil
-}
-
 // --- closure-diff helpers (P1a/P1b fix) ---
 //
 // Every cascade below projects a user's EFFECTIVE-ROLE CLOSURE delta (adds = after−before,
@@ -171,33 +153,6 @@ func sortRoleKeys(ks []roleKey) {
 }
 
 // userBaseHoldings returns a user's PRE-rule base = direct grants ∪ bundle literal roles.
-// subtractQueuedRevocations removes roles the subject has an unresolved
-// revocation for.
-//
-// The intent ledger keeps a grant until the target confirms it is gone — so
-// that a failed dispatch never leaves Syndra believing access is removed while
-// the target still has it. For as long as the row waits, the ledger is a wrong
-// answer to "what does this person effectively hold": the decision is taken,
-// the row is not yet gone. A delta computed from it concludes nothing is
-// missing and queues nothing, and the revocation lands anyway.
-//
-// Subtracting them makes the transition visible from the moment it is queued
-// rather than the moment it is confirmed, which is the only point at which
-// another cascade can still do something about it. A revocation that later
-// fails and is requeued leaves the role absent from the closure, and a cascade
-// that wants it queues an add behind the revoke — the final state is the one
-// the newer decision asked for.
-func subtractQueuedRevocations(ctx context.Context, userID string, base map[roleKey]bool) error {
-	queued, err := svcQueuedRevocations(ctx, userID)
-	if err != nil {
-		return err
-	}
-	for _, r := range queued {
-		delete(base, roleKey{projectID: r.ProjectID, roleKey: r.RoleKey})
-	}
-	return nil
-}
-
 func userBaseHoldings(ctx context.Context, userID string) (map[roleKey]bool, error) {
 	return userBaseHoldingsExcludingBundle(ctx, userID, "")
 }
@@ -245,18 +200,10 @@ func baseFrom(p db.PersonAccess, excludeBundleID string) map[roleKey]bool {
 }
 
 // userBaseHoldingsWithBundleAt is userBaseHoldings with ONE bundle's
-// contribution replaced by an explicit role set — "what would this person hold
-// if their pin on bundle B were moved to a version containing exactly these".
-//
-// This is how both publishing and moving a holder are simulated. It replaces
-// the old per-role add/remove simulations, which could only model one role
-// changing at a time; a version is a whole set moving at once, and a person can
-// gain and lose roles in the same step.
-func userBaseHoldingsWithBundleAt(
-	ctx context.Context,
-	userID, bundleID string,
-	roles []models.BundleRole,
-) (map[roleKey]bool, error) {
+// contribution replaced by an explicit role set: "what would this person hold
+// if their pin on bundle B were a version containing exactly these" (the
+// Insights what-if). A role a queued revocation is taking away stays away.
+func userBaseHoldingsWithBundleAt(ctx context.Context, userID, bundleID string, roles []models.BundleRole) (map[roleKey]bool, error) {
 	base, err := userBaseHoldingsExcludingBundle(ctx, userID, bundleID)
 	if err != nil {
 		return nil, err
@@ -264,124 +211,85 @@ func userBaseHoldingsWithBundleAt(
 	for _, ro := range roles {
 		base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
 	}
-	if err := subtractQueuedRevocations(ctx, userID, base); err != nil {
+	queued, err := svcQueuedRevocations(ctx, userID)
+	if err != nil {
 		return nil, err
+	}
+	for _, r := range queued {
+		delete(base, roleKey{projectID: r.ProjectID, roleKey: r.RoleKey})
 	}
 	return base, nil
 }
 
-// deltaParams converts a closure delta into enqueue params, all attributed to the ONE triggering
-// source (bundle or rule), whether it is an add or a revoke. A bundle's cascade then hands the
-// roles a rule follows with to asRuleRows: those rows are the rule's (decision 7).
-// It also REGISTERS the lifecycle trigger, and that placement is the point:
-// this is the ONE function every closure delta in this package passes through,
-// so a cascade added later reaches its mapped targets without anybody
-// remembering to wire it. Hooking the nine callers instead would be nine hooks
-// and one that gets forgotten — and the forgotten one is a person whose access
-// changed in Zitadel and nowhere else.
+// CascadeBundleAssignedToUser assigns the welcome bundle on a first sign-in
+// (onboarding), through the planner (task 1.9): the person's closure delta
+// (the bundle's roles at its latest published version, and what the rules
+// follow with) planned on the snapshot under the lock, written with the
+// assignment in one tx, then delivered as the plan decided (DeliverChange).
+// It cancels only the queued changes its plan named (systemGate).
 //
-// Registers rather than resolves, because this necessarily runs before the
-// write it is building params for. `withLockedAccess` flushes it afterwards,
-// inside the same transaction; see lifecycle_trigger.go.
-func deltaParams(ctx context.Context, userID string, adds, revokes []roleKey, actor, reason, source, sourceRef string) ([]db.EnqueueParams, error) {
-	if err := deferTargetConvergence(ctx, actor, userID, append(append([]roleKey(nil), adds...), revokes...)); err != nil {
-		return nil, err
-	}
-	params := deltaWrites(userID, adds, revokes, source, sourceRef)
-	for i := range params {
-		params[i].GrantedBy, params[i].Reason, params[i].PayloadJSON = actor, reason, "{}"
-	}
-	return params, nil
-}
-
-// deltaWrites are a delta's single-role writes, without side effects: what the
-// planner decides (and asks db.Answers about) is what the apply enqueues.
-func deltaWrites(userID string, adds, revokes []roleKey, source, sourceRef string) []db.EnqueueParams {
-	params := make([]db.EnqueueParams, 0, len(adds)+len(revokes))
-	for _, k := range adds {
-		params = append(params, db.EnqueueParams{UserID: userID, ProjectID: k.projectID, RoleKeys: []string{k.roleKey},
-			Source: source, SourceRef: sourceRef, OpType: "add"})
-	}
-	for _, k := range revokes {
-		params = append(params, db.EnqueueParams{UserID: userID, ProjectID: k.projectID, RoleKeys: []string{k.roleKey},
-			Source: source, SourceRef: sourceRef, OpType: "revoke"})
-	}
-	return params
-}
-
-// CascadeBundleAssignedToUser assigns the bundle AND enqueues the user's closure delta (bundle
-// roles plus anything they derive via active mapping rules) in one tx (atomic — no committed
-// assignment without its outbox rows), then (auto) drains those rows.
+// No catalogue guard, as before: a welcome assignment is never refused for a
+// role Zitadel no longer offers; that row is refused by Zitadel when it is
+// sent, and says so in Pending changes.
 func CascadeBundleAssignedToUser(ctx context.Context, actor, userID, bundleID string) (CascadeResult, error) {
-	var bundle models.Bundle
-	var ids []string
-	var assigned bool
+	ctx = systemGate(ctx)
+	var changes []Change
+	assigned := false
 
 	// Everything from the first read to the commit runs under the
-	// access-mutation lock. Reading outside it is what produced the failure this
-	// wraps: this cascade can read while a direct grant still covers the role,
-	// conclude it has nothing to add, write its assignment, and commit that
-	// emptiness on top of an expiry that revoked the cover in between. The
-	// person then holds the bundle and not the role, and no queued row disagrees.
-	//
-	// The drain below is deliberately outside: it talks to Zitadel, and holding
-	// a global lock across a network call would make one unreachable target
-	// serialise every access change behind it.
+	// access-mutation lock: a delta read outside it can describe a world an
+	// expiry changed in between. The send is outside: the lock is never held
+	// across a call to Zitadel.
 	err := withLockedAccess(ctx, func(ctx context.Context) error {
-		var err error
-		bundle, err = svcGetBundleByID(ctx, bundleID)
+		bundle, err := svcGetBundleByID(ctx, bundleID)
 		if err != nil {
 			return err
 		}
 		if err := refuseRetired(bundle); err != nil {
 			return err
 		}
-		// The LATEST PUBLISHED version, not the working copy. AssignBundleAndEnqueue
-		// pins the assignment to that version in the same transaction, so projecting
-		// from `bundle_roles` would push unpublished edits to somebody who is not
-		// pinned to them — a new member receiving a role nobody had published.
+		// The LATEST PUBLISHED version, not the working copy: the assignment
+		// pins it in the same transaction.
 		version, roles, err := svcLatestVersionRoles(ctx, bundleID)
 		if err != nil {
 			return err
 		}
-		rules, err := svcGetActiveMappingRules(ctx)
+		s, err := systemSnapshot(ctx, []string{userID})
 		if err != nil {
 			return err
 		}
-		before, err := userBaseHoldings(ctx, userID)
-		if err != nil {
-			return err
+		person := s.Access.People[userID]
+		if person.Bundles[bundleID] {
+			// Already a holder, on whichever version: re-assigning is a no-op,
+			// never a repin (moving holders is its own reviewed act).
+			return nil
 		}
-		after := make(map[roleKey]bool, len(before)+len(roles))
-		for k := range before {
-			after[k] = true
-		}
+		before := baseFrom(person, "")
+		after := maps.Clone(before)
 		for _, ro := range roles {
 			after[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
 		}
-		closureBefore, closureAfter := effectiveClosure(before, rules), effectiveClosure(after, rules)
-		adds, revokes := closureDelta(closureBefore, closureAfter)
-		params, err := deltaParams(ctx, userID, adds, revokes, actor, "Bundle membership cascade", "bundle", bundleID)
+		changes = []Change{systemChange(userID, person, s, before, after, s.Access.Rules, s.Access.Rules, "bundle", bundleID)}
+		db.CancellationsNamed(ctx, plannedCancels(changes))
+		params, err := systemParams(ctx, actor, "Bundle membership cascade", changes)
 		if err != nil {
 			return err
 		}
-		params = asRuleRows(params, ruleRefs(before, after, closureBefore, closureAfter, rules))
-
-		ids, assigned, err = svcAssignBundleAndEnqueue(ctx, actor, "", userID, bundleID, version.ID, params)
-		return err // enqueue+assign rolled back together → handler returns 500
+		ids, ok, err := svcAssignBundleAndEnqueue(ctx, actor, "", userID, bundleID, version.ID, params)
+		if err != nil || !ok {
+			return err // !ok: they joined in the same instant, and nothing was written
+		}
+		assigned = true
+		changes, err = pairWritten(changes, ids)
+		return err
 	})
 	if err != nil {
 		return CascadeResult{}, err
 	}
 	if !assigned {
-		// They already hold it, on whichever version they were pinned to. The
-		// delta computed above was against the LATEST version, so enqueuing it
-		// would hand them newer access than their pin records — the exact
-		// mismatch versioning exists to prevent. Moving them forward is a
-		// separate, rehearsed action.
 		return CascadeResult{NoOp: true}, nil
 	}
-	return applyMode(ctx, ids)
+	return deliverSystem(ctx, changes), nil
 }
 
 // EditBundleWorkingCopy adds or removes a role in the bundle's working copy.
@@ -399,81 +307,81 @@ func EditBundleWorkingCopy(ctx context.Context, actor, bundleID, projectID, role
 	return err
 }
 
-// CascadeRuleCreated creates the rule AND enqueues, for every known user, the closure delta caused
-// by the new source→target edge (empty delta users are skipped), in one tx, then (auto) drains.
-// Affected users come from GetAllKnownUserIDs — not a grant-index lookup — so a user who holds the
-// source only via Syndra's own tables (pending/manual/failed-drain) is still discovered (P1b). The
-// enqueue params carry SourceRef="" here; CreateMappingRuleAndEnqueue stamps the new rule id onto
-// them after the INSERT ... RETURNING, since the id doesn't exist yet at simulation time. Returns
-// the new rule id for the handler response. The handler does cycle/self-ref validation first.
+// everyone plans every known person's closure delta between two rule sets on
+// one snapshot: a rule's own edit (create, update, retire), every row
+// attributed to the edited rule (ref; "" for one not yet created, which the
+// insert stamps). People whose access doesn't move are left out.
+func everyone(ctx context.Context, rulesAfter func([]models.MappingRule) []models.MappingRule, ref string) ([]Change, error) {
+	users, err := svcGetAllKnownUserIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s, err := systemSnapshot(ctx, users)
+	if err != nil {
+		return nil, err
+	}
+	before := s.Access.Rules
+	after := rulesAfter(slices.Clone(before))
+	var changes []Change
+	for _, u := range users {
+		person := s.Access.People[u]
+		base := baseFrom(person, "")
+		if ch := systemChange(u, person, s, base, base, before, after, "rule", ref); len(ch.Writes) > 0 {
+			changes = append(changes, ch)
+		}
+	}
+	return changes, nil
+}
+
+// CascadeRuleCreated creates the rule AND enqueues, for every known user, the
+// closure delta the new source→target edge causes, planned on one snapshot
+// under the lock (task 1.9), in one tx, then delivers it as planned. Affected
+// users come from GetAllKnownUserIDs, not the grant index, so a user who holds
+// the source only in Syndra's own tables is still reached (P1b). The rows
+// carry SourceRef="" here; CreateMappingRuleAndEnqueue stamps the new rule id
+// onto them after the insert. The handler validates cycles first. It cancels
+// only what the operator's gate admits.
 func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, targetProject, targetRole string) (string, CascadeResult, error) {
 	var ruleID string
-	var ids []string
-
+	var changes []Change
 	// A rule reaches every holder of the source role, and which holders those
-	// are is what these reads are for — which is why the lock is one lock and
-	// not one per subject. There is no subject set to lock before the question
-	// that produces it.
+	// are is what these reads are for, which is why the lock is one lock.
 	err := withLockedAccess(ctx, func(ctx context.Context) error {
-		users, err := svcGetAllKnownUserIDs(ctx)
+		var err error
+		changes, err = everyone(ctx, func(rules []models.MappingRule) []models.MappingRule {
+			return append(rules, models.MappingRule{SourceProject: sourceProject, SourceRole: sourceRole,
+				TargetProject: targetProject, TargetRole: targetRole})
+		}, "")
 		if err != nil {
 			return err
 		}
-		rulesBefore, err := svcGetActiveMappingRules(ctx)
+		params, err := systemParams(ctx, actor, "Mapping rule cascade", changes)
 		if err != nil {
 			return err
 		}
-		rulesAfter := append(append([]models.MappingRule{}, rulesBefore...), models.MappingRule{
-			SourceProject: sourceProject, SourceRole: sourceRole,
-			TargetProject: targetProject, TargetRole: targetRole,
-		})
-
-		var params []db.EnqueueParams
-		for _, u := range users {
-			base, err := userBaseHoldings(ctx, u)
-			if err != nil {
-				return err
-			}
-			adds, revokes := closureDelta(effectiveClosure(base, rulesBefore), effectiveClosure(base, rulesAfter))
-			if len(adds) == 0 && len(revokes) == 0 {
-				continue
-			}
-			rows, err := deltaParams(ctx, u, adds, revokes, actor, "Mapping rule cascade", "rule", "")
-			if err != nil {
-				return err
-			}
-			params = append(params, rows...)
+		var ids []string
+		if ruleID, ids, err = svcCreateRuleAndEnqueue(ctx, actor, sourceProject, sourceRole, targetProject, targetRole, params); err != nil {
+			return err
 		}
-
-		ruleID, ids, err = svcCreateRuleAndEnqueue(ctx, actor,
-			sourceProject, sourceRole, targetProject, targetRole, params)
+		changes, err = pairWritten(changes, ids)
 		return err
 	})
 	if err != nil {
 		return "", CascadeResult{}, err
 	}
-	res, err := applyMode(ctx, ids)
-	return ruleID, res, err
+	return ruleID, deliverSystem(ctx, changes), nil
 }
 
-// CascadeBundleRetired retires a bundle and takes back what only it was granting.
-//
-// It is CascadeBundleRemovedFromUser run over every holder and committed with the deletion, and
-// it is written as a loop over holders rather than a single "revoke the bundle's roles" pass for
-// the same reason every other cascade here is: coverage is a property of a person, not of a
-// bundle. Two people can hold the same bundle and lose different roles by it going away, because
-// one of them also has a direct grant for one of those roles. The closure diff answers that per
-// person; a bundle-level role list could only guess.
-//
-// Holders are read via GetUsersForBundle — the assignment table — not the known-user list. A
-// bundle reaches exactly the people assigned to it, so widening the scan would be work with a
-// guaranteed empty delta.
+// CascadeBundleRetired retires a bundle and takes back what only it was
+// granting: each holder's closure delta without the bundle, planned on one
+// snapshot under the lock (task 1.9) and committed with the retirement.
+// Coverage is a property of a person, not of a bundle: two holders can lose
+// different roles by it going, because one also has a direct grant. Holders
+// are the assignment table's, which is exactly who a bundle reaches.
 func CascadeBundleRetired(ctx context.Context, actor, bundleID string) (CascadeResult, error) {
-	var bundle models.Bundle
-	var ids []string
+	var changes []Change
 	err := withLockedAccess(ctx, func(ctx context.Context) error {
-		var err error
-		bundle, err = svcGetBundleByID(ctx, bundleID)
+		bundle, err := svcGetBundleByID(ctx, bundleID)
 		if err != nil {
 			return err
 		}
@@ -489,215 +397,110 @@ func CascadeBundleRetired(ctx context.Context, actor, bundleID string) (CascadeR
 		if len(blockers) > 0 {
 			return &ErrBundleIncluded{Includers: blockers}
 		}
-		rules, err := svcGetActiveMappingRules(ctx)
-		if err != nil {
-			return err
-		}
 		holders, err := svcGetUsersForBundle(ctx, bundleID)
 		if err != nil {
 			return err
 		}
-
-		var params []db.EnqueueParams
-		for _, u := range holders {
-			before, err := userBaseHoldings(ctx, u)
-			if err != nil {
-				return err
-			}
-			after, err := userBaseHoldingsExcludingBundle(ctx, u, bundleID)
-			if err != nil {
-				return err
-			}
-			closureBefore, closureAfter := effectiveClosure(before, rules), effectiveClosure(after, rules)
-			adds, revokes := closureDelta(closureBefore, closureAfter)
-			if len(adds) == 0 && len(revokes) == 0 {
-				continue
-			}
-			rows, err := deltaParams(ctx, u, adds, revokes, actor, "Bundle deletion cascade", "bundle", bundleID)
-			if err != nil {
-				return err
-			}
-			params = append(params, asRuleRows(rows, ruleRefs(before, after, closureBefore, closureAfter, rules))...)
+		s, err := systemSnapshot(ctx, holders)
+		if err != nil {
+			return err
 		}
-
-		ids, err = svcRetireBundleAndEnqueue(ctx, actor, bundleID, params)
+		changes = nil
+		for _, u := range holders {
+			person := s.Access.People[u]
+			ch := systemChange(u, person, s, baseFrom(person, ""), baseFrom(person, bundleID), s.Access.Rules, s.Access.Rules, "bundle", bundleID)
+			if len(ch.Writes) > 0 {
+				changes = append(changes, ch)
+			}
+		}
+		params, err := systemParams(ctx, actor, "Bundle deletion cascade", changes)
+		if err != nil {
+			return err
+		}
+		ids, err := svcRetireBundleAndEnqueue(ctx, actor, bundleID, params)
+		if err != nil {
+			return err
+		}
+		changes, err = pairWritten(changes, ids)
 		return err
 	})
 	if err != nil {
 		return CascadeResult{}, err
 	}
-	return applyMode(ctx, ids)
+	return deliverSystem(ctx, changes), nil
 }
 
-// CascadeRuleUpdated re-projects a rule whose matcher/target changed. `old` is the rule as it was
-// BEFORE the update (captured by the handler, since the updated fields don't tell us the old
-// target); sp/sr/tp/tr are the NEW fields. The update and the cascade commit atomically.
-//
-// For every known user, rulesBefore (containing `old` as currently persisted) and rulesAfter
-// (old.ID's edge replaced by the new sp/sr/tp/tr) are each folded into that user's closure; the
-// diff is enqueued attributed to old.ID. This closure-diff replaces the old add-pass/revoke-pass
-// plus sameTriple/addSet bookkeeping: a user who ends up with the same effective roles either way
-// (e.g. re-added identically, or still covered by another source) simply gets an empty delta.
+// CascadeRuleUpdated re-projects a rule whose matcher or target changed. `old`
+// is the rule as it was (the handler read it; the new fields don't say the old
+// target); sp/sr/tp/tr are the new fields. For every known user the closure
+// through the active rules is compared with the closure with old.ID's edge
+// replaced, on one snapshot under the lock (task 1.9), and the difference is
+// committed with the update, attributed to old.ID. Someone who ends up with
+// the same access either way gets no rows.
 func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRule, sp, sr, tp, tr string) (CascadeResult, error) {
-	var ids []string
+	var changes []Change
 	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
-		users, err := svcGetAllKnownUserIDs(ctx)
-		if err != nil {
-			return err
-		}
-		rulesBefore, err := svcGetActiveMappingRules(ctx)
-		if err != nil {
-			return err
-		}
-		// ponytail: if old.ID isn't present in rulesBefore (shouldn't happen — the rule being updated
-		// is always in the active-rules read), rulesAfter falls back to == rulesBefore and the delta
-		// is a safe no-op rather than a guess.
-		rulesAfter := make([]models.MappingRule, len(rulesBefore))
-		copy(rulesAfter, rulesBefore)
-		for i, ru := range rulesAfter {
-			if ru.ID == old.ID {
-				rulesAfter[i] = models.MappingRule{
-					ID: old.ID, SourceProject: sp, SourceRole: sr,
-					TargetProject: tp, TargetRole: tr,
+		// ponytail: if old.ID isn't among the active rules (it always is),
+		// the rules after are the rules before, and the delta a safe no-op.
+		changes, err = everyone(ctx, func(rules []models.MappingRule) []models.MappingRule {
+			for i, ru := range rules {
+				if ru.ID == old.ID {
+					rules[i] = models.MappingRule{ID: old.ID, SourceProject: sp, SourceRole: sr, TargetProject: tp, TargetRole: tr}
+					break
 				}
-				break
 			}
-		}
-
-		var params []db.EnqueueParams
-		for _, u := range users {
-			base, err := userBaseHoldings(ctx, u)
-			if err != nil {
-				return err
-			}
-			adds, revokes := closureDelta(effectiveClosure(base, rulesBefore), effectiveClosure(base, rulesAfter))
-			if len(adds) == 0 && len(revokes) == 0 {
-				continue
-			}
-			rows, err := deltaParams(ctx, u, adds, revokes, actor, "Mapping-rule update cascade", "rule", old.ID)
-			if err != nil {
-				return err
-			}
-			params = append(params, rows...)
-		}
-
-		ids, err = svcUpdateRuleAndEnqueue(ctx, actor, old.ID, sp, sr, tp, tr, params)
+			return rules
+		}, old.ID)
 		if err != nil {
 			return err
 		}
-		return nil
+		params, err := systemParams(ctx, actor, "Mapping-rule update cascade", changes)
+		if err != nil {
+			return err
+		}
+		ids, err := svcUpdateRuleAndEnqueue(ctx, actor, old.ID, sp, sr, tp, tr, params)
+		if err != nil {
+			return err
+		}
+		changes, err = pairWritten(changes, ids)
+		return err
 	})
 	if err != nil {
 		return CascadeResult{}, err
 	}
-	return applyMode(ctx, ids)
+	return deliverSystem(ctx, changes), nil
 }
 
-// CascadeRuleRetired retires a rule and takes back what only it was granting. It is
-// CascadeRuleUpdated with no replacement edge: rulesAfter is the active set minus `old`, so the
-// per-user closure diff yields revokes for the targets this rule alone reached, and nothing at
-// all for anyone whose access to those targets survives via a bundle, a direct grant or another
-// rule. That coverage question is never asked separately — it falls out of the closure, which is
-// why deleting a rule cannot strip access somebody legitimately holds twice over.
-//
-// Adds are possible in principle and are enqueued if they occur: a rule can suppress nothing
-// today, but the diff is computed, not assumed, and a one-directional "revokes only" shortcut
-// would be a claim about the rule graph rather than a reading of it.
+// CascadeRuleRetired retires a rule and takes back what only it was granting:
+// CascadeRuleUpdated with no replacement edge. A role someone still reaches
+// through a bundle, a direct grant or another rule stays in their closure and
+// is never revoked; that coverage falls out of the closure rather than being
+// asked separately. Adds are possible in principle and are written if they
+// occur: the difference is computed, not assumed.
 func CascadeRuleRetired(ctx context.Context, actor string, old models.MappingRule) (CascadeResult, error) {
-	var ids []string
+	var changes []Change
 	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
-		users, err := svcGetAllKnownUserIDs(ctx)
+		changes, err = everyone(ctx, func(rules []models.MappingRule) []models.MappingRule {
+			return slices.DeleteFunc(rules, func(ru models.MappingRule) bool { return ru.ID == old.ID })
+		}, old.ID)
 		if err != nil {
 			return err
 		}
-		rulesBefore, err := svcGetActiveMappingRules(ctx)
+		params, err := systemParams(ctx, actor, "Mapping-rule deletion cascade", changes)
 		if err != nil {
 			return err
 		}
-		rulesAfter := make([]models.MappingRule, 0, len(rulesBefore))
-		for _, ru := range rulesBefore {
-			if ru.ID != old.ID {
-				rulesAfter = append(rulesAfter, ru)
-			}
-		}
-
-		var params []db.EnqueueParams
-		for _, u := range users {
-			base, err := userBaseHoldings(ctx, u)
-			if err != nil {
-				return err
-			}
-			adds, revokes := closureDelta(effectiveClosure(base, rulesBefore), effectiveClosure(base, rulesAfter))
-			if len(adds) == 0 && len(revokes) == 0 {
-				continue
-			}
-			rows, err := deltaParams(ctx, u, adds, revokes, actor, "Mapping-rule deletion cascade", "rule", old.ID)
-			if err != nil {
-				return err
-			}
-			params = append(params, rows...)
-		}
-
-		ids, err = svcRetireRuleAndEnqueue(ctx, actor, old.ID, params)
+		ids, err := svcRetireRuleAndEnqueue(ctx, actor, old.ID, params)
 		if err != nil {
 			return err
 		}
-		return nil
+		changes, err = pairWritten(changes, ids)
+		return err
 	})
 	if err != nil {
 		return CascadeResult{}, err
 	}
-	return applyMode(ctx, ids)
-}
-
-// userBaseHoldingsExcludingGrant is userBaseHoldings but omits exactly one
-// direct grant by id — the simulation of "after this direct access is removed",
-// computed from a PRE-mutation read.
-//
-// It excludes by GRANT ID rather than by (project, role): another source may
-// legitimately contribute the same pair, and blinding the base to the pair
-// would make a role look lost when a bundle still carries it.
-func userBaseHoldingsExcludingGrant(ctx context.Context, userID, excludeGrantID string) (map[roleKey]bool, error) {
-	base := make(map[roleKey]bool)
-	directs, err := svcGetDirectGrantsForUser(ctx, userID, false)
-	if err != nil {
-		return nil, err
-	}
-	for _, g := range directs {
-		if g.ID == excludeGrantID {
-			continue // this grant is the one being removed
-		}
-		base[roleKey{projectID: g.ProjectID, roleKey: g.RoleKey}] = true
-	}
-	byBundle, err := svcGetUserBundleRolesGrouped(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	for _, roles := range byBundle {
-		for _, ro := range roles {
-			base[roleKey{projectID: ro.ProjectID, roleKey: ro.RoleKey}] = true
-		}
-	}
-	if err := subtractQueuedRevocations(ctx, userID, base); err != nil {
-		return nil, err
-	}
-	return base, nil
-}
-
-// directGrantRoleKey resolves which (project, role) a grant id names. Absence is
-// not an error here: the authoritative "does this grant exist" answer comes from
-// the delete itself, which returns ErrGrantNotFound inside its transaction.
-func directGrantRoleKey(ctx context.Context, userID, grantID string) (roleKey, bool) {
-	grants, err := svcGetDirectGrantsForUser(ctx, userID, true)
-	if err != nil {
-		return roleKey{}, false
-	}
-	for _, g := range grants {
-		if g.ID == grantID {
-			return roleKey{projectID: g.ProjectID, roleKey: g.RoleKey}, true
-		}
-	}
-	return roleKey{}, false
+	return deliverSystem(ctx, changes), nil
 }

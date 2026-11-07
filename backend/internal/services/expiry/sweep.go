@@ -7,6 +7,7 @@ import (
 
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // Sweep runs a single pass: fetches up to batchSize expired direct grants,
@@ -69,11 +70,17 @@ func Sweep(ctx context.Context, batchSize int) {
 // pre-fetch snapshot, so a renewal landing between fetch and write is invisible
 // to all of them.
 func processUser(ctx context.Context, userID string, candidates []models.DirectGrant) {
+	var ended []services.Change
 	for _, candidate := range candidates {
 		if ctx.Err() != nil {
-			return
+			break
 		}
-		expireOne(ctx, userID, candidate)
+		if ch, ok := expireOne(ctx, userID, candidate); ok {
+			ended = append(ended, ch)
+		}
+	}
+	if len(ended) == 0 {
+		return
 	}
 	// Once per user, after every grant of theirs: the compile is per-user, so
 	// refreshing between grants would only rebuild state the next delete
@@ -83,19 +90,26 @@ func processUser(ctx context.Context, userID string, candidates []models.DirectG
 	if err := cacheRefreshUser(ctx, userID); err != nil {
 		log.Printf("[SCHEDULER] Cache refresh failed user=%s err=%v (non-fatal)", userID, err)
 	}
+	// Then each committed expiry is sent as its plan decided (task 1.9): what
+	// goes straight away goes now, a role that waits stays in Pending changes
+	// for you, and a send Zitadel didn't take is retried on its own.
+	for _, ch := range ended {
+		svcDeliverChange(ctx, ch)
+	}
 }
 
-func expireOne(ctx context.Context, userID string, candidate models.DirectGrant) {
-	res, err := svcExpireDirectGrant(ctx, userID, candidate.ID, candidate.ProjectID, candidate.RoleKey, expiryActor)
+func expireOne(ctx context.Context, userID string, candidate models.DirectGrant) (services.Change, bool) {
+	candidate.UserID = userID
+	res, err := svcExpireDirectGrant(ctx, candidate, expiryActor)
 	switch {
 	case errors.Is(err, db.ErrGrantRenewed):
 		// Somebody pushed the expiry forward between the fetch and the write.
 		// Nothing is wrong and nothing is owed: the grant is alive again.
 		log.Printf("[SCHEDULER] Grant renewed before expiry could run user=%s grant=%s (left alone)", userID, candidate.ID)
-		return
+		return services.Change{}, false
 	case err != nil:
-		log.Printf("[SCHEDULER] Expiry failed user=%s grant=%s err=%v — the grant stands and nothing was queued", userID, candidate.ID, err)
-		return
+		log.Printf("[SCHEDULER] Expiry failed user=%s grant=%s err=%v (the grant stands and nothing was queued)", userID, candidate.ID, err)
+		return services.Change{}, false
 	}
 
 	// The ledger delete, the audit row, the revocations AND any target
@@ -104,6 +118,7 @@ func expireOne(ctx context.Context, userID string, candidate models.DirectGrant)
 	// left to write to and no window in which one could be half-written.
 	log.Printf("[SCHEDULER] Grant expired user=%s grant=%s %s/%s revoked=%v retained=%v queued=%d",
 		userID, candidate.ID, res.ProjectID, res.RoleKey, res.Revoked, res.Retained, len(res.OutboxIDs))
+	return res.Change, true
 }
 
 func groupByUser(grants []models.DirectGrant) map[string][]models.DirectGrant {

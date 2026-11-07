@@ -223,17 +223,15 @@ func TestEveryClosureDiffRunsUnderTheAccessLock(t *testing.T) {
 	// matters is the function that owns the read-to-commit window. The set is
 	// pinned rather than inferred, so a new delta-computing function fails this
 	// test until somebody decides which side of the lock it belongs on.
-	// directGrantRemovalDelta reads and writes nothing of its own: DeleteDirectGrant
-	// (wrapped below) calls it under the lock, and the revoke preview (re-audit
-	// R18) calls it to write nothing at all.
-	pure := map[string]bool{"closureDelta": true, "directGrantRemovalDelta": true, "planRole": true, "Plan": true, "planMove": true}
+	// systemChange is system work's planner (task 1.9): pure, called under the
+	// lock by the wrapped cascades and expiry below.
+	pure := map[string]bool{"closureDelta": true, "systemChange": true, "planRole": true, "Plan": true, "planMove": true}
 	wrapped := map[string]bool{
 		"CascadeBundleAssignedToUser": true,
 		"CascadeRuleCreated":          true,
 		"CascadeBundleRetired":        true,
 		"CascadeRuleUpdated":          true,
 		"CascadeRuleRetired":          true,
-		"DeleteDirectGrant":           true,
 		"ApplyAct":                    true,
 		"ExpireDirectGrant":           true,
 		"ApplyPlannedBulk":            true,
@@ -243,7 +241,7 @@ func TestEveryClosureDiffRunsUnderTheAccessLock(t *testing.T) {
 	// through a rehearsal, so a scan for the call site alone would have declared
 	// it wrapped while it was not — which is exactly what happened.
 	sources := map[string]string{}
-	for _, file := range []string{"cascade.go", "role_members.go", "bundle_publish.go", "planner.go", "planner_act.go", "planner_ops.go", "planner_bulk.go"} {
+	for _, file := range []string{"cascade.go", "role_members.go", "bundle_publish.go", "planner.go", "planner_act.go", "planner_ops.go", "planner_bulk.go", "planner_system.go"} {
 		sources[file] = readServicesSource(t, file)
 	}
 	found := map[string]bool{}
@@ -350,6 +348,12 @@ func TestNoDirectoryLookupInsideTheAccessLock(t *testing.T) {
 	act := readServicesSource(t, "planner_act.go")
 	if body := funcBody(t, act, "actSnapshot"); strings.Contains(body, "svcFindUser") || strings.Contains(body, "PlannerCatalogue") {
 		t.Error("actSnapshot runs under the lock and must not call the directory")
+	}
+	// System work (task 1.9) reads no directory at all: nobody is named.
+	for _, call := range []string{"directory.", "svcFindUser", "svcDirectoryUsers", "PlannerCatalogue", "planDirectory"} {
+		if strings.Contains(readServicesSource(t, "planner_system.go"), call) {
+			t.Errorf("system work runs under the lock and must not call %s", call)
+		}
 	}
 	for _, c := range []struct{ src, fn, read, lock string }{
 		{bulk, "planEvery", "planDirectory(", "svcInTxLockingAccess("},

@@ -15,13 +15,14 @@ import (
 // refusedDelivery sends every row and has Zitadel refuse `refused` outright.
 func refusedDelivery(t *testing.T, refused, cause string) {
 	t.Helper()
-	orig := svcDeliver
-	t.Cleanup(func() { svcDeliver = orig })
-	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
-		d := services.Delivery{Sent: ids, Reason: map[string]string{}}
-		for _, id := range ids {
-			if id == refused {
-				d.Reason[id] = db.WaitReasonRefused(cause)
+	orig := svcDeliverChange
+	t.Cleanup(func() { svcDeliverChange = orig })
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		d := services.Delivery{Reason: map[string]string{}}
+		for _, w := range ch.Writes {
+			d.Sent = append(d.Sent, w.OutboxID)
+			if w.OutboxID == refused {
+				d.Reason[w.OutboxID] = db.WaitReasonRefused(cause)
 			}
 		}
 		return d

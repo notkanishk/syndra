@@ -151,7 +151,7 @@ func planSnapshot(ctx context.Context, req BulkRequest, s PlanSnapshot, subjects
 			s.Requests[id] = r
 			people = append(people, r.RequesterID)
 		}
-	case OpAdopt:
+	case OpAdopt, OpRevoke:
 		s.Drift, people = map[string]models.DriftItem{}, nil
 		for _, id := range subjects {
 			if item, err := svcGetDriftItem(ctx, id); err == nil {
@@ -467,23 +467,17 @@ func writeCohort(ctx context.Context, req BulkRequest, snap PlanSnapshot, subjec
 			return nil, version, err
 		}
 	}
-	// The rows come back in the order the writes went in; each row takes as
-	// many as its Change leaves.
-	out := make(map[string]Change, len(moved))
-	next := 0
-	for _, id := range moved {
-		ch := changes[id]
-		n := len(ch.Writes) - len(ch.delivered(DeliveryNone))
-		if next+n > len(ids) {
-			return nil, version, errWrittenOtherwise
-		}
-		if out[id], err = ch.written(ids[next : next+n]); err != nil {
-			return nil, version, err
-		}
-		next += n
+	inOrder := make([]Change, len(moved))
+	for i, id := range moved {
+		inOrder[i] = changes[id]
 	}
-	if next != len(ids) {
-		return nil, version, errWrittenOtherwise
+	paired, err := pairWritten(inOrder, ids)
+	if err != nil {
+		return nil, version, err
+	}
+	out := make(map[string]Change, len(moved))
+	for i, id := range moved {
+		out[id] = paired[i]
 	}
 	return out, version, nil
 }

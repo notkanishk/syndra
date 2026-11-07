@@ -422,37 +422,48 @@ func AttributeDriftTx(ctx context.Context, driftID string, p EnqueueParams, plan
 	return ruleIDs, nil
 }
 
-// RevokeDriftAndEnqueue claims a pending drift (→revoked) and enqueues a revoke
-// outbox row in ONE tx (p.OpType must be "revoke"; enqueueWrites skips the ledger
-// upsert for revoke). Returns the outbox id so the handler can drain it
-// best-effort AFTER commit. ErrDriftNotPending on a lost race.
-func RevokeDriftAndEnqueue(ctx context.Context, driftID string, p EnqueueParams) (string, error) {
+// RevokeDriftAndEnqueue claims a pending drift (→revoked) and enqueues the
+// revokes the planner decided for it in ONE tx: one named write per role
+// (op revoke, so no ledger row), each written as decided (a role that waits is
+// written waiting) and each passing the cancel gate. It returns the rows
+// written, in order; one that only cancelled a queued change leaves none.
+// ErrDriftNotPending on a lost race.
+func RevokeDriftAndEnqueue(ctx context.Context, driftID string, params []EnqueueParams) ([]string, error) {
+	if len(params) == 0 {
+		return nil, errors.New("a drift revoke needs at least one role")
+	}
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
-		return "", fmt.Errorf("begin revoke tx: %w", err)
+		return nil, fmt.Errorf("begin revoke tx: %w", err)
 	}
 	if owned {
 		defer tx.Rollback(ctx)
 	}
-	if _, err := claimDriftTx(ctx, tx, driftID, TargetZitadel, "revoked", p.GrantedBy, "{}"); err != nil {
-		return "", err
+	if _, err := claimDriftTx(ctx, tx, driftID, TargetZitadel, "revoked", params[0].GrantedBy, "{}"); err != nil {
+		return nil, err
 	}
-	key, err := newOutboxIdempotencyKey()
-	if err != nil {
-		return "", err
-	}
-	// The rules' rows, if any, are revocations: the background runner drains
-	// those without being asked.
-	ids, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{p}, key)
-	if err != nil {
-		return "", fmt.Errorf("revoke enqueue writes: %w", err)
+	var ids []string
+	for _, p := range params {
+		key, err := newOutboxIdempotencyKey()
+		if err != nil {
+			return nil, err
+		}
+		written, err := enqueueWrites(ctx, tx, nil, []EnqueueParams{p}, key)
+		if err != nil {
+			return nil, fmt.Errorf("revoke enqueue writes: %w", err)
+		}
+		for _, id := range written {
+			if id != "" {
+				ids = append(ids, id)
+			}
+		}
 	}
 	if owned {
 		if err := tx.Commit(ctx); err != nil {
-			return "", fmt.Errorf("commit revoke tx: %w", err)
+			return nil, fmt.Errorf("commit revoke tx: %w", err)
 		}
 	}
-	return ids[0], nil
+	return ids, nil
 }
 
 // MarkDriftExternalTx claims a pending drift (→marked_external) and inserts the

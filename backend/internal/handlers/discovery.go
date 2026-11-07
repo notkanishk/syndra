@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -15,7 +16,6 @@ import (
 
 	"syndra/internal/db"
 	"syndra/internal/extcall"
-	"syndra/internal/models"
 	"syndra/internal/services"
 	"syndra/internal/services/propagation"
 	"syndra/internal/zitadel"
@@ -26,10 +26,12 @@ import (
 type assignGrantRequest struct {
 	ProjectID string   `json:"projectId"`
 	RoleKeys  []string `json:"roleKeys"`
+	zitadelPlans
 }
 
 type updateGrantRequest struct {
 	RoleKeys []string `json:"roleKeys"`
+	zitadelPlans
 }
 
 type createProjectRoleRequest struct {
@@ -456,6 +458,9 @@ type zitadelGrantChange struct {
 	// Roles is each role's own outcome (W8): one change can send some roles,
 	// hold one that waits, and keep one a bundle still gives.
 	Roles []zitadelRoleChange `json:"roles"`
+	// Plans is a removal preview's plan per role key, which the write
+	// carries back (fingerprint, cancel ids).
+	Plans map[string]ActPlan `json:"plans,omitempty"`
 }
 
 // zitadelRoleChange is one role's part of a change. Status, after delivery:
@@ -491,9 +496,11 @@ func (res *zitadelGrantChange) add(role, change string, rows ...string) {
 // is as far along as its least delivered row.
 var roleStatusRank = map[string]int{"failed": 0, "waiting": 1, "pending": 2, "applied": 3}
 
-// handleAssignZitadelGrant gives roles from the Zitadel › Users screen through
-// the person page's pipe: each role must be offered and not already held, and
-// each is one direct grant, delivered by the one rule (services.Deliver).
+// handleAssignZitadelGrant gives roles from the Zitadel › Users screen as the
+// person page gives them, through the planner (task 1.9): one give per role,
+// each planned and applied like a give on a person's page (the same guards,
+// the rules' rows, delivery decided by the plan) with the plan its role was
+// shown (`plans`, by role key).
 func handleAssignZitadelGrant(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	if !trimmedNonEmpty(userID) {
@@ -514,16 +521,12 @@ func handleAssignZitadelGrant(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
-	if !canGiveRoles(w, r.Context(), userID, req.ProjectID, roles) {
+	acts, err := zitadelActs(r.Context(), userID, req.ProjectID, roles, nil)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	res := newZitadelGrantChange()
-	if err := giveRoles(r.Context(), resolveActor(r, ""), userID, req.ProjectID, roles, &res); err != nil {
-		grantChangeFailed(w, r, userID, err, res)
-		return
-	}
-	finishZitadelGrantChange(w, r, userID, res)
+	applyZitadelActs(w, r, userID, req.ProjectID, acts, req.Plans)
 }
 
 // resolveGrantTarget recovers (projectID, roleKeys) for a Zitadel grant
@@ -542,7 +545,7 @@ func resolveGrantTarget(ctx context.Context, userID, grantID string) (string, []
 
 // handleUpdateZitadelGrant replaces the roles on one Zitadel grant as what it
 // is: the roles left out are removed and the new ones given, each through the
-// same pipe as a removal or a give on the person page.
+// same planned act as a removal or a give on the person page.
 func handleUpdateZitadelGrant(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	grantID := r.PathValue("grantId")
@@ -567,22 +570,12 @@ func handleUpdateZitadelGrant(w http.ResponseWriter, r *http.Request) {
 		grantNotRead(w, err)
 		return
 	}
-	adds, removes := setDiff(want, current), setDiff(current, want)
-
-	if !canGiveRoles(w, r.Context(), userID, projectID, adds) {
+	acts, err := zitadelActs(r.Context(), userID, projectID, setDiff(want, current), setDiff(current, want))
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	actor := resolveActor(r, "")
-	res := newZitadelGrantChange()
-	if err := removeRoles(r.Context(), actor, userID, projectID, removes, &res); err != nil {
-		grantChangeFailed(w, r, userID, err, res)
-		return
-	}
-	if err := giveRoles(r.Context(), actor, userID, projectID, adds, &res); err != nil {
-		grantChangeFailed(w, r, userID, err, res)
-		return
-	}
-	finishZitadelGrantChange(w, r, userID, res)
+	applyZitadelActs(w, r, userID, projectID, acts, req.Plans)
 }
 
 // Codes for a Zitadel › Users change that did not finish (re-audit R17).
@@ -646,13 +639,20 @@ func grantChangeFailed(w http.ResponseWriter, r *http.Request, userID string, er
 }
 
 // handleRemoveZitadelGrant removes the roles on one Zitadel grant the way the
-// person page removes access: only what is held directly goes, and a role a
-// bundle or a rule still gives stays (services.DeleteDirectGrant).
+// person page removes access, through the planner: a role held by a direct
+// grant is that grant's removal (a role a bundle or a rule still gives stays),
+// any other is revoked unless Syndra still gives it (kept). The body may carry
+// the plan each role was shown (`plans`, from the removal preview).
 func handleRemoveZitadelGrant(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	grantID := r.PathValue("grantId")
 	if !trimmedNonEmpty(userID) || !trimmedNonEmpty(grantID) {
 		jsonValidationErrorResponse(w, "user id and grant id are required", map[string]string{"id": "required", "grantId": "required"})
+		return
+	}
+	var req zitadelPlans
+	if err := decodeJSONStrict(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
+		jsonValidationErrorResponse(w, "invalid request body", map[string]string{"body": err.Error()})
 		return
 	}
 
@@ -661,18 +661,20 @@ func handleRemoveZitadelGrant(w http.ResponseWriter, r *http.Request) {
 		grantNotRead(w, err)
 		return
 	}
-	res := newZitadelGrantChange()
-	if err := removeRoles(r.Context(), resolveActor(r, ""), userID, projectID, roleKeys, &res); err != nil {
-		grantChangeFailed(w, r, userID, err, res)
+	acts, err := zitadelActs(r.Context(), userID, projectID, nil, roleKeys)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	finishZitadelGrantChange(w, r, userID, res)
+	applyZitadelActs(w, r, userID, projectID, acts, req.Plans)
 }
 
-// handleRemoveZitadelGrantPreview is what revoking one Zitadel grant would
-// revoke and keep, by the removal's own code (removeRoles with nothing
-// written), so the count the revoke dialog asks consent for is the server's
-// rule and never one the browser works out (re-audit R18).
+// handleRemoveZitadelGrantPreview is what revoking one Zitadel grant's roles
+// (all, or ?roles=a,b for a replace's left-out roles) would revoke and keep,
+// from each role's plan (PlanAct, nothing written), with the plans themselves
+// (`plans`, by role key): what each cancels, its fingerprint and cancel ids,
+// which the write carries back. The count the revoke dialog asks consent for
+// is the server's (re-audit R18).
 func handleRemoveZitadelGrantPreview(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("id")
 	grantID := r.PathValue("grantId")
@@ -685,148 +687,176 @@ func handleRemoveZitadelGrantPreview(w http.ResponseWriter, r *http.Request) {
 		grantNotRead(w, err)
 		return
 	}
-	res := newZitadelGrantChange()
-	res.Status = "preview"
-	if err := previewRemoveRoles(r.Context(), userID, projectID, roleKeys, &res); err != nil {
+	if only := r.URL.Query().Get("roles"); only != "" {
+		roleKeys = slices.DeleteFunc(roleKeys, func(k string) bool { return !slices.Contains(strings.Split(only, ","), k) })
+	}
+	acts, err := zitadelActs(r.Context(), userID, projectID, nil, roleKeys)
+	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
+	}
+	res := newZitadelGrantChange()
+	res.Status, res.Plans = "preview", map[string]ActPlan{}
+	for _, a := range acts {
+		ch, err := svcPlanAct(r.Context(), a)
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		res.Plans[a.RoleKey] = actPlanOf(r, ch)
+		res.record(a, ch)
 	}
 	jsonResponse(w, http.StatusOK, res)
 }
 
-// canGiveRoles runs the person page's two checks on every role before any is
-// written: Zitadel still offers it, and the person does not already hold it.
-// One refusal refuses the whole change, so nothing is half given.
-func canGiveRoles(w http.ResponseWriter, ctx context.Context, userID, projectID string, roles []string) bool {
-	for _, role := range roles {
-		if err := checkRoleOffered(ctx, projectID, role); err != nil {
-			writeRoleOfferedError(w, err)
-			return false
+// zitadelPlans is what a Zitadel › Users write carries of the plans it was
+// shown, by role key.
+type zitadelPlans struct {
+	Plans map[string]planFields `json:"plans,omitempty"`
+}
+
+// zitadelActs is a change on the Zitadel › Users page as the person page's
+// own acts, one per role: a removal of the role's direct grant, or with none
+// a revoke (OpRevoke, kept under the lock when Syndra still gives the role),
+// then a give per role given. Which act a role is is read here, before the
+// lock; what it does is its plan's, under it.
+func zitadelActs(ctx context.Context, userID, projectID string, gives, removes []string) ([]services.Action, error) {
+	var acts []services.Action
+	if len(removes) > 0 {
+		direct, err := svcUserDirectGrants(ctx, userID)
+		if err != nil {
+			return nil, err
 		}
-		holding, err := dbRequestHolding(ctx, userID, projectID, role)
+		grantFor := map[string]string{}
+		for _, g := range direct {
+			if g.ProjectID == projectID {
+				grantFor[g.RoleKey] = g.ID
+			}
+		}
+		for _, role := range removes {
+			if id, ok := grantFor[role]; ok {
+				acts = append(acts, services.Action{Op: services.OpRemoveGrant, UserID: userID, GrantID: id, ProjectID: projectID, RoleKey: role})
+			} else {
+				acts = append(acts, services.Action{Op: services.OpRevoke, UserID: userID, ProjectID: projectID, RoleKey: role})
+			}
+		}
+	}
+	for _, role := range gives {
+		acts = append(acts, services.Action{Op: services.OpGive, UserID: userID, ProjectID: projectID, RoleKey: role})
+	}
+	return acts, nil
+}
+
+// applyZitadelActs applies a change's acts in order, each through the planner
+// with the plan its role was shown (a role with no plan admits no
+// cancellation, so the cancel gate's 409 answers it). Every give is planned
+// first: one refusal refuses the whole change, so nothing is half given. A
+// fault after a role was written is said as such (grantChangeFailed); before,
+// as the act's own error, and nothing was written.
+func applyZitadelActs(w http.ResponseWriter, r *http.Request, userID, projectID string, acts []services.Action, plans map[string]planFields) {
+	for _, a := range acts {
+		if a.Op != services.OpGive {
+			continue
+		}
+		ch, err := svcPlanAct(r.Context(), a)
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-			return false
+			return
 		}
-		if holding.Kind != models.HoldingNone {
-			jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD",
-				role+": "+alreadyHeldMessage(holding, "They")+" Nothing was changed.")
-			return false
-		}
-	}
-	return true
-}
-
-// giveRoles writes one direct grant per role, as the person page does.
-func giveRoles(ctx context.Context, actor, userID, projectID string, roles []string, res *zitadelGrantChange) error {
-	for _, role := range roles {
-		q, err := grantDirect(ctx, db.EnqueueParams{
-			UserID:      userID,
-			ProjectID:   projectID,
-			RoleKeys:    []string{role},
-			GrantedBy:   actor,
-			Source:      "direct",
-			OpType:      "add",
-			EndRule:     db.EndKept,
-			PayloadJSON: "{}",
-		})
-		if err != nil {
-			return err
-		}
-		res.OutboxIDs = append(res.OutboxIDs, q.OutboxID)
-		res.add(projectID+"/"+role, "given", q.OutboxID)
-	}
-	return nil
-}
-
-// removeRoles takes each role away the way the person page does. A direct
-// grant goes through services.DeleteDirectGrant, which revokes only what the
-// person loses. A role with no direct grant that Syndra still gives (a bundle,
-// a rule) stays. A role Syndra does not give at all is held in Zitadel with
-// nothing behind it, so its revoke takes nothing Syndra gives; it is recorded
-// like any other revoke.
-func removeRoles(ctx context.Context, actor, userID, projectID string, roles []string, res *zitadelGrantChange) error {
-	return walkRemoveRoles(ctx, actor, userID, projectID, roles, res, true)
-}
-
-// previewRemoveRoles is removeRoles with nothing written: the same walk and
-// the same rule for what stays, answered from the removal's own delta
-// (services.PreviewDirectGrantRemoval) instead of its write.
-func previewRemoveRoles(ctx context.Context, userID, projectID string, roles []string, res *zitadelGrantChange) error {
-	return walkRemoveRoles(ctx, "", userID, projectID, roles, res, false)
-}
-
-func walkRemoveRoles(ctx context.Context, actor, userID, projectID string, roles []string, res *zitadelGrantChange, write bool) error {
-	remove, revoke := svcDeleteDirectGrant, grantDirect
-	if !write {
-		remove = svcPreviewDirectGrantRemoval
-		revoke = func(context.Context, db.EnqueueParams) (db.EnqueueResult, error) { return db.EnqueueResult{}, nil }
-	}
-	direct, err := svcUserDirectGrants(ctx, userID)
-	if err != nil {
-		return err
-	}
-	grantFor := map[string]string{}
-	for _, g := range direct {
-		if g.ProjectID == projectID {
-			grantFor[g.RoleKey] = g.ID
-		}
-	}
-	for _, role := range roles {
-		if id, ok := grantFor[role]; ok {
-			rm, err := remove(ctx, userID, id, actor, "")
-			if err != nil {
-				return err
+		if ch.Row.Effect != services.EffectApply {
+			if ch.Refusal == "held" {
+				if holding, herr := dbRequestHolding(r.Context(), userID, projectID, a.RoleKey); herr == nil {
+					jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD",
+						a.RoleKey+": "+alreadyHeldMessage(holding, "They")+" Nothing was changed.")
+					return
+				}
 			}
-			res.OutboxIDs = append(res.OutboxIDs, rm.OutboxIDs...)
-			// ponytail: the removal's rows are not split by role, so each role
-			// it revoked reports the least delivered of them.
-			for _, gone := range rm.Revoked {
-				res.add(gone, "revoked", rm.OutboxIDs...)
-			}
-			for _, kept := range rm.Retained {
-				res.add(kept, "kept")
-			}
+			writeActError(w, &services.Refused{Change: ch})
+			return
+		}
+	}
+	actor := resolveActor(r, "")
+	res := newZitadelGrantChange()
+	var changes []services.Change
+	for _, a := range acts {
+		ch, err := svcApplyAct(r.Context(), a, services.ActWrite{Actor: actor,
+			Give: db.EnqueueParams{EndRule: db.EndKept, PayloadJSON: "{}"}}, plans[a.RoleKey].seen())
+		if a.Op == services.OpRevoke && refusedAs(err) == "held" {
+			res.add(projectID+"/"+a.RoleKey, "kept")
 			continue
 		}
-		// ponytail: read outside the access lock; a bundle given in the same
-		// instant queues its own add after this revoke. The planner (W3a)
-		// moves this read under the lock.
-		held, err := svcUserExpectsRole(ctx, userID, projectID, role)
-		if err != nil {
-			return err
+		if a.Op == services.OpRemoveGrant && refusedAs(err) == "not_held" {
+			err = db.ErrGrantNotFound
 		}
-		if held {
-			res.add(projectID+"/"+role, "kept")
+		if err != nil {
+			if len(changes) == 0 {
+				writeActError(w, err)
+				return
+			}
+			grantChangeFailed(w, r, userID, err, res)
+			return
+		}
+		changes = append(changes, ch)
+		res.record(a, ch)
+	}
+	finishZitadelGrantChange(w, r, userID, res, changes)
+}
+
+// record says, role by role, what one act's Change does: a give's role is
+// given (its own row says how far it got; one that only cancels a waiting
+// removal sends nothing and is kept), a removal's or a revoke's roles are
+// revoked, and a removal's own role that a bundle or a rule still gives is
+// kept, as is a revoke's role Syndra still gives.
+func (res *zitadelGrantChange) record(a services.Action, ch services.Change) {
+	if ch.Row.Effect != services.EffectApply {
+		res.add(a.ProjectID+"/"+a.RoleKey, "kept")
+		return
+	}
+	var rows []string
+	for _, wr := range ch.Writes {
+		if wr.OutboxID != "" {
+			rows = append(rows, wr.OutboxID)
+		}
+	}
+	res.OutboxIDs = append(res.OutboxIDs, rows...)
+	if a.Op == services.OpGive {
+		if own := ch.Writes[0].OutboxID; own != "" {
+			res.add(a.ProjectID+"/"+a.RoleKey, "given", own)
+		} else {
+			res.add(a.ProjectID+"/"+a.RoleKey, "kept")
+		}
+		return
+	}
+	revokesOwn := false
+	for _, wr := range ch.Writes {
+		if wr.OpType != "revoke" {
 			continue
 		}
-		q, err := revoke(ctx, db.EnqueueParams{
-			UserID:      userID,
-			ProjectID:   projectID,
-			RoleKeys:    []string{role},
-			GrantedBy:   actor,
-			Source:      "direct",
-			OpType:      "revoke",
-			PayloadJSON: "{}",
-		})
-		if err != nil {
-			return err
-		}
-		res.OutboxIDs = append(res.OutboxIDs, q.OutboxID)
-		res.add(projectID+"/"+role, "revoked", q.OutboxID)
+		role := wr.ProjectID + "/" + wr.RoleKeys[0]
+		revokesOwn = revokesOwn || role == ch.ProjectID+"/"+ch.RoleKey
+		// ponytail: a removal's rows are not split by role, so each role it
+		// revokes reports the least delivered of them.
+		res.add(role, "revoked", rows...)
 	}
-	return nil
+	if !revokesOwn {
+		res.add(ch.ProjectID+"/"+ch.RoleKey, "kept")
+	}
 }
 
 // finishZitadelGrantChange is the person page's tail: recompile the person's
-// claims first, then deliver by the one rule (services.Deliver). Each role
-// then reports how far its own rows got, and Status is the least delivered.
-func finishZitadelGrantChange(w http.ResponseWriter, r *http.Request, userID string, res zitadelGrantChange) {
+// claims first, then send what the plans said goes now (DeliverChange). Each
+// role then reports how far its own rows got, and Status is the least
+// delivered.
+func finishZitadelGrantChange(w http.ResponseWriter, r *http.Request, userID string, res zitadelGrantChange, changes []services.Change) {
 	rebuildUserCacheDetachedFn(r.Context(), userID)
 	row := map[string]string{}
 	refused := map[string]string{}
+	var all services.Change
+	for _, ch := range changes {
+		all.Writes = append(all.Writes, ch.Writes...)
+	}
 	if len(res.OutboxIDs) > 0 {
-		d := svcDeliver(r.Context(), res.OutboxIDs, r.URL.Query().Get("apply") != "true")
+		d := svcDeliverChange(r.Context(), all)
 		res.WaitReason, res.Retry = d.WaitReason(), d.Drain.Retry
 		for _, id := range d.Waiting {
 			row[id] = "waiting"

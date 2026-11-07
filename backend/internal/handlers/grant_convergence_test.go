@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,35 +10,6 @@ import (
 	"syndra/internal/addons"
 	"syndra/internal/db"
 )
-
-func TestADirectGrantConvergesItsProjectsSystem(t *testing.T) {
-	enqueue, converge := dbEnqueueDirectGrantPropagation, svcConvergeProjectChange
-	t.Cleanup(func() { dbEnqueueDirectGrantPropagation, svcConvergeProjectChange = enqueue, converge })
-	var asked []string
-	svcConvergeProjectChange = func(_ context.Context, actor, user, project string) error {
-		asked = append(asked, actor+"|"+user+"|"+project)
-		return nil
-	}
-
-	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams, ...db.EnqueueParams) (db.EnqueueResult, error) {
-		return db.EnqueueResult{OutboxID: "o1"}, nil
-	}
-	if _, err := grantDirect(context.Background(), db.EnqueueParams{UserID: "u1", ProjectID: "pNet", GrantedBy: "op_1"}); err != nil {
-		t.Fatal(err)
-	}
-	if len(asked) != 1 || asked[0] != "op_1|u1|pNet" {
-		t.Fatalf("a committed grant must converge its project's system, got %v", asked)
-	}
-
-	// A grant that did not commit converges nothing.
-	asked = nil
-	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams, ...db.EnqueueParams) (db.EnqueueResult, error) {
-		return db.EnqueueResult{}, errors.New("refused")
-	}
-	if _, err := grantDirect(context.Background(), db.EnqueueParams{UserID: "u1", ProjectID: "pNet"}); err == nil || len(asked) != 0 {
-		t.Fatalf("a failed grant must not converge, got err=%v asked=%v", err, asked)
-	}
-}
 
 // A hold takes effect at the next send, not at the next reconcile up to six
 // hours later. So does lifting it.

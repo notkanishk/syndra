@@ -285,6 +285,7 @@ var (
 	svcResolveAccessRequest     = db.ResolveAccessRequest
 	svcGetDriftItem             = db.GetDriftItem
 	svcAttributeDriftTx         = db.AttributeDriftTx
+	svcRevokeDriftAndEnqueue    = db.RevokeDriftAndEnqueue
 )
 
 // actDirectory is what the act reads from Zitadel, before the lock: the
@@ -318,7 +319,7 @@ func actDirectory(ctx context.Context, a Action) PlanSnapshot {
 // decided it since.
 func actSnapshot(ctx context.Context, a Action, s PlanSnapshot) (PlanSnapshot, error) {
 	var err error
-	if a.Op == BulkOpAssignBundle || a.Op == BulkOpRemoveBundle || a.Op == OpAdopt {
+	if a.Op == BulkOpAssignBundle || a.Op == BulkOpRemoveBundle || a.DriftID != "" {
 		s, _, err = planSnapshot(ctx, BulkRequest{Op: a.Op, BundleID: a.BundleID}, s, []string{a.subject()})
 		return s, err
 	}
@@ -340,8 +341,8 @@ func actSnapshot(ctx context.Context, a Action, s PlanSnapshot) (PlanSnapshot, e
 // resolveAction fills an approval's person and role from its request, and a
 // removal's role from the grant, so the act names what it is about.
 func resolveAction(ctx context.Context, a Action) (Action, error) {
-	if a.Op == OpAdopt {
-		// The person behind the drift row, for the directory; a row that has
+	if a.DriftID != "" {
+		// The person behind the drift row (an adoption or a revoke), for the directory; a row that has
 		// gone is the plan's to say ("No longer in the queue").
 		if item, err := svcGetDriftItem(ctx, a.DriftID); err == nil {
 			a.UserID = item.UserID
@@ -429,6 +430,8 @@ func writeAct(ctx context.Context, a Action, w ActWrite, ch Change, snap PlanSna
 		return writeExtend(ctx, w, ch)
 	case OpAdopt:
 		return writeAdopt(ctx, a, w, ch)
+	case OpRevoke:
+		return writeRevoke(ctx, a, w, ch)
 	}
 	if err := deferTargetConvergence(ctx, w.Actor, a.UserID, ch.changed()); err != nil {
 		return ch, err
