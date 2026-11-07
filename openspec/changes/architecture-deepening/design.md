@@ -52,3 +52,49 @@ Not in this slice, and listed as tasks: delivery decided only by the planner (ap
 - **One outbox insert (decision 8).** `db.enqueueWrites` is the one function every access change reaches the outbox through, and holds the one `INSERT INTO propagation_outbox` for Zitadel rows; `enqueueCascadeRows` is gone. A change is either a write a person named (a key is passed: its ledger and audit rows via `enqueueLedger`, its own row with that key and no cascade id, an identical waiting add answering it, the mapping rules following it through `FollowRules`) or a cascade (its audit rows, a key per row, the grant id taken from the index for a revoke). Every other row carries the change's one cascade id, every row passes `withdrawUndelivered` and the cancel gate. Each of these was pinned by live tests against the two old functions before they were merged (`db/enqueue_live_test.go`), and the merge changed none of them. One small difference: a named write with an empty payload is now stored as `{}` (as a cascade's always was) instead of failing the insert.
 - **Delivery decided only by the planner (decisions 11, 12).** A write the Change says waits for you is written waiting: `wait_reason = role_waits` is in the insert (`EnqueueParams.WaitReason`), so no drain can send it before the reason is on the row and nothing after the commit decides it again. The apply hands back each Change with its rows (`Write.OutboxID`); if the outbox wrote other rows than the Change says, the apply refuses and rolls back. `services.DeliverChange(ctx, Change)` sends the "straight away" rows through the same send `Deliver` uses (halt, retry, refusal: the same `Delivery` words) and never reads `role_waits` again. That is the seam 1.2 and 1.3 hand their Change to; paths not yet on the planner keep `Deliver`.
 - **The bulk reason (1.8).** The operator's reason on a bulk bundle assign or remove is on the audit row (`details.reason`), on every outbox row of the change (`propagation_outbox.reason`), and in Change history (`CascadeGroup.reason`, shown quoted on the card), which is what the dialog promises. It also shows where a queued change's reason was already read: the cancel step ("“term start”" instead of "… gave no reason."), the plan's cancels line ("… queued 7 Nov (term start)"), and a cancellation in the audit log. The labels "Bundle membership cascade" / "Bundle removal cascade" were never stored for a cascade's rows. The single ManageBundles path asks for no reason and records none, as before.
+
+### Built: rule rows carry the rule, task 1.6 (8 Nov 2026, `feat/planner-rule-rows`)
+
+**The stored shape.** One shape for a rule's row wherever it is written: `source='rule'`, `source_ref` = the rule that reaches the role (in the closure after for a give, before for a removal). That rule's first role is the role that set it off, so the existing columns carry both and nothing is migrated (production had 0 mapping rules on 7 Nov). This is what `FollowRules` already wrote; a bundle's cascade, publish and move, and the planner now write it too. A role in a change's delta is the rule's when the change moved it only through the rules (its base holding did not move); otherwise it is the change's own (the bundle's). `services.ruleRefs` decides it, `services.asRuleRows` stamps it (`services/rule_follow.go:87`, `:107`); `followRules` uses the same pair (`:75`). A rule's own edit (create, update, retire) still attributes every row to the edited rule, as before.
+
+**Which queued change a write cancels** (`db.Answers`, `db/withdraw.go:261`), each case with its test:
+
+| Case | Cancels? | Why | Tests |
+|---|---|---|---|
+| Bundle removal, its own queued give | yes | same bundle | `db/answers_test.go`, `TestPlanner_RemoveBundle_CancelsItsOwnAndItsRulesQueuedRows` |
+| Bundle removal, the give the rule queued under the bundle | yes | the removal's revoke of that role is now the rule's row, and a rule revoke answers queued rule gives | same two |
+| Bundle removal, another bundle's give of the same role | no | different bundle | same two |
+| Bundle removal, a direct give of the role the rule gives | no | a rule revoke never answers a direct give | same two |
+| Rule's own retirement, the give it queued under a bundle | yes (before 1.6: no, the removal was queued behind the give) | rule revoke, rule give | `TestPlanner_RuleRetiredCancelsTheRowItSetOffUnderABundle`, `TestARulesRemovalCancelsTheRulesQueuedGive` |
+| Rule removal, a give another rule queued for the same role | yes | a rule row is only ever a closure difference: a rule revoke is queued only when no grant, bundle or rule reaches the role, so no queued rule give of it is wanted. Matching the rule id too would let two rules reaching one role, picked in a different order on the way in and out, queue the removal behind the give | `db/answers_test.go`, `TestARulesRemovalCancelsTheRulesQueuedGive` |
+| Direct removal of a role a rule's give is queued for | no, as today for a bundle's give | a direct revoke answers direct gives only | `db/answers_test.go`, `TestADirectRemovalLeavesARulesQueuedGive` |
+| Direct (or bundle) give of a role whose rule removal is queued | yes, as today for every source | any give answers a queued removal | `db/answers_test.go`, `TestADirectGiveCancelsARulesQueuedRemoval` |
+
+`GetActiveMappingRules` is now ordered (`db/rules.go:34`), so the rule a row names is the same between a plan and its apply; without it two rules reaching one role could make a plan stale for nothing.
+
+**Every reader of `propagation_outbox.source` / `source_ref`** (traced 8 Nov):
+
+| Reader | file:line | Effect of rule rows under a bundle's change |
+|---|---|---|
+| `Answers` / `AnsweredBy`, the one cancel predicate | `db/withdraw.go:261`, `:276` | rule revoke matches on source (above) |
+| `withdrawUndelivered` (via `queuedChangeColumns`) | `db/withdraw.go:72`, `:311` | asks `Answers`; unchanged |
+| planner snapshot, queued changes | `db/access_snapshot.go:90` | same columns; unchanged |
+| planner writes and fingerprint | `services/planner.go:166`, `decided` `:246` | writes carry rule/ref; the fingerprint has source and ref, so a plan issued before this deploy goes stale on apply (stale-plan behaviour unchanged) |
+| `CancelledUnsentDetails` (audit `cause.via`) | `db/withdraw.go:207` | via is "rule" for the rule's row a bundle removal cancels; the audit line does not show via (`ui/src/components/audit/EventLine.tsx` `CancelledChange`) |
+| bundle cascades | `services/cascade.go:368`, `:496`, `:568` | rule rows |
+| bundle publish and move, rehearsal and apply | `services/bundle_publish.go:301`, `:533`, `:659`, `:732` | rule rows |
+| rule cascades (create, update, retire) | `services/cascade.go:441`, `:626`, `:684`; stamp `db/cascade.go:258` | unchanged: the edited rule |
+| `FollowRules` | `services/rule_follow.go:75` | unchanged shape, now through `asRuleRows` |
+| outbox insert | `db/propagation_enqueue.go:273` | unchanged |
+| Change history groups | `db/cascade.go:33` (`cascadeGroupSources`), `:58` (audit stamp), `:419` | a bundle's entry carried its rule rows already (one cascade id); the entry is now named by the non-rule row, since rows written in one transaction share `created_at` and the first read could be the rule's |
+| Change history card | `ui/src/app/operations/cascades/page.tsx` `CascadeCard`, `RuleFrom` | names the entry by `group.source_ref` (was the first write's); a rule's write in a bundle's entry reads "by the automatic rule from Trained in Laser Lab" |
+| Pending changes rows | `db/propagations.go:836`, `:936`, `scanPropagations` `:1102` | unchanged read |
+| Pending changes "Caused by" | `ui/src/app/governance/pending/page.tsx` `CausedBy` | a rule's row reads "Rule from Trained in Laser Lab" (A-21 §Q3; was "Trained gives Advanced"); the batch band is still one per edit, "These N changes come from one edit", since they are sent together |
+| ledger reconcile on applied | `db/propagations.go:1075` | a rule revoke deletes no ledger row (rules write none), as a bundle's never did |
+| pending deliveries, "waiting to be sent" marks | `db/pending_delivery.go:39`, `services/views.go:1564` | a rule's queued give now marks the person's rule reason as waiting; before, under a bundle's change, it marked nothing |
+| member feed | `db/my_changes.go:112`, `handlers/my_changes.go:83`, `:102` | a rule-given role reads "came automatically, because you have Trained" instead of "because you're in Safety", and names no operator (rows of a rule never do) |
+| request joins | `db/my_changes.go:95`, `:133`, `db/insights_trends.go:139` | request rows only; unaffected |
+| drift classification | `services/drift/sweep.go` | reads Syndra's records (ledger, bundles, rules), not the outbox source; unaffected |
+| `internal/access` | | no outbox reads |
+
+Not done: a rule's own edit attributing a chain hop to the rule that reaches it (it names the edited rule, so Pending changes says "Rule from" that rule's first role for a two-hop row); Pending changes' separate batch per rule (A-21 §4.3 "These 2 changes come from one rule"), which would split one send-together edit in two; recording the triggering role apart from the rule id, so a rule whose first role is later edited renames its old rows (the member feed and Change history already read the rule's current first role).
