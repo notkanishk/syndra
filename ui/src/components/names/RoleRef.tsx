@@ -2,6 +2,8 @@
 
 import { Mono } from "@/components/ui/Badge";
 import { ProjectName } from "@/components/names/ProjectName";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { roleName } from "@/lib/names";
 
 interface RoleRefProps {
   projectId: string | null | undefined;
@@ -38,5 +40,18 @@ export function RoleRef({ projectId, roleKey, className = "", link }: RoleRefPro
     <span className={className}>
       <ProjectName id={projectId} link={link} /> / <Mono>{roleKey}</Mono>
     </span>
+  );
+}
+
+/**
+ * A role in prose, as the planner says it: "Member in Laser Lab" (A-21 §Q3).
+ * The role by its name, then its place; for a sentence, where RoleRef is for a row.
+ */
+export function RoleInPlace({ projectId, roleKey }: { projectId: string; roleKey: string }) {
+  const role = roleName(useNameResolver().resolveRole(projectId, roleKey).value?.display_name, roleKey);
+  return (
+    <>
+      {role} in <ProjectName id={projectId} />
+    </>
   );
 }

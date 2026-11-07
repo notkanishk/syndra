@@ -180,7 +180,7 @@ describe("Pending changes · caused by", () => {
     expect(screen.queryByText(/b_bund/)).not.toBeInTheDocument();
   });
 
-  it("names the rule by its mapping when the bundle/rule list has not loaded", () => {
+  it("names the rule by the role that set it off (A-21 §Q3)", () => {
     rules.data = [
       {
         id: "rule-1111-2222",
@@ -195,7 +195,8 @@ describe("Pending changes · caused by", () => {
     pending.data = [row({ source: "rule", source_ref: "rule-1111-2222" })];
     renderPending();
 
-    expect(screen.getByText("Trained gives Door")).toBeInTheDocument();
+    expect(screen.getByText(/^Rule from Trained in/)).toBeInTheDocument();
+    expect(screen.queryByText(/gives Door/)).not.toBeInTheDocument();
     expect(screen.queryByText(/R_rule/)).not.toBeInTheDocument();
   });
 

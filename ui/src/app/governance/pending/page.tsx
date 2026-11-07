@@ -24,7 +24,7 @@ import { RetryStatus } from "@/components/ui/RetryStatus";
 import { narrow, usePendingFilters } from "@/lib/pending-filter";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { RoleRef, UserName } from "@/components/names";
+import { RoleInPlace, RoleRef, UserName } from "@/components/names";
 import { machineName } from "@/lib/audit-vocabulary";
 import { targetLabel } from "@/lib/nav";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
@@ -666,12 +666,16 @@ function CausedBy({
     );
   }
   // Named by what caused it, never by a handle alone. A direct grant has no
-  // handle: somebody chose it by hand on the person's page.
-  const name = bundle
-    ? bundle.name
-    : rule
-      ? `${humanizeKey(rule.source_role)} gives ${humanizeKey(rule.target_role)}`
-      : isBundle
+  // handle: somebody chose it by hand on the person's page. A rule has no name:
+  // the role that set it off is its name (A-21 §Q3), also when a bundle's
+  // change set the rule off, since the row is the rule's (task 1.6).
+  const name = bundle ? (
+    bundle.name
+  ) : rule ? (
+    <>
+      Rule from <RoleInPlace projectId={rule.source_project} roleKey={rule.source_role} />
+    </>
+  ) : isBundle
         ? "Bundle"
         : isRule
           ? "Automatic rule"

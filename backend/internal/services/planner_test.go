@@ -1,6 +1,7 @@
 package services
 
 import (
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -87,10 +88,19 @@ func sameWrites(t *testing.T, ch Change, want ...sentWrite) {
 		}
 	}
 	for _, w := range ch.Writes {
-		if w.Source != "bundle" || w.SourceRef != "b1" || w.UserID != "u1" {
-			t.Fatalf("a bundle's write is attributed to the bundle: %+v", w)
+		if w.UserID != "u1" || (w.Source != "rule" && (w.Source != "bundle" || w.SourceRef != "b1")) {
+			t.Fatalf("a bundle's write is attributed to the bundle, a rule's to the rule: %+v", w)
 		}
 	}
+}
+
+// writeSources is each write's role with its source and ref.
+func writeSources(ch Change) map[string]string {
+	out := map[string]string{}
+	for _, w := range ch.Writes {
+		out[w.OpType+" "+w.RoleKeys[0]] = w.Source + "/" + w.SourceRef
+	}
+	return out
 }
 
 func TestPlan_AssignGivesWhatTheyLackStraightAway(t *testing.T) {
@@ -276,9 +286,38 @@ func TestPlan_RulesFollowTheBundle(t *testing.T) {
 	if !strings.Contains(ch.Row.Consequence, "Also gives Advanced in Laser Lab, by the automatic rule from Trained in Laser Lab.") {
 		t.Errorf("consequence = %q", ch.Row.Consequence)
 	}
+	// The bundle's roles are its rows; the role the rule follows with is the
+	// rule's row, with the rule (task 1.6): the shape FollowRules writes.
+	want := map[string]string{"add member": "bundle/b1", "add trained": "bundle/b1", "add advanced": "rule/r1"}
+	if got := writeSources(ch); !maps.Equal(got, want) {
+		t.Errorf("sources = %v, want %v", got, want)
+	}
 	holdsBundle(&s)
-	if ch := remove(s); !strings.Contains(ch.Row.Consequence, "Also loses Advanced in Laser Lab, which the automatic rule from Trained in Laser Lab gave.") {
+	ch = remove(s)
+	if !strings.Contains(ch.Row.Consequence, "Also loses Advanced in Laser Lab, which the automatic rule from Trained in Laser Lab gave.") {
 		t.Errorf("removal consequence = %q", ch.Row.Consequence)
+	}
+	want = map[string]string{"revoke member": "bundle/b1", "revoke trained": "bundle/b1", "revoke advanced": "rule/r1"}
+	if got := writeSources(ch); !maps.Equal(got, want) {
+		t.Errorf("removal sources = %v, want %v", got, want)
+	}
+}
+
+// Two hops: each rule row names the rule that reaches it, whose first role is
+// the hop before it, as the words do.
+func TestPlan_RuleChainNamesEachHop(t *testing.T) {
+	s := plannerSnap()
+	s.Access.Rules = []models.MappingRule{
+		{ID: "r1", SourceProject: "pLab", SourceRole: "trained", TargetProject: "pLab", TargetRole: "advanced"},
+		{ID: "r2", SourceProject: "pLab", SourceRole: "advanced", TargetProject: "pLab", TargetRole: "supervisor"},
+	}
+	s.Catalogue[roleKey{projectID: "pLab", roleKey: "supervisor"}] = roleWords{Role: "Supervisor", Project: "Laser Lab"}
+	ch := assign(s)
+	if got := writeSources(ch); got["add advanced"] != "rule/r1" || got["add supervisor"] != "rule/r2" {
+		t.Errorf("sources = %v", got)
+	}
+	if !strings.Contains(ch.Row.Consequence, "Also gives Supervisor in Laser Lab, by the automatic rule from Advanced in Laser Lab.") {
+		t.Errorf("consequence = %q", ch.Row.Consequence)
 	}
 }
 
