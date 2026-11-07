@@ -174,7 +174,8 @@ function useDriftMutation<B>(path: (id: string) => string) {
 }
 
 export const useAttributeDrift = () =>
-  useDriftMutation<{ source: AttributionSource }>(
+  // The plan it was shown (GET /users/{id}/plan?op=adopt): its fingerprint and cancel ids.
+  useDriftMutation<{ source: AttributionSource; fingerprint?: string; cancel_ids?: string[] }>(
     (id) => `/governance/drift/${id}/attribute`,
   );
 export const useRevokeDrift = () => useDriftMutation<undefined>((id) => `/governance/drift/${id}/revoke`);

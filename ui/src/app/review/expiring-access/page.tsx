@@ -1,6 +1,6 @@
 "use client";
 
-import { useRoleWaits } from "@/lib/queries/useRoleWaits";
+import { useExtend } from "@/lib/useExtend";
 import { keepView, recallView, usePlace } from "@/lib/place";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -8,7 +8,6 @@ import { useMemo, useRef, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
-import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Crossfade } from "@/lib/motion";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
@@ -43,13 +42,11 @@ import {
   useExpiringGrants,
   type ExpiringGrantRow,
 } from "@/lib/queries/useExpiringAccess";
-import { useCreateGrant } from "@/lib/queries/useUsers";
 import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import {
   EXTEND_DAYS,
   FORECAST,
   outcomeFromError,
-  outcomeFromExtend,
   statesNothingChanged,
   succeeded,
   type ActionOutcome as Outcome,
@@ -573,14 +570,11 @@ function ExpiringRow({
   onLetLapse: () => void;
 }) {
   const ack = grant.acknowledged ?? null;
-  // Extending re-submits the grant with a later date: POST upserts on
-  // (user, project, role) and overwrites expires_at, so this renews in place
-  // rather than creating a duplicate.
-  const extend = useCreateGrant(grant.user_id);
-  const roleWaits = useRoleWaits();
-  // No sheet of its own: a small one holds the step if extending would cancel
-  // a change still waiting for you to send (A-04 §14).
-  const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
+  // Extending moves the grant's end in Syndra, through the planner; nothing is
+  // sent to Zitadel. No sheet of its own: a small one holds the step if
+  // extending would cancel a removal still waiting for you to send (A-04 §14).
+  const extend = useExtend(grant.user_id, grant.project_id, grant.role_key, "Extended from Expiring access", "It leaves this list on the next read.");
+  const step = extend.step;
   const clearAck = useClearExpiryAcknowledgement();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // The result takes the seat the buttons held, until the next read. A refusal does not: the
@@ -650,11 +644,9 @@ function ExpiringRow({
       </div>
 
       <div className="flex w-full min-w-0 flex-col items-start gap-2 desktop:w-auto desktop:min-w-[300px] desktop:items-end">
-        <Crossfade id={reported ? "outcome" : extend.isPending ? "forecast" : "open"} className="w-full tablet:w-auto">
-        {extend.isPending && !reported ? (
-          <ActionForecast
-            word={roleWaits(grant.project_id, grant.role_key) ? FORECAST.queued : `${FORECAST.extend} by ${EXTEND_DAYS} days`}
-          />
+        <Crossfade id={reported ? "outcome" : extend.writing ? "forecast" : "open"} className="w-full tablet:w-auto">
+        {extend.writing && !reported ? (
+          <ActionForecast word={`${FORECAST.extend} by ${EXTEND_DAYS} days`} />
         ) : reported ? (
           <ActionOutcome placement="seat" word={outcome.recorded ? "Refused by Zitadel" : outcome.message} outcome={outcome} />
         ) : (
@@ -664,23 +656,10 @@ function ExpiringRow({
             <Button
               variant="outline"
               size="sm"
-              isPending={extend.isPending}
+              isPending={extend.busy}
               onClick={async () => {
-                try {
-                  const result = await step.run(() =>
-                    extend.mutateAsync({
-                      project_id: grant.project_id,
-                      role_key: grant.role_key,
-                      reason: "Extended from Expiring access",
-                      duration_days: EXTEND_DAYS,
-                      extend: true,
-                    }),
-                  );
-                  if (result === KEPT) return;
-                  setOutcome(outcomeFromExtend(result, EXTEND_DAYS, "It leaves this list on the next read."));
-                } catch (error) {
-                  setOutcome(outcomeFromError(error));
-                }
+                const made = await extend.press();
+                if (made) setOutcome(made);
               }}
             >
               Extend {EXTEND_DAYS} days

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,10 +26,12 @@ import (
 // when the Change is the one the operator reviewed. A preview computed by
 // different code from the write it previews is a preview of nothing.
 //
-// Planned: bulk assign and remove bundle (task 1.1), and the single acts on
-// one person: give and remove a direct grant, approve a request, assign and
-// remove a bundle (task 1.2, planner_act.go). Every other action still goes
-// its old way (tasks.md, candidate 1).
+// Planned: every operator action that changes access. The single acts on one
+// person (give, remove a direct grant, approve, extend, adopt, a person's
+// bundles; planner_act.go, planner_ops.go) and every bulk op (give, remove,
+// extend, assign and remove bundle, request decisions, adopting drift,
+// publishing and moving a bundle's holders; planner_bulk.go). System work
+// (expiry, the welcome bundle, a rule's own edit) is task 1.9.
 
 // Action is one person's part of an access change.
 type Action struct {
@@ -41,6 +44,23 @@ type Action struct {
 	GrantID string
 	// RequestID is the request an approval decides.
 	RequestID string
+	// DriftID is the drift row an adoption resolves.
+	DriftID string
+	// Days is how long a give lasts, or an extension runs, from the day the
+	// snapshot was read (clock.Now); 0 is no end.
+	Days int
+}
+
+// subject is the plan row an action is: the person, or for a request
+// decision and an adoption the request and the drift row they resolve.
+func (a Action) subject() string {
+	switch a.Op {
+	case OpApprove:
+		return a.RequestID
+	case OpAdopt:
+		return a.DriftID
+	}
+	return a.UserID
 }
 
 // How a write reaches Zitadel (decision 11): sent in the same request, held
@@ -85,8 +105,9 @@ type Change struct {
 	// Said is the row's sentences after Detail, without the cancels line,
 	// which a single act says in its own step.
 	Said []string
-	// Waits names the roles whose write waits for you to send, alphabetical.
-	Waits []string
+	// Waits names the roles whose write waits for you to send, and Goes the
+	// ones sent straight away, alphabetical.
+	Waits, Goes []string
 	// ProjectID and RoleKey are a single act's own role (for a removal, the
 	// grant's).
 	ProjectID, RoleKey string
@@ -113,6 +134,21 @@ type PlanSnapshot struct {
 	Holding models.RequestHolding
 	// Request is the request an approval decides, read under the lock.
 	Request models.AccessRequest
+	// A bulk decision's requests and what each requester holds of the role,
+	// and an adoption's drift rows, by id: read under the lock with the rest.
+	Requests map[string]models.AccessRequest
+	Holdings map[string]models.RequestHolding
+	Drift    map[string]models.DriftItem
+	// Holders is who holds the bundle a publish or move repins, by person,
+	// with the version each is on.
+	Holders map[string]models.BundleHolder
+	// Ticked narrows an extension to the grants the operator ticked
+	// (Expiring access selects grant rows, not people); nil is every one.
+	Ticked map[string]bool
+	// LeaveHolders: a publish that leaves its holders where they are.
+	LeaveHolders bool
+	// Draft is what a publish cuts: the next version and what it gives.
+	Draft DraftDiff
 	// Now is when the snapshot was read: the day an approval's end counts from.
 	Now time.Time
 }
@@ -122,15 +158,32 @@ type roleWords struct{ Role, Project string }
 // Plan decides one action against the snapshot. Pure: no database, no
 // directory, no clock.
 func Plan(a Action, s PlanSnapshot) Change {
-	ch := Change{UserID: a.UserID, Row: BulkOutcome{UserID: a.UserID}}
-	profile, known := s.Profiles[a.UserID]
-	if !known {
-		return ch.decided(a, EffectBlocked, "absent", "No such account in the directory.", "")
+	a, s, refused := s.resolve(a)
+	ch := Change{UserID: a.UserID, Row: BulkOutcome{UserID: a.subject()}}
+	if a.subject() != a.UserID {
+		ch.Row.Person = a.UserID
 	}
-	ch.Row.Name, ch.Row.Email = profile.Name, profile.Email
+	profile, known := s.Profiles[a.UserID]
+	if known {
+		ch.Row.Name, ch.Row.Email = profile.Name, profile.Email
+	}
+	if refused != nil {
+		return ch.decided(a, refused.effect, refused.code, refused.detail, refused.step)
+	}
+	if !known {
+		return ch.decided(a, EffectBlocked, "absent", "No such account in the directory.",
+			"Take them out of the selection, or check the account in Zitadel.")
+	}
 	person := s.Access.People[a.UserID]
-	if roleOp(a.Op) {
+	switch {
+	case roleOp(a.Op):
 		return planRole(ch, a, s, profile, person)
+	case a.Op == OpExtend:
+		return planExtend(ch, a, s, profile, person)
+	case a.Op == OpAdopt:
+		return planAdopt(ch, a, s, person)
+	case a.Op == OpPublish || a.Op == OpMove:
+		return planMove(ch, a, s, person)
 	}
 	bundle := displayBundle(s.Bundle.Name)
 	holds := person.Bundles[a.BundleID]
@@ -248,16 +301,22 @@ func Plan(a Action, s PlanSnapshot) Change {
 // (A-21 §4.1), then which writes wait for you, then what it cancels.
 func (ch Change) said(a Action, s PlanSnapshot, detail string, said []string) Change {
 	said = append(said, ch.Rules...)
+	ch.Waits, ch.Goes = s.names(ch.delivered(DeliveryWaits)), s.names(ch.delivered(DeliveryStraightAway))
 	if waiting := ch.waiting(); len(waiting) > 0 {
-		for _, k := range waiting {
-			ch.Waits = append(ch.Waits, s.words(k))
+		var gives, removes []roleKey
+		for _, w := range ch.Writes {
+			if w.Delivery == DeliveryWaits && w.OpType == "revoke" {
+				removes = append(removes, roleKey{projectID: w.ProjectID, roleKey: w.RoleKeys[0]})
+			} else if w.Delivery == DeliveryWaits {
+				gives = append(gives, roleKey{projectID: w.ProjectID, roleKey: w.RoleKeys[0]})
+			}
 		}
-		sort.SliceStable(ch.Waits, func(i, j int) bool { return strings.ToLower(ch.Waits[i]) < strings.ToLower(ch.Waits[j]) })
-		verb := "Giving"
-		if a.Op == BulkOpRemoveBundle || a.Op == OpRemoveGrant {
-			verb = "Removing"
+		if len(gives) > 0 {
+			said = append(said, fmt.Sprintf("Giving %s waits for you to send.", s.list(gives)))
 		}
-		said = append(said, fmt.Sprintf("%s %s waits for you to send.", verb, s.list(waiting)))
+		if len(removes) > 0 {
+			said = append(said, fmt.Sprintf("Removing %s waits for you to send.", s.list(removes)))
+		}
 	}
 	ch.Said = said
 	// The cancels line stays last: the plan renderer splits it off the end.
@@ -268,13 +327,26 @@ func (ch Change) said(a Action, s PlanSnapshot, detail string, said []string) Ch
 }
 
 // waiting is the roles whose write waits for you to send.
-func (ch Change) waiting() []roleKey {
+func (ch Change) waiting() []roleKey { return ch.delivered(DeliveryWaits) }
+
+// delivered is the roles whose write is delivered this way.
+func (ch Change) delivered(how string) []roleKey {
 	var out []roleKey
 	for _, w := range ch.Writes {
-		if w.Delivery == DeliveryWaits {
+		if w.Delivery == how {
 			out = append(out, roleKey{projectID: w.ProjectID, roleKey: w.RoleKeys[0]})
 		}
 	}
+	return out
+}
+
+// names is roles in words, alphabetical; nil for none.
+func (s PlanSnapshot) names(ks []roleKey) []string {
+	var out []string
+	for _, k := range ks {
+		out = append(out, s.words(k))
+	}
+	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
 	return out
 }
 
@@ -283,6 +355,13 @@ func (ch Change) waiting() []roleKey {
 func (ch Change) deliver(writes []db.EnqueueParams, person db.PersonAccess, s PlanSnapshot) Change {
 	for _, p := range writes {
 		w := Write{EnqueueParams: p, Delivery: DeliveryStraightAway}
+		if p.NoPropagation {
+			// A ledger edit only (an extension, an adopted role): it never
+			// reaches the outbox, so it neither sends nor cancels anything.
+			w.Delivery = DeliveryNone
+			ch.Writes = append(ch.Writes, w)
+			continue
+		}
 		ref := db.RoleRef{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]}
 		answered := db.AnsweredBy(p, person.Queued)
 		ch.Cancels = append(ch.Cancels, answered...)
@@ -307,8 +386,15 @@ func (ch Change) decided(a Action, effect, refusal, detail, consequence string) 
 	if roleOp(a.Op) {
 		fields = append(fields, a.ProjectID, a.RoleKey, a.GrantID, a.RequestID, string(ch.Approval.Effect))
 	}
+	if a.DriftID != "" || a.Days != 0 {
+		fields = append(fields, "drift", a.DriftID, "days", strconv.Itoa(a.Days))
+	}
 	for _, w := range ch.Writes {
-		fields = append(fields, w.OpType, w.ProjectID, w.RoleKeys[0], w.Source, w.SourceRef, w.Delivery)
+		fields = append(fields, w.OpType, w.ProjectID, strings.Join(w.RoleKeys, ","), w.Source, w.SourceRef, w.Delivery)
+		if w.EndRule == db.EndSet {
+			// An extension's whole decision is the end it sets.
+			fields = append(fields, "ends", endField(w.ExpiresAt))
+		}
 	}
 	fields = append(fields, "cancels")
 	ch.Row.CancelIDs = nil
@@ -317,7 +403,18 @@ func (ch Change) decided(a Action, effect, refusal, detail, consequence string) 
 		ch.Row.CancelIDs = append(ch.Row.CancelIDs, c.ID)
 	}
 	ch.Row.Fingerprint = Fingerprint(fields...)
+	// How the row reaches Zitadel, on the plan and on the result (A-21 §Q1):
+	// straight away, waits for you, or nothing sent; which roles go now and
+	// which wait.
+	ch.Row.Delivery, ch.Row.Waits, ch.Row.Goes = ch.Delivery(), ch.Waits, ch.Goes
 	return ch
+}
+
+func endField(t *time.Time) string {
+	if t == nil {
+		return "none"
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 // params are the writes as the outbox takes them, every one of them: a write
@@ -411,11 +508,6 @@ func capitalise(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// --- reading the snapshot, and the two acts that use it ---
-
-// PlannedOp reports whether an operation goes through the planner yet.
-func PlannedOp(op string) bool { return op == BulkOpAssignBundle || op == BulkOpRemoveBundle }
-
 // PlannerCatalogue is Zitadel's catalogue as the role-offered guard reads it.
 // handlers wires the same reader its own check uses, so a demo catalogue
 // served while Zitadel is configured counts as unread there and here.
@@ -468,184 +560,6 @@ func planDirectory(ctx context.Context, ids []string) (PlanSnapshot, error) {
 	return s, nil
 }
 
-// planSnapshot adds what Syndra's own tables say, read under the lock the
-// caller holds: one pass for everyone in the plan.
-func planSnapshot(ctx context.Context, req BulkRequest, s PlanSnapshot, ids []string) (PlanSnapshot, error) {
-	var err error
-	if s.Bundle, err = svcGetBundleByID(ctx, req.BundleID); err != nil {
-		return s, err
-	}
-	if req.Op == BulkOpAssignBundle && s.Bundle.RetiredAt == nil {
-		// The LATEST PUBLISHED version: what an assignment pins and gives.
-		if s.Version, s.VersionRoles, err = svcLatestVersionRoles(ctx, req.BundleID); err != nil {
-			return s, err
-		}
-	}
-	s.Access, err = svcReadAccessSnapshot(ctx, ids)
-	return s, err
-}
-
-// rehearsePlanned is the preview: the snapshot read once under the lock, and
-// the planner's row for every selected person.
-func rehearsePlanned(ctx context.Context, req BulkRequest) (BulkPlan, error) {
-	changes, excluded, err := PlanBulk(ctx, req)
-	if err != nil {
-		return BulkPlan{}, err
-	}
-	plan := BulkPlan{Op: req.Op, Excluded: excluded}
-	for _, ch := range changes {
-		plan.Outcomes = append(plan.Outcomes, ch.Row)
-	}
-	sortOutcomes(plan.Outcomes)
-	plan.Summary = summarize(plan.Outcomes)
-	return plan, nil
-}
-
-// PlanBulk reads the snapshot once under the lock and plans every selected
-// person, in the order selected. An operation that takes access away leaves
-// out the person asking (#32, B4): their own page is where they change it.
-func PlanBulk(ctx context.Context, req BulkRequest) ([]Change, []BulkExclusion, error) {
-	ids := dedupeIDs(req.UserIDs)
-	snap, err := planDirectory(ctx, ids)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
-		snap, err = planSnapshot(ctx, req, snap, ids)
-		return err
-	}); err != nil {
-		return nil, nil, err
-	}
-	var changes []Change
-	var excluded []BulkExclusion
-	for _, uid := range ids {
-		if req.Op == BulkOpRemoveBundle && req.Actor != "" && uid == req.Actor {
-			excluded = append(excluded, BulkExclusion{UserID: uid, Reason: "self"})
-			continue
-		}
-		changes = append(changes, Plan(Action{Op: req.Op, UserID: uid, BundleID: req.BundleID}, snap))
-	}
-	return changes, excluded, nil
-}
-
-// StalePlan is the apply's refusal when the fresh read gives a different
-// Change for these people than the plan they reviewed: other writes, or a
-// queued change the row never named (decisions 3, 4). Nothing was written and
-// the plan is still unspent.
-type StalePlan struct{ IDs []string }
-
-func (e *StalePlan) Error() string {
-	return fmt.Sprintf("the plan is stale for %d subject(s)", len(e.IDs))
-}
-
-// ApplyPlannedBulk is the apply. In one transaction under the lock it spends
-// the plan, reads the snapshot again, plans every row again, and refuses the
-// whole plan, unspent and with nothing written, if any row's Change differs
-// from the one stored. Otherwise it writes every row, admitting only the
-// cancellations the rows named. It returns the rows' words and, per person,
-// the Change as written, each write with its outbox row: sending it is the
-// caller's (DeliverChange), after the commit, because the lock is never held
-// across a call to Zitadel.
-func ApplyPlannedBulk(ctx context.Context, req BulkRequest, cite db.PlanCitation) (BulkPlan, map[string]Change, error) {
-	plan := BulkPlan{Op: req.Op, Applied: true}
-	written := map[string]Change{}
-	var subjects []db.PlanSubject
-	var changes map[string]Change
-
-	// The plan's people are the request's (the request fingerprint binds
-	// them), so the directory is read before the lock like the preview's.
-	fromZitadel, err := planDirectory(ctx, dedupeIDs(req.UserIDs))
-	if err != nil {
-		return BulkPlan{}, nil, err
-	}
-	err = withLockedAccess(ctx, func(ctx context.Context) error {
-		var err error
-		if _, subjects, err = svcClaimPlanJoined(ctx, cite); err != nil {
-			return err
-		}
-		ids := make([]string, len(subjects))
-		for i, s := range subjects {
-			ids[i] = s.SubjectID
-		}
-		snap, err := planSnapshot(ctx, req, fromZitadel, ids)
-		if err != nil {
-			return err
-		}
-		changes = make(map[string]Change, len(subjects))
-		var moved, named []string
-		for _, s := range subjects {
-			ch := Plan(Action{Op: req.Op, UserID: s.SubjectID, BundleID: req.BundleID}, snap)
-			if ch.Row.Fingerprint != s.Fingerprint || !slices.Equal(ch.Row.CancelIDs, s.Outcome.CancelIDs) {
-				moved = append(moved, s.SubjectID)
-				continue
-			}
-			changes[s.SubjectID] = ch
-			named = append(named, s.Outcome.CancelIDs...)
-		}
-		if len(moved) > 0 {
-			sort.Strings(moved)
-			return &StalePlan{IDs: moved}
-		}
-		db.CancellationsNamed(ctx, named)
-
-		for _, s := range subjects {
-			ch := changes[s.SubjectID]
-			if ch.Row.Effect != EffectApply {
-				continue
-			}
-			if written[s.SubjectID], err = writeChange(ctx, req, ch); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return BulkPlan{}, nil, err
-	}
-	for _, s := range subjects {
-		plan.Outcomes = append(plan.Outcomes, changes[s.SubjectID].Row)
-	}
-	if req.Op == BulkOpRemoveBundle && req.Actor != "" && slices.Contains(dedupeIDs(req.UserIDs), req.Actor) {
-		plan.Excluded = []BulkExclusion{{UserID: req.Actor, Reason: "self"}}
-	}
-	sortOutcomes(plan.Outcomes)
-	plan.Summary = summarize(plan.Outcomes)
-	return plan, written, nil
-}
-
-// errNotAssigned: the assignment found them already holding the bundle, which
-// the plan just checked under the same lock. Unreachable; refused, not trusted.
-var errNotAssigned = errors.New("they already hold this bundle, which the plan said they didn't")
-
-// writeChange writes one row's Change: the bundle assignment or its removal,
-// its audit row and its outbox rows, in the caller's transaction, all with
-// the operator's reason. It returns the Change with each write's row.
-func writeChange(ctx context.Context, req BulkRequest, ch Change) (Change, error) {
-	if err := deferTargetConvergence(ctx, req.Actor, ch.UserID, ch.changed()); err != nil {
-		return ch, err
-	}
-	var ids []string
-	var err error
-	switch req.Op {
-	case BulkOpAssignBundle:
-		var assigned bool
-		ids, assigned, err = svcAssignBundleAndEnqueue(ctx, req.Actor, req.Reason, ch.UserID, req.BundleID, ch.VersionID,
-			ch.params(req.Actor, req.Reason))
-		if err == nil && !assigned {
-			err = errNotAssigned
-		}
-	case BulkOpRemoveBundle:
-		ids, err = svcRemoveBundleFromUserAndEnqueue(ctx, req.Actor, req.Reason, ch.UserID, req.BundleID,
-			ch.params(req.Actor, req.Reason))
-	default:
-		err = fmt.Errorf("the planner does not apply %q", req.Op)
-	}
-	if err != nil {
-		return ch, err
-	}
-	return ch.written(ids)
-}
-
 // errWrittenOtherwise: the outbox wrote other rows than the Change says, in
 // the transaction that is about to roll back. The planner and the outbox ask
 // the same questions of the same snapshot under the same lock, so this is
@@ -671,4 +585,19 @@ func (ch Change) written(ids []string) (Change, error) {
 		return ch, errWrittenOtherwise
 	}
 	return ch, nil
+}
+
+// RoleWords names one role the way plan rows do ("Member in Laser Lab"), from
+// the same catalogue; a role Zitadel no longer lists falls back to its key, as
+// words does.
+func RoleWords(ctx context.Context, projectID, roleKeyStr string) string {
+	s := PlanSnapshot{Catalogue: map[roleKey]roleWords{}}
+	if projects, err := PlannerCatalogue(ctx); err == nil {
+		for _, p := range projects {
+			for _, r := range p.Roles {
+				s.Catalogue[roleKey{projectID: p.ID, roleKey: r.Key}] = roleWords{Role: r.Label, Project: p.Name}
+			}
+		}
+	}
+	return s.words(roleKey{projectID: projectID, roleKey: roleKeyStr})
 }

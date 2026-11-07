@@ -179,8 +179,8 @@ var (
 	svcGetBundleRolesGiven = db.GetBundleRolesGiven
 	// What a bundle grants TODAY: the latest published version, which is what a
 	// new assignment pins to.
-	svcLatestVersionRoles     = db.LatestVersionRoles
-	svcWouldCancel            = db.WouldCancel
+	svcLatestVersionRoles = db.LatestVersionRoles
+
 	svcVersionBelongsTo       = db.VersionBelongsTo
 	svcGetDirectGrantsForUser = db.GetDirectGrantsForUser
 

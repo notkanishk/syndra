@@ -99,6 +99,16 @@ export interface BulkOutcome {
   retry?: RetryState;
   /** Rows automatic rules queued with this row's act that wait for Send (N4), never the act's own wait. */
   rule_waiting?: number;
+  /**
+   * How the planner sends this row's change (architecture deepening): straight
+   * away, waiting for you, or none (nothing is sent: an extend, an adoption's
+   * own row, a change already held another way). Omitted on a refusal.
+   */
+  delivery?: "straight_away" | "waits_for_you" | "none";
+  /** The roles that wait for you to send. */
+  waits?: string[];
+  /** The roles sent straight away. */
+  goes?: string[];
 }
 
 export interface BulkSummary {

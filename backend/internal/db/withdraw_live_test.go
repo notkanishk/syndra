@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"syndra/internal/models"
 	"testing"
 	"time"
 )
@@ -252,8 +253,14 @@ func TestThePreviewNamesWhatTheActionCancels(t *testing.T) {
 	removal := revokeParams(user, "p1", "community", "direct", "grant-123")
 	removal.GrantedBy = "op"
 
-	preview, err := WouldCancel(ctx, removal)
-	if err != nil {
+	// The preview is the planner's: the snapshot's queued changes, asked the
+	// one predicate (AnsweredBy).
+	var preview []models.QueuedChange
+	if err := InTxLockingAccess(ctx, func(ctx context.Context) error {
+		snap, err := ReadAccessSnapshot(ctx, []string{user})
+		preview = AnsweredBy(removal, snap.People[user].Queued)
+		return err
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if len(preview) != 1 || preview[0].ID != add || preview[0].OpType != "add" {

@@ -17,18 +17,17 @@ import (
 // A gate rides an operator's request. withdrawUndelivered consults it at the
 // one place cancellations happen, so no screen can cancel silently, whether
 // or not it was built to say so. A request with no gate (expiry, onboarding,
-// other system work) cancels and is audited as before; so does a plan the
-// operator reviewed, whose rows name the cancellations.
+// other system work) cancels and is audited as before. A plan admits exactly
+// the cancellations its rows named (CancellationsNamed).
 
 // ErrWouldCancel is the refusal; CancelGate.Refused has what it would cancel.
 var ErrWouldCancel = errors.New("this would cancel changes that are waiting for you to send")
 
 // CancelGate is one request's acknowledgement, and what it refused.
 type CancelGate struct {
-	mu       sync.Mutex
-	acked    map[string]bool
-	reviewed bool
-	refused  []models.QueuedChange
+	mu      sync.Mutex
+	acked   map[string]bool
+	refused []models.QueuedChange
 	// asks says whether the request's caller is someone to ask, read at the
 	// chokepoint, after authentication has put them in the context.
 	asks func(context.Context) bool
@@ -46,24 +45,13 @@ func GuardCancellations(ctx context.Context, acked []string, asks func(context.C
 	return context.WithValue(ctx, cancelGateKey{}, g), g
 }
 
-// CancellationsReviewed marks a plan apply: its rows named every cancellation
-// before the operator applied it.
-func CancellationsReviewed(ctx context.Context) context.Context {
-	if g, ok := ctx.Value(cancelGateKey{}).(*CancelGate); ok && g != nil {
-		g.mu.Lock()
-		g.reviewed = true
-		g.mu.Unlock()
-	}
-	return ctx
-}
-
 // CancellationsNamed admits exactly these queued changes on a planned apply:
 // the ones its rows named and the operator saw (architecture deepening,
-// decision 4). Any other cancellation is still refused, whatever the
-// request's X-Syndra-Cancel-Ack said: a planned act is admitted by its plan,
-// never by that header. The planner's apply refuses a plan whose fresh read
-// names any other first; this is the second safety, at the one place
-// cancellations happen.
+// decision 4). Any other cancellation is still refused, whatever else the
+// request named: a planned act is admitted by its plan. The planner's apply
+// refuses a plan whose fresh read names any other first; this is the second
+// safety, at the one place cancellations happen. Every plan applies this
+// way; nothing admits every cancellation.
 func CancellationsNamed(ctx context.Context, ids []string) {
 	if g, ok := ctx.Value(cancelGateKey{}).(*CancelGate); ok && g != nil {
 		g.mu.Lock()
@@ -93,9 +81,6 @@ func AdmitCancellations(ctx context.Context, changes []models.QueuedChange) bool
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.reviewed {
-		return true
-	}
 	for _, c := range changes {
 		if !g.acked[c.ID] {
 			g.refused = append(g.refused, changes...)

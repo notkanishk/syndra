@@ -37,22 +37,17 @@ func setupBulk(t *testing.T, fx bulkFixture) {
 	origGrants := svcGetDirectGrantsForUser
 	origBundle := svcGetBundleByID
 	origRoles := svcLatestVersionRoles
-	origCancel := svcWouldCancel
 	origRules, origByBundle, origQueued := svcGetActiveMappingRules, svcGetUserBundleRolesGrouped, svcQueuedRevocations
 	t.Cleanup(func() {
 		collectUserRolesHook = origCollect
 		svcGetDirectGrantsForUser = origGrants
 		svcGetBundleByID = origBundle
 		svcLatestVersionRoles = origRoles
-		svcWouldCancel = origCancel
 		svcGetActiveMappingRules, svcGetUserBundleRolesGrouped, svcQueuedRevocations = origRules, origByBundle, origQueued
 	})
 	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return fx.rules, nil }
 	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) { return nil, nil }
 	svcQueuedRevocations = func(context.Context, string) ([]db.RoleRef, error) { return nil, nil }
-	svcWouldCancel = func(_ context.Context, p db.EnqueueParams) ([]models.QueuedChange, error) {
-		return fx.queued[p.UserID+"/"+p.OpType+"/"+p.RoleKeys[0]], nil
-	}
 
 	collectUserRolesHook = func(_ context.Context, uid string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
 		roles := fx.roles[uid]
@@ -80,15 +75,39 @@ func setupBulk(t *testing.T, fx bulkFixture) {
 	svcReadAccessSnapshot = func(_ context.Context, ids []string) (db.AccessSnapshot, error) {
 		snap := db.AccessSnapshot{People: map[string]db.PersonAccess{}, Rules: fx.rules}
 		for _, id := range ids {
-			p := db.PersonAccess{Direct: fx.grants[id], Bundles: map[string]bool{}}
+			p := db.PersonAccess{Direct: fx.grants[id], Bundles: map[string]bool{}, ByBundle: map[string][]models.BundleRole{}}
 			for _, b := range fx.bundle[id] {
 				p.Bundles[b.ID] = true
+			}
+			// A role held through a bundle is the bundle's, in the snapshot.
+			for k, role := range fx.roles[id] {
+				for _, why := range role.Reasons {
+					if why.Kind == "bundle" {
+						b := "b-" + why.BundleName
+						p.Bundles[b] = true
+						p.ByBundle[b] = append(p.ByBundle[b], models.BundleRole{BundleID: b, ProjectID: k.projectID, RoleKey: k.roleKey})
+					}
+				}
+			}
+			for key, changes := range fx.queued {
+				if uid, _, _ := strings.Cut(key, "/"); uid == id {
+					for _, c := range changes {
+						c.UserID = id
+						if c.ProjectID == "" {
+							c.ProjectID = "pLaser"
+						}
+						p.Queued = append(p.Queued, c)
+					}
+				}
 			}
 			snap.People[id] = p
 		}
 		return snap, nil
 	}
 	PlannerCatalogue = func(context.Context) ([]models.ProjectCatalog, error) {
+		if fx.projs != nil {
+			return fx.projs, nil
+		}
 		return []models.ProjectCatalog{
 			{ID: "pLaser", Name: "Laser Lab", Roles: []models.ProjectRole{{Key: "member", Label: "Member"}, {Key: "trained", Label: "Trained"}}},
 			{ID: "pWood", Name: "Wood Shop", Roles: []models.ProjectRole{{Key: "member", Label: "Member"}}},
@@ -182,18 +201,17 @@ func TestRehearseBulk_RemoveNamesWhoKeepsTheRoleAnyway(t *testing.T) {
 	if both.Effect != EffectApply {
 		t.Errorf("a direct grant still exists to remove, got %q", both.Effect)
 	}
-	if !strings.Contains(both.Consequence, "Safety") {
-		t.Errorf("must name the source that keeps the role: %q", both.Consequence)
-	}
-	if !strings.Contains(both.Consequence, "does not take their access away") {
-		t.Errorf("must say the access survives: %q", both.Consequence)
+	// The planner's words, the same as a single removal's: they keep it, and
+	// nothing is sent.
+	if both.Detail != "Keeps Trained in Laser Lab another way, so nothing is sent to Zitadel." || both.Delivery != "" {
+		t.Errorf("must say the access survives and nothing is sent: %+v", both)
 	}
 
 	bundleOnly := outcomeFor(t, plan, "u_bundle")
 	if bundleOnly.Effect != EffectNoChange {
 		t.Errorf("no direct grant means nothing to remove, got %q", bundleOnly.Effect)
 	}
-	if !strings.Contains(bundleOnly.Consequence, "Safety") {
+	if bundleOnly.Consequence != "Keeps the role another way, through a bundle or an automatic rule. Remove that instead." {
 		t.Errorf("must point at the source to remove instead: %q", bundleOnly.Consequence)
 	}
 	if len(bundleOnly.GrantIDs) != 0 {
@@ -612,8 +630,8 @@ func TestRehearseBulk_GiveNamesWhatTheRulesAlsoGive(t *testing.T) {
 	}
 	row := outcomeFor(t, plan, "u1")
 	for _, want := range []string{
-		"Also gives Advanced in Laser, by the automatic rule from Trained.",
-		"Also gives Bench in Workshop, by the automatic rule from Advanced.",
+		"Also gives Advanced in Laser, by the automatic rule from Trained in Laser.",
+		"Also gives Bench in Workshop, by the automatic rule from Advanced in Laser.",
 	} {
 		if !strings.Contains(row.Consequence, want) {
 			t.Errorf("consequence %q is missing %q", row.Consequence, want)

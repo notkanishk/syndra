@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AutomaticRulesPage from "@/app/policies/page";
+import { WouldCancelQueued } from "@/lib/api-client";
+import type { QueuedChange } from "@/lib/cancel-confirm";
 import type { MappingRuleRow } from "@/lib/queries/useMappingRules";
 
 const state = vi.hoisted(() => ({
@@ -181,8 +183,39 @@ describe("deleting an automatic rule", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retire rule and revoke access" }));
 
     await waitFor(() =>
-      expect(state.remove).toHaveBeenCalledWith("aaaabbbb-1111-2222-3333-444455556666"),
+      expect(state.remove).toHaveBeenCalledWith({ id: "aaaabbbb-1111-2222-3333-444455556666" }),
     );
+  });
+
+  // Not on the planner: the first retire names nothing; refused with the
+  // removal it would cancel, the step shows it, and going ahead retires again
+  // naming exactly that id (`?cancel_ids=`, no header).
+  it("retires again naming the waiting change it showed, after the operator goes ahead", async () => {
+    const waiting: QueuedChange = {
+      id: "00000000-0000-0000-0000-0000000000a1",
+      op_type: "add",
+      user_id: "u1",
+      project_id: "pLaser",
+      role_keys: ["trained"],
+      source: "rule",
+      initiated_by: "op-2",
+      initiated_by_name: "Sam Lee",
+      queued_at: new Date(Date.now() - 3_600_000).toISOString(),
+    };
+    state.remove = vi
+      .fn()
+      .mockRejectedValueOnce(new WouldCancelQueued([waiting], "DELETE", "/rules/mapping/aaaabbbb-1111-2222-3333-444455556666"))
+      .mockResolvedValue({ message: "ok", cascade: { enqueued: 0 } });
+    openTheRule();
+    fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire rule and revoke access" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Cancel it and / }));
+
+    await waitFor(() => expect(state.remove).toHaveBeenCalledTimes(2));
+    expect(state.remove.mock.calls.map((c) => c[0])).toEqual([
+      { id: "aaaabbbb-1111-2222-3333-444455556666", cancelIds: undefined },
+      { id: "aaaabbbb-1111-2222-3333-444455556666", cancelIds: [waiting.id] },
+    ]);
   });
 
   // Audit W3, one-path 1.8e: who sends the revocations decides the sentence,

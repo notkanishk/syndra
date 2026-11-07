@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
 
@@ -185,88 +184,16 @@ func handlePublishBundleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A citation is required exactly when the rehearsal produced one, and
-	// issuePlan produces one exactly when the rehearsal reached somebody. A
-	// bundle nobody holds is the case: publishing it is a real act with no
-	// subject to approve, and demanding an approval that cannot exist would put
-	// the operator back on the dead end from the other side.
-	if err := claimPublishPlan(r, planSurfaceBundlePublish, actor, req.PlanID, call); err != nil {
-		writePlanCitationError(w, err)
-		return
+	// Through the planner (task 1.3): under the lock it reads the version and
+	// the holders again, checks them against the approval (the request
+	// fingerprint binds the contents and the cohort), plans every holder again
+	// and writes only the reviewed Change. A bundle nobody holds has no plan
+	// to cite: publishing it is still an act.
+	plan, ok := applyPlanned(w, r, services.BulkRequest{Op: services.OpPublish, BundleID: bundleID, Note: call.Note,
+		Migrate: call.Migrate, Includers: call.Includers, Actor: actor}, planCitation(planSurfaceBundlePublish, actor, "", req.PlanID))
+	if ok {
+		jsonResponse(w, http.StatusOK, map[string]any{"plan": plan, "version": plan.Version})
 	}
-
-	// Reviewed: the plan's rows named every queued change this cancels.
-	db.CancellationsReviewed(r.Context())
-	plan, version, err := svcPublishBundleVersion(r.Context(), actor, call)
-	if err != nil {
-		// "nothing to publish" is a conflict with the world, not a server
-		// fault: somebody else published while this dialog was open, or the
-		// draft was discarded.
-		if strings.HasPrefix(err.Error(), "nothing to publish") {
-			jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_PUBLISH", err.Error())
-			return
-		}
-		var unanswered *services.ErrIncludersUnanswered
-		if errors.As(err, &unanswered) {
-			jsonErrorResponse(w, http.StatusConflict, "INCLUDERS_UNANSWERED",
-				"Say whether each bundle that includes this one takes the new version: "+strings.Join(unanswered.Names, ", ")+". Nothing was changed.")
-			return
-		}
-		jsonErrorResponse(w, http.StatusInternalServerError, "APPLY_ERROR", err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]any{"plan": plan, "version": version})
-}
-
-// claimPublishPlan spends the approval a publish cites, or reports why it
-// cannot be spent.
-//
-// The apply is a single atomic operation over a cohort, not a row-by-row walk,
-// so the claimed subject rows are not what the write iterates — PublishBundleVersion
-// recomputes under the access lock and moves the holders it finds. What the
-// claim contributes is the guarantee that the world behind the approval has not
-// moved: the request fingerprint binds the version contents and the cohort, and
-// the per-subject fingerprints bind each holder's reviewed delta. If either
-// moved, the apply is refused before the lock is taken and the operator reads a
-// fresh plan instead.
-func claimPublishPlan(
-	r *http.Request,
-	surface, actor, planID string,
-	call services.PublishRequest,
-) error {
-	// Rehearsed once here, for the fingerprints the citation is checked against
-	// and for the request fingerprint the approval was bound to. The verdicts
-	// are not re-decided from it.
-	live, _, err := svcRehearsePublish(r.Context(), call)
-	if err != nil {
-		return err
-	}
-	// An approval that was OFFERED gets spent, whatever the cohort has done
-	// since. Checking emptiness first looked equivalent and was not: a publish
-	// rehearsed against fourteen holders, all of whom are unassigned before the
-	// apply, would take the no-citation path — leaving the approval unspent and
-	// citable until it expired, and publishing without verifying the version
-	// contents the operator had reviewed. It could not move the wrong person,
-	// because there is nobody left to move; it could still publish a different
-	// version from the one that was approved.
-	//
-	// So a caller holding a citation always presents it, and only a caller with
-	// none falls through to the definition path below.
-	if strings.TrimSpace(planID) != "" {
-		_, err := claimPlan(r.Context(), surface, actor, live.RequestFingerprint, planID,
-			func() map[string]services.BulkOutcome { return indexOutcomes(live.Outcomes) })
-		return err
-	}
-
-	// Nobody holds it, so the rehearsal approved nobody and there is nothing to
-	// verify. Publishing is still an act — it cuts the version future
-	// assignments will pin — and it takes the same path a mapping definition
-	// does.
-	if len(live.Outcomes) == 0 {
-		return nil
-	}
-	return errPlanCitationMissing
-
 }
 
 // MoveHoldersRequest repins named holders onto one version.
@@ -328,30 +255,10 @@ func handleMoveBundleHolders(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, http.StatusOK, plan)
 		return
 	}
-
-	// A move NAMES its cohort, so unlike a publish it can never rehearse to
-	// nobody with work still to do: no user ids is a validation failure above.
-	live, err := svcRehearseMoveHolders(r.Context(), call)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "PLAN_ERROR", err.Error())
-		return
-	}
 	if strings.TrimSpace(req.PlanID) == "" {
 		missingPlanCitation(w)
 		return
 	}
-	if _, err := claimPlan(r.Context(), planSurfaceBundleMove, actor, live.RequestFingerprint, req.PlanID,
-		func() map[string]services.BulkOutcome { return indexOutcomes(live.Outcomes) }); err != nil {
-		writePlanCitationError(w, err)
-		return
-	}
-
-	// Reviewed: the plan's rows named every queued change this cancels.
-	db.CancellationsReviewed(r.Context())
-	plan, err := svcMoveHolders(r.Context(), actor, call)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "APPLY_ERROR", err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, plan)
+	applyPlannedBulk(w, r, services.BulkRequest{Op: services.OpMove, BundleID: bundleID, VersionID: req.VersionID,
+		UserIDs: req.UserIDs, Actor: actor}, planCitation(planSurfaceBundleMove, actor, "", req.PlanID), http.StatusOK)
 }

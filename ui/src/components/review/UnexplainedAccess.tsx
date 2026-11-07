@@ -75,7 +75,9 @@ import {
   type DriftSortKey,
 } from "@/lib/drift-filters";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
-import { RuleConsentFailed, useRuleConsent } from "@/components/requests/RuleConsent";
+import { RuleConsentFailed } from "@/components/requests/RuleConsent";
+import { KEPT, PushedStep, useCancelStep, useForetell } from "@/components/ui/CancelQueuedStep";
+import { isStale, usePlanConsent } from "@/lib/usePlanConsent";
 import { isRefused, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { targetLabel } from "@/lib/nav";
@@ -743,7 +745,12 @@ export function UnexplainedAccess() {
         <SelectionAction onClick={selectSimilar}>Select similar rows</SelectionAction>
       </SelectionBar>
 
-      <ResolutionDialog pending={pending} onClose={() => setPending(null)} />
+      {/* Keyed: each item opens on its own plan, with no result or note left from the last. */}
+      <ResolutionDialog
+        key={pending ? `${pending.item.id}:${pending.resolution}` : "none"}
+        pending={pending}
+        onClose={() => setPending(null)}
+      />
 
       {bulkOp && (
         <BulkResolutionDialog
@@ -1071,8 +1078,8 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
         <div className="type-label mb-1.5">If you adopt</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">
           Syndra records this as access you gave, and the row stops appearing here. Their access
-          does not change here. An automatic rule that starts from this role adds its role to
-          Pending changes.
+          does not change here. An automatic rule that starts from this role also gives its role,
+          and Adopt names it before you press.
         </p>
       </div>
       <div>
@@ -1111,30 +1118,40 @@ function ResolutionDialog({
   const external = useMarkExternalDrift();
   const roleWaits = useRoleWaits();
   const auto = useAutoRetry();
+  const resolver = useNameResolver();
   // Adopting is when a rule starting from the role fires (ADR-006), so the
-  // dialog names what the rules give before the operator confirms (audit C1),
-  // from the closure the adoption itself follows.
-  const rules = useRuleConsent(
-    pending?.item.user_id ?? "",
-    pending?.item.project_id ?? "",
-    pending?.item.role_keys ?? [],
-    pending?.resolution === "attribute",
+  // dialog says what adopting does before the operator confirms (audit C1),
+  // from the planner: the same Change the adoption writes (task 1.3).
+  const consent = usePlanConsent(
+    pending?.resolution === "attribute" ? { op: "adopt", userId: pending.item.user_id, driftId: pending.item.id } : null,
+    "adopting it",
   );
+  const foretell = useForetell();
+  // An adoption that would cancel a change still waiting pushes the step inside this sheet.
+  const step = useCancelStep({ host: "Adopt this access", goAhead: "adopt" });
+  // The write found their access moved since the plan was read: nothing was written.
+  const [stale, setStale] = useState(false);
 
   if (!pending) return null;
   const { item, resolution } = pending;
   const busy = attribute.isPending || revoke.isPending || external.isPending;
   const role = item.role_keys[0] ?? "";
-  const ruleLines = resolution === "attribute" ? rules.lines : [];
+  const plan = resolution === "attribute" ? consent.plan : undefined;
+  const refused = plan && plan.effect !== "apply" ? plan : undefined;
+  // The planner's own sentences: what adopting records, what the rules also give, what waits.
+  const planLines = plan && !refused ? plan.said : [];
+  const refusedReason = refused ? [refused.detail, refused.consequence].filter(Boolean).join(" ") : undefined;
+  const cancelLine =
+    plan && !refused && consent.cancels.length > 0
+      ? `${foretell("Adopting it", consent.cancels)} Nothing is cancelled until you choose on the next step.`
+      : "";
+  const first = resolver.resolveUser(item.user_id).value?.display_name?.trim().split(/\s+/)[0];
   const waits = roleWaits(item.project_id, role);
 
   const copy = {
     attribute: {
       title: "Adopt this access in Syndra?",
-      lede:
-        ruleLines.length > 0
-          ? "Syndra takes this access on as its own. The access stays as it is, and the automatic rules that start from this role add what they give to Pending changes, for you to send:"
-          : "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, end or revoke it like any other access.",
+      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, end or revoke it like any other access.",
       confirm: "Adopt in Syndra",
       word: "Adopted",
       variant: "accent" as const,
@@ -1161,21 +1178,35 @@ function ResolutionDialog({
 
   return (
     <Modal open onClose={onClose} busy={busy} size="sm" labelledBy="triage-title">
+      <PushedStep step={step}>
       <ModalHeader title={copy.title} titleId="triage-title" lede={copy.lede} />
+      {stale && !outcome && (
+        <Notice
+          tone="warn"
+          blocking
+          className="mx-6 mb-3"
+          title={`Nothing was changed. ${first ? `${first}'s` : "Their"} access moved while this was open.`}
+          next="Read the lines under the role, then press Adopt in Syndra again."
+        >
+          {null}
+        </Notice>
+      )}
       <div className="flex flex-col gap-3 px-6">
         <div className="rounded-inner bg-tint-1 px-4 py-3.5 text-[14.5px]">
           <UserName id={item.user_id} /> · <ProjectName id={item.project_id} /> / <Mono>{role}</Mono>
         </div>
 
-        {ruleLines.length > 0 && (
-          <ul className="flex flex-col gap-1 text-[13.5px] leading-[1.55] text-muted">
-            {ruleLines.map((line) => (
+        {(planLines.length > 0 || cancelLine) && (
+          <ul className="flex flex-col gap-1 text-[13.5px] leading-[1.55] text-muted" data-testid="adopt-plan">
+            {planLines.map((line) => (
               <li key={line}>{line}</li>
             ))}
+            {cancelLine && <li>{cancelLine}</li>}
           </ul>
         )}
+        {refusedReason && <p className="text-[13.5px] leading-[1.55] text-ink">{refusedReason}</p>}
         {resolution === "attribute" && (
-          <RuleConsentFailed consent={rules} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] leading-[1.55] text-muted" />
+          <RuleConsentFailed consent={consent} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] leading-[1.55] text-muted" />
         )}
 
         {resolution === "revoke" && (
@@ -1236,7 +1267,9 @@ function ResolutionDialog({
         />
       )}
 
-      <ModalFooter cancel={succeeded(outcome) ? undefined : { onClick: onClose }}>
+      {succeeded(outcome) && step.after}
+
+      <ModalFooter cancel={succeeded(outcome) ? undefined : { onClick: onClose }} note={step.note ?? undefined}>
         {succeeded(outcome) && (
           <Button variant="outline" onClick={onClose}>
             Close
@@ -1254,27 +1287,39 @@ function ResolutionDialog({
             // places Cancel.
             data-skip-initial-focus={resolution === "revoke" ? "" : undefined}
             isPending={busy}
-            // Adopting is consent to what the rules give with it, so it waits
-            // for the preview that names them.
-            disabled={resolution === "attribute" && Boolean(rules.hold)}
-            reason={resolution === "attribute" ? rules.hold : undefined}
+            // Adopting is consent to what it does, so it waits for the plan
+            // that says so, and the planner's refusal holds it.
+            disabled={resolution === "attribute" && Boolean(consent.hold || refused)}
+            reason={resolution === "attribute" ? (consent.hold ?? refusedReason) : undefined}
             onClick={async () => {
               try {
                 let answer: DriftAnswer | undefined;
                 if (resolution === "attribute") {
-                  answer = (await attribute.mutateAsync({ id: item.id, body: { source: "external_backfill" } })) as typeof answer;
+                  // One that cancels a waiting change pushes the step at once, from the plan.
+                  const made = await step.confirm(consent.cancels, () =>
+                    attribute.mutateAsync({ id: item.id, body: { source: "external_backfill", ...consent.seen } }),
+                  );
+                  if (made === KEPT) return;
+                  setStale(false);
+                  answer = made as DriftAnswer;
                 } else if (resolution === "revoke") {
                   answer = (await revoke.mutateAsync({ id: item.id })) as typeof answer;
                 } else {
                   await external.mutateAsync({ id: item.id, body: {} });
                 }
-                const queuedByRules = answer?.rule_outbox_ids?.length ?? 0;
                 setOutcome(
                   resolution === "revoke"
                     ? revokeOutcome(answer?.wait_reason, role, answer, auto)
-                    : resolvedOutcome(queuedByRules),
+                    : resolvedOutcome(answer?.rule_waiting ?? 0),
                 );
               } catch (error) {
+                // Their access moved since the plan was read: nothing was
+                // written. The sheet says so and reads the plan again.
+                if (resolution === "attribute" && isStale(error)) {
+                  setStale(true);
+                  consent.retry();
+                  return;
+                }
                 setOutcome(outcomeFromError(error));
               }
             }}
@@ -1283,6 +1328,7 @@ function ResolutionDialog({
           </Button>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }
@@ -1321,6 +1367,8 @@ export function revokeOutcome(
 /** What a drift adopt or revoke answers (handlers/drift.go). */
 interface DriftAnswer {
   rule_outbox_ids?: string[];
+  /** An adoption: how many of the rules' rows wait for you to send (the rest were sent). */
+  rule_waiting?: number;
   wait_reason?: string;
   /** The revoke's outbox status once sent: "applied" when Zitadel took it. */
   propagation?: string;
@@ -1328,23 +1376,25 @@ interface DriftAnswer {
 }
 
 /**
- * An adopt or mark-external result. Queued when the rules queued rows: the
- * adoption is done, but what they give waits for Send, so the result ends on
- * that step, never on "Nothing for you to do" (re-audit R1).
+ * An adopt or mark-external result. What the automatic rules give with an
+ * adoption is sent straight away unless its role waits (task 1.3); `waiting`
+ * is how many wait (`rule_waiting`). Then the adoption is done but those wait
+ * for Send, so the result ends on that step, never on "Nothing for you to do"
+ * (re-audit R1).
  */
-export function resolvedOutcome(queuedByRules: number): Outcome {
+export function resolvedOutcome(waiting: number): Outcome {
   return {
-    kind: queuedByRules > 0 ? "queued" : "applied",
-    // Not "will not be listed again" — that renders right above this item's
+    kind: waiting > 0 ? "queued" : "applied",
+    // Not "will not be listed again": that renders right above this item's
     // own name and role while both are still on screen, which makes it false
     // the instant it appears. It leaves once this dialog closes.
     message: "Resolved. It drops off this list once you close this.",
-    // What the rules queued on the adoption (audit C1).
-    ...(queuedByRules > 0 ? { detail: adoptedRuleRowsLine(queuedByRules), next: SEND_IT } : {}),
+    // What the rules left waiting on the adoption (audit C1).
+    ...(waiting > 0 ? { detail: adoptedRuleRowsLine(waiting), next: SEND_IT } : {}),
   };
 }
 
-/** What an adoption's automatic rules queued, said in its result (audit C1). */
+/** What an adoption's automatic rules left waiting, said in its result (audit C1). */
 export function adoptedRuleRowsLine(n: number): string {
   return n === 1
     ? "1 more change from automatic rules waits in Pending changes for you to send."

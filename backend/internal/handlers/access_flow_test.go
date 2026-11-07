@@ -841,15 +841,16 @@ func TestGivingARoleTheyHaveIsRefusedAndExtendOnlyLengthens(t *testing.T) {
 	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
 		return models.RequestHolding{Kind: models.HoldingUntil, Until: &until}, nil
 	}
-	// A plain give is the planner's: it refuses a role they have. Extend is not on the planner yet.
+	// Giving and extending are the planner's (task 1.3): it refuses a role they
+	// have, an end that doesn't exist and an end that would come sooner
+	// (services' tests say when). The handler names each refusal.
 	probe := stubAct(t)
-	probe.Err = &services.Refused{Change: services.Change{Refusal: "held"}}
-	var got []db.EnqueueParams
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams, _ ...db.EnqueueParams) (db.EnqueueResult, error) {
-		got = append(got, p)
+	refuse := func(code string) error { return &services.Refused{Change: services.Change{Refusal: code}} }
+	written := 0
+	dbEnqueueDirectGrantPropagation = func(context.Context, db.EnqueueParams, ...db.EnqueueParams) (db.EnqueueResult, error) {
+		written++
 		return db.EnqueueResult{OutboxID: "o1"}, nil
 	}
-	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) { return propagation.DrainResult{}, nil }
 	call := func(body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants", strings.NewReader(body))
 		req.SetPathValue("id", "u1")
@@ -857,20 +858,37 @@ func TestGivingARoleTheyHaveIsRefusedAndExtendOnlyLengthens(t *testing.T) {
 		handleUpsertUserDirectGrant(rr, req)
 		return rr
 	}
+	probe.Err = refuse("held")
 	if rr := call(`{"project_id":"p1","role_key":"trained","reason":"r","duration_days":30}`); rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "ALREADY_HELD") {
 		t.Fatalf("giving a role they have: want 409 ALREADY_HELD, got %d %s", rr.Code, rr.Body.String())
 	}
-	if rr := call(`{"project_id":"p1","role_key":"trained","reason":"r","duration_days":3,"extend":true}`); rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "ALREADY_RUNS_PAST") {
-		t.Fatalf("an extension to an earlier end: want 409 ALREADY_RUNS_PAST, got %d %s", rr.Code, rr.Body.String())
+	for code, want := range map[string]string{"runs_past": "ALREADY_RUNS_PAST", "nothing_to_extend": "NOTHING_TO_EXTEND"} {
+		probe.Err = refuse(code)
+		rr := call(`{"project_id":"p1","role_key":"trained","reason":"r","duration_days":3,"extend":true}`)
+		wantError(t, rr, http.StatusConflict, want)
+		if !strings.Contains(rr.Body.String(), "Nothing was changed.") {
+			t.Fatalf("%s: a refusal says nothing changed: %s", code, rr.Body.String())
+		}
 	}
-	if len(got) != 0 {
-		t.Fatalf("nothing may be written for a refusal: %+v", got)
-	}
-	if rr := call(`{"project_id":"p1","role_key":"trained","reason":"r","duration_days":90,"extend":true}`); rr.Code >= 300 {
+
+	// A later end: the extension, as the planner's act, with the days asked for.
+	probe.Err = nil
+	probe.Actions, probe.Writes, probe.Seens, probe.Order = nil, nil, nil, nil
+	probe.Change = services.Change{UserID: "u1", Writes: []services.Write{{Delivery: services.DeliveryNone}}}
+	rr := call(`{"project_id":"p1","role_key":"trained","reason":"term","duration_days":90,"extend":true,"fingerprint":"fp"}`)
+	if rr.Code != http.StatusAccepted {
 		t.Fatalf("a later end is an extension: %d %s", rr.Code, rr.Body.String())
 	}
-	if len(got) != 1 || got[0].EndRule != db.EndSet {
-		t.Fatalf("an extension sets the end: %+v", got)
+	a, w, seen := probe.only(t)
+	if a != (services.Action{Op: services.OpExtend, UserID: "u1", ProjectID: "p1", RoleKey: "trained", Days: 90}) {
+		t.Fatalf("the extension reached the planner as %+v", a)
+	}
+	if w.Reason != "term" || w.Give.PayloadJSON == "" || seen == nil || seen.Fingerprint != "fp" {
+		t.Fatalf("the write carries the reason, the payload and the plan it was shown: %+v %+v", w, seen)
+	}
+	probe.wantOrder(t, "apply", "rebuild", "deliver")
+	if written != 0 {
+		t.Fatalf("the handler writes nothing of its own; the planner does: %d", written)
 	}
 }
 

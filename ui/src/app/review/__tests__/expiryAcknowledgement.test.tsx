@@ -4,7 +4,10 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ExpiringAccessPage from "@/app/review/expiring-access/page";
+import { ApiError } from "@/lib/api-client";
 import type { ExpiringGrantRow } from "@/lib/queries/useExpiringAccess";
+import type { ActPlan } from "@/lib/usePlanConsent";
+import { actPlan, cancelling, queuedChange } from "@/test-utils/plan";
 
 const state = vi.hoisted(() => ({
   rows: [] as ExpiringGrantRow[],
@@ -45,6 +48,16 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
   useCreateGrant: () => ({ mutateAsync: state.extend, isPending: false }),
 }));
 
+// What the planner answers at the press (GET /users/{id}/plan?op=extend), and what it was asked.
+const plan = vi.hoisted(() => ({ next: undefined as unknown as ActPlan, asked: [] as unknown[] }));
+vi.mock("@/lib/usePlanConsent", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/usePlanConsent")>()),
+  fetchPlan: (_client: unknown, action: unknown) => {
+    plan.asked.push(action);
+    return Promise.resolve(plan.next);
+  },
+}));
+
 // Captures what the bulk dialog is handed, without rendering it.
 const bulk = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }));
 vi.mock("@/components/people/BulkDialog", () => ({
@@ -82,9 +95,10 @@ beforeEach(() => {
   state.rows = [grant()];
   state.acknowledge = vi.fn().mockResolvedValue({ message: "ok" });
   state.clear = vi.fn().mockResolvedValue({ message: "ok" });
-  // Auto mode by default — most environments apply a grant inline. The
-  // "pending" case (manual mode) is exercised on its own below.
-  state.extend = vi.fn().mockResolvedValue({ outbox_id: "ob1", status: "applied" });
+  // An extension is a ledger edit: no outbox row, done when the write answers.
+  state.extend = vi.fn().mockResolvedValue({ outbox_id: "", status: "applied" });
+  plan.next = actPlan({ delivery: "none", detail: "Keeps Trained in Laser Lab until 30 Nov 2026." });
+  plan.asked = [];
   bulk.props = null;
 });
 
@@ -357,26 +371,54 @@ describe("the expiry queue gates on people, not on grants", () => {
 });
 
 describe("extending a single row", () => {
-  // This endpoint enqueues to the outbox in manual mode instead of applying
-  // inline (see CreateGrantResult's own doc comment: "the caller must not
-  // assume 'applied' from a bare 202"). The row used to ignore the response
-  // and always say "Extended", which claims Zitadel has it when only
-  // Syndra's ledger does.
-  it("says the extension is still queued when the grant does not apply inline", async () => {
-    state.extend = vi.fn().mockResolvedValue({ outbox_id: "ob1", status: "pending" });
-    renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
-
-    const link = await screen.findByRole("link", { name: /Waiting for you to send/ });
-    expect(link.getAttribute("href")).toBe("/governance/pending");
-    expect(document.body.textContent).not.toMatch(/Extended by 90 days/);
-  });
-
-  it("says the extension is done once Zitadel has it", async () => {
+  // Extending is planned (task 1.2a) and is a ledger edit: Zitadel has no end
+  // dates, so nothing is sent and nothing waits for Send, whatever the role.
+  it("reads the plan, writes with its fingerprint, and says it is done with the plan's words", async () => {
+    state.extend = vi.fn().mockResolvedValue({ outbox_id: "", status: "applied" });
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
 
     await waitFor(() => expect(document.body.textContent).toMatch(/Extended by 90 days/));
+    expect(document.body.textContent).toMatch(/Keeps Trained in Laser Lab until 30 Nov 2026\. It leaves this list on the next read\./);
+    expect(document.body.textContent).toMatch(/Nothing for you to do\./);
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).toBeNull();
+    expect(plan.asked).toEqual([{ op: "extend", userId: "u1", projectId: "pLaser", roleKey: "trained", days: 90 }]);
+    expect(state.extend).toHaveBeenCalledWith(
+      expect.objectContaining({ project_id: "pLaser", role_key: "trained", duration_days: 90, extend: true, fingerprint: "fp-1", cancel_ids: [] }),
+    );
+  });
+
+  it("a plan that refuses writes nothing, says why, and ends on its step", async () => {
+    plan.next = actPlan({ effect: "no_change", refusal: "runs_past", detail: "Already ends later than this would make it." });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
+
+    await waitFor(() => expect(document.body.textContent).toMatch(/Already ends later than this would make it\. Nothing was changed\./));
+    expect(document.body.textContent).toMatch(/Nothing for you to do\./);
+    expect(state.extend).not.toHaveBeenCalled();
+  });
+
+  it("their access moved before the write: nothing changed, and Extend is still there to press again", async () => {
+    state.extend = vi.fn().mockRejectedValue(
+      new ApiError(409, { error: "PLAN_STALE", message: "Nothing was changed. Their access moved while this was open, so read it again before you go ahead." }),
+    );
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
+
+    await waitFor(() => expect(document.body.textContent).toMatch(/Nothing was changed\. Their access moved while you looked\./));
+    expect(document.body.textContent).toMatch(/Press Extend again to read it afresh\./);
+    expect(screen.getByRole("button", { name: "Extend 90 days" })).toBeEnabled();
+  });
+
+  it("one that would cancel a waiting removal pushes the step at once, and the write names it", async () => {
+    const waiting = queuedChange({ project_id: "pLaser", role_keys: ["trained"] });
+    plan.next = cancelling([waiting]);
+    state.extend = vi.fn().mockResolvedValue({ outbox_id: "", status: "applied" });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and extend" }));
+    await waitFor(() => expect(state.extend).toHaveBeenCalledWith(expect.objectContaining({ cancel_ids: [waiting.id] })));
   });
 });
 

@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
 
-	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/extcall"
 	"syndra/internal/models"
@@ -142,29 +142,18 @@ func TestOwnWait_SplitsTheActFromItsRules(t *testing.T) {
 	}
 }
 
-// Re-audit C2: the bulk-approve plan names what the automatic rules give with
-// each approval, as a single approval does. R2: an approval whose role waits
-// is queued in the result, with its reason, not "applied" regardless.
-func TestBulkApprove_NamesRuleGiftsAndSaysWhatWaits(t *testing.T) {
+// Re-audit R2: an approval whose role waits is queued in the result, with its
+// reason, not "applied" regardless. (C2, naming what the rules give with each
+// approval, is the planner's now: services' tests.)
+func TestBulkApprove_SaysWhatWaits(t *testing.T) {
 	stubRequestLookup(t, map[string]models.AccessRequest{"r1": pendingRequest("r1", "u1", "trained")})
-	origOffered := checkRoleOffered
-	t.Cleanup(func() { checkRoleOffered = origOffered })
-	checkRoleOffered = func(context.Context, string, string) error { return nil }
-	svcRulesFollowing = func(_ context.Context, uid string, roles []access.Role) ([]services.RuleRow, error) {
-		return []services.RuleRow{{ProjectID: "p_shop", RoleKey: "bench", RuleID: "rule1",
-			Sentence: "Also gives Bench in Workshop, by the automatic rule from Trained."}}, nil
-	}
-	plan := rehearseDecisionBatch(context.Background(), []string{"r1"}, "approved")
-	if !strings.Contains(plan.Outcomes[0].Consequence, "Also gives Bench in Workshop") {
-		t.Fatalf("the plan must name the rule gift: %+v", plan.Outcomes[0])
-	}
-
 	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
 		id := ch.Writes[0].OutboxID
 		return services.Delivery{Waiting: []string{id}, Reason: map[string]string{id: db.WaitReasonRoleWaits}}
 	}
-	plan.Outcomes[0].Effect = services.EffectApply
-	applyDecisionPlan(bulkDecisionReq(t, `{"ids":["r1"],"status":"approved"}`, true), &plan, "approved", "")
+	rr := httptest.NewRecorder()
+	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1"],"status":"approved"}`, true))
+	plan := decodeBulkPlan(t, rr)
 	if o := plan.Outcomes[0]; o.Effect != services.EffectQueued || o.WaitReason != db.WaitReasonRoleWaits ||
 		!strings.Contains(o.Detail, "always waits for you") {
 		t.Fatalf("an approval whose role waits is queued and says why: %+v", o)

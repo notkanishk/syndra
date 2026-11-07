@@ -226,7 +226,7 @@ func TestEveryClosureDiffRunsUnderTheAccessLock(t *testing.T) {
 	// directGrantRemovalDelta reads and writes nothing of its own: DeleteDirectGrant
 	// (wrapped below) calls it under the lock, and the revoke preview (re-audit
 	// R18) calls it to write nothing at all.
-	pure := map[string]bool{"closureDelta": true, "holderDelta": true, "directGrantRemovalDelta": true, "planRole": true}
+	pure := map[string]bool{"closureDelta": true, "directGrantRemovalDelta": true, "planRole": true, "Plan": true, "planMove": true}
 	wrapped := map[string]bool{
 		"CascadeBundleAssignedToUser": true,
 		"CascadeRuleCreated":          true,
@@ -236,15 +236,14 @@ func TestEveryClosureDiffRunsUnderTheAccessLock(t *testing.T) {
 		"DeleteDirectGrant":           true,
 		"ApplyAct":                    true,
 		"ExpireDirectGrant":           true,
-		"PublishBundleVersion":        true,
-		"MoveHolders":                 true,
+		"ApplyPlannedBulk":            true,
 	}
 	// Every name in the set is checked directly, not only the ones that happen
 	// to call closureDelta themselves. PublishBundleVersion computes its delta
 	// through a rehearsal, so a scan for the call site alone would have declared
 	// it wrapped while it was not — which is exactly what happened.
 	sources := map[string]string{}
-	for _, file := range []string{"cascade.go", "role_members.go", "bundle_publish.go", "planner_act.go"} {
+	for _, file := range []string{"cascade.go", "role_members.go", "bundle_publish.go", "planner.go", "planner_act.go", "planner_ops.go", "planner_bulk.go"} {
 		sources[file] = readServicesSource(t, file)
 	}
 	found := map[string]bool{}
@@ -332,35 +331,36 @@ func TestTheDrainsLedgerReconciliationTakesTheAccessLock(t *testing.T) {
 	}
 }
 
-// A rehearsal that runs inside the access lock must not reach the directory:
-// in live mode that is Zitadel behind a cache that can miss, and a name nobody
-// has looked up yet would hold the one lock every expiry, grant and cascade
-// waits on for as long as an unreachable identity provider takes to time out.
+// The planner's snapshot is read under the access lock, so it must not reach
+// the directory: in live mode that is Zitadel behind a cache that can miss,
+// and a name nobody has looked up yet would hold the one lock every expiry,
+// grant and cascade waits on for as long as an unreachable identity provider
+// takes to time out. The people and the catalogue are read first
+// (planDirectory, actDirectory), before the lock is taken.
 func TestNoDirectoryLookupInsideTheAccessLock(t *testing.T) {
-	src := readServicesSource(t, "bundle_publish.go")
-	for _, fn := range []string{"RehearseBundlePublish", "RehearseMoveHolders"} {
-		if strings.Contains(funcBody(t, src, fn), "directory.Default") {
-			t.Errorf("%s runs under the lock on the apply path and must not call the directory", fn)
-		}
-	}
-	// Decoration still happens — outside — or the rehearsal renders subject ids.
-	if !strings.Contains(funcBody(t, src, "DecoratePlan"), "directory.Default.FindUser") {
-		t.Error("DecoratePlan must be where the names come from")
-	}
-	for _, fn := range []string{"PublishBundleVersion", "MoveHolders"} {
-		body := funcBody(t, src, fn)
-		lock := strings.Index(body, "withLockedAccess(ctx,")
-		// Both exits decorate: the one that failed still renders a plan, and
-		// counting them is what distinguishes "decorated after the lock" from
-		// "decorated only on the path nobody looks at". A single call passes an
-		// ordering check while the returned plan carries no names at all.
-		if n := strings.Count(body, "DecoratePlan(ctx, &plan)"); n != 2 {
-			t.Errorf("%s must decorate on both exits from the locked region, found %d", fn, n)
-		}
-		for _, at := range indicesOf(body, "DecoratePlan(ctx, &plan)") {
-			if lock < 0 || at < lock {
-				t.Errorf("%s decorates before or inside the locked region", fn)
+	bulk := readServicesSource(t, "planner_bulk.go")
+	for _, fn := range []string{"planSnapshot"} {
+		body := funcBody(t, bulk, fn)
+		for _, call := range []string{"directory.", "svcFindUser", "svcDirectoryUsers", "PlannerCatalogue", "planDirectory"} {
+			if strings.Contains(body, call) {
+				t.Errorf("%s runs under the lock and must not call %s", fn, call)
 			}
+		}
+	}
+	act := readServicesSource(t, "planner_act.go")
+	if body := funcBody(t, act, "actSnapshot"); strings.Contains(body, "svcFindUser") || strings.Contains(body, "PlannerCatalogue") {
+		t.Error("actSnapshot runs under the lock and must not call the directory")
+	}
+	for _, c := range []struct{ src, fn, read, lock string }{
+		{bulk, "planEvery", "planDirectory(", "svcInTxLockingAccess("},
+		{bulk, "ApplyPlannedBulk", "planDirectory(", "withLockedAccess("},
+		{act, "PlanAct", "actDirectory(", "svcInTxLockingAccess("},
+		{act, "ApplyAct", "actDirectory(", "withLockedAccess("},
+	} {
+		body := funcBody(t, c.src, c.fn)
+		read, lock := strings.Index(body, c.read), strings.Index(body, c.lock)
+		if read < 0 || lock < 0 || read > lock {
+			t.Errorf("%s must read the directory (%s) before it takes the lock", c.fn, c.read)
 		}
 	}
 }

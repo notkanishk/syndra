@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Modal } from "@/components/ui/Modal";
 import { WouldCancelQueued } from "@/lib/api-client";
-import { takeAck, type QueuedChange } from "@/lib/cancel-confirm";
+import type { QueuedChange } from "@/lib/cancel-confirm";
 import { FORECAST } from "@/lib/outcome";
 import type { Indicators } from "@/lib/queries/useIndicators";
 
@@ -85,7 +85,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  takeAck("POST", "/users/u1/grants");
 });
 
 async function goAhead(cancels: QueuedChange[]) {

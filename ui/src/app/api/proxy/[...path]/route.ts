@@ -173,13 +173,6 @@ async function proxy(request: NextRequest, method: Method, path: string[]) {
     headers["X-Syndra-Demo-Subject"] = session.id;
   }
 
-  // The ids of queued changes the operator was shown and agreed to cancel
-  // (lib/cancel-confirm). Forwarded only in its own shape: ids and commas.
-  const cancelAck = request.headers.get("x-syndra-cancel-ack");
-  if (cancelAck && /^[0-9a-fA-F,-]{1,8000}$/.test(cancelAck)) {
-    headers["X-Syndra-Cancel-Ack"] = cancelAck;
-  }
-
   const init: RequestInit = {
     method,
     headers,

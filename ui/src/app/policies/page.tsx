@@ -473,8 +473,8 @@ function RuleEditor({
                   target_project: targetProject,
                   target_role: targetRole,
                 };
-                const written = await step.run(() =>
-                  rule ? update.mutateAsync({ id: rule.id, ...input }) : create.mutateAsync(input),
+                const written = await step.run((cancelIds) =>
+                  rule ? update.mutateAsync({ id: rule.id, ...input, cancelIds }) : create.mutateAsync({ ...input, cancelIds }),
                 );
                 if (written === KEPT) return;
                 if (rule) {
@@ -646,7 +646,7 @@ function DeleteRuleConfirm({
             isPending={remove.isPending}
             onClick={async () => {
               try {
-                const result = await step.run(() => remove.mutateAsync(rule.id));
+                const result = await step.run((cancelIds) => remove.mutateAsync({ id: rule.id, cancelIds }));
                 if (result === KEPT) return;
                 const n = result.cascade?.enqueued ?? 0;
                 // What the server says happened, not a guess from settings, in
