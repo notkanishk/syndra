@@ -284,6 +284,24 @@ func TestBulkDecide_DecliningChangesNoAccess(t *testing.T) {
 	}
 }
 
+// A decline names the role as every plan row does, never by its key.
+func TestBulkDecide_DeclineNamesTheRole(t *testing.T) {
+	stubRequestLookup(t, map[string]models.AccessRequest{"r1": pendingRequest("r1", "u1", "trained")})
+	orig := services.PlannerCatalogue
+	t.Cleanup(func() { services.PlannerCatalogue = orig })
+	services.PlannerCatalogue = func(context.Context) ([]models.ProjectCatalog, error) {
+		return []models.ProjectCatalog{{ID: "pLaser", Name: "Laser Lab", Roles: []models.ProjectRole{{Key: "trained", Label: "Trained"}}}}, nil
+	}
+
+	rr := httptest.NewRecorder()
+	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1"],"status":"rejected"}`, false))
+
+	plan := decodeBulkPlan(t, rr)
+	if got := plan.Outcomes[0].Detail; got != "Their request for Trained in Laser Lab is declined." {
+		t.Errorf("decline row = %q", got)
+	}
+}
+
 // A grant attributed to "system" is a grant nobody can be asked about. In bulk
 // that would be true of the whole batch at once.
 func TestBulkDecide_RefusesToApproveWithoutAnAttributableReviewer(t *testing.T) {
