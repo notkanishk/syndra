@@ -24,14 +24,13 @@ import (
 // before anything was written (never "may have gone through").
 func TestZitadelGrantChange_FailureSaysExactlyWhatWasWritten(t *testing.T) {
 	p := newGrantPipe(t)
-	calls := 0
-	dbEnqueueDirectGrantPropagation = func(_ context.Context, ep db.EnqueueParams, _ ...db.EnqueueParams) (db.EnqueueResult, error) {
-		calls++
-		if calls == 2 {
-			return db.EnqueueResult{}, errors.New("connection reset")
+	inner := svcApplyAct
+	failOn := "r2"
+	svcApplyAct = func(ctx context.Context, a services.Action, w services.ActWrite, s *services.Seen) (services.Change, error) {
+		if a.RoleKey == failOn {
+			return services.Change{}, errors.New("connection reset")
 		}
-		p.enqueued = append(p.enqueued, ep)
-		return db.EnqueueResult{OutboxID: "ob-" + ep.RoleKeys[0]}, nil
+		return inner(ctx, a, w, s)
 	}
 	w, _ := serveGrant(t, handleAssignZitadelGrant, http.MethodPost, "/api/v1/zitadel/users/u1/grants",
 		`{"projectId":"p1","roleKeys":["r1","r2"]}`)
@@ -40,10 +39,11 @@ func TestZitadelGrantChange_FailureSaysExactlyWhatWasWritten(t *testing.T) {
 		t.Fatalf("a fault after r1 was written is partly recorded, naming r1: %d %s", w.Code, w.Body)
 	}
 
-	calls = 1 // the very first write fails
+	failOn = "r1" // the very first write fails
+	p.applied = nil
 	w, _ = serveGrant(t, handleAssignZitadelGrant, http.MethodPost, "/api/v1/zitadel/users/u1/grants",
 		`{"projectId":"p1","roleKeys":["r1","r2"]}`)
-	if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), `"DB_ERROR"`) {
+	if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), `"DB_ERROR"`) || len(p.applied) != 0 {
 		t.Fatalf("a fault before any write is a plain DB_ERROR: %d %s", w.Code, w.Body)
 	}
 
@@ -57,42 +57,31 @@ func TestZitadelGrantChange_FailureSaysExactlyWhatWasWritten(t *testing.T) {
 }
 
 // Re-audit R18: the revoke dialog's count is the server's own rule. The
-// preview walks the removal's own code, writes nothing, and answers the same
-// revoked and kept roles the removal then does: a direct grant by its delta,
+// preview plans the removal's own acts, writes nothing, and answers the same
+// revoked and kept roles the removal then does: a direct grant by its plan,
 // a role a bundle or a rule gives kept, an untraced role revoked.
 func TestRemoveZitadelGrantPreview_IsTheRemovalsOwnAnswer(t *testing.T) {
 	p := newGrantPipe(t)
-	origPreview := svcPreviewDirectGrantRemoval
-	t.Cleanup(func() { svcPreviewDirectGrantRemoval = origPreview })
 	dbGetGrantIndex = func(context.Context, string) (db.ZitadelGrantIndex, error) {
 		return db.ZitadelGrantIndex{ProjectID: "p1", RoleKeys: []string{"direct", "bundled", "untraced"}}, nil
 	}
 	svcUserDirectGrants = func(context.Context, string) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{ID: "dg1", ProjectID: "p1", RoleKey: "direct"}}, nil
 	}
-	svcUserExpectsRole = func(_ context.Context, _, _, role string) (bool, error) { return role == "bundled", nil }
-	answer := services.DirectGrantRemoval{Revoked: []string{"p1/direct", "p2/derived"}, Retained: []string{}}
-	svcDeleteDirectGrant = func(context.Context, string, string, string, string) (services.DirectGrantRemoval, error) {
-		out := answer
-		out.OutboxIDs = []string{"ob-del"}
-		return out, nil
-	}
-	svcPreviewDirectGrantRemoval = func(context.Context, string, string, string, string) (services.DirectGrantRemoval, error) {
-		return answer, nil
-	}
+	p.givenElsewhere["bundled"] = true
 
 	w, preview := serveGrant(t, handleRemoveZitadelGrantPreview, http.MethodGet, "/api/v1/zitadel/users/u1/grants/g1/removal", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("preview: %d %s", w.Code, w.Body)
 	}
-	if len(p.enqueued) != 0 {
-		t.Fatalf("a preview writes nothing, got %v", p.enqueued)
+	if len(p.applied) != 0 {
+		t.Fatalf("a preview writes nothing, got %v", p.ops())
 	}
 	_, removal := serveGrant(t, handleRemoveZitadelGrant, http.MethodDelete, "/api/v1/zitadel/users/u1/grants/g1", "")
 	if !slices.Equal(preview.Revoked, removal.Revoked) || !slices.Equal(preview.Retained, removal.Retained) {
 		t.Fatalf("preview %v/%v must equal the removal %v/%v", preview.Revoked, preview.Retained, removal.Revoked, removal.Retained)
 	}
-	if !slices.Equal(preview.Revoked, []string{"p1/direct", "p2/derived", "p1/untraced"}) || !slices.Equal(preview.Retained, []string{"p1/bundled"}) {
+	if !slices.Equal(preview.Revoked, []string{"p1/direct", "p1/untraced"}) || !slices.Equal(preview.Retained, []string{"p1/bundled"}) {
 		t.Fatalf("revoked %v kept %v", preview.Revoked, preview.Retained)
 	}
 }
@@ -101,11 +90,11 @@ func TestRemoveZitadelGrantPreview_IsTheRemovalsOwnAnswer(t *testing.T) {
 // can say Syndra sends it again on its own and when.
 func TestZitadelGrantChange_CarriesTheRetry(t *testing.T) {
 	newGrantPipe(t)
-	origDeliver, origStatus := svcDeliver, dbGetPropagationStatus
-	t.Cleanup(func() { svcDeliver, dbGetPropagationStatus = origDeliver, origStatus })
+	origDeliver, origStatus := svcDeliverChange, dbGetPropagationStatus
+	t.Cleanup(func() { svcDeliverChange, dbGetPropagationStatus = origDeliver, origStatus })
 	next := &extcall.RetryState{State: extcall.RetryRetrying, Try: 2, Of: 6}
-	svcDeliver = func(_ context.Context, ids []string, _ bool) services.Delivery {
-		return services.Delivery{Sent: ids, Drain: propagation.DrainResult{Requeued: 1, Retry: next}}
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		return services.Delivery{Sent: []string{ch.Writes[0].OutboxID}, Drain: propagation.DrainResult{Requeued: 1, Retry: next}}
 	}
 	dbGetPropagationStatus = func(context.Context, string) (string, error) { return "pending", nil }
 	_, res := serveGrant(t, handleAssignZitadelGrant, http.MethodPost, "/api/v1/zitadel/users/u1/grants",

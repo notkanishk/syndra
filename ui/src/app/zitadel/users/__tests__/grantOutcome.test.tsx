@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   assign: vi.fn(),
   waits: undefined as Array<{ project_id: string; role_key: string }> | undefined,
   plans: vi.fn(),
+  removal: { plans: {} } as { plans: Record<string, unknown> } | undefined,
 }));
 
 // The planner, one give plan per role: the read the person page's give makes (A-21 §Q3).
@@ -52,6 +53,8 @@ vi.mock("@/lib/queries/useUpstream", () => ({
   useUpstreamAssignGrant: () => ({ mutateAsync: state.assign, isPending: false }),
   useUpstreamUpdateGrant: () => ({ mutateAsync: state.update, isPending: false }),
   useUpstreamRemoveGrant: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // A replace's left-out roles, planned (task 1.9): nothing cancelled unless a test says so.
+  useGrantRemovalPreview: () => ({ isLoading: false, isError: false, data: state.removal, refetch: vi.fn() }),
 }));
 
 vi.mock("@/lib/queries/useUsers", () => ({
@@ -207,6 +210,25 @@ describe("giving roles in Zitadel", () => {
     render(<UpstreamUsersPage />);
     const dialog = openGive("trained");
     expect(dialog.textContent).toMatch(/straight away, unless a role waits for you/);
+  });
+
+  // Task 1.9: each role's give is a planned act; the write carries the plan
+  // each role was shown, so the server writes only those Changes.
+  it("sends each role's give plan with the write", async () => {
+    state.plans = vi.fn(each((key) => consent({ seen: { fingerprint: `fp-${key}`, cancel_ids: [] } })));
+    state.assign.mockResolvedValue({ status: "applied", roles: [{ role: "pLaser/trained", change: "given", status: "applied" }] });
+    render(<UpstreamUsersPage />);
+    const dialog = openGive("trained");
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Give roles in Zitadel" }));
+    await waitFor(() =>
+      expect(state.assign).toHaveBeenCalledWith({
+        userId: "u1",
+        projectId: "pLaser",
+        roleKeys: ["trained"],
+        plans: { trained: { fingerprint: "fp-trained", cancel_ids: [] } },
+      }),
+    );
   });
 
   // W8: given in Zitadel, waiting, or not taken: each role in its own words.

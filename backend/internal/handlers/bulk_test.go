@@ -353,9 +353,9 @@ func TestHandleBulkGrants_UnconfirmedDeliveryReportsQueuedNotApplied(t *testing.
 func stubPlannedApply(t *testing.T, op string, sent []string, applyErr error, deliver func([]string) services.Delivery) *db.PlanCitation {
 	t.Helper()
 	stubRehearsal(t, services.BulkPlan{Op: op, Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}}})
-	origApply, origDeliver, origDeliverChange, origRebuild := svcApplyPlannedBulk, svcDeliver, svcDeliverChange, rebuildUserCacheDetachedFn
+	origApply, origDeliverChange, origRebuild := svcApplyPlannedBulk, svcDeliverChange, rebuildUserCacheDetachedFn
 	t.Cleanup(func() {
-		svcApplyPlannedBulk, svcDeliver, svcDeliverChange, rebuildUserCacheDetachedFn = origApply, origDeliver, origDeliverChange, origRebuild
+		svcApplyPlannedBulk, svcDeliverChange, rebuildUserCacheDetachedFn = origApply, origDeliverChange, origRebuild
 	})
 	rebuildUserCacheDetachedFn = func(context.Context, string) {}
 	cited := &db.PlanCitation{}
@@ -372,12 +372,7 @@ func stubPlannedApply(t *testing.T, op string, sent []string, applyErr error, de
 			{UserID: "u1", Effect: services.EffectApply, Detail: "Joins the Safety bundle."},
 		}}, map[string]services.Change{"u1": written}, nil
 	}
-	// The planned path delivers the Change as written, never by asking again
-	// which roles wait.
-	svcDeliver = func(context.Context, []string, bool) services.Delivery {
-		t.Error("a planned apply must deliver its Change (DeliverChange), not ask Deliver")
-		return services.Delivery{}
-	}
+	// The planned path delivers the Change as written (DeliverChange, the one delivery).
 	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
 		var ids []string
 		for _, w := range ch.Writes {

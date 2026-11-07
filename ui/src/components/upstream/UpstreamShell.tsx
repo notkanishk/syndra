@@ -108,17 +108,20 @@ export function sendsWhen(waiting: string[] | undefined): string {
 export function WriteFooter({
   outcome,
   onClose,
+  note,
   children,
 }: {
   outcome: Outcome | null;
   onClose: () => void;
+  /** The cancel step's footer note after Keep ("Nothing changed. …"). */
+  note?: React.ReactNode;
   /** The act (accent, or dangerConfirm). */
   children: React.ReactNode;
 }) {
   // Anything but a refusal or a failure happened, or may have: no second press.
   const done = succeeded(outcome);
   return (
-    <ModalFooter cancel={done ? undefined : { onClick: onClose }}>
+    <ModalFooter cancel={done ? undefined : { onClick: onClose }} note={note ?? undefined}>
       {done ? (
         <Button variant="outline" onClick={onClose}>
           Close

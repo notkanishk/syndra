@@ -3,6 +3,7 @@ package expiry
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,11 +20,14 @@ func resetSweepDeps(t *testing.T) {
 	origGet := svcGetExpiredDirectGrants
 	origExpire := svcExpireDirectGrant
 	origCache := cacheRefreshUser
+	origDeliver := svcDeliverChange
 	t.Cleanup(func() {
 		svcGetExpiredDirectGrants = origGet
 		svcExpireDirectGrant = origExpire
 		cacheRefreshUser = origCache
+		svcDeliverChange = origDeliver
 	})
+	svcDeliverChange = func(context.Context, services.Change) services.Delivery { return services.Delivery{} }
 }
 
 // recorder captures what the sweep invoked, for assertions.
@@ -47,7 +51,8 @@ func newRecorder() *recorder {
 }
 
 func (r *recorder) install() {
-	svcExpireDirectGrant = func(_ context.Context, userID, grantID, projectID, role, actor string) (services.ExpiredGrantRevocation, error) {
+	svcExpireDirectGrant = func(_ context.Context, g models.DirectGrant, _ string) (services.ExpiredGrantRevocation, error) {
+		userID, grantID, projectID, role := g.UserID, g.ID, g.ProjectID, g.RoleKey
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.expiredCalls = append(r.expiredCalls, userID+"|"+grantID+"|"+projectID+"|"+role)
@@ -266,7 +271,8 @@ func TestSweep_ExpiresOneGrantAtATime(t *testing.T) {
 	r.install()
 
 	inFlight := 0
-	svcExpireDirectGrant = func(_ context.Context, userID, grantID, projectID, role, _ string) (services.ExpiredGrantRevocation, error) {
+	svcExpireDirectGrant = func(_ context.Context, g models.DirectGrant, _ string) (services.ExpiredGrantRevocation, error) {
+		userID, grantID, projectID, role := g.UserID, g.ID, g.ProjectID, g.RoleKey
 		r.mu.Lock()
 		inFlight++
 		if inFlight > 1 {
@@ -356,9 +362,9 @@ func TestSweep_ContextCancelledMidUser_StopsThere(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	inner := svcExpireDirectGrant
-	svcExpireDirectGrant = func(c context.Context, userID, grantID, projectID, role, actor string) (services.ExpiredGrantRevocation, error) {
+	svcExpireDirectGrant = func(c context.Context, g models.DirectGrant, actor string) (services.ExpiredGrantRevocation, error) {
 		cancel() // the shutdown lands while this user still has grants queued
-		return inner(c, userID, grantID, projectID, role, actor)
+		return inner(c, g, actor)
 	}
 	fetchReturns(
 		mkGrant("g1", "u1", "proj-a", "role-x"),
@@ -396,4 +402,35 @@ func contains(hay []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// Each committed expiry is sent as its plan decided (task 1.9), after the
+// person's claims are rebuilt; a renewed one wrote nothing and sends nothing.
+func TestSweep_SendsEachCommittedExpiryAfterTheRefresh(t *testing.T) {
+	resetSweepDeps(t)
+	r := newRecorder()
+	r.install()
+	r.outcome["g2"] = db.ErrGrantRenewed
+	var order []string
+	cacheRefreshUser = func(context.Context, string, ...string) error {
+		order = append(order, "refresh")
+		return nil
+	}
+	inner := svcExpireDirectGrant
+	svcExpireDirectGrant = func(c context.Context, g models.DirectGrant, actor string) (services.ExpiredGrantRevocation, error) {
+		res, err := inner(c, g, actor)
+		res.Change = services.Change{UserID: g.ID} // marks which expiry's Change is sent
+		return res, err
+	}
+	svcDeliverChange = func(_ context.Context, ch services.Change) services.Delivery {
+		order = append(order, "send:"+ch.UserID)
+		return services.Delivery{}
+	}
+	fetchReturns(mkGrant("g1", "u1", "proj-a", "role-x"), mkGrant("g2", "u1", "proj-a", "role-y"))
+
+	Sweep(context.Background(), 100)
+
+	if got := strings.Join(order, ","); got != "refresh,send:g1" {
+		t.Fatalf("want the refresh, then the one committed expiry sent; got %s", got)
+	}
 }

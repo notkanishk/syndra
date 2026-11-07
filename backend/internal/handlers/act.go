@@ -136,6 +136,11 @@ func missingActField(a services.Action) (string, bool) {
 		if a.DriftID == "" {
 			return "drift_id", false
 		}
+	case services.OpRevoke:
+		// A drift row's revoke, or one role's on the Zitadel › Users page.
+		if a.DriftID == "" && (a.ProjectID == "" || a.RoleKey == "") {
+			return "drift_id", false
+		}
 	default:
 		return "op", false
 	}

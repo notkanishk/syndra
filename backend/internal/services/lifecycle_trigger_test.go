@@ -190,32 +190,36 @@ func TestTheIntentIsTheWholeResolvedSetAndNotTheDelta(t *testing.T) {
 	}
 }
 
-// The trigger is wired to `deltaParams` and nowhere else, because that is the
-// one function every closure delta in this package passes through. A source
-// guard, since the alternative — nine hooks — fails by omission, and an omission
-// is invisible to every behavioural test that does not know to look for it.
-func TestTheTriggerHangsOffTheOneChokepoint(t *testing.T) {
-	src := readServiceSource(t, "cascade.go")
-	body := sliceBetween(t, src, "func deltaParams(", "\nfunc ")
-	if !strings.Contains(body, "deferTargetConvergence(") {
-		t.Fatal("deltaParams no longer registers the lifecycle trigger, so a cascade reaches Zitadel and no mapped target")
-	}
-	// It must REGISTER, never resolve. deltaParams runs before the source write
-	// by construction, so resolving here reads the world the change has not
-	// happened in and queues the inverse of the intent.
-	if strings.Contains(body, "triggerTargetConvergence(") {
-		t.Error("deltaParams resolves the entitlement set before the source write, which inverts it")
-	}
-	if strings.Index(body, "deferTargetConvergence(") > strings.Index(body, "params := deltaWrites(") {
-		t.Error("the trigger must register before the params are built, so a failure to register stops the change")
+// The trigger hangs off the planner's writes: every planned Change reaches the
+// outbox through one of these, and each registers the convergence its changed
+// roles reach before it builds the params (systemParams for system work,
+// task 1.9; writeAct, writeChange and writeCohort for the operator's acts). A
+// source guard, since an omission is invisible to every behavioural test that
+// does not know to look for it.
+func TestTheTriggerHangsOffThePlannersWrites(t *testing.T) {
+	for file, fn := range map[string]string{
+		"planner_system.go": "systemParams", "planner_act.go": "writeAct",
+		"planner_bulk.go": "writeChange",
+	} {
+		body := sliceBetween(t, readServiceSource(t, file), "func "+fn+"(", "\nfunc ")
+		if !strings.Contains(body, "deferTargetConvergence(") {
+			t.Errorf("%s no longer registers the lifecycle trigger, so a change reaches Zitadel and no mapped target", fn)
+		}
+		// It must REGISTER, never resolve: this runs before the source write,
+		// so resolving here reads the world the change has not happened in.
+		if strings.Contains(body, "triggerTargetConvergence(") {
+			t.Errorf("%s resolves the entitlement set before the source write, which inverts it", fn)
+		}
+		if strings.Index(body, "deferTargetConvergence(") > strings.Index(body, ".params(") {
+			t.Errorf("%s: the trigger must register before the params are built, so a failure to register stops the change", fn)
+		}
 	}
 
-	// And every caller goes through it: a closure delta turned into enqueue
-	// params by hand would bypass the trigger entirely.
-	for _, file := range []string{"bundle_publish.go", "role_members.go"} {
-		other := readServiceSource(t, file)
-		if strings.Contains(other, "db.EnqueueParams{") {
-			t.Errorf("%s builds enqueue params directly instead of going through deltaParams", file)
+	// And nothing outside the planner turns a closure delta into enqueue
+	// params by hand: that would bypass the trigger entirely.
+	for _, file := range []string{"bundle_publish.go", "role_members.go", "cascade.go"} {
+		if strings.Contains(readServiceSource(t, file), "db.EnqueueParams{") {
+			t.Errorf("%s builds enqueue params directly instead of planning them", file)
 		}
 	}
 }

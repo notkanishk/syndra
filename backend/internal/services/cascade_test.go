@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 	"errors"
-	"slices"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -124,19 +124,20 @@ func stubNoMappedTargets(t *testing.T) {
 	}
 }
 
-// waitsForRole marks the given outbox rows as carrying a role that waits.
-func waitsForRole(t *testing.T, ids ...string) {
+// waitsForRole marks roles to wait for you in the snapshot the planner reads
+// (role_waits): the one place delivery is decided.
+func waitsForRole(t *testing.T, roles ...db.RoleRef) {
 	t.Helper()
-	orig, origSet := svcOutboxRowsWaitForRole, svcSetWaitReason
-	t.Cleanup(func() { svcOutboxRowsWaitForRole, svcSetWaitReason = orig, origSet })
-	svcOutboxRowsWaitForRole = func(_ context.Context, rows []string) (map[string]bool, error) {
-		out := map[string]bool{}
-		for _, r := range rows {
-			out[r] = slices.Contains(ids, r)
+	inner := svcReadAccessSnapshot
+	t.Cleanup(func() { svcReadAccessSnapshot = inner })
+	svcReadAccessSnapshot = func(ctx context.Context, ids []string) (db.AccessSnapshot, error) {
+		s, err := inner(ctx, ids)
+		s.RoleWaits = map[db.RoleRef]bool{}
+		for _, r := range roles {
+			s.RoleWaits[r] = true
 		}
-		return out, nil
+		return s, err
 	}
-	svcSetWaitReason = func(context.Context, []string, string) error { return nil }
 }
 
 // noBundles/noDirects/noRules are the common "holds nothing else" stubs used by most closure-diff
@@ -154,6 +155,16 @@ func noBundleRoles(ctx context.Context, u string) (map[string][]models.BundleRol
 	return nil, nil
 }
 func noRules(ctx context.Context) ([]models.MappingRule, error) { return nil, nil }
+
+// oneIDEach is the outbox rows an enqueue stub hands back: one per write, as
+// the real insert does when nothing is cancelled (the apply pairs them).
+func oneIDEach(ps []db.EnqueueParams) []string {
+	var ids []string
+	for i := range ps {
+		ids = append(ids, fmt.Sprintf("o%d", i+1))
+	}
+	return ids
+}
 
 // --- CascadeBundleAssignedToUser ---
 
@@ -205,7 +216,7 @@ func TestCascadeBundleAssignedToUser_AutoEnqueuesPerRoleAndDrains(t *testing.T) 
 // to carry its own mode as well (dropped in 000078, inert under roles).
 func TestCascadeBundleAssignedToUser_ARoleThatWaitsQueuesWithoutDrain(t *testing.T) {
 	resetCascadeDeps(t)
-	waitsForRole(t, "o1")
+	waitsForRole(t, db.RoleRef{ProjectID: "p1", RoleKey: "r1"})
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id}, nil
 	}
@@ -333,7 +344,7 @@ func TestCascadeBundleAssignedToUser_IdempotentWhenAlreadyEffectivelyGranted(t *
 	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		assignCalled = true
 		enqueued = ps
-		return nil, true, nil
+		return oneIDEach(ps), true, nil
 	}
 
 	res, err := CascadeBundleAssignedToUser(context.Background(), "admin", "u1", "b1")
@@ -460,7 +471,7 @@ func TestCascadeRuleCreated_SkipsUsersWithEmptyDelta(t *testing.T) {
 	var gotParams []db.EnqueueParams
 	svcCreateRuleAndEnqueue = func(ctx context.Context, actor, sp, sr, tp, tr string, params []db.EnqueueParams) (string, []string, error) {
 		gotParams = params
-		return "rule-2", nil, nil
+		return "rule-2", oneIDEach(params), nil
 	}
 
 	if _, _, err := CascadeRuleCreated(context.Background(), "admin", "sp", "sr", "tp", "tr"); err != nil {
@@ -473,7 +484,7 @@ func TestCascadeRuleCreated_SkipsUsersWithEmptyDelta(t *testing.T) {
 
 func TestCascadeRuleCreated_ARoleThatWaitsQueuesWithoutDrain(t *testing.T) {
 	resetCascadeDeps(t)
-	waitsForRole(t, "o1")
+	waitsForRole(t, db.RoleRef{ProjectID: "tp", RoleKey: "tr"})
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) {
 		return []string{"u1"}, nil
 	}
@@ -506,17 +517,18 @@ func TestCascadeRuleCreated_ARoleThatWaitsQueuesWithoutDrain(t *testing.T) {
 	}
 }
 
-// --- applyMode: drain failure is non-fatal ---
+// --- deliverSystem: a send failure is non-fatal ---
 
-func TestApplyMode_AutoDrainFailureIsNonFatal(t *testing.T) {
+func TestDeliverSystem_ASendFailureIsNonFatal(t *testing.T) {
 	resetCascadeDeps(t)
 	svcDrainBatch = func(ctx context.Context, ids []string) (propagation.DrainResult, error) {
 		return propagation.DrainResult{}, errors.New("zitadel unreachable")
 	}
 
-	res, err := applyMode(context.Background(), []string{"o1"})
-	if err != nil {
-		t.Fatalf("a drain failure must not be returned as an error (rows stay pending): %v", err)
+	// Committed already: the result says why it isn't in Zitadel, and there is no error to retry on.
+	res := deliverSystem(context.Background(), []Change{{Writes: []Write{{Delivery: DeliveryStraightAway, OutboxID: "o1"}}}})
+	if res.Enqueued != 1 || res.WaitReason == "" {
+		t.Fatalf("the row stays pending and says why: %+v", res)
 	}
 	if !res.Drain.Halted {
 		t.Fatal("expected res.Drain.Halted to surface the drain failure")
@@ -556,7 +568,7 @@ func TestCascadeBundleAssigned_ProjectsThePublishedVersionNotTheWorkingCopy(t *t
 	var passed []db.EnqueueParams
 	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		passed = ps
-		return nil, true, nil
+		return oneIDEach(ps), true, nil
 	}
 
 	if _, err := CascadeBundleAssignedToUser(context.Background(), "admin", "u1", "b1"); err != nil {
@@ -813,7 +825,7 @@ func TestCascadeRuleUpdated_OldTargetStillCoveredByBundle_NoRevoke(t *testing.T)
 	var got []db.EnqueueParams
 	svcUpdateRuleAndEnqueue = func(ctx context.Context, actor, id, sp, sr, tp, tr string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
-		return nil, nil
+		return oneIDEach(ps), nil
 	}
 
 	if _, err := CascadeRuleUpdated(context.Background(), "admin", old, "sp", "sr", "tp", "trNew"); err != nil {
@@ -847,7 +859,7 @@ func TestCascadeRuleUpdated_SameTripleReAdded_NoChurnForKeptUser(t *testing.T) {
 	var got []db.EnqueueParams
 	svcUpdateRuleAndEnqueue = func(ctx context.Context, actor, id, sp, sr, tp, tr string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
-		return nil, nil
+		return oneIDEach(ps), nil
 	}
 
 	if _, err := CascadeRuleUpdated(context.Background(), "admin", old, "spNew", "sr", "tp", "tr"); err != nil {
@@ -876,7 +888,7 @@ func TestCascadeRuleUpdated_SkipsUsersWithEmptyDelta(t *testing.T) {
 	var got []db.EnqueueParams
 	svcUpdateRuleAndEnqueue = func(ctx context.Context, actor, id, sp, sr, tp, tr string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
-		return nil, nil
+		return oneIDEach(ps), nil
 	}
 
 	if _, err := CascadeRuleUpdated(context.Background(), "admin", old, "sp", "sr", "tp", "trNew"); err != nil {
@@ -992,7 +1004,7 @@ func TestCascadeBundleAssigned_PinsTheVersionItProjected(t *testing.T) {
 	var projected []db.EnqueueParams
 	svcAssignBundleAndEnqueue = func(ctx context.Context, actor, reason, userID, bundleID, versionID string, ps []db.EnqueueParams) ([]string, bool, error) {
 		pinned, projected = versionID, ps
-		return nil, true, nil
+		return oneIDEach(ps), true, nil
 	}
 
 	if _, err := CascadeBundleAssignedToUser(context.Background(), "admin", "u1", "b1"); err != nil {
@@ -1049,13 +1061,20 @@ func TestCascadeBundleAssigned_ExistingHolderIsANoOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The service still computes a delta — it cannot know about the conflict
-	// until the transaction answers — but nothing may be projected from it.
-	if len(offered) == 0 {
-		t.Fatal("expected the delta to have been computed and offered to the tx")
+	// The planner reads under the lock that they hold it: nothing is planned
+	// or offered to the tx.
+	if len(offered) != 0 || !res.NoOp || res.Enqueued != 0 {
+		t.Fatalf("an existing holder must not be projected against: offered %v, result %+v", offered, res)
 	}
-	if res.Enqueued != 0 {
-		t.Fatalf("an existing holder must not be projected against: enqueued = %d", res.Enqueued)
+
+	// And if they joined in the same instant (the snapshot didn't see it), the
+	// tx's conflict still writes nothing, and nothing is sent.
+	svcGetUserBundleRolesGrouped = noBundleRoles
+	if res, err = CascadeBundleAssignedToUser(context.Background(), "admin", "u1", "b1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(offered) == 0 || !res.NoOp || res.Enqueued != 0 {
+		t.Fatalf("the tx's conflict is a no-op: offered %v, result %+v", offered, res)
 	}
 	if drained {
 		t.Fatal("nothing was written, so nothing may be drained")
@@ -1138,7 +1157,7 @@ func TestCascadeRuleRetired_TargetStillCoveredByBundle_NoRevoke(t *testing.T) {
 	var got []db.EnqueueParams
 	svcRetireRuleAndEnqueue = func(ctx context.Context, actor, id string, ps []db.EnqueueParams) ([]string, error) {
 		got = ps
-		return nil, nil
+		return oneIDEach(ps), nil
 	}
 
 	if _, err := CascadeRuleRetired(context.Background(), "admin", old); err != nil {
@@ -1154,7 +1173,7 @@ func TestCascadeRuleRetired_TargetStillCoveredByBundle_NoRevoke(t *testing.T) {
 // the one irreversible thing the confirmation gate did not cover.
 func TestCascadeRuleRetired_ARoleThatWaitsDoesNotDrain(t *testing.T) {
 	resetCascadeDeps(t)
-	waitsForRole(t, "o1")
+	waitsForRole(t, db.RoleRef{ProjectID: "tp", RoleKey: "tr"})
 	old := models.MappingRule{ID: "rule1", SourceProject: "sp", SourceRole: "sr",
 		TargetProject: "tp", TargetRole: "tr"}
 	svcGetAllKnownUserIDs = func(ctx context.Context) ([]string, error) { return []string{"u1"}, nil }

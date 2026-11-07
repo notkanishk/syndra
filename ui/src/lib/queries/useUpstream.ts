@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import type { RetryState } from "@/lib/retry";
+import type { ActPlan, RolePlans } from "@/lib/usePlanConsent";
 
 /**
  * The identity provider's own view, read straight through the proxy.
@@ -105,16 +106,21 @@ export function useUpstreamUsers() {
 }
 
 /**
- * What revoking one grant would revoke and keep, from the removal's own code
- * on the server (GET …/grants/{grantId}/removal, re-audit R18): the count a
- * revoke asks consent for is never worked out in the browser.
+ * What revoking one grant's roles would revoke and keep, from each role's
+ * plan on the server (GET …/grants/{grantId}/removal, re-audit R18, task
+ * 1.9): the count a revoke asks consent for is never worked out in the
+ * browser, and `plans` are what the write carries back. `roles` narrows it to
+ * a replace's left-out roles; none means every role on the grant.
  */
-export function useGrantRemovalPreview(userId: string, grantId: string) {
+export function useGrantRemovalPreview(userId: string, grantId: string, roles?: string[], enabled = true) {
+  const only = roles ? `?roles=${encodeURIComponent(roles.join(","))}` : "";
   return useQuery({
-    queryKey: ["upstream", "users", userId, "grants", grantId, "removal"],
+    queryKey: ["upstream", "users", userId, "grants", grantId, "removal", only],
     queryFn: () =>
-      request<ZitadelGrantChange>(`/zitadel/users/${encodeURIComponent(userId)}/grants/${encodeURIComponent(grantId)}/removal`),
-    enabled: Boolean(userId && grantId),
+      request<ZitadelGrantChange>(
+        `/zitadel/users/${encodeURIComponent(userId)}/grants/${encodeURIComponent(grantId)}/removal${only}`,
+      ),
+    enabled: enabled && Boolean(userId && grantId) && (!roles || roles.length > 0),
     retry: false,
   });
 }
@@ -193,6 +199,8 @@ export interface ZitadelGrantChange {
   retry?: RetryState;
   /** Each role's own outcome (W8). */
   roles?: ZitadelRoleChange[];
+  /** A removal preview's plan per role key, which the write carries back. */
+  plans?: Record<string, ActPlan>;
 }
 
 /** One role's part of a change, after delivery. */
@@ -227,26 +235,31 @@ function useUpstreamMutation<V, R = unknown>(fn: (value: V) => Promise<R>) {
   });
 }
 
+// Each role is one planned act, as on a person's page (task 1.9): the write
+// carries the plan each role was shown (`plans`, by role key), and is sent
+// as those plans decided, straight away unless its role waits.
+
 export const useUpstreamAssignGrant = () =>
-  useUpstreamMutation(({ userId, projectId, roleKeys }: { userId: string; projectId: string; roleKeys: string[] }) =>
-    request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants`, {
-      method: "POST",
-      body: { projectId, roleKeys },
-    }),
+  useUpstreamMutation(
+    ({ userId, projectId, roleKeys, plans }: { userId: string; projectId: string; roleKeys: string[]; plans?: RolePlans }) =>
+      request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants`, {
+        method: "POST",
+        body: { projectId, roleKeys, plans },
+      }),
   );
 
 export const useUpstreamUpdateGrant = () =>
-  useUpstreamMutation(({ userId, grantId, roleKeys }: { userId: string; grantId: string; roleKeys: string[] }) =>
-    request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants/${grantId}`, {
-      method: "PUT",
-      body: { roleKeys },
-    }),
+  useUpstreamMutation(
+    ({ userId, grantId, roleKeys, plans }: { userId: string; grantId: string; roleKeys: string[]; plans?: RolePlans }) =>
+      request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants/${grantId}`, {
+        method: "PUT",
+        body: { roleKeys, plans },
+      }),
   );
 
-/** Sent at once unless a role waits, as a removal on a person's page is (`?apply=true`). */
 export const useUpstreamRemoveGrant = () =>
-  useUpstreamMutation(({ userId, grantId }: { userId: string; grantId: string }) =>
-    request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants/${grantId}?apply=true`, { method: "DELETE" }),
+  useUpstreamMutation(({ userId, grantId, plans }: { userId: string; grantId: string; plans?: RolePlans }) =>
+    request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants/${grantId}`, { method: "DELETE", body: { plans } }),
   );
 
 export const useUpstreamCreateRole = () =>

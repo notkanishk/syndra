@@ -245,42 +245,76 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, body)
 }
 
+// handleRevokeDrift revokes a drift row's roles in Zitadel through the
+// planner (task 1.9; GET /users/{id}/plan?op=revoke&drift_id= is its plan):
+// one revoke per role, written in ONE tx with the row's resolution, each
+// marked to go straight away or to wait for you because its role waits, and
+// cancelling only the queued changes the plan showed (the body carries its
+// fingerprint and cancel ids; a stale plan writes nothing, 409 PLAN_STALE).
+// A lost race is 409 with nothing written.
 func handleRevokeDrift(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	item, err := dbGetDriftItem(r.Context(), id)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+	var req planFields
+	// The plan it was shown is optional (an older client sends no body), but
+	// malformed JSON or unknown fields are refused.
+	if err := decodeJSONStrict(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
+		jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
-	actor := resolveActor(r, "")
-	// ONE tx: guard-transition to 'revoked' AND enqueue the revoke outbox row
-	// together. A lost race 409s with nothing written; a write failure rolls the
-	// resolution back too. Delivery is AFTER commit — the durable revoke row
-	// stays pending in the worklist if Zitadel is unreachable.
-	outboxID, err := dbRevokeDriftAndEnqueue(r.Context(), id, db.EnqueueParams{
-		UserID: item.UserID, ProjectID: item.ProjectID, RoleKeys: item.RoleKeys,
-		GrantedBy: actor, OpType: "revoke",
-		ZitadelGrantID: item.ZitadelGrantID, PayloadJSON: "{}",
-	})
+	ch, err := svcApplyAct(r.Context(), services.Action{Op: services.OpRevoke, DriftID: id},
+		services.ActWrite{Actor: resolveActor(r, "")}, req.seen())
+	switch refusedAs(err) {
+	case "absent":
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "No longer in the queue. Somebody may have resolved it already.")
+		return
+	case "resolved":
+		err = db.ErrDriftNotPending
+	}
 	if err != nil {
+		if refusedAs(err) != "" || errors.As(err, new(*services.StalePlan)) {
+			writeActError(w, err)
+			return
+		}
 		writeDriftActionError(w, err) // ErrDriftNotPending → 409, else 500
 		return
 	}
-	// Delivered by the one rule (services.Deliver), like every other write: a
-	// role that waits holds the revoke for the operator, as its forecast said
-	// (coherence audit C5). It used to be drained by id, past that check.
-	// The answer says where the revoke stands (re-audit R5): sent says
-	// "applied" once Zitadel took it, a retry carries its next try, and a
-	// role that waits says so. "On its way" is only for one still going.
-	body := map[string]any{"status": "revoked", "outbox_id": outboxID}
-	d := svcDeliver(r.Context(), []string{outboxID}, false)
+	// Sent as the plan decided (DeliverChange), after the commit. The answer
+	// says where the revoke stands (re-audit R5): sent says "applied" once
+	// Zitadel took every role, a retry carries its next try, and a role that
+	// waits says so. "On its way" is only for one still going.
+	ids := []string{}
+	for _, wr := range ch.Writes {
+		if wr.OutboxID != "" {
+			ids = append(ids, wr.OutboxID)
+		}
+	}
+	body := map[string]any{"status": "revoked", "outbox_ids": ids}
+	if len(ids) > 0 {
+		body["outbox_id"] = ids[0]
+	}
+	d := svcDeliverChange(r.Context(), ch)
 	if why := d.WaitReason(); why != "" {
 		body["wait_reason"] = why
 		if d.Drain.Retry != nil {
 			body["retry"] = d.Drain.Retry
 		}
-	} else if st, err := dbGetPropagationStatus(r.Context(), outboxID); err == nil && st != "" {
-		body["propagation"] = st
+	} else if len(ids) > 0 {
+		// The least delivered role says where the revoke stands; unread, nothing is said.
+		stands := "applied"
+		for _, oid := range ids {
+			st, err := dbGetPropagationStatus(r.Context(), oid)
+			if err != nil || st == "" {
+				stands = ""
+				break
+			}
+			if st != "applied" {
+				stands = st
+				break
+			}
+		}
+		if stands != "" {
+			body["propagation"] = stands
+		}
 	}
 	jsonResponse(w, http.StatusOK, body)
 }
