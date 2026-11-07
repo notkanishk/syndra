@@ -285,6 +285,44 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 
 **A refusal's cause is said in plain words** (`refused:<cause>`, `lib/wait-reason.ts refusalCause`, the same words as `handlers/bulk.go refusalWords`): not allowed, "Syndra's service account isn't allowed to make this change" (and the step starts "Ask whoever runs Zitadel to let Syndra's service account change grants."); not found, "it no longer has this person, project or role"; not valid, "it said the change isn't valid"; anything else, "it gave a reason Syndra can't put in plain words".
 
+**A single act that would cancel a waiting change says so before the press**
+(A-21 §3, architecture deepening 1.2). The sheet reads the act's plan as soon
+as it has enough to plan, and its before-line says it: "Giving it cancels the
+removal Sam Lee queued 2h ago. Nothing is cancelled until you choose on the
+next step." (several: "Giving it cancels 2 changes that are waiting.");
+"Revoking it cancels the give …", "Approving cancels the removal …" (in the
+row's "If you approve:" line), "Applying cancels …" (Manage bundles). The press
+pushes the cancel step at once; an act that cancels nothing gains no step.
+While the plan is read the act is held: "Checking what giving it does." /
+"Checking what approving does."; unread: "Held until Syndra can read what
+approving does." and "Syndra couldn't read what approving does, so it can't
+show what else this would give or cancel. Try again to read it." What the
+automatic rules add is the planner's sentence, one source: "Also gives
+Trained in Laser Lab, by the automatic rule from Member in Laser Lab."
+
+**A revoke that only cancels is the cancel, said plainly.** Lede: "Given to
+Rohan on 3 Nov by Sam Lee, and still waiting for you to send." Body: "Nothing
+to take back. It hasn't reached Zitadel, so Rohan never had it. This cancels
+that give and sends nothing." Button: "Cancel the waiting give" ("Cancel the
+waiting change" for a bundle). Result: **Cancelled**, "The give of Member in
+Laser Lab that was waiting is cancelled. Rohan never had it, so nothing goes
+to Zitadel." / "The Safety bundle that was waiting is cancelled. Nothing it
+carried had reached Rohan, so nothing goes to Zitadel.", then "Nothing for
+you to do."
+
+**When a person's access moved while the sheet was open, nothing is written**
+(A-21 §3.3). In a sheet, one Notice: "Nothing was changed. Rohan's access
+moved while this was open." with "Read the note under the form, then press
+Give role again." (the button's own label), and the note is the fresh plan. In
+a row (Approve): "Nothing was changed. Rohan's access moved while you looked."
+then "Read the line above, then approve again." Never "stale" or "plan".
+
+**Manage bundles says whether it finishes now or waits**, from the plans:
+"This goes to Zitadel when you apply." / "This waits for you to send." /
+"Apply sends 2 changes to Zitadel now. 1 waits for you to send." / "For 1,
+this only cancels a change that's waiting; nothing is sent." Every staged
+change's cancels are one step: "Cancel all 3 and apply 2 changes".
+
 **The drain switch is said only once it is read.** Until the indicators answer (or when they can't), nothing says "on its own" or "until you press Send": the sentence says what is known and ends on "Open Pending changes to see what has not reached Zitadel yet." The rail pill says "Syndra stopped sending N changes" for a give-up, the same words as Home and Pending changes.
 
 ## 6. Vocabulary
@@ -337,6 +375,7 @@ thing under two names reads as two things.
 | **makerspace staff** — in member-facing copy | lab manager, steward, operator, whoever runs the makerspace |
 | **revoke** — end a person's access | withdraw access, take away, drop, retire access |
 | **withdraw** — a member takes back their own request | — |
+| **cancel** — undo a change still waiting for you to send ("Cancel the waiting give", "Cancel the waiting change", the row verb "Cancel"; result **Cancelled**) | withdraw the queued grant, withdraw the queued change, withdraw (of a queued change) (A-21 §3.2, 8 Nov) |
 | **remove** — take a thing out of a set | — |
 | **delete** — an object ceases to exist | purge |
 | **retire** — a bundle closes to new members | delete (of a bundle) |
