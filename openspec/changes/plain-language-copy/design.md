@@ -294,7 +294,16 @@ removal Sam Lee queued 2h ago. Nothing is cancelled until you choose on the
 next step." (several: "Giving it cancels 2 changes that are waiting.");
 "Revoking it cancels the give …", "Approving cancels the removal …" (in the
 row's "If you approve:" line), "Applying cancels …" (Manage bundles),
-"Adopting it cancels …" (Drift's Adopt). Extend on a row (Expiring access,
+"Adopting it cancels …" (Drift's Adopt), "Revoking it cancels …" (Drift's
+Revoke), and on Zitadel › Users, where each role is its own planned act and
+the line is every role's plans together: "Revoking it cancels …" / "Revoking
+them cancels …", "Giving them cancels …", "Replacing them cancels …" (task
+1.9). A Zitadel › Users write whose plans moved writes nothing: "Nothing was
+changed. Their access moved while this was open." with "Read the lines above
+again, then press Give roles in Zitadel again." (the button's own words). A
+revoke there of a role Syndra still gives is kept: "Keeps Member in Laser
+Lab, because a bundle, a direct grant or an automatic rule still gives it."
+Extend on a row (Expiring access,
 Home, a person's page) reads its plan at the press, so it pushes the step
 then ("Cancel it and extend"). The press
 pushes the cancel step at once; an act that cancels nothing gains no step.
