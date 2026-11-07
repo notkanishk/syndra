@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -217,6 +218,11 @@ func TestPlanBulkApprove_EachRequestFromTheSnapshot(t *testing.T) {
 	ch := Plan(Action{Op: OpApprove, RequestID: "req1"}, s)
 	if ch.Row.UserID != "req1" || ch.UserID != "u1" || ch.Row.Person != "u1" || ch.Row.Effect != EffectApply || ch.Row.Detail != "Gains Member in Laser Lab." {
 		t.Fatalf("the row is the request, the change the requester's: %+v", ch)
+	}
+	// Whose it is reaches the screen, so a result row's "Waiting for you to
+	// send" opens Pending changes narrowed to the person (A-21 §2.6).
+	if raw, _ := json.Marshal(ch.Row); !strings.Contains(string(raw), `"person":"u1"`) {
+		t.Fatalf("the row must say whose access it changes: %s", raw)
 	}
 	if ch.Row.Name != "Ada Lovelace" {
 		t.Errorf("the row names the person: %q", ch.Row.Name)

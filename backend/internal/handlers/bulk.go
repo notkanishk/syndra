@@ -10,7 +10,6 @@ import (
 	"syndra/internal/db"
 	"syndra/internal/extcall"
 	"syndra/internal/services"
-	"syndra/internal/services/propagation"
 )
 
 // BulkGrantRequest is one access operation aimed at a set of people.
@@ -108,19 +107,22 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 // marking the row applied regardless is the same lie one step later. With
 // Zitadel offline every row once reported success while a bulk revoke sat
 // unexecuted in the outbox.
-func settleBulkRow(out *services.BulkOutcome, queued string, retry *extcall.RetryState, op string) {
-	revocation := op == services.BulkOpRemoveRole || op == services.BulkOpRemoveBundle
+//
+// It sets the state only (effect, wait reason, retry) and keeps the row's
+// plan words: "Gains Member. Giving Trained waits for you to send." is still
+// true and complete after Apply, and the result's fold and the row's seat say
+// the state (A-21 §2.6). A refused row's seat (the refusal and its step) is
+// the screen's, from the wait reason (ui/src/lib/plan-groups.ts refusedSeat).
+func settleBulkRow(out *services.BulkOutcome, queued string, retry *extcall.RetryState) {
 	switch {
 	case db.IsRefused(queued):
 		// Zitadel refused it outright: terminal, never "queued" (final
-		// verification N1). Recorded in Syndra, so the row says that too.
+		// verification N1).
 		out.Effect = services.EffectFailed
 		out.WaitReason = queued
-		out.Detail = refusedDetail(queued, revocation)
 	case queued != "":
 		out.Effect = services.EffectQueued
 		out.WaitReason, out.Retry = queued, retry
-		out.Detail = queuedDetail(queued, revocation)
 	default:
 		out.Effect = services.EffectApplied
 	}
@@ -191,7 +193,7 @@ func settlePlannedRow(ctx context.Context, out *services.BulkOutcome, ch service
 	}
 	if own == "" {
 		queued, retry := delivered(d)
-		settleBulkRow(out, queued, retry, op)
+		settleBulkRow(out, queued, retry)
 		return
 	}
 	queued, retry := d.ReasonFor(own), (*extcall.RetryState)(nil)
@@ -204,35 +206,7 @@ func settlePlannedRow(ctx context.Context, out *services.BulkOutcome, ch service
 		}
 	}
 	out.RuleWaiting = d.WaitingBesides(own)
-	settleBulkRow(out, queued, retry, op)
-}
-
-// refusalWords is a refusal's plain cause, said after "Zitadel refused this:".
-// The same words as the screens' (ui/src/lib/wait-reason.ts refusalCause).
-var refusalWords = map[string]string{
-	db.RefusalNotAllowed: "Syndra's service account isn't allowed to make this change",
-	db.RefusalNotFound:   "it no longer has this person, project or role",
-	db.RefusalInvalid:    "it said the change isn't valid",
-	db.RefusalOther:      "it gave a reason Syndra can't put in plain words",
-}
-
-// refusedDetail is a bulk row Zitadel refused: what it said, and the one true
-// step (ui/src/lib/retry.ts refusedNext). Terminal, so Send won't move it;
-// Pending changes lists it under "Syndra stopped sending".
-func refusedDetail(reason string, revocation bool) string {
-	cause := strings.TrimPrefix(reason, db.WaitReasonRefused(""))
-	words := refusalWords[cause]
-	if words == "" {
-		words = refusalWords[db.RefusalOther]
-	}
-	step := "Open their page to see what they hold now, then give it again once the reason is fixed."
-	if revocation {
-		step = "They may still hold it in Zitadel. It shows in Drift after Syndra's next check; revoke it there once the reason is fixed."
-	}
-	if cause == db.RefusalNotAllowed {
-		step = "Ask whoever runs Zitadel to let Syndra's service account change grants. " + step
-	}
-	return "Recorded in Syndra. Zitadel refused this: " + words + ". " + step
+	settleBulkRow(out, queued, retry)
 }
 
 // delivered is a delivery's answer for one bulk row: "" when every row it
@@ -247,25 +221,4 @@ func delivered(d services.Delivery) (string, *extcall.RetryState) {
 		return db.WaitReasonHalted("not_confirmed"), nil
 	}
 	return "", nil
-}
-
-// queuedDetail is a queued bulk row's sentence, by why it isn't in Zitadel
-// yet: plain words, never the raw reason (re-audit R2). A retry's time and
-// try are said by the result from the row's retry.
-func queuedDetail(reason string, revocation bool) string {
-	switch {
-	case reason == db.WaitReasonRoleWaits && revocation:
-		return "Recorded in Syndra. A role it removes always waits for you, so it is in Pending changes until you send it."
-	case reason == db.WaitReasonRoleWaits:
-		return "Recorded in Syndra. A role it gives always waits for you, so it is in Pending changes until you send it."
-	case reason == db.WaitReasonManual:
-		return "Recorded in Syndra. It is in Pending changes until you send it."
-	case reason == db.WaitReasonHalted(db.HaltRetrying):
-		if !propagation.AutoRetry() {
-			return "Recorded in Syndra. Zitadel didn't answer, and this server doesn't send changes again on its own, so it is in Pending changes until you send it."
-		}
-		return "Recorded in Syndra. Zitadel didn't answer, so Syndra sends it again on its own."
-	default:
-		return "Recorded in Syndra, not in Zitadel yet. It is in Pending changes until you send it."
-	}
 }
