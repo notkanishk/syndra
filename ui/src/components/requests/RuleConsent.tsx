@@ -48,13 +48,14 @@ export function RuleConsentFailed({
   consent,
   className,
 }: {
-  consent: Pick<ReturnType<typeof useRuleConsent>, "failed" | "retry">;
+  // A plan consent (usePlanConsent) says its own words; the rule preview says RULES_UNREAD.
+  consent: Pick<ReturnType<typeof useRuleConsent>, "failed" | "retry"> & { unread?: string };
   className?: string;
 }) {
   if (!consent.failed) return null;
   return (
     <span className={className ?? "flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted"} role="status">
-      <span>{RULES_UNREAD}</span>
+      <span>{consent.unread ?? RULES_UNREAD}</span>
       <Button variant="outline" size="sm" onClick={consent.retry}>
         Try again
       </Button>

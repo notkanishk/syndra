@@ -7,6 +7,7 @@ import { sortByName } from "@/lib/sort";
 import type { CascadeOutcome } from "@/lib/types";
 import { invalidateAfter } from "./invalidation";
 import type { RetryState } from "@/lib/retry";
+import { seenQuery, type PlanSeen } from "@/lib/usePlanConsent";
 
 export interface BundleRow {
   id: string;
@@ -348,8 +349,11 @@ export const bundlesQueryKeys = KEYS;
 export function useRemoveBundle(userId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (bundleId: string) =>
-      request<CascadeOutcome>(`/users/${userId}/bundles/${bundleId}`, { method: "DELETE" }),
+    // `seen` is the plan the sheet was shown (usePlanConsent), on the query.
+    mutationFn: async ({ bundleId, seen }: { bundleId: string; seen?: PlanSeen }) => {
+      const query = seenQuery(seen);
+      return request<CascadeOutcome>(`/users/${userId}/bundles/${bundleId}${query ? `?${query}` : ""}`, { method: "DELETE" });
+    },
     onSuccess: () => invalidateAfter(qc, "access"),
   });
 }

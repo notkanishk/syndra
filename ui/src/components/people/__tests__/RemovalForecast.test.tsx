@@ -7,6 +7,8 @@ import type { RoleReason } from "@/components/access/AccessSource";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { FORECAST } from "@/lib/outcome";
 import type { Indicators } from "@/lib/queries/useIndicators";
+import type { ActPlan } from "@/lib/usePlanConsent";
+import { actPlan } from "@/test-utils/plan";
 
 /**
  * A-20 P8: Remove forecasts in the first frame, honestly, and the rail's
@@ -16,6 +18,15 @@ const wire = vi.hoisted(() => ({
   release: null as null | (() => void),
   fail: false,
   waits: false,
+  plan: undefined as unknown as ActPlan,
+}));
+
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return wire.plan;
+    throw new Error(`unmocked request ${path}`);
+  },
 }));
 
 vi.mock("next/link", () => ({ default: ({ children }: { children: React.ReactNode }) => <span>{children}</span> }));
@@ -71,11 +82,17 @@ beforeEach(() => {
   wire.release = null;
   wire.fail = false;
   wire.waits = false;
+  wire.plan = actPlan();
 });
+
+// The press waits on the plan (A-21 §3).
+const planRead = (label: string) =>
+  waitFor(() => expect(screen.getByRole("button", { name: label })).toBeEnabled());
 
 describe("Remove, direct: the first 100ms", () => {
   it("says 'Will be removed' while out, then the true word, and never the forecast after", async () => {
     open([direct]);
+    await planRead("Revoke access");
     fireEvent.click(screen.getByRole("button", { name: "Revoke access" }));
     expect(await screen.findByText(FORECAST.remove)).toBeInTheDocument();
     wire.release!();
@@ -86,15 +103,18 @@ describe("Remove, direct: the first 100ms", () => {
   it("says 'Will wait for you to send' for a role that waits", async () => {
     wire.waits = true;
     open([direct]);
+    await planRead("Revoke access");
     fireEvent.click(screen.getByRole("button", { name: "Revoke access" }));
     expect(await screen.findByText(FORECAST.queued)).toBeInTheDocument();
     expect(screen.queryByText(FORECAST.remove)).toBeNull();
     wire.release!();
   });
 
-  it("withdrawing a grant that still waits forecasts a cancel, and the rail drops by one only once answered", async () => {
+  it("cancelling a give that still waits forecasts a cancel, and the rail drops by one only once answered", async () => {
+    wire.plan = actPlan({ delivery: "none" });
     open([queuedDirect]);
-    fireEvent.click(screen.getByRole("button", { name: "Withdraw the queued grant" }));
+    await planRead("Cancel the waiting give");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel the waiting give" }));
     expect(await screen.findByText(FORECAST.cancel)).toBeInTheDocument();
     // Ahead of the answer, nothing on the rail has moved.
     expect(railNow().pending_propagation).toBe(4);
@@ -104,8 +124,10 @@ describe("Remove, direct: the first 100ms", () => {
 
   it("an error is the honest error: no forecast left, the rail untouched", async () => {
     wire.fail = true;
+    wire.plan = actPlan({ delivery: "none" });
     open([queuedDirect]);
-    fireEvent.click(screen.getByRole("button", { name: "Withdraw the queued grant" }));
+    await planRead("Cancel the waiting give");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel the waiting give" }));
     await screen.findByText(FORECAST.cancel);
     wire.release!();
     await waitFor(() => expect(screen.getByText(/Nothing was changed/i)).toBeInTheDocument());
@@ -117,6 +139,7 @@ describe("Remove, direct: the first 100ms", () => {
 describe("Remove, a bundle: the first 100ms", () => {
   it("forecasts 'Will be removed', or the wait for a role that waits", async () => {
     open([bundle]);
+    await planRead("Remove bundle");
     fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
     expect(await screen.findByText(FORECAST.remove)).toBeInTheDocument();
     wire.release!();
@@ -126,6 +149,7 @@ describe("Remove, a bundle: the first 100ms", () => {
   it("says 'Will wait for you to send' when the role waits", async () => {
     wire.waits = true;
     open([bundle]);
+    await planRead("Remove bundle");
     fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
     expect(await screen.findByText(FORECAST.queued)).toBeInTheDocument();
     wire.release!();

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PersonRequests } from "@/components/people/PersonRequests";
 import type { AccessRequest } from "@/lib/queries/useRequests";
+import { actPlan } from "@/test-utils/plan";
 
 // A person's Requests tab reads a request to keep a role the way the queue
 // does: "To the end of next term" needs the term setting to know the end is one.
@@ -34,21 +35,26 @@ vi.mock("@/lib/queries/useTerms", () => ({
   useTerms: () => ({ data: [{ name: "Spring", start: "2027-01-01", end: "2027-05-31" }] }),
 }));
 vi.mock("@/components/names", () => ({ RoleRef: () => <span>Laser Lab · Operator</span> }));
-// What the automatic rules give with an approval, from the server's preview.
-vi.mock("@/lib/queries/useRulePreview", () => ({
-  useRulePreview: () => ({ data: [{ sentence: "Also gives Bench in Workshop, by the automatic rule from Operator." }] }),
+// What the automatic rules give with an approval, from the planner's plan (A-21 §3).
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?"))
+      return actPlan({ rules: ["Also gives Bench in Workshop, by the automatic rule from Operator."] });
+    throw new Error(`unmocked request ${path}`);
+  },
 }));
 
 // Re-audit C2: the person's Requests tab says what approving also gives, as
 // the queue and Home do, before the approve button is pressed.
 describe("PersonRequests · approving names what the rules give", () => {
-  it("shows the rule preview beside Approve", () => {
+  it("shows the planner's rule sentences beside Approve", async () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <PersonRequests userId="u9" name="Ada" isOperator />
       </QueryClientProvider>,
     );
-    expect(screen.getByText(/If you approve: Also gives Bench in Workshop/)).toBeInTheDocument();
+    expect(await screen.findByText(/If you approve: Also gives Bench in Workshop/)).toBeInTheDocument();
   });
 });
 

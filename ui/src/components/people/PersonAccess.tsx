@@ -920,7 +920,7 @@ function RoleGroup({
         // person can actually open the door. Syndra's tables say what was
         // DECIDED; they were being rendered as though they said what is true.
         const standing = confirmation === "read" ? Boolean(inZitadel?.has(role.role_key)) : null;
-        const verb = strongest?.queued ? "Withdraw" : strongest?.kind === "direct" ? "Revoke" : "Remove";
+        const verb = strongest?.queued ? "Cancel" : strongest?.kind === "direct" ? "Revoke" : "Remove";
 
         return (
           <div key={role.role_key} id={`role-${projectId}-${role.role_key}`}>
@@ -1000,13 +1000,14 @@ function RoleGroup({
 
             {isOperator && strongest && (
               // The verb is the label (RULES): Revoke when a person loses access
-              // they hold, Withdraw while the change is still waiting to be
-              // sent, Remove when a part comes out of a whole. It opens the
+              // they hold, Cancel while the change is still waiting for you to
+              // send (the queue's own verb, A-21 §3.2), Remove when a part comes
+              // out of a whole. It opens the
               // removal that belongs to this source; the dialog still decides
               // what is left and names it.
               <Button
                 size="sm"
-                variant={verb === "Withdraw" ? "outline" : "danger"}
+                variant={verb === "Cancel" ? "outline" : "danger"}
                 aria-label={`${verb} ${roleName(projectId, role.role_key)} in ${projectName}`}
                 onClick={() =>
                   onRemove({

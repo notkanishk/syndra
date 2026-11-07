@@ -231,10 +231,10 @@ describe("the floating project pill", () => {
 });
 
 describe("the verb on each row", () => {
-  it("is Revoke for direct access, Withdraw for what is still waiting, Remove for the rest", () => {
+  it("is Revoke for direct access, Cancel for what is still waiting, Remove for the rest", () => {
     renderPerson();
     expect(screen.getByRole("button", { name: /Revoke Operator/ })).toHaveTextContent("Revoke");
-    expect(screen.getByRole("button", { name: /Withdraw Supervisor/ })).toHaveTextContent("Withdraw");
+    expect(screen.getByRole("button", { name: /Cancel Supervisor/ })).toHaveTextContent("Cancel");
     expect(screen.getByRole("button", { name: /Remove Door/ })).toHaveTextContent("Remove");
     expect(screen.getByRole("button", { name: /Remove Member/ })).toHaveTextContent("Remove");
   });
@@ -247,7 +247,7 @@ describe("the verb on each row", () => {
 
   it("is not offered to a member reading their own page", () => {
     renderPerson(false);
-    expect(screen.queryByRole("button", { name: /^(Revoke|Withdraw|Remove)/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^(Revoke|Cancel|Remove)/ })).toBeNull();
   });
 });
 

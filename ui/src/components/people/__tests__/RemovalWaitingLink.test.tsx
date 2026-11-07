@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { seedAutoRetry } from "@/test-utils/drain";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { RoleReason } from "@/components/access/AccessSource";
 import { RemovalDialog } from "@/components/people/RemovalDialog";
+import { actPlan } from "@/test-utils/plan";
 
 /**
  * A-19 P3: "Waiting for you to send" in the Removal dialog opens Pending
@@ -13,6 +14,14 @@ import { RemovalDialog } from "@/components/people/RemovalDialog";
  */
 
 const removeBundle = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api-client", async (original) => ({
+  ...(await original<typeof import("@/lib/api-client")>()),
+  request: async (path: string) => {
+    if (path.includes("/plan?")) return actPlan();
+    throw new Error(`unmocked request ${path}`);
+  },
+}));
 
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
@@ -46,6 +55,7 @@ describe("the Removal dialog's way to Pending changes", () => {
         />
       </QueryClientProvider>,
     );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove bundle" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
     const link = await screen.findByRole("link", { name: /Waiting for you to send/ });
     expect(link).toHaveAttribute("href", `/governance/pending?person=${encodeURIComponent("u 2f/81")}`);

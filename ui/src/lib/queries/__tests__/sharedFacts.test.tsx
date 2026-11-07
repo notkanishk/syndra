@@ -30,7 +30,7 @@ async function invalidatedBy<T>(use: () => { mutateAsync: (v: T) => Promise<unkn
 
 describe("what a write refreshes", () => {
   it("assigning a bundle refreshes the bundles, which count its holders", async () => {
-    const keys = await invalidatedBy(() => useAssignBundle("u1"), "b1");
+    const keys = await invalidatedBy(() => useAssignBundle("u1"), { bundleId: "b1" });
     expect(keys).toContain(JSON.stringify(["bundles"]));
   });
 
