@@ -407,6 +407,15 @@ func (ch Change) decided(a Action, effect, refusal, detail, consequence string) 
 	// straight away, waits for you, or nothing sent; which roles go now and
 	// which wait.
 	ch.Row.Delivery, ch.Row.Waits, ch.Row.Goes = ch.Delivery(), ch.Waits, ch.Goes
+	if effect == EffectApply && ch.Row.Delivery == "" {
+		// Goes ahead and writes nothing (they already hold it another way):
+		// nothing is sent, so the row sits under Straight away like any other
+		// row that sends nothing. Every row that goes ahead carries a
+		// delivery, which is what lets the screen group a plan at all (A-21
+		// §2.9). Delivery() keeps "" for the single acts, whose sheets read
+		// "none" as "this only cancels".
+		ch.Row.Delivery = DeliveryNone
+	}
 	return ch
 }
 

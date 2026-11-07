@@ -330,14 +330,15 @@ func TestHandleBulkGrants_UnconfirmedDeliveryReportsQueuedNotApplied(t *testing.
 			if plan.Outcomes[0].Effect != services.EffectQueued {
 				t.Fatalf("effect = %q, want queued: the change has not reached Zitadel", plan.Outcomes[0].Effect)
 			}
-			// Why, as a reason the result reads (re-audit R2), and a sentence
-			// in plain words: never the raw code, never an em dash.
+			// Why, as a reason the result reads (re-audit R2); the row keeps
+			// the plan's words, and the screen's fold says the state (A-21
+			// §2.6), so no raw code and no generic sentence replaces them.
 			o := plan.Outcomes[0]
 			if !strings.HasPrefix(o.WaitReason, tc.want) {
 				t.Errorf("wait_reason = %q, want %q", o.WaitReason, tc.want)
 			}
-			if !strings.HasPrefix(o.Detail, "Recorded in Syndra") || strings.ContainsAny(o.Detail, "—_") {
-				t.Errorf("the row must say why it is queued in plain words, got %q", o.Detail)
+			if strings.HasPrefix(o.Detail, "Recorded in Syndra") || strings.ContainsAny(o.Detail, "—_") {
+				t.Errorf("the row must keep the plan's words, got %q", o.Detail)
 			}
 			// Counted apart from success, so the headline cannot round it up.
 			if plan.Summary.Queued != 1 || plan.Summary.Succeeded != 0 {
@@ -398,22 +399,20 @@ func TestHandleBulkGrants_WaitingBundleReportsQueued(t *testing.T) {
 		}
 		return d
 	}
-	for _, tc := range []struct{ op, want string }{
-		{services.BulkOpAssignBundle, "A role it gives always waits for you"},
-		{services.BulkOpRemoveBundle, "A role it removes always waits for you"},
-	} {
-		t.Run(tc.op, func(t *testing.T) {
-			cited := stubPlannedApply(t, tc.op, []string{"ob_1", "ob_2"}, nil, waits)
+	for _, op := range []string{services.BulkOpAssignBundle, services.BulkOpRemoveBundle} {
+		t.Run(op, func(t *testing.T) {
+			cited := stubPlannedApply(t, op, []string{"ob_1", "ob_2"}, nil, waits)
 
 			rr := httptest.NewRecorder()
-			handleBulkGrants(rr, bulkRequest(t, `{"op":"`+tc.op+`","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`, true))
+			handleBulkGrants(rr, bulkRequest(t, `{"op":"`+op+`","user_ids":["u1"],"bundle_id":"b1","reason":"x"}`, true))
 
 			plan := decodePlan(t, rr)
 			if rr.Code != http.StatusAccepted || plan.Outcomes[0].Effect != services.EffectQueued {
 				t.Fatalf("status %d, effect %q, want 202 and queued for a bundle whose role waits", rr.Code, plan.Outcomes[0].Effect)
 			}
-			if !strings.Contains(plan.Outcomes[0].Detail, tc.want) {
-				t.Errorf("the row must say %q, got %q", tc.want, plan.Outcomes[0].Detail)
+			// The reason says why; the row keeps the plan's words (A-21 §2.6).
+			if o := plan.Outcomes[0]; o.WaitReason != db.WaitReasonRoleWaits || o.Detail != "Joins the Safety bundle." {
+				t.Errorf("the row must wait for role_waits and keep its words, got %q %q", o.WaitReason, o.Detail)
 			}
 			// The citation the planner claims is the one claimPlan would have.
 			if cited.Surface != planSurfaceBulkGrants || cited.PlanID == "" || cited.RequestFingerprint == "" {
@@ -493,37 +492,43 @@ func TestHandleBulkGrants_RejectsInvalidRequests(t *testing.T) {
 	}
 }
 
-// A bundle whose role waits says so, rather than blaming the bundle's mode or
-// calling it merely "still queued".
-func TestSettleBulkRow_SaysWhyItIsQueued(t *testing.T) {
-	out := services.BulkOutcome{Effect: services.EffectApply}
-	settleBulkRow(&out, db.WaitReasonRoleWaits, nil, services.BulkOpAssignBundle)
-	if out.Effect != services.EffectQueued || !strings.Contains(out.Detail, "A role it gives always waits for you") {
+// Settling sets the state and keeps the row's plan words (A-21 §2.6): the row
+// that said "Giving Trained waits for you to send." before Apply says it
+// after, and the result's fold and the row's seat say the state.
+func TestSettleBulkRow_KeepsThePlanWordsAndSetsTheState(t *testing.T) {
+	const words = "Gains Member in Laser Lab and Trained in Laser Lab. Giving Trained in Laser Lab waits for you to send."
+	planned := func() services.BulkOutcome {
+		return services.BulkOutcome{Effect: services.EffectApply, Detail: "Joins Safety.", Consequence: words}
+	}
+	out := planned()
+	settleBulkRow(&out, db.WaitReasonRoleWaits, nil)
+	if out.Effect != services.EffectQueued || out.WaitReason != db.WaitReasonRoleWaits {
 		t.Fatalf("role waits: %+v", out)
 	}
-	out = services.BulkOutcome{Effect: services.EffectApply}
-	settleBulkRow(&out, "", nil, services.BulkOpRemoveBundle)
-	if out.Effect != services.EffectApplied {
+	out = planned()
+	settleBulkRow(&out, "", nil)
+	if out.Effect != services.EffectApplied || out.WaitReason != "" {
 		t.Fatalf("everything sent is applied: %+v", out)
 	}
-	// A send Zitadel didn't take is retrying, with its next try, and says it
-	// goes on its own (re-audit R2).
+	// A send Zitadel didn't take is retrying, with its next try (re-audit R2).
 	next := &extcall.RetryState{State: extcall.RetryRetrying, Try: 2, Of: 6}
-	out = services.BulkOutcome{Effect: services.EffectApply}
-	settleBulkRow(&out, "halted:retrying", next, services.BulkOpAssignBundle)
-	if out.Retry != next || !strings.Contains(out.Detail, "sends it again on its own") {
+	out = planned()
+	settleBulkRow(&out, "halted:retrying", next)
+	if out.Effect != services.EffectQueued || out.Retry != next {
 		t.Fatalf("retrying: %+v", out)
 	}
 	// Refused by Zitadel is terminal and failed, never queued (N1).
-	out = services.BulkOutcome{Effect: services.EffectApply}
-	settleBulkRow(&out, db.WaitReasonRefused(db.RefusalNotFound), nil, services.BulkOpRemoveBundle)
-	if out.Effect != services.EffectFailed || !strings.Contains(out.Detail, "Drift") {
-		t.Fatalf("refused removal: %+v", out)
+	out = planned()
+	settleBulkRow(&out, db.WaitReasonRefused(db.RefusalNotFound), next)
+	if out.Effect != services.EffectFailed || out.WaitReason != db.WaitReasonRefused(db.RefusalNotFound) || out.Retry != nil {
+		t.Fatalf("refused: %+v", out)
 	}
-	// With the background drain off, nothing sends it on its own.
-	propagation.SetAutoRetry(false)
-	t.Cleanup(func() { propagation.SetAutoRetry(true) })
-	if d := queuedDetail("halted:retrying", false); !strings.Contains(d, "until you send it") {
-		t.Fatalf("drain off: %q", d)
+	// No state overwrites what the plan said.
+	for _, reason := range []string{"", db.WaitReasonRoleWaits, "halted:retrying", db.WaitReasonRefused(db.RefusalNotAllowed)} {
+		out = planned()
+		settleBulkRow(&out, reason, next)
+		if out.Detail != "Joins Safety." || out.Consequence != words {
+			t.Fatalf("%q overwrote the plan's words: %+v", reason, out)
+		}
 	}
 }

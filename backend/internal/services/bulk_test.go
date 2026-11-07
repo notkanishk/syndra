@@ -202,9 +202,15 @@ func TestRehearseBulk_RemoveNamesWhoKeepsTheRoleAnyway(t *testing.T) {
 		t.Errorf("a direct grant still exists to remove, got %q", both.Effect)
 	}
 	// The planner's words, the same as a single removal's: they keep it, and
-	// nothing is sent.
-	if both.Detail != "Keeps Trained in Laser Lab another way, so nothing is sent to Zitadel." || both.Delivery != "" {
+	// nothing is sent. Its delivery says so on the plan row (none), so every
+	// row that goes ahead carries one and the plan groups (A-21 §2.9).
+	if both.Detail != "Keeps Trained in Laser Lab another way, so nothing is sent to Zitadel." || both.Delivery != DeliveryNone {
 		t.Errorf("must say the access survives and nothing is sent: %+v", both)
+	}
+	for _, o := range plan.Outcomes {
+		if (o.Effect == EffectApply) != (o.Delivery != "") {
+			t.Errorf("a row carries a delivery iff it goes ahead: %+v", o)
+		}
 	}
 
 	bundleOnly := outcomeFor(t, plan, "u_bundle")
