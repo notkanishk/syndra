@@ -89,7 +89,9 @@ func DrainRevocations(ctx context.Context) (DrainResult, error) {
 	// revocation queued.
 	for _, target := range addonDrainTargets() {
 		if !addonReachable(ctx, target) {
-			res.merge(target, DrainResult{Halted: true, Reason: "target_unreachable"})
+			// A target with nothing of its own queued was not skipped:
+			// unanswered says so, as the operator's pass does.
+			res.merge(target, unanswered(ctx, target, "target_unreachable"))
 			continue
 		}
 		rows, err := claimRevocations(ctx, target, claimBatch)
