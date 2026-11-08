@@ -201,32 +201,47 @@ export function groupPlan(plan: BulkPlan, noun: [string, string] = ["person", "p
   });
 }
 
-/** "people's", "person's", "requests'": whose changes. */
-const whose = (n: number, noun: [string, string]) => {
-  const word = n === 1 ? noun[0] : noun[1];
-  return `${n} ${word}${word.endsWith("s") ? "'" : "'s"}`;
-};
+const changes = (n: number) => `${n} ${n === 1 ? "change" : "changes"}`;
+
+/**
+ * How many changes a row sends now and how many wait, counted from its roles
+ * (browser pass, 8 Nov). A row's delivery is "waits_for_you" when ANY of its
+ * roles waits, so counting rows by delivery called a bundle of three roles,
+ * one of which waits, three changes that wait. A row with no role lists (a
+ * single act, an older backend) is one change of its delivery.
+ */
+export function travels(o: Pick<BulkOutcome, "delivery" | "waits" | "goes">): { now: number; wait: number } {
+  const now = o.goes?.length ?? 0;
+  const wait = o.waits?.length ?? 0;
+  if (now + wait > 0) return { now, wait };
+  return { now: o.delivery === "straight_away" ? 1 : 0, wait: o.delivery === "waits_for_you" ? 1 : 0 };
+}
 
 /**
  * The footer's before-line (A-21 §2.5): whether this finishes now or waits, by
- * people. Always the same shape; it replaces the retired note that counted the
- * rows the headings now carry. Undefined when there is nothing to say (a flat
- * plan, or one where nothing reaches Zitadel or waits).
+ * changes, never by people (a person with one role that waits still has the
+ * rest sent now). Always the same shape; it replaces the retired note that
+ * counted the rows the headings now carry. Undefined when there is nothing to
+ * say (a flat plan, or one where nothing reaches Zitadel or waits).
  */
-export function beforeLine(plan: BulkPlan, noun: [string, string] = ["person", "people"]): string | undefined {
+export function beforeLine(plan: BulkPlan): string | undefined {
   if (plan.applied) return undefined;
   if (plan.summary?.apply === 0) return NOTHING_TO_APPLY;
   if (!groupable(plan)) return undefined;
   const going = plan.outcomes.filter((o) => o.effect === "apply");
-  const sends = going.filter((o) => o.delivery === "straight_away").length;
-  const waits = going.filter((o) => o.delivery === "waits_for_you").length;
+  let sends = 0;
+  let waits = 0;
+  for (const o of going) {
+    const t = travels(o);
+    sends += t.now;
+    waits += t.wait;
+  }
   const cancelOnly = going.filter(onlyCancels).length;
   const said: string[] = [];
   if (sends > 0 && waits === 0) said.push("Every change goes to Zitadel when you apply.");
   else if (sends === 0 && waits > 0)
     said.push("Every change waits for you to send. Nothing reaches Zitadel until you press Send on Pending changes.");
-  else if (sends > 0)
-    said.push(`Apply sends ${whose(sends, noun)} changes to Zitadel now. ${whose(waits, noun)} changes wait for you to send.`);
+  else if (sends > 0) said.push(`Apply sends ${changes(sends)} to Zitadel now. ${waits} ${waits === 1 ? "waits" : "wait"} for you to send.`);
   if (cancelOnly === 1) said.push("For 1, this only cancels a change that's waiting; nothing is sent.");
   else if (cancelOnly > 1) said.push(`For ${cancelOnly}, this only cancels changes that are waiting; nothing is sent.`);
   return said.join(" ") || undefined;
@@ -282,20 +297,62 @@ export function resultOutcome(
   const unanswered = rows("unanswered");
   const refused = rows("refused").length;
   const written = done + wait + unanswered.length;
-  const going = unanswered.filter((o) => goesItself(o, plan.op, auto) === true).length;
-  const unsure = unanswered.length - going;
+  const unsureRows = unanswered.some((o) => goesItself(o, plan.op, auto) !== true);
 
+  // The clauses count changes, not people (browser pass, 8 Nov): a person in
+  // the wait fold for one role had the rest sent straight away, and "Nothing
+  // has reached Zitadel yet" said otherwise. Each row's roles say which went
+  // ({@link travels}); a row that says nothing of its roles is one change.
+  let inZitadel = 0;
+  let waiting = 0;
+  let again = 0;
+  let unsure = 0;
+  for (const o of rows("go")) {
+    const t = travels(o);
+    inZitadel += Math.max(1, t.now + t.wait);
+  }
+  for (const o of rows("wait")) {
+    const t = travels(o);
+    const listed = (o.goes?.length ?? 0) + (o.waits?.length ?? 0) > 0;
+    if (o.effect === "applied") {
+      // Its own act went; what a rule gave with it waits (N4).
+      inZitadel += listed ? t.now : 1;
+      waiting += listed ? t.wait : (o.rule_waiting ?? 1);
+    } else if (listed && t.wait > 0) {
+      waiting += t.wait;
+      // The roles sent with it went, unless the send left them to a retry.
+      // ponytail: a send that halted with no retry scheduled still reads as
+      // role_waits on the row; exact needs the row to count its unsent roles.
+      if (!o.retry) inZitadel += t.now;
+      else if (o.retry.state === "retrying") again += t.now;
+      else unsure += t.now;
+    } else {
+      // A send held for you (halted): every change on the row waits.
+      waiting += Math.max(1, t.now);
+    }
+  }
+  for (const o of unanswered) {
+    const t = travels(o);
+    const n = Math.max(1, t.now + t.wait);
+    if (goesItself(o, plan.op, auto) === true) again += n;
+    else unsure += n;
+  }
+
+  const settled = again === 0 && unsure === 0 && refused === 0;
   const said: string[] = [];
-  if (done > 0) said.push(done === written && refused === 0 && done > 1 ? `All ${done} are in Zitadel now.` : `${done} ${done === 1 ? "is" : "are"} in Zitadel now.`);
-  if (wait > 0) {
+  if (inZitadel > 0)
     said.push(
-      wait === written && refused === 0
-        ? `${wait === 1 ? "It waits" : `All ${wait} wait`} for you to send. Nothing has reached Zitadel yet.`
-        : `${wait} ${wait === 1 ? "waits" : "wait"} for you to send.`,
+      waiting === 0 && settled && inZitadel > 1 ? `All ${inZitadel} are in Zitadel now.` : `${inZitadel} ${inZitadel === 1 ? "is" : "are"} in Zitadel now.`,
+    );
+  if (waiting > 0) {
+    said.push(
+      inZitadel === 0 && settled
+        ? `${waiting === 1 ? "It waits" : `All ${waiting} wait`} for you to send. Nothing has reached Zitadel yet.`
+        : `${waiting} ${waiting === 1 ? "waits" : "wait"} for you to send.`,
     );
   }
-  if (going === 1) said.push("1 isn't in Zitadel yet; Syndra sends it again on its own.");
-  else if (going > 1) said.push(`${going} aren't in Zitadel yet; Syndra sends them again on its own.`);
+  if (again === 1) said.push("1 isn't in Zitadel yet; Syndra sends it again on its own.");
+  else if (again > 1) said.push(`${again} aren't in Zitadel yet; Syndra sends them again on its own.`);
   if (unsure > 0) said.push(`${unsure} ${unsure === 1 ? "isn't" : "aren't"} in Zitadel yet.`);
   if (refused === 1) said.push("Zitadel refused 1; the row says why.");
   else if (refused > 1) said.push(`Zitadel refused ${refused}; each row says why.`);
@@ -308,7 +365,7 @@ export function resultOutcome(
   if (unanswered.length > 0) {
     const retry = firstRetry(unanswered);
     const it = unanswered.length === 1 ? "it" : "them";
-    const next = unsure > 0 ? DRAIN_UNKNOWN_NEXT : retry ? retryNextStep(retry, { it }) : SENDS_ITSELF_NEXT;
+    const next = unsureRows ? DRAIN_UNKNOWN_NEXT : retry ? retryNextStep(retry, { it }) : SENDS_ITSELF_NEXT;
     return { outcome: { kind: "queued", message, sendsItself: true, next }, word };
   }
   return { outcome: { kind: "applied", message, next: NOTHING_TO_DO }, word: word ?? (written === 0 ? "Done" : undefined) };

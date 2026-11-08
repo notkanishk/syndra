@@ -387,6 +387,14 @@ describe("bundlesBeforeLine", () => {
     expect(bundlesBeforeLine([now, wait, wait])).toBe("Apply sends 1 change to Zitadel now. 2 wait for you to send.");
   });
 
+  // Browser pass, 8 Nov: a bundle is "waits_for_you" when ANY role waits, and
+  // its other roles still go now.
+  it("counts a bundle's roles, not the bundle: one waiting role does not make it all wait", () => {
+    const basic = actPlan({ delivery: "waits_for_you", goes: ["Audio-Dash", "Homeassistant"], waits: ["Navidrome community"] });
+    expect(bundlesBeforeLine([basic])).toBe("Apply sends 2 changes to Zitadel now. 1 waits for you to send.");
+    expect(bundlesBeforeLine([actPlan({ delivery: "waits_for_you", waits: ["A", "B"] })])).toBe("This waits for you to send.");
+  });
+
   it("says every change waits when they all do", () => {
     expect(bundlesBeforeLine([wait, wait])).toBe("Every change waits for you to send.");
   });
