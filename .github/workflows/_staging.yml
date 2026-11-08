@@ -30,6 +30,12 @@ jobs:
     env:
       STAGE_DIR: /opt/syndra
       PROD_DUMP: /var/lib/syndra-staging/prod-latest.dump
+      # Production's Zitadel, last night's read-only copy, and the stand-in's
+      # working copy of it (what ZITADEL_FAKE_WORLD in staging's .env names).
+      PROD_WORLD: /var/lib/syndra-staging/prod-world.json
+      WORLD: /var/lib/syndra-staging/world/world.json
+      # Every docker compose call here layers the staging override.
+      COMPOSE_FILE: docker-compose.yml:docker-compose.staging.yml
     steps:
       - name: Check out ${{ inputs.ref }} into /opt/syndra
         run: |
@@ -60,6 +66,24 @@ jobs:
           docker compose exec -T postgres sh -c 'dropdb -U "$POSTGRES_USER" --if-exists --force "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
           docker compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges --exit-on-error' < "$PROD_DUMP"
           echo "restored"
+
+      # The stand-in Zitadel goes back to production's copy with the database,
+      # so the grants it holds and the rows that explain them are one night's.
+      - name: Reset the stand-in Zitadel to production's copy
+        if: inputs.restore_prod_data
+        run: |
+          set -euo pipefail
+          cd "$STAGE_DIR"
+          if [ ! -s "$PROD_WORLD" ]; then
+            echo "::warning::no copy of production's Zitadel at $PROD_WORLD; keeping the stand-in's own"
+            exit 0
+          fi
+          echo "copy of production's Zitadel taken $(date -r "$PROD_WORLD" '+%Y-%m-%d %H:%M')"
+          docker compose stop backend 2>/dev/null || true
+          mkdir -p "$(dirname "$WORLD")"
+          cp "$PROD_WORLD" "$WORLD.tmp"
+          mv "$WORLD.tmp" "$WORLD"
+          echo "reset"
 
       - name: Build and start
         run: |

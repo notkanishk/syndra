@@ -61,9 +61,27 @@ func (e *StatusError) Error() string {
 // InitClient establishes the Service Account connection to Zitadel's Management API.
 // If ZITADEL_DOMAIN or ZITADEL_MACHINE_KEY_PATH are not set, it short-circuits
 // gracefully — the system operates in local-policy-only mode.
+//
+// ZITADEL_FAKE_WORLD (staging only) loads the stand-in from a world file
+// instead, and only when ZITADEL_DOMAIN is unset: both set is
+// ErrWorldBesideZitadel, and the caller refuses to start.
 func InitClient() error {
 	domain := os.Getenv("ZITADEL_DOMAIN")
 	keyPath := os.Getenv("ZITADEL_MACHINE_KEY_PATH")
+
+	if world := os.Getenv("ZITADEL_FAKE_WORLD"); world != "" {
+		if domain != "" {
+			return ErrWorldBesideZitadel
+		}
+		wc, err := NewWorldClient(world)
+		if err != nil {
+			return fmt.Errorf("load staging stand-in: %w", err)
+		}
+		MgmtClient = wc
+		u, p, g := wc.Counts()
+		log.Printf("[ZITADEL] Source=world (staging stand-in from %s, %d users, %d projects, %d grants)", world, u, p, g)
+		return nil
+	}
 
 	if domain == "" || keyPath == "" {
 		log.Println("[ZITADEL] M2M credentials not set; operating in local-policy-only mode.")

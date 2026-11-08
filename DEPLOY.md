@@ -523,7 +523,8 @@ against last night's copy of production's data.
 2. **Staging** (`deploy.yml` → `_staging.yml`, runner `syndra-staging` on the
    dev LXC):
    - check the merged commit out into `/opt/syndra`;
-   - reset its database to production's copy (`/var/lib/syndra-staging/prod-latest.dump`);
+   - reset its database to production's copy (`/var/lib/syndra-staging/prod-latest.dump`),
+     and the stand-in Zitadel to production's (`prod-world.json`, below);
    - `docker compose up -d --build`;
    - smoke-test the backend, the UI and both claims doors;
    - assert the database is at the newest migration and not dirty.
@@ -545,6 +546,33 @@ Merging to `main` is the whole procedure.
 - Staging runs with `ZITADEL_DOMAIN` empty and the TrueNAS add-on off
   (`COMPOSE_PROFILES=` in its `.env`), so production's rows never reach a real
   Zitadel or NAS from there.
+
+**Production's Zitadel on staging (the stand-in).** With no Zitadel, staging
+would show the five-person demo directory, which has none of production's
+projects, roles, people or grants. So it runs a stand-in instead: a world
+file, a copy of what production's Zitadel holds.
+- **Where it comes from.** The same nightly push runs
+  `docker compose exec -T backend ./syndra-world-export` on production and
+  sends its output to staging as `/var/lib/syndra-staging/prod-world.json`.
+  The export only reads Zitadel (users, the title and team metadata, projects,
+  roles, applications and their token settings, grants). It has no way to
+  write to it: it is handed a client with no write methods.
+- **How it refreshes.** Every staging deploy that resets the database also
+  copies `prod-world.json` over the stand-in's working copy,
+  `/var/lib/syndra-staging/world/world.json` (`_staging.yml`), so the grants
+  and the rows that explain them are from the same night.
+- **How it runs.** Staging's `.env` sets
+  `ZITADEL_FAKE_WORLD=/var/lib/syndra-staging/world/world.json` and leaves
+  `ZITADEL_DOMAIN` empty. `_staging.yml` layers `docker-compose.staging.yml`,
+  which passes that variable to the backend and mounts the `world/` directory.
+  The backend logs `[ZITADEL] Source=world (...)` and the Zitadel page says it
+  is the staging stand-in. Both variables set refuses the start, and a world
+  file that will not load refuses it too, rather than falling back to the demo.
+- **What a write does.** Giving or removing access on staging changes the
+  working copy (saved as it happens, so a restart keeps it) and nothing else.
+  It never reaches production's Zitadel. The stand-in has no event log, so
+  "who made this grant" answers that Zitadel's log has nothing.
+- Production never reads `docker-compose.staging.yml` or `ZITADEL_FAKE_WORLD`.
 
 **Experiments on staging only:** Actions › `deploy-staging` › Run workflow
 (or `gh workflow run deploy-staging.yml -f ref=<branch>`). This deploys any

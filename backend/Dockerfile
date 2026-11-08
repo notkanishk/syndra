@@ -19,12 +19,15 @@ RUN go mod tidy
 
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o syndra ./cmd/api
+# Staging's stand-in Zitadel: run on production nightly, reads only.
+RUN CGO_ENABLED=0 GOOS=linux go build -o syndra-world-export ./cmd/syndra-world-export
 
 # Final Stage (Minimal)
 FROM alpine:latest
 
 WORKDIR /app
 COPY --from=builder /app/syndra .
+COPY --from=builder /app/syndra-world-export .
 COPY --from=builder /app/db ./db
 
 EXPOSE 8080

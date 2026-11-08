@@ -70,6 +70,9 @@ func liveAuthConfigProblems() []string {
 	if os.Getenv("SYNDRA_API_KEY") == "dev_auth_token_secret" {
 		problems = append(problems, "SYNDRA_API_KEY is the development default")
 	}
+	if os.Getenv("ZITADEL_FAKE_WORLD") != "" {
+		problems = append(problems, "ZITADEL_FAKE_WORLD is set (the staging stand-in never runs beside a real Zitadel)")
+	}
 	return problems
 }
 
@@ -282,6 +285,11 @@ func main() {
 	// Initialize Zitadel service account auth before seeding so the seed path
 	// can see whether we're in live mode and skip itself accordingly.
 	if err := zitadel.InitClient(); err != nil {
+		// A stand-in that won't load, or one beside a real Zitadel, refuses
+		// the start: falling back to the demo would hide it.
+		if os.Getenv("ZITADEL_FAKE_WORLD") != "" {
+			log.Fatalf("[STARTUP] Refusing to start: %v", err)
+		}
 		log.Printf("Zitadel Init Warning: %v", err)
 	}
 
