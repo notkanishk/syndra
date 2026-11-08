@@ -191,22 +191,37 @@ describe("groupPlan after Apply", () => {
 });
 
 describe("beforeLine", () => {
-  it("says every shape of finishes-now-or-waits, by people", () => {
+  it("says every shape of finishes-now-or-waits, by changes", () => {
     expect(beforeLine(plan([row("Ada"), row("Bo")]))).toBe("Every change goes to Zitadel when you apply.");
     expect(beforeLine(plan([row("Ada", { delivery: "waits_for_you" })]))).toBe(
       "Every change waits for you to send. Nothing reaches Zitadel until you press Send on Pending changes.",
     );
     expect(beforeLine(plan([row("Ada"), row("Bo", { delivery: "waits_for_you" }), row("Cy", { delivery: "waits_for_you" })]))).toBe(
-      "Apply sends 1 person's changes to Zitadel now. 2 people's changes wait for you to send.",
+      "Apply sends 1 change to Zitadel now. 2 wait for you to send.",
     );
-    expect(beforeLine(plan([row("Ada"), row("Bo", { delivery: "waits_for_you" })]), ["request", "requests"])).toBe(
-      "Apply sends 1 request's changes to Zitadel now. 1 request's changes wait for you to send.",
+    expect(beforeLine(plan([row("Ada"), row("Bo"), row("Cy", { delivery: "waits_for_you" })]))).toBe(
+      "Apply sends 2 changes to Zitadel now. 1 waits for you to send.",
     );
+  });
+
+  // Browser pass, 8 Nov: Community – Basic to 3 people while Navidrome
+  // community waits. Every person sits under the wait fold, yet 6 changes go now.
+  it("counts each person's roles, so a bundle with one waiting role is not all waiting", () => {
+    const basic = (name: string) =>
+      row(name, { delivery: "waits_for_you", goes: ["Audio-Dash", "Homeassistant"], waits: ["Navidrome community"] });
+    const p = plan([basic("Anushka"), basic("Bo"), basic("Cy")]);
+    expect(groupPlan(p)!.map((g) => g.key)).toEqual(["wait"]);
+    expect(beforeLine(p)).toBe("Apply sends 6 changes to Zitadel now. 3 wait for you to send.");
+    expect(beforeLine(p)).not.toMatch(/Every change waits|Nothing reaches Zitadel/);
+    const allWait = plan([row("Ada", { delivery: "waits_for_you", waits: ["A", "B"] })]);
+    expect(beforeLine(allWait)).toBe("Every change waits for you to send. Nothing reaches Zitadel until you press Send on Pending changes.");
+    const allNow = plan([row("Ada", { goes: ["A", "B"] })]);
+    expect(beforeLine(allNow)).toBe("Every change goes to Zitadel when you apply.");
   });
 
   it("adds the cancel-only sentence, singular and plural", () => {
     expect(beforeLine(board())).toBe(
-      "Apply sends 1 person's changes to Zitadel now. 2 people's changes wait for you to send. For 1, this only cancels a change that's waiting; nothing is sent.",
+      "Apply sends 2 changes to Zitadel now. 2 wait for you to send. For 1, this only cancels a change that's waiting; nothing is sent.",
     );
     const two = plan([row("Ada"), row("K1", { delivery: "none", consequence: CANCEL }), row("K2", { delivery: "none", consequence: CANCEL })]);
     expect(beforeLine(two)).toBe(
@@ -293,10 +308,39 @@ describe("resultOutcome", () => {
     expect(r.word).toBe("Given to 4 of 6 people");
   });
 
-  it("never counts automatic rules apart", () => {
+  it("never counts automatic rules apart, and never says the act that went has not", () => {
+    // The row's roles say its own role went and the rule's two wait.
+    const listed = done([row("Ada", { effect: "applied", rule_waiting: 2, delivery: "waits_for_you", goes: ["Member"], waits: ["A", "B"] })]);
+    expect(listed.outcome.message).toBe("1 is in Zitadel now. 2 wait for you to send.");
+    // Without its roles, only what waits is counted.
     const r = done([row("Ada", { effect: "applied", rule_waiting: 2, delivery: "waits_for_you" })]);
-    expect(r.outcome.message).toBe("It waits for you to send. Nothing has reached Zitadel yet.");
+    expect(r.outcome.message).toBe("All 2 wait for you to send. Nothing has reached Zitadel yet.");
     expect(r.outcome.message).not.toMatch(/automatic rules/);
+  });
+
+  // Browser pass, 8 Nov: the same three people after Apply. The result said
+  // "All 3 wait for you to send. Nothing has reached Zitadel yet." while 6 had.
+  it("counts changes per fold: a person waiting on one role had the rest sent", () => {
+    const basic = (name: string, over: Partial<BulkOutcome> = {}) =>
+      row(name, {
+        effect: "queued",
+        wait_reason: "role_waits",
+        delivery: "waits_for_you",
+        goes: ["Audio-Dash", "Homeassistant"],
+        waits: ["Navidrome community"],
+        ...over,
+      });
+    const r = done([basic("Anushka"), basic("Bo"), basic("Cy")]);
+    expect(r.word).toBe("Given to 3 people");
+    expect(r.outcome).toMatchObject({ kind: "queued", message: "6 are in Zitadel now. 3 wait for you to send." });
+    expect(waitsForSend(r.outcome)).toBe(true);
+    // The roles sent with it left to a retry are not claimed as in Zitadel.
+    const retry = { state: "retrying" as const, try: 2, of: 6 };
+    const halted = done([basic("Anushka"), basic("Bo", { retry })]);
+    expect(halted.outcome.message).toBe("2 are in Zitadel now. 2 wait for you to send. 2 aren't in Zitadel yet; Syndra sends them again on its own.");
+    // Every role waits: the all-wait shape still holds when it is true.
+    const all = done([basic("Anushka", { goes: [] }), basic("Bo", { goes: [] })]);
+    expect(all.outcome.message).toBe("All 2 wait for you to send. Nothing has reached Zitadel yet.");
   });
 
   it("is null for a flat plan or a plan not yet applied", () => {

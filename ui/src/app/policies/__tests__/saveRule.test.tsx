@@ -153,6 +153,25 @@ describe("choosing the two roles", () => {
     expect(screen.getByRole("button", { name: "Create rule" })).toBeDisabled();
   });
 
+  // Browser pass, 8 Nov: the second list starts below the fold, and its matches
+  // were out of view until the dialog was scrolled.
+  it("brings the second list into view when its search changes, and not the first", () => {
+    const scroll = vi.fn();
+    const was = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      render(<AutomaticRulesPage />);
+      fireEvent.click(screen.getByRole("button", { name: "New rule" }));
+      fireEvent.input(screen.getByRole("searchbox", { name: "Search the role they hold" }), { target: { value: "tra" } });
+      expect(scroll).not.toHaveBeenCalled();
+      fireEvent.input(screen.getByRole("searchbox", { name: "Search the role to give" }), { target: { value: "tra" } });
+      expect(scroll).toHaveBeenCalledWith({ block: "start" });
+      expect(scroll.mock.contexts[0]).toContainElement(screen.getByText("then also give them"));
+    } finally {
+      Element.prototype.scrollIntoView = was;
+    }
+  });
+
   it("names no rule by an id anywhere in the list", () => {
     render(<AutomaticRulesPage />);
     expect(document.body.textContent).not.toMatch(/R-[0-9a-f]{4}/);

@@ -39,6 +39,8 @@ func stubDrainDeps(t *testing.T) {
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&awaitingDispatch, func(context.Context, string) ([]string, error) { return nil, nil }),
+		// A count that cannot be read keeps the halt, as before the count existed.
+		swap(&countPendingFor, func(context.Context, string) (int, error) { return 0, errors.New("unstubbed") }),
 		// No add-ons unless a test registers some. Stubbed rather than left to
 		// the process registry so a drain test cannot depend on what some other
 		// package's Init happened to leave behind.

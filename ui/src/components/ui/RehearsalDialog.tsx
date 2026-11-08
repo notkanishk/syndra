@@ -528,7 +528,7 @@ export function RehearsalDialog({
    * still an act, so it isn't told there is nothing to apply; and a line the
    * disabled button already says as its reason is said once, there.
    */
-  const before = plan && !isDefinitionApply ? beforeLine(plan, noun) : undefined;
+  const before = plan && !isDefinitionApply ? beforeLine(plan) : undefined;
   const reviewNote = [waits, before === applyBlocked ? undefined : before].filter(Boolean).join(" ") || undefined;
 
   /**
