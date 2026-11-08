@@ -258,8 +258,8 @@ describe("a give that never reached Zitadel: the dialog is the cancel", () => {
     open({ sources: [{ ...direct, queued: true }], grantId: "g_88" });
     await planRead("Cancel giving it");
 
-    expect(screen.getByText("Given to Tomas on 12 Oct by Sam Iyer, and still waiting for you to send.")).toBeInTheDocument();
-    expect(screen.getByText("It’s still waiting for you to send, so Tomas never had it. Nothing is sent to Zitadel.")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for you to send since 12 Oct, queued by Sam Iyer.")).toBeInTheDocument();
+    expect(screen.getByText("Tomas never had it, so nothing is sent to Zitadel.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Cancel giving .+ in Laser Lab to Tomas\?$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Keep it waiting" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Revoke this role" })).toBeNull();
@@ -270,7 +270,7 @@ describe("a give that never reached Zitadel: the dialog is the cancel", () => {
     wire.plan = cancelling([{ ...waitingGive, initiated_by_name: undefined }], { delivery: "none" });
     open({ sources: [{ ...direct, queued: true }], grantId: "g_88" });
     await planRead("Cancel giving it");
-    expect(screen.getByText("Given to Tomas on 12 Oct, and still waiting for you to send.")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for you to send since 12 Oct.")).toBeInTheDocument();
   });
 
   it("the press is the cancel itself: no step, the word Cancelled, the cancel-only sentence, nothing for you to do", async () => {

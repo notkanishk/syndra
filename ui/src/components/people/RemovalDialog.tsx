@@ -347,11 +347,12 @@ function DirectDialog({
           done
             ? undefined
             : cancelOnly && waitingGive
-              ? `Given to ${first} on ${formatShortDate(waitingGive.queued_at)}${
-                  waitingGive.initiated_by_name ? ` by ${waitingGive.initiated_by_name}` : ""
-                }, and still waiting for you to send.`
+              ? // When and by whom it was queued; "Given" would contradict "never had it" below.
+                `Waiting for you to send since ${formatShortDate(waitingGive.queued_at)}${
+                  waitingGive.initiated_by_name ? `, queued by ${waitingGive.initiated_by_name}` : ""
+                }.`
               : cancelOnly
-                ? `Still waiting for you to send.`
+                ? `Waiting for you to send.`
                 : `Given by hand to ${subject}. In Zitadel now.`
         }
       />
@@ -375,7 +376,7 @@ function DirectDialog({
             <StatusDot tone="neutral" className="mt-[8px]" />
             <span>
               <span className="text-muted">
-                It&rsquo;s still waiting for you to send, so {first} never had it. Nothing is sent to Zitadel.
+                {first} never had it, so nothing is sent to Zitadel.
               </span>
             </span>
           </p>
