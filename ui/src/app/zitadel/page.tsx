@@ -25,7 +25,7 @@ import {
 } from "@/components/system/SigningKeyGuide";
 import { request } from "@/lib/api-client";
 import { formatAt, formatShortDate } from "@/lib/format";
-import { FORECAST, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { FORECAST, NOTHING_TO_DO, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useClaimsDelivery, type ClaimsDelivery as Delivery } from "@/lib/queries/useClaimsDelivery";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useZitadelHealth } from "@/lib/queries/useZitadel";
@@ -48,7 +48,7 @@ interface RotationStatus {
   due_at?: string;
   auto?: {
     on: boolean;
-    off_reason?: "switched_off" | "no_zitadel";
+    off_reason?: "switched_off" | "no_zitadel" | "stand_in";
     lead_days?: number;
     window?: string;
     next_attempt_at?: string;
@@ -130,7 +130,10 @@ export default function IdentityProviderPage() {
     health.data ? live || notConfigured : undefined,
   );
   const reading = zitadelReading({ status: health.data?.status, misses });
-  const keyOverdue = rotation.data?.status === "warn" || rotation.data?.status === "stale";
+  // Staging's stand-in has no actions, event listener or claims setup: the
+  // checks that read them don't run, and the page says so once, calmly.
+  const standIn = health.data?.mode === "stand-in";
+  const keyOverdue = !standIn && (rotation.data?.status === "warn" || rotation.data?.status === "stale");
 
   return (
     <div className="flex flex-col gap-4">
@@ -206,8 +209,19 @@ export default function IdentityProviderPage() {
       )}
 
       {/* Fixed, under the health line: what Zitadel is doing with claims (§4g). */}
-      <ClaimsDelivery domain={health.data?.domain} connected={!notConfigured} />
-      <SigningKey status={rotation.data} loading={rotation.isLoading} error={rotation.error} keyring={keyring} />
+      {standIn ? (
+        <Card id="claims-delivery">
+          <p className="px-5 py-4 text-[14px] leading-[1.55] text-muted">
+            The stand-in has no actions, event listener or claims setup, so these checks don&rsquo;t run on
+            staging. {NOTHING_TO_DO}
+          </p>
+        </Card>
+      ) : (
+        <>
+          <ClaimsDelivery domain={health.data?.domain} connected={!notConfigured} />
+          <SigningKey status={rotation.data} loading={rotation.isLoading} error={rotation.error} keyring={keyring} />
+        </>
+      )}
       <UpstreamInspection reachable={live} />
       <UpstreamWrites reachable={live} />
     </div>

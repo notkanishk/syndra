@@ -19,6 +19,7 @@ import (
 	"syndra/internal/claimtel"
 	"syndra/internal/db"
 	"syndra/internal/services/periodic"
+	"syndra/internal/zitadel"
 )
 
 // The detectors (claims-delivery-integrity S3, S4, S5): the sign-in
@@ -150,7 +151,19 @@ var lastConfigRun atomic.Pointer[configRun]
 // RunClaimConfigCheck reads Zitadel's targets, executions, v1 flow and every
 // app's token settings, and Syndra's snapshot and env, then raises
 // CONFIG_DRIFT per check that differs and CANNOT_CHECK per read that failed.
+//
+// Staging's stand-in has no actions, event listener or claims setup, so there
+// is nothing to read: the run checks nothing and settles what an earlier run
+// raised, and staging shows no alarm about a Zitadel it hasn't got.
 func RunClaimConfigCheck(ctx context.Context) error {
+	if zitadel.IsStandIn() {
+		// Every check, no subject seen. [] and not nil: ANY(NULL) settles nothing.
+		all, none := claimcheck.Report{}.Ran(), []string{}
+		return errors.Join(
+			dbSettleUnseenClaimFindings(ctx, claimtel.KindConfigDrift, all, none),
+			dbSettleUnseenClaimFindings(ctx, claimtel.KindCannotCheck, all, none),
+			refreshClaimFindings(ctx))
+	}
 	start := time.Now()
 	in := gatherConfigInputs(ctx)
 	rep := claimcheck.Evaluate(in)
@@ -292,8 +305,12 @@ func readKeyringOnce(ctx context.Context) {
 
 // followKeyring reads the key once and publishes it when it moved. A failed
 // read leaves the keyring as it was (the env key still verifies) and raises
-// CANNOT_CHECK on R1, the check that reads the same target.
+// CANNOT_CHECK on R1, the check that reads the same target. The stand-in has
+// no targets and so no key to follow: nothing is read, nothing is raised.
 func followKeyring(ctx context.Context) error {
+	if zitadel.IsStandIn() {
+		return nil
+	}
 	now := time.Now()
 	rctx, cancel := context.WithTimeout(ctx, keyringReadTime)
 	defer cancel()
