@@ -154,6 +154,17 @@ export default function IdentityProviderPage() {
         }
       />
 
+      {health.data?.mode === "stand-in" ? (
+        <Notice
+          tone="neutral"
+          title="This is staging, and its Zitadel is a stand-in."
+          nothingToDo="Each staging deploy starts it again from production's latest copy."
+        >
+          Syndra reads a copy of production’s Zitadel taken overnight. Giving or removing access here
+          changes only that copy, never production.
+        </Notice>
+      ) : null}
+
       <Unfold open={keyOverdue && rotation.data?.age_days !== undefined} gap={16}>
         <Notice
           tone="warn"

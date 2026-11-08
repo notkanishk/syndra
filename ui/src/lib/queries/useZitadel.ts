@@ -6,7 +6,8 @@ import { request } from "@/lib/api-client";
 
 export interface ZitadelHealthResponse {
   status: "ok" | "disabled" | "error" | string;
-  mode: "live" | "local-policy-only" | string;
+  /** "stand-in" is staging's copy of production's Zitadel (ZITADEL_FAKE_WORLD), not a Zitadel. */
+  mode: "live" | "stand-in" | "local-policy-only" | string;
   domain?: string;
   projects_total?: number;
   latency_ms?: number;
