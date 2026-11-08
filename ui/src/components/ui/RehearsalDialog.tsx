@@ -528,7 +528,7 @@ export function RehearsalDialog({
    * still an act, so it isn't told there is nothing to apply; and a line the
    * disabled button already says as its reason is said once, there.
    */
-  const before = plan && !isDefinitionApply ? beforeLine(plan) : undefined;
+  const before = plan && !isDefinitionApply ? beforeLine(plan, system) : undefined;
   const reviewNote = [waits, before === applyBlocked ? undefined : before].filter(Boolean).join(" ") || undefined;
 
   /**
@@ -537,6 +537,9 @@ export function RehearsalDialog({
    * step rather than closing the dialog.
    */
   async function rehearse(acknowledgeScope: boolean) {
+    // One slot, cleared before every press (A-22 G23): nothing about an earlier attempt survives it.
+    setOutcome(null);
+    setStalePlan(null);
     setBusy(true);
     try {
       const result = await onRehearse(acknowledgeScope);
@@ -570,6 +573,8 @@ export function RehearsalDialog({
    */
   async function applyPlan() {
     if (!plan || applyBlocked) return;
+    setOutcome(null);
+    setStalePlan(null);
     setBusy(true);
     try {
       const result = await onApply(plan.plan_id ?? "");
@@ -581,7 +586,7 @@ export function RehearsalDialog({
       // removed itself after four seconds.
       // A grouped plan says one clause per fold and one step (A-21 §2.6);
       // a flat one keeps the counts it always said.
-      const grouped = resultOutcome(result, noun, auto);
+      const grouped = resultOutcome(result, noun, auto, system);
       if (grouped) {
         setOutcome({ ...grouped.outcome, word: grouped.word });
         return;
@@ -721,8 +726,8 @@ export function RehearsalDialog({
               its rows are — accounts, items, requests — and not passing it on
               meant the plan itself reported a missing list of "people" on
               screens that act on none. */}
-          <PlanReview plan={plan} noun={noun} auto={auto} />
-          {consequence && (
+          <PlanReview plan={plan} noun={noun} auto={auto} system={system} />
+          {consequence && step !== "result" && (
             <div className="px-6">
               <p className="text-[13.5px] leading-[1.55] text-warn-text">{consequence}</p>
             </div>

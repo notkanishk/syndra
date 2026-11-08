@@ -127,7 +127,11 @@ export function useForetell() {
     if (changes.length === 0) return "";
     if (changes.length > 1) return `${lead} cancels ${changes.length} changes that are waiting.`;
     const change = changes[0];
-    return `${lead} cancels the ${isRemoval(change) ? "removal" : "give"} ${who.queuer(change)} queued ${formatAgoShort(change.queued_at)}.`;
+    // A change that gives names what waits, the role and the person; "give" is only a verb (A-22).
+    if (!isRemoval(change)) {
+      return `${lead} cancels ${who.role(change)} for ${firstOf(who.person(change.user_id))}, which was waiting for you to send.`;
+    }
+    return `${lead} cancels the removal ${who.queuer(change)} queued ${formatAgoShort(change.queued_at)}.`;
   };
 }
 
@@ -155,10 +159,7 @@ function group(changes: QueuedChange[], fresh: Set<string>, who: Who): Group[] {
 }
 
 function kindOf(changes: QueuedChange[], plural: boolean): string {
-  const removal = changes.every(isRemoval);
-  const give = changes.every((c) => !isRemoval(c));
-  if (removal) return plural ? "removals" : "removal";
-  if (give) return plural ? "gives" : "give";
+  if (changes.every(isRemoval)) return plural ? "removals" : "removal";
   return plural ? "changes" : "change";
 }
 
@@ -382,7 +383,7 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
   const confirmLabel = n === 1 ? `Cancel it and ${options.goAhead}` : `Cancel all ${n} and ${options.goAhead}`;
 
   useEffect(() => {
-    root.current?.querySelector<HTMLElement>("[data-keep]")?.focus();
+    root.current?.querySelector<HTMLElement>("[data-footer-cancel]")?.focus();
   }, []);
 
   return (
@@ -439,6 +440,7 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
         />
       </div>
       <ModalFooter
+        cancel={{ label: "Keep it", onClick: () => asking.answer(false), disabled: busy }}
         note={
           busy ? (
             // The first 100ms: what Syndra will do, in its own tense, until the server answers.
@@ -451,9 +453,6 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
           )
         }
       >
-        <Button data-keep variant="outline" disabled={busy} onClick={() => asking.answer(false)}>
-          Keep it
-        </Button>
         <Button
           variant={options.tone === "danger" ? "dangerConfirm" : "accent"}
           isPending={busy}

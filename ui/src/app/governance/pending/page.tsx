@@ -28,7 +28,7 @@ import { RoleInPlace, RoleRef, UserName } from "@/components/names";
 import { machineName } from "@/lib/audit-vocabulary";
 import { targetLabel } from "@/lib/nav";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
-import { outcomeFromError, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useBundles, type BundleRow } from "@/lib/queries/useBundles";
@@ -75,7 +75,7 @@ export default function PendingChangesPage() {
   // to be a toast, which meant the account of a pass that requeued eight
   // changes was gone in four seconds — on the one screen whose entire subject
   // is what is still outstanding.
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [outcome, setOutcome] = useState<(Outcome & { word?: string }) | null>(null);
 
   // Search narrows what is shown, never what Send sends: the note beside it says so.
   const resolver = useNameResolver();
@@ -144,7 +144,7 @@ export default function PendingChangesPage() {
                   setOutcome(null);
                   beginSend(rows.length);
                   try {
-                    setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto));
+                    setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto, rows.length));
                   } catch (error) {
                     failedSend();
                     setOutcome(outcomeFromError(error));
@@ -158,13 +158,10 @@ export default function PendingChangesPage() {
         }
       />
 
-      {outcome && (
-        <ActionOutcome
-          outcome={outcome}
-          // "Sent" only when every change went: a pass that left some to be
-          // sent again is not one (W2).
-          word={statesNothingChanged(outcome.kind) ? "Not sent" : outcome.kind === "queued" ? "Not all sent" : "Sent"}
-        />
+      {/* One result slot (A-22 G23). When the queue is empty after the send, the
+          empty state below is the result and no card is drawn for it. */}
+      {outcome && !cleared && !(known && rows.length === 0 && outcome.kind === "applied") && (
+        <ActionOutcome outcome={outcome} word={outcome.word ?? "Sent"} />
       )}
 
       {known && rows.length > 0 && !cleared && (
