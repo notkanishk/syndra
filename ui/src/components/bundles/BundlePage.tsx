@@ -657,7 +657,7 @@ function RenameBundleDialog({
       <ModalHeader
         title={`Rename ${name}`}
         titleId="rename-bundle"
-        lede={succeeded(outcome) ? undefined : "This is what the bundle is called, not what it grants."}
+        lede={succeeded(outcome) ? undefined : "This is what the bundle is called, not what it gives."}
       />
       {succeeded(outcome) ? (
         <div className="px-6">
