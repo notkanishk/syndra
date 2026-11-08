@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -293,5 +294,33 @@ describe("sheets push, they do not stack", () => {
     expect(names.indexOf("Cancel")).toBeGreaterThan(-1);
     expect(names.indexOf("Cancel")).toBeLessThan(names.indexOf("Revoke it"));
     expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "Revoke it" }));
+  });
+  // A-22: a sheet becomes its result, so the pressed button leaves the page and
+  // the browser drops focus to <body>, outside the dialog and behind an inert app.
+  it("puts focus back inside when the pressed control is replaced by the result", async () => {
+    function Sheet() {
+      const [done, setDone] = useState(false);
+      return (
+        <Modal open={true} onClose={() => {}}>
+          {done ? (
+            <>
+              <p role="status">Revoked</p>
+              <button type="button">Close</button>
+            </>
+          ) : (
+            <button type="button" onClick={() => setDone(true)}>
+              Revoke this role
+            </button>
+          )}
+        </Modal>
+      );
+    }
+    render(<Sheet />);
+    const act = screen.getByRole("button", { name: "Revoke this role" });
+    act.focus();
+    fireEvent.click(act);
+    await screen.findByText("Revoked");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" }));
   });
 });
