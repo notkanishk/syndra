@@ -120,3 +120,27 @@ func TestStandIn_AutoRotationHasNothingToRotate(t *testing.T) {
 		t.Fatalf("rotated %d keys against Zitadel, want 2", n)
 	}
 }
+
+// On the stand-in, operators sign in as the development identities: a demo id
+// as an audit row's actor is who signed in, not sample data. Against a real
+// Zitadel (and in the demo) it still counts. Demo projects and users as
+// targets count either way (db.TestCountDemoResidue_ActorsOnlyWhenAsked_Live).
+func TestStandIn_DemoResidueLeavesOutActors(t *testing.T) {
+	orig := dbCountDemoResidue
+	t.Cleanup(func() { dbCountDemoResidue = orig })
+	var gotActors []bool
+	dbCountDemoResidue = func(_ context.Context, projects, users []string, actors bool) (int, error) {
+		if len(projects) == 0 || len(users) == 0 {
+			t.Error("demo projects and users must still be counted as targets")
+		}
+		gotActors = append(gotActors, actors)
+		return 0, nil
+	}
+
+	_, _ = countDemoResidue(context.Background())
+	asStandIn(t)
+	_, _ = countDemoResidue(context.Background())
+	if !slices.Equal(gotActors, []bool{true, false}) {
+		t.Fatalf("countActors real then stand-in: %v, want [true false]", gotActors)
+	}
+}

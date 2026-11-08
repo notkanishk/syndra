@@ -572,7 +572,7 @@ file, a copy of what production's Zitadel holds.
   working copy (saved as it happens, so a restart keeps it) and nothing else.
   It never reaches production's Zitadel. The stand-in has no event log, so
   "who made this grant" answers that Zitadel's log has nothing.
-- **What it doesn't cover.** It has no actions, event listener or claims setup, so the claims configuration check, the signing-key reads and the automatic key replacement don't run on staging (they settle any finding they raised before), and the Zitadel page says so in one line instead of claims delivery and the action signing key.
+- **What it doesn't cover.** It has no actions, event listener or claims setup, so the claims configuration check, the signing-key reads and the automatic key replacement don't run on staging (they settle any finding they raised before), and the Zitadel page says so in one line instead of claims delivery and the action signing key. Operators sign in to staging as the development identities (`dev_admin`), so the sample-data count leaves out audit rows that name one only as the actor.
 - Production never reads `docker-compose.staging.yml` or `ZITADEL_FAKE_WORLD`.
 
 **Experiments on staging only:** Actions › `deploy-staging` › Run workflow
