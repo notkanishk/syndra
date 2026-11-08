@@ -47,6 +47,14 @@ describe("a name nothing could place", () => {
     }
   });
 
+  // Staging's operators sign in as a development identity Syndra can't name:
+  // "Set by this person dev_admin" read as a name. In a sentence the phrase stands alone.
+  it("leaves the id out after the copy guide's phrase for a person it can't name", () => {
+    const { container } = inView("basic", <p>Set by <UserName id="dev_admin" fallback="this person" /> on 8 Nov.</p>);
+    expect(container.textContent).toBe("Set by this person on 8 Nov.");
+    expect(container.textContent).not.toContain("dev_admin");
+  });
+
   it("copies the id, which is the only thing anyone can look up in Zitadel", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
