@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api-client";
 import { SignInLookup } from "@/components/people/SignInLookup";
 
 const state = vi.hoisted(() => ({
@@ -63,6 +64,13 @@ describe("Look up sign-ins (owner, 3 Nov)", () => {
     expect(screen.getByText(/older ones may be missing/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Look up sign-ins" })).toBeNull();
+  });
+
+  it("a failed lookup says Not looked up and the step", () => {
+    state.error = new ApiError(500, { error: "BOOM", message: "boom" });
+    render(<SignInLookup userId="u1" name="Aanya" onClose={() => {}} />);
+    expect(screen.getByText("Not looked up")).toBeInTheDocument();
+    expect(screen.getByText("Check the address and look it up again.")).toBeInTheDocument();
   });
 
   it("an app's lookup names the people, each linked", () => {

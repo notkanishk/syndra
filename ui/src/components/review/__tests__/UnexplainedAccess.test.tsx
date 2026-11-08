@@ -961,6 +961,15 @@ describe("the adopt confirm, with automatic rules", () => {
     expect(within(dialog).getByRole("button", { name: "Adopt in Syndra" })).toBeEnabled();
   });
 
+  it("a failed adopt says Not adopted and the form keeps its button", async () => {
+    adoptCtl.reject = new ApiError(500, { error: "BOOM", message: "boom" });
+    const dialog = openAdopt();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Adopt in Syndra" }));
+    expect(await within(dialog).findByText("Not adopted")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Adopted")).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Adopt in Syndra" })).toBeEnabled();
+  });
+
   it("says the access stays exactly as it is when no rule follows", async () => {
     const dialog = openAdopt();
     expect(dialog.textContent).toMatch(/stays exactly as it is/);
