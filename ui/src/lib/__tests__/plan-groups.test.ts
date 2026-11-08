@@ -338,6 +338,10 @@ describe("resultOutcome", () => {
     const retry = { state: "retrying" as const, try: 2, of: 6 };
     const halted = done([basic("Avani"), basic("Bo", { retry })]);
     expect(halted.outcome.message).toBe("2 are in Zitadel now. 2 wait for you to send. 2 aren't in Zitadel yet; Syndra sends them again on its own.");
+    // A halt with no retry: its unsent roles are not claimed as in Zitadel, and the step stays Send.
+    const stopped = done([basic("Avani"), basic("Bo", { unsent: 2 })]);
+    expect(stopped.outcome.message).toBe("2 are in Zitadel now. 2 wait for you to send. 2 didn't go to Zitadel.");
+    expect(waitsForSend(stopped.outcome)).toBe(true);
     // Every role waits: the all-wait shape still holds when it is true.
     const all = done([basic("Avani", { goes: [] }), basic("Bo", { goes: [] })]);
     expect(all.outcome.message).toBe("All 2 wait for you to send. Nothing has reached Zitadel yet.");
