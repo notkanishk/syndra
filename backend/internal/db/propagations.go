@@ -697,6 +697,11 @@ func AppliedButUnobserved(ctx context.Context, olderThan time.Duration) ([]Pendi
 		SELECT id, op_type, user_id, COALESCE(project_id,''), role_keys, completed_at
 		  FROM propagation_outbox
 		 WHERE status = 'applied' AND confirmed_at IS NULL
+		   -- Only Zitadel writes are ever seen back (ConfirmFromObservation
+		   -- reads Zitadel alone). An add-on's write is checked by its own
+		   -- reconciliation, so listing it here kept it on Home forever, named
+		   -- as something Zitadel accepted.
+		   AND target = 'zitadel'
 		   AND completed_at < NOW() - $1::interval
 		 ORDER BY completed_at
 		 LIMIT 200`, olderThan.String())
