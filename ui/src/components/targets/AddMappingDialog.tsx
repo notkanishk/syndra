@@ -140,6 +140,7 @@ export function RoleMappingDialog({
           : `Everyone who holds the role gets an account on ${name} in this group. The preview says how many people that is before anything is sent.`
       }
       noun={["person", "people"]}
+      system={name}
       ready={ready}
       notReadyReason={notReadyReason}
       definitionLabel="Save mapping"
@@ -281,7 +282,7 @@ export function RoleMappingDialog({
                         )}
                       </span>
                       <FieldHint>
-                        Someone with two roles that give a home folder gets the larger limit. One person can be given
+                        Someone holding two roles that each carry a home folder gets the larger limit. One person can be given
                         their own, on {name}&apos;s page under Accounts.
                       </FieldHint>
                     </div>

@@ -19,7 +19,7 @@ import type { BulkEffect, BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGra
 // A-21 §Q1: a plan grouped by how each change travels. People, not writes;
 // fixed folds; the same order in the true tense after Apply.
 
-const CANCEL = "Cancels a change waiting for you to send: the give of Member in Laser Lab queued 2 Nov 2026 (wrong person).";
+const CANCEL = "Cancels a change waiting for you to send: the grant of Member in Laser Lab queued 2 Nov 2026 (wrong person).";
 
 const row = (name: string, over: Partial<BulkOutcome> = {}): BulkOutcome => ({
   user_id: `id-${name}`,
@@ -67,7 +67,7 @@ const board = () =>
     row("Kabir", {
       delivery: "none",
       detail: "Leaves Safety.",
-      consequence: `The give of Member in Laser Lab that was waiting is cancelled, so nothing is sent to Zitadel. ${CANCEL}`,
+      consequence: `Cancels giving Member in Laser Lab, which was waiting for you to send, so nothing is sent to Zitadel. ${CANCEL}`,
     }),
     row("Lena", { delivery: "none", consequence: "Already holds every role it gives, so nothing is sent to Zitadel." }),
     row("Aanya", { delivery: "waits_for_you", waits: ["Supervisor in Laser Lab"] }),

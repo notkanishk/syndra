@@ -439,7 +439,7 @@ describe("extending a single row", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and extend" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel removing it and extend" }));
     await waitFor(() => expect(state.extend).toHaveBeenCalledWith(expect.objectContaining({ cancel_ids: [waiting.id] })));
   });
 });

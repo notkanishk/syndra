@@ -619,7 +619,7 @@ export function ModalFooter({
   cancel?: { onClick: () => void; label?: string; disabled?: boolean; reason?: string };
 }) {
   const quiet = cancel && (
-    <Button variant="ghost" onClick={cancel.onClick} disabled={cancel.disabled} reason={cancel.reason}>
+    <Button data-footer-cancel variant="ghost" onClick={cancel.onClick} disabled={cancel.disabled} reason={cancel.reason}>
       {cancel.label ?? "Cancel"}
     </Button>
   );

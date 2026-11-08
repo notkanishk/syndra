@@ -271,6 +271,8 @@ describe("Ask for access · only what they lack, once", () => {
       screen.getByText("Makerspace staff decide. The answer appears on this page, and nothing else is needed from you."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
+    // Recorded, so a result and not a no-change: never "Nothing was changed."
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
     expect(inDialog().queryByRole("button", { name: "Ask for access" })).not.toBeInTheDocument();
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();

@@ -25,7 +25,11 @@ vi.mock("@/lib/api-client", async (original) => ({
   },
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
-  useNameResolver: () => ({ resolveUser: () => ({ value: undefined, resolved: true }) }),
+  useNameResolver: () => ({
+    resolveUser: () => ({ value: undefined, resolved: true }),
+    resolveRole: () => ({ value: undefined, resolved: true }),
+    resolveProject: () => ({ value: undefined, resolved: true }),
+  }),
 }));
 
 function ask(overrides: Partial<AccessRequest> = {}): AccessRequest {
@@ -67,7 +71,7 @@ describe("approving, with automatic rules", () => {
     render(withPlanClient(<HoldingNote request={ask()} />));
     expect(
       await screen.findByText(
-        "If you approve: Also gives Bench in Workshop, by the automatic rule from Operator. Approving cancels the removal Sam Lee queued 2h ago.",
+        /^If you approve: Also gives Bench in Workshop, by the automatic rule from Operator\. Approving cancels removing .+ from .+, which was waiting for you to send\.$/,
       ),
     ).toBeInTheDocument();
   });
@@ -75,7 +79,7 @@ describe("approving, with automatic rules", () => {
   it("says only the cancel when no rule follows", async () => {
     wire.plan = cancelling([queuedChange()]);
     render(withPlanClient(<HoldingNote request={ask()} />));
-    expect(await screen.findByText("If you approve: Approving cancels the removal Sam Lee queued 2h ago.")).toBeInTheDocument();
+    expect(await screen.findByText(/^If you approve: Approving cancels removing .+ from .+, which was waiting for you to send\.$/)).toBeInTheDocument();
   });
 
   it("says nothing when no rule follows, and does not ask about a role already held", async () => {

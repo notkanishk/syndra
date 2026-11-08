@@ -8,7 +8,6 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { Notice } from "@/components/ui/Notice";
 import { targetLabel } from "@/lib/nav";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useRevokeTargetAccess, type RevocationResult } from "@/lib/queries/useHolds";
@@ -68,56 +67,40 @@ export function RevokeDialog({
   const armed = confirm.armed && reason.trim() !== "" && !revoke.isPending;
   const name = targetLabel(target);
 
-  // The sheet becomes its result, and closes only on Close.
-  if (result) {
-    return (
-      <Modal open onClose={onClose} size="md" labelledBy="revoke-result">
-        <ModalHeader titleId="revoke-result" title={`Revoke ${subjectName}'s access on ${name}`} />
-        <div className="grid gap-3 px-6">
-          <ActionOutcome
-            word={result.status === "revoked" ? "Revoked" : "Partly done"}
-            outcome={{ kind: "applied", message: result.detail ?? "", detail: result.disclosure }}
-          />
-          {result.outstanding && (
-            // Named so a surface can offer the one remaining action rather than
-            // the whole composition again, and so an operator knows there IS one.
-            <p className="text-[13.5px] text-warn-text">Still outstanding: {result.outstanding}.</p>
-          )}
-        </div>
-        <ModalFooter>
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </ModalFooter>
-      </Modal>
-    );
-  }
-
   return (
     <Modal open onClose={revoke.isPending ? () => {} : onClose} busy={revoke.isPending} size="md" labelledBy="revoke-title">
       <ModalHeader
         titleId="revoke-title"
         title={`Revoke ${subjectName}'s access on ${name}`}
-        lede={`Revoke ends their access: ${subjectName} can no longer sign in to ${name}.`}
+        lede={result ? undefined : `Revoke ends their access: ${subjectName} can no longer sign in to ${name}.`}
       />
 
+      {/* The sheet is its result once it has one: the lede, the list, the form and
+          the typed name unmount with the body; the header keeps its title. */}
+      {result ? (
+        <div className="grid gap-3 px-6">
+          <ActionOutcome
+            word={result.status === "revoked" ? "Revoked" : "Partly done"}
+            outcome={{
+              kind: result.status === "revoked" ? "applied" : "queued",
+              message: result.detail ?? "",
+              detail: result.disclosure,
+              ...(result.outstanding ? { next: `Still outstanding: ${result.outstanding}.` } : {}),
+            }}
+          />
+        </div>
+      ) : (
       <div className="grid gap-4 px-6">
         <div className="grid gap-1.5 text-[13.5px] text-muted">
           <p className="font-semibold text-ink">What happens</p>
           <ul className="list-disc pl-5">
             <li>Their storage password on {name} is replaced now.</li>
             <li>New connections to {name} are refused.</li>
+            <li>{sessionSentence(name)}</li>
             <li>Their roles stay as they are. Only what those roles give them on {name} is on hold, until somebody lifts it.</li>
           </ul>
           <p>To pause without replacing the password, use Put on hold instead.</p>
         </div>
-
-        {/* Amber, and above the form rather than beside the button: it is what
-            the reader needs to know BEFORE deciding, not a caveat attached to
-            the decision. */}
-        <Notice tone="warn" title="Anyone connected stays connected for now." nothingToDo="Their next connection is refused on its own.">
-          {sessionSentence(name)}
-        </Notice>
 
         <div>
           <FieldLabel htmlFor="revoke-reason">Why</FieldLabel>
@@ -166,9 +149,17 @@ export function RevokeDialog({
           </p>
         )}
       </div>
+      )}
 
+      {result ? (
+        <ModalFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </ModalFooter>
+      ) : (
       <ModalFooter
-        cancel={{ onClick: onClose, disabled: revoke.isPending }}
+        cancel={{ label: "Keep it", onClick: onClose, disabled: revoke.isPending }}
         note={
           auto === null
             ? "It is listed in Pending changes until it is sent."
@@ -203,6 +194,7 @@ export function RevokeDialog({
           {`Revoke access for ${subjectName}`}
         </Button>
       </ModalFooter>
+      )}
     </Modal>
   );
 }

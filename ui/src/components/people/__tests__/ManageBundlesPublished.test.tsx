@@ -145,6 +145,32 @@ describe("ManageBundles", () => {
     expect(screen.getByText(/nothing is waiting for you to send/i)).toBeInTheDocument();
   });
 
+  it("a write that failed is Not applied, never Recorded, and the form stays", async () => {
+    state.assignAsync = vi.fn().mockRejectedValue(new ApiError(500, { error: "BOOM", message: "It broke." }));
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+    await applyReady();
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
+
+    expect(await screen.findByText("Not applied")).toBeInTheDocument();
+    expect(screen.queryByText("Recorded")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply 1 change" })).toBeInTheDocument();
+  });
+
+  it("holds the forecast Will be applied while the write is out, then one result replaces it", async () => {
+    let finish: (v: unknown) => void = () => {};
+    state.assignAsync = vi.fn().mockReturnValue(new Promise((r) => (finish = r)));
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+    await applyReady();
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
+
+    expect(await screen.findByText("Will be applied")).toBeInTheDocument();
+    finish({ cascade: { enqueued: 0 } });
+    expect(await screen.findByText("Recorded")).toBeInTheDocument();
+    expect(screen.queryByText("Will be applied")).not.toBeInTheDocument();
+  });
+
   // Final verification N1: a cascade Zitadel refused is said as a refusal, with
   // its cause and step; it never waits, and Send is not the step.
   it("says Zitadel refused this, with why and what to do, when it did", async () => {
@@ -254,7 +280,9 @@ describe("ManageBundles", () => {
       open();
       tick(/Lab Tech/);
       expect(
-        await screen.findByText("Applying cancels the removal Sam Lee queued 2h ago. Nothing is cancelled until you choose on the next step."),
+        await screen.findByText(
+          /^Applying cancels removing .+ from .+, which was waiting for you to send\. Nothing is cancelled until you choose on the next step\.$/,
+        ),
       ).toBeInTheDocument();
       expect(state.assignAsync).not.toHaveBeenCalled();
     });
@@ -267,9 +295,9 @@ describe("ManageBundles", () => {
       await applyReady();
       fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
-      expect(await screen.findByRole("heading", { name: "This cancels a removal that's waiting" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: /^Cancel removing .+\?$/ })).toBeInTheDocument();
       expect(state.assignAsync).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByRole("button", { name: "Cancel it and apply 1 change" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel removing it and apply 1 change" }));
 
       expect(await screen.findByText("Recorded")).toBeInTheDocument();
       expect(state.assignAsync).toHaveBeenCalledTimes(1);
@@ -310,17 +338,17 @@ describe("ManageBundles", () => {
       tick(/Door Crew/);
       await applyReady("Apply 2 changes");
       fireEvent.click(screen.getByRole("button", { name: "Apply 2 changes" }));
-      expect(await screen.findByRole("heading", { name: "This cancels a removal that's waiting" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Cancel it and apply 2 changes" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: /^Cancel removing .+\?$/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Cancel removing it and apply 2 changes" })).toBeInTheDocument();
     });
 
-    it("Keep it sends nothing, and the bundles stay staged", async () => {
+    it("Keep it waiting sends nothing, and the bundles stay staged", async () => {
       state.plans = { b1: cancelling([removalWaiting]) };
       open();
       tick(/Lab Tech/);
       await applyReady();
       fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
-      fireEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Keep it waiting" }));
       await waitFor(() => expect(screen.getByRole("button", { name: "Apply 1 change" })).toBeVisible());
       expect(state.assignAsync).not.toHaveBeenCalled();
     });

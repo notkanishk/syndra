@@ -20,7 +20,7 @@ import type { AutoRetry } from "@/lib/outcome";
 export type WaitsOp = "give" | "remove" | "change";
 
 const WHAT: Record<WaitsOp, string> = {
-  give: "the give",
+  give: "the access",
   remove: "the removal",
   change: "the change",
 };

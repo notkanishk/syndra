@@ -292,6 +292,10 @@ export const FORECAST = {
   decline: "Will be declined",
   extend: "Will be extended",
   remove: "Will be removed",
+  /** A person's direct access taken back (A-22 Q4); "removed" is for a part out of a whole. */
+  revoke: "Will be revoked",
+  /** A staged set of bundle changes recorded in one press. */
+  apply: "Will be applied",
   keep: "Will be kept",
   lift: "Will be lifted",
   give: "Will be given",
@@ -315,7 +319,7 @@ export type ForecastAct = Exclude<keyof typeof FORECAST, "queued">;
  * changes for you to send (drift attribute answers `rule_outbox_ids`). Its own
  * forecast is still "Will be adopted", so a waiting role changes nothing here.
  */
-const REACHES_ZITADEL: ReadonlySet<ForecastAct> = new Set<ForecastAct>(["approve", "extend", "remove", "give"]);
+const REACHES_ZITADEL: ReadonlySet<ForecastAct> = new Set<ForecastAct>(["approve", "extend", "remove", "revoke", "give"]);
 
 /** The forecast seat's word for `act`, given whether its role is a role that waits. */
 export function forecastFor(act: ForecastAct, roleWaits?: boolean): string {

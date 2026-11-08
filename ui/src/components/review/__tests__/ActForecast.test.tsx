@@ -117,7 +117,7 @@ describe("the first 100ms, in the future tense (A-19 P2)", () => {
     );
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("Couldn't lift it");
+    expect(alert.textContent).toContain("Not lifted");
     expect(alert.textContent).toContain("Nothing was changed.");
     expect(screen.queryByRole("status")).toBeNull();
     expect(container.querySelector(".bloom")).toBeNull();

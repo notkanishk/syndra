@@ -973,7 +973,7 @@ export function Retries({
 function PendingChanges({ count, reachable }: { count: number; reachable: boolean }) {
   const drain = useDrainPropagations();
   const auto = useAutoRetry();
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [outcome, setOutcome] = useState<(Outcome & { word?: string }) | null>(null);
 
   return (
     <Card>
@@ -995,7 +995,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           onClick={async () => {
             setOutcome(null);
             try {
-              setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto));
+              setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto, count));
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -1015,8 +1015,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           <ActionOutcome
             outcome={outcome}
             placement="inline"
-            // Never "Sent" for a pass that left changes to be sent again.
-            word={outcome.kind === "queued" ? "Not all sent" : outcomeWord(outcome, "Sent", "Not sent")}
+            word={outcome.word ?? outcomeWord(outcome, "Sent", "Not sent")}
           />
         </CardRow>
       )}

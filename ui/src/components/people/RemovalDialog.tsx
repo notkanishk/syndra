@@ -100,8 +100,11 @@ export function retainedLabels(pairs: string[], names: ShownNames): string[] {
 }
 
 /** The act's own word on the result, never "Applied" (A-17 G4). */
-const resultWord = (outcome: Outcome | null) =>
-  outcome?.recorded ? "Refused by Zitadel" : succeeded(outcome) ? "Removed" : "Not removed";
+const resultWord = (outcome: Outcome | null, act: "revoke" | "remove" | "cancel" = "remove") => {
+  if (outcome?.recorded) return "Refused by Zitadel";
+  const done = { revoke: "Revoked", remove: "Removed", cancel: "Cancelled" }[act];
+  return succeeded(outcome) ? done : `Not ${done.toLowerCase()}`;
+};
 
 /**
  * What removing a direct grant did, from the server's answer (W7). "The access
@@ -115,14 +118,14 @@ export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel
   const reason = result?.wait_reason;
   // Final verification N1: Zitadel refused the revocation, so the access is not gone.
   if (isRefused(reason) || result?.status === "failed") {
-    const out = refusedOutcome("Removed in Syndra", reason, { revocation: true });
+    const out = refusedOutcome("Revoked in Syndra", reason, { revocation: true });
     return { ...out, detail: `${out.detail}${kept}` };
   }
-  if (reason === RETRYING) return retryingOutcome(`Removed in Syndra`, result?.retry);
+  if (reason === RETRYING) return retryingOutcome(`Revoked in Syndra`, result?.retry);
   if (reason === "role_waits") {
     return {
       kind: "queued",
-      message: `Removed in Syndra. ${roleLabel} always waits for you, so it leaves Zitadel when you send it.${kept}`,
+      message: `Revoked in Syndra. ${roleLabel} always waits for you, so it leaves Zitadel when you send it.${kept}`,
       detail: waitReasonLine(reason, roleLabel),
     };
   }
@@ -134,7 +137,7 @@ export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel
       // Not known yet whether it goes on its own (N3): no promise either way.
       return {
         kind: "queued",
-        message: `Removed in Syndra. ${why ? `${why}. ` : ""}The revocation is not in Zitadel yet.${kept}`,
+        message: `Revoked in Syndra. ${why ? `${why}. ` : ""}The revocation is not in Zitadel yet.${kept}`,
         sendsItself: true,
         next: DRAIN_UNKNOWN_NEXT,
       };
@@ -142,18 +145,18 @@ export function removalOutcome(result: DirectGrantRemoval | undefined, roleLabel
     if (!auto) {
       return {
         kind: "queued",
-        message: `Removed in Syndra. ${why ? `${why}. ` : ""}The revocation waits in Pending changes until someone presses Send.${kept}`,
+        message: `Revoked in Syndra. ${why ? `${why}. ` : ""}The revocation waits in Pending changes until someone presses Send.${kept}`,
       };
     }
     return {
       kind: "queued",
-      message: `Removed in Syndra. ${why ? `${why}. ` : ""}Revocations send on their own, so it leaves Zitadel when Zitadel answers.${kept}`,
+      message: `Revoked in Syndra. ${why ? `${why}. ` : ""}Revocations send on their own, so it leaves Zitadel within a minute.${kept}`,
       sendsItself: true,
     };
   }
   return {
     kind: "applied",
-    message: `Direct access to ${roleLabel} removed`,
+    message: `Direct access to ${roleLabel} revoked`,
     detail: retained.length
       ? `They still hold ${retained.join(", ")}, from a bundle or a rule.`
       : "Nothing else was supplying it, so the access is gone.",
@@ -317,7 +320,9 @@ function DirectDialog({
   });
   const { cancelOnly, cancels, rules } = held.view;
   const waitingGive = cancels.find((c) => c.op_type !== "revoke");
-  const actLabel = cancelOnly ? "Cancel the waiting give" : "Revoke access";
+  const actLabel = cancelOnly ? "Cancel giving it" : "Revoke this role";
+  const done = succeeded(outcome);
+  const roleIn = `${shown.role(removal.projectId, removal.roleKey)} in ${removal.projectName}`;
   // A revoke that also cancels someone's waiting change asks first: the press
   // pushes the step, filled from the plan. Keep it comes back here as it was.
   const step = useCancelStep({
@@ -334,16 +339,21 @@ function DirectDialog({
         // Titled as the act: cancelling a give that never went is not a revoke.
         title={
           cancelOnly
-            ? `Cancel the waiting give of ${shown.role(removal.projectId, removal.roleKey)} in ${removal.projectName}?`
-            : `Revoke direct access to ${roleLabel}?`
+            ? `Cancel giving ${roleIn} to ${first}?`
+            : `Revoke ${roleIn}?`
         }
         titleId="removal-title"
         lede={
-          cancelOnly && waitingGive
-            ? `Given to ${first} on ${formatShortDate(waitingGive.queued_at)}${
-                waitingGive.initiated_by_name ? ` by ${waitingGive.initiated_by_name}` : ""
-              }, and still waiting for you to send.`
-            : `Given directly to ${subject}.`
+          done
+            ? undefined
+            : cancelOnly && waitingGive
+              ? // When and by whom it was queued; "Given" would contradict "never had it" below.
+                `Waiting for you to send since ${formatShortDate(waitingGive.queued_at)}${
+                  waitingGive.initiated_by_name ? `, queued by ${waitingGive.initiated_by_name}` : ""
+                }.`
+              : cancelOnly
+                ? `Waiting for you to send.`
+                : `Given by hand to ${subject}. In Zitadel now.`
         }
       />
       {stale && !outcome && (
@@ -357,7 +367,7 @@ function DirectDialog({
           {null}
         </Notice>
       )}
-      <div className="px-6">
+      {!done && <div className="px-6">
         {cancelOnly ? (
           // Never delivered, so there is nothing at the door to close: no box,
           // because nothing is wrong (RULES). The removal does not queue a
@@ -365,9 +375,8 @@ function DirectDialog({
           <p className="flex items-start gap-2.5 text-[15px] leading-[1.5]">
             <StatusDot tone="neutral" className="mt-[8px]" />
             <span>
-              <strong className="font-semibold text-ink">Nothing to take back.</strong>{" "}
               <span className="text-muted">
-                It hasn&rsquo;t reached Zitadel, so {first} never had it. This cancels that give and sends nothing.
+                {first} never had it, so nothing is sent to Zitadel.
               </span>
             </span>
           </p>
@@ -409,22 +418,22 @@ function DirectDialog({
           )}
         </div>
         )}
-      </div>
+      </div>}
       {/* The first 100ms. Cancelling a give that is still waiting; a role that
           waits holds its own removal; anything else is simply removed. */}
       {!outcome && remove.isPending && (
         <ActionForecast
           className="mx-6 mb-1"
-          word={cancelOnly ? FORECAST.cancel : forecastFor("remove", roleWaits(removal.projectId, removal.roleKey))}
+          word={cancelOnly ? FORECAST.cancel : forecastFor("revoke", roleWaits(removal.projectId, removal.roleKey))}
         />
       )}
-      {outcome && <ActionOutcome word={word ?? resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={word ?? resultWord(outcome, cancelOnly ? "cancel" : "revoke")} outcome={outcome} person={userId} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
         // Beside "Cancel the waiting give", a dismiss called Cancel is a second
         // cancel: it says what it keeps, as the cancel step does.
-        cancel={succeeded(outcome) ? undefined : { onClick: onClose, label: cancelOnly ? "Keep it" : undefined }}
+        cancel={done ? undefined : { onClick: onClose, label: cancelOnly ? "Keep it waiting" : "Keep it" }}
         note={
           step.note ??
           // Two causes, and they were reported as one. "This role was not given
@@ -479,7 +488,7 @@ function DirectDialog({
                   setWord("Cancelled");
                   setOutcome({
                     kind: "applied",
-                    message: `The give of ${shown.role(removal.projectId, removal.roleKey)} in ${removal.projectName} that was waiting is cancelled. ${first} never had it, so nothing goes to Zitadel.`,
+                    message: `${roleIn} won't be given to ${first}. It never reached Zitadel.`,
                     next: "Nothing for you to do.",
                   });
                   return;
@@ -565,7 +574,8 @@ function BundleDialog({
     cancels: consent.cancels,
   });
   const { cancelOnly, cancels } = held.view;
-  const actLabel = cancelOnly ? "Cancel the waiting change" : "Remove bundle";
+  const actLabel = cancelOnly ? "Cancel giving it" : "Remove the bundle";
+  const done = succeeded(outcome);
   const step = useCancelStep({
     host: `Remove the ${bundleName} bundle from ${subject}`,
     goAhead: "remove",
@@ -577,10 +587,12 @@ function BundleDialog({
       <PushedStep step={step}>
       <ModalHeader
         chip={<SourceChip kind="bundle" />}
-        title={`Remove the ${bundleName} bundle from ${subject}?`}
+        title={cancelOnly ? `Cancel giving the ${bundleName} bundle to ${first}?` : `Remove the ${bundleName} bundle from ${subject}?`}
         titleId="removal-title"
         lede={
-          cancelOnly
+          done
+            ? undefined
+            : cancelOnly
             ? `${bundleName} is still waiting for you to send, so nothing it carries has reached ${subject} yet.`
             : `Everything ${bundleName} carries goes with it, except what another source also gives them.`
         }
@@ -596,7 +608,7 @@ function BundleDialog({
           {null}
         </Notice>
       )}
-      <div className="flex flex-col gap-2 px-6">
+      {!done && <div className="flex flex-col gap-2 px-6">
         {/* "They will lose" is a claim about an effect, and this bundle has not
             had one yet. The assignment was recorded and never sent, so removing
             it cancels the queued delivery rather than queueing its opposite —
@@ -623,18 +635,18 @@ function BundleDialog({
             </div>
           </>
         )}
-      </div>
+      </div>}
       {!outcome && removeBundle.isPending && (
         <ActionForecast
           className="mx-6 mb-1"
           word={cancelOnly ? FORECAST.cancel : forecastFor("remove", roleWaits(removal.projectId, removal.roleKey))}
         />
       )}
-      {outcome && <ActionOutcome word={word ?? resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={word ?? resultWord(outcome, cancelOnly ? "cancel" : "remove")} outcome={outcome} person={userId} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
-        cancel={succeeded(outcome) ? undefined : { onClick: onClose, label: cancelOnly ? "Keep it" : undefined }}
+        cancel={done ? undefined : { onClick: onClose, label: cancelOnly ? "Keep it waiting" : "Keep it" }}
         // A bundle whose grants are still waiting says nothing more about them
         // here: it is the cancel. One that also cancels someone else's waiting
         // change says so before the press, and the press pushes the step.
@@ -698,7 +710,7 @@ function BundleDialog({
                   setWord("Cancelled");
                   setOutcome({
                     kind: "applied",
-                    message: `The ${bundleName} bundle that was waiting is cancelled. Nothing it carried had reached ${first}, so nothing goes to Zitadel.`,
+                    message: `The ${bundleName} bundle won't be given to ${first}. It never reached Zitadel.`,
                     next: "Nothing for you to do.",
                   });
                   return;

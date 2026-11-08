@@ -82,6 +82,7 @@ export function ConvergeEntitlements({
         title={`Check for differences on ${targetLabel(target)}`}
         lede={`Compares what ${label} should have on ${targetLabel(target)} with what they have, and records the differences as changes waiting for you to send. Nothing reaches ${targetLabel(target)} until somebody sends them from Pending changes.`}
         noun={["account", "accounts"]}
+        system={targetLabel(target)}
         onRehearse={async (acknowledgeScope) => {
           const result = await rehearse.mutateAsync({ subjectIds, acknowledgeScope });
           setPlan(result);

@@ -206,8 +206,17 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
       <ModalHeader
         title="New bundle"
         titleId="new-bundle-title"
-        lede="Name it after who it's for. The roles you choose become version 1, so it can be given straight away."
+        lede={
+          succeeded(outcome)
+            ? undefined
+            : "Name it after who it's for. The roles you choose become version 1, so it can be given straight away."
+        }
       />
+      {succeeded(outcome) ? (
+        <div className="px-6">
+          <ActionOutcome outcome={outcome!} word="Created" />
+        </div>
+      ) : (
       <div className="flex flex-col gap-3.5 px-6">
         <div className="grid gap-3.5 tablet:grid-cols-2">
           <div>
@@ -245,7 +254,8 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
           />
         </div>
       </div>
-      {outcome && <ActionOutcome outcome={outcome} word={succeeded(outcome) ? "Created" : "Not created"} className="mx-6 mb-1" />}
+      )}
+      {outcome && !succeeded(outcome) && <ActionOutcome outcome={outcome} word="Not created" className="mx-6 mb-1" />}
 
       <ModalFooter
         note={succeeded(outcome) ? undefined : footNote}
@@ -261,6 +271,7 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
             reason={blocked}
             isPending={create.isPending}
             onClick={async () => {
+              setOutcome(null);
               try {
                 await create.mutateAsync({
                   name: trimmed,

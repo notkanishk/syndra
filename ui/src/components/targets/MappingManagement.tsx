@@ -49,8 +49,6 @@ import {
 import { formatClock, roleLabel } from "@/lib/format";
 import { roleName as nameOfRole } from "@/lib/names";
 import { targetLabel } from "@/lib/nav";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useIsTouch } from "@/lib/useViewport";
 import dynamic from "next/dynamic";
 import { sortByName } from "@/lib/sort";
@@ -370,6 +368,7 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
       definitionLabel="Save the change"
       lede={`${roleName} currently gives ${gives(mapping)} on ${targetLabel(mapping.target)}. Change it and everybody holding the role is moved too.`}
       noun={["person", "people"]}
+      system={targetLabel(mapping.target)}
       ready={value.trim() !== "" && value !== mapping.value}
       compose={
         <div>
@@ -453,6 +452,7 @@ function DeleteMappingDialog({
         rows.home ? " New home folders stop; the ones already made stay, with their files." : ""
       }`}
       noun={["person", "people"]}
+      system={targetLabel(mapping.target)}
       // Destructive, because it takes access away — but still rung 2: the
       // cohort is a role's holders rather than a person somebody named, and the
       // dialog's own scope step is the ceremony.
@@ -549,7 +549,6 @@ function VersionRow({
   const rollback = useRollbackMappingVersion(target);
   const [rehearsing, setRehearsing] = useState(false);
   const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const names = useShownNames();
 
   return (
@@ -593,10 +592,8 @@ function VersionRow({
         )}
       </p>
 
-      {/* On the version row that was rolled back to, which is the row the
-          operator is looking at and the thing that changed. */}
-      {outcome && <ActionOutcome outcome={outcome} word="Rolled back" className="mt-3" />}
-
+      {/* The dialog is the one place a rollback reports: its result step names the
+          people and the system, so the row says nothing (one slot, G23). */}
       {rehearsing && (
         <RehearsalDialog
           title={`Roll back to version ${version.version}`}
@@ -604,6 +601,7 @@ function VersionRow({
             version.entries.length
           } mapping${version.entries.length === 1 ? "" : "s"} in version ${version.version}.`}
           noun={["person", "people"]}
+          system={targetLabel(target)}
           definitionLabel={`Roll back to version ${version.version}`}
           consequence={
             <>
@@ -621,13 +619,6 @@ function VersionRow({
             new Promise((resolve, reject) => {
               rollback.mutate({ version: version.version, planId }, {
                 onSuccess: (result) => {
-                  setOutcome({
-                    kind: "queued",
-                    message: `Rolled back to version ${version.version}. Account changes for ${
-                      result.queued_convergences
-                    } ${result.queued_convergences === 1 ? "person are" : "people are"} waiting for you to send`,
-                    detail: `Nothing has reached ${targetLabel(target)} yet. Send them from Pending changes.`,
-                  });
                   // The plan the dialog showed is the one being reported back,
                   // with every row now queued — `asPlan` carries the outcomes
                   // through so the result step lists the same people the

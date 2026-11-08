@@ -105,8 +105,8 @@ describe("a send with more than one connected system", () => {
       }),
     );
 
-    expect(out.message).toContain("9 sent");
-    expect(out.message).toContain("Zitadel was skipped");
+    expect(out.message).toContain("9 reached TrueNAS");
+    expect(out.message).toContain("Zitadel didn't answer");
     // Not an error: most of the work went through, and the part that did not is
     // named and still waiting.
     expect(out.tone).toBe("warning");
@@ -145,7 +145,7 @@ describe("a send with more than one connected system", () => {
       });
     expect(describeDrain(res(2))).toEqual({
       tone: "warning",
-      message: "3 sent. TrueNAS was skipped.",
+      message: "3 reached Zitadel. TrueNAS didn't answer, so its 2 are still here.",
       detail: "TrueNAS is not answering. Its 2 changes are still waiting for you to send, and nothing counts against the retry limit.",
     });
     expect(describeDrain(res(1)).detail).toMatch(/^TrueNAS is not answering\. Its 1 change is still waiting/);

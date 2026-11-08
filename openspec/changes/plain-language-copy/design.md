@@ -231,17 +231,17 @@ kind its step and `ActionOutcome` draws it in every placement; `retryNextStep`
 **Retries are seen in both views.** While Syndra is sending changes again on its
 own, Home says so in *Sent again on its own* and the rail carries a pill beside
 Home (and beside Pending changes in Advanced): amber "↻ 2" while retrying, danger
-"! 1" once it gave up. A give-up stays until you press **Mark seen**; it is yours alone, so each person marks their own (migration 000082).
+"! 1" once it gave up. A change Syndra stopped sending stays until you press **Mark seen**; it is yours alone, so each person marks their own (migration 000082).
 
 **Every Notice ends on a next step or none** (6 Nov): `Notice` takes `next` (what to do, or where to go) or `nothingToDo` (why there is nothing; drawn as "Nothing for you to do." plus it). One is required by its types.
 Retrying changes are never counted as "waiting for you to send".
 
 **While Zitadel isn't answering, the line before the act is exact per act**
-(`useWaitsBeforeLine(op)`): "Zitadel isn't answering. Syndra records the give
+(`useWaitsBeforeLine(op)`): "Zitadel isn't answering. Syndra records the access
 now and sends it on its own once Zitadel answers, so there is nothing for you
 to send. A role marked to wait still waits for you to send it." (the removal,
 the change). Never "will wait for you to send": a removal goes on its own, and a
-give that finds Zitadel down is retried on its own.
+role given while Zitadel is down is retried on its own.
 
 **The action signing key's states** (`app/zitadel/page.tsx` `keyState`,
 `SigningKeyGuide.tsx`):
@@ -272,8 +272,10 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 | Approve | Will be approved | Approved |
 | Decline | Will be declined | Declined |
 | Extend | Will be extended | Extended |
-| Remove | Will be removed | Removed |
-| Revoke under Drift | Will be removed | Taken: Removed in Zitadel. Not taken yet: the retry line ("Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)."). Halted with the drain on: On its way, Revocations send on their own. Drain off: Recorded in Syndra. The revocation waits in Pending changes until someone presses Send. Drain not read yet: Not in Zitadel yet, then "Open Pending changes to see what has not reached Zitadel yet." A role that waits: Waits for you, Waiting for you to send. Refused: Refused by Zitadel |
+| Remove (a bundle out of a person's set) | Will be removed | Removed |
+| Revoke direct access | Will be revoked | Revoked (A-22 Q4) |
+| Revoke under Drift | Will be revoked | Taken: Removed in Zitadel. Not taken yet: the retry line ("Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)."). Halted with the drain on: On its way, Revocations send on their own. Drain off: Recorded in Syndra. The revocation waits in Pending changes until someone presses Send. Drain not read yet: Not in Zitadel yet, then "Open Pending changes to see what has not reached Zitadel yet." A role that waits: Waits for you, Waiting for you to send. Refused: Refused by Zitadel. Applied: Revoked |
+| Apply bundle changes (Manage bundles) | Will be applied | Recorded; failure Not applied |
 | Keep | Will be kept | Kept |
 | Lift a hold | Will be lifted | Lifted |
 | Give | Will be given | Given |
@@ -291,8 +293,12 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 (A-21 §3, architecture deepening 1.2). The sheet reads the act's plan as soon
 as it has enough to plan, and its before-line says it: "Giving it cancels the
 removal Sam Lee queued 2h ago. Nothing is cancelled until you choose on the
-next step." (several: "Giving it cancels 2 changes that are waiting.");
-"Revoking it cancels the give …", "Approving cancels the removal …" (in the
+next step." became, with the owner's 8 Nov rule that give is only a verb,
+"Giving it cancels removing Member in Laser Lab from Sam, which was waiting for
+you to send." (several: "Giving it cancels 2 changes that are waiting.");
+"Revoking it cancels giving Member in Laser Lab to Sam, which was waiting for
+you to send.", "Approving cancels removing … from …, which was waiting for you to
+send." (in the
 row's "If you approve:" line), "Applying cancels …" (Manage bundles),
 "Adopting it cancels …" (Drift's Adopt), "Revoking it cancels …" (Drift's
 Revoke), and on Zitadel › Users, where each role is its own planned act and
@@ -335,19 +341,15 @@ it goes is said truly: the bulk dialog's "Syndra keeps it with each person's
 change." and the sign-in lookup's "It's on the Audit page with your reason."
 (it said Change history, which holds bundle and rule changes only).
 
-**A revoke that only cancels is the cancel, said plainly.** Lede: "Given to
-Rohan on 3 Nov by Sam Lee, and still waiting for you to send." Body: "Nothing
-to take back. It hasn't reached Zitadel, so Rohan never had it. This cancels
-that give and sends nothing." Title: "Cancel the waiting give of Member in
-Laser Lab?" (never "Revoke direct access to …", which is not the act). Button:
-"Cancel the waiting give" ("Cancel the waiting change" for a bundle); the
-dismiss beside it is "Keep it", never a second "Cancel". Once pressed, what
-the dialog said before stays as it was under the result: the act's own
-refetch never re-derives a warning or a lede (browser pass, 8 Nov). Result: **Cancelled**, "The give of Member in
-Laser Lab that was waiting is cancelled. Rohan never had it, so nothing goes
-to Zitadel." / "The Safety bundle that was waiting is cancelled. Nothing it
-carried had reached Rohan, so nothing goes to Zitadel.", then "Nothing for
-you to do."
+**A revoke that only cancels is the cancel, said plainly** (owner, 8 Nov: "give" is only a verb, so the sheet says what was going to happen, to whom, and that it has not). Lede: "Given to
+Rohan on 3 Nov by Sam Lee, and still waiting for you to send." Title: "Cancel giving Member in
+Laser Lab to Rohan?" (never "Revoke direct access to …", which is not the act). Body: "It's still waiting for you to send, so Rohan never had it. Nothing is sent to Zitadel."
+Button: "Cancel giving it" ("Cancel giving the Safety bundle to Rohan?" for a bundle, same buttons;
+"Cancel removing Member in Laser Lab from Sam?" and "Cancel removing it" for a waiting removal); the
+dismiss beside it is "Keep it waiting", never a second "Cancel". Once pressed, the sheet
+is its result (A-22 G22): the lede, body and before-line leave with the form. Result: **Cancelled**, "Member in
+Laser Lab won't be given to Rohan. It never reached Zitadel." / "Member in Laser Lab stays with Sam. The removal never reached Zitadel.", then "Nothing for you
+to do."
 
 **A plan is grouped by how each change travels** (A-21 §Q1, architecture
 deepening 1.7, `lib/plan-groups.ts`). People, not writes; one row per person;
@@ -448,7 +450,7 @@ What the rules add, what waits ("Giving Trained in Laser Lab waits for you to
 send.") and what it cancels follow, in that order. Role names, never keys; no
 arrows.
 
-**The drain switch is said only once it is read.** Until the indicators answer (or when they can't), nothing says "on its own" or "until you press Send": the sentence says what is known and ends on "Open Pending changes to see what has not reached Zitadel yet." The rail pill says "Syndra stopped sending N changes" for a give-up, the same words as Home and Pending changes.
+**The drain switch is said only once it is read.** Until the indicators answer (or when they can't), nothing says "on its own" or "until you press Send": the sentence says what is known and ends on "Open Pending changes to see what has not reached Zitadel yet." The rail pill says "Syndra stopped sending N changes", the same words as Home and Pending changes.
 
 ## 6. Vocabulary
 
@@ -500,7 +502,7 @@ thing under two names reads as two things.
 | **makerspace staff** — in member-facing copy | lab manager, steward, operator, whoever runs the makerspace |
 | **revoke** — end a person's access | withdraw access, take away, drop, retire access |
 | **withdraw** — a member takes back their own request | — |
-| **cancel** — undo a change still waiting for you to send ("Cancel the waiting give", "Cancel the waiting change", the row verb "Cancel"; result **Cancelled**) | withdraw the queued grant, withdraw the queued change, withdraw (of a queued change) (A-21 §3.2, 8 Nov) |
+| **cancel** — undo a change still waiting for you to send ("Cancel giving it", "Cancel removing it", the row verb "Cancel"; the dismiss is "Keep it waiting"; result **Cancelled**). A waiting change is named by what it was going to do ("giving Member in Laser Lab to Sam", "removing it from Sam"), never "the waiting give" | withdraw the queued grant, withdraw the queued change, withdraw (of a queued change) (A-21 §3.2, 8 Nov) |
 | **remove** — take a thing out of a set | — |
 | **delete** — an object ceases to exist | purge |
 | **retire** — a bundle closes to new members | delete (of a bundle) |
@@ -508,7 +510,7 @@ thing under two names reads as two things.
 | **send** — dispatch what is waiting | flush |
 | **decline** | deny, reject |
 | **lift** — end a hold | release, unblock |
-| **give** — a role, a bundle (result: **Given**; audit: "Gave a role") | grant direct access, grant access, granted (owner, A-17 Q7, 5 Nov). "Direct access" stays only as the noun for what *revoke* ends; the stored `direct_grant.*` codes and "Grant id" in lineage are technical and unchanged |
+| **give** — a role, a bundle (result: **Given**; audit: "Gave a role"). **A verb only (owner, 8 Nov 2026):** never "the give", "a waiting give", "give-up", "gives of"; where a sentence needs a noun it names what is waiting, the role and the person, or says "stopped sending". Guarded by `plain-language.test.ts`. | grant direct access, grant access, granted (owner, A-17 Q7, 5 Nov). "Direct access" stays only as the noun for what *revoke* ends; the stored `direct_grant.*` codes and "Grant id" in lineage are technical and unchanged |
 
 *Operator* names an audience and a view. It is correct on staff screens and
 wrong in anything a member reads.
@@ -650,3 +652,14 @@ events" was permitted vocabulary; the claim was false. A title that names part
 of its page, a timing that does not match the scheduler, a sentence true in
 one branch and false in another — those are found by reading the copy against
 the code that produces it, and nothing here substitutes for that.
+
+## 11. Messages in their place (A-22, owner 8 Nov 2026: yes to Q1 to Q7)
+
+Rules G20 to G31 (`design_handoff_syndra/reconcile-2026-10/RULES.md`, "Messages (A-22)"); the sweep is `from-design/A-22-every-message-in-its-place.md`.
+
+- **Title, dismiss, act.** The title is the act in the button's words, a question mark only when the act takes something away (Q2); the act names its verb and object; the dismiss says what it keeps: **Keep it**, **Keep them**, **Keep them open**, **Keep it waiting** (a cancel of a waiting change), **Keep tracking it**, for acts that take away, retire, cancel or decline; **Cancel** only on forms that create, ask, give or record; **Back** a step behind; **Close** after a result (Q1). Two buttons in a pair never share a verb.
+- **After a result the sheet is its result** (Q3): the lede, the What-happens list, the tick and the before-line leave with the form; the header keeps chip and title; the footer is one outline Close. A failed press keeps the form so it can be pressed again.
+- **One result slot per surface**, cleared by the press before it writes (G23).
+- **Words.** Revoke direct access and Drift: forecast **Will be revoked**, **Revoked**, **Not revoked**; **Removed** stays for a bundle out of a person's set (Q4). Manage bundles: **Will be applied**, **Recorded**, **Not applied**. Every failure is "Not" plus the act's word; "Refused by Zitadel" when Syndra recorded it and Zitadel refused. Retired for good (the guard fails on them): Didn't go through, Couldn't put it on hold, Couldn't lift it, That didn't save., That did not go through., Revocation recorded, Not all sent.
+- **Send** (Pending changes, Home): **Sent 7 of 9** (changes counted, the whole said), **Sent 9**, **Not sent** (none went, or another send was running), **Nothing to send**. When the queue is empty after the send the empty state is the result and no card is drawn (Q6).
+- **Colour follows what happens to the person** (G25): red when a named person loses access that reaches a system, amber when a step is left or a state must be read, quiet for what only records, asks, previews or cancels something unsent.

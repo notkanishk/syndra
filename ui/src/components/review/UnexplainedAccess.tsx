@@ -1157,30 +1157,36 @@ function ResolutionDialog({
   const first = resolver.resolveUser(item.user_id).value?.display_name?.trim().split(/\s+/)[0];
   const waits = roleWaits(item.project_id, role);
 
+  const subjectLine = (
+    <>
+      <UserName id={item.user_id} /> · <ProjectName id={item.project_id} /> / <Mono>{role}</Mono>.
+    </>
+  );
+  const done = succeeded(outcome);
   const copy = {
     attribute: {
-      title: "Adopt this access in Syndra?",
-      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, end or revoke it like any other access.",
+      title: "Adopt this access in Syndra",
+      lede: "Syndra takes ownership of it and explains it like any other access; the access itself stays exactly as it is.",
       confirm: "Adopt in Syndra",
       word: "Adopted",
       variant: "accent" as const,
     },
     external: {
-      title: "Is this owned by another system?",
-      lede: "The access stays and stops being listed here. Use this when a known system legitimately manages it, not to quiet something you have not identified.",
+      title: "Mark as owned elsewhere",
+      lede: "The access stays and stops being listed here, so use this only when a known system manages it.",
       confirm: "Mark as owned elsewhere",
       word: "Marked",
       variant: "accent" as const,
     },
     revoke: {
-      title: "Revoke this access?",
+      title: "Revoke this role?",
       // A role that waits holds the removal for you, as every other removal
       // of it is held (audit C5): the server now delivers it the same way.
       lede: waits
         ? `This removes the access in Zitadel once you send it, because ${role} always waits for you, and records your decision in Syndra, so the next check will not list it again.`
         : "This removes the access in Zitadel and records your decision in Syndra, so the next check will not list it again.",
-      confirm: "Revoke access",
-      word: "Revocation recorded",
+      confirm: "Revoke this role",
+      word: "Revoked",
       variant: "dangerConfirm" as const,
     },
   }[resolution];
@@ -1188,7 +1194,11 @@ function ResolutionDialog({
   return (
     <Modal open onClose={onClose} busy={busy} size="sm" labelledBy="triage-title">
       <PushedStep step={step}>
-      <ModalHeader title={copy.title} titleId="triage-title" lede={copy.lede} />
+      <ModalHeader
+        title={copy.title}
+        titleId="triage-title"
+        lede={done ? undefined : <>{subjectLine} {copy.lede}</>}
+      />
       {stale && !outcome && (
         <Notice
           tone="warn"
@@ -1200,11 +1210,7 @@ function ResolutionDialog({
           {null}
         </Notice>
       )}
-      <div className="flex flex-col gap-3 px-6">
-        <div className="rounded-inner bg-tint-1 px-4 py-3.5 text-[14.5px]">
-          <UserName id={item.user_id} /> · <ProjectName id={item.project_id} /> / <Mono>{role}</Mono>
-        </div>
-
+      {!done && <div className="flex flex-col gap-3 px-6">
         {(planLines.length > 0 || cancelLine) && (
           <ul className="flex flex-col gap-1 text-[13.5px] leading-[1.55] text-muted" data-testid="adopt-plan">
             {planLines.map((line) => (
@@ -1242,7 +1248,7 @@ function ResolutionDialog({
             )}
           </>
         )}
-      </div>
+      </div>}
       {/* The dialog states what it did, and for a revocation that is that
           nothing has reached the target yet — the access is still there until
           the drain runs. */}
@@ -1252,7 +1258,7 @@ function ResolutionDialog({
         <ActionForecast
           className="mx-6 mb-1"
           word={forecastFor(
-            resolution === "revoke" ? "remove" : resolution === "attribute" ? "adopt" : "mark",
+            resolution === "revoke" ? "revoke" : resolution === "attribute" ? "adopt" : "mark",
             roleWaits(item.project_id, role),
           )}
         />
@@ -1269,7 +1275,7 @@ function ResolutionDialog({
                 ? REVOKE_WAITS_WORD
                 : succeeded(outcome)
                   ? copy.word
-                  : "Didn’t go through"
+                  : `Not ${copy.word.toLowerCase()}`
           }
           person={item.user_id}
           className="mx-6 mb-1"
@@ -1278,7 +1284,7 @@ function ResolutionDialog({
 
       {succeeded(outcome) && step.after}
 
-      <ModalFooter cancel={succeeded(outcome) ? undefined : { onClick: onClose }} note={step.note ?? undefined}>
+      <ModalFooter cancel={done ? undefined : { onClick: onClose, label: resolution === "revoke" ? "Keep it" : undefined }} note={step.note ?? undefined}>
         {succeeded(outcome) && (
           <Button variant="outline" onClick={onClose}>
             Close
@@ -1319,7 +1325,7 @@ function ResolutionDialog({
                 setOutcome(
                   resolution === "revoke"
                     ? revokeOutcome(answer?.wait_reason, role, answer, auto)
-                    : resolvedOutcome(answer?.rule_waiting ?? 0),
+                    : resolvedOutcome(answer?.rule_waiting ?? 0, resolution === "external"),
                 );
               } catch (error) {
                 // Their access moved since the plan was read: nothing was
@@ -1343,7 +1349,7 @@ function ResolutionDialog({
 }
 
 /** The result's word for a Drift revoke held by its role. */
-export const REVOKE_WAITS_WORD = "Waits for you";
+export const REVOKE_WAITS_WORD = "Waiting for you to send";
 
 /**
  * A Drift revoke's result, from what the server did with it (audit C5): it is
@@ -1359,17 +1365,17 @@ export function revokeOutcome(
   // Final verification N1: Zitadel refused the revoke outright, so the role
   // is still there and nothing sends it again.
   if (isRefused(waitReason) || answer?.propagation === "failed") {
-    return refusedOutcome("Revocation recorded", waitReason, { revocation: true });
+    return refusedOutcome("Revoked in Syndra", waitReason, { revocation: true });
   }
   if (waitIsChosen(waitReason)) {
-    return { kind: "queued", message: "Waiting for you to send", detail: `${waitReasonLine(waitReason, role)}.` };
+    return { kind: "queued", message: "Revoked in Syndra. It leaves Zitadel when you send it.", detail: `${waitReasonLine(waitReason, role)}.` };
   }
   // Re-audit R5: it went, so it is not "on its way"; Zitadel didn't take it,
   // so it says when Syndra sends it again.
   if (!waitReason && answer?.propagation === "applied") {
-    return { kind: "applied", message: "Removed in Zitadel" };
+    return { kind: "applied", message: "It is gone from Zitadel." };
   }
-  if (waitReason === RETRYING) return retryingOutcome("Revocation recorded", answer?.retry);
+  if (waitReason === RETRYING) return retryingOutcome("Revoked in Syndra", answer?.retry);
   return revokeQueued(auto);
 }
 
@@ -1391,13 +1397,15 @@ interface DriftAnswer {
  * for Send, so the result ends on that step, never on "Nothing for you to do"
  * (re-audit R1).
  */
-export function resolvedOutcome(waiting: number): Outcome {
+export function resolvedOutcome(waiting: number, marked = false): Outcome {
   return {
     kind: waiting > 0 ? "queued" : "applied",
     // Not "will not be listed again": that renders right above this item's
     // own name and role while both are still on screen, which makes it false
     // the instant it appears. It leaves once this dialog closes.
-    message: "Resolved. It drops off this list once you close this.",
+    message: marked
+      ? "Another system manages it. It leaves this list when you close this."
+      : "Syndra owns it now and explains it like any other access. It leaves this list when you close this.",
     // What the rules left waiting on the adoption (audit C1).
     ...(waiting > 0 ? { detail: adoptedRuleRowsLine(waiting), next: SEND_IT } : {}),
   };

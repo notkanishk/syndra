@@ -155,6 +155,31 @@ describe("creating a bundle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByText(/Lab Tech created/)).toBeNull();
   });
+
+  // A-22 §3.17: after Created the sheet is its result; the form and lede unmount with it.
+  it("unmounts the form and lede once created", async () => {
+    openDialog();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lab Tech" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Laser trained/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Create with 1 role$/ }));
+
+    expect(await screen.findByText("Created")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByText(/Name it after who it's for/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
+  it("says Not created and keeps the form when the write fails", async () => {
+    state.create = vi.fn().mockRejectedValue(new Error("Zitadel is unreachable"));
+    openDialog();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lab Tech" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Laser trained/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Create with 1 role$/ }));
+
+    expect(await screen.findByText("Not created")).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Create with 1 role$/ })).toBeInTheDocument();
+  });
 });
 
 describe("starting a new bundle from another", () => {

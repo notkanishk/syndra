@@ -9,6 +9,7 @@ import type { RolesThatWait } from "@/lib/queries/useRolesThatWait";
 const state = vi.hoisted(() => ({
   waits: null as unknown as RolesThatWait,
   marked: [] as { ids: string[]; waits: boolean }[],
+  fail: false,
 }));
 
 function role(project_id: string, role_key: string, display_name: string, people: number, waits = false): CatalogRole {
@@ -44,12 +45,14 @@ vi.mock("@/lib/queries/useRolesThatWait", async (orig) => ({
     isPending: false,
     mutateAsync: async (v: { ids: string[]; waits: boolean }) => {
       state.marked.push(v);
+      if (state.fail) throw new Error("boom");
     },
   }),
 }));
 
 beforeEach(() => {
   state.marked = [];
+  state.fail = false;
 });
 
 describe("Roles that wait for you", () => {
@@ -94,6 +97,29 @@ describe("Roles that wait for you", () => {
       render(<RolesThatWaitPage />);
       fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
       await waitFor(() => expect(state.marked).toEqual([{ ids: ["p1:laser.operator"], waits: false }]));
+    });
+
+    it("stopping says Stopped inline, and a failed stop replaces it with Not stopped in the same slot", async () => {
+      render(<RolesThatWaitPage />);
+      fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+      expect(await screen.findByText("Stopped")).toBeInTheDocument();
+      state.fail = true;
+      fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+      expect(await screen.findByText("Not stopped")).toBeInTheDocument();
+      expect(screen.queryByText("Stopped")).toBeNull();
+      expect(screen.queryByText("That role still waits.")).toBeNull();
+    });
+
+    it("a failed mark is the block Not marked, never a Notice, and the picker stays", async () => {
+      state.fail = true;
+      render(<RolesThatWaitPage />);
+      fireEvent.click(screen.getByRole("button", { name: "Add roles" }));
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.click(within(dialog).getByRole("checkbox", { name: /Laser cutter · Supervisor/ }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Mark 1 role" }));
+      expect(await within(dialog).findByText("Not marked")).toBeInTheDocument();
+      expect(within(dialog).queryByText("Not all of them were marked.")).toBeNull();
+      expect(within(dialog).getByRole("button", { name: "Mark 1 role" })).toBeInTheDocument();
     });
 
     it("says what marking means before it marks", async () => {

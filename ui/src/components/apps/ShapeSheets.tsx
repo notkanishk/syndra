@@ -230,24 +230,7 @@ export function SaveSummary({
     <Modal open onClose={() => onClose(Boolean(saved))} busy={busy} size="md">
       <ModalHeader title={`Save what ${app} is told`} lede={saved ? undefined : `${app}'s claims, kept in History as version ${next}.`} />
       {saved ? (
-        <div role="status" className="lift-in flex flex-col gap-2 px-6 pb-2">
-          <span className="flex items-center gap-2.5">
-            <StatusDot tone="healthy" bloom />
-            <span className="font-display text-[22px] font-semibold">Saved</span>
-          </span>
-          <p className="text-[15px] leading-[1.55]">
-            {app}&rsquo;s claims are now version {saved.version.version}.
-          </p>
-          <p className="text-[13px] leading-[1.5] text-faint">
-            <Ticks
-              text={
-                saved.breaking.length && ctx.templateId === "netbird" && !ctx.heldBack
-                  ? `${moved ? `${moved} people` : "People"} move as they sign in. Point NetBird's policies at the new group once it appears there; a group made by hand isn't joined.`
-                  : (ctx.heldBack ?? `It reaches ${app} at each person's next sign-in.`)
-              }
-            />
-          </p>
-        </div>
+        <ActionOutcome word="Saved" outcome={savedOutcome(saved, app, ctx, moved)} className="mx-6 mb-2" />
       ) : (
         <div className="flex flex-col gap-[18px] px-6 pb-2">
           <Section title="What changes">
@@ -292,7 +275,9 @@ export function SaveSummary({
         }
       >
         {saved ? (
-          <Button onClick={() => onClose(true)}>Close</Button>
+          <Button variant="outline" onClick={() => onClose(true)}>
+            Close
+          </Button>
         ) : (
           <Button variant="accent" isPending={busy} disabled={breaking.length > 0 && !understood} onClick={submit}>
             Save
@@ -301,4 +286,18 @@ export function SaveSummary({
       </ModalFooter>
     </Modal>
   );
+}
+
+/** What a save says: the new version, then when it reaches people and any step left (A-22 §3.27). */
+function savedOutcome(saved: SaveResult, app: string, ctx: SayContext, moved: number): Outcome {
+  const message = `${app}\u2019s claims are now version ${saved.version.version}.`;
+  if (saved.breaking.length && ctx.templateId === "netbird" && !ctx.heldBack) {
+    return {
+      kind: "applied",
+      message,
+      detail: `${moved ? `${moved} people` : "People"} move as they sign in.`,
+      next: "Point NetBird's policies at the new group once it appears there; a group made by hand isn't joined.",
+    };
+  }
+  return { kind: "applied", message, detail: (ctx.heldBack ?? `It reaches ${app} at each person's next sign-in.`).replaceAll("`", "") };
 }
