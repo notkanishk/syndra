@@ -215,6 +215,16 @@ describe("Expiring access — acknowledgement (C4)", () => {
     state.waits = false;
   });
 
+  it("a failed acknowledgement says Not recorded and the dialog keeps its button", async () => {
+    state.acknowledge.mockRejectedValue(new ApiError(500, { error: "BOOM", message: "boom" }));
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Let it lapse" }));
+    expect(await screen.findByText("Not recorded")).toBeTruthy();
+    expect(screen.queryByText("Recorded")).toBeNull();
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Let it lapse" })).toBeTruthy();
+  });
+
   it("does not require a note", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
