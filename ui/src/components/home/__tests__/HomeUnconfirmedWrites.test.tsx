@@ -138,6 +138,7 @@ describe("Home shows a write Zitadel accepted and has not confirmed", () => {
     expect(await screen.findByText("Sent, and not seen back yet")).toBeTruthy();
     // What happened, in one sentence.
     expect(screen.getByText(/Zitadel accepted this change and hasn.t shown it back yet/)).toBeTruthy();
+    expect(screen.getByText(/If one stays, open the person to see what they hold\./)).toBeTruthy();
     // The age — the reason it is on screen at all.
     expect(screen.getByText(/45 min ago/)).toBeTruthy();
     // The name is the one link to their page; no second button to the same place.
@@ -172,7 +173,9 @@ describe("Home shows a write Zitadel accepted and has not confirmed", () => {
     await screen.findByText("Sent, and not seen back yet");
     expect(screen.getByRole("link", { name: "u-a" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "u-b" })).toBeTruthy();
-    expect(screen.getByText(/A revocation, accepted/)).toBeTruthy();
+    expect(screen.getByText(/to revoke it$/)).toBeTruthy();
+    // "grant" stays out of UI text, and the write is said as a verb.
+    expect(screen.queryByText(/A grant|A revocation/)).toBeNull();
   });
 
   it("draws no roles seat for a row with no roles, and caps the rows at five", async () => {
@@ -229,7 +232,7 @@ describe("Home shows a write Zitadel accepted and has not confirmed", () => {
     renderHome();
 
     await screen.findByText("Sent, and not seen back yet");
-    const reason = screen.getByText(/A grant, accepted/);
+    const reason = screen.getByText(/to give it$/);
     expect(reason.className).not.toContain("truncate");
     expect(reason.className).toContain("[text-wrap:pretty]");
   });
