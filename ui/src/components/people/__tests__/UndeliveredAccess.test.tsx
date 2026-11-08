@@ -112,7 +112,7 @@ describe("revoking a direct grant that was never sent", () => {
     show(directSource(true), true);
 
     expect(await screen.findByRole("button", { name: "Cancel giving it" })).toBeInTheDocument();
-    expect(screen.getByText(/still waiting for you to send, so .+ never had it/)).toBeInTheDocument();
+    expect(screen.getByText(/never had it, so nothing is sent to Zitadel/)).toBeInTheDocument();
     expect(screen.queryByText(/will lose this role/i)).toBeNull();
   });
 
