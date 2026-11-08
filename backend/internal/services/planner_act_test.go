@@ -227,7 +227,7 @@ func TestPlanAct_RemoveGrantThatOnlyCancelsTheWaitingGive(t *testing.T) {
 		t.Fatalf("writes = %+v", got)
 	}
 	if ch.Delivery() != DeliveryNone || !slices.Equal(ch.Row.CancelIDs, []string{"q2"}) ||
-		ch.Row.Detail != "The give of Member in Laser Lab that was waiting is cancelled, so nothing is sent to Zitadel." {
+		ch.Row.Detail != "Member in Laser Lab was waiting for you to send. It is cancelled, so nothing is sent to Zitadel." {
 		t.Fatalf("delivery = %q, cancels = %v, detail = %q", ch.Delivery(), ch.Row.CancelIDs, ch.Row.Detail)
 	}
 }

@@ -68,9 +68,14 @@ export function describeDrain(result: DrainResult | undefined, auto: AutoRetry =
     const left = halted.every((pass) => typeof pass.waiting === "number")
       ? halted.reduce((n, pass) => n + (pass.waiting ?? 0), 0)
       : undefined;
+    // One clause per system, in the fold's order (A-22 §3.5): who got theirs, then who didn't answer.
+    const wentTo = (result.passes ?? []).filter((pass) => !pass.halted && pass.applied > 0).map((pass) => targetLabel(pass.target));
+    const went = applied ? (wentTo.length ? `${applied} reached ${wentTo.join(" and ")}` : `${applied} sent`) : "";
+    const rest = parts.filter((part) => !part.endsWith(" sent"));
+    const still = left ? `its ${left}` : "its changes";
     return {
       tone: "warning",
-      message: `${counts}. ${stalled} was skipped.`,
+      message: `${[went, ...rest].filter(Boolean).join(". ")}. ${stalled} didn't answer, so ${still} ${left === 1 ? "is" : "are"} still here.`,
       detail: haltDetail(result.reason, stalled, left || undefined),
     };
   }
@@ -81,7 +86,7 @@ export function describeDrain(result: DrainResult | undefined, auto: AutoRetry =
         return {
           tone: "info",
           message: "Another send is already running.",
-          detail: "This one did nothing. No change was sent twice.",
+          detail: "This one did nothing, so no change was sent twice.",
         };
       case "zitadel_offline":
         return {
@@ -196,11 +201,28 @@ export const STOPPED_NEXT =
  * not a failure, and an operator who reads it as one goes looking for a broken
  * machine instead of pressing the button again.
  */
-export function outcomeFromDrain(result: DrainResult | undefined, auto: AutoRetry = true): ActionOutcome {
+export function outcomeFromDrain(result: DrainResult | undefined, auto: AutoRetry = true, total?: number): ActionOutcome & { word: string } {
   const { tone, message, detail, sendsItself, next } = describeDrain(result, auto);
   const kind: OutcomeKind =
     tone === "success" ? "applied" : tone === "warning" ? "queued" : tone === "error" ? "failed" : "no_change";
-  return { kind, message, detail, ...(sendsItself ? { sendsItself } : {}), ...(next ? { next } : {}) };
+  return { kind, message, detail, ...(sendsItself ? { sendsItself } : {}), ...(next ? { next } : {}), word: drainWord(result, total) };
+}
+
+/**
+ * The result word of a send, one table for Pending changes and Home (A-22
+ * §3.5, G29): it counts changes and says the whole when some did not go.
+ * "Sent 7 of 9" when some are still here, "Sent 9" when all went, "Not sent"
+ * when none did (a halted pass, or another send already running), "Nothing to
+ * send" when nothing was waiting. `total` is the queue as it stood at the press.
+ */
+export function drainWord(result: DrainResult | undefined, total?: number): string {
+  const applied = result?.applied ?? 0;
+  const seen = applied + (result?.failed ?? 0) + (result?.requeued ?? 0) + (result?.errored ?? 0);
+  if (result?.halted && result.reason === "drain_in_progress") return "Not sent";
+  if (!result?.halted && seen === 0) return "Nothing to send";
+  if (applied === 0) return "Not sent";
+  const whole = Math.max(total ?? 0, seen);
+  return applied < whole ? `Sent ${applied} of ${whole}` : `Sent ${applied}`;
 }
 
 /**

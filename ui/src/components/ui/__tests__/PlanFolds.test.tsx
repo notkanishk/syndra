@@ -13,7 +13,7 @@ import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 // button's words, and after Apply the same rows re-grouped in the true tense
 // with one outcome that ends on one step.
 
-const CANCEL = "Cancels a change waiting for you to send: the give of Member in Laser Lab queued 2 Nov 2026 (wrong person).";
+const CANCEL = "Cancels a change waiting for you to send: the grant of Member in Laser Lab queued 2 Nov 2026 (wrong person).";
 
 const row = (name: string, over: Partial<BulkOutcome> = {}): BulkOutcome => ({
   user_id: `id-${name}`,
@@ -38,7 +38,7 @@ const rehearsed: BulkPlan = {
     row("Kabir", {
       delivery: "none",
       detail: "Leaves Safety.",
-      consequence: `The give of Member in Laser Lab that was waiting is cancelled, so nothing is sent to Zitadel. ${CANCEL}`,
+      consequence: `Member in Laser Lab was waiting for you to send. It is cancelled, so nothing is sent to Zitadel. ${CANCEL}`,
     }),
     row("Dev", { effect: "no_change", delivery: undefined, detail: "Already in Safety.", consequence: undefined }),
     row("Sam", { effect: "blocked", delivery: undefined, detail: "Account is departed.", consequence: undefined }),
@@ -87,7 +87,7 @@ describe("a grouped plan, before Apply", () => {
     expect(within(go).queryByText(/Will change|No change|Refused/)).toBeNull();
     expect(screen.queryByText("Will change")).toBeNull();
     // Kabir only cancels: his one sentence is the whole row; the note below names the cancel.
-    expect(within(go).getByText(/The give of Member in Laser Lab that was waiting is cancelled/).textContent).not.toMatch(/Cancels a change/);
+    expect(within(go).getByText(/Member in Laser Lab was waiting for you to send. It is cancelled/).textContent).not.toMatch(/Cancels a change/);
     expect(screen.getByRole("note").textContent).toContain("Cancels 2 changes that are waiting for you to send:");
   });
 
