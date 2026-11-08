@@ -251,6 +251,9 @@ func TestConfirmFromObservationSettlesAnAddALaterRevokeTookBack(t *testing.T) {
 // under words that say Zitadel accepted it.
 func TestAnAddOnWriteIsNotListedAsUnseenInZitadel(t *testing.T) {
 	ctx := liveDB(t)
+	if _, err := PG.Exec(ctx, `INSERT INTO targets (target) VALUES ('truenas') ON CONFLICT DO NOTHING`); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
 	key, _ := newOutboxIdempotencyKey()
 	if _, err := PG.Exec(ctx, `
 		INSERT INTO propagation_outbox
