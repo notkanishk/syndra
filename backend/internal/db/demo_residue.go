@@ -19,7 +19,12 @@ import "context"
 // the caller can render one honest sentence. Operators who want the breakdown
 // run scripts/reset-data.sh, which prints per-table counts before deleting
 // anything.
-func CountDemoResidue(ctx context.Context, projectIDs, userIDs []string) (int, error) {
+//
+// countActors false leaves out audit rows whose only demo reference is their
+// actor: on staging's stand-in, operators sign in as the development
+// identities, so every action they take names one as actor, and that is who
+// signed in, not sample data. A demo project or user as a target still counts.
+func CountDemoResidue(ctx context.Context, projectIDs, userIDs []string, countActors bool) (int, error) {
 	// One round trip. Every branch is an index-free scan of a table that holds
 	// hundreds of rows at most, and this runs on a 60s UI poll.
 	const q = `
@@ -35,11 +40,11 @@ func CountDemoResidue(ctx context.Context, projectIDs, userIDs []string) (int, e
 		  + (SELECT count(*) FROM access_requests
 		       WHERE requester_user_id = ANY($2) OR zitadel_project_id = ANY($1))
 		  + (SELECT count(*) FROM audit_logs
-		       WHERE target_zitadel_user_id = ANY($2) OR actor_zitadel_user_id = ANY($2))
+		       WHERE target_zitadel_user_id = ANY($2) OR ($3 AND actor_zitadel_user_id = ANY($2)))
 	`
 
 	var total int
-	if err := querier(ctx).QueryRow(ctx, q, projectIDs, userIDs).Scan(&total); err != nil {
+	if err := querier(ctx).QueryRow(ctx, q, projectIDs, userIDs, countActors).Scan(&total); err != nil {
 		return 0, err
 	}
 	return total, nil
