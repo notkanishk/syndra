@@ -181,7 +181,7 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
       ) : (
         <span className="flex flex-col items-start gap-2">
           {outcome && (
-            <ActionOutcome placement="seat" className="tint-in" word="Couldn't lift it" outcome={outcome} />
+            <ActionOutcome placement="seat" className="tint-in" word="Not lifted" outcome={outcome} />
           )}
           <Button
             variant="outline"
@@ -201,12 +201,9 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
                 const failed = outcomeFromError(error);
                 setOutcome({
                   ...failed,
-                  message:
-                    failed.kind === "failed"
-                      ? failed.partial
-                        ? partialSentence(failed.partial)
-                        : NOTHING_CHANGED
-                      : `${sentence(failed.message)} ${NOTHING_CHANGED}`,
+                  message: failed.partial
+                    ? partialSentence(failed.partial)
+                    : `${sentence(failed.message)} ${NOTHING_CHANGED}`,
                 });
               }
             }}

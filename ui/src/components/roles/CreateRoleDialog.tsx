@@ -64,9 +64,18 @@ export function CreateRoleDialog({
       <ModalHeader
         title="New role"
         titleId="new-role-title"
-        lede="Created in Syndra and in Zitadel at the same time. If Zitadel refuses it, nothing is created in either place."
+        lede={
+          outcome?.kind === "applied"
+            ? undefined
+            : "Created in Syndra and in Zitadel at the same time. If Zitadel refuses it, nothing is created in either place."
+        }
       />
 
+      {outcome?.kind === "applied" ? (
+        <div className="px-6">
+          <ActionOutcome outcome={outcome} word="Created" />
+        </div>
+      ) : (
       <div className="flex flex-col gap-3.5 px-6">
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -161,11 +170,12 @@ export function CreateRoleDialog({
           </div>
         </div>
       </div>
+      )}
 
-      {/* The sheet reports its own result and stays open to do it: a role that
-          nobody holds yet is a fact the operator has to act on next, and a
-          dialog that closes itself takes that sentence with it. */}
-      {outcome && <ActionOutcome outcome={outcome} word="Created" className="mx-6 mb-1" />}
+      {/* The sheet is its own result and stays open to say it: a role that nobody holds yet is a
+          fact the operator has to act on next, and a dialog that closes itself takes that
+          sentence with it. A failed press keeps the form so it can be pressed again. */}
+      {outcome && outcome.kind !== "applied" && <ActionOutcome outcome={outcome} word="Not created" className="mx-6 mb-1" />}
       {created && outcome?.kind === "applied" && (
         <div className="mx-6 mb-1">
           <ArrowLink href={`/changes/roles-that-wait?add=${encodeURIComponent(created)}`}>
@@ -206,6 +216,7 @@ export function CreateRoleDialog({
               // fall through to the raw id, which is exactly the leak this
               // resolves for every other name on screen.
               const project = resolver.resolveProject(projectId).value?.name ?? projectId;
+              setOutcome(null);
               try {
                 await create.mutateAsync({
                   project_id: projectId,

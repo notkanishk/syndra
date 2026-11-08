@@ -72,10 +72,10 @@ describe("removing direct access (W7)", () => {
       detail: "Nothing else was supplying it, so the access is gone.",
     });
   });
-  it("a role that waits: removed in Syndra, leaves Zitadel when you send it", () => {
+  it("a role that waits: revoked in Syndra, leaves Zitadel when you send it", () => {
     const out = removalOutcome({ wait_reason: "role_waits", status: "pending" }, "Laser");
     expect(out.kind).toBe("queued");
-    expect(out.message).toBe("Removed in Syndra. Laser always waits for you, so it leaves Zitadel when you send it.");
+    expect(out.message).toBe("Revoked in Syndra. Laser always waits for you, so it leaves Zitadel when you send it.");
   });
   it("Zitadel didn't take it: says when it is sent again, never that access is gone", () => {
     const out = removalOutcome(
@@ -83,7 +83,7 @@ describe("removing direct access (W7)", () => {
       "Laser",
     );
     expect(out).toMatchObject({ kind: "queued", sendsItself: true });
-    expect(out.message).toBe("Removed in Syndra. Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6).");
+    expect(out.message).toBe("Revoked in Syndra. Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6).");
     expect(`${out.message} ${out.detail}`).not.toMatch(/access is gone/);
   });
 });

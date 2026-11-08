@@ -733,7 +733,7 @@ describe("the revoke confirm, once it has run", () => {
     expect(adoptCtl.asked).toContainEqual({ op: "revoke", userId: "u1", driftId: "d1" });
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke this role" }));
     await waitFor(() => expect(revokeCtl.calls).toBe(1));
     expect(revokeCtl.sent).toEqual({ id: "d1", body: { fingerprint: "fp-1", cancel_ids: [] } });
   });
@@ -744,13 +744,13 @@ describe("the revoke confirm, once it has run", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke this role" }));
 
     await waitFor(() =>
       expect(within(dialog).getByRole("button", { name: "Close" })).toBeInTheDocument(),
     );
     // Gone, not just relabelled — a second click must have nothing left to hit.
-    expect(within(dialog).queryByRole("button", { name: "Revoke access" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Revoke this role" })).toBeNull();
     expect(revokeCtl.calls).toBe(1);
   });
 
@@ -763,7 +763,7 @@ describe("the revoke confirm, once it has run", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke this role" }));
 
     const result = await within(dialog).findByRole("status");
     expect(result.textContent).toContain("On its way");
@@ -787,10 +787,10 @@ describe("the revoke confirm, once it has run", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/once you send it, because operator always waits for you/)).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke this role" }));
 
     const result = await within(dialog).findByRole("status");
-    expect(result.textContent).toContain("Waits for you");
+    expect(result.textContent).toContain("Waiting for you to send");
     expect(result.textContent).toContain("operator always waits for you.");
     expect(result.textContent).not.toContain("On its way");
   });
@@ -804,36 +804,64 @@ describe("the revoke confirm, once it has run", () => {
       renderTriage();
       fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
       const dialog = screen.getByRole("dialog");
-      fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Revoke this role" }));
       return { dialog, release };
     }
 
-    it("says 'Will be removed' while it is out, then crosses to the true word and drops the forecast", async () => {
+    it("says 'Will be revoked' while it is out, then crosses to the true word and drops the forecast", async () => {
       const { dialog, release } = await pressRevoke();
-      expect(await within(dialog).findByText("Will be removed")).toBeInTheDocument();
+      expect(await within(dialog).findByText("Will be revoked")).toBeInTheDocument();
       // No outcome has been claimed ahead of the server.
       expect(within(dialog).queryByText("On its way")).toBeNull();
       release();
       await within(dialog).findByText("On its way");
-      expect(within(dialog).queryByText("Will be removed")).toBeNull();
+      expect(within(dialog).queryByText("Will be revoked")).toBeNull();
     });
 
-    it("says 'Will wait for you to send' for a role that waits, never 'Will be removed'", async () => {
+    it("says 'Will wait for you to send' for a role that waits, never 'Will be revoked'", async () => {
       revokeCtl.waits = true;
       const { dialog, release } = await pressRevoke();
       expect(await within(dialog).findByText("Will wait for you to send")).toBeInTheDocument();
-      expect(within(dialog).queryByText("Will be removed")).toBeNull();
+      expect(within(dialog).queryByText("Will be revoked")).toBeNull();
       release();
     });
 
     it("shows the honest error, with no forecast left behind, when it fails", async () => {
       revokeCtl.fails = true;
       const { dialog, release } = await pressRevoke();
-      expect(await within(dialog).findByText("Will be removed")).toBeInTheDocument();
+      expect(await within(dialog).findByText("Will be revoked")).toBeInTheDocument();
       release();
       await waitFor(() => expect(within(dialog).getByText(/Nothing was changed/i)).toBeInTheDocument());
-      expect(within(dialog).queryByText("Will be removed")).toBeNull();
+      expect(within(dialog).queryByText("Will be revoked")).toBeNull();
     });
+  });
+
+  // A-22 §3.6: the sheet is its result once it has run.
+  it("titles the act, then unmounts lede and What-happens list with the result", async () => {
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Revoke this role?" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Keep it" })).toBeInTheDocument();
+    expect(dialog.querySelector(".bg-tint-1")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke this role" }));
+    await within(dialog).findByRole("status");
+    expect(within(dialog).queryByText(/They will lose this role/)).toBeNull();
+    expect(within(dialog).queryByText(/records your decision in Syndra/)).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Keep it" })).toBeNull();
+    expect(within(dialog).getByRole("heading", { name: "Revoke this role?" })).toBeInTheDocument();
+  });
+
+  it("a failed revoke says Not revoked and keeps the form", async () => {
+    revokeCtl.fails = true;
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke this role" }));
+    await waitFor(() => expect(within(dialog).getByText("Not revoked")).toBeInTheDocument());
+    expect(within(dialog).getByText(/They will lose this role/)).toBeInTheDocument();
   });
 
   it("keeps the confirm button when the revoke fails, so there is a retry", async () => {
@@ -843,20 +871,20 @@ describe("the revoke confirm, once it has run", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
 
     const dialog = screen.getByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke this role" }));
 
     await waitFor(() => expect(within(dialog).getByText(/Nothing was changed/i)).toBeInTheDocument());
-    expect(within(dialog).getByRole("button", { name: "Revoke access" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Revoke this role" })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull();
   });
 
-  it("opens with Cancel focused, not the destructive Revoke access button", () => {
+  it("opens with Keep it focused, not the destructive Revoke this role button", () => {
     drift.data = [item({ id: "d1" })];
     renderTriage();
     fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
 
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    expect(within(dialog).getByRole("button", { name: "Keep it" })).toHaveFocus();
   });
 
   it("doesn't claim the grant leaves Zitadel on confirm when the result says it only queues", () => {

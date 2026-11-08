@@ -73,7 +73,7 @@ describe("removing a bundle whose grants were never sent", () => {
   it("does not claim they lose access they never received", async () => {
     show(bundleSource(true), true);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel the waiting change" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel giving it" })).toBeEnabled());
     expect(screen.getByText(/Nothing to take back/i)).toBeInTheDocument();
     expect(screen.getByText(/recorded, never sent/i)).toBeInTheDocument();
     // The two sentences that were false, verbatim.
@@ -91,7 +91,7 @@ describe("removing a bundle whose grants were never sent", () => {
   it("still says what a delivered bundle takes away", async () => {
     show(bundleSource(false), false);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Remove bundle" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove the bundle" })).toBeEnabled());
     expect(screen.getByText(/They will lose/i)).toBeInTheDocument();
     expect(screen.getByText(/no other source gives it/i)).toBeInTheDocument();
     expect(screen.queryByText(/Nothing to take back/i)).toBeNull();
@@ -111,8 +111,8 @@ describe("revoking a direct grant that was never sent", () => {
   it("says there is nothing at the door to close, and the button is the cancel", async () => {
     show(directSource(true), true);
 
-    expect(await screen.findByRole("button", { name: "Cancel the waiting give" })).toBeInTheDocument();
-    expect(screen.getByText(/Nothing to take back/i)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Cancel giving it" })).toBeInTheDocument();
+    expect(screen.getByText(/never had it, so nothing is sent to Zitadel/)).toBeInTheDocument();
     expect(screen.queryByText(/will lose this role/i)).toBeNull();
   });
 
@@ -120,7 +120,7 @@ describe("revoking a direct grant that was never sent", () => {
     show(directSource(false), false);
 
     expect(screen.getByText(/will lose this role/i)).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Revoke access" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Revoke this role" })).toBeInTheDocument();
   });
 });
 
@@ -128,10 +128,10 @@ describe("the action, once it has run", () => {
   it("names the cancel rather than a removal while nothing has been sent", async () => {
     show(bundleSource(true), true);
 
-    const act = await screen.findByRole("button", { name: /Cancel the waiting change/ });
+    const act = await screen.findByRole("button", { name: /Cancel giving it/ });
     // Red is a promise about consequence, and this one takes nothing away.
     expect(act.className).not.toMatch(/danger/);
-    expect(screen.queryByRole("button", { name: "Remove bundle" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove the bundle" })).toBeNull();
   });
 
   it("cannot be pressed a second time", async () => {
@@ -139,14 +139,14 @@ describe("the action, once it has run", () => {
     removed.enqueued = 0;
     show(bundleSource(true), true);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /Cancel the waiting change/ })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: /Cancel the waiting change/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Cancel giving it/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Cancel giving it/ }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
 
     // The dialog stays open to report what happened, and a destructive
     // confirm left armed inside it queues another cascade on the next click —
     // which is what a person does when the dialog does not close.
-    expect(screen.queryByRole("button", { name: /Cancel the waiting change/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Cancel giving it/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(removed.calls).toBe(1);
   });
@@ -156,11 +156,11 @@ describe("the action, once it has run", () => {
     removed.enqueued = 0;
     show(bundleSource(true), true);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /Cancel the waiting change/ })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: /Cancel the waiting change/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Cancel giving it/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Cancel giving it/ }));
     await waitFor(() => expect(screen.getByText("Cancelled")).toBeInTheDocument());
     expect(
-      screen.getByText("The Ops Admin bundle that was waiting is cancelled. Nothing it carried had reached Sneha, so nothing goes to Zitadel."),
+      screen.getByText("The Ops Admin bundle won't be given to Sneha. It never reached Zitadel."),
     ).toBeInTheDocument();
     // The sentence that contradicted the dialog one centimetre above it.
     expect(screen.queryByText(/are revoked once you send/i)).toBeNull();
@@ -171,8 +171,8 @@ describe("the action, once it has run", () => {
     removed.enqueued = 3;
     show(bundleSource(false), false);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Remove bundle" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove the bundle" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Remove the bundle" }));
     // No wait reason: the server delivered all three (services.Deliver), so it
     // says they went, never "once you send" (final verification N1).
     await waitFor(() => expect(screen.getByText(/3 changes went to Zitadel/)).toBeInTheDocument());

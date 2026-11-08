@@ -104,6 +104,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
         state.adopted.push(input);
         opts?.onSuccess?.(state.adoptResult);
       },
+      reset: vi.fn(),
       isPending: false,
       error: null,
     }),
@@ -115,7 +116,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
       isPending: false,
       error: null,
     }),
-    useSetLifecycle: () => ({ mutate: vi.fn(), isPending: false }),
+    useSetLifecycle: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false }),
     useTargetSettings: () => ({ data: state.settings, isLoading: false, error: null, refetch: vi.fn() }),
     useTargetHomes: () => ({ data: state.homes, isLoading: false, error: null }),
     useSetTargetSetting: () => ({
@@ -141,12 +142,20 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useResolveBindingConflict: () => ({
-      mutate: (input: { id: string; owner: string; note: string }) => state.ownerDecided.push(input),
+      mutate: (input: { id: string; owner: string; note: string }, opts?: { onSuccess?: () => void }) => {
+        state.ownerDecided.push(input);
+        opts?.onSuccess?.();
+      },
+      reset: vi.fn(),
       isPending: false,
       error: null,
     }),
     useResolveLogFinding: () => ({
-      mutate: (input: { head: string; note: string }) => state.resolved.push(input),
+      mutate: (input: { head: string; note: string }, opts?: { onSuccess?: () => void }) => {
+        state.resolved.push(input);
+        opts?.onSuccess?.();
+      },
+      reset: vi.fn(),
       isPending: false,
       error: null,
     }),
@@ -747,6 +756,11 @@ describe("resolving a log finding", () => {
     expect(state.resolved).toEqual([
       { head: "bbbbbbbbbbbbbbbb", note: "we replaced the volume" },
     ]);
+    // The sheet is its result: Resolved and one Close, the form and its act are gone.
+    expect(screen.getByText("Resolved")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /type the system name/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /accept this log and start over/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });
 
@@ -818,6 +832,9 @@ describe("a disputed account", () => {
     expect(state.ownerDecided).toEqual([
       { id: "c1", owner: "u-bound", note: "checked the home directory with her" },
     ]);
+    expect(screen.getByText("Recorded")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /record the owner/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
   it("says the other person loses it without being told", () => {
@@ -1004,6 +1021,10 @@ describe("adopting an account", () => {
     fireEvent.click(screen.getByRole("button", { name: "Assign sana to Sana Kohli" }));
 
     expect(state.adopted).toEqual([{ username: "sana", subjectId: "s-99" }]);
+    // The sheet is its result (Assigned, Close); no Dismiss button anywhere.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /dismiss this result/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     const outcome = screen.getByText(/bound to that person/).closest("[role=status]")!;
     expect(outcome.closest(".unfold")!.parentElement!.textContent).toContain("sana");

@@ -30,7 +30,7 @@ describe("the line itself", () => {
       expect(line).toMatch(/nothing for you to send/);
       expect(line).not.toMatch(/will wait for you to send it once/);
     }
-    expect(waitsBeforeLine("give")).toMatch(/records the give/);
+    expect(waitsBeforeLine("give")).toMatch(/records the access/);
     expect(waitsBeforeLine("remove")).toMatch(/records the removal/);
   });
 });

@@ -699,7 +699,7 @@ function ExpiringRow({
         </Crossfade>
         {step.element}
         {outcome && !reported && (
-          <ActionOutcome placement="seat" className="tint-in" word="Didn’t go through" outcome={outcome} />
+          <ActionOutcome placement="seat" className="tint-in" word="Not extended" outcome={outcome} />
         )}
       </div>
     </div>
@@ -722,15 +722,17 @@ function LetItLapseDialog({
   const waits = useRoleWaits()(grant.project_id, grant.role_key);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [note, setNote] = useState("");
+  const done = succeeded(outcome);
 
   const expiresAt = grant.expires_at;
 
   return (
     <Modal open onClose={onClose} busy={acknowledge.isPending} size="md" labelledBy="lapse-title">
       <ModalHeader
-        title="Let it lapse?"
+        title="Let it lapse"
         titleId="lapse-title"
         lede={
+          done ? undefined : (
           <>
             <RoleRef projectId={grant.project_id} roleKey={grant.role_key} /> for{" "}
             <UserName id={grant.user_id} />, ending {formatShortDate(expiresAt)}.{" "}
@@ -739,9 +741,11 @@ function LetItLapseDialog({
               : "The access ends on that date as it would have; "}
             this records that you looked, and the row asks again if somebody changes the date.
           </>
+          )
         }
       />
 
+      {!done && (
       <div className="px-6">
         <div>
           <FieldLabel htmlFor="lapse-note">Why (optional)</FieldLabel>
@@ -757,6 +761,7 @@ function LetItLapseDialog({
           </FieldHint>
         </div>
       </div>
+      )}
 
       {/* The dialog states what it did, and this is the one screen where that
           sentence matters most: recording a decision changes nothing about the
@@ -764,23 +769,23 @@ function LetItLapseDialog({
       {outcome && (
         <ActionOutcome
           outcome={outcome}
-          word={succeeded(outcome) ? "Recorded" : "Didn’t go through"}
+          word={done ? "Recorded" : "Not recorded"}
           className="mx-6 mb-1"
         />
       )}
 
       <ModalFooter
-        note={succeeded(outcome) ? undefined : "Extend instead if the access should continue."}
-        cancel={succeeded(outcome) ? undefined : { onClick: onClose, disabled: acknowledge.isPending }}
+        note={done ? undefined : "Extend instead if the access should continue."}
+        cancel={done ? undefined : { onClick: onClose, disabled: acknowledge.isPending }}
       >
         {/* The act goes once it has run: nothing closed this on success, so a second click
             recorded the same acknowledgment again, against a grant that had not moved. */}
-        {succeeded(outcome) && (
+        {done && (
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
         )}
-        {!succeeded(outcome) && (
+        {!done && (
           <Button
             variant="accent"
             isPending={acknowledge.isPending}

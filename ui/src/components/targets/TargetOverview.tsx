@@ -1,6 +1,6 @@
 "use client";
 
-import { describeFailure, sentence } from "@/lib/outcome";
+import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
 import { Fragment, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -32,6 +32,7 @@ import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
   useAdoptAccount,
@@ -591,8 +592,11 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
                     it can be tracked again by assigning the account to a person if it comes
                     back.
                   </span>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+                    Keep tracking it
+                  </Button>
                   <Button
-                    variant="outline"
+                    variant="accent"
                     size="sm"
                     isPending={release.isPending}
                     onClick={() =>
@@ -618,9 +622,6 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
                     }
                   >
                     Stop tracking {b.username}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setConfirming(null)}>
-                    Cancel
                   </Button>
                   {unfinished[b.subject_id] && (
                     <span className="w-full text-[13px] text-warn-text">
@@ -1113,6 +1114,8 @@ function ResolveConflictDialog({
   const confirmation = useTypedConfirmation(conflict.username);
   const ready = owner !== "" && note.trim() !== "" && confirmation.armed && !resolve.isPending;
   const name = targetLabel(target);
+  const [done, setDone] = useState<string | null>(null);
+  const owners = useNameResolver();
 
   return (
     <Modal
@@ -1125,8 +1128,19 @@ function ResolveConflictDialog({
       <ModalHeader
         titleId="resolve-conflict-title"
         title={`Who owns ${conflict.username}?`}
-        lede="Syndra cannot tell. Both of these people are recorded as holding this account, in different places."
+        lede={done ? undefined : "Syndra cannot tell. Both of these people are recorded as holding this account, in different places."}
       />
+      {done ? (
+        <div className="grid gap-3 px-6">
+          <ActionOutcome
+            word="Recorded"
+            outcome={{
+              kind: "applied",
+              message: `${conflict.username} is ${owners.resolveUser(done).value ?? "that person"}'s account. Fixes for both people wait in Pending changes.`,
+            }}
+          />
+        </div>
+      ) : (
       <div className="grid gap-4 px-6">
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-[14px]">The account belongs to</legend>
@@ -1176,12 +1190,16 @@ function ResolveConflictDialog({
           noun="account"
           disabled={resolve.isPending}
         />
-        {resolve.error && (
-          <p className="text-[13.5px] text-danger-text">
-            {sentence(describeFailure(resolve.error))}
-          </p>
-        )}
+        {resolve.error && <ActionOutcome word="Not recorded" outcome={outcomeFromError(resolve.error)} />}
       </div>
+      )}
+      {done ? (
+        <ModalFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </ModalFooter>
+      ) : (
       <ModalFooter
         cancel={{ onClick: onClose, disabled: resolve.isPending }}
         note="Fixes for both people wait in Pending changes. Until they are sent, the account keeps the settings the wrong change gave it."
@@ -1201,11 +1219,15 @@ function ResolveConflictDialog({
                     : undefined
               : undefined
           }
-          onClick={() => resolve.mutate({ id: conflict.id, owner, note }, { onSuccess: onClose })}
+          onClick={() => {
+            resolve.reset();
+            resolve.mutate({ id: conflict.id, owner, note }, { onSuccess: () => setDone(owner) });
+          }}
         >
           Record the owner
         </Button>
       </ModalFooter>
+      )}
     </Modal>
   );
 }
@@ -1236,14 +1258,23 @@ function ResolveFindingDialog({
   const [note, setNote] = useState("");
   const confirmation = useTypedConfirmation(target);
   const ready = confirmation.armed && note.trim() !== "" && !resolve.isPending;
+  const [done, setDone] = useState(false);
 
   return (
     <Modal open onClose={resolve.isPending ? () => {} : onClose} busy={resolve.isPending} size="md" labelledBy="resolve-finding-title">
       <ModalHeader
         titleId="resolve-finding-title"
         title="Resolve this finding"
-        lede={`Syndra will accept the log as ${targetLabel(target)} reports it now, and compare against that from here on.`}
+        lede={done ? undefined : `Syndra will accept the log as ${targetLabel(target)} reports it now, and compare against that from here on.`}
       />
+      {done ? (
+        <div className="grid gap-3 px-6">
+          <ActionOutcome
+            word="Resolved"
+            outcome={{ kind: "applied", message: `Syndra takes the log as ${targetLabel(target)} reports it now.` }}
+          />
+        </div>
+      ) : (
       <div className="grid gap-4 px-6">
         <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
           <p className="text-[13.5px] text-danger-text">
@@ -1273,21 +1304,23 @@ function ResolveFindingDialog({
           noun="system name"
           disabled={resolve.isPending}
         />
-        {resolve.error && (
-          <p className="text-[13.5px] text-danger-text">
-            {sentence(describeFailure(resolve.error))}
-          </p>
-        )}
+        {resolve.error && <ActionOutcome word="Not resolved" outcome={outcomeFromError(resolve.error)} />}
       </div>
+      )}
+      {done ? (
+        <ModalFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </ModalFooter>
+      ) : (
       <ModalFooter
         cancel={{ onClick: onClose, disabled: resolve.isPending }}
         note="Syndra takes the log as it is now and compares against that from here on."
       >
-        {/* Not `dangerConfirm`: irreversible, but it takes nothing from
-            anybody — the rule this file states itself further down, at the
-            account-assignment button. */}
+        {/* dangerConfirm (G25): the records that went missing are gone for good. */}
         <Button
-          variant="accent"
+          variant="dangerConfirm"
           disabled={!ready}
           isPending={resolve.isPending}
           reason={
@@ -1299,16 +1332,18 @@ function ResolveFindingDialog({
                   : undefined
               : undefined
           }
-          onClick={() =>
+          onClick={() => {
+            resolve.reset();
             resolve.mutate(
               { head: anchor.violation_head ?? "", note },
-              { onSuccess: onClose },
-            )
-          }
+              { onSuccess: () => setDone(true) },
+            );
+          }}
         >
           Accept this log and start over
         </Button>
       </ModalFooter>
+      )}
     </Modal>
   );
 }
@@ -1385,7 +1420,10 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
         <ReadFreshness
           subject="The account list"
           state={read}
-          onRefresh={() => inventory.refetch()}
+          onRefresh={() => {
+            setResult(null);
+            inventory.refetch();
+          }}
           refreshing={inventory.isFetching}
         />
       </div>
@@ -1416,7 +1454,6 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
                     username={result.username}
                     person={result.person}
                     name={name}
-                    onDismiss={() => setResult(null)}
                   />
                 ) : null
               }
@@ -1460,18 +1497,17 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
               accounts={inventory.data?.accounts ?? []}
               pending={adopt.isPending}
               error={adopt.error}
+              result={result?.username === adopting ? result : null}
               onCancel={() => setAdopting(null)}
-              onAdopt={(subjectId, person) =>
+              onAdopt={(subjectId, person) => {
+                // One slot: the press clears the old result before it writes (G23).
+                setResult(null);
+                adopt.reset();
                 adopt.mutate(
                   { username: adopting, subjectId },
-                  {
-                    onSuccess: (res) => {
-                      setResult({ username: adopting, person, result: res });
-                      setAdopting(null);
-                    },
-                  },
-                )
-              }
+                  { onSuccess: (res) => setResult({ username: adopting, person, result: res }) },
+                );
+              }}
             />
           )}
         </>
@@ -1494,6 +1530,7 @@ function AdoptPanel({
   accounts,
   pending,
   error,
+  result,
   onAdopt,
   onCancel,
 }: {
@@ -1503,6 +1540,8 @@ function AdoptPanel({
   accounts: BoundAccount[];
   pending: boolean;
   error: unknown;
+  /** Once set, the sheet is its result: Close is all that is left. */
+  result: { username: string; person: string; result: AdoptionResult } | null;
   onAdopt: (subjectId: string, person: string) => void;
   onCancel: () => void;
 }) {
@@ -1520,8 +1559,13 @@ function AdoptPanel({
       <ModalHeader
         title={`Assign ${username} to a person`}
         titleId="adopt-title"
-        lede={`${username} becomes the account of the person you choose. Everything it already holds on ${name} is theirs from that moment. There is no undo, and none that gives the data back.`}
+        lede={result ? undefined : `${username} becomes the account of the person you choose. Everything it already holds on ${name} is theirs from that moment. There is no undo, and none that gives the data back.`}
       />
+      {result ? (
+        <div className="grid gap-3 px-6">
+          <ActionOutcome {...adoptionOutcome(result.result, result.username, result.person, name)} />
+        </div>
+      ) : (
       <form
         id="adopt-form"
         className="flex flex-col gap-4 px-6"
@@ -1597,8 +1641,16 @@ function AdoptPanel({
         )}
 
         <ConfirmByTyping expected={username} noun="account name" value={confirm.typed} onChange={confirm.setTyped} />
-        {Boolean(error) && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(error))}</p>}
+        {Boolean(error) && <ActionOutcome word="Not assigned" outcome={outcomeFromError(error)} />}
       </form>
+      )}
+      {result ? (
+        <ModalFooter>
+          <Button variant="outline" onClick={onCancel}>
+            Close
+          </Button>
+        </ModalFooter>
+      ) : (
       <ModalFooter cancel={{ onClick: onCancel }}>
         {/* Violet, not red: it gives an account to someone, and red is kept
             for taking access away. Rung 3 is the typed name, and the lede
@@ -1620,6 +1672,7 @@ function AdoptPanel({
           {chosen ? `Assign ${username} to ${chosen.name}` : `Assign ${username}`}
         </Button>
       </ModalFooter>
+      )}
     </Modal>
   );
 }
@@ -1631,19 +1684,7 @@ function AdoptPanel({
  * recorded here, and the operator must look before trying again. Rendering it as
  * success is what this screen used to do.
  */
-function AdoptionOutcome({
-  result,
-  username,
-  person,
-  name,
-  onDismiss,
-}: {
-  result: AdoptionResult;
-  username: string;
-  person: string;
-  name: string;
-  onDismiss: () => void;
-}) {
+function adoptionOutcome(result: AdoptionResult, username: string, person: string, name: string) {
   const adopted = result.status === "adopted";
   // The backend's own `detail` never names the person (it is written for the
   // audit trail, not the row), so the sentence names them here.
@@ -1655,19 +1696,25 @@ function AdoptionOutcome({
     .filter(Boolean)
     .map(sentence)
     .join(" ");
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <ActionOutcome
-        placement="inline"
-        word={adopted ? "Assigned" : "Not confirmed"}
-        outcome={{ kind: adopted ? "applied" : "failed", message: said }}
-      />
-      <span className="flex-1" />
-      <Button variant="outline" size="sm" onClick={onDismiss}>
-        Dismiss this result
-      </Button>
-    </div>
-  );
+  return {
+    word: adopted ? "Assigned" : "Not confirmed",
+    outcome: { kind: adopted ? "applied" : "failed", message: said } as const,
+  };
+}
+
+/** The row's copy of the result. It leaves on the next read of the list (G26), never on a button. */
+function AdoptionOutcome({
+  result,
+  username,
+  person,
+  name,
+}: {
+  result: AdoptionResult;
+  username: string;
+  person: string;
+  name: string;
+}) {
+  return <ActionOutcome placement="inline" {...adoptionOutcome(result, username, person, name)} />;
 }
 
 /**
@@ -1797,7 +1844,8 @@ function LifecycleControl({
                     variant="accent"
                     size="sm"
                     disabled={!reason || set.isPending}
-                    onClick={() =>
+                    onClick={() => {
+                      set.reset();
                       set.mutate(
                         { state: action.id, reason },
                         {
@@ -1806,8 +1854,8 @@ function LifecycleControl({
                             setAsking(null);
                           },
                         },
-                      )
-                    }
+                      );
+                    }}
                   >
                     {action.verb}
                   </Button>
@@ -1832,20 +1880,16 @@ function LifecycleControl({
           teaches people to type "asdf" the second time. */}
       {set.error && (
         <CardRow>
-          <Notice tone="warn" title="That did not go through." className="w-full" next={`Try again. If it keeps failing, check that ${name} is running.`}>
-            <p>{name} did not answer the request.</p>
-            <p className="mt-1">
-              <span className="font-semibold">The state is still {stateLabel(current)}</span>, the
-              one above, unchanged. Nothing about the attempt is recorded as a state, and this
-              message is its only trace. This does not affect the &ldquo;Waiting to retry&rdquo;
-              reading above.
-            </p>
-            {reason && (
-              <p className="mt-1 text-[13px] text-muted">
-                Your reason was kept. Trying again sends the same request with the same reason.
-              </p>
-            )}
-          </Notice>
+          <ActionOutcome
+            placement="inline"
+            word="Not changed"
+            outcome={{
+              ...outcomeFromError(set.error),
+              message: `${name} did not answer the request. The state is still ${stateLabel(current)}, unchanged.`,
+              detail: reason ? "Your reason was kept. Trying again sends the same request with the same reason." : undefined,
+              next: `Try again. If it keeps failing, check that ${name} is running.`,
+            }}
+          />
         </CardRow>
       )}
     </Card>

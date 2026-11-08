@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectClaimDefault } from "@/components/projects/ProjectClaimDefault";
@@ -79,6 +79,34 @@ describe("the project's default shape", () => {
     fireEvent.click(screen.getByRole("radio", { name: "csv" }));
     fireEvent.click(screen.getByRole("button", { name: "Save the default" }));
     expect(saveProject).toHaveBeenCalledWith(expect.objectContaining({ claim_name: "laser.roles.v2", format_type: "csv" }));
+  });
+});
+
+describe("the default shape's result", () => {
+  // A-22 §3.20: Saved / Not saved, and the slot clears on the first edit after a result.
+  it("says Saved, then clears on the first edit", async () => {
+    saveProject.mockReset().mockResolvedValue({});
+    setup();
+    fireEvent.change(screen.getByPlaceholderText("syndra.laser.roles"), { target: { value: "laser.roles.v2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save the default" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("syndra.laser.roles"), { target: { value: "laser.roles.v3" } });
+    expect(screen.queryByText("Saved")).toBeNull();
+  });
+
+  it("says Not saved when the write fails, and the next press replaces it", async () => {
+    saveProject.mockReset().mockRejectedValueOnce(new Error("first trouble")).mockRejectedValueOnce(new Error("second trouble"));
+    setup();
+    fireEvent.change(screen.getByPlaceholderText("syndra.laser.roles"), { target: { value: "laser.roles.v2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save the default" }));
+    expect(await screen.findByText("Not saved")).toBeInTheDocument();
+    expect(screen.queryByText("Saved")).toBeNull();
+    expect(document.body.textContent).toMatch(/first trouble/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save the default" }));
+    await waitFor(() => expect(document.body.textContent).toMatch(/second trouble/));
+    expect(document.body.textContent).not.toMatch(/first trouble/);
   });
 });
 

@@ -119,7 +119,7 @@ func TestPlanAct_GiveThatOnlyCancelsAWaitingRemoval(t *testing.T) {
 	if !slices.Equal(ch.Row.CancelIDs, []string{"q1"}) || ch.Delivery() != DeliveryNone {
 		t.Fatalf("cancels = %v, delivery = %q", ch.Row.CancelIDs, ch.Delivery())
 	}
-	if ch.Row.Detail != "The removal of Member in Laser Lab that was waiting is cancelled, so nothing is sent to Zitadel. They keep it." {
+	if ch.Row.Detail != "Cancels removing Member in Laser Lab, which was waiting for you to send, so nothing is sent to Zitadel. They keep it." {
 		t.Errorf("detail = %q", ch.Row.Detail)
 	}
 	// Said kept apart from the cancels line, which the step says.
@@ -227,7 +227,7 @@ func TestPlanAct_RemoveGrantThatOnlyCancelsTheWaitingGive(t *testing.T) {
 		t.Fatalf("writes = %+v", got)
 	}
 	if ch.Delivery() != DeliveryNone || !slices.Equal(ch.Row.CancelIDs, []string{"q2"}) ||
-		ch.Row.Detail != "The give of Member in Laser Lab that was waiting is cancelled, so nothing is sent to Zitadel." {
+		ch.Row.Detail != "Cancels giving Member in Laser Lab, which was waiting for you to send, so nothing is sent to Zitadel." {
 		t.Fatalf("delivery = %q, cancels = %v, detail = %q", ch.Delivery(), ch.Row.CancelIDs, ch.Row.Detail)
 	}
 }

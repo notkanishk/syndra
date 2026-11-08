@@ -90,31 +90,32 @@ const planRead = (label: string) =>
   waitFor(() => expect(screen.getByRole("button", { name: label })).toBeEnabled());
 
 describe("Remove, direct: the first 100ms", () => {
-  it("says 'Will be removed' while out, then the true word, and never the forecast after", async () => {
+  it("says 'Will be revoked' while out, then the true word, and never the forecast after", async () => {
     open([direct]);
-    await planRead("Revoke access");
-    fireEvent.click(screen.getByRole("button", { name: "Revoke access" }));
-    expect(await screen.findByText(FORECAST.remove)).toBeInTheDocument();
+    await planRead("Revoke this role");
+    fireEvent.click(screen.getByRole("button", { name: "Revoke this role" }));
+    expect(await screen.findByText(FORECAST.revoke)).toBeInTheDocument();
     wire.release!();
-    await screen.findByText(/Direct access to .* removed/);
-    expect(screen.queryByText(FORECAST.remove)).toBeNull();
+    await screen.findByText(/Direct access to .* revoked/);
+    expect(screen.getByText("Revoked")).toBeInTheDocument();
+    expect(screen.queryByText(FORECAST.revoke)).toBeNull();
   });
 
   it("says 'Will wait for you to send' for a role that waits", async () => {
     wire.waits = true;
     open([direct]);
-    await planRead("Revoke access");
-    fireEvent.click(screen.getByRole("button", { name: "Revoke access" }));
+    await planRead("Revoke this role");
+    fireEvent.click(screen.getByRole("button", { name: "Revoke this role" }));
     expect(await screen.findByText(FORECAST.queued)).toBeInTheDocument();
-    expect(screen.queryByText(FORECAST.remove)).toBeNull();
+    expect(screen.queryByText(FORECAST.revoke)).toBeNull();
     wire.release!();
   });
 
   it("cancelling a give that still waits forecasts a cancel, and the rail drops by one only once answered", async () => {
     wire.plan = actPlan({ delivery: "none" });
     open([queuedDirect]);
-    await planRead("Cancel the waiting give");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel the waiting give" }));
+    await planRead("Cancel giving it");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel giving it" }));
     expect(await screen.findByText(FORECAST.cancel)).toBeInTheDocument();
     // Ahead of the answer, nothing on the rail has moved.
     expect(railNow().pending_propagation).toBe(4);
@@ -126,8 +127,8 @@ describe("Remove, direct: the first 100ms", () => {
     wire.fail = true;
     wire.plan = actPlan({ delivery: "none" });
     open([queuedDirect]);
-    await planRead("Cancel the waiting give");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel the waiting give" }));
+    await planRead("Cancel giving it");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel giving it" }));
     await screen.findByText(FORECAST.cancel);
     wire.release!();
     await waitFor(() => expect(screen.getByText(/Nothing was changed/i)).toBeInTheDocument());
@@ -139,8 +140,8 @@ describe("Remove, direct: the first 100ms", () => {
 describe("Remove, a bundle: the first 100ms", () => {
   it("forecasts 'Will be removed', or the wait for a role that waits", async () => {
     open([bundle]);
-    await planRead("Remove bundle");
-    fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
+    await planRead("Remove the bundle");
+    fireEvent.click(screen.getByRole("button", { name: "Remove the bundle" }));
     expect(await screen.findByText(FORECAST.remove)).toBeInTheDocument();
     wire.release!();
     await screen.findByText(/removed from Tomas Beck/);
@@ -149,8 +150,8 @@ describe("Remove, a bundle: the first 100ms", () => {
   it("says 'Will wait for you to send' when the role waits", async () => {
     wire.waits = true;
     open([bundle]);
-    await planRead("Remove bundle");
-    fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
+    await planRead("Remove the bundle");
+    fireEvent.click(screen.getByRole("button", { name: "Remove the bundle" }));
     expect(await screen.findByText(FORECAST.queued)).toBeInTheDocument();
     wire.release!();
   });

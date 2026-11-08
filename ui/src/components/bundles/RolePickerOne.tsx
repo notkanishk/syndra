@@ -62,6 +62,8 @@ export interface RolePickerOneProps {
   /** Two pickers on one screen each need their own radio group and search label. */
   group?: string;
   searchLabel?: string;
+  /** Once a role is chosen only its chip stays; removing it reopens the list (A-22 G30). */
+  foldWhenChosen?: boolean;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -94,6 +96,7 @@ export function RolePickerOne({
   labelledBy,
   group = "role-one",
   searchLabel = "Search roles",
+  foldWhenChosen = false,
 }: RolePickerOneProps) {
   const [query, setQuery] = useState("");
   // A place opened or closed by hand keeps that, whatever the search does.
@@ -123,8 +126,11 @@ export function RolePickerOne({
     return null;
   }, [places, value]);
 
+  const folds = foldWhenChosen && chosen !== null;
+
   return (
     <>
+      {!folds && (
       <Input
         type="search"
         value={query}
@@ -132,9 +138,10 @@ export function RolePickerOne({
         placeholder="Search by place or role"
         aria-label={searchLabel}
       />
+      )}
 
       {chosen && (
-        <div className="mt-3 flex flex-wrap items-center gap-2.5 desktop:gap-2" aria-label="Chosen">
+        <div className={`${folds ? "" : "mt-3 "}flex flex-wrap items-center gap-2.5 desktop:gap-2`} aria-label="Chosen">
           <span className="type-label mr-1">Chosen</span>
           <ChosenChip key={value} disabled={disabled} onRemove={() => onChange(null)} removeLabel={`Remove ${chosen.role.name}`}>
             {chosen.role.name}
@@ -143,6 +150,7 @@ export function RolePickerOne({
         </div>
       )}
 
+      {!folds && (
       <div
         className="mt-3 max-h-[46vh] overflow-y-auto rounded-inner border border-line-strong"
         role="radiogroup"
@@ -213,6 +221,7 @@ export function RolePickerOne({
           })
         )}
       </div>
+      )}
     </>
   );
 }

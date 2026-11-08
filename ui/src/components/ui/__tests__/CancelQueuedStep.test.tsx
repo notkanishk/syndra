@@ -95,7 +95,7 @@ describe("the step pushed inside the host sheet", () => {
     render(<Host write={refusedOnce([change()])} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByRole("heading", { name: "This cancels a removal that's waiting" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Cancel removing Member from Rohan?" })).toBeInTheDocument();
     expect(screen.getByText("Give Rohan Mehta a role")).toBeInTheDocument(); // the chip
     expect(screen.getByText("It hasn't reached Zitadel, so Rohan still has Member today.")).toBeInTheDocument();
     expect(screen.getByText("Removing").closest("p")).toHaveTextContent("Removing Network storage · Member from Rohan Mehta");
@@ -103,8 +103,8 @@ describe("the step pushed inside the host sheet", () => {
     expect(screen.getByText("“left the course”")).toBeInTheDocument();
     expect(screen.getByText("Nothing changes until you choose.")).toBeInTheDocument();
 
-    const keep = screen.getByRole("button", { name: "Keep it" });
-    const confirm = screen.getByRole("button", { name: "Cancel it and give Member" });
+    const keep = screen.getByRole("button", { name: "Keep it waiting" });
+    const confirm = screen.getByRole("button", { name: "Cancel removing it and give Member" });
     expect(keep.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(keep).toHaveFocus();
   });
@@ -112,7 +112,7 @@ describe("the step pushed inside the host sheet", () => {
   it("a waiting grant is Giving ... to, and the person doesn't have it yet", async () => {
     render(<Host write={refusedOnce([change({ op_type: "add" })])} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByRole("heading", { name: "This cancels a give that's waiting" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Cancel giving Member to Rohan?" })).toBeInTheDocument();
     expect(screen.getByText("Giving").closest("p")).toHaveTextContent("Giving Network storage · Member to Rohan Mehta");
     expect(screen.getByText("It hasn't reached Zitadel, so Rohan doesn't have Member yet.")).toBeInTheDocument();
   });
@@ -123,11 +123,11 @@ describe("the step pushed inside the host sheet", () => {
     render(<Host write={write} onResult={onResult} />);
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "capstone" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep it waiting" }));
 
     await waitFor(() => expect(onResult).toHaveBeenCalledWith(KEPT));
     expect(write).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.queryByRole("heading", { name: /This cancels/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /^(This cancels|Cancel (giving|removing))/ })).not.toBeInTheDocument());
     expect(screen.getByLabelText("Reason")).toHaveValue("capstone");
     const note = screen.getByTestId("footer-note");
     expect(note).toHaveTextContent("Nothing changed. Sam's removal is still waiting.");
@@ -139,7 +139,7 @@ describe("the step pushed inside the host sheet", () => {
     const onResult = vi.fn();
     render(<Host write={refusedOnce([change()])} onResult={onResult} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    await screen.findByRole("button", { name: "Keep it" });
+    await screen.findByRole("button", { name: "Keep it waiting" });
     fireEvent.keyDown(document.body, { key: "Escape" });
     await waitFor(() => expect(onResult).toHaveBeenCalledWith(KEPT));
     expect(screen.getByLabelText("Reason")).toBeInTheDocument();
@@ -149,7 +149,7 @@ describe("the step pushed inside the host sheet", () => {
     const write = refusedOnce([change()]);
     render(<Host write={write} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and give Member" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel removing it and give Member" }));
 
     await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("sent"));
     expect(write).toHaveBeenCalledTimes(2);
@@ -157,14 +157,14 @@ describe("the step pushed inside the host sheet", () => {
     expect(screen.getByTestId("after")).toHaveTextContent(
       "The removal Sam queued 2h ago is cancelled, so nothing goes to Zitadel. Change history records both.",
     );
-    await waitFor(() => expect(screen.queryByRole("heading", { name: /This cancels/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /^(This cancels|Cancel (giving|removing))/ })).not.toBeInTheDocument());
   });
 
   it("several queued together share one who-line and one quote, and the title and confirm carry the count", async () => {
     const same = (n: number) => change({ id: idOf(n), op_type: "add", role_keys: ["member"] });
     render(<Host write={refusedOnce([same(1), same(2), same(3)])} options={{ goAhead: "remove", tone: "danger" }} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect(await screen.findByRole("heading", { name: "This cancels 3 gives that are waiting" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "This cancels 3 changes that are waiting" })).toBeInTheDocument();
     expect(screen.getAllByText(/Queued by Sam Iyer/)).toHaveLength(1);
     expect(screen.getAllByText("“left the course”")).toHaveLength(1);
     expect(screen.getAllByText(/Giving/)).toHaveLength(3);
@@ -212,7 +212,7 @@ describe("the step pushed inside the host sheet", () => {
     const write = refusedOnce([first], [first, added]);
     render(<Host write={write} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and give Member" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel removing it and give Member" }));
 
     expect(await screen.findByText(/One more since you looked\. Lena queued it just now, so it's added at the top and nothing was changed\./)).toBeInTheDocument();
     expect(screen.getByText("New since you looked")).toBeInTheDocument();
@@ -234,7 +234,7 @@ describe("the step pushed inside the host sheet", () => {
     render(<Host write={write} onResult={onResult} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("failed"));
-    expect(screen.queryByRole("heading", { name: /This cancels/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^(This cancels|Cancel (giving|removing))/ })).not.toBeInTheDocument();
     expect(onResult).not.toHaveBeenCalled();
   });
 
@@ -248,11 +248,11 @@ describe("the step pushed inside the host sheet", () => {
         fireEvent.click(screen.getByRole("button", { name: "Send" }));
       });
       expect(screen.getByLabelText("Reason").closest("[data-step-form]")).not.toHaveAttribute("hidden");
-      expect(screen.queryByRole("heading", { name: /This cancels/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /^(This cancels|Cancel (giving|removing))/ })).not.toBeInTheDocument();
       await act(async () => {
         vi.advanceTimersByTime(130);
       });
-      expect(screen.getByRole("heading", { name: /This cancels/ })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /^(This cancels|Cancel (giving|removing))/ })).toBeInTheDocument();
       expect(screen.getByLabelText("Reason", { selector: "input" }).closest("[data-step-form]")).toHaveAttribute("hidden");
     } finally {
       vi.unstubAllGlobals();
@@ -314,10 +314,10 @@ describe("a write with no sheet of its own", () => {
     render(<Row write={write} />);
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("heading", { name: "This cancels a give that's waiting" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "Cancel giving Member to Rohan?" })).toBeInTheDocument();
     expect(within(dialog).getByText("Approve Priya's request")).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Cancel it and approve" })).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Keep it" }));
+    expect(within(dialog).getByRole("button", { name: "Cancel giving it and approve" })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep it waiting" }));
     await waitFor(() => expect(screen.getByTestId("seat")).toHaveTextContent("kept"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(write).toHaveBeenCalledTimes(1);
@@ -326,7 +326,7 @@ describe("a write with no sheet of its own", () => {
   it("going ahead approves and closes the sheet", async () => {
     render(<Row write={refusedOnce([change({ op_type: "add" })])} />);
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and approve" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel giving it and approve" }));
     await waitFor(() => expect(screen.getByTestId("seat")).toHaveTextContent("approved"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -361,9 +361,9 @@ describe("a step pushed from the plan (confirm)", () => {
     render(<Planned changes={[change()]} write={write} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByRole("heading", { name: "This cancels a removal that's waiting" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Cancel removing Member from Rohan?" })).toBeInTheDocument();
     expect(write).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel it and give Member" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel removing it and give Member" }));
     await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("sent"));
     expect(write).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("after")).toHaveTextContent("cancelled, so nothing goes to Zitadel");
@@ -373,7 +373,7 @@ describe("a step pushed from the plan (confirm)", () => {
     const write = vi.fn();
     render(<Planned changes={[change()]} write={write} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep it waiting" }));
     await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("kept"));
     expect(write).not.toHaveBeenCalled();
   });
@@ -384,7 +384,7 @@ describe("a step pushed from the plan (confirm)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(screen.getByTestId("result")).toHaveTextContent("sent"));
     expect(write).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("heading", { name: /This cancels/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^(This cancels|Cancel (giving|removing))/ })).not.toBeInTheDocument();
     expect(screen.getByTestId("after")).toBeEmptyDOMElement();
   });
 
@@ -405,26 +405,26 @@ describe("a step pushed from the plan (confirm)", () => {
     }
     render(<Fails />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and give" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel removing it and give" }));
     await waitFor(() => expect(screen.getByTestId("r")).toHaveTextContent("failed"));
-    await waitFor(() => expect(screen.queryByRole("heading", { name: /This cancels/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /^(This cancels|Cancel (giving|removing))/ })).not.toBeInTheDocument());
   });
 
   it("says the before-line for one removal, one give and several, with who queued it and when", () => {
     const { rerender } = render(<Planned changes={[change()]} write={vi.fn()} />);
-    expect(screen.getByTestId("before")).toHaveTextContent("Giving it cancels the removal Sam Iyer queued 2h ago.");
+    expect(screen.getByTestId("before")).toHaveTextContent("Giving it cancels removing Member from Rohan, which was waiting for you to send.");
     rerender(<Planned changes={[change({ op_type: "add" })]} write={vi.fn()} />);
-    expect(screen.getByTestId("before")).toHaveTextContent("Giving it cancels the give Sam Iyer queued 2h ago.");
+    expect(screen.getByTestId("before")).toHaveTextContent("Giving it cancels giving Member to Rohan, which was waiting for you to send.");
     rerender(<Planned changes={[change({ id: idOf(1) }), change({ id: idOf(2) })]} write={vi.fn()} />);
     expect(screen.getByTestId("before")).toHaveTextContent("Giving it cancels 2 changes that are waiting.");
     rerender(<Planned changes={[]} write={vi.fn()} />);
     expect(screen.getByTestId("before")).toBeEmptyDOMElement();
   });
 
-  it("the after line says give, not grant", async () => {
+  it("the after line says change, not grant", async () => {
     render(<Planned changes={[change({ op_type: "add" })]} write={vi.fn().mockResolvedValue({})} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and give Member" }));
-    await waitFor(() => expect(screen.getByTestId("after")).toHaveTextContent("The give Sam queued 2h ago is cancelled"));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel giving it and give Member" }));
+    await waitFor(() => expect(screen.getByTestId("after")).toHaveTextContent("The change Sam queued 2h ago is cancelled"));
   });
 });

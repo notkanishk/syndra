@@ -36,8 +36,8 @@ describe("R1: an adoption whose rules queued rows ends on Send", () => {
 });
 
 describe("R5: a drift revoke says where it stands", () => {
-  it("went: Removed in Zitadel, not On its way", () => {
-    expect(revokeOutcome(undefined, "Trained", { propagation: "applied" })).toMatchObject({ kind: "applied", message: "Removed in Zitadel" });
+  it("went: gone from Zitadel, not On its way", () => {
+    expect(revokeOutcome(undefined, "Trained", { propagation: "applied" })).toMatchObject({ kind: "applied", message: "It is gone from Zitadel." });
   });
   it("not taken: says when Syndra sends it again", () => {
     const o = revokeOutcome("halted:retrying", "Trained", { retry });

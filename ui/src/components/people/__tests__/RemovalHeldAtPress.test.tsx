@@ -71,36 +71,37 @@ describe("cancelling a direct give that is still waiting", () => {
   it("is titled as the act, and its dismiss keeps it rather than cancelling", async () => {
     show(direct);
 
-    await ready("Cancel the waiting give");
-    expect(screen.getByRole("heading", { name: /^Cancel the waiting give of .* in Navidrome\?$/ })).toBeInTheDocument();
+    await ready("Cancel giving it");
+    expect(screen.getByRole("heading", { name: /^Cancel giving .* in Navidrome to .+\?$/ })).toBeInTheDocument();
     expect(screen.queryByText(/Revoke direct access/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Keep it" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep it waiting" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("after the press, says the result under what it said before, never a warning from the refetch", async () => {
     show(direct);
 
-    fireEvent.click(await ready("Cancel the waiting give"));
-    expect(await screen.findByText(/that was waiting is cancelled/)).toBeInTheDocument();
+    fireEvent.click(await ready("Cancel giving it"));
+    expect(await screen.findByText(/won't be given to .+\. It never reached Zitadel\./)).toBeInTheDocument();
     // Let the refetched plan land and render.
     await waitFor(() => expect(world.client.isFetching()).toBe(0));
 
     expect(screen.queryByText(/will lose this role/i)).toBeNull();
     expect(screen.queryByText(/Their access ends once the change reaches Zitadel/)).toBeNull();
-    expect(screen.queryByText(/Given directly to/)).toBeNull();
-    expect(screen.getByText(/still waiting for you to send/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /^Cancel the waiting give of/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Given by hand to/)).toBeNull();
+    // The sheet is its result: the lede and the body left with the form.
+    expect(screen.queryByText(/still waiting for you to send/)).toBeNull();
+    expect(screen.getByRole("heading", { name: /^Cancel giving .* to .+\?$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
-  it("a revoke of a delivered give keeps its own title and a plain Cancel", async () => {
+  it("a revoke of a delivered give keeps its own title and Keep it", async () => {
     world.plan = actPlan({ delivery: "straight_away" });
     show({ ...direct, sources: [{ kind: "direct", description: "", queued: false }] });
 
-    expect(await screen.findByRole("button", { name: "Revoke access" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /^Revoke direct access to Navidrome \/ .*\?$/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Revoke this role" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Revoke .+ in Navidrome\?$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep it" })).toBeInTheDocument();
   });
 });
 
@@ -115,18 +116,19 @@ describe("cancelling a bundle that is still waiting", () => {
   it("keeps it on dismiss, and the refetch after the press does not turn the body into a loss", async () => {
     show(bundle);
 
-    fireEvent.click(await ready("Cancel the waiting change"));
+    fireEvent.click(await ready("Cancel giving it"));
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
-    expect(await screen.findByText(/bundle that was waiting is cancelled/)).toBeInTheDocument();
+    expect(await screen.findByText(/bundle won't be given to .+\. It never reached Zitadel\./)).toBeInTheDocument();
     await waitFor(() => expect(world.client.isFetching()).toBe(0));
 
     expect(screen.queryByText(/They will lose/i)).toBeNull();
-    expect(screen.getByText(/Nothing to take back/i)).toBeInTheDocument();
+    // Body unmounted with the result.
+    expect(screen.queryByText(/Nothing to take back/i)).toBeNull();
   });
 
-  it("offers Keep it beside the cancel before the press", async () => {
+  it("offers Keep it waiting beside the cancel before the press", async () => {
     show(bundle);
-    await ready("Cancel the waiting change");
-    expect(screen.getByRole("button", { name: "Keep it" })).toBeInTheDocument();
+    await ready("Cancel giving it");
+    expect(screen.getByRole("button", { name: "Keep it waiting" })).toBeInTheDocument();
   });
 });

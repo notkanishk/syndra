@@ -83,8 +83,8 @@ async function give(role: string) {
   fireEvent.click(within(dialog).getByRole("radio", { name: new RegExp(role) }));
   fireEvent.change(screen.getByPlaceholderText(/Capstone build/), { target: { value: "test" } });
   // The press waits on the plan (A-21 §3).
-  await waitFor(() => expect(screen.getByRole("button", { name: "Give role" })).toBeEnabled());
-  fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: /^Give (?!a role$)/ })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: /^Give (?!a role$)/ }));
 }
 
 describe("Give: the first 100ms", () => {

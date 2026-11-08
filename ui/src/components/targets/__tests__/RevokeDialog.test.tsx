@@ -72,6 +72,14 @@ describe("revoking access on a target", () => {
 
   // What it does, not what it means. Everything on these screens queues, and
   // this button says so rather than claiming the access is gone.
+  it("pairs Keep it with the act, and the session sentence is in the What happens list", () => {
+    renderRevoke();
+    expect(screen.getByRole("button", { name: "Keep it" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.queryByText("Anyone connected stays connected for now.")).toBeNull();
+    expect(screen.getByText(/they stay connected until they disconnect/).closest("li")).not.toBeNull();
+  });
+
   it("names the queue in the button", () => {
     renderRevoke();
     expect(screen.getByRole("button", { name: /revoke access for Ada Rivera/i })).toBeInTheDocument();
@@ -156,6 +164,11 @@ describe("revoking access on a target", () => {
 
     expect(screen.getByText(/Partly done/i)).toBeInTheDocument();
     expect(screen.getByText(/Still outstanding: password.rotate/)).toBeInTheDocument();
+    // The sheet is its result: form, list and Keep it are gone, one Close remains.
+    expect(screen.queryByLabelText("Why")).toBeNull();
+    expect(screen.queryByText("What happens")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Keep it" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });
 

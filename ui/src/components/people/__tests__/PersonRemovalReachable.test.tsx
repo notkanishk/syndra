@@ -56,7 +56,7 @@ describe("RemovalDialog with a bundle source", () => {
     // The fingerprint of the defect, exactly as it appeared on screen.
     expect(screen.getByText(/from this person/)).toBeInTheDocument();
 
-    const remove = screen.getByRole("button", { name: "Remove bundle" });
+    const remove = screen.getByRole("button", { name: "Remove the bundle" });
     expect(remove).toBeDisabled();
     // And it no longer greys out in silence.
     expect(screen.getByText(/could not tell which person this is/)).toBeInTheDocument();
@@ -72,7 +72,7 @@ describe("RemovalDialog with a bundle source", () => {
     expect(screen.getByText(/from Sneha Rao/)).toBeInTheDocument();
     expect(screen.queryByText(/from this person/)).toBeNull();
     // Live once the plan is read.
-    await waitFor(() => expect(screen.getByRole("button", { name: "Remove bundle" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove the bundle" })).toBeEnabled());
     expect(screen.queryByText(/could not tell which person this is/)).toBeNull();
   });
 });

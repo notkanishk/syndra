@@ -81,10 +81,12 @@ export function HoldDialog({
       <ModalHeader
         titleId="hold-title"
         title={`Put ${spoken} on hold for ${subjectName}`}
-        lede={`They keep every role they have. This blocks ${spoken} on ${targetLabel(target)}, and nothing else.`}
+        lede={succeeded ? undefined : `They keep every role they have. This blocks ${spoken} on ${targetLabel(target)}, and nothing else.`}
       />
 
       <div className="grid gap-4 px-6">
+        {!succeeded && (
+        <>
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-[14px]">What happens if nobody comes back to this</legend>
           <ChoiceRow
@@ -136,12 +138,14 @@ export function HoldDialog({
             staff why the access is missing.
           </FieldHint>
         </div>
+        </>
+        )}
 
-        {outcome && <ActionOutcome outcome={outcome} word={succeeded ? "On hold" : "Couldn't put it on hold"} />}
+        {outcome && <ActionOutcome outcome={outcome} word={succeeded ? "On hold" : "Not put on hold"} />}
       </div>
 
       <ModalFooter
-        note={`Holding ${spoken} does not remove the role that gives it.`}
+        note={succeeded ? undefined : `Holding ${spoken} does not remove the role that gives it.`}
         cancel={succeeded ? undefined : { onClick: onClose, disabled: create.isPending }}
       >
         {!succeeded && (

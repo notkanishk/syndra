@@ -205,6 +205,11 @@ describe("a save NetBird will act on", () => {
 
     await within(dialog).findByText("Saved");
     expect(within(dialog).getByText(/NetBird’s claims are now version 4\./)).toBeInTheDocument();
+    // The sheet is its result: the form and its consent tick are gone, one outline Close is left.
+    expect(within(dialog).queryByRole("checkbox")).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Save" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Close" })).toBeInTheDocument();
+    expect(within(dialog).getByText(/Point NetBird's policies at the new group/)).toBeInTheDocument();
     const put = api.calls.find((c) => c.method === "PUT");
     expect(put?.body).toMatchObject({ acknowledge_breaking: true, template_id: "netbird" });
     expect((put?.body as { profile: Profile }).profile.roles?.[0]).toEqual({ key: "staff", as: "network-staff", included: true });

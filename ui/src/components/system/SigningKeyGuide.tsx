@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { CommandBlock } from "@/components/ui/CommandBlock";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FoldChevron } from "@/components/ui/FoldChevron";
-import { Modal, ModalFooter, mountedWhileOpen } from "@/components/ui/Modal";
+import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { request } from "@/lib/api-client";
 import { formatShortDate } from "@/lib/format";
 import { Unfold } from "@/lib/motion";
@@ -270,23 +270,23 @@ export const SigningKeyGuide = mountedWhileOpen(function SigningKeyGuide({
 
   return (
     <Modal open onClose={close} busy={busy} size="md" labelledBy="key-guide-title">
-      <div ref={head} className="flex flex-col gap-3 px-6 pt-[22px]">
-        <div className="flex items-center gap-3">
-          <span className="text-[12.5px] font-semibold text-muted">Step {kept.step} of 2</span>
-          <span aria-hidden className="flex flex-1 gap-1">
-            {[1, 2].map((i) => (
-              <span key={i} className={`h-1 flex-1 rounded-pill ${i <= kept.step ? "bg-accent" : "bg-line-strong"}`} />
-            ))}
-          </span>
-        </div>
-        <h2 id="key-guide-title" className="type-dialog-title">
-          {kept.step === 1 ? (setup ? "Register Syndra with Zitadel" : "Make a new key") : "Check the new key"}
-        </h2>
-        <p className="text-[14.5px] leading-[1.55] text-muted">
-          {kept.step === 1
-            ? "Run this on the Syndra server."
-            : "Syndra signs a test sign-in with the new key and checks it gets its claims."}
-        </p>
+      <div ref={head}>
+        <ModalHeader
+          chip={<span className="type-label">Step {kept.step} of 2</span>}
+          title={kept.step === 1 ? (setup ? "Register Syndra with Zitadel" : "Make a new key") : "Check the new key"}
+          titleId="key-guide-title"
+          lede={
+            kept.step === 1
+              ? "Run this on the Syndra server."
+              : "Syndra signs a test sign-in with the new key and checks it gets its claims."
+          }
+        />
+        {/* The bars stay: the chip says the step, the bars show how far along it is. */}
+        <span aria-hidden className="flex gap-1 px-6">
+          {[1, 2].map((i) => (
+            <span key={i} className={`h-1 flex-1 rounded-pill ${i <= kept.step ? "bg-accent" : "bg-line-strong"}`} />
+          ))}
+        </span>
       </div>
 
       <div className="flex flex-col gap-3 px-6 pb-1 pt-4">

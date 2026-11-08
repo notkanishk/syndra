@@ -67,6 +67,7 @@ export function WriteResult({
   outcome,
   word,
   neutral = OUTCOME_LABEL.no_change,
+  not,
   className = "mx-6 mb-1",
 }: {
   outcome: Outcome;
@@ -74,6 +75,8 @@ export function WriteResult({
   word: string;
   /** The word for a neutral end (`no_change`): "Nothing revoked", "Not known". */
   neutral?: string;
+  /** The act's "Not" word for a refusal or failure that recorded nothing: "Not given". */
+  not?: string;
   className?: string;
 }) {
   const shown =
@@ -83,7 +86,9 @@ export function WriteResult({
         ? neutral
         : outcome.sendsItself
           ? sendsItselfWord(outcome)
-          : OUTCOME_LABEL[outcome.kind];
+          : not && (outcome.kind === "failed" || outcome.kind === "refused")
+            ? not
+            : OUTCOME_LABEL[outcome.kind];
   return <ActionOutcome outcome={outcome} word={shown} className={className} />;
 }
 
@@ -109,10 +114,13 @@ export function WriteFooter({
   outcome,
   onClose,
   note,
+  keep,
   children,
 }: {
   outcome: Outcome | null;
   onClose: () => void;
+  /** What the dismiss keeps ("Keep them") when the act takes something away; Cancel when omitted. */
+  keep?: string;
   /** The cancel step's footer note after Keep ("Nothing changed. …"). */
   note?: React.ReactNode;
   /** The act (accent, or dangerConfirm). */
@@ -121,7 +129,7 @@ export function WriteFooter({
   // Anything but a refusal or a failure happened, or may have: no second press.
   const done = succeeded(outcome);
   return (
-    <ModalFooter cancel={done ? undefined : { onClick: onClose }} note={note ?? undefined}>
+    <ModalFooter cancel={done ? undefined : { onClick: onClose, label: keep }} note={note ?? undefined}>
       {done ? (
         <Button variant="outline" onClick={onClose}>
           Close

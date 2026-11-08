@@ -202,6 +202,55 @@ describe("AddRolesToBundle", () => {
     expect(screen.getByRole("button", { name: "Add 2 roles" })).toBeInTheDocument();
   });
 
+  // A-22 §3.18: one block says the whole ("Added 1 of 3"), its failure, what is left and the next
+  // press; no second panel beside it. Add stays beside Close while anything is ticked.
+  it("says a partial add as one block, with Add beside Close", async () => {
+    state.addRole = vi
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error("Zitadel refused that role."));
+    open();
+    openFolds();
+    const boxes = screen.getAllByRole("checkbox");
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[1]);
+    fireEvent.click(boxes[2]);
+    fireEvent.click(screen.getByRole("button", { name: "Add 3 roles" }));
+
+    expect(await screen.findByText("Added 1 of 3")).toBeInTheDocument();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(document.body.textContent).toMatch(/What is still ticked was not added\./);
+    expect(document.body.textContent).toMatch(/Press Add 2 roles again for the rest\./);
+    expect(document.body.textContent).not.toMatch(/Nothing was changed/);
+    expect(screen.getByRole("button", { name: "Add 2 roles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("says Not added when the first write fails, and a retry replaces the result", async () => {
+    state.addRole = vi.fn().mockRejectedValueOnce(new Error("first trouble")).mockRejectedValueOnce(new Error("second trouble"));
+    open();
+    openFolds();
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 role" }));
+    expect(await screen.findByText("Not added")).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/first trouble/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 role" }));
+    await waitFor(() => expect(document.body.textContent).toMatch(/second trouble/));
+    expect(document.body.textContent).not.toMatch(/first trouble/);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
+  it("drops Add once everything ticked is in, leaving Close alone", async () => {
+    open();
+    openFolds();
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 role" }));
+    await screen.findByText("Added");
+    expect(screen.queryByRole("button", { name: /^Add / })).toBeNull();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
   it("does not close the dialog on a failed apply", async () => {
     const onClose = vi.fn();
     state.addRole = vi.fn().mockRejectedValue(new Error("nope"));

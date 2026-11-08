@@ -9,7 +9,7 @@ import { Crossfade } from "@/lib/motion";
 import { FormPart } from "@/components/ui/FormPart";
 import { useLeavingRows } from "@/lib/motion";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { outcomeFromError, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Segmented, Select } from "@/components/ui/Select";
 import { RowSkeleton, ErrorState } from "@/components/states";
 import {
@@ -95,7 +95,11 @@ function ProfileForm({
   // crossfades, and a seat that was not edited does not.
   const [reverted, setReverted] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // The result is tied to the shape it was about: the first edit after it changes the shape and
+  // the slot clears, so an old "Saved" never sits above fresh edits (A-22 §3.20).
+  const shapeNow = JSON.stringify([claimName, format, extras.map(withoutId)]);
+  const [result, setResult] = useState<{ outcome: Outcome; shape: string } | null>(null);
+  const outcome = result?.shape === shapeNow ? result.outcome : null;
   // What was last written, so "unsaved" can be judged against it rather than
   // against `profile` — which stays stale until the parent's refetch lands.
   // Without this, `dirty` stayed true the instant a save succeeded (the local
@@ -120,6 +124,8 @@ function ProfileForm({
 
   async function save() {
     setSaving(true);
+    setResult(null);
+    const setOutcome = (next: Outcome) => setResult({ outcome: next, shape: shapeNow });
     try {
       const { attributes, statics } = fromExtras(extras);
       await onSave({
@@ -276,7 +282,7 @@ function ProfileForm({
       {/* Under the control that saved it, and above nothing: an editor that
           reports elsewhere leaves the operator unsure whether the shape on
           screen is the shape that was written. */}
-      {outcome && <ActionOutcome outcome={outcome} word="Saved" />}
+      {outcome && <ActionOutcome outcome={outcome} word={succeeded(outcome) ? "Saved" : "Not saved"} />}
 
       <div className="flex flex-wrap items-center gap-2.5">
         <Button variant="accent" disabled={!dirty || !claimName.trim()} isPending={saving} onClick={save}>

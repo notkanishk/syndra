@@ -163,7 +163,12 @@ const firstRetry = (rows: BulkOutcome[]): RetryState | undefined => rows.find((o
  * inside its fold. A fold with nobody in it is not drawn. Null when the plan
  * can't be grouped ({@link groupable}): it is drawn flat.
  */
-export function groupPlan(plan: BulkPlan, noun: [string, string] = ["person", "people"], auto: AutoRetry = true): PlanGroup[] | null {
+export function groupPlan(
+  plan: BulkPlan,
+  noun: [string, string] = ["person", "people"],
+  auto: AutoRetry = true,
+  system: string = "Zitadel",
+): PlanGroup[] | null {
   if (!groupable(plan)) return null;
   const by = new Map<FoldKey, BulkOutcome[]>();
   for (const o of plan.outcomes) {
@@ -173,7 +178,7 @@ export function groupPlan(plan: BulkPlan, noun: [string, string] = ["person", "p
   const reached = !["wait", "unanswered", "refused"].some((k) => by.has(k as FoldKey));
   return GROUPS.flatMap(({ key, before, after }) => {
     const rows = by.get(key);
-    const heading = plan.applied ? after : before;
+    const heading = plan.applied ? after.replace("Zitadel", system) : before;
     if (!rows || !heading) return [];
     const group: PlanGroup = {
       key,
@@ -190,7 +195,7 @@ export function groupPlan(plan: BulkPlan, noun: [string, string] = ["person", "p
         break;
       case "unanswered": {
         const retry = firstRetry(rows);
-        Object.assign(group, { dot: "warn", note: retry ? retryLine(retry, "Zitadel", rows.length === 1 ? "it" : "them") : undefined });
+        Object.assign(group, { dot: "warn", note: retry ? retryLine(retry, system, rows.length === 1 ? "it" : "them") : undefined });
         break;
       }
       case "refused":
@@ -224,7 +229,7 @@ export function travels(o: Pick<BulkOutcome, "delivery" | "waits" | "goes">): { 
  * counted the rows the headings now carry. Undefined when there is nothing to
  * say (a flat plan, or one where nothing reaches Zitadel or waits).
  */
-export function beforeLine(plan: BulkPlan): string | undefined {
+export function beforeLine(plan: BulkPlan, system: string = "Zitadel"): string | undefined {
   if (plan.applied) return undefined;
   if (plan.summary?.apply === 0) return NOTHING_TO_APPLY;
   if (!groupable(plan)) return undefined;
@@ -238,10 +243,10 @@ export function beforeLine(plan: BulkPlan): string | undefined {
   }
   const cancelOnly = going.filter(onlyCancels).length;
   const said: string[] = [];
-  if (sends > 0 && waits === 0) said.push("Every change goes to Zitadel when you apply.");
+  if (sends > 0 && waits === 0) said.push(`Every change goes to ${system} when you apply.`);
   else if (sends === 0 && waits > 0)
-    said.push("Every change waits for you to send. Nothing reaches Zitadel until you press Send on Pending changes.");
-  else if (sends > 0) said.push(`Apply sends ${changes(sends)} to Zitadel now. ${waits} ${waits === 1 ? "waits" : "wait"} for you to send.`);
+    said.push(`Every change waits for you to send. Nothing reaches ${system} until you press Send on Pending changes.`);
+  else if (sends > 0) said.push(`Apply sends ${changes(sends)} to ${system} now. ${waits} ${waits === 1 ? "waits" : "wait"} for you to send.`);
   if (cancelOnly === 1) said.push("For 1, this only cancels a change that's waiting; nothing is sent.");
   else if (cancelOnly > 1) said.push(`For ${cancelOnly}, this only cancels changes that are waiting; nothing is sent.`);
   return said.join(" ") || undefined;
@@ -288,8 +293,9 @@ export function resultOutcome(
   plan: BulkPlan,
   noun: [string, string] = ["person", "people"],
   auto: AutoRetry = true,
+  system: string = "Zitadel",
 ): { outcome: ActionOutcome; word?: string } | null {
-  const groups = plan.applied ? groupPlan(plan, noun, auto) : null;
+  const groups = plan.applied ? groupPlan(plan, noun, auto, system) : null;
   if (!groups) return null;
   const rows = (key: FoldKey) => groups.find((g) => g.key === key)?.rows ?? [];
   const done = rows("go").length;
@@ -344,25 +350,25 @@ export function resultOutcome(
   const said: string[] = [];
   if (inZitadel > 0)
     said.push(
-      waiting === 0 && settled && inZitadel > 1 ? `All ${inZitadel} are in Zitadel now.` : `${inZitadel} ${inZitadel === 1 ? "is" : "are"} in Zitadel now.`,
+      waiting === 0 && settled && inZitadel > 1 ? `All ${inZitadel} are in ${system} now.` : `${inZitadel} ${inZitadel === 1 ? "is" : "are"} in ${system} now.`,
     );
   if (waiting > 0) {
     said.push(
       inZitadel === 0 && settled
-        ? `${waiting === 1 ? "It waits" : `All ${waiting} wait`} for you to send. Nothing has reached Zitadel yet.`
+        ? `${waiting === 1 ? "It waits" : `All ${waiting} wait`} for you to send. Nothing has reached ${system} yet.`
         : `${waiting} ${waiting === 1 ? "waits" : "wait"} for you to send.`,
     );
   }
-  if (again === 1) said.push("1 isn't in Zitadel yet; Syndra sends it again on its own.");
-  else if (again > 1) said.push(`${again} aren't in Zitadel yet; Syndra sends them again on its own.`);
-  if (unsure > 0) said.push(`${unsure} ${unsure === 1 ? "isn't" : "aren't"} in Zitadel yet.`);
-  if (refused === 1) said.push("Zitadel refused 1; the row says why.");
-  else if (refused > 1) said.push(`Zitadel refused ${refused}; each row says why.`);
+  if (again === 1) said.push(`1 isn't in ${system} yet; Syndra sends it again on its own.`);
+  else if (again > 1) said.push(`${again} aren't in ${system} yet; Syndra sends them again on its own.`);
+  if (unsure > 0) said.push(`${unsure} ${unsure === 1 ? "isn't" : "aren't"} in ${system} yet.`);
+  if (refused === 1) said.push(`${system} refused 1; the row says why.`);
+  else if (refused > 1) said.push(`${system} refused ${refused}; each row says why.`);
   if (said.length === 0) said.push("Nobody's access changed.");
   const message = said.join(" ");
   const word = resultWord(plan.op, written, written + refused, noun);
 
-  if (refused > 0) return { outcome: { kind: "failed", recorded: true, message, next: REFUSED_ROWS_NEXT }, word };
+  if (refused > 0) return { outcome: { kind: "failed", recorded: true, message, next: REFUSED_ROWS_NEXT.replace("Zitadel", system) }, word };
   if (wait > 0) return { outcome: { kind: "queued", message }, word };
   if (unanswered.length > 0) {
     const retry = firstRetry(unanswered);
@@ -377,7 +383,7 @@ export function resultOutcome(
  * A refused row's seat (A-21 §2.6, fold 4): what Zitadel said and the one true
  * step, from the row's wait reason. The row keeps its plan words above it.
  */
-export function refusedSeat(o: BulkOutcome, op: BulkPlan["op"]): string {
+export function refusedSeat(o: BulkOutcome, op: BulkPlan["op"], system: string = "Zitadel"): string {
   const reason = o.wait_reason ?? "refused:other";
-  return `Zitadel refused this: ${refusalCause(reason)}. ${refusedNext(reason, { revocation: REVOKING_OPS.has(op) })}`;
+  return `${system} refused this: ${refusalCause(reason)}. ${refusedNext(reason, { revocation: REVOKING_OPS.has(op) })}`;
 }

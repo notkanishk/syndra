@@ -38,10 +38,13 @@ export function PlanReview({
   plan,
   noun = ["person", "people"],
   auto = true,
+  system = "Zitadel",
 }: {
   plan: BulkPlan | null;
   /** Whether this server sends changes again on its own: which fold a queued row sits in after Apply. */
   auto?: AutoRetry;
+  /** The system the change is sent to, for the words (copy guide §3.10). */
+  system?: string;
   /**
    * What this plan's rows ARE, in the caller's own vocabulary.
    *
@@ -76,7 +79,7 @@ export function PlanReview({
   const cancelled = cancels.reduce((n, c) => n + c.count, 0);
   // Grouped by how each change travels when every row that goes ahead says
   // so (A-21 §Q1); flat otherwise, as every plan was before.
-  const groups = missing ? null : groupPlan(plan, noun, auto);
+  const groups = missing ? null : groupPlan(plan, noun, auto, system);
 
   return (
     <div className="px-6">
@@ -91,7 +94,7 @@ export function PlanReview({
         ) : (
           <>
             {groups
-              ? groups.map((group) => <PlanFold key={group.key} group={group} plan={plan} />)
+              ? groups.map((group) => <PlanFold key={group.key} group={group} plan={plan} system={system} />)
               : sortByName(outcomes, (o) => o.name || o.email || "", (o) => o.user_id).map((outcome) => (
                   <PlanRow key={outcome.user_id} outcome={outcome} applied={plan.applied} />
                 ))}
@@ -178,7 +181,7 @@ function PlanRow({ outcome, applied }: { outcome: BulkOutcome; applied: boolean 
  * top of the box so the glance survives scrolling, then its people, ten at a
  * time. Open by default; the heading says which, the row says what.
  */
-function PlanFold({ group, plan }: { group: PlanGroup; plan: BulkPlan }) {
+function PlanFold({ group, plan, system }: { group: PlanGroup; plan: BulkPlan; system: string }) {
   const [open, setOpen] = useState(true);
   const [limit, setLimit] = useState(PAGE_FIRST);
   const anchor = useRef<HTMLDivElement>(null);
@@ -200,7 +203,7 @@ function PlanFold({ group, plan }: { group: PlanGroup; plan: BulkPlan }) {
       {open && (
         <>
           {shown.map((outcome) => (
-            <FoldRow key={outcome.user_id} outcome={outcome} group={group.key} op={plan.op} />
+            <FoldRow key={outcome.user_id} outcome={outcome} group={group.key} op={plan.op} system={system} />
           ))}
           <PaginationRow
             shown={shown.length}
@@ -222,7 +225,7 @@ function PlanFold({ group, plan }: { group: PlanGroup; plan: BulkPlan }) {
  * as they are", where each row keeps its own word. After Apply, the row's seat
  * says its state: the link to send it, its retry, or the refusal and its step.
  */
-function FoldRow({ outcome, group, op }: { outcome: BulkOutcome; group: PlanGroup["key"]; op: BulkPlan["op"] }) {
+function FoldRow({ outcome, group, op, system }: { outcome: BulkOutcome; group: PlanGroup["key"]; op: BulkPlan["op"]; system: string }) {
   const said = splitCancels(outcome.consequence);
   // A row that only cancels says so in its own one sentence (A-21 §2.4); the
   // cancels line under the box still names what it cancels.
@@ -246,7 +249,7 @@ function FoldRow({ outcome, group, op }: { outcome: BulkOutcome; group: PlanGrou
       </span>
       {applied && group === "wait" && <NextStep person={outcome.person || outcome.user_id} className="mt-1.5" />}
       {applied && group === "unanswered" && outcome.retry && <RetryStatus retry={outcome.retry} className="mt-1.5" />}
-      {group === "refused" && <p className="mt-1.5 text-[13px] leading-[1.5] text-danger-text">{refusedSeat(outcome, op)}</p>}
+      {group === "refused" && <p className="mt-1.5 text-[13px] leading-[1.5] text-danger-text">{refusedSeat(outcome, op, system)}</p>}
     </div>
   );
 }
