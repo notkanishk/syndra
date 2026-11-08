@@ -195,3 +195,24 @@ func TestEnqueue_ACascade(t *testing.T) {
 		t.Fatalf("a direct removal's audit row has no cascade id, got %s", *c)
 	}
 }
+
+// A write the planner decided asks the rules nothing, even when its plan has
+// no rule rows: FollowRules would only read the closure a second time.
+func TestEnqueue_APlannedWriteDoesNotFollowRulesAgain(t *testing.T) {
+	ctx := liveDB(t)
+	user := enqueueSubject(t, ctx)
+	orig := FollowRules
+	t.Cleanup(func() { FollowRules = orig })
+	FollowRules = func(context.Context, EnqueueParams, func() error) ([]EnqueueParams, error) {
+		t.Error("FollowRules ran for a planned write")
+		return nil, nil
+	}
+	res, err := EnqueueDirectGrantPropagation(ctx, EnqueueParams{UserID: user, ProjectID: "p1", RoleKeys: []string{"community"},
+		GrantedBy: "op", OpType: "add", PayloadJSON: `{}`, RulesDecided: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.OutboxID == "" || len(res.RuleOutboxIDs) != 0 {
+		t.Fatalf("own row only, got %+v", res)
+	}
+}

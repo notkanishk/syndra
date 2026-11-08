@@ -31,6 +31,11 @@ type EnqueueParams struct {
 	// RuleFrom is, on a rule's row, the role that set it off, kept in the
 	// row's payload_json so a later edit to the rule doesn't rename it.
 	RuleFrom *models.RuleFrom
+	// RulesDecided is set by the planner on the writes it decided: the rule
+	// rows that go with them are the plan's (params[1:], possibly none), so
+	// FollowRules does not ask the rules again, a second reading of the same
+	// closure that could only repeat the plan or contradict it.
+	RulesDecided bool
 	// NoPropagation records the ledger and audit rows without an outbox row,
 	// for the one case where Syndra owes Zitadel nothing: adopting drift.
 	// external_backfill means Zitadel is already authoritative, so there is no
@@ -127,7 +132,8 @@ var FollowRules func(ctx context.Context, p EnqueueParams, write func() error) (
 //
 // planned is the rule rows the planner decided for this write (task 1.2): they
 // are written as decided, each with its delivery, instead of asking the rules
-// again. None means the rules follow here (FollowRules).
+// again. None, on a write the planner did not decide, means the rules follow
+// here (FollowRules); only tests and the unplanned path ask it now.
 func EnqueueDirectGrantPropagation(ctx context.Context, p EnqueueParams, planned ...EnqueueParams) (EnqueueResult, error) {
 	key, err := newOutboxIdempotencyKey()
 	if err != nil {
@@ -311,7 +317,7 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 		// planner decided carries them already (params[1:], with how each is
 		// delivered), and nothing here decides them again.
 		switch {
-		case len(params) > 1:
+		case len(params) > 1 || p.RulesDecided:
 			params, err = params[1:], write()
 		case FollowRules == nil:
 			params, err = nil, write()

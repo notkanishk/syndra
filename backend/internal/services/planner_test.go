@@ -374,3 +374,17 @@ func TestPlan_FingerprintStabilityAndChange(t *testing.T) {
 		}
 	}
 }
+
+// Every write the planner decides says so, so db.FollowRules never asks the
+// rules again for it (a plan with no rule rows is a plan, not a gap to fill).
+func TestPlan_EveryWriteIsMarkedRulesDecided(t *testing.T) {
+	ch := assign(plannerSnap())
+	if len(ch.Writes) == 0 {
+		t.Fatal("expected writes")
+	}
+	for _, w := range ch.Writes {
+		if !w.RulesDecided {
+			t.Fatalf("a planned write must carry RulesDecided: %+v", w)
+		}
+	}
+}
