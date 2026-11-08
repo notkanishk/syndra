@@ -314,6 +314,23 @@ show what else this would give or cancel. Try again to read it." What the
 automatic rules add is the planner's sentence, one source: "Also gives
 Trained in Laser Lab, by the automatic rule from Member in Laser Lab."
 
+**What set a change off, and why** (architecture deepening 1.6a, 1.8a). A
+rule's queued change names the role one step before it in a chain, as it was
+when the change was queued, so editing the rule later renames nothing: "Rule
+from Trained in Laser Lab" on Pending changes, "by the automatic rule from
+Trained in Laser Lab" in Change history (on a rule's write inside a bundle's
+change, or one step further down than the rule edited). A rule since retired,
+or unknown: "Automatic rule" on Pending changes, "by an automatic rule" in
+Change history. The operator's reason is quoted, “term start”, once on each
+line that shows the change: under the event on the Audit page, a person's
+Activity and Home (a bundle given or taken, a role given, extended or
+removed, a sign-in lookup), and under each Zitadel row on Pending changes.
+Nothing when none was given, and Syndra's own words are never quoted as a
+reason (a removal with none used to record "Direct access removal"). Where
+it goes is said truly: the bulk dialog's "Syndra keeps it with each person's
+change." and the sign-in lookup's "It's on the Audit page with your reason."
+(it said Change history, which holds bundle and rule changes only).
+
 **A revoke that only cancels is the cancel, said plainly.** Lede: "Given to
 Rohan on 3 Nov by Sam Lee, and still waiting for you to send." Body: "Nothing
 to take back. It hasn't reached Zitadel, so Rohan never had it. This cancels
