@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A dialog's three moments</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Drawn inline until built (BRIDGE): the What-happens list (danger-note in code, not in the bundle), the source chip, the forecast word in the footer seat. The dialog, its header, footer, outcome block, dots and buttons are the real parts. */
+.a22-body{padding:0 24px 8px;display:flex;flex-direction:column;gap:14px}
+.a22-what{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:var(--radius-inner);border:1px solid var(--danger-line);background:var(--danger-soft)}
+.a22-what .a22-lead{font-size:15px;font-weight:600;color:var(--danger-text)}
+.a22-what p{margin:0;font-size:14px;line-height:1.5;color:var(--muted);text-wrap:pretty}
+.a22-quiet{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.5;text-wrap:pretty}
+.a22-quiet strong{font-weight:600}
+.a22-quiet span.a22-rest{color:var(--muted)}
+.a22-forecast{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--ink)}
+.a22-chip{font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label)}
+.a22-cell{min-width:0;font-size:14px;line-height:1.5;text-wrap:pretty}
+.a22-cell.m{color:var(--muted)}
+.a22-pair{display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center}
+@container syndra-frame (max-width: 719px){.a22-body{padding:0 20px 8px}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Dialog life cycle board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Every dialog · Proposed 8 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">A dialog's three moments</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-22, G20 to G31. One sheet, three moments: before the press it says what will happen and asks; while pressing it forecasts in its own tense; after, it becomes its result and nothing it previewed is still on screen. The same shape for an act that takes something away and for one that only cancels something unsent. The title is the act in the button's words, the dismiss says what it keeps, and the colour follows what happens to the person, not the name of the button.</p>
+  </header>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · Taking something away: Revoke, before · pressing · after</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Anushka Sinha holds Community in Navidrome by hand, and it is in Zitadel. Before: the lede is the fact, the What-happens list is the loss, the before-line says how it travels, the pair is Keep it beside the solid red act. Pressing: the before-line's seat becomes the forecast and both buttons hold. After: the lede, the list and the before-line are gone; the sheet is its result, with one Close.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ revFrames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:520px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:1040px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">2 · Cancelling something unsent: the same sheet, quiet</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The give never reached Zitadel, so nobody loses anything. The title changes with the act (Cancel the waiting give, no question mark), the body is one neutral line, the act is accent, and the dismiss is Keep it: two buttons never share a verb. The first frame is what staging shows today: a Revoke title over a cancel, two Cancels, and a red pre-act warning left standing above a green result.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ canFrames }}" as="f" hint-placeholder-count="5">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:520px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:1040px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:{{ f.edge }};background:var(--canvas)"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">3 · Button pairs (G24)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The act names its verb and its object. The dismiss is the ghost half of the pair and says what it keeps: Keep it (or them) when the act takes something away, retires, cancels or declines; Cancel only for a form that creates, asks or gives, where nothing exists yet to keep. After the result, one outline Close. Never OK, Confirm, Yes, or a second Cancel.</p>
+    <div class="card" style="overflow:hidden">
+      <div style="display:flex;gap:18px;padding:10px 22px;border-bottom:1px solid var(--line)"><span class="type-label" style="flex:0 0 220px;color:var(--label)">Sheet</span><span class="type-label" style="flex:0 0 360px;color:var(--label)">Pair, drawn</span><span class="type-label" style="flex:1 1 240px;color:var(--label)">Today</span><span class="type-label" style="flex:1 1 240px;color:var(--label)">Why</span></div>
+      <sc-for list="{{ pairs }}" as="p" hint-placeholder-count="8">
+        <div style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 22px;border-top:{{ p.rule }};align-items:center">
+          <span class="a22-cell" style="flex:0 0 220px;font-weight:600">{{ p.sheet }}</span>
+          <span class="a22-pair" style="flex:0 0 360px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="90px,32px">{{ p.dismiss }}</x-import><x-import component-from-global-scope="Syndra.Button" variant="{{ p.variant }}" size="sm" hint-size="160px,32px">{{ p.act }}</x-import></span>
+          <span class="a22-cell m" style="flex:1 1 240px">{{ p.today }}</span>
+          <span class="a22-cell m" style="flex:1 1 240px">{{ p.why }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">4 · What earns red, what earns amber, what stays quiet (G25)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Colour follows what the act does to a named person. Red is a loss that reaches a system: the What-happens list, the solid red confirm, the danger dot on a failure. Amber is a step left or a state to read before pressing: waits for you, a stale plan, an I-understand tick, a system not answering. Everything else is quiet text: what only records, asks, previews, or cancels something unsent.</p>
+    <div class="card" style="overflow:hidden">
+      <div style="display:flex;gap:18px;padding:10px 22px;border-bottom:1px solid var(--line)"><span class="type-label" style="flex:0 0 160px;color:var(--label)">Tone</span><span class="type-label" style="flex:0 0 220px;color:var(--label)">Drawn as</span><span class="type-label" style="flex:1 1 300px;color:var(--label)">When</span><span class="type-label" style="flex:1 1 240px;color:var(--label)">Examples</span></div>
+      <sc-for list="{{ tones }}" as="t" hint-placeholder-count="4">
+        <div style="display:flex;flex-wrap:wrap;gap:6px 18px;padding:12px 22px;border-top:{{ t.rule }}">
+          <span class="a22-cell" style="flex:0 0 160px;display:inline-flex;align-items:flex-start;gap:8px;font-weight:600"><span style="padding-top:6px"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ t.dot }}" hint-size="6px,6px"></x-import></span><span>{{ t.name }}</span></span>
+          <span class="a22-cell m" style="flex:0 0 220px">{{ t.drawn }}</span>
+          <span class="a22-cell m" style="flex:1 1 300px">{{ t.when }}</span>
+          <span class="a22-cell m" style="flex:1 1 240px">{{ t.eg }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you (this board)</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:90ch">The full answer is from-design/A-22-every-message-in-its-place.md. Pending changes after Send is a22-pending-one-outcome.</p>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u7" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Anushka Sinha" lede="anushka.sinha@example.edu · Member" hint-size="100%,90px"></x-import>
+</div>
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="a22-title" hint-size="420px,560px">
+  <sc-if value="{{ d.hasLede }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.ModalHeader" chip="{{ chipEl }}" title="{{ d.title }}" lede="{{ d.lede }}" title-id="a22-title" hint-size="100%,120px"></x-import>
+  </sc-if>
+  <sc-if value="{{ d.noLede }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.ModalHeader" chip="{{ chipEl }}" title="{{ d.title }}" title-id="a22-title" hint-size="100%,90px"></x-import>
+  </sc-if>
+  <sc-if value="{{ d.showWhat }}" hint-placeholder-val="{{ true }}">
+    <div class="a22-body">
+      <div class="a22-what"><span class="a22-lead">{{ d.whatLead }}</span><p>{{ d.whatRest }}</p></div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ d.showQuiet }}" hint-placeholder-val="{{ false }}">
+    <div class="a22-body">
+      <div class="a22-quiet"><span style="padding-top:7px"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import></span><span><strong>Nothing to take back.</strong> <span class="a22-rest">It hasn't reached Zitadel, so Anushka never had it. This cancels that give and sends nothing.</span></span></div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ d.showResult }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.ActionOutcome" placement="block" word="{{ d.word }}" outcome="{{ d.outcome }}" class-name="mx-6 mb-1" hint-size="100%,130px"></x-import>
+  </sc-if>
+  <sc-if value="{{ d.showPair }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ noteEl }}" cancel="{{ d.cancel }}" hint-size="100%,96px">
+      <x-import component-from-global-scope="Syndra.Button" variant="{{ d.variant }}" is-pending="{{ d.busy }}" on-click="{{ noop }}" hint-size="170px,40px">{{ d.act }}</x-import>
+    </x-import>
+  </sc-if>
+  <sc-if value="{{ d.showClose }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px">
+      <x-import component-from-global-scope="Syndra.Button" variant="outline" on-click="{{ noop }}" hint-size="90px,40px">Close</x-import>
+    </x-import>
+  </sc-if>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":4200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame") || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 1, auto_retry: true } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const noop = () => {};
+    const DIV = "1px solid var(--divider)";
+    const parts = this.frame.split("-");
+    const kind = parts[0];
+    const moment = parts[1] || "before";
+    const f = (frame, label, note, rec) => ({ src: "a22-dialog-lifecycle.dc.html?frame=" + frame, label, note: note || "", edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+
+    // The forecast seat: an amber breathing dot and the act in Syndra's own tense (ActionForecast in code).
+    const forecast = (word) => React.createElement("span", { className: "a22-forecast", role: "status" },
+      React.createElement(window.Syndra.StatusDot, { tone: "warn", className: "breathe" }), word);
+    const chip = (text) => React.createElement("span", { className: "a22-chip" }, text);
+
+    const revokeNext = "Nothing for you to do. Syndra sends it on its own and says on Home if it stops sending it.";
+    const dialogs = {
+      rev: {
+        before: { chip: "Direct access", title: "Revoke Community in Navidrome?", lede: "Given by hand to Anushka Sinha on 3 Nov by Kanishk Singh. In Zitadel now.", what: true, whatLead: "Anushka will lose this role.", whatRest: "No bundle and no rule gives it to her. Her access ends once the change reaches Zitadel.", note: "Revocations send on their own, within a minute.", cancel: { onClick: noop, label: "Keep it" }, act: "Revoke this role", variant: "dangerConfirm" },
+        pressing: { chip: "Direct access", title: "Revoke Community in Navidrome?", lede: "Given by hand to Anushka Sinha on 3 Nov by Kanishk Singh. In Zitadel now.", what: true, whatLead: "Anushka will lose this role.", whatRest: "No bundle and no rule gives it to her. Her access ends once the change reaches Zitadel.", forecast: "Will be revoked", cancel: { onClick: noop, label: "Keep it", disabled: true }, act: "Revoke this role", variant: "dangerConfirm", busy: true },
+        done: { chip: "Direct access", title: "Revoke Community in Navidrome?", result: true, word: "Revoked", outcome: { kind: "queued", sendsItself: true, message: "Revoked in Syndra. Revocations send on their own, so it leaves Zitadel within a minute", next: revokeNext } },
+      },
+      can: {
+        today: { chip: "Direct access", title: "Revoke direct access to Navidrome / Community?", lede: "Given to Anushka on 3 Nov by Kanishk Singh, and still waiting for you to send.", what: true, whatLead: "Anushka Sinha will lose this role.", whatRest: "No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel. Revocations send on their own, within a minute.", result: true, word: "Cancelled", outcome: { kind: "applied", message: "The give of Community in Navidrome that was waiting is cancelled. Anushka never had it, so nothing goes to Zitadel.", next: "Nothing for you to do." }, close: true },
+        before: { chip: "Direct access", title: "Cancel the waiting give", lede: "Given to Anushka Sinha on 3 Nov by Kanishk Singh, and still waiting for you to send.", quiet: true, note: "Nothing is sent. Change history records the give and its cancel.", cancel: { onClick: noop, label: "Keep it" }, act: "Cancel the waiting give", variant: "accent" },
+        pressing: { chip: "Direct access", title: "Cancel the waiting give", lede: "Given to Anushka Sinha on 3 Nov by Kanishk Singh, and still waiting for you to send.", quiet: true, forecast: "Will be cancelled", cancel: { onClick: noop, label: "Keep it", disabled: true }, act: "Cancel the waiting give", variant: "accent", busy: true },
+        done: { chip: "Direct access", title: "Cancel the waiting give", result: true, word: "Cancelled", outcome: { kind: "applied", message: "The give of Community in Navidrome that was waiting is cancelled. Anushka never had it, so nothing goes to Zitadel.", next: "Nothing for you to do." } },
+      },
+    };
+    const picked = (dialogs[kind] && dialogs[kind][moment]) || dialogs.rev.before;
+    const d = {
+      title: picked.title,
+      lede: picked.lede || "",
+      hasLede: Boolean(picked.lede),
+      noLede: !picked.lede,
+      showWhat: Boolean(picked.what),
+      whatLead: picked.whatLead || "",
+      whatRest: picked.whatRest || "",
+      showQuiet: Boolean(picked.quiet),
+      showResult: Boolean(picked.result),
+      word: picked.word || "",
+      outcome: picked.outcome || { kind: "applied", message: "" },
+      showPair: Boolean(picked.act),
+      showClose: Boolean(picked.result) && !picked.act,
+      cancel: picked.cancel || { onClick: noop },
+      act: picked.act || "",
+      variant: picked.variant || "accent",
+      busy: Boolean(picked.busy),
+    };
+    const noteEl = picked.forecast ? forecast(picked.forecast) : (picked.note || "");
+    const chipEl = chip(picked.chip || "");
+
+    const P = (sheet, dismiss, act, variant, today, why) => ({ sheet, dismiss, act, variant, today, why });
+    const pairs = [
+      P("Revoke a role", "Keep it", "Revoke this role", "dangerConfirm", "Cancel · Revoke access", "She loses access, so the dismiss says what stays. The act's object is the title's role."),
+      P("Cancel a waiting give", "Keep it", "Cancel the waiting give", "accent", "Cancel · Cancel the waiting give", "Two Cancels were one word for two acts. Nobody loses anything, so the act is accent."),
+      P("Remove a bundle", "Keep it", "Remove the bundle", "dangerConfirm", "Cancel · Remove bundle", "The bundle stays if you don't."),
+      P("Retire a bundle or rule", "Keep it", "Retire and revoke", "dangerConfirm", "Cancel · Retire and revoke", "The same pair for both; the act already carries the loss."),
+      P("Give a role", "Cancel", "Give Community", "accent", "Cancel · Give role", "Nothing exists yet to keep. The act names the role once it is chosen."),
+      P("Ask for access", "Cancel", "Ask for access", "accent", "Cancel · Ask for access", "As today. A form that creates keeps Cancel."),
+      P("Decline a request (bulk)", "Keep them open", "Decline 3 requests", "accent", "Cancel · Apply to 3 people", "Declining closes something; the dismiss keeps it open and the act counts."),
+      P("Any sheet, after its result", "", "Close", "outline", "Close", "One outline Close. The result is the sheet; there is nothing left to keep or do here."),
+    ];
+    pairs.forEach((x, i) => { x.rule = i === 0 ? "0" : DIV; });
+
+    const T = (name, dot, drawn, when, eg) => ({ name, dot, drawn, when, eg });
+    const tones = [
+      T("Red", "danger", "What-happens list on danger-soft; dangerConfirm; danger dot on a failure", "A named person loses access, or something is gone for good, and it reaches Zitadel or a system.", "Revoke, Remove a bundle, Retire with holders, Replace roles, Move people to a version that drops roles."),
+      T("Amber", "warn", "Amber dot and warn text; an I-understand tick on warn-soft; a warn Notice", "A step is left for the reader, or a state must be read before pressing. Never a result in itself.", "Waits for you to send, a stale plan, Zitadel didn't answer, a change over the usual size."),
+      T("Quiet", "neutral", "The lede, a faint before-line, a neutral dot", "What only records, asks, previews, or cancels something that never reached anybody.", "Cancel the waiting give, Let it lapse, Ask for access, Look up sign-ins, Mark as owned elsewhere."),
+      T("Healthy", "healthy", "Lime dot; blooms once in a result you caused", "The act is done and nothing is left to do. Said once, never celebrated twice.", "Given, Cancelled, Saved, Extended by 90 days."),
+    ];
+    tones.forEach((x, i) => { x.rule = i === 0 ? "0" : DIV; });
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("The dismiss says what it keeps (Keep it / Keep them) whenever the act takes something away, retires, cancels or declines, and stays Cancel only on a form that creates, asks or gives?", "Yes. One rule by what the act does, not by what it is called. Keep it everywhere would read oddly beside Give a role; Cancel everywhere is the bug you saw."),
+      Q("A question mark in the title only when the act takes something away (Revoke …? Retire …? Remove …?), never on an act that only records or cancels something unsent?", "Yes. The question is the pause; a reversible act needs none, and a title that asks a question over a cancel makes the cancel feel like a loss."),
+      Q("After the result, the lede leaves with the body, and the header keeps only the chip and the title?", "Yes. A lede is the fact before the press; after it, the result's sentence is the fact. Given directly to Anushka above Revoked contradicts itself."),
+      Q("Revoke's own words: the forecast Will be revoked and the result Revoked on a person's direct access, leaving Removed for a bundle taken out of a person's set?", "Yes. The title says Revoke and the result said Removed; the verbs rule gives each its own word."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame,
+      isFrame: Boolean(this.frame),
+      operator: this.operator, rootData: this.rootData, noop,
+      d, noteEl, chipEl,
+      pairs, tones, questions,
+      revFrames: [
+        f("rev-before", "Before · dark", "Chip, title, the fact as lede, the loss as the What-happens list, the before-line under the pair. Keep it is ghost and first; the act is solid red and names the role.", true),
+        f("rev-pressing", "Pressing", "The before-line's seat becomes the forecast, Will be revoked, amber and breathing. Both buttons hold; nothing else moves.", true),
+        f("rev-done", "After · dark", "The sheet is its result: Revoked, one sentence, the step (none, Syndra sends it). The lede, the list and the before-line are gone. One Close.", true),
+        f("rev-done-light", "After · light", "The same in daylight.", true),
+      ],
+      canFrames: [
+        f("can-today", "Today, on staging", "A Revoke title over a cancel; Cancel beside Cancel the waiting give; after the press, the red pre-act warning stays above the green result.", false),
+        f("can-before", "Before · dark", "The title is the act. One neutral line says nothing is taken back. The before-line says nothing is sent. Keep it beside an accent act.", true),
+        f("can-pressing", "Pressing", "Will be cancelled in the forecast seat.", true),
+        f("can-done", "After · dark", "Cancelled. Anushka never had it, so nothing goes to Zitadel. Nothing for you to do. Close.", true),
+        f("can-done-light", "After · light", "The same in daylight.", true),
+      ],
+      phoneFrames: [
+        f("rev-before-phone", "Phone · before", "The sheet rises from the bottom; the footer is pinned, so the before-line and the pair are under the thumb and the What-happens list is read above them.", true),
+        f("can-done-phone", "Phone · after", "The result at the top of the sheet, Close in reach.", true),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
