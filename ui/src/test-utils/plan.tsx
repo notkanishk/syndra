@@ -29,7 +29,7 @@ export const queuedChange = (over: Partial<QueuedChange> = {}): QueuedChange => 
   source: "direct",
   initiated_by: "op-2",
   initiated_by_name: "Sam Lee",
-  reason: "left the course",
+  said: "left the course",
   queued_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
   ...over,
 });

@@ -182,6 +182,10 @@ type AuditLog struct {
 	// Details is structured detail an entry carries when it has any (migration
 	// 000064); today a propagation.cancelled_unsent's what-and-why. Operator-only.
 	Details json.RawMessage `json:"details,omitempty"`
+	// Said is the operator's reason in Details (`reason`, or a cancellation's
+	// `cancelled.reason`) as they said it (db.Said: none for Syndra's own
+	// labels): the only reason an audit line quotes.
+	Said string `json:"said,omitempty"`
 	// Operation is, on an add-on send's row, that change as one record: its
 	// send, its one automatic resend, and what settled it. Read from the
 	// record table, never stored in the audit row.
@@ -603,6 +607,9 @@ type PendingPropagation struct {
 	// Reason is why it was queued, for a row whose project and roles say
 	// nothing: an add-on convergence. Empty on rows queued before it was kept.
 	Reason string `json:"reason,omitempty"`
+	// Said is, on a Zitadel row, Reason as a person said it (db.Said: none
+	// for Syndra's own labels): the only reason Pending changes quotes.
+	Said string `json:"said,omitempty"`
 	// WaitReason is why it waits for the operator: role_waits (the role
 	// always waits), halted:<reason> (meant to go, and the send stopped), or
 	// manual (a bundle or rule set to wait, before the switch over). Empty for
@@ -662,9 +669,9 @@ type CascadeGroup struct {
 	CascadeID string `json:"cascade_id"`
 	Source    string `json:"source"`               // bundle | rule | lifecycle_cascade
 	SourceRef string `json:"source_ref,omitempty"` // originating bundle/rule id
-	// Reason is the operator's words for the change, when they gave some
-	// (a bulk bundle assign or remove asks for them).
-	Reason  string `json:"reason,omitempty"`
+	// Said is the operator's words for the change, when they gave some (a
+	// bulk bundle assign or remove asks for them), as db.Said leaves them.
+	Said    string `json:"said,omitempty"`
 	Applied int    `json:"applied"`
 	Waiting int    `json:"waiting"`
 	Failed  int    `json:"failed"`
@@ -889,10 +896,13 @@ type QueuedChange struct {
 	Source    string   `json:"source"`
 	// SourceRef is the bundle or rule the change came from: a revoke answers
 	// only an add from the same one (db.Answers). Not said to anyone.
-	SourceRef   string    `json:"-"`
-	InitiatedBy string    `json:"initiated_by"`
-	Reason      string    `json:"reason,omitempty"`
-	QueuedAt    time.Time `json:"queued_at"`
+	SourceRef   string `json:"-"`
+	InitiatedBy string `json:"initiated_by"`
+	// Reason is the row's reason column as stored; Said is it as a person
+	// said it (db.Said: none for Syndra's own labels), the only one quoted.
+	Reason   string    `json:"-"`
+	Said     string    `json:"said,omitempty"`
+	QueuedAt time.Time `json:"queued_at"`
 }
 
 // RequestHolding is what a requester already has of the role they ask for.

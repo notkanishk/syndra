@@ -161,6 +161,7 @@ func GetAuditLogsForUser(
 			return nil, err
 		}
 		l.Details = details
+		l.Said = detailsSaid(details)
 		l.Operation = operation
 		logs = append(logs, l)
 	}

@@ -34,8 +34,8 @@ export interface CascadeGroupRow {
   cascade_id: string;
   source: string;
   source_ref?: string;
-  /** The operator's words for the change, when they gave some (a bulk bundle assign or remove). */
-  reason?: string;
+  /** The operator's words for the change, as they said them (backend `db.Said`: never Syndra's own labels). */
+  said?: string;
   applied: number;
   waiting: number;
   failed: number;

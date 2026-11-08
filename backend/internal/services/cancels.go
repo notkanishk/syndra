@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 )
 
@@ -19,8 +20,8 @@ func DescribeCancels(changes []models.QueuedChange) string {
 			what = "removal"
 		}
 		part := fmt.Sprintf("the %s of %s queued %s", what, strings.Join(c.RoleKeys, ", "), formatDay(c.QueuedAt))
-		if c.Reason != "" {
-			part += fmt.Sprintf(" (%s)", c.Reason)
+		if said := db.Said(c.Reason); said != "" {
+			part += fmt.Sprintf(" (%s)", said)
 		}
 		parts = append(parts, part)
 	}

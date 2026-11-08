@@ -85,7 +85,8 @@ func TestShapeMyChanges(t *testing.T) {
 		{Kind: "request_approved", At: at, ProjectID: "p", RoleKey: "sent", Actor: "kanishk"},
 		{Kind: "request_declined", At: at, ProjectID: "p", RoleKey: "m", Actor: "system", Note: "n"},
 		{Kind: "request_withdrawn", At: at, ProjectID: "p", RoleKey: "w"},
-		{Kind: "given", At: at, ProjectID: "p", RoleKey: "b", Actor: "kanishk", Source: "bundle", SourceRef: "b1"},
+		// An extension from Home carries Syndra's label as the grant's reason: never quoted.
+		{Kind: "given", At: at, ProjectID: "p", RoleKey: "b", Actor: "kanishk", Source: "bundle", SourceRef: "b1", Note: "Extended from Home"},
 		{Kind: "given", At: at, ProjectID: "p", RoleKey: "r", Actor: "kanishk", Source: "rule", SourceRef: "r1"},
 		{Kind: "taken_away", At: at, ProjectID: "p", RoleKey: "t", Actor: "system:expiry", Source: "direct", Pending: true},
 		{Kind: "taken_away", At: at, ProjectID: "p", RoleKey: "l", Actor: "kanishk", Source: "lifecycle_cascade"},
@@ -105,7 +106,7 @@ func TestShapeMyChanges(t *testing.T) {
 	if got[3].By != "" || got[4].By != "" {
 		t.Fatalf("decided by Syndra, or withdrawn by the member, names nobody: %+v %+v", got[3], got[4])
 	}
-	if c := got[5]; c.Via == nil || c.Via.BundleID != "b1" || c.By != "kanishk" {
+	if c := got[5]; c.Via == nil || c.Via.BundleID != "b1" || c.By != "kanishk" || c.Note != "" {
 		t.Fatalf("via a bundle: %+v", c)
 	}
 	if c := got[6]; c.Via == nil || c.Via.RuleID != "r1" || c.By != "" {

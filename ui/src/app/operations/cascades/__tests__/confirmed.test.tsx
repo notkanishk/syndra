@@ -102,7 +102,7 @@ describe("Change history: sent vs. confirmed", () => {
 
   // The bulk dialog asks for a reason; for a bundle change it shows here.
   it("says the operator's reason when the change came with one, and nothing when it didn't", () => {
-    groups = [group({ cascade_id: "with", reason: "term start", applied: 1, confirmed: 1 }), group({ cascade_id: "without" })];
+    groups = [group({ cascade_id: "with", said: "term start", applied: 1, confirmed: 1 }), group({ cascade_id: "without" })];
     renderPage();
 
     expect(screen.getAllByText("“term start”")).toHaveLength(1);

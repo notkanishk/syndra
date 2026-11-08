@@ -104,7 +104,7 @@ func shapeMyChanges(rows []db.MyChangeRow, triggers map[string]myTrigger) []myCh
 	for _, row := range rows {
 		c := myChange{
 			Kind: row.Kind, At: row.At, ProjectID: row.ProjectID, RoleKey: row.RoleKey, RequestKind: row.RequestKind,
-			Note: strings.TrimSpace(row.Note), Until: row.Until,
+			Note: db.Said(row.Note), Until: row.Until,
 			EndedBefore: row.EndedBefore, EndsAfter: row.EndsAfter,
 		}
 		switch row.Source {

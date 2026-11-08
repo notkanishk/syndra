@@ -111,12 +111,14 @@ describe("EventSentence", () => {
 
   // A-04 §14.8: with `details` the entry says what the change was, who queued it, when,
   // why, and which act cancelled it.
+  // `said` is what the backend reads from the reason (db.Said).
   const cancelled = (over: Record<string, unknown> = {}, cause: Record<string, unknown> = { action: "grant", via: "direct" }, actor = "op1") =>
     entry({
       action: "propagation.cancelled_unsent",
       actor_id: actor,
       target_id: "u1",
       created_at: new Date().toISOString(),
+      said: ("reason" in over ? over.reason : "Left the lab") as string | undefined,
       details: {
         cancelled: {
           kind: "remove", project_id: "p1", role_key: "member", user_id: "u1",
@@ -167,10 +169,10 @@ describe("EventSentence", () => {
 });
 
 /**
- * The operator's reason is kept on the event (`details.reason`) and said
- * under it, quoted, once (task 1.8a): on the Audit page, a person's Activity
- * and Home, which all draw EventSentence. Nothing when none was given, and
- * never Syndra's own words quoted as someone's.
+ * The operator's reason is said under the event, quoted, once (task 1.8a): on
+ * the Audit page, a person's Activity and Home, which all draw EventSentence.
+ * Only the backend's `said` is quoted, never `details.reason`, which can hold
+ * Syndra's own labels ("Direct access removal"); nothing when none was given.
  */
 describe("EventSentence · the reason", () => {
   it.each([
@@ -180,18 +182,41 @@ describe("EventSentence · the reason", () => {
     ["direct_grant.removed", "Revoked Gaurav Prem Singh's direct access by hand"],
     ["direct_grant.revoked", "Revoked Gaurav Prem Singh's direct access"],
   ])("quotes it under %s", (action, sentence) => {
-    render(<EventSentence entry={entry({ action, details: { reason: "term start" } })} />);
+    render(<EventSentence entry={entry({ action, details: { reason: "term start" }, said: "term start" })} />);
     expect(document.body.textContent).toBe(`${sentence}“term start”`);
     expect(screen.getAllByText("“term start”")).toHaveLength(1);
   });
 
   it("says nothing when none was given", () => {
-    render(<EventSentence entry={entry({ action: "bundle.assigned", details: { reason: "  " } })} />);
+    render(<EventSentence entry={entry({ action: "bundle.assigned" })} />);
     expect(document.body.textContent).toBe("Gave Gaurav Prem Singh a bundle");
   });
 
-  it("never quotes Syndra's own words as a reason", () => {
-    render(<EventSentence entry={entry({ action: "action_key.partly_replaced", target_id: "-", details: { reason: "Zitadel replaced one key" } })} />);
+  // A removal recorded on 8 Nov with Syndra's label: the backend says nothing was said.
+  it("never quotes a label of Syndra's kept as the reason", () => {
+    render(<EventSentence entry={entry({ action: "direct_grant.removed", details: { reason: "Direct access removal" } })} />);
+    expect(document.body.textContent).toBe("Revoked Gaurav Prem Singh's direct access by hand");
+  });
+
+  it("never quotes another event's details as a reason", () => {
+    render(<EventSentence entry={entry({ action: "action_key.partly_replaced", target_id: "-", details: { reason: "Zitadel replaced one key" }, said: "Zitadel replaced one key" })} />);
     expect(document.body.textContent).not.toContain("“");
+  });
+
+  it("a cancellation quotes only what was said", () => {
+    render(
+      <EventSentence
+        entry={entry({
+          action: "propagation.cancelled_unsent",
+          actor_id: "op1",
+          details: {
+            cancelled: { kind: "give", project_id: "p1", role_key: "member", user_id: "u1", initiated_by: "op2", queued_at: new Date().toISOString(), reason: "Extended from Home" },
+            cause: { action: "remove", via: "direct" },
+          },
+        })}
+      />,
+    );
+    expect(document.body.textContent).not.toContain("“");
+    expect(document.body.textContent).toContain("Asha gave no reason.");
   });
 });
