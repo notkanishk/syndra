@@ -547,3 +547,19 @@ describe("Identity provider · Change Zitadel directly", () => {
     expect(screen.getByText(/Unavailable while Zitadel isn.t answering: these change it directly/)).toBeInTheDocument();
   });
 });
+
+/** Staging's stand-in (ZITADEL_FAKE_WORLD) says so; a real Zitadel never does. */
+describe("Identity provider · the staging stand-in", () => {
+  it("says plainly that Zitadel here is staging's stand-in", async () => {
+    health.value = { status: "ok", mode: "stand-in", latency_ms: 1, projects_total: 6 };
+    renderPage();
+    expect(await screen.findByText("This is staging, and its Zitadel is a stand-in.")).toBeInTheDocument();
+    expect(screen.getByText(/changes only that copy, never production/)).toBeInTheDocument();
+  });
+
+  it("says nothing of a stand-in against a real Zitadel", async () => {
+    renderPage();
+    expect(await screen.findByText("Answering")).toBeInTheDocument();
+    expect(screen.queryByText(/stand-in/)).not.toBeInTheDocument();
+  });
+});
