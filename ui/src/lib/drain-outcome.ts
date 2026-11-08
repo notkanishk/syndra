@@ -62,10 +62,16 @@ export function describeDrain(result: DrainResult | undefined, auto: AutoRetry =
   // send carries no `passes`, and "undefined was skipped" is worse than the
   // reason-shaped sentence below.
   if (result?.halted && counts && stalled) {
+    // How many the skipped systems left waiting, when every halted pass said
+    // (browser pass, 8 Nov). A system with nothing of its own to send is not
+    // halted at all, so it is never named here.
+    const left = halted.every((pass) => typeof pass.waiting === "number")
+      ? halted.reduce((n, pass) => n + (pass.waiting ?? 0), 0)
+      : undefined;
     return {
       tone: "warning",
       message: `${counts}. ${stalled} was skipped.`,
-      detail: haltDetail(result.reason, stalled),
+      detail: haltDetail(result.reason, stalled, left || undefined),
     };
   }
 
@@ -204,12 +210,13 @@ export function outcomeFromDrain(result: DrainResult | undefined, auto: AutoRetr
  * different when other passes DID work: the operator is not being told the
  * send failed, they are being told which part of it is still outstanding.
  */
-function haltDetail(reason: string | undefined, system: string | undefined): string {
+function haltDetail(reason: string | undefined, system: string | undefined, waiting?: number): string {
+  const its = waiting === undefined ? "Its changes are" : waiting === 1 ? "Its 1 change is" : `Its ${waiting} changes are`;
   switch (reason) {
     case "zitadel_offline":
-      return "Zitadel is not answering. Its changes are still waiting for you to send, in order; the rest went through.";
+      return `Zitadel is not answering. ${its} still waiting for you to send, in order; the rest went through.`;
     case "target_unreachable":
-      return `${system ?? "The connected system"} is not answering. Its changes are still waiting for you to send, and nothing counts against the retry limit.`;
+      return `${system ?? "The connected system"} is not answering. ${its} still waiting for you to send, and nothing counts against the retry limit.`;
     case "drain_in_progress":
       return "Another send was already running for it.";
     default:

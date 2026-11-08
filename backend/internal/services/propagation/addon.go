@@ -78,7 +78,7 @@ func drainAddonPass(ctx context.Context, target string) (DrainResult, error) {
 	// rows an operator approved would be failed by the target being switched
 	// off rather than left queued for it coming back.
 	if !addonReachable(ctx, target) {
-		return DrainResult{Halted: true, Reason: "target_unreachable"}, nil
+		return unanswered(ctx, target, "target_unreachable"), nil
 	}
 
 	rows, err := claimPending(ctx, target, claimBatch)
