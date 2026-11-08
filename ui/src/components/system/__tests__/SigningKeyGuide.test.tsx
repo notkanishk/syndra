@@ -87,6 +87,8 @@ describe("SigningKeyGuide", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Step 1 of 2")).toBeInTheDocument();
     expect(within(dialog).getByText("Run this on the Syndra server.")).toBeInTheDocument();
+    // The header is the shared one: chip, title (the dialog's name), lede.
+    expect(dialog).toHaveAccessibleName("Make a new key");
     expect(within(dialog).getByText("make zitadel-actions-rotate-key")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
   });

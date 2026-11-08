@@ -6,7 +6,7 @@ import { RolePickerOne, roleId, type PickerPlace } from "@/components/bundles/Ro
 import { splitRoleId } from "@/components/bundles/RolePicker";
 import { RetiredRulesFold } from "@/components/rules/RetiredRules";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Mono } from "@/components/ui/Badge";
+import { Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Card, CardColumns } from "@/components/ui/Card";
@@ -50,6 +50,8 @@ import { roleName } from "@/lib/names";
 export default function AutomaticRulesPage() {
   const rules = useMappingRules();
   const [editing, setEditing] = useState<MappingRuleRow | "new" | null>(null);
+  // Retire lives on the rule's row (A-22 §3.7), not in the editor.
+  const [retiring, setRetiring] = useState<MappingRuleRow | null>(null);
 
   const names = useShownNames();
   // A to Z by the rule as it reads: "Project / role ⇒ Project / role".
@@ -142,6 +144,9 @@ export default function AutomaticRulesPage() {
                     in Syndra's records) only explains it. */}
                 <RuleHolders rule={rule} />
               </button>
+              <Button variant="danger" size="sm" onClick={() => setRetiring(rule)}>
+                Retire rule
+              </Button>
             </div>
           ))}
         </ListStates>
@@ -155,8 +160,24 @@ export default function AutomaticRulesPage() {
           onClose={() => setEditing(null)}
         />
       )}
+
+      {retiring && <RetireRule rule={retiring} onClose={() => setRetiring(null)} />}
     </div>
   );
+}
+
+/** Names the rule's second role the way the editor does, then asks. */
+function RetireRule({ rule, onClose }: { rule: MappingRuleRow; onClose: () => void }) {
+  const projects = useProjects();
+  const catalog = useGlobalRoleCatalog();
+  const entry = (catalog.data ?? []).find(
+    (r) => r.project_id === rule.target_project && r.role_key === rule.target_role,
+  );
+  const project =
+    entry?.project_name ||
+    (projects.data ?? []).find((p) => p.project.id === rule.target_project)?.project.name ||
+    UNKNOWN_PROJECT;
+  return <DeleteRuleConfirm rule={rule} label={`${project} / ${rule.target_role}`} onCancel={onClose} onDeleted={onClose} />;
 }
 
 /**
@@ -183,13 +204,6 @@ function RuleEditor({
     goAhead: "save the rule",
   });
   const validate = useValidateMappingRule();
-  /**
-   * Retiring the rule takes over this same dialog rather than opening a second one on top of it.
-   * The thing you are about to remove is the thing already on screen, and a modal over a modal
-   * asks somebody to read a consequence through the form that produced it.
-   */
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-
   const [sourceProject, setSourceProject] = useState(
     rule?.source_project ?? "",
   );
@@ -345,27 +359,41 @@ function RuleEditor({
     return true;
   }
 
-  if (rule && confirmingDelete) {
-    return (
-      <DeleteRuleConfirm
-        rule={rule}
-        label={roleLabel(rule.target_project, rule.target_role)}
-        onCancel={() => setConfirmingDelete(false)}
-        onDeleted={onClose}
-      />
-    );
+  const word = rule ? "Saved" : "Created";
+  // The result word is the act's own: a check that threw is "Not checked", a write that threw "Not saved".
+  const [failedWord, setFailedWord] = useState("");
+  const notWord = failedWord || (rule ? "Not saved" : "Not created");
+
+  async function check() {
+    setOutcome(null);
+    try {
+      await runValidation();
+    } catch (error) {
+      setFailedWord("Not checked");
+      setOutcome(outcomeFromError(error));
+    }
   }
 
   return (
-    <Modal open onClose={onClose} busy={busy} size="md" labelledBy="rule-title">
+    <Modal open onClose={onClose} busy={busy} size="lg" labelledBy="rule-title">
       <PushedStep step={step}>
+      {/* After the result the sheet is its result: chip and title stay, the lede goes (A-22 G22). */}
       <ModalHeader
         title={rule ? "Edit this rule" : "New automatic rule"}
         titleId="rule-title"
         chip={rule && ruleChip(rule)}
-        lede="Anybody who holds the first role gets the second: everyone who holds it today, and anyone given the first role through Syndra."
+        lede={
+          saved
+            ? undefined
+            : "Anybody who holds the first role gets the second: everyone who holds it today, and anyone given the first role through Syndra."
+        }
       />
 
+      {saved ? (
+        <div className="px-6">
+          <ActionOutcome outcome={outcome!} word={word} />
+        </div>
+      ) : (
       <div className="flex flex-col gap-3.5 px-6">
         <div>
           <FieldLabel id="rule-source-label">If someone holds</FieldLabel>
@@ -378,6 +406,7 @@ function RuleEditor({
             labelledBy="rule-source-label"
             group="rule-source"
             searchLabel="Search the role they hold"
+            foldWhenChosen
           />
         </div>
 
@@ -402,6 +431,7 @@ function RuleEditor({
             labelledBy="rule-target-label"
             group="rule-target"
             searchLabel="Search the role to give"
+            foldWhenChosen
           />
         </div>
 
@@ -414,24 +444,13 @@ function RuleEditor({
         )}
 
         {validated &&
-          (validated.ok && validated.notes.length === 0 ? (
-            // Nothing is wrong: a result, said as a caption, not a box.
-            <p className="text-[14px] leading-[1.55] text-muted">
-              <strong className="font-semibold text-ink">Checked.</strong> Saving gives the second role
-              to nobody new today: everybody who holds the first role, however they got it, already has it.
-            </p>
-          ) : (
+          (!validated.ok ? (
+            // The rule itself is wrong: the one finding that stays a Notice.
             <Notice
-              tone={validated.ok ? "warn" : "danger"}
-              blocking={!validated.ok}
-              {...(validated.ok
-                ? { next: "Read them, then save if they are what you meant." }
-                : { next: "Change the rule so the points below no longer apply, then save again." })}
-              title={
-                validated.ok
-                  ? `Checked: ${validated.notes.length} ${validated.notes.length === 1 ? "thing" : "things"} to know`
-                  : "This rule can't be saved"
-              }
+              tone="danger"
+              blocking
+              next="Change the rule so the points below no longer apply, then check it again."
+              title="This rule can't be saved"
             >
               <ul className="flex flex-col gap-1">
                 {validated.notes.map((note) => (
@@ -439,26 +458,56 @@ function RuleEditor({
                 ))}
               </ul>
             </Notice>
+          ) : (
+            // The check's findings are the What-happens list: plain lines, an amber dot each (A-22 §3.7).
+            <div className="flex flex-col gap-3">
+              {validated.notes.length === 0 ? (
+                <p className="text-[14px] leading-[1.55] text-muted">
+                  <strong className="font-semibold text-ink">Checked.</strong> Saving gives the second role
+                  to nobody new today: everybody who holds the first role, however they got it, already has it.
+                </p>
+              ) : (
+                <div role="group" aria-label="What happens" className="rounded-inner bg-warn-soft px-4 py-3.5 text-[14px] leading-[1.55]">
+                  <div className="type-label mb-1 text-warn-text">What happens</div>
+                  <ul className="flex flex-col gap-1.5 text-muted">
+                    {validated.notes.map((note) => (
+                      <li key={note} className="flex items-start gap-2.5">
+                        <StatusDot tone="warn" className="mt-[7px]" />
+                        <span>{note}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div>
+                <Button variant="outline" size="sm" isPending={validate.isPending} onClick={check}>
+                  Check again
+                </Button>
+              </div>
+            </div>
           ))}
       </div>
+      )}
 
-      {outcome && <ActionOutcome outcome={outcome} word={saved ? "Saved" : "Not saved"} className="mx-6 mb-1" />}
+      {outcome && !saved && <ActionOutcome outcome={outcome} word={notWord} className="mx-6 mb-1" />}
 
       {saved && step.after}
 
       <ModalFooter
         cancel={saved ? undefined : { onClick: onClose }}
         note={
-          step.note ??
-          // Two different unmet conditions used to share one sentence: an
-          // incomplete form was told to "check the rule" while Check itself
-          // sat disabled right below, recommending an action it had just
-          // refused.
-          (!complete
-            ? "Fill in every field above, then check the rule."
-            : !validated
-              ? "Check the rule before you can save it."
-              : undefined)
+          saved
+            ? undefined
+            : step.note ??
+              // Two different unmet conditions used to share one sentence: an
+              // incomplete form was told to "check the rule" while Check itself
+              // sat disabled right below, recommending an action it had just
+              // refused.
+              (!complete
+                ? "Fill in every field above, then check the rule."
+                : !validated
+                  ? "Check the rule before you can save it."
+                  : undefined)
         }
       >
         {saved && (
@@ -466,12 +515,14 @@ function RuleEditor({
             Close
           </Button>
         )}
-        {!saved && (
+        {!saved && validated?.ok && (
           <Button
             variant="accent"
-            disabled={!complete || !validated?.ok}
+            disabled={!complete}
             isPending={busy}
             onClick={async () => {
+              setOutcome(null);
+              setFailedWord("");
               try {
                 const input = {
                   source_project: sourceProject,
@@ -483,24 +534,14 @@ function RuleEditor({
                   rule ? update.mutateAsync({ id: rule.id, ...input, cancelIds }) : create.mutateAsync({ ...input, cancelIds }),
                 );
                 if (written === KEPT) return;
-                if (rule) {
-                  setOutcome({
-                    // "Applied" over the rule itself is always true — it is a
-                    // Syndra-side row, not a Zitadel mutation. What the pill
-                    // must not contradict is `savedDetail(targetWaits)` just below: a
-                    // manual rule's access still waits under Pending changes,
-                    // so the outcome for that half is `queued`.
-                    kind: targetWaits ? "queued" : "applied",
-                    message: "Rule updated",
-                    detail: savedDetail(targetWaits),
-                  });
-                } else {
-                  setOutcome({
-                    kind: targetWaits ? "queued" : "applied",
-                    message: "Rule created",
-                    detail: savedDetail(targetWaits),
-                  });
-                }
+                // "Applied" over the rule itself is always true: it is a Syndra-side row, not a
+                // Zitadel mutation. What the result must not contradict is `savedDetail(targetWaits)`:
+                // a manual rule's access still waits under Pending changes, so that half is `queued`.
+                setOutcome({
+                  kind: targetWaits ? "queued" : "applied",
+                  message: rule ? "Rule updated" : "Rule created",
+                  detail: savedDetail(targetWaits),
+                });
               } catch (error) {
                 setOutcome(outcomeFromError(error));
               }
@@ -509,33 +550,9 @@ function RuleEditor({
             {rule ? "Save rule" : "Create rule"}
           </Button>
         )}
-        {!saved && (
-          <Button
-            disabled={!complete}
-            isPending={validate.isPending}
-            onClick={async () => {
-              try {
-                await runValidation();
-              } catch (error) {
-                setOutcome(outcomeFromError(error));
-              }
-            }}
-          >
+        {!saved && !validated?.ok && (
+          <Button variant="accent" disabled={!complete} isPending={validate.isPending} onClick={check}>
             {validated ? "Check again" : "Check rule"}
-          </Button>
-        )}
-        {/*
-          Outline, and last. A rule is retired from the same place it is retargeted, because
-          those are the two things you come here to do — but a solid red button beside Save is
-          one slip away from revoking a term's worth of access.
-        */}
-        {!saved && rule && (
-          <Button
-            variant="danger"
-            disabled={busy}
-            onClick={() => setConfirmingDelete(true)}
-          >
-            Retire rule
           </Button>
         )}
       </ModalFooter>
@@ -604,9 +621,14 @@ function DeleteRuleConfirm({
         title="Retire this rule?"
         titleId="rule-delete-title"
         chip={ruleChip(rule)}
-        lede={`Some people may hold ${label} only because of this rule.`}
+        lede={gone ? undefined : `Some people may hold ${label} only because of this rule.`}
       />
 
+      {gone ? (
+        <div className="px-6">
+          <ActionOutcome outcome={outcome!} word="Retired" />
+        </div>
+      ) : (
       <div className="px-6">
         <div className="danger-note px-4 py-3.5 text-[14px] leading-[1.55]">
           <div className="type-label mb-1 text-danger-text">What happens</div>
@@ -626,13 +648,14 @@ function DeleteRuleConfirm({
           </ul>
         </div>
       </div>
+      )}
 
-      {outcome && <ActionOutcome outcome={outcome} word={gone ? "Retired" : "Not retired"} className="mx-6 mb-1" />}
+      {outcome && !gone && <ActionOutcome outcome={outcome} word="Not retired" className="mx-6 mb-1" />}
       {gone && step.after}
 
       <ModalFooter
-        note={step.note ?? "If you only want the rule to give a different role, edit it instead of retiring it."}
-        cancel={gone ? undefined : { onClick: onCancel, disabled: remove.isPending }}
+        note={gone ? undefined : step.note ?? "If you only want the rule to give a different role, edit it instead of retiring it."}
+        cancel={gone ? undefined : { label: "Keep it", onClick: onCancel, disabled: remove.isPending }}
       >
         {/* `onDeleted` closes the editor this dialog opened over, and it was
             never called, so deleting a rule left the operator looking at an
@@ -651,6 +674,7 @@ function DeleteRuleConfirm({
             variant="dangerConfirm"
             isPending={remove.isPending}
             onClick={async () => {
+              setOutcome(null);
               try {
                 const result = await step.run((cancelIds) => remove.mutateAsync({ id: rule.id, cancelIds }));
                 if (result === KEPT) return;

@@ -118,8 +118,8 @@ type Who = ReturnType<typeof useWho>;
 
 /**
  * The sentence that foretells the step, said in the sheet before the press
- * from the act's plan (A-21 §3.2): "Giving it cancels the removal Sam Lee
- * queued 2h ago." `lead` is the act: "Giving it", "Revoking it", "Approving".
+ * from the act's plan (A-21 §3.2): "Giving it cancels removing Member from Sam,
+ * which was waiting for you to send." `lead` is the act: "Giving it", "Revoking it", "Approving".
  */
 export function useForetell() {
   const who = useWho();
@@ -127,11 +127,8 @@ export function useForetell() {
     if (changes.length === 0) return "";
     if (changes.length > 1) return `${lead} cancels ${changes.length} changes that are waiting.`;
     const change = changes[0];
-    // A change that gives names what waits, the role and the person; "give" is only a verb (A-22).
-    if (!isRemoval(change)) {
-      return `${lead} cancels ${who.role(change)} for ${firstOf(who.person(change.user_id))}, which was waiting for you to send.`;
-    }
-    return `${lead} cancels the removal ${who.queuer(change)} queued ${formatAgoShort(change.queued_at)}.`;
+    // The verb says what was going to happen, to whom: "give" is only a verb (A-22, owner 8 Nov).
+    return `${lead} cancels ${doing(change, who)}, which was waiting for you to send.`;
   };
 }
 
@@ -158,14 +155,20 @@ function group(changes: QueuedChange[], fresh: Set<string>, who: Who): Group[] {
   return [...groups.filter((g) => g.fresh), ...groups.filter((g) => !g.fresh)];
 }
 
+/** "giving Member in Laser Lab to Sam" / "removing Member in Laser Lab from Sam". */
+function doing(change: QueuedChange, who: Who): string {
+  const first = firstOf(who.person(change.user_id));
+  return isRemoval(change) ? `removing ${who.role(change)} from ${first}` : `giving ${who.role(change)} to ${first}`;
+}
+
 function kindOf(changes: QueuedChange[], plural: boolean): string {
   if (changes.every(isRemoval)) return plural ? "removals" : "removal";
   return plural ? "changes" : "change";
 }
 
-function titleOf(changes: QueuedChange[]): string {
+function titleOf(changes: QueuedChange[], who: Who): string {
   return changes.length === 1
-    ? `This cancels a ${kindOf(changes, false)} that's waiting`
+    ? `Cancel ${doing(changes[0], who)}?`
     : `This cancels ${changes.length} ${kindOf(changes, true)} that are waiting`;
 }
 
@@ -380,7 +383,8 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
   const noReason = changes.some((c) => !c.said);
   const askWho = noReason ? firstOf(who.queuer(changes.find((c) => !c.said)!)) : "";
   const n = changes.length;
-  const confirmLabel = n === 1 ? `Cancel it and ${options.goAhead}` : `Cancel all ${n} and ${options.goAhead}`;
+  const confirmLabel =
+    n === 1 ? `Cancel ${isRemoval(changes[0]) ? "removing" : "giving"} it and ${options.goAhead}` : `Cancel all ${n} and ${options.goAhead}`;
 
   useEffect(() => {
     root.current?.querySelector<HTMLElement>("[data-footer-cancel]")?.focus();
@@ -390,7 +394,7 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
     <div ref={root}>
       <ModalHeader
         chip={<span className="type-label">{options.host}</span>}
-        title={titleOf(changes)}
+        title={titleOf(changes, who)}
         titleId="cancel-queued-title"
         lede={ledeOf(changes, who)}
       />
@@ -440,7 +444,7 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
         />
       </div>
       <ModalFooter
-        cancel={{ label: "Keep it", onClick: () => asking.answer(false), disabled: busy }}
+        cancel={{ label: n === 1 ? "Keep it waiting" : "Keep them waiting", onClick: () => asking.answer(false), disabled: busy }}
         note={
           busy ? (
             // The first 100ms: what Syndra will do, in its own tense, until the server answers.

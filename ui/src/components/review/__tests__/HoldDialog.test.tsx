@@ -53,6 +53,20 @@ describe("HoldDialog", () => {
     expect(screen.queryByRole("button", { name: "Put the prints share on hold" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+    // The sheet is its result: the form and the lede left with the body.
+    expect(screen.queryByLabelText(/Why \(shown to/i)).toBeNull();
+    expect(screen.queryByText(/They keep every role they have/)).toBeNull();
+  });
+
+  it("a failed press is Not put on hold and keeps the form so it can be pressed again", async () => {
+    createHold.mockRejectedValueOnce(new Error("boom"));
+    open();
+    fireEvent.change(screen.getByLabelText(/Why \(shown to Tomas Beck\)/i), { target: { value: "Per the safety review" } });
+    fireEvent.change(screen.getByLabelText(/Remind us on/i), { target: { value: "2026-10-03" } });
+    fireEvent.click(act());
+    expect(await screen.findByText("Not put on hold")).toBeInTheDocument();
+    expect(act()).toBeInTheDocument();
+    expect(screen.getByLabelText(/Why \(shown to/i)).toBeInTheDocument();
   });
 
   it("says the hold lifts itself instead of pointing at Holds due, when that's the form chosen", async () => {

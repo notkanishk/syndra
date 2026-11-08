@@ -134,7 +134,8 @@ function AskForAccessOpen({
         word: "Asked",
         final: true,
         outcome: {
-          kind: "no_change",
+          // The ask was recorded: a result, not a no-change (A-22 §3.31).
+          kind: "applied",
           message:
             extend && keepChoice
               ? `To keep ${placeName} · ${chosenRole} until ${formatShortDate(keepChoice.until)}`

@@ -83,4 +83,18 @@ describe("given to everyone who joins", () => {
     expect(screen.getByText(/No bundle is given to new members now/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Give Lab Tech to everyone who joins" })).toBeEnabled();
   });
+
+  // A-22 §3.20: the word is the act's own, with its Not; one slot, replaced by the next press.
+  it("says Default set, and Not set when it failed, in one slot", async () => {
+    state.setWelcome = vi.fn().mockRejectedValueOnce(new Error("first trouble")).mockResolvedValueOnce({});
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Give Lab Tech to everyone who joins" }));
+    expect(await screen.findByText("Not set")).toBeInTheDocument();
+    expect(screen.queryByText("Default set")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Give Lab Tech to everyone who joins" }));
+    expect(await screen.findByText("Default set")).toBeInTheDocument();
+    expect(screen.queryByText("Not set")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/first trouble/);
+  });
 });

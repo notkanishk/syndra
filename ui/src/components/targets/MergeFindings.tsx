@@ -11,6 +11,7 @@ import { UserName } from "@/components/names";
 import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
 import { RoleRef } from "@/components/names/RoleRef";
 import { fieldWords } from "@/lib/role-mapping-plan";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -349,18 +350,22 @@ function DecisionForm({
           // role — and the backend says so with the policy named. Rendered in
           // full rather than replaced with "could not resolve", which would leave
           // an operator pressing a button that never works.
-          <span className="text-[13.5px] text-warn-text">
-            {error instanceof Error
-              ? (() => {
-                  // An ApiError's message is the envelope's sentence (never upstream text); anything else is a transport fault.
-                  const said = error instanceof ApiError ? error.message : describeFailure(error);
-                  const ref = outcomeFromError(error).requestId;
-                  const where = mayHaveGoneThrough(error);
-                  const told = where ? `${sentence(said)} ${partialSentence(where)}` : said;
-                  return ref ? `${sentence(told)} Reference ${ref}.` : told;
-                })()
-              : "That decision did not go through. Nothing was changed."}
-          </span>
+          <ActionOutcome
+            placement="inline"
+            word="Not decided"
+            outcome={{
+              ...outcomeFromError(error),
+              message: (() => {
+                if (!(error instanceof Error)) return "That decision was not recorded. Nothing was changed.";
+                // An ApiError's message is the envelope's sentence (never upstream text); anything else is a transport fault.
+                const said = error instanceof ApiError ? error.message : describeFailure(error);
+                const ref = outcomeFromError(error).requestId;
+                const where = mayHaveGoneThrough(error);
+                const told = where ? `${sentence(said)} ${partialSentence(where)}` : said;
+                return ref ? `${sentence(told)} Reference ${ref}.` : told;
+              })(),
+            }}
+          />
         )
       )}
     </div>

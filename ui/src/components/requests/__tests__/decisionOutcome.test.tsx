@@ -233,7 +233,7 @@ describe("approving a request that would cancel a change still waiting", () => {
     decide.mockClear();
     wire.plan = cancelling([waiting]);
     renderQueue();
-    expect(await screen.findByText("If you approve: Approving cancels the removal Sam Iyer queued 2h ago.")).toBeTruthy();
+    expect(await screen.findByText(/^If you approve: Approving cancels removing .+ from .+, which was waiting for you to send\.$/)).toBeTruthy();
     expect(decide).not.toHaveBeenCalled();
   });
 
@@ -244,11 +244,11 @@ describe("approving a request that would cancel a change still waiting", () => {
     await approve();
 
     const dialog = await screen.findByRole("dialog");
-    expect(dialog.textContent).toContain("This cancels a removal that's waiting");
-    expect(screen.getByRole("button", { name: "Cancel it and approve" })).toBeTruthy();
+    expect(dialog.textContent).toContain("Cancel removing");
+    expect(screen.getByRole("button", { name: "Cancel removing it and approve" })).toBeTruthy();
     // The step came from the plan: nothing was written to learn it.
     expect(decide).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep it waiting" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(decide).not.toHaveBeenCalled();
@@ -262,7 +262,7 @@ describe("approving a request that would cancel a change still waiting", () => {
     wire.plan = cancelling([waiting], { fingerprint: "fp-42" });
     renderQueue();
     await approve();
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and approve" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel removing it and approve" }));
 
     const seat = await decisionSeat();
     expect(seat.textContent).toContain("Approved");

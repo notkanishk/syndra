@@ -4,14 +4,14 @@ import { useMemo, useState } from "react";
 
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { Button } from "@/components/ui/Button";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { KEPT, PushedStep, useCancelStep, useForetell } from "@/components/ui/CancelQueuedStep";
 import { Notice } from "@/components/ui/Notice";
 import { RuleConsentFailed } from "@/components/requests/RuleConsent";
 import { isStale, usePlanConsents, type ActPlan } from "@/lib/usePlanConsent";
-import { DRAIN_UNKNOWN_NEXT, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { DRAIN_UNKNOWN_NEXT, FORECAST, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { refusedOutcome } from "@/lib/retry";
 import { isRefused } from "@/lib/wait-reason";
 import { travels } from "@/lib/plan-groups";
@@ -96,7 +96,19 @@ function ManageBundlesOpen({
   const [stale, setStale] = useState(false);
   const first = userName.trim().split(/\s+/)[0] || userName;
 
+  // True from the press to the last write: the forecast's seat (A-22 G22).
+  const [applying, setApplying] = useState(false);
   async function apply() {
+    setOutcome(null);
+    setApplying(true);
+    try {
+      await applyAll();
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  async function applyAll() {
     // What is WAITING afterwards, summed from the backend rather than assumed
     // from the number of boxes ticked: a change that only cancels a waiting
     // one, or that reaches nobody's effective access, queues nothing.
@@ -303,7 +315,14 @@ function ManageBundlesOpen({
         </div>
       )}
 
-      {outcome && <ActionOutcome word={outcome.recorded ? "Refused by Zitadel" : "Recorded"} outcome={outcome} className="mx-6 mb-1" />}
+      {!outcome && applying && <ActionForecast className="mx-6 mb-1" word={FORECAST.apply} />}
+      {outcome && (
+        <ActionOutcome
+          word={outcome.recorded ? "Refused by Zitadel" : outcome.kind === "applied" || outcome.kind === "queued" ? "Recorded" : "Not applied"}
+          outcome={outcome}
+          className="mx-6 mb-1"
+        />
+      )}
       {outcome && step.after}
 
       {/* The footer follows the state of the work, because the work has three

@@ -94,7 +94,7 @@ async function goAhead(cancels: QueuedChange[]) {
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
-  fireEvent.click(await screen.findByRole("button", { name: /^Cancel (it|all \d+) and give Member$/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Cancel (giving it|removing it|all \d+) and give Member$/ }));
 }
 
 describe("Cancel a queued change: the first 100ms", () => {

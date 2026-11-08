@@ -242,7 +242,7 @@ describe("the verb on each row", () => {
   it("opens the same removal dialog the overflow used to", () => {
     renderPerson();
     fireEvent.click(screen.getByRole("button", { name: /Revoke Operator/ }));
-    expect(screen.getByRole("heading", { name: /Revoke direct access to Laser Lab \/ Operator/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Revoke Operator in Laser Lab/ })).toBeInTheDocument();
   });
 
   it("is not offered to a member reading their own page", () => {

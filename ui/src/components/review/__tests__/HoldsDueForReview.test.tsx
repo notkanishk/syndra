@@ -104,7 +104,7 @@ describe("a hold's row states", () => {
     fireEvent.click(lift());
 
     const seat = await screen.findByRole("alert");
-    expect(seat.textContent).toContain("Couldn't lift it");
+    expect(seat.textContent).toContain("Not lifted");
     expect(seat.textContent).toContain("Nothing was changed.");
     expect(seat.textContent).toContain("req_2c71f0b9");
 

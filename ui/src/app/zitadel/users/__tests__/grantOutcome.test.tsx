@@ -155,6 +155,8 @@ describe("replacing roles in Zitadel", () => {
     const dialog = screen.getByRole("dialog");
     await waitFor(() => expect(within(dialog).getByRole("alert")).toBeTruthy());
     expect(document.body.textContent).not.toMatch(/Roles replaced in Zitadel/);
+    expect(within(dialog).getByText("Not replaced")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Keep them" })).toBeTruthy();
   });
 
   // C4: what a replace takes away, in the caption.

@@ -71,3 +71,21 @@ Each tightens or adds to the rules above; `from-design/A-17-refinement-sweep.md`
 - G17 **Silence for normal.** When a count is all as expected, nothing more is written (no "confirmed", no "none"); only the exception is.
 - G18 **FilterBar** (amends 9b to match `FilterBar.tsx`). A pill set that chooses which list you are reading (Requests' status, Expiring's window) leads; search follows; Filters and Select sit right.
 - G19 **Boxes.** Added to "A box means something is wrong": `accent-note`, `bg-tint-1` and `bg-accent-soft` panels never hold explanation. Dashed means NotOpenYet and nothing else.
+
+## Messages (A-22, 8 Nov 2026)
+
+`from-design/A-22-every-message-in-its-place.md` §2 says each in full. Owner, 8 Nov 2026: yes to Q1 to Q7. "give" is only a verb (owner, 8 Nov): a sentence that needs a noun names what waits, the role and the person.
+
+- G20 **The title is the act, in the button's words.** A question mark only when the act takes something away. `ModalHeader.title` is the only title; the chip says where the thing comes from.
+- G21 **A sheet has four places for words.** Header (chip, title, lede of at most two sentences), body (the thing, and the What-happens list), footer note (the before-line), footer pair. Nothing else holds a message.
+- G22 **Three moments, one message each.** Before (lede, What happens, before-line), pressing (the forecast; both buttons hold), after (the sheet is its result: one ActionOutcome in the body's place; lede, list, tick and before-line unmount; header keeps chip and title; one outline Close). A failed press keeps the form. A work sheet keeps its list.
+- G23 **One result per surface**, in one slot, cleared by the press before it writes. One press that does several things is one word that says the whole ("Sent 7 of 9") and one sentence per part. A page whose empty state already says it draws no card.
+- G24 **Button pairs.** The act names verb and object. The dismiss is the ghost half in `ModalFooter.cancel` and says what it keeps: Keep it, Keep them, Keep them open, Keep it waiting, Keep tracking it, when the act takes away, retires, cancels or declines; Cancel only where nothing exists yet to keep (a form that creates, asks, gives or records). Two buttons never share a verb. After the result one outline Close. Never OK, Confirm, Yes, Submit or a second Cancel.
+- G25 **Red, amber, quiet** follow what the act does to a named person: red when they lose access that reaches a system; amber when a step is left or a state must be read; quiet for what only records, asks, previews or cancels something unsent.
+- G26 **How long a message stays.** Nothing times out and nothing is a toast. A sheet's result stays until Close; a row's until the list is next read; a page's until it is next read or left; a Notice as long as its condition.
+- G27 **Which part carries which message.** ActionOutcome is what you did; Notice is what is wrong with what you are looking at; NextStep is the step left; RetryStatus is a change Syndra sends again; explanations are the lede, a caption or the before-line.
+- G28 **Count what the surface counts**: people in a people plan, changes on Pending changes, roles in a role set. "Every" only when every.
+- G29 **One word per act, and its "Not".** Given, Revoked, Removed (a part out of a whole), Retired, Cancelled, Saved, Created, Asked, Approved, Declined, Extended by 90 days, Marked, Adopted, Sent, Looked up, Recorded; failure is "Not" plus the same word. "Refused by Zitadel" when Syndra recorded it and Zitadel refused.
+- G30 **Phone.** The footer is pinned; a sheet whose content is a list is lg and full height; two open lists never stack (a chosen picker folds to its chip); the result is the first thing after the title.
+- G31 **Consent lives in one line and one rung.** The before-line says whether the act finishes now or waits, and what it cancels; the tick or the typed name sits directly above the footer; a disabled act says why under itself. No "Are you sure".
+

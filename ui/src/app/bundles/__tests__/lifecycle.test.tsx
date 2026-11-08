@@ -144,7 +144,7 @@ describe("retiring a bundle", () => {
     render(<BundlePage bundleId="b1" />);
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
     fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^Cancel it and / }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Cancel giving it and / }));
 
     await waitFor(() => expect(state.remove).toHaveBeenCalledTimes(2));
     expect(state.remove.mock.calls.map((c) => c[0])).toEqual([
@@ -200,6 +200,30 @@ describe("bundle rename", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(document.body.textContent).not.toMatch(/Now called Lab Technician/);
   });
+
+  // A-22 §3.17: the sheet is its result after Renamed; a failure is Not saved and the form stays.
+  it("unmounts the form after Renamed", async () => {
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lab Technician" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Renamed")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByText(/not what it grants/)).toBeNull();
+  });
+
+  it("says Not saved and keeps the form when the write fails", async () => {
+    state.update = vi.fn().mockRejectedValue(new Error("Zitadel is unreachable"));
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lab Technician" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Not saved")).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
 });
 
 /**
@@ -233,8 +257,17 @@ describe("after a bundle is retired", () => {
     // Nothing left to destroy, so nothing offers to.
     expect(screen.queryByRole("button", { name: "Retire and revoke" })).toBeNull();
     // And the way out stops being a refusal, because there is nothing to refuse.
-    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Keep it" })).toBeNull();
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+  });
+
+  // A-22 Q3: the sheet is its result; the before-moment goes with the body.
+  it("unmounts the lede, the What-happens list and the before-line with the result", async () => {
+    await retireTheSecondBundle();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeTruthy());
+    expect(document.body.textContent).not.toMatch(/What happens/);
+    expect(document.body.textContent).not.toMatch(/is assigned to \d+ people right now/);
+    expect(document.body.textContent).not.toMatch(/Emptying the bundle instead/);
   });
 
   it("goes back to the list only when the operator dismisses", async () => {
@@ -258,7 +291,9 @@ describe("after a bundle is retired", () => {
     // Nothing was deleted, so the offer stands and the way out is still a
     // refusal. Relabelling here would tell the operator it worked.
     expect(screen.getByRole("button", { name: "Retire and revoke" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Keep it" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(document.body.textContent).toMatch(/Not retired/);
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     expect(state.push).not.toHaveBeenCalled();
   });

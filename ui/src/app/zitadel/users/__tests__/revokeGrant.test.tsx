@@ -95,12 +95,12 @@ describe("revoking a person's roles in Zitadel", () => {
       plans: { trained: actPlan({ fingerprint: "fp-t" }), stray: cancelling([give], { fingerprint: "fp-s" }) },
     };
     openRevoke();
-    expect(document.body.textContent).toMatch(/Revoking them cancels the give Sam Lee queued .*Nothing is cancelled until you choose on the next step\./);
+    expect(document.body.textContent).toMatch(/Revoking them cancels giving .* to .*, which was waiting for you to send\. .*Nothing is cancelled until you choose on the next step\./);
 
     fireEvent.click(screen.getByRole("checkbox", { name: /I understand this revokes 2 roles/ }));
     fireEvent.click(screen.getByRole("button", { name: "Revoke these 2 roles in Zitadel" }));
     // The step, pushed at once from the plans; nothing is written until the operator chooses.
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and revoke" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel giving it and revoke" }));
     await waitFor(() =>
       expect(state.remove).toHaveBeenCalledWith({
         userId: "u1",
@@ -110,11 +110,33 @@ describe("revoking a person's roles in Zitadel", () => {
     );
   });
 
-  it("keeps the roles when backed out of", () => {
+  it("keeps the role when backed out of: the dismiss says what it keeps", () => {
     openRevoke();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
     expect(state.remove).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("says Keep them for several roles", () => {
+    state.roleKeys = ["trained", "lead"];
+    state.preview = { revoked_roles: ["pLaser/trained", "pLaser/lead"], retained_roles: [] };
+    openRevoke();
+    expect(screen.getByRole("button", { name: "Keep them" })).toBeTruthy();
+  });
+
+  it("a thrown error is Not revoked, the form stays, and a second press clears the first result", async () => {
+    state.remove = vi.fn().mockRejectedValueOnce(new Error("boom")).mockResolvedValue(undefined);
+    openRevoke();
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this revokes 1 role/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Revoke this role in Zitadel" }));
+    await waitFor(() => expect(screen.getByText("Not revoked")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Revoke this role in Zitadel" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke this role in Zitadel" }));
+    await waitFor(() => expect(screen.getByText("Revoked")).toBeTruthy());
+    expect(screen.queryByText("Not revoked")).toBeNull();
+    // After the result the sheet is its result: the form and the tick are gone.
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 
   // C4: the lede says untraced roles go too, and the count is only what goes.

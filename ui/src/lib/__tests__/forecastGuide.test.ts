@@ -28,6 +28,8 @@ describe("the copy guide's forecast table", () => {
       FORECAST.decline,
       FORECAST.extend,
       FORECAST.remove,
+      FORECAST.revoke,
+      FORECAST.apply,
       FORECAST.keep,
       FORECAST.lift,
       FORECAST.give,

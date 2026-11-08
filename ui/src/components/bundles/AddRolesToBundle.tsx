@@ -50,9 +50,9 @@ export function AddRolesToBundle({
     () => new Set((draft.data?.includes ?? []).map((i) => i.child_bundle_id)),
     [draft.data?.includes],
   );
-  const [failure, setFailure] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [word, setWord] = useState("Added");
 
   const held = useMemo(
     () =>
@@ -67,12 +67,7 @@ export function AddRolesToBundle({
   const chosen = Array.from(selected);
   const chosenBundles = Array.from(bundles);
   const count = chosen.length + chosenBundles.length;
-  const what = [
-    chosenBundles.length ? `${chosenBundles.length} ${chosenBundles.length === 1 ? "bundle" : "bundles"}` : null,
-    chosen.length ? `${chosen.length} ${chosen.length === 1 ? "role" : "roles"}` : null,
-  ]
-    .filter(Boolean)
-    .join(" and ");
+  const what = whatOf(chosen.length, chosenBundles.length);
 
   function toggle(id: string) {
     setSelected((prev) => toggled(prev, id));
@@ -80,7 +75,9 @@ export function AddRolesToBundle({
 
   async function apply() {
     setApplying(true);
-    setFailure(null);
+    // One result slot: the press clears it before anything is written (A-22 G23).
+    setOutcome(null);
+    let failed: unknown = null;
     let added = 0;
     let included = 0;
     // Sequential, not concurrent. Each add is its own write against the
@@ -97,7 +94,7 @@ export function AddRolesToBundle({
           return next;
         });
       } catch (error) {
-        setFailure(sentence(describeFailure(error)));
+        failed = error;
         // `break`, and nothing else. This used to set a local flag because the
         // dialog closed itself on success and a failed apply must not be
         // closed over — the flag outlived the auto-close, and a variable that
@@ -115,11 +112,28 @@ export function AddRolesToBundle({
         included += 1;
         setBundles((prev) => toggled(prev, id));
       } catch (error) {
-        setFailure(sentence(describeFailure(error)));
+        failed = error;
         break;
       }
     }
     setApplying(false);
+
+    if (failed !== null) {
+      // One block, named, and the rest stay ticked: a partial apply that reports only "something
+      // went wrong" leaves the operator unable to tell which of the six landed (A-22 §3.18).
+      const done = added + included;
+      const rest = whatOf(chosen.length - added, added === chosen.length ? chosenBundles.length - included : chosenBundles.length);
+      setWord(done === 0 ? "Not added" : `Added ${done} of ${chosen.length + chosenBundles.length}`);
+      setOutcome({
+        kind: "failed",
+        partial: `${name}'s next version`,
+        message: sentence(describeFailure(failed)),
+        detail: done === 0 ? "Nothing was added. What is ticked is still ticked." : "What is still ticked was not added.",
+        next: done === 0 ? `Press Add ${rest} again.` : `Press Add ${rest} again for the rest.`,
+      });
+      return;
+    }
+    setWord("Added");
 
     if (included > 0 && added === 0) {
       setOutcome({
@@ -179,26 +193,20 @@ export function AddRolesToBundle({
         />
       </div>
 
-      {failure && (
-        // Named, and the rest stay selected. A partial apply that reports only
-        // "something went wrong" leaves the operator unable to tell which of
-        // the six landed.
-        <div className="danger-note mx-6 mt-3 px-4 py-3 text-[14px] leading-[1.5]">
-          {failure} What is still ticked was not added. Press Add {what} again to add the rest.
-        </div>
-      )}
-
-      {outcome && <ActionOutcome outcome={outcome} word={outcome.kind === "refused" || outcome.kind === "failed" ? "Not added" : "Added"} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word={word} className="mx-6 mb-1" />}
 
       <ModalFooter cancel={outcome ? undefined : { onClick: onClose, disabled: applying }}>
-        <Button
-          variant="accent"
-          disabled={count === 0 || applying}
-          isPending={applying}
-          onClick={apply}
-        >
-          {count === 0 ? "Add roles" : `Add ${what}`}
-        </Button>
+        {/* A work sheet: Add stays beside Close while anything is still ticked. */}
+        {(!outcome || count > 0) && (
+          <Button
+            variant="accent"
+            disabled={count === 0 || applying}
+            isPending={applying}
+            onClick={apply}
+          >
+            {count === 0 ? "Add roles" : `Add ${what}`}
+          </Button>
+        )}
         {outcome && (
           <Button variant="outline" onClick={onClose}>
             Close
@@ -207,6 +215,15 @@ export function AddRolesToBundle({
       </ModalFooter>
     </Modal>
   );
+}
+
+function whatOf(roles: number, bundles: number): string {
+  return [
+    bundles ? `${bundles} ${bundles === 1 ? "bundle" : "bundles"}` : null,
+    roles ? `${roles} ${roles === 1 ? "role" : "roles"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
 }
 
 function toggled(prev: ReadonlySet<string>, id: string): ReadonlySet<string> {

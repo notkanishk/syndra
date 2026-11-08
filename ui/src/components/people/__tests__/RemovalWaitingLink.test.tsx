@@ -55,8 +55,8 @@ describe("the Removal dialog's way to Pending changes", () => {
         />
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(screen.getByRole("button", { name: "Remove bundle" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove the bundle" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Remove the bundle" }));
     const link = await screen.findByRole("link", { name: /Waiting for you to send/ });
     expect(link).toHaveAttribute("href", `/governance/pending?person=${encodeURIComponent("u 2f/81")}`);
   });

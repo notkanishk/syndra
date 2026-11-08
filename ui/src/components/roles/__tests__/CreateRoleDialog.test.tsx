@@ -55,4 +55,28 @@ describe("the new-role dialog pinned to a project", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
+
+  // A-22 §3.16: after Created the sheet is its result; a failure is Not created and the form stays.
+  it("unmounts the form and lede after Created, keeping the ArrowLink under the block", async () => {
+    render(<CreateRoleDialog pinnedProjectId="p-laser" onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Role key"), { target: { value: "trained" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create role" }));
+
+    expect(await screen.findByText("Created")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Role key")).toBeNull();
+    expect(screen.queryByText(/Created in Syndra and in Zitadel at the same time/)).toBeNull();
+    expect(screen.getByRole("link", { name: /Make it wait for you/ })).toBeInTheDocument();
+  });
+
+  it("says Not created on failure and keeps the form to press again", async () => {
+    create.mockRejectedValueOnce(new Error("Zitadel is unreachable"));
+    render(<CreateRoleDialog pinnedProjectId="p-laser" onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Role key"), { target: { value: "trained" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create role" }));
+
+    expect(await screen.findByText("Not created")).toBeInTheDocument();
+    expect(screen.getByLabelText("Role key")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create role" })).toBeInTheDocument();
+  });
 });

@@ -58,6 +58,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useMergeFindings: () => ({ data: [], isLoading: false, error: null }),
     useSetLifecycle: () => ({
       mutate: (input: { state: string; reason: string }) => state.lifecycleCalls.push(input),
+      reset: vi.fn(),
       isPending: false,
       error: state.lifecycleError,
     }),
@@ -319,7 +320,8 @@ describe("maintenance, as two action rows", () => {
     fireEvent.click(within(maintenance()).getByRole("button", { name: "Set read-only" }));
     fireEvent.change(within(maintenance()).getByLabelText("Reason"), { target: { value: "disk work" } });
 
-    expect(within(maintenance()).getByText(/That did not go through/)).toBeInTheDocument();
+    expect(within(maintenance()).getByText("Not changed")).toBeInTheDocument();
+    expect(within(maintenance()).queryByText(/That did not go through/)).toBeNull();
     expect((within(maintenance()).getByLabelText("Reason") as HTMLTextAreaElement).value).toBe("disk work");
   });
 });

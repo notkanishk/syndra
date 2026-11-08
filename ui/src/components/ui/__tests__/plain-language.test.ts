@@ -69,6 +69,11 @@ const NEVER: Array<[RegExp, string]> = [
   [/\bwithdraw\w* (their |this |the )?access\b/i, "revoke"],
   [/\btak(e|es|en|ing) (it |this |them |that |the access |their access |access )?away\b/i, "revoke"],
 
+  // "give" is only a verb (owner, 8 Nov 2026): a sentence that needs a noun names what waits, the role and the person.
+  [/\b(the|a|an|waiting|this|that)\s+give\b/i, "name what waits: the role and the person"],
+  [/\bgive-ups?\b/i, "stopped sending"],
+  [/\bgives? of\b/i, "name the role and the person"],
+
   // Noise.
   [/\bpayload\b/i, "details"],
   [/\bmutation/i, "change"],
@@ -596,5 +601,47 @@ describe("a queued change never 'waits to be sent'", () => {
       .filter(({ source }) => /waiting\s+to\s+be\s+sent/i.test(source))
       .map(({ path }) => path);
     expect(offenders, 'say "waiting for you to send" (operator) or "on its way" (member)').toEqual([]);
+  });
+
+  // The same rule for the sentences the backend writes (services, handlers, db).
+  it("never uses give as a noun in a sentence the backend writes", () => {
+    const root = join(SRC, "../../backend/internal");
+    const bad: Array<[RegExp, string]> = NEVER.filter(([p]) => /give/.test(p.source));
+    const files: string[] = [];
+    const go = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) go(full);
+        else if (entry.endsWith(".go") && !entry.endsWith("_test.go")) files.push(full);
+      }
+    };
+    go(root);
+    const offenders: string[] = [];
+    for (const file of files) {
+      for (const m of readFileSync(file, "utf8").matchAll(/"((?:[^"\\\n]|\\.)*)"|`([^`]*)`/g)) {
+        const text = m[1] ?? m[2] ?? "";
+        for (const [pattern] of bad) if (pattern.test(text)) offenders.push(`${file.slice(root.length + 1)} "${text.slice(0, 80)}"`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  // Retired result words (A-22 G29): each act has its own word and "Not" plus it.
+  it("brings back none of the retired result words", () => {
+    const retired = [
+      /Didn[’']t go through/,
+      /Couldn[’']t (put it on hold|lift it)/,
+      /That didn[’']t save\./,
+      /That did not go through\./,
+      /Revocation recorded/,
+      /\bNot all sent\b/,
+    ];
+    const offenders: string[] = [];
+    for (const { path, source } of sources()) {
+      for (const { line, text } of copyOf(source)) {
+        for (const pattern of retired) if (pattern.test(text)) offenders.push(`${path}:${line} "${text.slice(0, 80)}"`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
