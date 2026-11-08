@@ -1050,6 +1050,10 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
         <div className="flex-1 text-[14.5px]">
           Zitadel accepted {count === 1 ? "this change" : "these changes"} and hasn&rsquo;t shown{" "}
           {count === 1 ? "it" : "them"} back yet.
+          <span className="text-faint">
+            {" "}
+            Each one clears when Zitadel shows it. If one stays, open the person to see what they hold.
+          </span>
         </div>
       </CardRow>
       <Capped items={rows} href="/users?attention=unseen">
@@ -1065,7 +1069,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
               </div>
             )}
             <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
-              {writeNoun(row.op_type)}, accepted <Relative iso={row.applied_at} />
+              Sent <Relative iso={row.applied_at} /> {sentTo(row.op_type, row.role_keys?.length ?? 0)}
             </div>
           </CardRow>
         )}
@@ -1080,11 +1084,12 @@ function outcomeWord(outcome: Outcome, done: string, not: string): string {
   return outcome.kind === "failed" || outcome.kind === "refused" ? not : done;
 }
 
-/** The write, in the word a reader uses for it — never the raw op_type. */
-function writeNoun(opType: string): string {
-  if (opType === "revoke") return "A revocation";
-  if (opType === "replace") return "A change";
-  return "A grant";
+/** What the write was sent to do, as a verb; never the raw op_type. */
+function sentTo(opType: string, roles: number): string {
+  const it = roles > 1 ? "them" : "it";
+  if (opType === "revoke") return `to revoke ${it}`;
+  if (opType === "replace") return `to change ${it}`;
+  return `to give ${it}`;
 }
 
 /**

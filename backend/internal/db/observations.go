@@ -264,6 +264,15 @@ func ConfirmFromObservation(ctx context.Context) (int64, error) {
 		           AND a.target = 'zitadel' AND a.status = 'applied'
 		           AND a.op_type IN ('add','replace') AND a.role_keys && o.role_keys
 		           AND a.intent_seq > o.intent_seq))
+		     OR
+		     -- The same, the other way round: an add a later delivered revoke
+		     -- took back can never be seen again, so it is settled too.
+		     (o.op_type IN ('add','replace') AND EXISTS (
+		        SELECT 1 FROM propagation_outbox r
+		         WHERE r.user_id = o.user_id AND r.project_id = o.project_id
+		           AND r.target = 'zitadel' AND r.status = 'applied'
+		           AND r.op_type = 'revoke' AND r.role_keys && o.role_keys
+		           AND r.intent_seq > o.intent_seq))
 		   )`)
 	if err != nil {
 		return 0, fmt.Errorf("confirm from observation: %w", err)
