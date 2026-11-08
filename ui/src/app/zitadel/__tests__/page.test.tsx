@@ -562,4 +562,31 @@ describe("Identity provider · the staging stand-in", () => {
     expect(await screen.findByText("Answering")).toBeInTheDocument();
     expect(screen.queryByText(/stand-in/)).not.toBeInTheDocument();
   });
+
+  // The stand-in has no actions, event listener or claims setup: the checks
+  // that read them would only raise false alarms, so one quiet line stands in
+  // for claims delivery, the signing key and its overdue Notice.
+  const quietLine =
+    "The stand-in has no actions, event listener or claims setup, so these checks don’t run on staging. Nothing for you to do.";
+
+  it("shows one quiet line in place of claims delivery and the signing key", async () => {
+    health.value = { status: "ok", mode: "stand-in", latency_ms: 1, projects_total: 6 };
+    rotation.value = { ...rotation.value, status: "stale", age_days: 120, auto: { on: false, off_reason: "stand_in" } };
+    const { container } = renderPage();
+    expect(await screen.findByText(quietLine)).toBeInTheDocument();
+    expect(container.querySelector("section#claims-delivery")).toBeNull();
+    expect(container.querySelectorAll("#claims-delivery")).toHaveLength(1); // links to it still land
+    expect(screen.queryByText("Action signing key")).not.toBeInTheDocument();
+    expect(screen.queryByText(/days old/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Replace now/ })).not.toBeInTheDocument();
+  });
+
+  it("shows claims delivery, the signing key and an overdue key against a real Zitadel", async () => {
+    rotation.value = { ...rotation.value, status: "stale", age_days: 120 };
+    const { container } = renderPage();
+    expect(await screen.findByText("Action signing key")).toBeInTheDocument();
+    expect(container.querySelector("section#claims-delivery")).not.toBeNull();
+    expect(await screen.findByText("The action signing key is 120 days old.")).toBeInTheDocument();
+    expect(screen.queryByText(quietLine)).not.toBeInTheDocument();
+  });
 });

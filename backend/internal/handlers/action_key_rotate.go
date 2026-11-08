@@ -396,7 +396,7 @@ func keyWords(targets []string) string {
 // autoRotateConfig is the schedule as configured.
 type autoRotateConfig struct {
 	On        bool
-	OffReason string // switched_off | no_zitadel
+	OffReason string // switched_off | no_zitadel | stand_in
 	Threshold time.Duration
 	Lead      time.Duration
 	LeadDays  int
@@ -432,7 +432,10 @@ func autoConfig() autoRotateConfig {
 	case "off", "false", "0", "no":
 		c.On, c.OffReason = false, "switched_off"
 	}
-	if c.On && (devModeNoZitadel() || zitadelKeyRotator() == nil) {
+	// Staging's stand-in has no actions and so no key: nothing to rotate.
+	if zitadel.IsStandIn() {
+		c.On, c.OffReason = false, "stand_in"
+	} else if c.On && (devModeNoZitadel() || zitadelKeyRotator() == nil) {
 		c.On, c.OffReason = false, "no_zitadel"
 	}
 	return c
@@ -532,7 +535,7 @@ func observedLastReplaced(st db.ActionKeyRotationState) (*time.Time, string) {
 // RunActionKeyAutoRotate is the schedule's look, every ActionKeyAutoEvery.
 func RunActionKeyAutoRotate(ctx context.Context) error {
 	c := autoConfig()
-	if c.OffReason == "no_zitadel" {
+	if c.OffReason == "no_zitadel" || c.OffReason == "stand_in" {
 		return nil
 	}
 	st, err := dbActionKeyRotationNow(ctx, claimcheck.ClaimTarget)
