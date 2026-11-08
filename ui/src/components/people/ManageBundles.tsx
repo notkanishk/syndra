@@ -14,6 +14,7 @@ import { isStale, usePlanConsents, type ActPlan } from "@/lib/usePlanConsent";
 import { DRAIN_UNKNOWN_NEXT, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { refusedOutcome } from "@/lib/retry";
 import { isRefused } from "@/lib/wait-reason";
+import { travels } from "@/lib/plan-groups";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { useBundleRolesByBundle, useBundles, useRemoveBundle } from "@/lib/queries/useBundles";
 import { useAssignBundle } from "@/lib/queries/useUsers";
@@ -372,17 +373,23 @@ export const ManageBundles = mountedWhileOpen(ManageBundlesOpen);
  * Whether the staged changes finish now or wait, from their plans (A-21 §3.2,
  * the bulk before-line's shapes): "Apply sends 2 changes to Zitadel now. 1
  * waits for you to send." A change that only cancels a waiting one sends
- * nothing, and says so.
+ * nothing, and says so. Counted by role ({@link travels}): a bundle with one
+ * role that waits still sends the rest now.
  */
 export function bundlesBeforeLine(plans: Array<ActPlan | undefined>): string {
   const going = plans.filter((p): p is ActPlan => p?.effect === "apply");
-  const now = going.filter((p) => p.delivery === "straight_away").length;
-  const wait = going.filter((p) => p.delivery === "waits_for_you").length;
+  let now = 0;
+  let wait = 0;
+  for (const p of going) {
+    const t = travels(p);
+    now += t.now;
+    wait += t.wait;
+  }
   const cancelOnly = going.filter((p) => p.delivery === "none").length;
-  if (going.length === 1 && (now || wait)) return now ? "This goes to Zitadel when you apply." : "This waits for you to send.";
+  if (going.length === 1 && Boolean(now) !== Boolean(wait)) return now ? "This goes to Zitadel when you apply." : "This waits for you to send.";
   const parts: string[] = [];
   if (now) parts.push(`Apply sends ${now} ${now === 1 ? "change" : "changes"} to Zitadel now.`);
-  if (wait) parts.push(wait === going.length ? "Every change waits for you to send." : `${wait} ${wait === 1 ? "waits" : "wait"} for you to send.`);
+  if (wait) parts.push(now === 0 ? "Every change waits for you to send." : `${wait} ${wait === 1 ? "waits" : "wait"} for you to send.`);
   if (cancelOnly) parts.push(`For ${cancelOnly}, this only cancels ${cancelOnly === 1 ? "a change that's waiting" : "changes that are waiting"}; nothing is sent.`);
   return parts.join(" ") || "Nothing here is sent to Zitadel.";
 }
