@@ -3,8 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DormantAccounts } from "@/components/targets/DormantAccounts";
-import type { DormantReport } from "@/lib/queries/useDormant";
+import { DormantAccounts, sweepResult } from "@/components/targets/DormantAccounts";
+import type { DormantReport, SweepResult } from "@/lib/queries/useDormant";
 import type { OneShotSecret } from "@/lib/secret";
 
 /**
@@ -16,6 +16,7 @@ import type { OneShotSecret } from "@/lib/secret";
 const state: {
   report: DormantReport;
   swept: Array<{ accounts: string[]; elevatedKey: OneShotSecret }>;
+  answer?: SweepResult;
 } = {
   report: { target: "truenas", state_read_at: new Date().toISOString(), truncated: false, accounts: [] },
   swept: [],
@@ -35,7 +36,13 @@ vi.mock("@/lib/queries/useDormant", async () => {
       refetch: vi.fn(),
     }),
     useSweepDormant: () => ({
-      mutate: (input: { accounts: string[]; elevatedKey: OneShotSecret }) => state.swept.push(input),
+      mutate: (
+        input: { accounts: string[]; elevatedKey: OneShotSecret },
+        opts?: { onSuccess?: (r: SweepResult) => void },
+      ) => {
+        state.swept.push(input);
+        if (state.answer) opts?.onSuccess?.(state.answer);
+      },
       isPending: false,
       error: null,
     }),
@@ -53,6 +60,7 @@ function renderDormant() {
 
 beforeEach(() => {
   state.swept = [];
+  state.answer = undefined;
   state.report = {
     target: "truenas",
     state_read_at: new Date().toISOString(),
@@ -174,5 +182,36 @@ describe("dormant accounts", () => {
     fireEvent.click(screen.getByLabelText("Select former-member"));
 
     expect(screen.getByText(/happens at once, not from Pending changes/i)).toBeInTheDocument();
+  });
+});
+
+// A-22: the sweep's result is one result in one slot, in the act's own words,
+// ending on a step; there is no "Dismiss this result".
+describe("the sweep result", () => {
+  const pressRemove = () => {
+    renderDormant();
+    fireEvent.click(screen.getByLabelText("Select former-member"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand/i }));
+    fireEvent.change(screen.getByLabelText(/API key that is allowed to delete/i), { target: { value: "k" } });
+    fireEvent.click(screen.getByRole("button", { name: /remove 1 account/i }));
+  };
+
+  it("says Removed, and that there is nothing left to do", () => {
+    state.answer = { target: "truenas", removed: 1, outcomes: [{ account: "former-member", outcome: "removed" }] };
+    pressRemove();
+    expect(screen.getByText("Removed")).toBeInTheDocument();
+    expect(screen.getByText("1 account removed.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing for you to do.")).toBeInTheDocument();
+    expect(screen.queryByText(/dismiss this result/i)).toBeNull();
+  });
+
+  it("says Not removed with the account's own sentence and a step", () => {
+    const failed = sweepResult({ target: "truenas", removed: 0, outcomes: [{ account: "former-member", outcome: "refused" }] }, "TrueNAS");
+    expect(failed.word).toBe("Not removed");
+    expect(failed.outcome).toMatchObject({ kind: "failed", next: "Refresh this list to see what is left." });
+    expect(failed.outcome.message).toContain("former-member: refused. It gained a role since you loaded this list, so it was left alone.");
+    const unsure = sweepResult({ target: "truenas", removed: 1, outcomes: [{ account: "a", outcome: "removed" }, { account: "b", outcome: "indeterminate" }] }, "TrueNAS");
+    expect(unsure.word).toBe("Removed 1 of 2");
+    expect(unsure.outcome.next).toBe("Check TrueNAS before you try again.");
   });
 });
