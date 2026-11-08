@@ -208,3 +208,62 @@ func TestConfirmFromObservationSettlesARevokeOvertakenByALaterAdd(t *testing.T) 
 		t.Fatalf("an overtaken revoke was left unconfirmed")
 	}
 }
+
+// An add a later revoke took back is settled by the revoke: its presence can
+// never be observed again, so leaving it unstamped kept it on Home for good.
+func TestConfirmFromObservationSettlesAnAddALaterRevokeTookBack(t *testing.T) {
+	ctx := liveDB(t)
+	var add string
+	key, _ := newOutboxIdempotencyKey()
+	if err := PG.QueryRow(ctx, `
+		INSERT INTO propagation_outbox
+			(op_type, user_id, project_id, role_keys, payload_json, idempotency_key,
+			 initiated_by, source, target, status, completed_at, intent_seq)
+		VALUES ('add','u1','p1',ARRAY['community'],'{}',$1,'tester','direct','zitadel','applied',
+		        NOW() - interval '1 day', nextval('propagation_outbox_intent_seq'))
+		RETURNING id`, key).Scan(&add); err != nil {
+		t.Fatalf("seed add: %v", err)
+	}
+	key2, _ := newOutboxIdempotencyKey()
+	if _, err := PG.Exec(ctx, `
+		INSERT INTO propagation_outbox
+			(op_type, user_id, project_id, role_keys, payload_json, idempotency_key,
+			 initiated_by, source, target, status, completed_at, intent_seq)
+		VALUES ('revoke','u1','p1',ARRAY['community'],'{}',$1,'tester','direct','zitadel','applied',
+		        NOW(), nextval('propagation_outbox_intent_seq'))`, key2); err != nil {
+		t.Fatalf("seed revoke: %v", err)
+	}
+	if err := RecordOrgObservation(ctx, nil, true, ""); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	if _, err := ConfirmFromObservation(ctx); err != nil {
+		t.Fatalf("ConfirmFromObservation: %v", err)
+	}
+	var at *time.Time
+	PG.QueryRow(ctx, `SELECT confirmed_at FROM propagation_outbox WHERE id=$1`, add).Scan(&at)
+	if at == nil {
+		t.Fatal("an add a later revoke took back is still unseen")
+	}
+}
+
+// Only Zitadel writes are listed: nothing ever confirms an add-on's write
+// (its own reconciliation checks it), so listing one kept it on Home forever
+// under words that say Zitadel accepted it.
+func TestAnAddOnWriteIsNotListedAsUnseenInZitadel(t *testing.T) {
+	ctx := liveDB(t)
+	key, _ := newOutboxIdempotencyKey()
+	if _, err := PG.Exec(ctx, `
+		INSERT INTO propagation_outbox
+			(op_type, user_id, payload_json, idempotency_key,
+			 initiated_by, source, target, status, completed_at)
+		VALUES ('apply','u1','{}',$1,'tester','direct','truenas','applied', NOW() - interval '1 day')`, key); err != nil {
+		t.Fatalf("seed add-on write: %v", err)
+	}
+	found, err := AppliedButUnobserved(ctx, 30*time.Minute)
+	if err != nil {
+		t.Fatalf("AppliedButUnobserved: %v", err)
+	}
+	if len(found) != 0 {
+		t.Fatalf("an add-on write was listed as unseen in Zitadel: %+v", found)
+	}
+}
