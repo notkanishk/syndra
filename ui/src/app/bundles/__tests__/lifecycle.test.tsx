@@ -210,7 +210,7 @@ describe("bundle rename", () => {
 
     expect(await screen.findByText("Renamed")).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).toBeNull();
-    expect(screen.queryByText(/not what it grants/)).toBeNull();
+    expect(screen.queryByText(/not what it gives/)).toBeNull();
   });
 
   it("says Not saved and keeps the form when the write fails", async () => {
