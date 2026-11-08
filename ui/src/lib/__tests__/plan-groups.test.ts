@@ -309,8 +309,12 @@ describe("resultOutcome", () => {
   });
 
   it("never counts automatic rules apart, and never says the act that went has not", () => {
+    // The row's roles say its own role went and the rule's two wait.
+    const listed = done([row("Ada", { effect: "applied", rule_waiting: 2, delivery: "waits_for_you", goes: ["Member"], waits: ["A", "B"] })]);
+    expect(listed.outcome.message).toBe("1 is in Zitadel now. 2 wait for you to send.");
+    // Without its roles, only what waits is counted.
     const r = done([row("Ada", { effect: "applied", rule_waiting: 2, delivery: "waits_for_you" })]);
-    expect(r.outcome.message).toBe("1 is in Zitadel now. 2 wait for you to send.");
+    expect(r.outcome.message).toBe("All 2 wait for you to send. Nothing has reached Zitadel yet.");
     expect(r.outcome.message).not.toMatch(/automatic rules/);
   });
 
