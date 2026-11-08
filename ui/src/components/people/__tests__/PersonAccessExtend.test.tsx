@@ -173,6 +173,16 @@ describe("a person's row that ends soon", () => {
     expect(document.body.textContent).not.toMatch(/once sent|Waiting for you to send|Will wait/);
   });
 
+  it("a failed extension says Not extended, with a step, and the button stays", async () => {
+    state.endsInDays = 5;
+    state.extend = vi.fn().mockRejectedValue(new ApiError(500, { error: "BOOM", message: "boom" }));
+    renderPerson();
+    fireEvent.click(screen.getByRole("button", { name: /^Extend/ }));
+    expect(await screen.findByText("Not extended")).toBeInTheDocument();
+    expect(screen.queryByText("Extended by 90 days")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Extend/ })).toBeEnabled();
+  });
+
   it("their access moved before the write: says so beside the button, to press again", async () => {
     state.endsInDays = 5;
     state.extend = vi.fn().mockRejectedValue(new ApiError(409, { error: "PLAN_STALE", message: "Nothing was changed." }));

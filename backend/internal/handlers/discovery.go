@@ -690,10 +690,16 @@ func handleRemoveZitadelGrantPreview(w http.ResponseWriter, r *http.Request) {
 	if only := r.URL.Query().Get("roles"); only != "" {
 		roleKeys = slices.DeleteFunc(roleKeys, func(k string) bool { return !slices.Contains(strings.Split(only, ","), k) })
 	}
+	// ?with=a,b: the roles a replace gives alongside, which the removals are
+	// planned beside (zitadelActs).
+	with := strings.Join(distinctRoleKeys(strings.Split(r.URL.Query().Get("with"), ",")), ",")
 	acts, err := zitadelActs(r.Context(), userID, projectID, nil, roleKeys)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
+	}
+	for i := range acts {
+		acts[i].Alongside = with
 	}
 	res := newZitadelGrantChange()
 	res.Status, res.Plans = "preview", map[string]ActPlan{}
@@ -716,12 +722,21 @@ type zitadelPlans struct {
 }
 
 // zitadelActs is a change on the Zitadel › Users page as the person page's
-// own acts, one per role: a removal of the role's direct grant, or with none
-// a revoke (OpRevoke, kept under the lock when Syndra still gives the role),
-// then a give per role given. Which act a role is is read here, before the
+// own acts, one per role: a give per role given, then a removal of each left-out
+// role's direct grant, or with none a revoke (OpRevoke, kept under the lock when
+// Syndra still gives the role). Which act a role is is read here, before the
 // lock; what it does is its plan's, under it.
+//
+// The gives go first and the removals are planned alongside them (Action.
+// Alongside), so a role the old and new roles' rules both reach is planned
+// held in the preview and at the apply alike; planned the other way round the
+// removal revoked it and the give then re-gave it, a different plan from the
+// one shown, refused as stale every time.
 func zitadelActs(ctx context.Context, userID, projectID string, gives, removes []string) ([]services.Action, error) {
 	var acts []services.Action
+	for _, role := range gives {
+		acts = append(acts, services.Action{Op: services.OpGive, UserID: userID, ProjectID: projectID, RoleKey: role})
+	}
 	if len(removes) > 0 {
 		direct, err := svcUserDirectGrants(ctx, userID)
 		if err != nil {
@@ -734,15 +749,12 @@ func zitadelActs(ctx context.Context, userID, projectID string, gives, removes [
 			}
 		}
 		for _, role := range removes {
+			a := services.Action{Op: services.OpRevoke, UserID: userID, ProjectID: projectID, RoleKey: role, Alongside: strings.Join(gives, ",")}
 			if id, ok := grantFor[role]; ok {
-				acts = append(acts, services.Action{Op: services.OpRemoveGrant, UserID: userID, GrantID: id, ProjectID: projectID, RoleKey: role})
-			} else {
-				acts = append(acts, services.Action{Op: services.OpRevoke, UserID: userID, ProjectID: projectID, RoleKey: role})
+				a = services.Action{Op: services.OpRemoveGrant, UserID: userID, GrantID: id, ProjectID: projectID, RoleKey: role, Alongside: strings.Join(gives, ",")}
 			}
+			acts = append(acts, a)
 		}
-	}
-	for _, role := range gives {
-		acts = append(acts, services.Action{Op: services.OpGive, UserID: userID, ProjectID: projectID, RoleKey: role})
 	}
 	return acts, nil
 }

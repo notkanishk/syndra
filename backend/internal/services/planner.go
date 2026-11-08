@@ -49,6 +49,27 @@ type Action struct {
 	// Days is how long a give lasts, or an extension runs, from the day the
 	// snapshot was read (clock.Now); 0 is no end.
 	Days int
+	// Alongside names roles (comma separated, so an Action stays comparable), in ProjectID, that the same change gives first
+	// (a Zitadel › Users replace gives the new roles, then takes the old
+	// away). A removal or revoke is planned as if they were already held, so
+	// a role the old and new roles' rules both reach stays held and is never
+	// revoked and given in one change. Applied after the gives are written
+	// they are already held and this adds nothing.
+	Alongside string
+}
+
+// withAlongside is the person as the act sees them: holding what the same
+// change gives first.
+func (a Action) withAlongside(p db.PersonAccess) db.PersonAccess {
+	for _, r := range strings.Split(a.Alongside, ",") {
+		if r == "" {
+			continue
+		}
+		if findGrant(p.Direct, a.ProjectID, r) == nil {
+			p.Direct = append(slices.Clone(p.Direct), models.DirectGrant{ID: "alongside:" + r, UserID: a.UserID, ProjectID: a.ProjectID, RoleKey: r})
+		}
+	}
+	return p
 }
 
 // subject is the plan row an action is: the person, or for a request
@@ -364,6 +385,7 @@ func (s PlanSnapshot) names(ks []roleKey) []string {
 // the queued changes they cancel (db.Answers, the one predicate).
 func (ch Change) deliver(writes []db.EnqueueParams, person db.PersonAccess, s PlanSnapshot) Change {
 	for _, p := range writes {
+		p.RulesDecided = true
 		w := Write{EnqueueParams: p, Delivery: DeliveryStraightAway}
 		if p.NoPropagation {
 			// A ledger edit only (an extension, an adopted role): it never

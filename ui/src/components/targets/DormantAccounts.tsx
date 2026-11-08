@@ -1,10 +1,10 @@
 "use client";
 
-import { describeFailure, sentence } from "@/lib/outcome";
+import { NOTHING_TO_DO, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { formatBytes } from "@/lib/format";
 import { useState } from "react";
 
-import { Mono, StatusDot } from "@/components/ui/Badge";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { EmptyState, ListStates } from "@/components/states";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { RowCheckbox } from "@/components/ui/SelectionBar";
@@ -50,7 +50,8 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   // the query cache. The add-on holds no delete-capable credential of its own,
   // so this is the only place in the deployment one exists.
   const [elevatedKey, setElevatedKey] = useState("");
-  const [result, setResult] = useState<SweepResult | null>(null);
+  // One result slot, cleared by the press before it writes (A-22 G23).
+  const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
 
   const accounts = dormant.data?.accounts ?? [];
   const name = targetLabel(target);
@@ -148,7 +149,11 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         </>
       </ListStates>
 
-      {result && <SweepOutcomes result={result} name={name} onDismiss={() => setResult(null)} />}
+      {result && (
+        <div className="border-t border-line px-5 py-4">
+          <ActionOutcome outcome={result.outcome} word={result.word} />
+        </div>
+      )}
 
       {chosen.length > 0 && (
         <div className="grid gap-3 border-t border-line px-5 py-4">
@@ -197,19 +202,21 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
                       : undefined
                   : undefined
               }
-              onClick={() =>
+              onClick={() => {
+                setResult(null);
                 remove.mutate(
                   { accounts: chosen.map((a) => a.account), elevatedKey: oneShot(elevatedKey) },
                   {
                     onSuccess: (outcome) => {
-                      setResult(outcome);
+                      setResult(sweepResult(outcome, name));
                       setSelected(new Set());
                       setAcknowledged(false);
                       setElevatedKey("");
                     },
+                    onError: (error) => setResult({ outcome: outcomeFromError(error), word: "Not removed" }),
                   },
-                )
-              }
+                );
+              }}
             >
               {`Remove ${chosen.length} ${chosen.length === 1 ? "account" : "accounts"}`}
             </Button>
@@ -232,11 +239,6 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
             it goes; one that has gained a role since you loaded this list is skipped, not
             removed.
           </p>
-          {remove.error && (
-            <p className="text-[13.5px] text-danger-text">
-              {sentence(describeFailure(remove.error))}
-            </p>
-          )}
         </div>
       )}
     </Card>
@@ -287,50 +289,30 @@ function AccountLine({ account }: { account: DormantAccount }) {
 }
 
 /**
- * What the sweep actually did, per account.
+ * What the sweep did, as one result (A-22): the act's word and its "Not", one
+ * sentence per account that was not removed, and the step left.
  *
  * Four outcomes and only one of them is "removed". An unconfirmed purge is the
- * one place in the product where retrying is not free — the account may be gone
- * — so it is named rather than folded into a failure count somebody would click
- * again.
+ * one place in the product where retrying is not free (the account may be
+ * gone), so it is named, and its step is to check first.
  */
-function SweepOutcomes({
-  result,
-  name,
-  onDismiss,
-}: {
-  result: SweepResult;
-  name: string;
-  onDismiss: () => void;
-}) {
+export function sweepResult(result: SweepResult, name: string): { outcome: Outcome; word: string } {
   const unresolved = result.outcomes.filter((o) => o.outcome !== "removed");
-  const done = result.removed > 0 && unresolved.length === 0;
   const fallback: Record<string, string> = {
     refused: "refused. It gained a role since you loaded this list, so it was left alone",
     unreached: `${name} did not answer, so it was not removed`,
     indeterminate: `not confirmed. Check ${name} before trying again`,
   };
-  return (
-    <div
-      role="status"
-      // Done lifts and blooms once; anything left unresolved appears still, on tint (S6).
-      className={`${done ? "lift-in" : "tint-in"} grid gap-2 border-t border-line px-5 py-4 text-[13.5px]`}
-    >
-      <p className={`flex items-center gap-2 ${result.removed > 0 ? "text-muted" : "text-warn-text"}`}>
-        {done && <StatusDot tone="healthy" bloom />}
-        {result.removed} {result.removed === 1 ? "account" : "accounts"} removed.
-      </p>
-      {unresolved.map((outcome) => (
-        <p key={outcome.account} className="text-warn-text">
-          <Mono>{outcome.account}</Mono>:{" "}
-          {outcome.detail ?? fallback[outcome.outcome] ?? "recorded"}
-        </p>
-      ))}
-      <div>
-        <Button variant="outline" size="sm" onClick={onDismiss}>
-          Dismiss this result
-        </Button>
-      </div>
-    </div>
-  );
+  const removed = `${result.removed} ${result.removed === 1 ? "account" : "accounts"} removed.`;
+  if (unresolved.length === 0) {
+    return { outcome: { kind: "applied", message: removed, next: NOTHING_TO_DO }, word: "Removed" };
+  }
+  const why = unresolved.map((o) => `${o.account}: ${o.detail ?? fallback[o.outcome] ?? "recorded"}.`.replace(/\.\.$/, "."));
+  const next = unresolved.some((o) => o.outcome === "indeterminate")
+    ? `Check ${name} before you try again.`
+    : "Refresh this list to see what is left.";
+  return {
+    outcome: { kind: "failed", recorded: true, message: [removed, ...why].join(" "), next },
+    word: result.removed > 0 ? `Removed ${result.removed} of ${result.outcomes.length}` : "Not removed",
+  };
 }

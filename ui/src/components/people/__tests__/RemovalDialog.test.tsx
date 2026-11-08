@@ -316,6 +316,17 @@ describe("a give that never reached Zitadel: the dialog is the cancel", () => {
       seen: { fingerprint: "fp-b", cancel_ids: [waitingGive.id] },
     });
   });
+
+  it("a failed cancel says Not cancelled and the form stays", async () => {
+    wire.plan = cancelling([{ ...waitingGive, source: "bundle" }], { delivery: "none", fingerprint: "fp-b" });
+    removeBundle.mockRejectedValueOnce(new ApiError(500, { error: "BOOM", message: "boom" }));
+    open({ sources: [{ ...bundle, queued: true }] });
+    await planRead("Cancel giving it");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel giving it" }));
+    expect(await screen.findByText("Not cancelled")).toBeInTheDocument();
+    expect(screen.queryByText("Cancelled")).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel giving it" })).toBeInTheDocument();
+  });
 });
 
 describe("the sheet is its result (A-22)", () => {

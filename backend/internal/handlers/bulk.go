@@ -194,6 +194,9 @@ func settlePlannedRow(ctx context.Context, out *services.BulkOutcome, ch service
 	if own == "" {
 		queued, retry := delivered(d)
 		settleBulkRow(out, queued, retry)
+		if out.Effect == services.EffectQueued {
+			out.Unsent = d.Unsent()
+		}
 		return
 	}
 	queued, retry := d.ReasonFor(own), (*extcall.RetryState)(nil)

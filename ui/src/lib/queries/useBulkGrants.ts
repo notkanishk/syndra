@@ -109,6 +109,8 @@ export interface BulkOutcome {
   waits?: string[];
   /** The roles sent straight away. */
   goes?: string[];
+  /** Of `goes`, how many a halted send left behind with no retry: not in Zitadel, waiting for Send. */
+  unsent?: number;
   /** Whose access the row changes, when the row is not the person (a request, a drift row). */
   person?: string;
 }

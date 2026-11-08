@@ -233,3 +233,25 @@ func TestDrainRevocations_OneTargetsOutageDoesNotStopAnother(t *testing.T) {
 		t.Errorf("the unreachable target must be named rather than folded into a total: %+v", res)
 	}
 }
+
+// The unattended runner reports a halt for an unreachable add-on only when it
+// has changes queued (or the count can't be read), as the operator's drain does.
+func TestDrainRevocations_UnreachableAddonWithNothingQueuedIsNotAHalt(t *testing.T) {
+	for _, tc := range []struct {
+		waiting int
+		halted  bool
+	}{{0, false}, {2, true}} {
+		h := stubAddonDrain(t)
+		h.reachable = false
+		t.Cleanup(swap(&registeredAddons, func() []addons.Registration { return []addons.Registration{{Target: "truenas"}} }))
+		t.Cleanup(swap(&claimRevocations, revokeRows()))
+		t.Cleanup(swap(&countPendingFor, func(context.Context, string) (int, error) { return tc.waiting, nil }))
+		res, err := DrainRevocations(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Halted != tc.halted {
+			t.Errorf("waiting=%d: halted=%v, want %v: %+v", tc.waiting, res.Halted, tc.halted, res)
+		}
+	}
+}

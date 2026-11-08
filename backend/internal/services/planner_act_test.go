@@ -231,3 +231,34 @@ func TestPlanAct_RemoveGrantThatOnlyCancelsTheWaitingGive(t *testing.T) {
 		t.Fatalf("delivery = %q, cancels = %v, detail = %q", ch.Delivery(), ch.Row.CancelIDs, ch.Row.Detail)
 	}
 }
+
+// A replace whose old and new roles' rules reach the same role: the removal
+// is planned alongside the give, so the shared role is held, never revoked
+// and re-given, and the plan shown is the plan applied (it was refused as
+// stale every time).
+func TestPlanAct_ReplaceWithASharedRuleTargetPlansTheSameBeforeAndAfter(t *testing.T) {
+	s := plannerSnap()
+	memberGivesTrained(&s)
+	s.Access.Rules = append(s.Access.Rules, models.MappingRule{ID: "r2", SourceProject: "pLab", SourceRole: "advanced", TargetProject: "pLab", TargetRole: "trained"})
+	withDirect(&s, member)
+	remove := Action{Op: OpRemoveGrant, UserID: "u1", GrantID: "g-member"}
+
+	// On its own the removal takes the shared role with it.
+	if got := plannedWrites(Plan(remove, s)); !slices.Equal(got, []sentWrite{{"revoke", "member", DeliveryStraightAway}, {"revoke", "trained", DeliveryStraightAway}}) {
+		t.Fatalf("a lone removal revokes the shared role: %+v", got)
+	}
+	// Planned beside the give of Advanced, it leaves it.
+	remove.ProjectID, remove.Alongside = "pLab", "advanced"
+	preview := Plan(remove, s)
+	if got := plannedWrites(preview); !slices.Equal(got, []sentWrite{{"revoke", "member", DeliveryStraightAway}}) {
+		t.Fatalf("beside the give, only the old role goes: %+v", got)
+	}
+	// After the give is written the person holds Advanced; the same removal
+	// planned then, with nothing alongside, is the same Change.
+	withDirect(&s, advanced)
+	remove.Alongside = ""
+	applied := Plan(remove, s)
+	if preview.Row.Fingerprint != applied.Row.Fingerprint {
+		t.Fatalf("preview %s and apply %s disagree", preview.Row.Fingerprint, applied.Row.Fingerprint)
+	}
+}

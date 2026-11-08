@@ -142,6 +142,10 @@ type BulkOutcome struct {
 	Delivery string   `json:"delivery,omitempty"`
 	Waits    []string `json:"waits,omitempty"`
 	Goes     []string `json:"goes,omitempty"`
+	// Unsent counts the straight-away roles a halted send left behind with no
+	// retry scheduled (set on the result only): they are in Goes but not in
+	// Zitadel, and wait for Send.
+	Unsent int `json:"unsent,omitempty"`
 	// Grants the row would act on. Populated for remove_role and extend so the
 	// apply pass acts on identified rows rather than re-guessing.
 	GrantIDs []string `json:"grant_ids,omitempty"`

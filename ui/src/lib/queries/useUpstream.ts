@@ -112,8 +112,9 @@ export function useUpstreamUsers() {
  * browser, and `plans` are what the write carries back. `roles` narrows it to
  * a replace's left-out roles; none means every role on the grant.
  */
-export function useGrantRemovalPreview(userId: string, grantId: string, roles?: string[], enabled = true) {
-  const only = roles ? `?roles=${encodeURIComponent(roles.join(","))}` : "";
+export function useGrantRemovalPreview(userId: string, grantId: string, roles?: string[], enabled = true, alongside: string[] = []) {
+  // `alongside` are the roles a replace gives first: the removals are planned beside them.
+  const only = (roles ? `?roles=${encodeURIComponent(roles.join(","))}` : "") + (alongside.length ? `${roles ? "&" : "?"}with=${encodeURIComponent(alongside.join(","))}` : "");
   return useQuery({
     queryKey: ["upstream", "users", userId, "grants", grantId, "removal", only],
     queryFn: () =>

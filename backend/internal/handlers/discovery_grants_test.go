@@ -249,8 +249,8 @@ func TestHandleUpdateZitadelGrant_RemovesLeftOutAndGivesNew(t *testing.T) {
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("want 202, got %d: %s", w.Code, w.Body.String())
 	}
-	if got := p.ops(); !slices.Equal(got, []string{"remove:olddg-old", "give:new"}) {
-		t.Fatalf("the left-out role is removed, then the new one given; applied %v", got)
+	if got := p.ops(); !slices.Equal(got, []string{"give:new", "remove:olddg-old"}) {
+		t.Fatalf("the new role is given, then the left-out one removed (planned beside it); applied %v", got)
 	}
 	if !slices.Equal(res.Given, []string{"p1/new"}) {
 		t.Fatalf("unexpected body: %+v", res)
@@ -294,6 +294,19 @@ func TestHandleRemoveZitadelGrantPreview_IsEachRolesPlan(t *testing.T) {
 	}
 	if res.Plans["stray"].Fingerprint != "fp-revoke-stray" || res.Plans["lead"].Effect != services.EffectNoChange {
 		t.Fatalf("each role's plan comes back: %+v", res.Plans)
+	}
+}
+
+// A replace's preview plans each removal beside the roles it gives first (?with=),
+// as the apply does, so the plan shown is the plan applied.
+func TestHandleRemoveZitadelGrantPreview_IsPlannedBesideTheGives(t *testing.T) {
+	p := newGrantPipe(t)
+	dbGetGrantIndex = func(_ context.Context, grantID string) (db.ZitadelGrantIndex, error) {
+		return db.ZitadelGrantIndex{GrantID: grantID, ProjectID: "p1", RoleKeys: []string{"old"}}, nil
+	}
+	w, _ := serveGrant(t, handleRemoveZitadelGrantPreview, http.MethodGet, "/api/v1/zitadel/users/u1/grants/g1/removal?roles=old&with=new,newer", "")
+	if w.Code != http.StatusOK || len(p.planned) != 1 || p.planned[0].Alongside != "new,newer" {
+		t.Fatalf("the removal is planned beside the gives: %d %+v", w.Code, p.planned)
 	}
 }
 
