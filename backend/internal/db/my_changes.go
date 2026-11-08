@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"syndra/internal/clock"
+	"syndra/internal/models"
 )
 
 // MyChangeRow is one change to a person's own access, as Syndra recorded it
@@ -26,7 +27,10 @@ type MyChangeRow struct {
 	// direct, bundle (ref = bundle id), rule (ref = rule id), lifecycle_cascade.
 	Source    string
 	SourceRef string
-	Until     *time.Time
+	// RuleFrom is, on a rule's row, the role that set it off, as it was when
+	// the row was written (task 1.6a); nil on rows from before it was kept.
+	RuleFrom *models.RuleFrom
+	Until    *time.Time
 	// RequestKind is a request's kind (access | extend); empty for given and
 	// taken-away rows.
 	RequestKind string
@@ -51,7 +55,7 @@ type MyChangeRow struct {
 // A cancelled removal is the one cancelled send the member hears about: it
 // means they keep a role they were going to lose.
 const myChangesSQL = `
-SELECT kind, changed_at, project_id, role_key, actor, note, source, source_ref, ends_at, pending, wait_reason, request_kind, ended_before, ends_after
+SELECT kind, changed_at, project_id, role_key, actor, note, source, source_ref, ends_at, pending, wait_reason, request_kind, ended_before, ends_after, rule_from
 FROM (
 	SELECT CASE ar.status WHEN 'approved' THEN 'request_approved'
 	                      WHEN 'rejected' THEN 'request_declined'
@@ -79,7 +83,8 @@ FROM (
 	       COALESCE(w.wait_reason, '')                                       AS wait_reason,
 	       ar.kind                                                           AS request_kind,
 	       ar.ended_before                                                   AS ended_before,
-	       ar.ends_after                                                     AS ends_after
+	       ar.ends_after                                                     AS ends_after,
+	       NULL::jsonb                                                       AS rule_from
 	  FROM access_requests ar
 	  LEFT JOIN direct_role_grants g
 	         ON ar.status = 'approved'
@@ -115,7 +120,8 @@ FROM (
 	       '',
 	       '',
 	       NULL::timestamptz,
-	       NULL::timestamptz
+	       NULL::timestamptz,
+	       o.payload_json->'rule_from'
 	  FROM propagation_outbox o
 	 CROSS JOIN LATERAL unnest(o.role_keys) AS rk(role_key)
 	  LEFT JOIN direct_role_grants g
@@ -148,7 +154,8 @@ FROM (
 	       '',
 	       '',
 	       NULL::timestamptz,
-	       NULL::timestamptz
+	       NULL::timestamptz,
+	       NULL::jsonb
 	  FROM audit_logs a
 	 WHERE a.target_zitadel_user_id = $1
 	   AND a.action = 'propagation.cancelled_unsent'
@@ -170,7 +177,7 @@ func ListMyChanges(ctx context.Context, userID string, days int) ([]MyChangeRow,
 	for rows.Next() {
 		var c MyChangeRow
 		if err := rows.Scan(&c.Kind, &c.At, &c.ProjectID, &c.RoleKey, &c.Actor, &c.Note,
-			&c.Source, &c.SourceRef, &c.Until, &c.Pending, &c.WaitReason, &c.RequestKind, &c.EndedBefore, &c.EndsAfter); err != nil {
+			&c.Source, &c.SourceRef, &c.Until, &c.Pending, &c.WaitReason, &c.RequestKind, &c.EndedBefore, &c.EndsAfter, &c.RuleFrom); err != nil {
 			return nil, fmt.Errorf("scan my change: %w", err)
 		}
 		out = append(out, c)

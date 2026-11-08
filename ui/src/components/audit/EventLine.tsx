@@ -224,7 +224,32 @@ function AnswerSentence({ entry }: { entry: AuditEntry }) {
   );
 }
 
+/**
+ * The events whose `details.reason` is the operator's own words: a bundle given
+ * or taken, a direct grant given, extended or removed, a sign-in lookup. Other
+ * events' details carry Syndra's words, never quoted as someone's.
+ */
+const SAID = /^(bundle\.(assigned|unassigned)|direct_grant\.(upserted|revoked|replaced|removed)|sign_ins\.looked_up)$/;
+
+/** The operator's reason on an event, if they gave one (task 1.8a). */
+export function saidReason(entry: AuditEntry): string | undefined {
+  const reason = (entry.details as { reason?: unknown } | undefined)?.reason;
+  return SAID.test(entry.action) && typeof reason === "string" && reason.trim() ? reason.trim() : undefined;
+}
+
+/** The event in words, then the operator's reason quoted under it when they gave one. */
 export function EventSentence({ entry }: { entry: AuditEntry }) {
+  const reason = saidReason(entry);
+  if (!reason) return <Sentence entry={entry} />;
+  return (
+    <span className="flex flex-col gap-0.5">
+      <Sentence entry={entry} />
+      <span className="text-ink">&ldquo;{reason}&rdquo;</span>
+    </span>
+  );
+}
+
+function Sentence({ entry }: { entry: AuditEntry }) {
   const { verb, template, destructive } = describeAction(entry.action);
   const tone = destructive ? "font-semibold text-danger-text" : undefined;
 

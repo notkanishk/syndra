@@ -462,6 +462,11 @@ function PendingGroups({
                         )}
                       </span>
                       <RowStatus row={row} skipWait={shared} />
+                      {/* The operator's words, kept with the change (task 1.8a). A
+                          connected system's row says its reason as its change. */}
+                      {row.op_type !== "apply" && row.reason && (
+                        <span className="text-[13px] text-ink">&ldquo;{row.reason}&rdquo;</span>
+                      )}
                     </span>
 
                     <span className="w-full text-[13.5px] tablet:w-[130px] tablet:shrink-0">
@@ -668,12 +673,15 @@ function CausedBy({
   // Named by what caused it, never by a handle alone. A direct grant has no
   // handle: somebody chose it by hand on the person's page. A rule has no name:
   // the role that set it off is its name (A-21 §Q3), also when a bundle's
-  // change set the rule off, since the row is the rule's (task 1.6).
+  // change set the rule off, since the row is the rule's (task 1.6). That role
+  // is the one kept on the row (the hop before it in a chain, as it was when
+  // written, task 1.6a); a row from before it was kept reads the rule's own.
+  const from = row.rule_from ?? (rule && { project_id: rule.source_project, role_key: rule.source_role });
   const name = bundle ? (
     bundle.name
-  ) : rule ? (
+  ) : rule && from ? (
     <>
-      Rule from <RoleInPlace projectId={rule.source_project} roleKey={rule.source_role} />
+      Rule from <RoleInPlace projectId={from.project_id} roleKey={from.role_key} />
     </>
   ) : isBundle
         ? "Bundle"

@@ -115,7 +115,13 @@ func shapeMyChanges(rows []db.MyChangeRow, triggers map[string]myTrigger) []myCh
 		case "rule":
 			if row.SourceRef != "" {
 				c.Via = &myViaRef{RuleID: row.SourceRef}
+				// The role kept on the row (task 1.6a), so a later edit to the
+				// rule doesn't rename it; the rule's own for older rows. A rule
+				// since retired names none, as before.
 				if t, ok := triggers[row.SourceRef]; ok {
+					if row.RuleFrom != nil {
+						t = myTrigger{ProjectID: row.RuleFrom.ProjectID, RoleKey: row.RuleFrom.RoleKey}
+					}
 					c.Via.Trigger = &t
 				}
 			}

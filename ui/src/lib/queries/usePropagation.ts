@@ -7,6 +7,16 @@ import type { RetryState } from "@/lib/retry";
 
 import { invalidateAfter } from "./invalidation";
 
+/**
+ * The role that set off a rule's row: the first role of the rule one step
+ * before it, as it was when the row was written, so a later edit to the rule
+ * doesn't rename it (task 1.6a).
+ */
+export interface RuleFrom {
+  project_id: string;
+  role_key: string;
+}
+
 export interface PendingRow {
   id: string;
   op_type: string;
@@ -15,6 +25,8 @@ export interface PendingRow {
   role_keys: string[];
   source: string;
   source_ref?: string;
+  /** A rule's row: the role that set it off, kept when it was written. Absent on older rows. */
+  rule_from?: RuleFrom;
   /** Shared by every write one triggering event produced. Empty on older rows. */
   cascade_id?: string;
   status: string;
@@ -25,7 +37,10 @@ export interface PendingRow {
   target?: string;
   /** Who queued it: a person's id, or a machine as "system:reconcile". */
   initiated_by?: string;
-  /** Why it was queued. Said for an add-on row, which has no project or roles. */
+  /**
+   * Why it was queued. An add-on row says it as its change (it has no project
+   * or roles); a Zitadel row's is the operator's own words, quoted.
+   */
   reason?: string;
   /**
    * Why it waits for the operator: "role_waits" (the role always waits),

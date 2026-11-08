@@ -157,7 +157,7 @@ func planRole(ch Change, a Action, s PlanSnapshot, profile models.UserProfile, p
 	rules := s.Access.Rules
 	closureBefore, closureAfter := effectiveClosure(before, rules), effectiveClosure(after, rules)
 	adds, revokes := closureDelta(closureBefore, closureAfter)
-	refs := ruleRefs(before, after, closureBefore, closureAfter, rules)
+	refs := ruleRefs(before, after, closureBefore, closureAfter, rules, rules)
 
 	// One guard for every give (decision 6): Zitadel still offers the role,
 	// the act's own and every one a rule follows with.
@@ -440,16 +440,14 @@ func writeAct(ctx context.Context, a Action, w ActWrite, ch Change, snap PlanSna
 	var ids []string
 	switch a.Op {
 	case OpRemoveGrant, BulkOpRemoveRole:
-		reason := w.Reason
-		if reason == "" {
-			reason = "Direct access removal"
-		}
+		// The operator's words or none: the audit line and Pending changes
+		// quote it (task 1.8a), so a label of Syndra's would read as theirs.
 		grantID := a.GrantID
 		if a.Op == BulkOpRemoveRole {
 			grantID = ch.Row.GrantIDs[0]
 		}
 		var err error
-		if ids, err = svcDeleteDirectGrantAndEnqueue(ctx, w.Actor, a.UserID, grantID, reason, ch.params(w.Actor, reason)); err != nil {
+		if ids, err = svcDeleteDirectGrantAndEnqueue(ctx, w.Actor, a.UserID, grantID, w.Reason, params); err != nil {
 			return ch, err
 		}
 	case OpGive, OpApprove, BulkOpAssignRole:

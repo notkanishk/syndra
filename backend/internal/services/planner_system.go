@@ -29,16 +29,15 @@ import (
 
 // systemChange plans one person's part of system work: what they hold before
 // and after, through the rules before and after, attributed to source and
-// ref. A role a rule follows with is the rule's row (decision 7), except in a
-// rule's own edit, where every row is the edited rule's (task 1.6a).
+// ref. A role a rule follows with is the rule's row (decision 7): the rule
+// that reaches it, also in a rule's own edit, where a role two steps down a
+// chain is the next rule's row, not the edited rule's (task 1.6a).
 func systemChange(userID string, person db.PersonAccess, s PlanSnapshot, before, after map[roleKey]bool,
 	rulesBefore, rulesAfter []models.MappingRule, source, ref string) Change {
 	closureBefore, closureAfter := effectiveClosure(before, rulesBefore), effectiveClosure(after, rulesAfter)
 	adds, revokes := closureDelta(closureBefore, closureAfter)
-	writes := deltaWrites(userID, adds, revokes, source, ref)
-	if source != "rule" {
-		writes = asRuleRows(writes, ruleRefs(before, after, closureBefore, closureAfter, rulesAfter))
-	}
+	writes := asRuleRows(deltaWrites(userID, adds, revokes, source, ref),
+		ruleRefs(before, after, closureBefore, closureAfter, rulesBefore, rulesAfter))
 	ch := Change{UserID: userID}.deliver(writes, person, s)
 	for _, c := range ch.Cancels {
 		ch.Row.CancelIDs = append(ch.Row.CancelIDs, c.ID)

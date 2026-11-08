@@ -55,6 +55,8 @@ describe("Look up sign-ins (owner, 3 Nov)", () => {
     };
     render(<SignInLookup userId="u1" name="Aanya" onClose={() => {}} />);
     expect(screen.getByText("Looked up")).toBeInTheDocument();
+    // The lookup is an audit event, quoted there with its reason (task 1.8a); Change history holds cascades only.
+    expect(screen.getByText(/It's on the Audit page with your reason/)).toBeInTheDocument();
     expect(screen.getByText(/2 sign-ins by Aanya in the last 30 days/)).toBeInTheDocument();
     expect(screen.getByText("Fab queue")).toBeInTheDocument();
     expect(screen.getByText("App unknown")).toBeInTheDocument();

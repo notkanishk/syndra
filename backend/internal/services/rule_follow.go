@@ -67,28 +67,33 @@ func followRules(ctx context.Context, p db.EnqueueParams, write func() error) ([
 		return nil, err
 	}
 
-	params := asRuleRows(deltaWrites(p.UserID, adds, revokes, "rule", ""), ruleRefs(before, after, closureBefore, closureAfter, rules))
+	params := asRuleRows(deltaWrites(p.UserID, adds, revokes, "rule", ""), ruleRefs(before, after, closureBefore, closureAfter, rules, rules))
 	for i := range params {
 		params[i].GrantedBy, params[i].Reason, params[i].PayloadJSON = p.GrantedBy, "Mapping rule cascade", "{}"
 	}
 	return params, nil
 }
 
-// ruleRefs is, for each role a change to a person's base moves only through the
-// mapping rules, the rule that reaches it: in the closure after for a role
-// given, before for one taken away. A role the base itself moved is absent: it
-// is the change's own (the bundle's, the grant's). That rule's first role is
-// the role that set it off (decision 7, task 1.6).
-func ruleRefs(before, after, closureBefore, closureAfter map[roleKey]bool, rules []models.MappingRule) map[roleKey]string {
-	refs := map[roleKey]string{}
+// ruleRefs is, for each role a change moves only through the mapping rules,
+// the rule that reaches it: through the rules after in the closure after for
+// a role given, through the rules before in the closure before for one taken
+// away. In a chain that is the hop one step before the role, never the rule
+// at the chain's start (task 1.6a). A role the base itself moved is absent: it
+// is the change's own (the bundle's, the grant's). The rule's first role is
+// the role that set it off (decision 7, task 1.6). A rule's own edit passes
+// the two rule sets; every other change passes the same rules twice.
+func ruleRefs(before, after, closureBefore, closureAfter map[roleKey]bool, rulesBefore, rulesAfter []models.MappingRule) map[roleKey]models.MappingRule {
+	refs := map[roleKey]models.MappingRule{}
 	for _, c := range []map[roleKey]bool{closureBefore, closureAfter} {
 		for k := range c {
 			if closureBefore[k] != closureAfter[k] && before[k] == after[k] {
-				reached := closureAfter
+				rules, reached := rulesAfter, closureAfter
 				if closureBefore[k] {
-					reached = closureBefore
+					rules, reached = rulesBefore, closureBefore
 				}
-				refs[k] = ruleReaching(rules, reached, k)
+				if r := ruleReachingRule(rules, reached, k); r != nil {
+					refs[k] = *r
+				}
 			}
 		}
 	}
@@ -97,12 +102,15 @@ func ruleRefs(before, after, closureBefore, closureAfter map[roleKey]bool, rules
 
 // asRuleRows gives the writes refs names the one shape a rule's row has,
 // wherever it is written (FollowRules, a bundle cascade, the planner, a
-// publish or move): source 'rule', source_ref the rule that reaches the role.
-// db.Answers matches a rule's rows on that source.
-func asRuleRows(params []db.EnqueueParams, refs map[roleKey]string) []db.EnqueueParams {
+// publish or move, a rule's own edit): source 'rule', source_ref the rule that
+// reaches the role ("" for a rule not yet created, which its insert stamps),
+// and the role that set it off, kept on the row (task 1.6a). db.Answers
+// matches a rule's rows on that source.
+func asRuleRows(params []db.EnqueueParams, refs map[roleKey]models.MappingRule) []db.EnqueueParams {
 	for i := range params {
-		if ref, ok := refs[roleKey{projectID: params[i].ProjectID, roleKey: params[i].RoleKeys[0]}]; ok {
-			params[i].Source, params[i].SourceRef = "rule", ref
+		if r, ok := refs[roleKey{projectID: params[i].ProjectID, roleKey: params[i].RoleKeys[0]}]; ok {
+			params[i].Source, params[i].SourceRef = "rule", r.ID
+			params[i].RuleFrom = &models.RuleFrom{ProjectID: r.SourceProject, RoleKey: r.SourceRole}
 		}
 	}
 	return params
@@ -127,15 +135,9 @@ func ruleDelta(before, after map[roleKey]bool, rules []models.MappingRule) (adds
 	return derived(adds), derived(revokes), closureBefore, closureAfter
 }
 
-// ruleReaching names a rule that derives k within closure: the source_ref
-// Change history groups by. The first in the list when several do.
-func ruleReaching(rules []models.MappingRule, closure map[roleKey]bool, k roleKey) string {
-	if r := ruleReachingRule(rules, closure, k); r != nil {
-		return r.ID
-	}
-	return ""
-}
-
+// ruleReachingRule is a rule that derives k within closure: one whose first
+// role the closure holds. The first in the list when several do (the active
+// rules are read in a fixed order, so a plan and its apply name the same).
 func ruleReachingRule(rules []models.MappingRule, closure map[roleKey]bool, k roleKey) *models.MappingRule {
 	for i, r := range rules {
 		if r.TargetProject == k.projectID && r.TargetRole == k.roleKey &&

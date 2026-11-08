@@ -256,7 +256,7 @@ func Plan(a Action, s PlanSnapshot) Change {
 	// The bundle's own roles are its rows; a role a rule follows with is the
 	// rule's row, with the rule that reaches it (decision 7).
 	ch = ch.deliver(asRuleRows(deltaWrites(a.UserID, adds, revokes, "bundle", a.BundleID),
-		ruleRefs(before, after, closureBefore, closureAfter, rules)), person, s)
+		ruleRefs(before, after, closureBefore, closureAfter, rules, rules)), person, s)
 
 	var detail string
 	var said []string

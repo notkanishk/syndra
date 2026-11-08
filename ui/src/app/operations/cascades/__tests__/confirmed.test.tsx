@@ -142,4 +142,34 @@ describe("Change history: sent vs. confirmed", () => {
     expect(screen.queryByText(/An automatic rule applied/)).toBeNull();
     rules.data = [];
   });
+
+  // Task 1.6a: a rule's own edit in a chain. The edited rule's write says
+  // nothing more (the entry is its own); the write one step further down names
+  // the role kept on it, not the rule's first role now; a retired rule's write
+  // is "by an automatic rule".
+  it("names each hop of a rule's edit by the role kept on its write", () => {
+    rules.data = [
+      { id: "r1", source_project: "p1", source_role: "member", target_project: "p1", target_role: "trained" },
+      // r2 has since been edited to start from visitor.
+      { id: "r2", source_project: "p1", source_role: "visitor", target_project: "p1", target_role: "advanced" },
+    ];
+    const write = (id: string, role: string, ref: string, from?: string) => ({
+      id, op_type: "add", user_id: "u1", project_id: "p1", role_keys: [role], source: "rule", source_ref: ref, status: "pending",
+      ...(from ? { rule_from: { project_id: "p1", role_key: from } } : {}),
+    });
+    groups = [
+      group({
+        source: "rule",
+        source_ref: "r1",
+        waiting: 3,
+        writes: [write("w1", "trained", "r1", "member"), write("w2", "advanced", "r2", "trained"), write("w3", "lead", "r-gone", "advanced")],
+      }),
+    ];
+    renderPage();
+
+    const named = screen.getAllByText(/^by (the|an) automatic rule/).map((el) => el.textContent);
+    expect(named).toEqual(["by the automatic rule from trained", "by an automatic rule"]);
+    expect(screen.queryByText(/from visitor/)).toBeNull();
+    rules.data = [];
+  });
 });

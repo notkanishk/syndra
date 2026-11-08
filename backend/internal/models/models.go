@@ -590,6 +590,7 @@ type PendingPropagation struct {
 	RoleKeys       []string   `json:"role_keys"`
 	Source         string     `json:"source"`               // direct | bundle | rule | external_backfill | lifecycle_cascade
 	SourceRef      string     `json:"source_ref,omitempty"` // bundle/rule id for cascade rows; drives worklist attribution
+	RuleFrom       *RuleFrom  `json:"rule_from,omitempty"`  // a rule's row: the role that set it off
 	CascadeID      string     `json:"cascade_id,omitempty"` // shared by every write one triggering event produced
 	ZitadelGrantID string     `json:"zitadel_grant_id,omitempty"`
 	Status         string     `json:"status"` // pending | in_flight | applied | failed | superseded | abandoned
@@ -616,6 +617,16 @@ type PendingPropagation struct {
 	Retry *extcall.RetryState `json:"retry,omitempty"`
 }
 
+// RuleFrom is the role that set off a rule's outbox row: the first role of the
+// rule that reaches the row's role, the step before it in a chain. Kept on the
+// row when it is written (payload_json.rule_from), so a later edit to the rule
+// doesn't rename what set the row off (task 1.6a). Absent on rows written
+// before it was kept.
+type RuleFrom struct {
+	ProjectID string `json:"project_id"`
+	RoleKey   string `json:"role_key"`
+}
+
 // CascadeSummary is one cascade-originated outbox write, as it appears inside
 // the CascadeGroup that Change history renders. `Status` is the row's own —
 // applied, waiting or failed — because a group is only readable as a group when
@@ -632,6 +643,7 @@ type CascadeSummary struct {
 	RoleKeys    []string   `json:"role_keys"`
 	Source      string     `json:"source"`               // bundle | rule | lifecycle_cascade
 	SourceRef   string     `json:"source_ref,omitempty"` // originating bundle/rule id
+	RuleFrom    *RuleFrom  `json:"rule_from,omitempty"`  // a rule's row: the role that set it off
 	CascadeID   string     `json:"cascade_id,omitempty"`
 	Status      string     `json:"status"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`

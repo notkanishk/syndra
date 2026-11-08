@@ -2,12 +2,14 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"syndra/internal/extcall"
+	"syndra/internal/models"
 )
 
 // EnqueueParams is the input to the transactional enqueue. RoleKeys is plural so
@@ -26,6 +28,9 @@ type EnqueueParams struct {
 	OpType         string // add | revoke | replace
 	ZitadelGrantID string
 	PayloadJSON    string
+	// RuleFrom is, on a rule's row, the role that set it off, kept in the
+	// row's payload_json so a later edit to the rule doesn't rename it.
+	RuleFrom *models.RuleFrom
 	// NoPropagation records the ledger and audit rows without an outbox row,
 	// for the one case where Syndra owes Zitadel nothing: adopting drift.
 	// external_backfill means Zitadel is already authoritative, so there is no
@@ -143,7 +148,12 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string, planned ...Enqu
 		defer tx.Rollback(ctx) // no-op after a successful Commit
 	}
 
-	ids, err := enqueueWrites(ctx, tx, nil, append([]EnqueueParams{p}, planned...), key)
+	// Every caller of this path (a give, a bulk give, an extend, a revoke)
+	// passes the operator's own words in Reason, or none (task 1.8a), so they
+	// go on its audit row and every row it queues, as a bundle change's do. An
+	// approval and an adopted drift carry Syndra's label there instead, and
+	// come in by their own paths with none.
+	ids, err := enqueueWrites(ctx, tx, []CascadeAudit{{Reason: p.Reason}}, append([]EnqueueParams{p}, planned...), key)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
@@ -212,7 +222,8 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 		return nil, err
 	}
 	// The operator's words, when the change came with some: on its audit row
-	// and on every row it queues.
+	// and on every row it queues. A named write's audits carry only these:
+	// its audit row is enqueueLedger's.
 	var why string
 	for _, a := range audits {
 		if why == "" {
@@ -274,10 +285,10 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 			INSERT INTO propagation_outbox
 				(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json,
 				 idempotency_key, initiated_by, source, source_ref, cascade_id, reason, wait_reason, target)
-			VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,NULLIF($10,''),$11,NULLIF($12,''),NULLIF($13,''),'zitadel')
+			VALUES ($1,$2,$3,$4,NULLIF($5,''),$6::jsonb || $14::jsonb,$7,$8,$9,NULLIF($10,''),$11,NULLIF($12,''),NULLIF($13,''),'zitadel')
 			RETURNING id`, p.OpType, p.UserID, p.ProjectID, p.RoleKeys, p.ZitadelGrantID,
 			jsonOrEmpty(p.PayloadJSON), ownKey, p.GrantedBy, outboxSource(p), p.SourceRef, cascade,
-			why, p.WaitReason).Scan(&id); err != nil {
+			why, p.WaitReason, ruleFromPayload(p)).Scan(&id); err != nil {
 			return "", fmt.Errorf("insert outbox: %w", err)
 		}
 		return id, nil
@@ -288,7 +299,7 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 		p := params[0]
 		var own string
 		write := func() error {
-			if err := enqueueLedger(ctx, tx, p); err != nil || p.NoPropagation {
+			if err := enqueueLedger(ctx, tx, p, why); err != nil || p.NoPropagation {
 				return err
 			}
 			var err error
@@ -348,6 +359,16 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 	return ids, nil
 }
 
+// ruleFromPayload keeps the role that set off a rule's row in the row's
+// payload (task 1.6a): an existing column, so nothing is migrated.
+func ruleFromPayload(p EnqueueParams) string {
+	if p.RuleFrom == nil {
+		return "{}"
+	}
+	b, _ := json.Marshal(map[string]*models.RuleFrom{"rule_from": p.RuleFrom}) // two strings: cannot fail
+	return string(b)
+}
+
 // ownAndRules splits a named write's ids: its own row, then the rules'.
 func ownAndRules(ids []string) (string, []string) {
 	if len(ids) < 2 {
@@ -358,7 +379,7 @@ func ownAndRules(ids []string) (string, []string) {
 
 // enqueueLedger is a named write's own record: the ledger rows for exactly
 // the roles it names, the requests it answers closed, and its audit row.
-func enqueueLedger(ctx context.Context, tx pgx.Tx, p EnqueueParams) error {
+func enqueueLedger(ctx context.Context, tx pgx.Tx, p EnqueueParams, why string) error {
 	// The ledger only records grants for add/replace. A revoke removes access;
 	// the direct_role_grants row (if any) is cleaned up on the applied drain or
 	// by expiry — we never write a grant row for a revoke intent.
@@ -394,10 +415,12 @@ func enqueueLedger(ctx context.Context, tx pgx.Tx, p EnqueueParams) error {
 	// With NoPropagation no outbox row follows: the ledger row is the durable
 	// intent and this audit row the durable trace. Adopting drift creates no
 	// work for the queue.
+	// why is the operator's own words, "" when none (task 1.8a).
 	const insertAudit = `INSERT INTO audit_logs
-		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id) VALUES ($1,$2,$3,$4)`
+		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, details)
+		VALUES ($1,$2,$3,$4, CASE WHEN $5 = '' THEN NULL ELSE jsonb_build_object('reason', $5::text) END)`
 	action := "direct_grant." + opTypeAuditVerb(p.OpType)
-	if _, err := tx.Exec(ctx, insertAudit, p.GrantedBy, p.UserID, action, firstGrantID); err != nil {
+	if _, err := tx.Exec(ctx, insertAudit, p.GrantedBy, p.UserID, action, firstGrantID, why); err != nil {
 		return fmt.Errorf("insert audit: %w", err)
 	}
 	return nil

@@ -165,3 +165,33 @@ describe("EventSentence", () => {
     expect(t).not.toContain("cancelled when");
   });
 });
+
+/**
+ * The operator's reason is kept on the event (`details.reason`) and said
+ * under it, quoted, once (task 1.8a): on the Audit page, a person's Activity
+ * and Home, which all draw EventSentence. Nothing when none was given, and
+ * never Syndra's own words quoted as someone's.
+ */
+describe("EventSentence · the reason", () => {
+  it.each([
+    ["bundle.assigned", "Gave Gaurav Prem Singh a bundle"],
+    ["bundle.unassigned", "Removed Gaurav Prem Singh from a bundle"],
+    ["direct_grant.upserted", "Gave Gaurav Prem Singh a role"],
+    ["direct_grant.removed", "Revoked Gaurav Prem Singh's direct access by hand"],
+    ["direct_grant.revoked", "Revoked Gaurav Prem Singh's direct access"],
+  ])("quotes it under %s", (action, sentence) => {
+    render(<EventSentence entry={entry({ action, details: { reason: "term start" } })} />);
+    expect(document.body.textContent).toBe(`${sentence}“term start”`);
+    expect(screen.getAllByText("“term start”")).toHaveLength(1);
+  });
+
+  it("says nothing when none was given", () => {
+    render(<EventSentence entry={entry({ action: "bundle.assigned", details: { reason: "  " } })} />);
+    expect(document.body.textContent).toBe("Gave Gaurav Prem Singh a bundle");
+  });
+
+  it("never quotes Syndra's own words as a reason", () => {
+    render(<EventSentence entry={entry({ action: "action_key.partly_replaced", target_id: "-", details: { reason: "Zitadel replaced one key" } })} />);
+    expect(document.body.textContent).not.toContain("“");
+  });
+});
