@@ -364,6 +364,7 @@ func (s PlanSnapshot) names(ks []roleKey) []string {
 // the queued changes they cancel (db.Answers, the one predicate).
 func (ch Change) deliver(writes []db.EnqueueParams, person db.PersonAccess, s PlanSnapshot) Change {
 	for _, p := range writes {
+		p.RulesDecided = true
 		w := Write{EnqueueParams: p, Delivery: DeliveryStraightAway}
 		if p.NoPropagation {
 			// A ledger edit only (an extension, an adopted role): it never
