@@ -397,6 +397,7 @@ describe("a password change nobody has confirmed", () => {
     state.credential = { isPending: false, data: { status: "indeterminate" }, error: null };
     renderStorage();
     fireEvent.change(passwordField()!, { target: { value: "correct horse" } });
+    expect(screen.getByText("Not confirmed yet")).toBeTruthy();
     expect(screen.getByText("TrueNAS didn't answer, so your password may not have changed.")).toBeTruthy();
     expect(screen.queryByText("Changed")).toBeNull();
     expect(screen.queryByText(/Last changed/)).toBeNull();
@@ -436,7 +437,18 @@ describe("a password change nobody has confirmed", () => {
     state.targets = [ready()];
     state.credential = { isPending: false, data: { status: "rejected" }, error: null };
     renderStorage();
-    expect(screen.getByRole("alert").textContent).toBe("TrueNAS refused the change. Nothing was changed.");
+    expect(screen.getByText("Not changed")).toBeTruthy();
+    expect(screen.getByText("TrueNAS refused the change. Nothing was changed.")).toBeTruthy();
+    expect(screen.queryByText("Changed")).toBeNull();
+  });
+
+  it("a thrown error is Not changed, in the one inline result, never Changed", () => {
+    state.targets = [ready()];
+    state.credential = { isPending: false, data: undefined, error: new Error("offline") };
+    renderStorage();
+    expect(screen.getByText("Not changed")).toBeTruthy();
+    expect(screen.queryByText("Changed")).toBeNull();
+    expect(screen.queryByText("Not confirmed yet")).toBeNull();
   });
 
   it("back later: one line above an open form, until the next confirmed change", () => {

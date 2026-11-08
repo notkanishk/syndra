@@ -9,10 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { Notice } from "@/components/ui/Notice";
-import { Unfold } from "@/lib/motion";
 import { personLine } from "@/lib/format";
-import { describeFailure, sentence } from "@/lib/outcome";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import {
   SERVICE_ACCOUNT_KINDS,
   useSaveServiceAccount,
@@ -61,7 +59,7 @@ export function ServiceAccountDialog({
   const [owner, setOwner] = useState<Owner | null>(
     account.owner_id ? { id: account.owner_id, name: "", title: "" } : null,
   );
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Outcome | null>(null);
   const [done, setDone] = useState(false);
   const ids = useId();
 
@@ -82,7 +80,7 @@ export function ServiceAccountDialog({
       await save.mutateAsync({ kind, purpose: purpose.trim(), owner_id: owner?.id ?? "" });
       setDone(true);
     } catch (e) {
-      setFailure(sentence(describeFailure(e)));
+      setFailure(outcomeFromError(e));
     }
   }
 
@@ -151,11 +149,7 @@ export function ServiceAccountDialog({
                 <FieldHint>The person who answers for what it holds.</FieldHint>
               </div>
             )}
-            <Unfold open={Boolean(failure)} gap={16}>
-              <Notice tone="danger" title="That didn't save." next="Try again. If it keeps failing, ask whoever runs the Syndra server.">
-                {failure} Nothing was changed.
-              </Notice>
-            </Unfold>
+            {failure && <ActionOutcome word={marking ? "Not marked" : "Not saved"} outcome={failure} />}
           </>
         )}
       </div>
@@ -247,7 +241,7 @@ function OwnerPicker({
 /** Mark as a person: removes the mark of a human-type account. A machine account is Zitadel's to say, and the backend refuses it. */
 export function UnmarkDialog({ account, onClose }: { account: { id: string; name: string }; onClose: () => void }) {
   const unmark = useUnmarkServiceAccount(account.id);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Outcome | null>(null);
   const [done, setDone] = useState(false);
   const titleId = useId();
 
@@ -257,7 +251,7 @@ export function UnmarkDialog({ account, onClose }: { account: { id: string; name
       await unmark.mutateAsync();
       setDone(true);
     } catch (e) {
-      setFailure(sentence(describeFailure(e)));
+      setFailure(outcomeFromError(e));
     }
   }
 
@@ -279,11 +273,7 @@ export function UnmarkDialog({ account, onClose }: { account: { id: string; name
             }}
           />
         ) : (
-          <Unfold open={Boolean(failure)} gap={16}>
-            <Notice tone="danger" title="That didn't save." next="Try again. If it keeps failing, ask whoever runs the Syndra server.">
-              {failure} Nothing was changed.
-            </Notice>
-          </Unfold>
+          failure && <ActionOutcome word="Not unmarked" outcome={failure} />
         )}
       </div>
       <ModalFooter

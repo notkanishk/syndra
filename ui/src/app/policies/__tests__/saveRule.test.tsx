@@ -8,6 +8,7 @@ import type { MappingRuleRow } from "@/lib/queries/useMappingRules";
 const state = vi.hoisted(() => ({
   rules: [] as MappingRuleRow[],
   update: vi.fn(),
+  create: vi.fn(),
   targetWaits: false,
   validate: vi.fn(),
   whatIf: vi.fn(),
@@ -21,7 +22,7 @@ vi.mock("@/lib/queries/useInsights", () => ({
 vi.mock("@/lib/queries/useMappingRules", () => ({
   useMappingRules: () => ({ data: state.rules, isLoading: false, error: null, refetch: () => {} }),
   useRetiredMappingRules: () => ({ data: [] }),
-  useCreateMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateMappingRule: () => ({ mutateAsync: (...a: unknown[]) => state.create(...a), isPending: false }),
   useUpdateMappingRule: () => ({ mutateAsync: state.update, isPending: false }),
   useDeleteMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useValidateMappingRule: () => ({ mutateAsync: state.validate, isPending: false }),
@@ -82,6 +83,7 @@ beforeEach(() => {
   state.whatIf = vi.fn().mockResolvedValue({ gains: [], losses: [], unchanged: 0 });
   state.rules = [rule()];
   state.update = vi.fn().mockResolvedValue({});
+  state.create = vi.fn().mockResolvedValue({});
   state.targetWaits = false;
   state.validate = vi.fn().mockResolvedValue({});
 });
@@ -149,8 +151,11 @@ describe("choosing the two roles", () => {
     fireEvent.click(source.getByRole("radio", { name: /Trained/ }));
 
     expect(screen.getAllByRole("button", { name: "Remove Trained" })).toHaveLength(1);
-    // The second picker is still empty: Save stays blocked until both are chosen.
-    expect(screen.getByRole("button", { name: "Create rule" })).toBeDisabled();
+    // The second picker is still empty: the check stays blocked until both are chosen.
+    expect(screen.getByRole("button", { name: "Check rule" })).toBeDisabled();
+    // The chosen list folded to its chip, so the second list starts in view (A-22 G30).
+    expect(screen.queryByRole("radiogroup", { name: "If someone holds" })).toBeNull();
+    expect(screen.getByRole("radiogroup", { name: "then also give them" })).toBeTruthy();
   });
 
   // Browser pass, 8 Nov: the second list starts below the fold, and its matches
@@ -223,7 +228,7 @@ describe("the rule check's result", () => {
     expect(notice).toHaveTextContent("It would give a role to itself.");
   });
 
-  it("says things to know in an amber Notice", async () => {
+  it("says things to know as the What-happens list, never a Notice", async () => {
     state.rules = [rule({ source_project: "pLaser", source_role: "trained" })];
     state.whatIf = vi.fn().mockResolvedValue({
       gains: ["u1", "u2", "u3"].map((u) => ({ user_id: u, name: u, roles: [{ project_id: "pLaser", role_key: "trained" }] })),
@@ -231,10 +236,11 @@ describe("the rule check's result", () => {
       unchanged: 0,
     });
     await check({});
-    const notice = screen.getByRole("status");
-    expect(notice).toHaveTextContent("Checked: 1 thing to know");
-    expect(notice).toHaveTextContent("Saving would give 3 people Laser Lab / trained.");
-    expect(notice).toHaveClass("bg-warn-soft");
+    const list = screen.getByRole("group", { name: "What happens" });
+    expect(list).toHaveTextContent("Saving would give 3 people Laser Lab / trained.");
+    expect(list).toHaveClass("bg-warn-soft");
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Checked: 1 thing/);
     // An edit asks about replacing this rule, not adding a second one.
     expect(state.whatIf).toHaveBeenCalledWith(expect.objectContaining({ kind: "rule_added", rule_id: "aaaabbbb-1111-2222-3333-444455556666" }));
   });
@@ -257,7 +263,7 @@ describe("the rule check's result", () => {
       unchanged: 0,
     });
     await check({});
-    const notice = screen.getByRole("status");
+    const notice = screen.getByRole("group", { name: "What happens" });
     expect(notice).toHaveTextContent("Saving would give 1 person Laser Lab / trained.");
     expect(notice).toHaveTextContent("Also sets off other rules, which would then give them Laser Lab / keys and Laser Lab / senior.");
   });
@@ -285,7 +291,7 @@ describe("the rule check's result", () => {
       unchanged: 0,
     });
     await check({});
-    expect(screen.getByRole("status")).toHaveTextContent("Also sets off another rule, which would then give them Laser Lab / keys.");
+    expect(screen.getByRole("group", { name: "What happens" })).toHaveTextContent("Also sets off another rule, which would then give them Laser Lab / keys.");
   });
 
   it("says an all-clear as a caption, with no box", async () => {
@@ -294,5 +300,90 @@ describe("the rule check's result", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByText("Checked.")).toBeInTheDocument();
+  });
+});
+
+/** A-22 §3.7: two steps in one sheet, and the sheet becomes its result. */
+describe("the rule editor's two steps", () => {
+  function chooseBoth() {
+    for (const picker of ["If someone holds", "then also give them"]) {
+      const group = within(screen.getByRole("radiogroup", { name: picker }));
+      fireEvent.click(group.getByRole("button", { name: /Laser Lab/ }));
+      fireEvent.click(group.getByRole("radio", { name: /Trained/ }));
+    }
+  }
+  const gains = {
+    gains: ["u1", "u2"].map((u) => ({ user_id: u, name: u, roles: [{ project_id: "pLaser", role_key: "trained" }] })),
+    losses: [],
+    unchanged: 0,
+  };
+
+  it("chooses, checks, reads the findings, saves, and ends on the result", async () => {
+    const create = vi.fn().mockResolvedValue({});
+    state.create = create;
+    state.whatIf = vi.fn().mockResolvedValue(gains);
+    render(<AutomaticRulesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "New rule" }));
+    const dialog = within(screen.getByRole("dialog"));
+
+    // Before the check: Cancel and Check rule, no Save.
+    expect(dialog.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(dialog.queryByRole("button", { name: "Create rule" })).toBeNull();
+    chooseBoth();
+    // Both lists are folded to chips.
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    fireEvent.click(dialog.getByRole("button", { name: "Check rule" }));
+
+    // After the check: findings, Check again beside them, Cancel and Create rule in the pair.
+    const list = await dialog.findByRole("group", { name: "What happens" });
+    expect(list).toHaveTextContent("Saving would give 2 people Laser Lab / trained.");
+    expect(dialog.getByRole("button", { name: "Check again" })).toBeTruthy();
+    expect(dialog.queryByRole("button", { name: "Check rule" })).toBeNull();
+
+    fireEvent.click(dialog.getByRole("button", { name: "Create rule" }));
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    // The sheet is its result: Created, the form, findings and lede are gone, one Close.
+    await dialog.findByText("Created");
+    expect(screen.queryByRole("group", { name: "What happens" })).toBeNull();
+    expect(screen.queryByText("then also give them")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Anybody who holds the first role/);
+    expect(dialog.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(dialog.getByRole("button", { name: "Close" })).toBeTruthy();
+  });
+
+  it("says Not created when the write fails, and the form stays to press again", async () => {
+    state.create = vi.fn().mockRejectedValue(new Error("Zitadel is unreachable"));
+    render(<AutomaticRulesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "New rule" }));
+    chooseBoth();
+    fireEvent.click(screen.getByRole("button", { name: "Check rule" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Create rule" }));
+
+    await waitFor(() => expect(document.body.textContent).toMatch(/Not created/));
+    expect(document.body.textContent).not.toMatch(/Didn.t go through|Couldn.t/);
+    expect(screen.getByRole("button", { name: "Create rule" })).toBeTruthy();
+  });
+
+  it("clears the old result before a press, so one slot holds one result", async () => {
+    state.update = vi.fn().mockRejectedValueOnce(new Error("first trouble")).mockRejectedValueOnce(new Error("second trouble"));
+    render(<AutomaticRulesPage />);
+    fireEvent.click(screen.getByText("member"));
+    fireEvent.click(screen.getByRole("button", { name: "Check rule" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save rule" }));
+    await waitFor(() => expect(document.body.textContent).toMatch(/first trouble/));
+    fireEvent.click(screen.getByRole("button", { name: "Save rule" }));
+    await waitFor(() => expect(document.body.textContent).toMatch(/second trouble/));
+    expect(document.body.textContent).not.toMatch(/first trouble/);
+  });
+
+  it("removing a chip reopens that list", () => {
+    render(<AutomaticRulesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "New rule" }));
+    const group = within(screen.getByRole("radiogroup", { name: "If someone holds" }));
+    fireEvent.click(group.getByRole("button", { name: /Laser Lab/ }));
+    fireEvent.click(group.getByRole("radio", { name: /Trained/ }));
+    expect(screen.queryByRole("radiogroup", { name: "If someone holds" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Trained" }));
+    expect(screen.getByRole("radiogroup", { name: "If someone holds" })).toBeTruthy();
   });
 });

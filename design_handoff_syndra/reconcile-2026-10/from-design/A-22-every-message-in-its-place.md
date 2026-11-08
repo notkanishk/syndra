@@ -313,6 +313,8 @@ Items 1 to 5 are the shared parts; 6 to 15 inherit them and are each one sitting
 
 ## 6 · Questions for the owner
 
+**Owner, 8 Nov 2026: yes to Q1–Q7.** Later the same day the owner corrected the wording of the cancel sheets (give is only a verb): "Cancel giving Community in Navidrome to Anushka?", act "Cancel giving it", dismiss "Keep it waiting", result **Cancelled** "Community in Navidrome won't be given to Anushka. It never reached Zitadel."; the same for a waiting removal ("Cancel removing … from …?") and a waiting bundle. Those words replace "Cancel the waiting give" and "Cancel the waiting change" wherever §3 quotes them.
+
 1. **The dismiss says what it keeps** (Keep it / Keep them) whenever the act takes something away, retires, cancels or declines, and stays Cancel only on a form that creates, asks or gives? *Recommended: yes.* One rule by what the act does. Keep it everywhere reads oddly beside Give a role; Cancel everywhere is the pair you saw.
 2. **A question mark only when the act takes something away** (Revoke …? Retire …? Remove …?), never on an act that records, asks or cancels something unsent? *Recommended: yes.* The question is the pause; a reversible act needs none.
 3. **After the result, the lede leaves with the body** and the header keeps chip and title? *Recommended: yes.* The lede was the fact before the press; the result's sentence is the fact after it.

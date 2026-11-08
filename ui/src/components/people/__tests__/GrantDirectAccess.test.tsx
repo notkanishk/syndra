@@ -119,16 +119,16 @@ function choose(role: string) {
 }
 
 // The plan is read once a role is chosen; the press waits on it (A-21 §3).
-async function planRead() {
-  await waitFor(() => expect(screen.getByRole("button", { name: "Give role" })).toBeEnabled());
+async function planRead(role = "Operator") {
+  await waitFor(() => expect(screen.getByRole("button", { name: `Give ${role}` })).toBeEnabled());
 }
 
 async function grant(role = "Operator") {
   choose(role);
-  await planRead();
+  await planRead(role);
   fireEvent.change(screen.getByPlaceholderText(/Capstone build/), { target: { value: "test" } });
-  fireEvent.click(screen.getByRole("button", { name: "Give role" }));
-  // "Close" only replaces "Give role"/"Cancel" once an outcome (either kind)
+  fireEvent.click(screen.getByRole("button", { name: `Give ${role}` }));
+  // "Close" only replaces "Give {Role}"/"Cancel" once an outcome (either kind)
   // is set — a wait condition that holds regardless of which message the
   // outcome carries.
   await screen.findByRole("button", { name: "Close" });
@@ -153,7 +153,7 @@ describe("GrantDirectAccess · choosing the role", () => {
     fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
     expect(screen.getByText("Has this")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Operator/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Give role" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Give a role" })).toBeDisabled();
   });
 
   it("a role given and not yet sent says so, with the way to send it", () => {
@@ -197,7 +197,7 @@ describe("GrantDirectAccess · choosing the role", () => {
     expect(screen.getByRole("radio", { name: /Operator/ })).toBeDisabled();
   });
 
-  it("says before the give that a waiting role waits, and a plain one doesn't", () => {
+  it("says before the press that a waiting role waits, and a plain one doesn't", () => {
     open();
     choose("Operator");
     expect(screen.getByText("Ada can use it as soon as you give it.")).toBeInTheDocument();
@@ -257,7 +257,7 @@ describe("GrantDirectAccess · its result", () => {
 
   // Final verification N1: Zitadel refused it outright. It used to read "It
   // goes when you send it", with a Send link Send could never honour.
-  it("a give Zitadel refused says so, with why and the true step, and no Send link", async () => {
+  it("a role Zitadel refused says so, with why and the true step, and no Send link", async () => {
     state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "failed", wait_reason: "refused:not_found" });
     open();
     await grant();
@@ -269,7 +269,7 @@ describe("GrantDirectAccess · its result", () => {
     expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
     // Given in Syndra: the sheet is its result, and nothing gives twice.
-    expect(screen.queryByRole("button", { name: "Give role" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Give Operator" })).not.toBeInTheDocument();
   });
 
   it("reports Given, in their first name, when nothing waits", async () => {
@@ -280,30 +280,30 @@ describe("GrantDirectAccess · its result", () => {
     expect(screen.getByText("Given")).toBeInTheDocument();
     expect(screen.getByText("Ada can use Operator on their own now.")).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Give role" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Give Operator" })).not.toBeInTheDocument();
   });
 
   // Audit C2: the person giving one role sees, before the click, every role an
   // automatic rule also gives with it, and the result says they went with it.
-  it("names what automatic rules also give, before the give and in its result", async () => {
+  it("names what automatic rules also give, before the press and in its result", async () => {
     state.plan = actPlan({ rules: ["Also gives Bench in Workshop, by the automatic rule from Operator."] });
     state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "applied", rule_outbox_ids: ["o2"] });
     open();
     choose("Operator");
     expect(await screen.findByText("Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
     await planRead();
-    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+    fireEvent.click(screen.getByRole("button", { name: "Give Operator" }));
     expect(await screen.findByText("Ada can use Operator on their own now.")).toBeInTheDocument();
     expect(screen.getByText(/Also gives Bench in Workshop/)).toBeInTheDocument();
   });
 
   // One consent rule with Approve (usePlanConsent): a plan that can't be read
-  // holds the give, with the reason and a Try again, never a give with a warning.
-  it("holds the give while the plan is read, and when it can't be, and Try again reads it again", async () => {
+  // holds the press, with the reason and a Try again, never a press with a warning.
+  it("holds the press while the plan is read, and when it can't be, and Try again reads it again", async () => {
     state.planFails = true;
     open();
     choose("Operator");
-    expect(screen.getByRole("button", { name: "Give role" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Give Operator" })).toBeDisabled();
     expect(screen.getByText("Checking what giving it does.")).toBeInTheDocument();
     expect(await screen.findByText("Held until Syndra can read what giving it does.")).toBeInTheDocument();
     expect(
@@ -338,9 +338,9 @@ describe("GrantDirectAccess · its result", () => {
     open();
     choose("Operator");
     await planRead();
-    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+    fireEvent.click(screen.getByRole("button", { name: "Give Operator" }));
     expect(await screen.findByText("Not given")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Give role" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Give Operator" })).toBeEnabled();
   });
 });
 
@@ -357,7 +357,7 @@ describe("GrantDirectAccess · while Zitadel is not answering", () => {
       within(dialog).getByText(waitsBeforeLine("give")),
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(/as soon as you give it/)).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Give role" })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: "Give Operator" })).toBeEnabled();
   });
 });
 
@@ -378,10 +378,21 @@ describe("GrantDirectAccess · wording and the end date", () => {
     expect(within(dialog).getByText("It stays until someone removes it.")).toBeInTheDocument();
     expect(within(dialog).getByText("No end date")).toBeInTheDocument();
   });
+
+  it("carries the chosen role on the button, and the date line sits under Ends, not in the footer note", () => {
+    open();
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: "Give a role" })).toBeDisabled();
+    choose("Operator");
+    expect(within(dialog).getByRole("button", { name: "Give Operator" })).toBeInTheDocument();
+    const hint = within(dialog).getByText(/The sweep removes it on that date/);
+    expect(hint.tagName).toBe("P");
+    expect(hint.closest("[data-modal-footer], footer")).toBeNull();
+  });
 });
 
-// A-21 §3: the plan is read before the press, so the sheet foretells what the
-// give cancels and the press shows it at once: no write is sent to find out.
+// A-21 §3: the plan is read before the press, so the sheet foretells what
+// giving it cancels and the press shows it at once: no write is sent to find out.
 describe("GrantDirectAccess · what the plan says before the press", () => {
   const removal = queuedChange();
 
@@ -391,7 +402,7 @@ describe("GrantDirectAccess · what the plan says before the press", () => {
     choose("Operator");
     expect(
       await screen.findByText(
-        "Giving it cancels the removal Sam Lee queued 2h ago. Nothing is cancelled until you choose on the next step.",
+        /^Giving it cancels removing .+ from .+, which was waiting for you to send\. Nothing is cancelled until you choose on the next step\.$/,
       ),
     ).toBeInTheDocument();
     expect(state.mutateAsync).not.toHaveBeenCalled();
@@ -410,14 +421,14 @@ describe("GrantDirectAccess · what the plan says before the press", () => {
     open();
     choose("Operator");
     await planRead();
-    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+    fireEvent.click(screen.getByRole("button", { name: "Give Operator" }));
 
-    const step = await screen.findByRole("heading", { name: "This cancels a removal that's waiting" });
+    const step = await screen.findByRole("heading", { name: /^Cancel removing .+\?$/ });
     expect(step).toBeInTheDocument();
     // Nothing was written to learn this: the step came from the plan.
     expect(state.mutateAsync).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel it and give Operator" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel removing it and give Operator" }));
     await screen.findByRole("button", { name: "Close" });
     expect(state.mutateAsync).toHaveBeenCalledTimes(1);
     expect(state.mutateAsync.mock.calls[0][0]).toMatchObject({
@@ -428,15 +439,15 @@ describe("GrantDirectAccess · what the plan says before the press", () => {
     });
   });
 
-  it("Keep it sends nothing and leaves the form as it was", async () => {
+  it("Keep it waiting sends nothing and leaves the form as it was", async () => {
     state.plan = cancelling([removal]);
     open();
     choose("Operator");
     await planRead();
-    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Give Operator" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep it waiting" }));
     expect(state.mutateAsync).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Give role" })).toBeVisible());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Give Operator" })).toBeVisible());
   });
 
   it("gains no step when the plan cancels nothing, and the write still carries the fingerprint", async () => {
@@ -458,22 +469,22 @@ describe("GrantDirectAccess · what the plan says before the press", () => {
     const reads = state.planCalls.length;
     // What the next read finds.
     state.plan = cancelling([removal], { fingerprint: "fp-2" });
-    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+    fireEvent.click(screen.getByRole("button", { name: "Give Operator" }));
 
     expect(await screen.findByText("Nothing was changed. Ada's access moved while this was open.")).toBeInTheDocument();
-    expect(screen.getByText("Read the note under the form, then press Give role again.")).toBeInTheDocument();
+    expect(screen.getByText("Read the note under the form, then press Give Operator again.")).toBeInTheDocument();
     await waitFor(() => expect(state.planCalls.length).toBeGreaterThan(reads));
-    expect(await screen.findByText(/Giving it cancels the removal Sam Lee queued 2h ago\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Giving it cancels removing .+ from .+, which was waiting for you to send\./)).toBeInTheDocument();
     // The form is still here, not a result.
     expect(screen.queryByText("Not given")).not.toBeInTheDocument();
   });
 
-  it("when the planner refuses because they already have it: held, with the reason and no give", async () => {
+  it("when the planner refuses because they already have it: held, with the reason and nothing to press", async () => {
     state.plan = actPlan({ effect: "no_change", refusal: "held", detail: "Ada already has Operator." });
     open();
     choose("Operator");
     expect(await screen.findByText("Nothing to give.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Give role" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Give Operator" })).toBeDisabled();
     expect(screen.getByText("Ada already has Operator.")).toBeInTheDocument();
   });
 });

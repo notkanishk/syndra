@@ -7,10 +7,9 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { Notice } from "@/components/ui/Notice";
 import { Segmented } from "@/components/ui/Select";
 import { formatWhen } from "@/lib/format";
-import { describeFailure, sentence } from "@/lib/outcome";
+import { outcomeFromError } from "@/lib/outcome";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useLookUpSignIns, type LookupRange } from "@/lib/queries/useSignIns";
 
@@ -111,9 +110,10 @@ export function SignInLookup({
               <FieldHint>Recorded with the lookup, for whoever reads Change history.</FieldHint>
             </div>
             {lookup.error && (
-              <Notice tone="danger" title="That lookup didn't run." next="Check the address and look it up again.">
-                {sentence(describeFailure(lookup.error))}
-              </Notice>
+              <ActionOutcome
+                word="Not looked up"
+                outcome={{ ...outcomeFromError(lookup.error), next: "Check the address and look it up again." }}
+              />
             )}
           </>
         )}

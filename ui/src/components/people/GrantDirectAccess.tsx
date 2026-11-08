@@ -10,7 +10,7 @@ import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep, useForetell } from "@/components/ui/CancelQueuedStep";
 import { Notice } from "@/components/ui/Notice";
-import { FieldLabel, Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { WaitsMark } from "@/components/ui/WaitsMark";
@@ -34,7 +34,7 @@ import { personOr, roleName } from "@/lib/names";
  *
  * Expiry gets presets before the picker, because "end of term" is what people
  * actually mean and a date field alone makes them count weeks. The consequence
- * of the date is stated in the panel: the sweep removes this automatically,
+ * of the date is the Ends field's hint: the sweep removes this automatically,
  * and two weeks earlier it appears under Expiring access where the only action
  * is to extend.
  *
@@ -112,6 +112,8 @@ function GrantDirectAccessOpen({
   // sheet to a step first (A-04 §14); Keep it comes back here as it was.
   const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${grantedRole}` });
   const waits = useWaitsBeforeLine("give");
+  // Once a role is chosen the button carries it (A-22 G24).
+  const giveLabel = value ? `Give ${grantedRole}` : GIVE_ROLE_LABEL;
   // What giving it does, from the planner before the press (A-21 §3): what the
   // automatic rules also give (the planner's words, audit C2) and the waiting
   // changes it would cancel, said in the footer; the write carries the plan.
@@ -144,7 +146,7 @@ function GrantDirectAccessOpen({
           blocking
           className="mx-6 mb-3"
           title={`Nothing was changed. ${first}'s access moved while this was open.`}
-          next="Read the note under the form, then press Give role again."
+          next={`Read the note under the form, then press ${giveLabel} again.`}
         >
           {null}
         </Notice>
@@ -207,6 +209,13 @@ function GrantDirectAccessOpen({
               )}
             </div>
           )}
+          {(preset !== "date" || customDate) && (
+            <FieldHint>
+              {resolved.date
+                ? "The sweep removes it on that date. Two weeks before, it shows under Expiring access, where the only action is to extend."
+                : "It stays until someone removes it."}
+            </FieldHint>
+          )}
         </div>
 
         <div>
@@ -233,19 +242,14 @@ function GrantDirectAccessOpen({
       {result && <ActionOutcome outcome={result.outcome} word={result.word} person={userId} className="mx-6 mb-1" />}
       {result && step.after}
 
-      {/* One note for the date (said once, here: the control above is the date)
-          and for whether they can use it yet. */}
+      {/* The note says whether they can use it yet, what it cancels and the rules'
+          part; the date line sits under the Ends field. */}
       <ModalFooter
         cancel={done ? undefined : { onClick: onClose }}
         note={
           step.note ??
           (result ? undefined : (
             <>
-              <span className="block">
-                {resolved.date
-                  ? "The sweep removes it on that date. Two weeks before, it shows under Expiring access, where the only action is to extend."
-                  : "It stays until someone removes it."}
-              </span>
               {selectedRole &&
                 // A role that waits waits for Send whatever Zitadel is doing,
                 // so its own line outranks the degraded one.
@@ -300,8 +304,8 @@ function GrantDirectAccessOpen({
               onClick={async () => {
                 setResult(null);
                 try {
-                  // A give that cancels a waiting change pushes the step at once,
-                  // from the plan; one that cancels nothing gains no step.
+                  // Giving a role that cancels a waiting change pushes the step at once,
+                  // from the plan; giving one that cancels nothing gains no step.
                   const made = await step.confirm(consent.cancels, () =>
                     grant.mutateAsync({
                       project_id: projectId,
@@ -369,7 +373,7 @@ function GrantDirectAccessOpen({
                 }
               }}
             >
-              Give role
+              {giveLabel}
             </Button>
         )}
       </ModalFooter>

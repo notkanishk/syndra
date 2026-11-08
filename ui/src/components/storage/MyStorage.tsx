@@ -4,6 +4,7 @@ import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import { useEffect, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -766,31 +767,43 @@ function PasswordForm({
         // The one retry model's seat (RetryStatus), in the member's voice.
         <RetryStatus retry={retrying} system={label} own />
       )}
+      {/* One result slot, in the member's words (A-22 §3.26). While Syndra is
+          trying again the seat above is RetryStatus own; once it stops, the
+          same sentences come back here. */}
       {noAnswer && !set.isPending && (
         // Step 2: a failure appears still; it never lifts.
-        <Result
-          tone="warn"
-          title={
-            set.data?.retry
+        <ActionOutcome
+          placement="inline"
+          word="Not confirmed yet"
+          outcome={{
+            kind: "queued",
+            sendsItself: true,
+            message: set.data?.retry
               ? `${retryLine(set.data.retry, label)} Your password may not have changed.`
-              : `${label} didn't answer, so your password may not have changed.`
-          }
-          body={`Try again in a minute: press ${submitLabel}. Sending the same password twice is safe, and ${label} then has the one you set.`}
+              : `${label} didn't answer, so your password may not have changed.`,
+            next: `Try again in a minute: press ${submitLabel}. Sending the same password twice is safe, and ${label} then has the one you set.`,
+          }}
         />
       )}
       {changed && !set.isPending && (
         // Only a confirmed done says this, on either send (owner, 3 Nov).
-        <Result tone="healthy" bloom title="Changed" body={`${label} has your new password.`} />
+        <ActionOutcome
+          placement="inline"
+          word="Changed"
+          outcome={{ kind: "applied", message: `${label} has your new password.` }}
+        />
       )}
       {refused && !set.isPending && (
-        <Result
-          alert
-          tone="danger"
-          title={
-            status === "rejected"
-              ? `${label} refused the change. Nothing was changed.`
-              : `The change didn't reach ${label}. Nothing was changed. Try again in a minute.`
-          }
+        <ActionOutcome
+          placement="inline"
+          word="Not changed"
+          outcome={{
+            kind: "failed",
+            message:
+              status === "rejected"
+                ? `${label} refused the change. Nothing was changed.`
+                : `The change didn't reach ${label}. Nothing was changed.`,
+          }}
         />
       )}
       <p className="max-w-[62ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
@@ -807,7 +820,13 @@ function PasswordForm({
           scope
         )}
       </p>
-      {set.error && <Result alert tone="danger" title={sentence(describeFailure(set.error))} />}
+      {set.error && (
+        <ActionOutcome
+          placement="inline"
+          word="Not changed"
+          outcome={{ kind: "failed", message: sentence(describeFailure(set.error)) }}
+        />
+      )}
     </form>
   );
 }

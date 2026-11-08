@@ -116,7 +116,7 @@ describe("giving one person their own limit", () => {
     const { unmount } = wrap(<LimitDialog target="truenas" name="Ada Rao" home={{ ...base, own }} onClose={onClose} />);
     expect(screen.getByText("Review Ada Rao's own home folder limit")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Review on"), { target: { value: "2027-02-28" } });
-    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep this limit" }));
     await waitFor(() => expect(screen.getByText("Kept")).toBeTruthy());
     expect(onClose).not.toHaveBeenCalled();
     expect(sent.map((s) => s.path)).toEqual(["/allowances"]);
@@ -124,7 +124,7 @@ describe("giving one person their own limit", () => {
 
     sent.length = 0;
     wrap(<LimitDialog target="truenas" name="Ada Rao" home={{ ...base, own }} onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "End it" }));
+    fireEvent.click(screen.getByRole("button", { name: "End this limit" }));
     await waitFor(() => expect(sent.map((s) => s.path)).toEqual(["/allowances/a1/lift"]));
     await waitFor(() => expect(screen.getByText("Ended")).toBeTruthy());
   });

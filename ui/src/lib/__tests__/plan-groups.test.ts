@@ -67,7 +67,7 @@ const board = () =>
     row("Kabir", {
       delivery: "none",
       detail: "Leaves Safety.",
-      consequence: `Member in Laser Lab was waiting for you to send. It is cancelled, so nothing is sent to Zitadel. ${CANCEL}`,
+      consequence: `Cancels giving Member in Laser Lab, which was waiting for you to send, so nothing is sent to Zitadel. ${CANCEL}`,
     }),
     row("Lena", { delivery: "none", consequence: "Already holds every role it gives, so nothing is sent to Zitadel." }),
     row("Aanya", { delivery: "waits_for_you", waits: ["Supervisor in Laser Lab"] }),

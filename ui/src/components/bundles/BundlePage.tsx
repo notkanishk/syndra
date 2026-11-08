@@ -590,6 +590,7 @@ function EndCards({
             size="sm"
             isPending={setWelcome.isPending}
             onClick={async () => {
+              setOutcome(null);
               try {
                 await setWelcome.mutateAsync(bundleId);
                 setOutcome({
@@ -606,7 +607,9 @@ function EndCards({
           </Button>
         )}
       </div>
-      {outcome && <ActionOutcome outcome={outcome} word="Default set" className="mx-5 my-3" />}
+      {outcome && (
+        <ActionOutcome outcome={outcome} word={succeeded(outcome) ? "Default set" : "Not set"} className="mx-5 my-3" />
+      )}
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         <div className="min-w-[240px] flex-1">
           <div className="text-[14.5px] font-semibold">Retire {name}</div>
@@ -654,8 +657,13 @@ function RenameBundleDialog({
       <ModalHeader
         title={`Rename ${name}`}
         titleId="rename-bundle"
-        lede="This is what the bundle is called, not what it grants."
+        lede={succeeded(outcome) ? undefined : "This is what the bundle is called, not what it grants."}
       />
+      {succeeded(outcome) ? (
+        <div className="px-6">
+          <ActionOutcome outcome={outcome!} word={trimmed === name ? "Saved" : "Renamed"} />
+        </div>
+      ) : (
       <div className="flex flex-col gap-3.5 px-6">
         <div>
           <FieldLabel htmlFor="bundle-rename">Name</FieldLabel>
@@ -674,13 +682,8 @@ function RenameBundleDialog({
           />
         </div>
       </div>
-      {outcome && (
-        <ActionOutcome
-          outcome={outcome}
-          word={succeeded(outcome) ? (trimmed === name ? "Saved" : "Renamed") : "Not saved"}
-          className="mx-6 mb-1"
-        />
       )}
+      {outcome && !succeeded(outcome) && <ActionOutcome outcome={outcome} word="Not saved" className="mx-6 mb-1" />}
 
       <ModalFooter cancel={succeeded(outcome) ? undefined : { onClick: onClose, disabled: update.isPending }}>
         {/* Closing on success used to fire in the same breath as `setOutcome`,
@@ -694,6 +697,7 @@ function RenameBundleDialog({
             isPending={update.isPending}
             reason={!trimmed ? "A bundle needs a name." : unchanged ? "Nothing changed yet." : undefined}
             onClick={async () => {
+              setOutcome(null);
               try {
                 await update.mutateAsync({
                   id: bundleId,
@@ -772,12 +776,19 @@ function DeleteBundleDialog({
         title={`Retire ${name}?`}
         titleId="delete-bundle"
         lede={
-          holders === 0
-            ? "It is assigned to nobody. Retiring it takes nothing away from anybody."
-            : `It is assigned to ${holders} ${holders === 1 ? "person" : "people"} right now.`
+          gone
+            ? undefined
+            : holders === 0
+              ? "It is assigned to nobody. Retiring it takes nothing away from anybody."
+              : `It is assigned to ${holders} ${holders === 1 ? "person" : "people"} right now.`
         }
       />
 
+      {gone ? (
+        <div className="px-6">
+          <ActionOutcome outcome={outcome!} word="Retired" />
+        </div>
+      ) : (
       <div className="px-6">
         <div className="danger-note px-4 py-3.5 text-[14px] leading-[1.55]">
           <div className="type-label mb-1 text-danger-text">What happens</div>
@@ -799,8 +810,9 @@ function DeleteBundleDialog({
           </ul>
         </div>
       </div>
+      )}
 
-      {outcome && <ActionOutcome outcome={outcome} word={gone ? "Retired" : "Not retired"} className="mx-6 mb-1" />}
+      {outcome && !gone && <ActionOutcome outcome={outcome} word="Not retired" className="mx-6 mb-1" />}
       {gone && step.after}
 
       <ModalFooter
@@ -808,7 +820,7 @@ function DeleteBundleDialog({
         // click that had already happened: "empty it instead" above a
         // bundle already deleted, with nothing left to empty.
         note={step.note ?? (gone ? undefined : "Emptying the bundle instead leaves it assignable and grants nothing.")}
-        cancel={gone ? undefined : { onClick: onCancel, disabled: remove.isPending }}
+        cancel={gone ? undefined : { label: "Keep it", onClick: onCancel, disabled: remove.isPending }}
       >
         {/* `onDeleted` clears the parent's selection, and the parent's own
             comment says why it must: the deleted bundle stays selected
@@ -828,6 +840,7 @@ function DeleteBundleDialog({
           data-skip-initial-focus
           isPending={remove.isPending}
           onClick={async () => {
+            setOutcome(null);
             try {
               const result = await step.run((cancelIds) => remove.mutateAsync({ id: bundleId, cancelIds }));
               if (result === KEPT) return;

@@ -269,11 +269,11 @@ export function LimitDialog({
                   })
                 }
               >
-                End it
+                End this limit
               </Button>
             )}
             <Button variant="accent" disabled={!ready || busy} onClick={save}>
-              {reviewing ? "Keep it" : `Give them ${kind === "none" ? "no limit" : gbWords(bytes)}`}
+              {reviewing ? "Keep this limit" : `Give them ${kind === "none" ? "no limit" : gbWords(bytes)}`}
             </Button>
           </>
         )}

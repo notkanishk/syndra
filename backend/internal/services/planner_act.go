@@ -210,9 +210,9 @@ func planRole(ch Change, a Action, s PlanSnapshot, profile models.UserProfile, p
 
 	switch {
 	case own != nil && ch.Writes[0].Delivery == DeliveryNone:
-		detail = fmt.Sprintf("The removal of %s that was waiting is cancelled, so nothing is sent to Zitadel. They keep it.", role)
+		detail = fmt.Sprintf("Cancels removing %s, which was waiting for you to send, so nothing is sent to Zitadel. They keep it.", role)
 	case own == nil && len(ch.Writes) > 0 && ch.onlyCancels():
-		detail = fmt.Sprintf("%s was waiting for you to send. It is cancelled, so nothing is sent to Zitadel.", role)
+		detail = fmt.Sprintf("Cancels giving %s, which was waiting for you to send, so nothing is sent to Zitadel.", role)
 	case own == nil && slices.Contains(revokes, k):
 		detail = fmt.Sprintf("Loses %s.", role)
 	case own == nil:

@@ -59,6 +59,7 @@ const roleOf = (role: string) => role.slice(role.indexOf("/") + 1);
 
 type Act = "given" | "revoked" | "replaced";
 const ACT_WORD: Record<Act, string> = { given: "Given", revoked: "Revoked", replaced: "Replaced" };
+const NOT_WORD: Record<Act, string> = { given: "Not given", revoked: "Not revoked", replaced: "Not replaced" };
 
 const sendsAny = (roles: ZitadelRoleChange[], pick: (r: ZitadelRoleChange) => boolean) => roles.some(pick);
 
@@ -82,7 +83,7 @@ function changeResult(res: ZitadelGrantChange | undefined, act: Act, auto: AutoR
   };
   say("Given in Zitadel", (r) => r.change === "given" && r.status === "applied");
   say("Revoked in Zitadel", (r) => r.change === "revoked" && r.status === "applied");
-  // Re-audit R3: a give Zitadel didn't take is retried on its own (the
+  // Re-audit R3: a role Zitadel didn't take is retried on its own (the
   // server says when); only one that isn't goes when you send it.
   const retrying = res?.retry?.state === "retrying";
   // Neither "on its own" nor "when you send it" is known (N3): the indicators
@@ -501,10 +502,10 @@ function RevokeDialog({
           )}
         </div>
       )}
-      {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} />}
+      {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} not={NOT_WORD.revoked} />}
       {done && w.step.after}
 
-      <WriteFooter outcome={outcome} onClose={onClose} note={w.step.note}>
+      <WriteFooter outcome={outcome} onClose={onClose} note={w.step.note} keep={going.length === 1 ? "Keep it" : "Keep them"}>
         <Button
           variant="dangerConfirm"
           disabled={reading || unread || nothingGoes || !acknowledged}
@@ -521,6 +522,7 @@ function RevokeDialog({
           }
           isPending={remove.isPending}
           onClick={async () => {
+            setResult(null);
             try {
               const made = await w.run(
                 cancels,
@@ -542,7 +544,7 @@ function RevokeDialog({
   );
 }
 
-/** The give plans' seen, by role key, for the roles that have one. */
+/** The seen of each role's give plan, by role key, for the roles that have one. */
 function seenOfGives(keys: string[], consents: PlanConsent[]): RolePlans {
   const out: RolePlans = {};
   keys.forEach((key, i) => {
@@ -567,8 +569,8 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
   const parsed = parseKeys(keys);
   const available = sortNames(roles.data?.items.map((role) => role.key) ?? []);
   const waiting = useWaitingAmong(projectId, parsed);
-  // What each give does, said before the click, in the planner's words: one
-  // give plan per role, the read the person page's give makes (audit C2,
+  // What giving each role does, said before the click, in the planner's words: one
+  // plan per role, the read the person page makes when it gives a role (audit C2,
   // A-21 §Q3), and the plan the write carries back (task 1.9). Only for keys
   // that exist, so typing doesn't ask. Several roles can reach one rule: each
   // line once.
@@ -648,7 +650,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           />
         </div>
       )}
-      {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} />}
+      {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} not={NOT_WORD.given} />}
       {done && w.step.after}
 
       <WriteFooter outcome={outcome} onClose={onClose} note={w.step.note}>
@@ -669,6 +671,7 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           }
           isPending={assign.isPending}
           onClick={async () => {
+            setResult(null);
             try {
               const made = await w.run(
                 cancels,
@@ -714,7 +717,7 @@ function EditRolesDialog({
   const changed = [...adds, ...removes];
   const waiting = useWaitingAmong(grant.projectId, changed);
   // Each half is planned as on a person's page (task 1.9): the left-out
-  // roles' removal plans and the new roles' give plans, which say what the
+  // roles' removal plans and the plans for giving the new roles, which say what the
   // replace cancels before the press and go back with the write.
   const removal = useGrantRemovalPreview(userId, grant.grantId, removes, removes.length > 0 && !done);
   const consents = usePlanConsents(
@@ -763,10 +766,10 @@ function EditRolesDialog({
           />
         </div>
       )}
-      {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} />}
+      {result && <WriteResult outcome={result.outcome} word={result.word} neutral={result.word} not={NOT_WORD.replaced} />}
       {done && w.step.after}
 
-      <WriteFooter outcome={outcome} onClose={onClose} note={w.step.note}>
+      <WriteFooter outcome={outcome} onClose={onClose} note={w.step.note} keep="Keep them">
         <Button
           variant="dangerConfirm"
           disabled={parsed.length === 0 || !acknowledged || Boolean(hold)}
@@ -781,6 +784,7 @@ function EditRolesDialog({
           }
           isPending={update.isPending}
           onClick={async () => {
+            setResult(null);
             try {
               const made = await w.run(
                 cancels,

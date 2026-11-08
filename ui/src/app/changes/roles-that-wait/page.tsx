@@ -14,13 +14,11 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";
-import { Notice } from "@/components/ui/Notice";
 import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui/SortHead";
-import { Unfold } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatShortDate } from "@/lib/format";
 import { heldSortKey, holdersLine, peopleSuffix } from "@/lib/holders";
-import { NOTHING_CHANGED, failureMessage, sentence, stateLine, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { failureMessage, outcomeFromError, sentence, stateLine, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { usePendingPropagations } from "@/lib/queries/usePropagation";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import {
@@ -134,8 +132,8 @@ function WaitingRoles({
   landed: ReadonlySet<string>;
 }) {
   const stop = useSetRolesWait();
-  const [failure, setFailure] = useState<{ text: string; state: string } | null>(null);
-  const [stopped, setStopped] = useState<string | null>(null);
+  // One slot per card (G23): a press clears it, a later result replaces it.
+  const [result, setResult] = useState<{ word: string; outcome: Outcome } | null>(null);
   const pending = usePendingPropagations();
   const waitingChanges = (pending.data ?? []).filter(
     (r) => r.wait_reason === "role_waits",
@@ -242,12 +240,22 @@ function WaitingRoles({
                       size="sm"
                       disabled={stop.isPending}
                       onClick={async () => {
-                        setFailure(null);
+                        setResult(null);
                         try {
                           await stop.mutateAsync({ ids: [id], waits: false });
-                          setStopped(roleName(role?.display_name, m.role_key));
+                          setResult({
+                            word: "Stopped",
+                            outcome: {
+                              kind: "applied",
+                              message: `${roleName(role?.display_name, m.role_key)} goes straight to Zitadel now`,
+                              detail: "Changes already waiting stay in Pending changes.",
+                            },
+                          });
                         } catch (e) {
-                          setFailure({ text: sentence(failureMessage(e)), state: stateLine(e) });
+                          setResult({
+                            word: "Not stopped",
+                            outcome: { kind: "failed", message: `${sentence(failureMessage(e))} ${stateLine(e)}` },
+                          });
                         }
                       }}
                     >
@@ -269,25 +277,11 @@ function WaitingRoles({
           </div>
         )}
       </ListStates>
-        {stopped && (
+        {result && (
           <div className="row-divider px-5 py-3">
-            <ActionOutcome
-              word="Stopped"
-              outcome={{
-                kind: "applied",
-                message: `${stopped} goes straight to Zitadel now`,
-                detail: "Changes already waiting stay in Pending changes.",
-              }}
-            />
+            <ActionOutcome placement="inline" word={result.word} outcome={result.outcome} />
           </div>
         )}
-        <Unfold open={Boolean(failure)}>
-          <div className="row-divider px-5 py-3">
-            <Notice tone="danger" title="That role still waits." next="Try again. If it keeps failing, ask whoever runs the Syndra server.">
-              {failure?.text} {failure?.state}
-            </Notice>
-          </div>
-        </Unfold>
     </Card>
   );
 }
@@ -310,9 +304,10 @@ function AddRoles({
     () => new Set(initial && !marked.has(initial) ? [initial] : []),
   );
   const mark = useSetRolesWait();
-  const [failure, setFailure] = useState<{ text: string; state: string } | null>(null);
   // The sheet becomes its result and ends on Close; it never closes onto the list.
+  // A failed press is a result too, but the picker stays so it can be pressed again.
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const done = succeeded(outcome);
   const chosen = Array.from(selected);
   const names = chosen.map((id) =>
     roleName(byId.get(id)?.display_name, id.slice(id.indexOf(":") + 1)),
@@ -349,25 +344,15 @@ function AddRoles({
           }
           lockedIds={marked}
           lockedNote="On your list"
-          disabled={mark.isPending || Boolean(outcome)}
+          disabled={mark.isPending || done}
           legend={false}
         />
       </div>
-      <Unfold open={Boolean(failure)}>
-        <div className="mx-6 mt-3">
-          <Notice tone="danger" title="Not all of them were marked." next="Press the button again for the rest. If it keeps failing, ask whoever runs the Syndra server.">
-            {failure?.text}{" "}
-            {failure?.state === NOTHING_CHANGED
-              ? "The roles still ticked weren't marked; press it again for the rest."
-              : failure?.state}
-          </Notice>
-        </div>
-      </Unfold>
-      {outcome && <ActionOutcome outcome={outcome} word="Marked" className="mx-6 mt-3" />}
+      {outcome && <ActionOutcome outcome={outcome} word={done ? "Marked" : "Not marked"} className="mx-6 mt-3" />}
       <ModalFooter
-        cancel={outcome ? undefined : { onClick: onClose }}
+        cancel={done ? undefined : { onClick: onClose }}
         note={
-          outcome
+          done
             ? undefined
             : chosen.length
             ? `From now on, ${listOf(names)} ${chosen.length > 1 ? "wait" : "waits"} for you. ${
@@ -380,15 +365,15 @@ function AddRoles({
             : "Choose the roles that should always wait for you."
         }
       >
-        {outcome ? (
-          <Button onClick={onClose}>Close</Button>
+        {done ? (
+          <Button variant="outline" onClick={onClose}>Close</Button>
         ) : (
           <Button
             variant="accent"
             disabled={!chosen.length || mark.isPending}
             isPending={mark.isPending}
             onClick={async () => {
-              setFailure(null);
+              setOutcome(null);
               try {
                 await mark.mutateAsync({ ids: chosen, waits: true });
                 setOutcome({
@@ -398,7 +383,7 @@ function AddRoles({
                 });
                 onMarked(chosen);
               } catch (e) {
-                setFailure({ text: sentence(failureMessage(e)), state: stateLine(e) });
+                setOutcome(outcomeFromError(e));
               }
             }}
           >
