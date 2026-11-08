@@ -956,6 +956,12 @@ func handleZitadelHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// "stand-in": staging's copy of production's Zitadel, not a Zitadel.
+	mode := "live"
+	if zitadel.IsStandIn() {
+		mode = "stand-in"
+	}
+
 	start := time.Now()
 	// limit=1 keeps the response tiny while still forcing a real API round-trip.
 	result, err := zitadelListProjects(r.Context(), zitadel.SearchParams{Limit: 1})
@@ -965,7 +971,7 @@ func handleZitadelHealth(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[ZITADEL] health probe failed: %v", err)
 		jsonResponse(w, http.StatusBadGateway, zitadelHealthResponse{
 			Status:    "error",
-			Mode:      "live",
+			Mode:      mode,
 			Domain:    domain,
 			LatencyMs: latency,
 			Error:     upstreamSentence(http.StatusBadGateway),
@@ -975,7 +981,7 @@ func handleZitadelHealth(w http.ResponseWriter, r *http.Request) {
 
 	jsonResponse(w, http.StatusOK, zitadelHealthResponse{
 		Status:    "ok",
-		Mode:      "live",
+		Mode:      mode,
 		Domain:    domain,
 		Projects:  result.Total,
 		LatencyMs: latency,

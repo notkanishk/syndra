@@ -1,0 +1,14 @@
+# Staging only: layered over docker-compose.yml by _staging.yml (COMPOSE_FILE).
+# Production never reads this file.
+#
+# The stand-in Zitadel: with ZITADEL_FAKE_WORLD set in staging's .env (and
+# ZITADEL_DOMAIN unset; both set refuses the start), the backend answers
+# Zitadel reads and writes from that world file. The directory is mounted
+# read-write at the same path, so the path in .env works inside the container
+# and a write can save the file beside itself and rename it into place.
+services:
+  backend:
+    environment:
+      - ZITADEL_FAKE_WORLD=${ZITADEL_FAKE_WORLD:-}
+    volumes:
+      - /var/lib/syndra-staging/world:/var/lib/syndra-staging/world
