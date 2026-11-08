@@ -11,6 +11,7 @@ import (
 	"syndra/internal/demo"
 	"syndra/internal/directory"
 	"syndra/internal/seed"
+	"syndra/internal/zitadel"
 )
 
 // SystemModeResponse describes which directory backend is currently active and
@@ -71,10 +72,14 @@ var systemZitadelConfigured = func() bool {
 	return os.Getenv("ZITADEL_DOMAIN") != ""
 }
 
-// countDemoResidue is injectable for tests.
+// countDemoResidue is injectable for tests. On staging's stand-in, operators
+// sign in as the development identities, so a demo id as an audit row's actor
+// is who signed in, not sample data: only targets count there.
 var countDemoResidue = func(ctx context.Context) (int, error) {
-	return db.CountDemoResidue(ctx, demo.ProjectIDs(), demo.UserIDs())
+	return dbCountDemoResidue(ctx, demo.ProjectIDs(), demo.UserIDs(), !zitadel.IsStandIn())
 }
+
+var dbCountDemoResidue = db.CountDemoResidue
 
 // resetCommand is what an operator runs to clear demo residue. Kept next to
 // the count it resolves so a rename of the make target updates both.
