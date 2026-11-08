@@ -40,6 +40,10 @@ type DrainResult struct {
 	Exhausted int    `json:"exhausted,omitempty"`
 	Halted    bool   `json:"halted"`
 	Reason    string `json:"reason,omitempty"`
+	// Waiting is, on a pass that halted because its target did not answer,
+	// how many of that target's own changes it left waiting. Zero (omitted)
+	// when the count could not be read.
+	Waiting int `json:"waiting,omitempty"`
 	// Retry is where a change the caller just sent stands when the target
 	// didn't take it: the next try and which try of how many. Set by
 	// services.Deliver for the rows it sent; a pass over many rows leaves it
@@ -113,6 +117,7 @@ type PassResult struct {
 	Exhausted int    `json:"exhausted,omitempty"`
 	Halted    bool   `json:"halted"`
 	Reason    string `json:"reason,omitempty"`
+	Waiting   int    `json:"waiting,omitempty"`
 }
 
 // merge folds one target's pass into the combined result.
@@ -130,7 +135,7 @@ func (r *DrainResult) merge(target string, p DrainResult) {
 	r.Passes = append(r.Passes, PassResult{
 		Target: target, Applied: p.Applied, Failed: p.Failed, Requeued: p.Requeued,
 		Abandoned: p.Abandoned, Errored: p.Errored, Exhausted: p.Exhausted,
-		Halted: p.Halted, Reason: p.Reason,
+		Halted: p.Halted, Reason: p.Reason, Waiting: p.Waiting,
 	})
 	if p.Halted && !r.Halted {
 		r.Halted, r.Reason, r.HaltedTarget = true, p.Reason, target
@@ -245,7 +250,7 @@ func addonDrainTargets() []string {
 // drainZitadelPass is the Management API leg. Caller holds the drain lock.
 func drainZitadelPass(ctx context.Context) (DrainResult, error) {
 	if !zitadelReachable(ctx) {
-		return DrainResult{Halted: true, Reason: "zitadel_offline"}, nil
+		return unanswered(ctx, db.TargetZitadel, "zitadel_offline"), nil
 	}
 	rows, err := claimPending(ctx, db.TargetZitadel, claimBatch)
 	if err != nil {
@@ -258,6 +263,21 @@ func drainZitadelPass(ctx context.Context) (DrainResult, error) {
 		}
 	}
 	return res, nil
+}
+
+// unanswered is the pass for a target that did not answer the probe. A target
+// with none of its own changes waiting was not skipped, there was nothing to
+// send it, so its pass is empty rather than halted: a send that sent three
+// changes to Zitadel once said "Not all sent. TrueNAS was skipped. Its changes
+// are still waiting" with nothing of TrueNAS's queued (browser pass, 8 Nov).
+// One with some says how many. A count that can't be read keeps the halt: an
+// operator told nothing halted must be able to believe it.
+func unanswered(ctx context.Context, target, reason string) DrainResult {
+	n, err := countPendingFor(ctx, target)
+	if err == nil && n == 0 {
+		return DrainResult{}
+	}
+	return DrainResult{Halted: true, Reason: reason, Waiting: n}
 }
 
 // pruneAfterDrain is the retention work, run once per drain rather than once

@@ -43,6 +43,9 @@ var (
 	claimOne         = db.ClaimPropagationByID
 	undispatchable   = db.UndispatchableTarget
 	awaitingDispatch = db.TargetsAwaitingDispatch
+	// countPendingFor is how many of one target's own rows wait: asked only
+	// of a target that did not answer the probe.
+	countPendingFor = db.CountPendingForTarget
 	markApplied      = db.MarkPropagationApplied
 	// Recorded separately from `applied`, because accepted and observed are
 	// different facts and the gap between them is ordinary.
