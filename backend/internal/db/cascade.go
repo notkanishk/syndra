@@ -233,8 +233,8 @@ func AddRoleToBundleAndEnqueue(ctx context.Context, actor, bundleID, projectID, 
 // CreateMappingRuleAndEnqueue creates a mapping rule and enqueues the caller-computed closure-diff
 // params in one tx (design pivot: NO direct_role_grants write — the grant already lives in
 // mapping_rules). params are built by the caller from a PRE-mutation closure simulation with
-// SourceRef left empty (the rule id does not exist yet); this stamps SourceRef = the new rule id
-// on every param right after the INSERT ... RETURNING, before enqueueing.
+// SourceRef left empty on the new rule's own rows (the rule id does not exist yet); this stamps
+// SourceRef = the new rule id on those right after the INSERT ... RETURNING, before enqueueing.
 func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sourceRole, targetProject, targetRole string, params []EnqueueParams) (string, []string, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
@@ -254,8 +254,12 @@ func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sour
 		return "", nil, err
 	}
 
+	// Only the new rule's own rows wait for its id; a row further down a
+	// chain names the rule that reaches it already (task 1.6a).
 	for i := range params {
-		params[i].SourceRef = ruleID
+		if params[i].SourceRef == "" {
+			params[i].SourceRef = ruleID
+		}
 	}
 	ids, err := enqueueWrites(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.created", ResourceID: ruleID}},
@@ -353,7 +357,10 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 		SELECT COALESCE(cascade_id::text, id::text) AS group_id,
 		       id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
 		       COALESCE(cascade_id::text,''), status, created_at, completed_at, confirmed_at,
-		       COALESCE(reason,'')
+		       COALESCE(reason,''), payload_json->'rule_from',
+		       COALESCE((SELECT a.resource_id FROM audit_logs a
+		                  WHERE a.cascade_id = propagation_outbox.cascade_id
+		                    AND a.action LIKE 'mapping_rule.%' LIMIT 1), '')
 		FROM propagation_outbox
 		WHERE source = ANY($1::text[])`
 
@@ -392,12 +399,12 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 	seenUser := make(map[string]map[string]bool)
 
 	for rows.Next() {
-		var groupID, reason string
+		var groupID, reason, editedRule string
 		var c models.CascadeSummary
 		var createdAt time.Time
 		if err := rows.Scan(&groupID, &c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys,
 			&c.Source, &c.SourceRef, &c.CascadeID, &c.Status, &createdAt, &c.CompletedAt,
-			&c.ConfirmedAt, &reason); err != nil {
+			&c.ConfirmedAt, &reason, &c.RuleFrom, &editedRule); err != nil {
 			return nil, fmt.Errorf("scan cascade group row: %w", err)
 		}
 
@@ -418,6 +425,11 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 		// the same instant, so a rule row read first never names it.
 		if g.Source == "rule" && c.Source != "rule" {
 			g.Source, g.SourceRef = c.Source, c.SourceRef
+		}
+		// A rule's own edit is named by the edited rule, as its audit row is:
+		// its rows further down a chain name the next rule (task 1.6a).
+		if editedRule != "" {
+			g.SourceRef = editedRule
 		}
 		if createdAt.Before(g.StartedAt) {
 			g.StartedAt = createdAt

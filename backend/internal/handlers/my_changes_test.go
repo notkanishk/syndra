@@ -132,6 +132,9 @@ func TestMyChanges_ViaRuleCarriesItsTriggerRole(t *testing.T) {
 		{Kind: "given", At: at, ProjectID: "p", RoleKey: "r", Source: "rule", SourceRef: "r1"},
 		{Kind: "given", At: at, ProjectID: "p", RoleKey: "r", Source: "rule", SourceRef: "gone"},
 		{Kind: "given", At: at, ProjectID: "p", RoleKey: "b", Source: "bundle", SourceRef: "b1"},
+		// Written when r1 started from "trained"; r1 was edited since (task 1.6a).
+		{Kind: "given", At: at, ProjectID: "p", RoleKey: "r", Source: "rule", SourceRef: "r1",
+			RuleFrom: &models.RuleFrom{ProjectID: "sp", RoleKey: "trained"}},
 	}
 	orig := dbGetActiveMappingRules
 	t.Cleanup(func() { dbGetActiveMappingRules = orig })
@@ -159,6 +162,9 @@ func TestMyChanges_ViaRuleCarriesItsTriggerRole(t *testing.T) {
 	}
 	if resp.Items[2].Via["bundle_id"] != "b1" {
 		t.Fatalf("bundle via unchanged: %s", w.Body)
+	}
+	if tr, _ := resp.Items[3].Via["trigger"].(map[string]any); tr["role_key"] != "trained" {
+		t.Fatalf("a row names the role kept on it, not the rule's first role now: %s", w.Body)
 	}
 }
 

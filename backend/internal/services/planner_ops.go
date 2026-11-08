@@ -147,7 +147,7 @@ func planAdopt(ch Change, a Action, s PlanSnapshot, person db.PersonAccess) Chan
 	}
 	rules := s.Access.Rules
 	adds, revokes, closureBefore, closureAfter := ruleDelta(before, after, rules)
-	refs := ruleRefs(before, after, closureBefore, closureAfter, rules)
+	refs := ruleRefs(before, after, closureBefore, closureAfter, rules, rules)
 	if refused, gone := s.offered(adds); refused != nil {
 		return ch.decided(a, EffectBlocked, "catalogue_unread",
 			"Syndra couldn't read Zitadel's list of roles to check the ones the rules give still exist. Try again shortly.", "")
@@ -226,7 +226,7 @@ func planMove(ch Change, a Action, s PlanSnapshot, person db.PersonAccess) Chang
 			"Everything in this version they already hold another way, so nothing is sent to Zitadel.")
 	}
 	ch = ch.deliver(asRuleRows(deltaWrites(a.UserID, adds, revokes, "bundle", a.BundleID),
-		ruleRefs(before, after, closureBefore, closureAfter, rules)), person, s)
+		ruleRefs(before, after, closureBefore, closureAfter, rules, rules)), person, s)
 	var said []string
 	gains, ruleGains := splitByBundle(adds, s.VersionRoles)
 	loses, ruleLoses := splitByBundle(revokes, person.ByBundle[a.BundleID])

@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -178,6 +179,89 @@ func TestPlannerSystem_RuleRetired(t *testing.T) {
 	}
 	if rows := newRows(t, f.ctx, f.alice, before); len(rows) != 0 {
 		t.Errorf("advanced was never sent, so nothing is owed: %v", sentRows(t, f.ctx, rows))
+	}
+}
+
+// A rule created in a chain (task 1.6a): each row names the rule one step
+// before its role and keeps the role that set it off; a later edit to the
+// rule's first role renames neither Pending changes nor Change history; and
+// retiring the rule still cancels the gives it queued, as before.
+func TestPlannerSystem_RuleChainNamesEachHop(t *testing.T) {
+	f := newPlannerFixture(t)
+	f.grant(t, f.alice, f.member, nil)
+	r2 := f.withRule(t) // trained gives advanced
+	operator := func(context.Context) bool { return true }
+
+	before := sentRowsFor(t, f.ctx, f.alice)
+	ctx, _ := db.GuardCancellations(f.ctx, nil, operator)
+	r1, _, err := services.CascadeRuleCreated(ctx, f.actor, f.project, f.member, f.project, f.trains)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = db.PG.Exec(f.ctx, `DELETE FROM mapping_rules WHERE id = $1::uuid`, r1) })
+	rows := newRows(t, f.ctx, f.alice, before)
+	if got, want := sentRows(t, f.ctx, rows), []string{"add advanced rule " + r2, "add trained rule " + r1}; !slices.Equal(got, want) {
+		t.Fatalf("create wrote %v, want %v (advanced is the next rule's row, not the new rule's)", got, want)
+	}
+
+	// setOff is what Change history and Pending changes say set each row off.
+	setOff := func() (string, map[string]string) {
+		var cascade string
+		if err := db.PG.QueryRow(f.ctx, `SELECT cascade_id::text FROM propagation_outbox WHERE id = $1::uuid`, rows[0]).Scan(&cascade); err != nil {
+			t.Fatal(err)
+		}
+		groups, err := db.GetCascadeGroups(f.ctx, 0, cascade)
+		if err != nil || len(groups) != 1 {
+			t.Fatalf("Change history: %+v %v", groups, err)
+		}
+		from := map[string]string{}
+		for _, w := range groups[0].Writes {
+			if w.RuleFrom != nil {
+				from["history "+w.RoleKeys[0]] = w.RuleFrom.RoleKey
+			}
+		}
+		pending, err := db.GetPendingPropagations(f.ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range pending {
+			if p.UserID == f.alice && p.RuleFrom != nil {
+				from["pending "+p.RoleKeys[0]] = p.RuleFrom.RoleKey
+			}
+		}
+		return groups[0].SourceRef, from
+	}
+	want := map[string]string{"history advanced": f.trains, "history trained": f.member, "pending advanced": f.trains, "pending trained": f.member}
+	if named, from := setOff(); named != r1 || !maps.Equal(from, want) {
+		t.Fatalf("the entry is the edited rule's (%s, want %s); each row names its own hop: %v, want %v", named, r1, from, want)
+	}
+
+	// The rule's first role edited afterwards: the rows still say member.
+	if _, err := db.UpdateMappingRuleAndEnqueue(f.ctx, f.actor, r1, f.project, "visitor", f.project, f.trains, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, from := setOff(); !maps.Equal(from, want) {
+		t.Fatalf("an edit to the rule renamed its rows: %v, want %v", from, want)
+	}
+	if _, err := db.UpdateMappingRuleAndEnqueue(f.ctx, f.actor, r1, f.project, f.member, f.project, f.trains, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Retired: a rule's revoke answers any queued rule give of its role, so
+	// both gives are cancelled, the hop's too, and nothing is owed.
+	before = sentRowsFor(t, f.ctx, f.alice)
+	ctx, _ = db.GuardCancellations(f.ctx, rows, operator)
+	old := models.MappingRule{ID: r1, SourceProject: f.project, SourceRole: f.member, TargetProject: f.project, TargetRole: f.trains}
+	if _, err := services.CascadeRuleRetired(ctx, f.actor, old); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range rows {
+		if s := status(t, f.ctx, id); s != "superseded" {
+			t.Errorf("queued give %s is %s, want superseded", id, s)
+		}
+	}
+	if got := newRows(t, f.ctx, f.alice, before); len(got) != 0 {
+		t.Errorf("nothing was ever sent, so nothing is owed: %v", sentRows(t, f.ctx, got))
 	}
 }
 

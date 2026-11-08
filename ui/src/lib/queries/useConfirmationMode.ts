@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 
+import type { RuleFrom } from "./usePropagation";
+
 export interface CascadeSummaryRow {
   id: string;
   op_type: string;
@@ -12,6 +14,8 @@ export interface CascadeSummaryRow {
   role_keys: string[];
   source: string;
   source_ref?: string;
+  /** A rule's row: the role that set it off, kept when it was written. Absent on older rows. */
+  rule_from?: RuleFrom;
   cascade_id?: string;
   status: string;
   completed_at?: string;
