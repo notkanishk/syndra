@@ -315,8 +315,10 @@ export function resultOutcome(
     const t = travels(o);
     const listed = (o.goes?.length ?? 0) + (o.waits?.length ?? 0) > 0;
     if (o.effect === "applied") {
-      // Its own act went; what a rule gave with it waits (N4).
-      inZitadel += listed ? t.now : 1;
+      // Its own act took effect; what a rule gave with it waits (N4). Without
+      // role lists nothing says the act sent anything (an adoption sends
+      // nothing), so only the rule's waiting roles are counted.
+      inZitadel += listed ? t.now : 0;
       waiting += listed ? t.wait : (o.rule_waiting ?? 1);
     } else if (listed && t.wait > 0) {
       waiting += t.wait;
