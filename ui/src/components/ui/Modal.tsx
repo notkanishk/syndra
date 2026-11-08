@@ -131,8 +131,19 @@ export function useDialogFocusTrap(
 
     // Not an id's copy control sitting in the header: the safe exit must be
     // what takes focus, and the id stays one Tab away.
-    const inPanel = focusableIn(panelRef.current);
-    (inPanel.find((el) => !el.hasAttribute("data-skip-initial-focus")) ?? inPanel[0])?.focus();
+    const focusSafe = () => {
+      const inPanel = focusableIn(panelRef.current);
+      (inPanel.find((el) => !el.hasAttribute("data-skip-initial-focus")) ?? inPanel[0])?.focus();
+    };
+    focusSafe();
+
+    // A sheet becomes its result (A-22): the pressed button is gone, and the
+    // browser drops focus to <body>, outside the dialog and behind an inert
+    // app. Put it back on the same safe control, the result's Close.
+    const lost = new MutationObserver(() => {
+      if (document.activeElement === document.body || document.activeElement === null) focusSafe();
+    });
+    if (panelRef.current) lost.observe(panelRef.current, { childList: true, subtree: true });
 
     // After the focus above: making the opener inert would blur it first and
     // `previouslyFocused` would be <body>. An outer dialog's inert stays its own.
@@ -166,6 +177,7 @@ export function useDialogFocusTrap(
     document.addEventListener("keydown", handleKey);
     return () => {
       document.removeEventListener("keydown", handleKey);
+      lost.disconnect();
       // Before the focus goes back: an inert opener would refuse it.
       if (madeInert) root.removeAttribute("inert");
       previouslyFocused?.focus();

@@ -105,17 +105,26 @@ export function MetaDot() {
   return <span aria-hidden className="inline-block h-[3px] w-[3px] rounded-pill bg-ink/30" />;
 }
 
-/** A metadata row: children separated by 3px dots. */
+/**
+ * A metadata row: children separated by 3px dots.
+ *
+ * Every item carries its dot, the row sits one dot and gap (15px) to the left,
+ * and the wrapper clips: whichever item starts a line, the first or one that
+ * wrapped on a phone, has its dot in the clipped strip. A dot only ever sits
+ * between two items. The 3px padding keeps focus rings inside the clip.
+ */
 export function MetaRow({ children }: { children: React.ReactNode[] }) {
   const items = children.filter(Boolean);
   return (
-    <span className="flex flex-wrap items-center gap-3 text-[14.5px] text-muted">
-      {items.map((item, index) => (
-        <span key={index} className="flex items-center gap-3">
-          {index > 0 && <MetaDot />}
-          {item}
-        </span>
-      ))}
+    <span className="-m-[3px] block overflow-hidden p-[3px]">
+      <span className="-ml-[15px] flex flex-wrap items-center gap-3 text-[14.5px] text-muted">
+        {items.map((item, index) => (
+          <span key={index} className="flex items-center gap-3">
+            <MetaDot />
+            {item}
+          </span>
+        ))}
+      </span>
     </span>
   );
 }
