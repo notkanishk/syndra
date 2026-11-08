@@ -385,7 +385,13 @@ function RuleEditor({
           &rArr;
         </div>
 
-        <div>
+        <div
+          // The second list starts below the fold: typing in its search brings
+          // it up, so the matches are in view without scrolling (browser pass, 8 Nov).
+          onInput={(event) => {
+            if ((event.target as HTMLInputElement).type === "search") event.currentTarget.scrollIntoView?.({ block: "start" });
+          }}
+        >
           <FieldLabel id="rule-target-label">then also give them</FieldLabel>
           <RolePickerOne
             mode="one"
