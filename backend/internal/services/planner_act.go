@@ -52,6 +52,7 @@ func SingleOp(op string) bool {
 func planRole(ch Change, a Action, s PlanSnapshot, profile models.UserProfile, person db.PersonAccess) Change {
 	k := roleKey{projectID: a.ProjectID, roleKey: a.RoleKey}
 	ch.ProjectID, ch.RoleKey = a.ProjectID, a.RoleKey
+	person = a.withAlongside(person)
 	role := s.words(k)
 	before := baseFrom(person, "")
 	after := baseFrom(person, "")
