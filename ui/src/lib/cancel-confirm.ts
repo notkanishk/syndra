@@ -22,7 +22,8 @@ export interface QueuedChange {
   initiated_by: string;
   /** Who started it, when the directory knows them. */
   initiated_by_name?: string;
-  reason?: string;
+  /** The reason as the queuer said it; never one of Syndra's own labels (backend `db.Said`). */
+  said?: string;
   queued_at: string;
   /** On a retry: queued since the ids that were acknowledged. */
   new?: boolean;

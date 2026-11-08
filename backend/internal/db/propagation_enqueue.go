@@ -148,11 +148,10 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string, planned ...Enqu
 		defer tx.Rollback(ctx) // no-op after a successful Commit
 	}
 
-	// Every caller of this path (a give, a bulk give, an extend, a revoke)
-	// passes the operator's own words in Reason, or none (task 1.8a), so they
-	// go on its audit row and every row it queues, as a bundle change's do. An
-	// approval and an adopted drift carry Syndra's label there instead, and
-	// come in by their own paths with none.
+	// A give, a bulk give, an extend, a revoke: the operator's words go on its
+	// audit row and every row it queues, as a bundle change's do (task 1.8a).
+	// A label of Syndra's in Reason (an extension's "Extended from Home") stays
+	// on the ledger only: enqueueWrites keeps what Said leaves.
 	ids, err := enqueueWrites(ctx, tx, []CascadeAudit{{Reason: p.Reason}}, append([]EnqueueParams{p}, planned...), key)
 	if err != nil {
 		return EnqueueResult{}, err
@@ -223,11 +222,12 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, params
 	}
 	// The operator's words, when the change came with some: on its audit row
 	// and on every row it queues. A named write's audits carry only these:
-	// its audit row is enqueueLedger's.
+	// its audit row is enqueueLedger's. Syndra's own labels are never kept
+	// as someone's words (Said).
 	var why string
 	for _, a := range audits {
 		if why == "" {
-			why = a.Reason
+			why = Said(a.Reason)
 		}
 	}
 

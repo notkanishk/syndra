@@ -21,6 +21,12 @@ export interface AuditEntry {
   /** What the entry carries beyond its columns; omitted when null. Only `propagation.cancelled_unsent` has any today. */
   details?: CancelledUnsentDetails | Record<string, unknown>;
   /**
+   * The operator's reason in `details` (its `reason`, or a cancellation's
+   * `cancelled.reason`) as they said it; never one of Syndra's own labels
+   * (backend `db.Said`). The only reason an audit line quotes.
+   */
+  said?: string;
+  /**
    * On a send to a connected system (`addon.<system>.<operation>.dispatched`):
    * that change as one record, read from the record table (A-13 §4). Absent on
    * every other entry.
@@ -52,6 +58,7 @@ export interface CancelledUnsentDetails {
     user_id: string;
     initiated_by?: string;
     queued_at: string;
+    /** As stored; quote the entry's `said`, never this. */
     reason?: string;
   };
   cause: { action: "grant" | "remove" | "approve" | string; via?: string };

@@ -434,8 +434,8 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 		if createdAt.Before(g.StartedAt) {
 			g.StartedAt = createdAt
 		}
-		if g.Reason == "" {
-			g.Reason = reason
+		if g.Said == "" {
+			g.Said = Said(reason)
 		}
 		switch c.Status {
 		case "applied":

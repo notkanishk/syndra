@@ -32,7 +32,7 @@ const change = (n: number): QueuedChange => ({
   role_keys: ["member"],
   source: "direct",
   initiated_by: "op-2",
-  reason: "left the course",
+  said: "left the course",
   queued_at: new Date(Date.now() - 3_600_000).toISOString(),
 });
 

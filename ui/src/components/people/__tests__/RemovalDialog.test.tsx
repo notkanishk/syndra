@@ -177,7 +177,7 @@ describe("a removal that would cancel a give still waiting (the plan says so bef
     source: "bundle",
     initiated_by: "op-2",
     initiated_by_name: "Sam Iyer",
-    reason: "joined the course",
+    said: "joined the course",
   });
 
   it("foretells the cancel, then turns the sheet to the step at once; Keep it sends nothing and returns here", async () => {

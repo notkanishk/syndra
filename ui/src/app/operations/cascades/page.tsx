@@ -125,7 +125,7 @@ function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: Ma
         {group.waiting + group.failed > 0 && <ArrowLink href="/governance/pending">Pending changes</ArrowLink>}
       </div>
 
-      {group.reason && <p className="row-divider px-5 py-3 text-[14px] leading-[1.55] text-ink">“{group.reason}”</p>}
+      {group.said && <p className="row-divider px-5 py-3 text-[14px] leading-[1.55] text-ink">“{group.said}”</p>}
 
       <div className="row-divider flex flex-wrap gap-x-5 gap-y-1.5 px-5 py-3 text-[13.5px]">
         {(one ? group.writes : group.writes.slice(0, 6)).map((write) => (

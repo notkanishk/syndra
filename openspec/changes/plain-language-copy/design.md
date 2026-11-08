@@ -326,7 +326,11 @@ line that shows the change: under the event on the Audit page, a person's
 Activity and Home (a bundle given or taken, a role given, extended or
 removed, a sign-in lookup), and under each Zitadel row on Pending changes.
 Nothing when none was given, and Syndra's own words are never quoted as a
-reason (a removal with none used to record "Direct access removal"). Where
+reason: the reason column also holds Syndra's labels ("Mapping rule
+cascade", "Extended from Home", "Direct access removal" …), so a surface
+quotes only the backend's `said` (`db.Said`, one list, guarded in
+`repoguard/said_labels_test.go`), never `reason`. A new fixed reason
+goes on that list in the same change. Where
 it goes is said truly: the bulk dialog's "Syndra keeps it with each person's
 change." and the sign-in lookup's "It's on the Audit page with your reason."
 (it said Change history, which holds bundle and rule changes only).

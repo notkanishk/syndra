@@ -464,8 +464,8 @@ function PendingGroups({
                       <RowStatus row={row} skipWait={shared} />
                       {/* The operator's words, kept with the change (task 1.8a). A
                           connected system's row says its reason as its change. */}
-                      {row.op_type !== "apply" && row.reason && (
-                        <span className="text-[13px] text-ink">&ldquo;{row.reason}&rdquo;</span>
+                      {row.op_type !== "apply" && row.said && (
+                        <span className="text-[13px] text-ink">&ldquo;{row.said}&rdquo;</span>
                       )}
                     </span>
 

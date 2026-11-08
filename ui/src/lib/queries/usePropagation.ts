@@ -37,11 +37,13 @@ export interface PendingRow {
   target?: string;
   /** Who queued it: a person's id, or a machine as "system:reconcile". */
   initiated_by?: string;
-  /**
-   * Why it was queued. An add-on row says it as its change (it has no project
-   * or roles); a Zitadel row's is the operator's own words, quoted.
-   */
+  /** Why it was queued. An add-on row says it as its change: it has no project or roles. */
   reason?: string;
+  /**
+   * On a Zitadel row, the reason as the operator said it; never one of
+   * Syndra's own labels (backend `db.Said`). The only reason quoted.
+   */
+  said?: string;
   /**
    * Why it waits for the operator: "role_waits" (the role always waits),
    * "halted:<reason>" (meant to go, and the send stopped), "manual" (a bundle

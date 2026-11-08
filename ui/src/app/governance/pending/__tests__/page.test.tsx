@@ -505,11 +505,22 @@ describe("Pending changes · board layout", () => {
 describe("Pending changes · the reason", () => {
   it("quotes the operator's reason on every row of the change, once each", () => {
     pending.data = [
-      row({ id: "o1", source: "bundle", source_ref: "b1", reason: "term start" }),
-      row({ id: "o2", role_keys: ["advanced"], reason: "term start" }),
+      row({ id: "o1", source: "bundle", source_ref: "b1", reason: "term start", said: "term start" }),
+      row({ id: "o2", role_keys: ["advanced"], reason: "term start", said: "term start" }),
     ];
     renderPending();
     expect(screen.getAllByText("“term start”")).toHaveLength(2);
+  });
+
+  // The reason column also holds Syndra's own labels; the backend's `said` leaves them out.
+  it("never quotes a label of Syndra's kept as the reason", () => {
+    pending.data = [
+      row({ id: "o1", op_type: "revoke", source: "direct", source_ref: "g1", reason: "Direct access removal" }),
+      row({ id: "o2", role_keys: ["advanced"], reason: "Mapping rule cascade" }),
+    ];
+    renderPending();
+    expect(screen.queryByText(/“/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Direct access removal|Mapping rule cascade/)).not.toBeInTheDocument();
   });
 
   it("says nothing where none was given", () => {

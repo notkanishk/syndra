@@ -1109,6 +1109,10 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 			&p.CreatedAt, &p.StartedAt, &p.CompletedAt, &p.Reason, &p.WaitReason, &p.NotBefore); err != nil {
 			return nil, fmt.Errorf("scan propagation: %w", err)
 		}
+		if p.OpType != "apply" {
+			// A connected system's row says its reason as its change.
+			p.Said = Said(p.Reason)
+		}
 		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
