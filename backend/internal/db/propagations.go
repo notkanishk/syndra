@@ -349,7 +349,7 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 		FROM claimed
 		WHERE p.id = claimed.id
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
-		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
+		          p.source, COALESCE(p.source_ref,''), p.payload_json->'rule_from', COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
 		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
@@ -392,7 +392,7 @@ func ClaimPropagationByID(ctx context.Context, target, id string) (*models.Pendi
 		WHERE p.id=$1 AND p.status IN ('pending','in_flight') AND p.target = $2
 		  AND t.target = p.target AND t.state = 'active'
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
-		          p.source, COALESCE(p.source_ref,''),
+		          p.source, COALESCE(p.source_ref,''), p.payload_json->'rule_from',
 		          COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
 		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
 	rows, err := querier(ctx).Query(ctx, q, id, target)
@@ -485,7 +485,7 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 		FROM claimed
 		WHERE p.id = claimed.id
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
-		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
+		          p.source, COALESCE(p.source_ref,''), p.payload_json->'rule_from', COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
 		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
@@ -542,7 +542,7 @@ func ClaimDueRetries(ctx context.Context, target string, limit int) ([]models.Pe
 		FROM claimed
 		WHERE p.id = claimed.id
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
-		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
+		          p.source, COALESCE(p.source_ref,''), p.payload_json->'rule_from', COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
 		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
@@ -836,7 +836,7 @@ func ReleasePropagation(ctx context.Context, id, reason string) error {
 func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, error) {
 	const q = `
 		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
-		       source, COALESCE(source_ref,''),
+		       source, COALESCE(source_ref,''), payload_json->'rule_from',
 		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
 		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,''), COALESCE(wait_reason,''), not_before
 		FROM propagation_outbox
@@ -936,7 +936,7 @@ func CountRetries(ctx context.Context, actor string) (retrying, gaveUp map[strin
 func ListGaveUp(ctx context.Context, actor string) ([]models.PendingPropagation, error) {
 	q := `
 		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
-		       source, COALESCE(source_ref,''),
+		       source, COALESCE(source_ref,''), payload_json->'rule_from',
 		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
 		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,''), COALESCE(wait_reason,''), not_before
 		FROM propagation_outbox
@@ -1104,10 +1104,14 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 	for rows.Next() {
 		var p models.PendingPropagation
 		if err := rows.Scan(&p.ID, &p.Target, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
-			&p.Source, &p.SourceRef, &p.CascadeID,
+			&p.Source, &p.SourceRef, &p.RuleFrom, &p.CascadeID,
 			&p.ZitadelGrantID, &p.Status, &p.Attempts, &p.LastError, &p.InitiatedBy,
 			&p.CreatedAt, &p.StartedAt, &p.CompletedAt, &p.Reason, &p.WaitReason, &p.NotBefore); err != nil {
 			return nil, fmt.Errorf("scan propagation: %w", err)
+		}
+		if p.OpType != "apply" {
+			// A connected system's row says its reason as its change.
+			p.Said = Said(p.Reason)
 		}
 		out = append(out, p)
 	}

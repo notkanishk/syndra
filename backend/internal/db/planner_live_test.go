@@ -242,7 +242,7 @@ func TestPlanner_AssignBundle_OutboxIsThePlan(t *testing.T) {
 		outboxIDs(written[f.alice])[0]).Scan(&cascade); err != nil {
 		t.Fatal(err)
 	}
-	if groups, err := db.GetCascadeGroups(ctx, 0, cascade); err != nil || len(groups) != 1 || groups[0].Reason != "term start" {
+	if groups, err := db.GetCascadeGroups(ctx, 0, cascade); err != nil || len(groups) != 1 || groups[0].Said != "term start" {
 		t.Fatalf("Change history for Alice's change: %+v %v, want the operator's reason", groups, err)
 	}
 	if s := status(t, ctx, revoke); s != "superseded" {

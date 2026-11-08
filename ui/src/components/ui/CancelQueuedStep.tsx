@@ -146,10 +146,10 @@ function group(changes: QueuedChange[], fresh: Set<string>, who: Who): Group[] {
   for (const change of changes) {
     const isNew = fresh.has(change.id);
     const by = who.queuer(change);
-    const key = `${isNew}|${change.initiated_by || by}|${change.queued_at.slice(0, 16)}|${change.reason ?? ""}`;
+    const key = `${isNew}|${change.initiated_by || by}|${change.queued_at.slice(0, 16)}|${change.said ?? ""}`;
     const found = groups.find((g) => g.key === key);
     if (found) found.changes.push(change);
-    else groups.push({ key, fresh: isNew, by, when: change.queued_at, reason: change.reason ?? "", changes: [change] });
+    else groups.push({ key, fresh: isNew, by, when: change.queued_at, reason: change.said ?? "", changes: [change] });
   }
   return [...groups.filter((g) => g.fresh), ...groups.filter((g) => !g.fresh)];
 }
@@ -376,8 +376,8 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
       return { ...g, changes: take };
     })
     .filter((g) => g.changes.length > 0);
-  const noReason = changes.some((c) => !c.reason);
-  const askWho = noReason ? firstOf(who.queuer(changes.find((c) => !c.reason)!)) : "";
+  const noReason = changes.some((c) => !c.said);
+  const askWho = noReason ? firstOf(who.queuer(changes.find((c) => !c.said)!)) : "";
   const n = changes.length;
   const confirmLabel = n === 1 ? `Cancel it and ${options.goAhead}` : `Cancel all ${n} and ${options.goAhead}`;
 

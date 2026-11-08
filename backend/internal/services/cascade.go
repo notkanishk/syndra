@@ -308,10 +308,12 @@ func EditBundleWorkingCopy(ctx context.Context, actor, bundleID, projectID, role
 }
 
 // everyone plans every known person's closure delta between two rule sets on
-// one snapshot: a rule's own edit (create, update, retire), every row
-// attributed to the edited rule (ref; "" for one not yet created, which the
-// insert stamps). People whose access doesn't move are left out.
-func everyone(ctx context.Context, rulesAfter func([]models.MappingRule) []models.MappingRule, ref string) ([]Change, error) {
+// one snapshot: a rule's own edit (create, update, retire). Each row is the
+// rule that reaches its role, the step before it in a chain (task 1.6a): the
+// edited rule for its own target, the next rule down for the role after that
+// ("" for a rule not yet created, which the insert stamps). People whose
+// access doesn't move are left out.
+func everyone(ctx context.Context, rulesAfter func([]models.MappingRule) []models.MappingRule) ([]Change, error) {
 	users, err := svcGetAllKnownUserIDs(ctx)
 	if err != nil {
 		return nil, err
@@ -326,7 +328,7 @@ func everyone(ctx context.Context, rulesAfter func([]models.MappingRule) []model
 	for _, u := range users {
 		person := s.Access.People[u]
 		base := baseFrom(person, "")
-		if ch := systemChange(u, person, s, base, base, before, after, "rule", ref); len(ch.Writes) > 0 {
+		if ch := systemChange(u, person, s, base, base, before, after, "rule", ""); len(ch.Writes) > 0 {
 			changes = append(changes, ch)
 		}
 	}
@@ -337,9 +339,10 @@ func everyone(ctx context.Context, rulesAfter func([]models.MappingRule) []model
 // closure delta the new source→target edge causes, planned on one snapshot
 // under the lock (task 1.9), in one tx, then delivers it as planned. Affected
 // users come from GetAllKnownUserIDs, not the grant index, so a user who holds
-// the source only in Syndra's own tables is still reached (P1b). The rows
-// carry SourceRef="" here; CreateMappingRuleAndEnqueue stamps the new rule id
-// onto them after the insert. The handler validates cycles first. It cancels
+// the source only in Syndra's own tables is still reached (P1b). The new
+// rule's rows carry SourceRef="" here; CreateMappingRuleAndEnqueue stamps the
+// new rule id onto them after the insert (a row further down a chain is the
+// next rule's already). The handler validates cycles first. It cancels
 // only what the operator's gate admits.
 func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, targetProject, targetRole string) (string, CascadeResult, error) {
 	var ruleID string
@@ -351,7 +354,7 @@ func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, t
 		changes, err = everyone(ctx, func(rules []models.MappingRule) []models.MappingRule {
 			return append(rules, models.MappingRule{SourceProject: sourceProject, SourceRole: sourceRole,
 				TargetProject: targetProject, TargetRole: targetRole})
-		}, "")
+		})
 		if err != nil {
 			return err
 		}
@@ -435,7 +438,8 @@ func CascadeBundleRetired(ctx context.Context, actor, bundleID string) (CascadeR
 // target); sp/sr/tp/tr are the new fields. For every known user the closure
 // through the active rules is compared with the closure with old.ID's edge
 // replaced, on one snapshot under the lock (task 1.9), and the difference is
-// committed with the update, attributed to old.ID. Someone who ends up with
+// committed with the update, each row to the rule that reaches its role
+// (old.ID for its own target, the next rule down a chain). Someone who ends up with
 // the same access either way gets no rows.
 func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRule, sp, sr, tp, tr string) (CascadeResult, error) {
 	var changes []Change
@@ -451,7 +455,7 @@ func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRul
 				}
 			}
 			return rules
-		}, old.ID)
+		})
 		if err != nil {
 			return err
 		}
@@ -484,7 +488,7 @@ func CascadeRuleRetired(ctx context.Context, actor string, old models.MappingRul
 		var err error
 		changes, err = everyone(ctx, func(rules []models.MappingRule) []models.MappingRule {
 			return slices.DeleteFunc(rules, func(ru models.MappingRule) bool { return ru.ID == old.ID })
-		}, old.ID)
+		})
 		if err != nil {
 			return err
 		}

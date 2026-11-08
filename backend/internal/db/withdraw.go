@@ -225,7 +225,7 @@ func CancelledUnsentDetails(c models.QueuedChange, p EnqueueParams) ([]byte, err
 	}
 	b, err := json.Marshal(CancelledUnsent{
 		Cancelled: CancelledChange{Kind: kind, ProjectID: c.ProjectID, RoleKey: role, UserID: c.UserID,
-			InitiatedBy: c.InitiatedBy, QueuedAt: c.QueuedAt.UTC(), Reason: c.Reason},
+			InitiatedBy: c.InitiatedBy, QueuedAt: c.QueuedAt.UTC(), Reason: Said(c.Reason)},
 		Cause: CancelCause{Action: action, Via: via},
 	})
 	if err != nil {
@@ -310,6 +310,7 @@ func scanQueuedChanges(rows pgx.Rows, err error) ([]models.QueuedChange, error) 
 		if err := rows.Scan(&c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys, &c.Source, &c.SourceRef, &c.InitiatedBy, &c.Reason, &c.QueuedAt); err != nil {
 			return nil, err
 		}
+		c.Said = Said(c.Reason)
 		out = append(out, c)
 	}
 	return out, rows.Err()

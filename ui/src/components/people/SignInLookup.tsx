@@ -64,7 +64,7 @@ export function SignInLookup({
           <>
             <ActionOutcome
               word="Looked up"
-              outcome={{ kind: "applied", message, detail: "It's in Change history with your reason." }}
+              outcome={{ kind: "applied", message, detail: "It's on the Audit page with your reason." }}
             />
             {found.length > 0 && (
               <ul className="m-0 flex max-h-[320px] list-none flex-col overflow-auto rounded-inner border border-line p-0">
