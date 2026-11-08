@@ -109,6 +109,12 @@ export interface DrainPass {
   exhausted?: number;
   halted: boolean;
   reason?: string;
+  /**
+   * On a pass halted because its system did not answer: how many of that
+   * system's own changes it left waiting. A system with none is not halted at
+   * all. Absent when the count could not be read.
+   */
+  waiting?: number;
 }
 
 const KEYS = {
