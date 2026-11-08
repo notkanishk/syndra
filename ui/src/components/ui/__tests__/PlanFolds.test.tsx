@@ -95,7 +95,7 @@ describe("a grouped plan, before Apply", () => {
     open();
     expect(
       await screen.findByText(
-        "Apply sends 1 person's changes to Zitadel now. 1 person's changes wait for you to send. For 1, this only cancels a change that's waiting; nothing is sent.",
+        "Apply sends 1 change to Zitadel now. 1 waits for you to send. For 1, this only cancels a change that's waiting; nothing is sent.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel 2 and apply to 3 people" })).toBeEnabled();

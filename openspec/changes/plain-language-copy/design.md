@@ -338,8 +338,12 @@ change." and the sign-in lookup's "It's on the Audit page with your reason."
 **A revoke that only cancels is the cancel, said plainly.** Lede: "Given to
 Rohan on 3 Nov by Sam Lee, and still waiting for you to send." Body: "Nothing
 to take back. It hasn't reached Zitadel, so Rohan never had it. This cancels
-that give and sends nothing." Button: "Cancel the waiting give" ("Cancel the
-waiting change" for a bundle). Result: **Cancelled**, "The give of Member in
+that give and sends nothing." Title: "Cancel the waiting give of Member in
+Laser Lab?" (never "Revoke direct access to …", which is not the act). Button:
+"Cancel the waiting give" ("Cancel the waiting change" for a bundle); the
+dismiss beside it is "Keep it", never a second "Cancel". Once pressed, what
+the dialog said before stays as it was under the result: the act's own
+refetch never re-derives a warning or a lede (browser pass, 8 Nov). Result: **Cancelled**, "The give of Member in
 Laser Lab that was waiting is cancelled. Rohan never had it, so nothing goes
 to Zitadel." / "The Safety bundle that was waiting is cancelled. Nothing it
 carried had reached Rohan, so nothing goes to Zitadel.", then "Nothing for
@@ -361,14 +365,17 @@ after Apply. Folds, in this order, and a fold with nobody in it is not drawn:
 Counts: "1 person" / "4 people" (the dialog's own noun). The footer's
 before-line: "Every change goes to Zitadel when you apply." · "Every change
 waits for you to send. Nothing reaches Zitadel until you press Send on Pending
-changes." · "Apply sends 7 people's changes to Zitadel now. 4 people's changes
-wait for you to send." · then, with a row that only cancels, "For 1, this only
+changes." · "Apply sends 6 changes to Zitadel now. 3 wait for you to send."
+The before-line and the result clauses count changes (each row's roles that
+go and wait), never people: a person under the wait fold for one role still
+has the rest sent straight away (browser pass, 8 Nov; it said "7 people's
+changes"). The fold headings and the result word still count people. · then, with a row that only cancels, "For 1, this only
 cancels a change that's waiting; nothing is sent." / "For 2, this only cancels
 changes that are waiting; nothing is sent." · nothing to apply: "Nothing here
 would change, so there is nothing to apply." (said once, as the disabled
 button's reason). The result: the word ("Given to 11 people", "Given to 9 of
 11 people", "Revoked from …", "Extended for …"), then one clause per fold in
-fold order: "All 11 are in Zitadel now." / "7 are in Zitadel now." · "4 wait
+fold order, in changes: "All 11 are in Zitadel now." / "6 are in Zitadel now." · "3 wait
 for you to send." / "All 11 wait for you to send. Nothing has reached Zitadel
 yet." · "1 isn't in Zitadel yet; Syndra sends it again on its own." / "2
 aren't in Zitadel yet; Syndra sends them again on its own." · "Zitadel refused

@@ -386,6 +386,51 @@ func TestTheAddonDrainProbesBeforeItSpendsARetry(t *testing.T) {
 	}
 }
 
+// Browser pass, 8 Nov: with TrueNAS switched off and nothing of its own
+// queued, Send said "Not all sent. TrueNAS was skipped. Its changes are still
+// waiting" beside "Everything has reached Zitadel". A target with no rows was
+// not skipped; one with rows says how many it left waiting.
+func TestAnUnansweredTargetIsSkippedOnlyWhenItHasChangesWaiting(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		waiting int
+		err     error
+		halted  bool
+	}{
+		{"nothing of its own queued", 0, nil, false},
+		{"three of its own queued", 3, nil, true},
+		{"the count can't be read", 0, errors.New("db down"), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := stubAddonDrain(t)
+			h.reachable = false
+			t.Cleanup(swap(&claimPending, func(context.Context, string, int) ([]models.PendingPropagation, error) { return nil, nil }))
+			t.Cleanup(swap(&registeredAddons, func() []addons.Registration { return []addons.Registration{{Target: "truenas"}} }))
+			t.Cleanup(swap(&countPendingFor, func(_ context.Context, target string) (int, error) {
+				if target != "truenas" {
+					t.Fatalf("only the target that did not answer is counted, got %q", target)
+				}
+				return tc.waiting, tc.err
+			}))
+
+			res, err := Drain(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Halted != tc.halted {
+				t.Fatalf("halted = %v, want %v: %+v", res.Halted, tc.halted, res)
+			}
+			pass := res.Passes[len(res.Passes)-1]
+			if pass.Target != "truenas" || pass.Halted != tc.halted || pass.Waiting != tc.waiting {
+				t.Fatalf("the pass must say whether it halted and how many it left: %+v", pass)
+			}
+			if tc.halted && (res.Reason != "target_unreachable" || res.HaltedTarget != "truenas") {
+				t.Fatalf("a halt names its target and reason: %+v", res)
+			}
+		})
+	}
+}
+
 // 2.26/2.27 — a plan whose target moved underneath it is withheld, and the
 // refusal says which of the two things happened.
 //

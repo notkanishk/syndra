@@ -553,6 +553,19 @@ func ClaimDueRetries(ctx context.Context, target string, limit int) ([]models.Pe
 	return scanPropagations(rows)
 }
 
+// CountPendingForTarget counts one target's unresolved rows (pending or
+// in_flight). A drain asks it of a target that did not answer, so a target
+// with nothing of its own to send is not reported as skipped, and one that
+// has some says how many it left waiting (browser pass, 8 Nov).
+func CountPendingForTarget(ctx context.Context, target string) (int, error) {
+	const q = `SELECT COUNT(*) FROM propagation_outbox WHERE status IN ('pending','in_flight') AND target = $1`
+	var n int
+	if err := querier(ctx).QueryRow(ctx, q, target).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count pending for %s: %w", target, err)
+	}
+	return n, nil
+}
+
 // TargetsAwaitingDispatch lists active targets holding unresolved outbox rows,
 // excluding the one just drained.
 //

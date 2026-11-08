@@ -113,6 +113,44 @@ describe("a send with more than one connected system", () => {
     expect(out.detail).toMatch(/waiting for you to send/i);
   });
 
+  // Browser pass, 8 Nov: TrueNAS switched off with nothing of its own queued.
+  // The send now reports its pass as not halted, and the outcome is one true
+  // card: sent, nothing waiting, no system named as skipped.
+  it("a system that did not answer but had nothing waiting is not skipped", () => {
+    const res = result({
+      applied: 3,
+      halted: false,
+      passes: [
+        { target: "zitadel", applied: 3, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: false },
+        { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: false },
+      ],
+    });
+    const out = describeDrain(res);
+    expect(out).toEqual({ tone: "success", message: "3 sent." });
+    expect(outcomeFromDrain(res).kind).toBe("applied");
+  });
+
+  it("a skipped system with changes of its own says how many it left waiting", () => {
+    const pass = { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: true, reason: "target_unreachable" };
+    const res = (waiting: number) =>
+      result({
+        applied: 3,
+        halted: true,
+        reason: "target_unreachable",
+        halted_target: "truenas",
+        passes: [
+          { target: "zitadel", applied: 3, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: false },
+          { ...pass, waiting },
+        ],
+      });
+    expect(describeDrain(res(2))).toEqual({
+      tone: "warning",
+      message: "3 sent. TrueNAS was skipped.",
+      detail: "TrueNAS is not answering. Its 2 changes are still waiting for you to send, and nothing counts against the retry limit.",
+    });
+    expect(describeDrain(res(1)).detail).toMatch(/^TrueNAS is not answering\. Its 1 change is still waiting/);
+  });
+
   it("says nothing was sent when the only pass that could run did not", () => {
     const out = describeDrain(
       result({
