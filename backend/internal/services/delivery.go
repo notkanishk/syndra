@@ -70,6 +70,17 @@ func (d Delivery) ReasonFor(id string) string {
 	return ""
 }
 
+// Unsent counts the rows meant to go now that a halted send left behind with
+// no retry scheduled: they are not in Zitadel and nothing sends them again,
+// so the row's result must not count them as there. Zero when a retry holds
+// them (Drain.Retry says when) or every one landed.
+func (d Delivery) Unsent() int {
+	if d.Drain.Retry != nil {
+		return 0
+	}
+	return max(len(d.Sent)-d.Drain.Applied, 0)
+}
+
 // WaitingBesides counts the rows other than own held for the operator: what a
 // rule gave with the act that waits for Send.
 func (d Delivery) WaitingBesides(own string) int {

@@ -313,6 +313,7 @@ export function resultOutcome(
   let waiting = 0;
   let again = 0;
   let unsure = 0;
+  let didntGo = 0;
   for (const o of rows("go")) {
     const t = travels(o);
     inZitadel += Math.max(1, t.now + t.wait);
@@ -329,9 +330,12 @@ export function resultOutcome(
     } else if (listed && t.wait > 0) {
       waiting += t.wait;
       // The roles sent with it went, unless the send left them to a retry.
-      // ponytail: a send that halted with no retry scheduled still reads as
-      // role_waits on the row; exact needs the row to count its unsent roles.
-      if (!o.retry) inZitadel += t.now;
+      // A halt with no retry counts its own unsent roles (`unsent`).
+      if (!o.retry) {
+        const left = Math.min(o.unsent ?? 0, t.now);
+        inZitadel += t.now - left;
+        didntGo += left;
+      }
       else if (o.retry.state === "retrying") again += t.now;
       else unsure += t.now;
     } else {
@@ -346,7 +350,7 @@ export function resultOutcome(
     else unsure += n;
   }
 
-  const settled = again === 0 && unsure === 0 && refused === 0;
+  const settled = again === 0 && unsure === 0 && didntGo === 0 && refused === 0;
   const said: string[] = [];
   if (inZitadel > 0)
     said.push(
@@ -361,6 +365,7 @@ export function resultOutcome(
   }
   if (again === 1) said.push(`1 isn't in ${system} yet; Syndra sends it again on its own.`);
   else if (again > 1) said.push(`${again} aren't in ${system} yet; Syndra sends them again on its own.`);
+  if (didntGo > 0) said.push(`${didntGo} didn't go to ${system}.`);
   if (unsure > 0) said.push(`${unsure} ${unsure === 1 ? "isn't" : "aren't"} in ${system} yet.`);
   if (refused === 1) said.push(`${system} refused 1; the row says why.`);
   else if (refused > 1) said.push(`${system} refused ${refused}; each row says why.`);

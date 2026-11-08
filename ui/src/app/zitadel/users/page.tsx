@@ -719,7 +719,7 @@ function EditRolesDialog({
   // Each half is planned as on a person's page (task 1.9): the left-out
   // roles' removal plans and the plans for giving the new roles, which say what the
   // replace cancels before the press and go back with the write.
-  const removal = useGrantRemovalPreview(userId, grant.grantId, removes, removes.length > 0 && !done);
+  const removal = useGrantRemovalPreview(userId, grant.grantId, removes, removes.length > 0 && !done, adds);
   const consents = usePlanConsents(
     adds.map((roleKey) => ({ op: "give" as const, userId, projectId: grant.projectId, roleKey })),
     "replacing them",

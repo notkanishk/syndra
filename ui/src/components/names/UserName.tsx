@@ -4,6 +4,7 @@ import { NameLink, nameHref, useNameLinks } from "@/components/names/NameLink";
 import { Unresolved, UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { personOr } from "@/lib/names";
 
 interface UserNameProps {
   /** Zitadel user ID. */
@@ -69,10 +70,14 @@ export function UserName({ id, fallback = "—", showEmail = false, className = 
     // mono text in Advanced only (touch cannot open a tooltip, and a screenshot
     // carries what is rendered). It is never the label: an opaque subject id
     // where a name belongs reads as a bug to everyone who sees it.
+    // The copy guide's phrase for a person it can't name ("this person") sits
+    // inside a sentence: an id after it reads as the name ("Set by this person
+    // dev_admin", a development identity on staging), so it stands alone.
+    const phrase = fallback === personOr(null) || fallback === personOr(null, true);
     return (
       <Unresolved
         label={fallback === "—" ? UNKNOWN_ACCOUNT : fallback}
-        id={id}
+        id={phrase ? undefined : id}
         idLabel="account id"
         href={link ? (href ?? nameHref.user(id)) : undefined}
         className={`${className} ${tint}`}

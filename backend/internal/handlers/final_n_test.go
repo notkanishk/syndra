@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 	"syndra/internal/services"
 )
@@ -135,5 +136,34 @@ func TestPartlyRecordedMessage_FollowsTheDrainSwitch(t *testing.T) {
 		if strings.Contains(off, "on its own") || !strings.Contains(off, "until you press Send") {
 			t.Fatalf("nothing goes on its own here: %q", off)
 		}
+	}
+}
+
+// A row with straight-away and waiting roles whose send halted with no retry
+// scheduled says how many of its straight-away roles did not go; with a retry
+// holding them, or when they all landed, none.
+func TestSettlePlannedRow_CountsTheRolesAHaltedSendLeft(t *testing.T) {
+	ch := services.Change{Writes: []services.Write{{OutboxID: "a"}, {OutboxID: "b"}}}
+	halted := services.Delivery{Sent: []string{"a", "b"}, Waiting: []string{"w"},
+		Reason: map[string]string{"w": db.WaitReasonRoleWaits, "a": db.WaitReasonHalted("zitadel_offline"), "b": db.WaitReasonHalted("zitadel_offline")}}
+	halted.Drain.Halted = true
+	out := services.BulkOutcome{Effect: services.EffectApply, Goes: []string{"A", "B"}, Waits: []string{"W"}}
+	settlePlannedRow(context.Background(), &out, ch, halted, services.BulkOpAssignBundle)
+	if out.Effect != services.EffectQueued || out.Unsent != 2 {
+		t.Fatalf("halted, no retry: %+v", out)
+	}
+	retrying := halted
+	retrying.Drain.Retry = &extcall.RetryState{}
+	out = services.BulkOutcome{Effect: services.EffectApply}
+	settlePlannedRow(context.Background(), &out, ch, retrying, services.BulkOpAssignBundle)
+	if out.Unsent != 0 {
+		t.Fatalf("a retry holds them: %+v", out)
+	}
+	landed := services.Delivery{Sent: []string{"a", "b"}, Waiting: []string{"w"}, Reason: map[string]string{"w": db.WaitReasonRoleWaits}}
+	landed.Drain.Applied = 2
+	out = services.BulkOutcome{Effect: services.EffectApply}
+	settlePlannedRow(context.Background(), &out, ch, landed, services.BulkOpAssignBundle)
+	if out.Unsent != 0 {
+		t.Fatalf("all landed: %+v", out)
 	}
 }

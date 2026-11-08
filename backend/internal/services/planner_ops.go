@@ -315,7 +315,7 @@ func planRevoke(ch Change, a Action, s PlanSnapshot, person db.PersonAccess) Cha
 		item := s.Drift[a.DriftID]
 		keys, grant = item.RoleKeys, item.ZitadelGrantID
 	}
-	held := effectiveClosure(baseFrom(person, ""), s.Access.Rules)
+	held := effectiveClosure(baseFrom(a.withAlongside(person), ""), s.Access.Rules)
 	var writes []db.EnqueueParams
 	var gone, kept []roleKey
 	for _, rk := range keys {
