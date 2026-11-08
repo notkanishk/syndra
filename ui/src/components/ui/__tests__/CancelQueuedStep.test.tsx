@@ -32,7 +32,7 @@ function change(over: Partial<QueuedChange> = {}): QueuedChange {
     role_keys: ["member"],
     source: "direct",
     initiated_by: "op-2",
-    reason: "left the course",
+    said: "left the course",
     queued_at: hoursAgo(2),
     ...over,
   };
@@ -177,7 +177,7 @@ describe("the step pushed inside the host sheet", () => {
       <Host
         write={refusedOnce([
           change({ id: idOf(1) }),
-          change({ id: idOf(2), initiated_by: "op-3", reason: "duplicate" }),
+          change({ id: idOf(2), initiated_by: "op-3", said: "duplicate" }),
         ])}
       />,
     );
@@ -200,7 +200,7 @@ describe("the step pushed inside the host sheet", () => {
   });
 
   it("no reason: says so in faint and tells you whom to ask", async () => {
-    render(<Host write={refusedOnce([change({ reason: undefined })])} />);
+    render(<Host write={refusedOnce([change({ said: undefined })])} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByText("Sam gave no reason.")).toBeInTheDocument();
     expect(screen.getByText(/If you're unsure why Sam queued it, keep it and ask Sam\./)).toBeInTheDocument();
@@ -208,7 +208,7 @@ describe("the step pushed inside the host sheet", () => {
 
   it("a longer refusal after going ahead: the new one is first, labelled, counted, and nothing was changed", async () => {
     const first = change({ id: idOf(1) });
-    const added = change({ id: idOf(2), initiated_by: "op-3", initiated_by_name: "Lena Ortiz", reason: "wrong person", queued_at: hoursAgo(0), new: true });
+    const added = change({ id: idOf(2), initiated_by: "op-3", initiated_by_name: "Lena Ortiz", said: "wrong person", queued_at: hoursAgo(0), new: true });
     const write = refusedOnce([first], [first, added]);
     render(<Host write={write} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));

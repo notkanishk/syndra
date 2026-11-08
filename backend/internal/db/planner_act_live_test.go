@@ -93,6 +93,16 @@ func TestPlannerAct_Give(t *testing.T) {
 	if err := db.PG.QueryRow(f.ctx, `SELECT reason FROM direct_role_grants WHERE user_id = $1 AND zitadel_role_key = $2`, f.alice, f.trains).Scan(&reason); err != nil || reason != "capstone" {
 		t.Fatalf("the ledger row keeps the operator's reason: %q %v", reason, err)
 	}
+	// And where the change is shown (task 1.8a): its audit line and every row
+	// it queued, so Pending changes can quote it.
+	if said := auditReason(t, f.ctx, f.alice, "direct_grant.upserted"); said != "capstone" {
+		t.Errorf("the give's audit row says %q, want the operator's reason", said)
+	}
+	for _, id := range outboxIDs(written) {
+		if _, why := rowWaitAndReason(t, f.ctx, id); why != "capstone" {
+			t.Errorf("row %s carries %q, want the operator's reason", id, why)
+		}
+	}
 }
 
 func TestPlannerAct_RemoveGrant(t *testing.T) {

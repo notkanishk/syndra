@@ -103,8 +103,8 @@ function CancelledChange({ entry, details }: { entry: AuditEntry; details: Cance
       <span className="text-faint">
         Queued by {queuer ? <UserName id={queuer} /> : "Syndra"} · {formatRelative(c.queued_at)}
       </span>
-      {c.reason ? (
-        <span>&ldquo;{c.reason}&rdquo;</span>
+      {entry.said ? (
+        <span>&ldquo;{entry.said}&rdquo;</span>
       ) : queuer ? (
         <span className="text-faint">
           <FirstName id={queuer} /> gave no reason.
@@ -224,7 +224,34 @@ function AnswerSentence({ entry }: { entry: AuditEntry }) {
   );
 }
 
+/**
+ * The events whose reason is the operator's own words: a bundle given or
+ * taken, a direct grant given, extended or removed, a sign-in lookup. Other
+ * events' details carry Syndra's words, never quoted as someone's.
+ */
+const SAID = /^(bundle\.(assigned|unassigned)|direct_grant\.(upserted|revoked|replaced|removed)|sign_ins\.looked_up)$/;
+
+/**
+ * The operator's reason on an event, if they gave one (task 1.8a): the
+ * backend's `said`, which is never one of Syndra's own labels.
+ */
+export function saidReason(entry: AuditEntry): string | undefined {
+  return SAID.test(entry.action) && entry.said ? entry.said : undefined;
+}
+
+/** The event in words, then the operator's reason quoted under it when they gave one. */
 export function EventSentence({ entry }: { entry: AuditEntry }) {
+  const reason = saidReason(entry);
+  if (!reason) return <Sentence entry={entry} />;
+  return (
+    <span className="flex flex-col gap-0.5">
+      <Sentence entry={entry} />
+      <span className="text-ink">&ldquo;{reason}&rdquo;</span>
+    </span>
+  );
+}
+
+function Sentence({ entry }: { entry: AuditEntry }) {
   const { verb, template, destructive } = describeAction(entry.action);
   const tone = destructive ? "font-semibold text-danger-text" : undefined;
 

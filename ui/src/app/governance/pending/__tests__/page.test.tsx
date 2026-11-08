@@ -200,6 +200,38 @@ describe("Pending changes · caused by", () => {
     expect(screen.queryByText(/R_rule/)).not.toBeInTheDocument();
   });
 
+  it("names the role kept on the row, so editing the rule later doesn't rename it (task 1.6a)", () => {
+    // The rule now starts from Visitor; the row was written when it started from Trained.
+    rules.data = [
+      {
+        id: "rule-1111-2222",
+        source_project: "p1",
+        source_role: "visitor",
+        target_project: "p1",
+        target_role: "advanced",
+        holder_count: 3,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    ];
+    pending.data = [
+      row({ source: "rule", source_ref: "rule-1111-2222", rule_from: { project_id: "p1", role_key: "trained" } }),
+    ];
+    renderPending();
+
+    expect(screen.getByText(/^Rule from Trained in/)).toBeInTheDocument();
+    expect(screen.queryByText(/Visitor/)).not.toBeInTheDocument();
+  });
+
+  it("says Automatic rule for a rule since retired, even with the role kept on the row", () => {
+    pending.data = [
+      row({ op_type: "revoke", source: "rule", source_ref: "rule-gone", rule_from: { project_id: "p1", role_key: "trained" } }),
+    ];
+    renderPending();
+
+    expect(screen.getByText("Automatic rule")).toBeInTheDocument();
+    expect(screen.queryByText(/Rule from/)).not.toBeInTheDocument();
+  });
+
   it("never leaves the handle as the only label, even before the lookup resolves", () => {
     pending.data = [row({ source: "bundle", source_ref: "bundle-9999-0000" })];
     renderPending();
@@ -462,5 +494,47 @@ describe("Pending changes · board layout", () => {
     expect(screen.getByText("Nothing is waiting for you to send.")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /Search pending changes/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Send / })).toBeDisabled();
+  });
+});
+
+/**
+ * The operator's reason, where the change is kept (task 1.8a): quoted once on
+ * each Zitadel row that has one, nothing when empty. A connected system's row
+ * says its reason as its change, unquoted.
+ */
+describe("Pending changes · the reason", () => {
+  it("quotes the operator's reason on every row of the change, once each", () => {
+    pending.data = [
+      row({ id: "o1", source: "bundle", source_ref: "b1", reason: "term start", said: "term start" }),
+      row({ id: "o2", role_keys: ["advanced"], reason: "term start", said: "term start" }),
+    ];
+    renderPending();
+    expect(screen.getAllByText("“term start”")).toHaveLength(2);
+  });
+
+  // The reason column also holds Syndra's own labels; the backend's `said` leaves them out.
+  it("never quotes a label of Syndra's kept as the reason", () => {
+    pending.data = [
+      row({ id: "o1", op_type: "revoke", source: "direct", source_ref: "g1", reason: "Direct access removal" }),
+      row({ id: "o2", role_keys: ["advanced"], reason: "Mapping rule cascade" }),
+    ];
+    renderPending();
+    expect(screen.queryByText(/“/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Direct access removal|Mapping rule cascade/)).not.toBeInTheDocument();
+  });
+
+  it("says nothing where none was given", () => {
+    pending.data = [row({ id: "o1", source: "direct", source_ref: "" })];
+    renderPending();
+    expect(screen.queryByText(/“/)).not.toBeInTheDocument();
+  });
+
+  it("leaves a connected system's reason as its change, unquoted", () => {
+    pending.data = [
+      row({ id: "o1", op_type: "apply", target: "truenas", project_id: "", role_keys: [], reason: "home quota raised" }),
+    ];
+    renderPending();
+    expect(screen.getByText(/home quota raised/)).toBeInTheDocument();
+    expect(screen.queryByText(/“home quota raised”/)).not.toBeInTheDocument();
   });
 });

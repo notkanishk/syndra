@@ -34,8 +34,6 @@ jobs:
       # working copy of it (what ZITADEL_FAKE_WORLD in staging's .env names).
       PROD_WORLD: /var/lib/syndra-staging/prod-world.json
       WORLD: /var/lib/syndra-staging/world/world.json
-      # Every docker compose call here layers the staging override.
-      COMPOSE_FILE: docker-compose.yml:docker-compose.staging.yml
     steps:
       - name: Check out ${{ inputs.ref }} into /opt/syndra
         run: |
@@ -46,6 +44,13 @@ jobs:
           if git rev-parse -q --verify "origin/$ref^{commit}" >/dev/null; then ref="origin/$ref"; fi
           git checkout --force --detach "$ref"
           echo "staging now at $(git rev-parse --short HEAD): $(git log -1 --format=%s)"
+          # Every later docker compose call layers the staging override, when the
+          # checked-out ref has one (an experiment from an older branch may not).
+          if [ -f docker-compose.staging.yml ]; then
+            echo "COMPOSE_FILE=docker-compose.yml:docker-compose.staging.yml" >> "$GITHUB_ENV"
+          else
+            echo "::warning::this ref has no docker-compose.staging.yml; the stand-in Zitadel is off for this deploy"
+          fi
 
       # Production's data, last night's copy, so every migration and every
       # read runs against real rows before it runs on production. It also

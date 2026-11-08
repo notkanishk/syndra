@@ -76,9 +76,10 @@ func TestTheMemberFeedNamesOnlyACancelledRemoval(t *testing.T) {
 	if strings.Contains(branch, "initiated_by") || strings.Contains(branch, "'reason'") {
 		t.Errorf("the member's cancelled_removal must not read who queued it or why: %s", branch)
 	}
-	// Every UNION branch has the same 14 columns; the outbox branch once had 12,
-	// which fails at runtime, so it pads the two ends it has no value for.
-	if !strings.Contains(myChangesSQL, "NULL::timestamptz,\n\t       NULL::timestamptz\n\t  FROM propagation_outbox o") {
+	// Every UNION branch has the same 15 columns; the outbox branch once had 12,
+	// which fails at runtime, so it pads the two ends it has no value for, then
+	// the role that set a rule's row off (task 1.6a).
+	if !strings.Contains(myChangesSQL, "NULL::timestamptz,\n\t       NULL::timestamptz,\n\t       o.payload_json->'rule_from'\n\t  FROM propagation_outbox o") {
 		t.Error("the outbox branch must pad ended_before and ends_after")
 	}
 }

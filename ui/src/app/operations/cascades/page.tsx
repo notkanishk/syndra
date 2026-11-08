@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { BundleName, RoleInPlace, RoleRef, UserName } from "@/components/names";
 import { humanizeKey } from "@/lib/format";
 import { useMappingRules, type MappingRuleRow } from "@/lib/queries/useMappingRules";
-import { useCascadeGroups, type CascadeGroupRow } from "@/lib/queries/useConfirmationMode";
+import { useCascadeGroups, type CascadeGroupRow, type CascadeSummaryRow } from "@/lib/queries/useConfirmationMode";
 import { Relative } from "@/components/ui/Time";
 
 /**
@@ -125,7 +125,7 @@ function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: Ma
         {group.waiting + group.failed > 0 && <ArrowLink href="/governance/pending">Pending changes</ArrowLink>}
       </div>
 
-      {group.reason && <p className="row-divider px-5 py-3 text-[14px] leading-[1.55] text-ink">“{group.reason}”</p>}
+      {group.said && <p className="row-divider px-5 py-3 text-[14px] leading-[1.55] text-ink">“{group.said}”</p>}
 
       <div className="row-divider flex flex-wrap gap-x-5 gap-y-1.5 px-5 py-3 text-[13.5px]">
         {(one ? group.writes : group.writes.slice(0, 6)).map((write) => (
@@ -134,8 +134,10 @@ function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: Ma
             {(write.role_keys ?? []).map((key) => (
               <RoleRef key={key} projectId={write.project_id} roleKey={key} className="mr-2" />
             ))}
-            {group.source !== "rule" && write.source === "rule" && (
-              <RuleFrom rule={rules?.find((entry) => entry.id === write.source_ref)} />
+            {/* A rule's write inside a bundle's change, or one step further down
+                a chain than the edited rule (task 1.6a). */}
+            {write.source === "rule" && (group.source !== "rule" || write.source_ref !== group.source_ref) && (
+              <RuleFrom write={write} rule={rules?.find((entry) => entry.id === write.source_ref)} />
             )}
           </span>
         ))}
@@ -163,15 +165,19 @@ function CascadeCard({ group, rules, one }: { group: CascadeGroupRow; rules?: Ma
 }
 
 /**
- * A write a rule gave inside a bundle's change, with the role that set it off
- * (A-21 §Q3): "by the automatic rule from Member in Laser Lab".
+ * A write a rule gave inside another act's change, with the role that set it
+ * off (A-21 §Q3): "by the automatic rule from Member in Laser Lab". The role
+ * is the one kept on the write (task 1.6a), so editing the rule later doesn't
+ * rename it; a write from before it was kept reads the rule's own. A rule
+ * since retired, or unknown, is "by an automatic rule".
  */
-function RuleFrom({ rule }: { rule?: MappingRuleRow }) {
+function RuleFrom({ write, rule }: { write: CascadeSummaryRow; rule?: MappingRuleRow }) {
+  const from = write.rule_from ?? (rule && { project_id: rule.source_project, role_key: rule.source_role });
   return (
     <span className="text-faint">
-      {rule ? (
+      {rule && from ? (
         <>
-          by the automatic rule from <RoleInPlace projectId={rule.source_project} roleKey={rule.source_role} />
+          by the automatic rule from <RoleInPlace projectId={from.project_id} roleKey={from.role_key} />
         </>
       ) : (
         "by an automatic rule"

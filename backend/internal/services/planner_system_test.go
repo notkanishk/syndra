@@ -48,14 +48,17 @@ func TestSystemChange_WelcomeBundle(t *testing.T) {
 	}
 }
 
-// A rule's own edit: every row is the edited rule's (1.6a), only the people
-// whose closure moves get any, and a role still reached another way stays.
+// A rule's own edit: a one-step rule's row is the edited rule's (a new one's
+// id is stamped by its insert), only the people whose closure moves get any,
+// and a role still reached another way stays.
 func TestSystemChange_RuleEdit(t *testing.T) {
 	old := models.MappingRule{ID: "r1", SourceProject: "pLab", SourceRole: "member", TargetProject: "pWiki", TargetRole: "editor"}
 	base := map[roleKey]bool{member: true}
 	s := PlanSnapshot{}
 
-	created := systemChange("u1", db.PersonAccess{}, s, base, base, nil, []models.MappingRule{old}, "rule", "")
+	fresh := old
+	fresh.ID = ""
+	created := systemChange("u1", db.PersonAccess{}, s, base, base, nil, []models.MappingRule{fresh}, "rule", "")
 	if got := systemWrites(created); got != "add pWiki/editor rule: straight_away" {
 		t.Fatalf("create: %s", got)
 	}
@@ -71,6 +74,67 @@ func TestSystemChange_RuleEdit(t *testing.T) {
 	both := map[roleKey]bool{member: true, {projectID: "pWiki", roleKey: "editor"}: true}
 	if ch := systemChange("u1", db.PersonAccess{}, s, both, both, []models.MappingRule{old}, nil, "rule", "r1"); len(ch.Writes) != 0 {
 		t.Fatalf("still held another way: %s", systemWrites(ch))
+	}
+}
+
+// chainWrites is each write with the rule its row names and the role kept on
+// it as the one that set it off: "add pLab/trained r1<member".
+func chainWrites(ch Change) string {
+	var out []string
+	for _, w := range ch.Writes {
+		from := "-"
+		if w.RuleFrom != nil {
+			from = w.RuleFrom.RoleKey
+		}
+		out = append(out, w.OpType+" "+w.ProjectID+"/"+w.RoleKeys[0]+" "+w.Source+":"+w.SourceRef+"<"+from)
+	}
+	return strings.Join(out, " | ")
+}
+
+// A rule's own edit in a chain (task 1.6a): each row names the rule that
+// reaches its role, the hop one step before it, so Pending changes says
+// "Rule from" the role before it, never the edited rule's first role for a
+// role two or three steps down.
+func TestSystemChange_RuleEditNamesEachHop(t *testing.T) {
+	supervisor, visitor := roleKey{projectID: "pLab", roleKey: "supervisor"}, roleKey{projectID: "pLab", roleKey: "visitor"}
+	rule := func(id string, from, to roleKey) models.MappingRule {
+		return models.MappingRule{ID: id, SourceProject: from.projectID, SourceRole: from.roleKey, TargetProject: to.projectID, TargetRole: to.roleKey}
+	}
+	r1, r2, r3 := rule("r1", member, trained), rule("r2", trained, advanced), rule("r3", advanced, supervisor)
+	fresh := r1
+	fresh.ID = "" // not yet created: the insert stamps its id
+	base := map[roleKey]bool{member: true}
+	plan := func(before, after []models.MappingRule) string {
+		return chainWrites(systemChange("u1", db.PersonAccess{}, PlanSnapshot{}, base, base, before, after, "rule", ""))
+	}
+
+	for _, c := range []struct {
+		name          string
+		before, after []models.MappingRule
+		want          string
+	}{
+		{"create, two hops", []models.MappingRule{r2}, []models.MappingRule{r2, fresh},
+			"add pLab/advanced rule:r2<trained | add pLab/trained rule:<member"},
+		{"create, three hops", []models.MappingRule{r2, r3}, []models.MappingRule{r2, r3, fresh},
+			"add pLab/advanced rule:r2<trained | add pLab/supervisor rule:r3<advanced | add pLab/trained rule:<member"},
+		{"retire, two hops", []models.MappingRule{r1, r2}, []models.MappingRule{r2},
+			"revoke pLab/advanced rule:r2<trained | revoke pLab/trained rule:r1<member"},
+		{"retire, three hops", []models.MappingRule{r1, r2, r3}, []models.MappingRule{r2, r3},
+			"revoke pLab/advanced rule:r2<trained | revoke pLab/supervisor rule:r3<advanced | revoke pLab/trained rule:r1<member"},
+		// An edit of r1's target: what it gave goes, named by r1 as it was
+		// (from member); what it gives now comes, named by r1 as it is.
+		{"edit, two hops", []models.MappingRule{r1, r2}, []models.MappingRule{rule("r1", member, supervisor), r2},
+			"add pLab/supervisor rule:r1<member | revoke pLab/advanced rule:r2<trained | revoke pLab/trained rule:r1<member"},
+		{"edit, three hops", []models.MappingRule{r1, r2, r3}, []models.MappingRule{rule("r1", member, visitor), r2, r3},
+			"add pLab/visitor rule:r1<member | revoke pLab/advanced rule:r2<trained | revoke pLab/supervisor rule:r3<advanced | revoke pLab/trained rule:r1<member"},
+		// An edit of r1's first role, to one they don't hold: r1 as it was
+		// names the rows it took back, each later hop its own rule.
+		{"edit the first role", []models.MappingRule{r1, r2}, []models.MappingRule{rule("r1", visitor, trained), r2},
+			"revoke pLab/advanced rule:r2<trained | revoke pLab/trained rule:r1<member"},
+	} {
+		if got := plan(c.before, c.after); got != c.want {
+			t.Errorf("%s\n got %s\nwant %s", c.name, got, c.want)
+		}
 	}
 }
 
