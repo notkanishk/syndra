@@ -310,8 +310,13 @@ function DirectDialog({
   const [stale, setStale] = useState(false);
   // The give never reached Zitadel: the dialog is the cancel, said plainly, and
   // nothing is sent. The plan says so; until it is read, the source does.
-  const cancelOnly = consent.plan ? consent.plan.delivery === "none" : Boolean(source?.queued);
-  const waitingGive = consent.cancels.find((c) => c.op_type !== "revoke");
+  const held = useHeldAtPress({
+    cancelOnly: consent.plan ? consent.plan.delivery === "none" : Boolean(source?.queued),
+    cancels: consent.cancels,
+    rules: consent.rules,
+  });
+  const { cancelOnly, cancels, rules } = held.view;
+  const waitingGive = cancels.find((c) => c.op_type !== "revoke");
   const actLabel = cancelOnly ? "Cancel the waiting give" : "Revoke access";
   // A revoke that also cancels someone's waiting change asks first: the press
   // pushes the step, filled from the plan. Keep it comes back here as it was.
@@ -326,7 +331,12 @@ function DirectDialog({
       <PushedStep step={step}>
       <ModalHeader
         chip={<SourceChip kind="direct" />}
-        title={`Revoke direct access to ${roleLabel}?`}
+        // Titled as the act: cancelling a give that never went is not a revoke.
+        title={
+          cancelOnly
+            ? `Cancel the waiting give of ${shown.role(removal.projectId, removal.roleKey)} in ${removal.projectName}?`
+            : `Revoke direct access to ${roleLabel}?`
+        }
         titleId="removal-title"
         lede={
           cancelOnly && waitingGive
@@ -391,11 +401,11 @@ function DirectDialog({
               </span>
             </>
           )}
-          {consent.cancels.length > 0 && (
-            <span className="mt-1.5 block text-[14px] text-muted">{foretell("Revoking it", consent.cancels)}</span>
+          {cancels.length > 0 && (
+            <span className="mt-1.5 block text-[14px] text-muted">{foretell("Revoking it", cancels)}</span>
           )}
-          {consent.rules.length > 0 && (
-            <span className="mt-1.5 block text-[14px] text-muted">{consent.rules.join(" ")}</span>
+          {rules.length > 0 && (
+            <span className="mt-1.5 block text-[14px] text-muted">{rules.join(" ")}</span>
           )}
         </div>
         )}
@@ -412,7 +422,9 @@ function DirectDialog({
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
-        cancel={succeeded(outcome) ? undefined : { onClick: onClose }}
+        // Beside "Cancel the waiting give", a dismiss called Cancel is a second
+        // cancel: it says what it keeps, as the cancel step does.
+        cancel={succeeded(outcome) ? undefined : { onClick: onClose, label: cancelOnly ? "Keep it" : undefined }}
         note={
           step.note ??
           // Two causes, and they were reported as one. "This role was not given
@@ -451,15 +463,19 @@ function DirectDialog({
             reason={blocked ? undefined : consent.hold}
             isPending={remove.isPending}
             onClick={async () => {
+              held.hold();
               try {
-                const result = await step.confirm(cancelOnly ? [] : consent.cancels, () =>
+                const result = await step.confirm(cancelOnly ? [] : cancels, () =>
                   remove.mutateAsync({ userId: userId!, grantId: removal.grantId!, seen: consent.seen }),
                 );
-                if (result === KEPT) return;
+                if (result === KEPT) {
+                  held.release();
+                  return;
+                }
                 setStale(false);
                 if (cancelOnly) {
                   // The give leaves the queue; the rail follows the answer.
-                  if (client) settleIndicators(client, { pending_propagation: -Math.max(1, consent.cancels.length) });
+                  if (client) settleIndicators(client, { pending_propagation: -Math.max(1, cancels.length) });
                   setWord("Cancelled");
                   setOutcome({
                     kind: "applied",
@@ -475,6 +491,7 @@ function DirectDialog({
                 // about somebody's access.
                 setOutcome(removalOutcome(result, roleLabel, shown, auto));
               } catch (error) {
+                held.release();
                 // Their access moved since the plan was read: nothing was written.
                 if (isStale(error)) {
                   setStale(true);
@@ -495,6 +512,18 @@ function DirectDialog({
 }
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+
+/**
+ * What the dialog read before the press, held from the press on (browser
+ * pass, 8 Nov). The act's own refetch lands before its answer, and
+ * re-deriving from it put "will lose this role" above "Cancelled" and turned
+ * the lede into another story. Let go when the act did not go (kept, stale,
+ * an error), so the next press reads the world afresh.
+ */
+function useHeldAtPress<T>(live: T): { view: T; hold: () => void; release: () => void } {
+  const [held, setHeld] = useState<{ value: T } | null>(null);
+  return { view: held ? held.value : live, hold: () => setHeld({ value: live }), release: () => setHeld(null) };
+}
 
 /**
  * Bundle removal. Two explicit lists — what they lose, and what they keep and
@@ -531,7 +560,11 @@ function BundleDialog({
   const foretell = useForetell();
   const [stale, setStale] = useState(false);
   // Nothing it carries reached them: the dialog is the cancel, and nothing is sent.
-  const cancelOnly = consent.plan ? consent.plan.delivery === "none" : Boolean(source.queued);
+  const held = useHeldAtPress({
+    cancelOnly: consent.plan ? consent.plan.delivery === "none" : Boolean(source.queued),
+    cancels: consent.cancels,
+  });
+  const { cancelOnly, cancels } = held.view;
   const actLabel = cancelOnly ? "Cancel the waiting change" : "Remove bundle";
   const step = useCancelStep({
     host: `Remove the ${bundleName} bundle from ${subject}`,
@@ -601,7 +634,7 @@ function BundleDialog({
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
-        cancel={succeeded(outcome) ? undefined : { onClick: onClose }}
+        cancel={succeeded(outcome) ? undefined : { onClick: onClose, label: cancelOnly ? "Keep it" : undefined }}
         // A bundle whose grants are still waiting says nothing more about them
         // here: it is the cancel. One that also cancels someone else's waiting
         // change says so before the press, and the press pushes the step.
@@ -613,8 +646,8 @@ function BundleDialog({
             <>
               {(!outcome && waits) ||
                 "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."}
-              {!outcome && consent.cancels.length > 0 && (
-                <span className="block">{foretell("Removing it", consent.cancels)}</span>
+              {!outcome && cancels.length > 0 && (
+                <span className="block">{foretell("Removing it", cancels)}</span>
               )}
             </>
           ))
@@ -651,11 +684,15 @@ function BundleDialog({
                   : consent.hold
             }
             onClick={async () => {
+              held.hold();
               try {
-                const result = await step.confirm(cancelOnly ? [] : consent.cancels, () =>
+                const result = await step.confirm(cancelOnly ? [] : cancels, () =>
                   removeBundle.mutateAsync({ bundleId: source.bundle_id!, seen: consent.seen }),
                 );
-                if (result === KEPT) return;
+                if (result === KEPT) {
+                  held.release();
+                  return;
+                }
                 setStale(false);
                 if (cancelOnly) {
                   setWord("Cancelled");
@@ -694,6 +731,7 @@ function BundleDialog({
                       : "The roles it supplied are revoked once you send Pending changes, except any that another source still gives.",
                 });
               } catch (error) {
+                held.release();
                 // Their access moved since the plan was read: nothing was written.
                 if (isStale(error)) {
                   setStale(true);
