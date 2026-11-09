@@ -3,7 +3,7 @@
     "openlore": {
       "command": "bunx",
       "args": [
-        "openlore@2.1.7",
+        "openlore@3.5.0",
         "mcp",
         "--preset",
         "substrate"
