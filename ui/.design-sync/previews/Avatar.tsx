@@ -25,7 +25,7 @@ export const WithName = () => (
 /** A single name gives two letters; a missing one leaves the shape blank. */
 export const SingleAndMissing = () => (
   <div style={row}>
-    <Avatar name="Priyanka" />
+    <Avatar name="Bayley" />
     <Avatar name={null} />
   </div>
 );

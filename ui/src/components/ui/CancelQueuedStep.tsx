@@ -51,7 +51,7 @@ import { personOr, roleName } from "@/lib/names";
 export const KEPT = Symbol("kept");
 
 export interface CancelStepOptions {
-  /** The host's name, shown as the header chip: "Give Rohan Mehta a role". */
+  /** The host's name, shown as the header chip: "Give Liv Morgan a role". */
   host: string;
   /** What goes ahead, finishing "Cancel it and …": "give Member", "remove", "approve". */
   goAhead: string;
