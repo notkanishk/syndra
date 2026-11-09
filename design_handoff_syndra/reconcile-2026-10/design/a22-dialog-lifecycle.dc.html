@@ -54,7 +54,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">2 · Cancelling something unsent: the same sheet, quiet</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The give never reached Zitadel, so nobody loses anything. The title changes with the act (Cancel the waiting give, no question mark), the body is one neutral line, the act is accent, and the dismiss is Keep it: two buttons never share a verb. The first frame is what staging shows today: a Revoke title over a cancel, two Cancels, and a red pre-act warning left standing above a green result.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Community in Navidrome never reached Zitadel, so nobody loses anything. The title is the act ("Cancel giving Community in Navidrome to Avani?", owner, 8 Nov: give is only a verb), the body is one neutral line, the act is accent, and the dismiss is Keep it waiting: two buttons never share a verb. The first frame is what staging shows today: a Revoke title over a cancel, two Cancels, and a red pre-act warning left standing above a green result.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ canFrames }}" as="f" hint-placeholder-count="5">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -200,9 +200,9 @@ class Component extends DCLogic {
       },
       can: {
         today: { chip: "Direct access", title: "Revoke direct access to Navidrome / Community?", lede: "Given to Avani on 3 Nov by Kanishk Singh, and still waiting for you to send.", what: true, whatLead: "Avani Sood will lose this role.", whatRest: "No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel. Revocations send on their own, within a minute.", result: true, word: "Cancelled", outcome: { kind: "applied", message: "The give of Community in Navidrome that was waiting is cancelled. Avani never had it, so nothing goes to Zitadel.", next: "Nothing for you to do." }, close: true },
-        before: { chip: "Direct access", title: "Cancel the waiting give", lede: "Given to Avani Sood on 3 Nov by Kanishk Singh, and still waiting for you to send.", quiet: true, note: "Nothing is sent. Change history records the give and its cancel.", cancel: { onClick: noop, label: "Keep it" }, act: "Cancel the waiting give", variant: "accent" },
-        pressing: { chip: "Direct access", title: "Cancel the waiting give", lede: "Given to Avani Sood on 3 Nov by Kanishk Singh, and still waiting for you to send.", quiet: true, forecast: "Will be cancelled", cancel: { onClick: noop, label: "Keep it", disabled: true }, act: "Cancel the waiting give", variant: "accent", busy: true },
-        done: { chip: "Direct access", title: "Cancel the waiting give", result: true, word: "Cancelled", outcome: { kind: "applied", message: "The give of Community in Navidrome that was waiting is cancelled. Avani never had it, so nothing goes to Zitadel.", next: "Nothing for you to do." } },
+        before: { chip: "Direct access", title: "Cancel giving Community in Navidrome to Avani?", lede: "Waiting for you to send since 3 Nov, queued by Kanishk Singh.", quiet: true, note: "Avani never had it, so nothing is sent to Zitadel.", cancel: { onClick: noop, label: "Keep it waiting" }, act: "Cancel giving it", variant: "accent" },
+        pressing: { chip: "Direct access", title: "Cancel giving Community in Navidrome to Avani?", lede: "Waiting for you to send since 3 Nov, queued by Kanishk Singh.", quiet: true, forecast: "Will be cancelled", cancel: { onClick: noop, label: "Keep it waiting", disabled: true }, act: "Cancel giving it", variant: "accent", busy: true },
+        done: { chip: "Direct access", title: "Cancel giving Community in Navidrome to Avani?", result: true, word: "Cancelled", outcome: { kind: "applied", message: "Community in Navidrome won't be given to Avani. It never reached Zitadel.", next: "Nothing for you to do." } },
       },
     };
     const picked = (dialogs[kind] && dialogs[kind][moment]) || dialogs.rev.before;
@@ -231,7 +231,7 @@ class Component extends DCLogic {
     const P = (sheet, dismiss, act, variant, today, why) => ({ sheet, dismiss, act, variant, today, why });
     const pairs = [
       P("Revoke a role", "Keep it", "Revoke this role", "dangerConfirm", "Cancel · Revoke access", "She loses access, so the dismiss says what stays. The act's object is the title's role."),
-      P("Cancel a waiting give", "Keep it", "Cancel the waiting give", "accent", "Cancel · Cancel the waiting give", "Two Cancels were one word for two acts. Nobody loses anything, so the act is accent."),
+      P("Cancel giving a waiting role", "Keep it waiting", "Cancel giving it", "accent", "Cancel · Cancel the waiting give", "Two Cancels were one word for two acts. Nobody loses anything, so the act is accent."),
       P("Remove a bundle", "Keep it", "Remove the bundle", "dangerConfirm", "Cancel · Remove bundle", "The bundle stays if you don't."),
       P("Retire a bundle or rule", "Keep it", "Retire and revoke", "dangerConfirm", "Cancel · Retire and revoke", "The same pair for both; the act already carries the loss."),
       P("Give a role", "Cancel", "Give Community", "accent", "Cancel · Give role", "Nothing exists yet to keep. The act names the role once it is chosen."),
@@ -245,7 +245,7 @@ class Component extends DCLogic {
     const tones = [
       T("Red", "danger", "What-happens list on danger-soft; dangerConfirm; danger dot on a failure", "A named person loses access, or something is gone for good, and it reaches Zitadel or a system.", "Revoke, Remove a bundle, Retire with holders, Replace roles, Move people to a version that drops roles."),
       T("Amber", "warn", "Amber dot and warn text; an I-understand tick on warn-soft; a warn Notice", "A step is left for the reader, or a state must be read before pressing. Never a result in itself.", "Waits for you to send, a stale plan, Zitadel didn't answer, a change over the usual size."),
-      T("Quiet", "neutral", "The lede, a faint before-line, a neutral dot", "What only records, asks, previews, or cancels something that never reached anybody.", "Cancel the waiting give, Let it lapse, Ask for access, Look up sign-ins, Mark as owned elsewhere."),
+      T("Quiet", "neutral", "The lede, a faint before-line, a neutral dot", "What only records, asks, previews, or cancels something that never reached anybody.", "Cancel giving it, Let it lapse, Ask for access, Look up sign-ins, Mark as owned elsewhere."),
       T("Healthy", "healthy", "Lime dot; blooms once in a result you caused", "The act is done and nothing is left to do. Said once, never celebrated twice.", "Given, Cancelled, Saved, Extended by 90 days."),
     ];
     tones.forEach((x, i) => { x.rule = i === 0 ? "0" : DIV; });
