@@ -162,7 +162,7 @@ describe("groupPlan after Apply", () => {
         row("Ada", { effect: "applied" }),
         row("Bo", { effect: "applied" }),
         row("Jules", { effect: "queued", wait_reason: "role_waits", delivery: "waits_for_you", waits: ["Trained in Laser Lab"] }),
-        row("Kai", { effect: "queued", wait_reason: "halted:retrying", retry: { state: "retrying", try: 2, of: 6, next_try: "2026-11-08T14:05:00Z" } }),
+        row("Kai", { effect: "queued", wait_reason: "halted:retrying", retry: { state: "retrying", try: 2, of: 6, next_try: "2099-11-08T14:05:00Z" } }),
         row("Sam", { effect: "failed", wait_reason: "refused:not_found" }),
         row("Dev", { effect: "no_change", delivery: undefined }),
       ],
