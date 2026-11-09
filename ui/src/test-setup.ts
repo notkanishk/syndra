@@ -5,6 +5,27 @@ import { afterEach, beforeEach, vi } from "vitest";
 
 import { installMatchMedia, resetMediaQueries } from "@/test-utils/media";
 
+// Every test runs on the same day: 9 Nov 2026, noon in the makerspace's zone,
+// with the clock moving at real speed from there. Fixtures are written as
+// dates in 2026 and the app (rightly) adds the year to a date outside the
+// current one, so on the real 1 Jan 2027 thirty-five tests went red at once,
+// and one on 31 Dec; a retry time fixed at 8 Nov 14:05 did the same on 9 Nov.
+// A test that needs another "now" still sets it (vi.useFakeTimers +
+// setSystemTime), and vi.useRealTimers comes back to this pinned clock.
+const PINNED_NOW = Date.UTC(2026, 10, 9, 6, 30);
+const RealDate = Date;
+const realStart = RealDate.now();
+class PinnedDate extends RealDate {
+  constructor(...args: ConstructorParameters<DateConstructor> | []) {
+    if (args.length === 0) super(PinnedDate.now());
+    else super(...(args as [string | number | Date]));
+  }
+  static now(): number {
+    return PINNED_NOW + (RealDate.now() - realStart);
+  }
+}
+globalThis.Date = PinnedDate as DateConstructor;
+
 // `next/dynamic` loads a component after first paint, which is right in a
 // browser and means a test would have to await every dialog it opens. Here the
 // load starts when the module does and `beforeEach` waits for it, so a lazily
