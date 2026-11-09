@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claims, simply</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Stands in for the proposed dense field (A-16 For code 3): a field in the shape card is the sm control's height, 34px with a mouse and the 44px floor below desktop, like PILL. */
+.a16-dense input,.a16-dense select{padding-top:5px;padding-bottom:5px;font-size:13.5px;min-height:44px}
+@container syndra-frame (width >= 67.5rem){.a16-dense input,.a16-dense select{min-height:0}}
+/* RoleWordsTable's quiet word field (A-15): no line at rest, the line on hover, the ring on focus; a changed word keeps its border. */
+.a16-quiet input:not(.a16-changed):not(:hover):not(:focus),.a16-quiet input:disabled{border-color:transparent;background:transparent}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:-5361px;padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Claims editor board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /applications/[id] · Proposed 4 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">What an app is told, simply</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-16, revising A-15's shape card and A-14's claim rows. The card is now one short list: each claim the app gets, said in words, with the roles claim first. That is the 90% job, and it is visible on arrival. Everything else opens in place, from the line it belongs to. Behaviour, API and the owner's rulings stand.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What you saw on 4 Nov</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">A summary, then the roles table, always open, at about 58px a row. Then a fold of five full forms that said the summary again. Bare-text buttons beside outlined ones, 46px fields, a segmented switch on every roles row, and Add a claim as a blank form.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What it becomes</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">One list, where the summary is the editor. The roles claim comes first, the rest A to Z. Each line opens in place with the grouped list's chevron. The roles table is folded and its line says what changed. Add a claim is a short menu of finished claims. A button on its own is outline sm, and fields are the sm control's height.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">Decisions</h2>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">1 · The shape card</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">One list of claims. Each line is the key in mono, what it carries in words, and a faint line where one helps. The roles claim is the hero because it is first, not because it is bigger: <span class="type-mono">groups</span>, "The roles each person holds in Network, as a list", then "All 7 roles, in Syndra's words." The other claims follow A to Z. Lands in and the template move to the card's foot. The Claim rows fold is gone, because every line now opens its own editor.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">2 · Roles, folded</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The roles line opens the roles. It is closed on every arrival, and its faint line says the state: "All 7 roles, in Syndra's words." or "6 of 7 roles. Staff as <span class="type-mono">netbird-staff</span>; Guests left out." Opened, it shows the claim's name and Sent as (Advanced). Then comes the roles table at about 44px a row, with name and key on one line, a quiet word field and Included. Roles added later (Advanced) closes it.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">3 · Adding a claim</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">Recommended (a).</strong> Add a claim opens a short menu of finished claims, named the way apps expect. Picking one adds a line that already works. Two need one choice, which roles or what value, and open straight into their editor. The keys Zitadel already sends are listed greyed, saying so. Nesting is "Inside", a field in a claim's editor. Text formats are Sent as, in the roles line's editor.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">4 · Controls</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">A button on its own is outline sm, and ghost appears only as the quieter half of a pair (Discard the draft, beside Save). Remove is outline danger sm. Fields are 34px with a mouse and 44 on touch. A segmented control appears only inside an opened line. Opening anything in place uses the 28px round chevron, and the whole line is the control. The full list is below.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">5 · Basic</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The same list, with nothing to change on it except the roles. The roles line still opens, showing only the words and Included. There is no Add a claim, no claim editor and no Lands in control, and the foot line says where the claims land.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">6 · Motion</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Every line opens by Unfold, and one stays open until you close it. A claim from the menu arrives as a FormPart: its gap opens in its A-to-Z place and it tints in. Nothing travels. The menu is an AnchoredPanel, popover-in, and closes with tint-out. Save unfolds with your first change, as in A-15.</p></div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">Every control, and its part</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ controls }}" as="c" hint-placeholder-count="14">
+        <div style="display:flex;flex-wrap:wrap;gap:4px 18px;padding:11px 22px;border-top:{{ c.rule }}">
+          <span style="flex:0 0 260px;font-size:14px;font-weight:600">{{ c.job }}</span>
+          <span style="flex:0 0 300px;font-size:13.5px;color:var(--ink)"><x-import component-from-global-scope="Syndra.Mono" hint-size="200px,18px">{{ c.part }}</x-import></span>
+          <span style="flex:1 1 300px;min-width:0;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ c.note }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Adding a claim · three options, at true size</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ options }}" as="o" hint-placeholder-count="3">
+        <figure data-screen-label="{{ o.label }}" style="margin:0;display:flex;flex-direction:column;gap:12px;width:{{ o.w }}">
+          <div style="display:flex;flex-direction:column;gap:8px;padding:16px;border:{{ o.edge }};border-radius:var(--radius-card)">
+            <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="30px,24px">{{ o.letter }}</x-import><span style="font-size:14.5px;font-weight:600">{{ o.title }}</span><span style="flex:1"></span><sc-if value="{{ o.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Recommended</span></sc-if></div>
+            <p style="margin:0;font-size:13px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ o.how }}</p>
+            <p style="margin:0;font-size:13px;line-height:1.55;color:var(--ink);text-wrap:pretty"><strong>For:</strong> {{ o.pro }}</p>
+            <p style="margin:0;font-size:13px;line-height:1.55;color:var(--ink);text-wrap:pretty"><strong>Against:</strong> {{ o.con }}</p>
+          </div>
+          <div style="width:{{ o.w }};height:1100px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1100px;margin-left:{{ o.off }}"><dc-import name="Frame" frame-src="{{ o.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440 · on arrival</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ pageFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:700px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1400px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440 · opened</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ tallFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:900px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1800px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:3000px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:390px;height:3000px"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="7">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/applications/a1" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:20px">
+  <div style="padding-bottom:8px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Apps" title="NetBird" meta="{{ meta }}" actions="{{ headerActions }}" hint-size="100%,110px"></x-import></div>
+
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:20px">
+
+    <!-- What the app is told: one list of claims. A plain .card (Card without overflow-hidden) so the add menu can draw past its edge, as AnchoredPanel does from the body. -->
+    <div style="flex:1 1 460px;min-width:0;display:flex">
+    <div class="card a16-dense" style="width:100%">
+      <div style="padding:20px 22px 8px"><h2 class="type-card-title" style="margin:0">What NetBird is told</h2></div>
+
+      <sc-for list="{{ lines }}" as="l" hint-placeholder-count="2">
+        <div style="border-top:{{ l.rule }}">
+          <!-- The whole line is the control (CardRow onToggle): a button with aria-expanded; the chevron only shows it. -->
+          <div style="display:flex;align-items:flex-start;gap:0 12px;padding:6px 22px 8px 11px;cursor:{{ l.cursor }}">
+            <span style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center">
+              <sc-if value="{{ l.chev }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line-strong);font-size:13px;color:var(--muted);transform:{{ l.turn }}">›</span></sc-if>
+            </span>
+            <span style="flex:1 1 auto;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 16px;padding-top:11px">
+              <span style="flex:0 0 132px;min-width:0"><x-import component-from-global-scope="Syndra.Mono" class-name="text-[14px]" hint-size="110px,20px">{{ l.key }}</x-import></span>
+              <span style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:14.5px;line-height:1.5;color:var(--ink);text-wrap:pretty"><sc-for list="{{ l.words }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if></sc-for></span>
+                <sc-if value="{{ l.hasSub }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ l.sub }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if></sc-for></span></sc-if>
+              </span>
+            </span>
+          </div>
+
+          <!-- Opened: the line's own editor, by Unfold, indented to the key -->
+          <sc-if value="{{ l.open }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;padding-bottom:6px">
+              <sc-for list="{{ l.top }}" as="r" hint-placeholder-count="2">
+                <div style="border-top:1px solid var(--divider);display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 16px;padding:9px 22px 9px 67px">
+                  <span style="width:130px;flex:none;padding-top:6px;font-size:13.5px;font-weight:600">{{ r.label }}</span>
+                  <span style="flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:4px">
+                    <sc-if value="{{ r.hasInput }}" hint-placeholder-val="{{ true }}"><span style="display:block;max-width:240px"><x-import component-from-global-scope="Syndra.Input" value="{{ r.inputVal }}" read-only="{{ true }}" spell-check="{{ false }}" aria-label="{{ r.label }}" class-name="font-mono" hint-size="240px,34px"></x-import></span></sc-if>
+                    <sc-if value="{{ r.hasSelect }}" hint-placeholder-val="{{ false }}"><span style="display:block;max-width:280px"><x-import component-from-global-scope="Syndra.Select" aria-label="{{ r.label }}" value="x" on-change="{{ noop }}" hint-size="280px,34px"><option value="x">{{ r.selectText }}</option></x-import></span></sc-if>
+                    <sc-if value="{{ r.hasChip }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Chip" class-name="py-1 text-[13px]" hint-size="80px,28px">{{ r.chip }}</x-import><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="120px,32px">Change roles</x-import></span></sc-if>
+                    <sc-if value="{{ r.hasText }}" hint-placeholder-val="{{ false }}"><span style="padding-top:6px;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty"><sc-for list="{{ r.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if></sc-for></span></sc-if>
+                    <sc-if value="{{ r.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ r.note }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if></sc-for></span></sc-if>
+                  </span>
+                  <sc-if value="{{ r.hasSeg }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Segmented" label="{{ r.label }}" size="sm" value="{{ r.segValue }}" options="{{ r.segOptions }}" on-change="{{ noop }}" hint-size="300px,32px"></x-import></span></sc-if>
+                </div>
+              </sc-for>
+
+              <!-- The roles table, dense (proposed RoleWordsTable dense prop): one line a role -->
+              <sc-if value="{{ l.isRoles }}" hint-placeholder-val="{{ false }}">
+                <div style="border-top:1px solid var(--divider);padding-left:47px"><x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,38px"><span style="width:190px;flex:none"><x-import component-from-global-scope="Syndra.SortHead" label="Role" name="role" sort="{{ sortRole }}" on-sort="{{ noop }}" hint-size="70px,18px"></x-import></span><span style="min-width:0;flex:1">NetBird calls it</span><span style="width:70px;flex:none;text-align:right">Included</span></x-import></div>
+                <div class="a16-quiet">
+                  <sc-for list="{{ roles }}" as="r" hint-placeholder-count="7">
+                    <div style="border-top:1px solid var(--divider);display:flex;flex-wrap:wrap;align-items:center;gap:2px 18px;padding:5px 22px 5px 67px">
+                      <span style="flex:0 0 190px;min-width:0;display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px">
+                        <span style="font-size:14px;font-weight:600;color:{{ r.nameColor }}">{{ r.name }}</span>
+                        <sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.WaitsMark" hint-size="10px,10px"></x-import></sc-if>
+                        <x-import component-from-global-scope="Syndra.Mono" class-name="text-[12.5px] text-faint" hint-size="60px,16px">{{ r.key }}</x-import>
+                      </span>
+                      <span style="flex:1 1 150px;min-width:0;display:flex;flex-direction:column;gap:2px">
+                        <x-import component-from-global-scope="Syndra.Input" value="{{ r.word }}" placeholder="{{ r.key }}" read-only="{{ true }}" disabled="{{ r.off }}" spell-check="{{ false }}" aria-label="{{ r.aria }}" class-name="{{ r.cls }}" hint-size="100%,34px"></x-import>
+                        <sc-if value="{{ r.hasNote }}" hint-placeholder-val="{{ false }}"><span style="padding-left:2px;font-size:12.5px;line-height:1.45;color:var(--faint)"><sc-for list="{{ r.note }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if></sc-for></span></sc-if>
+                      </span>
+                      <span style="flex:0 0 70px;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Checkbox" checked="{{ r.inc }}" on-change="{{ noop }}" aria-label="{{ r.seeAria }}" hint-size="16px,16px"></x-import></span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <!-- An object's keys, each a compact row: name · carries · Remove -->
+              <sc-if value="{{ l.isObj }}" hint-placeholder-val="{{ false }}">
+                <sc-for list="{{ kids }}" as="k" hint-placeholder-count="4">
+                  <div style="border-top:1px solid var(--divider);display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:7px 22px 7px 67px">
+                    <span style="flex:0 1 150px;min-width:120px"><x-import component-from-global-scope="Syndra.Input" value="{{ k.name }}" read-only="{{ true }}" spell-check="{{ false }}" aria-label="Claim name" class-name="font-mono" hint-size="150px,34px"></x-import></span>
+                    <span style="flex:1 1 170px;min-width:150px"><x-import component-from-global-scope="Syndra.Select" aria-label="Carries" value="x" on-change="{{ noop }}" hint-size="200px,34px"><option value="x">{{ k.carries }}</option></x-import></span>
+                    <span style="flex:none;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" aria-label="{{ k.removeAria }}" hint-size="80px,32px">Remove</x-import></span>
+                  </div>
+                </sc-for>
+              </sc-if>
+
+              <sc-if value="{{ l.hasSent }}" hint-placeholder-val="{{ false }}"><p style="margin:0;border-top:1px solid var(--divider);padding:10px 22px 4px 67px;font-size:12.5px;line-height:1.55;color:var(--faint);overflow-wrap:anywhere;text-wrap:pretty"><sc-for list="{{ l.sent }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if></sc-for></p></sc-if>
+
+              <sc-for list="{{ l.bottom }}" as="r" hint-placeholder-count="1">
+                <div style="border-top:1px solid var(--divider);display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 16px;padding:9px 22px 9px 67px">
+                  <span style="width:130px;flex:none;padding-top:6px;font-size:13.5px;font-weight:600">{{ r.label }}</span>
+                  <span style="flex:1 1 180px;min-width:0;padding-top:6px;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ r.plain }}</span>
+                  <span style="margin-left:auto;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Segmented" label="{{ r.label }}" size="sm" value="{{ r.segValue }}" options="{{ r.segOptions }}" on-change="{{ noop }}" hint-size="190px,32px"></x-import></span>
+                </div>
+              </sc-for>
+
+              <sc-if value="{{ l.hasFoot }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 22px 6px 67px">
+                  <sc-if value="{{ l.addInside }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="150px,32px">Add a claim inside</x-import></sc-if>
+                  <span style="margin-left:auto;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" aria-label="{{ l.removeAria }}" hint-size="160px,32px">{{ l.removeText }}</x-import></span>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+
+      <!-- Add a claim (Advanced). (a) a button with its menu · (b) the composer in its place -->
+      <sc-if value="{{ adv }}" hint-placeholder-val="{{ true }}">
+        <div style="border-top:1px solid var(--divider);padding:10px 22px 14px 67px">
+          <sc-if value="{{ addButton }}" hint-placeholder-val="{{ true }}">
+            <span style="position:relative;display:inline-flex">
+              <x-import component-from-global-scope="Syndra.Button" size="sm" aria-expanded="{{ menuA }}" hint-size="110px,32px">Add a claim</x-import>
+              <!-- (a) stands in for AnchoredPanel + the QuestionSeat listbox: 7px under the button, over the page -->
+              <sc-if value="{{ menuA }}" hint-placeholder-val="{{ false }}">
+                <div role="listbox" aria-label="Add a claim" style="position:absolute;top:calc(100% + 7px);left:0;width:390px;z-index:5;display:flex;flex-direction:column;gap:1px;padding:8px;border:1px solid var(--line-strong);border-radius:var(--radius-panel);background:var(--surface-2);box-shadow:var(--shadow-popover)">
+                  <sc-for list="{{ menuGroups }}" as="g" hint-placeholder-count="2">
+                    <span class="type-label" style="padding:8px 12px 4px">{{ g.label }}</span>
+                    <sc-for list="{{ g.items }}" as="m" hint-placeholder-count="5">
+                      <div role="option" aria-disabled="{{ m.off }}" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px;padding:8px 12px;border-radius:var(--radius-inner);background:{{ m.bg }}">
+                        <span style="flex:1 1 auto;font-size:14px;font-weight:600;color:{{ m.color }}">{{ m.label }}</span>
+                        <span style="flex:none;font-size:12.5px;color:var(--faint)"><sc-for list="{{ m.right }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,16px">{{ p.m }}</x-import></sc-if></sc-for></span>
+                      </div>
+                    </sc-for>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </span>
+          </sc-if>
+          <sc-if value="{{ composerB }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                <span style="flex:0 1 150px;min-width:120px"><x-import component-from-global-scope="Syndra.Input" value="is_admin" read-only="{{ true }}" spell-check="{{ false }}" aria-label="Claim name" class-name="font-mono" hint-size="150px,34px"></x-import></span>
+                <span style="flex:1 1 190px;min-width:170px"><x-import component-from-global-scope="Syndra.Select" aria-label="Carries" value="x" on-change="{{ noop }}" hint-size="200px,34px"><option value="x">Yes if they hold a role</option></x-import></span>
+                <span style="flex:none;white-space:nowrap;display:inline-flex;gap:6px"><x-import component-from-global-scope="Syndra.Button" size="sm" disabled="{{ true }}" hint-size="60px,32px">Add</x-import><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="70px,32px">Cancel</x-import></span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)">If they hold <x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="120px,32px">Choose roles</x-import> <span>Otherwise <x-import component-from-global-scope="Syndra.Mono" hint-size="40px,18px">false</x-import>.</span></div>
+              <span style="font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">Chose "Yes if they hold a role" from the name. Add opens once a role is chosen.</span>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="border-top:1px solid var(--divider);display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:12px 22px">
+          <span style="width:130px;flex:none;padding-top:5px;font-size:14px;font-weight:600">Lands in</span>
+          <span style="flex:1 1 140px;min-width:0;padding-top:5px;font-size:14px;color:var(--ink)">The access token and userinfo</span>
+          <span style="margin-left:auto;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Segmented" label="Lands in" size="sm" value="both" options="{{ landsOptions }}" on-change="{{ noop }}" hint-size="330px,32px"></x-import></span>
+        </div>
+      </sc-if>
+
+      <!-- The foot: where it came from, and the two ways to start again -->
+      <div style="border-top:1px solid var(--divider);display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 22px 16px">
+        <span style="flex:1 1 220px;min-width:0;font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ footLine }}</span>
+        <span style="flex:none;display:inline-flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-left:auto"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="180px,32px">See the NetBird template</x-import><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="190px,32px">Copy another app's shape</x-import></span>
+      </div>
+
+      <!-- Save comes with the first change -->
+      <sc-if value="{{ draft }}" hint-placeholder-val="{{ false }}">
+        <div style="border-top:1px solid var(--divider);display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:16px 22px 20px">
+          <span style="flex:none;display:inline-flex;gap:8px;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="70px,36px">Save</x-import><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="150px,36px">Discard the draft</x-import></span>
+          <span style="flex:1 1 240px;min-width:0;display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.5;color:{{ beforeColor }};text-wrap:pretty"><sc-if value="{{ beforeWarn }}" hint-placeholder-val="{{ true }}"><span style="display:flex;padding-top:7px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import></span></sc-if><span><sc-for list="{{ beforeLine }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if></sc-for></span></span>
+        </div>
+      </sc-if>
+    </div>
+    </div>
+
+    <!-- Preview, as A-15 (Show the checks is now outline sm) -->
+    <div style="flex:1 1 440px;min-width:0;display:flex">
+    <x-import component-from-global-scope="Syndra.Card" class-name="w-full" hint-size="100%,300px">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:18px 22px 14px">
+        <h2 class="type-card-title" style="margin:0">Preview</h2>
+        <span style="font-size:13.5px;color:var(--faint)">for</span>
+        <span style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 6px;border:1px solid var(--line-strong);border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Avatar" name="Ada Lovelace" size="row" hint-size="28px,28px"></x-import><x-import component-from-global-scope="Syndra.Select" aria-label="Preview for" value="ada" on-change="{{ noop }}" class-name="w-[160px] border-0 px-1 py-0 text-[14px]" hint-size="160px,24px"><option value="ada">Ada Lovelace</option></x-import></span>
+        <span style="flex:1"></span>
+        <span style="font-size:12.5px;color:var(--faint)">Checked 10:06</span>
+        <x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="110px,32px">Check again</x-import>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:0 22px 14px">
+        <x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="8px,8px"></x-import>
+        <span style="font-size:14.5px;font-weight:600;color:var(--ink)">{{ verdict }}</span>
+        <span style="display:inline-flex;margin-left:4px"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="140px,32px">Show the checks</x-import></span>
+      </div>
+      <div style="padding:0 22px"><x-import component-from-global-scope="Syndra.TokenBlock" lines="{{ tokenLines }}" hint-size="100%,110px"></x-import></div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 22px 20px">
+        <span style="flex:1 1 260px;min-width:0;font-size:13px;line-height:1.55;color:var(--faint);text-wrap:pretty"><sc-for list="{{ tokenFoot }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if></sc-for></span>
+        <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="120px,32px">Copy preview</x-import></span>
+      </div>
+    </x-import>
+    </div>
+  </div>
+
+  <!-- Quiet tools, as A-15 -->
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+    <!-- stands in for AppSignInStrip, as a row (not in the design system) -->
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:16px 22px">
+      <span style="width:170px;flex:none;font-size:14px;font-weight:600">Sign-ins</span>
+      <span aria-hidden="true" style="flex:none;display:flex;align-items:flex-end;gap:2px;height:20px;width:178px"><sc-for list="{{ bars }}" as="b" hint-placeholder-count="30"><span style="flex:1;border-radius:1px;background:var(--muted);height:{{ b.h }}"></span></sc-for></span>
+      <span style="flex:1 1 200px;min-width:0;font-size:14px;color:var(--muted)">412 in 30 days, by 23 people</span>
+    </div>
+    <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:14px 22px">
+      <span style="width:170px;flex:none;font-size:14px;font-weight:600">Debug mode</span>
+      <span style="flex:1 1 260px;min-width:0"><x-import component-from-global-scope="Syndra.StatusSeat" tone="neutral" word="Off" note="See one account's sign-ins as they happen, for 15 minutes." hint-size="360px,40px"></x-import></span>
+      <span style="margin-left:auto;display:flex;justify-content:flex-end;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="170px,32px">Turn on debug mode</x-import></span>
+    </div>
+    <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:14px 22px 16px">
+      <span style="width:170px;flex:none;font-size:14px;font-weight:600">History</span>
+      <span style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px">Version 1, as Actions v1 sent it</span><span style="font-size:13px;color:var(--faint)">Saved 3 Nov by Syndra.</span></span>
+    </div>
+  </x-import>
+</div>
+
+<!-- (c) the sheet: Modal md, over the page -->
+<sc-if value="{{ sheetC }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="add-title" hint-size="640px,900px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="Add a claim to NetBird" title-id="add-title" hint-size="100%,70px"></x-import>
+    <div class="a16-dense" style="display:flex;flex-direction:column;gap:18px;padding:0 24px 8px">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span class="type-label">What it carries</span>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <sc-for list="{{ sheetRows }}" as="c" hint-placeholder-count="10">
+            <x-import component-from-global-scope="Syndra.ChoiceRow" selected="{{ c.sel }}" on-toggle="{{ noop }}" single="{{ true }}" name="carries" title="{{ c.title }}" note="{{ c.note }}" locked="{{ c.locked }}" locked-note="{{ c.lockedNote }}" hint-size="100%,44px"></x-import>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:14px">
+        <div style="flex:1 1 220px;min-width:0"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100px,18px">Claim name</x-import><x-import component-from-global-scope="Syndra.Input" value="given_name" read-only="{{ true }}" spell-check="{{ false }}" aria-label="Claim name" class-name="font-mono" hint-size="100%,34px"></x-import></div>
+        <div style="flex:1 1 220px;min-width:0"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100px,18px">Inside</x-import><x-import component-from-global-scope="Syndra.Select" aria-label="Inside" value="x" on-change="{{ noop }}" hint-size="100%,34px"><option value="x">Nothing: top level</option></x-import></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-size:13px;color:var(--faint)">For Ada Lovelace</span>
+        <x-import component-from-global-scope="Syndra.TokenBlock" lines="{{ sheetToken }}" hint-size="100%,50px"></x-import>
+      </div>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="Adds it to the draft. Nothing changes until you save." hint-size="100%,80px"><x-import component-from-global-scope="Syndra.Button" hint-size="80px,36px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="150px,36px">Add given_name</x-import></x-import>
+  </x-import>
+</sc-if>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":2360,"height":9800}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "adv";
+    const base = this.st.replace(/-light$/, "");
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", base === "basic" ? "basic" : "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra; const h = React.createElement; const noop = () => {};
+    const base = this.st.replace(/-light$/, "");
+    const adv = base !== "basic";
+    const rolesOpen = base === "roles" || base === "phone";
+    const objOpen = base === "object";
+    const added = base === "added";
+    const renamed = base === "roles";
+    const draft = renamed || added;
+    const menuA = base === "add-a";
+    const composerB = base === "add-b";
+    const sheetC = base === "add-c";
+    // Sentences carry claim keys in `backticks`, drawn with Syndra.Mono.
+    const P = (s) => String(s || "").split("`").map((seg, i) => (i % 2 ? { isM: true, m: seg } : { isT: true, t: seg })).filter((x) => x.t !== "");
+    const f = (frame, label, note) => ({ src: "a16-claims-editor-2.dc.html?frame=" + frame, label, note });
+    const DIV = "1px solid var(--divider)";
+    const fmtOptions = [{ value: "array", label: "A list" }, { value: "csv", label: "Text, with commas" }, { value: "space_delimited", label: "Text, with spaces" }];
+    const laterOptions = [{ value: "out", label: "Left out" }, { value: "in", label: "Included" }];
+
+    // ------------------------------------------------ the editor's setting rows
+    const row = (label, o) => Object.assign({ label, hasInput: false, inputVal: "", hasSelect: false, selectText: "", hasChip: false, chip: "", hasText: false, text: [], hasNote: false, note: [], hasSeg: false, segValue: "", segOptions: [] }, o);
+
+    // ------------------------------------------------ the claims: the roles claim first, the rest A to Z
+    const L = (o) => Object.assign({ chev: true, open: false, isRoles: false, isObj: false, top: [], bottom: [], hasSent: false, sent: [], hasFoot: false, addInside: false, removeText: "Remove", removeAria: "" }, o, {
+      words: P(o.words), sub: P(o.sub || ""), hasSub: !!o.sub, turn: o.open ? "rotate(90deg)" : "none", cursor: o.chev === false ? "default" : "pointer",
+    });
+    const lines = [
+      L({
+        key: "groups", isRoles: true, open: rolesOpen,
+        words: "The roles each person holds in Network, as a list",
+        sub: renamed ? "6 of 7 roles. Staff as `netbird-staff`; Guests left out." : "All 7 roles, in Syndra's words.",
+        top: adv ? [
+          row("Claim name", { hasInput: true, inputVal: "groups", hasNote: true, note: P("NetBird reads the name set in its Settings › Groups › JWT claim.") }),
+          row("Sent as", { hasText: true, text: P("A list, and `[]` for anyone who holds none."), hasSeg: true, segValue: "array", segOptions: fmtOptions }),
+        ] : [],
+        bottom: adv ? [{ label: "Roles added later", plain: "Included. NetBird sees every role added to Network later.", segValue: "in", segOptions: laterOptions }] : [],
+        hasFoot: adv, removeText: "Remove groups", removeAria: "Remove the groups claim",
+      }),
+      L({
+        key: "custom_claims", isObj: true, open: objOpen, chev: adv,
+        words: "An object holding `family_name`, `given_name`, `groups` and `name`",
+        sub: "Its `groups` is the same list of roles.",
+        top: [row("Claim name", { hasInput: true, inputVal: "custom_claims" })],
+        hasSent: true,
+        sent: P("Sent as `{\"family_name\": \"Lovelace\", \"given_name\": \"Ada\", \"groups\": [\"admin\", \"staff\"], \"name\": \"Ada Lovelace\"}` for Ada Lovelace."),
+        hasFoot: true, addInside: true, removeText: "Remove custom_claims", removeAria: "Remove custom_claims and the 4 claims inside it",
+      }),
+    ];
+    if (added) lines.push(L({
+      key: "is_admin", open: true,
+      words: "`true` if they hold Admins, otherwise `false`",
+      sub: "New in this draft.",
+      top: [
+        row("Claim name", { hasInput: true, inputVal: "is_admin" }),
+        row("Carries", { hasSelect: true, selectText: "Yes if they hold a role" }),
+        row("If they hold", { hasChip: true, chip: "Admins" }),
+        row("Inside", { hasSelect: true, selectText: "Nothing: top level" }),
+      ],
+      hasSent: true,
+      sent: P("Sent as `true` for Ada Lovelace, who holds Admins, and `false` for anyone who doesn't."),
+      hasFoot: true, removeText: "Remove", removeAria: "Remove is_admin",
+    }));
+    lines.forEach((l, i) => { l.rule = i === 0 ? "0" : DIV; });
+
+    // ------------------------------------------------ roles, A to Z by name (the dense table)
+    const R = (key, name, o) => {
+      o = o || {};
+      const changed = !!o.word || o.off;
+      return {
+        key, name, waits: !!o.waits, word: o.word || "", inc: !o.off, off: !!o.off,
+        nameColor: o.off ? "var(--muted)" : "var(--ink)",
+        cls: "w-full font-mono" + (changed && !o.off ? " a16-changed" : ""),
+        hasNote: !!o.note, note: P(o.note || ""),
+        aria: "NetBird calls " + name, seeAria: "NetBird sees " + name,
+      };
+    };
+    const roles = [
+      R("admin", "Admins", { waits: true }),
+      R("guest", "Guests", renamed ? { off: true, note: "Was sent as `guest`." } : {}),
+      R("lab-vlan", "Lab VLAN"), R("member", "Members"), R("printers", "Printers"), R("server-room", "Server room"),
+      R("staff", "Staff", renamed ? { word: "netbird-staff", note: "Was `staff`." } : {}),
+    ];
+    const kids = [
+      { name: "family_name", carries: "Family name", removeAria: "Remove family_name" },
+      { name: "given_name", carries: "Given name", removeAria: "Remove given_name" },
+      { name: "groups", carries: "Roles NetBird sees", removeAria: "Remove groups from custom_claims" },
+      { name: "name", carries: "Full name", removeAria: "Remove name" },
+    ];
+
+    // ------------------------------------------------ (a) the menu: finished claims, A to Z, one group per Carries group
+    const M = (label, right, o) => ({ label, right: P(right), off: !!(o && o.off), color: o && o.off ? "var(--muted)" : "var(--ink)", bg: o && o.hover ? "var(--hover)" : "transparent" });
+    const menuGroups = [
+      { label: "From the person", items: [
+        M("Bundles they hold", "`bundles`"),
+        M("Each role's end date", "`role_ends`"),
+        M("Email", "Zitadel sends `email`", { off: true }),
+        M("Family name", "`family_name`"),
+        M("Full name", "Zitadel sends `name`", { off: true }),
+        M("Given name", "`given_name`"),
+        M("Is a service account", "`is_service_account`"),
+        M("Roles NetBird sees", "Sent as `groups`", { off: true }),
+        M("Username", "Zitadel sends `preferred_username`", { off: true }),
+        M("Yes if they hold a role", "Then choose the roles", { hover: true }),
+      ] },
+      { label: "The same for everyone", items: [M("A fixed value", "Then name it and set it")] },
+    ];
+
+    // ------------------------------------------------ (c) the sheet's choices
+    const mono = (k) => (S ? h(S.Mono, { className: "text-faint" }, k) : k);
+    const C = (title, key, o) => ({ title, sel: !!(o && o.sel), locked: !!(o && o.locked), lockedNote: (o && o.lockedNote) || undefined, note: o && o.locked ? undefined : (key ? mono(key) : (o && o.noteText)) });
+    const sheetRows = [
+      C("Bundles they hold", "bundles"),
+      C("Each role's end date", "role_ends"),
+      C("Email", null, { locked: true, lockedNote: "Zitadel sends email already." }),
+      C("Family name", "family_name"),
+      C("Full name", null, { locked: true, lockedNote: "Zitadel sends name already." }),
+      C("Given name", "given_name", { sel: true }),
+      C("Is a service account", "is_service_account"),
+      C("Username", null, { locked: true, lockedNote: "Zitadel sends preferred_username already." }),
+      C("Yes if they hold a role", null, { noteText: "Then choose the roles" }),
+      C("A fixed value", null, { noteText: "The same for everyone" }),
+    ];
+
+    // ------------------------------------------------ the preview
+    const G = '["admin", "staff"]', G2 = '["admin", "netbird-staff"]';
+    const CC = (g) => '{"family_name": "Lovelace", "given_name": "Ada", "groups": ' + g + ', "name": "Ada Lovelace"}';
+    const T = (key, val, mark) => ({ key, text: '"' + key + '": ' + val, mark: mark || " " });
+    const tokenLines = renamed
+      ? [T("groups", G, "−"), T("groups", G2, "+"), T("custom_claims", CC(G), "−"), T("custom_claims", CC(G2), "+")]
+      : added
+        ? [T("groups", G), T("custom_claims", CC(G)), T("is_admin", "true", "+")]
+        : [T("groups", G), T("custom_claims", CC(G))];
+    const tokenFoot = P(renamed
+      ? "One difference for Ada Lovelace: `staff` becomes `netbird-staff`, in both claims."
+      : added
+        ? "One difference for Ada Lovelace: `is_admin` joins, as `true`."
+        : "Zitadel adds `sub`, `email`, `name` and `preferred_username` itself.");
+
+    // ------------------------------------------------ header and tools
+    const meta = S ? h("span", { className: "flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint" },
+      "OIDC · roles from ", h(S.ArrowLink, { href: "#", className: "text-[14px]" }, "Network"),
+      h("span", null, "· 23 people in 7 days · last sign-in 10:02"),
+      adv ? h("span", null, "· client ", h(S.Mono, null, "301928374650192837")) : null) : null;
+    const headerActions = S ? h(S.Button, { variant: "outline" }, "Look up sign-ins") : null;
+    const counts = [8, 12, 10, 14, 0, 3, 11, 15, 13, 12, 9, 0, 2, 14, 16, 13, 15, 12, 0, 4, 13, 17, 15, 14, 12, 0, 3, 16, 18, 14];
+    const bars = counts.map((n) => ({ h: (n === 0 ? 2 : Math.max(3, Math.round((n / 18) * 20))) + "px" }));
+
+    // ------------------------------------------------ the board's lists
+    const CT = (job, part, note) => ({ job, part, note });
+    const controls = [
+      CT("Open a claim, or the roles", "CardRow onToggle + chevron", "The whole line is a button with aria-expanded. The 28px round chevron in its 44px seat is the grouped list's (PersonAccess, SignInRow), and it turns 90° on tint. Its body opens by Unfold."),
+      CT("Add a claim", "Button outline sm", "It opens an AnchoredPanel with the QuestionSeat listbox's option rows. Below tablet, it opens a Modal sm sheet holding the same list, because you act in it."),
+      CT("A finished claim in the menu", "role=option row", "The label in 14/600 ink, with the key it will get in faint Mono at the right. A key already sent, or one Zitadel sends, is muted and inert, and says why."),
+      CT("Claim name", "Input · mono · dense", "34px with a mouse and the 44px floor on touch, like PILL. One click edits."),
+      CT("What a claim carries", "Select", "Native, with the menu's two groups and the attributes behind them (title, team and the rest), since editing is fully technical."),
+      CT("Inside another claim", "Select", "Nothing: top level · each object already sent · A new object (that choice turns into a mono Input)."),
+      CT("Sent as (roles)", "Segmented sm", "A list · Text, with commas · Text, with spaces, in the roles editor only (Advanced), with A-14's warning in warn-text."),
+      CT("Roles added later · Lands in", "Segmented sm", "Each is a settings row: label, value, and the control in the right seat. The ID token choice explains itself in its option's title."),
+      CT("A fixed value", "Segmented sm + Input", "Type (Text · Number · Yes/no · List), then the value, as in A-11 §8. Shown only in that claim's editor."),
+      CT("Which roles make it true", "Chip + Button outline sm", "The chosen roles as Chips, then Change roles, which opens the role picker in single-project mode."),
+      CT("A role's word · Included", "Input (quiet) · Checkbox", "RoleWordsTable with a new dense prop: one line a role, with the quiet field and the round seat."),
+      CT("Remove", "Button danger sm", "The outline danger used elsewhere for Remove. Its visible word is Remove, and its aria-label names the claim. It sits at the end of an opened editor, never on a closed line."),
+      CT("See the template · Copy another app's shape", "Button outline sm", "Each opens a sheet, so neither ends in →. They sit at the card's foot."),
+      CT("Save · Discard the draft", "Button accent md · ghost md", "The only ghost on the page, as the quieter half of a pair."),
+    ];
+    controls.forEach((c, i) => { c.rule = i === 0 ? "0" : DIV; });
+
+    const O = (letter, title, src, w, off, rec, how, pro, con) => ({ letter, title, src: "a16-claims-editor-2.dc.html?frame=" + src, w: w + "px", off: off + "px", rec, edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line)", how, pro, con, label: "Option " + letter + " · " + title });
+    const options = [
+      O("a", "A menu of finished claims", "add-a", 620, -258, true,
+        "Add a claim opens a short list. Each entry adds a working line with the conventional key. Two of them need one choice, and they open straight into their editor (the role picker, or the value).",
+        "The fastest way to the common result, with no blank form and no wrong key. It also teaches you: Email is greyed, \"Zitadel sends email\", which answers \"why can't I add it?\" before you ask.",
+        "A key that isn't the convention takes a second step: open the line and rename it. The menu is one more list to keep true to the Carries groups."),
+      O("b", "An inline composer", "add-b", 620, -258, false,
+        "Add a claim unfolds one line in its place: name, Carries and Add. Typing a known key picks what it carries (is_admin picks \"Yes if they hold a role\"). A second line grows only for a kind that needs it.",
+        "One form for adding and editing, so there is less to learn. It suits someone who knows the key the app reads.",
+        "It is still a form, and it starts blank. Guessing from the name surprises people as often as it helps. It brings back the field-and-select row the owner called messy."),
+      O("c", "A sheet with a live preview", "add-c", 760, -340, false,
+        "Add a claim opens Modal md. You choose what it carries from ChoiceRows (Zitadel's own claims are ticked grey), then set the name and Inside, and see the one new line for Ada before Add.",
+        "The most guided. Everything is visible at once, and nothing reaches the card until you're sure.",
+        "It is a dialog for a one-line change. Its preview repeats the Preview card beside it, which already shows + for the draft. That makes two places for the same truth."),
+    ];
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("Adding a claim: (a) a menu of finished claims, (b) an inline composer, or (c) a sheet with a live preview?",
+        "(a). It does the common case in two clicks with a key that works, and the page's own Preview already shows the + line, so (c)'s preview would say it twice."),
+      Q("Should claims list the roles claim first and then the rest A to Z, with the token in the Preview in the same order? Today the token keeps the order rows were added in.",
+        "Yes. Apps don't read the order of keys, so the order is only for you, and A to Z is the standing rule. Keeping the roles claim first is the one exception, because it is the reason the card exists."),
+      Q("Should a button on its own be outline sm everywhere in Syndra, with ghost kept only as the quieter half of a pair (Discard beside Save, Cancel beside a confirm)? That would mean a sweep of the other lone ghost buttons, about 15 of them.",
+        "Yes, as a standing rule. A ghost button at rest reads as bare text, which is what looked inconsistent here. PaginationRow keeps its own controls."),
+      Q("The keys Zitadel already sends (email, name, preferred_username): should the menu show them greyed, saying \"Zitadel sends email\", or leave them out?",
+        "Show them greyed. They answer \"why can't I add email?\" in place. They stay choosable inside an object, where Supabase needs them."),
+      Q("Should Basic be able to change the roles claim's name (for example roles to groups)?",
+        "No. The name is what the app's own settings point at, and changing it is a breaking change for the app, which is Advanced work. Basic keeps the role words and Included."),
+      Q("When a shape that sends no roles gets them from the menu (Roles NetBird sees), what should the claim be called by default?",
+        "groups. Five of the six templates that send roles call them groups. Custom keeps roles, as it does today."),
+      Q("Should the roles stay folded on every arrival, even when some are renamed or left out? Their line says which.",
+        "Yes. The structure doesn't move with the data, and the line already names the change (\"Staff as netbird-staff; Guests left out\")."),
+    ];
+    questions.forEach((q, i) => { q.n = String(i + 1); q.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop,
+      meta, headerActions, adv, draft,
+      lines, roles, kids, sortRole: { key: "role", dir: 1 },
+      addButton: !composerB, menuA, composerB, sheetC, menuGroups, sheetRows,
+      sheetToken: [T("given_name", '"Ada"', "+")],
+      landsOptions: [{ value: "both", label: "Both" }, { value: "access_token", label: "Access token" }, { value: "userinfo", label: "ID token and userinfo", title: "One choice: the ID token carries them only while User Info inside ID Token is on." }],
+      footLine: adv ? "From the Custom template, 5 changes since." : "In the access token and userinfo. From the Custom template, 5 changes since.",
+      beforeWarn: renamed, beforeColor: renamed ? "var(--warn-text)" : "var(--faint)",
+      beforeLine: P(renamed
+        ? "2 changes NetBird will act on. 12 people move from `staff` to a new group, `netbird-staff`, and 4 people leave `guest`, at their next sign-in."
+        : "Takes effect at each person's next sign-in to NetBird."),
+      verdict: draft ? "All five checks pass on this draft" : "All five checks pass",
+      tokenLines, tokenFoot, bars,
+      controls, options, questions,
+
+      pageFrames: [
+        f("adv", "Advanced · on arrival", "Two lines say what NetBird gets. The roles claim comes first, folded, and its faint line says the state. custom_claims follows. Then come Add a claim, Lands in and the foot. On the right are the verdict and the token. Each line opens in place."),
+        f("adv-light", "Advanced · light", "The same page in the light theme."),
+        f("basic", "Basic", "The same list. Only the roles line opens, showing words and Included. There is no Add a claim and no Lands in control, and the foot says where the claims land."),
+      ],
+      tallFrames: [
+        f("roles", "The roles, opened · a rename and a role left out", "Claim name and Sent as, then the dense table at one line a role. Staff's word keeps its border with Was staff, and Guests is unticked with Was sent as guest. The line above says it in words, Save brings the amber before-line, and the Preview shows − and + for both claims."),
+        f("object", "custom_claims, opened", "Its name, then its four keys A to Z, each a compact row of name, Carries and Remove. One faint Sent as line covers the whole object, with Add a claim inside, and Remove for the object, at the end."),
+        f("added", "After (a): is_admin added", "Picking \"Yes if they hold a role\" opened the role picker. Use this role returned here with the line in its A-to-Z place, opened: name, Carries, the chosen role, and Inside (nesting lives here). The Preview shows + is_admin."),
+      ],
+      phoneFrames: [
+        f("phone", "Phone · Advanced · roles opened", "One column, the shape first. Each key sits above its words. The dense table stacks a role's name over its field, and every field keeps the 44px floor. On a phone, Add a claim opens its menu as a Modal sm sheet."),
+        f("phone-light", "Phone · light", "The same, in the light theme."),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
