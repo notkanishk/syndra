@@ -11,7 +11,7 @@ import type { AccessRequest } from "@/lib/queries/useRequests";
 // never reach a row the operator cannot see.
 
 const queue = vi.hoisted(() => ({ data: [] as AccessRequest[] }));
-const NAMES = vi.hoisted(() => ({ u1: "Ada Lovelace", u2: "Grace Hopper", u3: "Alan Turing" }) as Record<string, string>);
+const NAMES = vi.hoisted(() => ({ u1: "Charlotte Flair", u2: "Sami Zayn", u3: "Randy Orton" }) as Record<string, string>);
 const ROLES = vi.hoisted(() => ({ operator: "Laser operator", trained: "Bandsaw trained" }) as Record<string, string>);
 
 vi.mock("next/navigation", () => ({
@@ -77,17 +77,17 @@ describe("the queue's search", () => {
 
   it("finds a request by who asked", () => {
     renderQueue(three());
-    type("grace");
-    expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
-    expect(screen.queryByText("Ada Lovelace")).not.toBeInTheDocument();
-    expect(screen.queryByText("Alan Turing")).not.toBeInTheDocument();
+    type("sami");
+    expect(screen.getByText("Sami Zayn")).toBeInTheDocument();
+    expect(screen.queryByText("Charlotte Flair")).not.toBeInTheDocument();
+    expect(screen.queryByText("Randy Orton")).not.toBeInTheDocument();
   });
 
   it("finds a request by the role asked for", () => {
     renderQueue(three());
     type("bandsaw");
     expect(screen.getAllByRole("button", { name: /^Approve/ })).toHaveLength(2);
-    expect(screen.queryByText("Ada Lovelace")).not.toBeInTheDocument();
+    expect(screen.queryByText("Charlotte Flair")).not.toBeInTheDocument();
   });
 
   it("says so when nothing matches, and clearing it brings the queue back", () => {
@@ -95,7 +95,7 @@ describe("the queue's search", () => {
     type("zzz");
     expect(screen.getByText("No requests match that search.")).toBeInTheDocument();
     type("");
-    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("Charlotte Flair")).toBeInTheDocument();
   });
 
   it("keeps a bulk decision to the rows the search shows", () => {
@@ -120,17 +120,17 @@ describe("the queue's columns", () => {
       { ...ask("r2", "u3", "trained"), created_at: "2026-10-16T07:00:00Z" },
       { ...ask("r3", "u1", "trained"), created_at: "2026-10-16T06:00:00Z" },
     ]);
-    const order = () => screen.getAllByText(/^(Ada Lovelace|Grace Hopper|Alan Turing)$/).map((n) => n.textContent);
-    expect(order()).toEqual(["Grace Hopper", "Alan Turing", "Ada Lovelace"]);
+    const order = () => screen.getAllByText(/^(Charlotte Flair|Sami Zayn|Randy Orton)$/).map((n) => n.textContent);
+    expect(order()).toEqual(["Sami Zayn", "Randy Orton", "Charlotte Flair"]);
     fireEvent.click(screen.getByRole("button", { name: "Sort by who" }));
-    expect(order()).toEqual(["Ada Lovelace", "Alan Turing", "Grace Hopper"]);
+    expect(order()).toEqual(["Charlotte Flair", "Randy Orton", "Sami Zayn"]);
     fireEvent.click(screen.getByRole("button", { name: "Sort by who" }));
-    expect(order()).toEqual(["Grace Hopper", "Alan Turing", "Ada Lovelace"]);
+    expect(order()).toEqual(["Sami Zayn", "Randy Orton", "Charlotte Flair"]);
   });
 
   it("name the person as a link to their page, and show a reason as it was written", () => {
     renderQueue([ask("r1", "u1", "operator")]);
-    expect(screen.getByRole("link", { name: "Ada Lovelace" }).getAttribute("href")).toBe("/users/u1");
+    expect(screen.getByRole("link", { name: "Charlotte Flair" }).getAttribute("href")).toBe("/users/u1");
     expect(screen.getByText("A build.")).toBeInTheDocument();
   });
 });

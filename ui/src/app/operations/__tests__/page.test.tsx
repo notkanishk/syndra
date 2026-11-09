@@ -19,7 +19,7 @@ const state = vi.hoisted(() => ({
   triggers: [] as OnboardingTriggerRow[],
   eventsError: null as unknown,
   triggersError: null as unknown,
-  names: { u1: "Meera Pillai", u2: "Kabir Shah", p1: "Laser cutter", b1: "New members" } as Record<
+  names: { u1: "Finn Balor", u2: "Indi Hartwell", p1: "Laser cutter", b1: "New members" } as Record<
     string,
     string
   >,
@@ -170,7 +170,7 @@ describe("Incoming events — plain titles and outcomes", () => {
     state.triggers = [trigger()];
     renderPage();
 
-    expect(screen.getByText(/was given/).textContent).toContain("Meera Pillai");
+    expect(screen.getByText(/was given/).textContent).toContain("Finn Balor");
     expect(screen.getByText(/joined\. Syndra gave them/).textContent).toContain("New members");
   });
 
@@ -215,7 +215,7 @@ describe("Incoming events — search", () => {
     renderPage();
     const box = screen.getByRole("searchbox", { name: /search events/i });
 
-    fireEvent.change(box, { target: { value: "kabir" } });
+    fireEvent.change(box, { target: { value: "indi" } });
     expect(screen.queryByText("Access given in Zitadel")).toBeNull();
     expect(screen.getByText("Access removed in Zitadel")).toBeTruthy();
 

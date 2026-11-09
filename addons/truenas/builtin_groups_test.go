@@ -59,13 +59,13 @@ func TestBuiltinGroupIsNotReportedOnASubject(t *testing.T) {
 }
 
 func TestConvergeCarriesBuiltinMembershipsThrough(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41]}]`)
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41]}]`)
 	m.fakeRPC.groups = groupsWithAdmin
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"group":["lab_makers"]}}`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"group":["lab_makers"]}}`)
 	if decodeOutcome(t, rr).Effect != EffectApplied {
 		t.Fatalf("want applied: %s", rr.Body.String())
 	}
@@ -80,13 +80,13 @@ func TestConvergeCarriesBuiltinMembershipsThrough(t *testing.T) {
 }
 
 func TestConvergeIsANoOpWhenOnlyBuiltinGroupsDiffer(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]}]`)
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]}]`)
 	m.fakeRPC.groups = groupsWithAdmin
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"group":["lab_makers"]}}`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"group":["lab_makers"]}}`)
 	if out := decodeOutcome(t, rr); out.Effect != EffectNoChange {
 		t.Fatalf("builtin_users is not Syndra's to reconcile, want no change, got %s (%s)", out.Effect, rr.Body.String())
 	}
@@ -96,13 +96,13 @@ func TestConvergeIsANoOpWhenOnlyBuiltinGroupsDiffer(t *testing.T) {
 }
 
 func TestDesiringABuiltinGroupIsRefused(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	m.fakeRPC.groups = groupsWithAdmin
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"group":["builtin_administrators"]}}`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"group":["builtin_administrators"]}}`)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("a mapping to a built-in group must fail loudly, got %d (%s)", rr.Code, rr.Body.String())
 	}

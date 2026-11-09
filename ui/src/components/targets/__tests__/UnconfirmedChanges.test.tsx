@@ -8,7 +8,7 @@ import type { UnconfirmedOperation } from "@/lib/queries/useTargets";
 
 // A-09 §3–4: a change the system never answered, settled by Say what happened.
 
-const NAMES: Record<string, string> = { u9: "Grace Hopper", op1: "Kanishk Singh" };
+const NAMES: Record<string, string> = { u9: "Sami Zayn", op1: "Kanishk Singh" };
 vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{NAMES[id] ?? id}</span>,
 }));
@@ -42,7 +42,7 @@ const PURGE: UnconfirmedOperation = {
   operation: "account.purge",
   subject_id: "u9",
   actor_id: "op1",
-  about: "grace.hopper",
+  about: "sami.zayn",
   sent_at: "2026-11-02T18:05:00Z",
 };
 
@@ -92,8 +92,8 @@ describe("Waiting on you: changes nobody confirmed", () => {
   it("asks the operator to look first, and records nothing until they choose", () => {
     renderIt([PURGE]);
     fireEvent.click(screen.getByRole("button", { name: /^Say what happened/ }));
-    expect(screen.getByRole("heading", { name: "Did TrueNAS delete Grace Hopper's account and files?" })).toBeTruthy();
-    expect(screen.getByText(/^Read TrueNAS again\. If grace\.hopper is gone from Accounts on TrueNAS, it happened\./)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Did TrueNAS delete Sami Zayn's account and files?" })).toBeTruthy();
+    expect(screen.getByText(/^Read TrueNAS again\. If sami\.zayn is gone from Accounts on TrueNAS, it happened\./)).toBeTruthy();
     expect(screen.getByText("Nothing is sent to TrueNAS. This records what you found, with your name.")).toBeTruthy();
 
     const confirm = screen.getByRole("button", { name: "Record what happened" });
@@ -113,7 +113,7 @@ describe("Waiting on you: changes nobody confirmed", () => {
     renderIt([PURGE]);
     fireEvent.click(screen.getByRole("button", { name: /^Say what happened/ }));
     expect(screen.getByText("Done")).toBeTruthy();
-    expect(screen.getByText("TrueNAS deleted Grace Hopper's account and files.")).toBeTruthy();
+    expect(screen.getByText("TrueNAS deleted Sami Zayn's account and files.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 });

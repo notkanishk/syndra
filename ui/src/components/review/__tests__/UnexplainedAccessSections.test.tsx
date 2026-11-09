@@ -40,7 +40,7 @@ const diff = vi.hoisted(() => ({
 }));
 const summaryRead = vi.hoisted(() => ({ isLoading: false, error: null as unknown }));
 
-const NAMES: Record<string, string> = { u1: "Meera Pillai", u2: "Arjun Das", u3: "Tomas Weber" };
+const NAMES: Record<string, string> = { u1: "Finn Balor", u2: "Chad Gable", u3: "Jimmy Uso" };
 const PROJECTS: Record<string, string> = { p1: "Electronics bench", p2: "Wood shop" };
 
 vi.mock("next/navigation", () => ({
@@ -134,7 +134,7 @@ const GONE = /Given by Syndra, gone from Zitadel/;
 /** Names of the people in a section, in the order they are drawn. */
 function peopleIn(section: HTMLElement): string[] {
   return within(section)
-    .getAllByRole("link", { name: /Meera|Arjun|Tomas/ })
+    .getAllByRole("link", { name: /Finn|Chad|Jimmy/ })
     .map((link) => link.textContent ?? "");
 }
 
@@ -162,9 +162,9 @@ describe("Drift — sections", () => {
     const gone = screen.getByRole("region", { name: GONE });
 
     expect(within(zitadel).getByTestId("card-count")).toHaveTextContent("2");
-    expect(peopleIn(zitadel)).toEqual(["Meera Pillai", "Arjun Das"]);
+    expect(peopleIn(zitadel)).toEqual(["Finn Balor", "Chad Gable"]);
     expect(within(gone).getByTestId("card-count")).toHaveTextContent("1");
-    expect(peopleIn(gone)).toEqual(["Tomas Weber"]);
+    expect(peopleIn(gone)).toEqual(["Jimmy Uso"]);
   });
 
   it("folds a section to its heading and opens it again", () => {
@@ -175,12 +175,12 @@ describe("Drift — sections", () => {
 
     fireEvent.click(heading);
     expect(heading).toHaveAttribute("aria-expanded", "false");
-    expect(within(zitadel).queryByText("Meera Pillai")).toBeNull();
+    expect(within(zitadel).queryByText("Finn Balor")).toBeNull();
     // The other direction is untouched.
-    expect(screen.getByText("Tomas Weber")).toBeInTheDocument();
+    expect(screen.getByText("Jimmy Uso")).toBeInTheDocument();
 
     fireEvent.click(heading);
-    expect(within(zitadel).getByText("Meera Pillai")).toBeInTheDocument();
+    expect(within(zitadel).getByText("Finn Balor")).toBeInTheDocument();
   });
 
   it("shows ten rows a section, then offers the rest", () => {
@@ -205,10 +205,10 @@ describe("Drift — sections", () => {
 
     const gone = screen.getByRole("region", { name: GONE });
     fireEvent.click(within(gone).getByRole("button", { name: GONE }));
-    expect(within(gone).queryByText("Tomas Weber")).toBeNull();
+    expect(within(gone).queryByText("Jimmy Uso")).toBeNull();
 
     fireEvent.click(within(nav).getByRole("link", { name: /Gone from Zitadel/ }));
-    expect(within(gone).getByText("Tomas Weber")).toBeInTheDocument();
+    expect(within(gone).getByText("Jimmy Uso")).toBeInTheDocument();
   });
 
   it("says how many are waiting and how long the oldest has", () => {
@@ -232,10 +232,10 @@ describe("Drift — a finding that goes on a later read (S5)", () => {
       );
       const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
       expect(within(zitadel).getByTestId("card-count")).toHaveTextContent("1");
-      const gone = within(zitadel).getByRole("link", { name: "Arjun Das", hidden: true });
+      const gone = within(zitadel).getByRole("link", { name: "Chad Gable", hidden: true });
       expect(gone.closest("[data-leaving]")).not.toBeNull();
       expect(gone.closest("[inert]")).not.toBeNull();
-      expect(within(zitadel).getByRole("link", { name: "Meera Pillai" }).closest("[data-leaving]")).toBeNull();
+      expect(within(zitadel).getByRole("link", { name: "Finn Balor" }).closest("[data-leaving]")).toBeNull();
     } finally {
       motionInTests(false);
     }
@@ -257,11 +257,11 @@ describe("Drift — search", () => {
   it("finds a person by name, across both sections", () => {
     renderPage();
     fireEvent.change(screen.getByRole("textbox", { name: "Search drift by person or role" }), {
-      target: { value: "tomas" },
+      target: { value: "jimmy" },
     });
 
     expect(screen.queryByRole("region", { name: IN_ZITADEL })).toBeNull();
-    expect(within(screen.getByRole("region", { name: GONE })).getByText("Tomas Weber")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: GONE })).getByText("Jimmy Uso")).toBeInTheDocument();
   });
 
   it("finds a role by its project and its key", () => {
@@ -273,12 +273,12 @@ describe("Drift — search", () => {
     const box = screen.getByRole("textbox", { name: "Search drift by person or role" });
 
     fireEvent.change(box, { target: { value: "wood" } });
-    expect(screen.queryByText("Meera Pillai")).toBeNull();
-    expect(screen.getByText("Arjun Das")).toBeInTheDocument();
+    expect(screen.queryByText("Finn Balor")).toBeNull();
+    expect(screen.getByText("Chad Gable")).toBeInTheDocument();
 
     fireEvent.change(box, { target: { value: "operator" } });
-    expect(screen.getByText("Meera Pillai")).toBeInTheDocument();
-    expect(screen.queryByText("Arjun Das")).toBeNull();
+    expect(screen.getByText("Finn Balor")).toBeInTheDocument();
+    expect(screen.queryByText("Chad Gable")).toBeNull();
   });
 
   it("says nothing matches, and clearing is the way back", () => {
@@ -289,7 +289,7 @@ describe("Drift — search", () => {
 
     expect(screen.getByText("Nothing unexplained matches those filters.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getByText("Meera Pillai")).toBeInTheDocument();
+    expect(screen.getByText("Finn Balor")).toBeInTheDocument();
   });
 });
 
@@ -297,8 +297,8 @@ describe("Drift — sort", () => {
   it("starts with the most recently found on top", () => {
     renderPage();
     expect(peopleIn(screen.getByRole("region", { name: IN_ZITADEL }))).toEqual([
-      "Meera Pillai",
-      "Arjun Das",
+      "Finn Balor",
+      "Chad Gable",
     ]);
   });
 
@@ -307,10 +307,10 @@ describe("Drift — sort", () => {
     const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
 
     fireEvent.click(within(zitadel).getByRole("button", { name: "Sort by who" }));
-    expect(peopleIn(zitadel)).toEqual(["Arjun Das", "Meera Pillai"]);
+    expect(peopleIn(zitadel)).toEqual(["Chad Gable", "Finn Balor"]);
 
     fireEvent.click(within(zitadel).getByRole("button", { name: "Sort by who" }));
-    expect(peopleIn(zitadel)).toEqual(["Meera Pillai", "Arjun Das"]);
+    expect(peopleIn(zitadel)).toEqual(["Finn Balor", "Chad Gable"]);
   });
 
   it("gathers equal reasons under a label with their count", () => {
@@ -326,7 +326,7 @@ describe("Drift — sort", () => {
     // A to Z by reason; inside a run, newest first.
     const labels = within(zitadel).getAllByTestId("run-label").map((el) => el.textContent);
     expect(labels).toEqual(["Made in Zitadel by a person2", "Maker not known1"]);
-    expect(peopleIn(zitadel)).toEqual(["Meera Pillai", "Tomas Weber", "Arjun Das"]);
+    expect(peopleIn(zitadel)).toEqual(["Finn Balor", "Jimmy Uso", "Chad Gable"]);
   });
 });
 
@@ -416,7 +416,7 @@ describe("Drift — selection", () => {
     drift.data = [item({ zitadel_grant_id: "zg_9" })];
     renderPage();
 
-    expect(screen.getByRole("link", { name: "Meera Pillai" })).toHaveAttribute("href", "/users/u1");
+    expect(screen.getByRole("link", { name: "Finn Balor" })).toHaveAttribute("href", "/users/u1");
     fireEvent.click(screen.getByRole("button", { name: "Show evidence" }));
     expect(screen.getByText("zg_9")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hide evidence" })).toBeInTheDocument();

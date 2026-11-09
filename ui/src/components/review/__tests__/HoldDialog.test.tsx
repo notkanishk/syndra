@@ -14,7 +14,7 @@ function open() {
   return render(
     <HoldDialog
       subjectId="u_2f81"
-      subjectName="Tomas Beck"
+      subjectName="Kevin Owens"
       target="truenas"
       field="share"
       value="prints"
@@ -31,7 +31,7 @@ describe("HoldDialog", () => {
     createHold.mockResolvedValueOnce({});
     open();
 
-    fireEvent.change(screen.getByLabelText(/Why \(shown to Tomas Beck\)/i), {
+    fireEvent.change(screen.getByLabelText(/Why \(shown to Kevin Owens\)/i), {
       target: { value: "Per the safety review" },
     });
     fireEvent.change(screen.getByLabelText(/Remind us on/i), {
@@ -41,7 +41,7 @@ describe("HoldDialog", () => {
 
     // The result is in the act's own word, then one sentence, then where it shows next.
     expect(await screen.findByText("On hold")).toBeInTheDocument();
-    expect(screen.getByText("The prints share is on hold for Tomas Beck.")).toBeInTheDocument();
+    expect(screen.getByText("The prints share is on hold for Kevin Owens.")).toBeInTheDocument();
     // Default ending is "stays", so the reminder actually lands somewhere: the
     // queue where it will next surface, not just "the target catches up". The
     // radio option above also mentions Holds due, so match the fuller outcome
@@ -61,7 +61,7 @@ describe("HoldDialog", () => {
   it("a failed press is Not put on hold and keeps the form so it can be pressed again", async () => {
     createHold.mockRejectedValueOnce(new Error("boom"));
     open();
-    fireEvent.change(screen.getByLabelText(/Why \(shown to Tomas Beck\)/i), { target: { value: "Per the safety review" } });
+    fireEvent.change(screen.getByLabelText(/Why \(shown to Kevin Owens\)/i), { target: { value: "Per the safety review" } });
     fireEvent.change(screen.getByLabelText(/Remind us on/i), { target: { value: "2026-10-03" } });
     fireEvent.click(act());
     expect(await screen.findByText("Not put on hold")).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe("HoldDialog", () => {
     createHold.mockResolvedValueOnce({});
     open();
 
-    fireEvent.change(screen.getByLabelText(/Why \(shown to Tomas Beck\)/i), {
+    fireEvent.change(screen.getByLabelText(/Why \(shown to Kevin Owens\)/i), {
       target: { value: "Until the cohort ends" },
     });
     fireEvent.click(screen.getByText("It lifts itself on a date."));

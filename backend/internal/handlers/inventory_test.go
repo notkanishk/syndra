@@ -50,9 +50,9 @@ func stubAdopt(t *testing.T, h *adoptHarness) {
 
 func adopt(t *testing.T, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/inventory/ada/adopt", strings.NewReader(body))
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/targets/truenas/inventory/charlotte/adopt", strings.NewReader(body))
 	r.SetPathValue("target", "truenas")
-	r.SetPathValue("username", "ada")
+	r.SetPathValue("username", "charlotte")
 	rr := httptest.NewRecorder()
 	handleAdoptAccount(rr, r)
 	return rr
@@ -95,7 +95,7 @@ func TestAnUnreportedUIDIsNotRecordedAsRoot(t *testing.T) {
 func TestARefusedAdoptionIsNotReportedAsAdopted(t *testing.T) {
 	h := &adoptHarness{
 		outcome:  addons.OutcomeRejected,
-		addonErr: errors.New("ada is already bound to another subject (leo)"),
+		addonErr: errors.New("charlotte is already bound to another subject (seth)"),
 	}
 	stubAdopt(t, h)
 
@@ -439,7 +439,7 @@ func stubRelease(t *testing.T, h *releaseHarness) {
 	t.Cleanup(func() { dbGetTargetBinding = getBinding })
 	// The release's record names the account it lets go of (A-09 "about").
 	dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) {
-		return db.TargetBinding{Username: "aanya.rao"}, true, nil
+		return db.TargetBinding{Username: "roman.reigns"}, true, nil
 	}
 
 	svcDispatchOperation = func(_ context.Context, req addonop.Request) (addonop.Result, error) {
@@ -480,7 +480,7 @@ func TestAReleaseForgetsBothStores(t *testing.T) {
 	if len(h.dispatched) != 1 || h.dispatched[0].Operation != "account.release" {
 		t.Fatalf("the add-on's binding must be released too: %+v", h.dispatched)
 	}
-	if h.dispatched[0].About != "aanya.rao" {
+	if h.dispatched[0].About != "roman.reigns" {
 		t.Errorf("the release's record must name the account, for Waiting on you: %q", h.dispatched[0].About)
 	}
 	if h.dispatched[0].SubjectID != "u1" || !h.dispatched[0].Confirmed {

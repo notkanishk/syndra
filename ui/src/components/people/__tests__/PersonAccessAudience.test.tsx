@@ -13,8 +13,8 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
     data: {
       user: {
         id: "u1",
-        name: "Ada Lovelace",
-        email: "ada@example.edu",
+        name: "Charlotte Flair",
+        email: "charlotte@example.edu",
         title: "Student Staff",
         team: "Fabrication",
         status: "active",

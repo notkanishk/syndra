@@ -40,7 +40,7 @@ function renderActivity() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <PersonActivity userId="u1" name="Ada" />
+      <PersonActivity userId="u1" name="Charlotte" />
     </QueryClientProvider>,
   );
 }

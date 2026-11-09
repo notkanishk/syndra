@@ -27,13 +27,13 @@ func stubDormant(t *testing.T) {
 			Outcome:  addons.OutcomeSucceeded,
 			Current:  true,
 			TakenAt:  time.Now(),
-			Accounts: []addons.TargetAccount{{Username: "ada", UID: 3001}, {Username: "leo", UID: 3002}},
+			Accounts: []addons.TargetAccount{{Username: "charlotte", UID: 3001}, {Username: "seth", UID: 3002}},
 		}
 	}
 	dormantBindings = func(context.Context, string) ([]db.TargetBinding, error) {
 		return []db.TargetBinding{
-			{Target: "truenas", SubjectID: "u1", Username: "ada"},
-			{Target: "truenas", SubjectID: "u2", Username: "leo"},
+			{Target: "truenas", SubjectID: "u1", Username: "charlotte"},
+			{Target: "truenas", SubjectID: "u2", Username: "seth"},
 		}, nil
 	}
 	dormantResolve = func(_ context.Context, subjectID, _ string) (EntitlementSet, error) {
@@ -47,7 +47,7 @@ func stubDormant(t *testing.T) {
 		return EntitlementSet{Fields: map[string][]string{}}, nil
 	}
 	dormantSubjectStatus = func(_ context.Context, subjectID string) (string, bool) {
-		return "Leo Marsh", true
+		return "Seth Marsh", true
 	}
 	dormantSubjectRoles = func(context.Context, string) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{ID: "g1"}}, nil
@@ -66,7 +66,7 @@ func TestAnAccountAnActiveRoleStillGrantsIsNeverDormant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Accounts) != 1 || report.Accounts[0].Account != "leo" {
+	if len(report.Accounts) != 1 || report.Accounts[0].Account != "seth" {
 		t.Fatalf("only the unentitled account is dormant, got %+v", report.Accounts)
 	}
 }
@@ -139,7 +139,7 @@ func TestABindingToAnAbsentAccountIsNotDormant(t *testing.T) {
 	dormantSubjects = func(context.Context, string) addons.SubjectsResult {
 		return addons.SubjectsResult{
 			Outcome: addons.OutcomeSucceeded, Current: true, TakenAt: time.Now(),
-			Accounts: []addons.TargetAccount{{Username: "ada", UID: 3001}},
+			Accounts: []addons.TargetAccount{{Username: "charlotte", UID: 3001}},
 		}
 	}
 

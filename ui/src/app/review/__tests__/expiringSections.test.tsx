@@ -18,7 +18,7 @@ const state = vi.hoisted(() => ({
   byWindow: null as Record<number, ExpiringGrantRow[]> | null,
 }));
 
-const NAMES: Record<string, string> = { u1: "Meera Pillai", u2: "Arjun Das", u3: "Tomas Weber", priya: "Priya Nair" };
+const NAMES: Record<string, string> = { u1: "Finn Balor", u2: "Chad Gable", u3: "Jimmy Uso", cody: "Cody Rhodes" };
 const PROJECTS: Record<string, string> = { p1: "Electronics bench", p2: "Wood shop" };
 
 vi.mock("next/navigation", () => ({
@@ -58,7 +58,7 @@ function grant(over: Partial<ExpiringGrantRow> = {}): ExpiringGrantRow {
     user_id: "u1",
     project_id: "p1",
     role_key: "operator",
-    granted_by: "priya",
+    granted_by: "cody",
     reason: "",
     expires_at: days(5),
     created_at: "2026-06-01T12:00:00Z",
@@ -66,9 +66,9 @@ function grant(over: Partial<ExpiringGrantRow> = {}): ExpiringGrantRow {
   };
 }
 
-const ACK = { by: "priya", at: "2026-08-04T09:00:00Z" };
+const ACK = { by: "cody", at: "2026-08-04T09:00:00Z" };
 
-/** Three undecided (soonest: Meera) and one let lapse. */
+/** Three undecided (soonest: Finn) and one let lapse. */
 function mixed() {
   return [
     grant({ id: "a", user_id: "u1", project_id: "p1", role_key: "operator", expires_at: days(2) }),
@@ -111,14 +111,14 @@ describe("Expiring access — the read line", () => {
     renderPage();
     const lapse = screen.getByRole("region", { name: LAPSE });
     fireEvent.click(within(lapse).getByRole("button", { name: LAPSE }));
-    expect(within(lapse).queryByText("Arjun Das")).toBeNull();
+    expect(within(lapse).queryByText("Chad Gable")).toBeNull();
 
     fireEvent.click(
       within(screen.getByRole("navigation", { name: "Sections of expiring access" })).getByRole("link", {
         name: /Let lapse/,
       }),
     );
-    expect(within(lapse).getByText("Arjun Das")).toBeInTheDocument();
+    expect(within(lapse).getByText("Chad Gable")).toBeInTheDocument();
   });
 
   it("has a floating pill for the same two cards", () => {
@@ -145,8 +145,8 @@ describe("Expiring access — folding", () => {
 
     fireEvent.click(heading);
     expect(heading).toHaveAttribute("aria-expanded", "false");
-    expect(within(undecided).queryByText("Meera Pillai")).toBeNull();
-    expect(within(screen.getByRole("region", { name: LAPSE })).getByText("Arjun Das")).toBeInTheDocument();
+    expect(within(undecided).queryByText("Finn Balor")).toBeNull();
+    expect(within(screen.getByRole("region", { name: LAPSE })).getByText("Chad Gable")).toBeInTheDocument();
   });
 });
 
@@ -155,23 +155,23 @@ describe("Expiring access — search", () => {
 
   it("finds a person by name across both cards, and the lede counts what matched", () => {
     renderPage();
-    fireEvent.change(box(), { target: { value: "arjun" } });
+    fireEvent.change(box(), { target: { value: "chad" } });
 
-    expect(within(screen.getByRole("region", { name: UNDECIDED })).getByText("Arjun Das")).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: LAPSE })).getByText("Arjun Das")).toBeInTheDocument();
-    expect(screen.queryByText("Meera Pillai")).toBeNull();
+    expect(within(screen.getByRole("region", { name: UNDECIDED })).getByText("Chad Gable")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: LAPSE })).getByText("Chad Gable")).toBeInTheDocument();
+    expect(screen.queryByText("Finn Balor")).toBeNull();
     expect(screen.getByText(/2 roles matching · 1 person/)).toBeInTheDocument();
   });
 
   it("finds a role by its project and by its key", () => {
     renderPage();
     fireEvent.change(box(), { target: { value: "wood" } });
-    expect(screen.queryByText("Meera Pillai")).toBeNull();
-    expect(screen.getByText("Tomas Weber")).toBeInTheDocument();
+    expect(screen.queryByText("Finn Balor")).toBeNull();
+    expect(screen.getByText("Jimmy Uso")).toBeInTheDocument();
 
     fireEvent.change(box(), { target: { value: "operator" } });
-    expect(screen.getByText("Meera Pillai")).toBeInTheDocument();
-    expect(screen.queryByText("Tomas Weber")).toBeNull();
+    expect(screen.getByText("Finn Balor")).toBeInTheDocument();
+    expect(screen.queryByText("Jimmy Uso")).toBeNull();
   });
 
   it("never says every one is decided about a search that matches nothing", () => {
@@ -188,10 +188,10 @@ describe("Expiring access — search", () => {
   });
 
   it("does not say it of a search that happens to match only decided rows", () => {
-    // Arjun's Electronics bench row is let lapse; his Wood shop row is not, and neither are others.
+    // Chad's Electronics bench row is let lapse; his Wood shop row is not, and neither are others.
     state.rows = mixed().filter((row) => row.id !== "b");
     renderPage();
-    fireEvent.change(box(), { target: { value: "arjun" } });
+    fireEvent.change(box(), { target: { value: "chad" } });
     expect(screen.queryByText(/every one decided/)).toBeNull();
   });
 
@@ -202,14 +202,14 @@ describe("Expiring access — search", () => {
     expect(screen.queryByRole("region", { name: UNDECIDED })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Clear the search" }));
-    expect(screen.getByText("Meera Pillai")).toBeInTheDocument();
+    expect(screen.getByText("Finn Balor")).toBeInTheDocument();
   });
 
   it("does not call the queue decided because a search left no undecided row", () => {
     renderPage();
     fireEvent.change(box(), { target: { value: "operator" } });
-    // Only Arjun's decided Electronics row and Meera's undecided one match; narrow to the decided one.
-    fireEvent.change(box(), { target: { value: "arjun das" } });
+    // Only Chad's decided Electronics row and Finn's undecided one match; narrow to the decided one.
+    fireEvent.change(box(), { target: { value: "chad gable" } });
     expect(screen.queryByText(/Nothing here is waiting on a decision/)).toBeNull();
   });
 
@@ -217,7 +217,7 @@ describe("Expiring access — search", () => {
     renderPage();
     const amber = () => document.querySelectorAll("[data-soonest]").length;
     expect(amber()).toBe(1);
-    fireEvent.change(box(), { target: { value: "tomas" } });
+    fireEvent.change(box(), { target: { value: "jimmy" } });
     expect(amber()).toBe(1);
   });
 });
@@ -277,9 +277,9 @@ describe("Expiring access — sort", () => {
   it("starts with the soonest first, the arrow on Ends in", () => {
     renderPage();
     expect(peopleIn(screen.getByRole("region", { name: UNDECIDED }))).toEqual([
-      "Meera Pillai",
-      "Arjun Das",
-      "Tomas Weber",
+      "Finn Balor",
+      "Chad Gable",
+      "Jimmy Uso",
     ]);
     const ends = within(screen.getByRole("region", { name: UNDECIDED })).getByRole("button", { name: "Sort by ends in" });
     expect(ends.querySelector("span")).toHaveClass("opacity-100");
@@ -289,14 +289,14 @@ describe("Expiring access — sort", () => {
     renderPage();
     const card = screen.getByRole("region", { name: UNDECIDED });
     fireEvent.click(within(card).getByRole("button", { name: "Sort by ends in" }));
-    expect(peopleIn(card)).toEqual(["Tomas Weber", "Arjun Das", "Meera Pillai"]);
+    expect(peopleIn(card)).toEqual(["Jimmy Uso", "Chad Gable", "Finn Balor"]);
   });
 
   it("orders by who, with no runs", () => {
     renderPage();
     const card = screen.getByRole("region", { name: UNDECIDED });
     fireEvent.click(within(card).getByRole("button", { name: "Sort by who" }));
-    expect(peopleIn(card)).toEqual(["Arjun Das", "Meera Pillai", "Tomas Weber"]);
+    expect(peopleIn(card)).toEqual(["Chad Gable", "Finn Balor", "Jimmy Uso"]);
     expect(within(card).queryAllByTestId("run-label")).toHaveLength(0);
   });
 
@@ -309,7 +309,7 @@ describe("Expiring access — sort", () => {
       "Electronics bench · Operator1",
       "Wood shop · Member2",
     ]);
-    expect(peopleIn(card)).toEqual(["Meera Pillai", "Arjun Das", "Tomas Weber"]);
+    expect(peopleIn(card)).toEqual(["Finn Balor", "Chad Gable", "Jimmy Uso"]);
   });
 
   it("keeps the soonest row amber whatever the order", () => {
@@ -317,6 +317,6 @@ describe("Expiring access — sort", () => {
     const card = screen.getByRole("region", { name: UNDECIDED });
     fireEvent.click(within(card).getByRole("button", { name: "Sort by who" }));
     const amber = card.querySelector("[data-soonest]") as HTMLElement;
-    expect(amber).toHaveTextContent("Meera Pillai");
+    expect(amber).toHaveTextContent("Finn Balor");
   });
 });

@@ -26,8 +26,8 @@ const state: {
     plan_id: "plan_1",
     applied: false,
     outcomes: [
-      { user_id: "u1", name: "Ada", effect: "apply", detail: "Creates ada." },
-      { user_id: "u2", name: "Leo", effect: "no_change", detail: "Already correct." },
+      { user_id: "u1", name: "Charlotte", effect: "apply", detail: "Creates charlotte." },
+      { user_id: "u2", name: "Seth", effect: "no_change", detail: "Already correct." },
     ],
     summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     provisional: false,
@@ -85,8 +85,8 @@ describe("converging a cohort", () => {
     // say, and a screen that filtered the unchanged rows would leave an
     // operator wondering where the rest of their cohort went.
     await waitFor(() => expect(screen.getByText(/Already correct/)).toBeInTheDocument());
-    expect(screen.getByText("Ada")).toBeInTheDocument();
-    expect(screen.getByText("Leo")).toBeInTheDocument();
+    expect(screen.getByText("Charlotte")).toBeInTheDocument();
+    expect(screen.getByText("Seth")).toBeInTheDocument();
   });
 
   it("applies the plan id it was given, never the original submission", async () => {

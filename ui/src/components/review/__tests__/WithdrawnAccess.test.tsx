@@ -14,7 +14,7 @@ import { WithdrawnAccess } from "@/components/review/WithdrawnAccess";
  * response to data, on the page whose whole job is to say what has not happened yet.
  */
 
-const NAMES: Record<string, string> = { u1: "Sana Kohli", u2: "Tomas Weber", u3: "Omar Haddad" };
+const NAMES: Record<string, string> = { u1: "Iyo Sky", u2: "Jimmy Uso", u3: "Tiffany Stratton" };
 const PROJECTS: Record<string, string> = { pWood: "Wood shop" };
 
 vi.mock("@/lib/queries/useNameResolver", () => ({
@@ -184,10 +184,10 @@ describe("the board's anatomy", () => {
   it("search narrows the rows and a section with none says so, not 'nothing given up'", async () => {
     await renderPage();
     fireEvent.change(screen.getByRole("textbox", { name: /Search unfinished revocations/ }), {
-      target: { value: "omar" },
+      target: { value: "tiffany" },
     });
-    expect(screen.queryByText("Sana Kohli")).toBeNull();
-    expect(screen.getByText("Omar Haddad")).toBeInTheDocument();
+    expect(screen.queryByText("Iyo Sky")).toBeNull();
+    expect(screen.getByText("Tiffany Stratton")).toBeInTheDocument();
     expect(screen.getByText("Nothing here matches.")).toBeInTheDocument();
     expect(sectionTitles()).toEqual(["Given up", "Still on the way"]);
   });
@@ -205,10 +205,10 @@ describe("the board's anatomy", () => {
     await renderPage();
     const given = document.getElementById("given-up")!;
     fireEvent.click(within(given).getByRole("button", { name: /Given up/ }));
-    expect(within(given).queryByText("Sana Kohli")).toBeNull();
+    expect(within(given).queryByText("Iyo Sky")).toBeNull();
     fireEvent.click(
       within(screen.getByRole("navigation", { name: "Sections of unfinished revocations" })).getByText("Given up"),
     );
-    expect(within(given).getByText("Sana Kohli")).toBeInTheDocument();
+    expect(within(given).getByText("Iyo Sky")).toBeInTheDocument();
   });
 });

@@ -103,7 +103,7 @@ func TestTheListSettlesUnsentRecordsAndNamesTheChange(t *testing.T) {
 	dbListUnresolvedAddonOperations = func(_ context.Context, target string, _ time.Duration, _ int) ([]db.AddonOperation, error) {
 		order = append(order, "list")
 		return []db.AddonOperation{{ID: "op_p", Target: target, Operation: "account.purge", ActorID: "op-1",
-			SubjectID: "u-grace", About: "grace.hopper", CreatedAt: sent.Add(-time.Second), ClaimedAt: &sent}}, nil
+			SubjectID: "u-sami", About: "sami.zayn", CreatedAt: sent.Add(-time.Second), ClaimedAt: &sent}}, nil
 	}
 
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/targets/truenas/unconfirmed", nil)
@@ -121,7 +121,7 @@ func TestTheListSettlesUnsentRecordsAndNamesTheChange(t *testing.T) {
 		t.Fatalf("one row, got %s", rr.Body.String())
 	}
 	row := out.Operations[0]
-	if row["about"] != "grace.hopper" || row["sent_at"] != sent.Format(time.RFC3339) {
+	if row["about"] != "sami.zayn" || row["sent_at"] != sent.Format(time.RFC3339) {
 		t.Errorf("the row names the account and dates the send from the claim: %v", row)
 	}
 	for _, key := range []string{"status", "params", "password"} {

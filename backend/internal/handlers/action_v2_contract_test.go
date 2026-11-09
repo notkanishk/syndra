@@ -31,8 +31,8 @@ func TestActionV2_PerAppShapeByClientID(t *testing.T) {
 			"cInv": {ApplicationID: "aInv", Version: 1, Profile: claims.ActionsV1()},
 		},
 	}, failClosed)})
-	b, _ := json.Marshal(claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"staff"}, GivenName: "Ada"})
-	setFacts(r, "ada", "pNet", string(b))
+	b, _ := json.Marshal(claims.Facts{UserID: "charlotte", ProjectID: "pNet", Roles: []string{"staff"}, GivenName: "Charlotte"})
+	setFacts(r, "charlotte", "pNet", string(b))
 
 	ask := func(client, function string) string {
 		t.Helper()
@@ -41,7 +41,7 @@ func TestActionV2_PerAppShapeByClientID(t *testing.T) {
 		body, _ := json.Marshal(map[string]any{
 			"function":    function,
 			"application": map[string]string{"client_id": client},
-			"user":        map[string]string{"id": "ada"},
+			"user":        map[string]string{"id": "charlotte"},
 			"user_grants": []ActionV2UserGrantRef{{ProjectID: "pNet", Roles: rolesJSON("staff", "guest")}, {ProjectID: "pNet", Roles: rolesJSON("admin")}},
 		})
 		rr := httptest.NewRecorder()
@@ -55,7 +55,7 @@ func TestActionV2_PerAppShapeByClientID(t *testing.T) {
 	cases := []struct{ client, function, want string }{
 		{"cNB", claims.FunctionPreAccessToken, `{"append_claims":[{"key":"groups","value":["netbird-staff","netbird-admins"]}]}`},
 		{"cInv", claims.FunctionPreUserinfo, `{"append_claims":[{"key":"groups","value":["admin","guest","staff"]},` +
-			`{"key":"custom_claims","value":{"given_name":"Ada","groups":["admin","guest","staff"]}}]}`},
+			`{"key":"custom_claims","value":{"given_name":"Charlotte","groups":["admin","guest","staff"]}}]}`},
 		{"cElse", claims.FunctionPreAccessToken, `{"append_claims":[{"key":"net.roles","value":["admin","guest","staff"]}]}`},
 		{"", claims.FunctionPreAccessToken, `{"append_claims":[{"key":"net.roles","value":["admin","guest","staff"]}]}`},
 	}
@@ -73,13 +73,13 @@ func TestActionV2_LandsGatesTheFunction(t *testing.T) {
 	supabase, _ := claims.FindTemplate("supabase-oidc") // lands userinfo
 	r := testPlane(t, map[string]claimserve.Project{"pNet": project(services.ProjectShapes{
 		ByClient: map[string]services.AppShape{"cSB": {Profile: supabase.Profile}}}, failClosed)})
-	setFacts(r, "ada", "pNet", factsJSON("ada", "pNet", "staff"))
+	setFacts(r, "charlotte", "pNet", factsJSON("charlotte", "pNet", "staff"))
 
 	for _, c := range []struct {
 		function string
 		want     int
 	}{{claims.FunctionPreAccessToken, 0}, {claims.FunctionPreUserinfo, 1}} {
-		body := fmt.Sprintf(`{"function":%q,"application":{"client_id":"cSB"},"user":{"id":"ada"},"user_grants":[{"projectId":"pNet","roles":["staff"]}]}`, c.function)
+		body := fmt.Sprintf(`{"function":%q,"application":{"client_id":"cSB"},"user":{"id":"charlotte"},"user_grants":[{"projectId":"pNet","roles":["staff"]}]}`, c.function)
 		rr := httptest.NewRecorder()
 		HandleActionInject(rr, httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(body)))
 		got := decodeActionResponse(t, rr)
@@ -97,15 +97,15 @@ func TestActionV2_LandsGatesTheFunction(t *testing.T) {
 // sign-in is held.
 func TestActionV2_DebugCapturesOnlyTheWatchedAccount(t *testing.T) {
 	r := builtinPlane(t, "pNet")
-	setFacts(r, "ada", "pNet", factsJSON("ada", "pNet", "staff"))
+	setFacts(r, "charlotte", "pNet", factsJSON("charlotte", "pNet", "staff"))
 	origExplain := svcExplainSignIn
 	t.Cleanup(func() { svcExplainSignIn = origExplain; claimDebug.Stop("aDbg", "test") })
 	svcExplainSignIn = func(context.Context, string, string, string) (services.Explanation, error) {
 		return services.Explanation{Checks: []services.Check{{State: services.CheckPass}}}, nil
 	}
 
-	claimDebug.Start("aDbg", "cDbg", "ada", "kanishk")
-	for _, user := range []string{"grace", "ada"} {
+	claimDebug.Start("aDbg", "cDbg", "charlotte", "kanishk")
+	for _, user := range []string{"sami", "charlotte"} {
 		body := fmt.Sprintf(`{"function":"function/preaccesstoken","application":{"client_id":"cDbg"},"user":{"id":%q},"user_grants":[{"projectId":"pNet","roles":["staff"]}]}`, user)
 		HandleActionInject(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(body)))
 	}
@@ -125,8 +125,8 @@ func TestActionV2_DebugCapturesOnlyTheWatchedAccount(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(got) != 1 || got[0] != "ada" {
-		t.Fatalf("want only Ada's sign-in, got %v", got)
+	if len(got) != 1 || got[0] != "charlotte" {
+		t.Fatalf("want only Charlotte's sign-in, got %v", got)
 	}
 }
 
@@ -308,7 +308,7 @@ func TestObservedHolds(t *testing.T) {
 			}
 			return c.roles, c.absent, c.err
 		}
-		if holds, known := observedHolds(context.Background(), "ada", c.client); holds != c.holds || known != c.known {
+		if holds, known := observedHolds(context.Background(), "charlotte", c.client); holds != c.holds || known != c.known {
 			t.Errorf("%s: holds=%v known=%v", c.name, holds, known)
 		}
 	}

@@ -36,7 +36,7 @@ vi.mock("@/lib/queries/useRequests", async (original) => ({
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
-    resolveUser: () => ({ value: { display_name: "Ada Lovelace" }, resolved: true }),
+    resolveUser: () => ({ value: { display_name: "Charlotte Flair" }, resolved: true }),
     resolveRole: () => ({ value: { display_name: "Trained" }, resolved: true }),
     resolveProject: () => ({ value: { name: "Laser" }, resolved: true }),
     resolveBundle: () => ({ value: undefined, resolved: true }),

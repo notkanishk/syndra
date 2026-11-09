@@ -479,8 +479,8 @@ function richMap() {
   reads.pending = [];
   reads.catalog = [role("p1", "operator", 51), role("p1", "door", 22), role("p2", "weaving", 0)];
   people.users = [
-    { id: "u1", name: "Priya Nair", title: "Research assistant", email: "priya@example.edu" },
-    { id: "u2", name: "Aanya Rao", title: "Student", email: "aanya@example.edu" },
+    { id: "u1", name: "Cody Rhodes", title: "Research assistant", email: "cody@example.edu" },
+    { id: "u2", name: "Roman Reigns", title: "Student", email: "roman@example.edu" },
   ];
 }
 const panelOf = (name: string | RegExp) => screen.getByRole("region", { name });
@@ -636,15 +636,15 @@ describe("the question seat", () => {
 
   it("offers the questions its names can ask, and keeps the chosen one in the link", () => {
     renderPage();
-    type("priya to door");
-    expect(option(/Path from Priya Nair to Laser Lab · Door/)).toBeInTheDocument();
-    fireEvent.click(option(/Path from Priya Nair to Laser Lab · Door/));
+    type("cody to door");
+    expect(option(/Path from Cody Rhodes to Laser Lab · Door/)).toBeInTheDocument();
+    fireEvent.click(option(/Path from Cody Rhodes to Laser Lab · Door/));
 
     expect(new URLSearchParams(nav.state.search).get("q")).toBe("path");
     expect(new URLSearchParams(nav.state.search).get("person")).toBe("u1");
     expect(new URLSearchParams(nav.state.search).get("role")).toBe("role:p1:door");
     const chips = screen.getByRole("group", { name: "The question the map is answering" });
-    expect(chips).toHaveTextContent("Path from Priya Nair to Laser Lab · Door");
+    expect(chips).toHaveTextContent("Path from Cody Rhodes to Laser Lab · Door");
     expect(screen.queryByLabelText("Ask the map")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Clear the question" }));
@@ -653,10 +653,10 @@ describe("the question seat", () => {
   });
 
   it("opens a question straight from a link, with the pins kept", () => {
-    people.access = { u1: view("u1", "Priya Nair", [hand]) };
+    people.access = { u1: view("u1", "Cody Rhodes", [hand]) };
     nav.set("q=path&person=u1&role=role%3Ap1%3Adoor&pin=bundle%3Ab1");
     renderPage();
-    expect(screen.getByRole("group", { name: "The question the map is answering" })).toHaveTextContent("Path from Priya Nair to Laser Lab · Door");
+    expect(screen.getByRole("group", { name: "The question the map is answering" })).toHaveTextContent("Path from Cody Rhodes to Laser Lab · Door");
     expect(screen.getByRole("button", { name: "Unpin Lab Tech" })).toBeInTheDocument();
   });
 
@@ -682,18 +682,18 @@ describe("the answers", () => {
   beforeEach(richMap);
 
   it("Path says each route in the order by hand, bundle, rule, and the map lights them", () => {
-    people.access = { u1: view("u1", "Priya Nair", [hand, labTech, byRule]) };
+    people.access = { u1: view("u1", "Cody Rhodes", [hand, labTech, byRule]) };
     nav.set("q=path&person=u1&role=role%3Ap1%3Adoor");
     renderPage();
 
-    const panel = panelOf("Priya Nair to Laser Lab · Door");
+    const panel = panelOf("Cody Rhodes to Laser Lab · Door");
     expect(panel).toHaveTextContent("Path · 3 routes");
     expect(panel).toHaveTextContent("Research assistant");
     expect(panel).toHaveTextContent("By hand: given to them directly.");
     expect(panel).toHaveTextContent("Through Lab Tech: Lab Tech gives Laser Lab · Door.");
     expect(panel).toHaveTextContent("By rule from Laser Lab · Operator: Laser Lab · Door comes automatically with Laser Lab · Operator.");
-    expect(panel).toHaveTextContent("3 routes. Removing one of them won't stop Priya Nair having it.");
-    expect(within(panel).getByRole("link", { name: /Open Priya Nair/ })).toHaveAttribute("href", "/users/u1");
+    expect(panel).toHaveTextContent("3 routes. Removing one of them won't stop Cody Rhodes having it.");
+    expect(within(panel).getByRole("link", { name: /Open Cody Rhodes/ })).toHaveAttribute("href", "/users/u1");
     expect(lightOf("Lab Tech")).toBe("lit");
     expect(lightOf("New members")).toBe("receded");
 
@@ -703,50 +703,50 @@ describe("the answers", () => {
   });
 
   it("Path says so when the person doesn't have it, and names a bundle's child", () => {
-    people.access = { u1: view("u1", "Priya Nair", []) };
+    people.access = { u1: view("u1", "Cody Rhodes", []) };
     nav.set("q=path&person=u1&role=role%3Ap1%3Adoor");
     const { unmount } = renderPage();
-    expect(panelOf("Priya Nair to Laser Lab · Door")).toHaveTextContent("Priya Nair doesn't have Laser Lab · Door.");
+    expect(panelOf("Cody Rhodes to Laser Lab · Door")).toHaveTextContent("Cody Rhodes doesn't have Laser Lab · Door.");
     unmount();
 
     people.access = {
-      u1: view("u1", "Priya Nair", [{ ...labTech, bundle_name: "New members", via_bundle_id: "b3", via_bundle_name: "Safety basics", queued: true }]),
+      u1: view("u1", "Cody Rhodes", [{ ...labTech, bundle_name: "New members", via_bundle_id: "b3", via_bundle_name: "Safety basics", queued: true }]),
     };
     renderPage();
-    const panel = panelOf("Priya Nair to Laser Lab · Door");
+    const panel = panelOf("Cody Rhodes to Laser Lab · Door");
     expect(panel).toHaveTextContent("Through New members, from Safety basics: New members includes Safety basics");
     expect(panel).toHaveTextContent("It is waiting for you to send.");
   });
 
   it("Compare sets the shared route apart from each person's own", () => {
-    people.access = { u1: view("u1", "Priya Nair", [hand, labTech]), u2: view("u2", "Aanya Rao", [labTech]) };
+    people.access = { u1: view("u1", "Cody Rhodes", [hand, labTech]), u2: view("u2", "Roman Reigns", [labTech]) };
     nav.set("q=compare&person=u1&other=u2&role=role%3Ap1%3Adoor");
     renderPage();
 
-    const panel = panelOf("Priya Nair and Aanya Rao");
+    const panel = panelOf("Cody Rhodes and Roman Reigns");
     expect(panel).toHaveTextContent("Compare · on Laser Lab · Door");
     expect(panel).toHaveTextContent("Both have it.");
     expect(panel).toHaveTextContent("Both: through Lab Tech.");
-    expect(panel).toHaveTextContent("Only Priya Nair: by hand.");
-    expect(panel).not.toHaveTextContent("Only Aanya Rao");
-    expect(within(panel).getByRole("link", { name: /Open Priya Nair/ })).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Only Cody Rhodes: by hand.");
+    expect(panel).not.toHaveTextContent("Only Roman Reigns");
+    expect(within(panel).getByRole("link", { name: /Open Cody Rhodes/ })).toBeInTheDocument();
   });
 
   it("Compare says who has it when only one does", () => {
-    people.access = { u1: view("u1", "Priya Nair", [labTech]), u2: view("u2", "Aanya Rao", []) };
+    people.access = { u1: view("u1", "Cody Rhodes", [labTech]), u2: view("u2", "Roman Reigns", []) };
     nav.set("q=compare&person=u1&other=u2&role=role%3Ap1%3Adoor");
     renderPage();
-    const panel = panelOf("Priya Nair and Aanya Rao");
-    expect(panel).toHaveTextContent("Priya Nair has it, Aanya Rao doesn't.");
-    expect(panel).toHaveTextContent("Aanya Rao doesn't have Laser Lab · Door.");
-    expect(panel).toHaveTextContent("Only Priya Nair: through Lab Tech.");
+    const panel = panelOf("Cody Rhodes and Roman Reigns");
+    expect(panel).toHaveTextContent("Cody Rhodes has it, Roman Reigns doesn't.");
+    expect(panel).toHaveTextContent("Roman Reigns doesn't have Laser Lab · Door.");
+    expect(panel).toHaveTextContent("Only Cody Rhodes: through Lab Tech.");
   });
 
   it("Who lists people with how they hold it, and asks with the references the API takes", () => {
     insights.who = {
       data: [
-        { user_id: "u7", name: "Rohan Mehta", email: "", how: [hand, labTech] },
-        { user_id: "u8", name: "Ishaan Kapoor", email: "", how: [labTech] },
+        { user_id: "u7", name: "Liv Morgan", email: "", how: [hand, labTech] },
+        { user_id: "u8", name: "Trick Williams", email: "", how: [labTech] },
       ],
       isError: false,
     };
@@ -756,8 +756,8 @@ describe("the answers", () => {
     expect(insights.calls.who).toEqual(["role:p1:door", "bundle:b3"]);
     const panel = panelOf("2 people");
     expect(panel).toHaveTextContent("Who has Laser Lab · Door without Safety basics");
-    expect(panel).toHaveTextContent("Rohan Mehta: by hand and through Lab Tech.");
-    expect(panel).toHaveTextContent("Ishaan Kapoor: through Lab Tech.");
+    expect(panel).toHaveTextContent("Liv Morgan: by hand and through Lab Tech.");
+    expect(panel).toHaveTextContent("Trick Williams: through Lab Tech.");
     expect(within(panel).getByRole("link", { name: /See them in People/ })).toHaveAttribute("href", "/users");
   });
 
@@ -768,14 +768,14 @@ describe("the answers", () => {
     expect(panelOf("Nobody")).toHaveTextContent("Everyone who has Laser Lab · Door also has Safety basics.");
     unmount();
 
-    insights.who = { data: [{ user_id: "u7", name: "Rohan Mehta", email: "", how: [hand] }], isError: false };
+    insights.who = { data: [{ user_id: "u7", name: "Liv Morgan", email: "", how: [hand] }], isError: false };
     renderPage();
-    expect(within(panelOf("1 person")).getByRole("link", { name: /Open Rohan Mehta/ })).toHaveAttribute("href", "/users/u7");
+    expect(within(panelOf("1 person")).getByRole("link", { name: /Open Liv Morgan/ })).toHaveAttribute("href", "/users/u7");
   });
 
   it("What if it went is amber, a preview, and names who would lose what", () => {
     insights.whatIf = {
-      data: { gains: [], losses: [{ user_id: "u9", name: "Dev Patel", roles: [{ project_id: "p1", role_key: "door" }] }], unchanged: 11 },
+      data: { gains: [], losses: [{ user_id: "u9", name: "Candice LeRae", roles: [{ project_id: "p1", role_key: "door" }] }], unchanged: 11 },
       isError: false,
     };
     nav.set("q=gone&bundle=bundle%3Ab1");
@@ -785,7 +785,7 @@ describe("the answers", () => {
     const panel = panelOf("Lab Tech");
     expect(panel).toHaveTextContent("What if it went · a preview, nothing changes");
     expect(panel).toHaveTextContent("1 person would lose something.");
-    expect(panel).toHaveTextContent("Dev Patel would lose Laser Lab · Door.");
+    expect(panel).toHaveTextContent("Candice LeRae would lose Laser Lab · Door.");
     expect(panel).toHaveTextContent("The rest: 11 people would stay as they are.");
     // A warn answer is a Notice-toned line, not a tinted box.
     expect(panel.className).not.toContain("warn-soft");
@@ -796,7 +796,7 @@ describe("the answers", () => {
 
   it("What if it also gave is a plain panel, and names who would gain", () => {
     insights.whatIf = {
-      data: { gains: [{ user_id: "u9", name: "Dev Patel", roles: [{ project_id: "p1", role_key: "door" }] }], losses: [], unchanged: 3 },
+      data: { gains: [{ user_id: "u9", name: "Candice LeRae", roles: [{ project_id: "p1", role_key: "door" }] }], losses: [], unchanged: 3 },
       isError: false,
     };
     nav.set("q=gives&bundle=bundle%3Ab2&role=role%3Ap1%3Adoor");
@@ -805,7 +805,7 @@ describe("the answers", () => {
     expect(insights.calls.change).toEqual({ kind: "bundle_gives_also", bundle_id: "b2", project_id: "p1", role_key: "door" });
     const panel = panelOf("New members also gave Laser Lab · Door");
     expect(panel).toHaveTextContent("a preview, nothing changes");
-    expect(panel).toHaveTextContent("Dev Patel would gain Laser Lab · Door.");
+    expect(panel).toHaveTextContent("Candice LeRae would gain Laser Lab · Door.");
     expect(panel.className).not.toContain("bg-accent-soft");
   });
 
@@ -830,7 +830,7 @@ describe("the answers", () => {
   });
 
   it("Esc goes back one question and keeps the pins", () => {
-    people.access = { u1: view("u1", "Priya Nair", [hand]) };
+    people.access = { u1: view("u1", "Cody Rhodes", [hand]) };
     nav.set("q=path&person=u1&role=role%3Ap1%3Adoor&pin=bundle%3Ab1");
     renderPage();
     expect(screen.getByRole("group", { name: "The question the map is answering" })).toBeInTheDocument();
@@ -846,12 +846,12 @@ describe("the answers", () => {
   it("on a phone the panel is the page, with the way to the person and the footer line", () => {
     viewport.phone = true;
     viewport.touch = true;
-    people.access = { u1: view("u1", "Priya Nair", [hand, labTech]) };
+    people.access = { u1: view("u1", "Cody Rhodes", [hand, labTech]) };
     nav.set("q=path&person=u1&role=role%3Ap1%3Adoor");
     renderPage();
 
-    const panel = panelOf("Priya Nair to Laser Lab · Door");
-    expect(within(panel).getByRole("link", { name: /Open Priya Nair/ })).toHaveAttribute("href", "/users/u1");
+    const panel = panelOf("Cody Rhodes to Laser Lab · Door");
+    expect(within(panel).getByRole("link", { name: /Open Cody Rhodes/ })).toHaveAttribute("href", "/users/u1");
     expect(within(panel).getByRole("button", { name: "Keep this answer" })).toBeInTheDocument();
     expect(screen.getByText("The map draws this on a wider screen. The link keeps the question, so it opens there as you left it.")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Access map" })).not.toBeInTheDocument();

@@ -412,7 +412,7 @@ describe("Pending changes · board layout", () => {
 
   describe("search", () => {
     beforeEach(() => {
-      names.users = { u1: "Lena Brandt", u2: "Omar Haddad" };
+      names.users = { u1: "Zoey Stark", u2: "Tiffany Stratton" };
       pending.data = [
         row({ id: "o1", user_id: "u1", role_keys: ["booking"], cascade_id: "c1" }),
         row({ id: "o2", user_id: "u2", role_keys: ["welder"], cascade_id: "c2" }),
@@ -425,9 +425,9 @@ describe("Pending changes · board layout", () => {
 
     it("narrows by person, and says sending still sends all of them", () => {
       renderPending();
-      type("omar");
-      expect(screen.queryByText("Lena Brandt")).not.toBeInTheDocument();
-      expect(screen.getByText("Omar Haddad")).toBeInTheDocument();
+      type("tiffany");
+      expect(screen.queryByText("Zoey Stark")).not.toBeInTheDocument();
+      expect(screen.getByText("Tiffany Stratton")).toBeInTheDocument();
       expect(screen.getByText(/1 of the 2 changes match\. Sending sends all 2, in order\./)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Send 2 changes" })).toBeEnabled();
     });
@@ -439,7 +439,7 @@ describe("Pending changes · board layout", () => {
         row({ id: "o3", user_id: "u2", role_keys: ["laser"] }),
       ];
       renderPending();
-      type("omar");
+      type("tiffany");
       expect(screen.getByText(/These 3 changes come from one edit/)).toBeInTheDocument();
       expect(screen.getByText(/They are sent together or not at all\. 2 of 3 shown\./)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Fold these 3 changes" })).toBeInTheDocument();
@@ -451,7 +451,7 @@ describe("Pending changes · board layout", () => {
         row({ id: "o2", user_id: "u2", role_keys: ["welder"] }),
       ];
       renderPending();
-      type("omar");
+      type("tiffany");
       expect(screen.getByText(/These 2 changes come from one edit/)).toBeInTheDocument();
       expect(screen.getByText(/1 of 2 shown\./)).toBeInTheDocument();
     });
@@ -460,19 +460,19 @@ describe("Pending changes · board layout", () => {
     it("fades the changes a search drops, and holds the one that matches", () => {
       motionInTests();
       renderPending();
-      const omar = screen.getByText("Omar Haddad");
-      type("omar");
-      expect(screen.getByText("Omar Haddad")).toBe(omar);
-      expect(omar.closest("[data-leaving]")).toBeNull();
-      expect(screen.getByText("Lena Brandt").closest("[data-leaving]")).not.toBeNull();
-      expect(screen.getByText("Lena Brandt").closest("[data-closing]")).not.toBeNull();
+      const tiffany = screen.getByText("Tiffany Stratton");
+      type("tiffany");
+      expect(screen.getByText("Tiffany Stratton")).toBe(tiffany);
+      expect(tiffany.closest("[data-leaving]")).toBeNull();
+      expect(screen.getByText("Zoey Stark").closest("[data-leaving]")).not.toBeNull();
+      expect(screen.getByText("Zoey Stark").closest("[data-closing]")).not.toBeNull();
     });
 
     it("narrows by role", () => {
       renderPending();
       type("booking");
-      expect(screen.getByText("Lena Brandt")).toBeInTheDocument();
-      expect(screen.queryByText("Omar Haddad")).not.toBeInTheDocument();
+      expect(screen.getByText("Zoey Stark")).toBeInTheDocument();
+      expect(screen.queryByText("Tiffany Stratton")).not.toBeInTheDocument();
     });
 
     it("says so when nothing matches, rather than claiming nothing is waiting", () => {

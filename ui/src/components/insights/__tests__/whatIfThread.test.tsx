@@ -56,7 +56,7 @@ const panel = (onLine = true): Panel => ({
   eyebrow: "What if",
   title: "Lab bundle",
   lines: [
-    { tone: "warn", lead: "Priya", text: "would lose Operator.", lights: onLine ? { nodes: ["role:p1:op"], threads: ["e1"] } : undefined },
+    { tone: "warn", lead: "Cody", text: "would lose Operator.", lights: onLine ? { nodes: ["role:p1:op"], threads: ["e1"] } : undefined },
     { tone: "ink", text: "Nothing else changes." },
   ],
 });

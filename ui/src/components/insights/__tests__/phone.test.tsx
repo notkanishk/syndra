@@ -46,7 +46,7 @@ const rest = [
     finding: "send",
     kind: "Waiting for you to send",
     title: "1 change is approved, not yet in Zitadel",
-    line: "Operator for Aanya.",
+    line: "Operator for Roman.",
     open: { label: "Waiting for you to send", href: "/governance/pending" },
   },
 ];

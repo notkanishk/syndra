@@ -27,4 +27,4 @@ The backend MUST derive the `granted_by` audit attribute from the authenticated 
 #### Scenario: Direct grant in demo mode falls back to the proxied session id
 - **WHEN** the deployment is in demo mode (no `ZITADEL_DOMAIN`)
 - **AND** the proxy injects `granted_by: <session.id>` for an admin demo session
-- **THEN** the audit log entry's actor MUST be the demo session's user id (not "system" and not "alice.rivera")
+- **THEN** the audit log entry's actor MUST be the demo session's user id (not "system" and not "becky.lynch")

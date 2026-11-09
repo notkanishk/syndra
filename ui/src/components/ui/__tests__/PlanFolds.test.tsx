@@ -26,22 +26,22 @@ const row = (name: string, over: Partial<BulkOutcome> = {}): BulkOutcome => ({
   ...over,
 });
 
-const JULES = "Gains Member in Laser Lab and Trained in Laser Lab. Giving Trained in Laser Lab waits for you to send.";
+const JADE = "Gains Member in Laser Lab and Trained in Laser Lab. Giving Trained in Laser Lab waits for you to send.";
 
 const rehearsed: BulkPlan = {
   op: "assign_bundle",
   plan_id: "plan_1",
   applied: false,
   outcomes: [
-    row("Omar", { consequence: `Gains Member in Laser Lab. ${CANCEL}` }),
-    row("Jules", { delivery: "waits_for_you", waits: ["Trained in Laser Lab"], consequence: JULES }),
-    row("Kabir", {
+    row("Tiffany", { consequence: `Gains Member in Laser Lab. ${CANCEL}` }),
+    row("Jade", { delivery: "waits_for_you", waits: ["Trained in Laser Lab"], consequence: JADE }),
+    row("Alexa", {
       delivery: "none",
       detail: "Leaves Safety.",
       consequence: `Cancels giving Member in Laser Lab, which was waiting for you to send, so nothing is sent to Zitadel. ${CANCEL}`,
     }),
-    row("Dev", { effect: "no_change", delivery: undefined, detail: "Already in Safety.", consequence: undefined }),
-    row("Sam", { effect: "blocked", delivery: undefined, detail: "Account is departed.", consequence: undefined }),
+    row("Candice", { effect: "no_change", delivery: undefined, detail: "Already in Safety.", consequence: undefined }),
+    row("Randy", { effect: "blocked", delivery: undefined, detail: "Account is departed.", consequence: undefined }),
   ],
   summary: { total: 5, apply: 3, no_change: 1, blocked: 1, failed: 0, succeeded: 0, queued: 0 },
 };
@@ -53,7 +53,7 @@ const result: BulkPlan = {
   applied: true,
   outcomes: [
     { ...rehearsed.outcomes[0], effect: "failed", wait_reason: "refused:not_found" },
-    { ...rehearsed.outcomes[1], effect: "queued", wait_reason: "role_waits", person: "person-jules" },
+    { ...rehearsed.outcomes[1], effect: "queued", wait_reason: "role_waits", person: "person-jade" },
     { ...rehearsed.outcomes[2], effect: "applied" },
     rehearsed.outcomes[3],
     rehearsed.outcomes[4],
@@ -81,12 +81,12 @@ describe("a grouped plan, before Apply", () => {
     const wait = screen.getByRole("group", { name: "Will wait for you to send, 1 person" });
     const left = screen.getByRole("group", { name: "Left as they are, 2 people" });
     expect(within(wait).getByText("Because Trained in Laser Lab always waits for you.")).toBeInTheDocument();
-    expect(within(wait).getByText(new RegExp(JULES.replace(/\./g, "\\.")))).toBeInTheDocument();
+    expect(within(wait).getByText(new RegExp(JADE.replace(/\./g, "\\.")))).toBeInTheDocument();
     expect(within(left).getByText("No change")).toBeInTheDocument();
     expect(within(left).getByText("Refused")).toBeInTheDocument();
     expect(within(go).queryByText(/Will change|No change|Refused/)).toBeNull();
     expect(screen.queryByText("Will change")).toBeNull();
-    // Kabir only cancels: his one sentence is the whole row; the note below names the cancel.
+    // Alexa only cancels: his one sentence is the whole row; the note below names the cancel.
     expect(within(go).getByText(/Cancels giving Member in Laser Lab, which was waiting for you to send/).textContent).not.toMatch(/Cancels a change/);
     expect(screen.getByRole("note").textContent).toContain("Cancels 2 changes that are waiting for you to send:");
   });
@@ -105,7 +105,7 @@ describe("a grouped plan, before Apply", () => {
     open();
     const go = await screen.findByRole("group", { name: "Straight away, 2 people" });
     fireEvent.click(within(go).getByRole("button", { expanded: true }));
-    expect(within(go).queryByText("Omar")).toBeNull();
+    expect(within(go).queryByText("Tiffany")).toBeNull();
     expect(within(go).getByRole("button", { expanded: false })).toBeInTheDocument();
   });
 });
@@ -124,12 +124,12 @@ describe("a grouped plan, after Apply", () => {
     const refused = screen.getByRole("group", { name: "Zitadel refused, 1 person" });
     expect(screen.getByRole("group", { name: "Left as they were, 2 people" })).toBeInTheDocument();
     // The words survive Apply.
-    expect(within(waiting).getByText(new RegExp(JULES.replace(/\./g, "\\.")))).toBeInTheDocument();
+    expect(within(waiting).getByText(new RegExp(JADE.replace(/\./g, "\\.")))).toBeInTheDocument();
     // The row's seat: the link to send it, narrowed to the person.
     const links = within(waiting).getAllByRole("link", { name: /Waiting for you to send/ });
     expect(links.map((a) => a.getAttribute("href"))).toEqual([
       "/governance/pending",
-      "/governance/pending?person=person-jules",
+      "/governance/pending?person=person-jade",
     ]);
     expect(within(refused).getByText(/^Zitadel refused this: it no longer has this person, project or role\./)).toBeInTheDocument();
     expect(within(refused).getByText(/Gains Member in Laser Lab\./)).toBeInTheDocument();

@@ -82,7 +82,7 @@ beforeEach(() => {
 
 function open(assigned: Array<{ id: string; name: string }> = []) {
   return render(
-    withPlanClient(<ManageBundles userId="u1" userName="Ada" assigned={assigned} open onClose={vi.fn()} />, seedAutoRetry(planClient(), true)),
+    withPlanClient(<ManageBundles userId="u1" userName="Charlotte" assigned={assigned} open onClose={vi.fn()} />, seedAutoRetry(planClient(), true)),
   );
 }
 
@@ -217,14 +217,14 @@ describe("ManageBundles", () => {
   it("says the planner's words for a staged change, rules included, under the bundle's name", async () => {
     state.plans = {
       b1: actPlan({
-        detail: "Ada gets Lab Tech.",
+        detail: "Charlotte gets Lab Tech.",
         said: ["Also gives Bench in Workshop, by the automatic rule from Operator."],
       }),
     };
     open();
     tick(/Lab Tech/);
 
-    expect(await screen.findByText("Ada gets Lab Tech. Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
+    expect(await screen.findByText("Charlotte gets Lab Tech. Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
     expect(state.planCalls).toEqual(["/users/u1/plan?op=assign_bundle&bundle_id=b1"]);
     expect(screen.queryByText(/would give/)).not.toBeInTheDocument();
     expect(screen.queryByText(/through an automatic rule/)).not.toBeInTheDocument();
@@ -247,20 +247,20 @@ describe("ManageBundles", () => {
   });
 
   it("holds Apply, with the planner's reason, when the planner refuses the change", async () => {
-    state.plans = { b1: actPlan({ effect: "no_change", refusal: "held", detail: "Ada already has Lab Tech." }) };
+    state.plans = { b1: actPlan({ effect: "no_change", refusal: "held", detail: "Charlotte already has Lab Tech." }) };
     open();
     tick(/Lab Tech/);
-    expect((await screen.findAllByText("Ada already has Lab Tech.")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Charlotte already has Lab Tech.")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Apply 1 change" })).toBeDisabled();
   });
 
   it("an empty bundle keeps its own line instead of the planner's", async () => {
     state.roleQueries = vi.fn().mockReturnValue({ byId: { b1: [] }, allLoaded: true });
-    state.plans = { b1: actPlan({ detail: "Ada gets Lab Tech." }) };
+    state.plans = { b1: actPlan({ detail: "Charlotte gets Lab Tech." }) };
     open();
     tick(/Lab Tech/);
     expect(await screen.findByText("v2 of this bundle carries no roles, so this gives nothing.")).toBeInTheDocument();
-    expect(screen.queryByText("Ada gets Lab Tech.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Charlotte gets Lab Tech.")).not.toBeInTheDocument();
   });
 
   it("says two changes' before-line from their plans: some go now, some wait", async () => {
@@ -373,7 +373,7 @@ describe("ManageBundles", () => {
     const reads = state.planCalls.length;
     fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
-    expect(await screen.findByText("Nothing was changed. Ada's access moved while this was open.")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing was changed. Charlotte's access moved while this was open.")).toBeInTheDocument();
     expect(screen.getByText("Read the note under each bundle, then press Apply again.")).toBeInTheDocument();
     await waitFor(() => expect(state.planCalls.length).toBeGreaterThan(reads));
     // Not a result: still staged, still the form.
@@ -393,7 +393,7 @@ describe("when their access moved partway through", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply 2 changes" }));
 
     expect(await screen.findByText(/One bundle change recorded/)).toBeInTheDocument();
-    expect(screen.getByText(/One change wasn't applied: Ada's access moved while this was open\./)).toBeInTheDocument();
+    expect(screen.getByText(/One change wasn't applied: Charlotte's access moved while this was open\./)).toBeInTheDocument();
     expect(screen.getByText("Read the note under each bundle, then press Apply again.")).toBeInTheDocument();
     // Never "Nothing for you to do." while a change is still ticked and unwritten.
     expect(screen.queryByText("Nothing for you to do.")).not.toBeInTheDocument();

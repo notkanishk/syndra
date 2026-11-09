@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { fromParams, sentence, sentenceText, suggest, toParams, type Entity, type Question } from "@/components/insights/question";
 
 const E: Entity[] = [
-  { id: "u1", kind: "person", label: "Priya Nair" },
-  { id: "u2", kind: "person", label: "Aanya Rao" },
+  { id: "u1", kind: "person", label: "Cody Rhodes" },
+  { id: "u2", kind: "person", label: "Roman Reigns" },
   { id: "role:p1:door", kind: "role", label: "Laser Lab · Door" },
   { id: "role:p1:op", kind: "role", label: "Laser Lab · Operator" },
   { id: "role:p2:welder", kind: "role", label: "Metal shop · Welder" },
@@ -53,8 +53,8 @@ describe("the sentence", () => {
       sentenceText(sentence(q, (id) => E.find((e) => e.id === id)!.label, (id) => E.find((e) => e.id === id)!.label));
     expect(QUESTIONS.map(text)).toEqual([
       "Follow Laser Lab · Door",
-      "Path from Priya Nair to Laser Lab · Door",
-      "Compare Priya Nair with Aanya Rao on Metal shop · Welder",
+      "Path from Cody Rhodes to Laser Lab · Door",
+      "Compare Cody Rhodes with Roman Reigns on Metal shop · Welder",
       "Who has Laser Lab · Door without Safety basics",
       "Who has Lab Tech",
       "What if Lab Tech went",
@@ -82,11 +82,11 @@ describe("what typing offers", () => {
   });
 
   it("offers a path from a person to a role", () => {
-    expect(suggest("priya to door", E)[0]).toEqual({ kind: "path", person: "u1", role: "role:p1:door" });
+    expect(suggest("cody to door", E)[0]).toEqual({ kind: "path", person: "u1", role: "role:p1:door" });
   });
 
   it("offers a compare for two people on a role", () => {
-    expect(suggest("compare priya with aanya on welder", E)[0]).toEqual({
+    expect(suggest("compare cody with roman on welder", E)[0]).toEqual({
       kind: "compare",
       person: "u1",
       other: "u2",
@@ -112,6 +112,6 @@ describe("what typing offers", () => {
   });
 
   it("does not offer a path whose second name is not a role", () => {
-    expect(suggest("priya to safety", E).some((q) => q.kind === "path")).toBe(false);
+    expect(suggest("cody to safety", E).some((q) => q.kind === "path")).toBe(false);
   });
 });

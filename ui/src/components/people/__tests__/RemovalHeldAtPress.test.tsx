@@ -9,7 +9,7 @@ import type { ActPlan } from "@/lib/usePlanConsent";
 import { actPlan, planClient, queuedChange, withPlanClient } from "@/test-utils/plan";
 
 /**
- * Browser pass, 8 Nov: cancelling Avani's waiting give of Navidrome /
+ * Browser pass, 8 Nov: cancelling Raquel's waiting give of Navidrome /
  * Community. The title said "Revoke direct access", the dismiss beside "Cancel
  * the waiting give" was another "Cancel", and after the press the act's own
  * refetch (the give gone, the planner now reading a held role) re-derived the
@@ -42,7 +42,7 @@ vi.mock("@/lib/queries/useBundles", () => ({
   useRemoveBundle: () => ({ mutateAsync: afterTheAct, isPending: false }),
 }));
 
-const give = queuedChange({ op_type: "add", initiated_by_name: "Sam Lee" });
+const give = queuedChange({ op_type: "add", initiated_by_name: "Randy Orton" });
 
 beforeEach(() => {
   world.plan = actPlan({ delivery: "none", cancels: [give], cancel_ids: [give.id] });
@@ -50,7 +50,7 @@ beforeEach(() => {
 });
 
 const show = (removal: Removal) =>
-  render(withPlanClient(<RemovalDialog removal={removal} userId="avani" userName="Avani Sood" onClose={vi.fn()} />, world.client));
+  render(withPlanClient(<RemovalDialog removal={removal} userId="raquel" userName="Raquel Rodriguez" onClose={vi.fn()} />, world.client));
 
 /** The act, once the plan is read and the button armed. */
 async function ready(name: string) {

@@ -87,14 +87,14 @@ describe("R20: a refusal says 'Nothing was changed.' once", () => {
 
 describe("R12: a rule-given role that waits is said, and ends on Send", () => {
   it("an approval that went says the rule's role waits for you", () => {
-    const o = approvalOutcome(undefined, "Ada", "Trained", { rule_waiting: 1 }, [
+    const o = approvalOutcome(undefined, "Charlotte", "Trained", { rule_waiting: 1 }, [
       "Also gives Bench in Workshop, by the automatic rule from Trained in Workshop.",
     ]);
-    expect(o.message).toMatch(/^Approved\. Ada can use it now\. Also gives Bench in Workshop, by the automatic rule from Trained in Workshop\. One role an automatic rule also gives always waits for you/);
+    expect(o.message).toMatch(/^Approved\. Charlotte can use it now\. Also gives Bench in Workshop, by the automatic rule from Trained in Workshop\. One role an automatic rule also gives always waits for you/);
     expect(waitsForSend(o)).toBe(true);
   });
   it("is never blamed on the asked-for role", () => {
-    const o = approvalOutcome(undefined, "Ada", "Trained", { rule_waiting: 1 });
+    const o = approvalOutcome(undefined, "Charlotte", "Trained", { rule_waiting: 1 });
     expect(o.message).not.toMatch(/This role always waits/);
   });
 });
@@ -106,7 +106,7 @@ describe("R2: a bulk approval Zitadel didn't take is retried, not 'goes when you
       op: "approve",
       applied: true,
       summary: { total: 1, apply: 0, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 1 },
-      outcomes: [{ user_id: "u1", name: "Ada", email: "ada@example.org", effect: "queued", detail: "x", wait_reason: "halted:retrying", retry }],
+      outcomes: [{ user_id: "u1", name: "Charlotte", email: "charlotte@example.org", effect: "queued", detail: "x", wait_reason: "halted:retrying", retry }],
     } as unknown as BulkPlan;
     const [[, decided]] = decidedByBulk([entry], ["r1"], "approved", plan);
     expect(decided.outcome.message).toMatch(/^Approved\. Zitadel didn't answer\. Syndra sends it again at 14:05/);

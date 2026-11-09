@@ -18,8 +18,8 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
     data: {
       user: {
         id: "312458847001600001",
-        name: "Ada Lovelace",
-        email: "ada@example.edu",
+        name: "Charlotte Flair",
+        email: "charlotte@example.edu",
         title: "Student Staff",
         team: "Fabrication",
         status: "active",
@@ -58,8 +58,8 @@ describe("a person's header", () => {
   it("shows no raw id in Basic", () => {
     view.advanced = false;
     renderPerson();
-    expect(screen.getByRole("heading", { name: "Ada Lovelace" })).toBeInTheDocument();
-    expect(screen.getByText(/ada@example.edu/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Charlotte Flair" })).toBeInTheDocument();
+    expect(screen.getByText(/charlotte@example.edu/)).toBeInTheDocument();
     expect(screen.queryByText("312458847001600001")).not.toBeInTheDocument();
   });
 

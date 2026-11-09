@@ -107,7 +107,7 @@ beforeEach(() => {
 });
 
 function open() {
-  return render(withPlanClient(<GrantDirectAccess userId="u1" userName="Ada Lovelace" open onClose={vi.fn()} />));
+  return render(withPlanClient(<GrantDirectAccess userId="u1" userName="Charlotte Flair" open onClose={vi.fn()} />));
 }
 
 function choose(role: string) {
@@ -200,10 +200,10 @@ describe("GrantDirectAccess · choosing the role", () => {
   it("says before the press that a waiting role waits, and a plain one doesn't", () => {
     open();
     choose("Operator");
-    expect(screen.getByText("Ada can use it as soon as you give it.")).toBeInTheDocument();
+    expect(screen.getByText("Charlotte can use it as soon as you give it.")).toBeInTheDocument();
     choose("Supervisor");
     expect(
-      screen.getByText("Supervisor always waits for you, so Ada gets it once you send it."),
+      screen.getByText("Supervisor always waits for you, so Charlotte gets it once you send it."),
     ).toBeInTheDocument();
   });
 
@@ -240,7 +240,7 @@ describe("GrantDirectAccess · its result", () => {
 
     expect(screen.getByText("Given")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending?person=u1");
-    expect(screen.getByText("Supervisor always waits for you, so Ada can't use it yet.")).toBeInTheDocument();
+    expect(screen.getByText("Supervisor always waits for you, so Charlotte can't use it yet.")).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
   });
 
@@ -278,7 +278,7 @@ describe("GrantDirectAccess · its result", () => {
     await grant();
 
     expect(screen.getByText("Given")).toBeInTheDocument();
-    expect(screen.getByText("Ada can use Operator on their own now.")).toBeInTheDocument();
+    expect(screen.getByText("Charlotte can use Operator on their own now.")).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Give Operator" })).not.toBeInTheDocument();
   });
@@ -293,7 +293,7 @@ describe("GrantDirectAccess · its result", () => {
     expect(await screen.findByText("Also gives Bench in Workshop, by the automatic rule from Operator.")).toBeInTheDocument();
     await planRead();
     fireEvent.click(screen.getByRole("button", { name: "Give Operator" }));
-    expect(await screen.findByText("Ada can use Operator on their own now.")).toBeInTheDocument();
+    expect(await screen.findByText("Charlotte can use Operator on their own now.")).toBeInTheDocument();
     expect(screen.getByText(/Also gives Bench in Workshop/)).toBeInTheDocument();
   });
 
@@ -471,7 +471,7 @@ describe("GrantDirectAccess · what the plan says before the press", () => {
     state.plan = cancelling([removal], { fingerprint: "fp-2" });
     fireEvent.click(screen.getByRole("button", { name: "Give Operator" }));
 
-    expect(await screen.findByText("Nothing was changed. Ada's access moved while this was open.")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing was changed. Charlotte's access moved while this was open.")).toBeInTheDocument();
     expect(screen.getByText("Read the note under the form, then press Give Operator again.")).toBeInTheDocument();
     await waitFor(() => expect(state.planCalls.length).toBeGreaterThan(reads));
     expect(await screen.findByText(/Giving it cancels removing .+ from .+, which was waiting for you to send\./)).toBeInTheDocument();
@@ -480,11 +480,11 @@ describe("GrantDirectAccess · what the plan says before the press", () => {
   });
 
   it("when the planner refuses because they already have it: held, with the reason and nothing to press", async () => {
-    state.plan = actPlan({ effect: "no_change", refusal: "held", detail: "Ada already has Operator." });
+    state.plan = actPlan({ effect: "no_change", refusal: "held", detail: "Charlotte already has Operator." });
     open();
     choose("Operator");
     expect(await screen.findByText("Nothing to give.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Give Operator" })).toBeDisabled();
-    expect(screen.getByText("Ada already has Operator.")).toBeInTheDocument();
+    expect(screen.getByText("Charlotte already has Operator.")).toBeInTheDocument();
   });
 });

@@ -73,7 +73,7 @@ function open(sources: RoleReason[]) {
   } as Removal;
   return render(
     <QueryClientProvider client={client}>
-      <RemovalDialog removal={removal} userId="u1" userName="Tomas Beck" onClose={() => {}} />
+      <RemovalDialog removal={removal} userId="u1" userName="Kevin Owens" onClose={() => {}} />
     </QueryClientProvider>,
   );
 }
@@ -144,7 +144,7 @@ describe("Remove, a bundle: the first 100ms", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove the bundle" }));
     expect(await screen.findByText(FORECAST.remove)).toBeInTheDocument();
     wire.release!();
-    await screen.findByText(/removed from Tomas Beck/);
+    await screen.findByText(/removed from Kevin Owens/);
   });
 
   it("says 'Will wait for you to send' when the role waits", async () => {

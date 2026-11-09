@@ -28,7 +28,7 @@ vi.mock("@/lib/queries/useUpstream", () => ({
 const held = new ApiError(409, {
   error: "ROLE_HELD",
   message: "2 people hold this role in Zitadel and would lose it. Nothing was changed.",
-  details: { count: "2", holders: "Ada Lovelace, Grace Hopper" },
+  details: { count: "2", holders: "Charlotte Flair, Sami Zayn" },
 });
 
 beforeEach(() => {
@@ -49,7 +49,7 @@ describe("deleting a role somebody holds", () => {
     pressDelete();
 
     const dialog = screen.getByRole("dialog");
-    await waitFor(() => expect(dialog.textContent).toMatch(/Ada Lovelace, Grace Hopper/));
+    await waitFor(() => expect(dialog.textContent).toMatch(/Charlotte Flair, Sami Zayn/));
     const confirm = within(dialog).getByRole("button", { name: "Delete and revoke it for 2 people" });
     expect(confirm).toBeDisabled();
 

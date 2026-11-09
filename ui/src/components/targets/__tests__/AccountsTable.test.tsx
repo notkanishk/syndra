@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 
 const people = [
-  ["u1", "ada.l", "Ada Lovelace"],
-  ["u2", "grace.h", "Grace Hopper"],
+  ["u1", "charlotte.l", "Charlotte Flair"],
+  ["u2", "sami.h", "Sami Zayn"],
 ] as const;
 
 function account(i: number) {
@@ -43,13 +43,13 @@ vi.mock("@/lib/queries/useTargets", () => ({
   useTargetHomes: () => ({ data: { accounts: [] }, isLoading: false, error: null }),
 }));
 vi.mock("@/components/names", () => ({
-  UserName: ({ id }: { id: string }) => <span>{id.startsWith("u1") ? "Ada Lovelace" : "Grace Hopper"}</span>,
+  UserName: ({ id }: { id: string }) => <span>{id.startsWith("u1") ? "Charlotte Flair" : "Sami Zayn"}</span>,
   UserAvatar: ({ id }: { id: string }) => <span aria-hidden>{id.startsWith("u1") ? "AL" : "GH"}</span>,
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
     resolveUser: (id: string) => ({
-      value: { display_name: id.startsWith("u1") ? "Ada Lovelace" : "Grace Hopper" },
+      value: { display_name: id.startsWith("u1") ? "Charlotte Flair" : "Sami Zayn" },
       resolved: true,
     }),
   }),
@@ -77,9 +77,9 @@ describe("accounts Syndra manages, as the board's table", () => {
     state.count = 2;
     render(<PeopleOnTarget target="truenas" />);
 
-    const row = screen.getByText("Ada Lovelace").closest("[data-account]") as HTMLElement;
+    const row = screen.getByText("Charlotte Flair").closest("[data-account]") as HTMLElement;
     expect(within(row).getByText("AL")).toBeInTheDocument();
-    expect(within(row).getByText("ada.l")).toHaveClass("font-mono");
+    expect(within(row).getByText("charlotte.l")).toHaveClass("font-mono");
     expect(screen.getByText("GH")).toBeInTheDocument();
     expect(screen.queryByText(/200001|200000/)).not.toBeInTheDocument();
   });
@@ -98,7 +98,7 @@ describe("accounts Syndra manages, as the board's table", () => {
 
     expect(screen.getByRole("button", { name: "Revoke" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Put on hold" }));
-    expect(screen.getByRole("dialog")).toHaveTextContent("Hold for Ada Lovelace");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Hold for Charlotte Flair");
   });
 
   it("shows ten, then more on request", () => {

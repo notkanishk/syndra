@@ -49,7 +49,7 @@ vi.mock("@/lib/queries/useCatalogUsers", () => ({
   }),
 }));
 
-const session: SessionUser = { id: "u1", name: "Sam", email: "sam@x", title: "", team: "", status: "active", avatar: "", role: "user", sessionType: "demo" };
+const session: SessionUser = { id: "u1", name: "Randy", email: "randy@x", title: "", team: "", status: "active", avatar: "", role: "user", sessionType: "demo" };
 
 function view(
   observation: Record<string, unknown> | undefined,
@@ -336,7 +336,7 @@ describe("MemberAccess first paint", () => {
     reset();
     access.value = { isLoading: true, error: null, data: undefined };
     render(<MemberAccess session={session} />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^(Morning|Afternoon|Evening), Sam\./);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^(Morning|Afternoon|Evening), Randy\./);
     expect(screen.getByText("Checking what you can use.")).toBeTruthy();
     expect(screen.queryByLabelText("Loading your access")).toBeNull();
   });

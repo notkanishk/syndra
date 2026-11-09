@@ -17,7 +17,7 @@ import type { Indicators } from "@/lib/queries/useIndicators";
  */
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
-    resolveUser: () => ({ value: { display_name: "Rohan Mehta", email: "" }, resolved: true }),
+    resolveUser: () => ({ value: { display_name: "Liv Morgan", email: "" }, resolved: true }),
     resolveProject: () => ({ value: { name: "Network storage" }, resolved: true }),
     resolveRole: () => ({ value: { display_name: "Member" }, resolved: true }),
     resolveBundle: () => ({ value: undefined, resolved: true }),
@@ -39,7 +39,7 @@ const change = (n: number): QueuedChange => ({
 const wire = vi.hoisted(() => ({ settle: null as null | { resolve: () => void; reject: (e: unknown) => void } }));
 
 function Host({ cancels }: { cancels: QueuedChange[] }) {
-  const step = useCancelStep({ host: "Give Rohan Mehta a role", goAhead: "give Member" });
+  const step = useCancelStep({ host: "Give Liv Morgan a role", goAhead: "give Member" });
   let first = true;
   return (
     <Modal open onClose={() => undefined} size="md" labelledBy="host-title">

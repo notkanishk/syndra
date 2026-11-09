@@ -26,8 +26,8 @@ const lead = { project_id: "fab", role_key: "lead" };
 const renders = { share: "main", folder: "projects/renders", path: "/mnt/main/projects/renders", access: "change" as const, roles: [lead] };
 const homePlace = {
   share: "main",
-  folder: "homes/aanya.rao",
-  path: "/mnt/main/homes/aanya.rao",
+  folder: "homes/roman.reigns",
+  path: "/mnt/main/homes/roman.reigns",
   access: "change" as const,
   home: true,
   usage: { used_bytes: 18.4 * GB, quota_bytes: 50 * GB },
@@ -37,16 +37,16 @@ function view(over: Partial<PersonTargetView> = {}): PersonTargetView {
   return {
     target: "truenas",
     entitled: true,
-    account: { username: "aanya.rao", bound_at: "2026-09-03T10:00:00Z" },
+    account: { username: "roman.reigns", bound_at: "2026-09-03T10:00:00Z" },
     roles: [lead],
     credential: { set: true, last_changed_at: "2026-10-14T10:00:00Z" },
     reachable: true,
     health: "online",
     checked_at: new Date().toISOString(),
-    storage: { username: "aanya.rao", usable: true, needs_password: false, smb_enabled: true, places: [homePlace, renders], places_readable: true },
+    storage: { username: "roman.reigns", usable: true, needs_password: false, smb_enabled: true, places: [homePlace, renders], places_readable: true },
     home: {
       subject_id: "u1",
-      username: "aanya.rao",
+      username: "roman.reigns",
       gives_home: true,
       roles_limit: 20 * GB,
       roles_limit_from: lead,
@@ -69,7 +69,7 @@ function view(over: Partial<PersonTargetView> = {}): PersonTargetView {
 
 function show(v: PersonTargetView) {
   state.views = { data: [v], error: null, refetch: () => {} };
-  render(<PersonStorage userId="u1" name="Aanya" />);
+  render(<PersonStorage userId="u1" name="Roman" />);
 }
 
 /** The value cell of the row whose label is `label`. */
@@ -89,7 +89,7 @@ describe("a person's network storage (A-10 Part 1)", () => {
     show(view());
     expect(screen.getByText("Network storage")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "TrueNAS" })).toHaveAttribute("href", "/system/targets/truenas");
-    expect(within(rowOf("Account")).getByText("aanya.rao")).toBeInTheDocument();
+    expect(within(rowOf("Account")).getByText("roman.reigns")).toBeInTheDocument();
     expect(within(rowOf("Account")).getByText("Made by Syndra on 3 Sept")).toBeInTheDocument();
     expect(within(rowOf("Password")).getByText("Set, last changed 14 Oct")).toBeInTheDocument();
     // Nobody but the person sets it, so the row links nowhere.
@@ -105,7 +105,7 @@ describe("a person's network storage (A-10 Part 1)", () => {
     const folders = rowOf("Folders");
     expect(within(folders).getByText("renders")).toBeInTheDocument();
     expect(within(folders).getByText("from Fabrication lead")).toBeInTheDocument();
-    expect(within(folders).queryByText("aanya.rao")).toBeNull(); // the home folder isn't repeated
+    expect(within(folders).queryByText("roman.reigns")).toBeNull(); // the home folder isn't repeated
     expect(within(folders).getByRole("link", { name: /Set in TrueNAS's mappings/ })).toHaveAttribute(
       "href",
       "/system/targets/truenas/mappings",
@@ -201,12 +201,12 @@ describe("a person's network storage (A-10 Part 1)", () => {
   });
 
   it("loading shows the name and caption with no values; an error replaces the card", () => {
-    render(<PersonStorage userId="u1" name="Aanya" />);
+    render(<PersonStorage userId="u1" name="Roman" />);
     expect(screen.getByRole("link", { name: "TrueNAS" })).toBeInTheDocument();
-    expect(screen.queryByText("aanya.rao")).toBeNull();
+    expect(screen.queryByText("roman.reigns")).toBeNull();
     state.views = { data: undefined, error: new Error("down"), refetch: () => {} };
-    render(<PersonStorage userId="u1" name="Aanya" />);
-    expect(screen.getByText("Couldn't load Aanya's storage on TrueNAS.")).toBeInTheDocument();
+    render(<PersonStorage userId="u1" name="Roman" />);
+    expect(screen.getByText("Couldn't load Roman's storage on TrueNAS.")).toBeInTheDocument();
   });
 
   it("lists folders A to Z, and says the write place once per row, not in a caption too", () => {

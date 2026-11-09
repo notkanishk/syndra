@@ -385,62 +385,62 @@ func TestPreview_Checks(t *testing.T) {
 	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: netbirdShape(), TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
 		t.Fatal(err)
 	}
-	s.stored["ada:pNet"] = claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"admin", "staff"}, CompiledAt: "2026-11-03T09:52:00Z"}
+	s.stored["charlotte:pNet"] = claims.Facts{UserID: "charlotte", ProjectID: "pNet", Roles: []string{"admin", "staff"}, CompiledAt: "2026-11-03T09:52:00Z"}
 	s.observed = map[string][]db.ObservedGrant{
-		"ada":   {{UserID: "ada", ProjectID: "pNet", RoleKeys: []string{"staff", "admin"}}},
-		"rohan": {{UserID: "rohan", ProjectID: "pNet", RoleKeys: []string{"staff"}}},
+		"charlotte": {{UserID: "charlotte", ProjectID: "pNet", RoleKeys: []string{"staff", "admin"}}},
+		"liv":       {{UserID: "liv", ProjectID: "pNet", RoleKeys: []string{"staff"}}},
 	}
 
 	renamed := netbirdShape()
 	renamed.Roles[0].As = "network-staff"
 	// And a row only facts fill, so a person not built is short of it.
 	renamed.Claims = append(renamed.Claims, claims.Claim{Path: []string{"team"}, Kind: claims.KindAttribute, Source: claims.AttrTeam})
-	pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada", "rohan"}, Draft: &renamed})
+	pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"charlotte", "liv"}, Draft: &renamed})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ada := pv.People[0]
-	for i, c := range ada.Now.Checks {
+	charlotte := pv.People[0]
+	for i, c := range charlotte.Now.Checks {
 		if c.State != CheckPass {
-			t.Fatalf("check %d for Ada: %+v", i+1, c)
+			t.Fatalf("check %d for Charlotte: %+v", i+1, c)
 		}
 	}
 	tok := func(o any) string { b, _ := json.Marshal(o); return string(b) }
-	if got := tok(ada.Now.Token); got != `{"groups":["netbird-staff","netbird-admins"]}` {
+	if got := tok(charlotte.Now.Token); got != `{"groups":["netbird-staff","netbird-admins"]}` {
 		t.Fatalf("now: %s", got)
 	}
-	if got := tok(ada.Draft.Token); got != `{"groups":["network-staff","netbird-admins"]}` {
+	if got := tok(charlotte.Draft.Token); got != `{"groups":["network-staff","netbird-admins"]}` {
 		t.Fatalf("draft: %s", got)
 	}
-	if !ada.Draft.Checks[3].Facts["draft"].(bool) || len(pv.Breaking) != 1 {
-		t.Fatalf("draft check 4 and breaking: %+v %+v", ada.Draft.Checks[3], pv.Breaking)
+	if !charlotte.Draft.Checks[3].Facts["draft"].(bool) || len(pv.Breaking) != 1 {
+		t.Fatalf("draft check 4 and breaking: %+v %+v", charlotte.Draft.Checks[3], pv.Breaking)
 	}
 
-	// Rohan's claims were never built: check 3 is amber, and the token is what
+	// Liv's claims were never built: check 3 is amber, and the token is what
 	// the token path really sends (the shape over Zitadel's roles and identity
 	// alone). The live shape needs no facts, so it is whole: check 5 passes, as
 	// live counts it served. The draft asks for his team: amber, with what he
 	// would get.
-	rohan := pv.People[1]
-	if rohan.Now.Checks[2].State != CheckWarn || rohan.Now.Checks[4].State != CheckPass || tok(rohan.Now.Token) != `{"groups":["netbird-staff"]}` ||
-		rohan.Now.WouldReceive != nil {
-		t.Fatalf("not built: %+v token=%s", rohan.Now.Checks, tok(rohan.Now.Token))
+	liv := pv.People[1]
+	if liv.Now.Checks[2].State != CheckWarn || liv.Now.Checks[4].State != CheckPass || tok(liv.Now.Token) != `{"groups":["netbird-staff"]}` ||
+		liv.Now.WouldReceive != nil {
+		t.Fatalf("not built: %+v token=%s", liv.Now.Checks, tok(liv.Now.Token))
 	}
-	if rohan.Draft.Checks[4].State != CheckWarn || tok(rohan.Draft.Token) != `{"groups":["network-staff"]}` || rohan.Draft.WouldReceive == nil {
-		t.Fatalf("not built, a fact asked for: %+v token=%s", rohan.Draft.Checks[4], tok(rohan.Draft.Token))
+	if liv.Draft.Checks[4].State != CheckWarn || tok(liv.Draft.Token) != `{"groups":["network-staff"]}` || liv.Draft.WouldReceive == nil {
+		t.Fatalf("not built, a fact asked for: %+v token=%s", liv.Draft.Checks[4], tok(liv.Draft.Token))
 	}
 
 	// The roles are Zitadel's, never Syndra's records: admin, still queued
-	// for Ada in Zitadel, is not previewed though her facts hold it; and a
+	// for Charlotte in Zitadel, is not previewed though her facts hold it; and a
 	// failed read of Zitadel's grants says so rather than showing none.
-	s.observed["ada"] = []db.ObservedGrant{{UserID: "ada", ProjectID: "pNet", RoleKeys: []string{"staff"}}}
-	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	s.observed["charlotte"] = []db.ObservedGrant{{UserID: "charlotte", ProjectID: "pNet", RoleKeys: []string{"staff"}}}
+	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"charlotte"}})
 	if now := pv.People[0].Now; tok(now.Token) != `{"groups":["netbird-staff"]}` || tok(now.Checks[1].Facts["roles"]) != `["staff"]` {
 		t.Fatalf("queued role previewed: %s %+v", tok(now.Token), now.Checks[1])
 	}
 	orig := svcObservedGrantsFor
 	svcObservedGrantsFor = func(context.Context, string) ([]db.ObservedGrant, error) { return nil, errors.New("down") }
-	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"charlotte"}})
 	svcObservedGrantsFor = orig
 	if c := pv.People[0].Now.Checks[1]; c.State != CheckStale || c.Facts["unread"] != true {
 		t.Fatalf("unread grants: %+v", c)
@@ -448,7 +448,7 @@ func TestPreview_Checks(t *testing.T) {
 
 	// A Bearer access token keeps NetBird's claims out of where it reads them.
 	s.settings.AccessTokenType = "BEARER"
-	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"charlotte"}})
 	if c := pv.People[0].Now.Checks[0]; c.State != CheckFail || c.Facts["reached"].(map[string]bool)[claims.ReadsAccessToken] {
 		t.Fatalf("lands-fail: %+v", c)
 	}
@@ -458,9 +458,9 @@ func TestPreview_Checks(t *testing.T) {
 
 	// Zitadel stops answering: its last answer, marked stale.
 	s.settings.AccessTokenType = "JWT"
-	_, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	_, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"charlotte"}})
 	s.settings = nil
-	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"charlotte"}})
 	if c := pv.People[0].Now.Checks[0]; c.State != CheckStale || c.Facts["read_at"] == nil {
 		t.Fatalf("degraded check 1: %+v", c)
 	}
@@ -479,21 +479,21 @@ func TestPreview_ZitadelDoesNotListTheProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.observed = map[string][]db.ObservedGrant{
-		"grace": {{UserID: "grace", ProjectID: "pElse", RoleKeys: []string{"staff"}}},
-		"aanya": {{UserID: "aanya", ProjectID: "pNet"}},
+		"sami":  {{UserID: "sami", ProjectID: "pElse", RoleKeys: []string{"staff"}}},
+		"roman": {{UserID: "roman", ProjectID: "pNet"}},
 	}
-	pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"grace", "aanya"}})
+	pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"sami", "roman"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	tok := func(o any) string { b, _ := json.Marshal(o); return string(b) }
-	grace := pv.People[0].Now
-	if c5 := grace.Checks[4]; c5.State != CheckNone || c5.Facts["unlisted"] != true || tok(grace.Token) != `{}` || grace.WouldReceive != nil {
-		t.Fatalf("unlisted: %+v token=%s", c5, tok(grace.Token))
+	sami := pv.People[0].Now
+	if c5 := sami.Checks[4]; c5.State != CheckNone || c5.Facts["unlisted"] != true || tok(sami.Token) != `{}` || sami.WouldReceive != nil {
+		t.Fatalf("unlisted: %+v token=%s", c5, tok(sami.Token))
 	}
-	aanya := pv.People[1].Now
-	if aanya.Checks[4].Facts["unlisted"] != nil || tok(aanya.Token) != `{"groups":[]}` {
-		t.Fatalf("a grant with no roles lists the project: %+v token=%s", aanya.Checks[4], tok(aanya.Token))
+	roman := pv.People[1].Now
+	if roman.Checks[4].Facts["unlisted"] != nil || tok(roman.Token) != `{"groups":[]}` {
+		t.Fatalf("a grant with no roles lists the project: %+v token=%s", roman.Checks[4], tok(roman.Token))
 	}
 }
 
@@ -508,14 +508,14 @@ func TestPreview_ClientIDMissing(t *testing.T) {
 	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: nb, TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
 		t.Fatal(err)
 	}
-	s.stored["ada:pNet"] = claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"staff"}, CompiledAt: "x"}
+	s.stored["charlotte:pNet"] = claims.Facts{UserID: "charlotte", ProjectID: "pNet", Roles: []string{"staff"}, CompiledAt: "x"}
 	now := time.Now()
 	older, newer := now.Add(-time.Hour), now.Add(-time.Minute)
 	set := func(rows ...db.ClaimDeliveryLastRow) {
 		svcClaimDeliveryLast = func(context.Context) ([]db.ClaimDeliveryLastRow, error) { return rows, nil }
 	}
 	c4 := func() Check {
-		pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+		pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"charlotte"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -587,8 +587,8 @@ func TestCompareServed(t *testing.T) {
 // something else gets an amber check 4: the reason to pick a template.
 func TestPreview_DefaultTheAppDoesNotRead(t *testing.T) {
 	s := stubClaimShapeDeps(t)
-	s.stored["ada:pCode"] = claims.Facts{UserID: "ada", ProjectID: "pCode", Roles: []string{"users"}, CompiledAt: "x"}
-	pv, err := PreviewAppClaimShape(context.Background(), "aGL", PreviewRequest{UserIDs: []string{"ada"}})
+	s.stored["charlotte:pCode"] = claims.Facts{UserID: "charlotte", ProjectID: "pCode", Roles: []string{"users"}, CompiledAt: "x"}
+	pv, err := PreviewAppClaimShape(context.Background(), "aGL", PreviewRequest{UserIDs: []string{"charlotte"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +645,7 @@ func TestAttachClaimLines(t *testing.T) {
 
 	// Opening NetBird's page reads Zitadel: a Bearer token keeps its claims out.
 	s.settings.AccessTokenType = "BEARER"
-	if _, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}}); err != nil {
+	if _, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"charlotte"}}); err != nil {
 		t.Fatal(err)
 	}
 	if r := views()[0].Claims.Reaches; r == nil || *r {

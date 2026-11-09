@@ -21,7 +21,7 @@ func TestZitadelSource_Users_ConcurrentMissesRebuildOnce(t *testing.T) {
 		lists.Add(1)
 		<-release // hold the rebuild open so every reader arrives mid-flight
 		return &zitadel.SearchResult[zitadel.ZitadelUser]{
-			Items: []zitadel.ZitadelUser{{ID: "u1", DisplayName: "Alice"}, {ID: "u2", DisplayName: "Bob"}},
+			Items: []zitadel.ZitadelUser{{ID: "u1", DisplayName: "Becky"}, {ID: "u2", DisplayName: "Bob"}},
 			Total: 2,
 		}, nil
 	}

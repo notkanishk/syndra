@@ -242,14 +242,14 @@ func TestDecode_UserIdentity(t *testing.T) {
 		name, user string
 		want       claims.Identity
 	}{
-		{"a person", `{"id":"u","type":1,"username":"ada","preferred_login_name":"ada@example.edu","human":{"first_name":"Ada","last_name":"Lovelace","display_name":"Countess","email":"ada@example.edu","is_email_verified":true}}`,
-			claims.Identity{Human: true, GivenName: "Ada", FamilyName: "Lovelace", Username: "ada", Email: "ada@example.edu"}},
+		{"a person", `{"id":"u","type":1,"username":"charlotte","preferred_login_name":"charlotte@example.edu","human":{"first_name":"Charlotte","last_name":"Flair","display_name":"Countess","email":"charlotte@example.edu","is_email_verified":true}}`,
+			claims.Identity{Human: true, GivenName: "Charlotte", FamilyName: "Flair", Username: "charlotte", Email: "charlotte@example.edu"}},
 		{"a machine user", `{"id":"u","type":2,"username":"bot","machine":{"name":"Bot","access_token_type":1}}`,
 			claims.Identity{Machine: true, Username: "bot"}},
-		{"omitempty drops a name", `{"id":"u","human":{"first_name":"Ada"}}`, claims.Identity{Human: true, GivenName: "Ada"}},
-		{"the docs' camelCase is not Zitadel's", `{"id":"u","human":{"profile":{"firstName":"Ada"},"firstName":"Ada"}}`, claims.Identity{Human: true}},
-		{"odd types", `{"id":"u","username":7,"human":{"first_name":["Ada"],"last_name":null,"email":{}}}`, claims.Identity{Human: true}},
-		{"neither kind", `{"id":"u","username":"ada"}`, claims.Identity{Username: "ada"}},
+		{"omitempty drops a name", `{"id":"u","human":{"first_name":"Charlotte"}}`, claims.Identity{Human: true, GivenName: "Charlotte"}},
+		{"the docs' camelCase is not Zitadel's", `{"id":"u","human":{"profile":{"firstName":"Charlotte"},"firstName":"Charlotte"}}`, claims.Identity{Human: true}},
+		{"odd types", `{"id":"u","username":7,"human":{"first_name":["Charlotte"],"last_name":null,"email":{}}}`, claims.Identity{Human: true}},
+		{"neither kind", `{"id":"u","username":"charlotte"}`, claims.Identity{Username: "charlotte"}},
 	} {
 		req, fault := Decode([]byte(`{"user":` + tc.user + `}`))
 		if fault != "" || req.User.Identity != tc.want {

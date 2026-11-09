@@ -12,12 +12,12 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => {
     const read = (name: string) =>
       names.resolved ? { value: { display_name: name, name }, resolved: true } : { value: undefined, resolved: false };
-    return { resolveUser: () => read("Aanya Rao"), resolveProject: () => read("Laser Lab"), resolveBundle: () => read("Lab Tech") };
+    return { resolveUser: () => read("Roman Reigns"), resolveProject: () => read("Laser Lab"), resolveBundle: () => read("Lab Tech") };
   },
 }));
 
 const CASES = [
-  ["a person", "Aanya Rao", () => <UserName id="u1" />],
+  ["a person", "Roman Reigns", () => <UserName id="u1" />],
   ["a project", "Laser Lab", () => <ProjectName id="p1" />],
   ["a bundle", "Lab Tech", () => <BundleName id="b1" />],
 ] as const;

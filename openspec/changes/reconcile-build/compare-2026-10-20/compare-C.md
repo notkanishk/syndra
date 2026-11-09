@@ -37,7 +37,7 @@ Caveats
 - [low] (both) live has a "Two settings you cannot map, on purpose" note (enabled and smb_enabled) the board does not show.
 
 ## route-storage (live /storage) - frame `default`  -> partly (could not compare populated state)
-- [med] (both) board is the member view for Aanya Rao (Member shell with a 3-item nav: My access / Requests / Network storage): TrueNAS card with a status dot, 3-step progress line, SIGN IN AS `aanya.rao` + Copy, YOUR SHARES with quota bar and smb:// and \\ paths with Copy, STORAGE PASSWORD / live, as operator "test", shows only the "None of your roles reaches TrueNAS" empty state with "Ask for access in Requests ->". The empty state was not drawn on the board.
+- [med] (both) board is the member view for Roman Reigns (Member shell with a 3-item nav: My access / Requests / Network storage): TrueNAS card with a status dot, 3-step progress line, SIGN IN AS `roman.reigns` + Copy, YOUR SHARES with quota bar and smb:// and \\ paths with Copy, STORAGE PASSWORD / live, as operator "test", shows only the "None of your roles reaches TrueNAS" empty state with "Ask for access in Requests ->". The empty state was not drawn on the board.
 - [low] (both) the TrueNAS card header and the 3-step line (A role gives you access / Your account is created / You set a password) are present in both. Page title and lede are identical.
 - [low] (both) live card has no status dot or "Online and accepting sign-ins . checked a minute ago" line in the empty state.
 - Not verifiable here: share rows, copy rows and the password section (the test operator holds no TrueNAS role).

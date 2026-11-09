@@ -54,7 +54,7 @@ describe("role members — holding is observed", () => {
     state.data = view({
       members: [
         {
-          user: { id: "u1", name: "Ada Lovelace", email: "ada@example.edu", title: "", team: "" },
+          user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
           reasons: [{ kind: "direct" }],
         },
       ],
@@ -77,7 +77,7 @@ describe("role members — holding is observed", () => {
     state.data = view({
       members: [
         {
-          user: { id: "u1", name: "Ada Lovelace", email: "ada@example.edu", title: "", team: "" },
+          user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
           reasons: [{ kind: "direct" }],
         },
       ],
@@ -93,7 +93,7 @@ describe("role members — holding is observed", () => {
     state.data = view({
       members: [
         {
-          user: { id: "u1", name: "Ada Lovelace", email: "ada@example.edu", title: "", team: "" },
+          user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
           reasons: [{ kind: "direct" }],
           in_zitadel: false,
         },
@@ -124,14 +124,14 @@ describe("role members — holding is observed", () => {
     state.data = view({
       members: [
         {
-          user: { id: "u1", name: "Ada Lovelace", email: "ada@example.edu", title: "", team: "" },
+          user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
           reasons: [{ kind: "direct" }],
         },
       ],
     });
     renderPage();
 
-    expect(screen.getByText("ada@example.edu")).toBeInTheDocument();
+    expect(screen.getByText("charlotte@example.edu")).toBeInTheDocument();
   });
 
   it("prints the raw role key in Advanced and not in Basic (A-20 P17)", () => {

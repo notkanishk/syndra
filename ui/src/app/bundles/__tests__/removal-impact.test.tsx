@@ -106,7 +106,7 @@ describe("dropping a role from a bundle's working copy", () => {
         losses: [
           {
             user_id: "u1",
-            name: "Ada",
+            name: "Charlotte",
             roles: [
               { project_id: "p1", role_key: "operator" },
               { project_id: "p2", role_key: "chained-one" },

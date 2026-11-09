@@ -32,7 +32,7 @@ beforeEach(() => {
 
 describe("Look up sign-ins (owner, 3 Nov)", () => {
   it("asks only with a reason, for the chosen range", () => {
-    render(<SignInLookup userId="u1" name="Aanya" onClose={() => {}} />);
+    render(<SignInLookup userId="u1" name="Roman" onClose={() => {}} />);
     const go = screen.getByRole("button", { name: "Look up sign-ins" });
     expect(go).toBeDisabled();
     expect(screen.getByText("Say why first.")).toBeInTheDocument();
@@ -54,11 +54,11 @@ describe("Look up sign-ins (owner, 3 Nov)", () => {
       since: "2026-10-03T00:00:00Z",
       until: "2026-11-02T00:00:00Z",
     };
-    render(<SignInLookup userId="u1" name="Aanya" onClose={() => {}} />);
+    render(<SignInLookup userId="u1" name="Roman" onClose={() => {}} />);
     expect(screen.getByText("Looked up")).toBeInTheDocument();
     // The lookup is an audit event, quoted there with its reason (task 1.8a); Change history holds cascades only.
     expect(screen.getByText(/It's on the Audit page with your reason/)).toBeInTheDocument();
-    expect(screen.getByText(/2 sign-ins by Aanya in the last 30 days/)).toBeInTheDocument();
+    expect(screen.getByText(/2 sign-ins by Roman in the last 30 days/)).toBeInTheDocument();
     expect(screen.getByText("Fab queue")).toBeInTheDocument();
     expect(screen.getByText("App unknown")).toBeInTheDocument();
     expect(screen.getByText(/older ones may be missing/)).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe("Look up sign-ins (owner, 3 Nov)", () => {
 
   it("a failed lookup says Not looked up and the step", () => {
     state.error = new ApiError(500, { error: "BOOM", message: "boom" });
-    render(<SignInLookup userId="u1" name="Aanya" onClose={() => {}} />);
+    render(<SignInLookup userId="u1" name="Roman" onClose={() => {}} />);
     expect(screen.getByText("Not looked up")).toBeInTheDocument();
     expect(screen.getByText("Check the address and look it up again.")).toBeInTheDocument();
   });

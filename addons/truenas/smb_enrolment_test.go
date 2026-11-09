@@ -13,12 +13,12 @@ import (
 // snapshot, which for a new account says SMB is off because nothing could turn
 // it on yet. Every account Syndra created stayed off SMB for good.
 func TestTheFirstPasswordSwitchesOnTheSMBTheEntitlementWants(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}`)
 	if out := decodeOutcome(t, rr); out.Effect != EffectNoChange {
 		t.Fatalf("SMB waits for the password, want no change, got %s (%s)", out.Effect, rr.Body.String())
@@ -36,11 +36,11 @@ func TestTheFirstPasswordSwitchesOnTheSMBTheEntitlementWants(t *testing.T) {
 }
 
 func TestThePasswordNeverSwitchesOnSMBNobodyWants(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
-	postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+	postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":false}}`)
 
 	pw := postOperation(t, s, "password.set",
@@ -57,11 +57,11 @@ func TestThePasswordNeverSwitchesOnSMBNobodyWants(t *testing.T) {
 // stranded by the old password path). A standalone `smb: true` is refused by
 // TrueNAS and took the group change in the same update down with it.
 func TestSMBIsNeverSwitchedOnAloneAndTheGroupsStillLand(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":false,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":false,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}`)
 	out := decodeOutcome(t, rr)
 	if out.Effect != EffectApplied {
@@ -87,12 +87,12 @@ func TestSMBIsNeverSwitchedOnAloneAndTheGroupsStillLand(t *testing.T) {
 // convergence for every account still waiting on a password, each one drained
 // to "no change", and Pending changes never emptied.
 func TestThePlanDoesNotPromiseTheSMBOnlyAPasswordCanSwitchOn(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
-	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"ada@example.edu",
+	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu",
 		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}]}`)
 	var plan PlanResponse
 	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
@@ -108,7 +108,7 @@ func TestThePlanDoesNotPromiseTheSMBOnlyAPasswordCanSwitchOn(t *testing.T) {
 
 	// And a real change beside it is still planned, without the SMB it can't make.
 	rr = httptest.NewRecorder()
-	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"ada@example.edu",
+	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu",
 		"desired":{"group":["staff"],"enabled":true,"smb_enabled":true}}]}`)
 	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
 		t.Fatalf("want one outcome, got %s", rr.Body.String())

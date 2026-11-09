@@ -64,11 +64,11 @@ describe("AnchoredPanel closing", () => {
         </>
       );
     }
-    const { rerender } = render(<Suggestions options={["Aanya Rao"]} />);
+    const { rerender } = render(<Suggestions options={["Roman Reigns"]} />);
     rerender(<Suggestions options={[]} />);
-    expect(screen.getByText("Aanya Rao")).toBeInTheDocument();
+    expect(screen.getByText("Roman Reigns")).toBeInTheDocument();
     act(() => void vi.advanceTimersByTime(121));
-    expect(screen.queryByText("Aanya Rao")).toBeNull();
+    expect(screen.queryByText("Roman Reigns")).toBeNull();
   });
 
   it("is gone at once in reduced motion", () => {

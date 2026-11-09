@@ -224,7 +224,7 @@ func TestPlanBulkApprove_EachRequestFromTheSnapshot(t *testing.T) {
 	if raw, _ := json.Marshal(ch.Row); !strings.Contains(string(raw), `"person":"u1"`) {
 		t.Fatalf("the row must say whose access it changes: %s", raw)
 	}
-	if ch.Row.Name != "Ada Lovelace" {
+	if ch.Row.Name != "Charlotte Flair" {
 		t.Errorf("the row names the person: %q", ch.Row.Name)
 	}
 	if ch := Plan(Action{Op: OpApprove, RequestID: "req2"}, s); ch.Refusal != "resolved" || ch.Row.Detail != "Already declined." {

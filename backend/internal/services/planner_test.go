@@ -29,7 +29,7 @@ func plannerSnap() PlanSnapshot {
 			member: {Role: "Member", Project: "Laser Lab"}, trained: {Role: "Trained", Project: "Laser Lab"},
 			advanced: {Role: "Advanced", Project: "Laser Lab"},
 		},
-		Profiles: map[string]models.UserProfile{"u1": {ID: "u1", Name: "Ada Lovelace", Status: "active"}},
+		Profiles: map[string]models.UserProfile{"u1": {ID: "u1", Name: "Charlotte Flair", Status: "active"}},
 		Holding:  models.RequestHolding{Kind: models.HoldingNone},
 		Access: db.AccessSnapshot{
 			People:    map[string]db.PersonAccess{"u1": {}},
@@ -203,7 +203,7 @@ func TestPlan_RoleNoLongerOffered(t *testing.T) {
 
 func TestPlan_RefusesWhoCantChange(t *testing.T) {
 	s := plannerSnap()
-	s.Profiles["u1"] = models.UserProfile{ID: "u1", Name: "Ada", Status: "locked"}
+	s.Profiles["u1"] = models.UserProfile{ID: "u1", Name: "Charlotte", Status: "locked"}
 	if ch := assign(s); ch.Row.Effect != EffectBlocked || ch.Row.Detail != "Account is locked. Remove it from the selection to continue." {
 		t.Fatalf("departed: %+v", ch)
 	}

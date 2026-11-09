@@ -47,7 +47,7 @@ function renderRevoke() {
   const client = seedAutoRetry(new QueryClient({ defaultOptions: { queries: { retry: false } } }), true);
   return render(
     <QueryClientProvider client={client}>
-      <RevokeDialog target="truenas" subjectId="u1" subjectName="Ada Rivera" onClose={() => {}} />
+      <RevokeDialog target="truenas" subjectId="u1" subjectName="Charlotte Flair" onClose={() => {}} />
     </QueryClientProvider>,
   );
 }
@@ -82,7 +82,7 @@ describe("revoking access on a target", () => {
 
   it("names the queue in the button", () => {
     renderRevoke();
-    expect(screen.getByRole("button", { name: /revoke access for Ada Rivera/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /revoke access for Charlotte Flair/i })).toBeInTheDocument();
   });
 
   // Rung 3, the same gesture as every other revocation: muscle memory must not
@@ -92,7 +92,7 @@ describe("revoking access on a target", () => {
     // Re-queried at every step rather than held. `Button` wraps itself in a
     // span to carry a `reason`, so the button is a DIFFERENT DOM node once the
     // reason clears — a held reference goes stale and reads as never enabling.
-    const confirm = () => screen.getByRole("button", { name: /revoke access for Ada Rivera/i });
+    const confirm = () => screen.getByRole("button", { name: /revoke access for Charlotte Flair/i });
     expect(confirm()).toBeDisabled();
 
     // Queried by the label, which is now all the label is. The hint used to
@@ -102,7 +102,7 @@ describe("revoking access on a target", () => {
     expect(confirm()).toBeDisabled();
 
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
-      target: { value: "ada rivera" },
+      target: { value: "charlotte flair" },
     });
     expect(confirm()).toBeEnabled();
 
@@ -135,9 +135,9 @@ describe("revoking access on a target", () => {
 
     fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
-      target: { value: "Ada Rivera" },
+      target: { value: "Charlotte Flair" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /revoke access for Ada Rivera/i }));
+    fireEvent.click(screen.getByRole("button", { name: /revoke access for Charlotte Flair/i }));
 
     // The result screen's own disclosure — drains on its own, no operator
     // action needed — must not have been contradicted by the form it replaced.
@@ -158,9 +158,9 @@ describe("revoking access on a target", () => {
 
     fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
-      target: { value: "Ada Rivera" },
+      target: { value: "Charlotte Flair" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /revoke access for Ada Rivera/i }));
+    fireEvent.click(screen.getByRole("button", { name: /revoke access for Charlotte Flair/i }));
 
     expect(screen.getByText(/Partly done/i)).toBeInTheDocument();
     expect(screen.getByText(/Still outstanding: password.rotate/)).toBeInTheDocument();
@@ -179,7 +179,7 @@ describe("putting a hold on", () => {
       <QueryClientProvider client={client}>
         <HoldDialog
           subjectId="u1"
-          subjectName="Ada Rivera"
+          subjectName="Charlotte Flair"
           target="truenas"
           field="enabled"
           value="true"
@@ -210,7 +210,7 @@ describe("putting a hold on", () => {
     fireEvent.change(screen.getByLabelText(/Remind us on/), { target: { value: "2026-12-01" } });
     expect(confirm()).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/shown to Ada Rivera/i), {
+    fireEvent.change(screen.getByLabelText(/shown to Charlotte Flair/i), {
       target: { value: "safety review" },
     });
     expect(confirm()).toBeEnabled();
@@ -221,10 +221,10 @@ describe("putting a hold on", () => {
   // by the resolver.
   it("sends the resolver's value and shows the operator's words", () => {
     renderHold();
-    expect(screen.getByText(/Put access to TrueNAS on hold for Ada Rivera/)).toBeInTheDocument();
+    expect(screen.getByText(/Put access to TrueNAS on hold for Charlotte Flair/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Remind us on/), { target: { value: "2026-12-01" } });
-    fireEvent.change(screen.getByLabelText(/shown to Ada Rivera/i), {
+    fireEvent.change(screen.getByLabelText(/shown to Charlotte Flair/i), {
       target: { value: "safety review" },
     });
     fireEvent.click(screen.getByRole("button", { name: /put access to TrueNAS on hold/i }));

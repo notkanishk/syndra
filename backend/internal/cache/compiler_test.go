@@ -61,14 +61,14 @@ func TestCompileFacts_NamesBundlesEndsAndServiceAccount(t *testing.T) {
 		return []models.Bundle{{ID: "b1", Name: "Makers"}, {ID: "b2", Name: "Elsewhere"}}, nil
 	}
 	cacheFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
-		return models.UserProfile{ID: "u1", Name: "Ada Lovelace", GivenName: "Ada", FamilyName: "Lovelace", Username: "ada", Kind: models.UserKindMachine}, true, nil
+		return models.UserProfile{ID: "u1", Name: "Charlotte Flair", GivenName: "Charlotte", FamilyName: "Flair", Username: "charlotte", Kind: models.UserKindMachine}, true, nil
 	}
 
 	f, err := CompileFacts(context.Background(), "u1", "net")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.GivenName != "Ada" || f.FamilyName != "Lovelace" || f.Username != "ada" || !f.IsServiceAccount {
+	if f.GivenName != "Charlotte" || f.FamilyName != "Flair" || f.Username != "charlotte" || !f.IsServiceAccount {
 		t.Fatalf("profile facts: %+v", f)
 	}
 	if len(f.Bundles) != 1 || f.Bundles[0] != "Makers" {
@@ -82,7 +82,7 @@ func TestCompileFacts_NamesBundlesEndsAndServiceAccount(t *testing.T) {
 	// A failed read of the service-account marks fails the profile part, so a
 	// warm keeps the old entry instead of storing "not a service account".
 	cacheFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
-		return models.UserProfile{ID: "u1", Name: "Ada Lovelace"}, true, nil
+		return models.UserProfile{ID: "u1", Name: "Charlotte Flair"}, true, nil
 	}
 	dbListServiceAccounts = func(context.Context) ([]db.ServiceAccountRow, error) { return nil, errors.New("db down") }
 	ps, _ := newPass(context.Background(), nil)

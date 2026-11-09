@@ -56,7 +56,7 @@ func (b *blockingRPC) Call(method string, timeout int64, params any) (json.RawMe
 }
 
 func TestAMutationInFlightSettlesRatherThanBeingAbandoned(t *testing.T) {
-	users := `[{"username":"ada","id":11,"uid":3001,"locked":true,"smb":false,"groups":[42]}]`
+	users := `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":false,"groups":[42]}]`
 	b := &blockingRPC{
 		mutatingRPC: mutatingRPC{fakeRPC: fakeRPC{users: users, groups: fixtureGroups}},
 		entered:     make(chan struct{}, 1),
@@ -66,7 +66,7 @@ func TestAMutationInFlightSettlesRatherThanBeingAbandoned(t *testing.T) {
 	s.nas = newNAS(func() (rpc, error) { return b, nil }, []string{"25.04"})
 	s.nas.version, s.nas.probed = "25.04.2", true
 	s.auth = signedAuth(time.Now())
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -83,9 +83,9 @@ func TestAMutationInFlightSettlesRatherThanBeingAbandoned(t *testing.T) {
 	// while the blocking write is held would queue behind it — the test would
 	// deadlock waiting to construct the request it needs in order to proceed.
 	body := withContractVersion(t, withFingerprint(t, s, `{"call_id":"c1","subject":"sub-1",
-		"email":"ada@example.edu","desired":{"group":["lab_makers"],"enabled":true}}`))
+		"email":"charlotte@example.edu","desired":{"group":["lab_makers"],"enabled":true}}`))
 	second := withContractVersion(t, withFingerprint(t, s,
-		`{"call_id":"c2","subject":"sub-1","email":"ada@example.edu","desired":{"enabled":false}}`))
+		`{"call_id":"c2","subject":"sub-1","email":"charlotte@example.edu","desired":{"enabled":false}}`))
 
 	applied := make(chan int, 1)
 	go func() {

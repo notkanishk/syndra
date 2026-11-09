@@ -96,7 +96,7 @@ func TestZitadelRoleDelete_HeldNamesWhoAndHowMany(t *testing.T) {
 	svcDeleteRole = func(_ context.Context, _, _, _ string, confirm int) error {
 		confirmed = confirm
 		if confirm != 2 {
-			return &services.RoleHeldError{Holders: []models.UserProfile{{ID: "u1", Name: "Ada Lovelace"}, {ID: "u2", Email: "grace@example.org"}}}
+			return &services.RoleHeldError{Holders: []models.UserProfile{{ID: "u1", Name: "Charlotte Flair"}, {ID: "u2", Email: "sami@example.org"}}}
 		}
 		return nil
 	}
@@ -107,7 +107,7 @@ func TestZitadelRoleDelete_HeldNamesWhoAndHowMany(t *testing.T) {
 	}
 	var body ErrorResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &body)
-	if body.Error != "ROLE_HELD" || body.Details["count"] != "2" || body.Details["holders"] != "Ada Lovelace, grace@example.org" {
+	if body.Error != "ROLE_HELD" || body.Details["count"] != "2" || body.Details["holders"] != "Charlotte Flair, sami@example.org" {
 		t.Fatalf("the refusal must name who and how many: %+v", body)
 	}
 	if confirmed != 0 {

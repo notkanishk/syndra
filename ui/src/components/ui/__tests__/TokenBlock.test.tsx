@@ -30,7 +30,7 @@ describe("TokenBlock", () => {
   });
 
   it("in raw mode wraps anywhere and never scrolls sideways", () => {
-    const { container } = render(<TokenBlock raw={{ user: { email: "ada@example.edu" } }} />);
+    const { container } = render(<TokenBlock raw={{ user: { email: "charlotte@example.edu" } }} />);
     const pre = container.querySelector("pre")!;
     expect(pre.className).toMatch(/whitespace-pre-wrap/);
     expect(pre.className).toMatch(/overflow-wrap:anywhere/);

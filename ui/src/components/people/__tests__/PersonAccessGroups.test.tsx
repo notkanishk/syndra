@@ -38,8 +38,8 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
     data: {
       user: {
         id: "u1",
-        name: "Priya Nair",
-        email: "priya@example.edu",
+        name: "Cody Rhodes",
+        email: "cody@example.edu",
         title: "Research assistant",
         team: "Design",
         status: "active",
@@ -122,9 +122,9 @@ beforeEach(() => {
 describe("the header", () => {
   it("names the person, then email, role and team, with no raw id in Basic", () => {
     renderPerson();
-    expect(screen.getByRole("heading", { name: "Priya Nair" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Cody Rhodes" })).toBeInTheDocument();
     const text = document.body.textContent ?? "";
-    expect(text).toMatch(/priya@example\.edu.*Research assistant.*Design/);
+    expect(text).toMatch(/cody@example\.edu.*Research assistant.*Design/);
     expect(text).not.toMatch(/\bu1\b/);
   });
 });
@@ -255,7 +255,7 @@ describe("a person who holds nothing", () => {
   it("says what would put access here", () => {
     state.projects = [];
     renderPerson();
-    expect(screen.getByText("Priya Nair holds no access yet")).toBeInTheDocument();
+    expect(screen.getByText("Cody Rhodes holds no access yet")).toBeInTheDocument();
     expect(screen.getByText(/Access appears here once/)).toBeInTheDocument();
     // The strip above it keeps its seat.
     expect(screen.getByText("None assigned")).toBeInTheDocument();

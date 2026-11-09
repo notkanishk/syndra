@@ -26,8 +26,8 @@ const source = vi.hoisted(() => ({
 }));
 
 const people = vi.hoisted(() => [
-  { id: "u1", name: "Priya Nair", email: "priya@example.edu", title: "Student", team: "Operations" },
-  { id: "u2", name: "Omar Haddad", email: "omar@example.edu", title: "", team: "" },
+  { id: "u1", name: "Cody Rhodes", email: "cody@example.edu", title: "Student", team: "Operations" },
+  { id: "u2", name: "Tiffany Stratton", email: "tiffany@example.edu", title: "", team: "" },
 ]);
 vi.mock("@/lib/queries/useCatalogUsers", () => ({ useCatalogUsers: () => ({ data: people }) }));
 vi.mock("@/lib/queries/useUsers", () => ({ useUserAccess: () => ({ data: undefined }) }));
@@ -221,13 +221,13 @@ describe("starting a new bundle from a person", () => {
     fireEvent.click(screen.getByRole("radio", { name: "A person" }));
     fireEvent.change(screen.getByLabelText("Choose a person"), { target: { value: "a" } });
 
-    const priya = screen.getByText("Priya Nair").closest("label")!;
-    expect(priya.textContent).toContain("Student · Operations");
-    expect(priya.textContent).toContain("priya@example.edu");
+    const cody = screen.getByText("Cody Rhodes").closest("label")!;
+    expect(cody.textContent).toContain("Student · Operations");
+    expect(cody.textContent).toContain("cody@example.edu");
 
     // Nothing known but the email: no empty line, no dash.
-    const omar = screen.getByText("Omar Haddad").closest("label")!;
-    expect(omar.textContent).toBe("Omar Haddadomar@example.edu");
+    const tiffany = screen.getByText("Tiffany Stratton").closest("label")!;
+    expect(tiffany.textContent).toBe("Tiffany Strattontiffany@example.edu");
   });
 });
 

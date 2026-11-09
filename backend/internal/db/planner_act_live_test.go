@@ -81,21 +81,21 @@ func actStaleThenThePlan(t *testing.T, f plannerFixture, a services.Action, w se
 func TestPlannerAct_Give(t *testing.T) {
 	f := newPlannerFixture(t)
 	rule := f.withRule(t) // trained gives advanced
-	a := services.Action{Op: services.OpGive, UserID: f.alice, ProjectID: f.project, RoleKey: f.trains}
+	a := services.Action{Op: services.OpGive, UserID: f.becky, ProjectID: f.project, RoleKey: f.trains}
 	written := actStaleThenThePlan(t, f, a,
 		services.ActWrite{Actor: f.actor, Reason: "capstone", Give: db.EnqueueParams{EndRule: db.EndKept, PayloadJSON: "{}"}},
-		func() string { return f.queue(t, f.alice, "revoke", f.trains, "direct", "") })
+		func() string { return f.queue(t, f.becky, "revoke", f.trains, "direct", "") })
 	// Its own row waits (trained waits for you); the rule's goes straight away.
 	if got := sentRows(t, f.ctx, outboxIDs(written)); !slices.Equal(got, []string{"add advanced rule " + rule, "add trained direct "}) {
 		t.Fatalf("rows = %v", got)
 	}
 	var reason string
-	if err := db.PG.QueryRow(f.ctx, `SELECT reason FROM direct_role_grants WHERE user_id = $1 AND zitadel_role_key = $2`, f.alice, f.trains).Scan(&reason); err != nil || reason != "capstone" {
+	if err := db.PG.QueryRow(f.ctx, `SELECT reason FROM direct_role_grants WHERE user_id = $1 AND zitadel_role_key = $2`, f.becky, f.trains).Scan(&reason); err != nil || reason != "capstone" {
 		t.Fatalf("the ledger row keeps the operator's reason: %q %v", reason, err)
 	}
 	// And where the change is shown (task 1.8a): its audit line and every row
 	// it queued, so Pending changes can quote it.
-	if said := auditReason(t, f.ctx, f.alice, "direct_grant.upserted"); said != "capstone" {
+	if said := auditReason(t, f.ctx, f.becky, "direct_grant.upserted"); said != "capstone" {
 		t.Errorf("the give's audit row says %q, want the operator's reason", said)
 	}
 	for _, id := range outboxIDs(written) {
@@ -107,18 +107,18 @@ func TestPlannerAct_Give(t *testing.T) {
 
 func TestPlannerAct_RemoveGrant(t *testing.T) {
 	f := newPlannerFixture(t)
-	if _, err := db.EnqueueDirectGrantPropagation(f.ctx, db.EnqueueParams{UserID: f.alice, ProjectID: f.project,
+	if _, err := db.EnqueueDirectGrantPropagation(f.ctx, db.EnqueueParams{UserID: f.becky, ProjectID: f.project,
 		RoleKeys: []string{f.member}, GrantedBy: f.actor, OpType: "add", NoPropagation: true, PayloadJSON: "{}"}); err != nil {
 		t.Fatal(err)
 	}
 	var grant string
-	if err := db.PG.QueryRow(f.ctx, `SELECT id::text FROM direct_role_grants WHERE user_id = $1`, f.alice).Scan(&grant); err != nil {
+	if err := db.PG.QueryRow(f.ctx, `SELECT id::text FROM direct_role_grants WHERE user_id = $1`, f.becky).Scan(&grant); err != nil {
 		t.Fatal(err)
 	}
-	a := services.Action{Op: services.OpRemoveGrant, UserID: f.alice, GrantID: grant}
+	a := services.Action{Op: services.OpRemoveGrant, UserID: f.becky, GrantID: grant}
 	// The give still waits to be sent: revoking it only cancels it.
 	written := actStaleThenThePlan(t, f, a, services.ActWrite{Actor: f.actor},
-		func() string { return f.queue(t, f.alice, "add", f.member, "direct", "") })
+		func() string { return f.queue(t, f.becky, "add", f.member, "direct", "") })
 	if written.Delivery() != services.DeliveryNone || len(outboxIDs(written)) != 0 {
 		t.Fatalf("a revoke that only cancels sends nothing: %+v", written.Writes)
 	}
@@ -132,7 +132,7 @@ func TestPlannerAct_RemoveGrant(t *testing.T) {
 func TestPlannerAct_Approve(t *testing.T) {
 	f := newPlannerFixture(t)
 	days := 30
-	req, err := db.CreateAccessRequest(f.ctx, f.alice, f.project, f.member, "induction done", &days)
+	req, err := db.CreateAccessRequest(f.ctx, f.becky, f.project, f.member, "induction done", &days)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,11 +140,11 @@ func TestPlannerAct_Approve(t *testing.T) {
 	ctx, _ := db.GuardCancellations(f.ctx, nil, func(context.Context) bool { return true })
 
 	// Approve stays on the planner from the decision down (decision 5).
-	shown, err := services.PlanAct(ctx, services.Action{Op: services.OpApprove, UserID: f.alice, RequestID: req})
+	shown, err := services.PlanAct(ctx, services.Action{Op: services.OpApprove, UserID: f.becky, RequestID: req})
 	if err != nil {
 		t.Fatal(err)
 	}
-	unnamed := f.queue(t, f.alice, "revoke", f.member, "direct", "")
+	unnamed := f.queue(t, f.becky, "revoke", f.member, "direct", "")
 	if _, err := services.DecideRequest(ctx, req, "approved", f.actor, "ok",
 		&services.Seen{Fingerprint: shown.Row.Fingerprint, CancelIDs: shown.Row.CancelIDs}); !errors.As(err, new(*services.StalePlan)) {
 		t.Fatalf("stale, got %v", err)
@@ -155,7 +155,7 @@ func TestPlannerAct_Approve(t *testing.T) {
 		t.Fatalf("a stale approval decides nothing: request %s", still)
 	}
 
-	fresh, err := services.PlanAct(ctx, services.Action{Op: services.OpApprove, UserID: f.alice, RequestID: req})
+	fresh, err := services.PlanAct(ctx, services.Action{Op: services.OpApprove, UserID: f.becky, RequestID: req})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,11 +176,11 @@ func TestPlannerAct_Approve(t *testing.T) {
 
 func TestPlannerAct_AssignBundle(t *testing.T) {
 	f := newPlannerFixture(t)
-	a := services.Action{Op: services.BulkOpAssignBundle, UserID: f.alice, BundleID: f.bundle}
+	a := services.Action{Op: services.BulkOpAssignBundle, UserID: f.becky, BundleID: f.bundle}
 	actStaleThenThePlan(t, f, a, services.ActWrite{Actor: f.actor},
-		func() string { return f.queue(t, f.alice, "revoke", f.member, "direct", "") })
+		func() string { return f.queue(t, f.becky, "revoke", f.member, "direct", "") })
 	var held bool
-	_ = db.PG.QueryRow(f.ctx, `SELECT EXISTS (SELECT 1 FROM user_bundle_assignments WHERE user_id = $1 AND bundle_id = $2)`, f.alice, f.bundle).Scan(&held)
+	_ = db.PG.QueryRow(f.ctx, `SELECT EXISTS (SELECT 1 FROM user_bundle_assignments WHERE user_id = $1 AND bundle_id = $2)`, f.becky, f.bundle).Scan(&held)
 	if !held {
 		t.Fatal("assigned")
 	}
@@ -192,10 +192,10 @@ func TestPlannerAct_RemoveBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, "", f.alice, f.bundle, v.ID, nil); err != nil || !ok {
+	if _, ok, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, "", f.becky, f.bundle, v.ID, nil); err != nil || !ok {
 		t.Fatalf("assign: %v %v", ok, err)
 	}
-	a := services.Action{Op: services.BulkOpRemoveBundle, UserID: f.alice, BundleID: f.bundle}
+	a := services.Action{Op: services.BulkOpRemoveBundle, UserID: f.becky, BundleID: f.bundle}
 	actStaleThenThePlan(t, f, a, services.ActWrite{Actor: f.actor},
-		func() string { return f.queue(t, f.alice, "add", f.member, "bundle", f.bundle) })
+		func() string { return f.queue(t, f.becky, "add", f.member, "bundle", f.bundle) })
 }

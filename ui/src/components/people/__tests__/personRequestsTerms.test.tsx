@@ -51,7 +51,7 @@ describe("PersonRequests · approving names what the rules give", () => {
   it("shows the planner's rule sentences beside Approve", async () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <PersonRequests userId="u9" name="Ada" isOperator />
+        <PersonRequests userId="u9" name="Charlotte" isOperator />
       </QueryClientProvider>,
     );
     expect(await screen.findByText(/If you approve: Also gives Bench in Workshop/)).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe("PersonRequests · a request to keep a role", () => {
   it("says To the end of next term when the new end is a term's last day", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <PersonRequests userId="u9" name="Ada" isOperator />
+        <PersonRequests userId="u9" name="Charlotte" isOperator />
       </QueryClientProvider>,
     );
     expect(screen.getByText(/^To the end of next term · to 31 May 2027 instead of 18 Dec$/)).toBeInTheDocument();

@@ -69,17 +69,17 @@ describe("a step that points further down the same page", () => {
 describe("what lands after a skeleton", () => {
   function Name({ loading }: { loading: boolean }) {
     const tint = useTintAfterSkeleton(loading);
-    return loading ? <Skeleton className="h-3 w-20" /> : <span className={tint}>Aanya Rao</span>;
+    return loading ? <Skeleton className="h-3 w-20" /> : <span className={tint}>Roman Reigns</span>;
   }
 
   it("tints in", () => {
     const { rerender } = render(<Name loading />);
     rerender(<Name loading={false} />);
-    expect(screen.getByText("Aanya Rao")).toHaveClass("tint-in");
+    expect(screen.getByText("Roman Reigns")).toHaveClass("tint-in");
   });
 
   it("is simply there when it never was a skeleton", () => {
     render(<Name loading={false} />);
-    expect(screen.getByText("Aanya Rao")).not.toHaveClass("tint-in");
+    expect(screen.getByText("Roman Reigns")).not.toHaveClass("tint-in");
   });
 });

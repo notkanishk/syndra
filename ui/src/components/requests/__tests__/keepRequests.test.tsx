@@ -59,7 +59,7 @@ vi.mock("@/lib/queries/useCatalogUsers", () => ({
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
-    resolveUser: (id: string) => ({ value: { display_name: id === "u9" ? "Ada Lovelace" : "Kanishk Singh" } }),
+    resolveUser: (id: string) => ({ value: { display_name: id === "u9" ? "Charlotte Flair" : "Kanishk Singh" } }),
     resolveRole: () => ({ value: { display_name: "Operator" } }),
   }),
 }));
@@ -67,7 +67,7 @@ vi.mock("@/components/names", () => ({
   UserAvatar: () => null,
   ProjectName: () => <span>Laser Lab</span>,
   RoleRef: () => <span>Laser Lab · Operator</span>,
-  UserName: ({ id }: { id: string }) => <span>{id === "u9" ? "Ada Lovelace" : "Kanishk Singh"}</span>,
+  UserName: ({ id }: { id: string }) => <span>{id === "u9" ? "Charlotte Flair" : "Kanishk Singh"}</span>,
 }));
 
 const CURRENT = new Date(2026, 11, 18, 12).toISOString();
@@ -117,7 +117,7 @@ describe("The queue · a request to keep a role", () => {
     expect(within(row).getByText(/^Another month · to 17 Jan( 2027)? instead of 18 Dec$/)).toBeInTheDocument();
     expect(within(row).getByText(/^Capstone build\.$/)).toBeInTheDocument();
     expect(
-      within(row).getByText(/^Approving moves Ada[’']s end date to 17 Jan( 2027)?\. Nothing else changes\.$/),
+      within(row).getByText(/^Approving moves Charlotte[’']s end date to 17 Jan( 2027)?\. Nothing else changes\.$/),
     ).toBeInTheDocument();
     expect(within(row).queryByText(/Asks to keep it longer/)).not.toBeInTheDocument();
   });

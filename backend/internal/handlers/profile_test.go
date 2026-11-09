@@ -43,7 +43,7 @@ func (s *stubDirectory) InvalidateUsers()                                       
 func TestHandleGetMyProfile_Success(t *testing.T) {
 	orig := directory.Default
 	directory.Default = &stubDirectory{users: map[string]models.UserProfile{
-		"u1": {ID: "u1", Name: "Alice", Email: "alice@x.test", Title: "Director", Team: "Ops", Status: "active"},
+		"u1": {ID: "u1", Name: "Becky", Email: "becky@x.test", Title: "Director", Team: "Ops", Status: "active"},
 	}}
 	t.Cleanup(func() { directory.Default = orig })
 

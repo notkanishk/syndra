@@ -236,8 +236,8 @@ describe("PublishVersionDialog", () => {
         outcomes: [
           {
             user_id: "u1",
-            name: "Ada",
-            email: "ada@example.edu",
+            name: "Charlotte",
+            email: "charlotte@example.edu",
             effect: "apply",
             detail: "Moves from v2 to v3. Gains Trained in Laser Lab.",
             delivery: "straight_away",

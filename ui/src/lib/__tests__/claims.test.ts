@@ -157,20 +157,20 @@ describe("what NetBird will do", () => {
 });
 
 describe("Sent as", () => {
-  const token = { custom_claims: { groups: ["analyst"], given_name: "Ada" }, roles: [] };
+  const token = { custom_claims: { groups: ["analyst"], given_name: "Charlotte" }, roles: [] };
 
   it("shows a nested row's whole object, and its sibling says it's inside the same one", () => {
-    expect(sentAs({ path: ["custom_claims", "groups"], kind: "roles" }, token, "Ada Lovelace", { app: "Supabase" })).toBe(
-      'Sent as `{"custom_claims": {"groups": ["analyst"], "given_name": "Ada"}}` for Ada Lovelace, with `"groups": []` for anyone who holds none.',
+    expect(sentAs({ path: ["custom_claims", "groups"], kind: "roles" }, token, "Charlotte Flair", { app: "Supabase" })).toBe(
+      'Sent as `{"custom_claims": {"groups": ["analyst"], "given_name": "Charlotte"}}` for Charlotte Flair, with `"groups": []` for anyone who holds none.',
     );
-    expect(sentAs({ path: ["custom_claims", "given_name"], kind: "attribute", source: "given_name" }, token, "Ada Lovelace", { app: "Supabase", sameObject: true })).toBe(
-      'Sent as `"Ada"` for Ada Lovelace, inside the same object.',
+    expect(sentAs({ path: ["custom_claims", "given_name"], kind: "attribute", source: "given_name" }, token, "Charlotte Flair", { app: "Supabase", sameObject: true })).toBe(
+      'Sent as `"Charlotte"` for Charlotte Flair, inside the same object.',
     );
   });
 
   it("always sends a roles row, empty as []", () => {
-    expect(sentAs({ path: ["roles"], kind: "roles" }, token, "Rohan Mehta", { app: "Inventory" })).toBe(
-      "Sent as `[]` for Rohan Mehta, and `[]` for anyone who holds none.",
+    expect(sentAs({ path: ["roles"], kind: "roles" }, token, "Liv Morgan", { app: "Inventory" })).toBe(
+      "Sent as `[]` for Liv Morgan, and `[]` for anyone who holds none.",
     );
   });
 });
@@ -303,10 +303,10 @@ describe("namesRoles", () => {
 });
 
 describe("check 6: Zitadel reached Syndra for this app recently (S3)", () => {
-  const ctx = { app: "NetBird", project: "Network", person: "Ada", roles: [], profile: { claims: [], include_new: false, lands: "both" }, templates: [] } as unknown as CheckContext;
+  const ctx = { app: "NetBird", project: "Network", person: "Charlotte", roles: [], profile: { claims: [], include_new: false, lands: "both" }, templates: [] } as unknown as CheckContext;
   const at = new Date().toISOString();
   const e = (state: string, facts: Record<string, unknown> = {}) =>
-    ({ user_id: "ada", read_at: at, token: null, checks: [0, 1, 2, 3, 4].map(() => ({ state: "pass", facts: {} })).concat([{ state, facts }]) }) as never;
+    ({ user_id: "charlotte", read_at: at, token: null, checks: [0, 1, 2, 3, 4].map(() => ({ state: "pass", facts: {} })).concat([{ state, facts }]) }) as never;
 
   it("passes when called in the last day and served", () => {
     const [c] = check6(e("pass", { last_call_at: at, last_outcome: "served", last_served_at: at }), ctx);
@@ -347,6 +347,6 @@ describe("check 6: Zitadel reached Syndra for this app recently (S3)", () => {
   });
 
   it("invents no sixth check for an answer that has only five", () => {
-    expect(check6({ user_id: "ada", read_at: at, token: null, checks: [] } as never, ctx)).toEqual([]);
+    expect(check6({ user_id: "charlotte", read_at: at, token: null, checks: [] } as never, ctx)).toEqual([]);
   });
 });

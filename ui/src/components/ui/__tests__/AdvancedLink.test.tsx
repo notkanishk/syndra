@@ -38,7 +38,7 @@ describe("AdvancedLink (A-20 P10)", () => {
   });
 
   it("never touches the view for a page Basic has", () => {
-    render(<AdvancedLink href="/users/u1?tab=access">Priya</AdvancedLink>);
+    render(<AdvancedLink href="/users/u1?tab=access">Cody</AdvancedLink>);
     click(screen.getByRole("link"));
     expect(view.setView).not.toHaveBeenCalled();
   });

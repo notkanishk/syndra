@@ -43,8 +43,8 @@ function person(overrides: Partial<UserListEntry> = {}): UserListEntry {
   return {
     user: {
       id: "u1",
-      name: "Tomas Beck",
-      email: "tomas@example.org",
+      name: "Kevin Owens",
+      email: "kevin@example.org",
       title: "Student Staff",
       team: "Fabrication",
       status: "active",
@@ -88,7 +88,7 @@ describe("People index", () => {
       person({ user: { ...person().user, id: "svc2", name: "Ingestion Station", service_account: true } }),
     ];
     renderPeople();
-    expect(screen.getByText("Tomas Beck")).toBeInTheDocument();
+    expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
     expect(screen.queryByText("netbird")).not.toBeInTheDocument();
     expect(screen.queryByText("Ingestion Station")).not.toBeInTheDocument();
     expect(screen.queryByText("Service account")).not.toBeInTheDocument();
@@ -150,7 +150,7 @@ describe("People index", () => {
   it("gives Select's bundle verb its one name", () => {
     nav.url = "/users?bulk=1";
     renderPeople();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Kevin Owens" }));
     expect(screen.getByRole("button", { name: "Give a bundle" })).toBeInTheDocument();
     expect(screen.queryByText("Add to a bundle")).not.toBeInTheDocument();
   });
@@ -159,10 +159,10 @@ describe("People index", () => {
     nav.url = "/users?attention=no-access";
     users.data = [
       person({ user: { ...person().user, id: "svc", name: "netbird", kind: "machine" }, effective_role_count: 0 }),
-      person({ user: { ...person().user, id: "u2", name: "Ines Ward" }, effective_role_count: 0 }),
+      person({ user: { ...person().user, id: "u2", name: "Karrion Ward" }, effective_role_count: 0 }),
     ];
     renderPeople();
-    expect(screen.getByText("Ines Ward")).toBeInTheDocument();
+    expect(screen.getByText("Karrion Ward")).toBeInTheDocument();
     expect(screen.queryByText("netbird")).not.toBeInTheDocument();
   });
 
@@ -235,10 +235,10 @@ describe("People index", () => {
   it("keeps a departed account visible, its name a shade down and never dimmed", () => {
     users.data = [person({ user: { ...person().user, status: "departed" } })];
     renderPeople();
-    const row = screen.getByRole("link", { name: /Tomas Beck/ });
+    const row = screen.getByRole("link", { name: /Kevin Owens/ });
     // An opacity took the row's quiet lines under 4.5:1 (A-09 §2).
     expect(row.className).not.toMatch(/opacity-/);
-    expect(within(row).getByText("Tomas Beck").className).toContain("text-muted");
+    expect(within(row).getByText("Kevin Owens").className).toContain("text-muted");
   });
 
   it("tells people they can search by role key", () => {
@@ -277,7 +277,7 @@ describe("People index — filters come from the URL", () => {
     ];
     nav.url = "/users?project=pLaser";
     renderPeople();
-    expect(screen.getByText("Tomas Beck")).toBeInTheDocument();
+    expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
     expect(screen.queryByText("Nina Roy")).not.toBeInTheDocument();
   });
 
@@ -288,7 +288,7 @@ describe("People index — filters come from the URL", () => {
     ];
     nav.url = "/users?attention=no-access";
     renderPeople();
-    expect(screen.getByText("Tomas Beck")).toBeInTheDocument();
+    expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
     expect(screen.queryByText("Nina Roy")).not.toBeInTheDocument();
   });
 
@@ -302,7 +302,7 @@ describe("People index — filters come from the URL", () => {
     ];
     nav.url = "/users?attention=departed";
     renderPeople();
-    expect(screen.getByText("Tomas Beck")).toBeInTheDocument();
+    expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
     // Cleanly offboarded — not work, and listing it would bury the ones that are.
     expect(screen.queryByText("Nina Roy")).not.toBeInTheDocument();
   });
@@ -315,7 +315,7 @@ describe("People index — filters come from the URL", () => {
     roleMembers.data = { members: [{ user: { id: "u1" } }] };
     nav.url = "/users?project=pLaser&role=trained";
     renderPeople();
-    expect(screen.getByText("Tomas Beck")).toBeInTheDocument();
+    expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
     expect(screen.queryByText("Nina Roy")).not.toBeInTheDocument();
   });
 
@@ -326,7 +326,7 @@ describe("People index — filters come from the URL", () => {
     renderPeople();
     // An empty list would read as "nobody holds this", which is a different
     // and much worse claim than "still loading".
-    expect(screen.getByText("Tomas Beck")).toBeInTheDocument();
+    expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
     expect(screen.getByText("Nina Roy")).toBeInTheDocument();
   });
 });
@@ -340,14 +340,14 @@ describe("People index — bulk mode", () => {
 
   it("keeps the row a link out of bulk mode and a control inside it", () => {
     renderPeople();
-    expect(screen.getByRole("link", { name: /Tomas Beck/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Kevin Owens/ })).toBeInTheDocument();
 
     cleanup();
     nav.url = "/users?bulk=1";
     renderPeople();
-    expect(screen.getByRole("checkbox", { name: "Select Tomas Beck" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Select Kevin Owens" })).toBeInTheDocument();
     // The name is still a way to reach the person — the rest of the row selects.
-    expect(screen.getByRole("link", { name: "Tomas Beck" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Kevin Owens" })).toBeInTheDocument();
   });
 
   it("selects every row matching the filter, not just the rendered page", async () => {
@@ -389,12 +389,12 @@ describe("People index — bulk mode", () => {
     nav.url = "/users?bulk=1";
     setMediaQuery("(max-width: 67.49rem)", false);
     const { unmount } = renderPeople();
-    expect(await screen.findByRole("link", { name: /Tomas Beck/ })).toBeTruthy();
+    expect(await screen.findByRole("link", { name: /Kevin Owens/ })).toBeTruthy();
     unmount();
 
     setMediaQuery("(max-width: 67.49rem)", true);
     renderPeople();
-    await waitFor(() => expect(screen.queryByRole("link", { name: /Tomas Beck/ })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("link", { name: /Kevin Owens/ })).toBeNull());
   });
 
   it("drops the selection when the filter changes underneath it", async () => {
@@ -402,7 +402,7 @@ describe("People index — bulk mode", () => {
     nav.url = "/users?bulk=1";
     const { rerender } = renderPeople();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Kevin Owens" }));
     expect(await screen.findByText(/1 person selected/)).toBeInTheDocument();
 
     // A filter change re-aims the action at a different set of people, so the
@@ -427,7 +427,7 @@ describe("People index — bulk mode", () => {
     nav.url = "/users?bulk=1&attention=departed";
     renderPeople();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Kevin Owens" }));
     const bar = screen.getByRole("region", { name: "Selection" });
     const lead = () => within(bar).getAllByRole("button")[1];
     expect(lead()).toHaveTextContent("Revoke a role");
@@ -443,7 +443,7 @@ describe("People index — bulk mode", () => {
     setMediaQuery("(max-width: 44.99rem)", true);
     nav.url = "/users?bulk=1";
     renderPeople();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Kevin Owens" }));
     const bar = screen.getByRole("region", { name: "Selection" });
     expect(within(bar).getAllByRole("button")[1]).toHaveTextContent("Give a role");
     expect(within(bar).queryByRole("button", { name: "Revoke a role" })).toBeNull();
@@ -452,7 +452,7 @@ describe("People index — bulk mode", () => {
   it("names the filter in the selection bar rather than only counting", async () => {
     nav.url = "/users?bulk=1&project=pLaser";
     renderPeople();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Kevin Owens" }));
     expect(await screen.findByText(/in Laser Lab/)).toBeInTheDocument();
   });
 });
@@ -489,13 +489,13 @@ describe("People · the board", () => {
 
   it("puts title and team under the name, and the email only when there is no title", () => {
     users.data = [
-      named("Aanya Rao", { user: { ...person().user, id: "a", name: "Aanya Rao", title: "Research assistant", team: "Mechanical Engineering" } }),
-      named("Lena Brandt", { user: { ...person().user, id: "l", name: "Lena Brandt", title: "", team: "", email: "lena@example.edu" } }),
+      named("Roman Reigns", { user: { ...person().user, id: "a", name: "Roman Reigns", title: "Research assistant", team: "Mechanical Engineering" } }),
+      named("Zoey Stark", { user: { ...person().user, id: "l", name: "Zoey Stark", title: "", team: "", email: "zoey@example.edu" } }),
     ];
     renderPeople();
     expect(screen.getByText("Research assistant · Mechanical Engineering")).toBeInTheDocument();
-    expect(screen.getByText("lena@example.edu")).toBeInTheDocument();
-    expect(screen.queryByText("tomas@example.org")).not.toBeInTheDocument();
+    expect(screen.getByText("zoey@example.edu")).toBeInTheDocument();
+    expect(screen.queryByText("kevin@example.org")).not.toBeInTheDocument();
   });
 
   it("sorts on Person, Bundles and Attention, the Person arrow up by default", () => {
@@ -561,7 +561,7 @@ describe("People · the board", () => {
     it("holds the rows that still match, fades the rest where they were, and settles the gap after", () => {
       motionInTests();
       const named = (id: string, name: string) => person({ user: { ...person().user, id, name } });
-      const everyone = [named("a", "Ada Lin"), named("b", "Bo Chen"), named("c", "Cy Ward")];
+      const everyone = [named("a", "Charlotte Flair"), named("b", "Bo Chen"), named("c", "Cy Ward")];
       users.data = everyone;
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const page = () => (
@@ -570,16 +570,16 @@ describe("People · the board", () => {
         </QueryClientProvider>
       );
       const { rerender } = render(page());
-      const ada = screen.getByText("Ada Lin");
+      const charlotte = screen.getByText("Charlotte Flair");
 
       // The query is typed first; the read for it lands after.
-      nav.url = "/users?q=ada";
+      nav.url = "/users?q=charlotte";
       rerender(page());
       users.data = [everyone[0]];
       rerender(page());
 
-      expect(screen.getByText("Ada Lin")).toBe(ada);
-      expect(ada.closest("[data-leaving]")).toBeNull();
+      expect(screen.getByText("Charlotte Flair")).toBe(charlotte);
+      expect(charlotte.closest("[data-leaving]")).toBeNull();
       expect(screen.getByText("Bo Chen").closest("[data-leaving]")).not.toBeNull();
       expect(screen.getByText("Cy Ward").closest("[data-leaving]")).not.toBeNull();
       expect(screen.getByText("Bo Chen").closest("[data-closing]")).not.toBeNull();
@@ -593,10 +593,10 @@ describe("People · the board", () => {
       rerender(page());
       users.data = everyone;
       rerender(page());
-      expect(screen.getByText("Ada Lin")).toBe(ada);
+      expect(screen.getByText("Charlotte Flair")).toBe(charlotte);
       expect(screen.getByText("Bo Chen").closest("[data-opens]")).not.toBeNull();
-      expect(ada.closest("[data-opens]")).toBeNull();
-      expect(ada.closest("[data-fresh]")).toBeNull();
+      expect(charlotte.closest("[data-opens]")).toBeNull();
+      expect(charlotte.closest("[data-fresh]")).toBeNull();
     });
   });
 
@@ -643,7 +643,7 @@ describe("People · the board", () => {
     it("closes an open bulk dialog without also dropping the selection", () => {
       nav.url = "/users?bulk=1";
       renderPeople();
-      fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select Kevin Owens" }));
       fireEvent.click(screen.getByRole("button", { name: "Give a bundle" }));
       expect(screen.getByRole("dialog")).toBeInTheDocument();
       const before = nav.replaced.length;

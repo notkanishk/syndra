@@ -35,10 +35,10 @@ describe("PlanReview names", () => {
   it("uses the name the plan carries when it has one", () => {
     render(
       <PlanReview
-        plan={{ ...plan, outcomes: [{ ...plan.outcomes[0], name: "Aanya Rao" }] }}
+        plan={{ ...plan, outcomes: [{ ...plan.outcomes[0], name: "Roman Reigns" }] }}
       />,
     );
-    expect(screen.getByText("Aanya Rao")).toBeTruthy();
+    expect(screen.getByText("Roman Reigns")).toBeTruthy();
   });
 });
 
@@ -50,7 +50,7 @@ describe("PlanReview queued rows", () => {
     plan_id: "plan_2",
     applied: false,
     outcomes: [
-      { user_id: "u1", name: "Aanya Rao", effect: "queued", detail: "Supervisor always waits for you." },
+      { user_id: "u1", name: "Roman Reigns", effect: "queued", detail: "Supervisor always waits for you." },
       { user_id: "u2", name: "Ben Ito", effect: "apply", detail: "Gets Member." },
     ],
     summary: { total: 2, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 1 },
