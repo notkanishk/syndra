@@ -14,6 +14,8 @@ How code and design talk. One page, so nobody guesses.
 
 The old Claude Design project (`35ef762a-…`) and its separate design-system project are read-only history.
 
+**Two canvas limits (9 Nov 2026).** (1) A board is clipped past about 8,192px tall: Chrome stops painting a layer at 16,384 device pixels, so on a retina screen the rest of a taller board is blank. Set the board's `w` so its 720px frames sit two to a row (1640 for the 72px board padding) and its `h` to the measured content height plus a little; measure by opening the board at that width with the design-system bundle and reading `scrollHeight`. (2) The boards load the canvas's own copy of the design system (`project/ds/syndra/`, copied from the Syndra Design System artifact on 5 Nov). That copy predates `SyndraRoot`'s no-op router (`ui/.design-sync/entry.tsx`, 9653e699), so every frame drawing `AppShell` showed "This page couldn't render" until the copy was patched on 9 Nov (canvas v53). A resync from current code (step 2) replaces the patch; until then a new component in code is not on the canvas.
+
 **Which copy of a board is current.** The canvas copy is always the live board. Since 3 Nov 2026, every board is shown on the canvas through `Frame.dc.html` (frames rendered inline, using `_ds_bundle.container.css`), not through iframes. The repo's `design/` copies of the boards up to A-08 are the 23 Oct package as handed over. Boards from A-09 on are mirrored whenever they change. Everything they held was carried into the canvas on 2 Nov 2026.
 
 ## Questions and answers
