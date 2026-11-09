@@ -326,17 +326,17 @@
         <div style="display:flex;flex-direction:column;gap:6px">
           <div style="display:flex;min-height:44px;align-items:flex-start;gap:12px;padding:10px 12px;border-radius:var(--radius-inner);background:var(--surface-0)">
             <span style="margin-top:2px;width:16px;height:16px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);background:var(--surface-2);font-size:10px;color:var(--faint)">✓</span>
-            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600;color:var(--muted)">Grace Hopper</span><span style="font-size:13px;color:var(--muted)">Fabrication · Staff</span><span style="font-size:13px;color:var(--faint)">grace@example.edu</span></span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600;color:var(--muted)">Sami Zayn</span><span style="font-size:13px;color:var(--muted)">Fabrication · Staff</span><span style="font-size:13px;color:var(--faint)">grace@example.edu</span></span>
             <span style="max-width:170px;text-align:right;font-size:12.5px;color:var(--faint)">Already a test person</span>
           </div>
           <div style="display:flex;min-height:44px;align-items:flex-start;gap:12px;padding:10px 12px;border-radius:var(--radius-inner)">
             <span style="margin-top:2px;width:16px;height:16px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span>
-            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600">Greta Lind</span><span style="font-size:13px;color:var(--muted)">Design · Student</span><span style="font-size:13px;color:var(--faint)">greta@example.edu</span></span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600">Solo Sikoa</span><span style="font-size:13px;color:var(--muted)">Design · Student</span><span style="font-size:13px;color:var(--faint)">solo@example.edu</span></span>
             <span style="max-width:170px;text-align:right;font-size:12.5px;color:var(--muted)">Trained, through the Makers bundle</span>
           </div>
           <div style="display:flex;min-height:44px;align-items:flex-start;gap:12px;padding:10px 12px;border-radius:var(--radius-inner)">
             <span style="margin-top:2px;width:16px;height:16px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span>
-            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600">Gregor Nash</span><span style="font-size:13px;color:var(--muted)">Visiting researcher</span><span style="font-size:13px;color:var(--faint)">gregor@example.edu</span></span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600">Ivy Nile</span><span style="font-size:13px;color:var(--muted)">Visiting researcher</span><span style="font-size:13px;color:var(--faint)">ivy@example.edu</span></span>
             <span style="max-width:170px;text-align:right;font-size:12.5px;color:var(--muted)">No roles in 3D printing</span>
           </div>
         </div>
@@ -375,7 +375,7 @@
         <x-import component-from-global-scope="Syndra.FieldLabel" hint-size="220px,18px">A token Actions v1 issued, decoded</x-import>
         <x-import component-from-global-scope="Syndra.Textarea" class-name="font-mono text-[13px]" rows="{{ 4 }}" value="{{ v1Paste }}" placeholder="Paste the decoded claims, for example from jwt.io" read-only="{{ true }}" aria-label="A token Actions v1 issued, decoded" hint-size="100%,96px"></x-import>
         <span style="font-size:12.5px;line-height:1.5;color:var(--faint)">Syndra doesn't keep what you paste. It keeps only the result.</span>
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ v1Empty }}" hint-size="90px,34px">Compare</x-import></span><sc-if value="{{ v1Done }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;line-height:1.5;color:var(--muted)">This is Ada Lovelace's token, from its <x-import component-from-global-scope="Syndra.Mono" hint-size="30px,18px">sub</x-import>. Compared with what she gets now.</span></sc-if></div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ v1Empty }}" hint-size="90px,34px">Compare</x-import></span><sc-if value="{{ v1Done }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;line-height:1.5;color:var(--muted)">This is Charlotte Flair's token, from its <x-import component-from-global-scope="Syndra.Mono" hint-size="30px,18px">sub</x-import>. Compared with what she gets now.</span></sc-if></div>
       </div>
       <sc-if value="{{ v1Done }}" hint-placeholder-val="{{ false }}">
         <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:150px;flex:none">Claim</span><span style="flex:1;min-width:160px">Actions v1</span><span style="flex:1;min-width:160px">Syndra now</span><span style="width:250px;flex:none">Verdict</span></x-import>
@@ -503,7 +503,7 @@ class Component extends DCLogic {
     const noRoles = st === "no-roles";
     const failAssert = st === "check-assert";
     const refused = st === "check-refused";
-    const who = noRoles ? "Rohan Mehta" : "Ada Lovelace";
+    const who = noRoles ? "Liv Morgan" : "Charlotte Flair";
     const AR = '["trained", "maintainer"]';
 
     // The five checks. All five always run, so the trail points at the one step that broke.
@@ -520,7 +520,7 @@ class Component extends DCLogic {
       c4 = ck("healthy", "Your draft of 3D printing's default applies.", "Not saved yet. It makes `printing.roles` and `team`, where version 6 made `roles`.");
       c5text = "Zitadel would receive this once you save:";
       tokenLines = [L("removed", "roles", AR), L("added", "printing.roles", AR), L("added", "team", '"Fabrication"'), L("faded", "kiosk.roles", '"trained,maintainer"')];
-      tokenNote = "Two differences for Ada Lovelace: `roles` becomes `printing.roles`, and `team` is added. A line marked − leaves the token; a line marked + joins it. The faded line is Printer kiosk's own.";
+      tokenNote = "Two differences for Charlotte Flair: `roles` becomes `printing.roles`, and `team` is added. A line marked − leaves the token; a line marked + joins it. The faded line is Printer kiosk's own.";
     }
     if (statics) {
       c4 = ck("healthy", "Your draft of 3D printing's default applies.", "Not saved yet. It adds four values that are the same for everyone.");
@@ -536,26 +536,26 @@ class Component extends DCLogic {
       tokenNote = "Once Zitadel lists 3D printing, she gets `printing.roles` and `team`, as checks 2 to 4 show.";
     }
     if (refused) {
-      c1 = ck("danger", "Print queue asks for two projects when it signs people in: 3D printing and Wood shop. A token carries one project's claims, so Syndra adds none.", "Last refused at 10:12 today, when Aanya Rao signed in.",
+      c1 = ck("danger", "Print queue asks for two projects when it signs people in: 3D printing and Wood shop. A token carries one project's claims, so Syndra adds none.", "Last refused at 10:12 today, when Roman Reigns signed in.",
         { lead: "Stop Print queue asking for Wood shop's project. That is set in Print queue itself, not in Zitadel. If it needs a Wood shop role, give a matching one in 3D printing with an automatic rule.", link: "Automatic rules →" });
       c5tone = "neutral"; c5text = "Zitadel receives no Syndra claims for anyone signing in to Print queue.";
       tokenEmpty = true; tokenLines = [];
       tokenNote = "Each refused sign-in is logged with Print queue's name. Checks 2 to 4 show what she gets once it asks for one project.";
     }
     if (noRoles) {
-      c2 = ck("neutral", "Rohan Mehta holds no roles in 3D printing.", "That is not an error: none of the roles he holds belong to 3D printing.", { link: "Give him a role on his page →" });
+      c2 = ck("neutral", "Liv Morgan holds no roles in 3D printing.", "That is not an error: none of the roles he holds belong to 3D printing.", { link: "Give him a role on his page →" });
       c3 = ck("neutral", "Nothing to build for him.", "Claims are built from roles in 3D printing.");
       c4 = ck("healthy", "3D printing's default format applies.", "It would make `printing.roles` and `team`.");
       c5tone = "neutral"; c5text = "Zitadel receives no Syndra claims for him.";
       tokenEmpty = true; tokenLines = [];
-      tokenNote = "Rohan Mehta would sign in to Print queue with no roles.";
+      tokenNote = "Liv Morgan would sign in to Print queue with no roles.";
     }
     if (filament) {
       c4 = ck("warn", "3D printing's default format applies.", "It makes `printing.roles` and `team`. Filament log reads `roles`, which this token doesn't carry.");
     }
     if (deg) {
       c1 = ck("ring", "Zitadel listed 3D printing in Print queue's tokens at 09:40.", "Its last answer. Check again won't help until Zitadel answers.");
-      c2 = ck("ring", "Ada Lovelace held 2 roles in 3D printing at 09:40.", "Trained and Maintainer.");
+      c2 = ck("ring", "Charlotte Flair held 2 roles in 3D printing at 09:40.", "Trained and Maintainer.");
       c5text = "Zitadel would receive this, going by what it held at 09:40:";
     }
 
@@ -575,9 +575,9 @@ class Component extends DCLogic {
     // Also send.
     const attr = (key, src, sent) => ({ key, source: src, sourceValue: src, isStatic: false, sent: P(sent), hasErr: false });
     const stat = (key, type, value, sent, err) => ({ key, source: "the same value for everyone…", sourceValue: "__static", isStatic: true, type, isYesNo: type === "bool", hasInput: type !== "bool", value, sent: P(sent), hasErr: !!err, err: P(err) });
-    let extras = draft6 ? [attr("team", "team", "New. Sent as `\"Fabrication\"` for Ada Lovelace.")] : [attr("team", "team", "Sent as `\"Fabrication\"` for Ada Lovelace.")];
+    let extras = draft6 ? [attr("team", "team", "New. Sent as `\"Fabrication\"` for Charlotte Flair.")] : [attr("team", "team", "Sent as `\"Fabrication\"` for Charlotte Flair.")];
     if (statics) extras = [
-      attr("team", "team", "Sent as `\"Fabrication\"` for Ada Lovelace."),
+      attr("team", "team", "Sent as `\"Fabrication\"` for Charlotte Flair."),
       stat("site", "text", "makerspace", "Sent as `\"makerspace\"`."),
       stat("print.credits", "number", "40", "Sent as `40`."),
       stat("inducted", "bool", "", "Sent as `true`."),
@@ -592,25 +592,25 @@ class Component extends DCLogic {
     const tp = (name, how, recv, tone, word, before, after, diff) => ({ name, how: P(how), recv: commas(recv), recvEmpty: recv.length === 0, tone, word, before: commas(before || []), after: commas(after || []), diff: P(diff || "") });
     const pr = (v) => L("same", "printing.roles", v); const tm = (v) => L("same", "team", v);
     let testRows = [
-      tp("Aanya Rao", "From an automatic rule", [pr('["trained"]'), tm('"Design"')], "healthy", "All pass"),
-      tp("Ada Lovelace", "Given by hand", [pr(AR), tm('"Fabrication"')], "healthy", "All pass"),
-      tp("Grace Hopper", "From the [[Makers]] bundle", [pr('["supervisor"]'), tm('"Fabrication"')], "healthy", "All pass"),
-      tp("Rohan Mehta", "No roles in 3D printing", [], "neutral", "No roles"),
+      tp("Roman Reigns", "From an automatic rule", [pr('["trained"]'), tm('"Design"')], "healthy", "All pass"),
+      tp("Charlotte Flair", "Given by hand", [pr(AR), tm('"Fabrication"')], "healthy", "All pass"),
+      tp("Sami Zayn", "From the [[Makers]] bundle", [pr('["supervisor"]'), tm('"Fabrication"')], "healthy", "All pass"),
+      tp("Liv Morgan", "No roles in 3D printing", [], "neutral", "No roles"),
     ];
     if (failAssert || refused) testRows = testRows.map((r) => ({ ...r, recv: [], recvEmpty: true, tone: "danger", word: "Fails check 1" }));
     if (draft6) testRows = [
-      tp("Aanya Rao", "From an automatic rule", [], "", "", [L("same", "roles", '["trained"]')], [L("added", "printing.roles", '["trained"]'), L("added", "team", '"Design"')], "`roles` renamed, `team` added"),
-      tp("Ada Lovelace", "Given by hand", [], "", "", [L("same", "roles", AR)], [L("added", "printing.roles", AR), L("added", "team", '"Fabrication"')], "`roles` renamed, `team` added"),
-      tp("Grace Hopper", "From the [[Makers]] bundle", [], "", "", [L("same", "roles", '["supervisor"]')], [L("added", "printing.roles", '["supervisor"]'), L("added", "team", '"Fabrication"')], "`roles` renamed, `team` added"),
-      tp("Rohan Mehta", "No roles in 3D printing", [], "", "", [], [], "None. He holds no roles in 3D printing."),
+      tp("Roman Reigns", "From an automatic rule", [], "", "", [L("same", "roles", '["trained"]')], [L("added", "printing.roles", '["trained"]'), L("added", "team", '"Design"')], "`roles` renamed, `team` added"),
+      tp("Charlotte Flair", "Given by hand", [], "", "", [L("same", "roles", AR)], [L("added", "printing.roles", AR), L("added", "team", '"Fabrication"')], "`roles` renamed, `team` added"),
+      tp("Sami Zayn", "From the [[Makers]] bundle", [], "", "", [L("same", "roles", '["supervisor"]')], [L("added", "printing.roles", '["supervisor"]'), L("added", "team", '"Fabrication"')], "`roles` renamed, `team` added"),
+      tp("Liv Morgan", "No roles in 3D printing", [], "", "", [], [], "None. He holds no roles in 3D printing."),
     ].map((r, i) => ({ ...r, recvEmpty: i === 3 }));
     if (statics) {
       const plus = [L("added", "site", '"makerspace"'), L("added", "print.credits", "40"), L("added", "inducted", "true"), L("added", "print.bays", '["bay-1", "bay-2"]')];
       testRows = [
-        tp("Aanya Rao", "From an automatic rule", [], "", "", [pr('["trained"]'), tm('"Design"')], [pr('["trained"]'), tm('"Design"')].concat(plus), "4 values added"),
-        tp("Ada Lovelace", "Given by hand", [], "", "", [pr(AR), tm('"Fabrication"')], [pr(AR), tm('"Fabrication"')].concat(plus), "4 values added"),
-        tp("Grace Hopper", "From the [[Makers]] bundle", [], "", "", [pr('["supervisor"]'), tm('"Fabrication"')], [pr('["supervisor"]'), tm('"Fabrication"')].concat(plus), "4 values added"),
-        tp("Rohan Mehta", "No roles in 3D printing", [], "", "", [], [], "None. He holds no roles in 3D printing."),
+        tp("Roman Reigns", "From an automatic rule", [], "", "", [pr('["trained"]'), tm('"Design"')], [pr('["trained"]'), tm('"Design"')].concat(plus), "4 values added"),
+        tp("Charlotte Flair", "Given by hand", [], "", "", [pr(AR), tm('"Fabrication"')], [pr(AR), tm('"Fabrication"')].concat(plus), "4 values added"),
+        tp("Sami Zayn", "From the [[Makers]] bundle", [], "", "", [pr('["supervisor"]'), tm('"Fabrication"')], [pr('["supervisor"]'), tm('"Fabrication"')].concat(plus), "4 values added"),
+        tp("Liv Morgan", "No roles in 3D printing", [], "", "", [], [], "None. He holds no roles in 3D printing."),
       ].map((r, i) => ({ ...r, recvEmpty: i === 3 }));
     }
 
@@ -627,7 +627,7 @@ class Component extends DCLogic {
       { tone: "healthy", text: P("Zitadel lists 3D printing in " + app + "'s tokens.") },
       { tone: "healthy", text: P("There's a note of what " + app + " reads, and the token matches it.") },
       { tone: "healthy", text: P("None of the 4 test people fails a check.") },
-      v1Done ? { tone: "warn", text: P("2 claims differ from Actions v1 for Ada Lovelace. The comparison is below.") } : { tone: "neutral", text: P("No Actions v1 token compared yet. Paste one below.") },
+      v1Done ? { tone: "warn", text: P("2 claims differ from Actions v1 for Charlotte Flair. The comparison is below.") } : { tone: "neutral", text: P("No Actions v1 token compared yet. Paste one below.") },
     ];
     const v1Rows = [
       { key: "printing.roles", v1: '"trained,maintainer"', now: AR, tone: "warn", verdict: "Different", hasFix: true, fix: P("Actions v1 sends text with commas; Syndra sends an `array`. Set Sent as to `csv`, or check that Print queue reads an array.") },
@@ -635,7 +635,7 @@ class Component extends DCLogic {
       { key: "org_name", v1: '"Makerspace"', now: "—", tone: "warn", verdict: "Only in Actions v1", hasFix: true, fix: P("A v1 script read this from Zitadel's organisation, which Actions v2 can't read. If Print queue needs it, send it as the same value for everyone.") },
       { key: "kiosk.roles", v1: "—", now: '"trained,maintainer"', tone: "neutral", verdict: "Only in Syndra", hasFix: true, fix: P("Printer kiosk's own claim. Print queue ignores it.") },
     ];
-    const v1Paste = v1Done ? '{ "sub": "2981…", "printing.roles": "trained,maintainer", "team": "Fabrication", "org_name": "Makerspace", "email": "ada@example.edu", "exp": 1762171200 }' : "";
+    const v1Paste = v1Done ? '{ "sub": "2981…", "printing.roles": "trained,maintainer", "team": "Fabrication", "org_name": "Makerspace", "email": "charlotte@example.edu", "exp": 1762171200 }' : "";
 
     // Apps index: each app's own claim, and the verdict where an app has a note of what it reads.
     const ix = (name, kind, claim, own, project, format, warnNote, people) => ({ name, kind, claim, own, project, format, warn: !!warnNote, calm: !warnNote, warnNote, people });
@@ -660,7 +660,7 @@ class Component extends DCLogic {
         { name: "Filament log", tone: "healthy", text: P("Will match what it reads."), hasDetail: false },
         { name: "Printer kiosk", tone: "neutral", text: P("No change: it reads its own `kiosk.roles`."), hasDetail: false },
       ],
-      test: "Your 4 test people: 3 change, and Rohan Mehta doesn't.", note: "Back to version 6 until Print queue is updated.",
+      test: "Your 4 test people: 3 change, and Liv Morgan doesn't.", note: "Back to version 6 until Print queue is updated.",
     } : {
       verb: "Save token format", lede: "3D printing's default, used by 3 apps. It is kept in History as version 7.",
       changes: [{ g: "+", text: P("`team` is added: the person's team, as text.") }, { g: "~", text: P("`roles` becomes `printing.roles`. Still an `array`.") }],
@@ -669,7 +669,7 @@ class Component extends DCLogic {
         { name: "Filament log", tone: "warn", text: P("Won't match: it reads `roles`."), hasDetail: true, detail: "Change what Filament log reads, or update it first. Saving doesn't wait for either." },
         { name: "Printer kiosk", tone: "neutral", text: P("No change: it reads its own `kiosk.roles`."), hasDetail: false },
       ],
-      test: "Your 4 test people: 3 change as the page shows, and Rohan Mehta doesn't.", note: "Rename for the new print queue; add team.",
+      test: "Your 4 test people: 3 change as the page shows, and Liv Morgan doesn't.", note: "Rename for the new print queue; add team.",
     };
 
     return {

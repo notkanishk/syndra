@@ -35,7 +35,7 @@ vi.mock("@/lib/queries/useRequests", () => ({
 
 vi.mock("@/components/names", () => ({
   UserName: ({ id, fallback }: { id: string; fallback?: React.ReactNode }) => (
-    <span>{id === "u1" ? "Ada Lovelace" : id === "op" ? "Sam Patel" : (fallback ?? id)}</span>
+    <span>{id === "u1" ? "Charlotte Flair" : id === "op" ? "Rey Mysterio" : (fallback ?? id)}</span>
   ),
   BundleName: ({ id, fallback }: { id: string; fallback?: React.ReactNode }) => (
     <span>{id === "b1" ? "Community · Basic" : (fallback ?? id)}</span>
@@ -88,7 +88,7 @@ beforeEach(() => {
 
 describe("PersonActivity", () => {
   it("filters at the source rather than sifting the global tail", () => {
-    renderIn(<PersonActivity userId="u1" name="Ada" />);
+    renderIn(<PersonActivity userId="u1" name="Charlotte" />);
     // Client-filtering 200 global rows would render an empty feed for anyone
     // whose last action fell outside them — "nothing ever happened" is a very
     // different claim from "nothing in the last 200 events".
@@ -96,22 +96,22 @@ describe("PersonActivity", () => {
   });
 
   // Told from THEIR side, because this page is already about them: naming
-  // them in the sentence would say "Ada Lovelace" twice on Ada's own tab and
+  // them in the sentence would say "Charlotte Flair" twice on Charlotte's own tab and
   // bury the one fact the row adds, which is who did it.
   it("says who acted when the person was acted upon, in the passive", () => {
     audit.data = [entry({ actor_id: "op", target_id: "u1" })];
-    renderIn(<PersonActivity userId="u1" name="Ada" />);
+    renderIn(<PersonActivity userId="u1" name="Charlotte" />);
     expect(screen.getByText("Given a role")).toBeInTheDocument();
     // The person did not do this — the row must not imply they did.
     expect(screen.getByText(/by/)).toBeInTheDocument();
-    expect(screen.getByText("Sam Patel")).toBeInTheDocument();
+    expect(screen.getByText("Rey Mysterio")).toBeInTheDocument();
   });
 
   // When they DID it, the shared renderer names what they did it to — the same
   // sentence Lately and the Audit log show for the same row.
   it("names who was affected when the person acted", () => {
     audit.data = [entry({ actor_id: "u1", target_id: "u2" })];
-    renderIn(<PersonActivity userId="u1" name="Ada" />);
+    renderIn(<PersonActivity userId="u1" name="Charlotte" />);
     expect(document.body.textContent).toContain("Gave u2 a role");
   });
 
@@ -119,14 +119,14 @@ describe("PersonActivity", () => {
   // resolver is how the home page came to read "Unknown account 9e93893d-…".
   it("names a bundle as a bundle, not as an unknown account", () => {
     audit.data = [entry({ actor_id: "u1", target_id: "b1", action: "bundle.role_removed" })];
-    renderIn(<PersonActivity userId="u1" name="Ada" />);
+    renderIn(<PersonActivity userId="u1" name="Charlotte" />);
     expect(document.body.textContent).toContain("Community · Basic");
     expect(document.body.textContent).not.toMatch(/Unknown account/);
   });
 
   it("marks a destructive verb and leaves the rest of the row uncoloured", () => {
     audit.data = [entry({ action: "direct_grant.revoked" })];
-    renderIn(<PersonActivity userId="u1" name="Ada" />);
+    renderIn(<PersonActivity userId="u1" name="Charlotte" />);
     expect(screen.getByText("Their direct access was revoked").className).toContain(
       "text-danger-text",
     );
@@ -134,21 +134,21 @@ describe("PersonActivity", () => {
 
   it("admits when the feed is capped instead of implying it is complete", () => {
     audit.data = Array.from({ length: 200 }, (_, index) => entry({ id: `a${index}` }));
-    renderIn(<PersonActivity userId="u1" name="Ada" />);
+    renderIn(<PersonActivity userId="u1" name="Charlotte" />);
     expect(screen.getByText(/not their whole history/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
   });
 
   it("names the person in its empty state", () => {
-    renderIn(<PersonActivity userId="u1" name="Ada" />);
-    expect(screen.getByText(/Nothing recorded for Ada yet/)).toBeInTheDocument();
+    renderIn(<PersonActivity userId="u1" name="Charlotte" />);
+    expect(screen.getByText(/Nothing recorded for Charlotte yet/)).toBeInTheDocument();
   });
 });
 
 describe("PersonRequests", () => {
   it("shows only this person's requests", () => {
     requests.data = [request(), request({ id: "r2", requester_id: "u9", role_key: "operator" })];
-    renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
+    renderIn(<PersonRequests userId="u1" name="Charlotte" isOperator />);
     expect(screen.getByText("trained")).toBeInTheDocument();
     expect(screen.queryByText("operator")).not.toBeInTheDocument();
   });
@@ -157,23 +157,23 @@ describe("PersonRequests", () => {
     // This is the whole reason the tab exists rather than linking to /requests:
     // the queue holds pending work, so it cannot answer "what did we decide?".
     requests.data = [request({ status: "rejected", review_note: "Not trained yet" })];
-    renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
+    renderIn(<PersonRequests userId="u1" name="Charlotte" isOperator />);
     expect(screen.getByText("Declined")).toBeInTheDocument();
     expect(screen.getByText("Not trained yet")).toBeInTheDocument();
   });
 
   it("lets an operator decide without leaving the person", () => {
     requests.data = [request()];
-    renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
+    renderIn(<PersonRequests userId="u1" name="Charlotte" isOperator />);
     expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Decline" })).toBeInTheDocument();
   });
 
-  // 3.13: the queue's own approval text, per wait_reason — not "Approved for Ada".
+  // 3.13: the queue's own approval text, per wait_reason — not "Approved for Charlotte".
   it("reports an approval in the queue's words, in the Outcome seat", async () => {
     requests.data = [request()];
     requests.decide.mockResolvedValueOnce({ message: "ok", wait_reason: "role_waits" });
-    renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
+    renderIn(<PersonRequests userId="u1" name="Charlotte" isOperator />);
     // Held until the plan is read (A-21 §3).
     await waitFor(() => expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
@@ -181,18 +181,18 @@ describe("PersonRequests", () => {
     expect(seat.textContent).toContain("Approved");
     expect(seat.textContent).toContain("Trained always waits for you");
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
-    expect(screen.queryByText(/Approved for Ada/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Approved for Charlotte/)).not.toBeInTheDocument();
   });
 
   it("shows a member the outcome but never the decision buttons", () => {
     requests.data = [request()];
-    renderIn(<PersonRequests userId="u1" name="Ada" isOperator={false} />);
+    renderIn(<PersonRequests userId="u1" name="Charlotte" isOperator={false} />);
     expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
     expect(screen.getByText("Waiting on a decision")).toBeInTheDocument();
   });
 
   it("names the person in its empty state", () => {
-    renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
-    expect(screen.getByText(/Ada hasn’t asked for anything/)).toBeInTheDocument();
+    renderIn(<PersonRequests userId="u1" name="Charlotte" isOperator />);
+    expect(screen.getByText(/Charlotte hasn’t asked for anything/)).toBeInTheDocument();
   });
 });

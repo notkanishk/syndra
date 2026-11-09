@@ -105,7 +105,7 @@
     <sc-if value="{{ hasAccount }}" hint-placeholder-val="{{ true }}">
       <div class="row-divider" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
         <span class="type-label" style="color:var(--label)">Sign in as</span>
-        <div style="max-width:460px"><x-import component-from-global-scope="Syndra.CopyableValue" value="aanya.rao" label="Your account name" hint-size="100%,46px"></x-import></div>
+        <div style="max-width:460px"><x-import component-from-global-scope="Syndra.CopyableValue" value="roman.reigns" label="Your account name" hint-size="100%,46px"></x-import></div>
       </div>
 
       <div class="row-divider" style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:14px">
@@ -156,14 +156,14 @@
       <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:9px;padding-top:2px">
         <span style="font-size:15px;line-height:1.6;color:var(--ink);text-wrap:pretty">{{ g.lead }}<sc-if value="{{ g.hasKeys }}" hint-placeholder-val="{{ false }}"> <span style="display:inline-flex;gap:4px;vertical-align:1px"><sc-for list="{{ g.keys }}" as="k" hint-placeholder-count="2"><kbd style="display:inline-flex;align-items:center;min-width:22px;height:22px;justify-content:center;padding:0 6px;border-radius:6px;border:1px solid var(--line-strong);border-bottom-width:2px;background:var(--surface-1);font-family:var(--font-mono);font-size:12.5px;color:var(--ink)">{{ k }}</kbd></sc-for></span>{{ g.tail }}</sc-if></span>
         <sc-if value="{{ g.hasCopy }}" hint-placeholder-val="{{ false }}"><div style="max-width:520px"><x-import component-from-global-scope="Syndra.CopyableValue" value="{{ g.copy }}" label="Address to paste" hint-size="100%,46px"></x-import></div></sc-if>
-        <sc-if value="{{ g.creds }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;align-items:baseline;max-width:520px;padding:12px 14px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)"><span style="font-size:13px;color:var(--muted)">Name</span><span class="type-mono" style="font-size:14px">aanya.rao</span><span style="font-size:13px;color:var(--muted)">Password</span><span style="font-size:14px">Your storage password, not your Syndra or Google one</span></div></sc-if>
+        <sc-if value="{{ g.creds }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;align-items:baseline;max-width:520px;padding:12px 14px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)"><span style="font-size:13px;color:var(--muted)">Name</span><span class="type-mono" style="font-size:14px">roman.reigns</span><span style="font-size:13px;color:var(--muted)">Password</span><span style="font-size:14px">Your storage password, not your Syndra or Google one</span></div></sc-if>
         <sc-if value="{{ g.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ g.note }}</span></sc-if>
       </div>
     </li></sc-for>
   </ol>
   <div style="padding-top:16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
     <span class="type-label" style="color:var(--label)">If it doesn't connect</span>
-    <ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:5px;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty"><li>Look at the status beside TrueNAS on this page. If it says offline, wait for it to come back.</li><li>If your sign-in is refused, check you used your storage password. You can change it at the end of this page.</li><li>Still stuck? Ask makerspace staff, and mention your account name, <span class="type-mono" style="color:var(--ink)">aanya.rao</span>.</li></ul>
+    <ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:5px;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty"><li>Look at the status beside TrueNAS on this page. If it says offline, wait for it to come back.</li><li>If your sign-in is refused, check you used your storage password. You can change it at the end of this page.</li><li>Still stuck? Ask makerspace staff, and mention your account name, <span class="type-mono" style="color:var(--ink)">roman.reigns</span>.</li></ul>
   </div>
 </div></div>
   <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="outline" on-click="{{ closeGuide }}" hint-size="90px,40px">Close</x-import></x-import>
@@ -183,7 +183,7 @@ class Component extends DCLogic {
     const gs = { "guide-b-win": "windows", "guide-b-phone": "ios", "guide-b-android": "android" }[this.st];
     const ua = (navigator.userAgent || "");
     this.state = { os: gs || (/iPhone|iPad/.test(ua) ? "ios" : /Android/.test(ua) ? "android" : /Windows/.test(ua) ? "windows" : /Linux/.test(ua) ? "linux" : "mac"), share: "fabrication", guide: /^guide-b/.test(this.st) };
-    this.session = { id: "u7", name: "Aanya Rao", email: "aanya.rao@makerspace.edu", title: "Student", team: "Design", status: "active", avatar: "AR", role: "user", sessionType: "demo" };
+    this.session = { id: "u7", name: "Roman Reigns", email: "roman.reigns@makerspace.edu", title: "Student", team: "Design", status: "active", avatar: "AR", role: "user", sessionType: "demo" };
     this.rootData = [
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
       { key: ["governance", "indicators"], value: {} },

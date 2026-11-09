@@ -41,7 +41,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">1 · Taking something away: Revoke, before · pressing · after</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Avani Sood holds Community in Navidrome by hand, and it is in Zitadel. Before: the lede is the fact, the What-happens list is the loss, the before-line says how it travels, the pair is Keep it beside the solid red act. Pressing: the before-line's seat becomes the forecast and both buttons hold. After: the lede, the list and the before-line are gone; the sheet is its result, with one Close.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Raquel Rodriguez holds Community in Navidrome by hand, and it is in Zitadel. Before: the lede is the fact, the What-happens list is the loss, the before-line says how it travels, the pair is Keep it beside the solid red act. Pressing: the before-line's seat becomes the forecast and both buttons hold. After: the lede, the list and the before-line are gone; the sheet is its result, with one Close.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ revFrames }}" as="f" hint-placeholder-count="4">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -54,7 +54,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">2 · Cancelling something unsent: the same sheet, quiet</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Community in Navidrome never reached Zitadel, so nobody loses anything. The title is the act ("Cancel giving Community in Navidrome to Avani?", owner, 8 Nov: give is only a verb), the body is one neutral line, the act is accent, and the dismiss is Keep it waiting: two buttons never share a verb. The first frame is what staging shows today: a Revoke title over a cancel, two Cancels, and a red pre-act warning left standing above a green result.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Community in Navidrome never reached Zitadel, so nobody loses anything. The title is the act ("Cancel giving Community in Navidrome to Raquel?", owner, 8 Nov: give is only a verb), the body is one neutral line, the act is accent, and the dismiss is Keep it waiting: two buttons never share a verb. The first frame is what staging shows today: a Revoke title over a cancel, two Cancels, and a red pre-act warning left standing above a green result.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ canFrames }}" as="f" hint-placeholder-count="5">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -125,7 +125,7 @@
 <x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u7" data="{{ rootData }}" hint-size="100%,100vh">
 <x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
 <div style="display:flex;flex-direction:column;gap:28px">
-  <x-import component-from-global-scope="Syndra.PageHeader" title="Avani Sood" lede="avani.sood@example.edu · Member" hint-size="100%,90px"></x-import>
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Raquel Rodriguez" lede="raquel.rodriguez@example.edu · Member" hint-size="100%,90px"></x-import>
 </div>
 <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="a22-title" hint-size="420px,560px">
   <sc-if value="{{ d.hasLede }}" hint-placeholder-val="{{ true }}">
@@ -141,7 +141,7 @@
   </sc-if>
   <sc-if value="{{ d.showQuiet }}" hint-placeholder-val="{{ false }}">
     <div class="a22-body">
-      <div class="a22-quiet"><span style="padding-top:7px"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import></span><span><strong>Nothing to take back.</strong> <span class="a22-rest">It hasn't reached Zitadel, so Avani never had it. This cancels that give and sends nothing.</span></span></div>
+      <div class="a22-quiet"><span style="padding-top:7px"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import></span><span><strong>Nothing to take back.</strong> <span class="a22-rest">It hasn't reached Zitadel, so Raquel never had it. This cancels that give and sends nothing.</span></span></div>
     </div>
   </sc-if>
   <sc-if value="{{ d.showResult }}" hint-placeholder-val="{{ false }}">
@@ -194,15 +194,15 @@ class Component extends DCLogic {
     const revokeNext = "Nothing for you to do. Syndra sends it on its own and says on Home if it stops sending it.";
     const dialogs = {
       rev: {
-        before: { chip: "Direct access", title: "Revoke Community in Navidrome?", lede: "Given by hand to Avani Sood on 3 Nov by Kanishk Singh. In Zitadel now.", what: true, whatLead: "Avani will lose this role.", whatRest: "No bundle and no rule gives it to her. Her access ends once the change reaches Zitadel.", note: "Revocations send on their own, within a minute.", cancel: { onClick: noop, label: "Keep it" }, act: "Revoke this role", variant: "dangerConfirm" },
-        pressing: { chip: "Direct access", title: "Revoke Community in Navidrome?", lede: "Given by hand to Avani Sood on 3 Nov by Kanishk Singh. In Zitadel now.", what: true, whatLead: "Avani will lose this role.", whatRest: "No bundle and no rule gives it to her. Her access ends once the change reaches Zitadel.", forecast: "Will be revoked", cancel: { onClick: noop, label: "Keep it", disabled: true }, act: "Revoke this role", variant: "dangerConfirm", busy: true },
+        before: { chip: "Direct access", title: "Revoke Community in Navidrome?", lede: "Given by hand to Raquel Rodriguez on 3 Nov by Kanishk Singh. In Zitadel now.", what: true, whatLead: "Raquel will lose this role.", whatRest: "No bundle and no rule gives it to her. Her access ends once the change reaches Zitadel.", note: "Revocations send on their own, within a minute.", cancel: { onClick: noop, label: "Keep it" }, act: "Revoke this role", variant: "dangerConfirm" },
+        pressing: { chip: "Direct access", title: "Revoke Community in Navidrome?", lede: "Given by hand to Raquel Rodriguez on 3 Nov by Kanishk Singh. In Zitadel now.", what: true, whatLead: "Raquel will lose this role.", whatRest: "No bundle and no rule gives it to her. Her access ends once the change reaches Zitadel.", forecast: "Will be revoked", cancel: { onClick: noop, label: "Keep it", disabled: true }, act: "Revoke this role", variant: "dangerConfirm", busy: true },
         done: { chip: "Direct access", title: "Revoke Community in Navidrome?", result: true, word: "Revoked", outcome: { kind: "queued", sendsItself: true, message: "Revoked in Syndra. Revocations send on their own, so it leaves Zitadel within a minute", next: revokeNext } },
       },
       can: {
-        today: { chip: "Direct access", title: "Revoke direct access to Navidrome / Community?", lede: "Given to Avani on 3 Nov by Kanishk Singh, and still waiting for you to send.", what: true, whatLead: "Avani Sood will lose this role.", whatRest: "No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel. Revocations send on their own, within a minute.", result: true, word: "Cancelled", outcome: { kind: "applied", message: "The give of Community in Navidrome that was waiting is cancelled. Avani never had it, so nothing goes to Zitadel.", next: "Nothing for you to do." }, close: true },
-        before: { chip: "Direct access", title: "Cancel giving Community in Navidrome to Avani?", lede: "Waiting for you to send since 3 Nov, queued by Kanishk Singh.", quiet: true, note: "Avani never had it, so nothing is sent to Zitadel.", cancel: { onClick: noop, label: "Keep it waiting" }, act: "Cancel giving it", variant: "accent" },
-        pressing: { chip: "Direct access", title: "Cancel giving Community in Navidrome to Avani?", lede: "Waiting for you to send since 3 Nov, queued by Kanishk Singh.", quiet: true, forecast: "Will be cancelled", cancel: { onClick: noop, label: "Keep it waiting", disabled: true }, act: "Cancel giving it", variant: "accent", busy: true },
-        done: { chip: "Direct access", title: "Cancel giving Community in Navidrome to Avani?", result: true, word: "Cancelled", outcome: { kind: "applied", message: "Community in Navidrome won't be given to Avani. It never reached Zitadel.", next: "Nothing for you to do." } },
+        today: { chip: "Direct access", title: "Revoke direct access to Navidrome / Community?", lede: "Given to Raquel on 3 Nov by Kanishk Singh, and still waiting for you to send.", what: true, whatLead: "Raquel Rodriguez will lose this role.", whatRest: "No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel. Revocations send on their own, within a minute.", result: true, word: "Cancelled", outcome: { kind: "applied", message: "The give of Community in Navidrome that was waiting is cancelled. Raquel never had it, so nothing goes to Zitadel.", next: "Nothing for you to do." }, close: true },
+        before: { chip: "Direct access", title: "Cancel giving Community in Navidrome to Raquel?", lede: "Waiting for you to send since 3 Nov, queued by Kanishk Singh.", quiet: true, note: "Raquel never had it, so nothing is sent to Zitadel.", cancel: { onClick: noop, label: "Keep it waiting" }, act: "Cancel giving it", variant: "accent" },
+        pressing: { chip: "Direct access", title: "Cancel giving Community in Navidrome to Raquel?", lede: "Waiting for you to send since 3 Nov, queued by Kanishk Singh.", quiet: true, forecast: "Will be cancelled", cancel: { onClick: noop, label: "Keep it waiting", disabled: true }, act: "Cancel giving it", variant: "accent", busy: true },
+        done: { chip: "Direct access", title: "Cancel giving Community in Navidrome to Raquel?", result: true, word: "Cancelled", outcome: { kind: "applied", message: "Community in Navidrome won't be given to Raquel. It never reached Zitadel.", next: "Nothing for you to do." } },
       },
     };
     const picked = (dialogs[kind] && dialogs[kind][moment]) || dialogs.rev.before;
@@ -254,7 +254,7 @@ class Component extends DCLogic {
     const questions = [
       Q("The dismiss says what it keeps (Keep it / Keep them) whenever the act takes something away, retires, cancels or declines, and stays Cancel only on a form that creates, asks or gives?", "Yes. One rule by what the act does, not by what it is called. Keep it everywhere would read oddly beside Give a role; Cancel everywhere is the bug you saw."),
       Q("A question mark in the title only when the act takes something away (Revoke …? Retire …? Remove …?), never on an act that only records or cancels something unsent?", "Yes. The question is the pause; a reversible act needs none, and a title that asks a question over a cancel makes the cancel feel like a loss."),
-      Q("After the result, the lede leaves with the body, and the header keeps only the chip and the title?", "Yes. A lede is the fact before the press; after it, the result's sentence is the fact. Given directly to Avani above Revoked contradicts itself."),
+      Q("After the result, the lede leaves with the body, and the header keeps only the chip and the title?", "Yes. A lede is the fact before the press; after it, the result's sentence is the fact. Given directly to Raquel above Revoked contradicts itself."),
       Q("Revoke's own words: the forecast Will be revoked and the result Revoked on a person's direct access, leaving Removed for a bundle taken out of a person's set?", "Yes. The title says Revoke and the result said Removed; the verbs rule gives each its own word."),
     ];
     questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
@@ -275,7 +275,7 @@ class Component extends DCLogic {
         f("can-today", "Today, on staging", "A Revoke title over a cancel; Cancel beside Cancel the waiting give; after the press, the red pre-act warning stays above the green result.", false),
         f("can-before", "Before · dark", "The title is the act. One neutral line says nothing is taken back. The before-line says nothing is sent. Keep it beside an accent act.", true),
         f("can-pressing", "Pressing", "Will be cancelled in the forecast seat.", true),
-        f("can-done", "After · dark", "Cancelled. Avani never had it, so nothing goes to Zitadel. Nothing for you to do. Close.", true),
+        f("can-done", "After · dark", "Cancelled. Raquel never had it, so nothing goes to Zitadel. Nothing for you to do. Close.", true),
         f("can-done-light", "After · light", "The same in daylight.", true),
       ],
       phoneFrames: [

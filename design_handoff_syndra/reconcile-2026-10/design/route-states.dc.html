@@ -128,9 +128,9 @@
   </sc-if>
 
   <sc-if value="{{ fDialog }}" hint-placeholder-val="{{ false }}">
-    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Rohan Mehta" meta="Research assistant · Mechanical Engineering" hint-size="100%,96px"></x-import></div>
+    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Liv Morgan" meta="Research assistant · Mechanical Engineering" hint-size="100%,96px"></x-import></div>
     <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="m-give" hint-size="100%,420px">
-      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-give" title="Give Rohan Mehta a role" hint-size="100%,60px"></x-import>
+      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-give" title="Give Liv Morgan a role" hint-size="100%,60px"></x-import>
       <div style="padding:0 24px 4px;display:flex;flex-direction:column;gap:10px">
         <x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ outcome }}" hint-size="100%,90px"></x-import>
         <a href="route-pending.dc.html?frame=default" style="font-size:14px;font-weight:600;min-height:32px;display:inline-flex;align-items:center;align-self:flex-start">Waiting for you to send →</a>
@@ -240,15 +240,15 @@ class Component extends DCLogic {
       cmdOpen: this.state.cmdOpen, cmdArrow: this.state.cmdOpen ? "↑" : "↓", toggleCmd: () => this.setState(s => ({ cmdOpen: !s.cmdOpen })),
       cmdSteps: ["Only sample data is deleted. Real people, real projects and every decision you made stay exactly as they are.", "Zitadel is not changed. Anything left over there is reported under Drift at the next check.", "For a blank slate instead, with no bundles, rules or history, use make reset-all-data APPLY=1."],
       closeLabel: f === "done-a" ? "Done" : "Close",
-      outcome: { kind: "queued", message: "Given in Syndra", detail: "Laser cutter · Supervisor always waits for you, so Rohan can't supervise yet." },
+      outcome: { kind: "queued", message: "Given in Syndra", detail: "Laser cutter · Supervisor always waits for you, so Liv can't supervise yet." },
       homeAction: { label: "Go to the home page", href: "route-home.dc.html?frame=default" },
       readState: f === "stack" || f === "degraded" ? { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 3 * 60000).toISOString(), current: true },
       searchEl: S ? h(S.Input, { placeholder: "Search name, email or role key", "aria-label": "Search people by name, email or role key" }) : null,
       people: [
-        { name: "Aanya Rao", sub: "Research assistant · Mechanical Engineering", access: "3 roles across 2 projects" },
-        { name: "Priya Nair", sub: "Research assistant · Design", access: "5 roles across 3 projects" },
+        { name: "Roman Reigns", sub: "Research assistant · Mechanical Engineering", access: "3 roles across 2 projects" },
+        { name: "Cody Rhodes", sub: "Research assistant · Design", access: "5 roles across 3 projects" },
         { name: "Kanishk Singh", sub: "Makerspace staff · Operations", access: "6 roles across 4 projects" },
-        { name: "Rohan Mehta", sub: "Research assistant · Mechanical Engineering", access: "2 roles across 1 project" },
+        { name: "Liv Morgan", sub: "Research assistant · Mechanical Engineering", access: "2 roles across 1 project" },
       ],
     };
   }

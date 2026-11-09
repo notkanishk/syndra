@@ -9,7 +9,7 @@ const body = { fontSize: 14.5, color: "var(--muted)" } as const;
 export const InCardHeader = () => (
   <Card>
     <CardHeader title="Recent activity" action={<CardHeaderLink href="/audit">Full audit log →</CardHeaderLink>} />
-    <CardRow first><span style={body}>Priya Nair granted Laser cutter · Operator to Aanya Rao</span></CardRow>
+    <CardRow first><span style={body}>Cody Rhodes granted Laser cutter · Operator to Roman Reigns</span></CardRow>
   </Card>
 );
 

@@ -169,7 +169,7 @@
               <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label">If you revoke</span><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">She loses entry to the electronics bench. Revocations send on their own every few minutes; an app she is already signed in to keeps what it was told until she signs in again.</p></div>
               <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label">If you adopt</span><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Syndra records this as access you gave, and the row leaves this list. Her access does not change.</p></div>
               <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label">Evidence</span>
-                <div class="type-mono" style="display:grid;grid-template-columns:84px minmax(0,1fr);gap:4px 12px;font-size:12.5px;color:var(--muted)"><span style="color:var(--faint)">Zitadel id</span><span>291803447120556</span><span style="color:var(--faint)">Created</span><span>2 Oct 2026, 18:40</span><span style="color:var(--faint)">Made by</span><span style="font-family:var(--font-sans)"><a href="route-users-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Rohan Mehta</a></span><span style="color:var(--faint)">Last seen</span><span>5 Oct 2026, 09:34</span></div>
+                <div class="type-mono" style="display:grid;grid-template-columns:84px minmax(0,1fr);gap:4px 12px;font-size:12.5px;color:var(--muted)"><span style="color:var(--faint)">Zitadel id</span><span>291803447120556</span><span style="color:var(--faint)">Created</span><span>2 Oct 2026, 18:40</span><span style="color:var(--faint)">Made by</span><span style="font-family:var(--font-sans)"><a href="route-users-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Liv Morgan</a></span><span style="color:var(--faint)">Last seen</span><span>5 Oct 2026, 09:34</span></div>
               </div>
             </div>
           </sc-if>
@@ -240,19 +240,19 @@ class Component extends DCLogic {
     const T = (t) => ({ t, isText: true, isLink: false }), L = (t, href) => ({ t, href, isText: false, isLink: true });
     const R = (x) => Object.assign({ hasBadge: false, badge: "", badgeTone: "neutral", hasSecond: false, second: "", ask: false, hasAnswer: false, answer: [], adoptOff: deg, isService: false, adoptVariant: "accent", checked: false, unchecked: true, bg: "transparent", edge: "transparent", expanded: false, evidenceLabel: "Show evidence" }, x);
     let rows = [
-      R({ only: "z", kind: "unknown", days: 2, who: "Meera Pillai", holder: "Member", role: "Electronics bench · Operator", key: "electronics.operator", hasBadge: true, badge: "Safety-gated", badgeTone: "dangerSoft", edge: "var(--danger)",
+      R({ only: "z", kind: "unknown", days: 2, who: "Finn Balor", holder: "Member", role: "Electronics bench · Operator", key: "electronics.operator", hasBadge: true, badge: "Safety-gated", badgeTone: "dangerSoft", edge: "var(--danger)",
         reason: [T("Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra gives it: no direct access, no bundle, no automatic rule.")],
         hasSecond: true, second: "Zitadel usually tells Syndra about a change like this on its own. This time nothing arrived, which is worth a look.",
-        ask: !opened, hasAnswer: opened, answer: [T("Made by "), L("Rohan Mehta", PER), T(" in the Zitadel console, 2 Oct 18:40.")],
+        ask: !opened, hasAnswer: opened, answer: [T("Made by "), L("Liv Morgan", PER), T(" in the Zitadel console, 2 Oct 18:40.")],
         found: "2 days", expanded: opened, evidenceLabel: opened ? "Hide evidence" : "Show evidence" }),
-      R({ only: "s", kind: "removed", days: 3, who: "Arjun Das", holder: "Member", role: "3D printers · Member", key: "printers.member",
+      R({ only: "s", kind: "removed", days: 3, who: "Chad Gable", holder: "Member", role: "3D printers · Member", key: "printers.member",
         reason: [T("Given by "), L("Kanishk Singh", PER), T(" for the capstone print run. Syndra applied it on 12 Sept and Zitadel accepted it. Zitadel still held it on 30 Sept and does not now, so somebody removed it there.")],
         found: "3 days" }),
       R({ only: "z", kind: "self", days: 4, who: "Unifi sync", holder: "Service account", role: "Laser bay · Door", key: "laserbay.door", hasBadge: true, badge: "Role unknown to Syndra",
         reason: [T("Created in Zitadel on 1 Oct by this account itself. Nothing in Syndra gives it.")],
         adoptOff: true, isService: !deg, adoptVariant: "ghost", found: "4 days" }),
-      R({ only: "z", kind: "person", days: 6, who: "Tomas Weber", holder: "No longer active", role: "Wood shop · Member", key: "wood.member",
-        reason: [T("Created in Zitadel on 28 Sept by "), L("Sana Kohli", PER), T(". Nothing in Syndra gives it.")],
+      R({ only: "z", kind: "person", days: 6, who: "Jimmy Uso", holder: "No longer active", role: "Wood shop · Member", key: "wood.member",
+        reason: [T("Created in Zitadel on 28 Sept by "), L("Iyo Sky", PER), T(". Nothing in Syndra gives it.")],
         found: "6 days" }),
     ];
     const PEND = "route-pending.dc.html?frame=default";
@@ -261,9 +261,9 @@ class Component extends DCLogic {
     const dt = (d) => { const x = new Date(2026, 9, 5 - d); return x.getDate() + " " + MO[x.getMonth()]; };
     const KIND = { unknown: "Maker not known", person: "Made in Zitadel by a person", self: "Made by the account itself", removed: "Removed from Zitadel", never: "Never reached Zitadel" };
     if (many) {
-      const fn = ["Kavya","Daniel","Rhea","Naveen","Zara","Ishaan","Ana","Vikram","Leela","Farhan","Sara","Dev","Tara","Yusuf","Neha","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ansari","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
+      const fn = ["Carmelo","Bron","Chelsea","Lyra","Dominik","Trick","Ana","Montez","Akira","Michelle","Sara","Dev","Angelo","Stacy","Kelly","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ansari","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
       const RL = [["Wood shop · Member","wood.member"],["3D printers · Member","printers.member"],["Laser cutter · Operator","laser.operator"],["Studio · Booking","studio.booking"],["Bandsaw · Member","bandsaw.member"]];
-      const mk = ["Sana Kohli","Rohan Mehta","Lena Brandt"];
+      const mk = ["Iyo Sky","Liv Morgan","Zoey Stark"];
       for (let i = 0; i < 109; i++) {
         const k = i % 7 === 3 ? "unknown" : i % 23 === 5 ? "self" : "person", d = 7 + Math.floor(i * 31 / 109), r = RL[(i * 3) % RL.length], svc = k === "self";
         rows.push(R({ only: "z", kind: k, days: d, who: svc ? ["Printer queue","Door sync","Kiosk bot"][i % 3] : fn[i % 16] + " " + ln[(i * 7) % 15], holder: svc ? "Service account" : "Member", role: r[0], key: r[1],
@@ -327,8 +327,8 @@ class Component extends DCLogic {
       clearAction: { label: "Clear filters", onClick: () => {} },
       boardGroups: [
         { title: "Desktop · 1440", frames: [
-          f("default", "Default", "Four rows, a safety-gated one first with the danger edge. The reason gets the width; Adopt · Revoke · Owned elsewhere sit beneath it in the same order on every row (settled). Arjun's row tells the history of a grant somebody removed (#55). Meera's carries the two sentences of #59 and Who made it? (#58)."),
-          f("opened", "A row opened", "Who made it? answered for this row only, and Show evidence open: what a revoke costs her, what adopting records, and the Zitadel evidence. The name links to Meera's page, so it no longer doubles as the toggle."),
+          f("default", "Default", "Four rows, a safety-gated one first with the danger edge. The reason gets the width; Adopt · Revoke · Owned elsewhere sit beneath it in the same order on every row (settled). Chad's row tells the history of a grant somebody removed (#55). Finn's carries the two sentences of #59 and Who made it? (#58)."),
+          f("opened", "A row opened", "Who made it? answered for this row only, and Show evidence open: what a revoke costs her, what adopting records, and the Zitadel evidence. The name links to Finn's page, so it no longer doubles as the toggle."),
           f("selecting", "Selecting", "Select turns on checkboxes. The bar counts rows and people, states the 500 ceiling, and says revoking is one row at a time where somebody would look for it (#61, #103)."),
                     f("unread", "A system nobody could read", "The amber notice above the list says what is missing from it and why (#55). The rows below are still current."),
           f("checked", "After Check Zitadel again", "A check is a read, so it reports No change and the list below is the new answer."),

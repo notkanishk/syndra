@@ -15,6 +15,6 @@ export const Seat = () => (
 
 export const InsideASentence = () => (
   <p style={p}>
-    Aanya Rao, <Crossfade id="state" inline>waiting for you to send</Crossfade>.
+    Roman Reigns, <Crossfade id="state" inline>waiting for you to send</Crossfade>.
   </p>
 );

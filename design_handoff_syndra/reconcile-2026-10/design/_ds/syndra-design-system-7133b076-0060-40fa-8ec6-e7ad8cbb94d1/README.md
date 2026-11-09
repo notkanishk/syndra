@@ -43,7 +43,7 @@ Ready-made classes: `type-page-title`, `type-section-title`, `type-card-title`, 
     <CardHeader title="Open requests" count={2}
       action={<CardHeaderLink href="/requests">See all →</CardHeaderLink>} />
     <CardRow first>
-      <div style={{ width: 170, fontWeight: 600 }}>Aanya Rao</div>
+      <div style={{ width: 170, fontWeight: 600 }}>Roman Reigns</div>
       <div style={{ flex: 1, color: "var(--muted)" }}>Laser cutter · Operator</div>
       <Button size="sm" variant="accent">Approve</Button>
     </CardRow>

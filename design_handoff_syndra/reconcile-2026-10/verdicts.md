@@ -186,7 +186,7 @@ N15  SYNTHESIS (B)  Owner picked B, 13 Oct · Grants by hand and approved reques
      Boards: route-automation-settings-v4. Build list: Confirmation
 
 N16  SYNTHESIS  Owner, 13 Oct: one write place per setting; a step left is said where you took the first one
-     Whether a role waits is changed only on Automation settings. The project page's per-role control (v3 frame 4) goes; the project page, new-role dialog, rule editor, bundle editor and give-a-role dialog show it read-only ("When given: Straight away / Waits for you") with "Set in Automation settings →". After a new role is added, the outcome offers "Make it wait for you →". Every action with a step left keeps a Next step line on the thing it changed until the step is done (Rohan's role row, the rule row, the request row, the bundle header). Rules lose the mode badge entirely. Both rules are now in CLAUDE.md.
+     Whether a role waits is changed only on Automation settings. The project page's per-role control (v3 frame 4) goes; the project page, new-role dialog, rule editor, bundle editor and give-a-role dialog show it read-only ("When given: Straight away / Waits for you") with "Set in Automation settings →". After a new role is added, the outcome offers "Make it wait for you →". Every action with a step left keeps a Next step line on the thing it changed until the step is done (Liv's role row, the rule row, the request row, the bundle header). Rules lose the mode badge entirely. Both rules are now in CLAUDE.md.
      Boards: route-automation-settings-v5. Proposal: proposed/NextStep.md. Build list: Confirmation, Next step
 
 N17  SYNTHESIS  Owner, 13 Oct: one part per job across the flow

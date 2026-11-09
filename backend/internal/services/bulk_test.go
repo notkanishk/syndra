@@ -134,8 +134,8 @@ func laser(rk string) roleKey { return roleKey{projectID: "pLaser", roleKey: rk}
 // refused loudly rather than folded into a success count.
 func TestRehearseBulk_BlocksDepartedAccountsOnGrant(t *testing.T) {
 	setupBulk(t, bulkFixture{users: []models.UserProfile{
-		{ID: "u_live", Name: "Ada Lovelace", Status: "active"},
-		{ID: "u_gone", Name: "Leo Brooks", Status: "departed"},
+		{ID: "u_live", Name: "Charlotte Flair", Status: "active"},
+		{ID: "u_gone", Name: "Seth Rollins", Status: "departed"},
 	}})
 
 	plan, err := RehearseBulk(context.Background(), BulkRequest{
@@ -164,9 +164,9 @@ func TestRehearseBulk_BlocksDepartedAccountsOnGrant(t *testing.T) {
 func TestRehearseBulk_RemoveNamesWhoKeepsTheRoleAnyway(t *testing.T) {
 	setupBulk(t, bulkFixture{
 		users: []models.UserProfile{
-			{ID: "u_direct", Name: "Ada", Status: "active"},
-			{ID: "u_both", Name: "Sam", Status: "active"},
-			{ID: "u_bundle", Name: "Maya", Status: "active"},
+			{ID: "u_direct", Name: "Charlotte", Status: "active"},
+			{ID: "u_both", Name: "Randy", Status: "active"},
+			{ID: "u_bundle", Name: "Bianca", Status: "active"},
 		},
 		grants: map[string][]models.DirectGrant{
 			"u_direct": {{ID: "g1", ProjectID: "pLaser", RoleKey: "trained"}},
@@ -230,7 +230,7 @@ func TestRehearseBulk_RemoveNamesWhoKeepsTheRoleAnyway(t *testing.T) {
 // and the rehearsal must not present it as a person gaining something.
 func TestRehearseBulk_AssignLeavesSomeoneWhoHoldsItThroughABundle(t *testing.T) {
 	setupBulk(t, bulkFixture{
-		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}},
+		users: []models.UserProfile{{ID: "u1", Name: "Charlotte", Status: "active"}},
 		roles: map[string]map[roleKey]*models.EffectiveRole{
 			"u1": {laser("trained"): {Reasons: []models.RoleReason{{Kind: "bundle", BundleName: "Safety"}}}},
 		},
@@ -258,8 +258,8 @@ func TestRehearseBulk_ExtendIgnoresPermanentGrants(t *testing.T) {
 	soon := time.Now().Add(48 * time.Hour)
 	setupBulk(t, bulkFixture{
 		users: []models.UserProfile{
-			{ID: "u_mixed", Name: "Ada", Status: "active"},
-			{ID: "u_perm", Name: "Sam", Status: "active"},
+			{ID: "u_mixed", Name: "Charlotte", Status: "active"},
+			{ID: "u_perm", Name: "Randy", Status: "active"},
 		},
 		grants: map[string][]models.DirectGrant{
 			"u_mixed": {
@@ -300,7 +300,7 @@ func TestRehearseBulk_ExtendHonoursTheSelectedGrants(t *testing.T) {
 	// so nothing on screen could have told the operator it was about to be renewed.
 	distant := time.Now().Add(200 * 24 * time.Hour)
 	setupBulk(t, bulkFixture{
-		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}},
+		users: []models.UserProfile{{ID: "u1", Name: "Charlotte", Status: "active"}},
 		grants: map[string][]models.DirectGrant{
 			"u1": {
 				{ID: "g_seen", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon},
@@ -329,7 +329,7 @@ func TestRehearseBulk_ExtendWithoutIDsStillMeansEverythingExpiring(t *testing.T)
 	soon := time.Now().Add(48 * time.Hour)
 	later := time.Now().Add(20 * 24 * time.Hour)
 	setupBulk(t, bulkFixture{
-		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}},
+		users: []models.UserProfile{{ID: "u1", Name: "Charlotte", Status: "active"}},
 		grants: map[string][]models.DirectGrant{
 			"u1": {
 				{ID: "g_a", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon},
@@ -351,13 +351,13 @@ func TestRehearseBulk_ExtendWithoutIDsStillMeansEverythingExpiring(t *testing.T)
 
 // A flat id set across several people must not let one person's tick reach another's access. A
 // grant id belongs to exactly one person, so the per-user pass is what enforces this — and if it
-// ever stopped, a selection of Ada's row would extend Sam's grant of the same role.
+// ever stopped, a selection of Charlotte's row would extend Randy's grant of the same role.
 func TestRehearseBulk_ExtendDoesNotCrossBetweenPeople(t *testing.T) {
 	soon := time.Now().Add(48 * time.Hour)
 	setupBulk(t, bulkFixture{
 		users: []models.UserProfile{
-			{ID: "u1", Name: "Ada", Status: "active"},
-			{ID: "u2", Name: "Sam", Status: "active"},
+			{ID: "u1", Name: "Charlotte", Status: "active"},
+			{ID: "u2", Name: "Randy", Status: "active"},
 		},
 		grants: map[string][]models.DirectGrant{
 			"u1": {{ID: "g_ada", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon}},
@@ -374,11 +374,11 @@ func TestRehearseBulk_ExtendDoesNotCrossBetweenPeople(t *testing.T) {
 	}
 
 	if ids := outcomeFor(t, plan, "u1").GrantIDs; len(ids) != 1 || ids[0] != "g_ada" {
-		t.Errorf("expected Ada's ticked grant, got %v", ids)
+		t.Errorf("expected Charlotte's ticked grant, got %v", ids)
 	}
 	sam := outcomeFor(t, plan, "u2")
 	if sam.Effect != EffectNoChange || len(sam.GrantIDs) != 0 {
-		t.Errorf("Sam's grant was not selected and must not be extended: %+v", sam)
+		t.Errorf("Randy's grant was not selected and must not be extended: %+v", sam)
 	}
 	// And the plan must say why his row does nothing, so an operator reading it is not left to
 	// guess whether he has no expiring access at all.
@@ -390,7 +390,7 @@ func TestRehearseBulk_ExtendDoesNotCrossBetweenPeople(t *testing.T) {
 // An id that resolves to nobody is blocked, not skipped. A silently dropped row
 // would make the result count disagree with the selection the operator made.
 func TestRehearseBulk_BlocksUnknownAccounts(t *testing.T) {
-	setupBulk(t, bulkFixture{users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}}})
+	setupBulk(t, bulkFixture{users: []models.UserProfile{{ID: "u1", Name: "Charlotte", Status: "active"}}})
 
 	plan, err := RehearseBulk(context.Background(), BulkRequest{
 		Op: BulkOpAssignBundle, UserIDs: []string{"u1", "u_ghost"}, BundleID: "b1",
@@ -409,8 +409,8 @@ func TestRehearseBulk_BlocksUnknownAccounts(t *testing.T) {
 func TestRehearseBulk_BundleMembershipIsIdempotent(t *testing.T) {
 	setupBulk(t, bulkFixture{
 		users: []models.UserProfile{
-			{ID: "u_in", Name: "Ada", Status: "active"},
-			{ID: "u_out", Name: "Sam", Status: "active"},
+			{ID: "u_in", Name: "Charlotte", Status: "active"},
+			{ID: "u_out", Name: "Randy", Status: "active"},
 		},
 		bundle: map[string][]models.Bundle{"u_in": {{ID: "b1", Name: "Safety"}}},
 	})
@@ -447,7 +447,7 @@ func TestRehearseBulk_BundleMembershipIsIdempotent(t *testing.T) {
 // A duplicated id in the selection must not double-apply. Select-all across a
 // filter plus a manual click is an easy way to produce one.
 func TestRehearseBulk_DeduplicatesSelection(t *testing.T) {
-	setupBulk(t, bulkFixture{users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}}})
+	setupBulk(t, bulkFixture{users: []models.UserProfile{{ID: "u1", Name: "Charlotte", Status: "active"}}})
 
 	plan, err := RehearseBulk(context.Background(), BulkRequest{
 		Op: BulkOpAssignRole, UserIDs: []string{"u1", "u1", " u1 ", ""},
@@ -548,8 +548,8 @@ func TestRehearseBulk_NeverPromisesAShorterEnd(t *testing.T) {
 	soon := time.Now().Add(5 * 24 * time.Hour)
 	setupBulk(t, bulkFixture{
 		users: []models.UserProfile{
-			{ID: "u_forever", Name: "Ada", Status: "active"},
-			{ID: "u_far", Name: "Sam", Status: "active"},
+			{ID: "u_forever", Name: "Charlotte", Status: "active"},
+			{ID: "u_far", Name: "Randy", Status: "active"},
 			{ID: "u_soon", Name: "Lee", Status: "active"},
 		},
 		grants: map[string][]models.DirectGrant{
@@ -594,7 +594,7 @@ func TestRehearseBulk_NeverPromisesAShorterEnd(t *testing.T) {
 func TestABulkRowNamesWhatItWouldCancel(t *testing.T) {
 	queuedAt := time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
 	setupBulk(t, bulkFixture{
-		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}, {ID: "u2", Name: "Bo", Status: "active"}},
+		users: []models.UserProfile{{ID: "u1", Name: "Charlotte", Status: "active"}, {ID: "u2", Name: "Bo", Status: "active"}},
 		queued: map[string][]models.QueuedChange{
 			"u1/add/trained": {{ID: "q1", OpType: "revoke", RoleKeys: []string{"trained"}, QueuedAt: queuedAt, Reason: "left the course"}},
 		},
@@ -618,7 +618,7 @@ func TestABulkRowNamesWhatItWouldCancel(t *testing.T) {
 // row rather than riding through on an approval that never mentioned it.
 func TestRehearseBulk_GiveNamesWhatTheRulesAlsoGive(t *testing.T) {
 	fx := bulkFixture{
-		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}},
+		users: []models.UserProfile{{ID: "u1", Name: "Charlotte", Status: "active"}},
 		rules: []models.MappingRule{
 			{ID: "r1", SourceProject: "pLaser", SourceRole: "trained", TargetProject: "pLaser", TargetRole: "advanced"},
 			{ID: "r2", SourceProject: "pLaser", SourceRole: "advanced", TargetProject: "pShop", TargetRole: "bench"},
@@ -676,7 +676,7 @@ func TestRehearseBulk_NeverTakesAccessFromTheRequester(t *testing.T) {
 	setupBulk(t, bulkFixture{
 		users: []models.UserProfile{
 			{ID: "u_me", Name: "Kanishk", Status: "active"},
-			{ID: "u_ada", Name: "Ada", Status: "active"},
+			{ID: "u_ada", Name: "Charlotte", Status: "active"},
 		},
 		grants: map[string][]models.DirectGrant{
 			"u_me":  {{ID: "g1", ProjectID: "pLaser", RoleKey: "trained"}},

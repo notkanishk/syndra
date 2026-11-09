@@ -181,7 +181,7 @@
       <div style="display:flex;flex-direction:column;gap:14px;padding:18px 20px;border-radius:var(--radius-card);border:1px solid var(--accent-line);background:var(--accent-soft)">
         <div style="display:flex;flex-direction:column;gap:4px">
           <span class="type-label" style="color:var(--accent-text)">Path · two routes</span>
-          <span style="font-family:var(--font-display);font-size:20px;font-weight:600;line-height:1.25;text-wrap:pretty">Priya Nair to Laser bay · Door</span>
+          <span style="font-family:var(--font-display);font-size:20px;font-weight:600;line-height:1.25;text-wrap:pretty">Cody Rhodes to Laser bay · Door</span>
           <span style="font-size:13px;color:var(--muted)">Research assistant · Design</span>
         </div>
         <sc-for list="{{ pathLines }}" as="l" hint-placeholder-count="3">
@@ -190,7 +190,7 @@
             <p style="margin:0;font-size:14px;line-height:1.55;text-wrap:pretty"><strong>{{ l.lead }}</strong> {{ l.text }}</p>
           </div>
         </sc-for>
-        <a href="route-users-id.dc.html?frame=phone" style="font-size:14px;font-weight:600">Open Priya Nair →</a>
+        <a href="route-users-id.dc.html?frame=phone" style="font-size:14px;font-weight:600">Open Cody Rhodes →</a>
         <div style="display:flex;flex-wrap:wrap;gap:10px;padding-top:12px;border-top:1px solid var(--accent-line)">
           <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,36px">Pin this</x-import>
           <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="160px,36px">Copy as sentences</x-import>
@@ -201,7 +201,7 @@
   </sc-if>
 
   <sc-if value="{{ fPerson }}" hint-placeholder-val="{{ false }}">
-    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Aanya Rao" meta="Research assistant · Mechanical Engineering" hint-size="100%,96px"></x-import></div>
+    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Roman Reigns" meta="Research assistant · Mechanical Engineering" hint-size="100%,96px"></x-import></div>
     <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
       <x-import component-from-global-scope="Syndra.CardHeader" title="Laser Lab" count="{{ 2 }}" hint-size="100%,56px"></x-import>
       <div class="row-divider" style="display:flex;flex-direction:column;gap:4px;padding:14px 20px"><span style="font-size:15px;font-weight:600">Laser cutter · Operator</span><span style="font-size:13px;color:var(--muted)">Given by Kanishk Singh · until 20 Oct</span></div>
@@ -211,7 +211,7 @@
 
   <sc-if value="{{ fSm }}" hint-placeholder-val="{{ false }}">
     <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="m-sm" hint-size="100%,300px">
-      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-sm" title="Remove Operator from Aanya Rao?" lede="Aanya keeps her Member role. She can no longer start a cut job on her own." hint-size="100%,120px"></x-import>
+      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-sm" title="Remove Operator from Roman Reigns?" lede="Roman keeps her Member role. She can no longer start a cut job on her own." hint-size="100%,120px"></x-import>
       <x-import component-from-global-scope="Syndra.ModalFooter" note="This finishes now: it goes straight to Zitadel." hint-size="100%,100px">
         <x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="120px,44px">Keep access</x-import>
         <x-import component-from-global-scope="Syndra.Button" variant="dangerConfirm" hint-size="160px,44px">Remove Operator</x-import>
@@ -221,7 +221,7 @@
 
   <sc-if value="{{ fMd }}" hint-placeholder-val="{{ false }}">
     <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" busy="{{ busy }}" labelled-by="m-md" hint-size="100%,520px">
-      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-md" title="Extend Aanya Rao's Operator role" lede="It ends on 20 Oct. Choose how much longer, and say why." hint-size="100%,120px"></x-import>
+      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-md" title="Extend Roman Reigns's Operator role" lede="It ends on 20 Oct. Choose how much longer, and say why." hint-size="100%,120px"></x-import>
       <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
         <div style="display:flex;flex-direction:column;gap:8px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100%,20px">For how long</x-import><x-import component-from-global-scope="Syndra.Segmented" options="{{ howLongOpts }}" value="30" on-change="{{ noop }}" label="For how long" hint-size="100%,44px"></x-import></div>
         <div style="display:flex;flex-direction:column;gap:8px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100%,20px">Why</x-import><x-import component-from-global-scope="Syndra.Textarea" default-value="Finishing her capstone enclosure." aria-label="Why" disabled="{{ busy }}" hint-size="100%,72px"></x-import></div>
@@ -235,8 +235,8 @@
 
   <sc-if value="{{ fLand }}" hint-placeholder-val="{{ false }}">
     <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="m-l" hint-size="100%,300px">
-      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-l" title="Revoke Operator from Aanya Rao?" lede="She loses badge entry to the laser bay at once." hint-size="100%,100px"></x-import>
-      <div style="padding:0 24px"><x-import component-from-global-scope="Syndra.ConfirmByTyping" expected="Aanya Rao" value="" on-change="{{ noop }}" noun="person's name" hint-size="100%,70px"></x-import></div>
+      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-l" title="Revoke Operator from Roman Reigns?" lede="She loses badge entry to the laser bay at once." hint-size="100%,100px"></x-import>
+      <div style="padding:0 24px"><x-import component-from-global-scope="Syndra.ConfirmByTyping" expected="Roman Reigns" value="" on-change="{{ noop }}" noun="person's name" hint-size="100%,70px"></x-import></div>
       <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,80px">
         <x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="120px,44px">Keep access</x-import>
         <x-import component-from-global-scope="Syndra.Button" variant="dangerConfirm" disabled="{{ true }}" reason="Type her name to confirm." hint-size="160px,44px">Revoke Operator</x-import>
@@ -275,11 +275,11 @@ class Component extends DCLogic {
     const S = window.Syndra, h = React.createElement, st = this.st;
     const opt = (v, l) => h("option", { key: v, value: v }, l);
     const people = [
-      { name: "Aanya Rao", sub: "Research assistant · Mechanical Engineering", access: "3 roles across 2 projects", attn: "Expires in 2 days", attnColor: "var(--warn-text)" },
-      { name: "Priya Nair", sub: "Research assistant · Design", access: "5 roles across 3 projects", attn: "Unexplained role", attnColor: "var(--danger-text)" },
+      { name: "Roman Reigns", sub: "Research assistant · Mechanical Engineering", access: "3 roles across 2 projects", attn: "Expires in 2 days", attnColor: "var(--warn-text)" },
+      { name: "Cody Rhodes", sub: "Research assistant · Design", access: "5 roles across 3 projects", attn: "Unexplained role", attnColor: "var(--danger-text)" },
       { name: "Kanishk Singh", sub: "Makerspace staff · Operations", access: "6 roles across 4 projects", attn: "" },
-      { name: "Lena Brandt", sub: "lena.brandt@makerspace.edu", access: "Nothing yet", attn: "Open request", attnColor: "var(--accent-text)" },
-      { name: "Omar Haddad", sub: "Left 12 Sept · Architecture", access: "1 role", attn: "", opacity: 0.6 },
+      { name: "Zoey Stark", sub: "zoey.stark@makerspace.edu", access: "Nothing yet", attn: "Open request", attnColor: "var(--accent-text)" },
+      { name: "Tiffany Stratton", sub: "Left 12 Sept · Architecture", access: "1 role", attn: "", opacity: 0.6 },
     ].map(p => Object.assign({ opacity: 1 }, p, { hasAttn: !!p.attn }));
     const fresh = (bg, bd, ink, text, reading) => ({ bg, bd, ink, text, reading });
     const L = "var(--healthy)", W = "var(--warn)", none = "0", faint = "var(--faint)", wt = "var(--warn-text)";
@@ -338,7 +338,7 @@ class Component extends DCLogic {
       fPeople: ["pop", "overlay", "sheet"].includes(st), fOverlay: st === "overlay", fSheet: sheet, fIns: isIns, insRest: st === "ins-rest", insPath: st === "ins-path",
       fPerson: person, fSm: st === "sm", fMd: st === "md" || st === "busy", busy: st === "busy", notBusy: st !== "busy", extendLabel: st === "busy" ? "Extending" : "Extend to 20 Nov", fLand: st === "landscape",
       freshOpts, boardGroups, index, people,
-      overlayHits: [{ name: "Priya Nair", sub: "Research assistant · Design" }, { name: "Prisha Menon", sub: "Student · Architecture" }, { name: "Pritam Das", sub: "Lab technician · Operations" }],
+      overlayHits: [{ name: "Cody Rhodes", sub: "Research assistant · Design" }, { name: "Sonya Deville", sub: "Student · Architecture" }, { name: "Maryse Ouellet", sub: "Lab technician · Operations" }],
       freshRead: { readAt: new Date(Date.now() - 20000).toISOString(), current: true },
       searchEl: S ? h(S.Input, { placeholder: "Search name, email or role key", "aria-label": "Search people by name, email or role key", defaultValue: sheet ? "" : "" }) : null,
       filtersEl: S ? h(S.FilterPanel, { activeCount: sheet ? 1 : 0, onClear: () => {} },
@@ -351,10 +351,10 @@ class Component extends DCLogic {
       accountOpts: [{ value: "active", label: "Active" }, { value: "departed", label: "Left" }, { value: "all", label: "All" }],
       tabOpts: [{ value: "map", label: "Map" }, { value: "trends", label: "Trends" }],
       lensOpts: { children: [opt("people", "Lens: People"), opt("use", "Lens: Recent use"), opt("ending", "Lens: Ending soon"), opt("group", "Lens: A group")] },
-      insQ: st === "ins-path" ? "Path from Priya Nair to Laser bay · Door" : "",
+      insQ: st === "ins-path" ? "Path from Cody Rhodes to Laser bay · Door" : "",
       findings: [
         { kind: "Drift", dot: "var(--danger)", title: "Printer · Member is held in Zitadel, not given by Syndra", line: "3 people · found 30 Sept. They keep it until you decide.", open: "Open on Drift →", href: "route-drift.dc.html" },
-        { kind: "Waiting for you to send", dot: "var(--warn)", title: "2 changes are approved, not yet in Zitadel", line: "Lab Tech v3 and Rohan Mehta's Storage · Member.", open: "Waiting for you to send →", href: "route-pending.dc.html" },
+        { kind: "Waiting for you to send", dot: "var(--warn)", title: "2 changes are approved, not yet in Zitadel", line: "Lab Tech v3 and Liv Morgan's Storage · Member.", open: "Waiting for you to send →", href: "route-pending.dc.html" },
         { kind: "Single route", dot: "var(--warn)", title: "Front door depends on Safety basics", line: "48 of 53 people get it only that way.", open: "Open Safety basics →", href: "route-bundles-v2.dc.html" },
         { kind: "Unused", dot: "var(--muted)", title: "4 things give nothing", line: "Textiles, Studio and 2 roles nobody has.", open: "Open Textiles →", href: "route-projects-id.dc.html?frame=default" },
       ],

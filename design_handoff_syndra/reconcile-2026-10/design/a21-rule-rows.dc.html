@@ -43,7 +43,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">1 · The row names the rule by the role that set it off</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Give the Lab tech bundle to 3 people. Lab tech gives Trained in Laser Lab. A rule gives Operator to anyone with Trained, and a second rule gives Supervisor to anyone with Operator; Supervisor always waits for you. Aanya and Meera already hold Supervisor, so their rows end at the first rule. Kabir's row walks both, and the role that waits is named once more in the waits sentence, so a step is left for him. No count of rules anywhere: the row says it, and the heading only says which.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Give the Lab tech bundle to 3 people. Lab tech gives Trained in Laser Lab. A rule gives Operator to anyone with Trained, and a second rule gives Supervisor to anyone with Operator; Supervisor always waits for you. Roman and Kofi already hold Supervisor, so their rows end at the first rule. Alexa's row walks both, and the role that waits is named once more in the waits sentence, so a step is left for him. No count of rules anywhere: the row says it, and the heading only says which.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ planFrames }}" as="f" hint-placeholder-count="2">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -56,7 +56,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">2 · The same sentence before a single act</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Give Kabir Mehta a role: Trained in Laser Lab. The footer note is the planner's words for this one person: the date line, the delivery line, then each rule sentence, then the waits sentence with the Waits-for-you mark. Manage bundles and Approve read the same words. The three sources the code has today (the planner, rule_follow.go, Insights' what-if) become one.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Give Alexa Bliss a role: Trained in Laser Lab. The footer note is the planner's words for this one person: the date line, the delivery line, then each rule sentence, then the waits sentence with the Waits-for-you mark. Manage bundles and Approve read the same words. The three sources the code has today (the planner, rule_follow.go, Insights' what-if) become one.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ giveFrames }}" as="f" hint-placeholder-count="2">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -127,10 +127,10 @@
 <x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u3" data="{{ rootData }}" hint-size="100%,100vh">
 <x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
 <div style="display:flex;flex-direction:column;gap:28px">
-  <x-import component-from-global-scope="Syndra.PageHeader" title="Kabir Mehta" lede="kabir.mehta@example.edu · Member" hint-size="100%,90px"></x-import>
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Alexa Bliss" lede="alexa.bliss@example.edu · Member" hint-size="100%,90px"></x-import>
 </div>
 <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="give-title" hint-size="640px,720px">
-  <x-import component-from-global-scope="Syndra.ModalHeader" title="Give a role" lede="Kabir Mehta" title-id="give-title" hint-size="100%,90px"></x-import>
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Give a role" lede="Alexa Bliss" title-id="give-title" hint-size="100%,90px"></x-import>
   <div class="a21-body">
     <div class="a21-field">
       <span class="a21-label">Role</span>
@@ -168,7 +168,7 @@ class Component extends DCLogic {
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
       { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 0 } },
       { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
-      { key: ["name-catalog"], value: { users: [{ id: "u3", display_name: "Kabir Mehta" }], projects: [], applications: [] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u3", display_name: "Alexa Bliss" }], projects: [], applications: [] } },
       { key: ["name-bundles"], value: [] },
     ];
   }
@@ -181,20 +181,20 @@ class Component extends DCLogic {
     const R = (name, words) => ({ name, words });
     const groups = [
       { word: "Straight away", count: "2 people", dot: false, cause: "", aria: "Straight away, 2 people", foldLabel: "Fold these 2 people", rows: [
-        R("Aanya Rao", "Joins Lab tech. Gains Trained in Laser Lab. Also gives Operator in Laser Lab, by the automatic rule from Trained in Laser Lab."),
-        R("Meera Iyer", "Joins Lab tech. Gains Trained in Laser Lab. Also gives Operator in Laser Lab, by the automatic rule from Trained in Laser Lab."),
+        R("Roman Reigns", "Joins Lab tech. Gains Trained in Laser Lab. Also gives Operator in Laser Lab, by the automatic rule from Trained in Laser Lab."),
+        R("Kofi Kingston", "Joins Lab tech. Gains Trained in Laser Lab. Also gives Operator in Laser Lab, by the automatic rule from Trained in Laser Lab."),
       ] },
       { word: "Will wait for you to send", count: "1 person", dot: true, cause: "Because Supervisor in Laser Lab always waits for you.", aria: "Will wait for you to send, 1 person", foldLabel: "Fold this 1 person", rows: [
-        R("Kabir Mehta", "Joins Lab tech. Gains Trained in Laser Lab. Also gives Operator in Laser Lab, by the automatic rule from Trained in Laser Lab. Also gives Supervisor in Laser Lab, by the automatic rule from Operator in Laser Lab. Giving Supervisor in Laser Lab waits for you to send."),
+        R("Alexa Bliss", "Joins Lab tech. Gains Trained in Laser Lab. Also gives Operator in Laser Lab, by the automatic rule from Trained in Laser Lab. Also gives Supervisor in Laser Lab, by the automatic rule from Operator in Laser Lab. Giving Supervisor in Laser Lab waits for you to send."),
       ] },
     ];
 
     const giveNote = [
       "The sweep removes it on that date. Two weeks before, it shows under Expiring access, where the only action is to extend.",
-      "Kabir can use it as soon as you give it.",
+      "Alexa can use it as soon as you give it.",
       "Also gives Operator in Laser Lab, by the automatic rule from Trained in Laser Lab.",
       "Also gives Supervisor in Laser Lab, by the automatic rule from Operator in Laser Lab.",
-      "Supervisor in Laser Lab always waits for you, so Kabir gets it once you send it.",
+      "Supervisor in Laser Lab always waits for you, so Alexa gets it once you send it.",
     ].join(" ");
 
     const Q = (ask, rec) => ({ ask, rec });
@@ -213,7 +213,7 @@ class Component extends DCLogic {
       cancelBtn: { onClick: noop, label: "Cancel" },
       endsOptions: [{ value: "30", label: "30 days" }, { value: "term", label: "End of term" }, { value: "date", label: "Pick a date" }, { value: "never", label: "Never" }],
       planFrames: [
-        f("rule", "Two hops, one row · dark", "Aanya and Meera stop at the first rule. Kabir's row walks both, and ends on the waits sentence, which names the rule-given role like any other."),
+        f("rule", "Two hops, one row · dark", "Roman and Kofi stop at the first rule. Alexa's row walks both, and ends on the waits sentence, which names the rule-given role like any other."),
         f("rule-light", "Two hops, one row · light", "The same in daylight."),
       ],
       giveFrames: [

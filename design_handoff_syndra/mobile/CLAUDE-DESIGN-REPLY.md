@@ -352,7 +352,7 @@ where a member on http taps Copy and gets nothing.
 them, because a door is a fact about a role. Card as one read-only line. **Withheld leads
 the list**, names the person and the date, and offers the one action that resolves it. The
 empty member is told how to get access **by name**: *"Nobody has given you access yet. Ask
-Kabir Rao, who looks after Fabrication."* A member landing with no next step and no name
+Kairi Sane, who looks after Fabrication."* A member landing with no next step and no name
 is the screen that generates the support message.
 
 **B15 · Today.** Two blocks in Basic, six in Advanced — the sixth is merge findings, and
@@ -381,7 +381,7 @@ into needs a way out that is not the browser's. A capped node shows 12 and a row
 *"Pick an app and a person, and this will show the token that app would issue for them
 right now."* One chosen leaves the run control disabled **with its reason in place**.
 Running keeps both choices visible and changeable. **No access at all through this app**
-gets its own sentence — *"This app would issue a token with no roles for Meera. That is
+gets its own sentence — *"This app would issue a token with no roles for Finn. That is
 not an error: nothing she holds is in this app's project."*
 
 ---

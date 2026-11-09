@@ -1,6 +1,6 @@
 # devbox-1: Home, Requests, Pending changes, Drift, Expiring access, Holds, Events, Revocations
 
-Method: dev box (demo session Alice Rivera, operator) at 1280x800 vs boards on localhost:4400, screenshots side by side. Read-only; Advanced view. The sidebar groups, the 14|30 switch, "Your requests", Close wording and the phone Basic tab bar were not flagged.
+Method: dev box (demo session Becky Lynch, operator) at 1280x800 vs boards on localhost:4400, screenshots side by side. Read-only; Advanced view. The sidebar groups, the 14|30 switch, "Your requests", Close wording and the phone Basic tab bar were not flagged.
 
 Caveats
 - The dev box data is a DEGRADED real read: Zitadel has not answered since 11 Aug, and the demo has few records. So Requests, Expiring, Holds and Events were only reachable in their empty state; populated layouts of those four could not be compared.
@@ -12,10 +12,10 @@ Caveats
 
 Verdict: still off.
 
-- [high] board "Sent but not seen back 1": one row, a person's name ("Sana Kohli", role, sent time, "Read again") / dev "Sent, and not seen back yet 85": five rows of "Unknown account 3664..." (raw numeric Zitadel id, truncated), "— / interns" (role shown as a dash plus mono slug), "A grant, accepted 2 Aug", button "Look at their access". 85 rows in the count, 5 shown, no "show more".
+- [high] board "Sent but not seen back 1": one row, a person's name ("Iyo Sky", role, sent time, "Read again") / dev "Sent, and not seen back yet 85": five rows of "Unknown account 3664..." (raw numeric Zitadel id, truncated), "— / interns" (role shown as a dash plus mono slug), "A grant, accepted 2 Aug", button "Look at their access". 85 rows in the count, 5 shown, no "show more".
 - [high] board degraded frame: an amber notice above the title, "Zitadel isn't answering. This is what it held at 09:40.", a read line "Could not reach the connected system — this is the last state seen, 14 min ago", and the action buttons greyed / paused / dev shows NO page-level notice and the read line says "Checked, nothing waiting: Requests · Expiring access · Holds due" as if all was fine. Only the Pending card carries "Disabled — Zitadel is not answering", and the makerspace tile says "0 of 1 read". The Home page does not say it is looking at old data.
-- [med] board headline "8 things need you" counts blocks, one per block, with a one-line lede ("What needs you today. Time-sensitive work changes on its own...") / dev "Evening, Alice. 98 things need you." The 98 is a sum of rows (3 + 1 + 85 + 4 + 5), not blocks; there is no lede; a greeting precedes the headline and a "Tuesday 20 Oct · last checked 18:50" line replaces it.
-- [med] board "New people without a bundle 2": one grouped row ("Lena Brandt and Ravi Iyer", explanation, "Give a bundle" button) / dev lists each person as an avatar row with "Holds no bundle" and no action button, and the people are the operators themselves (Alice, Sam, Maya, Leo).
+- [med] board headline "8 things need you" counts blocks, one per block, with a one-line lede ("What needs you today. Time-sensitive work changes on its own...") / dev "Evening, Becky. 98 things need you." The 98 is a sum of rows (3 + 1 + 85 + 4 + 5), not blocks; there is no lede; a greeting precedes the headline and a "Tuesday 20 Oct · last checked 18:50" line replaces it.
+- [med] board "New people without a bundle 2": one grouped row ("Zoey Stark and Shayna Baszler", explanation, "Give a bundle" button) / dev lists each person as an avatar row with "Holds no bundle" and no action button, and the people are the operators themselves (Becky, Rey, Bianca, Seth).
 - [med] board makerspace section is three stat tiles and Lately / dev adds two more cards, "Gaps" (4 people have no access at all) and "Roles most people hold". The latter shows a stray "o" glyph above its amber error line and "Trainee / Laser Lab / not checked yet" below a "could not reach" error, so it contradicts itself.
 - [low] board block names "Systems nobody could read", "Sent but not seen back" / dev "Systems Syndra could not check", "Sent, and not seen back yet". Dev explanatory paragraph under the second is long, three lines.
 - [low] board Lately is sentence rows with the date at right and link "Open Audit →" / dev Lately is a three-column list (date, actor, action) with "Full audit log →"; removal actions in red.
@@ -27,7 +27,7 @@ Verdict: close (empty state matches; populated state only partly checked).
 
 - [low] board filter row: search field on the left, Open/Approved/Declined/Withdrawn/All on the right, plus a "Select" button / dev: the filter tabs sit on the left and the search field follows them, no Select (nothing open to select). Order is flipped.
 - [low] board empty card "No open requests." with healthy dot, same copy / dev matches; card top is ~4px tighter in dev.
-- [med] board table (All tab) has a header row WHO / WHAT THEY ASKED FOR / WHY / WHEN / DECISION, initials in the avatar, "Laser cutter · Operator" and a "For a month · until 3 Nov" subline, and a decision cell "Approved / Sent · not yet seen in Zitadel" / dev All tab (one row, Sam Patel): no header row, empty avatar circle without initials, role shown as "Laser Lab / trainee" with mono slug "trainee", the when as "19 hours ago", and decision "Approved" with no second line.
+- [med] board table (All tab) has a header row WHO / WHAT THEY ASKED FOR / WHY / WHEN / DECISION, initials in the avatar, "Laser cutter · Operator" and a "For a month · until 3 Nov" subline, and a decision cell "Approved / Sent · not yet seen in Zitadel" / dev All tab (one row, Rey Mysterio): no header row, empty avatar circle without initials, role shown as "Laser Lab / trainee" with mono slug "trainee", the when as "19 hours ago", and decision "Approved" with no second line.
 - [low] "Open" count in the sidebar shows 0 on dev (data); the board shows 3. Nothing to flag beyond data.
 
 ## Pending changes (/governance/pending) - frames default, degraded
@@ -45,13 +45,13 @@ Verdict: close.
 
 Verdict: close.
 
-- [high] board WHO is a name ("Meera Pillai", "Unifi sync / Service account") / dev rows 1-3 are "Unknown account" plus a 18-digit raw Zitadel id in mono, dimmed, with a blank avatar circle (no initials).
+- [high] board WHO is a name ("Finn Balor", "Unifi sync / Service account") / dev rows 1-3 are "Unknown account" plus a 18-digit raw Zitadel id in mono, dimmed, with a blank avatar circle (no initials).
 - [med] board WHAT THEY CAN GET INTO is "Electronics bench · Operator" with "electronics.operator" mono and a "Safety-gated" tag / dev is "— · Admin", "— · Community" with the slug beneath and a "Role unknown to Syndra" chip. The dash stands where the project name belongs.
 - [med] board degraded: banner above the title, "Check Zitadel again" dimmed, Adopt/Revoke/Owned elsewhere paused / dev: no banner for Zitadel not answering on this page (the Zitadel-not-read-since-11-Aug notice stands in for "unread"), "This list was read just now" in the read line, and Adopt/Revoke/Owned elsewhere fully active. The page disagrees with Pending changes, which says Zitadel is not answering.
 - [low] board stacks one notice at most under the read line (unread frame: "TrueNAS hasn't been read since 1 Oct 22:10") / dev stacks two before the first section ("Zitadel hasn't been read since 11 Aug 02:17" and "The comparison didn't load"), pushing the first row below the fold at 800px.
 - [low] board right of the read line shows section chips "Not given by Syndra 3 | Gone from Zitadel 1" / dev has one section so no chips; fine, but the read line has no age ("read just now").
 - [low] board first row has a red left accent bar and an amber "Zitadel usually tells Syndra about a change like this on its own" line / dev rows have neither (data dependent).
-- [low] board "oldest found 6 days ago" / dev "oldest found 3 Aug" (absolute). Evidence panel (Show evidence): board is an inset rounded panel with "Made by Rohan Mehta in the Zitadel console", dev is a flat full-width band with "Made by unknown" and "Created unknown" lines.
+- [low] board "oldest found 6 days ago" / dev "oldest found 3 Aug" (absolute). Evidence panel (Show evidence): board is an inset rounded panel with "Made by Liv Morgan in the Zitadel console", dev is a flat full-width band with "Made by unknown" and "Created unknown" lines.
 
 ## Expiring access (/review/expiring-access) - frames default, empty
 
@@ -83,8 +83,8 @@ Verdict: close (empty only).
 Verdict: still off.
 
 - [high] board has a meta line ("2 given up · 3 on the way · 5 people"), a search field, a Filters button, a read line ("Syndra's send queue was read just now"), section chips (Given up 2 | Still on the way 3) / dev has none of these: title, lede, then the two section cards directly.
-- [high] board sections are tables (WHO / WHAT WAS REVOKED / WHERE / REVOKED / attempts) with fold chevrons and avatars / dev sections are plain cards; the one "Still on the way" row is a single run-on line "Sam Patel on Zitadel · member revoked 24 Aug" with "c_7686" at the far right. No columns, no avatar, no "Try 1 of 8 / Next try in 1 min", no relative age ("4 min ago"), role shown as the lower-case slug "member".
+- [high] board sections are tables (WHO / WHAT WAS REVOKED / WHERE / REVOKED / attempts) with fold chevrons and avatars / dev sections are plain cards; the one "Still on the way" row is a single run-on line "Rey Mysterio on Zitadel · member revoked 24 Aug" with "c_7686" at the far right. No columns, no avatar, no "Try 1 of 8 / Next try in 1 min", no relative age ("4 min ago"), role shown as the lower-case slug "member".
 - [med] board "Given up" empty section: slim header, one line "Nothing has been given up on. Every revocation still has a way through." with a healthy dot / dev "Given up 0" renders the full explanatory paragraph, then the same sentence without the dot, in low-contrast text; no fold chevron.
 - [med] spacing: lede ends and the first card starts ~7px below it on dev; the board leaves ~24px. Cards look attached to the intro.
-- [low] board action links ("Revoke again on Tomas's page ->") on given-up rows / dev has none (no given-up rows to see).
+- [low] board action links ("Revoke again on Kevin's page ->") on given-up rows / dev has none (no given-up rows to see).
 - [low] dev footnote "A c_ handle links to the edit that set the revocation off, in Change history." is not on the board; a raw `c_7686` handle is the only identifier in the row.

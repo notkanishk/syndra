@@ -140,20 +140,20 @@ class Component extends DCLogic {
     const now = new Date(2026, 9, 6, 9, 50, 0).getTime();
     const E = (id, minsAgo, type, out, parts, raw) => { const src = type === "onboarding.trigger" ? "onboarding" : "provider"; return { id, at: now - minsAgo * 60000 - (id.length * 7919 % 59) * 1000, type: src === "provider" ? "zitadel." + type : type, label: LABEL[type], src, out, parts, raw: raw || {} }; };
     const rows = [
-      E("w1", 8, "grant.created", "done", [P("Meera Pillai"), T(" was given "), J("Electronics bench · Operator"), T(". Syndra recorded it.")], { role_key: "electronics.operator", status: "processed" }),
-      E("t1", 11, "onboarding.trigger", "done", [P("Aanya Rao"), T(" joined. Syndra gave her "), B("New members"), T(", the default bundle for new members.")], { bundle_id: "b_newmembers", status: "completed" }),
-      E("w2", 19, "grant.created", "dropped", [P("Kabir Shah"), T(" was given "), J("3D printers · Member"), T(". Syndra made this change itself, so there was nothing to record.")], { role_key: "printers.member", status: "dropped_own_change" }),
-      E("w4", 35, "grant.changed", "failed", [P("Ravi Kumar"), T("'s access on "), J("Wood shop"), T(" changed. Syndra could not record it: Zitadel named a role, "), M("wood.lead"), T(", that Syndra does not know.")], { role_key: "wood.lead", status: "failed", error_message: "role wood.lead is not in the catalog" }),
-      E("t2", 53, "onboarding.trigger", "waiting", [P("Leela Nair"), T(" joined. Syndra is giving her "), B("New members"), T(", the default bundle for new members.")], { bundle_id: "b_newmembers", status: "in_flight" }),
-      E("w5", 90, "user.deactivated", "done", [P("Tomas Weber"), T(" was deactivated. Syndra recorded it.")], { status: "processed" }),
-      E("w6", 108, "grant.removed", "done", [P("Sana Kohli"), T(" no longer has "), J("Laser bay · Door"), T(". Syndra recorded it.")], { role_key: "laserbay.door", status: "processed" }),
-      E("w7", 15 * 60 + 10, "grant.created", "done", [P("Rohan Mehta"), T(" was given "), J("Studio · Booking"), T(". Syndra recorded it.")], { role_key: "studio.booking", status: "processed" }),
-      E("t3", 16 * 60 + 45, "onboarding.trigger", "dropped", [P("Dev Malhotra"), T(" joined. Nothing was given: no default bundle for new members was set.")], { bundle_id: null, status: "unconfigured" }),
+      E("w1", 8, "grant.created", "done", [P("Finn Balor"), T(" was given "), J("Electronics bench · Operator"), T(". Syndra recorded it.")], { role_key: "electronics.operator", status: "processed" }),
+      E("t1", 11, "onboarding.trigger", "done", [P("Roman Reigns"), T(" joined. Syndra gave her "), B("New members"), T(", the default bundle for new members.")], { bundle_id: "b_newmembers", status: "completed" }),
+      E("w2", 19, "grant.created", "dropped", [P("Indi Hartwell"), T(" was given "), J("3D printers · Member"), T(". Syndra made this change itself, so there was nothing to record.")], { role_key: "printers.member", status: "dropped_own_change" }),
+      E("w4", 35, "grant.changed", "failed", [P("Sasha Banks"), T("'s access on "), J("Wood shop"), T(" changed. Syndra could not record it: Zitadel named a role, "), M("wood.lead"), T(", that Syndra does not know.")], { role_key: "wood.lead", status: "failed", error_message: "role wood.lead is not in the catalog" }),
+      E("t2", 53, "onboarding.trigger", "waiting", [P("Akira Tozawa"), T(" joined. Syndra is giving her "), B("New members"), T(", the default bundle for new members.")], { bundle_id: "b_newmembers", status: "in_flight" }),
+      E("w5", 90, "user.deactivated", "done", [P("Jimmy Uso"), T(" was deactivated. Syndra recorded it.")], { status: "processed" }),
+      E("w6", 108, "grant.removed", "done", [P("Iyo Sky"), T(" no longer has "), J("Laser bay · Door"), T(". Syndra recorded it.")], { role_key: "laserbay.door", status: "processed" }),
+      E("w7", 15 * 60 + 10, "grant.created", "done", [P("Liv Morgan"), T(" was given "), J("Studio · Booking"), T(". Syndra recorded it.")], { role_key: "studio.booking", status: "processed" }),
+      E("t3", 16 * 60 + 45, "onboarding.trigger", "dropped", [P("Tommaso Ciampa"), T(" joined. Nothing was given: no default bundle for new members was set.")], { bundle_id: null, status: "unconfigured" }),
       E("w8", 17 * 60 + 38, "grant.created", "done", [T("Unknown account "), M("291803447120556"), T(" was given "), J("Bandsaw · Member"), T(". Syndra recorded it.")], { user_id: "291803447120556", role_key: "bandsaw.member", status: "processed" }),
-      E("w9", 19 * 60 + 2, "grant.created", "dropped", [P("Zara Ansari"), T(" was given "), J("Laser cutter · Operator"), T(". Zitadel sent this twice; Syndra set the second aside.")], { role_key: "laser.operator", status: "dropped_duplicate" }),
-      E("t4", 22 * 60 + 20, "onboarding.trigger", "done", [P("Farhan Ali"), T(" joined. Syndra gave him a bundle since retired, the default for new members then.")], { bundle_id: "b_2025intake", status: "completed" }),
+      E("w9", 19 * 60 + 2, "grant.created", "dropped", [P("Dominik Mysterio"), T(" was given "), J("Laser cutter · Operator"), T(". Zitadel sent this twice; Syndra set the second aside.")], { role_key: "laser.operator", status: "dropped_duplicate" }),
+      E("t4", 22 * 60 + 20, "onboarding.trigger", "done", [P("Michelle McCool"), T(" joined. Syndra gave him a bundle since retired, the default for new members then.")], { bundle_id: "b_2025intake", status: "completed" }),
     ];
-    const fn = ["Kavya","Daniel","Rhea","Naveen","Ishaan","Ana","Vikram","Sara","Tara","Yusuf","Neha","Ben","Priya","Arjun","Lena","Omar"], ln = ["Menon","Okafor","Kapoor","Bose","Gupta","Ruiz","Shah","Nair","Lindqvist","Malhotra","Singh","Kamal","Joshi","Das","Brandt"];
+    const fn = ["Carmelo","Bron","Chelsea","Lyra","Trick","Ana","Montez","Sara","Angelo","Stacy","Kelly","Ben","Cody","Chad","Zoey","Tiffany"], ln = ["Menon","Okafor","Kapoor","Bose","Gupta","Ruiz","Shah","Nair","Lindqvist","Malhotra","Singh","Kamal","Joshi","Das","Brandt"];
     const RL = [["Wood shop · Member","wood.member"],["3D printers · Member","printers.member"],["Laser cutter · Operator","laser.operator"],["Studio · Booking","studio.booking"],["Bandsaw · Member","bandsaw.member"],["Electronics bench · Member","electronics.member"]];
     for (let i = 0; i < 236; i++) {
       const who = fn[(i * 5) % 16] + " " + ln[(i * 7) % 15], r = RL[(i * 3) % RL.length], mins = 23 * 60 + i * 172 + (i * 37) % 90, k = i % 9;

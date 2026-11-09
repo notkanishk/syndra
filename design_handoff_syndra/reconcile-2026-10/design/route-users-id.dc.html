@@ -69,14 +69,14 @@
       <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
       <div style="display:flex;flex-direction:column;gap:6px">
         <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
-        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Priya's access below is real, read 14 minutes ago, and may have changed since. Giving and revoking access is paused until Zitadel answers.</p>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Cody's access below is real, read 14 minutes ago, and may have changed since. Giving and revoking access is paused until Zitadel answers.</p>
       </div>
     </div>
   </sc-if>
 
   <div class="flex flex-col items-start gap-4 sm:flex-row sm:gap-[22px]" style="padding-bottom:12px">
-    <x-import component-from-global-scope="Syndra.Avatar" name="Priya Nair" size="header" hint-size="62px,62px"></x-import>
-    <div class="w-full flex-1"><x-import component-from-global-scope="Syndra.PageHeader" title="Priya Nair" meta="{{ metaRow }}" lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why." actions="{{ headerActions }}" hint-size="100%,140px"></x-import></div>
+    <x-import component-from-global-scope="Syndra.Avatar" name="Cody Rhodes" size="header" hint-size="62px,62px"></x-import>
+    <div class="w-full flex-1"><x-import component-from-global-scope="Syndra.PageHeader" title="Cody Rhodes" meta="{{ metaRow }}" lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why." actions="{{ headerActions }}" hint-size="100%,140px"></x-import></div>
   </div>
 
   <x-import component-from-global-scope="Syndra.Tabs" label="Views of this person's access" value="{{ tab }}" options="{{ tabs }}" on-select="{{ noop }}" hint-size="100%,44px"></x-import>
@@ -99,7 +99,7 @@
 
   <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}">
     <div class="panel flex flex-wrap items-center gap-3 px-5 py-4"><span class="type-label">Bundles</span><span class="text-[14px] text-faint">None assigned</span><span class="flex-1"></span><span class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6">Manage bundles →</span></div>
-    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,180px"><x-import component-from-global-scope="Syndra.EmptyState" title="Priya holds no access yet" guidance="Access appears here once Priya is given a bundle or direct access, or when a request of hers is approved. No welcome bundle is set, so joining gave her nothing." hint-size="100%,160px"></x-import></x-import>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,180px"><x-import component-from-global-scope="Syndra.EmptyState" title="Cody holds no access yet" guidance="Access appears here once Cody is given a bundle or direct access, or when a request of hers is approved. No welcome bundle is set, so joining gave her nothing." hint-size="100%,160px"></x-import></x-import>
   </sc-if>
 
   <sc-if value="{{ stAccess }}" hint-placeholder-val="{{ true }}">
@@ -181,7 +181,7 @@
           </sc-for>
         </x-import>
       </sc-for>
-      <div class="card" style="padding:14px 20px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px"><span style="flex:1;min-width:220px;font-size:13.5px;color:var(--faint)">Every event about Priya since she first signed in on 3 Sept. Past 200, only the latest 200 are listed here.</span><span class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6">Full audit trail →</span></div>
+      <div class="card" style="padding:14px 20px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px"><span style="flex:1;min-width:220px;font-size:13.5px;color:var(--faint)">Every event about Cody since she first signed in on 3 Sept. Past 200, only the latest 200 are listed here.</span><span class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6">Full audit trail →</span></div>
     </div>
   </sc-if>
 
@@ -212,7 +212,7 @@ class Component extends DCLogic {
     this.readError = Object.assign(new Error("Access could not be read"), { status: 503 });
     this.days = [
       { day: "2 Oct", events: [Component.ev("Given ", "Laser cutter · Supervisor", "", "by", "Kanishk Singh", true, "09:30"), Component.ev("Signed in", "", "", "through", "Zitadel", false, "09:12")] },
-      { day: "20 Sept", events: [Component.ev("Request for ", "Bandsaw · Member", " approved", "by", "Kanishk Singh", true, "11:00"), Component.ev("Asked for ", "Bandsaw · Member", ", for 30 days", "by", "Priya", false, "10:41")] },
+      { day: "20 Sept", events: [Component.ev("Request for ", "Bandsaw · Member", " approved", "by", "Kanishk Singh", true, "11:00"), Component.ev("Asked for ", "Bandsaw · Member", ", for 30 days", "by", "Cody", false, "10:41")] },
     ];
   }
   scroller() { if (this._sc && this._sc.isConnected) return this._sc; let p = document.getElementById((this.navIds || [])[0]); while (p && p !== document.body) { const o = getComputedStyle(p).overflowY; if (o === "auto" || o === "scroll") break; p = p.parentElement; } this._sc = p && p !== document.body ? p : null; return this._sc; }
@@ -252,7 +252,7 @@ class Component extends DCLogic {
       lastKnown: { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false },
       days: this.days,
       headerActions: S ? h(React.Fragment, null, h(S.Button, { disabled: deg }, "Manage bundles"), h(S.Button, { variant: "accent", disabled: deg }, "Grant direct access")) : null,
-      metaRow: S ? h(S.MetaRow, null, ["priya.nair@makerspace.edu", "Research assistant", "Design"]) : null,
+      metaRow: S ? h(S.MetaRow, null, ["cody.rhodes@makerspace.edu", "Research assistant", "Design"]) : null,
       desktopFrames: [
         f("default", "Access", "Bundles first, with their version. Then the read line every list with sections has: when Zitadel was read on the left, once, instead of in each project's heading; a chip per project on the right. One card per project. Each role: name, source, Zitadel's verdict as dot and word, and the verb that removes it — Revoke (danger) for direct access, Withdraw for something waiting for you to send (its verdict opens Pending changes), Remove for access from a bundle or rule."),
         f("activity", "Activity (operator only)", "Grouped by day, in the passive, naming who did it (#41). The way to the full audit trail sits at the foot, where history is read."),

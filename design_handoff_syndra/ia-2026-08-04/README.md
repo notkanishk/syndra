@@ -329,7 +329,7 @@ Breadcrumb: 14.5px, ancestors at `rgba(243,245,239,.45)`, current page `#f3f5ef`
 
 **Purpose.** Actionable work only. Not "Dashboard", not "Overview" — both promise a summary and deliver a link farm.
 
-**Greeting.** `Morning, Priya.` in Bricolage Grotesque 42px/500, followed by `Four things need you.` in the same line at `rgba(243,245,239,.4)`. Below: `Thursday 30 July · last checked 11:04` at 14.5px faint.
+**Greeting.** `Morning, Cody.` in Bricolage Grotesque 42px/500, followed by `Four things need you.` in the same line at `rgba(243,245,239,.4)`. Below: `Thursday 30 July · last checked 11:04` at 14.5px faint.
 
 **Blocks.** Each is a rounded 20px card on `surface-1` with a header row (title 22px/600 + count badge + optional right-side link or note) and one row per item separated by `1px rgba(255,255,255,.05)`.
 
@@ -543,7 +543,7 @@ Members see only their own — enforced at the backend, and the UI must match ra
 
 Landing route for members. Two destinations total; no Today, because a work queue for someone with no queue is an empty room.
 
-Greeting: `Hi Tomas.` / `Here's what you can use.` Sub-line: `Two memberships and six roles. One expires soon.`
+Greeting: `Hi Kevin.` / `Here's what you can use.` Sub-line: `Two memberships and six roles. One expires soon.`
 
 Roles grouped by project in two side-by-side cards. **Access source becomes a sentence, not a chip** — a member has no vocabulary to attach to Direct / Via bundle / Automatic:
 

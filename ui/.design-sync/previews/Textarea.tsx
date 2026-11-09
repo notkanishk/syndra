@@ -8,7 +8,7 @@ import { Textarea, FieldLabel, FieldHint } from "ui";
 const box = { width: 360 } as const;
 
 export const Filled = () => {
-  const [value, setValue] = useState("Finished the laser cutter safety induction with Rohan on 28 Sept.");
+  const [value, setValue] = useState("Finished the laser cutter safety induction with Liv on 28 Sept.");
   return (
     <div style={box}>
       <FieldLabel htmlFor="reason">Why they need this</FieldLabel>

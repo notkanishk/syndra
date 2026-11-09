@@ -45,7 +45,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">1 · What went, what waits, what Zitadel didn't answer, what it refused</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The Safety plan from a21-plan-grouped, applied. Five are done, including Kabir and Lena, whose rows sent nothing and whose words still say so. Four wait, each with the link that lands on Pending changes filtered to them. Meera's change didn't get an answer; Syndra sends it again on its own, and her row says when. Wei's was refused, and his row carries the step. Dev and Sam are as they were. The re-grouping is the re-sort motion: rows fade out and in, never travel.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The Safety plan from a21-plan-grouped, applied. Five are done, including Alexa and Zoey, whose rows sent nothing and whose words still say so. Four wait, each with the link that lands on Pending changes filtered to them. Kofi's change didn't get an answer; Syndra sends it again on its own, and her row says when. Xavier's was refused, and his row carries the step. Dev and Randy are as they were. The re-grouping is the re-sort motion: rows fade out and in, never travel.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ resultFrames }}" as="f" hint-placeholder-count="3">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -172,40 +172,40 @@ class Component extends DCLogic {
     const R = (name, words, o) => Object.assign({ name, words, seat: false, waiting: false, retry: false, refused: false, badge: "", tone: "neutral", why: "" }, o || {});
     const G = (word, count, o) => Object.assign({ word, count, dot: "", bloom: false, href: false, plain: true, cause: "", aria: word + ", " + count, foldLabel: "Fold these " + count, rows: [] }, o || {});
     const done = [
-      R("Aanya Rao", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
-      R("Ishaan Kapoor", "Joins Safety. Gains Trained in Laser Lab."),
-      R("Kabir Mehta", "Joins Safety. The removal of Trained in Laser Lab that was waiting is cancelled, so nothing is sent to Zitadel. They keep it."),
-      R("Lena Brandt", "Joins Safety. Already holds every role it gives, so nothing is sent to Zitadel."),
-      R("Omar Haddad", "Joins Safety. Gains Trained in Laser Lab. The removal of Member in Laser Lab that was waiting is cancelled."),
+      R("Roman Reigns", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
+      R("Trick Williams", "Joins Safety. Gains Trained in Laser Lab."),
+      R("Alexa Bliss", "Joins Safety. The removal of Trained in Laser Lab that was waiting is cancelled, so nothing is sent to Zitadel. They keep it."),
+      R("Zoey Stark", "Joins Safety. Already holds every role it gives, so nothing is sent to Zitadel."),
+      R("Tiffany Stratton", "Joins Safety. Gains Trained in Laser Lab. The removal of Member in Laser Lab that was waiting is cancelled."),
     ];
     const waiting = [
-      R("Jules Fontaine", "Joins Safety. Gains Member in Laser Lab, Supervisor in Laser Lab and Trained in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
-      R("Priya Nair", "Joins Safety. Gains Supervisor in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
-      R("Rohan Mehta", "Joins Safety. Gains Supervisor in Laser Lab and Trained in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
-      R("Tara Bose", "Joins Safety. Gains Member in Laser Lab and Supervisor in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
+      R("Jade Cargill", "Joins Safety. Gains Member in Laser Lab, Supervisor in Laser Lab and Trained in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
+      R("Cody Rhodes", "Joins Safety. Gains Supervisor in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
+      R("Liv Morgan", "Joins Safety. Gains Supervisor in Laser Lab and Trained in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
+      R("Angelo Dawkins", "Joins Safety. Gains Member in Laser Lab and Supervisor in Laser Lab. Giving Supervisor in Laser Lab waits for you to send.", { seat: true, waiting: true, why: "Can't supervise yet · Supervisor always waits for you" }),
     ];
     const groups = allWell ? [
       G("Done", "7 people", { dot: "healthy", bloom: true, rows: done.concat([
-        R("Meera Iyer", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
-        R("Wei Chen", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
+        R("Kofi Kingston", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
+        R("Xavier Woods", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab."),
       ]).sort((a, b) => a.name.localeCompare(b.name)) }),
       G("Waiting for you to send", "4 people", { dot: "warn", href: true, plain: false, cause: "Because Supervisor in Laser Lab always waits for you.", rows: waiting }),
       G("Left as they were", "2 people", { rows: [
-        R("Dev Sharma", "Already in Safety.", { seat: true, badge: "No change", tone: "neutral" }),
-        R("Sam Lee", "Account is deactivated. Remove it from the selection to continue.", { seat: true, badge: "Refused", tone: "warnSoft" }),
+        R("Kayden Carter", "Already in Safety.", { seat: true, badge: "No change", tone: "neutral" }),
+        R("Randy Orton", "Account is deactivated. Remove it from the selection to continue.", { seat: true, badge: "Refused", tone: "warnSoft" }),
       ] }),
     ] : [
       G("Done", "5 people", { dot: "healthy", rows: done }),
       G("Waiting for you to send", "4 people", { dot: "warn", href: true, plain: false, cause: "Because Supervisor in Laser Lab always waits for you.", rows: waiting }),
       G("Zitadel didn't answer", "1 person", { dot: "warn", cause: "Syndra sends it again at 14:05 (try 2 of 6).", rows: [
-        R("Meera Iyer", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab.", { seat: true, retry: true }),
+        R("Kofi Kingston", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab.", { seat: true, retry: true }),
       ] }),
       G("Zitadel refused", "1 person", { dot: "danger", rows: [
-        R("Wei Chen", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab.", { seat: true, refused: true }),
+        R("Xavier Woods", "Joins Safety. Gains Member in Laser Lab and Trained in Laser Lab.", { seat: true, refused: true }),
       ] }),
       G("Left as they were", "2 people", { rows: [
-        R("Dev Sharma", "Already in Safety.", { seat: true, badge: "No change", tone: "neutral" }),
-        R("Sam Lee", "Account is deactivated. Remove it from the selection to continue.", { seat: true, badge: "Refused", tone: "warnSoft" }),
+        R("Kayden Carter", "Already in Safety.", { seat: true, badge: "No change", tone: "neutral" }),
+        R("Randy Orton", "Account is deactivated. Remove it from the selection to continue.", { seat: true, badge: "Refused", tone: "warnSoft" }),
       ] }),
     ];
 
@@ -237,7 +237,7 @@ class Component extends DCLogic {
       operator: this.operator, rootData: this.rootData, noop,
       groups, outcome, cases, questions,
       resultFrames: [
-        f("result", "The result, with every fold · dark", "Five folds in the plan's order. The word says 10 of 11 because Wei's was refused; the block ends on the refused step. Each waiting row links to Pending changes filtered to that person.", true),
+        f("result", "The result, with every fold · dark", "Five folds in the plan's order. The word says 10 of 11 because Xavier's was refused; the block ends on the refused step. Each waiting row links to Pending changes filtered to that person.", true),
         f("result-light", "The result · light", "The same in daylight.", true),
         f("result-all", "The common result · dark", "Everything reached or waits. The amber dot is still; the one next step is the fold's own link. The healthy dot would bloom only if every written row had reached.", true),
       ],

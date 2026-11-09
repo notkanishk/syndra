@@ -68,7 +68,7 @@ Rare. It needs a crash or a dropped connection in the seconds a call is out. Whe
 
    I recommend **a**. It's per-system, rare, and the system's page is where the operator would check.
 4. **The row:**
-   - What was asked (in words: "Set Ada's storage password").
+   - What was asked (in words: "Set Charlotte's storage password").
    - When.
    - Who asked.
    - The two settling verbs. I suggest "It applied" and "It didn't apply".

@@ -70,7 +70,7 @@
         <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border:2px solid var(--accent-line);border-radius:var(--radius-card)">
           <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="34px,24px">6</x-import><span style="font-size:14px;font-weight:600">One account at a time, you by default</span><span style="flex:1"></span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Owner, 3 Nov</span></div>
           <x-import component-from-global-scope="Syndra.ChoiceRow" selected="{{ true }}" on-toggle="{{ noop }}" single="{{ true }}" name="opt6" title="You, Kanishk Singh" description="Sign in to NetBird yourself to see it here." hint-size="100%,60px"></x-import>
-          <x-import component-from-global-scope="Syndra.ChoiceRow" selected="{{ false }}" on-toggle="{{ noop }}" single="{{ true }}" name="opt6" title="Ada Lovelace" note="Test person" hint-size="100%,48px"></x-import>
+          <x-import component-from-global-scope="Syndra.ChoiceRow" selected="{{ false }}" on-toggle="{{ noop }}" single="{{ true }}" name="opt6" title="Charlotte Flair" note="Test person" hint-size="100%,48px"></x-import>
           <p style="margin:0;font-size:13px;line-height:1.55;color:var(--muted)">There is no "everyone". Choosing another account while it runs moves the capture to them; the before-line says so and the end time stays.</p>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;padding:16px">
@@ -324,7 +324,7 @@
         <div style="padding:20px 22px 14px"><h2 class="type-card-title" style="margin:0">Preview</h2><p style="margin:4px 0 0;font-size:14px;line-height:1.5;color:var(--faint)">{{ previewLede }}</p></div>
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:0 22px 18px">
           <span style="font-size:13.5px;color:var(--faint)">for</span>
-          <span style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 5px;border:1px solid var(--line-strong);border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Avatar" name="Ada Lovelace" size="row" hint-size="28px,28px"></x-import><span style="font-size:14px">Ada Lovelace</span></span>
+          <span style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 5px;border:1px solid var(--line-strong);border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Avatar" name="Charlotte Flair" size="row" hint-size="28px,28px"></x-import><span style="font-size:14px">Charlotte Flair</span></span>
           <x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="120px,34px">Change person</x-import>
           <span style="flex:1"></span>
           <span style="font-size:12.5px;color:var(--faint)">Checked 09:54</span>
@@ -549,7 +549,7 @@
           <sc-for list="{{ dlgDo }}" as="d" hint-placeholder-count="2"><div style="display:flex;gap:10px;align-items:flex-start"><span aria-hidden="true" style="width:1.5ch;flex:none;display:flex;justify-content:center;padding-top:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import></span><span style="font-size:14.5px;line-height:1.5;text-wrap:pretty"><sc-for list="{{ d.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></div></sc-for>
           <p style="margin:0;padding-left:calc(1.5ch + 10px);font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">The new group appears in NetBird when the first of them signs in. Point NetBird's policies at it then: a group you make by hand in NetBird isn't joined.</p>
         </div>
-        <p style="margin:0;font-size:14px;line-height:1.5;color:var(--muted)">Your 4 test people: 3 change as the page shows, and Rohan Mehta doesn't.</p>
+        <p style="margin:0;font-size:14px;line-height:1.5;color:var(--muted)">Your 4 test people: 3 change as the page shows, and Liv Morgan doesn't.</p>
         <label style="display:flex;gap:10px;align-items:flex-start;font-size:14.5px;line-height:1.5"><x-import component-from-global-scope="Syndra.Checkbox" class-name="mt-1" checked="{{ false }}" on-change="{{ noop }}" hint-size="16px,16px"></x-import><span>I understand NetBird will move 12 people to a new group and take 4 out of <span class="type-mono">netbird-guests</span>.</span></label>
         <div style="display:flex;flex-direction:column;gap:6px">
           <x-import component-from-global-scope="Syndra.FieldLabel" hint-size="180px,18px">What changed, for History</x-import>
@@ -875,15 +875,15 @@ class Component extends DCLogic {
       return out;
     };
     const AUD = '["staff", "dj"]';
-    const audioTokens = [L("same", "roles", AUD), L("added", "custom_claims", '{"site": "makerspace"}'), L("added", "given_name", '"Ada"'), L("added", "bundles", '["Makers"]'), L("added", "role_ends", "{}"), L("added", "is_service_account", "false"), L("added", "printer_roles", '"staff,dj"')];
-    const audioNote = "Six claims join for Ada Lovelace; `roles` stays as it is. `is_admin` is left out until it has a role from Audio. A line marked + joins the token.";
+    const audioTokens = [L("same", "roles", AUD), L("added", "custom_claims", '{"site": "makerspace"}'), L("added", "given_name", '"Charlotte"'), L("added", "bundles", '["Makers"]'), L("added", "role_ends", "{}"), L("added", "is_service_account", "false"), L("added", "printer_roles", '"staff,dj"')];
+    const audioNote = "Six claims join for Charlotte Flair; `roles` stays as it is. `is_admin` is left out until it has a role from Audio. A line marked + joins the token.";
     const audioTests = [
-      { name: "Ada Lovelace", how: P("Given by hand"), now: commas([L("same", "roles", AUD)]), after: commas([L("same", "roles", AUD), L("added", "given_name", '"Ada"'), L("added", "printer_roles", '"staff,dj"')]), diff: P("6 claims join; `roles` stays.") },
-      { name: "Rohan Mehta", how: P("No roles in Audio"), now: commas([L("same", "roles", "[]")]), after: commas([L("same", "roles", "[]"), L("added", "given_name", '"Rohan"'), L("added", "printer_roles", '""')]), diff: P("6 claims join, with his roles empty.") },
+      { name: "Charlotte Flair", how: P("Given by hand"), now: commas([L("same", "roles", AUD)]), after: commas([L("same", "roles", AUD), L("added", "given_name", '"Charlotte"'), L("added", "printer_roles", '"staff,dj"')]), diff: P("6 claims join; `roles` stays.") },
+      { name: "Liv Morgan", how: P("No roles in Audio"), now: commas([L("same", "roles", "[]")]), after: commas([L("same", "roles", "[]"), L("added", "given_name", '"Liv"'), L("added", "printer_roles", '""')]), diff: P("6 claims join, with his roles empty.") },
     ];
     const audioChecks = (c4) => [
       ck("healthy", "Zitadel's settings for Audio-Dash let its claims through.", "Audio's roles are asserted, the access token is a JWT, and userinfo goes inside the ID token."),
-      ck("healthy", "Ada Lovelace holds 2 roles in Audio.", "Staff and DJ, as Zitadel shows them."),
+      ck("healthy", "Charlotte Flair holds 2 roles in Audio.", "Staff and DJ, as Zitadel shows them."),
       ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
       c4,
     ];
@@ -903,11 +903,11 @@ class Component extends DCLogic {
       ];
       incNote = (draft || v4) ? "3 of 7 included" : "4 of 7 included";
       const val = (draft || v4) ? NB4 : NB;
-      claims = [C({ key: "groups", kind: "Roles NetBird sees", kv: "roles", sent: "Sent as `" + val + "` for Ada Lovelace, and `[]` for anyone who holds none.", fmt: adv ? "array" : "", putInside: adv })];
+      claims = [C({ key: "groups", kind: "Roles NetBird sees", kv: "roles", sent: "Sent as `" + val + "` for Charlotte Flair, and `[]` for anyone who holds none.", fmt: adv ? "array" : "", putInside: adv })];
       if (draft) { saveOff = false; saveWarn = true; saveNote = "2 changes NetBird will act on. 12 people move from `netbird-staff` to a new group, `network-staff`, at their next sign-in, and 4 leave `netbird-guests`."; }
       checks = [
         ck("healthy", "Zitadel's settings for NetBird let its claims through.", "Network's roles are asserted, the access token is a JWT, and userinfo goes inside the ID token."),
-        ck("healthy", "Ada Lovelace holds 2 roles in Network.", "Staff and Admins, as Zitadel shows them."),
+        ck("healthy", "Charlotte Flair holds 2 roles in Network.", "Staff and Admins, as Zitadel shows them."),
         ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
         ck("healthy", "What NetBird is told applies, version " + (v4 ? "4" : "3") + ".", "It makes `groups` from " + (v4 ? "3" : "4") + " of Network's 7 roles, in NetBird's words."),
       ];
@@ -918,7 +918,7 @@ class Component extends DCLogic {
         checks[3] = ck("healthy", "Your draft of what NetBird is told applies.", "Not saved yet. Staff becomes `network-staff`, and Guests is left out.");
         c5text = "Zitadel would receive this once you save:";
         tokenLines = [L("removed", "groups", NB), L("added", "groups", NB4)];
-        tokenNote = "One difference for Ada Lovelace: `netbird-staff` becomes `network-staff`, so NetBird moves her to a new group. A line marked − leaves the token; a line marked + joins it.";
+        tokenNote = "One difference for Charlotte Flair: `netbird-staff` becomes `network-staff`, so NetBird moves her to a new group. A line marked − leaves the token; a line marked + joins it.";
       }
       if (landsFail) {
         checks[0] = ck("danger", "Zitadel's settings for NetBird keep its claims out of the access token, where NetBird reads them.", "NetBird's token type in Zitadel is Bearer. Only a JWT access token carries claims.",
@@ -930,18 +930,18 @@ class Component extends DCLogic {
       if (draft) {
         editing = true;
         testRows = [
-          { name: "Ada Lovelace", how: P(how.ada), nowEmpty: false, now: commas([L("same", "groups", NB)]), after: commas([L("added", "groups", NB4)]), diff: P("`netbird-staff` becomes `network-staff`.") },
-          { name: "Aanya Rao", how: P(how.aanya), nowEmpty: false, now: commas([L("same", "groups", '["netbird-members", "netbird-guests"]')]), after: commas([L("added", "groups", '["netbird-members"]')]), diff: P("Leaves `netbird-guests`.") },
-          { name: "Grace Hopper", how: P(how.grace), nowEmpty: false, now: commas([L("same", "groups", '["netbird-staff"]')]), after: commas([L("added", "groups", '["network-staff"]')]), diff: P("`netbird-staff` becomes `network-staff`.") },
-          { name: "Rohan Mehta", how: P(how.rohan), nowEmpty: false, now: commas([L("same", "groups", "[]")]), after: commas([L("same", "groups", "[]")]), diff: P("None. He holds no roles in Network.") },
+          { name: "Charlotte Flair", how: P(how.ada), nowEmpty: false, now: commas([L("same", "groups", NB)]), after: commas([L("added", "groups", NB4)]), diff: P("`netbird-staff` becomes `network-staff`.") },
+          { name: "Roman Reigns", how: P(how.aanya), nowEmpty: false, now: commas([L("same", "groups", '["netbird-members", "netbird-guests"]')]), after: commas([L("added", "groups", '["netbird-members"]')]), diff: P("Leaves `netbird-guests`.") },
+          { name: "Sami Zayn", how: P(how.grace), nowEmpty: false, now: commas([L("same", "groups", '["netbird-staff"]')]), after: commas([L("added", "groups", '["network-staff"]')]), diff: P("`netbird-staff` becomes `network-staff`.") },
+          { name: "Liv Morgan", how: P(how.rohan), nowEmpty: false, now: commas([L("same", "groups", "[]")]), after: commas([L("same", "groups", "[]")]), diff: P("None. He holds no roles in Network.") },
         ];
       } else {
         const g = (s) => commas([L("same", "groups", s)]);
         testRows = [
-          { name: "Ada Lovelace", how: P(how.ada), now: g(v4 ? NB4 : NB), tone: "healthy", word: "All pass" },
-          { name: "Aanya Rao", how: P(how.aanya), now: g(v4 ? '["netbird-members"]' : '["netbird-members", "netbird-guests"]'), tone: "healthy", word: "All pass" },
-          { name: "Grace Hopper", how: P(how.grace), now: g(v4 ? '["network-staff"]' : '["netbird-staff"]'), tone: "healthy", word: "All pass" },
-          { name: "Rohan Mehta", how: P(how.rohan), now: g("[]"), tone: "neutral", word: "No roles" },
+          { name: "Charlotte Flair", how: P(how.ada), now: g(v4 ? NB4 : NB), tone: "healthy", word: "All pass" },
+          { name: "Roman Reigns", how: P(how.aanya), now: g(v4 ? '["netbird-members"]' : '["netbird-members", "netbird-guests"]'), tone: "healthy", word: "All pass" },
+          { name: "Sami Zayn", how: P(how.grace), now: g(v4 ? '["network-staff"]' : '["netbird-staff"]'), tone: "healthy", word: "All pass" },
+          { name: "Liv Morgan", how: P(how.rohan), now: g("[]"), tone: "neutral", word: "No roles" },
         ];
         if (landsFail) testRows = testRows.map((r) => ({ ...r, tone: "danger", word: "Fails check 1" }));
       }
@@ -968,26 +968,26 @@ class Component extends DCLogic {
       tplCaption = "Supabase keeps these in `user_metadata`, which the signed-in person can edit. Don't trust them for row-level security as they arrive; the template says how.";
       roles = [R("Analyst", "analyst", "analyst", true), R("Editor", "editor", "editor", true), R("Owner", "owner", "owner", true), R("Viewer", "viewer", "viewer", true)];
       incNote = "4 of 4 included";
-      const obj = '{"custom_claims": {"groups": ["analyst", "editor"], "given_name": "Ada", "family_name": "Lovelace"}}';
+      const obj = '{"custom_claims": {"groups": ["analyst", "editor"], "given_name": "Charlotte", "family_name": "Lovelace"}}';
       claims = [
-        C({ parent: "custom_claims", key: "groups", kind: "Roles Supabase sees", kv: "roles", sent: "Sent as `" + obj + "` for Ada Lovelace, with `\"groups\": []` for anyone who holds none." }),
-        C({ parent: "custom_claims", key: "given_name", kind: "Given name", kv: "given_name", sent: "Sent as `\"Ada\"` for Ada Lovelace, inside the same object." }),
-        C({ parent: "custom_claims", key: "family_name", kind: "Family name", kv: "family_name", sent: "Sent as `\"Lovelace\"` for Ada Lovelace, inside the same object." }),
+        C({ parent: "custom_claims", key: "groups", kind: "Roles Supabase sees", kv: "roles", sent: "Sent as `" + obj + "` for Charlotte Flair, with `\"groups\": []` for anyone who holds none." }),
+        C({ parent: "custom_claims", key: "given_name", kind: "Given name", kv: "given_name", sent: "Sent as `\"Charlotte\"` for Charlotte Flair, inside the same object." }),
+        C({ parent: "custom_claims", key: "family_name", kind: "Family name", kv: "family_name", sent: "Sent as `\"Lovelace\"` for Charlotte Flair, inside the same object." }),
       ];
       landsValue = "The ID token and userinfo"; landsNote = "Supabase reads only the ID token. Set by the template."; landsKey = "idtoken";
       checks = [
         ck("healthy", "Zitadel's settings for Supabase let its claims through.", "Data's roles are asserted, and userinfo goes inside the ID token. Supabase doesn't read the access token, so its type doesn't matter."),
-        ck("healthy", "Ada Lovelace holds 2 roles in Data.", "Analyst and Editor, as Zitadel shows them."),
+        ck("healthy", "Charlotte Flair holds 2 roles in Data.", "Analyst and Editor, as Zitadel shows them."),
         ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
         ck("healthy", "What Supabase is told applies, version 3.", "It makes one object, `custom_claims`, holding `groups`, `given_name` and `family_name`."),
       ];
-      tokenLines = [L("same", "custom_claims", '{"groups": ["analyst", "editor"], "given_name": "Ada", "family_name": "Lovelace"}')];
+      tokenLines = [L("same", "custom_claims", '{"groups": ["analyst", "editor"], "given_name": "Charlotte", "family_name": "Lovelace"}')];
       tokenNote = "Sent in the ID token and userinfo. Supabase keeps it in `user_metadata.custom_claims`, where she can edit it, so don't trust it for row-level security as it arrives.";
       const cc = (g) => commas([L("same", "custom_claims", '{"groups": ' + g + ', …}')]);
       testRows = [
-        { name: "Ada Lovelace", how: P("Given by hand"), now: cc('["analyst", "editor"]'), tone: "healthy", word: "All pass" },
-        { name: "Aanya Rao", how: P("From the [[Analysts]] bundle"), now: cc('["analyst"]'), tone: "healthy", word: "All pass" },
-        { name: "Rohan Mehta", how: P("No roles in Data"), now: cc("[]"), tone: "neutral", word: "No roles" },
+        { name: "Charlotte Flair", how: P("Given by hand"), now: cc('["analyst", "editor"]'), tone: "healthy", word: "All pass" },
+        { name: "Roman Reigns", how: P("From the [[Analysts]] bundle"), now: cc('["analyst"]'), tone: "healthy", word: "All pass" },
+        { name: "Liv Morgan", how: P("No roles in Data"), now: cc("[]"), tone: "neutral", word: "No roles" },
       ];
       contract = [{ key: "custom_claims", type: P("An object holding `groups`, a list of text, in the ID token"), tone: "healthy", verdict: "Matches", hasWhy: false, why: [] }];
       history = [
@@ -1005,27 +1005,27 @@ class Component extends DCLogic {
       incNote = "4 of 4 included · Syndra's words";
       laterNote = "Included. Inventory reads every role."; laterKey = "in";
       claims = [
-        C({ key: "roles", kind: "Roles Inventory sees", kv: "roles", fmt: "array", putInside: true, sent: "Sent as `[\"staff\", \"trained\"]` for Ada Lovelace, and `[]` for anyone who holds none." }),
-        C({ key: "is_admin", kind: "Yes if they hold a role", kv: "if_role", chips: ["Admin"], putInside: true, sent: "Sent as `false` for Ada Lovelace: she doesn't hold Admin." }),
+        C({ key: "roles", kind: "Roles Inventory sees", kv: "roles", fmt: "array", putInside: true, sent: "Sent as `[\"staff\", \"trained\"]` for Charlotte Flair, and `[]` for anyone who holds none." }),
+        C({ key: "is_admin", kind: "Yes if they hold a role", kv: "if_role", chips: ["Admin"], putInside: true, sent: "Sent as `false` for Charlotte Flair: she doesn't hold Admin." }),
         C({ parent: "custom_claims", key: "site", kind: "The same for everyone", kv: "static", type: "text", value: "makerspace", sent: "Sent as `{\"custom_claims\": {\"site\": \"makerspace\"}}` for everyone." }),
-        C({ key: "given_name", kind: "Given name", kv: "given_name", putInside: true, sent: "Sent as `\"Ada\"` for Ada Lovelace." }),
-        C({ key: "bundles", kind: "Bundles they hold", kv: "bundles", putInside: true, sent: "Sent as `[\"Makers\"]` for Ada Lovelace. Bundle names, so a rename reaches Inventory." }),
-        C({ key: "role_ends", kind: "Each role's end date", kv: "role_ends", putInside: true, sent: "Sent as `{\"trained\": \"2027-05-31\"}` for Ada Lovelace. Roles with no end are left out." }),
-        C({ key: "is_service_account", kind: "Is a service account", kv: "service_account", putInside: true, sent: "Sent as `false` for Ada Lovelace. Service accounts get `true`." }),
-        C({ key: "printer_roles", kind: "Roles Inventory sees", kv: "roles", fmt: "csv", putInside: true, sent: "Sent as `\"staff,trained\"` for Ada Lovelace.", warn: "No app Syndra has a template for reads roles as text. NetBird would make one group called `netbird-staff,netbird-admins`. Use this only if Inventory's own code splits it." }),
+        C({ key: "given_name", kind: "Given name", kv: "given_name", putInside: true, sent: "Sent as `\"Charlotte\"` for Charlotte Flair." }),
+        C({ key: "bundles", kind: "Bundles they hold", kv: "bundles", putInside: true, sent: "Sent as `[\"Makers\"]` for Charlotte Flair. Bundle names, so a rename reaches Inventory." }),
+        C({ key: "role_ends", kind: "Each role's end date", kv: "role_ends", putInside: true, sent: "Sent as `{\"trained\": \"2027-05-31\"}` for Charlotte Flair. Roles with no end are left out." }),
+        C({ key: "is_service_account", kind: "Is a service account", kv: "service_account", putInside: true, sent: "Sent as `false` for Charlotte Flair. Service accounts get `true`." }),
+        C({ key: "printer_roles", kind: "Roles Inventory sees", kv: "roles", fmt: "csv", putInside: true, sent: "Sent as `\"staff,trained\"` for Charlotte Flair.", warn: "No app Syndra has a template for reads roles as text. NetBird would make one group called `netbird-staff,netbird-admins`. Use this only if Inventory's own code splits it." }),
       ];
       landsValue = "The access token and userinfo"; landsNote = "Both, as the Custom template sets it."; landsKey = "both";
       checks = [
         ck("healthy", "Zitadel's settings for Inventory let its claims through.", "Inventory's roles are asserted, the access token is a JWT, and userinfo goes inside the ID token."),
-        ck("healthy", "Ada Lovelace holds 2 roles in Inventory.", "Staff and Trained, as Zitadel shows them."),
+        ck("healthy", "Charlotte Flair holds 2 roles in Inventory.", "Staff and Trained, as Zitadel shows them."),
         ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
         ck("healthy", "What Inventory is told applies, version 5.", "It makes 8 claims; one sits inside `custom_claims`."),
       ];
-      tokenLines = [L("same", "roles", '["staff", "trained"]'), L("same", "is_admin", "false"), L("same", "custom_claims", '{"site": "makerspace"}'), L("same", "given_name", '"Ada"'), L("same", "bundles", '["Makers"]'), L("same", "role_ends", '{"trained": "2027-05-31"}'), L("same", "is_service_account", "false"), L("same", "printer_roles", '"staff,trained"')];
+      tokenLines = [L("same", "roles", '["staff", "trained"]'), L("same", "is_admin", "false"), L("same", "custom_claims", '{"site": "makerspace"}'), L("same", "given_name", '"Charlotte"'), L("same", "bundles", '["Makers"]'), L("same", "role_ends", '{"trained": "2027-05-31"}'), L("same", "is_service_account", "false"), L("same", "printer_roles", '"staff,trained"')];
       tokenNote = "Sent in the access token and userinfo, in the order of the rows. Inventory's own code reads these.";
       testRows = [
-        { name: "Ada Lovelace", how: P("From the [[Makers]] bundle"), now: commas([L("same", "roles", '["staff", "trained"]'), L("same", "is_admin", "false"), L("same", "printer_roles", '"staff,trained"')]), tone: "healthy", word: "All pass" },
-        { name: "Grace Hopper", how: P("Given by hand"), now: commas([L("same", "roles", '["inv-admin", "staff"]'), L("same", "is_admin", "true"), L("same", "printer_roles", '"inv-admin,staff"')]), tone: "healthy", word: "All pass" },
+        { name: "Charlotte Flair", how: P("From the [[Makers]] bundle"), now: commas([L("same", "roles", '["staff", "trained"]'), L("same", "is_admin", "false"), L("same", "printer_roles", '"staff,trained"')]), tone: "healthy", word: "All pass" },
+        { name: "Sami Zayn", how: P("Given by hand"), now: commas([L("same", "roles", '["inv-admin", "staff"]'), L("same", "is_admin", "true"), L("same", "printer_roles", '"inv-admin,staff"')]), tone: "healthy", word: "All pass" },
       ];
       contract = [
         { key: "roles", type: P("A list of text, in the access token"), tone: "healthy", verdict: "Matches", hasWhy: false, why: [] },
@@ -1046,15 +1046,15 @@ class Component extends DCLogic {
       landsValue = "Nowhere: this shape sends nothing"; landsNote = "Vaultwarden reads Zitadel's own `email`, `email_verified` and `preferred_username`.";
       checks = [
         ck("warn", "Zitadel lets anyone in the organisation sign in to Vaultwarden.", "The role check is off for Vault. Vaultwarden has no groups, so nothing else stops them.", { link: "Turn on the role check for Vault in Zitadel" }),
-        ck("healthy", "Ada Lovelace holds Member in Vault.", "As Zitadel shows it."),
+        ck("healthy", "Charlotte Flair holds Member in Vault.", "As Zitadel shows it."),
         ck("neutral", "Nothing to build for her.", "This shape sends nothing of its own."),
         ck("healthy", "The Sign-in only shape applies.", "It adds nothing; Zitadel's own claims do the work."),
       ];
       c5tone = "neutral"; c5text = "Zitadel receives no Syndra claims for her, on purpose."; tokenEmpty = true; tokenLines = [];
       tokenNote = "Vaultwarden reads Zitadel's own `email`, `email_verified` and `preferred_username`. That is all it needs.";
       testRows = [
-        { name: "Ada Lovelace", how: P("Given by hand"), nowEmpty: true, now: [], tone: "healthy", word: "All pass" },
-        { name: "Rohan Mehta", how: P("No roles in Vault"), nowEmpty: true, now: [], tone: "warn", word: "Can sign in" },
+        { name: "Charlotte Flair", how: P("Given by hand"), nowEmpty: true, now: [], tone: "healthy", word: "All pass" },
+        { name: "Liv Morgan", how: P("No roles in Vault"), nowEmpty: true, now: [], tone: "warn", word: "Can sign in" },
       ];
       contractNone = true; contractNoneText = "Nothing to note. Vaultwarden reads only Zitadel's own claims.";
       history = [
@@ -1072,14 +1072,14 @@ class Component extends DCLogic {
       incNote = "4 of 4 included · Syndra's words";
       hasNotCopied = true; notCopied = "Not in this project, so not copied: Admin (`inv-admin`), Trained (`trained`).";
       claims = [
-        C({ key: "roles", kind: "Roles Audio-Dash sees", kv: "roles", sent: "Sent as `" + AUD + "` for Ada Lovelace, and `[]` for anyone who holds none." }),
+        C({ key: "roles", kind: "Roles Audio-Dash sees", kv: "roles", sent: "Sent as `" + AUD + "` for Charlotte Flair, and `[]` for anyone who holds none." }),
         C({ key: "is_admin", kind: "Yes if they hold a role", kv: "if_role", chips: [], sent: "Left out of the draft until it has a role.", err: "Admin isn't in Audio. Choose a role from Audio, or remove this row." }),
         C({ parent: "custom_claims", key: "site", kind: "The same for everyone", kv: "static", type: "text", value: "makerspace", sent: "Sent as `{\"custom_claims\": {\"site\": \"makerspace\"}}` for everyone." }),
-        C({ key: "given_name", kind: "Given name", kv: "given_name", sent: "Sent as `\"Ada\"` for Ada Lovelace." }),
-        C({ key: "bundles", kind: "Bundles they hold", kv: "bundles", sent: "Sent as `[\"Makers\"]` for Ada Lovelace." }),
-        C({ key: "role_ends", kind: "Each role's end date", kv: "role_ends", sent: "Sent as `{}` for Ada Lovelace: none of her roles in Audio ends." }),
-        C({ key: "is_service_account", kind: "Is a service account", kv: "service_account", sent: "Sent as `false` for Ada Lovelace." }),
-        C({ key: "printer_roles", kind: "Roles Audio-Dash sees", kv: "roles", fmt: "csv", sent: "Sent as `\"staff,dj\"` for Ada Lovelace.", warn: "No app Syndra has a template for reads roles as text. Use this only if Audio-Dash's own code splits it." }),
+        C({ key: "given_name", kind: "Given name", kv: "given_name", sent: "Sent as `\"Charlotte\"` for Charlotte Flair." }),
+        C({ key: "bundles", kind: "Bundles they hold", kv: "bundles", sent: "Sent as `[\"Makers\"]` for Charlotte Flair." }),
+        C({ key: "role_ends", kind: "Each role's end date", kv: "role_ends", sent: "Sent as `{}` for Charlotte Flair: none of her roles in Audio ends." }),
+        C({ key: "is_service_account", kind: "Is a service account", kv: "service_account", sent: "Sent as `false` for Charlotte Flair." }),
+        C({ key: "printer_roles", kind: "Roles Audio-Dash sees", kv: "roles", fmt: "csv", sent: "Sent as `\"staff,dj\"` for Charlotte Flair.", warn: "No app Syndra has a template for reads roles as text. Use this only if Audio-Dash's own code splits it." }),
       ];
       landsValue = "The access token and userinfo"; landsNote = "Copied from Inventory.";
       saveOff = true; saveNote = "Fix `is_admin` to save.";
@@ -1096,11 +1096,11 @@ class Component extends DCLogic {
       const copyMode = !!nw.copy;
       newLede = app + " uses " + project + "'s default shape. Nobody has set one for " + project + ", so it's Syndra's built-in: `roles`, every role in Syndra's words, as a list, in the access token and userinfo.";
       dfWhat = "Every role in " + project + ", in Syndra's words";
-      dfSent = "Sent as `" + nw.dfVal + "` for Ada Lovelace, and `[]` for anyone who holds none.";
+      dfSent = "Sent as `" + nw.dfVal + "` for Charlotte Flair, and `[]` for anyone who holds none.";
       pickMode = copyMode ? "copy" : "template";
       checks = [
         ck("healthy", "Zitadel's settings for " + app + " let its claims through.", nw.c1),
-        ck("healthy", "Ada Lovelace holds " + (nw.roles.indexOf(" and ") >= 0 ? "2 roles" : nw.roles) + " in " + project + ".", nw.roles + ", as Zitadel shows " + (nw.roles.indexOf(" and ") >= 0 ? "them." : "it.")),
+        ck("healthy", "Charlotte Flair holds " + (nw.roles.indexOf(" and ") >= 0 ? "2 roles" : nw.roles) + " in " + project + ".", nw.roles + ", as Zitadel shows " + (nw.roles.indexOf(" and ") >= 0 ? "them." : "it.")),
         ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
       ];
       c5text = "Zitadel would receive this once you save:";
@@ -1127,13 +1127,13 @@ class Component extends DCLogic {
         previewLede = "What " + app + " receives now, on " + project + "'s default, and from the " + pick.title + " template as a draft. Nothing changes until you save.";
         checks.push(ck("healthy", "The " + pick.title + " template applies, as a draft.", "Not saved yet. " + app + " gets " + project + "'s default until you save."));
         const k = nw.key;
-        if (k === "roles") { tokenLines = [L("same", "roles", nw.dfVal)]; tokenNote = "Nothing changes for Ada Lovelace yet: Custom sends what the default sends. It's a starting point to change."; }
-        else if (k) { tokenLines = [L("removed", "roles", nw.dfVal), L("added", k, nw.sample)]; tokenNote = "One difference for Ada Lovelace: `roles` becomes `" + k + "`. A line marked − leaves the token; a line marked + joins it."; }
+        if (k === "roles") { tokenLines = [L("same", "roles", nw.dfVal)]; tokenNote = "Nothing changes for Charlotte Flair yet: Custom sends what the default sends. It's a starting point to change."; }
+        else if (k) { tokenLines = [L("removed", "roles", nw.dfVal), L("added", k, nw.sample)]; tokenNote = "One difference for Charlotte Flair: `roles` becomes `" + k + "`. A line marked − leaves the token; a line marked + joins it."; }
         else { c5text = "Zitadel would receive no Syndra claims for her once you save, on purpose:"; c5tone = "neutral"; tokenLines = [L("removed", "roles", nw.dfVal)]; tokenNote = "One difference: `roles` leaves the token. " + app + " reads Zitadel's own claims; who may sign in is Zitadel's role check."; }
         const aft = (v) => k === "roles" ? commas([L("same", "roles", v)]) : k ? commas([L("removed", "roles", v), L("added", k, v)]) : commas([L("removed", "roles", v)]);
         testRows = [
-          { name: "Ada Lovelace", how: P("Given by hand"), now: commas([L("same", "roles", nw.dfVal)]), after: aft(nw.dfVal), diff: P(k === "roles" ? "None yet." : k ? "`roles` becomes `" + k + "`." : "`roles` leaves the token.") },
-          { name: "Rohan Mehta", how: P("No roles in " + project), now: commas([L("same", "roles", "[]")]), after: aft("[]"), diff: P(k === "roles" ? "None yet." : k ? "`roles` becomes `" + k + "`, still empty." : "`roles` leaves the token.") },
+          { name: "Charlotte Flair", how: P("Given by hand"), now: commas([L("same", "roles", nw.dfVal)]), after: aft(nw.dfVal), diff: P(k === "roles" ? "None yet." : k ? "`roles` becomes `" + k + "`." : "`roles` leaves the token.") },
+          { name: "Liv Morgan", how: P("No roles in " + project), now: commas([L("same", "roles", "[]")]), after: aft("[]"), diff: P(k === "roles" ? "None yet." : k ? "`roles` becomes `" + k + "`, still empty." : "`roles` leaves the token.") },
         ];
         contractNoneText = "Nothing noted yet. Starting from a template notes what " + app + " reads.";
       }
@@ -1143,19 +1143,19 @@ class Component extends DCLogic {
     const dbgOff = !(dbgOn || dbgEmptyS || dbgEndedS);
     const SI = (time, who, asked, ans, tone, word, open) => ({ time, who, asked, ans: P(ans), tone, word, open: !!open, chev: open ? "⌄" : "›" });
     const ada = [
-      SI("10:09:14", "Ada Lovelace", "Access token", "`groups`, 2 values", "healthy", "All pass", dbgOpen),
-      SI("10:09:13", "Ada Lovelace", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
-      SI("10:08:02", "Ada Lovelace", "Access token", "Nothing: NetBird asked for two projects", "danger", "Refused"),
-      SI("10:07:30", "Ada Lovelace", "Access token", "`groups`, 2 values", "healthy", "All pass"),
-      SI("10:07:29", "Ada Lovelace", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:09:14", "Charlotte Flair", "Access token", "`groups`, 2 values", "healthy", "All pass", dbgOpen),
+      SI("10:09:13", "Charlotte Flair", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:08:02", "Charlotte Flair", "Access token", "Nothing: NetBird asked for two projects", "danger", "Refused"),
+      SI("10:07:30", "Charlotte Flair", "Access token", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:07:29", "Charlotte Flair", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
     ];
-    // Ended: switched to Aanya Rao at 10:12, so two people share the list.
+    // Ended: switched to Roman Reigns at 10:12, so two people share the list.
     const signins = dbgEndedS ? [
-      SI("10:19:40", "Aanya Rao", "Access token", "`groups`, 2 values", "healthy", "All pass"),
-      SI("10:19:39", "Aanya Rao", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
-      SI("10:15:02", "Aanya Rao", "Access token", "`groups`, 2 values", "healthy", "All pass"),
-      SI("10:15:01", "Aanya Rao", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
-      SI("10:13:22", "Aanya Rao", "Access token", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:19:40", "Roman Reigns", "Access token", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:19:39", "Roman Reigns", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:15:02", "Roman Reigns", "Access token", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:15:01", "Roman Reigns", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:13:22", "Roman Reigns", "Access token", "`groups`, 2 values", "healthy", "All pass"),
     ].concat(ada) : ada;
     const reqJson = J([
       '{',
@@ -1164,10 +1164,10 @@ class Component extends DCLogic {
       '  "user": {',
       '    "id": "298113054121345501",',
       '    "human": {',
-      '      "first_name": "Ada",',
+      '      "first_name": "Charlotte",',
       '      "last_name": "Lovelace",',
-      '      "display_name": "Ada Lovelace",',
-      '      "email": "ada@example.edu",',
+      '      "display_name": "Charlotte Flair",',
+      '      "email": "charlotte@example.edu",',
       '      "is_email_verified": true',
       '    }',
       '  },',
@@ -1187,16 +1187,16 @@ class Component extends DCLogic {
     const rebuiltJson = J([
       '{',
       '~  "sub": "298113054121345501",',
-      '~  "email": "ada@example.edu",',
+      '~  "email": "charlotte@example.edu",',
       '~  "email_verified": true,',
-      '~  "name": "Ada Lovelace",',
+      '~  "name": "Charlotte Flair",',
       '~  "preferred_username": "ada",',
       '  "groups": ["netbird-staff", "netbird-admins"]',
       '}',
     ]);
     const dbgChecks = [
       { tone: "healthy", text: P("Zitadel's settings for NetBird let its claims through.") },
-      { tone: "healthy", text: P("Ada Lovelace held 2 roles in Network: Staff and Admins.") },
+      { tone: "healthy", text: P("Charlotte Flair held 2 roles in Network: Staff and Admins.") },
       { tone: "healthy", text: P("Her claims were ready, built at 09:52.") },
       { tone: "healthy", text: P("What NetBird is told applied, version 3.") },
       { tone: "healthy", text: P("Syndra answered with `groups`.") },
@@ -1261,7 +1261,7 @@ class Component extends DCLogic {
       dfKey, dfWhat, dfSent: P(dfSent), pickMode, pickOptions: [{ value: "template", label: "Start from a template" }, { value: "copy", label: "Copy another app's shape" }],
       hasNotCopied, notCopied: P(notCopied), historyNoneText,
       copyOpen, copyList, copyLede, copyFoot, copyVerb,
-      dbgCanSwitch: dbgOn || dbgEmptyS, dbgTitle: dbgSwitch ? "Change whose sign-ins" : "Turn on debug mode", dbgConfirm: dbgSwitch ? "Switch to Aanya Rao" : "Turn on debug mode",
+      dbgCanSwitch: dbgOn || dbgEmptyS, dbgTitle: dbgSwitch ? "Change whose sign-ins" : "Turn on debug mode", dbgConfirm: dbgSwitch ? "Switch to Roman Reigns" : "Turn on debug mode",
       incNote, hasRolesTable, noRolesClaim, roles, sortRole: { key: "role", dir: 1 },
       laterNote, laterKey, laterOptions: [{ value: "out", label: "Left out" }, { value: "in", label: "Included" }],
       noClaims, claims,
@@ -1273,14 +1273,14 @@ class Component extends DCLogic {
       previewLede, checks, c5tone, c5text: P(c5text), tokenEmpty, tokenLines: commas(tokenLines), tokenNote: P(tokenNote),
       dbgOff, dbgSeat: !dbgOff,
       dbgTone: dbgEndedS ? "neutral" : "healthy", dbgWord: dbgEndedS ? "Ended" : "On",
-      dbgNote: dbgEndedS ? "At 10:21, after 15 minutes. Switched to Aanya Rao at 10:12." : dbgEmptyS ? "Your sign-ins · ends 10:21, 15 min left" : "Ada Lovelace's sign-ins · ends 10:21, 14 min left",
+      dbgNote: dbgEndedS ? "At 10:21, after 15 minutes. Switched to Roman Reigns at 10:12." : dbgEmptyS ? "Your sign-ins · ends 10:21, 15 min left" : "Charlotte Flair's sign-ins · ends 10:21, 14 min left",
       dbgVerb: dbgOff ? "Turn on debug mode" : dbgEndedS ? "Turn on again" : "Turn off",
       dbgLast: "Last on 2 Nov, for 15 minutes, by Kanishk Singh.",
       dbgList: !dbgOff, dbgEmpty: dbgEmptyS, dbgRows: dbgOn || dbgEndedS, dbgMore: dbgEndedS, dbgEnded: dbgEndedS,
       dbgLive: dbgEndedS ? "Seen while it was on · newest on top" : "Live · newest on top", dbgLiveTone: dbgEndedS ? "neutral" : "healthy",
       dbgHasWaiting: dbgOn, dbgWaiting: dbgOpen ? "1 new sign-in waits until you close this one." : "2 new sign-ins wait until you move off the list.",
       noSections: [], signins,
-      reqLead: P("Zitadel asked for NetBird's access-token claims for Ada Lovelace, listing 2 roles in Network."),
+      reqLead: P("Zitadel asked for NetBird's access-token claims for Charlotte Flair, listing 2 roles in Network."),
       ansLead: P("Syndra added 1 claim, in 4 ms, from her claims built at 09:52."),
       reqJson, ansJson, rebuiltJson, dbgChecks,
       notEditing: !editing, editing, beforeHead, testRows: testRows.map((r) => ({ nowEmpty: false, after: [], diff: [], tone: "neutral", word: "", ...r })),
@@ -1293,15 +1293,15 @@ class Component extends DCLogic {
       dlgFoot: saved ? undefined : "16 people's groups change at their next sign-in. Anyone signed in now keeps the old ones until then.",
       tplOpen: !!tplId, sheet,
       dbgDlg, dbgForm: !dbgDone, dbgDone,
-      dbgDlgLede: dbgDone ? undefined : dbgSwitch ? "Debug mode captures one account at a time. It's showing Ada Lovelace's sign-ins to NetBird until 10:21." : "See one account's sign-ins to NetBird live: what Zitadel asked, what Syndra answered, and the five checks. It turns itself off after 15 minutes.",
+      dbgDlgLede: dbgDone ? undefined : dbgSwitch ? "Debug mode captures one account at a time. It's showing Charlotte Flair's sign-ins to NetBird until 10:21." : "See one account's sign-ins to NetBird live: what Zitadel asked, what Syndra answered, and the five checks. It turns itself off after 15 minutes.",
       dbgScopes: [
         { title: "You, Kanishk Singh", sel: !dbgSwitch, locked: false, lockedNote: "", desc: "Sign in to NetBird yourself to see it here.", note: "" },
-        { title: "Ada Lovelace", sel: false, locked: dbgSwitch, lockedNote: "Captured now", desc: "", note: "Test person" },
-        { title: "Aanya Rao", sel: dbgSwitch, locked: false, lockedNote: "", desc: "", note: "Test person" },
-        { title: "Grace Hopper", sel: false, locked: false, lockedNote: "", desc: "", note: "Test person" },
-        { title: "Rohan Mehta", sel: false, locked: false, lockedNote: "", desc: "", note: "Test person" },
+        { title: "Charlotte Flair", sel: false, locked: dbgSwitch, lockedNote: "Captured now", desc: "", note: "Test person" },
+        { title: "Roman Reigns", sel: dbgSwitch, locked: false, lockedNote: "", desc: "", note: "Test person" },
+        { title: "Sami Zayn", sel: false, locked: false, lockedNote: "", desc: "", note: "Test person" },
+        { title: "Liv Morgan", sel: false, locked: false, lockedNote: "", desc: "", note: "Test person" },
       ],
-      dbgFoot: dbgDone ? undefined : dbgSwitch ? "Moves the capture to Aanya Rao from now on. It still ends at 10:21. Ada Lovelace's sign-ins seen so far stay in the list. Change history records the switch." : "Ends at 10:21, 15 minutes from now. While it runs, choosing another account moves the capture to them. Change history records each.",
+      dbgFoot: dbgDone ? undefined : dbgSwitch ? "Moves the capture to Roman Reigns from now on. It still ends at 10:21. Charlotte Flair's sign-ins seen so far stay in the list. Change history records the switch." : "Ends at 10:21, 15 minutes from now. While it runs, choosing another account moves the capture to them. Change history records each.",
 
       tallFrames: [
         f("netbird", "NetBird · Basic · every check passes", "The calm first screen. The template line and its one truth, the roles table (4 of 7 in NetBird's words), one claim row, Lands in as read-only text, Save. Beside it the trail ending in the token. Debug mode is one quiet row. Then test people, what NetBird reads, History."),
@@ -1312,9 +1312,9 @@ class Component extends DCLogic {
         f("supabase", "Supabase · custom OIDC provider", "A nested claim: custom_claims › groups, with given_name and family_name added inside the same object (2 changes since the template). Lands in the ID token and userinfo. The caption says plainly that user_metadata can't be trusted for row-level security."),
         f("rename", "Editing roles · a rename and a removal", "Staff becomes network-staff and Guests is left out. Each row says what it was; the before-line turns amber and names what NetBird will do; the preview shows − and + lines; test people show Now, After and Difference."),
         f("rows", "Claim rows · Advanced · every kind", "Inventory on Custom. One row form for a roles claim, Yes if they hold a role, a fixed value inside custom_claims, a given name, bundles, role end dates, service account, and roles sent as text with its warning."),
-        f("debug-on", "Debug mode · on, live", "One account, Ada Lovelace, for 15 minutes. Change account and Turn off in the seat. Newest on top; two new sign-ins wait while the pointer is on the list. One verdict is a refused cross-project request."),
+        f("debug-on", "Debug mode · on, live", "One account, Charlotte Flair, for 15 minutes. Change account and Turn off in the seat. Newest on top; two new sign-ins wait while the pointer is on the list. One verdict is a refused cross-project request."),
         f("debug-empty", "Debug mode · on, nothing yet", "Only your sign-ins. A breathing lime dot and one sentence; no column headings until something arrives."),
-        f("debug-ended", "Debug mode · ended", "It turned itself off at 10:21. It was switched to Aanya Rao at 10:12, so both appear. What it saw stays readable for an hour, with the long-list row; Turn on again."),
+        f("debug-ended", "Debug mode · ended", "It turned itself off at 10:21. It was switched to Roman Reigns at 10:12, so both appear. What it saw stays readable for an hour, with the long-list row; Turn on again."),
       ],
       openFrames: [f("debug-open", "Debug mode · one sign-in opened", "Opened in place: what Zitadel sent and what Syndra answered as raw JSON (her email shows; the signature never does), the five checks for that sign-in, and the claims rebuilt, labelled as not the signed token. A new arrival waits until it's closed.")],
       desktopFrames: [
@@ -1322,7 +1322,7 @@ class Component extends DCLogic {
         f("save", "Save · a change NetBird will act on", "What changes, line by line; What NetBird will do, in amber; why to wait for the group to appear; the test people; I understand (Save off until ticked); a note for History."),
         f("saved", "Saved · the sheet's own result", "Dot, Saved, version 4, and what to do in NetBird next. Close."),
         f("debug-turn-on", "Turn on debug mode · one account", "One account at a time, you preselected; test people, or someone else through the person form. No everyone (owner, 3 Nov). The before-line names the end time, that choosing another account moves the capture, and the audit."),
-        f("debug-switch", "Change whose sign-ins · while it runs", "The same sheet. Ada is ticked grey, Captured now; Aanya is chosen. The before-line says the capture moves to her, the end stays 10:21, and Ada's sign-ins stay in the list."),
+        f("debug-switch", "Change whose sign-ins · while it runs", "The same sheet. Charlotte is ticked grey, Captured now; Roman is chosen. The before-line says the capture moves to her, the end stays 10:21, and Charlotte's sign-ins stay in the list."),
         f("copy-later", "Copy another app's shape · later", "From the claims part of NetBird clients. In Network first, then other projects. NetBird is chosen: 1 claim and all 7 role words copy, and the two aren't linked."),
         f("debug-on-result", "Debug mode · on, the sheet's result", "On, with its bloom once; until when, for whom; where the sign-ins appear."),
         f("vault", "Sign-in only · Vaultwarden", "No roles claim, so the roles table is NotOpenYet. The caption and check 1 say who may sign in is Zitadel's role check, which is off, with the fix as a link."),

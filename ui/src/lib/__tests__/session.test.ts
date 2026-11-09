@@ -40,7 +40,7 @@ describe("getDemoUser", () => {
   it("returns a known user by ID", () => {
     const user = getDemoUser("dev_admin");
     expect(user).not.toBeNull();
-    expect(user!.name).toBe("Alice Rivera");
+    expect(user!.name).toBe("Becky Lynch");
     expect(user!.role).toBe("admin");
     expect(user!.sessionType).toBe("demo");
   });
@@ -183,8 +183,8 @@ describe("getSession", () => {
       accessToken: "tok",
       userId: "u1",
       role: "user",
-      name: "Alice",
-      email: "alice@x.test",
+      name: "Becky",
+      email: "becky@x.test",
       title: "Director",
       team: "Ops",
       status: "active",
@@ -222,8 +222,8 @@ describe("getSession", () => {
       accessToken: "tok",
       userId: "u1",
       role: "user",
-      name: "Alice",
-      email: "alice@x.test",
+      name: "Becky",
+      email: "becky@x.test",
       title: "Director",
       team: "Ops",
       status: "active",

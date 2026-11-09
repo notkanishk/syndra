@@ -293,7 +293,7 @@
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:18px 22px 14px">
         <h2 class="type-card-title" style="margin:0">Preview</h2>
         <span style="font-size:13.5px;color:var(--faint)">for</span>
-        <span style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 6px;border:1px solid var(--line-strong);border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Avatar" name="Ada Lovelace" size="row" hint-size="28px,28px"></x-import><x-import component-from-global-scope="Syndra.Select" aria-label="Preview for" value="ada" on-change="{{ noop }}" class-name="w-[160px] border-0 px-1 py-0 text-[14px]" hint-size="160px,24px"><option value="ada">Ada Lovelace</option></x-import></span>
+        <span style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 6px;border:1px solid var(--line-strong);border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Avatar" name="Charlotte Flair" size="row" hint-size="28px,28px"></x-import><x-import component-from-global-scope="Syndra.Select" aria-label="Preview for" value="ada" on-change="{{ noop }}" class-name="w-[160px] border-0 px-1 py-0 text-[14px]" hint-size="160px,24px"><option value="ada">Charlotte Flair</option></x-import></span>
         <span style="flex:1"></span>
         <span style="font-size:12.5px;color:var(--faint)">Checked 10:06</span>
         <x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="110px,32px">Check again</x-import>
@@ -350,7 +350,7 @@
         <div style="flex:1 1 220px;min-width:0"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100px,18px">Inside</x-import><x-import component-from-global-scope="Syndra.Select" aria-label="Inside" value="x" on-change="{{ noop }}" hint-size="100%,34px"><option value="x">Nothing: top level</option></x-import></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
-        <span style="font-size:13px;color:var(--faint)">For Ada Lovelace</span>
+        <span style="font-size:13px;color:var(--faint)">For Charlotte Flair</span>
         <x-import component-from-global-scope="Syndra.TokenBlock" lines="{{ sheetToken }}" hint-size="100%,50px"></x-import>
       </div>
     </div>
@@ -423,7 +423,7 @@ class Component extends DCLogic {
         sub: "Its `groups` is the same list of roles.",
         top: [row("Claim name", { hasInput: true, inputVal: "custom_claims" })],
         hasSent: true,
-        sent: P("Sent as `{\"family_name\": \"Lovelace\", \"given_name\": \"Ada\", \"groups\": [\"admin\", \"staff\"], \"name\": \"Ada Lovelace\"}` for Ada Lovelace."),
+        sent: P("Sent as `{\"family_name\": \"Lovelace\", \"given_name\": \"Charlotte\", \"groups\": [\"admin\", \"staff\"], \"name\": \"Charlotte Flair\"}` for Charlotte Flair."),
         hasFoot: true, addInside: true, removeText: "Remove custom_claims", removeAria: "Remove custom_claims and the 4 claims inside it",
       }),
     ];
@@ -438,7 +438,7 @@ class Component extends DCLogic {
         row("Inside", { hasSelect: true, selectText: "Nothing: top level" }),
       ],
       hasSent: true,
-      sent: P("Sent as `true` for Ada Lovelace, who holds Admins, and `false` for anyone who doesn't."),
+      sent: P("Sent as `true` for Charlotte Flair, who holds Admins, and `false` for anyone who doesn't."),
       hasFoot: true, removeText: "Remove", removeAria: "Remove is_admin",
     }));
     lines.forEach((l, i) => { l.rule = i === 0 ? "0" : DIV; });
@@ -504,7 +504,7 @@ class Component extends DCLogic {
 
     // ------------------------------------------------ the preview
     const G = '["admin", "staff"]', G2 = '["admin", "netbird-staff"]';
-    const CC = (g) => '{"family_name": "Lovelace", "given_name": "Ada", "groups": ' + g + ', "name": "Ada Lovelace"}';
+    const CC = (g) => '{"family_name": "Lovelace", "given_name": "Charlotte", "groups": ' + g + ', "name": "Charlotte Flair"}';
     const T = (key, val, mark) => ({ key, text: '"' + key + '": ' + val, mark: mark || " " });
     const tokenLines = renamed
       ? [T("groups", G, "−"), T("groups", G2, "+"), T("custom_claims", CC(G), "−"), T("custom_claims", CC(G2), "+")]
@@ -512,9 +512,9 @@ class Component extends DCLogic {
         ? [T("groups", G), T("custom_claims", CC(G)), T("is_admin", "true", "+")]
         : [T("groups", G), T("custom_claims", CC(G))];
     const tokenFoot = P(renamed
-      ? "One difference for Ada Lovelace: `staff` becomes `netbird-staff`, in both claims."
+      ? "One difference for Charlotte Flair: `staff` becomes `netbird-staff`, in both claims."
       : added
-        ? "One difference for Ada Lovelace: `is_admin` joins, as `true`."
+        ? "One difference for Charlotte Flair: `is_admin` joins, as `true`."
         : "Zitadel adds `sub`, `email`, `name` and `preferred_username` itself.");
 
     // ------------------------------------------------ header and tools
@@ -557,7 +557,7 @@ class Component extends DCLogic {
         "One form for adding and editing, so there is less to learn. It suits someone who knows the key the app reads.",
         "It is still a form, and it starts blank. Guessing from the name surprises people as often as it helps. It brings back the field-and-select row the owner called messy."),
       O("c", "A sheet with a live preview", "add-c", 760, -340, false,
-        "Add a claim opens Modal md. You choose what it carries from ChoiceRows (Zitadel's own claims are ticked grey), then set the name and Inside, and see the one new line for Ada before Add.",
+        "Add a claim opens Modal md. You choose what it carries from ChoiceRows (Zitadel's own claims are ticked grey), then set the name and Inside, and see the one new line for Charlotte before Add.",
         "The most guided. Everything is visible at once, and nothing reaches the card until you're sure.",
         "It is a dialog for a one-line change. Its preview repeats the Preview card beside it, which already shows + for the draft. That makes two places for the same truth."),
     ];
@@ -586,7 +586,7 @@ class Component extends DCLogic {
       meta, headerActions, adv, draft,
       lines, roles, kids, sortRole: { key: "role", dir: 1 },
       addButton: !composerB, menuA, composerB, sheetC, menuGroups, sheetRows,
-      sheetToken: [T("given_name", '"Ada"', "+")],
+      sheetToken: [T("given_name", '"Charlotte"', "+")],
       landsOptions: [{ value: "both", label: "Both" }, { value: "access_token", label: "Access token" }, { value: "userinfo", label: "ID token and userinfo", title: "One choice: the ID token carries them only while User Info inside ID Token is on." }],
       footLine: adv ? "From the Custom template, 5 changes since." : "In the access token and userinfo. From the Custom template, 5 changes since.",
       beforeWarn: renamed, beforeColor: renamed ? "var(--warn-text)" : "var(--faint)",

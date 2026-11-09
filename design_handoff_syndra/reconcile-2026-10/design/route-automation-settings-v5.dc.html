@@ -295,7 +295,7 @@
       <div class="row-divider" style="display:flex;align-items:flex-start;gap:18px;padding:14px 20px;animation:{{ r.land }}">
         <span style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:6px">
           <span style="font-size:14.5px;line-height:1.5;text-wrap:pretty"><span style="color:var(--muted)">Anyone with</span> <a href="route-automation-settings-v5.dc.html?frame=project" style="color:var(--ink)" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.a }}</a> <span style="color:var(--muted)">also gets</span> <strong style="font-weight:600">{{ r.b }}</strong></span>
-          <sc-if value="{{ r.pending }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-automation-settings-v5.dc.html?frame=pending">Waiting for you to send →</a></span><span style="padding-left:15px;font-size:12.5px;color:var(--faint);text-wrap:pretty">Kabir Mehta and Meera Iyer don't have Operator yet · Operator always waits for you</span></span></sc-if>
+          <sc-if value="{{ r.pending }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-automation-settings-v5.dc.html?frame=pending">Waiting for you to send →</a></span><span style="padding-left:15px;font-size:12.5px;color:var(--faint);text-wrap:pretty">Alexa Bliss and Kofi Kingston don't have Operator yet · Operator always waits for you</span></span></sc-if>
         </span>
         <span style="width:110px;flex:none;text-align:right;font-size:15px;font-variant-numeric:tabular-nums">{{ r.n }}</span>
       </div>
@@ -355,7 +355,7 @@
 </sc-if>
 
 <sc-if value="{{ fPerson }}" hint-placeholder-val="{{ false }}">
-  <div style="padding-bottom:4px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Rohan Mehta" meta="{{ rohanMeta }}" actions="{{ giveBtn }}" hint-size="100%,110px"></x-import></div>
+  <div style="padding-bottom:4px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Liv Morgan" meta="{{ rohanMeta }}" actions="{{ giveBtn }}" hint-size="100%,110px"></x-import></div>
   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 20px;border-radius:var(--radius-panel);border:1px solid var(--line);background:var(--surface-0)"><span class="type-label">Bundles</span><x-import component-from-global-scope="Syndra.Chip" hint-size="120px,30px">Lab Tech v3</x-import><span style="flex:1"></span><a href="route-automation-settings-v5.dc.html?frame=bundle" style="font-size:13.5px;font-weight:600">Manage bundles →</a></div>
   <div style="padding:2px 20px 0">{{ personRead }}</div>
   <x-import component-from-global-scope="Syndra.Card" hint-size="100%,320px">
@@ -592,11 +592,11 @@ class Component extends DCLogic {
       pk.close = () => this.setState({ picker: null });
     } else if (mode === "give") {
       const w = ch.filter(r => waits.has(r.id)), g = ch.filter(r => !waits.has(r.id));
-      pk = Object.assign(pk, { title: "Give Rohan Mehta a role", lede: "Roles he already has are ticked and say how he has them.", fieldLabel: "Roles", hasGive: true, listH: 280,
-        note: !ch.length ? "Choose a role to give Rohan." : !w.length ? "Rohan can use " + (g.length > 1 ? "them" : "it") + " as soon as you give " + (g.length > 1 ? "them" : "it") + "." : !g.length ? names(w) + (w.length > 1 ? " always wait" : " always waits") + " for you, so Rohan gets " + (w.length > 1 ? "them" : "it") + " once you send " + (w.length > 1 ? "them" : "it") + "." : names(g) + " reaches him straight away. " + names(w) + " waits for you to send.",
+      pk = Object.assign(pk, { title: "Give Liv Morgan a role", lede: "Roles he already has are ticked and say how he has them.", fieldLabel: "Roles", hasGive: true, listH: 280,
+        note: !ch.length ? "Choose a role to give Liv." : !w.length ? "Liv can use " + (g.length > 1 ? "them" : "it") + " as soon as you give " + (g.length > 1 ? "them" : "it") + "." : !g.length ? names(w) + (w.length > 1 ? " always wait" : " always waits") + " for you, so Liv gets " + (w.length > 1 ? "them" : "it") + " once you send " + (w.length > 1 ? "them" : "it") + "." : names(g) + " reaches him straight away. " + names(w) + " waits for you to send.",
         verb: "Give " + ch.length + (ch.length === 1 ? " role" : " roles"),
         act: () => this.setState({ pickDone: true }),
-        outcome: w.length ? { kind: "queued", message: "Given in Syndra. Not in Zitadel yet", detail: "Rohan gets " + names(w) + " once you send " + (w.length > 1 ? "them" : "it") + " from Pending changes. His page says so until then." + (g.length ? " " + names(g) + " reached Zitadel." : "") } : { kind: "applied", message: "Rohan can use " + names(g) + " now" },
+        outcome: w.length ? { kind: "queued", message: "Given in Syndra. Not in Zitadel yet", detail: "Liv gets " + names(w) + " once you send " + (w.length > 1 ? "them" : "it") + " from Pending changes. His page says so until then." + (g.length ? " " + names(g) + " reached Zitadel." : "") } : { kind: "applied", message: "Liv can use " + names(g) + " now" },
         finish: () => { const ids = ch.map(r => r.id); this.setState(st => ({ picker: null, pickDone: false, handGiven: st.handGiven.concat(ids.filter(i => !st.handGiven.includes(i))) })); this.landOn(ids); } });
     }
     pk = Object.assign({ close, finish: close, act: close, outcome: null }, pk, { groups, chips: mode === "rule" || mode === "first" ? [] : ch.map(r => ({ label: r.label, removeLabel: "Remove " + r.label, remove: () => toggleChoice(r.id) })), noneChosen: mode !== "rule" && mode !== "first" && !ch.length, cantAct: !ch.length, done: s.pickDone, notDone: !s.pickDone });
@@ -617,7 +617,7 @@ class Component extends DCLogic {
 
     // rules
     const t = byId[s.ruleTarget], tWaits = waits.has(s.ruleTarget);
-    const reachOf = { op: "4 people have Laser cutter · Supervisor. 2 already have Operator; Kabir Mehta and Meera Iyer would get it.", door: "4 people have Laser cutter · Supervisor. 3 already have Laser bay · Door; Meera Iyer would get it.", front: "All 4 people with Supervisor already have Front door, so nobody gets anything today." };
+    const reachOf = { op: "4 people have Laser cutter · Supervisor. 2 already have Operator; Alexa Bliss and Kofi Kingston would get it.", door: "4 people have Laser cutter · Supervisor. 3 already have Laser bay · Door; Kofi Kingston would get it.", front: "All 4 people with Supervisor already have Front door, so nobody gets anything today." };
     const reach = reachOf[s.ruleTarget] || "4 people have Laser cutter · Supervisor. Some would get " + t.label + ".";
     const rulesList = [
       { a: "Bandsaw · Member", b: "Wood shop · Door", n: 22, pending: false, land: "none" },
@@ -634,25 +634,25 @@ class Component extends DCLogic {
 
     // requests
     const reqDefs = [
-      { id: "aanya", who: "Aanya Rao", role: "Laser cutter · Member", rid: "mem", howLong: "Until the end of term · 30 Nov", why: "“Finished the induction on Friday.”", when: "1d", kind: "go" },
-      { id: "rohan", who: "Rohan Mehta", role: "Laser cutter · Supervisor", rid: "sup", howLong: "Until the end of term · 30 Nov", why: "“Supervisor training done, so I can sign off evening sessions.”", when: "3h", kind: "wait" },
-      { id: "priya", who: "Priya Nair", role: "Printer · Member", rid: "print", howLong: "For a month · until 13 Nov", why: "“Prints for my thesis models.”", when: "2h", kind: "fail" },
-      { id: "ishaan", who: "Ishaan Kapoor", role: "Bandsaw · Member", rid: "band", howLong: "Until the end of term · 30 Nov", why: "“Building the robotics team's chassis this term.”", when: "20m", kind: "go" },
+      { id: "aanya", who: "Roman Reigns", role: "Laser cutter · Member", rid: "mem", howLong: "Until the end of term · 30 Nov", why: "“Finished the induction on Friday.”", when: "1d", kind: "go" },
+      { id: "rohan", who: "Liv Morgan", role: "Laser cutter · Supervisor", rid: "sup", howLong: "Until the end of term · 30 Nov", why: "“Supervisor training done, so I can sign off evening sessions.”", when: "3h", kind: "wait" },
+      { id: "priya", who: "Cody Rhodes", role: "Printer · Member", rid: "print", howLong: "For a month · until 13 Nov", why: "“Prints for my thesis models.”", when: "2h", kind: "fail" },
+      { id: "ishaan", who: "Trick Williams", role: "Bandsaw · Member", rid: "band", howLong: "Until the end of term · 30 Nov", why: "“Building the robotics team's chassis this term.”", when: "20m", kind: "go" },
     ];
     const requests = reqDefs.map(r => { const done = !!s.approved[r.id];
-      const o = r.kind === "wait" ? { tone: "warn", note: "Supervisor always waits for you, so Rohan can't supervise yet", waits: !s.sent } : r.kind === "fail" ? { tone: "warn", note: "Zitadel didn't answer at 10:42, so Priya can't print yet", waits: !s.sent } : { tone: "healthy", note: r.who.split(" ")[0] + " can use it now", waits: false };
+      const o = r.kind === "wait" ? { tone: "warn", note: "Supervisor always waits for you, so Liv can't supervise yet", waits: !s.sent } : r.kind === "fail" ? { tone: "warn", note: "Zitadel didn't answer at 10:42, so Cody can't print yet", waits: !s.sent } : { tone: "healthy", note: r.who.split(" ")[0] + " can use it now", waits: false };
       return Object.assign({}, r, o, { marked: waits.has(r.rid), open: !done, done, approve: () => this.setState(st => ({ approved: Object.assign({}, st.approved, { [r.id]: true }) })) }); });
 
     // pending
     const fd = s.folded;
     const pg = (key, lead, handle, rows) => { const open = !fd[key]; return { multi: !!lead, lead, handle, rows, open, rot: open ? "none" : "rotate(-90deg)", foldLabel: (open ? "Fold " : "Open ") + "these " + rows.length + " changes", toggle: () => this.setState(st => ({ folded: Object.assign({}, st.folded, { [key]: !st.folded[key] }) })) }; };
     const prow = (who, role, cause, causeHref, waiting, why, warn) => ({ who, whoHref: P + "rohan", role, cause, causeHref, waiting, hasWhy: !!why, why, whyWarn: !!warn, whyInk: warn ? "var(--warn-text)" : "var(--faint)" });
-    const nine = ["Aanya Rao", "Ishaan Kapoor", "Kabir Mehta", "Meera Iyer", "Omar Haddad", "Lena Brandt", "Wei Chen", "Jules Fontaine", "Tara Bose"];
+    const nine = ["Roman Reigns", "Trick Williams", "Alexa Bliss", "Kofi Kingston", "Tiffany Stratton", "Zoey Stark", "Xavier Woods", "Jade Cargill", "Angelo Dawkins"];
     const pendingGroups = [
-      pg("rohan", "", "", [prow("Rohan Mehta", "Laser cutter · Supervisor", "Given by hand", P + "rohan", "14m", "Waits because Supervisor always waits for you")]),
+      pg("rohan", "", "", [prow("Liv Morgan", "Laser cutter · Supervisor", "Given by hand", P + "rohan", "14m", "Waits because Supervisor always waits for you")]),
       pg("lab", "These 9 changes come from one edit: Kanishk Singh published Lab Tech v4. They wait because Supervisor always waits for you, and are sent together or not at all.", "c_8e21f0", nine.map(n => prow(n, "Laser cutter · Supervisor", "Lab Tech v4", P + "bundle", "7m", ""))),
-      pg("priya", "", "", [prow("Priya Nair", "Printer · Member", "Her request, approved", P + "requests", "3m", "Tried when it was approved at 10:42. Zitadel didn't answer.", true)]),
-      pg("rule", "These 2 changes come from one rule: anyone with Laser cutter · Supervisor also gets Laser cutter · Operator. They wait because Operator always waits for you.", "c_19bd04", [prow("Kabir Mehta", "Laser cutter · Operator", "The new rule", P + "rules", "1m", ""), prow("Meera Iyer", "Laser cutter · Operator", "The new rule", P + "rules", "1m", "")]),
+      pg("priya", "", "", [prow("Cody Rhodes", "Printer · Member", "Her request, approved", P + "requests", "3m", "Tried when it was approved at 10:42. Zitadel didn't answer.", true)]),
+      pg("rule", "These 2 changes come from one rule: anyone with Laser cutter · Supervisor also gets Laser cutter · Operator. They wait because Operator always waits for you.", "c_19bd04", [prow("Alexa Bliss", "Laser cutter · Operator", "The new rule", P + "rules", "1m", ""), prow("Kofi Kingston", "Laser cutter · Operator", "The new rule", P + "rules", "1m", "")]),
     ];
 
     const fr = (n, id, label, where, note, hh) => ({ n, src: P + id, label, where, note, h: hh || 1000, bh: (hh || 1000) / 2 });
@@ -681,10 +681,10 @@ class Component extends DCLogic {
       rules: rulesList, ruleEditorOpen: s.ruleEditorOpen && mode !== "rule" && mode !== "first",
       ruleTarget: { label: t.label, project: t.project, n: t.n, waits: tWaits }, ruleReach: s.ruleFirst === "sup" ? reach : byId[s.ruleFirst].n + " people have " + byId[s.ruleFirst].label + ". Those without " + t.label + " would get it.",
       ruleFirst: { label: byId[s.ruleFirst].label, project: byId[s.ruleFirst].project, n: byId[s.ruleFirst].n, waits: waits.has(s.ruleFirst) }, openFirstPick: () => this.setState({ picker: "first" }),
-      ruleNote: s.ruleSaved ? "" : tWaits ? "Kabir and Meera, and anyone this rule reaches later, will wait for you to send." : "What this rule gives goes straight to Zitadel.",
+      ruleNote: s.ruleSaved ? "" : tWaits ? "Alexa and Kofi, and anyone this rule reaches later, will wait for you to send." : "What this rule gives goes straight to Zitadel.",
       openRulePick: () => this.setState({ picker: "rule" }),
       ruleNotSaved: !s.ruleSaved, ruleSaved: s.ruleSaved, saveRule: () => this.setState({ ruleSaved: true }),
-      ruleOutcome: tWaits ? { kind: "queued", message: "Rule saved. Not in Zitadel yet for Kabir and Meera", detail: "They get Laser cutter · Operator once you send it from Pending changes. The rule's row says so until then." } : { kind: "applied", message: "Rule saved. Meera can open the laser bay now" },
+      ruleOutcome: tWaits ? { kind: "queued", message: "Rule saved. Not in Zitadel yet for Alexa and Kofi", detail: "They get Laser cutter · Operator once you send it from Pending changes. The rule's row says so until then." } : { kind: "applied", message: "Rule saved. Kofi can open the laser bay now" },
       closeRule: () => { this.setState({ ruleEditorOpen: false, ruleListed: true }); this.landOn(["rule"]); },
       newBundleBtn: hbtn("New bundle", () => this.setState({ picker: "bundle", pickDone: false })),
       bundleList: [{ name: "Lab Tech", meta: "v4", desc: "Student staff who run the fabrication lab", n: 11 }, { name: "New members", meta: "v2", desc: "Everyone in their first term", n: 40 }, { name: "Safety basics", meta: "v3", desc: "Everyone who has done the safety induction", n: 53 }, { name: "Staff", meta: "v2", desc: "Makerspace staff", n: 5 }],
@@ -696,7 +696,7 @@ class Component extends DCLogic {
         { waits: true, label: "Laser cutter · Operator", key: "laser.operator", project: "Laser Lab", isIn: true, isNew: false, isWaiting: false },
         { label: "Bandsaw · Member", key: "wood.bandsaw", project: "Wood shop", isIn: true, isNew: false, isWaiting: false },
       ],
-      rohanMeta: S ? h(S.MetaRow, null, ["rohan.mehta@makerspace.edu", "Research assistant", "Mechanical Engineering"]) : null,
+      rohanMeta: S ? h(S.MetaRow, null, ["liv.morgan@makerspace.edu", "Research assistant", "Mechanical Engineering"]) : null,
       giveBtn: hbtn("Give a role", () => this.setState({ picker: "give", pickDone: false })),
       personRoles, personRoleCount: personRoles.length,
       requests,
@@ -706,8 +706,8 @@ class Component extends DCLogic {
       reqSearch: S ? h(S.Input, { placeholder: "Search person or role…", "aria-label": "Search requests by person or role" }) : null,
       reqPills: S ? h(S.FilterPills, { label: "Filter by status", value: "pending", onChange: () => {}, options: [{ value: "pending", label: "Open" }, { value: "approved", label: "Approved" }, { value: "declined", label: "Declined" }] }) : null,
       reqSelect: S ? h(S.SelectModeToggle, { active: false, onToggle: () => {} }) : null,
-      personRead: S ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 30000).toISOString(), current: true }, subject: "Rohan's access" }) : null,
-      sentOutcome: { kind: "applied", message: "13 changes reached Zitadel", detail: "Rohan can supervise, Lab Tech v4 is in place for all 11, Priya can print, and Kabir and Meera can operate. Each of those pages has stopped saying a step is left." },
+      personRead: S ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 30000).toISOString(), current: true }, subject: "Liv's access" }) : null,
+      sentOutcome: { kind: "applied", message: "13 changes reached Zitadel", detail: "Liv can supervise, Lab Tech v4 is in place for all 11, Cody can print, and Alexa and Kofi can operate. Each of those pages has stopped saying a step is left." },
       todayRows: [
         todayRow("A bundle", "3px", "solid", "Its own mode", "Picked from the default when the bundle was made. No screen shows it or changes it.", "Nowhere", "var(--danger)", "var(--danger-text)"),
         todayRow("An automatic rule", "999px", "dashed", "Its own mode", "Set in the rule editor, shown as a badge on Automatic rules.", "On Rules", "var(--healthy)", "var(--muted)"),
@@ -764,9 +764,9 @@ class Component extends DCLogic {
           fr(8, "rulepick", "Choosing the role a rule gives", "New rule · the role they get", "The same picker, choosing one. The first role is ticked grey. Picking a role returns to the editor with it filled in. Try Laser bay · Door."),
         ] },
         { eyebrow: "6 · When a step is left", title: "The thing you changed says it isn't done", note: "After you act, the outcome says what happened. Then the role, the request, the rule or the bundle keeps Waiting for you to send →, with why, until it's sent.", frames: [
-          fr(9, "give", "Giving Rohan Supervisor", "Rohan Mehta · Give a role", "The same picker. What Rohan has is ticked grey and says how. For how long and Why are the request form's own fields. The footer note says Supervisor will wait. Add Printer · Member and it says which goes when."),
-          fr(10, "rohan", "Rohan's page, after", "Rohan Mehta", "The role sits in his Laser Lab card with the status every role row has. Waiting for you to send →, and under it: he can't supervise yet, and why. Withdraw is its verb until it's sent."),
-          fr(11, "requests", "Approving requests", "Requests", "Asked for marks a role that waits, so you know before you approve. The decision seat: approved and usable now, approved and waiting because the role waits, or because Zitadel didn't answer. Approve Ishaan to see the first."),
+          fr(9, "give", "Giving Liv Supervisor", "Liv Morgan · Give a role", "The same picker. What Liv has is ticked grey and says how. For how long and Why are the request form's own fields. The footer note says Supervisor will wait. Add Printer · Member and it says which goes when."),
+          fr(10, "rohan", "Liv's page, after", "Liv Morgan", "The role sits in his Laser Lab card with the status every role row has. Waiting for you to send →, and under it: he can't supervise yet, and why. Withdraw is its verb until it's sent."),
+          fr(11, "requests", "Approving requests", "Requests", "Asked for marks a role that waits, so you know before you approve. The decision seat: approved and usable now, approved and waiting because the role waits, or because Zitadel didn't answer. Approve Trick to see the first."),
           fr(12, "bundle", "Lab Tech, after publishing v4", "Lab Tech", "The read line says what isn't true yet. Each role's status says where it stands for the 11 people on v4."),
           fr(13, "rules", "The rule, after saving", "Automatic rules", "No mode column. The new rule's row carries the step left, naming the two people, until it's sent."),
           fr(14, "pending", "Sending, with why", "Pending changes", "The settled list. Each change, or each batch's sentence, says why it waited. Lab Tech v4 and the rule fold as batches. Send 13 changes and every page above stops saying a step is left.", 1600),

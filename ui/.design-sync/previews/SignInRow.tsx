@@ -17,9 +17,9 @@ const body = (
 );
 
 const rows = [
-  { id: "a", minutes: 2, name: "Aanya Rao", answered: "Operator on Laser cutter", tone: "healthy", word: "Matches" },
-  { id: "b", minutes: 9, name: "Rohan Iyer", answered: "No roles for this app", tone: "warn", word: "Checked" },
-  { id: "c", minutes: 31, name: "Ishita Sen", answered: "Zitadel did not answer", tone: "danger", word: "Failed" },
+  { id: "a", minutes: 2, name: "Roman Reigns", answered: "Operator on Laser cutter", tone: "healthy", word: "Matches" },
+  { id: "b", minutes: 9, name: "Damian Priest", answered: "No roles for this app", tone: "warn", word: "Checked" },
+  { id: "c", minutes: 31, name: "Jey Uso", answered: "Zitadel did not answer", tone: "danger", word: "Failed" },
 ] as const;
 
 /** One captured sign-in per verdict; the first is open, the others fold. */

@@ -80,7 +80,7 @@ class Component extends DCLogic {
     const member = /^member/.test(this.st);
     if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "basic"); } catch (e) {} }
     this.session = member
-      ? { id: "u7", name: "Aanya Rao", email: "aanya.rao@makerspace.edu", title: "Student", team: "Design", status: "active", avatar: "AR", role: "user", sessionType: "demo" }
+      ? { id: "u7", name: "Roman Reigns", email: "roman.reigns@makerspace.edu", title: "Student", team: "Design", status: "active", avatar: "AR", role: "user", sessionType: "demo" }
       : { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
     this.rootData = [
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },

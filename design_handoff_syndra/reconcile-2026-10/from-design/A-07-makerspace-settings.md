@@ -106,7 +106,7 @@ Answer to `Q-07-makerspace-settings.md`, 23 Oct 2026. **Owner, 23 Oct: every rec
       - Purpose, with the hint "What it's for, in a few words. It shows under its name everywhere."
       - Owner, chosen like any person.
       - Before-line: "This finishes now. It leaves People, the people counts and the welcome bundle; nothing about its access changes."
-    - The result: **Marked** · "Ingestion Station is a service account now, and Sana Kohli answers for it." Faint: "It's in Service accounts. If this was wrong, Mark as a person on its page puts it back."
+    - The result: **Marked** · "Ingestion Station is a service account now, and Iyo Sky answers for it." Faint: "It's in Service accounts. If this was wrong, Mark as a person on its page puts it back."
     - Machine accounts are service accounts because Zitadel says so. Nobody marks them.
     - No naming rule and no metadata key.
 29. **They leave every people flow listed.** They stay, as service accounts, in:

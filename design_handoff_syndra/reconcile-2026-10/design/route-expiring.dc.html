@@ -135,7 +135,7 @@
 
   <sc-if value="{{ stDialog }}" hint-placeholder-val="{{ false }}">
   <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="lapse-title" hint-size="560px,520px">
-    <x-import component-from-global-scope="Syndra.ModalHeader" title="Let this lapse?" title-id="lapse-title" lede="Laser cutter · Operator for Aanya Rao, ending 7 Oct." hint-size="100%,90px"></x-import>
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="Let this lapse?" title-id="lapse-title" lede="Laser cutter · Operator for Roman Reigns, ending 7 Oct." hint-size="100%,90px"></x-import>
     <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
       <div class="accent-note" style="padding:14px 16px;font-size:14px;line-height:1.55">
         <div class="type-label" style="margin-bottom:4px">What this does</div>
@@ -211,21 +211,21 @@ class Component extends DCLogic {
     const D = (d) => { const x = new Date(2026, 9, 5 + d); return x.getDate() + " " + MO[x.getMonth()]; };
     const B = (k, who, role, key, by, givenAgo, days, ack) => ({ k, who, role, key, by, givenOn: D(-givenAgo), days, ack: ack || null });
     let rows = [
-      B("u", "Aanya Rao", "Laser cutter · Operator", "laser.operator", "Kanishk Singh", 88, 2),
-      B("u", "Mei Tanaka", "Wood shop · Supervisor", "wood.supervisor", "Kanishk Singh", 84, 6),
-      B("u", "Ravi Iyer", "3D printers · Member", "printers.member", "Lena Brandt", 46, 10),
-      B("u", "Jules Fontaine", "Studio · Booking", "studio.booking", "Kanishk Singh", 16, 14),
-      B("u", "Sana Kohli", "Laser cutter · Operator", "laser.operator", "Lena Brandt", 69, 21),
-      B("u", "Isha Menon", "Bandsaw · Member", "bandsaw.member", "Kanishk Singh", 62, 28),
-      B("l", "Kabir Rao", "Electronics bench · Operator", "electronics.operator", "Lena Brandt", 86, 4, { by: "Kanishk Singh", on: D(-2), note: ": “Capstone ends this week.”" }),
-      B("l", "Wei Chen", "Wood shop · Member", "wood.member", "Kanishk Singh", 73, 17, { by: "Lena Brandt", on: D(-4), note: "." }),
+      B("u", "Roman Reigns", "Laser cutter · Operator", "laser.operator", "Kanishk Singh", 88, 2),
+      B("u", "Piper Niven", "Wood shop · Supervisor", "wood.supervisor", "Kanishk Singh", 84, 6),
+      B("u", "Shayna Baszler", "3D printers · Member", "printers.member", "Zoey Stark", 46, 10),
+      B("u", "Jade Cargill", "Studio · Booking", "studio.booking", "Kanishk Singh", 16, 14),
+      B("u", "Iyo Sky", "Laser cutter · Operator", "laser.operator", "Zoey Stark", 69, 21),
+      B("u", "Santos Escobar", "Bandsaw · Member", "bandsaw.member", "Kanishk Singh", 62, 28),
+      B("l", "Kairi Sane", "Electronics bench · Operator", "electronics.operator", "Zoey Stark", 86, 4, { by: "Kanishk Singh", on: D(-2), note: ": “Capstone ends this week.”" }),
+      B("l", "Xavier Woods", "Wood shop · Member", "wood.member", "Kanishk Singh", 73, 17, { by: "Zoey Stark", on: D(-4), note: "." }),
     ];
-    if (decided) rows = rows.map(r => r.k === "u" ? Object.assign({}, r, { k: "l", ack: { by: "Kanishk Singh", on: D(-1), note: "." } }) : r).filter((r, i) => i < 3 || r.who === "Kabir Rao" || r.who === "Wei Chen");
+    if (decided) rows = rows.map(r => r.k === "u" ? Object.assign({}, r, { k: "l", ack: { by: "Kanishk Singh", on: D(-1), note: "." } }) : r).filter((r, i) => i < 3 || r.who === "Kairi Sane" || r.who === "Xavier Woods");
     if (many) {
-      const fn = ["Kavya","Daniel","Rhea","Naveen","Zara","Ishaan","Ana","Vikram","Leela","Farhan","Sara","Dev","Tara","Yusuf","Neha","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ansari","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
+      const fn = ["Carmelo","Bron","Chelsea","Lyra","Dominik","Trick","Ana","Montez","Akira","Michelle","Sara","Dev","Angelo","Stacy","Kelly","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ansari","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
       const RL = [["Wood shop · Member","wood.member"],["3D printers · Member","printers.member"],["Laser cutter · Operator","laser.operator"],["Studio · Booking","studio.booking"],["Bandsaw · Member","bandsaw.member"]];
-      for (let i = 0; i < 32; i++) { const r = RL[(i * 3) % 5]; rows.push(B("u", fn[i % 16] + " " + ln[(i * 7) % 15], r[0], r[1], i % 3 ? "Kanishk Singh" : "Lena Brandt", 40 + i, Math.min(30, 3 + Math.floor(i * 27 / 32)))); }
-      for (let i = 0; i < 4; i++) { const r = RL[i]; rows.push(B("l", fn[15 - i] + " " + ln[(i * 4) % 15], r[0], r[1], "Kanishk Singh", 60, 8 + i * 5, { by: "Lena Brandt", on: D(-3), note: "." })); }
+      for (let i = 0; i < 32; i++) { const r = RL[(i * 3) % 5]; rows.push(B("u", fn[i % 16] + " " + ln[(i * 7) % 15], r[0], r[1], i % 3 ? "Kanishk Singh" : "Zoey Stark", 40 + i, Math.min(30, 3 + Math.floor(i * 27 / 32)))); }
+      for (let i = 0; i < 4; i++) { const r = RL[i]; rows.push(B("l", fn[15 - i] + " " + ln[(i * 4) % 15], r[0], r[1], "Kanishk Singh", 60, 8 + i * 5, { by: "Zoey Stark", on: D(-3), note: "." })); }
     }
     const win = st === "window-30" ? 30 : 14; rows = rows.filter(r => r.days <= win);
     const so = this.state.sort, dir = this.state.dir;
@@ -243,7 +243,7 @@ class Component extends DCLogic {
       rs = rs.map((r, i) => {
         const v = runs ? keyOf[so](r) : null, soon = k === "u" && r.days === minU && !rs.slice(0, i).some(x => x.days === minU);
         const pick = sel && k === "u" && (i === 0 || i === 1 || i === 3);
-        const done = st === "extended" && r.who === "Aanya Rao", queued = st === "extended-queued" && r.who === "Aanya Rao";
+        const done = st === "extended" && r.who === "Roman Reigns", queued = st === "extended-queued" && r.who === "Roman Reigns";
         const o = Object.assign({}, r, {
           hasRun: runs && v !== prev, run: v, runCount: runs ? cnt[v] : 0,
           left: r.days <= 0 ? "Ends today" : r.days === 1 ? "1 day left" : r.days + " days left", date: D(r.days), leftInk: soon ? "var(--warn-text)" : "var(--muted)",

@@ -6,8 +6,8 @@ import { LoginDoor } from "@/components/login/LoginDoor";
 import { loginFailure } from "@/lib/login-error";
 
 const IDENTITIES = [
-  { id: "dev_admin", name: "Alice Rivera", role: "admin" as const },
-  { id: "sam_student", name: "Sam Patel", role: "user" as const },
+  { id: "dev_admin", name: "Becky Lynch", role: "admin" as const },
+  { id: "sam_student", name: "Rey Mysterio", role: "user" as const },
 ];
 
 function stage() {
@@ -76,15 +76,15 @@ describe("LoginDoor", () => {
     render(<LoginDoor mode="demo" identities={IDENTITIES} failure={null} />);
 
     // Not reachable — not merely invisible — until the door opens.
-    expect(screen.queryByRole("button", { name: /alice rivera/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /becky lynch/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /choose an identity/i }));
 
-    const alice = screen.getByRole("button", { name: /alice rivera/i });
+    const alice = screen.getByRole("button", { name: /becky lynch/i });
     expect(alice.closest("form")).toHaveAttribute("action", "/auth/login");
     expect(alice.closest("form")?.querySelector("input")).toHaveValue("dev_admin");
     expect(alice).toHaveFocus();
-    expect(screen.getByRole("button", { name: /sam patel · member/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /rey mysterio · member/i })).toBeInTheDocument();
   });
 
   // N21: signed in again in a tab opened for it. The door stands open, says

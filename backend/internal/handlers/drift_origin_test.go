@@ -55,7 +55,7 @@ func TestDriftOriginNamesWhoMadeTheGrant(t *testing.T) {
 				t.Errorf("must ask about the row's own grant, got %q", grantID)
 			}
 			return &zitadel.GrantOrigin{
-				ActorID: "212418735923626245", ActorName: "Maya Chen",
+				ActorID: "212418735923626245", ActorName: "Bianca Belair",
 				Service: "Management-API", EventType: "user.grant.added",
 				At: time.Date(2026, 8, 3, 9, 25, 46, 0, time.UTC),
 			}, nil
@@ -65,7 +65,7 @@ func TestDriftOriginNamesWhoMadeTheGrant(t *testing.T) {
 	if body["readable"] != true || body["recorded"] != true || body["attributed"] != true {
 		t.Fatalf("want a fully attributed origin: %v", body)
 	}
-	if body["actor_name"] != "Maya Chen" || body["service"] != "Management-API" {
+	if body["actor_name"] != "Bianca Belair" || body["service"] != "Management-API" {
 		t.Errorf("wrong actor: %v", body)
 	}
 	if body["at"] != "2026-08-03T09:25:46Z" {

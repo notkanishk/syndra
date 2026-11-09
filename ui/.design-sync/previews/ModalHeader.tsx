@@ -14,8 +14,8 @@ export const WithChipAndLede = () => (
     <ModalHeader
       titleId="h-1"
       chip={<Badge tone="accent">3D printers</Badge>}
-      title="Grant Member to Kabir Mehta"
-      lede="Kabir can book the Prusa printers and see the print queue. Supervisors are told by email."
+      title="Grant Member to Alexa Bliss"
+      lede="Alexa can book the Prusa printers and see the print queue. Supervisors are told by email."
     />
     <ModalFooter>
       <Button variant="ghost">Cancel</Button>

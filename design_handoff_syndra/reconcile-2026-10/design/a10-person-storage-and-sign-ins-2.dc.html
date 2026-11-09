@@ -93,8 +93,8 @@
 
 <sc-if value="{{ isPerson }}" hint-placeholder-val="{{ true }}">
   <div class="flex flex-col items-start gap-4 sm:flex-row sm:gap-[22px]" style="padding-bottom:12px">
-    <x-import component-from-global-scope="Syndra.Avatar" name="Aanya Rao" size="header" hint-size="62px,62px"></x-import>
-    <div class="w-full flex-1"><x-import component-from-global-scope="Syndra.PageHeader" title="Aanya Rao" meta="{{ metaRow }}" lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why." actions="{{ headerActions }}" hint-size="100%,140px"></x-import></div>
+    <x-import component-from-global-scope="Syndra.Avatar" name="Roman Reigns" size="header" hint-size="62px,62px"></x-import>
+    <div class="w-full flex-1"><x-import component-from-global-scope="Syndra.PageHeader" title="Roman Reigns" meta="{{ metaRow }}" lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why." actions="{{ headerActions }}" hint-size="100%,140px"></x-import></div>
   </div>
 
   <x-import component-from-global-scope="Syndra.Tabs" label="Views of this person's access" value="access" options="{{ tabs }}" on-select="{{ noop }}" hint-size="100%,44px"></x-import>
@@ -133,7 +133,7 @@
           <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
             <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
             <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
-              <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load Aanya's storage on TrueNAS.</span>
+              <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load Roman's storage on TrueNAS.</span>
               <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
               <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
                 <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import>
@@ -150,10 +150,10 @@
               <span class="type-card-title"><a href="route-system-targets-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">TrueNAS</a></span>
               <sc-if value="{{ hasStatus }}" hint-placeholder-val="{{ true }}"><span role="status" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;line-height:1.4;color:{{ statusInk }}"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:{{ statusDot }}"></span>{{ statusText }}</span></sc-if>
             </div>
-            <p style="margin:0;max-width:80ch;font-size:13.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">What TrueNAS says about Aanya's account. Limits, holds and folders are set on TrueNAS's page; only Aanya sets their password.</p>
+            <p style="margin:0;max-width:80ch;font-size:13.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">What TrueNAS says about Roman's account. Limits, holds and folders are set on TrueNAS's page; only Roman sets their password.</p>
           </div>
 
-          <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><div style="padding:0 20px 20px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" avatar="{{ false }}" label="Loading Aanya's storage on TrueNAS" hint-size="100%,220px"></x-import></div></sc-if>
+          <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><div style="padding:0 20px 20px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" avatar="{{ false }}" label="Loading Roman's storage on TrueNAS" hint-size="100%,220px"></x-import></div></sc-if>
 
           <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}">
             <!-- stands in for Syndra.Notice until it is in the design system -->
@@ -161,7 +161,7 @@
               <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
               <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
                 <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">TrueNAS is offline</span>
-                <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">It stopped answering at 08:33. Home folder and Folders below are what it said at 08:31, 2 hours ago. Aanya's access hasn't changed, and their folders open again when it's back.</p>
+                <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">It stopped answering at 08:33. Home folder and Folders below are what it said at 08:31, 2 hours ago. Roman's access hasn't changed, and their folders open again when it's back.</p>
               </div>
             </div>
           </sc-if>
@@ -184,8 +184,8 @@
           <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-height:52px;padding:9px 20px">
             <span class="type-label" style="width:170px;flex:none;color:var(--label)">Account</span>
             <span style="flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:15px;line-height:1.45;color:var(--ink)">
-              <sc-if value="{{ acctNormal }}" hint-placeholder-val="{{ true }}"><span class="type-mono" style="font-size:14.5px">aanya.rao</span><span style="font-size:13px;color:var(--faint)">Made by Syndra on 3 Sept</span></sc-if>
-              <sc-if value="{{ acctAdopted }}" hint-placeholder-val="{{ false }}"><span class="type-mono" style="font-size:14.5px">arao</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">Made by hand on TrueNAS before Syndra managed it. <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Kanishk Singh</a> assigned it to Aanya on 12 Sept, with everything it held.</span></sc-if>
+              <sc-if value="{{ acctNormal }}" hint-placeholder-val="{{ true }}"><span class="type-mono" style="font-size:14.5px">roman.reigns</span><span style="font-size:13px;color:var(--faint)">Made by Syndra on 3 Sept</span></sc-if>
+              <sc-if value="{{ acctAdopted }}" hint-placeholder-val="{{ false }}"><span class="type-mono" style="font-size:14.5px">arao</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">Made by hand on TrueNAS before Syndra managed it. <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Kanishk Singh</a> assigned it to Roman on 12 Sept, with everything it held.</span></sc-if>
               <sc-if value="{{ acctWaiting }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-pending.dc.html?frame=person">Waiting for you to send →</a></span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">Their Fabrication lead role reaches TrueNAS. Syndra makes the account once you send it.</span></sc-if>
               <sc-if value="{{ acctNone }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted)">None</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">None of their roles reaches TrueNAS. Fabrication lead and Archive admin do.</span></sc-if>
             </span>
@@ -206,9 +206,9 @@
               <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-height:52px;padding:9px 20px">
                 <span class="type-label" style="width:170px;flex:none;color:var(--label)">Password</span>
                 <span style="flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:15px;line-height:1.45;color:var(--ink)">
-                  <sc-if value="{{ pwSet }}" hint-placeholder-val="{{ true }}"><span>Set, last changed 14 Oct</span><span style="font-size:13px;color:var(--faint)">Only Aanya sets it, on their Network storage page.</span></sc-if>
-                  <sc-if value="{{ pwAdopted }}" hint-placeholder-val="{{ false }}"><span>Set before Syndra managed this account</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">TrueNAS accepts it, so it works. Syndra has no date for it, and only Aanya can change it.</span></sc-if>
-                  <sc-if value="{{ pwNew }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="7px,7px"></x-import>Needs a new password</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">Their access was given back on 20 Oct. TrueNAS opens their folders again only once Aanya sets a new one on their Network storage page. Nobody else can.</span></sc-if>
+                  <sc-if value="{{ pwSet }}" hint-placeholder-val="{{ true }}"><span>Set, last changed 14 Oct</span><span style="font-size:13px;color:var(--faint)">Only Roman sets it, on their Network storage page.</span></sc-if>
+                  <sc-if value="{{ pwAdopted }}" hint-placeholder-val="{{ false }}"><span>Set before Syndra managed this account</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">TrueNAS accepts it, so it works. Syndra has no date for it, and only Roman can change it.</span></sc-if>
+                  <sc-if value="{{ pwNew }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="7px,7px"></x-import>Needs a new password</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">Their access was given back on 20 Oct. TrueNAS opens their folders again only once Roman sets a new one on their Network storage page. Nobody else can.</span></sc-if>
                   <sc-if value="{{ pwNotYet }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted)">Not set yet</span></sc-if>
                 </span>
                 <span style="min-width:200px;flex:none;margin-left:auto;display:flex;justify-content:flex-end"></span>
@@ -276,7 +276,7 @@
 
       <sc-if value="{{ isSignB }}" hint-placeholder-val="{{ false }}">
         <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
-          <div style="padding:18px 20px 12px;display:flex;flex-direction:column;gap:4px"><h2 class="type-card-title" style="margin:0">Apps Aanya signs in to</h2><p style="margin:0;font-size:13.5px;color:var(--faint)">Sign-ins per day, last 30 days. Needs C: a count per person per app per day.</p></div>
+          <div style="padding:18px 20px 12px;display:flex;flex-direction:column;gap:4px"><h2 class="type-card-title" style="margin:0">Apps Roman signs in to</h2><p style="margin:0;font-size:13.5px;color:var(--faint)">Sign-ins per day, last 30 days. Needs C: a count per person per app per day.</p></div>
           <sc-for list="{{ appRows }}" as="a" hint-placeholder-count="4">
             <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:12px 20px">
               <span style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:1px"><sc-if value="{{ a.isApp }}" hint-placeholder-val="{{ true }}"><a href="route-applications-id.dc.html?frame=default" style="align-self:flex-start;font-size:15px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ a.name }}</a></sc-if><sc-if value="{{ a.isUnknown }}" hint-placeholder-val="{{ false }}"><span style="font-size:15px;font-weight:600">{{ a.name }}</span></sc-if><span style="font-size:13px;color:var(--faint)">{{ a.sub }}</span></span>
@@ -395,7 +395,7 @@ class Component extends DCLogic {
       tabs: [{ value: "access", label: "Access" }, { value: "requests", label: "Requests" }, { value: "activity", label: "Activity" }],
       insightTabs: [{ value: "map", label: "Map" }, { value: "trends", label: "Trends" }],
       headerActions: S ? h(S.Button, { variant: "accent" }, "Give a role") : null,
-      metaRow: S ? h(S.MetaRow, null, ["aanya.rao@example.edu", "Research assistant", "Mechanical Engineering"]) : null,
+      metaRow: S ? h(S.MetaRow, null, ["roman.reigns@example.edu", "Research assistant", "Mechanical Engineering"]) : null,
       readEl: S ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 60000).toISOString(), current: true }, subject: "What Zitadel confirmed" }) : null,
       chips,
       hasBand: !!C.band,
@@ -434,7 +434,7 @@ class Component extends DCLogic {
       storageFrames: [
         f("default", "Default · their own limit in force", "One card per connected system on the Access tab, under the projects, with a chip in the read line. The system's name links to its page; beside it, a dot and how current the read is. One row per fact: label · value · its one write place in the right seat. The limit in force reads first, in ink, with its end and reason; the roles' limit it replaces sits under it, faint. Folders are listed, not counted; their paths in mono are Advanced only. Nothing on the card writes."),
         f("adopted", "An account Syndra didn't make", "The account row says it was made by hand and who assigned it, and when. The password row follows what TrueNAS says, not Syndra's empty record: it works, and Syndra has no date for it. The home folder here is the roles' limit, so its line is the only one."),
-        f("newpw", "Needs a new password", "Access given back after a hold. The password row says why it's needed and that only Aanya can set it, with no link, because there's nowhere for an operator to go. The Hold row says when the last one ended, which explains it. Folders stay at full strength: the operator can read them, even though Aanya can't open them yet."),
+        f("newpw", "Needs a new password", "Access given back after a hold. The password row says why it's needed and that only Roman can set it, with no link, because there's nowhere for an operator to go. The Hold row says when the last one ended, which explains it. Folders stay at full strength: the operator can read them, even though Roman can't open them yet."),
         f("held", "Whole account on hold", "Where the 6 Oct per-row Put on hold would have been: the Hold row says what's in force, why, by whom, and when it's reviewed, and links to the row that changes it. The Withheld band above the projects stays as built. The status beside the name turns neutral: TrueNAS is fine."),
         f("noaccount", "No account yet · waiting for you to send", "The account row is the step's status seat: Waiting for you to send →, opening Pending changes. Everything read from the account is NotOpenYet, previewed at 0.45 with what they'll get: their roles' limit and the folders their groups open. No link in the lead line: the step is the row above."),
         f("norole", "No role reaches TrueNAS", "Nothing is about to open, so no NotOpenYet: the card is one row saying so, and naming the roles that would reach it."),

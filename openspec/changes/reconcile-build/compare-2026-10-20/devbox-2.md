@@ -8,7 +8,7 @@ Console: no React/hydration errors (#418, Minified) on any route. Only generic r
 
 Cross-route:
 - [med] board Basic/Advanced pill shows Advanced selected on load / dev pill paints "Basic" selected for a couple of seconds while the sidebar is already Advanced, then flips (seen on every route after a navigation). First-paint mismatch between server render and the stored choice.
-- [low] board header shows "Advanced" selected and a name "Kanishk" / dev shows "Alice Rivera" (demo identity, not a defect).
+- [low] board header shows "Advanced" selected and a name "Kanishk" / dev shows "Becky Lynch" (demo identity, not a defect).
 
 ## People
 - [low] board 248 people with a Bundles chip and an access summary ("3 roles across 2 projects") / dev 5 people, Bundles "none", Access "Not checked yet" (data).
@@ -16,7 +16,7 @@ Cross-route:
 - [low] board subtitle "248 people · 12 with access expiring" / dev "5 people" only (no expiry clause when unread); fine.
 - Layout, header, search, Filters and Select placement match.
 
-## A person's page (Alice Rivera and Maya Chen; nobody has several projects)
+## A person's page (Becky Lynch and Bianca Belair; nobody has several projects)
 - [med] board holdings grouped into collapsible project cards with Given / Automatic sections and a project jump-chip row / dev shows only the empty state "holds no access yet" (data; the populated layout was not verifiable).
 - [med] board has no hold panel / dev "On hold" panel lines start with a bare "true on truenas — put on hold by system": a raw value ("true") stands where a role name belongs.
 - [low] board header action pair and tabs match; dev advisory line "Advisory · No Syndra bundle is assigned yet" with "?" glyph has no board equivalent.

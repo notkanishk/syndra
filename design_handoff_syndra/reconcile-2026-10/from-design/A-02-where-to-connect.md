@@ -92,7 +92,7 @@ Per mapping row, under `group → fabrication`, one line per place, then the hom
 **First among their folders** (frame `ready`):
 - **Name:** "Your home folder" · **Can change files**
 - Faint: "In main › home_dir · private to you"
-- Usage and its bar, then both addresses (`smb://drive.makerspace.tools/main/home_dir/aanya.rao`)
+- Usage and its bar, then both addresses (`smb://drive.makerspace.tools/main/home_dir/roman.reigns`)
 
 **Role gone, folder kept** (frame `home-kept`): the same block, still first, with one line in ink:
 - "You no longer hold Lab Tech, the role that gave you this folder. It stays, with your files in it, and only you can open it. Syndra never moves or deletes a home folder."
@@ -102,7 +102,7 @@ Per mapping row, under `group → fabrication`, one line per place, then the hom
 ## 7 · Two roles disagree (route-system-targets-id, frame `homes-disagree`)
 
 A second row in **Waiting on you**, and the chip counts 2:
-- **Title:** "[Priya Nair]'s roles name two home folders". Her name links to her page.
+- **Title:** "[Cody Rhodes]'s roles name two home folders". Her name links to her page.
 - **Body:** "Fabrication lead puts homes in `main › home_dir`, Archive admin in `archive › homes`. Syndra left her home where it is, in main › home_dir, and makes no second one. Give one of the two mappings no home folder, or the same one."
 - **Link, right:** "Change it on Mappings →". A link, not a button: the fix is a mapping change, made in its one place.
 - It clears by itself once the mappings agree.

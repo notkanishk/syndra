@@ -93,7 +93,7 @@ No change. One card per row at full width is the intended phone layout.
 ## 11 · One way for a dialog to report what it did (route-asking, Results)
 
 Every dialog ends on its own result, in the sheet, with **Close**. The page beneath updates in place without moving (Motion 1, 2). The block has three parts: a dot and one word in the act's own vocabulary, one sentence about what it means for the person, and one faint line about where it goes next.
-- **A single change, now**: lime **Given** / **Removed** / **Extended**. "Rohan can use the laser cutter on his own now."
+- **A single change, now**: lime **Given** / **Removed** / **Extended**. "Liv can use the laser cutter on his own now."
 - **A single change that waits**: the same word with an amber dot, then "Waiting for you to send →" and the faint why (NextStep).
 - **A request someone else decides**: neutral **Asked**. Never "Applied".
 - **A rehearsed change to many**: the count goes in the word ("Given to 12 people"), then RehearsalDialog's list of who changed, as today.
@@ -110,24 +110,24 @@ Grant direct access stops closing on success and stays on its result like the re
 ## 13 · Overtaken requests
 
 1. **Words**: "You have this" (member, lime) and "Given another way" (operator, neutral) are right. The member's row needs the note too: "Makerspace staff gave it to you directly on 15 Oct, so there was nothing left to decide." Without it, a closed request looks like a lost one (`mine`, `op-closed`).
-2. **Change history**: no separate entry. The grant's entry gains one faint line, "Closed Priya's request for it". The member's Recent changes needs nothing more than the request row.
+2. **Change history**: no separate entry. The grant's entry gains one faint line, "Closed Cody's request for it". The member's Recent changes needs nothing more than the request row.
 3. **Not yet sent in the pickers**: "On its way" to a member, and "Given 2h ago · Waiting for you to send →" to an operator (`ask-onway`, `give-choose`).
 4. **The cancel confirmation becomes a pushed step**, not a stacked sheet. It opens inside whichever sheet asked, so no route can skip it and sheets still never stack. See §14. Removing a bundle whose grants are still waiting drops its own line about them. The step is the one place this is said, because only the step carries who queued each change and why.
 
 ## 14 · Undoing a change that's still waiting (flow-cancel-queued, proposed/CancelQueuedStep.md)
 
 1. **One change.** The host sheet turns one page.
-   - The ModalHeader chip names the host ("Give Rohan Mehta a role").
+   - The ModalHeader chip names the host ("Give Liv Morgan a role").
    - The title names the kind: "This cancels a removal that's waiting".
-   - The lede says what that means today: "It hasn't reached Zitadel, so Rohan still has Member today."
-   - Then the change: **Removing** Network storage · Member from Rohan Mehta, then "Queued by Sam Iyer · 2h ago", then his reason as a quote.
+   - The lede says what that means today: "It hasn't reached Zitadel, so Liv still has Member today."
+   - Then the change: **Removing** Network storage · Member from Liv Morgan, then "Queued by Tegan Nox · 2h ago", then his reason as a quote.
    - **Keep it** comes first, is focused, and is what Escape does. The confirm names what goes ahead: "Cancel it and give Member" (accent), "Cancel it and remove" (dangerConfirm, as the removal dialog's own confirm), "Cancel it and approve".
    - Approve on a queue row has no sheet of its own, so a Modal sm opens holding only the step.
 2. **Several.** Changes queued together (same person, same moment, same reason) share one who-line and one quote. Up to five changes show; past that, "Showing 5 of 9 · Show all 9" sits inside the list. The title and the confirm carry the count.
-3. **A longer list.** The step stays open. One line above the list says: "One more since you looked. Lena queued it a minute ago, so it's added at the top and nothing was changed." The new group sits first, accent-soft, labelled "New since you looked", and flashes once. The confirm's count updates.
-4. **No reason.** "Sam gave no reason." in faint, in the quote's place. The footer adds: "If you're unsure why Sam queued it, keep it and ask him."
-5. **Outcome.** Yes. The host's usual result, plus one faint line: "The removal Sam queued 2h ago is cancelled, so nothing goes to Zitadel. Change history records both."
-6. **Kept.** Back to the form exactly as it was, still open. The footer note reads "Nothing changed. Sam's removal is still waiting." with Waiting for you to send →. A queue row's Approve that's kept leaves the request waiting in its seat.
+3. **A longer list.** The step stays open. One line above the list says: "One more since you looked. Zoey queued it a minute ago, so it's added at the top and nothing was changed." The new group sits first, accent-soft, labelled "New since you looked", and flashes once. The confirm's count updates.
+4. **No reason.** "Tegan gave no reason." in faint, in the quote's place. The footer adds: "If you're unsure why Tegan queued it, keep it and ask him."
+5. **Outcome.** Yes. The host's usual result, plus one faint line: "The removal Tegan queued 2h ago is cancelled, so nothing goes to Zitadel. Change history records both."
+6. **Kept.** Back to the form exactly as it was, still open. The footer note reads "Nothing changed. Tegan's removal is still waiting." with Waiting for you to send →. A queue row's Approve that's kept leaves the request waiting in its seat.
 7. **Plan rows.** PlanReview's consequence line carries "Cancels a change waiting to be sent: …" as code wrote it. Under the plan, one amber line repeats it with the quote, because the plan goes stale if anyone queues another change first.
 8. **Change history.**
    - Operator: "Kanishk Singh cancelled a change that was waiting to be sent", then the change, who queued it and when, the quote, and "cancelled when Kanishk gave it back". The act that caused it names it in return.

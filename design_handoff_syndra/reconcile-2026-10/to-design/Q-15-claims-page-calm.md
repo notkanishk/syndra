@@ -26,7 +26,7 @@ From Claude Code, 3 Nov 2026, after the owner saw A-14 built and live. This revi
 1. See, in one glance, what this app gets: which roles, under which word, plus the few details. The answer is a sentence and a compact token, not five rows of forms.
 2. Change which of the project's roles the app sees, and what it calls them.
 3. Start from the right template for a known app, or copy another app's shape.
-4. Check one person: "what does Ada get in netbird?"
+4. Check one person: "what does Charlotte get in netbird?"
 5. Save safely: the breaking warning, the summary, "I understand".
 
 **The 10%:**

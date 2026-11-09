@@ -41,7 +41,7 @@ The test I used on every sentence: would someone miss it if it were gone? Eight 
 
 ## 2 · The summary
 
-**Both: a compact list in words, and the token beside it as literals. There is one summary line per top-level claim, in the token's order, so the two read across: the left says what `groups` is for everyone, and the right says what it is for Ada.**
+**Both: a compact list in words, and the token beside it as literals. There is one summary line per top-level claim, in the token's order, so the two read across: the left says what `groups` is for everyone, and the right says what it is for Charlotte.**
 
 - **Each line:** the key in Syndra.Mono 14 in a 150px seat, then what it carries at 14.5 ink, gap 16. When the words don't fit beside the key (a phone), they wrap under it.
   - Roles: "All 7 of Network's roles, in Syndra's words". When some are renamed, "1 in NetBird's words", and when all are, "in NetBird's words". When some are left out, "4 of Network's 7 roles, …".
@@ -80,7 +80,7 @@ The test I used on every sentence: would someone miss it if it were gone? Eight 
 - **Name: "Claim rows".** **Owner's call**, drawn as 4a and 4b. "Custom claims", your word, collides with the `custom_claims` key that the seeded shape and both Supabase templates send. The fold also holds the plain `groups` row. **Recommendation: 4a, "Claim rows".**
 - **Closed note:** "5 rows · `groups` · `custom_claims` holding 4 · both places". The count, then the top-level keys in order, with a nested object's leaf count, then where they land, in short.
 - **Open, in order:**
-  1. Every ClaimRow, as built: Inside › name · Carries · Remove; line 2 where the kind needs it; "Sent as …" for Ada Lovelace; "Put it inside another claim" under a top-level row.
+  1. Every ClaimRow, as built: Inside › name · Carries · Remove; line 2 where the kind needs it; "Sent as …" for Charlotte Flair; "Put it inside another claim" under a top-level row.
   2. Add a claim (ghost sm).
   3. **Lands in**: the settings row with its Segmented (Both | Access token | ID token and userinfo) and one faint line: "ID token and userinfo is one choice: the ID token carries it only while User Info inside ID Token is on."
 - **Text formats** stay where A-14 put them: line 2 of a roles row, "Sent as" A list | Text, with commas | Text, with spaces, with the warning. That is inside the fold.
@@ -89,7 +89,7 @@ The test I used on every sentence: would someone miss it if it were gone? Eight 
 
 ## 5 · The preview and its checks
 
-**The person picker is the card's title line: "Preview for [Ada Lovelace]". Under it is one verdict line. When everything passes, the checks are one step away. When a check fails, the trail opens by itself in its compact form. The token always sits under the trail, never inside check 5.**
+**The person picker is the card's title line: "Preview for [Charlotte Flair]". Under it is one verdict line. When everything passes, the checks are one step away. When a check fails, the trail opens by itself in its compact form. The token always sits under the trail, never inside check 5.**
 
 - **Title line:**
   - "Preview" (type-card-title), "for" in faint 13.5, and the pill (Avatar row and Select), as now.
@@ -106,7 +106,7 @@ The test I used on every sentence: would someone miss it if it were gone? Eight 
   - The words are A-14's. Check 5 becomes "Syndra answers with `groups` and `custom_claims`, below." On failure it reads "…, but only for userinfo."
 - **The token:** TokenBlock, then one faint line at 13 and **Copy preview** (sm) in a nowrap right seat.
   - The faint line at rest: "Zitadel adds `sub`, `email`, `name` and `preferred_username` itself."
-  - With a draft: "One difference for Ada Lovelace: `staff` becomes `netbird-staff`, in both claims."
+  - With a draft: "One difference for Charlotte Flair: `staff` becomes `netbird-staff`, in both claims."
   - On failure: "NetBird reads its access token, so it sees none of this, and empties every group it made from a token."
 - **Who's in the picker:** you first, then everyone. When test people are built, they become the Select's first group, "Test people". There is no new section.
 
