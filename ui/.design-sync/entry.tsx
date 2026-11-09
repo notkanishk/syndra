@@ -3,7 +3,7 @@
 import "./process-shim";
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
+import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -103,6 +103,13 @@ const NO_ROUTER = {
 };
 
 /**
+ * Next's `useSearchParams()` (PlaceHost, in AppShell) reads its context and returns null without one,
+ * and PlaceHost calls `.toString()` on it: so every frame drawing AppShell showed the error page
+ * (found 9 Nov 2026 before publishing). A board has no query string: an empty one.
+ */
+const NO_SEARCH = new URLSearchParams();
+
+/**
  * The app root outside Next.js: the same stack as `components/providers.tsx`
  * (query client, name resolver, theme, error boundary - minus the dev-only
  * query devtools) plus the current route, which the shell's `usePathname()`
@@ -142,6 +149,7 @@ export function SyndraRoot({
     <PortalTarget.Provider value={frame}>
       <AppRouterContext.Provider value={NO_ROUTER}>
       <PathnameContext.Provider value={pathname}>
+      <SearchParamsContext.Provider value={NO_SEARCH}>
         <QueryClientProvider client={client}>
           <NameResolverProvider>
             <ThemeProvider>
@@ -149,6 +157,7 @@ export function SyndraRoot({
             </ThemeProvider>
           </NameResolverProvider>
         </QueryClientProvider>
+      </SearchParamsContext.Provider>
       </PathnameContext.Provider>
       </AppRouterContext.Provider>
     </PortalTarget.Provider>
