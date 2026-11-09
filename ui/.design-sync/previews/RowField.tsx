@@ -16,13 +16,13 @@ export const InDisclosedRow = () => (
       onToggle={() => {}}
       disclosure={
         <>
-          <RowField label="Granted by">Priya Nair</RowField>
+          <RowField label="Granted by">Cody Rhodes</RowField>
           <RowField label="Came from">Bundle · Wood shop basics</RowField>
           <RowField label="Expires">30 Nov 2026</RowField>
         </>
       }
     >
-      <div style={name}>Ishita Sen</div>
+      <div style={name}>Jey Uso</div>
       <div style={muted}>Wood shop · Supervisor</div>
     </CardRow>
   </Card>

@@ -15,8 +15,8 @@ export const RemoveRole = () => (
     <ModalHeader
       titleId="m-remove"
       chip={<Badge tone="warn">Laser cutter</Badge>}
-      title="Remove Operator from Aanya Rao?"
-      lede="Aanya keeps her Member role. She can no longer start a cut job on her own."
+      title="Remove Operator from Roman Reigns?"
+      lede="Roman keeps her Member role. She can no longer start a cut job on her own."
     />
     <ModalFooter note="Syndra records this before it reaches Zitadel.">
       <Button variant="ghost">Keep access</Button>

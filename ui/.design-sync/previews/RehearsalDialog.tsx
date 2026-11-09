@@ -16,10 +16,10 @@ const grant = {
   plan_id: "plan_01JB2X",
   applied: false,
   outcomes: [
-    row("u1", "Aanya Rao", "apply", "Gets Member on 3D printers"),
-    row("u2", "Kabir Mehta", "apply", "Gets Member on 3D printers"),
-    row("u3", "Ishita Sen", "apply", "Gets Member on 3D printers"),
-    row("u4", "Rohan Iyer", "no_change", "Already holds Member on 3D printers"),
+    row("u1", "Roman Reigns", "apply", "Gets Member on 3D printers"),
+    row("u2", "Alexa Bliss", "apply", "Gets Member on 3D printers"),
+    row("u3", "Jey Uso", "apply", "Gets Member on 3D printers"),
+    row("u4", "Damian Priest", "no_change", "Already holds Member on 3D printers"),
   ],
   summary: { total: 4, apply: 3, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
 };
@@ -29,9 +29,9 @@ const removal = {
   plan_id: "plan_01JB4R",
   applied: false,
   outcomes: [
-    row("u5", "Meera Pillai", "apply", "Loses Operator on CNC router", "Keeps Member there."),
-    row("u6", "Arjun Nair", "apply", "Loses Operator on CNC router"),
-    row("u7", "Diya Kapoor", "blocked", "Is the only Supervisor on CNC router"),
+    row("u5", "Finn Balor", "apply", "Loses Operator on CNC router", "Keeps Member there."),
+    row("u6", "Katana Chance", "apply", "Loses Operator on CNC router"),
+    row("u7", "Mickie James", "blocked", "Is the only Supervisor on CNC router"),
   ],
   summary: { total: 3, apply: 2, no_change: 0, blocked: 1, failed: 0, succeeded: 0, queued: 0 },
 };

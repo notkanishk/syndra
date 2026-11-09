@@ -28,9 +28,9 @@ const nav = [
 /** From the name catalog Syndra already holds: no request is made while typing. */
 const catalog = {
   users: [
-    { id: "u1", name: "Priya Nair", email: "priya.nair@example.edu", title: "Makerspace Manager", team: "Makerspace", status: "active", avatar: "PN" },
-    { id: "u2", name: "Prisha Rao", email: "prisha.rao@example.edu", title: "Student", team: "Design Club", status: "active", avatar: "PR" },
-    { id: "u3", name: "Arjun Priest", email: "arjun@example.edu", title: "", team: "Wood shop", status: "active", avatar: "AP" },
+    { id: "u1", name: "Cody Rhodes", email: "cody.rhodes@example.edu", title: "Makerspace Manager", team: "Makerspace", status: "active", avatar: "PN" },
+    { id: "u2", name: "Scarlett Bordeaux", email: "scarlett.bordeaux@example.edu", title: "Student", team: "Design Club", status: "active", avatar: "PR" },
+    { id: "u3", name: "Bobby Lashley", email: "bobby@example.edu", title: "", team: "Wood shop", status: "active", avatar: "AP" },
   ],
   projects: [
     { id: "p1", name: "Print Lab", kind: "project", description: "", roles: [{ key: "operator", label: "Operator", description: "" }] },

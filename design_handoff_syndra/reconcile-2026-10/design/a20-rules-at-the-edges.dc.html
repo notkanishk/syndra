@@ -207,7 +207,7 @@ class Component extends DCLogic {
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
       { key: ["governance", "indicators"], value: { pending_requests: 2, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 2 } },
       { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
-      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Priya Nair" }], projects: [], applications: [] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Cody Rhodes" }], projects: [], applications: [] } },
       { key: ["name-bundles"], value: [] },
     ];
   }
@@ -221,18 +221,18 @@ class Component extends DCLogic {
 
     // Alphabetical, always: the list is A to Z by shown name.
     const people = [
-      { name: "Aanya Rao", email: "aanya.rao@example.edu", bundle: "Lab tech", roles: "4" },
-      { name: "Kabir Mehta", email: "kabir.mehta@example.edu", bundle: "Member", roles: "2" },
-      { name: "Prisha Menon", email: "prisha.menon@example.edu", bundle: "Member", roles: "1" },
-      { name: "Priya Nair", email: "priya.nair@example.edu", bundle: "Lab tech", roles: "3" },
+      { name: "Roman Reigns", email: "roman.reigns@example.edu", bundle: "Lab tech", roles: "4" },
+      { name: "Alexa Bliss", email: "alexa.bliss@example.edu", bundle: "Member", roles: "2" },
+      { name: "Sonya Deville", email: "sonya.deville@example.edu", bundle: "Member", roles: "1" },
+      { name: "Cody Rhodes", email: "cody.rhodes@example.edu", bundle: "Lab tech", roles: "3" },
     ];
     const requests = [
-      { name: "Priya Nair", role: "Operator", project: "Laser cutting", when: "Asked 3 days ago, on 2 Nov", cls: "" },
-      { name: "Rohan Iyer", role: "Member", project: "Wood shop", when: "Asked yesterday, on 4 Nov", cls: "is-hover" },
+      { name: "Cody Rhodes", role: "Operator", project: "Laser cutting", when: "Asked 3 days ago, on 2 Nov", cls: "" },
+      { name: "Damian Priest", role: "Member", project: "Wood shop", when: "Asked yesterday, on 4 Nov", cls: "is-hover" },
     ];
     const pending = [
-      { name: "Priya Nair", role: "Operator", project: "Laser cutting", when: "Queued 2 minutes ago, by you", note: "She can't use it yet", cls: "" },
-      { name: "Rohan Iyer", role: "Member", project: "Wood shop", when: "Queued 2 minutes ago, by you", note: "He can't use it yet", cls: "is-hover" },
+      { name: "Cody Rhodes", role: "Operator", project: "Laser cutting", when: "Queued 2 minutes ago, by you", note: "She can't use it yet", cls: "" },
+      { name: "Damian Priest", role: "Member", project: "Wood shop", when: "Queued 2 minutes ago, by you", note: "He can't use it yet", cls: "is-hover" },
     ];
 
     const Q = (ask, rec) => ({ ask, rec });

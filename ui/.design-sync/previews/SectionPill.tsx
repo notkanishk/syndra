@@ -33,10 +33,10 @@ export const WhileScrolling = () => {
             <Card>
               <CardHeader title={s.label} count={s.count} />
               <CardRow first>
-                <div style={{ height: 70 }}>Aanya Rao · Laser cutter</div>
+                <div style={{ height: 70 }}>Roman Reigns · Laser cutter</div>
               </CardRow>
               <CardRow>
-                <div style={{ height: 70 }}>Rohan Iyer · CNC router</div>
+                <div style={{ height: 70 }}>Damian Priest · CNC router</div>
               </CardRow>
             </Card>
           </div>

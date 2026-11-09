@@ -130,7 +130,7 @@ Every part of A-02 can be built as drawn, with A for naming (the folder). It arr
 - **Access given back.** `/me/targets` gains `needs_new_password` (the account has had a password, and SMB stays off until a new one) and `restored_at`, the time the deny hold was lifted. Distinct from `reenrol` and from a first password.
 - **Home folder values as `share › folder`.** The values answer gains a label per value. The value stays the absolute path, which is what converge writes.
 - **"Makes 34 home folders in main › home_dir; 2 people already have one there".** The plan already projects each person's home; the rehearsal sums them.
-- **"[Priya Nair]'s roles name two home folders".** The resolver already sees two values for a single field. The system page's Waiting on you lists them, grouped by the pair of mappings.
+- **"[Cody Rhodes]'s roles name two home folders".** The resolver already sees two values for a single field. The system page's Waiting on you lists them, grouped by the pair of mappings.
 - **"You no longer hold Lab Tech, the role that gave you this folder".** `storage.status` reports the account's home, and the backend compares it with what the member's roles want now.
 
 ## A-03, read against the code (15 Oct 2026)

@@ -462,8 +462,8 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       op: "adopt",
       applied: false,
       outcomes: [
-        { user_id: "d1", name: "Ada Lovelace", email: "u1", effect: "apply", detail: "Adopted into Syndra (trained)." },
-        { user_id: "d2", name: "Sam Patel", email: "u2", effect: "no_change", detail: "Already resolved as adopted." },
+        { user_id: "d1", name: "Charlotte Flair", email: "u1", effect: "apply", detail: "Adopted into Syndra (trained)." },
+        { user_id: "d2", name: "Rey Mysterio", email: "u2", effect: "no_change", detail: "Already resolved as adopted." },
       ],
       plan_id: "plan_1",
       summary: { total: 2, apply: 1, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
@@ -473,7 +473,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
 
     // Rows are named, and the confirm button counts only what will change —
     // offering "Apply to 2" when one is already resolved would be a lie.
-    expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument();
+    expect(await screen.findByText("Charlotte Flair")).toBeInTheDocument();
     expect(screen.getByText(/Already resolved as adopted/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply to 1 item" })).toBeInTheDocument();
     expect(bulk.applies).toBe(0);
@@ -483,7 +483,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
     bulk.plan = {
       op: "adopt",
       applied: false,
-      outcomes: [{ user_id: "d1", name: "Ada", email: "u1", effect: "apply", detail: "Adopted." }],
+      outcomes: [{ user_id: "d1", name: "Charlotte", email: "u1", effect: "apply", detail: "Adopted." }],
       plan_id: "plan_1",
       summary: { total: 1, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
     };
@@ -502,7 +502,7 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       op: "adopt",
       applied: false,
       outcomes: [
-        { user_id: "d1", name: "Ada", email: "u1", effect: "no_change", detail: "Already resolved." },
+        { user_id: "d1", name: "Charlotte", email: "u1", effect: "no_change", detail: "Already resolved." },
       ],
       plan_id: "plan_1",
       summary: { total: 1, apply: 0, no_change: 1, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
@@ -522,8 +522,8 @@ describe("Unexplained access — bulk resolution is rehearsed", () => {
       op: "adopt",
       applied: false,
       outcomes: [
-        { user_id: "d1", name: "Ada", email: "u1", effect: "apply", detail: "Adopted." },
-        { user_id: "d2", name: "Sam", email: "u2", effect: "apply", detail: "Adopted." },
+        { user_id: "d1", name: "Charlotte", email: "u1", effect: "apply", detail: "Adopted." },
+        { user_id: "d2", name: "Rey", email: "u2", effect: "apply", detail: "Adopted." },
       ],
       plan_id: "plan_1",
       summary: { total: 2, apply: 2, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 0 },
@@ -562,7 +562,7 @@ it("does not call an add-on role retired", () => {
 // sentence every syndra_only row used to get — it reads as a stranger, and
 // the operator's next move is wrong.
 it("tells a removal as the history of the grant Syndra applied", () => {
-  NAMES.current = { "op-ada": "Ada Rivera", "op-marta": "Marta Reyes" };
+  NAMES.current = { "op-ada": "Charlotte Rivera", "op-marta": "Marta Reyes" };
   drift.data = [
     item({
       drift_type: "syndra_only",
@@ -577,7 +577,7 @@ it("tells a removal as the history of the grant Syndra applied", () => {
   ];
   renderTriage();
 
-  expect(screen.getByText(/Given by Ada Rivera/i)).toBeTruthy();
+  expect(screen.getByText(/Given by Charlotte Rivera/i)).toBeTruthy();
   expect(screen.getByText(/inducted on the laser/i)).toBeTruthy();
   expect(screen.getByText(/does not now, so somebody removed it there/i)).toBeTruthy();
   expect(screen.getByText(/Removed by Marta Reyes/i)).toBeTruthy();
@@ -677,12 +677,12 @@ describe("who made it", () => {
   it("names the actor once asked", async () => {
     origin.data = {
       id: "d1", readable: true, recorded: true, attributed: true,
-      actor_name: "Maya Chen", service: "Management-API", at: "2026-08-03T09:25:46Z",
+      actor_name: "Bianca Belair", service: "Management-API", at: "2026-08-03T09:25:46Z",
     };
     renderTriage();
     fireEvent.click(screen.getByRole("button", { name: "Who made it?" }));
 
-    await waitFor(() => expect(screen.getByText(/Maya Chen/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Bianca Belair/)).toBeInTheDocument());
     expect(screen.getByText(/Management-API/)).toBeInTheDocument();
   });
 

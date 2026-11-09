@@ -39,7 +39,7 @@
       <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">2 · The summary</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">One line per top-level claim, in the token's order: the key in mono, then what it carries in words. Then one faint line: where it lands, and the template. The token beside it is the same lines as literals for one person, so the two read across. Both, never a sentence that paraphrases the token.</p></div>
       <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">3 · The roles table</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">RoleWordsTable, first and always open. Its word fields are quiet at rest: they read as mono text, show their line on hover and their ring on focus. One click edits. An edited word keeps its border and a faint "Was <span class="type-mono">staff</span>."; a left-out role reads muted. The amber before-line comes with Save.</p></div>
       <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">4 · Claim rows, folded</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Advanced only. Closed: a 28px chevron, "Claim rows", and a faint count with the keys ("5 rows · <span class="type-mono">groups</span> · <span class="type-mono">custom_claims</span> holding 4 · both places"). Open: every ClaimRow form as built, Add a claim, then Lands in. Text formats stay on each roles row's second line. It opens by itself only when a row inside stops Save.</p></div>
-      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">5 · Preview and checks</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">"Preview for [Ada Lovelace]" is the card's title line, with Checked and Check again at its end. Then one verdict line: "All five checks pass", with Show the checks. A failure opens the trail by itself in its compact form, the failing check with its fix. The token always sits under the trail, never inside check 5.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">5 · Preview and checks</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">"Preview for [Charlotte Flair]" is the card's title line, with Checked and Check again at its end. Then one verdict line: "All five checks pass", with Show the checks. A failure opens the trail by itself in its compact form, the failing check with its fix. The token always sits under the trail, never inside check 5.</p></div>
       <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">6 · Quiet tools</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">One card, three settings rows: Sign-ins (the 30-day bars, small, with the count) · Debug mode (StatusSeat "Off" and its one line, Turn on debug mode) · History (the current version in one line; with two or more, Show all N unfolds the table). Each is a deliberate button away from doing anything.</p></div>
       <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">7 · Phone</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">One column, the shape first (#90). The summary's key sits above its words when they don't fit beside it. Roles stack with the word field full width. Then the preview's verdict and token, then the tools.</p></div>
       <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">8 · Motion</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Every fold is Unfold: height settles, contents tint in a beat behind; closing fades first, then shuts. The chevron turns on tint. Nothing travels; the page never scrolls to a fold. The verdict line crossfades in its seat. Reduced motion: each appears and goes at once.</p></div>
@@ -204,7 +204,7 @@
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:18px 22px 14px">
         <h2 class="type-card-title" style="margin:0">Preview</h2>
         <span style="font-size:13.5px;color:var(--faint)">for</span>
-        <span style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 6px;border:1px solid var(--line-strong);border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Avatar" name="Ada Lovelace" size="row" hint-size="28px,28px"></x-import><x-import component-from-global-scope="Syndra.Select" aria-label="Preview for" value="ada" on-change="{{ noop }}" class-name="w-[160px] border-0 px-1 py-0 text-[14px]" hint-size="160px,24px"><option value="ada">Ada Lovelace</option></x-import></span>
+        <span style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 6px;border:1px solid var(--line-strong);border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Avatar" name="Charlotte Flair" size="row" hint-size="28px,28px"></x-import><x-import component-from-global-scope="Syndra.Select" aria-label="Preview for" value="ada" on-change="{{ noop }}" class-name="w-[160px] border-0 px-1 py-0 text-[14px]" hint-size="160px,24px"><option value="ada">Charlotte Flair</option></x-import></span>
         <span style="flex:1"></span>
         <span style="font-size:12.5px;color:var(--faint)">Checked 19:06</span>
         <x-import component-from-global-scope="Syndra.Button" size="sm" hint-size="110px,34px">Check again</x-import>
@@ -317,15 +317,15 @@ class Component extends DCLogic {
     });
     const G = '["admin", "staff"]', G2 = '["admin", "netbird-staff"]';
     const claims = [
-      C("groups", false, "Roles NetBird sees", "Sent as `" + G + "` for Ada Lovelace, and `[]` for anyone who holds none.", true),
-      C("groups", true, "Roles NetBird sees", "Sent as `" + G + "` for Ada Lovelace, and `[]` for anyone who holds none.", true),
-      C("given_name", true, "Given name", "Sent as `\"Ada\"` for Ada Lovelace."),
-      C("family_name", true, "Family name", "Sent as `\"Lovelace\"` for Ada Lovelace."),
-      C("name", true, "Full name", "Sent as `\"Ada Lovelace\"` for Ada Lovelace."),
+      C("groups", false, "Roles NetBird sees", "Sent as `" + G + "` for Charlotte Flair, and `[]` for anyone who holds none.", true),
+      C("groups", true, "Roles NetBird sees", "Sent as `" + G + "` for Charlotte Flair, and `[]` for anyone who holds none.", true),
+      C("given_name", true, "Given name", "Sent as `\"Charlotte\"` for Charlotte Flair."),
+      C("family_name", true, "Family name", "Sent as `\"Lovelace\"` for Charlotte Flair."),
+      C("name", true, "Full name", "Sent as `\"Charlotte Flair\"` for Charlotte Flair."),
     ];
 
     // ------------------------------------------------ the preview
-    const CC = (g) => '{"groups": ' + g + ', "given_name": "Ada", "family_name": "Lovelace", "name": "Ada Lovelace"}';
+    const CC = (g) => '{"groups": ' + g + ', "given_name": "Charlotte", "family_name": "Lovelace", "name": "Charlotte Flair"}';
     const T = (key, val, mark) => ({ key, text: '"' + key + '": ' + val, mark: mark || " " });
     const tokenLines = isNew
       ? [T("roles", '["admins", "users"]', "−"), T("groups", '["admins", "users"]', "+")]
@@ -334,9 +334,9 @@ class Component extends DCLogic {
         : [T("groups", G), T("custom_claims", CC(G))];
     const zitadelAdds = "Zitadel adds `sub`, `email`, `name` and `preferred_username` itself.";
     const tokenFoot = P(isNew
-      ? "One difference for Ada Lovelace: `roles` becomes `groups`."
+      ? "One difference for Charlotte Flair: `roles` becomes `groups`."
       : draft
-        ? "One difference for Ada Lovelace: `staff` becomes `netbird-staff`, in both claims."
+        ? "One difference for Charlotte Flair: `staff` becomes `netbird-staff`, in both claims."
         : fail
           ? "NetBird reads its access token, so it sees none of this, and empties every group it made from a token."
           : zitadelAdds);
@@ -350,7 +350,7 @@ class Component extends DCLogic {
         : { tone: "healthy", sentence: "Zitadel's settings for NetBird let its claims through.", faint: ["Network's roles are asserted, the access token is a JWT, and userinfo goes inside the ID token."] };
     const checks = [
       c1,
-      { tone: "healthy", sentence: "Ada Lovelace holds 2 roles in " + (isNew ? "Code." : "Network."), faint: [isNew ? "Users and Admins, as Zitadel shows them." : "Staff and Admins, as Zitadel shows them."] },
+      { tone: "healthy", sentence: "Charlotte Flair holds 2 roles in " + (isNew ? "Code." : "Network."), faint: [isNew ? "Users and Admins, as Zitadel shows them." : "Staff and Admins, as Zitadel shows them."] },
       { tone: "healthy", sentence: "Her claims are ready.", faint: ["Built at 09:52 today, after her last change."] },
       isNew
         ? { tone: "healthy", sentence: "The GitLab template applies, as a draft.", faint: ["Not saved yet. GitLab gets Code's default until you save."] }
@@ -406,7 +406,7 @@ class Component extends DCLogic {
       historyNote: isNew ? "It uses Code's default." : "Saved 3 Nov by Syndra.",
 
       pageFrames: [
-        f("basic", "NetBird · Basic · every check passes", "The first screen answers both questions. Two summary lines say what NetBird gets; all seven roles sit under them, their words quiet until touched. Beside it: Preview for Ada Lovelace, one verdict line, the token. No claim rows, no Save until you edit. Below, three quiet tools."),
+        f("basic", "NetBird · Basic · every check passes", "The first screen answers both questions. Two summary lines say what NetBird gets; all seven roles sit under them, their words quiet until touched. Beside it: Preview for Charlotte Flair, one verdict line, the token. No claim rows, no Save until you edit. Below, three quiet tools."),
         f("basic-light", "NetBird · Basic · light", "The same page in the light theme."),
         f("adv", "NetBird · Advanced · claim rows folded", "Advanced adds the client id, Roles added later, and one folded line: Claim rows, with its count and keys. Nothing else moves."),
         f("rename", "Editing roles · a rename NetBird will act on", "Staff's word becomes netbird-staff. The field keeps its border and says Was staff. The summary's first line counts it. Save unfolds with the amber before-line; the preview shows − and + for both claims and one plain difference."),

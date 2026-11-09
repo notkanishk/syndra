@@ -90,14 +90,14 @@
 <x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
 <x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
 <div style="display:flex;flex-direction:column;gap:16px">
-  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Aanya Rao" meta="Research assistant · Mechanical Engineering" hint-size="100%,96px"></x-import></div>
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Roman Reigns" meta="Research assistant · Mechanical Engineering" hint-size="100%,96px"></x-import></div>
   <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
     <x-import component-from-global-scope="Syndra.CardHeader" title="Laser Lab" count="{{ 2 }}" hint-size="100%,56px"></x-import>
     <div class="row-divider" style="display:flex;flex-direction:column;gap:4px;padding:14px 20px"><span style="font-size:15px;font-weight:600">Laser cutter · Operator</span><span style="font-size:13px;color:var(--muted)">Given by Kanishk Singh · until 20 Oct</span></div>
     <div class="row-divider" style="display:flex;flex-direction:column;gap:4px;padding:14px 20px"><span style="font-size:15px;font-weight:600">Laser cutter · Member</span><span style="font-size:13px;color:var(--muted)">Through Lab Tech</span></div>
   </x-import>
   <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="m-rm" hint-size="100%,520px">
-    <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-rm" title="Remove Operator from Aanya Rao?" lede="Aanya keeps her Member role. She can no longer start a cut job on her own." hint-size="100%,120px"></x-import>
+    <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-rm" title="Remove Operator from Roman Reigns?" lede="Roman keeps her Member role. She can no longer start a cut job on her own." hint-size="100%,120px"></x-import>
     <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
       <div style="display:flex;flex-direction:column;gap:8px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100%,20px">Why</x-import><x-import component-from-global-scope="Syndra.Textarea" default-value="Her induction lapsed; she rebooks next week." aria-label="Why" hint-size="100%,72px"></x-import></div>
       <x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ ended }}" hint-size="100%,90px"></x-import>

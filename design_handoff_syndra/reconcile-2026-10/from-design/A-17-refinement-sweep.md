@@ -180,7 +180,7 @@ Each is one line, with the wording to add. Most findings in §2 are instances of
 - `BulkDialog.tsx:100`: "audit log". Fix: "Change history". polish
 
 ### 2.6 Requests (`components/requests/*`)
-- `RequestsScreen.tsx:318`: `<Avatar name={undefined}>` draws the empty circle (screenshot: Aditya Hegde). Fix: pass the resolved name. **clash**
+- `RequestsScreen.tsx:318`: `<Avatar name={undefined}>` draws the empty circle (screenshot: Gail Kim). Fix: pass the resolved name. **clash**
 - `RequestsScreen.tsx:319-324`: requester and role don't link, and the requester is truncated. Fix: G14; wrap. **clash**
 - `RequestsScreen.tsx:216-244`: no read line. Fix: `ReadFreshness` (G5). **clash**
 - `RequestsScreen.tsx:247`: column headings render only when something is pending, but the rows keep the same layout. Fix: always render them. **clash**
@@ -374,7 +374,7 @@ Each is one line, with the wording to add. Most findings in §2 are instances of
 - `HoldDialog.tsx:83,189,200`: "Hold X" and "Hold placed on…". Fix: "Put X on hold", word "On hold". **clash**
 - `HoldDialog.tsx:91-121`: hand-made radio cards. Fix: ChoiceRow. **clash**
 - `HoldDialog.tsx:159`: confirm first, ghost Cancel last (G4). **clash**
-- `HoldDialog.tsx:137`: rationale. `:143`: "Why — shown to…". Fix: "Why (shown to Priya)". `:102`: "Review › Holds due" as a path. `HoldsDueForReview.tsx:50`: no Refresh. `:131`: no column heads, and two near-duplicate rows. `:127`: a nowrap ArrowLink overflows on a phone. polish
+- `HoldDialog.tsx:137`: rationale. `:143`: "Why — shown to…". Fix: "Why (shown to Cody)". `:102`: "Review › Holds due" as a path. `HoldsDueForReview.tsx:50`: no Refresh. `:131`: no column heads, and two near-duplicate rows. `:127`: a nowrap ArrowLink overflows on a phone. polish
 
 ### 2.22 Zitadel (`app/zitadel/*`, `components/upstream/*`, `components/system/ClaimsDelivery.tsx`)
 - `zitadel/page.tsx:63-69`: the signing-key Notice sits above the title (screenshot), and the key's age is said four times. Fix: the Notice under the header, once (G7). **clash**

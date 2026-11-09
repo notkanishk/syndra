@@ -149,7 +149,7 @@ class Component extends DCLogic {
     this.member = /^(mine|ask|ask-nothing|asked|member-empty|member-phone)$/.test(this.st);
     if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
     this.session = this.member
-      ? { id: "u2", name: "Priya", email: "priya.nair@makerspace.edu", title: "Student", team: "Operations", status: "active", avatar: "", role: "user", sessionType: "demo" }
+      ? { id: "u2", name: "Cody", email: "cody.rhodes@makerspace.edu", title: "Student", team: "Operations", status: "active", avatar: "", role: "user", sessionType: "demo" }
       : { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
     this.rootData = [
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
@@ -166,11 +166,11 @@ class Component extends DCLogic {
     const decided = (mark, tone, note, noteTone) => ({ open: false, showActions: false, showMark: true, mark, markTone: tone, markColor: tone === "neutral" ? "var(--muted)" : "var(--ink)", hasNote: !!note, notePending: noteTone === "pending", note, noteColor: noteTone === "warn" ? "var(--warn-text)" : "var(--faint)" });
     const WAITS = new Set(["Laser cutter · Operator", "Laser cutter · Supervisor", "Welder · Member", "Storage · Member"]);
     let opRows = [
-      R("Aanya Rao", "Laser cutter · Operator", "For a month · until 3 Nov", "Capstone build needs unsupervised cuts after 6pm.", "2h"),
-      R("Omar Haddad", "Bandsaw · Member", "Until the end of term · 12 Dec", "", "5h"),
-      R("Priya Nair", "Laser cutter · Supervisor", "Until the end of term · 12 Dec", "Running the evening inductions this term.", "3h", decided("Approved", "warn", "Supervisor always waits for you", "pending")),
-      R("Lena Brandt", "Studio · Booking", "For a week · until 10 Oct", "Recording a short film for class.", "1d", deg ? decided("Approved", "warn", "Zitadel didn't answer when it was approved", "pending") : decided("Approved", "healthy", "Sent · not yet seen in Zitadel")),
-      R("Wei Chen", "Soldering station · Operator", "For a month · until 3 Nov", "Repairing the badge reader boards.", "2d", decided("Declined", "neutral", "Nothing was sent")),
+      R("Roman Reigns", "Laser cutter · Operator", "For a month · until 3 Nov", "Capstone build needs unsupervised cuts after 6pm.", "2h"),
+      R("Tiffany Stratton", "Bandsaw · Member", "Until the end of term · 12 Dec", "", "5h"),
+      R("Cody Rhodes", "Laser cutter · Supervisor", "Until the end of term · 12 Dec", "Running the evening inductions this term.", "3h", decided("Approved", "warn", "Supervisor always waits for you", "pending")),
+      R("Zoey Stark", "Studio · Booking", "For a week · until 10 Oct", "Recording a short film for class.", "1d", deg ? decided("Approved", "warn", "Zitadel didn't answer when it was approved", "pending") : decided("Approved", "healthy", "Sent · not yet seen in Zitadel")),
+      R("Xavier Woods", "Soldering station · Operator", "For a month · until 3 Nov", "Repairing the badge reader boards.", "2d", decided("Declined", "neutral", "Nothing was sent")),
     ];
     opRows = opRows.map(r => Object.assign(r, { waits: WAITS.has(r.role) }));
     if (sel) opRows = opRows.slice(0, 2).map(r => Object.assign({}, r, { checked: true, unchecked: false, bg: "var(--accent-soft)" }));
@@ -204,7 +204,7 @@ class Component extends DCLogic {
       selectEl: S && st !== "empty" && st !== "loading" && st !== "error" ? h(S.SelectModeToggle, { active: sel, onToggle: () => {} }) : null,
       groups: [
         { title: "Operator · desktop 1440", frames: [
-          f("default", "Default", "Two open requests with Approve and Decline; three just decided. Each keeps its seat until the next read and reports in the Decision seat itself: the decision as dot and word, and under it what happened to the access (#96). Aanya's and Priya's roles carry the Waits-for-you mark, so the operator knows before approving that the change will wait; Priya's approval says why and links to Pending changes (N15–N17). Duration under the ask (#52)."),
+          f("default", "Default", "Two open requests with Approve and Decline; three just decided. Each keeps its seat until the next read and reports in the Decision seat itself: the decision as dot and word, and under it what happened to the access (#96). Roman's and Cody's roles carry the Waits-for-you mark, so the operator knows before approving that the change will wait; Cody's approval says why and links to Pending changes (N15–N17). Duration under the ask (#52)."),
           f("selecting", "Selecting", "Select turns on round seats for open rows only. The bar states the 500 ceiling before the tap (#103) and both verbs open a rehearsal; one verb, declining."),
           f("empty", "Empty", "An empty open queue is resolved work, so it carries the healthy dot."),
           f("loading", "Loading", "Skeleton rows; no headings, no Select."),

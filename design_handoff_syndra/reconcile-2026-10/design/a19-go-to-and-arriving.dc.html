@@ -78,7 +78,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">3 · Landing on you (P3)</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Pending changes, opened from "Waiting for you to send" on Priya's page. The link carried her, so her chip is in force and the read line says what is shown and what Send does. Her name links back to her page (G14). Clearing the chip shows everyone's changes; Send always sends all of them, so the chip never changes what Send does.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Pending changes, opened from "Waiting for you to send" on Cody's page. The link carried her, so her chip is in force and the read line says what is shown and what Send does. Her name links back to her page (G14). Clearing the chip shows everyone's changes; Send always sends all of them, so the chip never changes what Send does.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ landingFrames }}" as="f" hint-placeholder-count="2">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -150,10 +150,10 @@
 <x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
 <div style="display:flex;flex-direction:column;gap:28px">
   <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px 20px">
-    <x-import component-from-global-scope="Syndra.Avatar" name="Priya Nair" size="header" hint-size="56px,56px"></x-import>
+    <x-import component-from-global-scope="Syndra.Avatar" name="Cody Rhodes" size="header" hint-size="56px,56px"></x-import>
     <div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:6px">
-      <h1 class="type-page-title" style="margin:0">Priya Nair</h1>
-      <span style="font-size:14.5px;color:var(--muted)">priya.nair@example.edu · Student, Design</span>
+      <h1 class="type-page-title" style="margin:0">Cody Rhodes</h1>
+      <span style="font-size:14.5px;color:var(--muted)">cody.rhodes@example.edu · Student, Design</span>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="150px,40px">Manage bundles</x-import>
@@ -165,7 +165,7 @@
       <a class="a19-tab" href="#access" aria-current="page">Access</a><a class="a19-tab" href="#requests">Requests</a><a class="a19-tab" href="#activity">Activity</a>
     </nav>
     <x-import component-from-global-scope="Syndra.Card" hint-size="100%,190px">
-      <x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 3 }}" avatar="{{ false }}" label="Reading what Priya can use" hint-size="100%,170px"></x-import>
+      <x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 3 }}" avatar="{{ false }}" label="Reading what Cody can use" hint-size="100%,170px"></x-import>
     </x-import>
   </div>
 </div>
@@ -190,14 +190,14 @@
     </div>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;font-size:13.5px;color:var(--muted)">
       <span style="display:inline-flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>Read just now</span>
-      <x-import component-from-global-scope="Syndra.FilterChip" on-clear="{{ noop }}" clear-label="Show everyone's changes" hint-size="130px,32px">Priya Nair</x-import>
-      <span>Showing Priya Nair's 2 changes. Send sends all 7.</span>
+      <x-import component-from-global-scope="Syndra.FilterChip" on-clear="{{ noop }}" clear-label="Show everyone's changes" hint-size="130px,32px">Cody Rhodes</x-import>
+      <span>Showing Cody Rhodes's 2 changes. Send sends all 7.</span>
     </div>
     <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
       <sc-for list="{{ pending }}" as="p" hint-placeholder-count="2">
         <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:14px 20px">
           <span style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:2px">
-            <span style="font-size:15px"><a class="a19-name" href="#person">Priya Nair</a> <span style="color:var(--muted)">· {{ p.what }}</span></span>
+            <span style="font-size:15px"><a class="a19-name" href="#person">Cody Rhodes</a> <span style="color:var(--muted)">· {{ p.what }}</span></span>
             <span style="font-size:12.5px;color:var(--faint)">{{ p.when }}</span>
           </span>
           <span style="flex:0 0 200px"><x-import component-from-global-scope="Syndra.StatusSeat" tone="warn" word="Waiting for you to send" note="{{ p.note }}" hint-size="200px,40px"></x-import></span>
@@ -223,7 +223,7 @@ class Component extends DCLogic {
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
       { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 7 } },
       { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
-      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Priya Nair" }], projects: [], applications: [] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Cody Rhodes" }], projects: [], applications: [] } },
       { key: ["name-bundles"], value: [] },
     ];
   }
@@ -236,8 +236,8 @@ class Component extends DCLogic {
     // Go to, with "pri" typed. Groups in a fixed order; names A to Z inside each.
     const groups = [
       { name: "People", rows: [
-        { name: "Prisha Menon", note: "Student, Electronics", kind: "Person", sel: true },
-        { name: "Priya Nair", note: "Student, Design", kind: "Person", sel: false },
+        { name: "Sonya Deville", note: "Student, Electronics", kind: "Person", sel: true },
+        { name: "Cody Rhodes", note: "Student, Design", kind: "Person", sel: false },
       ] },
       { name: "Projects", rows: [
         { name: "3D printing", note: "4 roles", kind: "Project", sel: false },
@@ -279,7 +279,7 @@ class Component extends DCLogic {
         f("arrive-light", "Proposed · light", "The same in daylight.", true),
       ],
       landingFrames: [
-        f("landing", "Pending changes, landed on Priya · dark", "Her chip is in force in the read line, with the count of what is shown and what Send does. Her name links to her page."),
+        f("landing", "Pending changes, landed on Cody · dark", "Her chip is in force in the read line, with the count of what is shown and what Send does. Her name links to her page."),
         f("landing-light", "The same · light"),
       ],
     };

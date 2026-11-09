@@ -13,10 +13,10 @@ export const WithNote = () => (
   <Modal open onClose={noop} size="md" labelledBy="f-1">
     <ModalHeader
       titleId="f-1"
-      title="Extend Rohan Iyer's CNC router access"
+      title="Extend Damian Priest's CNC router access"
       lede="His Operator role ends in 3 days. Extending keeps it until the end of the semester."
     />
-    <ModalFooter note="No change for Rohan's other roles — Syndra leaves those as they are.">
+    <ModalFooter note="No change for Damian's other roles — Syndra leaves those as they are.">
       <Button variant="ghost">Cancel</Button>
       <Button variant="accent">Extend to 15 Dec</Button>
     </ModalFooter>

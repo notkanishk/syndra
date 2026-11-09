@@ -69,7 +69,7 @@ Each has what, where, why, and a cost (S under a day, M a few days, L a week or 
 - **Rule.** RULES "A plan row forecasts in the future tense"; A-04 §7 (a step left is said where you took the first one); FINAL S4 (bloom only for something that went well, because of you).
 
 ### P3 · "Waiting for you to send →" lands on you · **S**
-- **What.** The link carries the person: `/governance/pending?person=<id>`. Pending changes seeds an in-force `FilterChip` ("Priya Nair ✕") from it, with the read line saying "Showing Priya Nair's changes · Send sends all 7". Names on Pending become `UserName` links (G14).
+- **What.** The link carries the person: `/governance/pending?person=<id>`. Pending changes seeds an in-force `FilterChip` ("Cody Rhodes ✕") from it, with the read line saying "Showing Cody Rhodes's changes · Send sends all 7". Names on Pending become `UserName` links (G14).
 - **Where.** `NextStep.tsx:16` takes `person`; `ActionOutcome` passes it; `pending/page.tsx:76` reads `?person` beside `?q`; `pending/page.tsx:285,502` link.
 - **Why.** Today the reader follows the step they were promised and lands on a queue of other people's changes. The link should finish the sentence it started.
 - **Rule.** A-04 §7.3; G14; "A cut-off list becomes a violet link to the full list, filtered."

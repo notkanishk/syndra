@@ -8,11 +8,11 @@ Answer to `Q-10-person-storage-and-sign-ins.md`, 3 Nov 2026. Board: `a10-person-
 
 ## 1 · Placement: a card per connected system on the Access tab, under the projects (chosen)
 
-- **The Access tab, after the last project card.** The page lede is "Everything this person can use". Storage is something they use, and their roles reach it. A tab of its own would split one question, "what can Aanya reach", across two tabs. Activity is history, and this card is the present.
+- **The Access tab, after the last project card.** The page lede is "Everything this person can use". Storage is something they use, and their roles reach it. A tab of its own would split one question, "what can Roman reach", across two tabs. Activity is history, and this card is the present.
 - **A quiet section label first:** "Network storage" (type-label, inset 20 to align with card content, 14 above the first card). It's the member's own word for it, so operator and member name it the same way.
 - **One card per connected system.** Today that's TrueNAS. A second system gets a second card in the same section.
 - **The read line gains one chip per system:** "TrueNAS ↓", with no count, after the project chips. The page now has more sections, and this is how you reach them. Folded projects don't hide it.
-- **Both views.** Basic gets the whole card: "why can't Aanya open her folder" is an everyday question. Advanced adds one thing, each folder's path in faint mono under its name (`main/projects/renders`), opened by Unfold like every Advanced part (A-08 §3).
+- **Both views.** Basic gets the whole card: "why can't Roman open her folder" is an everyday question. Advanced adds one thing, each folder's path in faint mono under its name (`main/projects/renders`), opened by Unfold like every Advanced part (A-08 §3).
 - **Operators only.** A member reading their own person page doesn't get the card. Their storage is on Network storage, with the password form.
 
 ## 2 · The card
@@ -23,14 +23,14 @@ Answer to `Q-10-person-storage-and-sign-ins.md`, 3 Nov 2026. Board: `a10-person-
   - "Answering · read 2 min ago" (healthy dot)
   - "Answering · their account is on hold" (line-strong dot)
   - "Offline since 08:33 · last read 08:31" (warn dot, warn-text)
-- Caption, faint 13.5: "What TrueNAS says about Aanya's account. Limits, holds and folders are set on TrueNAS's page; only Aanya sets their password." This is the card's one explanation, with no box.
+- Caption, faint 13.5: "What TrueNAS says about Roman's account. Limits, holds and folders are set on TrueNAS's page; only Roman sets their password." This is the card's one explanation, with no box.
 
 **Rows.** The setup card's row: label 170 · value · a 200px seat on the right. The seat holds a link or nothing, and never a button. Rows read in the order a person gets to their files:
 
 | Row | Value (ink 15) | Faint line (13) | Seat |
 |---|---|---|---|
-| Account | `aanya.rao` (mono 14.5) | "Made by Syndra on 3 Sept" | none |
-| Password | "Set, last changed 14 Oct" | "Only Aanya sets it, on their Network storage page." | none |
+| Account | `roman.reigns` (mono 14.5) | "Made by Syndra on 3 Sept" | none |
+| Password | "Set, last changed 14 Oct" | "Only Roman sets it, on their Network storage page." | none |
 | Home folder | "18.4 GB of 50 GB", 5px bar (max 360) | the limit and where it comes from (below) | "Set on TrueNAS's page →" |
 | Folders | one line per folder (below) | none | "Set in TrueNAS's mappings →" |
 | Hold | "None" (muted) | none | "Set on TrueNAS's page →" |
@@ -82,20 +82,20 @@ Answer to `Q-10-person-storage-and-sign-ins.md`, 3 Nov 2026. Board: `a10-person-
   - No NotOpenYet, because nothing is about to open.
   - The card stays, so the section never moves.
 - **An account Syndra didn't make** (`adopted`):
-  - Account: `arao`, faint "Made by hand on TrueNAS before Syndra managed it. Kanishk Singh assigned it to Aanya on 12 Sept, with everything it held." Kanishk Singh links to his page.
-  - **The Password row follows TrueNAS, not Syndra's record.** Syndra has no record of a password, but TrueNAS accepts one. It reads "Set before Syndra managed this account", with faint "TrueNAS accepts it, so it works. Syndra has no date for it, and only Aanya can change it."
+  - Account: `arao`, faint "Made by hand on TrueNAS before Syndra managed it. Kanishk Singh assigned it to Roman on 12 Sept, with everything it held." Kanishk Singh links to his page.
+  - **The Password row follows TrueNAS, not Syndra's record.** Syndra has no record of a password, but TrueNAS accepts one. It reads "Set before Syndra managed this account", with faint "TrueNAS accepts it, so it works. Syndra has no date for it, and only Roman can change it."
   - Never "Not set" for an account that works.
 - **Needs a new password** (`newpw`):
-  - Password: neutral dot, 600, "Needs a new password". Faint: "Their access was given back on 20 Oct. TrueNAS opens their folders again only once Aanya sets a new one on their Network storage page. Nobody else can."
+  - Password: neutral dot, 600, "Needs a new password". Faint: "Their access was given back on 20 Oct. TrueNAS opens their folders again only once Roman sets a new one on their Network storage page. Nobody else can."
   - Hold: "None", faint "The last one ended on 20 Oct", which is the reason.
-  - Folders stay at full strength. The operator can read them, though Aanya can't open them yet.
-- **First password not set:** the same row, with "Not set yet" and "Their account turns every sign-in away until Aanya sets one on their Network storage page."
+  - Folders stay at full strength. The operator can read them, though Roman can't open them yet.
+- **First password not set:** the same row, with "Not set yet" and "Their account turns every sign-in away until Roman sets one on their Network storage page."
 - **Old password gone (re-enrolment):** the same row, with "Needs a new password" and "TrueNAS was rebuilt since they set it, and passwords didn't carry over."
 - **Not mapped to any folder** (`nofolders`):
   - Folders: "None yet". Faint: "Their Fab visitor role reaches TrueNAS, but no folder there is open to it. Folders open to a group on TrueNAS itself; this fills in when one does."
   - No dashed box and no hollow dot. That's the member's pattern for an empty list; for the operator, nothing is wrong.
 - **System offline** (`offline`):
-  - **One amber Notice in the card**, live, under the header. Title: "TrueNAS is offline". Body: "It stopped answering at 08:33. Home folder and Folders below are what it said at 08:31, 2 hours ago. Aanya's access hasn't changed, and their folders open again when it's back."
+  - **One amber Notice in the card**, live, under the header. Title: "TrueNAS is offline". Body: "It stopped answering at 08:33. Home folder and Folders below are what it said at 08:31, 2 hours ago. Roman's access hasn't changed, and their folders open again when it's back."
   - Home folder and Folders are TrueNAS's reads, so they sit at **0.62**: stale, still readable.
   - **Account, Password and Hold are Syndra's own records** and stay at full strength.
   - With no last read, the Notice stands alone, those two rows aren't drawn, and there are no numbers.
@@ -108,7 +108,7 @@ Answer to `Q-10-person-storage-and-sign-ins.md`, 3 Nov 2026. Board: `a10-person-
   - With a project but no mapping yet, the why becomes "No role is mapped to TrueNAS yet, so nobody has an account there."
 - **Loading:** the name and the caption (both known), then RowSkeleton 4. No status, no age, no values.
 - **Error** (Syndra's server):
-  - The red Notice takes the card's place, under the section label: "Couldn't load Aanya's storage on TrueNAS." · "Syndra's server did not answer when this page asked for it. Nothing was changed." · Try again · reference.
+  - The red Notice takes the card's place, under the section label: "Couldn't load Roman's storage on TrueNAS." · "Syndra's server did not answer when this page asked for it. Nothing was changed." · Try again · reference.
   - The projects above keep their own state.
 - **Whole account on hold** (`held`):
   - Hold row: neutral dot, 600, "Their whole account, since 20 Oct". Faint: "“Lost their key card. Until it's found.” · put on hold by Kanishk Singh · review on 17 Nov". The status beside the name reads "Answering · their account is on hold".

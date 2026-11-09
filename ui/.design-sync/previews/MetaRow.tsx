@@ -12,7 +12,7 @@ export const PersonFacts = () => (
 
 /** Empty facts are dropped, so no dot hangs on the end. */
 export const SkipsEmpty = () => (
-  <MetaRow>{["meera.pillai@example.edu", null, "Electronics bench", null]}</MetaRow>
+  <MetaRow>{["finn.balor@example.edu", null, "Electronics bench", null]}</MetaRow>
 );
 
 export const TwoItems = () => <MetaRow>{["12 roles", "Synced 4 min ago"]}</MetaRow>;

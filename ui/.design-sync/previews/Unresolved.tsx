@@ -15,7 +15,7 @@ export const InRows = () => (
       <span style={muted}>Laser Cutter · Operator</span>
     </CardRow>
     <CardRow>
-      <div style={who}>Aanya Rao</div>
+      <div style={who}>Roman Reigns</div>
       <span style={muted}><Unresolved label="Unknown project" id="382075332397639918" idLabel="project id" /> · Member</span>
     </CardRow>
   </Card>

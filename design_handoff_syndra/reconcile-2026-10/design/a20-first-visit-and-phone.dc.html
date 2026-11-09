@@ -49,7 +49,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">1 · The welcome keeps its seat (P2)</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">My access on Priya's first visit, the day her welcome roles were given. Today the welcome takes the ladder's line (MemberAccess.tsx:226), so she is not told she can use Laser cutting from today. Proposed, "Welcome to Syndra." is the title's second sentence, in the seat "Here's what you can use." holds on every later visit, and the line below keeps the ladder. When nothing is on the ladder, its calm rung reads the About sentence that day. Nothing moves between the first visit and the second.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">My access on Cody's first visit, the day her welcome roles were given. Today the welcome takes the ladder's line (MemberAccess.tsx:226), so she is not told she can use Laser cutting from today. Proposed, "Welcome to Syndra." is the title's second sentence, in the seat "Here's what you can use." holds on every later visit, and the line below keeps the ladder. When nothing is on the ladder, its calm rung reads the About sentence that day. Nothing moves between the first visit and the second.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ welcomeFrames }}" as="f" hint-placeholder-count="3">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -136,11 +136,11 @@
 <div style="display:flex;flex-direction:column;gap:16px">
   <div style="display:flex;flex-direction:column;gap:8px">
     <sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
-      <h1 class="type-page-title" style="margin:0">Morning, Priya. <span style="color:var(--faint)">Here&rsquo;s what you can use.</span></h1>
+      <h1 class="type-page-title" style="margin:0">Morning, Cody. <span style="color:var(--faint)">Here&rsquo;s what you can use.</span></h1>
       <div class="a20-line"><span>Welcome to Syndra. It keeps the makerspace&rsquo;s list of who can use what, and why.</span></div>
     </sc-if>
     <sc-if value="{{ isProposed }}" hint-placeholder-val="{{ true }}">
-      <h1 class="type-page-title" style="margin:0">Morning, Priya. <span style="color:var(--faint)">Welcome to Syndra.</span></h1>
+      <h1 class="type-page-title" style="margin:0">Morning, Cody. <span style="color:var(--faint)">Welcome to Syndra.</span></h1>
       <div class="a20-line"><span style="display:inline-flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>From today, you can use Laser cutting.</span><a class="a20-jump" href="#card">Laser cutting <span aria-hidden>↓</span></a></div>
     </sc-if>
   </div>
@@ -233,7 +233,7 @@
       <div class="a20-row row-divider" style="align-items:flex-start">
         <span style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:4px">
           <span class="type-label" style="color:var(--label)">{{ m.k }}</span>
-          <span style="font-size:15px"><a class="a20-name" href="#person">Rohan Iyer</a> <span style="color:var(--muted)">holds Operator in</span> <a class="a20-name" href="#project">Laser cutting</a></span>
+          <span style="font-size:15px"><a class="a20-name" href="#person">Damian Priest</a> <span style="color:var(--muted)">holds Operator in</span> <a class="a20-name" href="#project">Laser cutting</a></span>
           <span style="font-size:12.5px;color:var(--faint)">Found 2 hours ago · nothing in Syndra explains it</span>
         </span>
         <span style="flex:0 0 260px;display:flex;justify-content:flex-end;gap:8px">
@@ -262,12 +262,12 @@ class Component extends DCLogic {
     this.frame = q.get("frame");
     this.st = this.frame || "";
     this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
-    this.member = { id: "u2", name: "Priya Nair", email: "priya.nair@example.edu", title: "Student", team: "Design", status: "active", avatar: "PN", role: "user", sessionType: "demo" };
+    this.member = { id: "u2", name: "Cody Rhodes", email: "cody.rhodes@example.edu", title: "Student", team: "Design", status: "active", avatar: "PN", role: "user", sessionType: "demo" };
     this.rootData = [
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
       { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 4, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 0 } },
       { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
-      { key: ["name-catalog"], value: { users: [{ id: "u3", display_name: "Rohan Iyer" }], projects: [], applications: [] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u3", display_name: "Damian Priest" }], projects: [], applications: [] } },
       { key: ["name-bundles"], value: [] },
     ];
     this.memberData = [
@@ -289,10 +289,10 @@ class Component extends DCLogic {
       { project: "Wood shop", note: "1 role", role: "Hand tools", how: "Because you're in Member", since: "Since 3 Nov" },
     ];
     const phonePeople = [
-      { name: "Aanya Rao", bundle: "Lab tech", roles: "4" },
-      { name: "Kabir Mehta", bundle: "Member", roles: "2" },
-      { name: "Prisha Menon", bundle: "Member", roles: "1" },
-      { name: "Priya Nair", bundle: "Lab tech", roles: "3" },
+      { name: "Roman Reigns", bundle: "Lab tech", roles: "4" },
+      { name: "Alexa Bliss", bundle: "Member", roles: "2" },
+      { name: "Sonya Deville", bundle: "Member", roles: "1" },
+      { name: "Cody Rhodes", bundle: "Lab tech", roles: "3" },
     ];
     const moments = [
       { k: "At rest", buttons: true, seat: false, busy: false, revoke: "Revoke it" },

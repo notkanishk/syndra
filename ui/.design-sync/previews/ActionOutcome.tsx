@@ -8,7 +8,7 @@ const col = { display: "grid", gap: 12, maxWidth: 560 } as const;
 
 export const Block = () => (
   <div style={col}>
-    <ActionOutcome outcome={{ kind: "applied", message: "Granted Operator on Laser cutter to Aanya Rao" }} />
+    <ActionOutcome outcome={{ kind: "applied", message: "Granted Operator on Laser cutter to Roman Reigns" }} />
     <ActionOutcome
       outcome={{
         kind: "queued",
@@ -16,7 +16,7 @@ export const Block = () => (
         detail: "Recorded in Syndra and waiting to be sent to Zitadel. Nothing has changed there yet; send it from Pending changes.",
       }}
     />
-    <ActionOutcome outcome={{ kind: "no_change", message: "Kabir Mehta already holds Member on 3D printers" }} />
+    <ActionOutcome outcome={{ kind: "no_change", message: "Alexa Bliss already holds Member on 3D printers" }} />
   </div>
 );
 

@@ -10,7 +10,7 @@ The example world is fake but the apps are real:
 - **GitLab** on Code, with no shape of its own yet, so it uses Code's default.
 - **Audio-Dash** on Audio, copying Inventory's shape (§8).
 - **Inventory**, an in-house app on Custom.
-- The preview person is Ada Lovelace. The test people are Aanya Rao, Rohan Mehta and Grace Hopper.
+- The preview person is Charlotte Flair. The test people are Roman Reigns, Liv Morgan and Sami Zayn.
 
 Every template below follows `docs/research/2026-11-03-app-claims.md`: the same claim keys, value shapes and token placement.
 
@@ -83,7 +83,7 @@ Gaps: 28 from the header to the content, 20 between cards. On a wide screen the 
 **An app with no shape of its own** (frame `new`, GitLab). **Owner, 3 Nov: it gets its project's default shape, never nothing.** The default works today; templates are an offer on top of it.
 - **The shape card's lede:** "GitLab uses Code's default shape. Nobody has set one for Code, so it's Syndra's built-in: `roles`, every role in Syndra's words, as a list, in the access token and userinfo."
   - Then a violet link: "Code's default →". The project default has one write place, the project's page; here it is read-only.
-- **"Sends now"**, one read-only claim row in the row form's type: `roles` · "Every role in Code, in Syndra's words" · "Sent as `["users", "admins"]` for Ada Lovelace, and `[]` for anyone who holds none."
+- **"Sends now"**, one read-only claim row in the row form's type: `roles` · "Every role in Code, in Syndra's words" · "Sent as `["users", "admins"]` for Charlotte Flair, and `[]` for anyone who holds none."
 - **The offer.** A type-label, "Shape it for GitLab", then a Segmented sm: **Start from a template** | **Copy another app's shape** (§8).
 - **Templates:** one ChoiceRow per template, single choice. Each has a title, a meta line with what it sends and where, and one description.
 - **Suggested** sits in the note seat when the app's name in Zitadel contains the template's name ("Suggested: this app is called GitLab"). It is preselected.
@@ -224,7 +224,7 @@ From the chooser, the footer is Close and accent **Start from …**. From an app
   - An unticked role that was sent gets: "Was sent as `netbird-guests`."
 - **The before-line**, beside Save. It turns warn-text, with an amber dot, only when a change breaks something for the app:
   - "2 changes NetBird will act on. 12 people move from `netbird-staff` to a new group, `network-staff`, at their next sign-in. 4 people leave `netbird-guests`."
-- **The draft preview** shows − `"groups": ["netbird-staff", "netbird-admins"]` and + `"groups": ["network-staff", "netbird-admins"]`. Under it: "One difference for Ada Lovelace: `netbird-staff` becomes `network-staff`, so NetBird moves her to a new group."
+- **The draft preview** shows − `"groups": ["netbird-staff", "netbird-admins"]` and + `"groups": ["network-staff", "netbird-admins"]`. Under it: "One difference for Charlotte Flair: `netbird-staff` becomes `network-staff`, so NetBird moves her to a new group."
 - Test people show Now · After this draft · Difference, as in A-11 §3.
 - **What makes a change "breaking"** comes from the template, not from a guess:
   - **NetBird:** any rename or removal.
@@ -240,7 +240,7 @@ From the chooser, the footer is Close and accent **Start from …**. From an app
 **The row:**
 - **Line 1:** Claim (mono Input, 180) · Carries (Select, flexible) · Remove (ghost sm, nowrap).
 - **Line 2,** only for kinds that need it (below).
-- **Line 3:** faint, "Sent as `…` for Ada Lovelace." Every row has it.
+- **Line 3:** faint, "Sent as `…` for Charlotte Flair." Every row has it.
 - **An error** is danger text under the row, as in A-11 §8.
 
 **Carries**, the Select, in three groups:
@@ -255,12 +255,12 @@ From the chooser, the footer is Close and accent **Start from …**. From an app
 | | Bundles they hold | a list of bundle names |
 | | Each role's end date | an object |
 
-- **Roles.** No line 2 in Basic. "Sent as `["netbird-staff", "netbird-admins"]` for Ada Lovelace, and `[]` for anyone who holds none." It is always sent, never left out.
-- **Is a service account.** "Sent as `false` for Ada Lovelace." Service accounts get `true`. This is the only place a token says so.
+- **Roles.** No line 2 in Basic. "Sent as `["netbird-staff", "netbird-admins"]` for Charlotte Flair, and `[]` for anyone who holds none." It is always sent, never left out.
+- **Is a service account.** "Sent as `false` for Charlotte Flair." Service accounts get `true`. This is the only place a token says so.
 - **Yes if they hold a role.**
   - Line 2: "If they hold" · the chosen roles as chips · **Change roles** (ghost sm). That opens the role picker in single-project mode: one part per job.
   - "Otherwise `false`." A missing claim reads differently from false, so it is never left out.
-  - Example: `is_admin`, "Sent as `true` for Ada Lovelace (she holds Admins)."
+  - Example: `is_admin`, "Sent as `true` for Charlotte Flair (she holds Admins)."
 - **Bundles they hold.** "Sent as `["Makers"]`." These are bundle names, not ids, so a rename reaches the app.
 - **Each role's end date.** "Sent as `{"staff": "2027-05-31"}`." The keys are the app's words. Roles with no end are left out of the object.
 - **Fixed value.** A-11 §8 unchanged: the Type Segmented, the value control, and the type keeping itself.
@@ -336,7 +336,7 @@ It checks each fact only where the shape lands. The pass line: "Network's roles 
 - **Title:** "Turn on debug mode". **Lede:** "See one account's sign-ins to NetBird live: what Zitadel asked, what Syndra answered, and the five checks. It turns itself off after 15 minutes."
 - **"Whose sign-ins"**, with the faint note "One account at a time". ChoiceRow single:
   - "You, Kanishk Singh" (preselected), description "Sign in to NetBird yourself to see it here.";
-  - one row per test person ("Ada Lovelace", note seat "Test person");
+  - one row per test person ("Charlotte Flair", note seat "Test person");
   - then "Someone else": an Input, "Choose a person", that opens the person form (A-11 §3).
 - **Faint:** "Syndra keeps what it sees in memory for an hour, never in its database. Names and emails show, because this is for you to debug. Signatures and secrets never do."
 - **Footer note (the before-line):** "Ends at 10:21, 15 minutes from now. While it runs, choosing another account moves the capture to them. Change history records each." Then Cancel and accent **Turn on debug mode**.
@@ -348,12 +348,12 @@ It checks each fact only where the shape lands. The pass line: "Network's roles 
 
 **Changing the account while it runs** (frame `debug-switch`). **Change account** (outline sm, in the seat beside Turn off) opens the same sheet:
 - **Title:** "Change whose sign-ins". The account being captured is ticked grey, with the note "Captured now".
-- **Before-line:** "Moves the capture to Aanya Rao from now on. It still ends at 10:21. Ada Lovelace's sign-ins seen so far stay in the list. Change history records the switch."
-- **Confirm:** **Switch to Aanya Rao** (accent). Result: **Switched**, "Debug mode now shows Aanya Rao's sign-ins, until 10:21."
+- **Before-line:** "Moves the capture to Roman Reigns from now on. It still ends at 10:21. Charlotte Flair's sign-ins seen so far stay in the list. Change history records the switch."
+- **Confirm:** **Switch to Roman Reigns** (accent). Result: **Switched**, "Debug mode now shows Roman Reigns's sign-ins, until 10:21."
 - The end time doesn't move. A switch never makes a capture longer.
 
 **On** (frames `debug-on`, `debug-empty`). The row becomes:
-- **StatusSeat, lime:** "On", with the note "Ada Lovelace's sign-ins · ends 10:21, 14 min left".
+- **StatusSeat, lime:** "On", with the note "Charlotte Flair's sign-ins · ends 10:21, 14 min left".
   - The minutes change in place once a minute (Crossfade, S4). It is never a ticking counter.
   - The seat has **Change account** and **Turn off** (both outline sm).
 - **Beneath, by Unfold:**
@@ -371,7 +371,7 @@ It checks each fact only where the shape lands. The pass line: "Network's roles 
 
 **One sign-in, opened** (frame `debug-open`). The row's chevron opens it in place by Unfold. Inside, at 1440, two columns, then two rows:
 1. **"What Zitadel sent"**:
-   - A plain sentence: "Zitadel asked for NetBird's access-token claims for Ada Lovelace, listing 2 roles in Network."
+   - A plain sentence: "Zitadel asked for NetBird's access-token claims for Charlotte Flair, listing 2 roles in Network."
    - Then the raw JSON in Syndra.Mono on `--surface-0`: function, application client id, user (with email, unredacted), org, user grants.
    - Faint under it: "Signed by Zitadel. The signature isn't shown."
 2. **"What Syndra answered"**:

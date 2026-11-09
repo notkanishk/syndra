@@ -7,8 +7,8 @@ import { AppShell, Badge, Button, Card, CardHeader, CardRow, PageHeader, SyndraR
 
 const operator = {
   id: "284019337710552064",
-  name: "Priya Nair",
-  email: "priya.nair@example.edu",
+  name: "Cody Rhodes",
+  email: "cody.rhodes@example.edu",
   title: "Makerspace Manager",
   team: "Makerspace",
   status: "active",
@@ -19,8 +19,8 @@ const operator = {
 
 const member = {
   id: "284019337710552099",
-  name: "Kabir Mehta",
-  email: "kabir.mehta@example.edu",
+  name: "Alexa Bliss",
+  email: "alexa.bliss@example.edu",
   title: "Student",
   team: "Design Club",
   status: "active",
@@ -54,17 +54,17 @@ export const OperatorBasic = () => (
         <Card>
           <CardHeader title="Recently active" count={3} />
           <CardRow first>
-            <div style={name}>Aanya Rao</div>
+            <div style={name}>Roman Reigns</div>
             <div style={muted}>Laser cutter · Operator</div>
             <Badge tone="neutral">Active</Badge>
           </CardRow>
           <CardRow>
-            <div style={name}>Rohan Iyer</div>
+            <div style={name}>Damian Priest</div>
             <div style={muted}>CNC router · Operator</div>
             <Badge tone="warn">Expires in 3 days</Badge>
           </CardRow>
           <CardRow>
-            <div style={name}>Ishita Sen</div>
+            <div style={name}>Jey Uso</div>
             <div style={muted}>Wood shop · Supervisor</div>
             <Badge tone="neutral">Active</Badge>
           </CardRow>
@@ -86,12 +86,12 @@ export const OperatorAdvanced = () => (
         <Card>
           <CardHeader title="Unexplained changes" count={2} tone="danger" />
           <CardRow first>
-            <div style={name}>Meera Pillai</div>
+            <div style={name}>Finn Balor</div>
             <div style={muted}>Electronics bench · Operator added in Zitadel</div>
             <Button size="sm" variant="outline">Review</Button>
           </CardRow>
           <CardRow>
-            <div style={name}>Arjun Das</div>
+            <div style={name}>Chad Gable</div>
             <div style={muted}>3D printers · Member removed in Zitadel</div>
             <Button size="sm" variant="outline">Review</Button>
           </CardRow>

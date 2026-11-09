@@ -67,9 +67,9 @@ Part 1 measures ink at each alpha over the real grounds in `ui/src/app/globals.c
 **What was asked, as a sentence, then an amber "Not confirmed". When it was sent, who asked, and one verb: Say what happened.**
 
 **The row** (`?frame=waiting`), in the region's row form:
-- Line 1, 15px/600: what was asked, with the person linked. "Set **Ada Lovelace**'s storage password". Beside it, an amber dot and "Not confirmed" (13.5px, 600, `--warn-text`), so the sentence can't be read as a to-do.
+- Line 1, 15px/600: what was asked, with the person linked. "Set **Charlotte Flair**'s storage password". Beside it, an amber dot and "Not confirmed" (13.5px, 600, `--warn-text`), so the sentence can't be read as a to-do.
 - Line 2, `--muted`: "Sent to TrueNAS at 09:41 today, 2 hours ago. No answer came back, so it may or may not have happened." Older ones read "on 2 Nov at 18:05".
-- Line 3, `--faint`: "Asked by Ada Lovelace". When Syndra asked by itself: "Asked by Syndra, bringing accounts in line".
+- Line 3, `--faint`: "Asked by Charlotte Flair". When Syndra asked by itself: "Asked by Syndra, bringing accounts in line".
 - Seat: **Say what happened**, outline sm, nowrap, right. Its aria-label repeats the sentence.
 - No id on the row. The id belongs in Audit.
 
@@ -77,20 +77,20 @@ Part 1 measures ink at each alpha over the real grounds in `ui/src/app/globals.c
 
 | Operation | What was asked | How to tell, in the dialog |
 |---|---|---|
-| `password.set` | "Set Ada Lovelace's storage password" | "TrueNAS can't show a password. Ask Ada Lovelace to sign in to storage with the new one: if TrueNAS lets Ada Lovelace in, it happened." Then: "Can't reach Ada Lovelace? Choose It didn't happen. Setting a storage password again is safe once someone has looked." |
-| `password.rotate` | "Replace Grace Hopper's storage password, so the old one stops working" | "TrueNAS can't show a password. If you can't tell, choose It didn't happen: the revoke stays unfinished, and Syndra replaces the password again." |
-| `account.purge` | "Delete Grace Hopper's account and files on TrueNAS" | "Read TrueNAS again. If grace.hopper is gone from Accounts on TrueNAS, it happened. Syndra won't send a delete again by itself." |
-| `account.adopt` | "Assign kiosk to Aanya Rao" | "If kiosk is under Accounts Syndra manages, it happened." (Syndra should settle this itself from a read.) |
-| `account.release` | "Let go of Aanya Rao's account on TrueNAS, keeping it" | "If aanya.rao is under Not made by Syndra, it happened." (Syndra should settle this itself.) |
+| `password.set` | "Set Charlotte Flair's storage password" | "TrueNAS can't show a password. Ask Charlotte Flair to sign in to storage with the new one: if TrueNAS lets Charlotte Flair in, it happened." Then: "Can't reach Charlotte Flair? Choose It didn't happen. Setting a storage password again is safe once someone has looked." |
+| `password.rotate` | "Replace Sami Zayn's storage password, so the old one stops working" | "TrueNAS can't show a password. If you can't tell, choose It didn't happen: the revoke stays unfinished, and Syndra replaces the password again." |
+| `account.purge` | "Delete Sami Zayn's account and files on TrueNAS" | "Read TrueNAS again. If sami.zayn is gone from Accounts on TrueNAS, it happened. Syndra won't send a delete again by itself." |
+| `account.adopt` | "Assign kiosk to Roman Reigns" | "If kiosk is under Accounts Syndra manages, it happened." (Syndra should settle this itself from a read.) |
+| `account.release` | "Let go of Roman Reigns's account on TrueNAS, keeping it" | "If roman.reigns is under Not made by Syndra, it happened." (Syndra should settle this itself.) |
 | `setting.put` (`home_root`) | "Change where home folders go to main › homes" | "Home folders, in the setup card above, shows what TrueNAS holds now." (Syndra should settle this itself.) |
 
 **The dialog** (`?frame=settle`), Modal md:
-- **Title** as the question: "Did TrueNAS set Ada Lovelace's storage password?"
-- **Lede:** "Syndra sent it at 09:41 today, asked by Ada Lovelace, and no answer came back. Until you say, Syndra treats it as neither done nor failed."
+- **Title** as the question: "Did TrueNAS set Charlotte Flair's storage password?"
+- **Lede:** "Syndra sent it at 09:41 today, asked by Charlotte Flair, and no answer came back. Until you say, Syndra treats it as neither done nor failed."
 - **"How to tell"** (`type-label`), then the sentence for its kind from the table, in ink.
 - **Two single-choice ChoiceRows. Nothing is chosen at first.**
-  - **It happened**: "TrueNAS has the new password. Ada Lovelace's storage page says it was changed today."
-  - **It didn't happen**: "TrueNAS still has the old password. Ada Lovelace's storage page asks for a new one."
+  - **It happened**: "TrueNAS has the new password. Charlotte Flair's storage page says it was changed today."
+  - **It didn't happen**: "TrueNAS still has the old password. Charlotte Flair's storage page asks for a new one."
   - For other kinds the second line says the state of the world in the same way.
 - **Why two choices inside one verb, not two row buttons.** "It applied" and "It didn't apply" side by side on a row are opposite claims one tap apart. The dialog puts "how to tell" in front of the choice, so the operator looks before saying. "Happened" is also plainer than "applied", and keeps "Applied" away from something nobody has confirmed.
 - **Footer note** (the before-line): "Nothing is sent to TrueNAS. This records what you found, with your name."
@@ -99,8 +99,8 @@ Part 1 measures ink at each alpha over the real grounds in `ui/src/app/globals.c
   - Before a choice: "Record what happened", disabled.
 
 **The result, in the sheet** (96b):
-- **Not done** (`?frame=settled`): neutral dot, appears still. "You recorded that TrueNAS didn't set Ada Lovelace's storage password." Faint: "Ada Lovelace's storage page now asks for a new one. Audit keeps your answer, with your name." Close.
-- **Done** (`?frame=settled-done`): lime dot that lifts and blooms once. "TrueNAS has Ada Lovelace's new storage password." Faint: "It leaves Waiting on you. Audit keeps your answer, with your name." Close.
+- **Not done** (`?frame=settled`): neutral dot, appears still. "You recorded that TrueNAS didn't set Charlotte Flair's storage password." Faint: "Charlotte Flair's storage page now asks for a new one. Audit keeps your answer, with your name." Close.
+- **Done** (`?frame=settled-done`): lime dot that lifts and blooms once. "TrueNAS has Charlotte Flair's new storage password." Faint: "It leaves Waiting on you. Audit keeps your answer, with your name." Close.
 - The row leaves on the next read: it tints out and the gap settles (A-05 §2.6). Reopened, the dialog starts clean.
 
 **States:**

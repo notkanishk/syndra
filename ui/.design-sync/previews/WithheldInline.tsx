@@ -11,12 +11,12 @@ export const InHolderList = () => (
   <Card>
     <CardRow first>
       <div>
-        <div style={name}>Rohan Iyer</div>
+        <div style={name}>Damian Priest</div>
         <WithheldInline items={[{ field: "group", value: "cnc-router", target: "Door access", reason: "Waiting on a supervisor sign-off" }]} />
       </div>
     </CardRow>
     <CardRow>
-      <div style={name}>Meera Pillai</div>
+      <div style={name}>Finn Balor</div>
     </CardRow>
   </Card>
 );

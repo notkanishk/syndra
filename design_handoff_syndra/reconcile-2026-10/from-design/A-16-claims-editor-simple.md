@@ -34,7 +34,7 @@ Top to bottom (Advanced):
 - A-15's separate summary block. The list is the summary.
 - The **Claim rows** fold, along with its closed note and A-15's 4a/4b naming question. Each line now opens its own editor, so nothing needs a fold name. `CLAIM_ROWS` and `foldNote` go.
 - The roles type-label, "Roles NetBird sees · 7 of 7 included". The roles line says it.
-- The per-row "Sent as `…` for Ada Lovelace." line on every closed claim. It appears once, inside an opened editor.
+- The per-row "Sent as `…` for Charlotte Flair." line on every closed claim. It appears once, inside an opened editor.
 - "Put it inside another claim" as a bare button. Nesting is the **Inside** field (§3).
 
 **A text-format warning stays visible** (A-15 §2): if a saved roles claim is sent as text, its line carries the warn-text line in both views, so it can't hide behind a closed line.
@@ -105,7 +105,7 @@ Top to bottom (Advanced):
 **(c) A sheet with a live preview.** Modal md, "Add a claim to NetBird":
 - ChoiceRows (single) for what it carries. Zitadel's own claims are locked, ticked grey, with "Zitadel sends email already."
 - Then the claim name and Inside, side by side.
-- Then the new line for Ada Lovelace in a TokenBlock. The footer note says "Adds it to the draft. Nothing changes until you save.", with Cancel and accent **Add given_name**.
+- Then the new line for Charlotte Flair in a TokenBlock. The footer note says "Adds it to the draft. Nothing changes until you save.", with Cancel and accent **Add given_name**.
 - *For:* the most guided. *Against:* a dialog for a one-line change, and its preview repeats the Preview card beside it.
 
 **Why (a).** The common jobs (the roles, then perhaps a name or a yes/no) take two clicks with a key that works. The page's own Preview already shows the + line, so (c)'s preview would be a second place for the same truth. (b) is the form we're removing.
@@ -117,7 +117,7 @@ Top to bottom (Advanced):
    - If they hold: the roles as Chips, with **Change roles** (outline sm);
    - Value: the Type Segmented and the value Input (A-11 §8).
 4. **Inside**: a Select of "Nothing: top level", each object already sent, and "A new object", which becomes a mono Input. **This is where nesting lives** (Q-16 §3). A-14's rules stand: a dot stays a dot, rows that share a parent merge, and a row named like a parent is refused.
-5. **The faint literal:** "Sent as `true` for Ada Lovelace, who holds Admins, and `false` for anyone who doesn't."
+5. **The faint literal:** "Sent as `true` for Charlotte Flair, who holds Admins, and `false` for anyone who doesn't."
 6. **Remove** (danger sm), at the end and right-aligned.
 
 **An object's editor** (`custom_claims`):

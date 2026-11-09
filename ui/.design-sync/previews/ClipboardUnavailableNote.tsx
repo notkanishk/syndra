@@ -10,7 +10,7 @@ try { Object.defineProperty(navigator, "clipboard", { value: undefined, configur
 /** Renders only where the browser has no clipboard (http on the LAN); said once under the rows it explains. */
 export const UnderCopyRows = () => (
   <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
-    <CopyableValue label="Your account name" value="kabir.mehta" />
+    <CopyableValue label="Your account name" value="alexa.bliss" />
     <CopyableValue label="Share path" value="\\truenas.makerspace.local\projects\design-club" />
     <ClipboardUnavailableNote />
   </div>

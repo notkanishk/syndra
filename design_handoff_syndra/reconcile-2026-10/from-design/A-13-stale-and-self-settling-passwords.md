@@ -144,9 +144,9 @@ All in second person. TrueNAS is the actor. Each message says what's true and wh
 - Members have no history page. Their record is the password row itself.
 - The operator sees each change on the person's **Activity** tab, and the same lines in **Audit**. One row per change the member made. A resend is never a second change.
 - The row shows what happened, who did it, and the time. A faint line under it lists the sends:
-  - Confirmed on the second send: "Storage password changed on TrueNAS — by Ada Lovelace". Faint: "Sent at 18:05:03 with no answer. Sent again automatically at 18:05:15, and TrueNAS confirmed that one."
-  - Never confirmed: "Storage password change on TrueNAS, not confirmed — by Ada Lovelace". Faint: "Sent at 09:41:02 with no answer. Sent again automatically at 09:41:14 with no answer. Settled by her change at 11:52, which TrueNAS confirmed."
-  - The change that settles it: "Storage password changed on TrueNAS — by Ada Lovelace". Faint: "TrueNAS confirmed it at once. It also settles her change at 09:41."
+  - Confirmed on the second send: "Storage password changed on TrueNAS — by Charlotte Flair". Faint: "Sent at 18:05:03 with no answer. Sent again automatically at 18:05:15, and TrueNAS confirmed that one."
+  - Never confirmed: "Storage password change on TrueNAS, not confirmed — by Charlotte Flair". Faint: "Sent at 09:41:02 with no answer. Sent again automatically at 09:41:14 with no answer. Settled by her change at 11:52, which TrueNAS confirmed."
+  - The change that settles it: "Storage password changed on TrueNAS — by Charlotte Flair". Faint: "TrueNAS confirmed it at once. It also settles her change at 09:41."
 - Times show seconds only on these send lines, where the gap between two sends is the point.
 - Audit also offers the operation reference for each send, one tap away, as references always are.
 
@@ -155,7 +155,7 @@ All in second person. TrueNAS is the actor. Each message says what's true and wh
 **Waiting on you keeps only changes nobody else can settle. In practice, that means deletes (`account.purge`).** Drawn: `?frame=waiting`.
 
 - **`account.purge`** stays exactly as A-09 §3–4 drew it: the row, Say what happened, the dialog and both results.
-  - The dialog title for this kind is "Did TrueNAS delete Grace Hopper's account and files?"
+  - The dialog title for this kind is "Did TrueNAS delete Sami Zayn's account and files?"
 - **`password.set`** is dropped. It never reaches Waiting on you, Home's "Not confirmed" block, the chip or the lede. The member settles it by setting the password again (§4).
   - If the member never comes back, it stays unconfirmed in Activity and Audit. Nothing waits on anyone.
 - **`password.rotate`** (part of a revoke) is dropped from Waiting on you.

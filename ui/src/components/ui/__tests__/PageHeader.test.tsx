@@ -10,15 +10,15 @@ import { TINT_MS } from "@/lib/motion";
  * `/users/<id>` paired a `flex-1` (basis 0%) title block against `actions`
  * on the same un-wrapped flex line: the title reported zero size to the
  * wrap decision, so `actions` claimed the line and the title was squeezed
- * into whatever sliver was left — "Sam Patel" wrapped into "Sam" / "Patel"
+ * into whatever sliver was left — "Rey Mysterio" wrapped into "Rey" / "Patel"
  * with the rest of the row empty. `flex-auto` (basis auto) makes the title
  * count its real size, so a tight line wraps `actions` below instead.
  */
 describe("PageHeader title block sizing", () => {
   it("gives the title its content-based size instead of starving it next to actions", () => {
-    render(<PageHeader title="Sam Patel" actions={<button>Give a role</button>} />);
+    render(<PageHeader title="Rey Mysterio" actions={<button>Give a role</button>} />);
 
-    const heading = screen.getByRole("heading", { level: 1, name: "Sam Patel" });
+    const heading = screen.getByRole("heading", { level: 1, name: "Rey Mysterio" });
     const titleBlock = heading.parentElement;
 
     expect(titleBlock?.className).toMatch(/\bflex-auto\b/);

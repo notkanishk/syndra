@@ -7,8 +7,8 @@ import { SyndraRoot, TopBar, UiViewProvider, useUiView } from "ui";
 
 const operator = {
   id: "284019337710552064",
-  name: "Priya Nair",
-  email: "priya.nair@example.edu",
+  name: "Cody Rhodes",
+  email: "cody.rhodes@example.edu",
   title: "Makerspace Manager",
   team: "Makerspace",
   status: "active",
@@ -19,8 +19,8 @@ const operator = {
 
 const member = {
   id: "284019337710552099",
-  name: "Kabir Mehta",
-  email: "kabir.mehta@example.edu",
+  name: "Alexa Bliss",
+  email: "alexa.bliss@example.edu",
   title: "Student",
   team: "Design Club",
   status: "active",

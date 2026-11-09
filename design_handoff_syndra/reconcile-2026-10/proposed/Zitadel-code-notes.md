@@ -12,7 +12,7 @@ Settled on explore-zitadel-questions.dc.html (4a 5b 6b+6a 7c 8a, 2c) and drawn o
 - Change: direct people's-role writes go straight to Zitadel, like project and role edits: one Audit line, no ledger row, no queue. Same tick and copy as projects ("no preview and no record in Syndra"). Retire the `traced` branch of DirectWriteWarning.
 - Nudge to the Syndra route, evident but not nagging:
   - The page lede says the person's page does the same with a reason, a plan and a record, with a link.
-  - The selected person's card opens with one accent note linking to their Syndra page ("Change it on Priya Nair's page →").
+  - The selected person's card opens with one accent note linking to their Syndra page ("Change it on Cody Rhodes's page →").
   - Each dialog ends with a one-line alternative link above the tick.
   - A role that already matches Syndra says so in the dialog: removing it here is listed under Drift (Only in Syndra) for somebody to decide, and roles derived from it by automatic rules end with it.
 

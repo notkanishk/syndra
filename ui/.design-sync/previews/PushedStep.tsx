@@ -7,8 +7,8 @@ import { Modal, ModalFooter, ModalHeader, Button, PushedStep, SyndraRoot, WouldC
 
 const catalog = {
   users: [
-    { id: "284019337710553311", name: "Kabir Mehta", email: "kabir.mehta@example.edu", title: "Student", team: "Wood Shop", status: "active", avatar: "" },
-    { id: "284019337710554187", name: "Priya Nair", email: "priya.nair@example.edu", title: "Makerspace staff", team: "Staff", status: "active", avatar: "" },
+    { id: "284019337710553311", name: "Alexa Bliss", email: "alexa.bliss@example.edu", title: "Student", team: "Wood Shop", status: "active", avatar: "" },
+    { id: "284019337710554187", name: "Cody Rhodes", email: "cody.rhodes@example.edu", title: "Makerspace staff", team: "Staff", status: "active", avatar: "" },
   ],
   projects: [
     { id: "382075332397630470", name: "Laser Cutter", kind: "machine", description: "", roles: [
@@ -24,7 +24,7 @@ const stage = { margin: -24, height: "100dvh" } as const;
 const noop = () => {};
 
 function Host() {
-  const step = useCancelStep({ host: "Remove Operator from Kabir Mehta", goAhead: "remove", tone: "danger" });
+  const step = useCancelStep({ host: "Remove Operator from Alexa Bliss", goAhead: "remove", tone: "danger" });
   useEffect(() => {
     // The write is refused once: it would cancel a grant that is still waiting.
     void step.run(() =>
@@ -51,7 +51,7 @@ function Host() {
   return (
     <Modal open onClose={noop} size="md" labelledBy="m-host">
       <PushedStep step={step}>
-        <ModalHeader titleId="m-host" title="Remove Operator from Kabir Mehta?" lede="Kabir keeps his Member role." />
+        <ModalHeader titleId="m-host" title="Remove Operator from Alexa Bliss?" lede="Alexa keeps his Member role." />
         <ModalFooter>
           <Button variant="ghost">Keep access</Button>
           <Button variant="dangerConfirm">Remove Operator</Button>

@@ -163,8 +163,8 @@
       <x-import component-from-global-scope="Syndra.Card" hint-size="100%,120px">
         <sc-if value="{{ hasFinding }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 18px;padding:16px 20px;opacity:{{ staleOp }}">
           <span style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:4px">
-            <span style="font-size:15px;font-weight:600;text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Aanya Rao</a>'s home folder moved on TrueNAS</span>
-            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Syndra wants <span class="type-mono" style="color:var(--ink)">/mnt/tank/home/aanya.rao</span>. TrueNAS holds <span class="type-mono" style="color:var(--warn-text)">/mnt/tank/staff/aanya</span>. Pointing Syndra at the new folder and moving her files back are different decisions, so a reason is required either way.</span>
+            <span style="font-size:15px;font-weight:600;text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Roman Reigns</a>'s home folder moved on TrueNAS</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Syndra wants <span class="type-mono" style="color:var(--ink)">/mnt/tank/home/roman.reigns</span>. TrueNAS holds <span class="type-mono" style="color:var(--warn-text)">/mnt/tank/staff/aanya</span>. Pointing Syndra at the new folder and moving her files back are different decisions, so a reason is required either way.</span>
             <span class="type-mono" style="font-size:12.5px;color:var(--faint)">f_2211 · found 40 min ago</span>
           </span>
           <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="96px,34px">Decide</x-import>
@@ -249,12 +249,12 @@
       </div>
     </div>
     <div style="display:flex;flex-direction:column;border-radius:var(--radius-inner);border:1px solid var(--line-strong)">
-      <div style="display:flex;gap:14px;padding:12px 16px"><span style="width:72px;flex:none;font-size:12.5px;font-weight:600;color:var(--label)">Changes</span><span style="font-size:14px;line-height:1.5">kiosk belongs to <strong style="font-weight:600">Aanya Rao</strong>, for good.</span></div>
-      <div class="row-divider" style="display:flex;gap:14px;padding:12px 16px"><span style="width:72px;flex:none;font-size:12.5px;font-weight:600;color:var(--label)">Stays</span><span style="font-size:14px;line-height:1.5;color:var(--muted);text-wrap:pretty">Its home folder, its shares and its group memberships, as they are. The next time Syndra brings accounts in line, it adds what Aanya's roles give her on top.</span></div>
+      <div style="display:flex;gap:14px;padding:12px 16px"><span style="width:72px;flex:none;font-size:12.5px;font-weight:600;color:var(--label)">Changes</span><span style="font-size:14px;line-height:1.5">kiosk belongs to <strong style="font-weight:600">Roman Reigns</strong>, for good.</span></div>
+      <div class="row-divider" style="display:flex;gap:14px;padding:12px 16px"><span style="width:72px;flex:none;font-size:12.5px;font-weight:600;color:var(--label)">Stays</span><span style="font-size:14px;line-height:1.5;color:var(--muted);text-wrap:pretty">Its home folder, its shares and its group memberships, as they are. The next time Syndra brings accounts in line, it adds what Roman's roles give her on top.</span></div>
     </div>
     <x-import component-from-global-scope="Syndra.ConfirmByTyping" expected="kiosk" noun="account name" value="kiosk" on-change="{{ noop }}" hint-size="100%,90px"></x-import>
   </div>
-  <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="220px,40px">Assign kiosk to Aanya Rao</x-import></x-import>
+  <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="220px,40px">Assign kiosk to Roman Reigns</x-import></x-import>
 </x-import>
 </sc-if>
 
@@ -278,7 +278,7 @@
 
 <sc-if value="{{ stLimit }}" hint-placeholder-val="{{ false }}">
 <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="lim-title" hint-size="560px,700px">
-  <x-import component-from-global-scope="Syndra.ModalHeader" title="Give Aanya Rao her own home folder limit" title-id="lim-title" lede="Her roles give her up to 20 GB, from Fabrication lead. Her own limit takes the place of that, larger or smaller, until it ends." hint-size="100%,100px"></x-import>
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Give Roman Reigns her own home folder limit" title-id="lim-title" lede="Her roles give her up to 20 GB, from Fabrication lead. Her own limit takes the place of that, larger or smaller, until it ends." hint-size="100%,100px"></x-import>
   <div style="padding:0 24px;display:flex;flex-direction:column;gap:18px">
     <div style="display:flex;flex-direction:column;gap:6px">
       <x-import component-from-global-scope="Syndra.FieldLabel" html-for="lim-size" hint-size="60px,18px">Limit</x-import>
@@ -347,7 +347,7 @@ class Component extends DCLogic {
       { tone: "healthy", word: "File sharing", text: "Running." },
       { tone: "neutral", word: "nas-01.makerspace.lan", text: "Up 41 days." },
     ].map(r => Object.assign({ look: "", op: so }, r));
-    const people = ["Aanya Rao", "Arjun Kapoor", "Diya Menon", "Ishita Banerjee", "Kabir Sethi", "Meera Pillai", "Priya Nair", "Rohan Mehta", "Sana Kohli", "Vikram Rao"];
+    const people = ["Roman Reigns", "Jacob Fatu", "Isla Dawn", "Braun Strowman", "Maxxine Dupri", "Finn Balor", "Cody Rhodes", "Liv Morgan", "Iyo Sky", "Montez Ford"];
     const since = ["12 Aug", "3 Sept", "12 Aug", "21 July", "30 Sept", "12 Aug", "4 June", "18 Sept", "4 June", "1 Oct"];
     const own = { home: "Home folder up to 50 GB, her own", homeInk: "var(--ink)", hasSub: true };
     const LIM = {
@@ -367,7 +367,7 @@ class Component extends DCLogic {
       homeNote: homeChange ? "Takes effect now. Nothing is moved, and nobody's access changes." : st === "home-none" ? "Nothing to choose until main has a folder." : "Takes effect now. Nothing is made until a mapping gives home folders.",
       homeGo: homeChange ? "Make new homes in main › homes" : "Use main › home_dir",
       stLimit: st === "limit-set", limOpts: [{ value: "size", label: "Up to a size" }, { value: "none", label: "No limit" }], untilOpts: [{ value: "ends", label: "Ends on" }, { value: "review", label: "Review on" }],
-      adoptPeople: [["Aanya Rao", "Research assistant · Mechanical Engineering", "aanya.rao@makerspace.edu", "", true], ["Aanand Iyer", "Student staff", "aanand.iyer@makerspace.edu", "", false], ["Saanvi Shah", "Lab technician · Design", "saanvi.shah@makerspace.edu", "Already has saanvi on TrueNAS", false, true]].map(([name, sub, email, note, on, blocked]) => ({ name, sub, email, note, on, op: blocked ? 0.55 : 1, cursor: blocked ? "default" : "pointer", disabled: blocked ? "true" : "false", edge: on ? "var(--accent-line)" : "transparent", bg: on ? "var(--accent-soft)" : "transparent", seatEdge: on ? "var(--accent)" : "var(--line-strong)", seatBg: on ? "var(--accent)" : "transparent", dot: on ? "var(--accent-ink)" : "transparent" })),
+      adoptPeople: [["Roman Reigns", "Research assistant · Mechanical Engineering", "roman.reigns@makerspace.edu", "", true], ["Melina Perez", "Student staff", "melina.perez@makerspace.edu", "", false], ["Bret Hart", "Lab technician · Design", "bret.hart@makerspace.edu", "Already has saanvi on TrueNAS", false, true]].map(([name, sub, email, note, on, blocked]) => ({ name, sub, email, note, on, op: blocked ? 0.55 : 1, cursor: blocked ? "default" : "pointer", disabled: blocked ? "true" : "false", edge: on ? "var(--accent-line)" : "transparent", bg: on ? "var(--accent-soft)" : "transparent", seatEdge: on ? "var(--accent)" : "var(--line-strong)", seatBg: on ? "var(--accent)" : "transparent", dot: on ? "var(--accent-ink)" : "transparent" })),
       showPage: known, g3, g3set, fenced: g3, fBorder: g3 ? "1px dashed var(--line-strong)" : "0", fPad: g3 ? "22px 22px 26px" : "0", fOp: g3 ? 0.45 : 1, fPe: g3 ? "none" : "auto",
       hasChips: !g3, showStrip: known && !g3 && !g3set, readTop: known && !g3 && !g3set ? "2px" : "-8px", stripMap: fresh ? "None yet" : "2 roles to TrueNAS groups · version 4", stripLink: fresh ? "Add the first mapping →" : "Mappings →", noFindingTone: "healthy", actOff: stale || g3, hasCensusLink: !g3,
       hasWarn: stale,

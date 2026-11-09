@@ -92,7 +92,7 @@
 <x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
 <div style="display:flex;flex-direction:column;gap:22px">
   <div style="display:flex;flex-direction:column;gap:8px">
-    <h1 class="type-page-title" style="margin:0">Hi Priya. <span style="color:var(--faint)">Here's what you can use.</span></h1>
+    <h1 class="type-page-title" style="margin:0">Hi Cody. <span style="color:var(--faint)">Here's what you can use.</span></h1>
     <sc-if value="{{ showSummary }}" hint-placeholder-val="{{ true }}"><span style="font-size:14.5px;color:var(--faint)">Four roles across two rooms. One runs out on 20 Oct.</span></sc-if>
   </div>
 
@@ -206,7 +206,7 @@ class Component extends DCLogic {
     const q = new URLSearchParams(window.location.search);
     this.frame = q.get("frame");
     this.st = this.frame || "default";
-    this.session = { id: "u2", name: "Priya Nair", email: "priya.nair@makerspace.edu", title: "Student", team: "Design", status: "active", avatar: "", role: "user", sessionType: "demo" };
+    this.session = { id: "u2", name: "Cody Rhodes", email: "cody.rhodes@makerspace.edu", title: "Student", team: "Design", status: "active", avatar: "", role: "user", sessionType: "demo" };
     this.rootData = [
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
       { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
@@ -255,7 +255,7 @@ class Component extends DCLogic {
       E("Taken away", "danger", "", "Studio · Booking", " was taken away.", "5 Oct", { hasQuote: true, quote: "Studio bookings close for the term. They open again in January.", by: "Kanishk Singh" }),
       E("Approved", "healthy", "Your request for ", "Laser cutter · Operator", " was approved, until 20 Oct.", "2 Oct", { hasQuote: true, quote: "Approved for the capstone build. Book the evening slots.", by: "Kanishk Singh" }),
       E("Given", "healthy", "", "Laser bay · Door", " came with it, automatically.", "2 Oct"),
-      E("Not approved", "neutral", "Your request for ", "Soldering station · Operator", " was not approved.", "30 Sept", { hasQuote: true, quote: "Do the electronics induction first. It runs every Tuesday at 4.", by: "Sana Kohli", hasLink: true, link: "Ask again →" }),
+      E("Not approved", "neutral", "Your request for ", "Soldering station · Operator", " was not approved.", "30 Sept", { hasQuote: true, quote: "Do the electronics induction first. It runs every Tuesday at 4.", by: "Iyo Sky", hasLink: true, link: "Ask again →" }),
     ]);
     const f = (frame, label, note) => ({ src: "route-me.dc.html?frame=" + frame, label, note });
     return {

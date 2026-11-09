@@ -9,7 +9,7 @@ const col = { maxWidth: 420 } as const;
 
 export const Empty = () => {
   const [v, setV] = useState("");
-  return <div style={col}><ConfirmByTyping expected="Meera Pillai" value={v} onChange={setV} /></div>;
+  return <div style={col}><ConfirmByTyping expected="Finn Balor" value={v} onChange={setV} /></div>;
 };
 
 export const Matching = () => {

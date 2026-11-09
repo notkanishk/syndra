@@ -1,6 +1,6 @@
 ## Why
 
-Syndra's admin UI still shows **demo catalog data** (Alice Rivera, Sam Patel, the Laser Lab) even when `ZITADEL_DOMAIN`, `ZITADEL_MACHINE_KEY_PATH`, Actions v2 signing key, and webhook listener are all correctly configured. The zero-trust auth boundary is complete end-to-end (OIDC login, RS256 JWT validation, token forwarding), but the **data boundary** is not — `services/views.go` and `services/roles.go` still call `demo.Users()`, `demo.Projects()`, `demo.Applications()` directly, with no live-mode branch.
+Syndra's admin UI still shows **demo catalog data** (Becky Lynch, Rey Mysterio, the Laser Lab) even when `ZITADEL_DOMAIN`, `ZITADEL_MACHINE_KEY_PATH`, Actions v2 signing key, and webhook listener are all correctly configured. The zero-trust auth boundary is complete end-to-end (OIDC login, RS256 JWT validation, token forwarding), but the **data boundary** is not — `services/views.go` and `services/roles.go` still call `demo.Users()`, `demo.Projects()`, `demo.Applications()` directly, with no live-mode branch.
 
 Concretely, every admin view (`/users`, `/projects`, `/bundles`, `/policies`, `/applications`, `/graph`, audit) reads from hardcoded fixtures in `backend/internal/demo/catalog.go` instead of from the already-live Zitadel Management API client (`zitadel.MgmtClient`). The only Zitadel-native page today is `/zitadel` (diagnostics), which is siloed from the normal admin navigation.
 

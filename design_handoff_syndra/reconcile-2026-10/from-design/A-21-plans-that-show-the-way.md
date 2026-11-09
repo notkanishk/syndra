@@ -164,7 +164,7 @@ The sheet plans as soon as it can (a role is chosen, a request is on screen, a b
 
 Then:
 
-1. **Nothing cancelled:** one step, as today. The before-line is the planner's delivery ("{Role} always waits for you, so Rohan gets it once you send it." / "Rohan can use it as soon as you give it."), and the rule lines follow it.
+1. **Nothing cancelled:** one step, as today. The before-line is the planner's delivery ("{Role} always waits for you, so Liv gets it once you send it." / "Liv can use it as soon as you give it."), and the rule lines follow it.
 2. **Something cancelled:** the before-line says so before the press, in one sentence. The press pushes the existing **CancelQueuedStep** at once, already filled from the plan, no round trip. Keep it first, the confirm names what goes ahead ("Cancel it and give Member"). The write carries the cancel ids the step showed.
 3. **The 409 stays as the second safety.** If someone queues another change between the plan and the press, the write is refused as stale, and the step shows it with its existing "One more since you looked" group at the top.
 
@@ -173,22 +173,22 @@ Then:
 ### 3.2 The surfaces
 
 **Give a role** (`GrantDirectAccess.tsx`)
-- Before-line, in this order: the date line as today; then the delivery line; then, when the plan cancels: "Giving it cancels the removal Sam Lee queued 2 hours ago. Nothing is cancelled until you choose on the next step." (several: "Giving it cancels 2 changes that are waiting. Nothing is cancelled until you choose on the next step."); then the rule lines.
-- Button stays "Give role". The press pushes the step. Its confirm: "Cancel it and give Member" (accent). Keep it returns to the form with the kept note as today ("Nothing changed. Sam Lee's removal is still waiting." + Waiting for you to send →).
+- Before-line, in this order: the date line as today; then the delivery line; then, when the plan cancels: "Giving it cancels the removal Randy Orton queued 2 hours ago. Nothing is cancelled until you choose on the next step." (several: "Giving it cancels 2 changes that are waiting. Nothing is cancelled until you choose on the next step."); then the rule lines.
+- Button stays "Give role". The press pushes the step. Its confirm: "Cancel it and give Member" (accent). Keep it returns to the form with the kept note as today ("Nothing changed. Randy Orton's removal is still waiting." + Waiting for you to send →).
 - Forecast from the plan: "Will wait for you to send" when the role waits, else "Will be given".
-- Result: as today, plus the after line from the step: "The removal Sam Lee queued 2 hours ago is cancelled, so nothing goes to Zitadel. Change history records both."
+- Result: as today, plus the after line from the step: "The removal Randy Orton queued 2 hours ago is cancelled, so nothing goes to Zitadel. Change history records both."
 
 **Revoke direct access** (`RemovalDialog.tsx`, `DirectDialog`)
 - When the plan's delivery is `none` (the give never reached Zitadel), the dialog is the cancel, said plainly:
-  - Lede: "Given to Rohan on 3 Nov by Sam Lee, and still waiting for you to send."
-  - Body, neutral dot: "Nothing to take back. It hasn't reached Zitadel, so Rohan never had it. This cancels that give and sends nothing."
+  - Lede: "Given to Liv on 3 Nov by Randy Orton, and still waiting for you to send."
+  - Body, neutral dot: "Nothing to take back. It hasn't reached Zitadel, so Liv never had it. This cancels that give and sends nothing."
   - Button: **"Cancel the waiting give"** (accent). **Replaces "Withdraw the queued grant"**: *withdraw* belongs to a member and *grant* was retired for *give* (A-17 Q7, A-20 P5).
-  - Result: word **Cancelled** (the forecast table already has "Will be cancelled" → "Cancelled"), sentence "The give of Member in Laser Lab that was waiting is cancelled. Rohan never had it, so nothing goes to Zitadel.", next "Nothing for you to do."
-- When the plan cancels something else as well as revoking (rare: a re-give of the same role waiting from someone else), the danger note gains the sentence "Revoking it cancels the give Sam Lee queued 2 hours ago." and the press pushes the step; confirm "Cancel it and revoke" (dangerConfirm).
-- The bundle case (`BundleDialog`) is the same: **"Cancel the waiting change"** replaces "Withdraw the queued change"; the result word is Cancelled; the sentence "The {bundle} bundle that was waiting is cancelled. Nothing it carries had reached Rohan, so nothing goes to Zitadel."
+  - Result: word **Cancelled** (the forecast table already has "Will be cancelled" → "Cancelled"), sentence "The give of Member in Laser Lab that was waiting is cancelled. Liv never had it, so nothing goes to Zitadel.", next "Nothing for you to do."
+- When the plan cancels something else as well as revoking (rare: a re-give of the same role waiting from someone else), the danger note gains the sentence "Revoking it cancels the give Randy Orton queued 2 hours ago." and the press pushes the step; confirm "Cancel it and revoke" (dangerConfirm).
+- The bundle case (`BundleDialog`) is the same: **"Cancel the waiting change"** replaces "Withdraw the queued change"; the result word is Cancelled; the sentence "The {bundle} bundle that was waiting is cancelled. Nothing it carries had reached Liv, so nothing goes to Zitadel."
 
 **Approve a request** (`Holding.tsx`, `request-decisions.ts`)
-- The row's "If you approve:" line is the plan's words: "If you approve: Also gives Trained in Laser Lab, by the automatic rule from Member in Laser Lab. Approving cancels the removal Sam Lee queued 2 hours ago." (the cancel sentence last, as the planner orders it).
+- The row's "If you approve:" line is the plan's words: "If you approve: Also gives Trained in Laser Lab, by the automatic rule from Member in Laser Lab. Approving cancels the removal Randy Orton queued 2 hours ago." (the cancel sentence last, as the planner orders it).
 - The hold states stay: "Checking what automatic rules also give." → "Checking what approving does." (the read now covers more than rules), "Held until Syndra can read the automatic rules." → "Held until Syndra can read what approving does.", and the failed line "Syndra couldn't read what approving does, so it can't show what else this would give or cancel. Try again to read it." with Try again.
 - Press Approve: the standalone step (Modal sm) opens at once, filled from the plan; confirm "Cancel it and approve". No change to the step.
 - Forecast from the plan: "Will wait for you to send" for a role that waits (closes A-20 P8's honesty gap for Approve), else "Will be approved".
@@ -203,11 +203,11 @@ Then:
 
 The write carries the fingerprint the sheet planned against; apply re-plans under the lock and refuses on any difference (decision 3), answered as 409 `PLAN_STALE` with the fresh row. Nothing is written. Each surface says it where the act was taken, then shows the fresh plan in its own ordinary seat, so the reader reads the new state in the same words as the old one:
 
-- **In a sheet** (Give, Revoke, Manage bundles): a Notice (warn, blocking) between the header and the form: title **"Nothing was changed. Rohan's access moved while this was open."**, next **"Read the note under the form, then press Give role again."** (the button's own label). The form stays as it was; the before-line and the rule lines refresh from the fresh plan; if the fresh plan cancels, the next press pushes the step; if it cancels nothing any more, no step. Particular cases say themselves through the ordinary seats:
-  - now already held: the picker row is ticked grey with "Already has it" (the picker's held row, unchanged), the button is disabled with reason "Rohan already has Member in Laser Lab.", the before-line is "Nothing to give."
+- **In a sheet** (Give, Revoke, Manage bundles): a Notice (warn, blocking) between the header and the form: title **"Nothing was changed. Liv's access moved while this was open."**, next **"Read the note under the form, then press Give role again."** (the button's own label). The form stays as it was; the before-line and the rule lines refresh from the fresh plan; if the fresh plan cancels, the next press pushes the step; if it cancels nothing any more, no step. Particular cases say themselves through the ordinary seats:
+  - now already held: the picker row is ticked grey with "Already has it" (the picker's held row, unchanged), the button is disabled with reason "Liv already has Member in Laser Lab.", the before-line is "Nothing to give."
   - the change it would have cancelled was sent meanwhile: the cancel sentence simply leaves the before-line.
   - a new queued change appeared: the before-line names it; the step on press shows it under "New since you looked".
-- **In a row** (Approve): the buttons return beside one line, `role="alert"`, danger dot: **"Nothing was changed. Rohan's access moved while you looked. Read the line above, then approve again."** The "If you approve:" line refreshes.
+- **In a row** (Approve): the buttons return beside one line, `role="alert"`, danger dot: **"Nothing was changed. Liv's access moved while you looked. Read the line above, then approve again."** The "If you approve:" line refreshes.
 
 No "stale" and no "plan" on screen: the reader never had a plan, they had a sheet, and what moved was a person's access.
 
@@ -217,12 +217,12 @@ Unchanged where they exist (Given, Removed, Approved, Recorded, Refused by Zitad
 
 | Act | Word | Sentence | Faint line / next |
 |---|---|---|---|
-| Give that cancelled a removal | Given | "Rohan can use Member in Laser Lab on their own now" (or the waits form) | "The removal Sam Lee queued 2 hours ago is cancelled, so nothing goes to Zitadel. Change history records both." |
-| Revoke that was only a cancel | Cancelled | "The give of Member in Laser Lab that was waiting is cancelled. Rohan never had it, so nothing goes to Zitadel." | "Nothing for you to do." |
-| Remove a bundle that was only a cancel | Cancelled | "The Safety bundle that was waiting is cancelled. Nothing it carried had reached Rohan, so nothing goes to Zitadel." | "Nothing for you to do." |
+| Give that cancelled a removal | Given | "Liv can use Member in Laser Lab on their own now" (or the waits form) | "The removal Randy Orton queued 2 hours ago is cancelled, so nothing goes to Zitadel. Change history records both." |
+| Revoke that was only a cancel | Cancelled | "The give of Member in Laser Lab that was waiting is cancelled. Liv never had it, so nothing goes to Zitadel." | "Nothing for you to do." |
+| Remove a bundle that was only a cancel | Cancelled | "The Safety bundle that was waiting is cancelled. Nothing it carried had reached Liv, so nothing goes to Zitadel." | "Nothing for you to do." |
 | Approve that cancelled | Approved | as today | the same after line, in the seat's second line |
 | Manage bundles with cancels | Recorded | as today | "The 3 changes that were waiting for you to send are cancelled, so nothing goes to Zitadel for them. Change history records them all." |
-| Kept (any) | none: back to the form | "Nothing changed. Sam Lee's removal is still waiting." | Waiting for you to send → |
+| Kept (any) | none: back to the form | "Nothing changed. Randy Orton's removal is still waiting." | Waiting for you to send → |
 
 ---
 
@@ -324,7 +324,7 @@ Each "yes" accepts the recommendation.
 All four sit on the canvas's "App screens" page, right of A-20, 1600 wide. Each mounts the real parts from `window.Syndra` (Modal, ModalHeader, ModalFooter, Button, Badge, StatusDot, Notice, ActionOutcome, Input, Segmented, PageHeader, AppShell); the fold heading, the pushed step's list, the role picker's chosen row and the row's NextStep link are drawn inline and say so (BRIDGE: a part the system lacks is drawn inline until built). Light frames are named `…-light`.
 
 **`a21-plan-grouped`** (1600 × 2900)
-1. The plan: Give the Safety bundle to 13 people, dark and light at 1440 (frames `plan`, `plan-light`), with a person with some of each (Jules), a cancel-only row (Kabir), a row that cancels and sends (Omar), a row that sends nothing (Lena), No change (Dev) and Refused (Sam); the cancels note; the before-line and "Cancel 2 and apply to 11 people".
+1. The plan: Give the Safety bundle to 13 people, dark and light at 1440 (frames `plan`, `plan-light`), with a person with some of each (Jade), a cancel-only row (Alexa), a row that cancels and sends (Tiffany), a row that sends nothing (Zoey), No change (Dev) and Refused (Randy); the cancels note; the before-line and "Cancel 2 and apply to 11 people".
 2. The phone sheet at 390 (`plan-phone`).
 3. The consent, line by line: a table of the before-line's shapes and the button's labels.
 
@@ -340,5 +340,5 @@ All four sit on the canvas's "App screens" page, right of A-20, 1600 wide. Each 
 3. Revoke with delivery none (`remove`, `remove-light`): "Cancel the waiting give"; after (`remove-done`): Cancelled. The step on a phone (`give-step-phone`).
 
 **`a21-rule-rows`** (1600 × 2300)
-1. The plan with two rule hops in one row (`rule`, `rule-light`): Aanya and Meera stop at the first rule; Kabir's row walks both and ends on the waits sentence.
+1. The plan with two rule hops in one row (`rule`, `rule-light`): Roman and Finn stop at the first rule; Alexa's row walks both and ends on the waits sentence.
 2. Give a role with the same words in its footer (`give`, `give-light`).

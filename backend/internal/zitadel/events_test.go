@@ -36,7 +36,7 @@ func rawResp(status int, body string) *http.Response {
 const documentedEventsResponse = `{
   "events": [
     {
-      "editor": {"userId": "212418735923626245", "displayName": "Maya Chen", "service": "Management-API"},
+      "editor": {"userId": "212418735923626245", "displayName": "Bianca Belair", "service": "Management-API"},
       "aggregate": {
         "id": "385621222114722822",
         "type": {"type": "usergrant", "localized": {"key": "EventTypes.usergrant"}},
@@ -48,7 +48,7 @@ const documentedEventsResponse = `{
       "type": {"type": "user.grant.added", "localized": {"key": "EventTypes.user.grant.added"}}
     },
     {
-      "editor": {"userId": "212418735923626245", "displayName": "Maya Chen", "service": "Management-API"},
+      "editor": {"userId": "212418735923626245", "displayName": "Bianca Belair", "service": "Management-API"},
       "aggregate": {"id": "385621222114722822", "type": {"type": "usergrant"}},
       "sequence": "14",
       "creationDate": "2026-08-05T11:02:00Z",
@@ -104,7 +104,7 @@ func TestGrantOriginReadsTheEarliestEvent(t *testing.T) {
 	if origin == nil {
 		t.Fatal("want an origin")
 	}
-	if origin.ActorID != "212418735923626245" || origin.ActorName != "Maya Chen" {
+	if origin.ActorID != "212418735923626245" || origin.ActorName != "Bianca Belair" {
 		t.Errorf("wrong actor: %+v", origin)
 	}
 	if origin.Service != "Management-API" {

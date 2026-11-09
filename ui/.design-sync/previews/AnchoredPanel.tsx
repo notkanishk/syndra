@@ -26,7 +26,7 @@ export function UnderItsTrigger() {
             color: "var(--ink)",
           }}
         >
-          Given by the Wood Shop bundle, version 3. Priya Nair added Kabir Mehta on 4 Sept.
+          Given by the Wood Shop bundle, version 3. Cody Rhodes added Alexa Bliss on 4 Sept.
         </div>
       </AnchoredPanel>
     </div>

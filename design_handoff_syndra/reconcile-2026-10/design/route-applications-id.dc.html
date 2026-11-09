@@ -109,7 +109,7 @@
       <sc-if value="{{ stEditing }}" hint-placeholder-val="{{ false }}"><div class="mx-[22px] mb-3 border-t border-dashed border-warn-line pt-3 text-[13.5px] leading-[1.5] text-warn-text">You have unsaved changes in Token format. This preview shows the saved format; save to preview your changes.</div></sc-if>
       <div class="flex-1 px-[22px] pb-5" style="display:flex;flex-direction:column;gap:12px">
         <sc-if value="{{ stNothing }}" hint-placeholder-val="{{ false }}">
-          <p class="max-w-[60ch] text-[14px] leading-[1.5] text-muted" style="margin:0">Lena Brandt would sign in to Laser bookings with no roles. That is not an error: none of the roles she holds belong to Laser Lab.</p>
+          <p class="max-w-[60ch] text-[14px] leading-[1.5] text-muted" style="margin:0">Zoey Stark would sign in to Laser bookings with no roles. That is not an error: none of the roles she holds belong to Laser Lab.</p>
           <div class="rounded-inner border border-line bg-surface-0 px-[18px] py-4 font-mono text-[13px] leading-[1.85]"><div class="text-ink/70">{}</div></div>
         </sc-if>
         <sc-if value="{{ stHasToken }}" hint-placeholder-val="{{ true }}">
@@ -159,7 +159,7 @@ class Component extends DCLogic {
       stEditing: editing, stNotEditing: !editing, stNothing: st === "nothing", stHasToken: st !== "nothing",
       claimValue: editing ? "laser.roles" : "",
       saveDisabled: !editing || deg, saveNote: editing ? "1 unsaved change" : "Nothing to save yet.",
-      previewName: st === "nothing" ? "Lena Brandt" : "Priya Nair",
+      previewName: st === "nothing" ? "Zoey Stark" : "Cody Rhodes",
       previewLede: editing ? "The format Laser bookings receives now — not the one being edited." : "Exactly what Laser bookings would receive right now.",
       scopeOptions: [{ value: "project", label: "Project default" }, { value: "app", label: "Laser bookings only" }],
       formatOptions: [{ value: "array", label: "array" }, { value: "csv", label: "csv" }, { value: "space_delimited", label: "spaced" }],

@@ -9,8 +9,8 @@ const col = { display: "grid", gap: 18 } as const;
 /** The status a change wears until the operator sends it, with what isn't true yet. */
 export const WithWhy = () => (
   <div style={col}>
-    <NextStep why="Rohan can't supervise yet · Supervisor always waits for you" />
-    <NextStep why="Aanya keeps Operator until you send the removal" />
+    <NextStep why="Liv can't supervise yet · Supervisor always waits for you" />
+    <NextStep why="Roman keeps Operator until you send the removal" />
   </div>
 );
 
@@ -21,6 +21,6 @@ export const Bare = () => <NextStep />;
 export const UnderAStatus = () => (
   <div style={{ display: "grid", gap: 6 }}>
     <StatusSeat tone="warn" word="Waiting" />
-    <NextStep dot={false} why="Kabir can't use the CNC router yet" />
+    <NextStep dot={false} why="Alexa can't use the CNC router yet" />
   </div>
 );

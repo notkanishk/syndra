@@ -9,7 +9,7 @@ When the deployment is configured for live Zitadel (`ZITADEL_DOMAIN` is set), th
 #### Scenario: Login page in OIDC mode hides demo identities
 - **WHEN** `ZITADEL_DOMAIN` is set
 - **AND** an unauthenticated user requests `/login`
-- **THEN** the rendered HTML, the RSC payload, and the JS bundle MUST NOT contain any string from the `DEMO_USERS` catalog (e.g., "sam_student", "alice@makerspace.local", "Maya Chen")
+- **THEN** the rendered HTML, the RSC payload, and the JS bundle MUST NOT contain any string from the `DEMO_USERS` catalog (e.g., "sam_student", "becky@makerspace.local", "Bianca Belair")
 - **AND** the demo identity card MUST NOT be present in the DOM
 
 #### Scenario: Forms do not pre-fill demo identifiers in OIDC mode

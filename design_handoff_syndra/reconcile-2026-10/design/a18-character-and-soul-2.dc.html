@@ -29,7 +29,7 @@
   </header>
 
   <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
-    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What you asked</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">"Nine roles across six rooms" is going. Can something better sit under "Hi Priya. Here's what you can use."? And the mythology card leaves the Zitadel page, so where does the story live, and what else would make Syndra feel alive, with a character, without ever slowing an operator down?</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What you asked</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">"Nine roles across six rooms" is going. Can something better sit under "Hi Cody. Here's what you can use."? And the mythology card leaves the Zitadel page, so where does the story live, and what else would make Syndra feel alive, with a character, without ever slowing an operator down?</p></div>
     <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What I recommend</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">(A)</strong> One line under the greeting, picked from a fixed ladder; its calm state is "Nothing needs you right now.", the operator's own words. <strong style="color:var(--ink)">H1</strong>: About Syndra in the Account sheet, with the login line as the short form. <strong style="color:var(--ink)">Ideas 1 to 7</strong>: seven pieces of copy and one bloom, with no new component, route or loop.</p></div>
   </section>
 
@@ -155,7 +155,7 @@
 <x-import component-from-global-scope="Syndra.AppShell" session="{{ member }}" hint-size="100%,100vh">
 <div style="display:flex;flex-direction:column;gap:16px">
   <div style="display:flex;flex-direction:column;gap:8px;padding-bottom:12px">
-    <h1 class="type-page-title" style="margin:0">Hi Priya. <span style="color:var(--faint)">Here's what you can use.</span></h1>
+    <h1 class="type-page-title" style="margin:0">Hi Cody. <span style="color:var(--faint)">Here's what you can use.</span></h1>
     <sc-if value="{{ vA }}" hint-placeholder-val="{{ true }}">
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;font-size:14.5px;line-height:1.5;color:var(--muted)">
         <span style="display:inline-flex;align-items:center;gap:9px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import><span>Operator in Laser cutting ends in 7 days.</span></span>
@@ -219,7 +219,7 @@
 <sc-if value="{{ isLadder }}" hint-placeholder-val="{{ false }}">
 <x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
 <div style="padding:36px 32px;display:flex;flex-direction:column;gap:0;background:var(--ground);min-height:100vh">
-  <h1 class="type-page-title" style="margin:0 0 20px">Hi Priya. <span style="color:var(--faint)">Here's what you can use.</span></h1>
+  <h1 class="type-page-title" style="margin:0 0 20px">Hi Cody. <span style="color:var(--faint)">Here's what you can use.</span></h1>
   <sc-for list="{{ rungs }}" as="g" hint-placeholder-count="9">
     <div style="display:flex;flex-direction:column;gap:6px;padding:14px 0;border-top:1px solid var(--divider)">
       <span style="font-size:12.5px;color:var(--faint)">{{ g.when }}</span>
@@ -294,7 +294,7 @@
 
   <div style="display:flex;flex-direction:column;gap:10px">
     <span style="font-size:12.5px;color:var(--faint)">2 · The time of day on My access · Recommended</span>
-    <h1 class="type-page-title" style="margin:0">Morning, Priya. <span style="color:var(--faint)">Here's what you can use.</span></h1>
+    <h1 class="type-page-title" style="margin:0">Morning, Cody. <span style="color:var(--faint)">Here's what you can use.</span></h1>
     <div style="display:flex;align-items:center;gap:9px;font-size:14.5px;line-height:1.5;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import><span>Nothing needs you right now.</span></div>
   </div>
 
@@ -345,7 +345,7 @@ class Component extends DCLogic {
     const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
     this.frame = q.get("frame");
     this.st = this.frame || "";
-    this.member = { id: "u2", name: "Priya Nair", email: "priya.nair@example.edu", title: "Student", team: "Design", status: "active", avatar: "PN", role: "user", sessionType: "demo" };
+    this.member = { id: "u2", name: "Cody Rhodes", email: "cody.rhodes@example.edu", title: "Student", team: "Design", status: "active", avatar: "PN", role: "user", sessionType: "demo" };
     this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
     this.rootData = [
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
@@ -439,7 +439,7 @@ class Component extends DCLogic {
     const I = (n, title, verdict, copy, where, why) => ({ n: String(n), title, verdict, verdictColor: verdict === "Recommended" ? "var(--accent-text)" : "var(--faint)", copy, where, why });
     const ideas = [
       I(1, "Term days on Home's weekday line", "Recommended", "\"Thursday 31 Dec · Last day of Monsoon term · last checked 09:14\". On a first day: \"First day of Spring term\".", "Operator Home, the faint line under the greeting. On a term's first and last day, from Makerspace settings.", "Six days a year, a fact Syndra holds, said where a date is already said."),
-      I(2, "The time of day on My access", "Recommended", "\"Morning, Priya. Here's what you can use.\" Afternoon from 12, Evening from 17.", "The member's title, in place of \"Hi\". Always.", "Three fixed words, already the operator's greeting: one keeper greets everyone the same way."),
+      I(2, "The time of day on My access", "Recommended", "\"Morning, Cody. Here's what you can use.\" Afternoon from 12, Evening from 17.", "The member's title, in place of \"Hi\". Always.", "Three fixed words, already the operator's greeting: one keeper greets everyone the same way."),
       I(3, "About Syndra", "Recommended", "\"Syndra is named for Syn. In the Norse stories she keeps the door of the hall, and shuts it on those who should not enter. When a case is argued, she speaks for the one who refuses it.\"", "The foot of the Account sheet. Only when someone opens it.", "Closed at rest, one line, never pushed at anyone."),
       I(4, "The keeper's all-clears", "Recommended", "Drift: \"Everyone inside is on the list, and everyone on the list is inside.\" Unfinished revocations: \"Everyone whose access was revoked is out.\"", "Those two queues' resolved EmptyState. Guidance lines unchanged.", "Still one sentence with a full stop, and each says more than the old title. Only where the door is literally true; Home, Pending, Expiring and Holds keep plain titles."),
       I(5, "The last one, cleared", "Recommended", "No new copy: the queue's own all-clear is the moment.", "Drift, Unfinished revocations, Requests, Expiring, Holds. Only when your act empties the queue on screen.", "The existing rule: a bloom only for something that went well, because of you, on screen. Never on arrival or refresh."),
@@ -455,7 +455,7 @@ class Component extends DCLogic {
     const questions = [
       Q("My access header: option (A), one line that knows, from the ladder?", "Yes. One quiet sentence that is right on every visit, from parts Syndra already has."),
       Q("The ladder's order (ending soon first, calm last), with the line jumping to the card it names?", "Yes. An ending is the only rung that costs the member something if missed."),
-      Q("Should the member's title greet by time of day (\"Morning, Priya.\"), like Home?", "Yes."),
+      Q("Should the member's title greet by time of day (\"Morning, Cody.\"), like Home?", "Yes."),
       Q("Should Recent changes keep its seat on a quiet month, saying \"Nothing has changed in the last 30 days.\"?", "Yes. Structure doesn't move with data."),
       Q("Should the story live in About Syndra at the foot of the Account sheet, with the login line as its short form, and nowhere else?", "Yes."),
       Q("Should the story be told exactly, \"the door of the hall\", with Syn speaking for the one who refuses?", "Yes; Snorri names no hall. No keeps \"Frigg's hall\"."),

@@ -6,9 +6,9 @@ Status: proposed 17 Oct 2026 (A-04 §13.4, §14). Board: `flow-cancel-queued`. B
 It renders inside the host Modal (Give a role, Remove, a bundle's dialogs) in place of the form. A row action with no sheet of its own (Approve) opens a Modal sm that holds only the step. Sheets never stack.
 
 ## Anatomy
-- ModalHeader `chip`: the host's name ("Give Rohan Mehta a role").
+- ModalHeader `chip`: the host's name ("Give Liv Morgan a role").
 - **Title** names the kind and count: "This cancels a removal that's waiting" / "This cancels 3 grants that are waiting".
-- **Lede**: what it means for the person today: "It hasn't reached Zitadel, so Rohan still has Member today."
+- **Lede**: what it means for the person today: "It hasn't reached Zitadel, so Liv still has Member today."
 - **List**: a `--line-strong` box with one group per who-queued-it, when and why.
   - Each change: **Giving** / **Removing** {system · role} to/from {person}.
   - Then "Queued by {name} · {when}" in muted.
@@ -18,7 +18,7 @@ It renders inside the host Modal (Give a role, Remove, a bundle's dialogs) in pl
 - **Footer**: the note "Nothing changes until you choose." Then **Keep it** (outline, first, initial focus, Escape), then the confirm, which names what goes ahead in the host's tone: "Cancel it and give Member" (accent), "Cancel all 3 and remove" (dangerConfirm).
 
 ## After
-- **Go ahead**: the host's result (ActionOutcome block with a word), plus a faint line: "The removal Sam queued 2h ago is cancelled, so nothing goes to Zitadel. Change history records both."
+- **Go ahead**: the host's result (ActionOutcome block with a word), plus a faint line: "The removal Randy queued 2h ago is cancelled, so nothing goes to Zitadel. Change history records both."
 - **Keep**: back to the host's form as it was. The footer note becomes "Nothing changed. {Name}'s {removal} is still waiting." with Waiting for you to send →.
 
 ## Motion

@@ -186,12 +186,12 @@ class Component extends DCLogic {
     this.listError = Object.assign(new Error("People could not be read"), { status: 503 });
     const P = (name, sub, team, bundles, access, attn, tone, extra) => ({ name, sub, team, subLine: team && team !== "—" ? sub + " · " + team : sub, bundles, noBundles: bundles.length === 0, access, attn, attnColor: tone ? "var(--" + tone + "-text)" : "inherit", avatarName: name, nameColor: "var(--ink)", opacity: 1, ...(extra || {}) });
     this.people = [
-      P("Aanya Rao", "Research assistant", "Mechanical Engineering", [{ name: "Lab Tech", v: 3 }], "3 roles across 2 projects", "Expires in 2 days", "warn"),
-      P("Priya Nair", "Research assistant", "Design", [{ name: "Lab Tech", v: 2 }], "5 roles across 3 projects", "Unexplained role", "danger"),
+      P("Roman Reigns", "Research assistant", "Mechanical Engineering", [{ name: "Lab Tech", v: 3 }], "3 roles across 2 projects", "Expires in 2 days", "warn"),
+      P("Cody Rhodes", "Research assistant", "Design", [{ name: "Lab Tech", v: 2 }], "5 roles across 3 projects", "Unexplained role", "danger"),
       P("Kanishk Singh", "Makerspace staff", "Operations", [{ name: "Staff", v: 1 }], "6 roles across 4 projects", "", ""),
-      P("Lena Brandt", "lena.brandt@makerspace.edu", "—", [], "Nothing yet", "Open request", "accent"),
+      P("Zoey Stark", "zoey.stark@makerspace.edu", "—", [], "Nothing yet", "Open request", "accent"),
       P("Unknown account", "a91f3c2e-7d0b-4e5a-9c11-28d6f0b4e7a3", "—", [], "Not in Zitadel", "", "", { avatarName: "", nameColor: "var(--faint)" }),
-      P("Omar Haddad", "Left 12 Sept", "Architecture", [{ name: "Wood shop", v: 1 }], "1 role", "", "", { opacity: 0.6 }),
+      P("Tiffany Stratton", "Left 12 Sept", "Architecture", [{ name: "Wood shop", v: 1 }], "1 role", "", "", { opacity: 0.6 }),
     ];
   }
   seat(on, label) { const h = React.createElement; const mixed = on === "mixed"; const s = { width: 24, height: 24, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-pill)", border: "1.5px solid " + (on ? "var(--accent)" : "var(--line-strong)"), background: on ? "var(--accent)" : "transparent", color: "var(--accent-ink)", fontSize: 13, fontWeight: 700, lineHeight: 1 };
@@ -199,7 +199,7 @@ class Component extends DCLogic {
     return label ? h("span", { role: "checkbox", "aria-checked": !!on, "aria-label": label, tabIndex: 0, style: { display: "inline-flex", minWidth: 26, minHeight: 26, alignItems: "center", justifyContent: "center", cursor: "pointer" } }, glyph) : glyph; }
   peopleView() {
     const S = window.Syndra, h = React.createElement, bulk = this.st === "bulk-a" || this.st === "bulk-b";
-    const picked = ["Aanya Rao", "Priya Nair", "Kanishk Singh", "Omar Haddad"];
+    const picked = ["Roman Reigns", "Cody Rhodes", "Kanishk Singh", "Tiffany Stratton"];
     return (this.people || []).map(p => ({ ...p, bg: bulk && picked.includes(p.name) ? "var(--accent-soft)" : "transparent", checkEl: bulk ? this.seat(picked.includes(p.name), "Select " + p.name) : null, bundleLine: (p.bundles || []).length ? (p.bundles || []).map(b => b.name + " v" + b.v).join(" · ") : "" }));
   }
   renderVals() {

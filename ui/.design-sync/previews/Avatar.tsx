@@ -9,16 +9,16 @@ const item = { display: "flex", alignItems: "center", gap: 10, fontSize: 15, fon
 
 export const Sizes = () => (
   <div style={row}>
-    <Avatar name="Aanya Rao" size="row" />
-    <Avatar name="Kabir Mehta" size="list" />
-    <Avatar name="Ishita Sen" size="header" />
+    <Avatar name="Roman Reigns" size="row" />
+    <Avatar name="Alexa Bliss" size="list" />
+    <Avatar name="Jey Uso" size="header" />
   </div>
 );
 
 export const WithName = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-    <span style={item}><Avatar name="Rohan Iyer" />Rohan Iyer</span>
-    <span style={item}><Avatar name="Meera Pillai" />Meera Pillai</span>
+    <span style={item}><Avatar name="Damian Priest" />Damian Priest</span>
+    <span style={item}><Avatar name="Finn Balor" />Finn Balor</span>
   </div>
 );
 

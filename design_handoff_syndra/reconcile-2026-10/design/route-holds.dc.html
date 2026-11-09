@@ -148,17 +148,17 @@ class Component extends DCLogic {
       why: why || "No reason recorded.", whyInk: why ? "var(--muted)" : "var(--faint)", by, placed: D(placedAgo), dueAgo, due: D(dueAgo), ago: dueAgo === 1 ? "1 day ago" : dueAgo + " days ago",
       returns: (field === "enabled" ? "The account" : field === "share" ? "The share" : "The group") + " returns when TrueNAS is next brought in line." });
     let rs = [
-      H("Arjun Das", "enabled", "", "Left the makerspace mid-term. Keeping his files until the department confirms what happens to them.", "Lena Brandt", 65, 18),
-      H("Meera Pillai", "share", "projects", "Shared a licensed dataset outside the course. Held until the safety officer has spoken to her.", "Kanishk Singh", 27, 6),
-      H("Wei Chen", "enabled", "", "Went over the storage quota again after a written warning.", "Lena Brandt", 35, 5),
-      H("Tomas Weber", "group", "cnc", "", "Sana Kohli", 16, 2),
+      H("Chad Gable", "enabled", "", "Left the makerspace mid-term. Keeping his files until the department confirms what happens to them.", "Zoey Stark", 65, 18),
+      H("Finn Balor", "share", "projects", "Shared a licensed dataset outside the course. Held until the safety officer has spoken to her.", "Kanishk Singh", 27, 6),
+      H("Xavier Woods", "enabled", "", "Went over the storage quota again after a written warning.", "Zoey Stark", 35, 5),
+      H("Jimmy Uso", "group", "cnc", "", "Iyo Sky", 16, 2),
     ];
     const so = this.state.sort, dir = this.state.dir;
     const keyOf = { who: r => r.who, what: r => r.what };
     rs.sort((a, b) => { let c = so === "due" ? b.dueAgo - a.dueAgo : keyOf[so](a).localeCompare(keyOf[so](b)); if (dir < 0) c = -c; return c || b.dueAgo - a.dueAgo; });
     const runs = so === "what", cnt = {}; if (runs) rs.forEach(r => { cnt[r.what] = (cnt[r.what] || 0) + 1; });
     let prev = null;
-    const rows = rs.map(r => { const v = runs ? r.what : null; const lifted = st === "lifted" && r.who === "Meera Pillai", failed = st === "lift-failed" && r.who === "Meera Pillai";
+    const rows = rs.map(r => { const v = runs ? r.what : null; const lifted = st === "lifted" && r.who === "Finn Balor", failed = st === "lift-failed" && r.who === "Finn Balor";
       const o = Object.assign({}, r, { hasRun: runs && v !== prev, run: v, runCount: runs ? cnt[v] : 0, showLift: !lifted && !failed, showLifted: lifted, showFailed: failed }); prev = v; return o; });
     const SH = (k, key) => ({ ["sort" + k]: () => this.setSort(key), ["rot" + k]: so === key && dir < 0 ? "rotate(180deg)" : "none", ["op" + k]: so === key ? 1 : 0, ["col" + k]: so === key ? "var(--ink)" : "inherit" });
     const oldest = Math.max.apply(null, rs.map(r => r.dueAgo));

@@ -16,7 +16,7 @@ export function Toggle() {
         </Button>
       </div>
       <Unfold open={open} gap={16}>
-        <Notice tone="warn" title="Paused by Priya Nair">
+        <Notice tone="warn" title="Paused by Cody Rhodes">
           {"The laser cutter's extraction fan is being serviced. Operator grants resume on Monday."}
         </Notice>
       </Unfold>

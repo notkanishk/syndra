@@ -22,7 +22,7 @@ export const WithActions = () => (
 /** A person's page: meta is a dot-separated MetaRow, never a sentence. */
 export const PersonMeta = () => (
   <PageHeader
-    title="Aanya Rao"
+    title="Roman Reigns"
     lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why."
     meta={
       <MetaRow>

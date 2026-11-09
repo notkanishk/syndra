@@ -17,7 +17,7 @@ export const RoleKeys = () => (
 
 export const InSentence = () => (
   <div style={line}>
-    Aanya Rao holds <Mono>laser-cutter.operator</Mono> through the claim{" "}
+    Roman Reigns holds <Mono>laser-cutter.operator</Mono> through the claim{" "}
     <Mono>urn:zitadel:iam:org:project:roles</Mono>.
   </div>
 );

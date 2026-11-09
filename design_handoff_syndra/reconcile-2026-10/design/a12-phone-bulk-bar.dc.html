@@ -191,23 +191,23 @@ class Component extends DCLogic {
     ];
     const P = (name, sub, access, attn, tone, on) => ({ name, sub, access, attn, attnColor: tone ? "var(--" + tone + "-text)" : "var(--ink)", on: !!on, off: !on, bg: on ? "var(--accent-soft)" : "transparent", seatLabel: "Select " + name });
     this.everyone = [
-      P("Aanya Rao", "Research assistant · Mechanical Engineering", "3 roles across 2 projects", "Ends in 2 days", "warn", true),
-      P("Priya Nair", "Research assistant · Design", "5 roles across 3 projects", "Unexplained role", "danger", true),
-      P("Ada Lovelace", "Visiting fellow · Computer Science", "2 roles across 1 project", "", ""),
-      P("Lena Brandt", "lena@example.edu", "Nothing yet", "Open request", "accent", true),
-      P("Rohan Mehta", "Student · Physics", "1 role", "", ""),
-      P("Sofia Rossi", "Student · Architecture", "4 roles across 2 projects", "", ""),
-      P("Mei Tanaka", "Research assistant · Biology", "2 roles across 2 projects", "Ends in 9 days", "warn"),
-      P("Daniel Okafor", "Student · Mechanical Engineering", "1 role", "", ""),
+      P("Roman Reigns", "Research assistant · Mechanical Engineering", "3 roles across 2 projects", "Ends in 2 days", "warn", true),
+      P("Cody Rhodes", "Research assistant · Design", "5 roles across 3 projects", "Unexplained role", "danger", true),
+      P("Charlotte Flair", "Visiting fellow · Computer Science", "2 roles across 1 project", "", ""),
+      P("Zoey Stark", "zoey@example.edu", "Nothing yet", "Open request", "accent", true),
+      P("Liv Morgan", "Student · Physics", "1 role", "", ""),
+      P("Beth Phoenix", "Student · Architecture", "4 roles across 2 projects", "", ""),
+      P("Piper Niven", "Research assistant · Biology", "2 roles across 2 projects", "Ends in 9 days", "warn"),
+      P("Bron Breakker", "Student · Mechanical Engineering", "1 role", "", ""),
     ];
     this.departed = [
-      P("Omar Haddad", "Left 12 Sept · Architecture", "1 role", "Departed", "danger", true),
-      P("Ines Duarte", "Left 30 Aug · Design", "3 roles across 2 projects", "Departed", "danger", true),
-      P("Tomas Novak", "Left 22 Aug · Physics", "2 roles across 1 project", "Departed", "danger", true),
-      P("Hema Kim", "Left 5 Sept · Biology", "1 role", "Departed", "danger"),
-      P("Arjun Iyer", "Left 1 Sept · Computer Science", "2 roles across 2 projects", "Departed", "danger"),
-      P("Clara Weiss", "Left 30 Aug · Mechanical Engineering", "1 role", "Departed", "danger"),
-      P("Yusuf Demir", "Left 18 Aug · Design", "4 roles across 3 projects", "Departed", "danger"),
+      P("Tiffany Stratton", "Left 12 Sept · Architecture", "1 role", "Departed", "danger", true),
+      P("Karrion Kross", "Left 30 Aug · Design", "3 roles across 2 projects", "Departed", "danger", true),
+      P("Trish Stratus", "Left 22 Aug · Physics", "2 roles across 1 project", "Departed", "danger", true),
+      P("Austin Theory", "Left 5 Sept · Biology", "1 role", "Departed", "danger"),
+      P("Torrie Wilson", "Left 1 Sept · Computer Science", "2 roles across 2 projects", "Departed", "danger"),
+      P("Grayson Waller", "Left 30 Aug · Mechanical Engineering", "1 role", "Departed", "danger"),
+      P("Stacy Keibler", "Left 18 Aug · Design", "4 roles across 3 projects", "Departed", "danger"),
     ];
   }
   renderVals() {

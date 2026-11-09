@@ -55,8 +55,8 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
     outcomes: [
       {
         user_id: "u1",
-        name: "Ada Lovelace",
-        email: "ada@example.edu",
+        name: "Charlotte Flair",
+        email: "charlotte@example.edu",
         effect: "apply",
         detail: "Gains Member in Laser Lab.",
         delivery: "straight_away",
@@ -65,15 +65,15 @@ function plan(overrides: Partial<BulkPlan> = {}): BulkPlan {
       },
       {
         user_id: "u2",
-        name: "Leo Brooks",
-        email: "leo@example.edu",
+        name: "Seth Rollins",
+        email: "seth@example.edu",
         effect: "blocked",
         detail: "Account is departed. Remove it from the selection to continue.",
       },
       {
         user_id: "u3",
-        name: "Sam Patel",
-        email: "sam@example.edu",
+        name: "Rey Mysterio",
+        email: "rey@example.edu",
         effect: "no_change",
         detail: "Holds no direct grant here.",
         consequence: "Keeps the role another way, through a bundle or an automatic rule. Remove that instead.",
@@ -132,7 +132,7 @@ describe("BulkDialog", () => {
     chooseRole();
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "New cohort" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
-    await screen.findByText("Ada Lovelace");
+    await screen.findByText("Charlotte Flair");
   }
 
   it("shows the server's plan verbatim, naming every person", async () => {
@@ -140,8 +140,8 @@ describe("BulkDialog", () => {
     await rehearse();
 
     // Names, not ids: a plan identified by id is a plan nobody can check.
-    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
-    expect(screen.getByText("Leo Brooks")).toBeInTheDocument();
+    expect(screen.getByText("Charlotte Flair")).toBeInTheDocument();
+    expect(screen.getByText("Seth Rollins")).toBeInTheDocument();
     expect(screen.getByText(/Account is departed/)).toBeInTheDocument();
     // The consequence — who keeps the role anyway — is the part a count hides.
     expect(screen.getByText(/Keeps the role another way, through a bundle or an automatic rule/)).toBeInTheDocument();
@@ -255,7 +255,7 @@ describe("BulkDialog", () => {
     expect(screen.getByLabelText("Reason")).toHaveValue("New cohort");
   });
 
-  // The summary line and Ada's own row are two sentences about the same
+  // The summary line and Charlotte's own row are two sentences about the same
   // apply, computed from the same plan — this pins them to agreeing rather
   // than the summary claiming "applied" over a row still marked "queued".
   it("keeps the summary outcome and the per-row outcome saying the same thing, by name", async () => {
@@ -265,8 +265,8 @@ describe("BulkDialog", () => {
       outcomes: [
         {
           user_id: "u1",
-          name: "Ada Lovelace",
-          email: "ada@example.edu",
+          name: "Charlotte Flair",
+          email: "charlotte@example.edu",
           effect: "queued",
           detail: "Waiting to be sent to Zitadel.",
         },
@@ -284,14 +284,14 @@ describe("BulkDialog", () => {
     // never "Applied" while a row is still queued.
     const summary = screen.getByRole("link", { name: /Waiting for you to send/ });
     expect(summary.getAttribute("href")).toBe("/governance/pending");
-    // Ada's own row says the same words, so the two agree rather than one
+    // Charlotte's own row says the same words, so the two agree rather than one
     // saying "applied" over a row still marked queued.
     const sayings = screen.getAllByText("Waiting for you to send");
     expect(sayings.length).toBeGreaterThanOrEqual(2);
     expect(sayings.filter((el) => !el.closest("a"))).toHaveLength(1);
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
     // Named rather than by id.
-    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("Charlotte Flair")).toBeInTheDocument();
     expect(screen.queryByText("u1")).not.toBeInTheDocument();
   });
 });

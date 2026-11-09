@@ -17,15 +17,15 @@ The page has one job: make sure this app is told the right thing about people. E
   - **Check 5 is the token.** Its sentence ("Zitadel receives this:") sits above the token block, then the sentence under the block (#49 and the faded-line sentence carry over), then Copy preview and Show the role list.
 - **The five sentences**, all passing:
   1. "Zitadel lists 3D printing in Print queue's tokens." Faint: "Assert roles is on for 3D printing."
-  2. "Ada Lovelace holds 2 roles in 3D printing." Faint: "Trained and Maintainer, as Zitadel shows them."
+  2. "Charlotte Flair holds 2 roles in 3D printing." Faint: "Trained and Maintainer, as Zitadel shows them."
   3. "Her claims are ready." Faint: "Built at 09:52 today, after her last change."
   4. "3D printing's default format applies." Faint: "It makes `printing.roles` and `team`. Print queue has no format of its own."
   5. "Zitadel receives this:" and the token.
 - **Every check always runs.** A failure doesn't hide the rest, so the trail points at the one step that broke. The token block shows `{}`, and its sentence says what checks 2 to 4 would give once the fault is fixed.
 - **A failed check** has a danger dot, its sentence, a faint detail, then the fix: a plain sentence, then a violet link ending in →. No box: the dot and the words carry it.
   - **The fix is in Zitadel** (frame `check-assert`): "Zitadel doesn't list 3D printing in Print queue's tokens, so Print queue gets nothing from Syndra." Faint: "Assert roles is off for 3D printing, and Print queue doesn't ask for role scopes." Link: "Turn on Assert roles for 3D printing in Zitadel →" (opens Zitadel's console). Faint: "Or have Print queue ask for role scopes when it signs people in. Then check again." A fix in Zitadel always names Zitadel in the link's words.
-  - **Refused, ADR-002** (frame `check-refused`): "Print queue asks for two projects when it signs people in: 3D printing and Wood shop. A token carries one project's claims, so Syndra adds none." Faint: "Last refused at 10:12 today, when Aanya Rao signed in." Fix: "Stop Print queue asking for Wood shop's project. That is set in Print queue itself, not in Zitadel. If it needs a Wood shop role, give a matching one in 3D printing with an automatic rule." Link: "Automatic rules →". Check 5: "Zitadel receives no Syndra claims for anyone signing in to Print queue."
-  - **No roles** (frame `no-roles`) is not a failure. Check 2 has a **neutral** dot: "Rohan Mehta holds no roles in 3D printing." Faint: "That is not an error: none of the roles he holds belong to 3D printing." Link: "Give him a role on his page →". Check 3, neutral: "Nothing to build for him." Under the token: "Rohan Mehta would sign in to Print queue with no roles." (#49).
+  - **Refused, ADR-002** (frame `check-refused`): "Print queue asks for two projects when it signs people in: 3D printing and Wood shop. A token carries one project's claims, so Syndra adds none." Faint: "Last refused at 10:12 today, when Roman Reigns signed in." Fix: "Stop Print queue asking for Wood shop's project. That is set in Print queue itself, not in Zitadel. If it needs a Wood shop role, give a matching one in 3D printing with an automatic rule." Link: "Automatic rules →". Check 5: "Zitadel receives no Syndra claims for anyone signing in to Print queue."
+  - **No roles** (frame `no-roles`) is not a failure. Check 2 has a **neutral** dot: "Liv Morgan holds no roles in 3D printing." Faint: "That is not an error: none of the roles he holds belong to 3D printing." Link: "Give him a role on his page →". Check 3, neutral: "Nothing to build for him." Under the token: "Liv Morgan would sign in to Print queue with no roles." (#49).
 - **Tones.** Lime: passes. Neutral: a fact, nothing to fix. Amber: a broken assumption (check 4 when the token doesn't match what the app reads, §6; claims not built yet). Red: the token is wrong or empty because of this step.
 - **Degraded** (frame `degraded`): the amber Notice reads "Zitadel isn't answering. This is what it held at 09:40.", then "Everything below is real, read 14 minutes ago, and may have changed since. Previews go by what Zitadel held then." Checks 1 and 2 get an **amber ring** (not a fresh read) and past tense: "Zitadel listed 3D printing in Print queue's tokens at 09:40." Faint: "Its last answer. Check again won't help until Zitadel answers." The preview still runs. This changes the 23 Oct line, which said previews wait.
 - **Loading, error, not found:** as on the 23 Oct board.
@@ -45,7 +45,7 @@ The page has one job: make sure this app is told the right thing about people. E
   - A line that **joins** starts with "+" and is set at weight 600.
   - A line with no mark is unchanged. A renamed key is a − line and a + line.
   - Each marked line carries hidden text for screen readers ("Leaves the token:", "Joins the token:").
-- **The sentence under the block:** "Two differences for Ada Lovelace: `roles` becomes `printing.roles`, and `team` is added. A line marked − leaves the token; a line marked + joins it. The faded line is Printer kiosk's own."
+- **The sentence under the block:** "Two differences for Charlotte Flair: `roles` becomes `printing.roles`, and `team` is added. A line marked − leaves the token; a line marked + joins it. The faded line is Printer kiosk's own."
 - The draft runs through the same explain step as the live token (Locked), every time the form changes and the person is chosen. It shows a skeleton only if slow (S7).
 - **Inline validation runs on the draft:** an invalid key or a repeated key shows under its row before Save (§8).
 
@@ -83,7 +83,7 @@ The page has one job: make sure this app is told the right thing about people. E
     - Print queue: lime, "Will match what it reads."
     - Filament log: amber, "Won't match: it reads `roles`." Faint: "Change what Filament log reads, or update it first. Saving doesn't wait for either."
     - Printer kiosk: neutral, "No change: it reads its own `kiosk.roles`."
-  - One sentence: "Your 4 test people: 3 change as the page shows, and Rohan Mehta doesn't."
+  - One sentence: "Your 4 test people: 3 change as the page shows, and Liv Morgan doesn't."
   - **What changed, for History**: a Textarea, required, prefilled from the differences ("Rename for the new print queue; add team."). It is the Publish version note's pattern on mappings: one pattern per job.
   - **Footer note (the before-line):** "41 people get this at their next sign-in. Anyone signed in now keeps the old token until then." Cancel (outline) · Save token format (accent).
 - **A mismatch doesn't block the save.** The operator may be updating the app next. The dialog says so plainly and the app's page carries it afterwards.
@@ -137,11 +137,11 @@ The page has one job: make sure this app is told the right thing about people. E
   - "Zitadel lists 3D printing in Print queue's tokens."
   - "There's a note of what Print queue reads, and the token matches it."
   - "None of the 4 test people fails a check."
-  - Compare: neutral, "No Actions v1 token compared yet. Paste one below." After comparing: amber, "2 claims differ from Actions v1 for Ada Lovelace. The comparison is below."
+  - Compare: neutral, "No Actions v1 token compared yet. Paste one below." After comparing: amber, "2 claims differ from Actions v1 for Charlotte Flair. The comparison is below."
 - **Paste and compare** (frame `v1`):
   - The field is "A token Actions v1 issued, decoded" (a mono Textarea). Faint under it: "Syndra doesn't keep what you paste. It keeps only the result."
   - Then **Compare** (outline sm).
-  - The token names its person by its `sub`: "This is Ada Lovelace's token, from its `sub`. Compared with what she gets now." With no `sub`, the person form opens.
+  - The token names its person by its `sub`: "This is Charlotte Flair's token, from its `sub`. Compared with what she gets now." With no `sub`, the person form opens.
 - **The comparison table:** Claim · Actions v1 · Syndra now · Verdict (dot, word, and what to do).
   - **Same.**
   - **Different:** "Actions v1 sends text with commas; Syndra sends an `array`. Set Sent as to `csv`, or check that Print queue reads an array."
@@ -159,7 +159,7 @@ The page has one job: make sure this app is told the right thing about people. E
 - **The row:**
   - Claim name (mono Input) · Where the value comes from (as built) · Remove.
   - With "the same value for everyone…", a second line: Type (Segmented sm) and the value control for that type.
-  - Then the faint "Sent as …" line. Every row has it, attributes too: "Sent as `"Fabrication"` for Ada Lovelace."
+  - Then the faint "Sent as …" line. Every row has it, attributes too: "Sent as `"Fabrication"` for Charlotte Flair."
 - **The value controls:**
   - **Text:** an Input. Sent as `"makerspace"`.
   - **Number:** an Input with a numeric keyboard. Sent as `40`. Field error: "Type a number, like 40."

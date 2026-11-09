@@ -44,7 +44,7 @@ Answer to `Q-18-character-and-soul.md`, which carries the owner's open questions
 
 ## 2 · My access: what sits under the greeting
 
-All four options keep the title as it is, "Hi Priya. Here's what you can use." (§4 idea 2 would change "Hi" to the time of day). They differ only in the seat under it, 8px below the title. Content still starts 28px under the header (G5).
+All four options keep the title as it is, "Hi Cody. Here's what you can use." (§4 idea 2 would change "Hi" to the time of day). They differ only in the seat under it, 8px below the title. Content still starts 28px under the header (G5).
 
 ### (A) One line that knows · **Recommended**
 **One sentence, always there, choosing the most useful thing to say from a fixed ladder.**
@@ -163,7 +163,7 @@ Each idea has its exact copy, where it lives, when it shows, and why it stays ca
    - **When:** only on a term's first and last day, read from Makerspace settings (the one write place).
    - **Why calm:** six days a year. It is a fact Syndra holds, said in the place a date is already said. Nothing moves.
 2. **The time of day on My access.**
-   - **Copy:** "Morning, Priya. Here's what you can use." (Afternoon and Evening at the same hours as Home: before 12, before 17.)
+   - **Copy:** "Morning, Cody. Here's what you can use." (Afternoon and Evening at the same hours as Home: before 12, before 17.)
    - **Where:** the member's title, replacing "Hi".
    - **When:** always.
    - **Why calm:** it is three fixed words, already the operator's greeting, so member and operator are greeted by the same keeper. It is not a rotating line.
@@ -249,7 +249,7 @@ Each idea has its exact copy, where it lives, when it shows, and why it stays ca
 
 1. **My access header: option (A), one line that knows, from the ladder in §2?** *Recommended: yes.*
 2. **Should the ladder's order stand (ending soon first, calm last), with the line jumping to the card it names?** *Recommended: yes.*
-3. **Should the member's title greet by time of day ("Morning, Priya."), like Home?** *Recommended: yes.*
+3. **Should the member's title greet by time of day ("Morning, Cody."), like Home?** *Recommended: yes.*
 4. **Should Recent changes keep its seat on a quiet month, with "Nothing has changed in the last 30 days."?** *Recommended: yes. Structure doesn't move with data.*
 5. **Should the story live in About Syndra at the foot of the Account sheet, with the login line as its short form, and nowhere else?** *Recommended: yes.*
 6. **Should the story be told the exact way, "the door of the hall", with Syn speaking for the one who refuses?** *Recommended: yes. "No" keeps "Frigg's hall".*

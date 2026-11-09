@@ -11,8 +11,8 @@ const one = [
 ];
 
 const several = [
-  { field: "group", value: "cnc-router", reason: "Waiting on a supervisor sign-off after the spindle incident", target: "Door access", actorId: "Priya Nair" },
-  { field: "share", value: "capstone-2026", reason: "Over the storage quota", target: "TrueNAS", actorId: "Vivek Nair", reviewDue: true },
+  { field: "group", value: "cnc-router", reason: "Waiting on a supervisor sign-off after the spindle incident", target: "Door access", actorId: "Cody Rhodes" },
+  { field: "share", value: "capstone-2026", reason: "Over the storage quota", target: "TrueNAS", actorId: "Eddie Guerrero", reviewDue: true },
 ];
 
 export const MemberOne = () => <div style={box}><Withheld items={one} /></div>;

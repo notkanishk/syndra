@@ -17,11 +17,11 @@ const empty = (
 const rows = (
   <>
     <CardRow first>
-      <div style={name}>Aanya Rao</div>
+      <div style={name}>Roman Reigns</div>
       <div style={muted}>Laser Lab / laser_operator</div>
     </CardRow>
     <CardRow>
-      <div style={name}>Ishita Sen</div>
+      <div style={name}>Jey Uso</div>
       <div style={muted}>Laser Lab / laser_operator</div>
     </CardRow>
   </>

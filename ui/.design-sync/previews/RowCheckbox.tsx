@@ -6,9 +6,9 @@ import { useState } from "react";
 import { RowCheckbox, Card } from "ui";
 
 const people = [
-  { id: "1", name: "Aanya Rao", role: "Laser cutter · Operator" },
-  { id: "2", name: "Kabir Mehta", role: "3D printers · Member" },
-  { id: "3", name: "Ishita Sen", role: "Wood shop · Supervisor" },
+  { id: "1", name: "Roman Reigns", role: "Laser cutter · Operator" },
+  { id: "2", name: "Alexa Bliss", role: "3D printers · Member" },
+  { id: "3", name: "Jey Uso", role: "Wood shop · Supervisor" },
 ];
 const rowStyle = { display: "flex", alignItems: "center", gap: 14, padding: "10px 20px", borderTop: "1px solid var(--line)", cursor: "pointer" } as const;
 
@@ -34,8 +34,8 @@ export const InRows = () => {
 
 export const States = () => (
   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-    <RowCheckbox label="Select Rohan Iyer" checked={false} onChange={() => {}} />
-    <RowCheckbox label="Select Meera Pillai" checked onChange={() => {}} />
-    <RowCheckbox label="Select Arjun Nair" disabled checked={false} onChange={() => {}} />
+    <RowCheckbox label="Select Damian Priest" checked={false} onChange={() => {}} />
+    <RowCheckbox label="Select Finn Balor" checked onChange={() => {}} />
+    <RowCheckbox label="Select Katana Chance" disabled checked={false} onChange={() => {}} />
   </div>
 );

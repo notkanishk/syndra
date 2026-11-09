@@ -187,7 +187,7 @@ The copy-row specimen. Structure: status bar → body `padding:12px 16px`,
 - Rows `min-height:52px`, `padding:11px 14px`, mono `13px`
   `rgba(243,245,239,.82)`, `word-break:break-all`, divider `.05`.
 - Confirmed row: `background:rgba(163,230,53,.07)`, trailing `"Copied"` `#a3e635` 600.
-Copy: `"Connection"`, `"smb://fileserver-01/studio"` + `"Copy"`, `"req_8f31c0a4"` + `"Copied"`, `"aditi.rao"` + `"Copy"`, `"The row confirms itself for 900ms, then returns. No toast — a toast covers the value you just copied."` (footnote `12.5px`, `.32`).
+Copy: `"Connection"`, `"smb://fileserver-01/studio"` + `"Copy"`, `"req_8f31c0a4"` + `"Copied"`, `"drew.mcintyre"` + `"Copy"`, `"The row confirms itself for 900ms, then returns. No toast — a toast covers the value you just copied."` (footnote `12.5px`, `.32`).
 Caption: "Every id, endpoint, request id and connection string is a 52px row with a Copy affordance. Long strings wrap rather than truncate: an operator reading a path aloud needs all of it."
 
 ---
@@ -233,7 +233,7 @@ Structure: status bar → content `padding:10px 16px 16px`, `gap:14px` → title
   `border-top:1px solid rgba(255,255,255,.05)`, primary `14.5px/600`,
   secondary `13px`/`.5`, trailing `›`. Footer link row **`min-height:48px`**,
   `padding:0 16px`, link `13.5px/600`. **[CONTRADICTION: 48px footer row]**
-Copy: `"Today"`, `"Basic"`, `"Requests waiting"` `4`, `"Aditi Rao"` / `"Laser cutter · 2 days"`, `"Meera Nair"` / `"CNC router · 1 day"`, `"All 4 requests"`, `"Expiring this week"` `11`, `"Studio Access"` / `"6 people · Fri 15 Aug"`, `"All 11"`.
+Copy: `"Today"`, `"Basic"`, `"Requests waiting"` `4`, `"Drew McIntyre"` / `"Laser cutter · 2 days"`, `"Dakota Kai"` / `"CNC router · 1 day"`, `"All 4 requests"`, `"Expiring this week"` `11`, `"Studio Access"` / `"6 people · Fri 15 Aug"`, `"All 11"`.
 Caption: "Each block shows two rows and a link to the rest, so the first screen-height carries work rather than two large numbers. The count moves beside its label instead of below it."
 
 ### M04b — "Advanced · five blocks"
@@ -270,7 +270,7 @@ Filter button) → grouped list.
 - Person row: **`min-height:64px`**, `padding:12px 16px`; name `15.5px/600`,
   fact `13px`/`.5`; optional amber `7px` dot before the chevron.
   **[CONTRADICTION: 64px vs 60px]**
-Copy: `"People"`, `"Search 184 people"`, `"Filter 2"`, `"Studio · 3"`, `"Aditi Rao"` / `"4 roles · 1 expiring Fri"`, `"Meera Nair"` / `"2 roles"`, `"Devan Suresh"` / `"6 roles · 1 hold"`, `"Fabrication · 41"`, `"Priya Menon"` / `"3 roles"`.
+Copy: `"People"`, `"Search 184 people"`, `"Filter 2"`, `"Studio · 3"`, `"Drew McIntyre"` / `"4 roles · 1 expiring Fri"`, `"Dakota Kai"` / `"2 roles"`, `"Natalya Neidhart"` / `"6 roles · 1 hold"`, `"Fabrication · 41"`, `"John Cena"` / `"3 roles"`.
 Caption: "Grouped by project as on desktop, headers sticky. Two lines per person: the name, then the fact an operator opens the page for. The amber dot repeats what the second line says — colour never carries it alone."
 
 ### M05b — "Search overlay"
@@ -281,7 +281,7 @@ focused field + `"Cancel"` `14px`/`.62`) → results grouped **by kind** → key
 - Result row `min-height:60px`, `padding:11px 16px`.
 - Match highlight: `background:rgba(155,123,255,.24)`, `radius:3px` —
   **highlighted, not bolded.**
-Copy: `"rao"`, `"Cancel"`, `"People · 2"`, `"Rao, Aditi"` / `"Studio · 4 roles"`, `"K. Rao"` / `"Operator · Fabrication"`, `"Accounts on targets · 1"`, `"aditi.rao"` (mono 13.5px) / `"fileserver-01 · adopted"`.
+Copy: `"rao"`, `"Cancel"`, `"People · 2"`, `"Rao, Drew"` / `"Studio · 4 roles"`, `"K. Rao"` / `"Operator · Fabrication"`, `"Accounts on targets · 1"`, `"drew.mcintyre"` (mono 13.5px) / `"fileserver-01 · adopted"`.
 Caption: "Results group by what they are, because an operator searching a name is sometimes after an account on a target. Matches are highlighted, not bolded — bold already means the primary line."
 
 ### M05c — "Filter sheet"
@@ -303,7 +303,7 @@ labelled-line card wins over the A2 row.
 
 ### M06a — "Access · granted"
 Structure: status bar → header (back-line `"People · Studio"`, title
-`"Aditi Rao"`, meta `12.5px`/`.5`) → body `padding:12px 16px 16px`, `gap:12px`:
+`"Drew McIntyre"`, meta `12.5px`/`.5`) → body `padding:12px 16px 16px`, `gap:12px`:
 section header row (eyebrow + action link) → grant cards → second section header
 → automatic card.
 - Grant card: radius 18, padding 16, `gap:12px`. Head column `gap:7px`:
@@ -313,7 +313,7 @@ section header row (eyebrow + action link) → grant cards → second section he
   `border:1px solid rgba(255,92,77,.4)`, `background:transparent`, `#ff8d82`,
   `14.5px/600`.
 - Non-removable cards carry a `13px`/`.5` sentence instead of a button.
-Copy: `"People · Studio"`, `"Aditi Rao"`, `"Studio · member since Jan 2026"`, `"Granted · 2"`, `"Give access"`, `"Laser cutter"` / `"operate"` / direct, `"Granted by"` → `"K. Rao"`, `"Until"` → `"30 May 2026"` (mono, amber), `"Remove this grant"`, `"3D printers"` / `"operate"` / bundle `"Workshop basics"`, `"Comes from a bundle. Change the bundle or unassign it — it cannot be removed here."`, `"Automatic · 1"`, `"Studio Access"` / `"enter"` / mapping, `"Follows the Studio membership rule. Ends when membership does."`
+Copy: `"People · Studio"`, `"Drew McIntyre"`, `"Studio · member since Jan 2026"`, `"Granted · 2"`, `"Give access"`, `"Laser cutter"` / `"operate"` / direct, `"Granted by"` → `"K. Rao"`, `"Until"` → `"30 May 2026"` (mono, amber), `"Remove this grant"`, `"3D printers"` / `"operate"` / bundle `"Workshop basics"`, `"Comes from a bundle. Change the bundle or unassign it — it cannot be removed here."`, `"Automatic · 1"`, `"Studio Access"` / `"enter"` / mapping, `"Follows the Studio membership rule. Ends when membership does."`
 Caption: "Granted above automatic, with the section counts as headers. Only the direct grant carries a remove button; the other two explain in place why they have none — the same sentences the desktop popovers carry."
 
 ### M06b — "Person · withheld and cards"
@@ -324,7 +324,7 @@ withheld card first, then normal cards.
   (`7px` amber dot + `"Withheld"` 11px/.1em/uppercase `#f5a524`); resource
   `16px/600`; explanation `13.5px/1.55` `.7`; key–value; then a `min-height:44px`
   link row.
-Copy: `"People · Studio"`, `"Devan Suresh"`, tabs `"Access"` / `"Holds 1"` / `"Cards 2"` / `"History"`, `"Withheld"`, `"CNC router"`, `"Fabrication Access still grants this. A hold placed by K. Rao on 09 Aug takes it away until the refresher induction is done."`, `"Hold ends"` → `"When lifted by hand"`, `"Open the hold"`, `"Laser cutter"` / `"operate"` / bundle `"Fabrication Access"`, `"Studio shares"` / `"read, write"` / mapping, `"On fileserver-01. Account adopted 14 Feb."`
+Copy: `"People · Studio"`, `"Natalya Neidhart"`, tabs `"Access"` / `"Holds 1"` / `"Cards 2"` / `"History"`, `"Withheld"`, `"CNC router"`, `"Fabrication Access still grants this. A hold placed by K. Rao on 09 Aug takes it away until the refresher induction is done."`, `"Hold ends"` → `"When lifted by hand"`, `"Open the hold"`, `"Laser cutter"` / `"operate"` / bundle `"Fabrication Access"`, `"Studio shares"` / `"read, write"` / mapping, `"On fileserver-01. Account adopted 14 Feb."`
 Caption: "Tabs replace the desktop's side panels — four fit at 390px without scrolling, with counts inline. A withheld row leads its section: it is the one thing on the page that contradicts what a role says."
 
 ---
@@ -342,14 +342,14 @@ answer sentence `13.5px`/`.62`) → list with the first row disclosed → "N mor
 - Collapsed member row `min-height:60px`; name `15px/600` then the capsule as
   the whole second line.
 - Overflow row: `min-height:52px`, `padding:0 16px`, `13.5px`/`.42`.
-Copy: `"Roles · Fabrication"`, `"Laser cutter · operate"`, `"23 people can currently use this"`, `"Aditi Rao"`, `"Granted by"` → `"K. Rao · 14 Feb"`, `"Until"` → `"30 May 2026"`, `"Open Aditi's access"`, `"Devan Suresh"`, `"Priya Menon"`, `"Meera Nair"`, `"19 more"`.
+Copy: `"Roles · Fabrication"`, `"Laser cutter · operate"`, `"23 people can currently use this"`, `"Drew McIntyre"`, `"Granted by"` → `"K. Rao · 14 Feb"`, `"Until"` → `"30 May 2026"`, `"Open Drew's access"`, `"Natalya Neidhart"`, `"John Cena"`, `"Dakota Kai"`, `"19 more"`.
 Caption: "The name is the primary line and the capsule is the whole second line — at this width the source is the only other thing worth a row. The header sentence answers the question in words before the list does."
 
 ### M07b — "Expiring · from Today"
 Structure: status bar → header (back-line `"Today"`, title, sentence) →
 date-grouped list (imminent group header amber) → pinned action bar (`Select` +
 `Extend all 11`).
-Copy: `"Today"`, `"Expiring this week"`, `"11 grants across 3 roles"`, `"Friday 15 Aug · 6"`, `"Aditi Rao"` / `"Studio Access · enter"`, `"Meera Nair"` / `"Studio Access · enter"`, `"Sunday 17 Aug · 5"`, `"Priya Menon"` / `"Laser cutter · operate"`, `"Select"`, `"Extend all 11"`.
+Copy: `"Today"`, `"Expiring this week"`, `"11 grants across 3 roles"`, `"Friday 15 Aug · 6"`, `"Drew McIntyre"` / `"Studio Access · enter"`, `"Dakota Kai"` / `"Studio Access · enter"`, `"Sunday 17 Aug · 5"`, `"John Cena"` / `"Laser cutter · operate"`, `"Select"`, `"Extend all 11"`.
 Caption: "Grouped by date, nearest first, with the imminent group in amber. *Extend all* is a bulk change, so it opens a rung-2 sheet; *Select* switches the list into the explicit selection mode from M29."
 > The caption references **M29**, which is not on this board. Selection mode is drawn in M25b.
 
@@ -391,7 +391,7 @@ three-part column:
 3. Footer: `border-top:1px solid rgba(255,255,255,.08)`,
    `padding:12px 18px 24px`, `background:rgba(11,12,10,.6)`, `gap:10px`:
    expansion sentence `13px`/`.62` → `height:50px` accent button.
-Copy: `"Give access to Aditi Rao"`, `"Search roles and bundles"`, `"Bundles"`, `"Workshop basics"` / `"4 roles"` (checked), `"Fabrication Access"` / `"6 roles · 1 mapping"`, `"Roles"`, `"CNC router · operate"` / `"Fabrication"`, `"1 bundle selected · expands to 4 roles"`, `"Preview what changes"`.
+Copy: `"Give access to Drew McIntyre"`, `"Search roles and bundles"`, `"Bundles"`, `"Workshop basics"` / `"4 roles"` (checked), `"Fabrication Access"` / `"6 roles · 1 mapping"`, `"Roles"`, `"CNC router · operate"` / `"Fabrication"`, `"1 bundle selected · expands to 4 roles"`, `"Preview what changes"`.
 Caption: "The sheet stops 96px short of the top, so the person you are acting on stays visible behind it. The footer names the expansion before the operator commits to a preview."
 
 ### M09b — "Cascade preview"
@@ -403,7 +403,7 @@ Structure: head (grabber, title, subtitle) → grouped preview rows → footer w
   `background:rgba(245,165,36,.06)`.
 - Footer: `Back` `min-height:50px` outline `padding:0 18px`; primary `flex:1`
   `height:50px`.
-Copy: `"This gives Aditi 6 things"`, `"Four from the bundle, two more because a rule follows one of them."`, `"From the bundle · 4"`, `"3D printers · operate"`, `"Hand tools · operate"`, `"2 more"`, `"Because a rule follows · 2"`, `"Studio shares · read, write"`, `"An account on fileserver-01"`, `"Back"`, `"Give access"`.
+Copy: `"This gives Drew 6 things"`, `"Four from the bundle, two more because a rule follows one of them."`, `"From the bundle · 4"`, `"3D printers · operate"`, `"Hand tools · operate"`, `"2 more"`, `"Because a rule follows · 2"`, `"Studio shares · read, write"`, `"An account on fileserver-01"`, `"Back"`, `"Give access"`.
 Caption: "Rule-caused grants are a separate, amber-headed group — the operator did not ask for them. The title counts the total in words, because six is the number they will be held to."
 
 ---
@@ -413,7 +413,7 @@ Caption: "Rule-caused grants are a separate, amber-headed group — the operator
 ### M10a — "Gap explained"
 Explanation first, evidence second (inverted from desktop).
 Structure: status bar → header (back-line `"booking-web"`, title
-`"What this app sees"`, subject line `"For Aditi Rao"`) → body `padding:14px 16px`,
+`"What this app sees"`, subject line `"For Drew McIntyre"`) → body `padding:14px 16px`,
 `gap:12px`: verdict card (amber border `rgba(245,165,36,.3)`) → "Syndra holds"
 list card → "Last token" list card.
 - Verdict card: dot row (`7px` amber + `"One role missing"` 11px uppercase amber),
@@ -421,14 +421,14 @@ list card → "Last token" list card.
 - List rows **`min-height:46px`**, `padding:8px 16px`, `border-top:.05`, mono `13px`.
   Missing row `background:rgba(245,165,36,.07)`, text `#f5a524`, trailing
   `"not in token"` `12px`. **[CONTRADICTION: 46px rows carrying a `Copy` affordance]**
-Copy: `"booking-web"`, `"What this app sees"`, `"For Aditi Rao"`, `"One role missing"`, `"cnc.operate was granted 4 minutes ago. The app's token was issued 11 minutes ago and lasts 15, so it will appear within 4 minutes."`, `"Syndra holds · 3"`, `"laser.operate"`, `"studio.enter"`, `"cnc.operate"` + `"not in token"`, `"Last token · 2"`, `"tok_4c9e2f10"` + `"Copy"`, `"Issued"` → `"09:30:14"`.
+Copy: `"booking-web"`, `"What this app sees"`, `"For Drew McIntyre"`, `"One role missing"`, `"cnc.operate was granted 4 minutes ago. The app's token was issued 11 minutes ago and lasts 15, so it will appear within 4 minutes."`, `"Syndra holds · 3"`, `"laser.operate"`, `"studio.enter"`, `"cnc.operate"` + `"not in token"`, `"Last token · 2"`, `"tok_4c9e2f10"` + `"Copy"`, `"Issued"` → `"09:30:14"`.
 Caption: "The explanation comes first and the evidence follows — inverted from desktop, where the two lists sit side by side and the sentence sits beneath. On a phone the operator wants the answer before the proof."
 
 ### M10b — "Agreed"
 Healthy case collapses two lists into one.
 Structure: same header; verdict card with neutral border and a lime dot; one
 `"Both sides · 2"` card whose rows carry a trailing `6px` lime dot; closing note.
-Copy: `"For Meera Nair"`, `"Token matches"`, `"The app is seeing everything Syndra holds. If a member reports otherwise, the problem is inside the app."`, `"Both sides · 2"`, `"studio.enter"`, `"studio.shares.read"`, `"Lime is a dot and a word here, never a fill. Nothing on this screen needs doing."`
+Copy: `"For Dakota Kai"`, `"Token matches"`, `"The app is seeing everything Syndra holds. If a member reports otherwise, the problem is inside the app."`, `"Both sides · 2"`, `"studio.enter"`, `"studio.shares.read"`, `"Lime is a dot and a word here, never a fill. Nothing on this screen needs doing."`
 Caption: "The healthy case collapses the two lists into one, because there is no difference to show. It ends by telling the operator where to look next — the screen's job is to end the conversation."
 
 ---
@@ -444,14 +444,14 @@ action bar** (`Decline` outline `padding:0 20px`, `15px/600`; `Approve` accent
 `flex:1` with `box-shadow:0 10px 26px -14px rgba(127,90,240,.85)`).
 - Checks: `7px` dot + `14px` sentence per line; the neutral check uses
   `border:1px solid rgba(243,245,239,.4)` and no fill.
-Copy: `"Requests · 4"`, `"Laser cutter · operate"`, `"Asked by Aditi Rao, 2 days ago"`, `"Why they asked"`, `"Cutting acrylic for the exhibition build. Induction with Kabir on 11 Feb."`, `"Checks"`, `"Induction recorded 11 Feb"`, `"No hold on this person"`, `"No prior access to this role"`, `"Open Aditi's access"`, `"Decline"`, `"Approve"`.
+Copy: `"Requests · 4"`, `"Laser cutter · operate"`, `"Asked by Drew McIntyre, 2 days ago"`, `"Why they asked"`, `"Cutting acrylic for the exhibition build. Induction with Kairi on 11 Feb."`, `"Checks"`, `"Induction recorded 11 Feb"`, `"No hold on this person"`, `"No prior access to this role"`, `"Open Drew's access"`, `"Decline"`, `"Approve"`.
 Caption: "Checks are dots and words, with the neutral one carrying an outline rather than a colour. Decline sits away from the thumb's resting arc; approve is the wide target."
 
 ### M11b — "Member · asking"
 Structure: status bar → header (back-line `"My access"`, title) → body `gap:12px`:
 state card (violet `7px` dot + `"Waiting"` eyebrow `#c9b6ff`) → "What you wrote"
 card → dashed disabled card.
-Copy: `"My access"`, `"Laser cutter"`, `"Waiting"`, `"You asked 2 days ago"`, `"Kabir Rao looks after this machine and usually answers within three working days."`, `"What you wrote"`, `"Cutting acrylic for the exhibition build. Induction with Kabir on 11 Feb."`, `"Ask again"`, `"Available once a request is 5 days old. This one is 2 days old."`
+Copy: `"My access"`, `"Laser cutter"`, `"Waiting"`, `"You asked 2 days ago"`, `"Kairi Sane looks after this machine and usually answers within three working days."`, `"What you wrote"`, `"Cutting acrylic for the exhibition build. Induction with Kairi on 11 Feb."`, `"Ask again"`, `"Available once a request is 5 days old. This one is 2 days old."`
 Caption: "The member sees who is deciding and roughly when. The disabled nudge states the rule and the current count rather than greying out silently — the same disabled-reason rule the operator side obeys."
 
 ---
@@ -531,7 +531,7 @@ freshness strip) → target-grouped list → pinned action bar.
   column. Line 1: account `15px/600` + kind word `12px` (`#f5a524` for a real
   difference, `.5` for "unknown"). Line 2: sentence `13.5px/1.5` `.62` with both
   sides in `<strong style="color:#f3f5ef;font-weight:600">`.
-Copy: `"Review"`, `"Drift · 4"`, `"Read 2 minutes ago"`, `"Refresh"`, `"fileserver-01 · 3"`, `"aditi.rao"` + `"extra on target"` / `"Syndra intends read. The target reports read, write."`, `"devan.suresh"` + `"missing on target"` / `"Syndra intends read, write. The target has no account."`, `"legacy.build"` + `"unknown to Syndra"` / `"Nobody in Syndra claims this account. Adopt it or leave it alone."`, `"Select"`, `"Rehearse fixing 3"`.
+Copy: `"Review"`, `"Drift · 4"`, `"Read 2 minutes ago"`, `"Refresh"`, `"fileserver-01 · 3"`, `"drew.mcintyre"` + `"extra on target"` / `"Syndra intends read. The target reports read, write."`, `"natalya.neidhart"` + `"missing on target"` / `"Syndra intends read, write. The target has no account."`, `"legacy.build"` + `"unknown to Syndra"` / `"Nobody in Syndra claims this account. Adopt it or leave it alone."`, `"Select"`, `"Rehearse fixing 3"`.
 Caption: "Each row states the difference as a sentence with both sides bolded, so no column headers are needed. The kind of drift is a word at the end of the first line, not a coloured badge."
 
 ### M14b — "Reconcile · draining"
@@ -542,7 +542,7 @@ mono `12px` counter) → per-item rows `min-height:58px`, `padding:10px 18px`,
 - Done row: lime dot. Failed row: `background:rgba(255,92,77,.07)`, `#ff5c4d`
   dot, second line `#ff8d82` `12.5px/1.45`. Waiting row: hollow dot
   (`border:1px solid rgba(243,245,239,.3)`), text dimmed.
-Copy: `"Drift · 4"` (behind), `"Applying 3 fixes"`, `"2 of 3 · 1 failed"`, `"aditi.rao"` / `"write removed"`, `"devan.suresh"` / `"Target refused: quota exhausted on pool studio"`, `"legacy.build"` / `"waiting"`, `"Stop after this one"`.
+Copy: `"Drift · 4"` (behind), `"Applying 3 fixes"`, `"2 of 3 · 1 failed"`, `"drew.mcintyre"` / `"write removed"`, `"natalya.neidhart"` / `"Target refused: quota exhausted on pool studio"`, `"legacy.build"` / `"waiting"`, `"Stop after this one"`.
 Caption: "Drains inline and reports what happened, per row. The failure states the target's own words and stays in the list rather than interrupting; the operator can stop the run without dismissing anything."
 
 ---
@@ -594,7 +594,7 @@ Caption: "When and Then are one card with a divider, because they are one senten
 Structure: status bar → header (back-line + cascade id, title `"Queued writes · 2"`)
 → write rows (`padding:12px 16px`, `gap:8px`: violet `7px` dot + label `15px/600`;
 detail line indented `padding-left:17px`) → footnote + link row `min-height:44px`.
-Copy: `"Studio membership"` · `"csc_2f81b0"`, `"Queued writes · 2"`, `"Create account · aditi.rao"` / `"On fileserver-01. Queued 4 minutes ago, next attempt in 2."`, `"Grant read, write · studio"` / `"Waits for the account above."`, `"Writes queue rather than fail — the target is reachable but slow. Nothing here needs a decision."`, `"What this rule has done · history"`.
+Copy: `"Studio membership"` · `"csc_2f81b0"`, `"Queued writes · 2"`, `"Create account · drew.mcintyre"` / `"On fileserver-01. Queued 4 minutes ago, next attempt in 2."`, `"Grant read, write · studio"` / `"Waits for the account above."`, `"Writes queue rather than fail — the target is reachable but slow. Nothing here needs a decision."`, `"What this rule has done · history"`.
 Caption: "The back-line names the rule and carries the cascade id as a link, so the thread survives four taps deep. Dependent writes say what they are waiting for instead of showing a spinner."
 
 ### M16c — "History · one cascade"
@@ -604,7 +604,7 @@ A timeline spine. Each entry: row `gap:14px`; left `width:9px` column with a
 - Dot vocabulary: **filled `#7f5af0` = an operator act; filled `#a3e635` = done;
   ringed `1.5px solid rgba(155,123,255,.7)` = a rule firing; hollow
   `1.5px solid rgba(243,245,239,.3)` = not yet** (last entry drops the connector).
-Copy: `"Queued writes"` · `"csc_2f81b0"`, `"What happened"`, `"K. Rao gave Studio Access"` / `"to Aditi Rao · 09:26"`, `"Studio membership fired"` / `"queued 2 writes · 09:26"`, `"Account created"` / `"aditi.rao on fileserver-01 · 09:28"`, `"Grant read, write"` / `"still queued"`.
+Copy: `"Queued writes"` · `"csc_2f81b0"`, `"What happened"`, `"K. Rao gave Studio Access"` / `"to Drew McIntyre · 09:26"`, `"Studio membership fired"` / `"queued 2 writes · 09:26"`, `"Account created"` / `"drew.mcintyre on fileserver-01 · 09:28"`, `"Grant read, write"` / `"still queued"`.
 Caption: "The chain becomes a spine with one dot per event: filled for done, ringed for a rule firing, hollow for not yet. The operator can read cause and effect top to bottom without a table."
 
 ---
@@ -617,7 +617,7 @@ field + **time-window control** (`min-height:44px`, `radius:14px`, outline,
 `padding:0 14px`, `13.5px`, label `"7 days"`) → date-grouped list of
 `min-height:64px` rows (`padding:11px 16px`, column `gap:4px`; sentence
 `14.5px/600`, consequence `13px`/`.5`). **[CONTRADICTION: 64px]**
-Copy: `"History"`, `"Search a person or id"`, `"7 days"`, `"Today"`, `"K. Rao gave Studio Access to Aditi Rao"` / `"09:26 · caused 2 writes"`, `"Hold placed on Devan Suresh"` / `"08:52 · CNC router · by K. Rao"`, `"3 accounts adopted on fileserver-01"` / `"08:14 · by M. Iyer"`, `"Yesterday"`, `"Card 04 revoked · Priya Menon"` / `"17:40 · reported lost"`.
+Copy: `"History"`, `"Search a person or id"`, `"7 days"`, `"Today"`, `"K. Rao gave Studio Access to Drew McIntyre"` / `"09:26 · caused 2 writes"`, `"Hold placed on Natalya Neidhart"` / `"08:52 · CNC router · by K. Rao"`, `"3 accounts adopted on fileserver-01"` / `"08:14 · by M. Iyer"`, `"Yesterday"`, `"Card 04 revoked · John Cena"` / `"17:40 · reported lost"`.
 Caption: "One sentence per event, in the product's own words, with the consequence on the second line. A time window replaces the desktop filter bar; everything else is search."
 
 ### M17b — "Provider health"
@@ -683,7 +683,7 @@ Caption: "Violet, not amber — this is normal, not a deadline. 'Nothing for you
 ### M19c — "Withheld"
 Card border `rgba(245,165,36,.3)`, amber dot + `"Withheld"` eyebrow `#f5a524`,
 explanation `13.5px/1.55` `.75`, then a `min-height:48px` outline action.
-Copy: `"One folder on hold"`, `"Withheld"`, `"studio"`, `"Your role includes this folder, but access is being withheld until your refresher induction. Kabir Rao placed the hold on 9 August."`, `"Message Kabir Rao"`, `"The member sees 'withheld'. The operator sees the same object as a 'hold'. One record, two words, chosen for who is reading."`
+Copy: `"One folder on hold"`, `"Withheld"`, `"studio"`, `"Your role includes this folder, but access is being withheld until your refresher induction. Kairi Sane placed the hold on 9 August."`, `"Message Kairi Sane"`, `"The member sees 'withheld'. The operator sees the same object as a 'hold'. One record, two words, chosen for who is reading."`
 Caption: "Names the person and the date, and offers the one action that resolves it. A withheld state without a named human is a dead end."
 
 ---
@@ -708,7 +708,7 @@ Same header + tab strip (Accounts active) → grouped list, **unclaimed above
 claimed** → pinned action bar.
 - Account row `min-height:60px`; identifier mono `13.5px`; unclaimed rows end in
   a named text control `"Adopt"` `13px` `#9b7bff` 600; claimed rows end in `›`.
-Copy: `"Unclaimed · 3"`, `"legacy.build"` / `"Last login 8 months ago"` / `"Adopt"`, `"r.krishnan"` / `"Last login 3 days ago"` / `"Adopt"`, `"Claimed · 38"`, `"aditi.rao"` / `"Aditi Rao · adopted 14 Feb"`, `"meera.nair"` / `"Meera Nair · adopted 02 Jan"`, `"Select"`, `"Adopt 3 accounts"`.
+Copy: `"Unclaimed · 3"`, `"legacy.build"` / `"Last login 8 months ago"` / `"Adopt"`, `"r.krishnan"` / `"Last login 3 days ago"` / `"Adopt"`, `"Claimed · 38"`, `"drew.mcintyre"` / `"Drew McIntyre · adopted 14 Feb"`, `"dakota.kai"` / `"Dakota Kai · adopted 02 Jan"`, `"Select"`, `"Adopt 3 accounts"`.
 Caption: "Unclaimed sits above claimed, because that is the work. Adoption binds identity, so this whole screen is unavailable when the read passes ten minutes — see M02b."
 
 ---
@@ -726,7 +726,7 @@ groups, **each header carrying its own explanatory subtitle**
 - Group 1 rows `min-height:64px`, two lines. **[CONTRADICTION: 64px]**
 - Group 2 entry is a block (`padding:12px 16px`, `gap:8px`) ending in a
   `min-height:44px` link.
-Copy: `"Review"`, `"Withdrawn access"`, `"Three revocations Syndra could not complete on the target"`, `"Will end by itself · 2"` / `"Open sessions. They end when the person reconnects."`, `"Priya Menon · studio"` / `"Session open since 08:10 · fileserver-01"`, `"Devan Suresh · exhibition-2026"` / `"Session open since 09:02 · fileserver-01"`, `"Will not end by itself · 1"` / `"The target refused the revocation. This needs a decision."`, `"r.krishnan · studio"`, `"Target refused: account is the owner of 41 files. Reassign ownership or delete the account."`, `"Open on fileserver-01"`.
+Copy: `"Review"`, `"Withdrawn access"`, `"Three revocations Syndra could not complete on the target"`, `"Will end by itself · 2"` / `"Open sessions. They end when the person reconnects."`, `"John Cena · studio"` / `"Session open since 08:10 · fileserver-01"`, `"Natalya Neidhart · exhibition-2026"` / `"Session open since 09:02 · fileserver-01"`, `"Will not end by itself · 1"` / `"The target refused the revocation. This needs a decision."`, `"r.krishnan · studio"`, `"Target refused: account is the owner of 41 files. Reassign ownership or delete the account."`, `"Open on fileserver-01"`.
 Caption: "Each group's header explains itself in a subtitle, so the distinction survives without the desktop's two panels. Only the second group carries amber — the first is expected behaviour."
 
 ### M21b — "Revoke on a target · rung 3"
@@ -764,7 +764,7 @@ Structure:
    `background:rgba(11,12,10,.66)`, `gap:10px`: counts row (`13px`/`.62`
    + plan age with a `6px` lime dot at `12.5px`/`.5`) → `height:50px` accent button.
 - **A plan older than five minutes replaces `Apply` with `Rehearse again`.**
-Copy: `"Rehearsal"`, `"Close"`, `"Fixing 3 differences"`, `"Nothing has happened yet. This is what will happen if you apply."`, `"Will change · 2"`, `"aditi.rao"` / `"Remove write on studio"`, `"devan.suresh"` / `"Create account, then grant read, write"`, `"Will be left alone · 1"`, `"legacy.build"` / `"Unknown to Syndra. Adopting it is a separate decision."`, `"Cannot be done · 1"`, `"r.krishnan"` / `"Owns 41 files. The target will refuse until ownership moves."`, `"2 changes · 1 skipped · 1 will fail"`, `"planned 30s ago"`, `"Apply this plan"`.
+Copy: `"Rehearsal"`, `"Close"`, `"Fixing 3 differences"`, `"Nothing has happened yet. This is what will happen if you apply."`, `"Will change · 2"`, `"drew.mcintyre"` / `"Remove write on studio"`, `"natalya.neidhart"` / `"Create account, then grant read, write"`, `"Will be left alone · 1"`, `"legacy.build"` / `"Unknown to Syndra. Adopting it is a separate decision."`, `"Cannot be done · 1"`, `"r.krishnan"` / `"Owns 41 files. The target will refuse until ownership moves."`, `"2 changes · 1 skipped · 1 will fail"`, `"planned 30s ago"`, `"Apply this plan"`.
 Caption: "Full-height, four honest groups, and a sticky footer that never leaves the counts and the plan's age off-screen. A plan older than five minutes replaces *Apply* with *Rehearse again*."
 
 ### M22b — "Mappings · versions"
@@ -797,7 +797,7 @@ field group (eyebrow + textarea `min-height:76px`, `radius:14px`,
 (two options `flex:1`, **`min-height:42px`**, `radius:12px`;
 selected `background:#7f5af0`) → `height:50px` accent button.
 **[CONTRADICTION: 42px segments]**
-Copy: `"Hold CNC router for Devan Suresh"`, `"Fabrication Access still grants this. A hold takes it away without changing the role."`, `"Reason · Devan will read this"`, field content `"Until your refresher induction"`, `"Ends"`, `"When lifted"` / `"On a date"`, `"Place the hold"`.
+Copy: `"Hold CNC router for Natalya Neidhart"`, `"Fabrication Access still grants this. A hold takes it away without changing the role."`, `"Reason · Natalya will read this"`, field content `"Until your refresher induction"`, `"Ends"`, `"When lifted"` / `"On a date"`, `"Place the hold"`.
 Caption: "Placing a hold is reversible, so it is rung 1 — but the reason field is required and labelled with who reads it. That label is the whole design: it is why holds get written in plain words."
 
 ### M23b — "Review · all holds"
@@ -810,7 +810,7 @@ definition sentence) → body `padding:13px 16px`, `gap:12px`: hold cards.
   attributor.
 - Action: `min-height:44px` outline pill, full width via `flex:1`.
 - Stale-hold sentence `12.5px/1.5` `#f5a524`.
-Copy: `"Review"`, `"Holds · 3"`, `"Access a role grants that somebody is withholding"`, `"Devan Suresh"` / `"CNC router · operate"` / `"4 days"`, `"“Until your refresher induction” — K. Rao"`, `"Lift the hold"`, `"Priya Menon"` / `"Studio shares · read, write"` / `"61 days"`, `"“Pending fee settlement” — Accounts"`, `"Older than 60 days. A hold this old is usually a decision nobody made."`
+Copy: `"Review"`, `"Holds · 3"`, `"Access a role grants that somebody is withholding"`, `"Natalya Neidhart"` / `"CNC router · operate"` / `"4 days"`, `"“Until your refresher induction” — K. Rao"`, `"Lift the hold"`, `"John Cena"` / `"Studio shares · read, write"` / `"61 days"`, `"“Pending fee settlement” — Accounts"`, `"Older than 60 days. A hold this old is usually a decision nobody made."`
 Caption: "Age is the column that matters, so it sits top-right and turns amber past 60 days with a sentence saying why. The reason is quoted verbatim — it is what the member was told."
 
 ---
@@ -830,11 +830,11 @@ block (`padding:18px 0 8px`, `gap:14px`) → `min-height:50px` outline `"Cancel"
   `border:1px solid rgba(155,123,255,.16)`. **The rings are static — they mark a
   target, they do not pulse.**
 - Instruction `15.5px/600` centred; sub-line `13.5px/1.5` `.62`, `max-width:280px`.
-Copy: `"Enrol a card for Aditi Rao"`, `"Hold the card against the studio reader"`, `"Waiting for a tap. This stays open for two minutes, then stops on its own."`, `"Cancel"`.
+Copy: `"Enrol a card for Drew McIntyre"`, `"Hold the card against the studio reader"`, `"Waiting for a tap. This stays open for two minutes, then stops on its own."`, `"Cancel"`.
 Caption: "The waiting state names the reader and states its own timeout, so an operator holding a card knows how long they have. The rings are static — they mark a target, they do not pretend to pulse."
 
 ### M24b — "Cards · lost card drains"
-Structure: status bar → header (back-line `"Priya Menon"`, title `"Cards · 2"`)
+Structure: status bar → header (back-line `"John Cena"`, title `"Cards · 2"`)
 → body `gap:12px`: revoking card + active card.
 - Revoking card: `border:1px solid rgba(255,92,77,.3)`; head row (name
   `15.5px/600`, uid mono `12.5px` `.5` `margin-top:3px`, right status word
@@ -843,7 +843,7 @@ Structure: status bar → header (back-line `"Priya Menon"`, title `"Cards · 2"
   done, `#ff5c4d` + `#ff8d82` text = failed, hollow = waiting); closing sentence
   `12.5px/1.5` `.5`.
 - **Red here is a state, not a button.**
-Copy: `"Priya Menon"`, `"Cards · 2"`, `"Card 04"`, `"3f 9a c1 02"`, `"revoking"`, `"studio-door · revoked"`, `"workshop-door · did not answer, will retry"`, `"gate · waiting"`, `"The card is refused everywhere Syndra has reached. Doors that have not answered still accept it."`, `"Card 07"`, `"7c 21 e4 88"`, `"active"`, `"Enrolled 02 Jan · opens 3 doors"`.
+Copy: `"John Cena"`, `"Cards · 2"`, `"Card 04"`, `"3f 9a c1 02"`, `"revoking"`, `"studio-door · revoked"`, `"workshop-door · did not answer, will retry"`, `"gate · waiting"`, `"The card is refused everywhere Syndra has reached. Doors that have not answered still accept it."`, `"Card 07"`, `"7c 21 e4 88"`, `"active"`, `"Enrolled 02 Jan · opens 3 doors"`.
 Caption: "Revocation drains inline, per door, and says plainly which doors still accept the card — the sentence an operator repeats to the person who lost it. Red here is a state, not a button."
 
 ---
@@ -899,7 +899,7 @@ The only tablet figure. Frame `radius:26px`, row layout.
   `gap:16px`, eyebrow type, columns `flex:1` / `width:150px` / `width:110px`;
   body rows `min-height:58px`, `padding:10px 18px`.
 - **Three columns is the honest maximum: resource, source, until.**
-Copy: `"Aditi Rao"`, `"Studio · 4 roles"`, `"Give access"`, `"Resource"` / `"Source"` / `"Until"`, `"Laser cutter"` / `"operate"` / direct / `"30 May 2026"` (amber mono), `"3D printers"` / `"operate"` / bundle / `"No end date"`, `"Studio Access"` / `"enter"` / mapping / `"No end date"`.
+Copy: `"Drew McIntyre"`, `"Studio · 4 roles"`, `"Give access"`, `"Resource"` / `"Source"` / `"Until"`, `"Laser cutter"` / `"operate"` / direct / `"30 May 2026"` (amber mono), `"3D printers"` / `"operate"` / bundle / `"No end date"`, `"Studio Access"` / `"enter"` / mapping / `"No end date"`.
 Caption: "The rail keeps its badges and its divider at 64px, labels dropped — the eight destinations are already learned by anyone in Advanced. Three columns is the honest maximum: resource, source, until. Granted-by moves into the row's detail."
 
 Accompanying breakpoint panels (verbatim rules):
@@ -1025,7 +1025,7 @@ Caption: "The back-line names the origin and carries the cascade id, so a thread
 ### M32b — "Arriving cold"
 Deep link with no history. Back reads `"Today"`; the parent is reachable as a
 **named link in the header beside the cascade id**, not as back.
-Copy: `"Today"`, `"Create account · aditi.rao"`, `"Part of Studio membership"` · `"csc_2f81b0"`, `"Queued"`, `"On fileserver-01. Queued 4 minutes ago, next attempt in 2."`, `"Back reads Today because there is nothing behind this screen. It does not reconstruct a chain the operator never walked — an invented history is worse than an honest exit."`
+Copy: `"Today"`, `"Create account · drew.mcintyre"`, `"Part of Studio membership"` · `"csc_2f81b0"`, `"Queued"`, `"On fileserver-01. Queued 4 minutes ago, next attempt in 2."`, `"Back reads Today because there is nothing behind this screen. It does not reconstruct a chain the operator never walked — an invented history is worse than an honest exit."`
 Caption: "The parent is reachable, just not as *back*: it sits in the header as a named link beside the cascade id. Somebody arriving from a chat message can go up the chain deliberately or leave to Today."
 
 **Stack diagram** (`Four stacks, one thread`): four columns (`Today`, `People`,
@@ -1175,7 +1175,7 @@ under a different name — but these are the ones with nothing obvious behind th
   ten-minute adoption gate as a *visual* state.
 - **M14b / M24b inline drain** with per-item outcomes and `Stop after this one`
   — `RehearsalDialog`/`PlanReview` cover rehearsal, not the drain.
-- **M23a hold sheet** with the `"Reason · Devan will read this"` label and the
+- **M23a hold sheet** with the `"Reason · Natalya will read this"` label and the
   When-lifted/On-a-date pair.
 - **M03b one-row-at-a-time disclosure** carrying the desktop popover's sentence.
 - **M12d degraded banner** as a full-frame, non-dismissible state.

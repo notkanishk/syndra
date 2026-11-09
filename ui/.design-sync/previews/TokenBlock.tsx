@@ -9,7 +9,7 @@ export const Claims = () => (
     comment="What the laser cutter app receives"
     lines={[
       { key: "sub", text: '"sub": "2481",', theirs: true },
-      { key: "email", text: '"email": "aanya@example.edu",', theirs: true },
+      { key: "email", text: '"email": "roman@example.edu",', theirs: true },
       { key: "roles", text: '"roles": ["operator", "trained"]' },
     ]}
   />

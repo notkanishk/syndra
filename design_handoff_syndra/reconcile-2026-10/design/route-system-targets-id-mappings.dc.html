@@ -180,13 +180,13 @@ class Component extends DCLogic {
     ];
     const rows = (none ? [] : edits ? ahead : v4).map(r => Object.assign({ diff: "" }, r, { hasDiff: !!r.diff }));
     const versions = [
-      { n: 4, who: "Sana Kohli", when: "3 weeks ago", note: "summer build cohort", count: "2 mappings" },
-      { n: 3, who: "Sana Kohli", when: "8 weeks ago", note: "archive admins split out of fabrication", count: "2 mappings" },
+      { n: 4, who: "Iyo Sky", when: "3 weeks ago", note: "summer build cohort", count: "2 mappings" },
+      { n: 3, who: "Iyo Sky", when: "8 weeks ago", note: "archive admins split out of fabrication", count: "2 mappings" },
       { n: 2, who: "Kanishk Singh", when: "4 months ago", note: "first mapping for the new NAS", count: "1 mapping" },
     ].map((v, i) => Object.assign(v, { inForce: i === 0 && !edits }));
     const band = none ? { tone: "neutral", ink: "var(--ink)", word: "Nothing published yet", text: "No version exists, so there is nothing to roll back to and nothing to compare the rows against." }
       : edits ? { tone: "warn", ink: "var(--warn-text)", word: "Version 4, plus 3 changes not yet published", text: "The rows below are live: each change went through its own preview. Publishing records them as version 5, so a later rollback has something to return to. Rolling back to version 4 would undo all three." }
-      : { tone: "healthy", ink: "var(--ink)", word: "Matches version 4", text: "Published 3 weeks ago by Sana Kohli: “summer build cohort”. What the rows say is what version 4 says." };
+      : { tone: "healthy", ink: "var(--ink)", word: "Matches version 4", text: "Published 3 weeks ago by Iyo Sky: “summer build cohort”. What the rows say is what version 4 says." };
     const f = (frame, label, note, phone) => phone ? { src: "route-system-targets-id-mappings.dc.html?frame=" + frame, label, note, w: 390, h: 1500, boxW: 390, boxH: 1100, scale: 1 } : { src: "route-system-targets-id-mappings.dc.html?frame=" + frame, label, note, w: 1440, h: 1180, boxW: 720, boxH: 590, scale: 0.5 };
     const n = rows.length;
     return {
@@ -202,7 +202,7 @@ class Component extends DCLogic {
       edits: [
         { kind: "Changed", ink: "var(--warn-text)", role: "Archive admin", what: "archive-admins → archive-write", who: "Kanishk Singh", when: "2 days ago", people: "3 people" },
         { kind: "Added", ink: "var(--ink)", role: "Laser operator", what: "group → laser-users", who: "Kanishk Singh", when: "2 days ago", people: "12 people" },
-        { kind: "Removed", ink: "var(--ink)", role: "Member", what: "group → fabrication-read", who: "Sana Kohli", when: "5 hours ago", people: "61 people" },
+        { kind: "Removed", ink: "var(--ink)", role: "Member", what: "group → fabrication-read", who: "Iyo Sky", when: "5 hours ago", people: "61 people" },
       ],
       rows, hasRows: !none, noRows: none, rowCount: n, versions, verCount: none ? 0 : 3,
       dlgAdd: /^add/.test(st), dlgPub: st === "publish",

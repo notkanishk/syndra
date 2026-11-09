@@ -48,7 +48,7 @@ Each is grounded in a part that exists, so the rule holds by what the part can a
 
 - **G25 Red, amber, quiet.** Colour follows what the act does to a named person, never the name of the button. *Red* (the What-happens list on `danger-soft`, `dangerConfirm`, the danger dot on a failure or refusal): a person loses access or something is gone for good, and it reaches Zitadel or a system. *Amber* (warn text and dot, the I-understand tick on `warn-soft`, a warn Notice): a step is left for the reader or a state must be read before pressing (waits for you, a stale plan, a system not answering, a change over the usual size). *Quiet* (the lede, a faint before-line, a neutral dot): what only records, asks, previews or cancels something that never reached anybody. A Revoke that only cancels an unsent give is quiet and its act is accent (A-21 §3). The rung (`Acknowledge.tsx`) is set by what cannot be undone, as today.
 
-- **G26 How long a message stays.** Nothing times out and nothing is a toast. A sheet's result stays until Close; reopened, the sheet starts clean (A-04 §11). A row's inline or seat result stays until the list is next read, never leaving on the tap. A page's own result (Send) stays until the page is next read or left. A Notice stays as long as its condition. The note after Keep it ("Nothing changed. Sam's removal is still waiting.") stays until the next press.
+- **G26 How long a message stays.** Nothing times out and nothing is a toast. A sheet's result stays until Close; reopened, the sheet starts clean (A-04 §11). A row's inline or seat result stays until the list is next read, never leaving on the tap. A page's own result (Send) stays until the page is next read or left. A Notice stays as long as its condition. The note after Keep it ("Nothing changed. Randy's removal is still waiting.") stays until the next press.
 
 - **G27 Which part carries which message.** `ActionOutcome` is what *you* did: block in a sheet or at the top of a page's content, inline or seat in a row. `Notice` is what is wrong with what you are looking at: stale, failed to read, offline, needs a decision; one per card, under the header (G7); never a result, never a consequence. `NextStep` is the step left, worn by the thing that changed. `RetryStatus` is a change Syndra sends again. Explanations are the lede, a caption or the before-line. A member's own voice ("Not confirmed yet", "On its way") uses the same parts with its own words (`RetryStatus own`, `sendsItselfWord`).
 
@@ -70,8 +70,8 @@ Order: misleading > confusing > cluttered > could be more elegant. "Now" quotes 
 
 - **Now:** title `Revoke direct access to ${roleLabel}?` (`:325`) also when the give never left Syndra; dismiss "Cancel" (ghost) beside act "Cancel the waiting give" (accent, `:447-489`); after the press the `danger-note` ("{subject} will lose this role." … "ends once the change reaches Zitadel.", `:365-400`) stays above the "Cancelled" block (`:411`), because nothing guards it on `outcome`. Result word for a real revoke is "Removed" (`:103`), message "Direct access to {role} removed" (`:111-161`), forecast "Will be removed".
 - **Rule:** G20, G22, G24, G29.
-- **New, cancel-only:** chip *Direct access*; title **Cancel the waiting give**; lede as today ("Given to Avani Sood on 3 Nov by Kanishk Singh, and still waiting for you to send."); body the one neutral line as today; before-line "Nothing is sent. Change history records the give and its cancel."; pair **Keep it** · **Cancel the waiting give** (accent). After: chip + title, block **Cancelled** (words as today), Close.
-- **New, revoke:** title **Revoke {Role} in {Project}?**; lede "Given by hand to Avani Sood on 3 Nov by Kanishk Singh. In Zitadel now."; What happens as today; before-line as today (`waits` or the drain line); pair **Keep it** · **Revoke this role** (dangerConfirm). Pressing: forecast **Will be revoked** (new `FORECAST.revoke`; Q4). After: block **Revoked**, message "Revoked in Syndra. Revocations send on their own, so it leaves Zitadel within a minute" (the queued/sendsItself case; the other cases keep their sentences with "Revoked" for "Removed"), Close. Failure word **Not revoked**. The What-happens list, lede and before-line unmount with the result. Board: `a22-dialog-lifecycle` §1 and §2.
+- **New, cancel-only:** chip *Direct access*; title **Cancel the waiting give**; lede as today ("Given to Raquel Rodriguez on 3 Nov by Kanishk Singh, and still waiting for you to send."); body the one neutral line as today; before-line "Nothing is sent. Change history records the give and its cancel."; pair **Keep it** · **Cancel the waiting give** (accent). After: chip + title, block **Cancelled** (words as today), Close.
+- **New, revoke:** title **Revoke {Role} in {Project}?**; lede "Given by hand to Raquel Rodriguez on 3 Nov by Kanishk Singh. In Zitadel now."; What happens as today; before-line as today (`waits` or the drain line); pair **Keep it** · **Revoke this role** (dangerConfirm). Pressing: forecast **Will be revoked** (new `FORECAST.revoke`; Q4). After: block **Revoked**, message "Revoked in Syndra. Revocations send on their own, so it leaves Zitadel within a minute" (the queued/sendsItself case; the other cases keep their sentences with "Revoked" for "Removed"), Close. Failure word **Not revoked**. The What-happens list, lede and before-line unmount with the result. Board: `a22-dialog-lifecycle` §1 and §2.
 
 ### 3.2 Remove a bundle · `RemovalDialog.tsx` BundleDialog (`:503-714`) — misleading
 
@@ -110,7 +110,7 @@ Order: misleading > confusing > cluttered > could be more elegant. "Now" quotes 
 ### 3.8 Give a role · `people/GrantDirectAccess.tsx` — could be more elegant
 
 - **Now:** form unmounts on success (`:154`), stale Notice exclusive with the result, pair "Cancel" · "Give role", footer note stacks the date line ("The sweep removes it on that date. Two weeks before, it shows under Expiring access, where the only action is to extend.", `:241-278`), the role line, the cancel line and the rule lines.
-- **New:** act **Give {Role}** once a role is chosen ("Give a role", disabled with its reason, before); the date line moves to the Ends field's `FieldHint`; the footer note keeps delivery ("Avani can use it as soon as you give it." / the waits line), the cancel sentence and the rule sentences. Words as today (Given / Not given / Refused by Zitadel).
+- **New:** act **Give {Role}** once a role is chosen ("Give a role", disabled with its reason, before); the date line moves to the Ends field's `FieldHint`; the footer note keeps delivery ("Raquel can use it as soon as you give it." / the waits line), the cancel sentence and the rule sentences. Words as today (Given / Not given / Refused by Zitadel).
 
 ### 3.9 Manage bundles · `people/ManageBundles.tsx` — misleading (one word)
 
@@ -227,7 +227,7 @@ Order: misleading > confusing > cluttered > could be more elegant. "Now" quotes 
 
 ### 3.32 Approve / Decline on a row · `requests/RequestsScreen.tsx:401-447`, `lib/request-decisions.ts` — nothing wrong
 
-- Forecast → word → sentence → step in the seat; "Not decided" beside the returned buttons on a failure; the stale line "Nothing was changed. Rohan's access moved while you looked." with "Read the line above, then approve again." All as the rules say.
+- Forecast → word → sentence → step in the seat; "Not decided" beside the returned buttons on a failure; the stale line "Nothing was changed. Liv's access moved while you looked." with "Read the line above, then approve again." All as the rules say.
 
 ### 3.33 Ask for access · `requests/AskForAccess.tsx` — nothing wrong
 
@@ -313,7 +313,7 @@ Items 1 to 5 are the shared parts; 6 to 15 inherit them and are each one sitting
 
 ## 6 · Questions for the owner
 
-**Owner, 8 Nov 2026: yes to Q1–Q7.** Later the same day the owner corrected the wording of the cancel sheets (give is only a verb): "Cancel giving Community in Navidrome to Avani?", act "Cancel giving it", dismiss "Keep it waiting", result **Cancelled** "Community in Navidrome won't be given to Avani. It never reached Zitadel."; the same for a waiting removal ("Cancel removing … from …?") and a waiting bundle. Those words replace "Cancel the waiting give" and "Cancel the waiting change" wherever §3 quotes them.
+**Owner, 8 Nov 2026: yes to Q1–Q7.** Later the same day the owner corrected the wording of the cancel sheets (give is only a verb): "Cancel giving Community in Navidrome to Raquel?", act "Cancel giving it", dismiss "Keep it waiting", result **Cancelled** "Community in Navidrome won't be given to Raquel. It never reached Zitadel."; the same for a waiting removal ("Cancel removing … from …?") and a waiting bundle. Those words replace "Cancel the waiting give" and "Cancel the waiting change" wherever §3 quotes them.
 
 1. **The dismiss says what it keeps** (Keep it / Keep them) whenever the act takes something away, retires, cancels or declines, and stays Cancel only on a form that creates, asks or gives? *Recommended: yes.* One rule by what the act does. Keep it everywhere reads oddly beside Give a role; Cancel everywhere is the pair you saw.
 2. **A question mark only when the act takes something away** (Revoke …? Retire …? Remove …?), never on an act that records, asks or cancels something unsent? *Recommended: yes.* The question is the pause; a reversible act needs none.

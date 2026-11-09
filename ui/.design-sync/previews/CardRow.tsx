@@ -12,17 +12,17 @@ export const PlainRows = () => (
   <Card>
     <CardHeader title="Holders" count={3} />
     <CardRow first>
-      <div style={name}>Aanya Rao</div>
+      <div style={name}>Roman Reigns</div>
       <div style={muted}>Laser cutter · Operator</div>
       <Badge tone="accent">Bundle</Badge>
     </CardRow>
     <CardRow>
-      <div style={name}>Kabir Mehta</div>
+      <div style={name}>Alexa Bliss</div>
       <div style={muted}>3D printers · Member</div>
       <Badge>Direct</Badge>
     </CardRow>
     <CardRow>
-      <div style={name}>Ishita Sen</div>
+      <div style={name}>Jey Uso</div>
       <div style={muted}>Wood shop · Supervisor</div>
       <Badge tone="warn">in 6 days</Badge>
     </CardRow>
@@ -40,16 +40,16 @@ export const DisclosureOpen = () => {
         onToggle={() => setOpen((v) => !v)}
         disclosure={
           <>
-            <RowField label="Granted by">Priya Nair</RowField>
+            <RowField label="Granted by">Cody Rhodes</RowField>
             <RowField label="Expires">14 Nov 2026</RowField>
           </>
         }
       >
-        <div style={name}>Rohan Iyer</div>
+        <div style={name}>Damian Priest</div>
         <div style={muted}>CNC router · Operator</div>
       </CardRow>
-      <CardRow expanded={false} onToggle={() => {}} disclosure={<RowField label="Granted by">Priya Nair</RowField>}>
-        <div style={name}>Meera Pillai</div>
+      <CardRow expanded={false} onToggle={() => {}} disclosure={<RowField label="Granted by">Cody Rhodes</RowField>}>
+        <div style={name}>Finn Balor</div>
         <div style={muted}>Electronics bench · Member</div>
       </CardRow>
     </Card>
@@ -64,7 +64,7 @@ export const DisclosureWithControl = () => (
       expanded
       disclosure={<RowField label="Reason given">Needs the CNC router for a capstone enclosure.</RowField>}
     >
-      <div style={name}>Arjun Das</div>
+      <div style={name}>Chad Gable</div>
       <div style={muted}>CNC router · Member</div>
       <Button size="sm" variant="outline">Hide details</Button>
     </CardRow>

@@ -40,7 +40,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">1 · Give a role: foretold, then asked</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Give Rohan Mehta a role. Member in Laser Lab is chosen; Sam Lee queued its removal two hours ago. The footer note says what giving does today: the date line, the delivery line, then the cancel in one sentence. The button stays Give role. On the press, the form fades and the step settles into the sheet (S2): the removal, who queued it, when, and the reason, with Keep it first and the confirm naming the act. When nothing is cancelled, there is no step at all.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Give Liv Morgan a role. Member in Laser Lab is chosen; Randy Orton queued its removal two hours ago. The footer note says what giving does today: the date line, the delivery line, then the cancel in one sentence. The button stays Give role. On the press, the form fades and the step settles into the sheet (S2): the removal, who queued it, when, and the reason, with Keep it first and the confirm naming the act. When nothing is cancelled, there is no step at all.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ giveFrames }}" as="f" hint-placeholder-count="4">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -53,7 +53,7 @@
 
   <section style="display:flex;flex-direction:column;gap:18px">
     <h2 class="type-section-title" style="margin:0">2 · When the plan went stale</h2>
-    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Between the plan and the press, Sam's removal was sent. The write is refused, nothing is written, and the sheet says it where the act was taken: a Notice between the header and the form, and the note already refreshed (the cancel sentence has left it). The step never shows, because there is nothing to cancel now. No "stale" and no "plan" on screen: the reader had a sheet, and what moved was a person's access.</p>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Between the plan and the press, Randy's removal was sent. The write is refused, nothing is written, and the sheet says it where the act was taken: a Notice between the header and the form, and the note already refreshed (the cancel sentence has left it). The step never shows, because there is nothing to cancel now. No "stale" and no "plan" on screen: the reader had a sheet, and what moved was a person's access.</p>
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ staleFrames }}" as="f" hint-placeholder-count="2">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
@@ -103,15 +103,15 @@
 <x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u2" data="{{ rootData }}" hint-size="100%,100vh">
 <x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
 <div style="display:flex;flex-direction:column;gap:28px">
-  <x-import component-from-global-scope="Syndra.PageHeader" title="Rohan Mehta" lede="rohan.mehta@example.edu · Member" hint-size="100%,90px"></x-import>
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Liv Morgan" lede="liv.morgan@example.edu · Member" hint-size="100%,90px"></x-import>
 </div>
 <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="give-title" hint-size="640px,760px">
   <sc-if value="{{ isStep }}" hint-placeholder-val="{{ false }}">
-    <x-import component-from-global-scope="Syndra.ModalHeader" chip="Give Rohan Mehta a role" title="This cancels a removal that's waiting" lede="It hasn't reached Zitadel, so Rohan still has Member in Laser Lab today." title-id="give-title" hint-size="100%,120px"></x-import>
+    <x-import component-from-global-scope="Syndra.ModalHeader" chip="Give Liv Morgan a role" title="This cancels a removal that's waiting" lede="It hasn't reached Zitadel, so Liv still has Member in Laser Lab today." title-id="give-title" hint-size="100%,120px"></x-import>
     <div class="a21-body">
       <div class="a21-list">
-        <span style="font-size:14.5px;font-weight:600">Removing Laser Lab · Member from Rohan Mehta</span>
-        <span style="font-size:13px;color:var(--muted)">Queued by Sam Lee · 2 hours ago</span>
+        <span style="font-size:14.5px;font-weight:600">Removing Laser Lab · Member from Liv Morgan</span>
+        <span style="font-size:13px;color:var(--muted)">Queued by Randy Orton · 2 hours ago</span>
         <span style="font-size:14px">“Left the project”</span>
       </div>
     </div>
@@ -120,15 +120,15 @@
     </x-import>
   </sc-if>
   <sc-if value="{{ isForm }}" hint-placeholder-val="{{ true }}">
-    <x-import component-from-global-scope="Syndra.ModalHeader" title="Give a role" lede="Rohan Mehta" title-id="give-title" hint-size="100%,90px"></x-import>
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="Give a role" lede="Liv Morgan" title-id="give-title" hint-size="100%,90px"></x-import>
     <sc-if value="{{ isStale }}" hint-placeholder-val="{{ false }}">
-      <div style="padding:0 24px 16px"><x-import component-from-global-scope="Syndra.Notice" tone="warn" blocking="{{ true }}" title="Nothing was changed. Rohan's access moved while this was open." next="Read the note under the form, then press Give role again." hint-size="100%,96px">Sam Lee's removal of Member in Laser Lab was sent while you were here.</x-import></div>
+      <div style="padding:0 24px 16px"><x-import component-from-global-scope="Syndra.Notice" tone="warn" blocking="{{ true }}" title="Nothing was changed. Liv's access moved while this was open." next="Read the note under the form, then press Give role again." hint-size="100%,96px">Randy Orton's removal of Member in Laser Lab was sent while you were here.</x-import></div>
     </sc-if>
     <div class="a21-body">
       <div class="a21-field">
         <span class="a21-label">Role</span>
         <x-import component-from-global-scope="Syndra.Input" default-value="laser" placeholder="Search roles" aria-label="Search roles" hint-size="100%,44px"></x-import>
-        <div class="a21-chosen"><span class="a21-radio" aria-hidden="true"></span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:14.5px;font-weight:600">Member <span style="font-weight:400;color:var(--muted)">in Laser Lab</span></span><span style="font-size:12.5px;color:var(--muted)">Removal waiting for you to send, queued by Sam Lee</span></span></div>
+        <div class="a21-chosen"><span class="a21-radio" aria-hidden="true"></span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:14.5px;font-weight:600">Member <span style="font-weight:400;color:var(--muted)">in Laser Lab</span></span><span style="font-size:12.5px;color:var(--muted)">Removal waiting for you to send, queued by Randy Orton</span></span></div>
         <div class="a21-held"><span class="a21-tick" aria-hidden="true">✓</span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:14.5px;color:var(--muted)">Trained <span style="font-weight:400">in Laser Lab</span></span><span style="font-size:12.5px;color:var(--faint)">Already has it, via Safety</span></span></div>
       </div>
       <div class="a21-field">
@@ -154,10 +154,10 @@
 <x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u2" data="{{ rootData }}" hint-size="100%,100vh">
 <x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
 <div style="display:flex;flex-direction:column;gap:28px">
-  <x-import component-from-global-scope="Syndra.PageHeader" title="Rohan Mehta" lede="rohan.mehta@example.edu · Member" hint-size="100%,90px"></x-import>
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Liv Morgan" lede="liv.morgan@example.edu · Member" hint-size="100%,90px"></x-import>
 </div>
 <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="remove-title" hint-size="640px,520px">
-  <x-import component-from-global-scope="Syndra.ModalHeader" title="Revoke direct access to Laser Lab / Member?" lede="Given to Rohan on 3 Nov by Sam Lee, and still waiting for you to send." title-id="remove-title" hint-size="100%,100px"></x-import>
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Revoke direct access to Laser Lab / Member?" lede="Given to Liv on 3 Nov by Randy Orton, and still waiting for you to send." title-id="remove-title" hint-size="100%,100px"></x-import>
   <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
     <x-import component-from-global-scope="Syndra.ActionOutcome" placement="block" word="Cancelled" outcome="{{ cancelledOutcome }}" class-name="mx-6 mb-1" hint-size="100%,120px"></x-import>
     <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px">
@@ -166,7 +166,7 @@
   </sc-if>
   <sc-if value="{{ isAsk }}" hint-placeholder-val="{{ true }}">
     <div class="a21-body">
-      <div class="a21-note"><span style="padding-top:6px"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import></span><span><strong style="font-weight:600">Nothing to take back.</strong> It hasn't reached Zitadel, so Rohan never had it. This cancels that give and sends nothing.</span></div>
+      <div class="a21-note"><span style="padding-top:6px"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import></span><span><strong style="font-weight:600">Nothing to take back.</strong> It hasn't reached Zitadel, so Liv never had it. This cancels that give and sends nothing.</span></div>
     </div>
     <x-import component-from-global-scope="Syndra.ModalFooter" note="Change history records the give and its cancel." cancel="{{ cancelBtn }}" hint-size="100%,90px">
       <x-import component-from-global-scope="Syndra.Button" variant="accent" on-click="{{ noop }}" hint-size="190px,40px">Cancel the waiting give</x-import>
@@ -190,7 +190,7 @@ class Component extends DCLogic {
       { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
       { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 1 } },
       { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
-      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Rohan Mehta" }], projects: [], applications: [] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Liv Morgan" }], projects: [], applications: [] } },
       { key: ["name-bundles"], value: [] },
     ];
   }
@@ -208,8 +208,8 @@ class Component extends DCLogic {
     const isPlain = isGive && variant === "plain";
     const dateLine = "The sweep removes it on that date. Two weeks before, it shows under Expiring access, where the only action is to extend.";
     const note = isStale || isPlain
-      ? [dateLine, "Rohan can use it as soon as you give it."]
-      : [dateLine, "Rohan can use it as soon as you give it.", "Giving it cancels the removal Sam Lee queued 2 hours ago. Nothing is cancelled until you choose on the next step."];
+      ? [dateLine, "Liv can use it as soon as you give it."]
+      : [dateLine, "Liv can use it as soon as you give it.", "Giving it cancels the removal Randy Orton queued 2 hours ago. Nothing is cancelled until you choose on the next step."];
 
     const Q = (ask, rec) => ({ ask, rec });
     const questions = [
@@ -229,7 +229,7 @@ class Component extends DCLogic {
       endsOptions: [{ value: "30", label: "30 days" }, { value: "term", label: "End of term" }, { value: "date", label: "Pick a date" }, { value: "never", label: "Never" }],
       cancelBtn: { onClick: noop, label: "Cancel" },
       keepBtn: { onClick: noop, label: "Keep it" },
-      cancelledOutcome: { kind: "applied", message: "The give of Member in Laser Lab that was waiting is cancelled. Rohan never had it, so nothing goes to Zitadel.", next: "Nothing for you to do." },
+      cancelledOutcome: { kind: "applied", message: "The give of Member in Laser Lab that was waiting is cancelled. Liv never had it, so nothing goes to Zitadel.", next: "Nothing for you to do." },
       giveFrames: [
         f("give-plain", "Nothing cancelled · one step", "The form as built: the date line and the delivery line. No step follows the press.", false),
         f("give", "Foretold · dark", "The chosen row's note says a removal is waiting. The footer gains one sentence: giving cancels it, and nothing is cancelled until you choose. The button is still Give role.", true),

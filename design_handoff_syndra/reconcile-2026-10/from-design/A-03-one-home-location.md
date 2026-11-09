@@ -54,7 +54,7 @@ It goes on the system's account list, not the person's page. The limit is a True
 
 **Every managed row** gains a home line under its account: "Home folder up to 20 GB, from Fabrication lead". That's the largest limit among their roles, and the role that gives it. The row's first verb is **Set a limit**, and the actions seat widens to 380.
 
-**Setting it** (`limit-set`): Modal md, "Give Aanya Rao her own home folder limit".
+**Setting it** (`limit-set`): Modal md, "Give Roman Reigns her own home folder limit".
 - Lede: "Her roles give her up to 20 GB, from Fabrication lead. Her own limit takes the place of that, larger or smaller, until it ends."
 - **Limit**: Up to a size | No limit, then GB. Hint: "She has 18.4 GB in her home folder now."
 - **Why**: a Textarea. Required. Hint: "Whoever looks at this limit next reads this and nothing else."

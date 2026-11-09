@@ -19,7 +19,7 @@ export const Accent = () => (
       label="TrueNAS"
       value="Read-only"
       tone="accent"
-      detail="Set to read-only by Priya Nair for maintenance. Nothing is lost; changes wait until it can be written to again."
+      detail="Set to read-only by Cody Rhodes for maintenance. Nothing is lost; changes wait until it can be written to again."
     />
   </div>
 );
