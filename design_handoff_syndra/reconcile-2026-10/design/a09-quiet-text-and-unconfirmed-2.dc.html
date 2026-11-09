@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:-6283px;padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Quiet text and unconfirmed changes board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · tokens, /system/targets/[target], /storage · Final, 3 Nov 2026</span>
+    <h1 class="type-page-title" style="margin:0">Quiet text, and changes nobody can vouch for</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">A-09. Part 1 lifts the three quiet text tokens so every one clears 4.5:1 on every ground it sits on, in both themes, measured below. Part 2 puts a change TrueNAS never answered where the operator already settles things for that system, Waiting on you, with one verb that asks what happened. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">1–2 · Quiet text · A, with B's merge</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">Dark</strong> --muted 0.70 · --faint 0.56 · --label = --faint. <strong style="color:var(--ink)">Light</strong> --muted 0.78 · --faint 0.66 · --label = --faint. Every pair clears 4.5 on every ground, a pressed or chosen row included. Two steps, about 12 L* apart in both themes. A label is told from faint text by its case, weight and tracking, not by being dimmer. No decoration token: nothing that isn't text uses --label.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">3 · Where it lives · in Waiting on you</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Not a Notice (a): nothing on the page is unreliable, and a Notice doesn't hold a list. Not its own section (b): the system page already has the region for "a person must decide", with its seat and its chip. Not Review (c). Rows go first in Waiting on you, newest first. Home's What needs you counts them, one row per system, like Merge findings. None: nothing shows.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">4 · The row and its verb</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">What was asked, as a sentence with the person linked ("Set Ada Lovelace's storage password"), then an amber <strong style="color:var(--ink)">Not confirmed</strong>. When it was sent and that no answer came. Who asked. One verb, <strong style="color:var(--ink)">Say what happened</strong>, opens a dialog: how to tell for this kind, then <strong style="color:var(--ink)">It happened</strong> or <strong style="color:var(--ink)">It didn't happen</strong>. The confirm says what it records. Result: Done or Not done, then Close.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">5 · The member · Owner's call · B recommended</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">A</strong> say nothing (today). <strong style="color:var(--ink)">B</strong> one line in the Storage password row, in place of the form: an amber dot, what Syndra couldn't confirm, which password to try, and that staff are checking. <strong style="color:var(--ink)">C</strong> an amber Notice in the card. B: it's one field in doubt, not the account, and the line is the same evidence the operator needs. Once staff say Not done, the form comes back and asks for it again.</p></div>
+  </section>
+
+  <section data-screen-label="Part 1 specimen" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;flex-direction:column;gap:6px"><h2 class="type-section-title" style="margin:0">Part 1 · The three quiet text tokens, measured</h2><p style="margin:0;max-width:86ch;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">Ink at each alpha over the real grounds in globals.css, by WCAG 2 relative luminance. Text under 18px needs 4.5. Before is today's value; after is this answer's. Each sample is drawn with the alpha it names, not with the live token.</p></div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+      <sc-for list="{{ specimen }}" as="t" hint-placeholder-count="2">
+      <div data-theme="{{ t.theme }}" style="display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--ground);color:var(--ink)">
+        <span style="display:flex;align-items:baseline;gap:10px"><span style="font-size:16px;font-weight:600">{{ t.name }}</span><span style="font-size:12.5px;color:var(--ink)">{{ t.values }}</span></span>
+        <sc-for list="{{ t.grounds }}" as="g" hint-placeholder-count="2">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:var(--radius-inner);border:1px solid var(--line);background:{{ g.bg }}">
+          <span style="font-size:12.5px;font-weight:600;color:var(--ink)">{{ g.name }}</span>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+            <sc-for list="{{ g.cols }}" as="c" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+              <span style="font-size:12px;font-weight:600;color:var(--ink)">{{ c.head }}</span>
+              <sc-for list="{{ c.lines }}" as="l" hint-placeholder-count="3">
+              <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                <span style="font-size:{{ l.size }};font-weight:{{ l.weight }};letter-spacing:{{ l.ls }};text-transform:{{ l.tt }};line-height:1.45;color:{{ l.color }};text-wrap:pretty">{{ l.text }}</span>
+                <span style="display:flex;gap:6px;align-items:baseline;font-family:var(--font-mono);font-size:11.5px;color:var(--ink)"><span>{{ l.token }}</span><span style="font-weight:600;color:{{ l.verdictInk }}">{{ l.ratio }} {{ l.mark }}</span></span>
+              </div>
+              </sc-for>
+            </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-for>
+        <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--ink);text-wrap:pretty">{{ t.worst }}</p>
+      </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;max-width:86ch;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The order holds: ink, then --muted, then --faint, about 12 L* apart in both themes (dark 96 · 72 · 61, light 10 · 33 · 44). A --label line reads at --faint's strength, but at 12.5px, 600, in capitals with 0.1em tracking it can't be mistaken for a timestamp. One consequence the rules must take: stale data dimmed to 0.62 drops --faint to 3.0 (dark) and 2.6 (light). See §1 of the answer.</p>
+  </section>
+
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="3">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:{{ f.w }}px;height:{{ f.h }}px;;transform:scale({{ f.scale }});transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ path }}" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+
+<sc-if value="{{ isSystem }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ optA }}" hint-placeholder-val="{{ false }}">
+    <!-- stands in for Syndra.Notice until it is in the design system (option a, not chosen) -->
+    <div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">2 changes Syndra can't confirm</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">Syndra sent them to TrueNAS and no answer came back, so each may or may not have happened. Syndra won't send them again by itself.</p>
+        <div style="margin-top:6px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="150px,34px">Hide the 2 changes</x-import></div>
+      </div>
+    </div>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,260px">
+      <sc-for list="{{ aList }}" as="u" hint-placeholder-count="2"><div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 18px;padding:16px 20px;border-top:{{ u.edge }}">
+        <span style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:15px;font-weight:600;text-wrap:pretty">{{ u.pre }}<a href="route-users-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ u.who }}</a>{{ u.post }}</span>
+          <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ u.sent }}</span>
+          <span style="font-size:12.5px;color:var(--faint)">{{ u.by }}</span>
+        </span>
+        <span style="margin-left:auto;flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" aria-label="{{ u.aria }}" hint-size="150px,34px">Say what happened</x-import></span>
+      </div></sc-for>
+    </x-import>
+  </sc-if>
+
+  <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:12px">
+    <a href="route-systems.dc.html?frame=default" class="inline-flex min-h-11 items-center desktop:min-h-6" style="font-size:13.5px;font-weight:600"><span aria-hidden="true">←&nbsp;</span>Connected systems</a>
+    <x-import component-from-global-scope="Syndra.PageHeader" title="TrueNAS" meta="TrueNAS SCALE 24.10 · network storage · truenas" lede="{{ lede }}" hint-size="100%,120px"></x-import>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:36px">
+    <div style="margin-top:2px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding-left:20px">
+      <div style="flex:1 1 260px;min-width:260px"><x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ healthRead }}" subject="TrueNAS" hint-size="260px,24px"></x-import></div>
+      <nav aria-label="Regions of this page" style="margin-left:auto;display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{ chips }}" as="c" hint-placeholder-count="3"><a href="#{{ c.id }}" style="flex:none;white-space:nowrap;text-decoration:none;color:inherit;border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Chip" class-name="gap-2" hint-size="130px,32px"><sc-if value="{{ c.dot }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import></sc-if>{{ c.label }}<span style="color:var(--faint)">{{ c.count }}</span><span aria-hidden="true" style="color:var(--faint);font-size:12px">↓</span></x-import></a></sc-for>
+      </nav>
+    </div>
+
+    <section id="land" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:4px;padding:0 4px"><h2 class="type-section-title" style="margin:0">Whether changes can land</h2><p style="margin:0;max-width:80ch;font-size:14px;line-height:1.55;color:var(--muted)">Two machines, kept apart: what Syndra can reach, and what TrueNAS says about itself. Each reading ends by saying which one to look at.</p></div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,120px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Syndra's reach" hint-size="100%,56px"></x-import>
+        <div class="row-divider" style="display:flex;gap:12px;padding:13px 20px"><span style="padding-top:7px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import></span><span style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:14.5px;font-weight:600">Answering</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">Accepting changes. Nothing is in flight.</span></span></div>
+      </x-import>
+    </section>
+
+    <section id="waiting" style="display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px">
+      <div style="display:flex;flex-direction:column;gap:4px;padding:0 4px"><h2 class="type-section-title" style="margin:0">Waiting on you</h2><p style="margin:0;max-width:80ch;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">Differences Syndra will not settle by itself, an edited change record, two of Syndra's own records disagreeing about who owns an account, or a change TrueNAS never answered. Each needs a person to decide.</p></div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+        <sc-for list="{{ inWaiting }}" as="u" hint-placeholder-count="2"><div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 18px;padding:16px 20px;border-top:{{ u.edge }}">
+          <span style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:4px">
+            <span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px"><span style="font-size:15px;font-weight:600;text-wrap:pretty">{{ u.pre }}<a href="route-users-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ u.who }}</a>{{ u.post }}</span><span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-size:13.5px;font-weight:600;color:var(--warn-text)"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import>Not confirmed</span></span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ u.sent }}</span>
+            <span style="font-size:12.5px;color:var(--faint)">{{ u.by }}</span>
+          </span>
+          <span style="margin-left:auto;flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" aria-label="{{ u.aria }}" hint-size="150px,34px">Say what happened</x-import></span>
+        </div></sc-for>
+        <sc-if value="{{ hasFinding }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 18px;padding:16px 20px;border-top:{{ findingEdge }}">
+          <span style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:4px">
+            <span style="font-size:15px;font-weight:600;text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Aanya Rao</a>'s home folder moved on TrueNAS</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Syndra wants <span class="type-mono" style="color:var(--ink)">/mnt/tank/home/aanya.rao</span>. TrueNAS holds <span class="type-mono" style="color:var(--warn-text)">/mnt/tank/staff/aanya</span>. Pointing Syndra at the new folder and moving her files back are different decisions, so a reason is required either way.</span>
+            <span class="type-mono" style="font-size:12.5px;color:var(--faint)">f_2211 · found 40 min ago</span>
+          </span>
+          <span style="margin-left:auto;flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="96px,34px">Decide</x-import></span>
+        </div></sc-if>
+      </x-import>
+    </section>
+
+    <section id="accounts" style="display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px">
+      <div style="display:flex;flex-direction:column;gap:4px;padding:0 4px"><h2 class="type-section-title" style="margin:0">Accounts on TrueNAS</h2><p style="margin:0;max-width:80ch;font-size:14px;line-height:1.55;color:var(--muted)">Two roles in Network storage reach TrueNAS through mappings: everyone who holds one gets an account here.</p></div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,60px"><x-import component-from-global-scope="Syndra.CardHeader" title="Accounts Syndra manages" count="{{ 48 }}" hint-size="100%,56px"></x-import></x-import>
+    </section>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isMember }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Network storage" lede="Your account on the makerspace's shared storage, and how to connect to it. Your access follows the roles you hold." hint-size="100%,110px"></x-import>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,600px">
+    <div style="padding:20px 20px 0;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 20px">
+      <span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px"><span class="type-card-title">TrueNAS</span><span role="status" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;line-height:1.4;color:var(--muted)"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--healthy)"></span>Online and accepting sign-ins · checked a minute ago</span></span>
+      <ol aria-label="Your progress" class="hidden tablet:flex" style="margin:0;padding:0;list-style:none;flex-wrap:wrap;align-items:center;gap:6px 10px">
+        <sc-for list="{{ spine }}" as="s" hint-placeholder-count="3"><li style="display:flex;align-items:center;gap:10px"><sc-if value="{{ s.notFirst }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:18px;height:1px;background:var(--line-strong)"></span></sc-if><span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);white-space:nowrap"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--healthy)"></span>{{ s.label }}</span></li></sc-for>
+      </ol>
+      <div class="tablet:hidden" aria-hidden="true" style="width:100%"><span style="display:flex;gap:4px;margin-bottom:7px"><sc-for list="{{ spine }}" as="s" hint-placeholder-count="3"><span style="flex:1;height:4px;border-radius:var(--radius-pill);background:var(--healthy)"></span></sc-for></span><span style="font-size:13px;color:var(--muted)">All three steps done</span></div>
+    </div>
+    <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:8px">
+      <h2 style="margin:0;font-family:var(--font-display);font-size:24px;font-weight:600;letter-spacing:-.01em;line-height:1.25;text-wrap:pretty">Your account is ready</h2>
+      <p style="margin:0;max-width:66ch;font-size:15px;line-height:1.55;color:var(--muted);text-wrap:pretty">Copy an address below into your computer, then sign in with your account name and storage password.</p>
+    </div>
+    <sc-if value="{{ memberNotice }}" hint-placeholder-val="{{ false }}">
+      <!-- stands in for Syndra.Notice until it is in the design system (option C, not recommended) -->
+      <div role="status" style="margin:0 20px 22px;display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+        <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+        <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+          <span style="font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--warn-text);text-wrap:pretty">Syndra couldn't confirm your password change</span>
+          <p style="margin:0;max-width:68ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">You changed it at 09:41 today and TrueNAS didn't answer, so it may have your new password or still your old one. Try the new one first. If TrueNAS turns it away, your old one still works. Makerspace staff are checking.</p>
+        </div>
+      </div>
+    </sc-if>
+    <div class="row-divider" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+      <span class="type-label" style="color:var(--label)">Sign in as</span>
+      <div style="max-width:460px"><x-import component-from-global-scope="Syndra.CopyableValue" value="ada.lovelace" label="Your account name" hint-size="100%,46px"></x-import></div>
+    </div>
+    <div class="row-divider" style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:14px">
+      <span class="type-label" style="color:var(--label)">Your folders</span>
+      <div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px"><span style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px"><span style="font-size:15.5px;font-weight:600">Your home folder</span><span style="font-size:13px;color:var(--muted);white-space:nowrap">Can change files</span></span><span style="font-size:13px;color:var(--faint)">In main › home_dir · private to you</span></span><span style="margin-left:auto;font-size:13.5px;color:var(--muted)">8.2 GB of 50 GB</span></div>
+        <div aria-hidden="true" style="height:5px;border-radius:var(--radius-pill);background:var(--line);overflow:hidden"><div style="height:100%;width:17%;border-radius:var(--radius-pill);background:var(--muted)"></div></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px 14px">
+          <div style="display:flex;flex-direction:column;gap:5px;min-width:0"><span style="font-size:12.5px;color:var(--muted)">Mac and Linux · Connect to Server</span><x-import component-from-global-scope="Syndra.CopyableValue" value="{{ smb }}" label="Address for Mac and Linux" hint-size="100%,46px"></x-import></div>
+          <div style="display:flex;flex-direction:column;gap:5px;min-width:0"><span style="font-size:12.5px;color:var(--muted)">Windows · File Explorer address bar</span><x-import component-from-global-scope="Syndra.CopyableValue" value="{{ unc }}" label="Address for Windows" hint-size="100%,46px"></x-import></div>
+        </div>
+      </div>
+    </div>
+    <div class="row-divider" style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:8px">
+      <span class="type-label" style="color:var(--label)">Storage password</span>
+      <sc-if value="{{ pwDoubt }}" hint-placeholder-val="{{ true }}">
+        <!-- stands in for Syndra.NextStep's dot-and-line form (no box) until it is in the design system -->
+        <div role="status" style="display:flex;gap:10px;align-items:flex-start;max-width:68ch">
+          <span aria-hidden="true" style="margin-top:8px;width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+          <span style="display:flex;flex-direction:column;gap:4px;min-width:0">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.55;color:var(--ink);text-wrap:pretty">Syndra couldn't confirm your password change at 09:41 today.</span>
+            <span style="font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">TrueNAS didn't answer, so it may have your new password or still your old one. Try the new one first. If TrueNAS turns it away, your old one still works. Makerspace staff are checking, and you can change it again once they have.</span>
+          </span>
+        </div>
+      </sc-if>
+      <sc-if value="{{ pwAfterNotice }}" hint-placeholder-val="{{ false }}"><span style="max-width:66ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">You can change it again once makerspace staff have checked.</span></sc-if>
+      <sc-if value="{{ pwRedo }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;max-width:460px"><div style="flex:1 1 220px;min-width:0"><x-import component-from-global-scope="Syndra.Input" id="pw2" type="password" auto-complete="new-password" aria-label="New storage password" hint-size="100%,46px"></x-import></div><span style="flex:none;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="150px,46px">Change password</x-import></span></div>
+        <span style="max-width:68ch;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">Your change at 09:41 today may not have gone through. Set your password again, and TrueNAS will have the one you set. Only for TrueNAS: not your Syndra sign-in or your Google account.</span>
+      </div></sc-if>
+    </div>
+  </x-import>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDialog }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="settle-title" hint-size="520px,640px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Did TrueNAS set Ada Lovelace's storage password?" title-id="settle-title" lede="Syndra sent it at 09:41 today, asked by Ada Lovelace, and no answer came back. Until you say, Syndra treats it as neither done nor failed." hint-size="100%,110px"></x-import>
+  <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+    <sc-if value="{{ dForm }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span class="type-label" style="color:var(--label)">How to tell</span>
+        <p style="margin:0;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">TrueNAS can't show a password. Ask Ada Lovelace to sign in to storage with the new one: if TrueNAS lets Ada Lovelace in, it happened.</p>
+      </div>
+      <!-- stands in for Syndra.ChoiceRow (single choice) until it is in the design system -->
+      <div role="radiogroup" aria-label="What happened" style="display:flex;flex-direction:column;gap:6px">
+        <sc-for list="{{ choices }}" as="c" hint-placeholder-count="2">
+          <div role="radio" aria-checked="{{ c.on }}" style="display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border-radius:12px;border:1px solid {{ c.edge }};background:{{ c.bg }};cursor:pointer">
+            <span aria-hidden="true" style="margin-top:3px;width:16px;height:16px;flex:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid {{ c.seatEdge }};background:{{ c.seatBg }}"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:{{ c.dot }}"></span></span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ c.title }}</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ c.desc }}</span></span>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Can't reach Ada Lovelace? Choose It didn't happen. Setting a storage password again is safe once someone has looked.</p>
+    </sc-if>
+    <sc-if value="{{ dResult }}" hint-placeholder-val="{{ false }}">
+      <div role="status" style="display:flex;flex-direction:column;gap:6px;padding:6px 0 10px">
+        <span style="display:inline-flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:22px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ rTone }}" hint-size="8px,8px"></x-import>{{ rWord }}</span>
+        <p style="margin:0;font-size:15px;line-height:1.55;text-wrap:pretty">{{ rSentence }}</p>
+        <span style="font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ rNext }}</span>
+      </div>
+    </sc-if>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ dFoot }}" hint-size="100%,80px">
+    <sc-if value="{{ dForm }}" hint-placeholder-val="{{ true }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Cancel</x-import></span><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="200px,40px">Record it as not done</x-import></span></sc-if>
+    <sc-if value="{{ dResult }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Close</x-import></sc-if>
+  </x-import>
+</x-import>
+</sc-if>
+
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":10400}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "waiting";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    const member = /^member/.test(this.st);
+    this.session = member
+      ? { id: "u9", name: "Ada Lovelace", email: "ada@example.edu", title: "Student", team: "Design", status: "active", avatar: "AL", role: "user", sessionType: "demo" }
+      : { id: "u1", name: "Kanishk", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: member ? {} : { pending_requests: 3, expiring_grants: 6, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const st = this.st, ago = (m) => new Date(Date.now() - m * 60000).toISOString();
+    const isMember = /^member/.test(st), isDialog = /^settle/.test(st), isSystem = !isMember;
+    const optA = st === "option-a", empty = st === "empty";
+    const LINE = "1px solid var(--divider)";
+    const unconf = empty ? [] : [
+      { pre: "Set ", who: "Ada Lovelace", post: "’s storage password", sent: "Sent to TrueNAS at 09:41 today, 2 hours ago. No answer came back, so it may or may not have happened.", by: "Asked by Ada Lovelace", aria: "Say what happened: set Ada Lovelace’s storage password" },
+      { pre: "Delete ", who: "Grace Hopper", post: "’s account and files on TrueNAS", sent: "Sent to TrueNAS on 2 Nov at 18:05. No answer came back, so it may or may not have happened.", by: "Asked by Kanishk Singh", aria: "Say what happened: delete Grace Hopper’s account and files on TrueNAS" },
+    ].map((u, i) => Object.assign(u, { edge: i === 0 ? "0" : LINE }));
+    const inWaiting = optA ? [] : unconf;
+    const waitingN = inWaiting.length + 1;
+    const words = { 1: "One thing is", 2: "Two things are", 3: "Three things are" };
+
+    // Part 1 specimen. Each sample is ink at the alpha it names, drawn with color-mix, not the live token.
+    const mix = (a) => "color-mix(in srgb, var(--ink) " + Math.round(a * 100) + "%, transparent)";
+    const KIND = {
+      label: { size: "12.5px", weight: 600, ls: "0.1em", tt: "uppercase", text: "Account on TrueNAS" },
+      muted: { size: "14px", weight: 400, ls: "normal", tt: "none", text: "Two roles reach TrueNAS through mappings." },
+      faint: { size: "12.5px", weight: 400, ls: "normal", tt: "none", text: "Ends 2 Aug · found 40 min ago" },
+    };
+    const line = (kind, a, ratio) => Object.assign({}, KIND[kind], { color: mix(a), token: "--" + kind + " " + a.toFixed(2), ratio: ratio.toFixed(2), mark: ratio >= 4.5 ? "✓" : "✗ fails", verdictInk: ratio >= 4.5 ? "var(--ink)" : "var(--danger-text)" });
+    const col = (head, a, r) => ({ head, lines: [line("label", a[2], r[2]), line("muted", a[0], r[0]), line("faint", a[1], r[1])] });
+    const ground = (name, bg, before, rb, after, ra) => ({ name, bg, cols: [col("Before", before, rb), col("After", after, ra)] });
+    const DB = [0.60, 0.42, 0.34], DA = [0.70, 0.56, 0.56], LB = [0.60, 0.45, 0.40], LA = [0.78, 0.66, 0.66];
+    const specimen = [
+      { theme: "dark", name: "Dark", values: "after: --muted 0.70 · --faint 0.56 · --label 0.56", grounds: [
+        ground("On the canvas (--canvas)", "var(--canvas)", DB, [6.72, 3.81, 2.87], DA, [8.88, 5.97, 5.97]),
+        ground("On a raised surface (--surface-2), the brightest", "var(--surface-2)", DB, [6.30, 3.78, 2.94], DA, [8.09, 5.66, 5.66]),
+      ], worst: "Worst ground after: a pressed row (--tint-3 on --surface-2) holds --faint at 4.90 and --muted at 6.72; a chosen row (--accent-soft) 5.01; inside an amber Notice (--warn-soft) 4.97." },
+      { theme: "light", name: "Light", values: "after: --muted 0.78 · --faint 0.66 · --label 0.66", grounds: [
+        ground("On the canvas (--canvas), the lilac page", "var(--canvas)", LB, [4.36, 2.81, 2.45], LA, [7.89, 5.28, 5.28]),
+        ground("On a card (--surface-1, white)", "var(--surface-1)", LB, [4.53, 2.87, 2.50], LA, [8.43, 5.53, 5.53]),
+      ], worst: "Worst ground after: a pressed row (--tint-3 on --canvas) holds --faint at 4.94 and --muted at 7.17; a chosen row (--accent-soft) 4.96; inside an amber Notice (--warn-soft) 5.02." },
+    ];
+
+    const choice = (title, desc, on) => ({ title, desc, on: on ? "true" : "false", edge: on ? "var(--accent-line)" : "var(--line)", bg: on ? "var(--accent-soft)" : "transparent", seatEdge: on ? "var(--accent)" : "var(--line-strong)", seatBg: on ? "var(--accent)" : "transparent", dot: on ? "var(--accent-ink)" : "transparent" });
+    const done = st === "settled-done", result = st === "settled" || done;
+
+    const f = (frame, label, note, o) => Object.assign({ src: "a09-quiet-text-and-unconfirmed-2.dc.html?frame=" + frame, label, note, w: 1440, h: 1300, boxW: 720, boxH: 650, scale: 0.5 }, o || {});
+    const P = { w: 390, h: 1600, boxW: 390, boxH: 1600, scale: 1 };
+    const M = { h: 1200, boxH: 600 };
+
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      path: isMember ? "/storage" : "/system/targets/truenas",
+      isSystem, isMember, isDialog, optA,
+      lede: "Network storage members keep their files on, joined to Syndra by an add-on. It answers and accepts changes. " + words[waitingN] + " waiting on you.",
+      healthRead: { readAt: ago(0.05), current: true },
+      chips: [{ id: "waiting", label: "Waiting on you", count: waitingN, dot: true }, { id: "accounts", label: "Accounts", count: 51, dot: false }, { id: "runs", label: "What runs here", count: 6, dot: false }],
+      inWaiting, aList: optA ? unconf : [], hasFinding: true, findingEdge: inWaiting.length ? LINE : "0",
+      spine: ["A role gives you access", "Your account is created", "You set a password"].map((label, i) => ({ label, notFirst: i > 0 })),
+      smb: "smb://storage.example.edu/main/home_dir/ada.lovelace", unc: "\\\\storage.example.edu\\main\\home_dir\\ada.lovelace",
+      memberNotice: st === "member-notice", pwDoubt: st === "member" || st === "member-phone", pwAfterNotice: st === "member-notice", pwRedo: st === "member-redo",
+      dForm: st === "settle", dResult: result,
+      choices: [
+        choice("It happened", "TrueNAS has the new password. Ada Lovelace’s storage page says it was changed today.", false),
+        choice("It didn’t happen", "TrueNAS still has the old password. Ada Lovelace’s storage page asks for a new one.", true),
+      ],
+      dFoot: result ? "" : "Nothing is sent to TrueNAS. This records what you found, with your name.",
+      rTone: done ? "healthy" : "neutral", rWord: done ? "Done" : "Not done",
+      rSentence: done ? "TrueNAS has Ada Lovelace’s new storage password." : "You recorded that TrueNAS didn’t set Ada Lovelace’s storage password.",
+      rNext: done ? "It leaves Waiting on you. Audit keeps your answer, with your name." : "Ada Lovelace’s storage page now asks for a new one. Audit keeps your answer, with your name.",
+      specimen,
+      boardGroups: [
+        { title: "Part 2 · System › TrueNAS · 1440", frames: [
+          f("waiting", "Recommended · in Waiting on you", "The two changes TrueNAS never answered lead the region, newest first, above the finding that was already there. Each says what was asked as a sentence, with the person linked; an amber Not confirmed beside it; when it was sent and that no answer came; who asked. One verb, Say what happened. The chip and the lede count them with everything else waiting on you. Home's What needs you gets one row per system: “TrueNAS · 2 changes · Open TrueNAS →”."),
+          f("option-a", "Option a · a Notice opening a list (not chosen)", "For comparison. An amber Notice reads as “what you're looking at is unreliable”, and its dot breathes, but the page is current and TrueNAS is fine. The list it opens is a second place for things a person must decide, beside a region that already holds them."),
+          f("settle", "Saying what happened", "Modal md. The title asks the question in words; the lede says when, who asked, and that it stays neither done nor failed until someone says. How to tell is written for the kind: a password can't be read back, so the member is the test. Two single-choice rows. The confirm names what it records (“Record it as not done” / “Record it as done”); before a choice it reads “Record what happened”, off. The footer note says nothing is sent.", M),
+          f("settled", "Result · Not done", "The sheet becomes its result: a neutral dot, Not done, one sentence, one faint line saying where it goes next (the member's page asks for a new password), Close. The row leaves Waiting on you on the next read.", M),
+          f("settled-done", "Result · Done", "Lime dot, blooms once: Done, “TrueNAS has Ada Lovelace's new storage password.”, then where it goes, Close. Never “Applied”: this records what a person found.", M),
+          f("empty", "Nothing to confirm", "Nothing shows: no card, no zero, no line. The region keeps its seat with whatever else waits; with nothing at all it says “Nothing is waiting on you.” as today.", { h: 1100, boxH: 550 }),
+        ] },
+        { title: "Part 2 · The member's storage page · Owner's call, B recommended · 1440", frames: [
+          f("member", "B · one line where the password is (recommended)", "The Storage password row loses its form while the change is unconfirmed and says, with an amber dot and no box: what Syndra couldn't confirm, which password to try first, that the old one works if the new one doesn't, and that staff are checking. The rest of the page is untouched: the account and the files are fine.", { h: 1200, boxH: 600 }),
+          f("member-notice", "C · an amber Notice in the card (not recommended)", "For comparison. The same words in a box above the account. A box says something is wrong with the account; it's one field in doubt.", { h: 1300, boxH: 650 }),
+          f("member-redo", "After Not done · the form comes back", "Staff recorded Not done. The form returns with one line: the change may not have gone through; set it again and TrueNAS will have the one you set. Done instead: the row reads as usual, “Last changed today.”", { h: 1200, boxH: 600 }),
+        ] },
+        { title: "Phone · 390", frames: [
+          f("phone", "Phone · Waiting on you", "Each row wraps: the sentence, then Not confirmed under it, the when, who asked, and Say what happened at the right. The dialog is the md sheet from the bottom edge.", P),
+          f("member-phone", "Phone · the member's line", "The same line under Storage password; no form until staff have checked.", P),
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
