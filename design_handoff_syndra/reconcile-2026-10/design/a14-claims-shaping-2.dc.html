@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>An app, what it's told</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:-2061px;padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Claims shaping board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /applications/[id] · Final, 3 Nov 2026</span>
+    <h1 class="type-page-title" style="margin:0">An app, and what it's told</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">A-14, revising A-11. Each app has its own shape: the roles it sees and the word it sees for each, the claims it gets, and where they land. A template starts it, the preview proves it before you save, and Debug mode shows one account's real sign-ins as they happen. An app with no shape of its own uses its project's default; a template, or another app's shape, is an offer on top. Each frame is the real shell and components at true width; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">From A-11: the five-check trail ending in the token · a draft previews itself with − and + lines · test people and the person form · the save summary that ends on Saved · History and Go back · what the app reads, Matches or Doesn't match · typed fixed values · the refused cross-project check (ADR-002) · degraded, now with A-13 (d): cards from Zitadel's last answer recede · #49 no roles is a full sentence · #90 on a phone the shape comes first.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Gone from A-11 (owner, 3 Nov)</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Moving off Actions v1 and its pasted-token comparison · start from a token · the project default and its "What to edit" switch: a shape belongs to one app · the faded line for another app's claim · array, csv and spaced offered as equals · the mixed-format warning on the apps index. The owner removes the v1 scripts himself; apps that exist today are seeded with exactly what v1 sent, so that day changes nothing.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Decisions</h2>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">1 · The page</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Header · <strong style="color:var(--ink)">What NetBird is told</strong> beside the <strong style="color:var(--ink)">Preview</strong> · Debug mode · Test people · What NetBird reads · History. The shape card is one column: the template line, the roles table, the claim rows, where it lands, Save. Basic is that, calm. Advanced only adds ways to make unusual shapes: where it lands as a choice, roles added later, nesting, More claims, text formats, the client id. A saved row shows in both views.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">2 · Templates, on top of a working default</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">An app with no shape of its own uses its project's default: the built-in <span class="type-mono">roles</span> list when nobody set one. The card says what it sends now, then offers <strong style="color:var(--ink)">Start from a template · Copy another app's shape</strong>. Choosing a template unfolds its short form and the preview shows the draft against the default at once. The sheet says what it sends, where it lands, what the app does, <strong style="color:var(--ink)">what no claim can do</strong>, and what to set. Role choices and words don't count as changes since.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">3 · Roles for this app</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">One table: Role · "NetBird calls it" · Included. Every role in the project, A to Z. A rename or a removal is said three times before it lands: a faint "Was …" on its row, an amber before-line naming what NetBird will do ("12 people move to a new group"), and the save summary. What counts as breaking comes from the template.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">4 · One row form</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Claim · Carries · Remove; a second line only where the kind needs it; every row ends "Sent as …" with the literal. Carries is grouped: from the person, the same for everyone, and (Advanced) More claims. Nesting is its own "Inside" field, so a dot stays a dot. Roles are always sent, <span class="type-mono">[]</span> when empty. Text formats: Advanced only, with a warning (owner, 3 Nov).</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">5 · Where claims land</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Per app: <strong style="color:var(--ink)">Both</strong> | Access token | ID token and userinfo, set by the template, changeable in Advanced. Check 1 becomes "Zitadel's settings for NetBird" and reads the token type and "User Info inside ID Token" where the shape lands. A Bearer token for NetBird turns checks 1 and 5 red, with the fix in Zitadel as a violet link.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">6 · Debug mode</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Only here, under the preview: one row when off. It captures <strong style="color:var(--ink)">exactly one account at a time</strong>, you by default; there is no "everyone" (owner, 3 Nov). Change account moves the capture and keeps the end time. A live list fills in place, newest on top; arrivals wait for the pointer to leave. One sign-in opens in place: what Zitadel sent, what Syndra answered, the checks, and the claims <strong style="color:var(--ink)">rebuilt, not the signed token</strong>. Signatures never show.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">7 · What changes from A-11</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">History is per app. The save summary's "3 apps on the project" becomes <strong style="color:var(--ink)">What NetBird will do</strong>, and a breaking save needs the I-understand tick (owner, 3 Nov). #50's "nobody named the claim" becomes "Uses Code's default". What the app reads moves below Test people, is filled by the template and says where. The apps index's Format column becomes Claims, with the template on the sub-line.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">8 · Copy another app's shape</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Any app, this project or another, from the offer or later from the claims part. It lands as a <strong style="color:var(--ink)">draft</strong> with the preview diff and the usual save summary. Claim rows, formats, where they land, fixed values, nested and role-dependent rows copy. Role words copy only for keys this project has; the rest are a faint line, "Not in this project, so not copied". A role-dependent row whose role is missing stops Save until fixed. The two apps aren't linked.</p></div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Owner's calls · settled 3 Nov</h2>
+    <p style="margin:0;max-width:80ch;font-size:14px;line-height:1.6;color:var(--muted)">The owner chose each one on 3 Nov. Where an option was drawn and not chosen, it stays here, quieter, for the record. Every frame below follows the choice.</p>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span class="type-label" style="color:var(--label)">4 · Text formats for roles</span>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border:2px solid var(--accent-line);border-radius:var(--radius-card)">
+          <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="34px,24px">4a</x-import><span style="font-size:14px;font-weight:600">Behind Advanced, with a warning</span><span style="flex:1"></span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Owner, 3 Nov</span></div>
+          <x-import component-from-global-scope="Syndra.Segmented" label="Sent as" size="sm" value="csv" options="{{ fmtOptions }}" on-change="{{ noop }}" hint-size="330px,36px"></x-import>
+          <p style="margin:0;font-size:13px;line-height:1.5;color:var(--warn-text)">No app Syndra has a template for reads roles as text. NetBird would make one group called <span class="type-mono">netbird-staff,netbird-admins</span>.</p>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--muted)">No template chooses text. A shape already sending text shows it in both views, with the warning.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--line);border-radius:var(--radius-card);opacity:0.62">
+          <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="34px,24px">4b</x-import><span style="font-size:14px;font-weight:600">Removed</span><span style="flex:1"></span><span style="font-size:12.5px;color:var(--faint)">Not chosen</span></div>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--muted)">Roles always sent as a list, with no Sent as.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span class="type-label" style="color:var(--label)">6 · Whose sign-ins Debug mode captures</span>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border:2px solid var(--accent-line);border-radius:var(--radius-card)">
+          <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="34px,24px">6</x-import><span style="font-size:14px;font-weight:600">One account at a time, you by default</span><span style="flex:1"></span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Owner, 3 Nov</span></div>
+          <x-import component-from-global-scope="Syndra.ChoiceRow" selected="{{ true }}" on-toggle="{{ noop }}" single="{{ true }}" name="opt6" title="You, Kanishk Singh" description="Sign in to NetBird yourself to see it here." hint-size="100%,60px"></x-import>
+          <x-import component-from-global-scope="Syndra.ChoiceRow" selected="{{ false }}" on-toggle="{{ noop }}" single="{{ true }}" name="opt6" title="Ada Lovelace" note="Test person" hint-size="100%,48px"></x-import>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--muted)">There is no "everyone". Choosing another account while it runs moves the capture to them; the before-line says so and the end time stays.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;padding:16px">
+          <span style="font-size:14px;font-weight:600">What the owner ruled out</span>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--muted)">Capturing everyone signing in to an app. Syndra never holds another person's sign-in unless that one account was chosen, and the filter runs before anything is kept.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span class="type-label" style="color:var(--label)">7 · A save NetBird or GitLab will act on</span>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border:2px solid var(--accent-line);border-radius:var(--radius-card)">
+          <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="34px,24px">7a</x-import><span style="font-size:14px;font-weight:600">An I-understand tick</span><span style="flex:1"></span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Owner, 3 Nov</span></div>
+          <label style="display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.5"><x-import component-from-global-scope="Syndra.Checkbox" class-name="mt-1" checked="{{ true }}" on-change="{{ noop }}" hint-size="16px,16px"></x-import><span>I understand NetBird will move 12 people to a new group.</span></label>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--muted)">Only when the template marks the change as breaking. Save stays off until it's ticked.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--line);border-radius:var(--radius-card);opacity:0.62">
+          <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="34px,24px">7b</x-import><span style="font-size:14px;font-weight:600">The before-line and summary only</span><span style="flex:1"></span><span style="font-size:12.5px;color:var(--faint)">Not chosen</span></div>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--muted)">The words said twice, with no tick.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span class="type-label" style="color:var(--label)">7 · An app with no shape of its own</span>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border:2px solid var(--accent-line);border-radius:var(--radius-card)">
+          <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="34px,24px">7</x-import><span style="font-size:14px;font-weight:600">It gets its project's default</span><span style="flex:1"></span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Owner, 3 Nov</span></div>
+          <p style="margin:0;font-size:13px;line-height:1.6"><span class="type-mono">roles</span>: every role in the project, in Syndra's words, as a list, in both places, when nobody set a default. Templates and copying are an offer on top of a shape that already works.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--line);border-radius:var(--radius-card);opacity:0.62">
+          <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="34px,24px">7c</x-import><span style="font-size:14px;font-weight:600">It gets nothing</span><span style="flex:1"></span><span style="font-size:12.5px;color:var(--faint)">Not chosen</span></div>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--muted)">My first draft. The owner chose a working default instead.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440 · whole page</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ tallFrames }}" as="f" hint-placeholder-count="9">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:1500px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:3000px;;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440 · one sign-in opened</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ openFrames }}" as="f" hint-placeholder-count="1">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:1900px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:3800px;;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ desktopFrames }}" as="f" hint-placeholder-count="7">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1200px;;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Templates · the sheet</h2>
+    <p style="margin:0;max-width:80ch;font-size:14px;line-height:1.6;color:var(--muted)">One sheet anatomy for every template; the words follow the 3 Nov app research. NetBird and Supabase are opened from an app that has a shape; the rest from an app's template choice.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ tplFrames }}" as="f" hint-placeholder-count="7">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:750px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1500px;;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:7200px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:390px;height:7200px"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:20px">
+
+  <sc-if value="{{ isApp }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;flex-direction:column;gap:20px">
+    <div style="padding-bottom:8px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Apps" title="{{ app }}" lede="{{ headerLede }}" meta="{{ meta }}" hint-size="100%,150px"></x-import></div>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:20px">
+
+      <!-- What the app is told (§1–5) -->
+      <div style="flex:1 1 460px;min-width:0;display:flex">
+      <x-import component-from-global-scope="Syndra.Card" class-name="w-full" hint-size="100%,900px">
+        <div style="padding:20px 22px 12px"><h2 class="type-card-title" style="margin:0">What {{ app }} is told</h2>
+          <sc-if value="{{ isNew }}" hint-placeholder-val="{{ false }}"><p style="margin:4px 0 0;max-width:64ch;font-size:14px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ newLede }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></p><span style="display:inline-flex;margin-top:6px;font-size:14px;font-weight:600"><x-import component-from-global-scope="Syndra.ArrowLink" href="#" hint-size="140px,20px">{{ project }}'s default</x-import></span></sc-if>
+        </div>
+
+        <sc-if value="{{ isNew }}" hint-placeholder-val="{{ false }}">
+          <div class="row-divider" style="display:flex;flex-direction:column;gap:4px;padding:14px 22px">
+            <span class="type-label">Sends now</span>
+            <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px"><x-import component-from-global-scope="Syndra.Mono" hint-size="60px,18px">{{ dfKey }}</x-import><span style="font-size:14px;color:var(--muted)">{{ dfWhat }}</span></div>
+            <span style="font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ dfSent }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span>
+          </div>
+          <div class="row-divider" style="display:flex;flex-direction:column;gap:10px;padding:16px 22px 6px">
+            <span class="type-label">Shape it for {{ app }}</span>
+            <x-import component-from-global-scope="Syndra.Segmented" label="Shape it from" size="sm" value="{{ pickMode }}" options="{{ pickOptions }}" on-change="{{ noop }}" hint-size="380px,36px"></x-import>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:4px 14px 12px">
+            <sc-for list="{{ tpls }}" as="t" hint-placeholder-count="7">
+              <sc-if value="{{ t.isLabel }}" hint-placeholder-val="{{ false }}"><span class="type-label" style="padding:10px 8px 2px">{{ t.label }}</span></sc-if>
+              <sc-if value="{{ t.isRow }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column">
+                <x-import component-from-global-scope="Syndra.ChoiceRow" selected="{{ t.sel }}" on-toggle="{{ noop }}" single="{{ true }}" name="shape-from" title="{{ t.title }}" meta="{{ t.meta }}" description="{{ t.desc }}" note="{{ t.note }}" hint-size="100%,60px"></x-import>
+                <sc-if value="{{ t.sel }}" hint-placeholder-val="{{ false }}">
+                  <x-import component-from-global-scope="Syndra.Unfold" open="{{ true }}" hint-size="100%,150px">
+                    <div style="display:flex;flex-direction:column;gap:7px;padding:10px 14px 8px 44px">
+                      <sc-for list="{{ t.lines }}" as="k" hint-placeholder-count="3">
+                        <sc-if value="{{ k.isDot }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:10px;align-items:flex-start"><span aria-hidden="true" style="width:6px;flex:none;display:flex;padding-top:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import></span><span style="font-size:13.5px;line-height:1.5;color:var(--ink);text-wrap:pretty"><sc-for list="{{ k.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></div></sc-if>
+                        <sc-if value="{{ k.isFaint }}" hint-placeholder-val="{{ false }}"><span style="padding-left:16px;font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ k.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></sc-if>
+                      </sc-for>
+                      <sc-if value="{{ t.hasSheet }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;margin-left:-10px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="180px,34px">See the whole template</x-import></span></sc-if>
+                    </div>
+                  </x-import>
+                </sc-if>
+              </div>
+              </sc-if>
+            </sc-for>
+          </div>
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:16px 22px 20px">
+            <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="170px,40px">{{ startVerb }}</x-import></span>
+            <span style="flex:1 1 220px;min-width:0;font-size:13px;line-height:1.5;color:var(--faint)">{{ startNote }}</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasShape }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:6px;padding:0 22px 16px">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px"><span style="font-size:13.5px;line-height:1.5;color:var(--faint)"><sc-for list="{{ tplLine }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span><span style="flex:none;white-space:nowrap;display:inline-flex;gap:4px;margin-left:-10px"><sc-if value="{{ hasTpl }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="140px,34px">See the template</x-import></sc-if><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="210px,34px">Copy another app's shape</x-import></span></div>
+            <p style="margin:0;max-width:64ch;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><sc-for list="{{ tplCaption }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></p>
+            <sc-if value="{{ hasRoleCheckLink }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;font-size:14px;font-weight:600"><x-import component-from-global-scope="Syndra.ArrowLink" href="#" hint-size="320px,20px">Turn on the role check for Vault in Zitadel</x-import></span></sc-if>
+          </div>
+
+          <div class="row-divider" style="display:flex;flex-direction:column;gap:4px;padding:16px 22px 12px">
+            <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px"><span class="type-label">Roles {{ app }} sees</span><span style="flex:1"></span><span style="font-size:12.5px;color:var(--faint)">{{ incNote }}</span></div>
+            <p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--faint)">Which of <a href="#" style="color:var(--muted);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ project }}</a>'s roles {{ app }} sees, and the word it sees for each.</p>
+          </div>
+          <sc-if value="{{ hasRolesTable }}" hint-placeholder-val="{{ true }}">
+            <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:170px;flex:none"><x-import component-from-global-scope="Syndra.SortHead" label="Role" name="role" sort="{{ sortRole }}" on-sort="{{ noop }}" hint-size="60px,18px"></x-import></span><span style="flex:1;min-width:150px">{{ app }} calls it</span><span style="width:80px;flex:none;text-align:right">Included</span></x-import>
+            <sc-for list="{{ roles }}" as="r" hint-placeholder-count="7">
+              <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 14px;padding:10px 20px">
+                <span style="width:170px;flex:none;display:flex;flex-direction:column;gap:1px;padding-top:2px"><span style="display:inline-flex;align-items:center;gap:7px;font-size:14.5px;font-weight:600">{{ r.name }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.WaitsMark" hint-size="10px,10px"></x-import></sc-if></span><span style="font-family:var(--font-mono);font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span>
+                <span style="flex:1 1 170px;min-width:0;display:flex;flex-direction:column;gap:4px">
+                  <x-import component-from-global-scope="Syndra.Input" class-name="w-full font-mono text-[13.5px]" value="{{ r.word }}" placeholder="{{ r.key }}" read-only="{{ true }}" disabled="{{ r.off }}" aria-label="{{ r.label }}" hint-size="200px,40px"></x-import>
+                  <sc-if value="{{ r.hasWas }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;line-height:1.45;color:var(--faint);text-wrap:pretty"><sc-for list="{{ r.was }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></sc-if>
+                </span>
+                <span style="width:80px;flex:none;display:flex;justify-content:flex-end;padding-top:11px"><x-import component-from-global-scope="Syndra.Checkbox" checked="{{ r.inc }}" on-change="{{ noop }}" aria-label="{{ r.incLabel }}" hint-size="16px,16px"></x-import></span>
+              </div>
+            </sc-for>
+            <sc-if value="{{ hasNotCopied }}" hint-placeholder-val="{{ false }}"><p class="row-divider" style="margin:0;padding:12px 22px;font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ notCopied }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></p></sc-if>
+            <sc-if value="{{ adv }}" hint-placeholder-val="{{ false }}">
+              <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:14px 22px">
+                <span style="width:170px;flex:none;padding-top:2px;font-size:14px;font-weight:600">Roles added later</span>
+                <span style="flex:1 1 160px;min-width:0;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ laterNote }}</span>
+                <span style="margin-left:auto;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Segmented" label="Roles added later" size="sm" value="{{ laterKey }}" options="{{ laterOptions }}" on-change="{{ noop }}" hint-size="190px,36px"></x-import></span>
+              </div>
+            </sc-if>
+          </sc-if>
+          <sc-if value="{{ noRolesClaim }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:2px 22px 16px">
+              <x-import component-from-global-scope="Syndra.NotOpenYet" open="{{ false }}" title="Roles reach Vaultwarden only through a roles claim." why="The Sign-in only shape sends none, on purpose: Vaultwarden has no groups." hint-size="100%,140px">
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px"><span style="width:150px;flex:none;font-size:14.5px;font-weight:600">Member</span><span style="flex:1;min-width:0;font-family:var(--font-mono);font-size:13px;color:var(--faint)">member</span></div>
+              </x-import>
+            </div>
+          </sc-if>
+
+          <div class="row-divider" style="padding:16px 22px 4px"><span class="type-label">Claims</span></div>
+          <sc-if value="{{ noClaims }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:4px 22px 12px;font-size:13.5px;line-height:1.5;color:var(--muted)">Sends nothing of its own. Zitadel's standard claims do the work.</p></sc-if>
+          <sc-for list="{{ claims }}" as="x" hint-placeholder-count="1">
+            <div style="display:flex;flex-direction:column;gap:6px;padding:8px 22px 12px">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                <sc-if value="{{ x.nested }}" hint-placeholder-val="{{ false }}"><span style="flex:0 1 140px;min-width:0;display:flex"><x-import component-from-global-scope="Syndra.Input" class-name="w-full font-mono text-[13.5px]" value="{{ x.parent }}" read-only="{{ true }}" aria-label="Inside" hint-size="140px,40px"></x-import></span><span aria-hidden="true" style="font-size:15px;color:var(--faint)">›</span></sc-if>
+                <span style="flex:1 1 140px;min-width:0;display:flex"><x-import component-from-global-scope="Syndra.Input" class-name="w-full font-mono text-[13.5px]" value="{{ x.key }}" read-only="{{ true }}" aria-label="Claim name" hint-size="160px,40px"></x-import></span>
+                <span style="flex:1 1 190px;min-width:0;display:flex"><x-import component-from-global-scope="Syndra.Select" class-name="w-full" aria-label="Carries" value="{{ x.kv }}" hint-size="200px,40px"><option value="{{ x.kv }}">{{ x.kind }}</option></x-import></span>
+                <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="80px,34px">Remove</x-import></span>
+              </div>
+              <sc-if value="{{ x.isStatic }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                  <x-import component-from-global-scope="Syndra.Segmented" label="Type" size="sm" value="{{ x.type }}" options="{{ typeOptions }}" on-change="{{ noop }}" hint-size="300px,36px"></x-import>
+                  <span style="flex:1 1 140px;min-width:0;display:flex"><x-import component-from-global-scope="Syndra.Input" class-name="w-full" value="{{ x.value }}" read-only="{{ true }}" aria-label="Value for everyone" hint-size="160px,40px"></x-import></span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ x.isIf }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                  <span style="font-size:13.5px;color:var(--muted)">If they hold</span>
+                  <sc-for list="{{ x.chips }}" as="c" hint-placeholder-count="1"><x-import component-from-global-scope="Syndra.Chip" hint-size="80px,28px">{{ c }}</x-import></sc-for>
+                  <x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="120px,34px">Change roles</x-import>
+                  <span style="font-size:13.5px;color:var(--muted)">Otherwise <span class="type-mono">false</span>.</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ x.isFmt }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span style="font-size:13.5px;color:var(--muted)">Sent as</span><x-import component-from-global-scope="Syndra.Segmented" label="Sent as" size="sm" value="{{ x.fmt }}" options="{{ fmtOptions }}" on-change="{{ noop }}" hint-size="330px,36px"></x-import></div>
+              </sc-if>
+              <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty;overflow-wrap:anywhere"><sc-for list="{{ x.sent }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></p>
+              <sc-if value="{{ x.hasWarn }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:13px;line-height:1.5;color:var(--warn-text);text-wrap:pretty"><sc-for list="{{ x.warn }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></p></sc-if>
+              <sc-if value="{{ x.hasErr }}" hint-placeholder-val="{{ false }}"><p role="alert" style="margin:0;font-size:13px;line-height:1.5;color:var(--danger-text);text-wrap:pretty"><sc-for list="{{ x.err }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></p></sc-if>
+              <sc-if value="{{ x.putInside }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;margin-left:-10px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="200px,34px">Put it inside another claim</x-import></span></sc-if>
+            </div>
+          </sc-for>
+          <div style="padding:0 12px 12px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="110px,34px">Add a claim</x-import></div>
+
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:14px 22px">
+            <span style="width:170px;flex:none;padding-top:2px;font-size:14px;font-weight:600">Lands in</span>
+            <span style="flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:14.5px;line-height:1.5">{{ landsValue }}</span><span style="font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ landsNote }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span><sc-if value="{{ landsBad }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;line-height:1.5;color:var(--danger-text);text-wrap:pretty">Doesn't reach the access token. Check 1 in the preview says why.</span></sc-if></span>
+            <sc-if value="{{ adv }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Segmented" label="Lands in" size="sm" value="{{ landsKey }}" options="{{ landsOptions }}" on-change="{{ noop }}" hint-size="340px,36px"></x-import></span></sc-if>
+          </div>
+
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:16px 22px 20px">
+            <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="accent" disabled="{{ saveOff }}" hint-size="90px,40px">Save</x-import></span>
+            <sc-if value="{{ saveWarn }}" hint-placeholder-val="{{ false }}"><span style="flex:1 1 260px;min-width:0;display:inline-flex;align-items:baseline;gap:8px;font-size:13px;line-height:1.5;color:var(--warn-text);text-wrap:pretty"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import><span><sc-for list="{{ saveNote }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></span></sc-if>
+            <sc-if value="{{ saveCalm }}" hint-placeholder-val="{{ true }}"><span style="flex:1 1 260px;min-width:0;font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ saveNote }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></sc-if>
+          </div>
+        </sc-if>
+      </x-import>
+      </div>
+
+      <!-- Preview -->
+      <div style="flex:1 1 440px;min-width:0;display:flex">
+      <x-import component-from-global-scope="Syndra.Card" class-name="w-full" hint-size="100%,620px">
+        <div style="padding:20px 22px 14px"><h2 class="type-card-title" style="margin:0">Preview</h2><p style="margin:4px 0 0;font-size:14px;line-height:1.5;color:var(--faint)">{{ previewLede }}</p></div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:0 22px 18px">
+          <span style="font-size:13.5px;color:var(--faint)">for</span>
+          <span style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 5px;border:1px solid var(--line-strong);border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Avatar" name="Ada Lovelace" size="row" hint-size="28px,28px"></x-import><span style="font-size:14px">Ada Lovelace</span></span>
+          <x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="120px,34px">Change person</x-import>
+          <span style="flex:1"></span>
+          <span style="font-size:12.5px;color:var(--faint)">Checked 09:54</span>
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,34px">Check again</x-import>
+        </div>
+        <ol aria-label="How this token is made" style="list-style:none;margin:0;padding:0 22px">
+          <sc-for list="{{ checks }}" as="c" hint-placeholder-count="4">
+            <li style="display:flex;gap:12px;align-items:stretch">
+              <span aria-hidden="true" style="width:14px;flex:none;display:flex;flex-direction:column;align-items:center;padding-top:8px">
+                <x-import component-from-global-scope="Syndra.StatusDot" tone="{{ c.tone }}" hint-size="6px,6px"></x-import>
+                <span style="flex:1;width:1px;margin-top:7px;background:var(--line)"></span>
+              </span>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding-bottom:14px">
+                <span style="font-size:14.5px;line-height:1.5;color:var(--ink);text-wrap:pretty"><sc-for list="{{ c.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span>
+                <sc-if value="{{ c.hasDetail }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ c.detail }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></sc-if>
+                <sc-if value="{{ c.hasLink }}" hint-placeholder-val="{{ false }}"><span style="margin-top:4px;display:inline-flex;font-size:14px;font-weight:600"><x-import component-from-global-scope="Syndra.ArrowLink" href="#" hint-size="300px,20px">{{ c.link }}</x-import></span></sc-if>
+                <sc-if value="{{ c.hasTail }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ c.tail }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></sc-if>
+              </div>
+            </li>
+          </sc-for>
+          <li style="display:flex;gap:12px;align-items:stretch">
+            <span aria-hidden="true" style="width:14px;flex:none;display:flex;flex-direction:column;align-items:center;padding-top:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ c5tone }}" hint-size="6px,6px"></x-import></span>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;padding-bottom:20px">
+              <span style="font-size:14.5px;line-height:1.5;color:var(--ink)"><sc-for list="{{ c5text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span>
+              <div style="border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0);padding:12px 14px;font-family:var(--font-mono);font-size:13px;line-height:1.85;overflow-wrap:anywhere">
+                <sc-if value="{{ tokenEmpty }}" hint-placeholder-val="{{ false }}"><div style="color:var(--muted)">{}</div></sc-if>
+                <sc-for list="{{ tokenLines }}" as="l" hint-placeholder-count="1"><div style="position:relative;display:flex;gap:8px"><span aria-hidden="true" style="width:1.5ch;flex:none;font-weight:700;color:var(--ink)">{{ l.g }}</span><sc-if value="{{ l.isSame }}" hint-placeholder-val="{{ true }}"><span style="min-width:0"><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isAdded }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;font-weight:600"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Joins the token: </span><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isRemoved }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;color:var(--muted);text-decoration:line-through"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Leaves the token: </span><span>"{{ l.k }}": {{ l.v }}{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isFaded }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;opacity:0.55"><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if></div></sc-for>
+              </div>
+              <p style="margin:0;max-width:62ch;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><sc-for list="{{ tokenNote }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></p>
+              <div style="display:flex;flex-wrap:wrap;gap:10px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Copy preview</x-import></div>
+            </div>
+          </li>
+        </ol>
+      </x-import>
+      </div>
+    </div>
+
+    <!-- Debug mode (§6): only here, in the claims part -->
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,120px">
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:18px 22px">
+        <span style="width:170px;flex:none"><h2 class="type-card-title" style="margin:0">Debug mode</h2></span>
+        <span style="flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:3px;padding-top:2px">
+          <sc-if value="{{ dbgOff }}" hint-placeholder-val="{{ true }}"><span style="font-size:14.5px;line-height:1.5;text-wrap:pretty">Off. See each real sign-in to {{ app }} as it happens, for 15 minutes.</span><span style="font-size:13px;line-height:1.5;color:var(--faint)">{{ dbgLast }}</span></sc-if>
+          <sc-if value="{{ dbgSeat }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.StatusSeat" tone="{{ dbgTone }}" word="{{ dbgWord }}" note="{{ dbgNote }}" hint-size="320px,40px"></x-import></sc-if>
+        </span>
+        <span style="margin-left:auto;display:flex;gap:8px;justify-content:flex-end;white-space:nowrap"><sc-if value="{{ dbgCanSwitch }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="140px,34px">Change account</x-import></sc-if><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="170px,34px">{{ dbgVerb }}</x-import></span>
+      </div>
+      <sc-if value="{{ dbgList }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Syndra.Unfold" open="{{ true }}" hint-size="100%,400px">
+          <div class="row-divider" style="padding:10px 22px">
+            <x-import component-from-global-scope="Syndra.ReadLine" sections="{{ noSections }}" label="Sign-ins" hint-size="100%,24px">
+              <span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ dbgLiveTone }}" hint-size="6px,6px"></x-import>{{ dbgLive }}</span>
+              <sc-if value="{{ dbgHasWaiting }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;font-size:13px;color:var(--faint)">{{ dbgWaiting }}</span></sc-if>
+            </x-import>
+          </div>
+          <sc-if value="{{ dbgEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:4px;padding:16px 22px 22px">
+              <span style="display:inline-flex;align-items:center;gap:10px;font-size:14.5px"><span class="breathe" style="width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--healthy)"></span>Waiting for your next sign-in to {{ app }}.</span>
+              <span style="padding-left:18px;font-size:13px;color:var(--faint)">Sign in to {{ app }} in another window to see it here.</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ dbgRows }}" hint-placeholder-val="{{ true }}">
+            <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:28px;flex:none"></span><span style="width:96px;flex:none">Time<span aria-hidden="true" style="margin-left:5px;font-size:11px">↓</span></span><span style="width:210px;flex:none">Person</span><span style="width:120px;flex:none">Asked for</span><span style="flex:1;min-width:150px">Syndra answered</span><span style="width:120px;flex:none;text-align:right">Checks</span></x-import>
+            <sc-for list="{{ signins }}" as="s" hint-placeholder-count="5">
+              <div style="display:flex;flex-direction:column">
+                <div class="row-divider motion-tint" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:10px 20px;cursor:pointer">
+                  <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line-strong);border-radius:var(--radius-pill);font-size:12px;color:var(--muted)">{{ s.chev }}</span>
+                  <span style="width:96px;flex:none;font-family:var(--font-mono);font-size:13px">{{ s.time }}</span>
+                  <span style="width:210px;flex:none;display:flex;align-items:center;gap:9px;min-width:0"><x-import component-from-global-scope="Syndra.Avatar" name="{{ s.who }}" size="row" hint-size="28px,28px"></x-import><a href="#" style="font-size:14.5px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ s.who }}</a></span>
+                  <span style="width:120px;flex:none;font-size:14px;color:var(--muted)">{{ s.asked }}</span>
+                  <span style="flex:1 1 150px;min-width:0;font-size:13.5px;line-height:1.5"><sc-for list="{{ s.ans }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span>
+                  <span style="width:120px;flex:none;display:inline-flex;justify-content:flex-end;align-items:center;gap:7px;font-size:13.5px;font-weight:600;white-space:nowrap"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ s.tone }}" hint-size="6px,6px"></x-import>{{ s.word }}</span>
+                </div>
+                <sc-if value="{{ s.open }}" hint-placeholder-val="{{ false }}">
+                  <x-import component-from-global-scope="Syndra.Unfold" open="{{ true }}" hint-size="100%,900px">
+                    <div style="display:flex;flex-direction:column;gap:22px;padding:8px 22px 24px clamp(22px, 4.3vw, 62px)">
+                      <div style="display:flex;flex-wrap:wrap;gap:20px">
+                        <div style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:8px">
+                          <span class="type-label">What Zitadel sent</span>
+                          <p style="margin:0;font-size:14px;line-height:1.5;text-wrap:pretty"><sc-for list="{{ reqLead }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></p>
+                          <div style="border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0);padding:12px 14px;font-family:var(--font-mono);font-size:12.5px;line-height:1.7;color:var(--ink)"><sc-for list="{{ reqJson }}" as="j" hint-placeholder-count="6"><sc-if value="{{ j.plain }}" hint-placeholder-val="{{ true }}"><div style="white-space:pre-wrap;overflow-wrap:anywhere">{{ j.t }}</div></sc-if><sc-if value="{{ j.faded }}" hint-placeholder-val="{{ false }}"><div style="white-space:pre-wrap;overflow-wrap:anywhere;opacity:0.55">{{ j.t }}</div></sc-if></sc-for></div>
+                          <span style="font-size:12.5px;line-height:1.5;color:var(--faint)">Signed by Zitadel. The signature isn't shown.</span>
+                          <span style="display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Copy request</x-import></span>
+                        </div>
+                        <div style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:8px">
+                          <span class="type-label">What Syndra answered</span>
+                          <p style="margin:0;font-size:14px;line-height:1.5;text-wrap:pretty"><sc-for list="{{ ansLead }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></p>
+                          <div style="border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0);padding:12px 14px;font-family:var(--font-mono);font-size:12.5px;line-height:1.7;color:var(--ink)"><sc-for list="{{ ansJson }}" as="j" hint-placeholder-count="6"><sc-if value="{{ j.plain }}" hint-placeholder-val="{{ true }}"><div style="white-space:pre-wrap;overflow-wrap:anywhere">{{ j.t }}</div></sc-if><sc-if value="{{ j.faded }}" hint-placeholder-val="{{ false }}"><div style="white-space:pre-wrap;overflow-wrap:anywhere;opacity:0.55">{{ j.t }}</div></sc-if></sc-for></div>
+                          <span style="display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Copy answer</x-import></span>
+                        </div>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:8px">
+                        <span class="type-label">The checks for this sign-in</span>
+                        <sc-for list="{{ dbgChecks }}" as="k" hint-placeholder-count="5"><div style="display:flex;gap:12px;align-items:flex-start"><span aria-hidden="true" style="width:14px;flex:none;display:flex;justify-content:center;padding-top:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ k.tone }}" hint-size="6px,6px"></x-import></span><span style="font-size:14px;line-height:1.5;text-wrap:pretty"><sc-for list="{{ k.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></div></sc-for>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:8px;max-width:760px">
+                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px"><span class="type-label">Your claims, as {{ app }} will see them</span><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hollow="{{ true }}" hint-size="200px,24px">Rebuilt, not the signed token</x-import></div>
+                        <p style="margin:0;max-width:70ch;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Zitadel adds its own claims, signs the token and hands it to {{ app }} after Syndra answers, so Syndra never sees the token. This is rebuilt from what Zitadel sent and what Syndra answered.</p>
+                        <div style="border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0);padding:12px 14px;font-family:var(--font-mono);font-size:12.5px;line-height:1.7;color:var(--ink)"><sc-for list="{{ rebuiltJson }}" as="j" hint-placeholder-count="6"><sc-if value="{{ j.plain }}" hint-placeholder-val="{{ true }}"><div style="white-space:pre-wrap;overflow-wrap:anywhere">{{ j.t }}</div></sc-if><sc-if value="{{ j.faded }}" hint-placeholder-val="{{ false }}"><div style="white-space:pre-wrap;overflow-wrap:anywhere;opacity:0.55">{{ j.t }}</div></sc-if></sc-for></div>
+                        <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">The faded lines are Zitadel's own, rebuilt from what it sent. <span class="type-mono">iss</span>, <span class="type-mono">aud</span> and the times are left out.</p>
+                      </div>
+                    </div>
+                  </x-import>
+                </sc-if>
+              </div>
+            </sc-for>
+            <sc-if value="{{ dbgMore }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="padding:6px 12px"><x-import component-from-global-scope="Syndra.PaginationRow" shown="{{ 10 }}" total="{{ 23 }}" initial="{{ 10 }}" step="{{ 25 }}" on-more="{{ noop }}" on-all="{{ noop }}" on-back="{{ noop }}" hint-size="100%,44px"></x-import></div></sc-if>
+            <sc-if value="{{ dbgEnded }}" hint-placeholder-val="{{ false }}"><p class="row-divider" style="margin:0;padding:12px 22px 16px;font-size:13px;line-height:1.5;color:var(--faint)">What it saw stays here until 11:21, then Syndra forgets it. It's gone sooner if Syndra restarts.</p></sc-if>
+          </sc-if>
+        </x-import>
+      </sc-if>
+    </x-import>
+
+    <!-- Test people (A-11 §3) -->
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,320px">
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 18px;padding:20px 22px 14px">
+        <div style="flex:1 1 300px;min-width:0"><h2 class="type-card-title" style="margin:0">Test people</h2><p style="margin:4px 0 0;max-width:76ch;font-size:14px;line-height:1.5;color:var(--faint)">Up to five people every change to what {{ app }} is told is checked against. Choose people who hold their access in different ways.</p></div>
+        <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="150px,34px">Add a test person</x-import></span>
+      </div>
+      <sc-if value="{{ notEditing }}" hint-placeholder-val="{{ true }}">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:240px;flex:none">Person</span><span style="flex:1;min-width:200px">What {{ app }} receives</span><span style="width:120px;flex:none;text-align:right">Checks</span><span style="width:96px;flex:none"></span></x-import>
+        <sc-for list="{{ testRows }}" as="r" hint-placeholder-count="4">
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:14px 20px">
+            <span style="width:240px;flex:none;display:flex;gap:10px;align-items:flex-start"><x-import component-from-global-scope="Syndra.Avatar" name="{{ r.name }}" size="row" hint-size="28px,28px"></x-import><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><a href="#" style="font-size:15px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.name }}</a><span style="font-size:13px;line-height:1.45;color:var(--faint)"><sc-for list="{{ r.how }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></span></span>
+            <span style="flex:1 1 260px;min-width:0;font-family:var(--font-mono);font-size:13px;line-height:1.7;overflow-wrap:anywhere"><sc-if value="{{ r.nowEmpty }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted)">{}</span></sc-if><sc-for list="{{ r.now }}" as="l" hint-placeholder-count="1"><div style="position:relative;display:flex;gap:8px"><span aria-hidden="true" style="width:1.5ch;flex:none;font-weight:700;color:var(--ink)">{{ l.g }}</span><sc-if value="{{ l.isSame }}" hint-placeholder-val="{{ true }}"><span style="min-width:0"><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isAdded }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;font-weight:600"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Joins the token: </span><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isRemoved }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;color:var(--muted);text-decoration:line-through"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Leaves the token: </span><span>"{{ l.k }}": {{ l.v }}{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isFaded }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;opacity:0.55"><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if></div></sc-for></span>
+            <span style="width:120px;flex:none;display:inline-flex;justify-content:flex-end;align-items:center;gap:7px;font-size:13.5px;font-weight:600;white-space:nowrap"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.tone }}" hint-size="6px,6px"></x-import>{{ r.word }}</span>
+            <span style="width:96px;flex:none;display:flex;justify-content:flex-end;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="84px,34px">Remove</x-import></span>
+          </div>
+        </sc-for>
+      </sc-if>
+      <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:240px;flex:none">Person</span><span style="flex:1;min-width:180px">{{ beforeHead }}</span><span style="flex:1;min-width:180px">After this draft</span><span style="width:190px;flex:none">Difference</span><span style="width:96px;flex:none"></span></x-import>
+        <sc-for list="{{ testRows }}" as="r" hint-placeholder-count="4">
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:14px 20px">
+            <span style="width:240px;flex:none;display:flex;gap:10px;align-items:flex-start"><x-import component-from-global-scope="Syndra.Avatar" name="{{ r.name }}" size="row" hint-size="28px,28px"></x-import><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><a href="#" style="font-size:15px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.name }}</a><span style="font-size:13px;line-height:1.45;color:var(--faint)"><sc-for list="{{ r.how }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></span></span>
+            <span style="flex:1 1 180px;min-width:0;font-family:var(--font-mono);font-size:13px;line-height:1.7;overflow-wrap:anywhere"><sc-if value="{{ r.nowEmpty }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted)">{}</span></sc-if><sc-for list="{{ r.now }}" as="l" hint-placeholder-count="1"><div style="position:relative;display:flex;gap:8px"><span aria-hidden="true" style="width:1.5ch;flex:none;font-weight:700;color:var(--ink)">{{ l.g }}</span><sc-if value="{{ l.isSame }}" hint-placeholder-val="{{ true }}"><span style="min-width:0"><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isAdded }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;font-weight:600"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Joins the token: </span><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isRemoved }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;color:var(--muted);text-decoration:line-through"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Leaves the token: </span><span>"{{ l.k }}": {{ l.v }}{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isFaded }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;opacity:0.55"><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if></div></sc-for></span>
+            <span style="flex:1 1 180px;min-width:0;font-family:var(--font-mono);font-size:13px;line-height:1.7;overflow-wrap:anywhere"><sc-for list="{{ r.after }}" as="l" hint-placeholder-count="1"><div style="position:relative;display:flex;gap:8px"><span aria-hidden="true" style="width:1.5ch;flex:none;font-weight:700;color:var(--ink)">{{ l.g }}</span><sc-if value="{{ l.isSame }}" hint-placeholder-val="{{ true }}"><span style="min-width:0"><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isAdded }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;font-weight:600"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Joins the token: </span><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isRemoved }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;color:var(--muted);text-decoration:line-through"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Leaves the token: </span><span>"{{ l.k }}": {{ l.v }}{{ l.comma }}</span></span></sc-if><sc-if value="{{ l.isFaded }}" hint-placeholder-val="{{ false }}"><span style="min-width:0;opacity:0.55"><span style="color:var(--accent-text)">"{{ l.k }}"</span><span style="color:var(--muted)">: </span><span style="color:var(--ink)">{{ l.v }}</span><span style="color:var(--muted)">{{ l.comma }}</span></span></sc-if></div></sc-for></span>
+            <span style="width:190px;flex:none;font-size:13.5px;line-height:1.5;text-wrap:pretty"><sc-for list="{{ r.diff }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span>
+            <span style="width:96px;flex:none;display:flex;justify-content:flex-end;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="84px,34px">Remove</x-import></span>
+          </div>
+        </sc-for>
+      </sc-if>
+      <div style="height:6px"></div>
+    </x-import>
+
+    <!-- What the app reads (A-11 §6), now with where -->
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,180px">
+      <div style="padding:20px 22px 14px"><h2 class="type-card-title" style="margin:0">What {{ app }} reads</h2><p style="margin:4px 0 0;max-width:76ch;font-size:14px;line-height:1.5;color:var(--faint)">The claims {{ app }}'s own code expects, and where it looks for them. Syndra checks every preview and every save against this note.</p></div>
+      <sc-if value="{{ contractNone }}" hint-placeholder-val="{{ false }}"><p class="row-divider" style="margin:0;padding:14px 22px;font-size:14px;line-height:1.5;color:var(--faint)">{{ contractNoneText }}</p></sc-if>
+      <sc-for list="{{ contract }}" as="q" hint-placeholder-count="1">
+        <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:14px 22px">
+          <span style="width:170px;flex:none;padding-top:1px"><x-import component-from-global-scope="Syndra.Mono" hint-size="120px,18px">{{ q.key }}</x-import></span>
+          <span style="flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:4px">
+            <span style="font-size:14.5px;line-height:1.5"><sc-for list="{{ q.type }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span>
+            <span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ q.tone }}" hint-size="6px,6px"></x-import>{{ q.verdict }}</span>
+            <sc-if value="{{ q.hasWhy }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty"><sc-for list="{{ q.why }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></sc-if>
+          </span>
+          <span style="width:200px;flex:none;margin-left:auto;display:flex;justify-content:flex-end;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">Change</x-import></span>
+        </div>
+      </sc-for>
+      <div class="row-divider" style="padding:10px 12px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="160px,34px">Add a claim it reads</x-import></div>
+    </x-import>
+
+    <!-- History (A-11 §5), per shape -->
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+      <div style="padding:20px 22px 14px"><h2 class="type-card-title" style="margin:0">History</h2><p style="margin:4px 0 0;max-width:76ch;font-size:14px;line-height:1.5;color:var(--faint)">Every save of what {{ app }} is told, kept as it was. Going back saves an old version again, as a new one.</p></div>
+      <sc-if value="{{ historyNone }}" hint-placeholder-val="{{ false }}"><p class="row-divider" style="margin:0;padding:14px 22px 18px;font-size:14px;line-height:1.5;color:var(--faint)">{{ historyNoneText }}</p></sc-if>
+      <sc-if value="{{ historyHas }}" hint-placeholder-val="{{ true }}">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:130px;flex:none">Version<span aria-hidden="true" style="margin-left:5px;font-size:11px">↓</span></span><span style="flex:1;min-width:220px">What changed</span><span style="width:150px;flex:none;text-align:right">Saved</span><span style="width:210px;flex:none"></span></x-import>
+        <sc-for list="{{ history }}" as="v" hint-placeholder-count="3">
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:14px 20px">
+            <span style="width:130px;flex:none;font-size:15px;font-weight:600">{{ v.name }}</span>
+            <span style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:14.5px;line-height:1.5;text-wrap:pretty"><sc-for list="{{ v.change }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span><span style="font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">“{{ v.note }}”</span></span>
+            <span style="width:150px;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:14px"><span>{{ v.date }}</span><a href="#" style="font-size:13px;color:var(--muted);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Kanishk Singh</a></span>
+            <span style="width:210px;flex:none;margin-left:auto;display:flex;justify-content:flex-end;white-space:nowrap">
+              <sc-if value="{{ v.inUse }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:7px;padding-top:6px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>In use</span></sc-if>
+              <sc-if value="{{ v.old }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="190px,34px">Go back to this version</x-import></sc-if>
+            </span>
+          </div>
+        </sc-for>
+        <div style="height:6px"></div>
+      </sc-if>
+    </x-import>
+  </div>
+  </sc-if>
+
+  <!-- Apps index -->
+  <sc-if value="{{ isIndex }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="padding-bottom:14px"><x-import component-from-global-scope="Syndra.PageHeader" title="Apps" lede="An app is something people sign in to: NetBird, GitLab, the inventory. Each is told a person's roles from one project, in its own shape. Open an app when it isn't seeing the roles it should." hint-size="100%,130px"></x-import></div>
+    <div style="display:flex;flex-direction:column;gap:4px"><x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ readState }}" subject="What Zitadel confirmed" hint-size="100%,24px"></x-import><p style="margin:0;max-width:100ch;font-size:13.5px;line-height:1.55;color:var(--muted)"><strong style="color:var(--warn-text)">Home Assistant doesn't get its claims.</strong> Its page says which Zitadel setting to change. GitLab uses Code's default shape.</p></div>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,560px">
+      <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:300px;min-width:170px">App<span aria-hidden="true" style="margin-left:5px;font-size:11px">↑</span></span><span style="flex:1;min-width:140px">Reads roles from</span><span style="width:220px;flex:none;text-align:right">Claims</span><span style="width:110px;flex:none;text-align:right">People</span></x-import>
+      <sc-for list="{{ indexRows }}" as="a" hint-placeholder-count="10">
+        <div class="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+          <span class="w-full tablet:w-[300px]" style="min-width:170px;display:flex;flex-direction:column;gap:2px"><a href="#" style="font-size:15.5px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ a.name }}</a><span style="font-size:13px;color:var(--faint)">{{ a.kind }}</span></span>
+          <span class="w-full tablet:flex-1" style="min-width:140px;font-size:14px"><a href="#" style="color:var(--muted);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ a.project }}</a></span>
+          <span class="tablet:w-[220px] tablet:shrink-0 tablet:text-right" style="display:flex;flex-direction:column;gap:2px;font-size:13px">
+            <sc-if value="{{ a.hasKey }}" hint-placeholder-val="{{ true }}"><span><x-import component-from-global-scope="Syndra.Mono" hint-size="120px,18px">{{ a.claim }}</x-import></span></sc-if>
+            <sc-if value="{{ a.calm }}" hint-placeholder-val="{{ true }}"><span style="color:var(--faint)">{{ a.where }}</span></sc-if>
+            <sc-if value="{{ a.warn }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;justify-content:flex-end;align-items:center;gap:7px;font-weight:600;color:var(--warn-text)"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import>{{ a.where }}</span></sc-if>
+          </span>
+          <span class="tablet:w-[110px] tablet:shrink-0 tablet:text-right" style="font-size:15px">{{ a.people }}</span>
+        </div>
+      </sc-for>
+    </x-import>
+  </div>
+  </sc-if>
+
+  <!-- Save summary (A-11 §4, rescoped) -->
+  <sc-if value="{{ saveOpen }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="save-title" hint-size="640px,700px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="Save what NetBird is told" title-id="save-title" lede="{{ saveLede }}" hint-size="100%,100px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:18px">
+      <sc-if value="{{ showForm }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span class="type-label">What changes</span>
+          <sc-for list="{{ dlgChanges }}" as="d" hint-placeholder-count="2"><div style="display:flex;gap:10px;align-items:baseline"><span aria-hidden="true" style="width:1.5ch;flex:none;font-family:var(--font-mono);font-size:13px;font-weight:700">{{ d.g }}</span><span style="font-size:14.5px;line-height:1.5;text-wrap:pretty"><sc-for list="{{ d.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></div></sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span class="type-label">What NetBird will do</span>
+          <sc-for list="{{ dlgDo }}" as="d" hint-placeholder-count="2"><div style="display:flex;gap:10px;align-items:flex-start"><span aria-hidden="true" style="width:1.5ch;flex:none;display:flex;justify-content:center;padding-top:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import></span><span style="font-size:14.5px;line-height:1.5;text-wrap:pretty"><sc-for list="{{ d.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></div></sc-for>
+          <p style="margin:0;padding-left:calc(1.5ch + 10px);font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">The new group appears in NetBird when the first of them signs in. Point NetBird's policies at it then: a group you make by hand in NetBird isn't joined.</p>
+        </div>
+        <p style="margin:0;font-size:14px;line-height:1.5;color:var(--muted)">Your 4 test people: 3 change as the page shows, and Rohan Mehta doesn't.</p>
+        <label style="display:flex;gap:10px;align-items:flex-start;font-size:14.5px;line-height:1.5"><x-import component-from-global-scope="Syndra.Checkbox" class-name="mt-1" checked="{{ false }}" on-change="{{ noop }}" hint-size="16px,16px"></x-import><span>I understand NetBird will move 12 people to a new group and take 4 out of <span class="type-mono">netbird-guests</span>.</span></label>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <x-import component-from-global-scope="Syndra.FieldLabel" hint-size="180px,18px">What changed, for History</x-import>
+          <x-import component-from-global-scope="Syndra.Textarea" value="Network's new names; guests leave NetBird for the guest Wi-Fi." read-only="{{ true }}" aria-label="What changed, for History" hint-size="100%,64px"></x-import>
+        </div>
+      </sc-if>
+      <sc-if value="{{ saved }}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="display:flex;flex-direction:column;gap:6px;padding:6px 0 10px">
+          <span style="display:inline-flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:22px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" bloom="{{ true }}" hint-size="8px,8px"></x-import>Saved</span>
+          <p style="margin:0;font-size:15px;line-height:1.55;text-wrap:pretty">NetBird's claims are now version 4.</p>
+          <span style="font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">12 people move to <span class="type-mono">network-staff</span> as they sign in. Point NetBird's policies at it once it appears there; a group made by hand isn't joined.</span>
+        </div>
+      </sc-if>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ dlgFoot }}" hint-size="100%,80px">
+      <sc-if value="{{ showForm }}" hint-placeholder-val="{{ true }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Cancel</x-import></span><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="accent" disabled="{{ true }}" hint-size="90px,40px">Save</x-import></span></sc-if>
+      <sc-if value="{{ saved }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Close</x-import></sc-if>
+    </x-import>
+  </x-import>
+  </sc-if>
+
+  <!-- The template sheet (§2) -->
+  <sc-if value="{{ tplOpen }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="tpl-title" hint-size="640px,900px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="{{ sheet.title }}" title-id="tpl-title" lede="{{ sheet.lede }}" hint-size="100%,100px"></x-import>
+    <div style="padding:0 24px 6px;display:flex;flex-direction:column;gap:18px">
+      <sc-for list="{{ sheet.sections }}" as="sec" hint-placeholder-count="5">
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span class="type-label">{{ sec.label }}</span>
+          <sc-for list="{{ sec.lines }}" as="k" hint-placeholder-count="2"><div style="display:flex;gap:10px;align-items:flex-start"><span aria-hidden="true" style="width:1.5ch;flex:none;display:flex;justify-content:center;padding-top:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ k.tone }}" hint-size="6px,6px"></x-import></span><span style="font-size:14px;line-height:1.55;text-wrap:pretty;overflow-wrap:anywhere"><sc-for list="{{ k.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></div></sc-for>
+        </div>
+      </sc-for>
+      <sc-if value="{{ sheet.hasChanged }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span class="type-label">Changed since you started from it</span>
+          <sc-for list="{{ sheet.changed }}" as="d" hint-placeholder-count="2"><div style="display:flex;gap:10px;align-items:baseline"><span aria-hidden="true" style="width:1.5ch;flex:none;font-family:var(--font-mono);font-size:13px;font-weight:700">{{ d.g }}</span><span style="font-size:14px;line-height:1.55;text-wrap:pretty"><sc-for list="{{ d.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></div></sc-for>
+        </div>
+      </sc-if>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ sheet.foot }}" hint-size="100%,80px">
+      <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Close</x-import></span>
+      <sc-if value="{{ sheet.hasAgain }}" hint-placeholder-val="{{ false }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="230px,40px">Start again from the template</x-import></span></sc-if>
+      <sc-if value="{{ sheet.hasStart }}" hint-placeholder-val="{{ false }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="200px,40px">{{ sheet.start }}</x-import></span></sc-if>
+    </x-import>
+  </x-import>
+  </sc-if>
+
+  <!-- Copy another app's shape, later (§8) -->
+  <sc-if value="{{ copyOpen }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="copy-title" hint-size="640px,760px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="Copy another app's shape" title-id="copy-title" lede="{{ copyLede }}" hint-size="100%,100px"></x-import>
+    <div style="padding:0 10px"><div style="display:flex;flex-direction:column;gap:6px;padding:4px 14px 12px">
+            <sc-for list="{{ copyList }}" as="t" hint-placeholder-count="7">
+              <sc-if value="{{ t.isLabel }}" hint-placeholder-val="{{ false }}"><span class="type-label" style="padding:10px 8px 2px">{{ t.label }}</span></sc-if>
+              <sc-if value="{{ t.isRow }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column">
+                <x-import component-from-global-scope="Syndra.ChoiceRow" selected="{{ t.sel }}" on-toggle="{{ noop }}" single="{{ true }}" name="shape-from" title="{{ t.title }}" meta="{{ t.meta }}" description="{{ t.desc }}" note="{{ t.note }}" hint-size="100%,60px"></x-import>
+                <sc-if value="{{ t.sel }}" hint-placeholder-val="{{ false }}">
+                  <x-import component-from-global-scope="Syndra.Unfold" open="{{ true }}" hint-size="100%,150px">
+                    <div style="display:flex;flex-direction:column;gap:7px;padding:10px 14px 8px 44px">
+                      <sc-for list="{{ t.lines }}" as="k" hint-placeholder-count="3">
+                        <sc-if value="{{ k.isDot }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:10px;align-items:flex-start"><span aria-hidden="true" style="width:6px;flex:none;display:flex;padding-top:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import></span><span style="font-size:13.5px;line-height:1.5;color:var(--ink);text-wrap:pretty"><sc-for list="{{ k.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></div></sc-if>
+                        <sc-if value="{{ k.isFaint }}" hint-placeholder-val="{{ false }}"><span style="padding-left:16px;font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty"><sc-for list="{{ k.text }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isT }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if><sc-if value="{{ p.isM }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Mono" hint-size="90px,18px">{{ p.m }}</x-import></sc-if><sc-if value="{{ p.isL }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.l }}</a></sc-if></sc-for></span></sc-if>
+                      </sc-for>
+                      <sc-if value="{{ t.hasSheet }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;margin-left:-10px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="180px,34px">See the whole template</x-import></span></sc-if>
+                    </div>
+                  </x-import>
+                </sc-if>
+              </div>
+              </sc-if>
+            </sc-for>
+          </div></div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ copyFoot }}" hint-size="100%,80px">
+      <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Cancel</x-import></span>
+      <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="200px,40px">{{ copyVerb }}</x-import></span>
+    </x-import>
+  </x-import>
+  </sc-if>
+
+  <!-- Turning on Debug mode (§6) -->
+  <sc-if value="{{ dbgDlg }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="dbg-title" hint-size="640px,700px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="{{ dbgTitle }}" title-id="dbg-title" lede="{{ dbgDlgLede }}" hint-size="100%,100px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:12px">
+      <sc-if value="{{ dbgForm }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px"><span class="type-label">Whose sign-ins</span><span style="font-size:12.5px;color:var(--faint)">One account at a time</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ dbgScopes }}" as="o" hint-placeholder-count="5"><x-import component-from-global-scope="Syndra.ChoiceRow" selected="{{ o.sel }}" on-toggle="{{ noop }}" single="{{ true }}" name="scope" locked="{{ o.locked }}" locked-note="{{ o.lockedNote }}" title="{{ o.title }}" description="{{ o.desc }}" note="{{ o.note }}" hint-size="100%,56px"></x-import></sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="120px,18px">Someone else</x-import><x-import component-from-global-scope="Syndra.Input" placeholder="Choose a person" value="" read-only="{{ true }}" aria-label="Someone else: choose a person" hint-size="100%,40px"></x-import></div>
+        <p style="margin:0;font-size:13px;line-height:1.55;color:var(--faint);text-wrap:pretty">Syndra keeps what it sees in memory for an hour, never in its database. Names and emails show, because this is for you to debug. Signatures and secrets never do.</p>
+      </sc-if>
+      <sc-if value="{{ dbgDone }}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="display:flex;flex-direction:column;gap:6px;padding:6px 0 10px">
+          <span style="display:inline-flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:22px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" bloom="{{ true }}" hint-size="8px,8px"></x-import>On</span>
+          <p style="margin:0;font-size:15px;line-height:1.55;text-wrap:pretty">Debug mode is on for NetBird until 10:21, for your sign-ins.</p>
+          <span style="font-size:13px;line-height:1.5;color:var(--faint)">Each sign-in appears under the preview as it happens.</span>
+        </div>
+      </sc-if>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ dbgFoot }}" hint-size="100%,80px">
+      <sc-if value="{{ dbgForm }}" hint-placeholder-val="{{ true }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Cancel</x-import></span><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="190px,40px">{{ dbgConfirm }}</x-import></span></sc-if>
+      <sc-if value="{{ dbgDone }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Close</x-import></sc-if>
+    </x-import>
+  </x-import>
+  </sc-if>
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":45000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    const advFrames = ["netbird-adv", "rows", "lands-fail"];
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", advFrames.indexOf(this.frame) >= 0 ? "advanced" : "basic"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra; const h = React.createElement;
+    const raw = this.st;
+    const st = raw === "phone" ? "netbird" : raw === "phone-debug" ? "debug-open" : raw;
+    // Sentences carry claim keys in `backticks` (drawn with Syndra.Mono) and page links in [[double brackets]].
+    const P = (s) => {
+      const out = [];
+      String(s || "").split(/(`[^`]+`|\[\[[^\]]+\]\])/).forEach((seg) => {
+        if (!seg) return;
+        if (seg[0] === "`") out.push({ isM: true, m: seg.slice(1, -1) });
+        else if (seg.indexOf("[[") === 0) out.push({ isL: true, l: seg.slice(2, -2) });
+        else out.push({ isT: true, t: seg });
+      });
+      return out;
+    };
+    const f = (frame, label, note) => ({ src: "a14-claims-shaping-2.dc.html?frame=" + frame, label, note });
+    // A token line: kind is same | added | removed | faded. The glyph is the cue that isn't colour.
+    const L = (kind, k, v) => ({ k, v, isSame: kind === "same", isAdded: kind === "added", isRemoved: kind === "removed", isFaded: kind === "faded", g: kind === "added" ? "+" : kind === "removed" ? "−" : "" });
+    const commas = (lines) => lines.map((l, i) => ({ ...l, comma: i < lines.length - 1 ? "," : "" }));
+    const ck = (tone, text, detail, fix) => {
+      const x = fix || {};
+      return { tone, text: P(text), hasDetail: !!detail, detail: P(detail), hasLink: !!x.link, link: x.link, hasTail: !!x.tail, tail: P(x.tail) };
+    };
+    // Raw JSON lines; a line starting with ~ is Zitadel's own (faded) in the rebuild.
+    const J = (lines) => lines.map((t) => t.indexOf("~") === 0 ? { t: t.slice(1), plain: false, faded: true } : { t, plain: true, faded: false });
+    // A sheet line; a leading ! makes its dot amber (something the app will act on).
+    const K = (s) => s.indexOf("!") === 0 ? { tone: "warn", text: P(s.slice(1)) } : { tone: "neutral", text: P(s) };
+
+    // ---------------------------------------------------------------- templates (words from docs/research/2026-11-03-app-claims.md)
+    const TPL = {
+      "netbird": { title: "NetBird", short: "NetBird", meta: "groups · access token and userinfo", apps: ["NetBird"],
+        desc: "Each role you include becomes a NetBird group.",
+        lede: "For self-hosted NetBird. Each role you include becomes a NetBird group.",
+        lines: ["Sends `groups`, a list of the roles you include, in NetBird's words.", "Lands in the access token and userinfo, so NetBird finds it either way.", "A rename makes a new NetBird group and moves people out of the old one."],
+        sections: [
+          ["What it sends", ["`groups`: a list of the roles you include, in NetBird's words, such as `netbird-staff`. Always a list; `[]` when someone holds none.", "Nothing else. NetBird reads who someone is from Zitadel's own `sub`, `email`, `name` and `preferred_username`."]],
+          ["Where it lands", ["The access token and userinfo. NetBird reads its access token, and its built-in Dex reads the ID token with userinfo, so both ways work."]],
+          ["What NetBird does with it", ["Each value becomes a NetBird group.", "On every sign-in, NetBird adds the person to the groups in the claim and takes them out of any group it made from a token that the claim no longer names.", "!A rename makes a new group and moves people out of the old one. Policies on the old group stop matching them.", "A group you made by hand in NetBird with the same name isn't joined."]],
+          ["What no claim can do", ["Set NetBird's owner, admin or user role. Syndra found no claim that sets them; they are set in NetBird."]],
+          ["Set in NetBird", ["Settings › Groups: turn on Enable JWT group sync, and set JWT claim to `groups`.", "!JWT allow groups turns away anyone in none of them. Never save one you aren't in."]],
+          ["Set in Zitadel", ["Auth token type: JWT. A Bearer token carries no claims.", "User Info inside ID Token: on."]],
+        ] },
+      "gitlab": { title: "GitLab", short: "GitLab", meta: "groups · ID token and userinfo", apps: ["GitLab"],
+        desc: "Matches the group lists in GitLab's gitlab.rb.",
+        lede: "For self-managed GitLab signing in with OpenID Connect. Its group lists decide who may sign in and who is an admin.",
+        lines: ["Sends `groups`, a list in the words your `gitlab.rb` uses.", "Lands in the ID token and userinfo. GitLab merges the two.", "Group sync is GitLab Premium or Ultimate. On the free edition these settings do nothing."],
+        sections: [
+          ["What it sends", ["`groups`: a list in the words your `gitlab.rb` uses, such as `gitlab-users`, `gitlab-admins` and `gitlab-external`. Always a list; `[]` when someone holds none.", "Nothing else. GitLab takes `name`, `email`, `preferred_username`, `given_name` and `family_name` from Zitadel's own claims."]],
+          ["Where it lands", ["The ID token and userinfo. GitLab merges them, and the ID token wins where they differ."]],
+          ["What GitLab does with it", ["!If `required_groups` is set, anyone without a match can't sign in.", "!If `admin_groups` is set, GitLab makes and unmakes admins on every sign-in, including admins made by hand. `auditor_groups` and `external_groups` work the same way, and external cancels admin.", "!A missing or renamed claim demotes every admin and can lock everyone out."]],
+          ["What no claim can do", ["Do anything on GitLab's free edition. Group sync is Premium or Ultimate only."]],
+          ["Set in GitLab", ["Under `args.client_options.gitlab`: `groups_attribute: groups`, and the four lists, naming these words exactly.", "Renaming is optional: GitLab's lists can name Syndra's keys directly. If you rename, change `gitlab.rb` in the same step."]],
+          ["Set in Zitadel", ["User Info inside ID Token: on. GitLab doesn't read the access token."]],
+        ] },
+      "supabase-oidc": { title: "Supabase, custom OIDC provider", short: "Supabase, custom OIDC", meta: "custom_claims.groups · ID token and userinfo", apps: ["Supabase"],
+        desc: "Supabase Auth's custom: provider. It keeps only the custom_claims object.",
+        lede: "For Supabase Auth's custom OIDC provider (custom:). It keeps one object, custom_claims, and drops other keys it doesn't know.",
+        lines: ["Sends `custom_claims` › `groups`: a list inside one object, always, `[]` when empty.", "Lands in the ID token, the only one Supabase reads.", "It lands in `user_metadata`, which the person can edit, so it isn't safe for row-level security as it arrives."],
+        sections: [
+          ["What it sends", ["`custom_claims` › `groups`: a list of the roles you include, inside one object. Sent as `{\"custom_claims\": {\"groups\": [\"analyst\"]}}`.", "Always sent, with `[]` when someone holds none.", "`given_name`, `family_name` and `name` already reach `user_metadata` on their own. Put them inside `custom_claims` only if your code reads them there."]],
+          ["Where it lands", ["The ID token, and userinfo too. Supabase reads only the ID token when there is one, and Zitadel always sends one."]],
+          ["What Supabase does with it", ["It keeps the top-level `custom_claims` object and drops other keys it doesn't know. A top-level `groups` would be lost unless it is on `custom_claims_allowlist`.", "!It rewrites the person's metadata on every sign-in, key by key, and a missing key keeps its old value. That's why the claim is always sent, even empty.", "Read it as `auth.jwt()->'user_metadata'->'custom_claims'->'groups'`."]],
+          ["What no claim can do", ["!Make this safe for row-level security as it arrives. It lands in `user_metadata`, which the signed-in person can edit. Copy it into `app_metadata` with a Custom Access Token Hook first.", "Refresh groups without a new sign-in through Zitadel. Supabase's own refresh doesn't fetch them."]],
+          ["Set in Supabase", ["A `custom:` provider with `provider_type: \"oidc\"`. Needs Supabase Auth v2.196.0 or later, or self-hosted 0.8.1.", "Which one is yours? A `custom:` provider is this one; `GOTRUE_EXTERNAL_KEYCLOAK_*` settings mean the Keycloak one."]],
+          ["Set in Zitadel", ["User Info inside ID Token: on."]],
+        ] },
+      "supabase-keycloak": { title: "Supabase, Keycloak provider", short: "Supabase, Keycloak", meta: "groups · userinfo", apps: ["Supabase"],
+        desc: "Supabase Auth's Keycloak provider. It reads only userinfo.",
+        lede: "For Supabase Auth's Keycloak provider. It reads only userinfo, and copies every key it doesn't know into custom_claims.",
+        lines: ["Sends `groups`, a top-level list, always, `[]` when empty.", "Lands in userinfo, the only place this provider reads.", "It asks Keycloak's paths, so Zitadel needs a rewrite in front of it."],
+        sections: [
+          ["What it sends", ["`groups`: a top-level list of the roles you include. Supabase copies every key it doesn't know into `custom_claims`, so it arrives as `user_metadata.custom_claims.groups`.", "Always sent, with `[]` when someone holds none."]],
+          ["Where it lands", ["Userinfo. This provider reads only userinfo."]],
+          ["What Supabase does with it", ["!It rewrites the person's metadata on every sign-in, key by key, and a missing key keeps its old value. That's why the claim is always sent, even empty."]],
+          ["What no claim can do", ["Point this provider at Zitadel by itself. It asks Keycloak's own paths, so Zitadel needs a rewrite in front of it.", "!Make this safe for row-level security as it arrives. It lands in `user_metadata`, which the signed-in person can edit. Copy it into `app_metadata` with a Custom Access Token Hook first."]],
+          ["Set in Supabase", ["The `GOTRUE_EXTERNAL_KEYCLOAK_*` settings.", "Which one is yours? Those settings mean this one; a `custom:` provider is the custom OIDC one."]],
+          ["Set in Zitadel", ["Nothing beyond the app itself: userinfo always carries these claims."]],
+        ] },
+      "home-assistant": { title: "Home Assistant", short: "Home Assistant", meta: "groups · ID token and userinfo", apps: ["Home Assistant"],
+        desc: "For the hass-oidc-auth integration.",
+        lede: "For Home Assistant with the hass-oidc-auth integration. Its groups decide who is an administrator, once.",
+        lines: ["Sends `groups`, a list. Name the roles `admins` and `users`, Home Assistant's defaults.", "Lands in the ID token and userinfo; userinfo fills in what's missing.", "Home Assistant sets a role only when someone's user is first made."],
+        sections: [
+          ["What it sends", ["`groups`: a list of the roles you include. Name them `admins` and `users`, Home Assistant's defaults, or set `roles.admin` and `roles.user` to Syndra's words.", "Always a list. Anything else is read as no groups."]],
+          ["Where it lands", ["The ID token and userinfo. Home Assistant reads the ID token, and userinfo fills in what's missing."]],
+          ["What Home Assistant does with it", ["In `admins`: an administrator.", "In `users`, or when no user group is set: a user.", "!If `roles.user` is set, anyone in neither group is turned away.", "!Renaming the admin role without changing `roles.admin` means new people silently get no admin."]],
+          ["What no claim can do", ["!Change someone's role once their Home Assistant user exists. Home Assistant sets it only when the user is first made. Promote or demote existing people by hand in Home Assistant."]],
+          ["Set in Home Assistant", ["The `auth_oidc` integration (hass-oidc-auth). Home Assistant has no OIDC sign-in of its own.", "`claims.groups: groups`, which is already its default."]],
+          ["Set in Zitadel", ["User Info inside ID Token: on."]],
+        ] },
+      "sign-in-only": { title: "Sign-in only", short: "Sign-in only", meta: "nothing of its own", apps: ["Vaultwarden", "Kan", "Navidrome"],
+        desc: "For Vaultwarden, Kan and Navidrome. Who may sign in is Zitadel's role check.",
+        lede: "For apps with no groups at all. Syndra adds nothing; who may sign in is decided in Zitadel.",
+        lines: ["Sends nothing of its own. Zitadel's standard claims do the work.", "Who may sign in is Zitadel's role check for the project, not a claim."],
+        sections: [
+          ["What it sends", ["Nothing of its own. Zitadel's standard `email`, `email_verified`, `name`, `preferred_username` and `picture` do the work."]],
+          ["What no claim can do", ["!Decide who may sign in. Vaultwarden and Kan have no groups. Turn on Zitadel's role check for the project, and give the role."]],
+          ["Vaultwarden", ["Needs `email` and `email_verified`. Without them, sign-up is blocked.", "Set `SSO_AUDIENCE_TRUSTED` to the project's id: Zitadel puts it in the ID token's audience."]],
+          ["Kan", ["Reads `email` and `name` from the ID token, or from userinfo when the ID token has no `email`."]],
+          ["Navidrome", ["It has no OIDC of its own. It signs in through a proxy, which needs a stable `preferred_username` or `email`. If the proxy checks a group, use Custom instead."]],
+          ["Set in Zitadel", ["The project's role check: on."]],
+        ] },
+      "custom": { title: "Custom", short: "Custom", meta: "roles · both", apps: [],
+        desc: "Every role, in Syndra's words. For in-house apps.",
+        lede: "For in-house apps: SmartDB, Community Slicer, Inventory, Audio-Dash, Printer Config and Syndra itself. No template knows what they read.",
+        lines: ["Sends `roles`, every role in Syndra's words, as a list.", "Lands in both places. Roles added later are included.", "No template knows what your app reads: note it under What it reads."],
+        sections: [
+          ["What it sends", ["`roles`: every role in Syndra's words, as a list; `[]` when someone holds none.", "Add claims for anything else your app needs."]],
+          ["Where it lands", ["Both: the access token, and userinfo with the ID token."]],
+          ["Roles added later", ["Included."]],
+          ["What no claim can do", ["Tell Syndra what your app reads. Note it under What it reads, and Syndra checks every save against it."]],
+        ] },
+    };
+    const ORDER = ["netbird", "gitlab", "supabase-oidc", "supabase-keycloak", "home-assistant", "sign-in-only", "custom"];
+
+    // ---------------------------------------------------------------- which world a frame draws
+    const tplId = st.indexOf("tpl-") === 0 ? st.slice(4) : "";
+    let world = "netbird";
+    if (st === "new" || tplId === "gitlab") world = "gitlab-new";
+    if (st === "supabase" || tplId === "supabase-oidc") world = "supabase";
+    if (tplId === "supabase-keycloak") world = "supabase-new";
+    if (tplId === "home-assistant") world = "ha-new";
+    if (tplId === "sign-in-only") world = "vault-new";
+    if (tplId === "custom") world = "inventory-new";
+    if (st === "rows") world = "inventory";
+    if (st === "vault") world = "vault";
+    if (st === "copy") world = "audio-new";
+    if (st === "copied") world = "audio";
+    const copyLater = st === "copy-later";
+    const isIndex = st === "index";
+    const adv = ["netbird-adv", "rows", "lands-fail"].indexOf(st) >= 0;
+    const NEW = {
+      "audio-new": { app: "Audio-Dash", project: "Audio", copy: "Inventory", roles: "Staff and DJ", n: 4, dfVal: '["staff", "dj"]', c1: "Audio's roles are asserted, the access token is a JWT, and userinfo goes inside the ID token." },
+      "gitlab-new": { app: "GitLab", project: "Code", pick: "gitlab", dfVal: '["users", "admins"]', roles: "Users and Admins", n: 4, sample: '["users", "admins"]', key: "groups", c1: "Code's roles are asserted, and userinfo goes inside the ID token. GitLab doesn't read the access token, so its type doesn't matter." },
+      "supabase-new": { app: "Supabase", project: "Data", pick: "supabase-keycloak", dfVal: '["analyst", "editor"]', roles: "Analyst and Editor", n: 4, sample: '["analyst", "editor"]', key: "groups", c1: "Data's roles are asserted. This provider reads userinfo, which always carries these claims." },
+      "ha-new": { app: "Home Assistant", project: "Home", pick: "home-assistant", dfVal: '["admins", "users"]', roles: "Admins and Users", n: 2, sample: '["admins", "users"]', key: "groups", c1: "Home's roles are asserted, and userinfo goes inside the ID token." },
+      "vault-new": { app: "Vaultwarden", project: "Vault", pick: "sign-in-only", dfVal: '["member"]', roles: "Member", n: 1, sample: "", key: "", c1: "Vault's role check decides who may sign in. Nothing else is needed for this shape." },
+      "inventory-new": { app: "Inventory", project: "Inventory", pick: "custom", dfVal: '["staff", "trained"]', roles: "Staff and Trained", n: 4, sample: '["staff", "trained"]', key: "roles", c1: "Inventory's roles are asserted, the access token is a JWT, and userinfo goes inside the ID token." },
+    };
+    const isNew = !!NEW[world];
+    const nw = NEW[world] || {};
+
+    // ---------------------------------------------------------------- NetBird states
+    const draft = st === "rename" || st === "save";
+    const v4 = st === "saved";
+    const landsFail = st === "lands-fail";
+    const dbgOn = ["debug-on", "debug-open", "debug-switch"].indexOf(st) >= 0;
+    const dbgEmptyS = st === "debug-empty";
+    const dbgEndedS = st === "debug-ended";
+    const dbgOpen = st === "debug-open";
+
+    const R = (name, key, word, inc, x) => {
+      const o = x || {};
+      return { name, key, word, inc, off: !inc, waits: !!o.waits, hasWas: !!o.was, was: P(o.was), label: name + ": the word the app sees", incLabel: "Include " + name };
+    };
+    const C = (o) => ({ key: o.key, parent: o.parent || "", nested: !!o.parent, kind: o.kind, kv: o.kv, sent: P(o.sent),
+      isStatic: !!o.type, type: o.type || "text", value: o.value || "", isIf: !!o.chips, chips: o.chips || [], isFmt: !!o.fmt, fmt: o.fmt || "array",
+      hasWarn: !!o.warn, warn: P(o.warn), hasErr: !!o.err, err: P(o.err), putInside: !!o.putInside });
+
+    let app = "NetBird", project = "Network";
+    let tplLine = "From the NetBird template. Same as the template.";
+    let tplCaption = "Each value becomes a NetBird group. NetBird moves people between groups on every sign-in.";
+    let hasRoleCheckLink = false;
+    let roles = [], claims = [], incNote = "", hasRolesTable = true, noRolesClaim = false, noClaims = false;
+    let landsValue = "The access token and userinfo", landsNote = "NetBird reads the access token." + (adv ? "" : " Set by the NetBird template."), landsKey = "both";
+    let laterNote = "Left out until you include them. Every role NetBird sees becomes a group, so none arrives by surprise.", laterKey = "out";
+    let saveOff = true, saveWarn = false, saveNote = "Nothing to save yet.";
+    let previewLede = "Exactly what NetBird receives when this person signs in, and each check on the way.";
+    let checks = [], c5tone = "healthy", c5text = "Zitadel receives this:", tokenEmpty = false, tokenLines = [], tokenNote = "";
+    let testRows = [], editing = false, beforeHead = "Now, version 3";
+    let contract = [], contractNone = false, contractNoneText = "";
+    let history = [], historyNone = false;
+    let newLede = "", tpls = [], startVerb = "", startNote = "";
+    let hasTpl = true, dfKey = "roles", dfWhat = "", dfSent = "", pickMode = "template", hasNotCopied = false, notCopied = "", historyNoneText = "Nothing saved yet.";
+    // Copying another app's shape (§8)
+    const K2 = (str, faint) => ({ text: P(str), isDot: !faint, isFaint: !!faint });
+    const APPS = [
+      ["Audio-Dash", "Audio", "roles and 7 more", "Copied from Inventory"],
+      ["Home Assistant", "Home", "groups", "Home Assistant template"],
+      ["Inventory", "Inventory", "roles and 7 more", "Custom, changed"],
+      ["Kan", "Boards", "nothing of its own", "Sign-in only"],
+      ["NetBird", "Network", "groups", "NetBird template"],
+      ["NetBird clients", "Network", "groups", "Copied from NetBird"],
+      ["Supabase", "Data", "custom_claims.groups", "Supabase, custom OIDC, changed"],
+      ["Vaultwarden", "Vault", "nothing of its own", "Sign-in only"],
+    ];
+    const copyListFor = (self, proj, selName, selLines) => {
+      const mk = (a) => ({ isRow: true, isLabel: false, title: a[0], meta: a[2] + " · " + a[1], desc: "", note: a[3], sel: a[0] === selName, hasSheet: false, lines: a[0] === selName ? selLines : [] });
+      const here = APPS.filter((a) => a[1] === proj && a[0] !== self), other = APPS.filter((a) => a[1] !== proj && a[0] !== self);
+      const out = [];
+      if (here.length) { out.push({ isLabel: true, isRow: false, label: "In " + proj }); here.forEach((a) => out.push(mk(a))); }
+      out.push({ isLabel: true, isRow: false, label: "In other projects" }); other.forEach((a) => out.push(mk(a)));
+      return out;
+    };
+    const AUD = '["staff", "dj"]';
+    const audioTokens = [L("same", "roles", AUD), L("added", "custom_claims", '{"site": "makerspace"}'), L("added", "given_name", '"Ada"'), L("added", "bundles", '["Makers"]'), L("added", "role_ends", "{}"), L("added", "is_service_account", "false"), L("added", "printer_roles", '"staff,dj"')];
+    const audioNote = "Six claims join for Ada Lovelace; `roles` stays as it is. `is_admin` is left out until it has a role from Audio. A line marked + joins the token.";
+    const audioTests = [
+      { name: "Ada Lovelace", how: P("Given by hand"), now: commas([L("same", "roles", AUD)]), after: commas([L("same", "roles", AUD), L("added", "given_name", '"Ada"'), L("added", "printer_roles", '"staff,dj"')]), diff: P("6 claims join; `roles` stays.") },
+      { name: "Rohan Mehta", how: P("No roles in Audio"), now: commas([L("same", "roles", "[]")]), after: commas([L("same", "roles", "[]"), L("added", "given_name", '"Rohan"'), L("added", "printer_roles", '""')]), diff: P("6 claims join, with his roles empty.") },
+    ];
+    const audioChecks = (c4) => [
+      ck("healthy", "Zitadel's settings for Audio-Dash let its claims through.", "Audio's roles are asserted, the access token is a JWT, and userinfo goes inside the ID token."),
+      ck("healthy", "Ada Lovelace holds 2 roles in Audio.", "Staff and DJ, as Zitadel shows them."),
+      ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
+      c4,
+    ];
+    let copyOpen = false, copyList = [], copyLede = "", copyFoot = "", copyVerb = "";
+
+    const NB = '["netbird-staff", "netbird-admins"]';
+    const NB4 = '["network-staff", "netbird-admins"]';
+    if (world === "netbird") {
+      roles = [
+        R("Admins", "admin", "netbird-admins", true, { waits: true }),
+        R("Guests", "guest", "netbird-guests", !(draft || v4), draft ? { was: "Was sent as `netbird-guests`." } : {}),
+        R("Lab VLAN", "lab-vlan", "", false),
+        R("Members", "member", "netbird-members", true),
+        R("Printers", "printers", "", false),
+        R("Server room", "server-room", "", false),
+        R("Staff", "staff", (draft || v4) ? "network-staff" : "netbird-staff", true, draft ? { was: "Was `netbird-staff`." } : {}),
+      ];
+      incNote = (draft || v4) ? "3 of 7 included" : "4 of 7 included";
+      const val = (draft || v4) ? NB4 : NB;
+      claims = [C({ key: "groups", kind: "Roles NetBird sees", kv: "roles", sent: "Sent as `" + val + "` for Ada Lovelace, and `[]` for anyone who holds none.", fmt: adv ? "array" : "", putInside: adv })];
+      if (draft) { saveOff = false; saveWarn = true; saveNote = "2 changes NetBird will act on. 12 people move from `netbird-staff` to a new group, `network-staff`, at their next sign-in, and 4 leave `netbird-guests`."; }
+      checks = [
+        ck("healthy", "Zitadel's settings for NetBird let its claims through.", "Network's roles are asserted, the access token is a JWT, and userinfo goes inside the ID token."),
+        ck("healthy", "Ada Lovelace holds 2 roles in Network.", "Staff and Admins, as Zitadel shows them."),
+        ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
+        ck("healthy", "What NetBird is told applies, version " + (v4 ? "4" : "3") + ".", "It makes `groups` from " + (v4 ? "3" : "4") + " of Network's 7 roles, in NetBird's words."),
+      ];
+      tokenLines = [L("same", "groups", v4 ? NB4 : NB)];
+      tokenNote = "Sent in NetBird's access token and in userinfo. Zitadel adds `sub`, `email`, `name` and `preferred_username` itself; NetBird reads those for who she is.";
+      if (draft) {
+        previewLede = "What NetBird receives now, and once you save this draft. Nothing changes until you save.";
+        checks[3] = ck("healthy", "Your draft of what NetBird is told applies.", "Not saved yet. Staff becomes `network-staff`, and Guests is left out.");
+        c5text = "Zitadel would receive this once you save:";
+        tokenLines = [L("removed", "groups", NB), L("added", "groups", NB4)];
+        tokenNote = "One difference for Ada Lovelace: `netbird-staff` becomes `network-staff`, so NetBird moves her to a new group. A line marked − leaves the token; a line marked + joins it.";
+      }
+      if (landsFail) {
+        checks[0] = ck("danger", "Zitadel's settings for NetBird keep its claims out of the access token, where NetBird reads them.", "NetBird's token type in Zitadel is Bearer. Only a JWT access token carries claims.",
+          { link: "Set NetBird's token type to JWT in Zitadel", tail: "Or have NetBird read its ID token instead, with `NETBIRD_TOKEN_SOURCE=idToken`. Then check again." });
+        c5tone = "danger"; c5text = "Zitadel receives this, but only for userinfo:";
+        tokenNote = "NetBird reads its access token, so it sees no groups, and it empties every group it made from a token.";
+      }
+      const how = { ada: "Given by hand", aanya: "From the [[Makers]] bundle", grace: "From an automatic rule", rohan: "No roles in Network" };
+      if (draft) {
+        editing = true;
+        testRows = [
+          { name: "Ada Lovelace", how: P(how.ada), nowEmpty: false, now: commas([L("same", "groups", NB)]), after: commas([L("added", "groups", NB4)]), diff: P("`netbird-staff` becomes `network-staff`.") },
+          { name: "Aanya Rao", how: P(how.aanya), nowEmpty: false, now: commas([L("same", "groups", '["netbird-members", "netbird-guests"]')]), after: commas([L("added", "groups", '["netbird-members"]')]), diff: P("Leaves `netbird-guests`.") },
+          { name: "Grace Hopper", how: P(how.grace), nowEmpty: false, now: commas([L("same", "groups", '["netbird-staff"]')]), after: commas([L("added", "groups", '["network-staff"]')]), diff: P("`netbird-staff` becomes `network-staff`.") },
+          { name: "Rohan Mehta", how: P(how.rohan), nowEmpty: false, now: commas([L("same", "groups", "[]")]), after: commas([L("same", "groups", "[]")]), diff: P("None. He holds no roles in Network.") },
+        ];
+      } else {
+        const g = (s) => commas([L("same", "groups", s)]);
+        testRows = [
+          { name: "Ada Lovelace", how: P(how.ada), now: g(v4 ? NB4 : NB), tone: "healthy", word: "All pass" },
+          { name: "Aanya Rao", how: P(how.aanya), now: g(v4 ? '["netbird-members"]' : '["netbird-members", "netbird-guests"]'), tone: "healthy", word: "All pass" },
+          { name: "Grace Hopper", how: P(how.grace), now: g(v4 ? '["network-staff"]' : '["netbird-staff"]'), tone: "healthy", word: "All pass" },
+          { name: "Rohan Mehta", how: P(how.rohan), now: g("[]"), tone: "neutral", word: "No roles" },
+        ];
+        if (landsFail) testRows = testRows.map((r) => ({ ...r, tone: "danger", word: "Fails check 1" }));
+      }
+      contract = [{ key: "groups", type: P("A list of text, in the access token"), tone: landsFail ? "warn" : "healthy", verdict: landsFail ? "Doesn't reach it" : "Matches", hasWhy: landsFail, why: P("The access token carries no claims while NetBird's token type in Zitadel is Bearer. Check 1 in the preview says how to fix it.") }];
+      history = [
+        { name: "Version 3", change: P("Guests included, as `netbird-guests`."), note: "Guests need the guest network.", date: "3 Nov", inUse: !v4, old: v4 },
+        { name: "Version 2", change: P("Started from the NetBird template: 3 of Network's 7 roles, in NetBird's words."), note: "NetBird template.", date: "2 Nov", inUse: false, old: true },
+        { name: "Version 1", change: P("As Actions v1 sent it: `groups` with every role, and `custom_claims`."), note: "Carried over when Syndra took over from Actions v1.", date: "1 Nov", inUse: false, old: true },
+      ];
+      if (copyLater) {
+        app = "NetBird clients"; hasTpl = false; tplLine = "Copied from [[NetBird]] on 2 Nov.";
+        copyOpen = true;
+        copyList = copyListFor("NetBird clients", "Network", "NetBird", [K2("Copies 1 claim, `groups`, where it lands (both) and roles added later (left out)."), K2("Role words for all 7 roles: both apps are on Network."), K2("NetBird keeps its own; the two aren't linked.", true)]);
+        copyLede = "Makes a draft of another app's shape on NetBird clients. Nothing changes until you save.";
+        copyFoot = "Makes a draft on NetBird clients. Nothing changes until you save. NetBird keeps its own; the two aren't linked.";
+        copyVerb = "Copy NetBird's shape";
+      }
+      if (v4) history.unshift({ name: "Version 4", change: P("`netbird-staff` becomes `network-staff`; Guests left out."), note: "Network's new names; guests leave NetBird for the guest Wi-Fi.", date: "3 Nov", inUse: true, old: false });
+    }
+
+    if (world === "supabase") {
+      app = "Supabase"; project = "Data";
+      tplLine = "From the Supabase, custom OIDC provider template. 2 changes since.";
+      tplCaption = "Supabase keeps these in `user_metadata`, which the signed-in person can edit. Don't trust them for row-level security as they arrive; the template says how.";
+      roles = [R("Analyst", "analyst", "analyst", true), R("Editor", "editor", "editor", true), R("Owner", "owner", "owner", true), R("Viewer", "viewer", "viewer", true)];
+      incNote = "4 of 4 included";
+      const obj = '{"custom_claims": {"groups": ["analyst", "editor"], "given_name": "Ada", "family_name": "Lovelace"}}';
+      claims = [
+        C({ parent: "custom_claims", key: "groups", kind: "Roles Supabase sees", kv: "roles", sent: "Sent as `" + obj + "` for Ada Lovelace, with `\"groups\": []` for anyone who holds none." }),
+        C({ parent: "custom_claims", key: "given_name", kind: "Given name", kv: "given_name", sent: "Sent as `\"Ada\"` for Ada Lovelace, inside the same object." }),
+        C({ parent: "custom_claims", key: "family_name", kind: "Family name", kv: "family_name", sent: "Sent as `\"Lovelace\"` for Ada Lovelace, inside the same object." }),
+      ];
+      landsValue = "The ID token and userinfo"; landsNote = "Supabase reads only the ID token. Set by the template."; landsKey = "idtoken";
+      checks = [
+        ck("healthy", "Zitadel's settings for Supabase let its claims through.", "Data's roles are asserted, and userinfo goes inside the ID token. Supabase doesn't read the access token, so its type doesn't matter."),
+        ck("healthy", "Ada Lovelace holds 2 roles in Data.", "Analyst and Editor, as Zitadel shows them."),
+        ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
+        ck("healthy", "What Supabase is told applies, version 3.", "It makes one object, `custom_claims`, holding `groups`, `given_name` and `family_name`."),
+      ];
+      tokenLines = [L("same", "custom_claims", '{"groups": ["analyst", "editor"], "given_name": "Ada", "family_name": "Lovelace"}')];
+      tokenNote = "Sent in the ID token and userinfo. Supabase keeps it in `user_metadata.custom_claims`, where she can edit it, so don't trust it for row-level security as it arrives.";
+      const cc = (g) => commas([L("same", "custom_claims", '{"groups": ' + g + ', …}')]);
+      testRows = [
+        { name: "Ada Lovelace", how: P("Given by hand"), now: cc('["analyst", "editor"]'), tone: "healthy", word: "All pass" },
+        { name: "Aanya Rao", how: P("From the [[Analysts]] bundle"), now: cc('["analyst"]'), tone: "healthy", word: "All pass" },
+        { name: "Rohan Mehta", how: P("No roles in Data"), now: cc("[]"), tone: "neutral", word: "No roles" },
+      ];
+      contract = [{ key: "custom_claims", type: P("An object holding `groups`, a list of text, in the ID token"), tone: "healthy", verdict: "Matches", hasWhy: false, why: [] }];
+      history = [
+        { name: "Version 3", change: P("`custom_claims` › `given_name` and `family_name` added."), note: "The dashboard greets people by name.", date: "3 Nov", inUse: true, old: false },
+        { name: "Version 2", change: P("Started from the Supabase, custom OIDC provider template."), note: "Supabase moved to the custom provider.", date: "2 Nov", inUse: false, old: true },
+        { name: "Version 1", change: P("As Actions v1 sent it: `groups` with every role, and `custom_claims`."), note: "Carried over when Syndra took over from Actions v1.", date: "1 Nov", inUse: false, old: true },
+      ];
+    }
+
+    if (world === "inventory") {
+      app = "Inventory"; project = "Inventory";
+      tplLine = "From the Custom template. 7 changes since.";
+      tplCaption = "No template knows what Inventory's own code reads. Note it under What Inventory reads, and Syndra checks every save against it.";
+      roles = [R("Admin", "inv-admin", "", true, { waits: true }), R("Staff", "staff", "", true), R("Trained", "trained", "", true), R("Volunteer", "volunteer", "", true)];
+      incNote = "4 of 4 included · Syndra's words";
+      laterNote = "Included. Inventory reads every role."; laterKey = "in";
+      claims = [
+        C({ key: "roles", kind: "Roles Inventory sees", kv: "roles", fmt: "array", putInside: true, sent: "Sent as `[\"staff\", \"trained\"]` for Ada Lovelace, and `[]` for anyone who holds none." }),
+        C({ key: "is_admin", kind: "Yes if they hold a role", kv: "if_role", chips: ["Admin"], putInside: true, sent: "Sent as `false` for Ada Lovelace: she doesn't hold Admin." }),
+        C({ parent: "custom_claims", key: "site", kind: "The same for everyone", kv: "static", type: "text", value: "makerspace", sent: "Sent as `{\"custom_claims\": {\"site\": \"makerspace\"}}` for everyone." }),
+        C({ key: "given_name", kind: "Given name", kv: "given_name", putInside: true, sent: "Sent as `\"Ada\"` for Ada Lovelace." }),
+        C({ key: "bundles", kind: "Bundles they hold", kv: "bundles", putInside: true, sent: "Sent as `[\"Makers\"]` for Ada Lovelace. Bundle names, so a rename reaches Inventory." }),
+        C({ key: "role_ends", kind: "Each role's end date", kv: "role_ends", putInside: true, sent: "Sent as `{\"trained\": \"2027-05-31\"}` for Ada Lovelace. Roles with no end are left out." }),
+        C({ key: "is_service_account", kind: "Is a service account", kv: "service_account", putInside: true, sent: "Sent as `false` for Ada Lovelace. Service accounts get `true`." }),
+        C({ key: "printer_roles", kind: "Roles Inventory sees", kv: "roles", fmt: "csv", putInside: true, sent: "Sent as `\"staff,trained\"` for Ada Lovelace.", warn: "No app Syndra has a template for reads roles as text. NetBird would make one group called `netbird-staff,netbird-admins`. Use this only if Inventory's own code splits it." }),
+      ];
+      landsValue = "The access token and userinfo"; landsNote = "Both, as the Custom template sets it."; landsKey = "both";
+      checks = [
+        ck("healthy", "Zitadel's settings for Inventory let its claims through.", "Inventory's roles are asserted, the access token is a JWT, and userinfo goes inside the ID token."),
+        ck("healthy", "Ada Lovelace holds 2 roles in Inventory.", "Staff and Trained, as Zitadel shows them."),
+        ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
+        ck("healthy", "What Inventory is told applies, version 5.", "It makes 8 claims; one sits inside `custom_claims`."),
+      ];
+      tokenLines = [L("same", "roles", '["staff", "trained"]'), L("same", "is_admin", "false"), L("same", "custom_claims", '{"site": "makerspace"}'), L("same", "given_name", '"Ada"'), L("same", "bundles", '["Makers"]'), L("same", "role_ends", '{"trained": "2027-05-31"}'), L("same", "is_service_account", "false"), L("same", "printer_roles", '"staff,trained"')];
+      tokenNote = "Sent in the access token and userinfo, in the order of the rows. Inventory's own code reads these.";
+      testRows = [
+        { name: "Ada Lovelace", how: P("From the [[Makers]] bundle"), now: commas([L("same", "roles", '["staff", "trained"]'), L("same", "is_admin", "false"), L("same", "printer_roles", '"staff,trained"')]), tone: "healthy", word: "All pass" },
+        { name: "Grace Hopper", how: P("Given by hand"), now: commas([L("same", "roles", '["inv-admin", "staff"]'), L("same", "is_admin", "true"), L("same", "printer_roles", '"inv-admin,staff"')]), tone: "healthy", word: "All pass" },
+      ];
+      contract = [
+        { key: "roles", type: P("A list of text, in the access token"), tone: "healthy", verdict: "Matches", hasWhy: false, why: [] },
+        { key: "is_admin", type: P("Yes/no, in the access token"), tone: "healthy", verdict: "Matches", hasWhy: false, why: [] },
+      ];
+      history = [
+        { name: "Version 5", change: P("`printer_roles` added, sent as text with commas."), note: "Printer Config's old reader splits text.", date: "3 Nov", inUse: true, old: false },
+        { name: "Version 4", change: P("`is_admin`, `bundles` and `role_ends` added."), note: "Inventory's admin screen.", date: "2 Nov", inUse: false, old: true },
+        { name: "Version 1", change: P("As Actions v1 sent it: `groups` with every role, and `custom_claims`."), note: "Carried over when Syndra took over from Actions v1.", date: "1 Nov", inUse: false, old: true },
+      ];
+    }
+
+    if (world === "vault") {
+      app = "Vaultwarden"; project = "Vault";
+      tplLine = "From the Sign-in only template. Same as the template.";
+      tplCaption = "Vaultwarden has no groups, so who may sign in is Zitadel's role check for Vault, and that check is off.";
+      hasRoleCheckLink = true; hasRolesTable = false; noRolesClaim = true; noClaims = true; incNote = "";
+      landsValue = "Nowhere: this shape sends nothing"; landsNote = "Vaultwarden reads Zitadel's own `email`, `email_verified` and `preferred_username`.";
+      checks = [
+        ck("warn", "Zitadel lets anyone in the organisation sign in to Vaultwarden.", "The role check is off for Vault. Vaultwarden has no groups, so nothing else stops them.", { link: "Turn on the role check for Vault in Zitadel" }),
+        ck("healthy", "Ada Lovelace holds Member in Vault.", "As Zitadel shows it."),
+        ck("neutral", "Nothing to build for her.", "This shape sends nothing of its own."),
+        ck("healthy", "The Sign-in only shape applies.", "It adds nothing; Zitadel's own claims do the work."),
+      ];
+      c5tone = "neutral"; c5text = "Zitadel receives no Syndra claims for her, on purpose."; tokenEmpty = true; tokenLines = [];
+      tokenNote = "Vaultwarden reads Zitadel's own `email`, `email_verified` and `preferred_username`. That is all it needs.";
+      testRows = [
+        { name: "Ada Lovelace", how: P("Given by hand"), nowEmpty: true, now: [], tone: "healthy", word: "All pass" },
+        { name: "Rohan Mehta", how: P("No roles in Vault"), nowEmpty: true, now: [], tone: "warn", word: "Can sign in" },
+      ];
+      contractNone = true; contractNoneText = "Nothing to note. Vaultwarden reads only Zitadel's own claims.";
+      history = [
+        { name: "Version 2", change: P("Started from the Sign-in only template: sends nothing of its own."), note: "Vaultwarden has no groups.", date: "2 Nov", inUse: true, old: false },
+        { name: "Version 1", change: P("As Actions v1 sent it: `groups` with every role, and `custom_claims`."), note: "Carried over when Syndra took over from Actions v1.", date: "1 Nov", inUse: false, old: true },
+      ];
+    }
+
+    if (world === "audio") {
+      app = "Audio-Dash"; project = "Audio"; hasTpl = false;
+      tplLine = "Copied from [[Inventory]], as a draft. Not saved yet.";
+      tplCaption = "Inventory's shape, on Audio's roles. What doesn't fit Audio is said where it stops fitting.";
+      const nu = { was: "New. Included, as Inventory includes roles added later." };
+      roles = [R("DJ", "dj", "", true, nu), R("Engineer", "engineer", "", true, nu), R("Staff", "staff", "", true), R("Volunteer", "volunteer", "", true)];
+      incNote = "4 of 4 included · Syndra's words";
+      hasNotCopied = true; notCopied = "Not in this project, so not copied: Admin (`inv-admin`), Trained (`trained`).";
+      claims = [
+        C({ key: "roles", kind: "Roles Audio-Dash sees", kv: "roles", sent: "Sent as `" + AUD + "` for Ada Lovelace, and `[]` for anyone who holds none." }),
+        C({ key: "is_admin", kind: "Yes if they hold a role", kv: "if_role", chips: [], sent: "Left out of the draft until it has a role.", err: "Admin isn't in Audio. Choose a role from Audio, or remove this row." }),
+        C({ parent: "custom_claims", key: "site", kind: "The same for everyone", kv: "static", type: "text", value: "makerspace", sent: "Sent as `{\"custom_claims\": {\"site\": \"makerspace\"}}` for everyone." }),
+        C({ key: "given_name", kind: "Given name", kv: "given_name", sent: "Sent as `\"Ada\"` for Ada Lovelace." }),
+        C({ key: "bundles", kind: "Bundles they hold", kv: "bundles", sent: "Sent as `[\"Makers\"]` for Ada Lovelace." }),
+        C({ key: "role_ends", kind: "Each role's end date", kv: "role_ends", sent: "Sent as `{}` for Ada Lovelace: none of her roles in Audio ends." }),
+        C({ key: "is_service_account", kind: "Is a service account", kv: "service_account", sent: "Sent as `false` for Ada Lovelace." }),
+        C({ key: "printer_roles", kind: "Roles Audio-Dash sees", kv: "roles", fmt: "csv", sent: "Sent as `\"staff,dj\"` for Ada Lovelace.", warn: "No app Syndra has a template for reads roles as text. Use this only if Audio-Dash's own code splits it." }),
+      ];
+      landsValue = "The access token and userinfo"; landsNote = "Copied from Inventory.";
+      saveOff = true; saveNote = "Fix `is_admin` to save.";
+      previewLede = "What Audio-Dash receives now, on Audio's default, and once you save this draft. Nothing changes until you save.";
+      checks = audioChecks(ck("healthy", "Your draft, copied from Inventory, applies.", "Not saved yet. `is_admin` is left out until it has a role from Audio."));
+      c5text = "Zitadel would receive this once you save:"; tokenLines = audioTokens; tokenNote = audioNote;
+      editing = true; beforeHead = "Now, Audio's default"; testRows = audioTests;
+      contractNone = true; contractNoneText = "Nothing noted yet. Inventory's note isn't copied: what an app reads belongs to that app.";
+      historyNone = true; historyNoneText = "Nothing saved for Audio-Dash yet. It uses Audio's default."; history = [];
+    }
+
+    if (isNew) {
+      app = nw.app; project = nw.project;
+      const copyMode = !!nw.copy;
+      newLede = app + " uses " + project + "'s default shape. Nobody has set one for " + project + ", so it's Syndra's built-in: `roles`, every role in Syndra's words, as a list, in the access token and userinfo.";
+      dfWhat = "Every role in " + project + ", in Syndra's words";
+      dfSent = "Sent as `" + nw.dfVal + "` for Ada Lovelace, and `[]` for anyone who holds none.";
+      pickMode = copyMode ? "copy" : "template";
+      checks = [
+        ck("healthy", "Zitadel's settings for " + app + " let its claims through.", nw.c1),
+        ck("healthy", "Ada Lovelace holds " + (nw.roles.indexOf(" and ") >= 0 ? "2 roles" : nw.roles) + " in " + project + ".", nw.roles + ", as Zitadel shows " + (nw.roles.indexOf(" and ") >= 0 ? "them." : "it.")),
+        ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
+      ];
+      c5text = "Zitadel would receive this once you save:";
+      editing = true; beforeHead = "Now, " + project + "'s default";
+      contractNone = true;
+      historyNone = true; historyNoneText = "Nothing saved for " + app + " yet. It uses " + project + "'s default."; history = [];
+      if (copyMode) {
+        tpls = copyListFor(app, project, "Inventory", [K2("Copies 8 claims, where they land (both) and roles added later (included)."), K2("Role words for Staff and Volunteer, which Audio has too."), K2("`is_admin` depends on Admin, which Audio doesn't have. It copies with no role; choose one before you save."), K2("Not in this project, so not copied: Admin (`inv-admin`), Trained (`trained`).", true)]);
+        startVerb = "Copy Inventory's shape";
+        startNote = "Makes a draft on Audio-Dash. Nothing changes until you save. Inventory keeps its own; the two aren't linked.";
+        previewLede = "What Audio-Dash receives now, on Audio's default, and with Inventory's shape as a draft. Nothing changes until you save.";
+        checks = audioChecks(ck("healthy", "Inventory's shape applies, as a draft.", "Not saved yet. `is_admin` is left out until it has a role from Audio."));
+        tokenLines = audioTokens; tokenNote = audioNote; testRows = audioTests;
+        contractNoneText = "Nothing noted yet. Inventory's note isn't copied: what an app reads belongs to that app.";
+      } else {
+        const pick = TPL[nw.pick];
+        tpls = ORDER.map((id) => {
+          const t = TPL[id];
+          const sugg = t.apps.indexOf(app) >= 0;
+          return { isRow: true, isLabel: false, hasSheet: true, title: t.title, meta: t.meta, desc: t.desc, note: sugg ? "Suggested: this app is called " + app : "", sel: id === nw.pick, lines: t.lines.map((x) => K2(x)) };
+        });
+        startVerb = "Start from " + pick.short;
+        startNote = "Makes a draft. " + app + " keeps " + project + "'s default until you save.";
+        previewLede = "What " + app + " receives now, on " + project + "'s default, and from the " + pick.title + " template as a draft. Nothing changes until you save.";
+        checks.push(ck("healthy", "The " + pick.title + " template applies, as a draft.", "Not saved yet. " + app + " gets " + project + "'s default until you save."));
+        const k = nw.key;
+        if (k === "roles") { tokenLines = [L("same", "roles", nw.dfVal)]; tokenNote = "Nothing changes for Ada Lovelace yet: Custom sends what the default sends. It's a starting point to change."; }
+        else if (k) { tokenLines = [L("removed", "roles", nw.dfVal), L("added", k, nw.sample)]; tokenNote = "One difference for Ada Lovelace: `roles` becomes `" + k + "`. A line marked − leaves the token; a line marked + joins it."; }
+        else { c5text = "Zitadel would receive no Syndra claims for her once you save, on purpose:"; c5tone = "neutral"; tokenLines = [L("removed", "roles", nw.dfVal)]; tokenNote = "One difference: `roles` leaves the token. " + app + " reads Zitadel's own claims; who may sign in is Zitadel's role check."; }
+        const aft = (v) => k === "roles" ? commas([L("same", "roles", v)]) : k ? commas([L("removed", "roles", v), L("added", k, v)]) : commas([L("removed", "roles", v)]);
+        testRows = [
+          { name: "Ada Lovelace", how: P("Given by hand"), now: commas([L("same", "roles", nw.dfVal)]), after: aft(nw.dfVal), diff: P(k === "roles" ? "None yet." : k ? "`roles` becomes `" + k + "`." : "`roles` leaves the token.") },
+          { name: "Rohan Mehta", how: P("No roles in " + project), now: commas([L("same", "roles", "[]")]), after: aft("[]"), diff: P(k === "roles" ? "None yet." : k ? "`roles` becomes `" + k + "`, still empty." : "`roles` leaves the token.") },
+        ];
+        contractNoneText = "Nothing noted yet. Starting from a template notes what " + app + " reads.";
+      }
+    }
+
+    // ---------------------------------------------------------------- Debug mode
+    const dbgOff = !(dbgOn || dbgEmptyS || dbgEndedS);
+    const SI = (time, who, asked, ans, tone, word, open) => ({ time, who, asked, ans: P(ans), tone, word, open: !!open, chev: open ? "⌄" : "›" });
+    const ada = [
+      SI("10:09:14", "Ada Lovelace", "Access token", "`groups`, 2 values", "healthy", "All pass", dbgOpen),
+      SI("10:09:13", "Ada Lovelace", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:08:02", "Ada Lovelace", "Access token", "Nothing: NetBird asked for two projects", "danger", "Refused"),
+      SI("10:07:30", "Ada Lovelace", "Access token", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:07:29", "Ada Lovelace", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
+    ];
+    // Ended: switched to Aanya Rao at 10:12, so two people share the list.
+    const signins = dbgEndedS ? [
+      SI("10:19:40", "Aanya Rao", "Access token", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:19:39", "Aanya Rao", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:15:02", "Aanya Rao", "Access token", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:15:01", "Aanya Rao", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
+      SI("10:13:22", "Aanya Rao", "Access token", "`groups`, 2 values", "healthy", "All pass"),
+    ].concat(ada) : ada;
+    const reqJson = J([
+      '{',
+      '  "function": "function/preaccesstoken",',
+      '  "application": { "client_id": "301928374650192837" },',
+      '  "user": {',
+      '    "id": "298113054121345501",',
+      '    "human": {',
+      '      "first_name": "Ada",',
+      '      "last_name": "Lovelace",',
+      '      "display_name": "Ada Lovelace",',
+      '      "email": "ada@example.edu",',
+      '      "is_email_verified": true',
+      '    }',
+      '  },',
+      '  "org": { "id": "298112990876543210", "name": "Makerspace" },',
+      '  "user_grants": [',
+      '    { "projectId": "298113000000001111", "roles": ["staff", "admin"] }',
+      '  ]',
+      '}',
+    ]);
+    const ansJson = J([
+      '{',
+      '  "append_claims": [',
+      '    { "key": "groups", "value": ["netbird-staff", "netbird-admins"] }',
+      '  ]',
+      '}',
+    ]);
+    const rebuiltJson = J([
+      '{',
+      '~  "sub": "298113054121345501",',
+      '~  "email": "ada@example.edu",',
+      '~  "email_verified": true,',
+      '~  "name": "Ada Lovelace",',
+      '~  "preferred_username": "ada",',
+      '  "groups": ["netbird-staff", "netbird-admins"]',
+      '}',
+    ]);
+    const dbgChecks = [
+      { tone: "healthy", text: P("Zitadel's settings for NetBird let its claims through.") },
+      { tone: "healthy", text: P("Ada Lovelace held 2 roles in Network: Staff and Admins.") },
+      { tone: "healthy", text: P("Her claims were ready, built at 09:52.") },
+      { tone: "healthy", text: P("What NetBird is told applied, version 3.") },
+      { tone: "healthy", text: P("Syndra answered with `groups`.") },
+    ];
+
+    // ---------------------------------------------------------------- template sheet
+    let sheet = { title: "", lede: "", sections: [], hasChanged: false, changed: [], foot: "", hasAgain: false, hasStart: false, start: "" };
+    if (tplId && TPL[tplId]) {
+      const t = TPL[tplId];
+      sheet.title = "The " + t.title + " template";
+      sheet.lede = t.lede;
+      sheet.sections = t.sections.map(([label, lines]) => ({ label, lines: lines.map(K) }));
+      if (tplId === "netbird") {
+        sheet.hasChanged = true;
+        sheet.changed = [{ g: "", text: P("Nothing yet. Your role choices and words are yours, so they don't count as changes.") }];
+        sheet.foot = "A template is copied in. Syndra never changes your shape when a template changes.";
+      } else if (tplId === "supabase-oidc") {
+        sheet.hasChanged = true;
+        sheet.changed = [{ g: "+", text: P("`custom_claims` › `given_name` is added: the person's given name.") }, { g: "+", text: P("`custom_claims` › `family_name` is added: the person's family name.") }];
+        sheet.foot = "Starting again makes a draft of the template. Nothing changes until you save.";
+        sheet.hasAgain = true;
+      } else {
+        sheet.foot = "Makes a draft. " + app + " keeps " + project + "'s default until you save.";
+        sheet.hasStart = true; sheet.start = "Start from " + t.short;
+      }
+    }
+
+    // ---------------------------------------------------------------- apps index
+    const IX = (name, kind, project, claim, where, people, warn) => ({ name, kind, project, claim, hasKey: !!claim, where, calm: !warn, warn: !!warn, people });
+    const indexRows = [
+      IX("Audio-Dash", "OIDC · copied from Inventory", "Audio", "roles", "and 7 more · access token, userinfo", 9),
+      IX("GitLab", "OIDC · Code's default", "Code", "roles", "access token, userinfo", 14),
+      IX("Home Assistant", "OIDC · Home Assistant template", "Home", "groups", "Doesn't reach it", 6, true),
+      IX("Inventory", "OIDC · Custom, changed", "Inventory", "roles", "and 7 more · access token, userinfo", 41),
+      IX("Kan", "OIDC · Sign-in only", "Boards", "", "Nothing of its own", 33),
+      IX("NetBird", "OIDC · NetBird template", "Network", "groups", "access token, userinfo", 23),
+      IX("NetBird clients", "OIDC · copied from NetBird", "Network", "groups", "access token, userinfo", 23),
+      IX("Supabase", "OIDC · Supabase, custom OIDC provider template, changed", "Data", "custom_claims.groups", "ID token, userinfo", 12),
+      IX("TrueNAS", "OIDC · no template: TrueNAS can't sign in with Zitadel", "Storage", "", "Access goes through the add-on", 41),
+      IX("Vaultwarden", "OIDC · Sign-in only", "Vault", "", "Nothing of its own", 38),
+    ];
+
+    const meta = S ? h("span", { className: "flex flex-wrap items-center gap-2 text-[14px] text-faint" }, "OIDC · roles from ",
+      h("a", { href: "#", className: "font-semibold text-accent-text", style: { textDecoration: "none" } }, project + " →"),
+      adv ? h("span", null, " · client ", h(S.Mono, null, "301928374650192837")) : null) : null;
+    const headerLede = world === "vault"
+      ? "What Vaultwarden is told about a person when they sign in. It needs only Zitadel's own claims; who may sign in is Zitadel's role check."
+      : "What " + app + " is told about a person when they sign in. Come here when it isn't seeing the " + (app === "NetBird" ? "groups" : "roles") + " it should, or before you change what it's told.";
+
+    const saveOpen = st === "save" || st === "saved";
+    const saved = st === "saved";
+    const dbgSwitch = st === "debug-switch";
+    const dbgDlg = st === "debug-turn-on" || st === "debug-on-result" || dbgSwitch;
+    const dbgDone = st === "debug-on-result";
+
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      pathname: isIndex ? "/applications" : "/applications/a1",
+      isApp: !isIndex, isIndex, adv, app, project, meta, headerLede,
+      isNew, hasShape: !isNew, newLede, tpls, startVerb, startNote,
+      tplLine: P(tplLine), tplCaption: P(tplCaption), hasRoleCheckLink, hasTpl,
+      dfKey, dfWhat, dfSent: P(dfSent), pickMode, pickOptions: [{ value: "template", label: "Start from a template" }, { value: "copy", label: "Copy another app's shape" }],
+      hasNotCopied, notCopied: P(notCopied), historyNoneText,
+      copyOpen, copyList, copyLede, copyFoot, copyVerb,
+      dbgCanSwitch: dbgOn || dbgEmptyS, dbgTitle: dbgSwitch ? "Change whose sign-ins" : "Turn on debug mode", dbgConfirm: dbgSwitch ? "Switch to Aanya Rao" : "Turn on debug mode",
+      incNote, hasRolesTable, noRolesClaim, roles, sortRole: { key: "role", dir: 1 },
+      laterNote, laterKey, laterOptions: [{ value: "out", label: "Left out" }, { value: "in", label: "Included" }],
+      noClaims, claims,
+      typeOptions: [{ value: "text", label: "Text" }, { value: "number", label: "Number" }, { value: "yesno", label: "Yes/no" }, { value: "list", label: "List" }],
+      fmtOptions: [{ value: "array", label: "A list" }, { value: "csv", label: "Text, with commas" }, { value: "space_delimited", label: "Text, with spaces" }],
+      landsValue, landsNote: P(landsNote), landsBad: landsFail, landsKey,
+      landsOptions: [{ value: "both", label: "Both" }, { value: "access", label: "Access token" }, { value: "idtoken", label: "ID token and userinfo" }],
+      saveOff, saveWarn, saveCalm: !saveWarn, saveNote: P(saveNote),
+      previewLede, checks, c5tone, c5text: P(c5text), tokenEmpty, tokenLines: commas(tokenLines), tokenNote: P(tokenNote),
+      dbgOff, dbgSeat: !dbgOff,
+      dbgTone: dbgEndedS ? "neutral" : "healthy", dbgWord: dbgEndedS ? "Ended" : "On",
+      dbgNote: dbgEndedS ? "At 10:21, after 15 minutes. Switched to Aanya Rao at 10:12." : dbgEmptyS ? "Your sign-ins · ends 10:21, 15 min left" : "Ada Lovelace's sign-ins · ends 10:21, 14 min left",
+      dbgVerb: dbgOff ? "Turn on debug mode" : dbgEndedS ? "Turn on again" : "Turn off",
+      dbgLast: "Last on 2 Nov, for 15 minutes, by Kanishk Singh.",
+      dbgList: !dbgOff, dbgEmpty: dbgEmptyS, dbgRows: dbgOn || dbgEndedS, dbgMore: dbgEndedS, dbgEnded: dbgEndedS,
+      dbgLive: dbgEndedS ? "Seen while it was on · newest on top" : "Live · newest on top", dbgLiveTone: dbgEndedS ? "neutral" : "healthy",
+      dbgHasWaiting: dbgOn, dbgWaiting: dbgOpen ? "1 new sign-in waits until you close this one." : "2 new sign-ins wait until you move off the list.",
+      noSections: [], signins,
+      reqLead: P("Zitadel asked for NetBird's access-token claims for Ada Lovelace, listing 2 roles in Network."),
+      ansLead: P("Syndra added 1 claim, in 4 ms, from her claims built at 09:52."),
+      reqJson, ansJson, rebuiltJson, dbgChecks,
+      notEditing: !editing, editing, beforeHead, testRows: testRows.map((r) => ({ nowEmpty: false, after: [], diff: [], tone: "neutral", word: "", ...r })),
+      contract, contractNone, contractNoneText, history, historyNone, historyHas: !historyNone,
+      readState: { readAt: new Date(Date.now() - 40000).toISOString(), current: true }, indexRows,
+      saveOpen, saved, showForm: !saved,
+      saveLede: saved ? undefined : "NetBird's claims, kept in History as version 4.",
+      dlgChanges: [{ g: "~", text: P("`netbird-staff` becomes `network-staff`: Staff's word.") }, { g: "−", text: P("Guests is left out: `netbird-guests` is no longer sent.") }],
+      dlgDo: [{ text: P("NetBird makes a new group, `network-staff`, and moves 12 people into it from `netbird-staff` as each signs in. Policies on `netbird-staff` stop matching them.") }, { text: P("NetBird takes 4 people out of `netbird-guests` at their next sign-in.") }],
+      dlgFoot: saved ? undefined : "16 people's groups change at their next sign-in. Anyone signed in now keeps the old ones until then.",
+      tplOpen: !!tplId, sheet,
+      dbgDlg, dbgForm: !dbgDone, dbgDone,
+      dbgDlgLede: dbgDone ? undefined : dbgSwitch ? "Debug mode captures one account at a time. It's showing Ada Lovelace's sign-ins to NetBird until 10:21." : "See one account's sign-ins to NetBird live: what Zitadel asked, what Syndra answered, and the five checks. It turns itself off after 15 minutes.",
+      dbgScopes: [
+        { title: "You, Kanishk Singh", sel: !dbgSwitch, locked: false, lockedNote: "", desc: "Sign in to NetBird yourself to see it here.", note: "" },
+        { title: "Ada Lovelace", sel: false, locked: dbgSwitch, lockedNote: "Captured now", desc: "", note: "Test person" },
+        { title: "Aanya Rao", sel: dbgSwitch, locked: false, lockedNote: "", desc: "", note: "Test person" },
+        { title: "Grace Hopper", sel: false, locked: false, lockedNote: "", desc: "", note: "Test person" },
+        { title: "Rohan Mehta", sel: false, locked: false, lockedNote: "", desc: "", note: "Test person" },
+      ],
+      dbgFoot: dbgDone ? undefined : dbgSwitch ? "Moves the capture to Aanya Rao from now on. It still ends at 10:21. Ada Lovelace's sign-ins seen so far stay in the list. Change history records the switch." : "Ends at 10:21, 15 minutes from now. While it runs, choosing another account moves the capture to them. Change history records each.",
+
+      tallFrames: [
+        f("netbird", "NetBird · Basic · every check passes", "The calm first screen. The template line and its one truth, the roles table (4 of 7 in NetBird's words), one claim row, Lands in as read-only text, Save. Beside it the trail ending in the token. Debug mode is one quiet row. Then test people, what NetBird reads, History."),
+        f("netbird-adv", "NetBird · Advanced", "The same page with the ways to make unusual shapes: Roles added later, Sent as on the roles row, Put it inside another claim, Lands in as a Segmented, and the client id in the header. Nothing moves; each part unfolds."),
+        f("new", "A new app on its project's default · the offer", "GitLab has no shape of its own, so it uses Code's default: the built-in roles list, said under Sends now (owner, 3 Nov). The offer sits on top: Start from a template · Copy another app's shape. GitLab is suggested and chosen; the preview shows − roles + groups against the default."),
+        f("copy", "Copy another app's shape · choosing", "Audio-Dash copies Inventory, from another project. The unfolded row says what copies, that is_admin needs a role, and in a faint line which roles are not in this project, so not copied. The preview runs the draft at once."),
+        f("copied", "Copied · the draft on this app", "The draft fills the card: Inventory's 8 rows on Audio's roles. Audio's own roles follow the copied rule (New. Included). The faint not-copied line sits under the table. is_admin has no role here, so it stops Save in danger text. Nothing is linked."),
+        f("supabase", "Supabase · custom OIDC provider", "A nested claim: custom_claims › groups, with given_name and family_name added inside the same object (2 changes since the template). Lands in the ID token and userinfo. The caption says plainly that user_metadata can't be trusted for row-level security."),
+        f("rename", "Editing roles · a rename and a removal", "Staff becomes network-staff and Guests is left out. Each row says what it was; the before-line turns amber and names what NetBird will do; the preview shows − and + lines; test people show Now, After and Difference."),
+        f("rows", "Claim rows · Advanced · every kind", "Inventory on Custom. One row form for a roles claim, Yes if they hold a role, a fixed value inside custom_claims, a given name, bundles, role end dates, service account, and roles sent as text with its warning."),
+        f("debug-on", "Debug mode · on, live", "One account, Ada Lovelace, for 15 minutes. Change account and Turn off in the seat. Newest on top; two new sign-ins wait while the pointer is on the list. One verdict is a refused cross-project request."),
+        f("debug-empty", "Debug mode · on, nothing yet", "Only your sign-ins. A breathing lime dot and one sentence; no column headings until something arrives."),
+        f("debug-ended", "Debug mode · ended", "It turned itself off at 10:21. It was switched to Aanya Rao at 10:12, so both appear. What it saw stays readable for an hour, with the long-list row; Turn on again."),
+      ],
+      openFrames: [f("debug-open", "Debug mode · one sign-in opened", "Opened in place: what Zitadel sent and what Syndra answered as raw JSON (her email shows; the signature never does), the five checks for that sign-in, and the claims rebuilt, labelled as not the signed token. A new arrival waits until it's closed.")],
+      desktopFrames: [
+        f("lands-fail", "Where claims land · the check fails", "NetBird's access token is a Bearer token in Zitadel, so it carries no claims. Check 1 is red with the fix in Zitadel as a violet link; check 5 is red and says NetBird empties its groups. Lands in points at check 1."),
+        f("save", "Save · a change NetBird will act on", "What changes, line by line; What NetBird will do, in amber; why to wait for the group to appear; the test people; I understand (Save off until ticked); a note for History."),
+        f("saved", "Saved · the sheet's own result", "Dot, Saved, version 4, and what to do in NetBird next. Close."),
+        f("debug-turn-on", "Turn on debug mode · one account", "One account at a time, you preselected; test people, or someone else through the person form. No everyone (owner, 3 Nov). The before-line names the end time, that choosing another account moves the capture, and the audit."),
+        f("debug-switch", "Change whose sign-ins · while it runs", "The same sheet. Ada is ticked grey, Captured now; Aanya is chosen. The before-line says the capture moves to her, the end stays 10:21, and Ada's sign-ins stay in the list."),
+        f("copy-later", "Copy another app's shape · later", "From the claims part of NetBird clients. In Network first, then other projects. NetBird is chosen: 1 claim and all 7 role words copy, and the two aren't linked."),
+        f("debug-on-result", "Debug mode · on, the sheet's result", "On, with its bloom once; until when, for whom; where the sign-ins appear."),
+        f("vault", "Sign-in only · Vaultwarden", "No roles claim, so the roles table is NotOpenYet. The caption and check 1 say who may sign in is Zitadel's role check, which is off, with the fix as a link."),
+        f("index", "Apps index · each app's real claim", "Claims replaces Format: the real key in mono and where it lands, or Sends nothing yet. The sub-line names the template. Home Assistant is amber: Doesn't reach it."),
+      ],
+      tplFrames: [
+        f("tpl-netbird", "The NetBird template", "Opened from NetBird, which hasn't changed it: role choices and words don't count. A template is copied in; Syndra never changes a shape when a template changes."),
+        f("tpl-gitlab", "The GitLab template", "Opened from GitLab's template choice. required_groups and admin_groups said plainly, in amber; Premium only; change gitlab.rb with any rename."),
+        f("tpl-supabase-oidc", "The Supabase template · custom OIDC provider", "Opened from Supabase, with its 2 changes since and Start again from the template."),
+        f("tpl-supabase-keycloak", "The Supabase template · Keycloak provider", "Userinfo only; the rewrite Zitadel needs; how to tell which provider you have."),
+        f("tpl-home-assistant", "The Home Assistant template", "admins and users; a role is set only when the HA user is first made."),
+        f("tpl-sign-in-only", "The Sign-in only template", "For Vaultwarden, Kan and Navidrome: nothing of its own, and who may sign in is Zitadel's role check."),
+        f("tpl-custom", "The Custom template", "For in-house apps: every role, both places, roles added later included."),
+      ],
+      phoneFrames: [
+        f("phone", "Phone · NetBird", "The shape first (#90): template line, roles stacked with the word field full width, the claim row, Lands in, Save. Then the preview, Debug mode, test people, what it reads, History."),
+        f("phone-debug", "Phone · one sign-in opened", "Rows stack; the opened sign-in stacks request, answer, checks and the rebuild. The JSON wraps and never scrolls sideways."),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
