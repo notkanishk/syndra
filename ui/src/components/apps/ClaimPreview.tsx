@@ -236,7 +236,7 @@ export function LiveLine({ live, person }: { live?: LiveCheck; person: string })
 }
 
 /**
- * The faint line under a draft's token: "One difference for Ada Lovelace:
+ * The faint line under a draft's token: "One difference for Charlotte Flair:
  * `staff` becomes `netbird-staff`, in both claims." when the draft's one change
  * is a rename of a role they hold; otherwise how many lines differ.
  */
