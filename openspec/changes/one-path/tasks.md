@@ -64,7 +64,7 @@
   - Stopped sending says why (6 Nov): a refused row keeps `wait_reason = refused:<cause>` (`db.MarkPropagationRefused`, migration 000083 widens the 000056 check). Pending changes names the cause per row; Home's card counts per cause; add-on failures and older rows keep the general sentence.
   - MyStorage: a pause never ends by itself (an operator sets the add-on back to active) and nothing resumes on its end alone, so "by itself" and "a few minutes" are gone (`handlers/my_storage.go` Lifecycle doc).
 - [ ] 1.8g Deploy, then 503 one give on the dev box (stop Zitadel briefly) and watch it go on its own at the named time; audit shows `propagation.retried` #ready-for-human
-- [ ] 1.9 Move the add-on transport onto `extcall` (W1e) #ready-for-agent
+- [x] 1.9 Move the add-on transport onto `extcall` (W1e): `addons/transport.go` (`doAuthenticatedWith` is one `extcall.Do`, `addonPolicy`, `addonAttempts = 1` keeps the old send-once rule); tests and guard in `addons/extcall_path_test.go`
 - [ ] 1.10 Owner: after deploy, watch `[ZITADEL] ... req=` lines during the next Zitadel blip #ready-for-human
 
 ## W1b. Error envelope
