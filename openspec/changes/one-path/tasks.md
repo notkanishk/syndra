@@ -109,7 +109,7 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 
 - [x] `lib/queries/invalidation.ts`; all mutation hooks and the two signing-key sites use it
 - [x] Guard test: every mutation uses it; rail kinds hold governance
-- [ ] `HomeLimit.tsx`, `UnconfirmedChanges.tsx` onto `invalidateAfter`, then widen the guard's raw-call scan to `src/` `ready-for-agent`
+- [x] `HomeLimit.tsx`, `UnconfirmedChanges.tsx`, `DegradedBanner.tsx`, `useUpstream.ts` onto `invalidateAfter` (kinds `upstream`, `reconnected` added); `states/index.tsx` and `request-decisions.ts` re-read what is on screen (`refetchQueries`, `type: "active"`, as invalidation did), since they are not writes. The guard is a lint rule (`ui/eslint.config.mjs`, `no-restricted-syntax` on the syntax tree: `x.invalidateQueries`, `x["invalidateQueries"]`, destructuring) over every non-test file but `invalidation.ts`; CI's `bun run lint` runs it. Mutation-checked all three forms.
 - [ ] `["name-catalog"]` defined twice (`useNameCatalog.ts`, `useNameResolver.tsx`) belongs to W2d
 
 ## W2d: one path for a name (branch `fix/one-name-path`)

@@ -236,7 +236,9 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
       // Their access moved while the row was read: nothing was decided, the
       // "If you approve:" line reads the plan again, and the row says so (A-21 §3.3).
       if (isStale(error)) {
-        void client.invalidateQueries({ queryKey: planKey(action) });
+        // Not a write: the plan on screen is read again (a refetch, not the
+        // write map).
+        void client.refetchQueries({ queryKey: planKey(action), type: "active" });
         const name = firstOf(resolver.resolveUser(entry.requester_id).value?.display_name);
         setOutcomes((prev) => ({
           ...prev,
