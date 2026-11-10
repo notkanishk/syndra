@@ -217,8 +217,10 @@ function NeverRead() {
   const client = useQueryClient();
   useEffect(() => {
     const again = setInterval(
-      // Not a write: the failed reads ask again (refetch, not the write map).
-      () => client.refetchQueries({ predicate: (q) => q.state.status === "error" }),
+      // Not a write: the failed reads on screen ask again (refetch, not the
+      // write map). "active" keeps what invalidation did: a read nobody is
+      // showing asks again when it is next shown, not now.
+      () => client.refetchQueries({ type: "active", predicate: (q) => q.state.status === "error" }),
       60_000,
     );
     return () => clearInterval(again);
