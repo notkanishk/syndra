@@ -180,4 +180,26 @@ func TestPendingRowsSayWhetherTheySendOnTheirOwn(t *testing.T) {
 	if len(got) != 3 || !got[revoke] || !got[departure] || got[ordinary] {
 		t.Fatalf("sends on its own %v, want revoke and the withdraw-only apply true, the ordinary apply false", got)
 	}
+
+	// Held: a withdraw-only row queued after an ordinary one for the same
+	// person and target waits behind it, so it must not promise to send.
+	held := freshSubject(t, ctx)
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, held) })
+	older := seedOutbox(t, ctx, "apply", "pending", held, "pSO", "direct", "", []string{"r"})
+	behind := seedOutbox(t, ctx, "apply", "pending", held, "pSO", "direct", "", []string{"r"})
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET target = 'truenas' WHERE id = ANY($1)`, []string{older, behind}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET withdraws_only = true WHERE id = $1`, behind); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = GetPendingPropagations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.ID == behind && r.SendsOnItsOwn {
+			t.Fatal("a withdraw-only row held behind an older conferring row must not say it sends on its own")
+		}
+	}
 }

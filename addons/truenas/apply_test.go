@@ -1132,3 +1132,55 @@ func TestAWriteThatCannotBeReadBackIsReportedAsUnverified(t *testing.T) {
 		t.Fatalf("want exactly one write, got %d", len(m.updates))
 	}
 }
+
+// A subject wanted switched off who has no account here gets none: not on a
+// first apply (never bound) and not after an operator deleted the bound one. A
+// withdraw-only instruction is sent with nobody reviewing it, so this is what
+// keeps it from making an account. The plan says the same as the apply.
+func TestNoAccountIsMadeForASubjectWantedOff(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		bound bool
+	}{
+		{"never had one", false},
+		{"the bound one was deleted", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, m := applyServer(t, `[]`)
+			if tc.bound {
+				if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			rr := httptest.NewRecorder()
+			planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu",
+				"desired":{"group":["lab_makers"],"enabled":false,"smb_enabled":false}}]}`)
+			var plan PlanResponse
+			if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil {
+				t.Fatal(err)
+			}
+			if len(plan.Outcomes) != 1 || plan.Outcomes[0].Effect != EffectNoChange {
+				t.Fatalf("the plan must promise no create: %+v", plan.Outcomes)
+			}
+
+			out := decodeOutcome(t, postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
+				"desired":{"enabled":false,"smb_enabled":false}}`))
+			if out.Effect != EffectNoChange {
+				t.Fatalf("want no_change, got %+v", out)
+			}
+			if len(m.creates) != 0 || len(m.updates) != 0 {
+				t.Fatalf("nothing may be written: %d creates %d updates", len(m.creates), len(m.updates))
+			}
+		})
+	}
+
+	// The same absent subject wanted ON is still created: the guard is about
+	// the wanted state, not about absence.
+	s, m := applyServer(t, `[]`)
+	out := decodeOutcome(t, postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
+		"desired":{"enabled":true,"smb_enabled":false}}`))
+	if out.Effect != EffectApplied || len(m.creates) != 1 {
+		t.Fatalf("an absent subject wanted on must still be created: %+v (%d creates)", out, len(m.creates))
+	}
+}

@@ -67,11 +67,11 @@ type SystemConvergence struct {
 	// WithdrawsOnly says this convergence can only take access away, which is
 	// what lets the background runner drain it without an operator.
 	//
-	// Declared by whoever queues it, and only where it is true by construction:
-	// a revocation resolves its set with the lifecycle field denied. A cascade
-	// leaves it false even when the delta happens to be a removal, because the
-	// resolved set it carries is whatever policy now says — and on the next
-	// person that same code path confers.
+	// Never declared by a caller: services.EntitlementSet.Convergence is the
+	// one constructor, and it sets this from the set (WithdrawsOnly) together
+	// with a Desired that is then the lifecycle switch alone, so the flag and
+	// what the row can do cannot disagree. A lock because no mapped role reaches
+	// the target stays false: the same resolution confers on the next person.
 	WithdrawsOnly bool
 }
 

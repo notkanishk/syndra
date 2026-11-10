@@ -37,7 +37,7 @@ func TestTheWithdrawalDeclarationIsCoherentEndToEnd(t *testing.T) {
 
 	// The claim reads it, so a target revocation drains without an operator.
 	claim := funcBody(t, readDBSource(t, "propagations.go"), "ClaimPendingRevocations")
-	if !strings.Contains(claim, "sendsOnItsOwn") || !strings.Contains(readDBSource(t, "propagations.go"), "OR p.withdraws_only)`") {
+	if !strings.Contains(claim, "runnerSends") || !strings.Contains(readDBSource(t, "propagations.go"), "OR p.withdraws_only)`") {
 		t.Error("the background claim must read the declaration, or an add-on revocation is queued and nothing ever claims it")
 	}
 	// And the surface reads it, so one that has not drained is visible. The two

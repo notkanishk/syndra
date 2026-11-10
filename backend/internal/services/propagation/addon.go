@@ -35,13 +35,11 @@ var ErrBuiltInTarget = errors.New("zitadel is the built-in target and has its ow
 //
 // Operator-triggered like the Zitadel pass, and for the same reason: these rows
 // confer access, and the drain rule narrows to grants rather than disappearing.
-// Revocation-shaped add-on work is not separated out yet — an `apply` carries a
-// resolved set rather than a direction, so "does this withdraw access" is a
-// question only a diff against the last applied snapshot can answer.
-//
-// ponytail: until that diff exists, add-on rows wait for an operator in both
-// directions. The conservative half of the rule, and stated rather than
-// silently assumed.
+// An `apply` carries a resolved set rather than a direction, so the one kind
+// the background runner sends without an operator is a withdraw-only row
+// (EntitlementSet.WithdrawsOnly: a departure or a denied account), whose
+// desired state is the lifecycle switch alone and so cannot give anything.
+// Every other add-on row waits for this pass.
 func DrainAddon(ctx context.Context, target string) (DrainResult, error) {
 	if target == db.TargetZitadel {
 		// Refused rather than ignored. The Zitadel pass exists and is not this

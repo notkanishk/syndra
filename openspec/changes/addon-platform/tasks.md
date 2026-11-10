@@ -1198,11 +1198,13 @@ too. Production showed every `system:reconcile` row to the NAS sent by hand.
   conflicts, revocation); the handlers' map-only wrapper
   (`svcResolveEntitlementsFor`) is gone, and the revocation's hand-written
   `WithdrawsOnly: true` is now the rule's answer.
-- [x] 37.3 One statement of "sends on its own" in the outbox
-  (`db.sendsOnItsOwn`), read by the background claims and carried on every
-  pending row (`sends_on_its_own`, one shared column list `outboxRowColumns`
-  for the six queries that return rows). Pending changes says "A revocation:
-  it also sends on its own" from that flag, not from `op_type`.
+- [x] 37.3 One statement of what the background runner sends in the outbox
+  (`db.runnerSends`: the kind, `sendsOnItsOwn`, and nothing holding it: no
+  role wait, no older conferring row for the same person and target). The
+  runner's claim is that predicate, and every pending row carries it
+  (`sends_on_its_own`, one shared column list `outboxRowColumns` for the six
+  queries that return rows), so Pending changes never promises a send the
+  runner would not make. The retry claim takes the complement of the kind.
 - [x] 37.4 Tests: `TestWithdrawsOnly`, `TestADepartedPersonsDisableDrainsOnItsOwn`
   (sweep), `TestConvergeSubjectOn_ADepartureIsWithdrawOnly` (webhook path),
   `TestPendingRowsSayWhetherTheySendOnTheirOwn` (live), Pending changes page
@@ -1211,3 +1213,24 @@ too. Production showed every `system:reconcile` row to the NAS sent by hand.
   `user.locked`): production has received only grant events, the last on
   15 Sep. Console steps are the owner's; until then the sweep carries every
   departure within an observation interval. `ready-for-human`
+- [x] 37.6 A withdraw-only instruction cannot give (Opus review): its
+  `Desired` is `enabled` and `smb_enabled` alone, set in
+  `EntitlementSet.Desired()` itself, so the drift plan, the queue's dedupe
+  (`PendingApplyWants`), previews and the queued row read one map. The add-on
+  leaves an absent field alone, so groups, home and quota are untouched; on a
+  locked account the groups it keeps reach nothing. A fully suspended set
+  (every value suppressed, `enabled` not denied) is not withdraw-only and still
+  says `groups: []`. Consequence: the merge base recorded after such an apply
+  holds only the two lifecycle fields, so the next full apply after a return
+  classifies groups without a base. Conservative: it surfaces rather than
+  merges. Test `TestWithdrawOnlyDesiredIsTheSwitchAlone` (mutation-checked).
+- [x] 37.7 The add-on never makes an account that is wanted off
+  (`noAccountToSwitchOff`, asked by plan and apply after the truncation
+  refusal): a subject with no account, never bound or bound to one an operator
+  deleted, gets `no_change` "nothing to switch off". Test
+  `TestNoAccountIsMadeForASubjectWantedOff` (both sites mutation-checked).
+- [ ] 37.8 Locking a password-disabled account on the real NAS. TrueNAS
+  middleware source (24.10/25.04) refuses SMB with `password_disabled` but
+  allows `locked` on such an account; not yet seen on the makerspace NAS. The
+  first departure the runner sends is the check: its outcome should be
+  `applied` with `locked: true` observed. `ready-for-human`

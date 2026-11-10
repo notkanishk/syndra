@@ -201,6 +201,11 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 		}
 	}
 
+	if noAccountToSwitchOff(current, desired) {
+		out := noAccountToSwitchOffOutcome(req.Subject)
+		out.Fingerprint = fingerprint
+		return out
+	}
 	if current == nil {
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectApply,

@@ -310,6 +310,38 @@ const notBeforeDue = `(p.not_before IS NULL OR p.not_before <= NOW())`
 // rule rather than its own copy.
 const sendsOnItsOwn = `(p.op_type = 'revoke' OR p.withdraws_only)`
 
+// runnerSends is everything the background runner asks of a row before it
+// sends one with nobody pressing Send (ClaimPendingRevocations), beyond its
+// target, its status and its backoff: it is a withdrawal (sendsOnItsOwn), no
+// role on it waits for the operator, and nothing queued earlier for the same
+// person could confer. Every outbox row carries it (outboxRowColumns), so
+// Pending changes says "sends on its own" only of a row the runner will take.
+const runnerSends = `(` + sendsOnItsOwn + `
+			  -- A role that always waits waits for the operator on the way
+			  -- out too, however the loss came about (an expiry, a removal):
+			  -- losing it is theirs to send (N14 B). Read from role_waits
+			  -- itself, not only the row's stamp, so a row written without
+			  -- one (expiry, an unreadable flag) is held all the same; and a
+			  -- row held because its role waited stays held after unmarking.
+			  AND p.wait_reason IS DISTINCT FROM 'role_waits'
+			  AND NOT EXISTS (SELECT 1 FROM role_waits w
+			                  WHERE w.project_id = p.project_id AND w.role_key = ANY(p.role_keys))
+			  AND NOT EXISTS (
+			      SELECT 1 FROM propagation_outbox e
+			       WHERE e.target     = p.target
+			         AND e.user_id    = p.user_id
+			         AND e.project_id IS NOT DISTINCT FROM p.project_id
+			         -- Anything queued earlier that could confer. On the add-on
+			         -- side that is an apply which did not declare itself a
+			         -- withdrawal: it carries a whole resolved set, so draining
+			         -- it after this one would restore exactly what is being
+			         -- withdrawn, silently, with neither row having failed.
+			         AND (e.op_type IN ('add', 'replace')
+			              OR (e.op_type = 'apply' AND NOT e.withdraws_only))
+			         AND e.status     IN ('pending', 'in_flight')
+			         AND e.intent_seq < p.intent_seq)
+			  )`
+
 // outboxRowColumns is the column list scanPropagations reads, in its order, over the
 // alias p. Every query that returns outbox rows selects exactly this, so a
 // column is added in one place.
@@ -318,7 +350,7 @@ const outboxRowColumns = `p.id, p.target, p.op_type, p.user_id, COALESCE(p.proje
 		       COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
 		       p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by,
 		       p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''),
-		       p.not_before, ` + sendsOnItsOwn
+		       p.not_before, ` + runnerSends
 
 // ClaimPendingPropagations atomically transitions up to `limit` claimable rows
 // to in_flight and returns them in dispatch order. FOR UPDATE SKIP LOCKED makes
@@ -465,31 +497,8 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 			SELECT p.id FROM propagation_outbox p
 			JOIN targets t ON t.target = p.target AND t.state = 'active'
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
-			  AND ` + sendsOnItsOwn + `
 			  AND ` + notBeforeDue + `
-			  -- A role that always waits waits for the operator on the way
-			  -- out too, however the loss came about (an expiry, a removal):
-			  -- losing it is theirs to send (N14 B). Read from role_waits
-			  -- itself, not only the row's stamp, so a row written without
-			  -- one (expiry, an unreadable flag) is held all the same; and a
-			  -- row held because its role waited stays held after unmarking.
-			  AND p.wait_reason IS DISTINCT FROM 'role_waits'
-			  AND NOT EXISTS (SELECT 1 FROM role_waits w
-			                  WHERE w.project_id = p.project_id AND w.role_key = ANY(p.role_keys))
-			  AND NOT EXISTS (
-			      SELECT 1 FROM propagation_outbox e
-			       WHERE e.target     = p.target
-			         AND e.user_id    = p.user_id
-			         AND e.project_id IS NOT DISTINCT FROM p.project_id
-			         -- Anything queued earlier that could confer. On the add-on
-			         -- side that is an apply which did not declare itself a
-			         -- withdrawal: it carries a whole resolved set, so draining
-			         -- it after this one would restore exactly what is being
-			         -- withdrawn, silently, with neither row having failed.
-			         AND (e.op_type IN ('add', 'replace')
-			              OR (e.op_type = 'apply' AND NOT e.withdraws_only))
-			         AND e.status     IN ('pending', 'in_flight')
-			         AND e.intent_seq < p.intent_seq)
+			  AND ` + runnerSends + `
 			ORDER BY p.intent_seq
 			LIMIT $1
 			FOR UPDATE OF p SKIP LOCKED

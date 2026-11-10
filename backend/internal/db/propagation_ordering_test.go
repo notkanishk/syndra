@@ -131,14 +131,19 @@ func TestEveryClaimRejectsStaleVersionsBeforeItClaims(t *testing.T) {
 // The background runner's licence, stated in the statement. A caller cannot
 // widen it, which is why the restriction is here rather than in the runner.
 func TestRevocationClaimReturnsOnlyWithdrawalsAndNeverOvertakesOlderIntent(t *testing.T) {
-	body := funcBody(t, readDBSource(t, "propagations.go"), "ClaimPendingRevocations")
+	src := readDBSource(t, "propagations.go")
+	claim := funcBody(t, src, "ClaimPendingRevocations")
+	// The claim's predicate has one statement (runnerSends), which every outbox
+	// row also carries, so Pending changes and the claim cannot disagree. The
+	// checks below read the claim together with that statement.
+	if !strings.Contains(claim, "runnerSends") {
+		t.Fatal("the background claim must use runnerSends, the one statement of what it takes")
+	}
+	body := claim + constDef(t, src, "runnerSends")
 
 	// Two withdrawal shapes and no third. Zitadel names the direction in
 	// op_type; an add-on apply carries a resolved set and cannot be read for it,
 	// so the writer declares it and the claim reads the declaration.
-	// The rule has one statement (sendsOnItsOwn), which every outbox row also
-	// carries, so a screen and the claim cannot disagree; the claim must use it.
-	src := readDBSource(t, "propagations.go")
 	if !strings.Contains(body, "sendsOnItsOwn") ||
 		!strings.Contains(src, "const sendsOnItsOwn = `(p.op_type = 'revoke' OR p.withdraws_only)`") {
 		t.Fatal("the background claim must return only withdrawals: 'add' confers, 'replace' both confers and withdraws, and an undeclared 'apply' may do either")
@@ -235,4 +240,19 @@ func constValue(t *testing.T, src, name string) string {
 		t.Fatalf("const %s not found", name)
 	}
 	return m[1]
+}
+
+// constDef is the text of a const declaration in src, from its name to the end
+// of its (possibly concatenated) value.
+func constDef(t *testing.T, src, name string) string {
+	t.Helper()
+	i := strings.Index(src, "const "+name+" =")
+	if i < 0 {
+		t.Fatalf("no const %s", name)
+	}
+	j := strings.Index(src[i:], "\n\n")
+	if j < 0 {
+		return src[i:]
+	}
+	return src[i : i+j]
 }

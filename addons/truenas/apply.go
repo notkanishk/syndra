@@ -471,6 +471,9 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 				Consequence: "Nothing was changed.",
 			}, http.StatusConflict, nil
 		}
+		if noAccountToSwitchOff(current, desired) {
+			return noAccountToSwitchOffOutcome(req.Subject), http.StatusOK, nil
+		}
 		out, status, err := s.createAndConverge(req, desired, binding)
 		s.rememberWantedSMB(req.Subject, desired, err)
 		return out, status, err
@@ -478,6 +481,26 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	out, status, err := s.converge(req, desired, current)
 	s.rememberWantedSMB(req.Subject, desired, err)
 	return out, status, err
+}
+
+// noAccountToSwitchOff is a subject with no account here whose wanted state is
+// off. There is nothing to lock, and creating an account only to lock it would
+// give a departed person's name, groups and home back to the target, or remake
+// one an operator deleted on purpose. A withdraw-only instruction is sent with
+// nobody reviewing it, so this is what keeps it from ever creating anything.
+// Plan and apply both ask it, so the plan never promises a create the apply
+// refuses. Asked after the truncation refusal: an absence read out of a capped
+// list is not an absence, and "nothing to switch off" would then be a lie.
+func noAccountToSwitchOff(current *Subject, desired desiredState) bool {
+	return current == nil && desired.managed[FieldEnabled] && !desired.enabled
+}
+
+func noAccountToSwitchOffOutcome(subject string) ApplyOutcome {
+	return ApplyOutcome{
+		Subject: subject, Effect: EffectNoChange,
+		Detail:      "This subject has no account here and is wanted switched off, so there is nothing to switch off.",
+		Consequence: "Nothing changes. No account is made.",
+	}
 }
 
 // rememberWantedSMB keeps what this apply asked for SMB on the subject's
