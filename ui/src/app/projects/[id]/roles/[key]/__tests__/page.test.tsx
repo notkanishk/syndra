@@ -133,7 +133,9 @@ describe("role members — holding is observed", () => {
     expect(screen.getByText("Not sent to Zitadel yet")).toBeInTheDocument();
   });
 
-  it("says a member the backend can't place couldn't be checked, and counts them as not held", () => {
+  // An unread Zitadel is said once, in the card's title (next test), never on
+  // every row: forty identical warnings say less than one line.
+  it("a member the backend can't place has no row label, and isn't counted as holding it", () => {
     state.data = view({
       members: [
         {
@@ -145,7 +147,7 @@ describe("role members — holding is observed", () => {
     });
     renderPage();
 
-    expect(screen.getByText("Couldn\u2019t check Zitadel")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn\u2019t check Zitadel")).toBeNull();
     expect(screen.getByText("0 people hold this role")).toBeInTheDocument();
   });
 

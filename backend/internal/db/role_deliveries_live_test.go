@@ -64,3 +64,33 @@ func TestDeliveredForReadsTheLatestAppliedRow(t *testing.T) {
 		t.Fatalf("delivered %v, want only kept (dropped by the replace, revoked, later not applied)", got[user])
 	}
 }
+
+// QueuedRevocations asks the latest row (Deliveries.Taking): a revoke still
+// queued is a removal on its way, one an add was queued behind is not, and a
+// sent one is not queued. A queued replace takes the direct-sourced roles its
+// set omits and never the ones it names: `replace` names what SURVIVES, and
+// reading it as removals would subtract exactly the access being kept.
+func TestQueuedRevocationsReadTheLatestRow(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user) })
+	for _, role := range []string{"kept", "omitted"} {
+		if _, err := UpsertDirectGrant(ctx, user, "pRep", role, "op", "", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seedOutbox(t, ctx, "revoke", "pending", user, "pQR", "direct", "", []string{"going"})
+	seedOutbox(t, ctx, "revoke", "pending", user, "pQR", "direct", "", []string{"back"})
+	seedOutbox(t, ctx, "add", "pending", user, "pQR", "bundle", "b1", []string{"back"})
+	seedOutbox(t, ctx, "revoke", "applied", user, "pQR", "direct", "", []string{"gone"})
+	seedOutbox(t, ctx, "replace", "in_flight", user, "pRep", "direct", "", []string{"kept"})
+
+	got, err := QueuedRevocations(ctx, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []RoleRef{{ProjectID: "pQR", RoleKey: "going"}, {ProjectID: "pRep", RoleKey: "omitted"}}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("queued revocations %v, want %v (an add queued behind a revoke, a sent revoke and a role the replace keeps are not on their way out)", got, want)
+	}
+}

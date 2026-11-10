@@ -1044,7 +1044,7 @@ func TestMarkQueuedDeliveriesCarriesTheEarliestQueueTime(t *testing.T) {
 		{"p1", "r2"}: {Reasons: []models.RoleReason{{Kind: "bundle", BundleID: "b1"}, {Kind: "bundle", BundleID: "b2"}}},
 		{"p1", "r3"}: {Reasons: []models.RoleReason{{Kind: "direct"}}},
 	}
-	if err := markQueuedDeliveries(context.Background(), "u1", roleMap); err != nil {
+	if err := markQueuedDeliveries(context.Background(), "u1", roleMap, func(string, string) bool { return true }); err != nil {
 		t.Fatal(err)
 	}
 	if r := roleMap[roleKey{"p1", "r1"}].Reasons[0]; !r.Queued || r.QueuedAt == nil || !r.QueuedAt.Equal(early) {

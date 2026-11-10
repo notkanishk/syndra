@@ -20,7 +20,7 @@ import {
 } from "@/components/access/AccessSource";
 import { Withheld } from "@/components/ui/Withheld";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
-import { holds, onItsWay as onItsWayStanding, standingWords, type Standing } from "@/lib/standing";
+import { holds, onItsWay as onItsWayStanding, standingTone, standingWords, type Standing } from "@/lib/standing";
 import { useMyChanges, type MyChange } from "@/lib/queries/useMyChanges";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
@@ -409,7 +409,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
 function StandingMark({ standing }: { standing: Standing }) {
   const words = standingWords(standing, "member");
   if (!words) return null;
-  const warn = standing === "not_held" || standing === "removing";
+  const warn = standingTone(standing) === "warn";
   return <span className={`text-[13.5px] ${warn ? "font-semibold text-warn-text" : "text-faint"}`}>{words}</span>;
 }
 

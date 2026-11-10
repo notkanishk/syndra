@@ -30,7 +30,7 @@ import { peopleHref } from "@/lib/people-filters";
 import { useRoleMembers, type RoleMember } from "@/lib/queries/useRoleMembers";
 import { formatShortDate } from "@/lib/format";
 import { roleName } from "@/lib/names";
-import { holds, standingWords } from "@/lib/standing";
+import { holds, standingTone, standingWords } from "@/lib/standing";
 
 type Filter = "all" | SourceKind;
 
@@ -268,8 +268,14 @@ function MemberRow({
         {member.user.title || member.user.team || member.user.email}
       </div>
       <div className="min-w-0 flex-1">
-        {member.standing !== "held" && (
-          <span className="mb-0.5 block text-[12.5px] font-semibold text-warn-text">
+        {/* Held is the healthy case, and an unread Zitadel is said once, in
+            the card's title, not on every row. */}
+        {member.standing && member.standing !== "held" && (
+          <span
+            className={`mb-0.5 block text-[12.5px] ${
+              standingTone(member.standing) === "warn" ? "font-semibold text-warn-text" : "text-faint"
+            }`}
+          >
             {standingWords(member.standing, "operator")}
           </span>
         )}

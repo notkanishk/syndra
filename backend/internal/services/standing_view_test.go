@@ -160,3 +160,41 @@ func TestExplainUserAccess_HoldingsAreTheRequestChecksAnswer(t *testing.T) {
 		}
 	}
 }
+
+// The person page stands on the person's own basis: after a capped org sweep,
+// their own complete read settles what they don't hold, so a given role
+// Zitadel lacks reads "not held", not "couldn't check".
+func TestExplainUserAccess_TheirOwnCompleteReadSettlesAbsence(t *testing.T) {
+	noRecordsFor(t, []models.DirectGrant{{ProjectID: "p1", RoleKey: "laser"}})
+	swept := time.Now().Add(-time.Hour)
+	observedStore(t, db.Observation{ObservedAt: swept, Complete: false}, nil, nil)
+	orig := svcLatestUserObservations
+	t.Cleanup(func() { svcLatestUserObservations = orig })
+	svcLatestUserObservations = func(context.Context, []string) (map[string]db.Observation, error) {
+		return map[string]db.Observation{"dev_admin": {Scope: "user", ObservedAt: time.Now(), Complete: true}}, nil
+	}
+
+	view, err := ExplainUserAccess(context.Background(), "dev_admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertStanding(t, standingIn(t, projectIn(t, view, "p1"), "laser"), models.StandingNotHeld)
+	if !view.Observation.ConcludesAbsence() {
+		t.Fatalf("the page's basis %+v is not their own complete read", view.Observation)
+	}
+}
+
+// A role a bundle gives has a ledger row (every give Syndra queues writes one),
+// so it is had even before Zitadel was read: a second ask would duplicate it.
+func TestExplainUserAccess_ABundleRoleIsHadThroughItsLedgerRow(t *testing.T) {
+	noRecordsFor(t, []models.DirectGrant{{ProjectID: "p1", RoleKey: "laser", Source: "bundle", SourceRef: "b1"}})
+	observedStore(t, db.Observation{}, db.ErrNoObservation, nil)
+
+	view, err := ExplainUserAccess(context.Background(), "dev_admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := projectIn(t, view, "p1").Holdings["laser"].Kind; got != models.HoldingForGood {
+		t.Fatalf("holding %q, want for_good", got)
+	}
+}

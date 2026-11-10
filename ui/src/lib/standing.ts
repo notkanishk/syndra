@@ -18,6 +18,13 @@ export const holds = (s: Standing): boolean => s === "held" || s === "removing";
 export const onItsWay = (s: Standing): boolean => s === "sent" || s === "waiting";
 
 /**
+ * How loudly a standing is said, the same on every surface: "warn" needs the
+ * reader (given and not there, or on its way out), "quiet" is information.
+ */
+export const standingTone = (s: Standing): "warn" | "quiet" =>
+  s === "not_held" || s === "removing" ? "warn" : "quiet";
+
+/**
  * The words for a standing, or null where silence is the word (a member's held
  * role). A missing key reads as null: the backend couldn't say.
  */

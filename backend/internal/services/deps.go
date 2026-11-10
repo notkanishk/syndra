@@ -232,7 +232,9 @@ var (
 	// standing up an observation fixture, and vice versa.
 	svcLatestOrgObservation = db.LatestOrgObservation
 	svcObservedGrantsFor    = db.ObservedGrantsFor
-	svcRoleHolderFacts      = RoleHolderFacts
+	// A person's own latest read, beside the org sweep: their basis.
+	svcLatestUserObservations = db.LatestUserObservations
+	svcRoleHolderFacts        = RoleHolderFacts
 	// Whether the directory still counts this person as a member. Read on the
 	// entitlement path so a deactivation reaches the accounts Syndra manages,
 	// which it did not before.

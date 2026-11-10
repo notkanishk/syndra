@@ -60,8 +60,13 @@ type accessSnapshot struct {
 	basis         models.ObservationBasis
 	basisComputed bool
 	// standings is the lazy, memoised standing of each user's roles, from
-	// Observed, Basis and the user's outbox rows. See Standing.
+	// Observed, BasisFor and the user's outbox rows. See Standing.
 	standings map[string]Standings
+	// deliveries and ownReads are read once for every user of the snapshot
+	// (or once for the one person of a personSnapshot): see primeFor.
+	deliveries map[string]db.Deliveries
+	ownReads   map[string]db.Observation
+	primed     map[string]bool
 }
 
 // newAccessSnapshot primes the user list (single directory call) but defers
@@ -80,11 +85,8 @@ func newAccessSnapshot(ctx context.Context) (*accessSnapshot, error) {
 }
 
 // Standing is the standing of each of userID's roles: the one answer to "does
-// this person hold this role", from what Zitadel shows (Observed, under Basis)
-// and the latest outbox row for the role. Lazy and memoised like For.
-//
-// ponytail: one outbox read per person, like Observed; a role-members page
-// pays one per member. Batch through RoleDeliveries' []string if that is slow.
+// this person hold this role", from what Zitadel shows (Observed, under
+// BasisFor) and the latest outbox row for the role. Lazy and memoised like For.
 func (s *accessSnapshot) Standing(userID string) (Standings, error) {
 	if st, ok := s.standings[userID]; ok {
 		return st, nil
@@ -93,20 +95,70 @@ func (s *accessSnapshot) Standing(userID string) (Standings, error) {
 	if err != nil {
 		return Standings{}, err
 	}
-	basis, err := s.Basis()
-	if err != nil {
-		return Standings{}, err
-	}
-	deliveries, err := svcRoleDeliveries(s.ctx, []string{userID})
+	basis, err := s.BasisFor(userID)
 	if err != nil {
 		return Standings{}, err
 	}
 	if s.standings == nil {
 		s.standings = map[string]Standings{}
 	}
-	st := newStandings(deliveries[userID], observed, basis)
+	st := newStandings(s.deliveries[userID], observed, basis)
 	s.standings[userID] = st
 	return st, nil
+}
+
+// BasisFor is the footing for one person's absences (personBasis): the newer
+// of the org sweep and their own latest read.
+func (s *accessSnapshot) BasisFor(userID string) (models.ObservationBasis, error) {
+	org, err := s.Basis()
+	if err != nil {
+		return models.ObservationBasis{}, err
+	}
+	if err := s.primeFor(userID); err != nil {
+		return models.ObservationBasis{}, err
+	}
+	if own, ok := s.ownReads[userID]; ok {
+		return personBasis(org, &own), nil
+	}
+	return personBasis(org, nil), nil
+}
+
+// primeFor reads the outbox rows and own reads behind standings once: for
+// every user of the snapshot in one read each (a role's holder list asks for
+// many), or for the one person a personSnapshot is about.
+func (s *accessSnapshot) primeFor(userID string) error {
+	if s.primed[userID] {
+		return nil
+	}
+	ids := []string{userID}
+	if len(s.users) > 0 {
+		ids = make([]string, 0, len(s.users)+1)
+		for _, u := range s.users {
+			ids = append(ids, u.ID)
+		}
+		ids = append(ids, userID) // asked about, whether or not the directory lists them
+	}
+	deliveries, err := svcRoleDeliveries(s.ctx, ids)
+	if err != nil {
+		return err
+	}
+	own, err := svcLatestUserObservations(s.ctx, ids)
+	if err != nil {
+		return err
+	}
+	if s.primed == nil {
+		s.primed, s.deliveries, s.ownReads = map[string]bool{}, map[string]db.Deliveries{}, map[string]db.Observation{}
+	}
+	for _, id := range ids {
+		s.primed[id] = true
+		if d, ok := deliveries[id]; ok {
+			s.deliveries[id] = d
+		}
+		if o, ok := own[id]; ok {
+			s.ownReads[id] = o
+		}
+	}
+	return nil
 }
 
 // personSnapshot is a snapshot for one person's page: no directory listing,
@@ -303,14 +355,32 @@ func observationBasis(ctx context.Context) (models.ObservationBasis, error) {
 	if err != nil {
 		return models.ObservationBasis{}, err
 	}
+	return basisOf(obs), nil
+}
+
+// basisOf is one read as the footing a number rests on, for the org sweep and
+// a person's own read alike.
+func basisOf(obs db.Observation) models.ObservationBasis {
 	at := obs.ObservedAt
 	return models.ObservationBasis{
 		ReadAt: &at,
-		// Current is false only when the sweep itself failed. A capped-but-
+		// Current is false only when the read itself failed. A capped-but-
 		// clean read is still current; Truncated says the cap part on its own.
 		Current:   obs.Error == "",
 		Truncated: !obs.Complete,
-	}, nil
+	}
+}
+
+// personBasis is the footing for one person: the newer of the org sweep and
+// their own latest read. A complete read of one person rewrites all of their
+// rows (db.RecordUserObservation), so when it is the newer it settles their
+// absences as a complete sweep would; an older one never overrides a newer
+// sweep, which may have seen them change.
+func personBasis(org models.ObservationBasis, own *db.Observation) models.ObservationBasis {
+	if own == nil || (org.ReadAt != nil && !own.ObservedAt.After(*org.ReadAt)) {
+		return org
+	}
+	return basisOf(*own)
 }
 
 // ConfirmedHolderCounts is HolderCounts' companion: of the people HolderCounts
@@ -638,14 +708,6 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		return models.UserAccessView{}, err
 	}
 
-	// Here and not inside collectUserRoles. Delivery is a fact this VIEW owes
-	// its reader; the drift detector and the entitlement resolver call the same
-	// collector and want Syndra's records exactly as recorded — and neither
-	// should pay a per-user query for a marker it never renders.
-	if err := markQueuedDeliveries(ctx, userID, roleMap); err != nil {
-		return models.UserAccessView{}, err
-	}
-
 	// What Zitadel shows this person holding. Read here, beside the records,
 	// so one response carries both — a screen that fetched the records and
 	// then asked a second endpoint what was real could render the two against
@@ -662,6 +724,15 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 	// the one answer the screens render (design.md, W3b).
 	standings, err := snap.Standing(userID)
 	if err != nil {
+		return models.UserAccessView{}, err
+	}
+	// Here and not inside collectUserRoles. Delivery is a fact this VIEW owes
+	// its reader; the drift detector and the entitlement resolver call the same
+	// collector and want Syndra's records exactly as recorded — and neither
+	// should pay a per-user query for a marker it never renders. A source is
+	// marked only while the role's latest row is a give on its way
+	// (standings.Giving), so the marker and the standing never disagree.
+	if err := markQueuedDeliveries(ctx, userID, roleMap, standings.Giving); err != nil {
 		return models.UserAccessView{}, err
 	}
 	direct, err := directGrantsByRole(ctx, userID)
@@ -751,7 +822,7 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 			for _, key := range keys {
 				st := standings.Of(bucket.ProjectID, key)
 				bucket.Standings[key] = st
-				bucket.Holdings[key] = holdingFrom(st, direct[access.Role{ProjectID: bucket.ProjectID, RoleKey: key}])
+				bucket.Holdings[key] = holdingFrom(st, standings.Taking(bucket.ProjectID, key), direct[access.Role{ProjectID: bucket.ProjectID, RoleKey: key}])
 			}
 		}
 		projects = append(projects, *bucket)
@@ -804,16 +875,17 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 }
 
 // observedRolesByProject is what the observation store holds for one person,
-// folded to project → roles, with the basis it rests on. Read through the
-// snapshot, so it is the same read the standings rest on, and a person with two
-// grant rows on one project keeps the roles of both.
+// folded to project → roles, with the basis it rests on: the person's own
+// (BasisFor), so the page's read line, its observed lists and its standings all
+// stand on one footing. A person with two grant rows on one project keeps the
+// roles of both.
 //
 // Returns a nil map — never an empty one — when nothing has ever been observed.
 // The distinction is the whole point: an empty map is "we looked and they hold
 // nothing", and nil is "we have not looked", and a screen that confuses the two
 // tells somebody their access is gone when it is merely unread.
 func observedRolesByProject(snap *accessSnapshot, userID string) (map[string][]string, models.ObservationBasis, error) {
-	basis, err := snap.Basis()
+	basis, err := snap.BasisFor(userID)
 	if err != nil {
 		return nil, models.ObservationBasis{}, err
 	}
@@ -1624,7 +1696,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 // role is derived by one rule, and the failure mode of the rest is a marker
 // that appears while a sibling derivation is queued, which overstates the wait
 // rather than the delivery.
-func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKey]*models.EffectiveRole) error {
+func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKey]*models.EffectiveRole, giving func(projectID, roleKey string) bool) error {
 	pending, err := svcPendingDeliveries(ctx, userID)
 	if err != nil {
 		return err
@@ -1648,7 +1720,7 @@ func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKe
 	}
 
 	for key, role := range roleMap {
-		if role == nil {
+		if role == nil || !giving(key.projectID, key.roleKey) {
 			continue
 		}
 		for i, reason := range role.Reasons {

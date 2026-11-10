@@ -31,6 +31,8 @@ const KINDS: Record<WriteKind, { rail: boolean }> = {
   terms: { rail: false },
   welcomeClaims: { rail: false },
   retriesSeen: { rail: true },
+  // A look-again moves what was observed, never the rail.
+  observed: { rail: false },
 };
 
 const has = (keys: readonly unknown[][], key: readonly unknown[]) =>
@@ -42,6 +44,11 @@ describe("the write-to-keys map", () => {
       const keys = keysFor(kind, { target: "t", appId: "a" }) as unknown[][];
       expect(has(keys, ["governance"]), `${kind} and the rail`).toBe(rail);
     }
+  });
+
+  it("a look-again reaches that person's access view and the holder lists, nobody else's", () => {
+    const keys = keysFor("observed", { user: "u1" }) as unknown[][];
+    expect(keys).toEqual([["users", "access", "u1"], ["roles", "members"]]);
   });
 
   it("an access change reaches people, bundles, roles, pending, drift's neighbours and the rail", () => {

@@ -31,30 +31,38 @@ func (s Standings) Of(projectID, roleKey string) *models.RoleStanding {
 	return standingOf(roleKey, d, ok, s.observed[projectID+":"+roleKey], s.concludes)
 }
 
+// Taking says a removal of the role is queued (db.Deliveries.Taking): decided,
+// whatever Zitadel shows yet. The request check reads it, since asking again
+// for a role on its way out is not asking for one already had.
+func (s Standings) Taking(projectID, roleKey string) bool {
+	return s.deliveries.Taking(projectID, roleKey)
+}
+
+// Giving says a give of the role is queued (db.Deliveries.Giving).
+func (s Standings) Giving(projectID, roleKey string) bool {
+	return s.deliveries.Giving(projectID, roleKey)
+}
+
 // standingOf decides one role's standing from the latest outbox row for it
 // (when there is one), whether Zitadel's index shows it, and whether the read
 // behind that index can conclude an absence. design.md, W3b.
 //
-// The latest row decides (db.Deliveries.Latest, the same answer the planner
-// reads), so an add a later revoke took back is never read as both. A row that
-// settled (confirmed, failed) says nothing Zitadel's own answer doesn't, so the
-// index decides then.
+// Holding is observed, so Zitadel's answer is never overridden: a row that is
+// still on its way only explains a state Zitadel doesn't show yet. A give on
+// its way to a role Zitadel already shows (a second source) leaves it held; a
+// removal on its way of one Zitadel doesn't show leaves it not held. The latest
+// row decides (db.Deliveries.Latest, the answer the planner reads too), so an
+// add a later revoke took back is never read as both. A row that settled
+// (confirmed, failed) says nothing Zitadel's own answer doesn't.
 func standingOf(roleKey string, d db.RoleDelivery, hasRow, observed, concludes bool) *models.RoleStanding {
-	if hasRow {
-		gives := d.Gives(roleKey)
-		switch {
-		case d.Status == "pending" || d.Status == "in_flight":
-			if gives {
-				return standing(models.StandingWaiting)
-			}
-			return standing(models.StandingRemoving)
-		case d.Status == "applied" && !d.Confirmed && gives && !observed:
-			return standing(models.StandingSent)
-		case d.Status == "applied" && !d.Confirmed && !gives && observed:
-			return standing(models.StandingRemoving)
-		}
-	}
+	unsettled := hasRow && (d.Queued() || (d.Status == "applied" && !d.Confirmed))
 	switch {
+	case unsettled && observed && !d.Gives(roleKey):
+		return standing(models.StandingRemoving)
+	case unsettled && !observed && d.Gives(roleKey) && d.Queued():
+		return standing(models.StandingWaiting)
+	case unsettled && !observed && d.Gives(roleKey):
+		return standing(models.StandingSent)
 	case observed:
 		return standing(models.StandingHeld)
 	case concludes:
@@ -68,6 +76,10 @@ func standing(s models.RoleStanding) *models.RoleStanding { return &s }
 
 // RequestHolding is what a person already has of a role, for a request or a
 // give: the role's standing, plus the direct grant's end when there is one.
+//
+// ponytail: one personSnapshot per call, so about five point reads; the request
+// list and a bulk approve call it once per request. Fine at tens of requests;
+// share one snapshot across a call site's loop if that ever grows.
 //
 //   - "for_good": they have it with no end: Syndra granted it for good, or
 //     the standing is held, sent or waiting (a bundle, a rule, or given in
@@ -93,11 +105,13 @@ func RequestHolding(ctx context.Context, userID, projectID, roleKey string) (mod
 	if err != nil {
 		return models.RequestHolding{}, fmt.Errorf("read what %s holds of %s/%s: %w", userID, projectID, roleKey, err)
 	}
-	return holdingFrom(standings.Of(projectID, roleKey), direct[access.Role{ProjectID: projectID, RoleKey: roleKey}]), nil
+	return holdingFrom(standings.Of(projectID, roleKey), standings.Taking(projectID, roleKey), direct[access.Role{ProjectID: projectID, RoleKey: roleKey}]), nil
 }
 
-// directGrantsByRole is the person's direct grants, expired ones too (an ended
-// grant can be asked to keep), keyed by role: the direct half of holdingFrom.
+// directGrantsByRole is the person's ledger rows (direct_role_grants: every
+// give Syndra queued, from any source, bundle and rule included), expired ones
+// too (an ended grant can be asked to keep), keyed by role: the recorded half
+// of holdingFrom.
 func directGrantsByRole(ctx context.Context, userID string) (map[access.Role]*models.DirectGrant, error) {
 	grants, err := svcGetDirectGrantsForUser(ctx, userID, true)
 	if err != nil {
@@ -112,15 +126,16 @@ func directGrantsByRole(ctx context.Context, userID string) (map[access.Role]*mo
 
 // holdingFrom is RequestHolding's rule, pure: the one rule for "already has
 // it", read by the request check and sent with the access view.
-func holdingFrom(st *models.RoleStanding, direct *models.DirectGrant) models.RequestHolding {
-	leaving := st != nil && *st == models.StandingRemoving
-	had := st != nil && (*st == models.StandingHeld || *st == models.StandingSent || *st == models.StandingWaiting)
-	waiting := st != nil && *st == models.StandingWaiting
-	granted := direct != nil && !leaving
+func holdingFrom(st *models.RoleStanding, taking bool, direct *models.DirectGrant) models.RequestHolding {
+	is := func(want models.RoleStanding) bool { return st != nil && *st == want }
+	if taking {
+		return models.RequestHolding{Kind: models.HoldingNone}
+	}
+	waiting := is(models.StandingWaiting)
 	switch {
-	case granted && direct.ExpiresAt != nil:
+	case direct != nil && direct.ExpiresAt != nil:
 		return models.RequestHolding{Kind: models.HoldingUntil, Until: direct.ExpiresAt, Waiting: waiting}
-	case granted || had:
+	case direct != nil || is(models.StandingHeld) || is(models.StandingSent) || waiting:
 		return models.RequestHolding{Kind: models.HoldingForGood, Waiting: waiting}
 	default:
 		return models.RequestHolding{Kind: models.HoldingNone}

@@ -139,7 +139,7 @@ export function useUpstreamUserGrants(userId: string | null) {
     queryKey: userId ? KEYS.userGrants(userId) : ["upstream", "users", "none", "grants"],
     queryFn: async () => {
       const read = await page<UpstreamGrant>(`/zitadel/users/${userId}/grants?limit=${PAGE_SIZE}`);
-      invalidateAfter(qc, "observed");
+      if (userId) invalidateAfter(qc, "observed", { user: userId });
       return read;
     },
     enabled: Boolean(userId),

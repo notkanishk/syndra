@@ -329,3 +329,35 @@ func ObservationPage(ctx context.Context, limit, offset int) (Observation, []Obs
 	}
 	return obs, items, total, nil
 }
+
+// LatestUserObservations is each person's own latest read (scope 'user'), for
+// the people asked about; a person never read alone is absent from the map.
+// With the org sweep it makes a person's basis (services.personBasis): a
+// complete read of one person rewrites all of their rows, so it settles their
+// absences as a complete sweep does.
+func LatestUserObservations(ctx context.Context, userIDs []string) (map[string]Observation, error) {
+	rows, err := querier(ctx).Query(ctx, `
+		SELECT DISTINCT ON (subject_id) subject_id, observed_at, complete, grants_seen, error
+		  FROM zitadel_observations
+		 WHERE scope = 'user' AND subject_id = ANY($1)
+		 ORDER BY subject_id, observed_at DESC`, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("read people's own reads: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]Observation{}
+	for rows.Next() {
+		var user string
+		var o Observation
+		var readErr *string
+		if err := rows.Scan(&user, &o.ObservedAt, &o.Complete, &o.GrantsSeen, &readErr); err != nil {
+			return nil, fmt.Errorf("read people's own reads: %w", err)
+		}
+		o.Scope = "user"
+		if readErr != nil {
+			o.Error = *readErr
+		}
+		out[user] = o
+	}
+	return out, rows.Err()
+}

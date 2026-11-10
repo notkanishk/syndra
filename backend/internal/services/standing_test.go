@@ -52,6 +52,10 @@ func TestStanding_TheDesignTable(t *testing.T) {
 		{"no row, incomplete read without it", nil, none, read(false), ""},
 		{"no row, Zitadel never read", nil, none, models.ObservationBasis{}, ""},
 		{"a sent removal, incomplete read without it", []db.RoleDelivery{row("revoke", "applied", 1, "r")}, none, read(false), ""},
+		// Holding is observed: a row on its way never overrides what Zitadel shows.
+		{"a give on its way to a role Zitadel already shows (a second source)", []db.RoleDelivery{row("add", "pending", 1, "r")}, seen, read(true), models.StandingHeld},
+		{"a removal on its way of a role Zitadel doesn't show", []db.RoleDelivery{row("revoke", "pending", 1, "r")}, none, read(true), models.StandingNotHeld},
+		{"a removal on its way, incomplete read without it", []db.RoleDelivery{row("revoke", "pending", 1, "r")}, none, read(false), ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := newStandings(db.NewDeliveries(tc.rows...), tc.seen, tc.basis).Of("p", "r")
@@ -75,8 +79,37 @@ func TestStanding_TheLatestRowDecides(t *testing.T) {
 	got = newStandings(db.NewDeliveries(
 		row("add", "pending", 3, "r"),
 		row("replace", "pending", 2, "other"),
-	), seen, read(true)).Of("p", "r")
+	), map[string]bool{}, read(true)).Of("p", "r")
 	assertStanding(t, got, models.StandingWaiting)
+}
+
+// A person's own complete read, newer than the org sweep, settles their
+// absences (it rewrote all of their rows); an older one never overrides a
+// newer sweep, and an incomplete one settles nothing.
+func TestPersonBasis_TheNewerReadIsTheFooting(t *testing.T) {
+	now := time.Now()
+	capped := models.ObservationBasis{ReadAt: &now, Current: true, Truncated: true}
+	newer := db.Observation{ObservedAt: now.Add(time.Minute), Complete: true}
+	older := db.Observation{ObservedAt: now.Add(-time.Minute), Complete: true}
+	newerCapped := db.Observation{ObservedAt: now.Add(time.Minute), Complete: false, Error: "the read reached its safety limit"}
+	for _, tc := range []struct {
+		name string
+		org  models.ObservationBasis
+		own  *db.Observation
+		want bool
+	}{
+		{"own complete read after a capped sweep", capped, &newer, true},
+		{"own complete read before a capped sweep", capped, &older, false},
+		{"own capped read after a capped sweep", capped, &newerCapped, false},
+		{"own complete read, no sweep ever", models.ObservationBasis{}, &newer, true},
+		{"never read on their own", capped, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := personBasis(tc.org, tc.own).ConcludesAbsence(); got != tc.want {
+				t.Fatalf("concludes absence %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 // A replace gives what it names and takes the rest.

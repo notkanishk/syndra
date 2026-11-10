@@ -27,6 +27,9 @@ func (d RoleDelivery) Gives(roleKey string) bool {
 	return d.OpType == "add" || (d.OpType == "replace" && slices.Contains(d.RoleKeys, roleKey))
 }
 
+// Queued says the row is still Syndra's to send: decided, not yet in Zitadel.
+func (d RoleDelivery) Queued() bool { return d.Status == "pending" || d.Status == "in_flight" }
+
 // Deliveries is one person's latest rows: per role its latest add or revoke,
 // per project its latest replace. Latest picks between the two, so "which came
 // last" has one answer for every reader.
@@ -44,6 +47,21 @@ func (ds Deliveries) Latest(projectID, roleKey string) (RoleDelivery, bool) {
 		return r, true
 	}
 	return d, ok
+}
+
+// Taking says the latest row for roleKey is a queued removal: decided, not
+// yet sent. The one answer to "is a removal of this on its way", read by the
+// role's standing (removing) and the cascades (QueuedRevocations).
+func (ds Deliveries) Taking(projectID, roleKey string) bool {
+	d, ok := ds.Latest(projectID, roleKey)
+	return ok && d.Queued() && !d.Gives(roleKey)
+}
+
+// Giving says the latest row for roleKey is a queued give: decided, not yet
+// sent. Whether the person already holds it is Zitadel's answer, not this.
+func (ds Deliveries) Giving(projectID, roleKey string) bool {
+	d, ok := ds.Latest(projectID, roleKey)
+	return ok && d.Queued() && d.Gives(roleKey)
 }
 
 // Roles is every role a row names, with its project: the roles Latest can say

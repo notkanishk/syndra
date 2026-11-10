@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { holds, onItsWay, standingWords, type RoleStanding } from "@/lib/standing";
+import { holds, onItsWay, standingTone, standingWords, type RoleStanding } from "@/lib/standing";
 
 const ALL: Array<RoleStanding | null> = ["held", "sent", "waiting", "removing", "not_held", null];
 
@@ -36,5 +36,13 @@ describe("holds / onItsWay", () => {
   it("a role being removed is still held; sent and waiting are on their way, not held", () => {
     expect(ALL.filter(holds)).toEqual(["held", "removing"]);
     expect(ALL.filter(onItsWay)).toEqual(["sent", "waiting"]);
+  });
+});
+
+describe("standingTone", () => {
+  it("warns only when the reader is needed", () => {
+    expect(standingTone("not_held")).toBe("warn");
+    expect(standingTone("removing")).toBe("warn");
+    for (const s of ["held", "sent", "waiting", null] as const) expect(standingTone(s)).toBe("quiet");
   });
 });

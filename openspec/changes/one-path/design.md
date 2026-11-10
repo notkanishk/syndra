@@ -119,26 +119,29 @@ Owner, 10 Nov 2026: one answer to "does this person hold this role, and why", wo
 
 **Today (mapped 10 Nov, before the change).** No reader gives that answer. `/users/{id}/access` sends the recorded closure, a per-source `queued` flag and `observed_role_keys` per project, and never reads queued removals or unconfirmed writes; `/projects/{id}/roles/{key}/members` sends `in_zitadel` and no `queued`. The UI then combines them in six places (`MemberAccess` `standing()`, `PersonAccess` `RoleGroup` with a second fetch of Zitadel's grants, `GrantDirectAccess` `noteOf`, `Holding.tsx` `askState`, the role page's `holdCount`, `answers.ts`), each with its own order. A role whose removal is queued shows as held, or as missing, depending on the page. `db.RequestHolding` is the only reader that already treats a queued removal as leaving. `db.PendingDeliveriesForUser` does not filter `target`, so an add-on row can mark a Zitadel role as not sent.
 
-**The standing.** For one person and one role (`project:role`):
+**One read, one rule for "the latest row".** `db.latestDeliveries` is the only read of the outbox's latest row per role: per person, the latest add/revoke per role and the latest replace per project, among the statuses asked for (`db.Live`: pending, in_flight, applied, failed; a cancelled or abandoned row never happened). `db.Deliveries.Latest` picks the later of the two by `intent_seq`; `RoleDelivery.Gives` says what a row means for a role (a replace gives what it names and takes the rest); `Taking` and `Giving` say a removal or a give of the role is queued. Three readers, one answer: the standing (`RoleDeliveries`), the planner's "is a delivery still standing" (`deliveredFor`, over applied rows; it used to ignore a later replace that left the role out) and the cascades' queued revocations (`queuedRevocationsFor`, which asks about revoked roles and the direct ledger roles under a replace; it used to count any pending revoke, so an add a cascade queued behind one still read as revoking).
+
+**The standing.** For one person and one role (`project:role`), from the latest row and what Zitadel shows. Holding is observed: a row on its way only explains a state Zitadel doesn't show yet.
 
 ```
-latest outbox row for this role (target zitadel; add naming it, revoke naming it,
-or any replace on its project — a replace gives what it names and takes the rest),
-by intent_seq
-   pending / in_flight, gives      → waiting      "waiting to be sent"
-   pending / in_flight, takes      → removing     "being removed" (still held)
-   applied, not confirmed, takes   → removing if Zitadel still shows it, else not_held
-   applied, not confirmed, gives   → held if Zitadel shows it, else sent
-otherwise (no row, confirmed, failed, discarded)
-   Zitadel shows it                → held
-   Zitadel read, complete, absent  → not_held
-   Zitadel not read / incomplete   → no standing (null): absence can't be concluded
+unsettled = latest row is queued (pending/in_flight), or applied and not confirmed
+  unsettled, takes it, Zitadel shows it           → removing  "being removed" (still held)
+  unsettled, gives it, Zitadel doesn't, queued    → waiting   "waiting to be sent"
+  unsettled, gives it, Zitadel doesn't, sent      → sent      "sent, not seen back yet"
+otherwise
+  Zitadel shows it                                → held      (a give on its way from a second source too)
+  the person's basis concludes absence            → not_held  (a removal on its way of what isn't there too)
+  else                                            → null: absence can't be concluded
 ```
 
-The latest row decides, so an add a later revoke took back, or the other way round, is never read as two states. `held` with no reasons is access Syndra didn't give (unexplained); `not_held` with reasons is access given and not in Zitadel. Neither needs a sixth word.
+`held` with no reasons is access Syndra didn't give; `not_held` with reasons is access given and not in Zitadel. **The person's basis** (`personBasis`) is the newer of the org sweep and their own latest read: a complete read of one person rewrites all of their rows (`RecordUserObservation`), so the person page's look-again settles their absences even after a capped sweep. The page's read line, its observed lists and its standings all stand on it.
 
-**Where it lives.** `services.accessSnapshot` becomes the holding index: beside `For` (records) and `Observed` (Zitadel), `Standing(userID)` reads the person's outbox rows once (`db.RoleDeliveries`, latest row per role, batch for many people) and applies a pure `standingOf` (table-tested). `ExplainUserAccess` and `RoleMembers` read it from the snapshot and send `standing` on each `EffectiveRole` and member. The UI gets one helper, `standingWords`, and the six derivations call it. `in_zitadel` and the second fetch of Zitadel's grants on the person page go once nothing reads them.
+**Where it lives.** `services.accessSnapshot` is the holding index: beside `For` (records) and `Observed` (Zitadel), `BasisFor(user)` and `Standing(user)`, reading outbox rows and own reads once for every user of a snapshot (a role's holder list) or for the one person of a `personSnapshot`. `/users/{id}/access` sends, per project, `standings` (every recorded and observed role) and `holdings` (what they already have of each, for a give or an ask: `holdingFrom`, the request check's own rule). `/projects/{id}/roles/{key}/members` sends `standing` per member (`in_zitadel` is gone). The UI renders through `lib/standing.ts` (`standingWords`, `standingTone`, `holds`, `onItsWay`); the pickers and the member catalogue read `holdings`; `standing-guard.test.ts` fails a component that decides holding from the raw fields. The person page keeps its look-again (`GET /zitadel/users/{id}/grants`, which re-reads Zitadel for them) and refreshes the access view after it through `invalidateAfter(qc, "observed", { user })`.
 
-**The rest of W3b.** `RequestHolding` answers from the standing plus the direct grant's end (the request guard); `MemberAccess`'s overwrite of `observed_role_keys` goes; `reachOf` already reads the snapshot (a role being removed is still held, so no change); `insights_asof` stores nothing for a day before Zitadel was ever read (no recorded fallback); the "unused bundle" hint stays a question about assignments, and stays on its one grouped count (`db.GetBundleHolderCounts`): reading it through the snapshot would walk every person's records on Home for the same answer.
+**"Already has it"** (`holdingFrom`): a role whose removal is queued (`Taking`) is not had, so asking for it again is not refused; otherwise a ledger row (`direct_role_grants`: every give Syndra queued, from any source) is had, until its end when it has one, and so is a role held, sent or waiting. The reasons' per-source "not sent yet" marker is set only while the role's latest row is a queued give (`Giving`), so it never disagrees with the standing.
+
+**The rest of W3b.** `RequestHolding` answers from the standing and the ledger (its own SQL is gone); `observedRolesByProject` keeps every grant row's roles (it kept the last one's); `PendingDeliveriesForUser` reads Zitadel's rows only; `reachOf` already reads the snapshot (a role being removed is still held, so no change); `insights_asof` stores null for a day before Zitadel was ever read (migration 000084), never the recorded count; the "unused bundle" hint stays a question about assignments, on its one grouped count (`db.GetBundleHolderCounts`): reading it through the snapshot would walk every person's records on Home for the same answer.
+
+**Open.** `observed_only` on a role's holder list stays profiles (held, unexplained): a removal queued for one of them isn't said there yet; giving them a standing means reshaping the role-delete guard (`roles.go`), which reads the same list. Home's "Sent, and not seen back yet" lists writes older than 20 minutes (a finding), where a role's standing says "sent" at once (a state): the same fact, deliberately read at two ages. `RequestHolding` reads about five point rows per call; the request list and a bulk approve call it per request (ceiling and upgrade in its ponytail note).
 
 **Owner's answers, 10 Nov 2026.** (1) Zitadel never read or read incompletely: no standing (null); the page says it couldn't check, from the view's `observation`. The four outbox-based standings still show. (2) A role sent and not seen back yet counts as already had: the request guard and the pickers say it is on its way, and no duplicate request is made. (3) Insights history says "not checked" for days before the first read. (4) "Unused bundle" stays about assignments.

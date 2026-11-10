@@ -53,6 +53,8 @@ export type WriteKind =
 export interface WriteScope {
   target?: string;
   appId?: string;
+  /** The one person a write is about, when it is about one ("observed"). */
+  user?: string;
   /** Keys only the calling hook knows (its own list or a local constant). */
   extra?: readonly QueryKey[];
 }
@@ -77,7 +79,7 @@ const ACCESS: readonly QueryKey[] = [
 
 /** Pure: the keys a write of this kind makes stale. Exported for the test. */
 export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
-  const { target, appId } = scope;
+  const { target, appId, user } = scope;
   const keys: QueryKey[] = (() => {
     switch (kind) {
       case "access":
@@ -113,8 +115,9 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
         // The rail's count and Pending changes' "Syndra stopped sending" list.
         return [GOVERNANCE, ["propagations"]];
       case "observed":
-        // People (their standings and observed counts) and a role's holders.
-        return [["users"], ["roles"]];
+        // That person's access view (standings, holdings), and the holder
+        // lists they may be on; every person's views when no one is named.
+        return [user ? ["users", "access", user] : ["users"], ["roles", "members"]];
     }
   })();
   return [...keys, ...(scope.extra ?? [])];
