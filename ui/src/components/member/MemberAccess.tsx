@@ -124,11 +124,11 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   const heldByProject = new Map(
     projects.map((project) => [
       project.project_id,
-      // Holding is observed, and a role on its way counts as had (owner, 10 Nov):
-      // so one they hold with no record of why is marked too.
+      // What they already have, by the backend's one rule (holdings): the same
+      // answer that refuses a second ask, so the catalogue never offers it.
       new Set(
-        Object.entries(project.standings ?? {})
-          .filter(([, s]) => holds(s) || onItsWayStanding(s))
+        Object.entries(project.holdings ?? {})
+          .filter(([, h]) => h.kind !== "none")
           .map(([roleKey]) => roleKey),
       ),
     ]),

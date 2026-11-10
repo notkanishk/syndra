@@ -1,6 +1,7 @@
 "use client";
 
 import type { RoleStanding } from "@/lib/standing";
+import type { RequestHolding } from "@/lib/queries/useRequests";
 import { settleIndicators } from "@/lib/queries/useIndicators";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
@@ -111,6 +112,12 @@ export interface UserAccessProject {
    * concluded.
    */
   standings?: Record<string, RoleStanding | null>;
+  /**
+   * What they already have of each of those roles for a give or an ask: the
+   * backend's one rule (services.holdingFrom), so a picker never offers what
+   * the backend refuses as "already has this". Read, never worked out here.
+   */
+  holdings?: Record<string, RequestHolding>;
 }
 
 export interface UserAccessView {

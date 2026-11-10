@@ -119,3 +119,44 @@ func TestRoleMembers_EachMemberCarriesTheirStanding(t *testing.T) {
 	assertStanding(t, got["u0"], models.StandingRemoving)
 	assertStanding(t, got["u1"], models.StandingHeld)
 }
+
+// The view's holdings are the request check's answer, role for role: a direct
+// grant Zitadel doesn't show is still had (giving it again is refused), a
+// role being removed is not, and a role sent and not seen back is.
+func TestExplainUserAccess_HoldingsAreTheRequestChecksAnswer(t *testing.T) {
+	until := time.Now().Add(72 * time.Hour)
+	noRecordsFor(t, []models.DirectGrant{
+		{ProjectID: "p1", RoleKey: "laser"},
+		{ProjectID: "p1", RoleKey: "lathe", ExpiresAt: &until},
+		{ProjectID: "p1", RoleKey: "kiln"},
+	})
+	observedStore(t, db.Observation{ObservedAt: time.Now(), Complete: true}, nil,
+		[]db.ObservedGrant{{ProjectID: "p1", RoleKeys: []string{"kiln", "drill"}}})
+	deliveries(t,
+		db.RoleDelivery{ProjectID: "p1", RoleKey: "kiln", OpType: "revoke", Status: "pending", IntentSeq: 2},
+		db.RoleDelivery{ProjectID: "p1", RoleKey: "drill", OpType: "add", Status: "applied", Confirmed: true, IntentSeq: 1},
+	)
+
+	view, err := ExplainUserAccess(context.Background(), "dev_admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := projectIn(t, view, "p1")
+	for key, want := range map[string]string{
+		"laser": models.HoldingForGood, // given, not in Zitadel: still had
+		"lathe": models.HoldingUntil,
+		"kiln":  models.HoldingNone, // being removed
+		"drill": models.HoldingForGood,
+	} {
+		if got := p.Holdings[key].Kind; got != want {
+			t.Errorf("%s: holding %q, want %q", key, got, want)
+		}
+		h, err := RequestHolding(context.Background(), "dev_admin", "p1", key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if h.Kind != p.Holdings[key].Kind {
+			t.Errorf("%s: the request check says %q, the view %q", key, h.Kind, p.Holdings[key].Kind)
+		}
+	}
+}

@@ -43,7 +43,12 @@ export type WriteKind =
   /** The welcome-claims switch. */
   | "welcomeClaims"
   /** Changes Syndra gave up on were marked seen: Home and the rail stop raising them. */
-  | "retriesSeen";
+  | "retriesSeen"
+  /**
+   * Zitadel was read again for a person (the person page's look-again): what
+   * Syndra observed moved, so every standing and observed count may have.
+   */
+  | "observed";
 
 export interface WriteScope {
   target?: string;
@@ -107,6 +112,9 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "retriesSeen":
         // The rail's count and Pending changes' "Syndra stopped sending" list.
         return [GOVERNANCE, ["propagations"]];
+      case "observed":
+        // People (their standings and observed counts) and a role's holders.
+        return [["users"], ["roles"]];
     }
   })();
   return [...keys, ...(scope.extra ?? [])];

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { invalidateAfter } from "./invalidation";
 import type { RetryState } from "@/lib/retry";
 import type { ActPlan, RolePlans } from "@/lib/usePlanConsent";
 
@@ -128,8 +129,9 @@ export function useGrantRemovalPreview(userId: string, grantId: string, roles?: 
 
 /**
  * Asks Zitadel again about one person. The read re-observes them into the store
- * the access view's standings are worked out from, so on success the view is
- * refetched; this payload is never what a screen renders holding from.
+ * the standings are worked out from, so each completed read marks those reads
+ * stale through the one map ("observed"): once per read, never per render.
+ * This payload is never what a screen renders holding from.
  */
 export function useUpstreamUserGrants(userId: string | null) {
   const qc = useQueryClient();
@@ -137,7 +139,7 @@ export function useUpstreamUserGrants(userId: string | null) {
     queryKey: userId ? KEYS.userGrants(userId) : ["upstream", "users", "none", "grants"],
     queryFn: async () => {
       const read = await page<UpstreamGrant>(`/zitadel/users/${userId}/grants?limit=${PAGE_SIZE}`);
-      void qc.invalidateQueries({ queryKey: ["users", "access", userId] });
+      invalidateAfter(qc, "observed");
       return read;
     },
     enabled: Boolean(userId),

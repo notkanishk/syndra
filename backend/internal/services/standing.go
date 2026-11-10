@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"syndra/internal/access"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -88,20 +89,29 @@ func RequestHolding(ctx context.Context, userID, projectID, roleKey string) (mod
 	if err != nil {
 		return models.RequestHolding{}, fmt.Errorf("read what %s holds of %s/%s: %w", userID, projectID, roleKey, err)
 	}
-	grants, err := svcGetDirectGrantsForUser(ctx, userID, true)
+	direct, err := directGrantsByRole(ctx, userID)
 	if err != nil {
 		return models.RequestHolding{}, fmt.Errorf("read what %s holds of %s/%s: %w", userID, projectID, roleKey, err)
 	}
-	var direct *models.DirectGrant
-	for i := range grants {
-		if grants[i].ProjectID == projectID && grants[i].RoleKey == roleKey {
-			direct = &grants[i]
-		}
-	}
-	return holdingFrom(standings.Of(projectID, roleKey), direct), nil
+	return holdingFrom(standings.Of(projectID, roleKey), direct[access.Role{ProjectID: projectID, RoleKey: roleKey}]), nil
 }
 
-// holdingFrom is RequestHolding's rule, pure.
+// directGrantsByRole is the person's direct grants, expired ones too (an ended
+// grant can be asked to keep), keyed by role: the direct half of holdingFrom.
+func directGrantsByRole(ctx context.Context, userID string) (map[access.Role]*models.DirectGrant, error) {
+	grants, err := svcGetDirectGrantsForUser(ctx, userID, true)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[access.Role]*models.DirectGrant, len(grants))
+	for i := range grants {
+		out[access.Role{ProjectID: grants[i].ProjectID, RoleKey: grants[i].RoleKey}] = &grants[i]
+	}
+	return out, nil
+}
+
+// holdingFrom is RequestHolding's rule, pure: the one rule for "already has
+// it", read by the request check and sent with the access view.
 func holdingFrom(st *models.RoleStanding, direct *models.DirectGrant) models.RequestHolding {
 	leaving := st != nil && *st == models.StandingRemoving
 	had := st != nil && (*st == models.StandingHeld || *st == models.StandingSent || *st == models.StandingWaiting)

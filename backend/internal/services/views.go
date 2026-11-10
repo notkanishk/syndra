@@ -664,6 +664,10 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 	if err != nil {
 		return models.UserAccessView{}, err
 	}
+	direct, err := directGrantsByRole(ctx, userID)
+	if err != nil {
+		return models.UserAccessView{}, err
+	}
 
 	projectBuckets := make(map[string]*models.ProjectAccessView)
 	for _, role := range roleMap {
@@ -742,9 +746,12 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 			}
 		}
 		bucket.Standings = map[string]*models.RoleStanding{}
+		bucket.Holdings = map[string]models.RequestHolding{}
 		for _, keys := range [][]string{bucket.EffectiveRoleKeys, bucket.ObservedRoleKeys} {
 			for _, key := range keys {
-				bucket.Standings[key] = standings.Of(bucket.ProjectID, key)
+				st := standings.Of(bucket.ProjectID, key)
+				bucket.Standings[key] = st
+				bucket.Holdings[key] = holdingFrom(st, direct[access.Role{ProjectID: bucket.ProjectID, RoleKey: key}])
 			}
 		}
 		projects = append(projects, *bucket)

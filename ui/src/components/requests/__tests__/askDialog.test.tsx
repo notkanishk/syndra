@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { holdingsFor } from "@/test-utils/holdings";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { actPlan } from "@/test-utils/plan";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -98,6 +99,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
         {
           project_id: "pLaser",
           standings: held.standings,
+          holdings: holdingsFor(held.grants.filter((g) => g.project_id === "pLaser"), held.standings),
           source_roles: held.queued.map((key) => ({ role_key: key, reasons: [{ kind: "direct", description: "", queued: true, queued_at: held.queuedAt }] })),
           derived_roles: [],
         },
@@ -244,11 +246,23 @@ describe("Ask for access · only what they lack, once", () => {
     expect(within(dialog()).getByRole("radio", { name: /Trained operator/ })).toBeEnabled();
   });
 
-  it("a role the backend can't place is not marked held", () => {
+  // The dialog reads the backend's holding, never the grants: one whose
+  // removal is on its way can be asked for again; one given and not in
+  // Zitadel can't, since the ask would be refused as already had.
+  it("a role being removed can be asked for again, whatever the grants say", () => {
     held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: null }];
+    held.standings = { trained: "removing" };
     search.value = "project=pLaser&role=trained";
     renderAs(false);
     expect(within(dialog()).queryByText("You have this")).toBeNull();
+  });
+
+  it("a role given and not in Zitadel is had: a second ask would be refused", () => {
+    held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: null }];
+    held.standings = { trained: "not_held" };
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    expect(within(dialog()).getByText("You have this")).toBeInTheDocument();
   });
 
   it("arriving on one given and not yet sent says it's on its way", () => {

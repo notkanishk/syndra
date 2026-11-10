@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { holdingsFor } from "@/test-utils/holdings";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -88,6 +89,10 @@ vi.mock("@/lib/queries/useUsers", () => ({
         {
           project_id: "p1",
           standings: state.standing ? { operator: state.standing } : {},
+          holdings: holdingsFor(
+            state.grants.filter((g: { project_id: string }) => g.project_id === "p1"),
+            state.standing ? { operator: state.standing } : {},
+          ),
           source_roles: state.queued.map((key) => ({ role_key: key, reasons: [{ kind: "direct", description: "", queued: true, queued_at: state.queuedAt }] })),
           derived_roles: [],
         },
@@ -216,11 +221,24 @@ describe("GrantDirectAccess · choosing the role", () => {
     expect(screen.getByRole("radio", { name: /Operator/ })).toBeEnabled();
   });
 
-  it("a role the backend can't place is not marked held, whatever the grants say", () => {
+  // The picker reads the backend's holding (holdings), never the grants: a
+  // grant whose removal is on its way is not had, and a grant Zitadel doesn't
+  // show still is, because giving it again would be refused.
+  it("a role being removed is not marked held, whatever the grants say", () => {
     state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: null }];
+    state.standing = "removing";
     open();
     fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
     expect(screen.queryByText("Has this")).toBeNull();
+    expect(screen.getByText("Being removed")).toBeInTheDocument();
+  });
+
+  it("a direct grant Zitadel doesn't show is still had: giving it again would be refused", () => {
+    state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: null }];
+    state.standing = "not_held";
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    expect(screen.getByText("Has this")).toBeInTheDocument();
   });
 
   it("a role held with an end is listed, not pickable, and offers Extend", () => {

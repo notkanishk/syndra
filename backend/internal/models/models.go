@@ -354,6 +354,10 @@ type ProjectAccessView struct {
 	// answer the screens render (RoleStanding); null for a role whose absence
 	// can't be concluded.
 	Standings map[string]*RoleStanding `json:"standings"`
+	// Holdings is what they already have of each of those roles for a give or
+	// an ask (services.RequestHolding's rule, holdingFrom): the pickers read it
+	// so they never offer what the backend refuses as "already has this".
+	Holdings map[string]RequestHolding `json:"holdings"`
 }
 
 // AllowanceBand is the third band beside Source and Derived (design §6).

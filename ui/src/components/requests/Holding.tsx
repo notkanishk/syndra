@@ -14,7 +14,7 @@ import { RuleConsentFailed } from "@/components/requests/RuleConsent";
 import { useForetell } from "@/components/ui/CancelQueuedStep";
 import { usePlanConsent } from "@/lib/usePlanConsent";
 import type { Term } from "@/lib/queries/useTerms";
-import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
+import { useUserAccess } from "@/lib/queries/useUsers";
 
 /**
  * What someone already has of a role they ask for, said where it decides
@@ -206,7 +206,6 @@ export type AskState =
  */
 export function useAskState(userId: string) {
   const access = useUserAccess(userId);
-  const grants = useUserGrants(userId);
   const requests = useRequestsMine();
   const changes = useMyChanges();
 
@@ -216,7 +215,6 @@ export function useAskState(userId: string) {
       (r) => r.status === "pending" && r.requester_id === userId && r.project_id === projectId && r.role_key === roleKey,
     );
     if (waiting) return { kind: "asked", at: waiting.created_at };
-    const grant = (grants.data ?? []).find((g) => g.project_id === projectId && g.role_key === roleKey);
     const project = access.data?.projects?.find((p) => p.project_id === projectId);
     const role = [...(project?.source_roles ?? []), ...(project?.derived_roles ?? [])].find(
       (r) => r.role_key === roleKey,
@@ -234,9 +232,12 @@ export function useAskState(userId: string) {
       return { kind: "onway", at };
     }
     if (standing === "removing") return { kind: "removing" };
-    // After "on its way": an end on a grant that hasn't reached Zitadel isn't theirs to keep yet.
-    if (standing === "held" && grant?.expires_at) return { kind: "until", until: grant.expires_at };
-    if (standing === "held") return { kind: "for_good" };
+    // After "on its way": an end on a grant that hasn't reached Zitadel isn't
+    // theirs to keep yet. Whether they already have it is the backend's rule
+    // (holdings), the same one that refuses a second ask.
+    const holding = project?.holdings?.[roleKey];
+    if (holding?.kind === "until" && holding.until) return { kind: "until", until: holding.until };
+    if (holding?.kind === "for_good" || holding?.kind === "until") return { kind: "for_good" };
     return { kind: "none" };
   };
 }
