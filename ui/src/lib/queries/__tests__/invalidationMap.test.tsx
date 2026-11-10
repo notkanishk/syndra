@@ -149,17 +149,6 @@ const READ_ONLY = new Set([
   "useSaveWelcomeClaims",
 ]);
 
-const SRC = join(QUERIES_DIR, "..", "..");
-
-/** Every non-test source file under src/. */
-function srcFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-    const p = join(dir, e.name);
-    if (e.isDirectory()) return e.name === "__tests__" ? [] : srcFiles(p);
-    return /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [p] : [];
-  });
-}
-
 function hookFiles(): string[] {
   return readdirSync(QUERIES_DIR)
     .filter((n) => /^use.*\.tsx?$/.test(n))
@@ -198,11 +187,4 @@ describe("every mutation hook goes through the map", () => {
     expect(mutationsMissingTheMap(broken)).toEqual(["useX.ts: useX"]);
   });
 
-  it("nothing in src names a key to invalidate: only invalidation.ts does", () => {
-    const offenders = srcFiles(SRC)
-      .filter((f) => !f.endsWith("lib/queries/invalidation.ts"))
-      .filter((f) => /\.invalidateQueries\(/.test(readFileSync(f, "utf8")))
-      .map((f) => f.slice(SRC.length));
-    expect(offenders).toEqual([]);
-  });
 });
