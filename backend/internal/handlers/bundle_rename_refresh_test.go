@@ -19,7 +19,7 @@ func TestHandleUpdateBundle_RefreshesEveryHolder(t *testing.T) {
 		return []models.BundleHolder{{UserID: "u1"}, {UserID: "u2"}}, nil
 	}
 	var got []string
-	bundleRefresh = func(_ context.Context, ids []string, _ ...string) error { got = ids; return nil }
+	cacheRefresh = func(_ context.Context, ids []string, _ ...string) error { got = ids; return nil }
 
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/bundles/b1", strings.NewReader(`{"name":"Lab Tech","description":""}`))
 	req.SetPathValue("id", "b1")
@@ -34,7 +34,7 @@ func TestHandleUpdateBundle_RefreshesEveryHolder(t *testing.T) {
 func TestHandleUpdateBundle_NoRefreshWhenTheRenameFails(t *testing.T) {
 	resetBundleDeps(t)
 	dbUpdateBundle = func(context.Context, string, string, string) error { return context.DeadlineExceeded }
-	bundleRefresh = func(context.Context, []string, ...string) error {
+	cacheRefresh = func(context.Context, []string, ...string) error {
 		t.Fatal("nothing changed, nothing to refresh")
 		return nil
 	}

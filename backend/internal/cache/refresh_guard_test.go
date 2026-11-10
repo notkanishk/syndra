@@ -3,8 +3,9 @@ package cache
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strings"
 	"testing"
 )
@@ -29,60 +30,137 @@ func TestRefresh_EachPersonOnceAndOneFailureDoesNotStopTheRest(t *testing.T) {
 	}
 }
 
-// Every write path that changes what facts carry routes through Refresh. A new
-// path is added here; deleting a listed path's call fails this test.
-// file -> {the seam bound to cache.Refresh, a call of it}
-var writePaths = map[string][2]string{
-	"../services/propagation/drain.go": {"deps.go", "refreshClaims("},
-	"../services/service_accounts.go":  {"", "svcRefresh("},
-	"../handlers/bundles.go":           {"", "bundleRefresh("},
-	"../handlers/webhook.go":           {"deps.go", "refreshOrLog("},
-	"../handlers/access.go":            {"deps.go", "refreshOrLog("},
-	"../handlers/bulk.go":              {"deps.go", "rebuildUserCacheDetachedFn("},
-	"../handlers/role_members.go":      {"deps.go", "rebuildUserCacheDetachedFn"},
-	"../handlers/claim_delivery.go":    {"deps.go", "cacheRefresh("},
-	"../services/expiry/sweep.go":      {"deps.go", "cacheRefresh("},
+// The seams outside this package that refresh the cache: one per package, each
+// bound to cache.Refresh (through whatever name the file imports this package
+// as). to is "Refresh" for cache.Refresh, else the function a seam is bound to.
+var seams = []struct{ file, name, to string }{
+	{"../services/propagation/deps.go", "refreshClaims", "Refresh"},
+	{"../services/service_accounts.go", "svcRefresh", "Refresh"},
+	{"../handlers/deps.go", "cacheRefresh", "Refresh"},
+	{"../services/expiry/deps.go", "cacheRefresh", "Refresh"},
+	// The detached rebuild after a planned write: a seam over a handler
+	// helper, which reaches cacheRefresh through refreshOrLog (below).
+	{"../handlers/role_members.go", "rebuildUserCacheDetachedFn", "rebuildUserCacheDetached"},
 }
 
-func TestWritePathsCallTheOneRefresh(t *testing.T) {
-	for path, w := range writePaths {
-		b, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("%s: %v", path, err)
+// Every function on a write path that changes what facts carry, and the call
+// in its own body that refreshes them (a seam, or the helper that calls one).
+// Checked in that function's body, so a call elsewhere in the file, a comment
+// or the function's own definition never satisfies it. A new write path is
+// added here.
+var writePaths = []struct{ file, fn, calls string }{
+	{"../services/propagation/drain.go", "refreshAfterRow", "refreshClaims"},
+	{"../services/service_accounts.go", "refreshServiceAccount", "svcRefresh"},
+	{"../services/expiry/sweep.go", "processUser", "cacheRefresh"},
+	{"../handlers/bundles.go", "refreshBundleHolders", "cacheRefresh"},
+	{"../handlers/claim_delivery.go", "repair", "cacheRefresh"},
+	{"../handlers/access.go", "refreshOrLog", "cacheRefresh"},
+	{"../handlers/access.go", "rebuildUserCacheOrSkip", "refreshOrLog"},
+	{"../handlers/access.go", "rebuildUserCacheDetached", "rebuildUserCacheOrSkip"},
+	{"../handlers/webhook.go", "processGrantAdded", "refreshOrLog"},
+	{"../handlers/webhook.go", "processGrantRemoved", "refreshOrLog"},
+	{"../handlers/webhook.go", "processUserDeactivated", "refreshOrLog"},
+	{"../handlers/bulk.go", "applyPlanned", "rebuildUserCacheDetachedFn"},
+	{"../handlers/act.go", "removeGrantPlanned", "rebuildUserCacheDetachedFn"},
+	{"../handlers/act.go", "bundlePlanned", "rebuildUserCacheDetachedFn"},
+}
+
+const cacheImport = "syndra/internal/cache"
+
+func parseGo(t *testing.T, path string) *ast.File {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	return f
+}
+
+// importName is the name f refers to this package by, "" when it doesn't
+// import it.
+func importName(f *ast.File) string {
+	for _, imp := range f.Imports {
+		if strings.Trim(imp.Path.Value, `"`) != cacheImport {
+			continue
 		}
-		if !strings.Contains(string(b), w[1]) {
-			t.Errorf("%s no longer calls %s: a write path that skips the refresh leaves stale facts", path, w[1])
+		if imp.Name != nil {
+			return imp.Name.Name
 		}
-		bind := path
-		if w[0] != "" {
-			bind = filepath.Join(filepath.Dir(path), w[0])
+		return "cache"
+	}
+	return ""
+}
+
+// boundTo is what name is assigned in f: a package-level var or an assignment
+// anywhere in it; nil when it is never bound.
+func boundTo(f *ast.File, name string) ast.Expr {
+	var found ast.Expr
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.ValueSpec:
+			for i, id := range n.Names {
+				if id.Name == name && i < len(n.Values) {
+					found = n.Values[i]
+				}
+			}
+		case *ast.AssignStmt:
+			for i, lhs := range n.Lhs {
+				if id, ok := lhs.(*ast.Ident); ok && id.Name == name && i < len(n.Rhs) {
+					found = n.Rhs[i]
+				}
+			}
 		}
-		bb, _ := os.ReadFile(bind)
-		if !strings.Contains(string(bb), "cache.Refresh") {
-			t.Errorf("%s must bind its seam to cache.Refresh", bind)
+		return true
+	})
+	return found
+}
+
+// callsIn says fn's own body calls name (a plain call, name(...)).
+func callsIn(f *ast.File, fn, name string) (declared, calls bool) {
+	for _, d := range f.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Name.Name != fn || fd.Body == nil {
+			continue
+		}
+		declared = true
+		ast.Inspect(fd.Body, func(n ast.Node) bool {
+			if c, ok := n.(*ast.CallExpr); ok {
+				if id, ok := c.Fun.(*ast.Ident); ok && id.Name == name {
+					calls = true
+				}
+			}
+			return !calls
+		})
+	}
+	return declared, calls
+}
+
+func TestEachSeamIsBoundToTheOneRefresh(t *testing.T) {
+	for _, s := range seams {
+		f := parseGo(t, s.file)
+		got := boundTo(f, s.name)
+		ok := false
+		switch e := got.(type) {
+		case *ast.SelectorExpr: // cache.Refresh, under the file's own import name
+			x, isIdent := e.X.(*ast.Ident)
+			ok = s.to == "Refresh" && isIdent && x.Name == importName(f) && e.Sel.Name == "Refresh"
+		case *ast.Ident:
+			ok = s.to != "Refresh" && e.Name == s.to
+		}
+		if !ok {
+			t.Errorf("%s: %s must be bound to %s, is %#v", s.file, s.name, s.to, got)
 		}
 	}
 }
 
-// cache.Refresh is the only way outside this package to refresh the cache.
-// There is no allow-list: a new raw refresh fails here.
-func TestNoRawRefreshOutsideThePackage(t *testing.T) {
-	err := filepath.Walk("..", func(p string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
-			return err
+func TestEachWritePathCallsTheRefresh(t *testing.T) {
+	for _, w := range writePaths {
+		declared, calls := callsIn(parseGo(t, w.file), w.fn, w.calls)
+		switch {
+		case !declared:
+			t.Errorf("%s: no function %s (moved or renamed? update writePaths)", w.file, w.fn)
+		case !calls:
+			t.Errorf("%s: %s no longer calls %s: a write path that skips the refresh leaves stale facts until the 12-hour warm", w.file, w.fn, w.calls)
 		}
-		if strings.HasPrefix(p, "../cache/") {
-			return nil
-		}
-		b, _ := os.ReadFile(p)
-		for _, raw := range []string{"cache.RefreshUser", "cache.RebuildUserCache"} {
-			if strings.Contains(string(b), raw) {
-				t.Errorf("%s uses %s directly: use cache.Refresh", p, raw)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 }

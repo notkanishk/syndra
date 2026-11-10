@@ -10,7 +10,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"syndra/internal/cache"
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -301,11 +300,9 @@ func handleUpdateBundle(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Bundle updated"})
 }
 
-// bundleHolders and bundleRefresh are the seams behind a rename's refresh.
-var (
-	bundleHolders = db.GetBundleHoldersByVersion
-	bundleRefresh = cache.Refresh
-)
+// bundleHolders is the seam behind a rename's refresh: who to refresh. The
+// refresh itself is the package's one (cacheRefresh).
+var bundleHolders = db.GetBundleHoldersByVersion
 
 // refreshBundleHolders: a token carries bundle NAMES, so a rename reaches every
 // holder's cached claims, not just the ones who happen to be refreshed next.
@@ -323,7 +320,7 @@ func refreshBundleHolders(ctx context.Context, bundleID string) {
 	for _, h := range holders {
 		ids = append(ids, h.UserID)
 	}
-	if err := bundleRefresh(ctx, ids); err != nil {
+	if err := cacheRefresh(ctx, ids); err != nil {
 		log.Printf("[CACHE] renamed %s but could not refresh its holders' cached claims: %v", bundleID, err)
 	}
 }
