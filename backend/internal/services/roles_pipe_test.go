@@ -105,7 +105,7 @@ func newRolePipe(t *testing.T) *rolePipe {
 	// Nobody holds anything and the read is whole, unless a test says otherwise.
 	now := time.Now()
 	roleMembersFor = func(context.Context, string, string) (RoleMembersView, error) {
-		return RoleMembersView{ObservedOnly: []models.UserProfile{}, Observation: models.ObservationBasis{ReadAt: &now, Current: true}}, nil
+		return RoleMembersView{ObservedOnly: []RoleMember{}, Observation: models.ObservationBasis{ReadAt: &now, Current: true}}, nil
 	}
 	return p
 }
@@ -319,13 +319,15 @@ func TestUpdateRole_ZitadelOnlyRoleHasNoLocalRowToChange(t *testing.T) {
 	p.assertTracedBefore(t, "update")
 }
 
+// Charlotte's grant is being removed and still counts: she holds the role until
+// Zitadel shows it gone (owner, 10 Nov 2026).
 func TestDeleteRole_HeldInZitadel_RefusedUntilTheCountIsConfirmed(t *testing.T) {
 	p := newRolePipe(t)
 	p.roles["trained"] = zitadel.ProjectRoleResult{Key: "trained"}
 	now := time.Now()
 	roleMembersFor = func(context.Context, string, string) (RoleMembersView, error) {
 		return RoleMembersView{
-			ObservedOnly: []models.UserProfile{{ID: "u2", Name: "sami Zayn"}, {ID: "u1", Name: "Charlotte Flair"}},
+			ObservedOnly: []RoleMember{{User: models.UserProfile{ID: "u2", Name: "sami Zayn"}}, {User: models.UserProfile{ID: "u1", Name: "Charlotte Flair"}, Standing: standing(models.StandingRemoving)}},
 			Observation:  models.ObservationBasis{ReadAt: &now, Current: true},
 		}, nil
 	}
@@ -379,8 +381,8 @@ func TestDeleteRole_RefusedWhileSyndraGivesIt(t *testing.T) {
 func TestDeleteRole_HoldersUnknown_Refused(t *testing.T) {
 	cases := map[string]RoleMembersView{
 		"never observed":   {},
-		"last read failed": {ObservedOnly: []models.UserProfile{}, Observation: models.ObservationBasis{Current: false}},
-		"read was capped":  {ObservedOnly: []models.UserProfile{}, Observation: models.ObservationBasis{Current: true, Truncated: true}},
+		"last read failed": {ObservedOnly: []RoleMember{}, Observation: models.ObservationBasis{Current: false}},
+		"read was capped":  {ObservedOnly: []RoleMember{}, Observation: models.ObservationBasis{Current: true, Truncated: true}},
 	}
 	for name, view := range cases {
 		t.Run(name, func(t *testing.T) {

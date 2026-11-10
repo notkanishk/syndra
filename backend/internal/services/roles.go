@@ -236,7 +236,13 @@ func roleDeleteGuard(ctx context.Context, projectID, roleKey string, confirmHold
 	if view.ObservedOnly == nil || !view.Observation.Current || view.Observation.Truncated {
 		return nil, &RoleHeldError{Unknown: true}
 	}
-	holders := append([]models.UserProfile(nil), view.ObservedOnly...)
+	// Everyone Zitadel shows holding it counts, a holder whose removal is on its
+	// way too (owner, 10 Nov 2026): they hold it until Zitadel shows it gone,
+	// and deleting the role under them is what this confirmation is for.
+	holders := make([]models.UserProfile, 0, len(view.ObservedOnly))
+	for _, m := range view.ObservedOnly {
+		holders = append(holders, m.User)
+	}
 	textsort.ByName(holders, func(u models.UserProfile) string { return u.Name }, nil)
 	if len(holders) != confirmHolders {
 		return nil, &RoleHeldError{Holders: holders}

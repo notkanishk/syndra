@@ -220,3 +220,43 @@ func TestRequestHolding_ARecordedRoleIsHadWithoutALedgerRow(t *testing.T) {
 		t.Fatalf("holding %+v, want for_good: the bundle gives it", h)
 	}
 }
+
+// Someone Zitadel shows holding the role with no record in Syndra is listed
+// with a standing too: held, or being removed once their removal is queued, the
+// same answer their own page gives.
+func TestRoleMembers_ObservedOnlyHoldersCarryTheirStanding(t *testing.T) {
+	setupSnapshotTestFixtures(t, 2, 0, 1)
+	stubRoleFixtures(t)
+	observedStore(t, db.Observation{ObservedAt: time.Now(), Complete: true}, nil,
+		[]db.ObservedGrant{{ProjectID: "p0", RoleKeys: []string{"trained"}}})
+	origCollect := collectUserRolesHook
+	t.Cleanup(func() { collectUserRolesHook = origCollect })
+	collectUserRolesHook = func(context.Context, string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
+		return map[roleKey]*models.EffectiveRole{}, nil, nil
+	}
+	orig := svcRoleDeliveries
+	t.Cleanup(func() { svcRoleDeliveries = orig })
+	svcRoleDeliveries = func(_ context.Context, ids []string) (map[string]db.Deliveries, error) {
+		if len(ids) != 2 {
+			t.Errorf("primed %v, want both holders at once", ids)
+		}
+		return map[string]db.Deliveries{"u0": db.NewDeliveries(db.RoleDelivery{ProjectID: "p0", RoleKey: "trained", OpType: "revoke", Status: "pending", IntentSeq: 1})}, nil
+	}
+
+	view, err := RoleMembers(context.Background(), "p0", "trained")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Members) != 0 || len(view.ObservedOnly) != 2 {
+		t.Fatalf("members %d, observed only %d; want 0 and 2", len(view.Members), len(view.ObservedOnly))
+	}
+	got := map[string]*models.RoleStanding{}
+	for _, m := range view.ObservedOnly {
+		if len(m.Reasons) != 0 {
+			t.Fatalf("%s: reasons %v, want none (Syndra didn't give it)", m.User.ID, m.Reasons)
+		}
+		got[m.User.ID] = m.Standing
+	}
+	assertStanding(t, got["u0"], models.StandingRemoving)
+	assertStanding(t, got["u1"], models.StandingHeld)
+}
