@@ -85,7 +85,7 @@ Both conclude only from a complete read.
 
 **Open (other waves).**
 - `services/roles.go:80-84` still rolls back when the read-back cannot confirm the role. That is W1a's.
-- The add-on transport's own retries are W1e's to move onto `extcall`.
+- ~~The add-on transport's own retries are W1e's to move onto `extcall`.~~ Done (one-path 1.9, `fix/addon-transport-extcall`): `addons/transport.go` `doAuthenticatedWith` is one `extcall.Do`; the per-call `context.WithTimeout` is `Policy.Timeout`. The transport never retried, so the rule is kept as an explicit option, `addonAttempts = 1` (`addonPolicy`); raising it applies extcall's rule (reads on 408/429/5xx, writes only on 429), so it is one visible change, not a silent one. `addon_operations` outcomes are unchanged (classification still `classifyStatus`). Guard `TestTransportHasNoRetryLoopSleepOrTimeoutOfItsOwn`.
 - `PutSetting` has no idempotency key (family 2).
 
 ## W2a · One access core (`backend/internal/access`)
