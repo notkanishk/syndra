@@ -96,6 +96,12 @@ export interface BulkOutcome {
    * refused:<cause> when Zitadel refused it outright (N1).
    */
   wait_reason?: string;
+  /**
+   * A queued row the background runner sends on its own although its op is not
+   * a revocation: an add-on lock for somebody who left (planapply
+   * QueuedSubject.SendsOnItsOwn). Said as a revocation, since it is one.
+   */
+  sends_on_its_own?: boolean;
   /** A retrying row's next try. */
   retry?: RetryState;
   /** Rows automatic rules queued with this row's act that wait for Send (N4), never the act's own wait. */

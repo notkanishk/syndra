@@ -27,6 +27,7 @@ type harness struct {
 	citation   db.PlanCitation
 	enqueued   []db.EntitlementApply
 	enqueueErr map[string]error
+	itself     map[string]bool
 	rolledBack bool
 	txOpened   bool
 }
@@ -44,8 +45,19 @@ func (h *harness) subjectOf(planSubjectID string) string {
 
 func install(t *testing.T, h *harness) {
 	t.Helper()
-	savedTx, savedState, savedClaim, savedEnqueue := inTx, targetState, claimPlan, enqueue
-	t.Cleanup(func() { inTx, targetState, claimPlan, enqueue = savedTx, savedState, savedClaim, savedEnqueue })
+	savedTx, savedState, savedClaim, savedEnqueue, savedSends := inTx, targetState, claimPlan, enqueue, sendsOnTheirOwn
+	t.Cleanup(func() {
+		inTx, targetState, claimPlan, enqueue, sendsOnTheirOwn = savedTx, savedState, savedClaim, savedEnqueue, savedSends
+	})
+	// Which queued rows the runner sends on its own: h.itself names them by
+	// outbox id; every other row waits for Send.
+	sendsOnTheirOwn = func(_ context.Context, _ pgx.Tx, ids []string) (map[string]bool, error) {
+		out := map[string]bool{}
+		for _, id := range ids {
+			out[id] = h.itself[id]
+		}
+		return out, nil
+	}
 
 	inTx = func(ctx context.Context, fn func(pgx.Tx) error) error {
 		h.txOpened = true
@@ -398,10 +410,21 @@ func TestTheResponseSaysWhetherItDrainsOnItsOwn(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		queued      int
+		itself      int
 		provisional bool
 		wants       string
 		forbids     string
 	}{
+		{
+			name: "a departure's lock goes on its own", queued: 1, itself: 1,
+			wants:   "sends them on its own within a minute",
+			forbids: "resumes the drain",
+		},
+		{
+			name: "a lock beside a grant: both said", queued: 3, itself: 1,
+			wants:   "1 only switch an account off",
+			forbids: "applied",
+		},
 		{
 			name: "a grant waits", queued: 2,
 			wants:   "resumes the drain",
@@ -419,7 +442,7 @@ func TestTheResponseSaysWhetherItDrainsOnItsOwn(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := disclose(tc.queued, tc.provisional)
+			got := disclose(tc.queued, tc.itself, tc.provisional)
 			if !strings.Contains(got, tc.wants) {
 				t.Errorf("disclosure = %q, want it to mention %q", got, tc.wants)
 			}
@@ -427,5 +450,25 @@ func TestTheResponseSaysWhetherItDrainsOnItsOwn(t *testing.T) {
 				t.Errorf("disclosure = %q, must not mention %q", got, tc.forbids)
 			}
 		})
+	}
+}
+
+// A row the runner sends on its own (a departed member's lock) is reported as
+// such, per row and in the disclosure, so the surface never tells the operator
+// it waits for a Send that will find nothing to send.
+func TestTheResultSaysWhichRowsSendOnTheirOwn(t *testing.T) {
+	h := working()
+	h.itself = map[string]bool{"outbox-u2": true}
+	install(t, h)
+
+	res, err := Apply(context.Background(), request())
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(res.Queued) != 2 || res.Queued[0].SendsOnItsOwn || !res.Queued[1].SendsOnItsOwn {
+		t.Fatalf("want u1 waiting and u2 sending on its own, got %+v", res.Queued)
+	}
+	if !strings.Contains(res.Disclosure, "1 only switch an account off") {
+		t.Errorf("the disclosure must say one goes on its own: %q", res.Disclosure)
 	}
 }

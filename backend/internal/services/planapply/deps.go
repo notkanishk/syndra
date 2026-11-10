@@ -11,4 +11,7 @@ var (
 	targetState = db.LockTargetStateTx
 	claimPlan   = db.ClaimPlanTx
 	enqueue     = db.EnqueueEntitlementApplyTx
+	// sendsOnTheirOwn reads, for the rows just queued, which the background
+	// runner sends without Send (db.runnerSends): a withdraw-only row does.
+	sendsOnTheirOwn = db.SendsOnTheirOwnTx
 )

@@ -166,6 +166,16 @@ func TestRevocationClaimReturnsOnlyWithdrawalsAndNeverOvertakesOlderIntent(t *te
 	if regexp.MustCompile(`\bOR\b|op_type`).MatchString(own) {
 		t.Error("the background claim must select through runnerSends alone: nobody gains access without an operator")
 	}
+	// And every constant it splices in is one bracketed group. AND binds
+	// tighter than OR, so an unbracketed OR in any of them (notBeforeDue's
+	// `IS NULL OR <= NOW()`) would split the WHERE in two, and one half would
+	// claim rows runnerSends never admitted.
+	for _, m := range regexp.MustCompile("` \\+ (\\w+) \\+ `").FindAllStringSubmatch(claim, -1) {
+		def := constDef(t, src, m[1])
+		if top := topLevelSQL(def[strings.Index(def, "=")+1:]); regexp.MustCompile(`\bOR\b`).MatchString(top) {
+			t.Errorf("%s is spliced into the background claim with an OR outside brackets: %q", m[1], top)
+		}
+	}
 	guard := regexp.MustCompile(`(?s)NOT EXISTS \(.*?e\.intent_seq < p\.intent_seq\)`).FindString(body)
 	if guard == "" {
 		t.Fatal("a revocation must not be dispatched ahead of OLDER conferring intent for its subject; draining the grant later restores the access")

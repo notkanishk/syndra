@@ -59,7 +59,12 @@ export interface EntitlementApplyResult {
   plan_id: string;
   target: string;
   provisional: boolean;
-  queued: Array<{ subject_id: string; outbox_id: string }>;
+  /**
+   * `sends_on_its_own`: the background runner sends this row with nobody
+   * pressing Send (it only switches an account off), read from the row as
+   * Pending changes reads it.
+   */
+  queued: Array<{ subject_id: string; outbox_id: string; sends_on_its_own?: boolean }>;
   summary: {
     total: number;
     queued: number;

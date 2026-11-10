@@ -31,6 +31,9 @@ func TestMigration87_AddsSnapshotWithdrawsOnly(t *testing.T) {
 	if !strings.Contains(up, "ADD COLUMN IF NOT EXISTS withdraws_only boolean NOT NULL DEFAULT false") {
 		t.Error("000087 up must add withdraws_only NOT NULL DEFAULT false to desired_state_snapshots")
 	}
+	if !strings.Contains(up, "CHECK (NOT withdraws_only OR (") {
+		t.Error("000087 up must hold withdraws_only to its meaning: the switch alone, off")
+	}
 	if !strings.Contains(down, "DROP COLUMN IF EXISTS withdraws_only") {
 		t.Error("000087 down must drop the column")
 	}

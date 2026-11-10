@@ -3,6 +3,8 @@ package db
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // A whole observation replaces the base: that is what keeps the Zitadel
@@ -75,6 +77,43 @@ func TestTheRowCopiesWithdrawsOnlyFromItsSnapshot(t *testing.T) {
 		}
 		if snapshot != want || row != want || intent.WithdrawsOnly != want {
 			t.Fatalf("withdraws-only %v: snapshot %v, row %v, intent %v", want, snapshot, row, intent.WithdrawsOnly)
+		}
+		// And what an apply's result reports is the runner's own reading.
+		var sends map[string]bool
+		if err := InTx(ctx, func(tx pgx.Tx) error {
+			var err error
+			sends, err = SendsOnTheirOwnTx(ctx, tx, []string{outboxID})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if sends[outboxID] != want {
+			t.Fatalf("withdraws-only %v: SendsOnTheirOwnTx says %v", want, sends[outboxID])
+		}
+	}
+}
+
+// A snapshot marked withdraw-only must be the switch alone, off: the runner
+// sends its row unreviewed, so the database refuses anything else.
+func TestAWithdrawOnlySnapshotCanOnlySwitchOff(t *testing.T) {
+	ctx := liveDB(t)
+	subject := freshSubject(t, ctx)
+	write := func(state map[string]json.RawMessage) error {
+		return InTx(ctx, func(tx pgx.Tx) error {
+			_, err := WriteDesiredStateSnapshotTx(ctx, tx, subject, "truenas", "system:reconcile", state, true)
+			return err
+		})
+	}
+	off := map[string]json.RawMessage{"enabled": json.RawMessage(`false`), "smb_enabled": json.RawMessage(`false`)}
+	if err := write(off); err != nil {
+		t.Fatalf("the switch alone, off, must be accepted: %v", err)
+	}
+	for name, state := range map[string]map[string]json.RawMessage{
+		"with groups": {"enabled": json.RawMessage(`false`), "smb_enabled": json.RawMessage(`false`), "group": json.RawMessage(`["lab"]`)},
+		"switched on": {"enabled": json.RawMessage(`true`), "smb_enabled": json.RawMessage(`false`)},
+	} {
+		if err := write(state); err == nil {
+			t.Errorf("a withdraw-only snapshot %s must be refused", name)
 		}
 	}
 }

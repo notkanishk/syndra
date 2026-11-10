@@ -844,3 +844,17 @@ func TestATargetsRefusalIsMarkedAsOne(t *testing.T) {
 		t.Fatalf("want o1 marked as refused by its target, got %v (failed %v)", h.refused, h.failed)
 	}
 }
+
+// A stale plan is not a refusal a retry would repeat: the subject moved since
+// the approval. Marked as a plain failure, so it holds nobody's next
+// withdrawal.
+func TestAStalePlanIsNotMarkedAsTheTargetsRefusal(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 409, Code: addons.CodePlanStale}
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.refused) != 0 || !strings.Contains(h.failed["o1"], "PLAN_STALE") {
+		t.Fatalf("want a plain PLAN_STALE failure, got refused %v failed %v", h.refused, h.failed)
+	}
+}

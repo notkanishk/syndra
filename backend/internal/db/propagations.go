@@ -788,6 +788,32 @@ func MarkPropagationRefused(ctx context.Context, id, errMsg, cause string) error
 		 WHERE id=$1 AND status='in_flight'`, errMsg, WaitReasonRefused(cause))
 }
 
+// SendsOnTheirOwnTx says, for rows just written on tx, which the background
+// runner will send with nobody pressing Send: runnerSends, the same statement
+// the claim and every pending row read, so an apply's result and Pending
+// changes cannot disagree about a row.
+func SendsOnTheirOwnTx(ctx context.Context, tx pgx.Tx, ids []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT p.id::text, `+runnerSends+`
+		  FROM propagation_outbox p WHERE p.id::text = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("read whether rows send on their own: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var sends bool
+		if err := rows.Scan(&id, &sends); err != nil {
+			return nil, fmt.Errorf("read whether rows send on their own: %w", err)
+		}
+		out[id] = sends
+	}
+	return out, rows.Err()
+}
+
 // MarkPropagationTargetRefused is MarkPropagationFailed for an add-on row the
 // target refused deterministically (WaitReasonTargetRefused).
 func MarkPropagationTargetRefused(ctx context.Context, id, errMsg string) error {

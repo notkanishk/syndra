@@ -237,7 +237,7 @@ export function queuedNote(plan: BulkPlan, system: string = "Zitadel", auto: Aut
     parts.push(
       retry
         ? `Recorded in Syndra. ${retryLine(retry, system, going === 1 ? "it" : "them")}`
-        : REVOKING_OPS.has(plan.op)
+        : REVOKING_OPS.has(plan.op) || plan.outcomes.some((o) => o.effect === "queued" && o.sends_on_its_own)
           ? `Recorded in Syndra, not yet sent to ${system}. Syndra sends revocations on their own, within a minute; until then the person still has the access.`
           : `Recorded in Syndra. ${system} didn't answer, so Syndra sends ${going === 1 ? "it" : "them"} again on its own.`,
     );

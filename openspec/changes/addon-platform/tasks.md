@@ -1247,6 +1247,20 @@ too. Production showed every `system:reconcile` row to the NAS sent by hand.
   guards for 000086/000087; the runner-licence guard reads `runnerSends`
   structurally (its top level after `sendsOnItsOwn` is ANDs only; the claim's
   own text has no OR or op_type). All mutation-checked.
+- [x] 37.6c An operator-approved withdrawal says it goes on its own. The
+  entitlement apply's result carries `sends_on_its_own` per queued row, read
+  from the row by `db.SendsOnTheirOwnTx` (`runnerSends`, as Pending changes
+  reads it), and `disclose` says how many go within a minute. "Check for
+  differences" treats such a row as the revocation it is (`goesItself`,
+  `queuedNote`) and its lede says a departed member's lock goes on its own.
+  A snapshot marked withdraw-only is held to its meaning by a CHECK (the switch
+  alone, off; 000087). A stale plan (PLAN_STALE) is a plain failure, not a
+  target refusal, so it holds nobody. The runner-licence guard also requires
+  every constant spliced into the claim to be one bracketed group (an
+  unbracketed OR in `notBeforeDue` would split the WHERE). Tests:
+  `TestTheResultSaysWhichRowsSendOnTheirOwn`, the disclosure table, live
+  `TestAWithdrawOnlySnapshotCanOnlySwitchOff`, `TestAStalePlanIsNotMarkedAsTheTargetsRefusal`,
+  `RehearsalResult` and `ConvergeEntitlements` tests; all mutation-checked.
 - [x] 37.7 The add-on never makes an account that is wanted off
   (`noAccountToSwitchOff`, asked by plan and apply after the truncation
   refusal): a subject with no account, never bound or bound to one an operator

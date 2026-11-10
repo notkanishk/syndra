@@ -257,7 +257,15 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 	case resp.Outcome == addons.OutcomeRejected:
 		// The add-on validated the call and refused; it did not act. Terminal,
 		// because retrying a deterministic refusal changes nothing.
-		if err := markTargetRefused(ctx, row.ID, refusalReason(resp)); err != nil {
+		// A stale plan is not the target refusing the change: the subject moved
+		// since the approval, and a fresh plan may well be accepted. Only a
+		// refusal a retry would repeat is marked as one, because only that
+		// holds the person's next withdrawal (db.WaitReasonTargetRefused).
+		settle := markTargetRefused
+		if resp.Code == addons.CodePlanStale {
+			settle = markFailed
+		}
+		if err := settle(ctx, row.ID, refusalReason(resp)); err != nil {
 			res.settleFailure(row.ID, "mark failed", err)
 			return false
 		}
