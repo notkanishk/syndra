@@ -994,9 +994,9 @@ describe("adopting an account", () => {
     const iyo = screen.getByRole("radio", { name: /Iyo Sky/ }).closest("label")!;
     expect(iyo.textContent).toContain("Lab technician · Design");
     expect(iyo.textContent).toContain("iyo@example.edu");
-    const kabirRadio = screen.getByRole("radio", { name: /Kairi Sane/ });
-    const alexa = kabirRadio.closest("label")!;
-    expect(kabirRadio).toBeDisabled();
+    const kairiRadio = screen.getByRole("radio", { name: /Kairi Sane/ });
+    const alexa = kairiRadio.closest("label")!;
+    expect(kairiRadio).toBeDisabled();
     expect(alexa.textContent).toContain("Already has alexa.r on TrueNAS");
     expect(alexa.textContent).not.toMatch(/—/);
   });
