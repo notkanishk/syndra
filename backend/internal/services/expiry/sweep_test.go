@@ -19,12 +19,12 @@ func resetSweepDeps(t *testing.T) {
 	t.Helper()
 	origGet := svcGetExpiredDirectGrants
 	origExpire := svcExpireDirectGrant
-	origCache := cacheRefreshUser
+	origCache := cacheRefresh
 	origDeliver := svcDeliverChange
 	t.Cleanup(func() {
 		svcGetExpiredDirectGrants = origGet
 		svcExpireDirectGrant = origExpire
-		cacheRefreshUser = origCache
+		cacheRefresh = origCache
 		svcDeliverChange = origDeliver
 	})
 	svcDeliverChange = func(context.Context, services.Change) services.Delivery { return services.Delivery{} }
@@ -66,10 +66,10 @@ func (r *recorder) install() {
 			Revoked:   []string{projectID + "/" + role},
 		}, nil
 	}
-	cacheRefreshUser = func(_ context.Context, uid string, _ ...string) error {
+	cacheRefresh = func(_ context.Context, users []string, _ ...string) error {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		r.invalidatedFor = append(r.invalidatedFor, uid)
+		r.invalidatedFor = append(r.invalidatedFor, users...)
 		return nil
 	}
 }
@@ -412,7 +412,7 @@ func TestSweep_SendsEachCommittedExpiryAfterTheRefresh(t *testing.T) {
 	r.install()
 	r.outcome["g2"] = db.ErrGrantRenewed
 	var order []string
-	cacheRefreshUser = func(context.Context, string, ...string) error {
+	cacheRefresh = func(context.Context, []string, ...string) error {
 		order = append(order, "refresh")
 		return nil
 	}

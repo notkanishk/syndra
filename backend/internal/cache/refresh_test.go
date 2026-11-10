@@ -148,7 +148,7 @@ func TestRefreshUser_RecompilesInsteadOfInvalidating(t *testing.T) {
 		models.DirectGrant{ProjectID: "pB", RoleKey: "editor"},
 		models.DirectGrant{ProjectID: "pB", RoleKey: "admin"},
 	)
-	if err := RefreshUser(ctx, "u1"); err != nil {
+	if err := refreshPerson(ctx, "u1"); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	if got := s.roles(t, "u1", "pA"); len(got) != 1 {
@@ -162,7 +162,7 @@ func TestRefreshUser_RecompilesInsteadOfInvalidating(t *testing.T) {
 		models.DirectGrant{ProjectID: "pB", RoleKey: "admin"},
 		models.DirectGrant{ProjectID: "pC", RoleKey: "member"},
 	)
-	if err := RefreshUser(ctx, "u1", "pC"); err != nil {
+	if err := refreshPerson(ctx, "u1", "pC"); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	for p, want := range map[string]int{"pA": 1, "pB": 2, "pC": 1} {
@@ -176,7 +176,7 @@ func TestRefreshUser_RecompilesInsteadOfInvalidating(t *testing.T) {
 		models.DirectGrant{ProjectID: "pB", RoleKey: "editor"},
 		models.DirectGrant{ProjectID: "pC", RoleKey: "member"},
 	)
-	if err := RefreshUser(ctx, "u1", "pB"); err != nil {
+	if err := refreshPerson(ctx, "u1", "pB"); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	if got := s.roles(t, "u1", "pB"); len(got) != 1 || got[0] != "editor" {
@@ -206,7 +206,7 @@ func TestRefreshUser_MovesTheOldLayoutOnce(t *testing.T) {
 	s.kv["mapping:u2:pA"] = `{"roles":["admin"]}`
 	holding(models.DirectGrant{ProjectID: "pA", RoleKey: "viewer"})
 
-	if err := RefreshUser(ctx, "u1"); err != nil {
+	if err := refreshPerson(ctx, "u1"); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := s.kv["mapping:u1:pOld"]; ok {
@@ -229,7 +229,7 @@ func TestRefreshUser_MovesTheOldLayoutOnce(t *testing.T) {
 		t.Errorf("an unmoved person reads from the old key until they move: %+v %v %v", f, ok, err)
 	}
 
-	_ = RefreshUser(ctx, "u1")
+	_ = refreshPerson(ctx, "u1")
 	if s.ops["SCAN"] != 1 {
 		t.Errorf("SCANs = %d, want one, for the move only", s.ops["SCAN"])
 	}
@@ -247,7 +247,7 @@ func TestRefreshUser_ACompileFailureDropsWhatItCouldNotRefresh(t *testing.T) {
 		return nil, errors.New("db down")
 	}
 
-	if err := RefreshUser(context.Background(), "u1", "pA"); err == nil {
+	if err := refreshPerson(context.Background(), "u1", "pA"); err == nil {
 		t.Fatal("a failed compile must be reported")
 	}
 	if s.has("u1", "pA") {
@@ -381,9 +381,9 @@ func TestRefreshUser_SerializedPerUser(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); _ = RefreshUser(context.Background(), "u1") }()
+	go func() { defer wg.Done(); _ = refreshPerson(context.Background(), "u1") }()
 	<-entered
-	go func() { defer wg.Done(); _ = RefreshUser(context.Background(), "u1") }()
+	go func() { defer wg.Done(); _ = refreshPerson(context.Background(), "u1") }()
 	time.Sleep(50 * time.Millisecond) // let the second reach the lock
 	close(release)
 	wg.Wait()
@@ -401,7 +401,7 @@ func TestRefreshUser_EscapesGlobCharsInTheScan(t *testing.T) {
 	redisScanKeys = func(_ context.Context, p string) ([]string, error) { pattern = p; return nil, nil }
 	holding()
 
-	_ = RefreshUser(context.Background(), `a*b[c]?\d`)
+	_ = refreshPerson(context.Background(), `a*b[c]?\d`)
 	if want := `mapping:a\*b\[c\]\?\\d:*`; pattern != want {
 		t.Errorf("scan pattern = %q, want %q", pattern, want)
 	}

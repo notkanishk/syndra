@@ -333,7 +333,7 @@ func StoredFacts(ctx context.Context, userID, projectID string) (claims.Facts, b
 	return f, true, nil
 }
 
-// RefreshUser recompiles a user's claims after something changed what they
+// refreshPerson recompiles a user's claims after something changed what they
 // hold. The token path serves ONLY what is stored here, so deleting a key and
 // waiting is an outage of the claims, not a refresh: nothing else rebuilds it.
 //
@@ -343,7 +343,7 @@ func StoredFacts(ctx context.Context, userID, projectID string) (claims.Facts, b
 // is dropped only when it must not be served: it now yields no roles (and
 // nobody asked for it), or the compile failed, where stale facts could still
 // carry a revoked role and the data plane's degraded path is safer.
-func RefreshUser(ctx context.Context, userID string, projectIDs ...string) error {
+func refreshPerson(ctx context.Context, userID string, projectIDs ...string) error {
 	ps, err := newPass(ctx, nil)
 	if err != nil {
 		return err
@@ -362,7 +362,7 @@ var userLocks sync.Map
 // carrying * or [ would otherwise refresh (or drop) other users' keys.
 var globEscape = strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`, `]`, `\]`).Replace
 
-// refreshUser is RefreshUser; warm marks a background pass, which must never
+// refreshUser is refreshPerson; warm marks a background pass, which must never
 // make a good entry worse: a failed compile there keeps the facts, since
 // nothing changed and the stored claims are as right as they were. A
 // change-driven refresh drops them instead, where stale facts could carry a
@@ -470,14 +470,6 @@ func WriteCanary(ctx context.Context) error {
 		return fmt.Errorf("cache: write the canary's facts: %w", err)
 	}
 	return nil
-}
-
-// RebuildUserCache refreshes a user's cache, logging rather than returning a
-// failure, for callers with nothing to do about one.
-func RebuildUserCache(ctx context.Context, userID string, projectIDs []string) {
-	if err := RefreshUser(ctx, userID, projectIDs...); err != nil {
-		log.Printf("[CACHE] rebuild failed for %s: %v", userID, err)
-	}
 }
 
 // errGone is a person Zitadel no longer has: deleted there, still holding

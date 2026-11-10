@@ -87,7 +87,7 @@ func processUser(ctx context.Context, userID string, candidates []models.DirectG
 	// changes again. A recompile, not an invalidation: the token path serves
 	// only what is stored, so a deleted key is a degraded token until something
 	// else happens to rebuild it.
-	if err := cacheRefreshUser(ctx, userID); err != nil {
+	if err := cacheRefresh(ctx, []string{userID}); err != nil {
 		log.Printf("[SCHEDULER] Cache refresh failed user=%s err=%v (non-fatal)", userID, err)
 	}
 	// Then each committed expiry is sent as its plan decided (task 1.9): what

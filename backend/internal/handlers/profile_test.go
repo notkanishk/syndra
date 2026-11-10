@@ -36,7 +36,6 @@ func (s *stubDirectory) RoleKeysForProject(_ context.Context, _ string) ([]strin
 }
 func (s *stubDirectory) ProjectName(_ context.Context, _ string) (string, error) { return "", nil }
 func (s *stubDirectory) Tag() string                                             { return "stub" }
-func (s *stubDirectory) InvalidateAll()                                          {}
 func (s *stubDirectory) InvalidateProject(_ string)                              {}
 func (s *stubDirectory) InvalidateUsers()                                        {}
 

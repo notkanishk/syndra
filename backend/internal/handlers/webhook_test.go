@@ -42,7 +42,7 @@ func TestWebhookRoute_RejectsInvalidActionsV2Signature(t *testing.T) {
 // resetWebhookDeps saves and restores injectable vars for webhook handler tests.
 func resetWebhookDeps(t *testing.T) {
 	t.Helper()
-	origRebuild := cacheRebuildUser
+	origRefresh := cacheRefresh
 	origOnboard := webhookTriggerOnboarding
 	origInsert := dbInsertWebhookEvent
 	origComplete := dbCompleteWebhookEvent
@@ -55,7 +55,7 @@ func resetWebhookDeps(t *testing.T) {
 	origHasExclusion := dbHasExclusion
 	origUpsertDriftItem := dbUpsertDriftItemWithEvidence
 	t.Cleanup(func() {
-		cacheRebuildUser = origRebuild
+		cacheRefresh = origRefresh
 		webhookTriggerOnboarding = origOnboard
 		dbInsertWebhookEvent = origInsert
 		dbCompleteWebhookEvent = origComplete
@@ -81,7 +81,7 @@ func resetWebhookDeps(t *testing.T) {
 func setupNoopWebhookDeps(t *testing.T) {
 	t.Helper()
 	resetWebhookDeps(t)
-	cacheRebuildUser = func(_ context.Context, _ string, _ []string) {}
+	cacheRefresh = func(context.Context, []string, ...string) error { return nil }
 	webhookTriggerOnboarding = func(_ context.Context, _, _, _ string) error { return nil }
 	dbInsertWebhookEvent = func(_ context.Context, _, _, _, _, _ string) (string, bool, error) {
 		return "evt-1", true, nil
@@ -174,9 +174,10 @@ func TestWebhook_GrantRemoved(t *testing.T) {
 
 	var invalidateCalled bool
 	var refreshed []string
-	cacheRebuildUser = func(_ context.Context, _ string, projects []string) {
+	cacheRefresh = func(_ context.Context, _ []string, projects ...string) error {
 		invalidateCalled = true
 		refreshed = projects
+		return nil
 	}
 
 	body := []byte(`{"event_type":"grant_removed","user_id":"u1","source_project":"p1","role_key":"editor"}`)
@@ -241,7 +242,7 @@ func TestWebhook_UserDeactivated(t *testing.T) {
 
 	var invalidateCalled bool
 	var enforceCalled bool
-	cacheRebuildUser = func(_ context.Context, _ string, _ []string) { invalidateCalled = true }
+	cacheRefresh = func(context.Context, []string, ...string) error { invalidateCalled = true; return nil }
 	svcUserExpectsRole = func(_ context.Context, _, _, _ string) (bool, error) {
 		enforceCalled = true
 		return false, nil
@@ -672,7 +673,7 @@ func TestHandleZitadelWebhook_LifecycleEvents_DispatchWithoutSourceProject(t *te
 	cases := []struct {
 		name      string
 		event     string
-		expectInv bool // user_deactivated / user_locked → cacheRebuildUser
+		expectInv bool // user_deactivated / user_locked → cacheRefresh
 		expectOnb bool // user_created → onboarding trigger
 	}{
 		{"user.human.added → user_created", "user.human.added", false, true},
@@ -686,7 +687,7 @@ func TestHandleZitadelWebhook_LifecycleEvents_DispatchWithoutSourceProject(t *te
 
 			var invalidated bool
 			var onboarded bool
-			cacheRebuildUser = func(_ context.Context, _ string, _ []string) { invalidated = true }
+			cacheRefresh = func(context.Context, []string, ...string) error { invalidated = true; return nil }
 			webhookTriggerOnboarding = func(_ context.Context, _, _, _ string) error {
 				onboarded = true
 				return nil
@@ -940,5 +941,24 @@ func TestProcessGrantRemoved_ARemovalSyndraDidNotIntendIsNotAFinding(t *testing.
 	}
 	if called {
 		t.Fatal("Zitadel and Syndra agreeing is not a finding")
+	}
+}
+
+// The refresh recompiles what the onboarding write left, so it runs after it.
+func TestProcessGrantAdded_RefreshesAfterTheOnboardingWrite(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	var order []string
+	webhookTriggerOnboarding = func(context.Context, string, string, string) error {
+		order = append(order, "write")
+		return nil
+	}
+	cacheRefresh = func(context.Context, []string, ...string) error { order = append(order, "refresh"); return nil }
+
+	ev := WebhookPayload{EventType: "grant_added", UserID: "u1", SourceProject: "p1", RoleKeys: []string{"new_user"}}
+	if err := processGrantAdded(context.Background(), ev, "evt-1"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(order, ",") != "write,refresh" {
+		t.Fatalf("the refresh must follow the write it reflects: %v", order)
 	}
 }

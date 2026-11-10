@@ -35,11 +35,11 @@ func resetBundleDeps(t *testing.T) {
 	origGetByID := dbGetBundleByID
 	origCascadeDelete := svcCascadeBundleRetired
 	origAudit := dbInsertAuditLog
-	origHolders, origRefresh := bundleHolders, bundleRefresh
+	origHolders, origRefresh := bundleHolders, cacheRefresh
 	bundleHolders = func(context.Context, string) ([]models.BundleHolder, error) { return nil, nil }
-	bundleRefresh = func(context.Context, []string, ...string) error { return nil }
+	cacheRefresh = func(context.Context, []string, ...string) error { return nil }
 	t.Cleanup(func() {
-		bundleHolders, bundleRefresh = origHolders, origRefresh
+		bundleHolders, cacheRefresh = origHolders, origRefresh
 		dbCreateBundle = origCreate
 		dbGetAllBundles = origGetAll
 		dbGetRolesForBundle = origGetRoles

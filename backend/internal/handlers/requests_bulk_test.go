@@ -69,7 +69,7 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 	// An apply cites an approval now, so every rehearsal needs somewhere to land.
 	stubPlanStore(t)
 	origGet := dbGetAccessRequestByID
-	origRebuild := cacheRebuildUser
+	origRefresh := cacheRefresh
 	origHolding := dbRequestHolding
 	origStatus := dbGetPropagationStatus
 	origDecide, origDeliver := svcDecideRequest, svcDeliverChange
@@ -82,7 +82,7 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 	t.Cleanup(func() {
 		dbGetPropagationStatus = origStatus
 		dbRequestHolding = origHolding
-		cacheRebuildUser = origRebuild
+		cacheRefresh = origRefresh
 		dbGetAccessRequestByID = origGet
 		svcDecideRequest, svcDeliverChange = origDecide, origDeliver
 	})
@@ -118,7 +118,7 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 		}
 		return d
 	}
-	cacheRebuildUser = func(context.Context, string, []string) {}
+	cacheRefresh = func(context.Context, []string, ...string) error { return nil }
 	stubPlannedBulk(t, &writes)
 	return &writes
 }

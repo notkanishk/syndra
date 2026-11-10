@@ -413,11 +413,12 @@ func TestRepairQueue_DedupedBoundedRateLimited(t *testing.T) {
 		t.Fatalf("stats = %+v, want 3 queued (a deduped) and 1 dropped", st)
 	}
 
-	orig := cacheRefreshUser
-	t.Cleanup(func() { cacheRefreshUser = orig })
+	orig := cacheRefresh
+	t.Cleanup(func() { cacheRefresh = orig })
 	var mu sync.Mutex
 	var at []time.Time
-	cacheRefreshUser = func(_ context.Context, id string, _ ...string) error {
+	cacheRefresh = func(_ context.Context, ids []string, _ ...string) error {
+		id := ids[0]
 		mu.Lock()
 		at = append(at, time.Now())
 		mu.Unlock()
