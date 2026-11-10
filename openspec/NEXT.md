@@ -30,7 +30,7 @@ Branch `feat/a22-messages`; design in `design_handoff_syndra/reconcile-2026-10/f
 
 ## 0e. A stand-in Zitadel on staging (8 Nov 2026)
 
-Branch `feat/staging-world`: `zitadel.NewWorldClient` answers every `ZitadelClient` call from a world file (production's users, title/team metadata, projects, roles, applications, token settings, grants), and grant and role writes save back to it; `syndra-world-export` writes that file from a live Zitadel through `zitadel.WorldReader`, which has no write methods. On with `ZITADEL_FAKE_WORLD` and only without `ZITADEL_DOMAIN` (both refuses the start); the directory, holdings, drift and planner run unchanged over it, and the Zitadel page says it is the stand-in. How it refreshes: DEPLOY.md, staging. **Operator-gated, open:** production's nightly push runs the export and sends `prod-world.json`; staging's forced command accepts it; staging's `.env` sets `ZITADEL_FAKE_WORLD=/var/lib/syndra-staging/world/world.json`; then one staging deploy and a give and a remove on it.
+Branch `feat/staging-world`: `zitadel.NewWorldClient` answers every `ZitadelClient` call from a world file (production's users, title/team metadata, projects, roles, applications, token settings, grants), and grant and role writes save back to it; `syndra-world-export` writes that file from a live Zitadel through `zitadel.WorldReader`, which has no write methods. On with `ZITADEL_FAKE_WORLD` and only without `ZITADEL_DOMAIN` (both refuses the start); the directory, holdings, drift and planner run unchanged over it, and the Zitadel page says it is the stand-in. How it refreshes: DEPLOY.md, staging. **Live** (checked 10 Nov 2026): production's nightly push runs the export (02:33 IST, 37 users, 14 projects, 65 grants) and sends `prod-world.json`; staging's `.env` sets `ZITADEL_FAKE_WORLD`; the backend logs `[ZITADEL] Source=world`; the give and revoke checks of 8 Nov (§0f) ran on it.
 
 Branch `fix/stand-in-quiet`: the stand-in has no actions, event listener or claims setup, so behind `zitadel.IsStandIn()` the claims configuration check reads nothing and settles the CONFIG_DRIFT and CANNOT_CHECK findings it raised, the keyring reads nothing, and the automatic key replacement is off with `off_reason: "stand_in"` (nothing to rotate). The Zitadel page shows one quiet line in place of claims delivery, the signing key and its overdue Notice. The sample-data count (`db.CountDemoResidue`, `countActors`) leaves out audit rows that name a development identity only as actor, since operators sign in to staging as one; demo projects and users as targets still count. Production unchanged; both paths tested (`handlers/stand_in_test.go`, `zitadel/__tests__/page.test.tsx`).
 
@@ -418,8 +418,8 @@ Wave 1 · feel is built (P2 forecast tense, P11 Appearance Device, P12 scrim/lay
   honest record was on no screen. Fixed 2026-09-10: real faults propagate and
   retry, a missing bundle is its own outcome rather than a defect, and a
   reconciler answers "who joined and got nothing" from state instead of from
-  having heard an event. **The deployment still has no welcome bundle
-  configured** — that is now a visible choice rather than five silent failures.
+  having heard an event. A welcome bundle has since been set (production,
+  10 Nov 2026: one of two bundles is `is_welcome`).
 
 - **A deactivated person kept every account Syndra manages.** Grants survive
   deactivation in Zitadel, so every mapped role survived with them and the
@@ -811,10 +811,8 @@ read-back on that account. Everything found is fixed under
 [`one-truth-many-checks`](changes/one-truth-many-checks/tasks.md) §4 ("Holding
 is observed"). What is still open, and whose it is:
 
-- **Owner decision — welcome bundle.** No bundle is flagged `is_welcome`; every
-  join since 4 Aug got nothing (now visible on Home, no longer a silent
-  failure). Flag one under Bundles → "Default for new members", or record that
-  auto-onboarding is not wanted.
+- ~~**Owner decision — welcome bundle.**~~ Done: the owner flagged one under
+  Bundles → "Default for new members" (production, checked 10 Nov 2026).
 - **Owner decision — TrueNAS objects.** Group, dataset and share (one name for
   all three keeps the member mount line true), the role key, and the Zitadel
   project that carries it. Syndra's key is `ACCOUNT_WRITE` only; the objects
