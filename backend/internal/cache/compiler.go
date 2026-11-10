@@ -472,14 +472,6 @@ func WriteCanary(ctx context.Context) error {
 	return nil
 }
 
-// RebuildUserCache refreshes a user's cache, logging rather than returning a
-// failure, for callers with nothing to do about one.
-func RebuildUserCache(ctx context.Context, userID string, projectIDs []string) {
-	if err := RefreshUser(ctx, userID, projectIDs...); err != nil {
-		log.Printf("[CACHE] rebuild failed for %s: %v", userID, err)
-	}
-}
-
 // errGone is a person Zitadel no longer has: deleted there, still holding
 // records here. Not a failure to retry on every pass (assessment D1).
 var errGone = errors.New("gone from Zitadel")

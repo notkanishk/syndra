@@ -44,7 +44,7 @@ Branch `release/coherence`: groups A (delivery and one retry model), B (rule con
 
 ## 0d. One refresh path, W2b and W2c (5 Nov 2026)
 
-Branch `fix/one-refresh-path`; detail in [`changes/one-path`](changes/one-path/proposal.md). Backend: `cache.Refresh` is the one post-commit refresh; the drain (including failed and exhausted rows), service-account mark/unmark and bundle rename now call it. UI: `lib/queries/invalidation.ts` maps writes to keys and every mutation hook uses it; both are guard-tested. Open: move `webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go`, `expiry/sweep.go` onto `Refresh` (guard allow-list); the webhook refreshes before its rule write; dead `directory.InvalidateUsers/InvalidateAll`; `HomeLimit.tsx` and `UnconfirmedChanges.tsx` still call `invalidateQueries` directly.
+Branch `fix/one-refresh-path`; detail in [`changes/one-path`](changes/one-path/proposal.md). Backend: `cache.Refresh` is the one post-commit refresh; the drain (including failed and exhausted rows), service-account mark/unmark and bundle rename now call it. UI: `lib/queries/invalidation.ts` maps writes to keys and every mutation hook uses it; both are guard-tested. Closed on `fix/one-refresh-rest`: every refresh site is on `Refresh`, guard allow-list empty, webhook refreshes after its write, `directory.InvalidateAll` deleted. Open: `directory.InvalidateUsers` (no production caller, five tests use it); `HomeLimit.tsx` and `UnconfirmedChanges.tsx` still call `invalidateQueries` directly.
 
 ## 0d. One access core (one-path W2a, 5 Nov 2026)
 

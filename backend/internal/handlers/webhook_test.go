@@ -942,3 +942,22 @@ func TestProcessGrantRemoved_ARemovalSyndraDidNotIntendIsNotAFinding(t *testing.
 		t.Fatal("Zitadel and Syndra agreeing is not a finding")
 	}
 }
+
+// The refresh recompiles what the onboarding write left, so it runs after it.
+func TestProcessGrantAdded_RefreshesAfterTheOnboardingWrite(t *testing.T) {
+	setupNoopWebhookDeps(t)
+	var order []string
+	webhookTriggerOnboarding = func(context.Context, string, string, string) error {
+		order = append(order, "write")
+		return nil
+	}
+	cacheRebuildUser = func(context.Context, string, []string) { order = append(order, "refresh") }
+
+	ev := WebhookPayload{EventType: "grant_added", UserID: "u1", SourceProject: "p1", RoleKeys: []string{"new_user"}}
+	if err := processGrantAdded(context.Background(), ev, "evt-1"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(order, ",") != "write,refresh" {
+		t.Fatalf("the refresh must follow the write it reflects: %v", order)
+	}
+}

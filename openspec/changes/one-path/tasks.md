@@ -101,9 +101,9 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [x] `cache/refresh.go` `Refresh`; drain refreshes applied, failed and exhausted rows
 - [x] Service-account mark/unmark and bundle rename refresh through it
 - [x] Guard `cache/refresh_guard_test.go`; behavioural tests per path
-- [ ] Move `webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go`, `expiry/sweep.go` onto `Refresh`, then empty the guard's allow-list `ready-for-agent`
-- [ ] Webhook refreshes before the rule write (`webhook.go:294` then `:297`); order it after `ready-for-agent`
-- [ ] Dead `directory.InvalidateUsers`/`InvalidateAll` and the comment at `directory/zitadel.go:168` `ready-for-agent`
+- [x] `webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go`, `expiry/sweep.go` reach `Refresh` through the `handlers/deps.go` and `services/expiry/deps.go` seams (`cacheRebuildUser`, `cacheRefreshUser`); `cache.RebuildUserCache` deleted, `seed/demo.go` uses `Refresh`; the guard has no allow-list (`TestNoRawRefreshOutsideThePackage`)
+- [x] Webhook `processGrantAdded` refreshes after the onboarding write, not before (`TestProcessGrantAdded_RefreshesAfterTheOnboardingWrite`; the rule write the old text names is gone, the onboarding trigger is the write left)
+- [x] Dead `directory.InvalidateAll` deleted (interface, both sources, test stubs); comment at `directory/zitadel.go:168` corrected. `InvalidateUsers` kept: no production caller, but `directory_test.go` uses it to expire the list and `TestZitadelSource_InvalidateDuringARebuildIsNotUndone` guards the `usersGen` race; its doc now says so. Removing it means rewriting those tests: `ready-for-human`
 
 ## W2c · One invalidation map
 

@@ -92,7 +92,7 @@ Verified on main before changing: `drain.go` refreshed the cache only after an a
 
 Change: `cache.Refresh(ctx, people, projects...)` in `cache/refresh.go` is the one call a write path makes after its commit. Routed through it: the drain (applied, failed, exhausted via `refreshAfterRow`), service-account mark/unmark, and a bundle rename (every holder from `db.GetBundleHoldersByVersion`, on a detached bounded context). A cache failure is logged and never fails the write; the 12-hour warm stays the backstop. Guard: `cache/refresh_guard_test.go` fails if a listed write path stops calling it, or if new code calls `cache.RefreshUser` directly.
 
-Not moved (outside W2b's file list, still on `RefreshUser`/`RebuildUserCache`): `handlers/webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go`, `services/expiry/sweep.go`. They are allow-listed in the guard.
+Finished on `fix/one-refresh-rest` (10 Nov 2026): `handlers/webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go` and `services/expiry/sweep.go` now reach `cache.Refresh` through their seams (`handlers/deps.go`, `expiry/deps.go`); `cache.RebuildUserCache` is gone and `seed/demo.go` calls `Refresh`. The guard's allow-list is empty: `TestNoRawRefreshOutsideThePackage` fails any use of `cache.RefreshUser` or `cache.RebuildUserCache` outside `cache/`, and `writePaths` lists each moved file. `processGrantAdded` refreshes after the onboarding write. `directory.InvalidateAll` was dead and is deleted; `InvalidateUsers` has no production caller but tests use it, so it stays with its comment corrected.
 
 ## W2c · One invalidation map (audit family 10, item 12, UI)
 

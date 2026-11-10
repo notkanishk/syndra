@@ -297,8 +297,6 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 // rule fires when Syndra's own record of the source changes (db.FollowRules
 // and the cascades), including when an operator adopts this drift.
 func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string) error {
-	cacheRebuildUser(ctx, event.UserID, append([]string{event.SourceProject}, event.ProjectIDs...))
-
 	for _, role := range event.RoleKeys {
 		// Legacy back-compat: role_key=new_user on grant_added also triggers onboarding.
 		if role == "new_user" {
@@ -308,6 +306,10 @@ func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string
 			}
 		}
 	}
+
+	// After the onboarding write above, so the facts compiled are the ones the
+	// write left, not the ones before it.
+	cacheRebuildUser(ctx, event.UserID, append([]string{event.SourceProject}, event.ProjectIDs...))
 
 	// Real-time drift: a surviving (non-self, per the self-mutation guard)
 	// grant event that Syndra neither expects nor has excluded is out-of-band.

@@ -36,6 +36,12 @@ var writePaths = map[string][2]string{
 	"../services/propagation/drain.go": {"deps.go", "refreshClaims("},
 	"../services/service_accounts.go":  {"", "svcRefresh("},
 	"../handlers/bundles.go":           {"", "bundleRefresh("},
+	"../handlers/webhook.go":           {"deps.go", "cacheRebuildUser("},
+	"../handlers/access.go":            {"deps.go", "cacheRebuildUser("},
+	"../handlers/bulk.go":              {"deps.go", "rebuildUserCacheDetachedFn("},
+	"../handlers/role_members.go":      {"deps.go", "rebuildUserCacheDetachedFn"},
+	"../handlers/claim_delivery.go":    {"deps.go", "cacheRefreshUser("},
+	"../services/expiry/sweep.go":      {"deps.go", "cacheRefreshUser("},
 }
 
 func TestWritePathsCallTheOneRefresh(t *testing.T) {
@@ -58,14 +64,9 @@ func TestWritePathsCallTheOneRefresh(t *testing.T) {
 	}
 }
 
-// New code calls cache.Refresh. RefreshUser stays for callers that predate it
-// (listed), so a new direct caller fails here instead of quietly bypassing.
-func TestNoNewDirectRefreshUserCallers(t *testing.T) {
-	allowed := map[string]bool{
-		"../handlers/deps.go":        true, // repair on miss
-		"../services/expiry/deps.go": true,
-		"../claimserve/canary.go":    true, // a comment
-	}
+// cache.Refresh is the only way outside this package to refresh the cache.
+// There is no allow-list: a new raw refresh fails here.
+func TestNoRawRefreshOutsideThePackage(t *testing.T) {
 	err := filepath.Walk("..", func(p string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
 			return err
@@ -74,8 +75,10 @@ func TestNoNewDirectRefreshUserCallers(t *testing.T) {
 			return nil
 		}
 		b, _ := os.ReadFile(p)
-		if strings.Contains(string(b), "cache.RefreshUser") && !allowed[p] {
-			t.Errorf("%s calls cache.RefreshUser directly: use cache.Refresh", p)
+		for _, raw := range []string{"cache.RefreshUser", "cache.RebuildUserCache"} {
+			if strings.Contains(string(b), raw) {
+				t.Errorf("%s uses %s directly: use cache.Refresh", p, raw)
+			}
 		}
 		return nil
 	})
