@@ -1,6 +1,7 @@
 package db
 
 import (
+	"time"
 	"context"
 	"errors"
 	"testing"
@@ -24,7 +25,7 @@ func TestObservationSnapshot_RowsAndBasisCannotStraddleASweep(t *testing.T) {
 	truncateObservations(t, ctx)
 
 	// Generation one: complete, one grant.
-	if err := RecordOrgObservation(ctx,
+	if err := RecordOrgObservation(ctx, time.Time{},
 		[]ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}},
 		true, ""); err != nil {
 		t.Fatalf("record generation one: %v", err)
@@ -42,7 +43,7 @@ func TestObservationSnapshot_RowsAndBasisCannotStraddleASweep(t *testing.T) {
 		// Generation two commits, in full, from outside this snapshot: a
 		// different observation AND different rows. This is the scheduled
 		// sweep landing between the drift sweep's two reads.
-		if err := RecordOrgObservation(ctx,
+		if err := RecordOrgObservation(ctx, time.Time{},
 			[]ObservedGrant{{GrantID: "g2", UserID: "u2", ProjectID: "p2", RoleKeys: []string{"staff"}}},
 			false, ""); err != nil {
 			return err

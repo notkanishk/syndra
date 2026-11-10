@@ -2,6 +2,7 @@ package db
 
 import (
 	"testing"
+	"time"
 )
 
 // RoleDeliveries keeps, per role, only the latest add or revoke and, per
@@ -122,5 +123,31 @@ func TestQueuedRevocationsSeeARevokeANewerSentRowDidNotSettle(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != (RoleRef{ProjectID: "pOrd", RoleKey: "r"}) {
 		t.Fatalf("queued revocations %v, want r: its revoke is still to be sent", got)
+	}
+}
+
+// A read is recorded at the time it began (ReadStart), and a person's own
+// latest read is what LatestUserObservations returns: the two halves of
+// "did a complete read come after Zitadel answered this row".
+func TestAReadIsRecordedAtItsStart(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	t.Cleanup(func() {
+		_, _ = PG.Exec(ctx, `DELETE FROM zitadel_observations WHERE scope = 'user' AND subject_id = $1`, user)
+	})
+	start, err := ReadStart(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start = start.Add(-time.Minute).Truncate(time.Microsecond) // a listing that took a minute
+	if err := RecordUserObservation(ctx, user, start, nil, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LatestUserObservations(ctx, []string{user})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o, ok := got[user]; !ok || !o.ObservedAt.Equal(start) || !o.Complete {
+		t.Fatalf("own read %+v (ok %v), want complete, dated %v", o, ok, start)
 	}
 }

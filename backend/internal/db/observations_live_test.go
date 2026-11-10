@@ -1,6 +1,7 @@
 package db
 
 import (
+	"time"
 	"context"
 	"testing"
 )
@@ -15,7 +16,7 @@ import (
 
 func seedObserved(t *testing.T, ctx context.Context, grantID, userID, project string, roles []string) {
 	t.Helper()
-	if err := RecordUserObservation(ctx, userID,
+	if err := RecordUserObservation(ctx, userID, time.Time{},
 		[]ObservedGrant{{GrantID: grantID, UserID: userID, ProjectID: project, RoleKeys: roles}},
 		true, ""); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -38,7 +39,7 @@ func TestAnIncompleteSweepRemovesNothing(t *testing.T) {
 	seedObserved(t, ctx, "g2", "u2", "p1", []string{"member"})
 
 	// A sweep that saw only one of them and knows it did not finish.
-	if err := RecordOrgObservation(ctx,
+	if err := RecordOrgObservation(ctx, time.Time{},
 		[]ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"member"}}},
 		false, "the read reached its safety limit"); err != nil {
 		t.Fatalf("RecordOrgObservation: %v", err)
@@ -56,7 +57,7 @@ func TestACompleteSweepReplacesTheStore(t *testing.T) {
 	seedObserved(t, ctx, "g1", "u1", "p1", []string{"member"})
 	seedObserved(t, ctx, "gone", "u2", "p1", []string{"member"})
 
-	if err := RecordOrgObservation(ctx,
+	if err := RecordOrgObservation(ctx, time.Time{},
 		[]ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"member"}}},
 		true, ""); err != nil {
 		t.Fatalf("RecordOrgObservation: %v", err)
@@ -76,7 +77,7 @@ func TestAUserObservationTouchesOnlyThatPerson(t *testing.T) {
 	seedObserved(t, ctx, "g2", "u2", "p1", []string{"member"})
 
 	// u1 now holds nothing, completely observed.
-	if err := RecordUserObservation(ctx, "u1", nil, true, ""); err != nil {
+	if err := RecordUserObservation(ctx, "u1", time.Time{}, nil, true, ""); err != nil {
 		t.Fatalf("RecordUserObservation: %v", err)
 	}
 
@@ -96,7 +97,7 @@ func TestAUserObservationRefusesAnotherPersonsGrant(t *testing.T) {
 	ctx := liveDB(t)
 	truncateObservations(t, ctx)
 
-	err := RecordUserObservation(ctx, "u1",
+	err := RecordUserObservation(ctx, "u1", time.Time{},
 		[]ObservedGrant{{GrantID: "gx", UserID: "u2", ProjectID: "p1", RoleKeys: []string{"member"}}},
 		true, "")
 	if err == nil {

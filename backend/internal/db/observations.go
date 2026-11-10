@@ -53,7 +53,7 @@ type ObservedGrant struct {
 //
 // The complete case replaces in ONE transaction, so no reader ever sees a
 // half-swapped world in which somebody appears to hold nothing.
-func RecordOrgObservation(ctx context.Context, grants []ObservedGrant, complete bool, readErr string) error {
+func RecordOrgObservation(ctx context.Context, startedAt time.Time, grants []ObservedGrant, complete bool, readErr string) error {
 	tx, err := beginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("record observation: %w", err)
@@ -69,9 +69,9 @@ func RecordOrgObservation(ctx context.Context, grants []ObservedGrant, complete 
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO zitadel_observations (scope, subject_id, complete, grants_seen, error)
-		VALUES ('org', NULL, $1, $2, NULLIF($3,''))`,
-		complete, len(grants), readErr); err != nil {
+		INSERT INTO zitadel_observations (scope, subject_id, complete, grants_seen, error, observed_at)
+		VALUES ('org', NULL, $1, $2, NULLIF($3,''), COALESCE($4, NOW()))`,
+		complete, len(grants), readErr, readTime(startedAt)); err != nil {
 		return fmt.Errorf("record observation: %w", err)
 	}
 	return tx.Commit(ctx)
@@ -81,7 +81,7 @@ func RecordOrgObservation(ctx context.Context, grants []ObservedGrant, complete 
 //
 // A complete read of ONE person may delete only that person's rows — never
 // anybody else's, whatever the listing happened to contain.
-func RecordUserObservation(ctx context.Context, userID string, grants []ObservedGrant, complete bool, readErr string) error {
+func RecordUserObservation(ctx context.Context, userID string, startedAt time.Time, grants []ObservedGrant, complete bool, readErr string) error {
 	tx, err := beginTx(ctx)
 	if err != nil {
 		return fmt.Errorf("record observation: %w", err)
@@ -106,9 +106,9 @@ func RecordUserObservation(ctx context.Context, userID string, grants []Observed
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO zitadel_observations (scope, subject_id, complete, grants_seen, error)
-		VALUES ('user', $1, $2, $3, NULLIF($4,''))`,
-		userID, complete, len(grants), readErr); err != nil {
+		INSERT INTO zitadel_observations (scope, subject_id, complete, grants_seen, error, observed_at)
+		VALUES ('user', $1, $2, $3, NULLIF($4,''), COALESCE($5, NOW()))`,
+		userID, complete, len(grants), readErr, readTime(startedAt)); err != nil {
 		return fmt.Errorf("record observation: %w", err)
 	}
 	return tx.Commit(ctx)
@@ -360,4 +360,27 @@ func LatestUserObservations(ctx context.Context, userIDs []string) (map[string]O
 		out[user] = o
 	}
 	return out, rows.Err()
+}
+
+// ReadStart is the database's clock as a read of Zitadel begins: the time an
+// observation is recorded at. A read can only answer writes Zitadel finished
+// before it began listing, so an outbox row's completed_at (also the
+// database's clock) is compared with this, never with when the read was saved:
+// a long sweep saved after a revoke landed mid-listing would otherwise read as
+// having seen it. One clock, the database's, on both sides.
+func ReadStart(ctx context.Context) (time.Time, error) {
+	var t time.Time
+	if err := querier(ctx).QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&t); err != nil {
+		return time.Time{}, fmt.Errorf("read start: %w", err)
+	}
+	return t, nil
+}
+
+// readTime is startedAt for the insert, NULL (the record's own NOW()) when a
+// caller has none.
+func readTime(startedAt time.Time) *time.Time {
+	if startedAt.IsZero() {
+		return nil
+	}
+	return &startedAt
 }
