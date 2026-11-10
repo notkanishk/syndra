@@ -80,7 +80,7 @@ export function ConvergeEntitlements({
       {open && (
       <RehearsalDialog
         title={`Check for differences on ${targetLabel(target)}`}
-        lede={`Compares what ${label} should have on ${targetLabel(target)} with what they have, and records the differences as changes waiting for you to send. Nothing reaches ${targetLabel(target)} until somebody sends them from Pending changes, except switching off the account of somebody who has left, which Syndra sends on its own.`}
+        lede={`Compares what ${label} should have on ${targetLabel(target)} with what they have, and records the differences as changes. Pending changes lists each one until it reaches ${targetLabel(target)}.`}
         noun={["account", "accounts"]}
         system={targetLabel(target)}
         onRehearse={async (acknowledgeScope) => {

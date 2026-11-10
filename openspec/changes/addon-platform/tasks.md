@@ -1252,7 +1252,8 @@ too. Production showed every `system:reconcile` row to the NAS sent by hand.
   from the row by `db.SendsOnTheirOwnTx` (`runnerSends`, as Pending changes
   reads it), and `disclose` says how many go within a minute. "Check for
   differences" treats such a row as the revocation it is (`goesItself`,
-  `queuedNote`) and its lede says a departed member's lock goes on its own.
+  `queuedNote`). Its lede (a prop the dialog never renders, having no compose
+  step) no longer claims every change waits.
   A snapshot marked withdraw-only is held to its meaning by a CHECK (the switch
   alone, off; 000087). A stale plan (PLAN_STALE) is a plain failure, not a
   target refusal, so it holds nobody. The runner-licence guard also requires
