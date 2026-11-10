@@ -1,5 +1,7 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
+import { NAME_BUNDLES_KEY, NAME_CATALOG_KEY } from "./useNameCatalog";
+
 /**
  * The ONE place a write learns which reads it made stale.
  *
@@ -92,14 +94,14 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "bundle":
         return [["bundles"]];
       case "bundleRename":
-        return [["bundles"], ["name-bundles"]];
+        return [["bundles"], NAME_BUNDLES_KEY];
       case "request":
         return [["requests"], GOVERNANCE];
       case "drift":
         // A revoke queues a removal, and an adopt can queue what a rule gives.
         return [["drift"], ["users"], ["propagations"], GOVERNANCE];
       case "role":
-        return [["roles"], ["roles-that-wait"], ["projects"], ["name-catalog"]];
+        return [["roles"], ["roles-that-wait"], ["projects"], NAME_CATALOG_KEY];
       case "serviceAccount":
         return [["service-accounts"], ["users"], GOVERNANCE];
       case "expiryNote":
@@ -128,7 +130,7 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
           ["upstream"],
           ["drift"],
           // A role created or renamed here changes the names every screen resolves.
-          ["name-catalog"],
+          NAME_CATALOG_KEY,
           // The same records the everyday screens read: a person's access, a
           // role's holders and the catalogue, the queue of changes to send.
           ["users"],

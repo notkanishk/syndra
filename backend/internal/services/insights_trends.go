@@ -232,10 +232,7 @@ func InsightsTrends(ctx context.Context, period TrendPeriod) (models.InsightsTre
 	}
 	out.EndingSoon = make([]models.TrendEndingSoon, 0, len(ending))
 	for _, e := range ending {
-		name := names[e.ProjectID]
-		if name == "" {
-			name = e.ProjectID // a project the directory no longer lists is still a project
-		}
+		name := names[e.ProjectID] // a project the directory no longer lists has no name: "", the UI's fallback renders it
 		out.EndingSoon = append(out.EndingSoon, models.TrendEndingSoon{
 			ProjectID: e.ProjectID, ProjectName: name, D14: e.D14, D30: e.D30,
 		})

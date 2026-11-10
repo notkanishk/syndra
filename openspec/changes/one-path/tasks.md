@@ -110,7 +110,7 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [x] `lib/queries/invalidation.ts`; all mutation hooks and the two signing-key sites use it
 - [x] Guard test: every mutation uses it; rail kinds hold governance
 - [x] `HomeLimit.tsx`, `UnconfirmedChanges.tsx`, `DegradedBanner.tsx`, `useUpstream.ts` onto `invalidateAfter` (kinds `upstream`, `reconnected` added); `states/index.tsx` and `request-decisions.ts` re-read what is on screen (`refetchQueries`, `type: "active"`, as invalidation did), since they are not writes. The guard is a lint rule (`ui/eslint.config.mjs`, `no-restricted-syntax` on the syntax tree: `x.invalidateQueries`, `x["invalidateQueries"]`, destructuring) over every non-test file but `invalidation.ts`; CI's `bun run lint` runs it. Mutation-checked all three forms.
-- [ ] `["name-catalog"]` defined twice (`useNameCatalog.ts`, `useNameResolver.tsx`) belongs to W2d
+- [x] `["name-catalog"]` defined twice: now one `NAME_CATALOG_KEY` / `NAME_BUNDLES_KEY` in `useNameCatalog.ts` (see W2d)
 
 ## W2d: one path for a name (branch `fix/one-name-path`)
 
@@ -119,8 +119,9 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [x] `backend/internal/textsort`; twelve backend name sorts routed through it
 - [x] Guards: `names-one-path.test.ts`, `repoguard/name_sort_test.go`
 - [x] One person fallback phrase across screens: `personOr` / `UNKNOWN_PERSON` in `lib/names.ts` ("this person", "This person" to open a sentence); ten sites routed; guard in `names-one-path.test.ts` (release/coherence)
-- [ ] Backend returns `("", false)` rather than the id as a name in six places (`directory/zitadel.go:430-436`, `insights_trends.go:240`, `insights_lens.go:165`, `claim_shape.go:644`, `role_members.go:120`, `directory/demo.go:48`) #ready-for-agent
-- [ ] Go `roleLabel` (`services/views.go`) deleted or pinned to `humanizeKey` by a golden test #ready-for-agent
+- [x] No id passed off as a name: `directory.Source.ProjectName` returns `(name, ok, err)`, `("", false, nil)` when unlisted (`directory/directory.go`, `zitadel.go`, `demo.go`, `demo/catalog.go`); `claim_shape.go`, `role_members.go`, `views.go` (`upsertRole`, observed-only bucket), `insights_trends.go`, `insights_lens.go` (`lensNamer`) and `roles.go` (`GlobalRoleCatalog`, a seventh) send `""`; the UI renders it through `projectLabel` / `ResolvedProjectName` (`useUsers.ts` select, `Makerspace.tsx`, `CreateRoleDialog.tsx`, `ProjectClaimDefault.tsx`, `roles/[key]/page.tsx`); `services/project_name_test.go`, `directory_test.go`, `roles_test.go`
+- [x] Go `roleLabel` (`services/views.go`) now is `humanizeKey` character for character, pinned by `ui/src/lib/__fixtures__/humanize-key.json`, read by `services/role_label_test.go` and `lib/__tests__/names.test.ts`
+- [x] Review (Opus, 10 Nov 2026) follow-ups: the map's placeholder project has no label and `projectLabel(name)`/`ProjectName` read an empty name as the one signal (the `name !== id` defence is gone, 22 call sites); stored maps blanked by migration 000085 (production had none); a role the map hasn't drawn is said "Project · Role" through the one fallbacks (`insights/lens.ts`, `TrendsTab` reads it); a role created without a display name is named `roleLabel(key)`, never the key (`services/roles.go`); unnamed projects sort by id (`ExplainUserAccess`); `UNKNOWN_PROJECT` is imported only by the names components (lint `no-restricted-imports`, `ui/eslint.config.mjs`); the name catalog's key and fetch are one `queryOptions` each (`useNameCatalog.ts`). Open, the owner's call: existing roles whose display name is their key.
 - [ ] SQL `ORDER BY name` (`db/bundle_includes.go`, `target_bindings.go`, `role_waits.go`): DB collation UNVERIFIED #needs-triage
 - [ ] One envelope type for `bundles.go`, `access.go`, `claimserve/door.go`, add-on writer #needs-triage
 

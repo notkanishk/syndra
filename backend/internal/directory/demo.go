@@ -45,8 +45,9 @@ func (d *demoSource) RoleKeysForProject(ctx context.Context, projectID string) (
 	return demo.RoleKeysForProject(projectID), nil
 }
 
-func (d *demoSource) ProjectName(ctx context.Context, projectID string) (string, error) {
-	return demo.ProjectName(projectID), nil
+func (d *demoSource) ProjectName(ctx context.Context, projectID string) (string, bool, error) {
+	name, ok := demo.ProjectName(projectID)
+	return name, ok, nil
 }
 
 func (d *demoSource) Tag() string { return "demo" }

@@ -45,12 +45,12 @@ export interface Model {
 }
 
 /**
- * The API labels a project it could not read with the project's own id. On a
- * map that is a raw id standing where a name goes, and it prefixes every role in
- * it, so it is renamed here, once, for every reader of the model.
+ * The API sends no label for a project it could not read (one-path W2d). On a
+ * map a blank prefixes every role in it, so the shared phrase stands in here,
+ * once, for every reader of the model.
  */
 function named(n: TopologyNode): TopologyNode {
-  return n.kind === "project" ? { ...n, label: projectLabel(n.label, n.project_id ?? n.id.replace("project:", "")) } : n;
+  return n.kind === "project" ? { ...n, label: projectLabel(n.label) } : n;
 }
 
 export function buildModel(graph: TopologyGraph): Model {

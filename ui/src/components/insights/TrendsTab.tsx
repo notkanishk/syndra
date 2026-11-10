@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
 
+import { roleName as lensRoleName } from "@/components/insights/lens";
 import { buildModel } from "@/components/insights/model";
 import { projectLabel } from "@/components/names/Unresolved";
 import type { InsightsUrl } from "@/components/insights/useInsightsUrl";
@@ -14,6 +15,7 @@ import { FilterPills } from "@/components/ui/Select";
 import { useInsightsTrends, useInsightsUsage, type InsightsTrends, type TrendPeriod } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
 import { formatShortDate } from "@/lib/format";
+import { roleName as roleDisplayName } from "@/lib/names";
 
 const PERIODS: Array<{ value: TrendPeriod; label: string }> = [
   { value: "30d", label: "30 days" },
@@ -76,10 +78,10 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
   const usage = usageRead.data;
   const model = useMemo(() => (topology.data ? buildModel(topology.data) : null), [topology.data]);
   const t = trends.data;
-  const roleName = (projectId: string, roleKey: string) => {
-    const id = model?.roleId(projectId, roleKey);
-    return id ? model!.nameOf(id) : "A role no longer on the map";
-  };
+  // The lens's one way to say a role (lens.roleName); before the map has
+  // loaded, just the role's own name.
+  const roleName = (projectId: string, roleKey: string) =>
+    model ? lensRoleName(model, { project_id: projectId, role_key: roleKey }) : roleDisplayName(undefined, roleKey);
 
   return (
     <>
@@ -197,7 +199,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                     .map((p) => (
                       <div key={p.project_id} role="row" className={`${ENDING_ROW} text-[13.5px]`}>
                         <span role="cell" className="text-muted">
-                          {projectLabel(p.project_name, p.project_id)}
+                          {projectLabel(p.project_name)}
                         </span>
                         <span role="cell" className="text-right font-semibold tabular-nums">
                           <EndingLink within={14} n={p.d14} />

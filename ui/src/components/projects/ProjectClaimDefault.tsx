@@ -19,6 +19,7 @@ import {
   type ClaimFormat,
   type ProjectDefaultForm,
 } from "@/lib/queries/useClaimShape";
+import { projectLabel } from "@/components/names";
 import { compareNames, sortNames } from "@/lib/sort";
 
 /**
@@ -47,7 +48,7 @@ export function ProjectClaimDefault({ projectId }: { projectId: string }) {
     <Card id="claims-default">
       <CardHeader title="Default shape" className="pb-1" />
       <p className="px-5 pb-4 text-[14px] leading-[1.5] text-faint">
-        What an app on {shape.data.project_name} is told when it has no shape of its own.{" "}
+        What an app on {projectLabel(shape.data.project_name)} is told when it has no shape of its own.{" "}
         {onDefault.length === 0
           ? "Every app here has its own shape now, so this reaches none of them."
           : `It reaches ${sortNames(onDefault.map((a) => a.name)).join(", ")} today.`}

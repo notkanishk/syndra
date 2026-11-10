@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GoTo, GoToPanel } from "@/components/ui/GoTo";
+import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
 import { ADVANCED_NAV, BASIC_NAV, MEMBER_NAV } from "@/lib/nav";
 
 const view = vi.hoisted(() => ({ audience: "advanced" as "basic" | "advanced" | "member" }));
@@ -23,7 +24,7 @@ const catalog = {
 
 function renderIn(node: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(["name-catalog"], catalog);
+  client.setQueryData(NAME_CATALOG_KEY, catalog);
   client.setQueryData(["name-bundles"], [{ id: "b1", name: "Printing basics" }]);
   return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
 }

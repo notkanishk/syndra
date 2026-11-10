@@ -157,7 +157,7 @@ function Picker({
       if (!matches(role)) continue;
       const g = byProject.get(role.project_id) ?? {
         id: role.project_id,
-        project: projectLabel(role.project_name, role.project_id),
+        project: projectLabel(role.project_name),
         roles: [],
       };
       g.roles.push(role);

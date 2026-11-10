@@ -999,3 +999,30 @@ func TestToUserProfile_CarriesCreation(t *testing.T) {
 		t.Errorf("no creation date must leave Joined nil, got %v", got.Joined)
 	}
 }
+
+// ProjectName says "no name" as ("", false, nil): never the id standing in.
+func TestProjectName_UnlistedIsNoName(t *testing.T) {
+	ctx := context.Background()
+	demo := NewDemoSource()
+	if name, ok, err := demo.ProjectName(ctx, "printing"); err != nil || !ok || name == "" {
+		t.Errorf("demo listed project: %q %v %v", name, ok, err)
+	}
+	if name, ok, err := demo.ProjectName(ctx, "gone-project"); err != nil || ok || name != "" {
+		t.Errorf("demo unlisted project: %q %v %v", name, ok, err)
+	}
+
+	mc := newMockClient()
+	mc.listProjectsFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error) {
+		return &zitadel.SearchResult[zitadel.ZitadelProject]{Items: []zitadel.ZitadelProject{{ID: "p1", Name: "Project One", State: "ACTIVE"}}}, nil
+	}
+	mc.listRolesFn = func(context.Context, string, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ProjectRoleResult], error) {
+		return &zitadel.SearchResult[zitadel.ProjectRoleResult]{}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+	if name, ok, err := src.ProjectName(ctx, "p1"); err != nil || !ok || name != "Project One" {
+		t.Errorf("zitadel listed project: %q %v %v", name, ok, err)
+	}
+	if name, ok, err := src.ProjectName(ctx, "gone-project"); err != nil || ok || name != "" {
+		t.Errorf("zitadel unlisted project: %q %v %v", name, ok, err)
+	}
+}

@@ -25,7 +25,7 @@ import {
   useTargets,
   type TargetSetting,
 } from "@/lib/queries/useTargets";
-import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
+import { projectLabel } from "@/components/names/Unresolved";
 import { sortByName } from "@/lib/sort";
 
 /**
@@ -152,7 +152,7 @@ export function SetupStrip({
     <Card>
       <SettingRow label="Zitadel project">
         <Link href={`/projects/${project.id}`} className="text-[15px] font-semibold text-ink link-hover">
-          {project.name || resolver.resolveProject(project.id).value?.name || UNKNOWN_PROJECT}
+          {projectLabel(project.name || resolver.resolveProject(project.id).value?.name)}
         </Link>
       </SettingRow>
       <SettingRow

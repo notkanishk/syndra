@@ -5,6 +5,7 @@ import type { RequestHolding } from "@/lib/queries/useRequests";
 import { settleIndicators } from "@/lib/queries/useIndicators";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
+import { projectLabel } from "@/components/names/Unresolved";
 import { request } from "@/lib/api-client";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { CascadeOutcome } from "@/lib/types";
@@ -87,9 +88,9 @@ export interface UserAccessProject {
   project_id: string;
   project_name: string;
   /**
-   * False when the directory couldn't name this project and `project_name`
-   * is the raw id standing in for one — the id an operator needs to search,
-   * not a name. Render it labelled, not as the heading.
+   * False when the directory couldn't name this project. The server then sends
+   * no name, and `useUserAccess` puts the one fallback ("Unknown project") in
+   * `project_name`; show the id beside it, not a raw id as the heading.
    */
   project_name_resolved: boolean;
   source_roles: AccessRole[];
@@ -220,7 +221,13 @@ export function useUserAccess(userId: string) {
       view && {
         ...view,
         bundles: sortByName(view.bundles ?? [], (b) => b.name),
-        projects: sortByName(view.projects ?? [], (p) => p.project_name, (p) => p.project_id),
+        // The server sends no name ("") for a project it could not read; the one
+        // shared phrase stands in here so no screen builds a label from nothing.
+        projects: sortByName(
+          (view.projects ?? []).map((p) => ({ ...p, project_name: projectLabel(p.project_name) })),
+          (p) => p.project_name,
+          (p) => p.project_id,
+        ),
       },
   });
 }

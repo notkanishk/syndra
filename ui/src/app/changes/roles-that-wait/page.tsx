@@ -157,7 +157,7 @@ function WaitingRoles({
       },
     };
     const label = (m: (typeof marked)[number]) =>
-      projectLabel(byId.get(roleId(m.project_id, m.role_key))?.project_name, m.project_id);
+      projectLabel(byId.get(roleId(m.project_id, m.role_key))?.project_name);
     const sorted = orderBy(marked, view.sort, by).sort(
       (a, b) => compareNames(label(a), label(b)) || compareNames(a.project_id, b.project_id),
     );

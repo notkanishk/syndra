@@ -143,7 +143,7 @@ describe("the roles index, as drawn", () => {
   it("says Unknown project, with the id beside it and never as the label, when the name could not be read", () => {
     state.roles = [
       role("gamma", { display_name: "Gamma", project_id: "365951028870251526", project_name: "" }),
-      role("alpha", { display_name: "Alpha", project_id: "382075332397630470", project_name: "382075332397630470" }),
+      role("alpha", { display_name: "Alpha", project_id: "382075332397630470", project_name: "" }),
     ];
     render(<RolesPage />);
     // Two cells, and the one run they gather under (same label, so the id beside each is the tell).

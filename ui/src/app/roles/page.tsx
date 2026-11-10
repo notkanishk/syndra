@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { ProjectName } from "@/components/names";
-import { projectLabel, UNKNOWN_PROJECT } from "@/components/names/Unresolved";
+import { projectLabel } from "@/components/names/Unresolved";
 import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -29,7 +29,7 @@ import { roleName } from "@/lib/names";
 type RoleSort = "project" | "role" | "group" | "people";
 
 const ROLE_SORT: Record<RoleSort, (role: CatalogRole) => string | number> = {
-  project: (role) => projectLabel(role.project_name, role.project_id),
+  project: (role) => projectLabel(role.project_name),
   role: (role) => roleName(role.display_name, role.role_key),
   group: (role) => role.group || "",
   // The number the row shows: what Zitadel holds, else what Syndra recorded.
@@ -69,7 +69,7 @@ export default function RolesPage() {
   // Keyed by id, labelled by name: two projects Syndra could not name are two
   // projects, not one "Unknown project", and an id is never the label.
   const projects = useMemo(() => {
-    const byId = new Map(all.map((role) => [role.project_id, projectLabel(role.project_name, role.project_id)]));
+    const byId = new Map(all.map((role) => [role.project_id, projectLabel(role.project_name)]));
     return sortByName(Array.from(byId, ([id, label]) => ({ id, label })), (p) => p.label);
   }, [all]);
   const groups = useMemo(
@@ -102,7 +102,7 @@ export default function RolesPage() {
     () =>
       runStarts(
         leaving.rows,
-        view.sort.key === "project" ? (role) => projectLabel(role.project_name, role.project_id) : null,
+        view.sort.key === "project" ? (role) => projectLabel(role.project_name) : null,
       ),
     [leaving.rows, view.sort.key],
   );
@@ -269,7 +269,7 @@ export default function RolesPage() {
           {leaving.rows.map((role, index) => {
             const run = runAt(index);
             const underRun =
-              view.sort.key === "project" && projectLabel(role.project_name, role.project_id) !== UNKNOWN_PROJECT;
+              view.sort.key === "project" && Boolean(role.project_name);
             const holders = holdersLine(
               role.assigned_user_count,
               role.confirmed_user_count,

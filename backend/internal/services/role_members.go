@@ -123,12 +123,11 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 	}
 
 	view := RoleMembersView{
-		ProjectID:   projectID,
-		ProjectName: projectID,
-		RoleKey:     key,
-		Members:     []RoleMember{},
+		ProjectID: projectID,
+		RoleKey:   key,
+		Members:   []RoleMember{},
 	}
-	if name, nerr := directory.Default.ProjectName(ctx, projectID); nerr == nil && name != "" {
+	if name, ok, nerr := directory.Default.ProjectName(ctx, projectID); nerr == nil && ok {
 		view.ProjectName = name
 	}
 

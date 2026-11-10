@@ -215,8 +215,9 @@ func TestInsightsLensGroup_ObservedHoldersAndNames(t *testing.T) {
 	if err != nil || term.Size != 1 || len(term.Roles) != 2 {
 		t.Fatalf("new_term = %+v, %v", term, err)
 	}
-	// q:x is not in the directory: it is named by its key, not dropped.
-	if term.Roles[0].ProjectName != "Laser" || term.Roles[1].ProjectName != "q" || term.Roles[1].RoleLabel != "x" {
+	// q:x is not in the directory: kept, with no name ("") for the UI's one
+	// fallback to render, never its key passed off as a name.
+	if term.Roles[0].ProjectName != "Laser" || term.Roles[1].ProjectID != "q" || term.Roles[1].ProjectName != "" || term.Roles[1].RoleLabel != "" {
 		t.Errorf("roles = %+v", term.Roles)
 	}
 }

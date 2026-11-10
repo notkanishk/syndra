@@ -64,6 +64,32 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    /**
+     * One path for a missing name (one-path W2d). "Unknown project" is said by
+     * the names components only: projectLabel(name) where a string is needed,
+     * <ProjectName> where a component is. Importing the phrase elsewhere is how
+     * a second fallback starts. Its own rule, not no-restricted-syntax: a later
+     * block setting that rule would replace the invalidation guard above.
+     */
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/components/names/**", "src/**/__tests__/**", "src/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          // By pattern, so the alias and any relative path are both caught.
+          patterns: [
+            {
+              group: ["**/components/names", "**/components/names/Unresolved", "**/names/Unresolved"],
+              importNames: ["UNKNOWN_PROJECT"],
+              message: "Say a missing project name through projectLabel(name) or <ProjectName>, the one fallback.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

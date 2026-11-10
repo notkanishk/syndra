@@ -40,7 +40,10 @@ type Source interface {
 	FindApplication(ctx context.Context, appID string) (models.ApplicationCatalog, bool, error)
 
 	RoleKeysForProject(ctx context.Context, projectID string) ([]string, error)
-	ProjectName(ctx context.Context, projectID string) (string, error)
+	// ProjectName is the project's name, and false when the directory does not
+	// list it: ("", false, nil), never the id standing in for a name. The UI's
+	// one fallback ("Unknown project") renders the missing name.
+	ProjectName(ctx context.Context, projectID string) (string, bool, error)
 
 	// Tag identifies the source for audit/display surfaces. "demo" for the
 	// local-dev fallback, "zitadel" for the live Management API backing.
@@ -119,8 +122,8 @@ func (unreachableSource) FindApplication(context.Context, string) (models.Applic
 func (unreachableSource) RoleKeysForProject(context.Context, string) ([]string, error) {
 	return nil, ErrUnreachable
 }
-func (unreachableSource) ProjectName(context.Context, string) (string, error) {
-	return "", ErrUnreachable
+func (unreachableSource) ProjectName(context.Context, string) (string, bool, error) {
+	return "", false, ErrUnreachable
 }
 func (unreachableSource) Tag() string                  { return "unreachable" }
 func (unreachableSource) Freshness() (time.Time, bool) { return time.Time{}, false }

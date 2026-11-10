@@ -427,17 +427,12 @@ func (z *zitadelSource) RoleKeysForProject(ctx context.Context, projectID string
 	return keys, nil
 }
 
-func (z *zitadelSource) ProjectName(ctx context.Context, projectID string) (string, error) {
+func (z *zitadelSource) ProjectName(ctx context.Context, projectID string) (string, bool, error) {
 	p, ok, err := z.FindProject(ctx, projectID)
-	if err != nil {
-		return "", err
+	if err != nil || !ok {
+		return "", false, err
 	}
-	if !ok {
-		// Match demo.ProjectName's fallback: unknown ID renders as itself so
-		// audit rows and topology placeholders don't collapse to empty.
-		return projectID, nil
-	}
-	return p.Name, nil
+	return p.Name, p.Name != "", nil
 }
 
 // --- Applications -----------------------------------------------------------

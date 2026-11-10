@@ -306,7 +306,7 @@ func TestInsightsTrends_AssemblesEveryPart(t *testing.T) {
 	}
 	wantEnding := []models.TrendEndingSoon{
 		{ProjectID: "p1", ProjectName: "Laser room", D14: 1, D30: 2},
-		{ProjectID: "gone-project", ProjectName: "gone-project", D30: 1}, // unnamed -> its id
+		{ProjectID: "gone-project", ProjectName: "", D30: 1}, // unnamed -> no name, never its id
 	}
 	if !reflect.DeepEqual(got.EndingSoon, wantEnding) {
 		t.Errorf("ending soon = %+v", got.EndingSoon)

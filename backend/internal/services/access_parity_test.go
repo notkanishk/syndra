@@ -33,13 +33,13 @@ func parityFixture() parity {
 			{ID: "ember", Name: "Ember", Status: "active"},
 			{ID: "brock", Name: "Brock", Status: "active"},
 			{ID: "cesaro", Name: "Cesaro", Status: "active"},
-			{ID: "dean", Name: "Dean", Status: "locked"},  // has left
+			{ID: "dean", Name: "Dean", Status: "locked"},   // has left
 			{ID: "elias", Name: "Elias", Status: "active"}, // holds only in Zitadel
 		},
 		direct: map[string][]models.DirectGrant{
-			"ember": {{UserID: "ember", ProjectID: "p", RoleKey: "a", ExpiresAt: &june}},
+			"ember":  {{UserID: "ember", ProjectID: "p", RoleKey: "a", ExpiresAt: &june}},
 			"cesaro": {{UserID: "cesaro", ProjectID: "p", RoleKey: "z"}},
-			"dean":  {{UserID: "dean", ProjectID: "p", RoleKey: "a"}},
+			"dean":   {{UserID: "dean", ProjectID: "p", RoleKey: "a"}},
 		},
 		bundles: map[string][]models.Bundle{"brock": {{ID: "b1", Name: "Makers", PinnedVersion: 2}}},
 		pinned: map[string][]models.BundleRole{"brock": {
@@ -50,7 +50,7 @@ func parityFixture() parity {
 			"ember": {{UserID: "ember", ProjectID: "p", RoleKeys: []string{"a", "b"}}}, // q:c never arrived
 			"brock": {{UserID: "brock", ProjectID: "p", RoleKeys: []string{"x", "a", "b"}}, {UserID: "brock", ProjectID: "q", RoleKeys: []string{"c"}}},
 			"dean":  {{UserID: "dean", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
-			"elias":  {{UserID: "elias", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
+			"elias": {{UserID: "elias", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
 		},
 		rules: []models.MappingRule{
 			{ID: "r1", SourceProject: "p", SourceRole: "a", TargetProject: "p", TargetRole: "b"},
