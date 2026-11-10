@@ -19,7 +19,7 @@ import type { ActPlan } from "@/lib/usePlanConsent";
 const state = vi.hoisted(() => ({
   down: false,
   mutateAsync: vi.fn(),
-  grants: [] as unknown[],
+  grants: [] as Array<{ id: string; project_id: string; role_key: string; expires_at?: string | null }>,
   queued: [] as string[],
   queuedAt: undefined as string | undefined,
   // The backend's standing for the operator role; the dialog only reads it.
@@ -90,7 +90,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
           project_id: "p1",
           standings: state.standing ? { operator: state.standing } : {},
           holdings: holdingsFor(
-            state.grants.filter((g: { project_id: string }) => g.project_id === "p1"),
+            state.grants.filter((g) => g.project_id === "p1"),
             state.standing ? { operator: state.standing } : {},
           ),
           source_roles: state.queued.map((key) => ({ role_key: key, reasons: [{ kind: "direct", description: "", queued: true, queued_at: state.queuedAt }] })),
