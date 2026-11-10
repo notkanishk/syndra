@@ -746,16 +746,20 @@ waited on.
 
 ```
 syndra-addon-conform --url https://addon.example.org:8443 --target truenas --secret-file ./secret \
-                     [--subject conformance-<run>] [--email seth.rollins@example.org] [--mutate]
+                     [--subject conformance-<run>] [--email conformance-<run>@example.org] [--mutate]
 ```
 
 It speaks the real transport (derived keys from `transport_derivation.json`),
 embeds the contract it was built from (`contract_version`, the schemas, the
-registries, the fixtures), and reports every check as `pass | fail | skip`
+registries, the fixtures; `addons/contract` is an embed-only module that
+exposes those files and no Go type, so §1's rejection of a shared types
+module stands, and only the kit imports it; there is no override flag), and reports every check as `pass | fail | skip`
 with the MUST it enforces. Non-zero exit on any MUST failure. Without
 `--mutate` it runs reads only; with it, it creates and converges one
-throwaway subject, refusing to touch a subject that already exists (the
-`record-truenas-fixtures.sh` rule), and at the end leaves **one disabled,
+throwaway subject, always named `conformance-...`, refusing to touch a subject
+that already exists (the `record-truenas-fixtures.sh` rule; the plan is read by
+the presence of `account_id`, `standing` or `conflict`, never by their value)
+or to write at all once a read has failed a MUST, and at the end leaves **one disabled,
 labelled account** on the target and says so in its last line: removal
 disables and never deletes, so "as it found it" is not a promise the kit can
 keep, and it does not pretend to.

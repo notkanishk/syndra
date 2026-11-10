@@ -42,7 +42,7 @@ query string joins the MAC.
 | `v2/schema/identity/vector.json` | a JCS golden vector | `identity_{apply,operation,lifecycle,setting}.json` |
 | `v2/registry/roles.json`, `kinds.json`, `units.json`, `constants.json` | closed vocabularies and Syndra's own constants | n/a |
 | `v2/registry/features.json` | every key a feature introduces, listed under it | n/a |
-| `v2/registry/errors.json` | problem+json codes with titles; adds `UNKNOWN_REQUEST_FIELD`, `CALL_IN_PROGRESS`, `CALL_UNSETTLED`, `UNKNOWN_METRIC`, `FRESH_READ_COOLDOWN`, `TARGET_UNREACHABLE`, `PLAN_TOO_LARGE`; `CALL_ID_REUSED` to 422; adds `APPLY_BLOCKED`, `BINDING_CONFLICT`; drops `SCOPE_ACKNOWLEDGEMENT_REQUIRED` | `error.json` |
+| `v2/registry/errors.json` | problem+json codes with titles; adds `UNKNOWN_REQUEST_FIELD`, `CALL_IN_PROGRESS`, `CALL_UNSETTLED`, `UNKNOWN_METRIC`, `FRESH_READ_COOLDOWN`, `TARGET_UNREACHABLE`, `PLAN_TOO_LARGE`, `UNKNOWN_ROUTE` (added in slice 4: every non-2xx is a problem with a registered code, so the 404 an undeclared route answers needs one); `CALL_ID_REUSED` to 422; adds `APPLY_BLOCKED`, `BINDING_CONFLICT`; drops `SCOPE_ACKNOWLEDGEMENT_REQUIRED` | `error.json` |
 | `v2/registry/operations.json` | adds `meaning`, `effect`, `result` per operation | `operation_response_result.json` |
 | `v2/openapi.yaml` | fourteen routes, `x-feature` gates, problem+json errors, the query in the signature | n/a |
 | `transport_derivation.json` | gains `raw_query_signatures` (introduced by major 2): four vectors; the existing keys are untouched | n/a |

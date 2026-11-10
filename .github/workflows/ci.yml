@@ -66,6 +66,44 @@ jobs:
       - run: go vet ./...
       - run: go test -count=1 ./...
 
+  # The conformance kit (addons/conformance) against the reference add-on
+  # (addons/reference), with the contract embedded from addons/contract. The
+  # self-tests serve the reference in-process and watch
+  # every check fail against a deliberately broken one; then both binaries run
+  # end to end on localhost over the real derived-key transport, -mutate
+  # included, since the reference's target is in memory. The secret is a fixed
+  # test value, not a credential. Nothing here reaches a real target.
+  addon-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: addons/conformance/go.mod
+          cache-dependency-path: addons/conformance/go.sum
+      - name: the contract's embed module
+        working-directory: addons/contract
+        run: go vet ./... && go test -count=1 ./...
+      - name: reference add-on
+        working-directory: addons/reference
+        run: go vet ./... && go test -count=1 ./...
+      - name: conformance kit self-tests
+        working-directory: addons/conformance
+        run: go vet ./... && go test -count=1 ./...
+      - name: the kit against the reference, end to end
+        run: |
+          go build -C addons/reference -o "$RUNNER_TEMP/reference-addon" ./cmd/reference-addon
+          go build -C addons/conformance -o "$RUNNER_TEMP/syndra-addon-conform" ./cmd/syndra-addon-conform
+          printf '%s' conformance-ci-test-secret-not-a-credential > "$RUNNER_TEMP/addon-secret"
+          "$RUNNER_TEMP/reference-addon" -listen 127.0.0.1:8443 -target reference -secret-file "$RUNNER_TEMP/addon-secret" &
+          for _ in $(seq 50); do (: </dev/tcp/127.0.0.1/8443) 2>/dev/null && break; sleep 0.2; done
+          kit() { "$RUNNER_TEMP/syndra-addon-conform" -url https://127.0.0.1:8443 -target reference \
+                    -secret-file "$RUNNER_TEMP/addon-secret" "$@"; }
+          kit
+          kit -mutate -json "$RUNNER_TEMP/conformance.json"
+          kit -mutate -mutate-settings -subject "conformance-ci-settings-$GITHUB_RUN_ID"
+
   ui:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -111,10 +149,11 @@ jobs:
   # above never needs a settings change.
   ci-ok:
     if: always()
-    needs: [backend, addon-truenas, ui, images]
+    needs: [backend, addon-truenas, addon-conformance, ui, images]
     runs-on: ubuntu-latest
     steps:
       - run: |
           [ "${{ needs.backend.result }}" = success ] && [ "${{ needs.addon-truenas.result }}" = success ] \
+            && [ "${{ needs.addon-conformance.result }}" = success ] \
             && [ "${{ needs.ui.result }}" = success ] && [ "${{ needs.images.result }}" = success ] \
             || { echo "a required job did not pass"; exit 1; }

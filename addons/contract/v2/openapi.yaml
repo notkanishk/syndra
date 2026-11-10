@@ -6,7 +6,7 @@ info:
   description: >-
     Fourteen routes, every one authenticated; the routes marked x-feature are served only by an
     add-on whose manifest lists that feature (registry/features.json), and anything else answers
-    404. Bodies are the JSON Schemas under schema/; fixtures/ holds a golden document per message;
+    404 UNKNOWN_ROUTE. Bodies are the JSON Schemas under schema/; fixtures/ holds a golden document per message;
     registry/ lists the error codes and operation ids. Every non-2xx is application/problem+json.
   license:
     name: Proprietary

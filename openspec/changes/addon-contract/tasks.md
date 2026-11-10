@@ -347,21 +347,110 @@ deploys** (design §12): the kit is written against the slice-0 and slice-1a
 schemas and run against the v2 TrueNAS add-on on staging as the gate for
 1.10. The feature halves (reference and checks) are slice 6 (6.0, 6.11).
 
-- [ ] 4.1 `addons/reference`: an in-memory target with accounts, one field of
+Decided while building (10 Nov 2026; where design §7 was silent, and the
+review of the same day): each module is a library plus `cmd/`
+(`cmd/reference-addon`, `cmd/syndra-addon-conform`) so the kit's self-tests
+serve the reference in-process; the kit requires the reference by `replace
+../reference` for its tests only, and a test proves the binary does not link
+it. The kit embeds the contract as §7 says: `addons/contract` gained an
+embed-only module (`embed.go`, files only, no Go type, so §1's rejection of a
+shared types module stands), the kit imports it by `replace ../contract`, and
+there is no override flag; nothing is fetched. Results are `pass|fail|skip` in
+the §7 table's order, plus `feature.<name>` skip rows (slice-6 features; an
+unknown feature, whose top-level manifest keys are then not judged);
+`dangerous-scopes` is advisory (`WARN`, exit unaffected). Exit 0 / 1 (a MUST
+failed) / 2 (could not start, or `-mutate` refused) / 130 (interrupted, after
+putting things back). Reads only means GET routes and `/plan`. `-mutate`
+writes only to a subject named `conformance-...`, refuses to write at all once
+a read has failed a MUST, and refuses a subject whose plan carries an
+`account_id`, `standing` or `conflict` (by presence, any type) or any effect
+but `apply`; the withdraw-only and refusal probes run before the account
+exists; `read_only` is remembered before the request is sent; SIGINT/SIGTERM
+stop it between requests (an interrupt is exit 130 wherever it lands; nothing
+asserted after it is judged, and the checks judged across steps or over every
+reply say "not judged" rather than pass); a create answered with an account
+that was there before the run fails `create-is-new` and stops the run without
+touching that account. Whose account an id is has one rule in one function
+(`owner.go`): until the kit's creating apply answers 200 with a string
+`account_id` that was not there before the run, the kit owns nothing and any
+id named for its subject (plan, apply, operation, the end-of-run plan) is
+foreign; after it, the kit owns exactly that id; only an absent `account_id`
+is "no account", and null, "" or a non-string is foreign and never claimable;
+a claimed account must also be labelled as the kit's (its username, from the
+create's reply or else /subjects, begins `conformance-`, so `-email` must too),
+and a 2xx plan or apply after the create that names no account fails
+`bound-to-created`. After the create, every write to the subject (converge,
+replay, operations, the lifecycle applies, the end-of-run disable) goes through
+one gate, `toOwned`, which sends only when the plan read just before it names
+exactly the owned account, and otherwise sends nothing and stops the kit
+writing; `send` refuses any after-create write to the subject that did not come
+through it.
+Every reply about the subject goes through it, and no code outside `owner.go`
+reads `account_id`; a foreign id fails `bound-to-created` and freezes every
+apply and operation, for any subject, with no exception, the end of the run included,
+so the end never adopts an id it first sees there. The last line lists, with
+step and body (never a secret value), every write that may have reached a
+foreign account (its reply named it, was not a 2xx, never came, or was the
+create or came after it without naming the kit's own account, as an
+operation's never does) and says
+"did not touch" only when none could have; a step cut short by a freeze, or by
+the run stopping before it, marks the checks it judges "not judged"; "one
+disabled account" is said only when the end-of-run plan was read and confirmed
+it, otherwise "NOT confirmed disabled" with the reason and `bound-to-created`
+not judged; it refuses to write if the accounts before the first write cannot
+be read, are read truncated, or are not a current read; and whatever happened
+after the first write, it ends by putting lifecycle back to `active`, waiting
+(about a minute, with backoff) for `health.in_flight` 0, and re-planning the
+subject through the same gate: it disables the account only when that plan
+names exactly the account it owns. An account first named after a create that
+never answered (or answered no account) is never adopted: it is foreign, left
+as it is, and reported with the writes that may have made it, for the owner to
+check; a rebound subject is never written to. "No account was created" is
+said only after a drained plan with every write answered; otherwise the last
+line says `UNKNOWN` and why, and it also names any account the kit does not
+own that its subject was answered with, and any other account that appeared
+during the run. Writing a target-wide
+setting back is its own opt-in, `-mutate-settings` (not in §7's table).
+`log_records` must advance across the creating apply and the first
+`password.set`, and a count that cannot be read never passes "nothing
+written"; without `-mutate`, `health` and `required-fields`, which each have a
+half only writes can judge, report "not judged" unless they failed. Beyond the table's wording, all from §4/§5: `current` (two reads
+1.1 s apart that both say `current: true` must move `taken_at` forward), an
+unknown route answering 404 `UNKNOWN_ROUTE` (a code added to
+`v2/registry/errors.json` and named in `openapi.yaml`: every non-2xx needs a
+registered code and an undeclared route had none), a PLAN_STALE-then-replan
+probe under `replay.refusal`, and a managed value held before the withdraw of
+an existing account. `plan = apply` is asserted on every converge the kit does,
+the `password.set` replay with another password sits under `operations`,
+`replay.29d` is skip (no `-clock`), observed limits are `[effective]`, the
+kit's own requests are validated against the request schemas, and replies are
+capped at `constants.max_reply_bytes`. The reference is a print queue (`kind:
+machine`, one field per role, a builtin `lobby` printer as the unlisted value);
+its handlers read as a correct add-on, every defect lives in `defects.go`; its
+request identity reproduces the four JCS vectors; it is ~860 code lines
+(plus ~175 in `defects.go`) rather than ~400: every core route, operations and
+settings with the full §5 rules.
+
+- [x] 4.1 `addons/reference`: an in-memory target with accounts, one field of
   each role, one member operation (`password.set`), lifecycle, settings;
   ~400 lines; the derived-key transport (with the raw query in the MAC)
   from `addons/truenas/transport.go` copied, not imported #ready-for-agent
-- [ ] 4.2 `addons/conformance`: the binary in design §7, every check in the
+- [x] 4.2 `addons/conformance`: the binary in design §7, every check in the
   table, `pass|fail|skip` with the MUST it enforces, JSON and text report,
   non-zero on a MUST failure, `--mutate` gated, reads only without it #ready-for-agent
-- [ ] 4.3 CI: the kit runs against the reference add-on on every push
+- [x] 4.3 CI: the kit runs against the reference add-on on every push
   (`ci.yml` job `addon-conformance`); the job is required for `ci-ok` #ready-for-agent
-- [ ] 4.4 The kit's own tests: each check is watched to fail against a
+- [x] 4.4 The kit's own tests: each check is watched to fail against a
   deliberately broken reference (a flag per defect: ignores fingerprint,
   creates on withdraw-only, echoes the secret, answers a replay after the
   fingerprint check, remembers a refusal, omits `truncated`, says
   `current: true` from its mirror, accepts an altered query, treats
   max(`"0"`, 5 GiB) as 5 GiB, lets a withdraw-only apply touch a membership) #ready-for-agent
+- [ ] 4.4a (found by the last slice-4 review, below its bar) A `-mutate` run refused
+  before any write (subject exists, `before` unreadable or not current, a reads
+  MUST failed) still reports `health` and `required-fields` as pass on their read
+  halves; give it the reads-only "not judged: needs a write" marking too. Report
+  wording only: such a run already exits 2 #ready-for-agent
 - [ ] 4.5 Reads-only run against production TrueNAS from the app host;
   report attached to this change #ready-for-human
 - [ ] 4.6 `--mutate` run against staging TrueNAS with a throwaway subject,
