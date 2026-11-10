@@ -7,8 +7,9 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
  * else; no hook names a query key to invalidate. Before this each hook listed
  * its own, and they disagreed: approving a request missed People and Pending
  * changes, draining missed People, and two hooks for the same kind of change
- * covered different sets. `invalidation.test.ts` fails a mutation that does
- * not call this and a raw `invalidateQueries` outside this file.
+ * covered different sets. `invalidationMap.test.tsx` fails a mutation that
+ * does not call this; the lint rule in `ui/eslint.config.mjs` fails a raw
+ * `invalidateQueries` anywhere else.
  *
  * The rail's counts are `["governance", "indicators"]`, so any write that can
  * move a count includes `["governance"]` (see RAIL_KINDS in the test).

@@ -42,6 +42,6 @@ export function useSaveTerms() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (terms: Term[]) => request("/terms", { method: "PUT", body: { terms } }),
-    onSuccess: () => invalidateAfter(qc, "terms", { extra: [termsKey] }),
+    onSuccess: () => invalidateAfter(qc, "terms"),
   });
 }

@@ -149,10 +149,13 @@ const READ_ONLY = new Set([
   "useSaveWelcomeClaims",
 ]);
 
-function hookFiles(): string[] {
-  return readdirSync(QUERIES_DIR)
-    .filter((n) => /^use.*\.tsx?$/.test(n))
-    .map((n) => join(QUERIES_DIR, n));
+/** Every non-test source file under src/: a mutation in a component counts too. */
+function sourceFiles(dir = join(QUERIES_DIR, "..", "..")): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) return e.name === "__tests__" ? [] : sourceFiles(p);
+    return /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [p] : [];
+  });
 }
 
 /** A top-level function (or `export const use… =`) per block. */
@@ -174,7 +177,7 @@ export function mutationsMissingTheMap(files: Record<string, string>): string[] 
 }
 
 describe("every mutation hook goes through the map", () => {
-  const files = Object.fromEntries(hookFiles().map((f) => [f, readFileSync(f, "utf8")]));
+  const files = Object.fromEntries(sourceFiles().map((f) => [f, readFileSync(f, "utf8")]));
 
   it("calls invalidateAfter unless it is a dry run", () => {
     expect(mutationsMissingTheMap(files)).toEqual([]);
