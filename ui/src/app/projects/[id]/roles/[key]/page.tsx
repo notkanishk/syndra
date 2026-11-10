@@ -16,7 +16,7 @@ import { Mono } from "@/components/ui/Badge";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
-import { ProjectName } from "@/components/names";
+import { ProjectName, projectLabel } from "@/components/names";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
 import { WithheldInline } from "@/components/ui/Withheld";
@@ -56,7 +56,7 @@ export default function RoleMembersPage({
   const [removal, setRemoval] = useState<(Removal & { userName: string }) | null>(null);
 
   const view = members.data;
-  useCrumb(view ? `${view.project_name} / ${roleKey}` : null);
+  useCrumb(view ? `${projectLabel(view.project_name, id)} / ${roleKey}` : null);
 
   const rows = useMemo(() => {
     const all = sortByName(view?.members ?? [], (member) => member.user.name, (member) => member.user.id);
@@ -186,7 +186,7 @@ export default function RoleMembersPage({
               key={member.user.id}
               member={member}
               projectId={id}
-              projectName={view?.project_name ?? id}
+              projectName={projectLabel(view?.project_name, id)}
               roleKey={roleKey}
               onRemove={setRemoval}
             />

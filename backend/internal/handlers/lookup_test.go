@@ -43,11 +43,13 @@ func (s lookupStubSource) FindApplication(context.Context, string) (models.Appli
 func (s lookupStubSource) RoleKeysForProject(context.Context, string) ([]string, error) {
 	return nil, nil
 }
-func (s lookupStubSource) ProjectName(context.Context, string) (string, error) { return "", nil }
-func (s lookupStubSource) Tag() string                                         { return "stub" }
-func (s lookupStubSource) InvalidateAll()                                      {}
-func (s lookupStubSource) InvalidateProject(string)                            {}
-func (s lookupStubSource) InvalidateUsers()                                    {}
+func (s lookupStubSource) ProjectName(context.Context, string) (string, bool, error) {
+	return "", false, nil
+}
+func (s lookupStubSource) Tag() string              { return "stub" }
+func (s lookupStubSource) InvalidateAll()           {}
+func (s lookupStubSource) InvalidateProject(string) {}
+func (s lookupStubSource) InvalidateUsers()         {}
 
 func withLookupDeps(t *testing.T,
 	src directory.Source,

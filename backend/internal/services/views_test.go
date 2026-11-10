@@ -512,8 +512,8 @@ type namedProjectDirectory struct {
 	name string
 }
 
-func (d *namedProjectDirectory) ProjectName(context.Context, string) (string, error) {
-	return d.name, nil
+func (d *namedProjectDirectory) ProjectName(context.Context, string) (string, bool, error) {
+	return d.name, d.name != "", nil
 }
 
 // A project id the directory cannot name reads as a fallback, not a name —
@@ -532,8 +532,8 @@ func TestUpsertRoleHonestWhenProjectNameUnresolved(t *testing.T) {
 	if role == nil {
 		t.Fatalf("expected role to be inserted")
 	}
-	if role.ProjectName != key.projectID {
-		t.Fatalf("expected fallback name to stay the raw id, got %q", role.ProjectName)
+	if role.ProjectName != "" {
+		t.Fatalf("an unresolved project has no name, never its id; got %q", role.ProjectName)
 	}
 	if role.ProjectNameResolved {
 		t.Fatalf("expected ProjectNameResolved=false when the directory only echoed the id back")
@@ -609,8 +609,8 @@ func (d *snapshotFixtureDirectory) FindApplication(_ context.Context, id string)
 func (d *snapshotFixtureDirectory) RoleKeysForProject(context.Context, string) ([]string, error) {
 	return nil, nil
 }
-func (d *snapshotFixtureDirectory) ProjectName(_ context.Context, id string) (string, error) {
-	return id, nil
+func (d *snapshotFixtureDirectory) ProjectName(_ context.Context, id string) (string, bool, error) {
+	return "", false, nil
 }
 func (d *snapshotFixtureDirectory) Tag() string              { return "snapshot-fixture" }
 func (d *snapshotFixtureDirectory) InvalidateAll()           {}

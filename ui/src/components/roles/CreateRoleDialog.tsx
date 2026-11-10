@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
-import { ProjectName } from "@/components/names";
+import { ProjectName, projectLabel } from "@/components/names";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useProjects } from "@/lib/queries/useProjects";
@@ -158,12 +158,12 @@ export function CreateRoleDialog({
               onChange={(event) => setCloneFrom(event.target.value)}
             >
               <option value="">Start empty</option>
-              {sortByName(all, (role) => `${role.project_name} / ${roleName(role.display_name, role.role_key)}`, (role) => `${role.project_id}:${role.role_key}`).map((role) => (
+              {sortByName(all, (role) => `${projectLabel(role.project_name, role.project_id)} / ${roleName(role.display_name, role.role_key)}`, (role) => `${role.project_id}:${role.role_key}`).map((role) => (
                 <option
                   key={`${role.project_id}:${role.role_key}`}
                   value={`${role.project_id}:${role.role_key}`}
                 >
-                  {role.project_name} / {roleName(role.display_name, role.role_key)}
+                  {projectLabel(role.project_name, role.project_id)} / {roleName(role.display_name, role.role_key)}
                 </option>
               ))}
             </Select>

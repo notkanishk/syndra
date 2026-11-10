@@ -34,6 +34,13 @@ describe("one name path", () => {
     expect(bad).toEqual([]);
   });
 
+  it("the name query keys are defined once (useNameCatalog.ts), never retyped", () => {
+    // A second `["name-catalog"]` is how the resolver and Go to could drift onto two cache entries.
+    const literal = /["'`]name-(?:catalog|bundles)["'`]/;
+    const bad = files.filter((f) => f.rel !== join("lib", "queries", "useNameCatalog.ts") && literal.test(f.text)).map((f) => f.rel);
+    expect(bad).toEqual([]);
+  });
+
   it("one phrase for a person nobody can name (lib/names.ts personOr)", () => {
     // "They", "Somebody", "Someone" or a literal "this person" as a name's fallback.
     const fallback = /(?:\?\?|\|\|)\s*"(?:They|Somebody|Someone|this person)"|fallback="(?:Somebody|Someone|They)"/;

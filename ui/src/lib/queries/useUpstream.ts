@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import { invalidateAfter } from "./invalidation";
+import { NAME_CATALOG_KEY } from "./useNameCatalog";
 import type { RetryState } from "@/lib/retry";
 import type { ActPlan, RolePlans } from "@/lib/usePlanConsent";
 
@@ -237,7 +238,7 @@ function useUpstreamMutation<V, R = unknown>(fn: (value: V) => Promise<R>) {
       qc.invalidateQueries({ queryKey: ["upstream"] });
       qc.invalidateQueries({ queryKey: ["drift"] });
       // A role created or renamed here changes the names every screen resolves.
-      qc.invalidateQueries({ queryKey: ["name-catalog"] });
+      qc.invalidateQueries({ queryKey: NAME_CATALOG_KEY });
       // The same records the everyday screens read: a person's access, a
       // role's holders and the catalogue, the queue of changes to send.
       qc.invalidateQueries({ queryKey: ["users"] });

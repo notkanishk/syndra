@@ -255,3 +255,32 @@ func (fake *failingRoleClient) SearchEvents(context.Context, zitadel.EventSearch
 func (fake *failingRoleClient) GrantOriginByID(context.Context, string) (*zitadel.GrantOrigin, error) {
 	return nil, nil
 }
+
+// A local role in a project the directory does not list is kept, with no
+// project name ("") for the UI's one fallback, never the project id.
+func TestGlobalRoleCatalog_UnlistedProjectHasNoName(t *testing.T) {
+	resetRoleDeps(t)
+	noopRoleDeps()
+	svcDbGetAllLocalRoles = func(_ context.Context) ([]models.Role, error) {
+		return []models.Role{{ProjectID: "gone-project", RoleKey: "x"}, {ProjectID: "printing", RoleKey: "admin"}}, nil
+	}
+	catalog, err := GlobalRoleCatalog(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gone, listed bool
+	for _, cr := range catalog {
+		switch cr.ProjectID {
+		case "gone-project":
+			gone = true
+			if cr.ProjectName != "" {
+				t.Errorf("unlisted project name = %q, want none", cr.ProjectName)
+			}
+		case "printing":
+			listed = listed || cr.ProjectName != ""
+		}
+	}
+	if !gone || !listed {
+		t.Errorf("gone=%v listed=%v", gone, listed)
+	}
+}

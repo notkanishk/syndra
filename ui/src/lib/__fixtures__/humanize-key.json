@@ -1,0 +1,16 @@
+[
+  { "key": "", "label": "" },
+  { "key": "admin", "label": "Admin" },
+  { "key": "laser_trained", "label": "Laser Trained" },
+  { "key": "lab-pin", "label": "Lab Pin" },
+  { "key": "door__access--pin", "label": "Door Access Pin" },
+  { "key": "_leading", "label": " Leading" },
+  { "key": "trailing_", "label": "Trailing " },
+  { "key": "Already_Upper", "label": "Already Upper" },
+  { "key": "shop2_door", "label": "Shop2 Door" },
+  { "key": "2fa_reset", "label": "2fa Reset" },
+  { "key": "o'neil", "label": "O'Neil" },
+  { "key": "a.b", "label": "A.B" },
+  { "key": "two words", "label": "Two Words" },
+  { "key": "élan_vital", "label": "éLan Vital" }
+]

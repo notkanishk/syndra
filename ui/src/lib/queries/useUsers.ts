@@ -5,6 +5,7 @@ import type { RequestHolding } from "@/lib/queries/useRequests";
 import { settleIndicators } from "@/lib/queries/useIndicators";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
+import { projectLabel } from "@/components/names/Unresolved";
 import { request } from "@/lib/api-client";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { CascadeOutcome } from "@/lib/types";
@@ -220,7 +221,13 @@ export function useUserAccess(userId: string) {
       view && {
         ...view,
         bundles: sortByName(view.bundles ?? [], (b) => b.name),
-        projects: sortByName(view.projects ?? [], (p) => p.project_name, (p) => p.project_id),
+        // The server sends no name ("") for a project it could not read; the one
+        // shared phrase stands in here so no screen builds a label from nothing.
+        projects: sortByName(
+          (view.projects ?? []).map((p) => ({ ...p, project_name: projectLabel(p.project_name, p.project_id) })),
+          (p) => p.project_name,
+          (p) => p.project_id,
+        ),
       },
   });
 }

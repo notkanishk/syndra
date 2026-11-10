@@ -622,7 +622,7 @@ func GetProjectClaimShape(ctx context.Context, projectID string) (ProjectClaimSh
 		return ProjectClaimShape{}, err
 	}
 	out := ProjectClaimShape{
-		ProjectID: projectID, ProjectName: projectID, Configured: found,
+		ProjectID: projectID, Configured: found,
 		Default:      ProjectDefaultForm{ClaimName: claims.DefaultClaimName, FormatType: claims.DefaultFormat, AttributeClaims: map[string]string{}, StaticClaims: map[string]any{}},
 		Applications: []ProjectAppShape{},
 	}
@@ -630,7 +630,7 @@ func GetProjectClaimShape(ctx context.Context, projectID string) (ProjectClaimSh
 		out.Default = ProjectDefaultForm{ClaimName: row.ClaimName, FormatType: row.FormatType, AttributeClaims: row.AttributeClaims, StaticClaims: row.StaticClaims}
 	}
 	out.Profile = claims.FromFlat(out.Default.ClaimName, out.Default.FormatType, out.Default.AttributeClaims, out.Default.StaticClaims)
-	if name, nerr := directory.Default.ProjectName(ctx, projectID); nerr == nil && name != "" {
+	if name, ok, nerr := directory.Default.ProjectName(ctx, projectID); nerr == nil && ok {
 		out.ProjectName = name
 	}
 

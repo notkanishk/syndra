@@ -589,7 +589,9 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 				continue
 			}
 			seenProjects[role.ProjectID] = true
-			keyProjects = append(keyProjects, role.ProjectName)
+			if role.ProjectNameResolved {
+				keyProjects = append(keyProjects, role.ProjectName)
+			}
 			keyProjectIDs = append(keyProjectIDs, role.ProjectID)
 		}
 		textsort.Strings(keyProjects)
@@ -609,7 +611,7 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 			BundleNames:        bundleNames,
 			BundleVersions:     bundleVersions,
 			EffectiveRoleCount: len(roleMap),
-			ProjectCount:       len(keyProjects),
+			ProjectCount:       len(keyProjectIDs),
 			KeyProjects:        keyProjects,
 			KeyProjectIDs:      keyProjectIDs,
 			ExpiringCount:      attention.expiring[user.ID],
@@ -769,14 +771,11 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		if projectBuckets[projectID] != nil {
 			continue
 		}
-		name := projectID
-		if resolved, nameErr := directory.Default.ProjectName(ctx, projectID); nameErr == nil {
-			name = resolved
-		}
+		name, resolved, _ := directory.Default.ProjectName(ctx, projectID)
 		projectBuckets[projectID] = &models.ProjectAccessView{
 			ProjectID:           projectID,
 			ProjectName:         name,
-			ProjectNameResolved: name != projectID,
+			ProjectNameResolved: resolved,
 			SourceRoles:         []models.EffectiveRole{},
 			DerivedRoles:        []models.EffectiveRole{},
 			EffectiveRoleKeys:   []string{},
@@ -1749,24 +1748,15 @@ func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKe
 func upsertRole(ctx context.Context, roleMap map[roleKey]*models.EffectiveRole, key roleKey, isSource bool, reason models.RoleReason) bool {
 	current := roleMap[key]
 	if current == nil {
-		// Best-effort project name — never block lineage resolution on a
-		// directory lookup failure. Fall back to the raw project ID.
-		//
-		// directory.Default.ProjectName itself returns the id with a nil
-		// error on an unresolved lookup (deliberately, so audit rows and
-		// topology placeholders never collapse to empty) — so a real error
-		// and a silent miss both surface here the same way: the returned
-		// name equals the id we asked about. That equality IS the "did this
-		// resolve" signal, since a real project name colliding with its own
-		// platform id is not a case this system needs to handle.
-		projectName := key.projectID
-		if name, err := directory.Default.ProjectName(ctx, key.projectID); err == nil {
-			projectName = name
-		}
+		// Best-effort project name: never block lineage resolution on a
+		// directory lookup failure. An unresolved lookup (error or not listed)
+		// is ("", false): no name, and ProjectNameResolved says so, so the UI's
+		// one fallback renders it rather than a raw id standing in as a name.
+		projectName, resolved, _ := directory.Default.ProjectName(ctx, key.projectID)
 		current = &models.EffectiveRole{
 			ProjectID:           key.projectID,
 			ProjectName:         projectName,
-			ProjectNameResolved: projectName != key.projectID,
+			ProjectNameResolved: resolved,
 			RoleKey:             key.roleKey,
 			IsSource:            isSource,
 		}
@@ -1829,16 +1819,30 @@ func roleNodeID(projectID, roleKey string) string {
 	return "role:" + projectID + ":" + roleKey
 }
 
+// roleLabel is the UI's `humanizeKey` (ui/src/lib/names.ts), character for
+// character: a run of "_" or "-" becomes one space, and the first letter of
+// every word (an ASCII letter after a non-word character, JS `\b\w`) is
+// upper-cased. Nothing is trimmed, as in the UI. The shared fixture
+// ui/src/lib/__fixtures__/humanize-key.json pins the two: the Go test
+// (TestRoleLabelMatchesHumanizeKey) and the UI test (names.test.ts) read it.
 func roleLabel(roleKey string) string {
-	words := strings.Fields(strings.NewReplacer("_", " ", "-", " ").Replace(roleKey))
-	for i, word := range words {
-		if word == "" {
+	var b strings.Builder
+	prevWord, prevSep := false, false
+	for _, c := range roleKey {
+		if c == '_' || c == '-' {
+			if !prevSep {
+				b.WriteByte(' ')
+			}
+			prevWord, prevSep = false, true
 			continue
 		}
-		words[i] = strings.ToUpper(word[:1]) + word[1:]
+		prevSep = false
+		isWord := c < 128 && (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9')
+		if isWord && !prevWord && c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		prevWord = isWord
+		b.WriteRune(c)
 	}
-	if len(words) == 0 {
-		return roleKey
-	}
-	return strings.Join(words, " ")
+	return b.String()
 }

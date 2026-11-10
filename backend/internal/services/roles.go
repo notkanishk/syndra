@@ -563,13 +563,9 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 	for key, entry := range seen {
 		usage := usageCounts[key]
 		assignedUsers := facts.Given[key]
-		projectName, ok := projectNames[entry.projectID]
-		if !ok {
-			// Referenced role pointing at a project not currently visible in
-			// the directory — render the ID rather than the empty string so
-			// operators see which project needs attention.
-			projectName = entry.projectID
-		}
+		// A referenced role in a project the directory does not list has no
+		// name: "" and the UI's one fallback renders it, never the id.
+		projectName := projectNames[entry.projectID]
 
 		cr := models.CatalogRole{
 			ProjectID:         entry.projectID,
@@ -604,6 +600,9 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 	sort.Slice(catalog, func(i, j int) bool {
 		if catalog[i].ProjectName != catalog[j].ProjectName {
 			return catalog[i].ProjectName < catalog[j].ProjectName
+		}
+		if catalog[i].ProjectID != catalog[j].ProjectID { // unnamed projects stay together
+			return catalog[i].ProjectID < catalog[j].ProjectID
 		}
 		return catalog[i].RoleKey < catalog[j].RoleKey
 	})

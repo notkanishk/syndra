@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
 import { NameResolverProvider, useNameResolver } from "@/lib/queries/useNameResolver";
 import { makeProxyFetch, respondWith } from "@/test-utils/proxyFetch";
 
@@ -206,7 +207,7 @@ describe("useNameResolver (full-catalog)", () => {
 
     // Simulate a user-create: the catalog now includes the previously-unknown id.
     catalog.users.push({ id: "nope", name: "New Person", email: "new@example.edu" });
-    await client.invalidateQueries({ queryKey: ["name-catalog"] });
+    await client.invalidateQueries({ queryKey: NAME_CATALOG_KEY });
 
     await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("New Person"));
   });

@@ -32,7 +32,7 @@ func (s stubSource) FindApplication(context.Context, string) (models.Application
 	return models.ApplicationCatalog{}, false, nil
 }
 func (s stubSource) RoleKeysForProject(context.Context, string) ([]string, error) { return nil, nil }
-func (s stubSource) ProjectName(context.Context, string) (string, error)          { return "", nil }
+func (s stubSource) ProjectName(context.Context, string) (string, bool, error)    { return "", false, nil }
 func (s stubSource) Tag() string                                                  { return s.tag }
 func (s stubSource) InvalidateAll()                                               {}
 func (s stubSource) InvalidateProject(string)                                     {}

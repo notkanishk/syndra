@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TouchNav } from "@/components/shell/TouchNav";
+import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
 
 /** A-19 P4 on a phone: Go to is the existing sheet, with an Input at its top. */
 
@@ -25,7 +26,7 @@ vi.mock("@/lib/queries/useIndicators", () => ({ useIndicatorsRead: () => ({ data
 
 function openSheet() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(["name-catalog"], {
+  client.setQueryData(NAME_CATALOG_KEY, {
     users: [
       { id: "u2", name: "Primo Colon", email: "", title: "", team: "Fabrication" },
       { id: "u1", name: "Damian Priest", email: "", title: "", team: "" },

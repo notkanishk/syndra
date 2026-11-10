@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { UserName } from "@/components/names";
+import { projectLabel } from "@/components/names/Unresolved";
 import { EmptyState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
@@ -303,7 +304,7 @@ function AccessShape() {
                     {roleName(role.display_name, role.role_key)}
                   </span>
                   <span className="shrink-0 truncate text-right text-[13px] text-faint">
-                    {role.project_name}
+                    {projectLabel(role.project_name, role.project_id)}
                     {/* What Zitadel shows right now, not Syndra's record of who
                         was granted this — see the confirmation line above. */}
                     {holders.note && (

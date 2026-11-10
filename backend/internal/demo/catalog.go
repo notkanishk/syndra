@@ -208,12 +208,9 @@ func FindApplication(appID string) (models.ApplicationCatalog, bool) {
 	return models.ApplicationCatalog{}, false
 }
 
-func ProjectName(projectID string) string {
+func ProjectName(projectID string) (string, bool) {
 	project, ok := FindProject(projectID)
-	if !ok {
-		return projectID
-	}
-	return project.Name
+	return project.Name, ok
 }
 
 func BaseGrants(userID string) []models.RoleGrant {

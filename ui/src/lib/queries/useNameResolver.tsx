@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { request } from "@/lib/api-client";
+import { NAME_BUNDLES_KEY, NAME_CATALOG_KEY } from "./useNameCatalog";
 import {
   type LookupResponse,
   type ResolvedBundle,
@@ -208,7 +209,7 @@ export function NameResolverProvider({
 }) {
   // Catalog: users + projects + nested roles. Member-allowed via proxy.
   const catalogQ = useQuery({
-    queryKey: ["name-catalog"],
+    queryKey: NAME_CATALOG_KEY,
     queryFn: () => request<CatalogResponse>("catalog"),
     enabled,
     staleTime: STALE_TIME,
@@ -217,7 +218,7 @@ export function NameResolverProvider({
   // on failure data is undefined → resolveBundle yields fallback, isolated
   // from catalog. Members don't surface bundle names on their own pages.
   const bundlesQ = useQuery({
-    queryKey: ["name-bundles"],
+    queryKey: NAME_BUNDLES_KEY,
     queryFn: () => request<Bundle[]>("bundles"),
     enabled: bundles,
     staleTime: STALE_TIME,

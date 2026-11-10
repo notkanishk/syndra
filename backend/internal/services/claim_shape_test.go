@@ -63,8 +63,11 @@ func (shapeDir) RoleKeysForProject(_ context.Context, id string) ([]string, erro
 	}
 	return out, nil
 }
-func (shapeDir) ProjectName(_ context.Context, id string) (string, error) { return id, nil }
-func (shapeDir) Users(context.Context) ([]models.UserProfile, error)      { return nil, nil }
+func (shapeDir) ProjectName(_ context.Context, id string) (string, bool, error) {
+	_, ok := shapeProjects[id]
+	return id, ok, nil
+}
+func (shapeDir) Users(context.Context) ([]models.UserProfile, error) { return nil, nil }
 
 // shapeStore is an in-memory app_claim_shape_versions.
 type shapeStore struct {

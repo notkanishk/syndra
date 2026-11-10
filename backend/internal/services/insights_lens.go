@@ -151,7 +151,8 @@ func readLensWorld(ctx context.Context, withRoutes bool) (lensWorld, error) {
 }
 
 // lensNamer turns "project:role" into names. A project or role the directory
-// does not list falls back to its key, as the trends read does.
+// does not list has no name: "" for the UI's one fallback (`lens.ts`
+// `roleName`), never its key standing in as one.
 func lensNamer(projects []models.ProjectCatalog) func(project, role string) (string, string) {
 	pn := map[string]string{}
 	rl := map[string]string{}
@@ -162,14 +163,7 @@ func lensNamer(projects []models.ProjectCatalog) func(project, role string) (str
 		}
 	}
 	return func(project, role string) (string, string) {
-		pName, rLabel := pn[project], rl[project+":"+role]
-		if pName == "" {
-			pName = project
-		}
-		if rLabel == "" {
-			rLabel = role
-		}
-		return pName, rLabel
+		return pn[project], rl[project+":"+role]
 	}
 }
 
@@ -180,6 +174,9 @@ func sortLensRoles(rs []models.LensRole) {
 		case a.People != b.People:
 			return a.People > b.People
 		case a.ProjectName != b.ProjectName:
+			if a.ProjectName == "" || b.ProjectName == "" { // unnamed roles after named ones
+				return b.ProjectName == ""
+			}
 			return a.ProjectName < b.ProjectName
 		case a.RoleLabel != b.RoleLabel:
 			return a.RoleLabel < b.RoleLabel
