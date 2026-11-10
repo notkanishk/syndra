@@ -12,6 +12,8 @@ second copy of everything.
 |---|---|
 | [`contract/`](contract/) | The wire contract, as artifacts both ends are tested against — plus what a real target answered, recorded rather than written |
 | [`truenas/`](truenas/) | The first and so far only add-on: TrueNAS SCALE, SMB storage |
+| [`reference/`](reference/) | A complete contract-2 add-on over an in-memory target: the conformance kit's self-test and the guide's worked example. Never deployed |
+| [`conformance/`](conformance/) | `syndra-addon-conform`: drives any add-on black-box over the real transport and says, check by check, whether it may be connected. Reads only unless `-mutate` |
 
 ## The trust model
 

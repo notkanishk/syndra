@@ -271,6 +271,14 @@
       ],
       "retry": "never",
       "meaning": "The strict decoder met a field the route does not know."
+    },
+    "UNKNOWN_ROUTE": {
+      "title": "Unknown route",
+      "statuses": [
+        404
+      ],
+      "retry": "never",
+      "meaning": "No such method and path on this add-on, including a feature route its manifest does not declare (design §11: no UNKNOWN_FEATURE code; the backend reads it as unreached and refreshes the manifest)."
     }
   }
 }

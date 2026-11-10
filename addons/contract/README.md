@@ -44,6 +44,7 @@ editing one, run `go test -count=1`, or a stale pass is reported.
 | [`registry/errors.json`](registry/errors.json) | Every `error` code the add-on writes: its statuses and its retry class |
 | [`registry/operations.json`](registry/operations.json) | Every operation id in the backend's `operationPolicy`: scope ceiling, confirm, params, secret params |
 | [`transport_derivation.json`](transport_derivation.json) | How both ends derive their keys and sign requests (below) |
+| [`embed.go`](embed.go) | Files only: `v2/` and the transport vector embedded, so the conformance kit carries the contract it was built from. No Go type lives here, ever (design §1); the two ends keep reading these files from their own suites |
 | [`truenas_observed.json`](truenas_observed.json) | What a real TrueNAS answered, recorded rather than written (below) |
 
 Request schemas are closed (`additionalProperties: false`), mirroring the
