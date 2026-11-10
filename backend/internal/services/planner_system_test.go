@@ -42,7 +42,7 @@ func TestSystemChange_WelcomeBundle(t *testing.T) {
 	}
 	// Where the role still stands in Zitadel, cancelling that removal is all
 	// that is owed: nothing is sent for it.
-	person.Standing = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "member"}: true}
+	person.Delivered = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "member"}: true}
 	if ch := systemChange("u1", person, s, map[roleKey]bool{}, after, rules, rules, "bundle", "b1"); ch.Writes[0].Delivery != DeliveryNone {
 		t.Fatalf("a give that only cancels sends nothing: %s", systemWrites(ch))
 	}

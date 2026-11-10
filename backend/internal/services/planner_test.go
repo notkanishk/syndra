@@ -280,9 +280,9 @@ func TestPlan_CancelIDs(t *testing.T) {
 	if !strings.HasSuffix(ch.Row.Consequence, "Cancels a change waiting for you to send: the removal of member queued 2 Nov 2026.") {
 		t.Errorf("consequence = %q", ch.Row.Consequence)
 	}
-	// Standing: cancelling the removal is all it takes, so nothing is sent.
+	// Delivered: cancelling the removal is all it takes, so nothing is sent.
 	p := s.Access.People["u1"]
-	p.Standing = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "member"}: true}
+	p.Delivered = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "member"}: true}
 	s.Access.People["u1"] = p
 	sameWrites(t, assign(s), sentWrite{"add", "member", DeliveryNone}, sentWrite{"add", "trained", DeliveryStraightAway})
 

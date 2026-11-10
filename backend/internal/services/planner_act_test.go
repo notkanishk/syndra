@@ -109,7 +109,7 @@ func TestPlanAct_GiveThatOnlyCancelsAWaitingRemoval(t *testing.T) {
 	withQueued(&s, models.QueuedChange{ID: "q1", OpType: "revoke", ProjectID: "pLab", RoleKeys: []string{"member"}, Source: "direct"})
 	p := s.Access.People["u1"]
 	p.Revoking = []db.RoleRef{{ProjectID: "pLab", RoleKey: "member"}}
-	p.Standing = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "member"}: true}
+	p.Delivered = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "member"}: true}
 	s.Access.People["u1"] = p
 
 	ch := give(s)

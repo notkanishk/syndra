@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -16,49 +15,32 @@ var svcRoleDeliveries = db.RoleDeliveries
 // Standings answers the standing of each of one person's roles. Built once per
 // person by accessSnapshot.Standing; Of is pure.
 type Standings struct {
-	byRole    map[string]db.RoleDelivery // "project:role" → latest add or revoke
-	byProject map[string]db.RoleDelivery // project → latest replace
-	observed  map[string]bool            // "project:role" in Zitadel's index
-	concludes bool                       // the read behind observed was complete
+	deliveries db.Deliveries   // the latest outbox row per role (db.RoleDeliveries)
+	observed   map[string]bool // "project:role" in Zitadel's index
+	concludes  bool            // the read behind observed was complete
 }
 
-func newStandings(deliveries []db.RoleDelivery, observed map[string]bool, basis models.ObservationBasis) Standings {
-	s := Standings{
-		byRole:    map[string]db.RoleDelivery{},
-		byProject: map[string]db.RoleDelivery{},
-		observed:  observed,
-		concludes: basis.ConcludesAbsence(),
-	}
-	for _, d := range deliveries {
-		if d.OpType == "replace" {
-			s.byProject[d.ProjectID] = d
-		} else {
-			s.byRole[d.ProjectID+":"+d.RoleKey] = d
-		}
-	}
-	return s
+func newStandings(deliveries db.Deliveries, observed map[string]bool, basis models.ObservationBasis) Standings {
+	return Standings{deliveries: deliveries, observed: observed, concludes: basis.ConcludesAbsence()}
 }
 
 // Of is the role's standing, nil when it can't be said (see standingOf).
 func (s Standings) Of(projectID, roleKey string) *models.RoleStanding {
-	key := projectID + ":" + roleKey
-	d, ok := s.byRole[key]
-	if r, rok := s.byProject[projectID]; rok && (!ok || r.IntentSeq > d.IntentSeq) {
-		d, ok = r, true
-	}
-	return standingOf(roleKey, d, ok, s.observed[key], s.concludes)
+	d, ok := s.deliveries.Latest(projectID, roleKey)
+	return standingOf(roleKey, d, ok, s.observed[projectID+":"+roleKey], s.concludes)
 }
 
 // standingOf decides one role's standing from the latest outbox row for it
 // (when there is one), whether Zitadel's index shows it, and whether the read
 // behind that index can conclude an absence. design.md, W3b.
 //
-// The latest row decides, so an add a later revoke took back is never read as
-// both. A row that settled (confirmed, failed) says nothing Zitadel's own
-// answer doesn't, so the index decides then.
+// The latest row decides (db.Deliveries.Latest, the same answer the planner
+// reads), so an add a later revoke took back is never read as both. A row that
+// settled (confirmed, failed) says nothing Zitadel's own answer doesn't, so the
+// index decides then.
 func standingOf(roleKey string, d db.RoleDelivery, hasRow, observed, concludes bool) *models.RoleStanding {
 	if hasRow {
-		gives := d.OpType == "add" || (d.OpType == "replace" && slices.Contains(d.RoleKeys, roleKey))
+		gives := d.Gives(roleKey)
 		switch {
 		case d.Status == "pending" || d.Status == "in_flight":
 			if gives {

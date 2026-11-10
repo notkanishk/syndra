@@ -54,7 +54,7 @@ func TestStanding_TheDesignTable(t *testing.T) {
 		{"a sent removal, incomplete read without it", []db.RoleDelivery{row("revoke", "applied", 1, "r")}, none, read(false), ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := newStandings(tc.rows, tc.seen, tc.basis).Of("p", "r")
+			got := newStandings(db.NewDeliveries(tc.rows...), tc.seen, tc.basis).Of("p", "r")
 			assertStanding(t, got, tc.want)
 		})
 	}
@@ -66,22 +66,22 @@ func TestStanding_TheLatestRowDecides(t *testing.T) {
 	seen := map[string]bool{"p:r": true}
 	// Only the latest add/revoke per role reaches here (RoleDeliveries), but a
 	// replace on the project competes with it by intent_seq.
-	got := newStandings([]db.RoleDelivery{
+	got := newStandings(db.NewDeliveries(
 		confirmed(row("add", "applied", 1, "r")),
 		row("replace", "pending", 2, "other"),
-	}, seen, read(true)).Of("p", "r")
+	), seen, read(true)).Of("p", "r")
 	assertStanding(t, got, models.StandingRemoving)
 
-	got = newStandings([]db.RoleDelivery{
+	got = newStandings(db.NewDeliveries(
 		row("add", "pending", 3, "r"),
 		row("replace", "pending", 2, "other"),
-	}, seen, read(true)).Of("p", "r")
+	), seen, read(true)).Of("p", "r")
 	assertStanding(t, got, models.StandingWaiting)
 }
 
 // A replace gives what it names and takes the rest.
 func TestStanding_AReplaceGivesWhatItNames(t *testing.T) {
-	st := newStandings([]db.RoleDelivery{row("replace", "pending", 1, "r", "s")}, map[string]bool{"p:t": true}, read(true))
+	st := newStandings(db.NewDeliveries(row("replace", "pending", 1, "r", "s")), map[string]bool{"p:t": true}, read(true))
 	assertStanding(t, st.Of("p", "r"), models.StandingWaiting)
 	assertStanding(t, st.Of("p", "t"), models.StandingRemoving)
 	// Another project is untouched by it.

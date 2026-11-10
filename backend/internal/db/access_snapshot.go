@@ -38,9 +38,10 @@ type PersonAccess struct {
 	// Queued is their changes waiting to be sent to Zitadel, oldest first:
 	// what a write may cancel (Answers).
 	Queued []models.QueuedChange
-	// Standing is the roles whose last delivery to Zitadel was an add: whether
-	// a write that cancels a queued change is still owed (OwedAfterCancel).
-	Standing map[RoleRef]bool
+	// Delivered is the roles whose latest applied delivery to Zitadel gives
+	// them (deliveredFor): whether a write that cancels a queued change is
+	// still owed (OwedAfterCancel).
+	Delivered map[RoleRef]bool
 }
 
 // errSnapshotUnlocked: the snapshot was asked for outside a transaction, so
@@ -92,9 +93,9 @@ func ReadAccessSnapshot(ctx context.Context, userIDs []string) (AccessSnapshot, 
 	if err != nil {
 		return AccessSnapshot{}, fmt.Errorf("snapshot queued changes: %w", err)
 	}
-	standing, err := standingFor(ctx, tx, "zitadel", userIDs)
+	delivered, err := deliveredFor(ctx, tx, "zitadel", userIDs)
 	if err != nil {
-		return AccessSnapshot{}, fmt.Errorf("snapshot standing deliveries: %w", err)
+		return AccessSnapshot{}, fmt.Errorf("snapshot delivered roles: %w", err)
 	}
 	rules, err := GetActiveMappingRules(ctx)
 	if err != nil {
@@ -111,7 +112,7 @@ func ReadAccessSnapshot(ctx context.Context, userIDs []string) (AccessSnapshot, 
 	}
 	for _, id := range userIDs {
 		snap.People[id] = PersonAccess{Direct: direct[id], Bundles: assigned[id], ByBundle: byBundle[id],
-			Revoking: revoking[id], Standing: standing[id]}
+			Revoking: revoking[id], Delivered: delivered[id]}
 	}
 	for _, c := range queued {
 		p := snap.People[c.UserID]

@@ -13,8 +13,8 @@ func deliveries(t *testing.T, rows ...db.RoleDelivery) {
 	t.Helper()
 	orig := svcRoleDeliveries
 	t.Cleanup(func() { svcRoleDeliveries = orig })
-	svcRoleDeliveries = func(_ context.Context, ids []string) (map[string][]db.RoleDelivery, error) {
-		return map[string][]db.RoleDelivery{ids[0]: rows}, nil
+	svcRoleDeliveries = func(_ context.Context, ids []string) (map[string]db.Deliveries, error) {
+		return map[string]db.Deliveries{ids[0]: db.NewDeliveries(rows...)}, nil
 	}
 }
 
@@ -101,11 +101,11 @@ func TestRoleMembers_EachMemberCarriesTheirStanding(t *testing.T) {
 	}
 	orig := svcRoleDeliveries
 	t.Cleanup(func() { svcRoleDeliveries = orig })
-	svcRoleDeliveries = func(_ context.Context, ids []string) (map[string][]db.RoleDelivery, error) {
+	svcRoleDeliveries = func(_ context.Context, ids []string) (map[string]db.Deliveries, error) {
 		if ids[0] != "u0" {
 			return nil, nil
 		}
-		return map[string][]db.RoleDelivery{"u0": {{ProjectID: "p0", RoleKey: "trained", OpType: "revoke", Status: "pending", IntentSeq: 1}}}, nil
+		return map[string]db.Deliveries{"u0": db.NewDeliveries(db.RoleDelivery{ProjectID: "p0", RoleKey: "trained", OpType: "revoke", Status: "pending", IntentSeq: 1})}, nil
 	}
 
 	view, err := RoleMembers(context.Background(), "p0", "trained")
