@@ -38,7 +38,7 @@ func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 	k1, r1 := role("p_laser", "trained", "Laser Lab")
 	users := []models.UserProfile{
 		{ID: "u_kevin", Name: "Kevin Owens"},
-		{ID: "u_amara", Name: "Amara Osei"},
+		{ID: "u_amara", Name: "Apollo Crews"},
 	}
 	snap := snapshotWith(users,
 		map[string]map[roleKey]*models.EffectiveRole{
@@ -72,7 +72,7 @@ func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 		t.Errorf("Kevin has an expiring grant; got count=%d soonest=%v", kevin.ExpiringCount, kevin.SoonestExpiry)
 	}
 	if kevin.OpenRequestCount != 0 {
-		t.Errorf("Amara's request must not land on Kevin's row, got %d", kevin.OpenRequestCount)
+		t.Errorf("Apollo's request must not land on Kevin's row, got %d", kevin.OpenRequestCount)
 	}
 	if len(kevin.BundleNames) != 2 || kevin.BundleNames[0] != "Lab Tech" {
 		t.Errorf("bundle names are pills, not a count: got %v", kevin.BundleNames)
@@ -83,10 +83,10 @@ func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 
 	amara := byID["u_amara"]
 	if amara.OpenRequestCount != 1 {
-		t.Errorf("Amara has one open request, got %d", amara.OpenRequestCount)
+		t.Errorf("Apollo has one open request, got %d", amara.OpenRequestCount)
 	}
 	if amara.ExpiringCount != 0 || amara.SoonestExpiry != nil {
-		t.Error("Amara has nothing expiring; the row must say so with a dash, not borrow Kevin's date")
+		t.Error("Apollo has nothing expiring; the row must say so with a dash, not borrow Kevin's date")
 	}
 }
 
@@ -96,7 +96,7 @@ func TestPeopleIndex_SearchMatchesRoleKeys(t *testing.T) {
 	k1, r1 := role("p_laser", "trained", "Laser Lab")
 	users := []models.UserProfile{
 		{ID: "u_holder", Name: "Nia Jax", Email: "nia@example.org"},
-		{ID: "u_other", Name: "Wen-Li Chao", Email: "wenli@example.org"},
+		{ID: "u_other", Name: "Shinsuke Nakamura", Email: "shinsuke@example.org"},
 	}
 	snap := snapshotWith(users,
 		map[string]map[roleKey]*models.EffectiveRole{
@@ -121,7 +121,7 @@ func TestPeopleIndex_SearchMatchesRoleKeys(t *testing.T) {
 func TestPeopleIndex_SearchStillMatchesNames(t *testing.T) {
 	users := []models.UserProfile{
 		{ID: "u1", Name: "Nia Jax", Email: "nia@example.org"},
-		{ID: "u2", Name: "Wen-Li Chao", Email: "wenli@example.org"},
+		{ID: "u2", Name: "Shinsuke Nakamura", Email: "shinsuke@example.org"},
 	}
 	snap := snapshotWith(users, map[string]map[roleKey]*models.EffectiveRole{"u1": {}, "u2": {}}, nil)
 

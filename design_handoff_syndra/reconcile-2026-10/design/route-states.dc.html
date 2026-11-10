@@ -234,7 +234,7 @@ class Component extends DCLogic {
     const isNotice = ["offline", "stack", "sample", "sample-open", "degraded"].includes(f);
     return {
       isBoard: !f, isFrame: !!f, session: this.session, rootData: this.rootData, noop: () => {}, groups,
-      pathname: f === "term" ? "/governance/pending" : f.startsWith("done") ? "/users/rohan" : "/users",
+      pathname: f === "term" ? "/governance/pending" : f.startsWith("done") ? "/users/liv" : "/users",
       fPeople: isNotice, fNeverPage: f === "degraded-never", showNever: f === "degraded-never", fDialog: f === "done-a" || f === "done-b", fError: f === "error", fMissing: f === "missing", fTerm: f === "term",
       showOffline: f === "offline" || f === "stack", showDegraded: f === "stack" || f === "degraded", showSample: f === "sample" || f === "sample-open",
       cmdOpen: this.state.cmdOpen, cmdArrow: this.state.cmdOpen ? "↑" : "↓", toggleCmd: () => this.setState(s => ({ cmdOpen: !s.cmdOpen })),

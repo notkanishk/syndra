@@ -158,8 +158,8 @@ const canonicalV2Payload = `{
     "human": {
       "first_name": "Test",
       "last_name": "User",
-      "nick_name": "Tess",
-      "display_name": "Tess U.",
+      "nick_name": "Tatum",
+      "display_name": "Tatum P.",
       "preferred_language": "en",
       "gender": 1,
       "email": "test@example.com",

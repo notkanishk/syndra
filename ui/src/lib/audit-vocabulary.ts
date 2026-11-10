@@ -26,8 +26,8 @@ import type { AuditEntry } from "@/lib/queries/useAudit";
  * `passive` is the same event told from the TARGET's side, for a screen that
  * is already about that person — their own Activity tab, where naming them in
  * every row repeats the heading above it. "Gave somebody a bundle" was the
- * placeholder that made this necessary: on Gaurav's page, that somebody
- * was Gaurav. Only the actions a person can be the target of have one.
+ * placeholder that made this necessary: on Bobby's page, that somebody
+ * was Bobby. Only the actions a person can be the target of have one.
  */
 export const AUDIT_ACTIONS: Record<
   string,

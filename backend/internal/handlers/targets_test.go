@@ -101,7 +101,7 @@ func TestResolvingABindingConflict(t *testing.T) {
 	dbResolveBindingConflict = func(_ context.Context, id, owner, actor, note string) (db.BindingConflict, error) {
 		got.id, got.owner, got.actor, got.note = id, owner, actor, note
 		return db.BindingConflict{
-			Target: "truenas", Username: "ada",
+			Target: "truenas", Username: "charlotte",
 			ConvergedSubjectID: "subject-b", BoundSubjectID: "subject-a",
 		}, nil
 	}
@@ -183,7 +183,7 @@ func TestAResolutionThatCannotQueueIsRolledBack(t *testing.T) {
 		return err
 	}
 	dbResolveBindingConflict = func(context.Context, string, string, string, string) (db.BindingConflict, error) {
-		return db.BindingConflict{Target: "truenas", Username: "ada",
+		return db.BindingConflict{Target: "truenas", Username: "charlotte",
 			ConvergedSubjectID: "subject-b", BoundSubjectID: "subject-a"}, nil
 	}
 	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
@@ -324,7 +324,7 @@ func TestATargetCanBeReconciledOnDemand(t *testing.T) {
 		called = target
 		return drift.AddonReconcileResult{
 			Target: target, Bound: 4, Queued: 1, Current: true,
-			Stale: []drift.StaleBinding{{SubjectID: "s", Username: "alice", UID: 3999}},
+			Stale: []drift.StaleBinding{{SubjectID: "s", Username: "becky", UID: 3999}},
 		}, nil
 	}
 
@@ -345,7 +345,7 @@ func TestATargetCanBeReconciledOnDemand(t *testing.T) {
 	}
 	// The stale bindings are the point of reading the result: they are what a
 	// sweep refuses to act on and an operator has to decide about.
-	if len(got.Stale) != 1 || got.Stale[0].Username != "alice" {
+	if len(got.Stale) != 1 || got.Stale[0].Username != "becky" {
 		t.Errorf("the stale bindings did not survive the response: %+v", got.Stale)
 	}
 }

@@ -215,13 +215,13 @@ func TestAFolderBehindARootTheGroupCantTraverseIsOutOfReach(t *testing.T) {
 // their home first, and usage only where they can save.
 func TestAMembersPlacesAreTheirOwnGroupsWithHomeFirst(t *testing.T) {
 	fake := reachFake()
-	fake.users = `[{"username":"ada","id":11,"uid":200001,"locked":false,"smb":true,"password_disabled":false,
-		"groups":[41,50],"home":"/mnt/tank/main/home_dir/ada"}]`
+	fake.users = `[{"username":"charlotte","id":11,"uid":200001,"locked":false,"smb":true,"password_disabled":false,
+		"groups":[41,50],"home":"/mnt/tank/main/home_dir/charlotte"}]`
 	fake.answers["pool.dataset.get_quota"] = `[]`
 	fake.answers["pool.dataset.get_quota tank/main/waddle"] = `[{"id":200001,"used_bytes":5000,"quota_type":"USER"}]`
 	fake.answers["pool.dataset.get_quota tank/main/home_dir"] = `[{"id":200001,"used_bytes":0,"quota":1000000,"quota_type":"USER"}]`
 	s := testServer(t, fake)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 200001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -233,7 +233,7 @@ func TestAMembersPlacesAreTheirOwnGroupsWithHomeFirst(t *testing.T) {
 	if !got.PlacesReadable {
 		t.Fatal("places were read and reported unreadable")
 	}
-	if d := describe(got.Places); d != "main/home_dir/ada:change,main:read,main/waddle:change,open:read" {
+	if d := describe(got.Places); d != "main/home_dir/charlotte:change,main:read,main/waddle:change,open:read" {
 		t.Fatalf("places = %q", d)
 	}
 	home := got.Places[0]
@@ -302,9 +302,9 @@ func TestReachFallsBackToTheLastReadAndSaysSo(t *testing.T) {
 // The member is told the step that opens their folders again, and not that
 // they can connect.
 func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":false,"groups":[]}]`)
+	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":false,"groups":[]}]`)
 	want := true
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001, WantsSMB: &want}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &want}); err != nil {
 		t.Fatal(err)
 	}
 	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
@@ -317,7 +317,7 @@ func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
 	}
 
 	off := false
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001, WantsSMB: &off}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &off}); err != nil {
 		t.Fatal(err)
 	}
 	if res, _, _ := s.storageStatus(OperationRequest{Subject: "sub-1"}); res.Storage.NeedsNewPassword {

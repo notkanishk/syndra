@@ -199,7 +199,7 @@ it("offers to finish an unbind that did not complete", () => {
       outcome: "deleted_upstream",
       field: undefined,
       decision: "unbound",
-      decided_by: "op-ada",
+      decided_by: "op-charlotte",
     }),
   ];
   state.resolved = [];

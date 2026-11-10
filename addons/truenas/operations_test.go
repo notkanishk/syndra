@@ -22,8 +22,8 @@ const theSecret = "correct-horse-battery-staple"
 
 func opServer(t *testing.T) (*server, *mutatingRPC) {
 	t.Helper()
-	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 	// Known, because a purge refuses while the add-on does not know its own
@@ -607,9 +607,9 @@ func TestTheRecordedActorIsTheOneWhoAsked(t *testing.T) {
 // NAME instead, so a rename made every one of them fail until an apply happened
 // to run and re-sync the binding. One rule for both paths, and it is the uid.
 func TestAnOutOfBandRenameDoesNotBreakTheOperationPath(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada_renamed","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	s, m := applyServer(t, `[{"username":"charlotte_renamed","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
 	// The binding still names the account as it was.
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -634,8 +634,8 @@ func TestAnOutOfBandRenameDoesNotBreakTheOperationPath(t *testing.T) {
 // A binding recorded before uids were is still resolvable, and uid 0 is root —
 // never a subject's account, so it must not be matched on.
 func TestABindingWithNoUidFallsBackToTheName(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada"}); err != nil {
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -665,10 +665,10 @@ func TestABindingWithNoUidFallsBackToTheName(t *testing.T) {
 // credential.
 func TestAnAmbiguousUidRefusesRatherThanResolvingByName(t *testing.T) {
 	s, m := applyServer(t, `[
-		{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
-		{"username":"ada_clone","id":12,"uid":3001,"locked":false,"smb":true,"groups":[42]}
+		{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
+		{"username":"charlotte_clone","id":12,"uid":3001,"locked":false,"smb":true,"groups":[42]}
 	]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -683,12 +683,12 @@ func TestAnAmbiguousUidRefusesRatherThanResolvingByName(t *testing.T) {
 }
 
 // And the rename test above is only meaningful because the fake applies the
-// query's filters: with the binding naming `ada` and the target holding
-// `ada_renamed`, a name-first lookup matches nothing at all.
+// query's filters: with the binding naming `charlotte` and the target holding
+// `charlotte_renamed`, a name-first lookup matches nothing at all.
 func TestTheFakeAppliesTheFiltersTheLookupSends(t *testing.T) {
 	s, _ := applyServer(t, `[
-		{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
-		{"username":"leo","id":12,"uid":3002,"locked":false,"smb":true,"groups":[42]}
+		{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
+		{"username":"seth","id":12,"uid":3002,"locked":false,"smb":true,"groups":[42]}
 	]`)
 
 	id, err := s.lookupOne("uid", int64(3002))
@@ -713,7 +713,7 @@ func TestTheFakeAppliesTheFiltersTheLookupSends(t *testing.T) {
 func TestAMissingBoundAccountIsRefusedRatherThanLeftUnknown(t *testing.T) {
 	rpc := &fakeRPC{users: `[]`, groups: fixtureGroups}
 	s := testServer(t, rpc)
-	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "ada", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -745,13 +745,13 @@ func TestAMissingBoundAccountIsRefusedRatherThanLeftUnknown(t *testing.T) {
 func TestAnAmbiguousBindingIsItsOwnRefusal(t *testing.T) {
 	rpc := &fakeRPC{
 		users: `[
-			{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
-			{"username":"ada-old","id":12,"uid":3001,"locked":false,"smb":false,"groups":[42]}
+			{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]},
+			{"username":"charlotte-old","id":12,"uid":3001,"locked":false,"smb":false,"groups":[42]}
 		]`,
 		groups: fixtureGroups,
 	}
 	s := testServer(t, rpc)
-	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "ada", UID: 3001}); err != nil {
+	if err := s.store.PutBinding(Binding{SubjectID: "u1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 

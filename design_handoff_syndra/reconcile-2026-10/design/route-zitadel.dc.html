@@ -309,7 +309,7 @@ class Component extends DCLogic {
       P("Wood shop", "lack", "2 roles · 13 people", true, [R("Bandsaw · Member", "wood.bandsaw", "11"), R("Lathe · Member", "wood.lathe", "2", ZO)]),
     ];
     const U = (name, email, flag, sel) => ({ name, email, hasFlag: !!flag, flag: flag || "", flagTone: flag === "Inactive" ? "neutral" : "warn", flagInk: flag === "Inactive" ? "var(--muted)" : "var(--warn-text)", bg: sel ? "var(--accent-soft)" : "transparent" });
-    const people = [U("Roman Reigns", "roman.reigns@makerspace.edu"), U("Chad Gable", "chad.gable@makerspace.edu", "Inactive"), U("Zoey Stark", "zoey.stark@makerspace.edu"), U("Finn Balor", "finn.balor@makerspace.edu"), U("Cody Rhodes", "cody.rhodes@makerspace.edu", "", true), U("Zelina Vega", "r.ghosh@makerspace.edu", "Not in Syndra"), U("Jimmy Uso", "jimmy.uso@makerspace.edu")];
+    const people = [U("Roman Reigns", "roman.reigns@makerspace.edu"), U("Chad Gable", "chad.gable@makerspace.edu", "Inactive"), U("Zoey Stark", "zoey.stark@makerspace.edu"), U("Finn Balor", "finn.balor@makerspace.edu"), U("Cody Rhodes", "cody.rhodes@makerspace.edu", "", true), U("Zelina Vega", "z.vega@makerspace.edu", "Not in Syndra"), U("Jimmy Uso", "jimmy.uso@makerspace.edu")];
     const grants = [
       Object.assign({ project: "Laser Lab", roles: [{ name: "Laser cutter · Operator", key: "laser.operator" }, { name: "Laser cutter · Member", key: "laser.member" }] }, OK("Matches Syndra")),
       Object.assign({ project: "Wood shop", roles: [{ name: "Lathe · Member", key: "wood.lathe" }] }, ZO),

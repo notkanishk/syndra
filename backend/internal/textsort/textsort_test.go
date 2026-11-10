@@ -14,7 +14,7 @@ func TestStringsReadsNamesTheWayTheScreenDoes(t *testing.T) {
 	}{
 		{"case aside", []string{"mkauth", "Kanishk Singh", "claude code", "Admin Makerspace", "netbird"},
 			[]string{"Admin Makerspace", "claude code", "Kanishk Singh", "mkauth", "netbird"}},
-		{"accents aside", []string{"Zoë", "Émile", "Eva", "Alia"}, []string{"Alia", "Émile", "Eva", "Zoë"}},
+		{"accents aside", []string{"Zoë", "Émile", "Eugene", "Edge"}, []string{"Edge", "Émile", "Eugene", "Zoë"}},
 		{"numbers are numbers", []string{"Lab 10", "Lab 2", "lab 1"}, []string{"lab 1", "Lab 2", "Lab 10"}},
 	} {
 		got := append([]string(nil), tc.in...)

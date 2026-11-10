@@ -21,7 +21,7 @@ export interface ExpiryAcknowledgement {
 
 /**
  * One direct grant approaching its expiry. `granted_by` and `created_at` are
- * what turn a row from "something expires" into "P. Raghunathan gave this on
+ * what turn a row from "something expires" into "L. Kaiser gave this on
  * 4 Jul" — which is the difference between extending confidently and going to
  * ask someone first.
  */

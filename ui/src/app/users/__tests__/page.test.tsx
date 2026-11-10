@@ -159,10 +159,10 @@ describe("People index", () => {
     nav.url = "/users?attention=no-access";
     users.data = [
       person({ user: { ...person().user, id: "svc", name: "netbird", kind: "machine" }, effective_role_count: 0 }),
-      person({ user: { ...person().user, id: "u2", name: "Karrion Ward" }, effective_role_count: 0 }),
+      person({ user: { ...person().user, id: "u2", name: "Mustafa Ali" }, effective_role_count: 0 }),
     ];
     renderPeople();
-    expect(screen.getByText("Karrion Ward")).toBeInTheDocument();
+    expect(screen.getByText("Mustafa Ali")).toBeInTheDocument();
     expect(screen.queryByText("netbird")).not.toBeInTheDocument();
   });
 
@@ -221,7 +221,7 @@ describe("People index", () => {
         effective_role_count: 4,
       }),
       person({
-        user: { ...person().user, id: "u2", name: "Nina Roy" },
+        user: { ...person().user, id: "u2", name: "Alba Fyre" },
         observation: { read_at: "2026-09-10T00:00:00Z", current: true, truncated: false },
         observed_role_count: 0,
         effective_role_count: 0,
@@ -270,7 +270,7 @@ describe("People index — filters come from the URL", () => {
     users.data = [
       person(),
       person({
-        user: { ...person().user, id: "u2", name: "Nina Roy" },
+        user: { ...person().user, id: "u2", name: "Alba Fyre" },
         key_projects: ["Wood Shop"],
         key_project_ids: ["pWood"],
       }),
@@ -278,25 +278,25 @@ describe("People index — filters come from the URL", () => {
     nav.url = "/users?project=pLaser";
     renderPeople();
     expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
-    expect(screen.queryByText("Nina Roy")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alba Fyre")).not.toBeInTheDocument();
   });
 
   it("narrows to an attention cohort that no column exposes on its own", () => {
     users.data = [
       person({ effective_role_count: 0, project_count: 0 }),
-      person({ user: { ...person().user, id: "u2", name: "Nina Roy" } }),
+      person({ user: { ...person().user, id: "u2", name: "Alba Fyre" } }),
     ];
     nav.url = "/users?attention=no-access";
     renderPeople();
     expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
-    expect(screen.queryByText("Nina Roy")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alba Fyre")).not.toBeInTheDocument();
   });
 
   it("counts a departed person as work only while they still hold roles", () => {
     users.data = [
       person({ user: { ...person().user, status: "departed" } }),
       person({
-        user: { ...person().user, id: "u2", name: "Nina Roy", status: "departed" },
+        user: { ...person().user, id: "u2", name: "Alba Fyre", status: "departed" },
         effective_role_count: 0,
       }),
     ];
@@ -304,30 +304,30 @@ describe("People index — filters come from the URL", () => {
     renderPeople();
     expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
     // Cleanly offboarded — not work, and listing it would bury the ones that are.
-    expect(screen.queryByText("Nina Roy")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alba Fyre")).not.toBeInTheDocument();
   });
 
   it("takes role membership from the role endpoint, not from the people list", () => {
     users.data = [
       person(),
-      person({ user: { ...person().user, id: "u2", name: "Nina Roy" } }),
+      person({ user: { ...person().user, id: "u2", name: "Alba Fyre" } }),
     ];
     roleMembers.data = { members: [{ user: { id: "u1" } }] };
     nav.url = "/users?project=pLaser&role=trained";
     renderPeople();
     expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
-    expect(screen.queryByText("Nina Roy")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alba Fyre")).not.toBeInTheDocument();
   });
 
   it("shows everyone rather than nobody while role membership is still loading", () => {
-    users.data = [person(), person({ user: { ...person().user, id: "u2", name: "Nina Roy" } })];
+    users.data = [person(), person({ user: { ...person().user, id: "u2", name: "Alba Fyre" } })];
     roleMembers.data = undefined;
     nav.url = "/users?project=pLaser&role=trained";
     renderPeople();
     // An empty list would read as "nobody holds this", which is a different
     // and much worse claim than "still loading".
     expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
-    expect(screen.getByText("Nina Roy")).toBeInTheDocument();
+    expect(screen.getByText("Alba Fyre")).toBeInTheDocument();
   });
 });
 
@@ -398,7 +398,7 @@ describe("People index — bulk mode", () => {
   });
 
   it("drops the selection when the filter changes underneath it", async () => {
-    users.data = [person(), person({ user: { ...person().user, id: "u2", name: "Nina Roy" } })];
+    users.data = [person(), person({ user: { ...person().user, id: "u2", name: "Alba Fyre" } })];
     nav.url = "/users?bulk=1";
     const { rerender } = renderPeople();
 
@@ -422,7 +422,7 @@ describe("People index — bulk mode", () => {
     setMediaQuery("(max-width: 44.99rem)", true);
     users.data = [
       person({ user: { ...person().user, status: "departed" } }),
-      person({ user: { ...person().user, id: "u2", name: "Nina Roy", status: "departed" } }),
+      person({ user: { ...person().user, id: "u2", name: "Alba Fyre", status: "departed" } }),
     ];
     nav.url = "/users?bulk=1&attention=departed";
     renderPeople();
@@ -433,7 +433,7 @@ describe("People index — bulk mode", () => {
     expect(lead()).toHaveTextContent("Revoke a role");
     expect(lead().className).toContain("border-danger-line");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Nina Roy" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Alba Fyre" }));
     expect(within(bar).getByText(/2 people selected/)).toBeTruthy();
     expect(lead()).toHaveTextContent("Revoke a role");
     expect(within(bar).getByRole("button", { name: "More changes" })).toBeTruthy();
@@ -500,23 +500,23 @@ describe("People · the board", () => {
 
   it("sorts on Person, Bundles and Attention, the Person arrow up by default", () => {
     users.data = [
-      named("Zed", { bundle_names: ["Alpha"], unexplained_count: 0 }),
-      named("Amy", { bundle_names: ["Zulu"], expiring_count: 1, soonest_expiry: new Date(Date.now() + 2 * 86400_000).toISOString() }),
-      named("Bo", { bundle_names: ["Mid"], unexplained_count: 2 }),
+      named("Zack", { bundle_names: ["Alpha"], unexplained_count: 0 }),
+      named("Asuka", { bundle_names: ["Zulu"], expiring_count: 1, soonest_expiry: new Date(Date.now() + 2 * 86400_000).toISOString() }),
+      named("Booker", { bundle_names: ["Mid"], unexplained_count: 2 }),
     ];
     renderPeople();
-    const order = () => screen.getAllByRole("link").map((a) => a.textContent ?? "").map((t) => ["Zed", "Amy", "Bo"].find((n) => t.includes(n)));
+    const order = () => screen.getAllByRole("link").map((a) => a.textContent ?? "").map((t) => ["Zack", "Asuka", "Booker"].find((n) => t.includes(n)));
     expect(screen.getByRole("button", { name: "Sort by person" })).toHaveAttribute("data-sort", "asc");
-    expect(order()).toEqual(["Amy", "Bo", "Zed"]);
+    expect(order()).toEqual(["Asuka", "Booker", "Zack"]);
     fireEvent.click(screen.getByRole("button", { name: "Sort by person" }));
-    expect(order()).toEqual(["Zed", "Bo", "Amy"]);
+    expect(order()).toEqual(["Zack", "Booker", "Asuka"]);
     fireEvent.click(screen.getByRole("button", { name: "Sort by bundles" }));
-    expect(order()).toEqual(["Zed", "Bo", "Amy"]);
+    expect(order()).toEqual(["Zack", "Booker", "Asuka"]);
     fireEvent.click(screen.getByRole("button", { name: "Sort by attention" }));
     expect(screen.getByRole("button", { name: "Sort by attention" })).toHaveAttribute("data-sort", "asc");
     // The first press puts the people who need you on top: unexplained, then
     // the deadline, then the clear row.
-    expect(order()).toEqual(["Bo", "Amy", "Zed"]);
+    expect(order()).toEqual(["Booker", "Asuka", "Zack"]);
   });
 
   it("says how fresh the list is", () => {
@@ -561,7 +561,7 @@ describe("People · the board", () => {
     it("holds the rows that still match, fades the rest where they were, and settles the gap after", () => {
       motionInTests();
       const named = (id: string, name: string) => person({ user: { ...person().user, id, name } });
-      const everyone = [named("a", "Charlotte Flair"), named("b", "Bo Chen"), named("c", "Cy Ward")];
+      const everyone = [named("a", "Charlotte Flair"), named("b", "Tommy Dreamer"), named("c", "Bubba Ray")];
       users.data = everyone;
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const page = () => (
@@ -580,21 +580,21 @@ describe("People · the board", () => {
 
       expect(screen.getByText("Charlotte Flair")).toBe(charlotte);
       expect(charlotte.closest("[data-leaving]")).toBeNull();
-      expect(screen.getByText("Bo Chen").closest("[data-leaving]")).not.toBeNull();
-      expect(screen.getByText("Cy Ward").closest("[data-leaving]")).not.toBeNull();
-      expect(screen.getByText("Bo Chen").closest("[data-closing]")).not.toBeNull();
+      expect(screen.getByText("Tommy Dreamer").closest("[data-leaving]")).not.toBeNull();
+      expect(screen.getByText("Bubba Ray").closest("[data-leaving]")).not.toBeNull();
+      expect(screen.getByText("Tommy Dreamer").closest("[data-closing]")).not.toBeNull();
 
       // Their gaps have settled and they are gone. Clearing it brings them back: the gap
       // opens, then they tint in. The rows that stayed hold still.
-      gapSettled(screen.getByText("Bo Chen").closest("[data-closing]")!);
-      gapSettled(screen.getByText("Cy Ward").closest("[data-closing]")!);
-      expect(screen.queryByText("Bo Chen")).toBeNull();
+      gapSettled(screen.getByText("Tommy Dreamer").closest("[data-closing]")!);
+      gapSettled(screen.getByText("Bubba Ray").closest("[data-closing]")!);
+      expect(screen.queryByText("Tommy Dreamer")).toBeNull();
       nav.url = "/users";
       rerender(page());
       users.data = everyone;
       rerender(page());
       expect(screen.getByText("Charlotte Flair")).toBe(charlotte);
-      expect(screen.getByText("Bo Chen").closest("[data-opens]")).not.toBeNull();
+      expect(screen.getByText("Tommy Dreamer").closest("[data-opens]")).not.toBeNull();
       expect(charlotte.closest("[data-opens]")).toBeNull();
       expect(charlotte.closest("[data-fresh]")).toBeNull();
     });

@@ -1075,7 +1075,7 @@ func TestAnUndecodableApplySuccessIsIndeterminate(t *testing.T) {
 func TestABlockedEffectOnA2xxIsRejected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"effect":"blocked","detail":"An account named ada already exists."}`))
+		_, _ = w.Write([]byte(`{"effect":"blocked","detail":"An account named charlotte already exists."}`))
 	}))
 	defer srv.Close()
 	signedAddon(t, srv.URL, "a-test-secret")
@@ -1109,7 +1109,7 @@ func TestActivityCarriesTheTruncatedFlag(t *testing.T) {
 func TestASuccessfulApplyCarriesBackWhatTheAddonDid(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"effect":"applied","username":"ada","fingerprint":"fp-2","detail":"Created ada."}`))
+		_, _ = w.Write([]byte(`{"effect":"applied","username":"charlotte","fingerprint":"fp-2","detail":"Created charlotte."}`))
 	}))
 	defer srv.Close()
 	signedAddon(t, srv.URL, "a-test-secret")
@@ -1119,7 +1119,7 @@ func TestASuccessfulApplyCarriesBackWhatTheAddonDid(t *testing.T) {
 	if resp.Outcome != OutcomeSucceeded {
 		t.Fatalf("want succeeded, got %s / %v", resp.Outcome, resp.Err)
 	}
-	if resp.Username != "ada" || resp.Fingerprint != "fp-2" {
+	if resp.Username != "charlotte" || resp.Fingerprint != "fp-2" {
 		t.Fatalf("the derived name and the new fingerprint must come back: %+v", resp)
 	}
 }

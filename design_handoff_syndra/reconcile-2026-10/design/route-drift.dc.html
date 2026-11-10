@@ -261,18 +261,18 @@ class Component extends DCLogic {
     const dt = (d) => { const x = new Date(2026, 9, 5 - d); return x.getDate() + " " + MO[x.getMonth()]; };
     const KIND = { unknown: "Maker not known", person: "Made in Zitadel by a person", self: "Made by the account itself", removed: "Removed from Zitadel", never: "Never reached Zitadel" };
     if (many) {
-      const fn = ["Carmelo","Bron","Chelsea","Lyra","Dominik","Trick","Ana","Montez","Akira","Michelle","Sara","Dev","Angelo","Stacy","Kelly","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ansari","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
+      const NM = ["AJ Styles", "Sheamus", "Gunther", "Matt Riddle", "Bayley", "Asuka", "Rikishi", "Booker T", "Batista", "Triple H", "Jeff Hardy", "Matt Hardy", "Rusev", "Elias", "Dean Ambrose", "Bray Wyatt", "Luke Harper", "Erick Rowan", "Roderick Strong", "Kyle O'Reilly", "Adam Cole", "Aleister Black", "Ricochet", "Andrade", "Samoa Joe", "Cesaro", "Tyson Kidd", "Naomi", "Jimmy Snuka", "Ric Flair", "Hulk Hogan", "Ultimate Warrior", "Sting", "Goldberg", "Lex Luger", "Ted DiBiase", "Razor Ramon", "Vader", "Scott Hall", "Road Dogg", "Billy Gunn", "Mr Perfect", "Yokozuna", "Jinder Mahal", "Lance Storm", "Rhyno", "Tazz", "Rick Steiner"];
       const RL = [["Wood shop · Member","wood.member"],["3D printers · Member","printers.member"],["Laser cutter · Operator","laser.operator"],["Studio · Booking","studio.booking"],["Bandsaw · Member","bandsaw.member"]];
       const mk = ["Iyo Sky","Liv Morgan","Zoey Stark"];
       for (let i = 0; i < 109; i++) {
         const k = i % 7 === 3 ? "unknown" : i % 23 === 5 ? "self" : "person", d = 7 + Math.floor(i * 31 / 109), r = RL[(i * 3) % RL.length], svc = k === "self";
-        rows.push(R({ only: "z", kind: k, days: d, who: svc ? ["Printer queue","Door sync","Kiosk bot"][i % 3] : fn[i % 16] + " " + ln[(i * 7) % 15], holder: svc ? "Service account" : "Member", role: r[0], key: r[1],
+        rows.push(R({ only: "z", kind: k, days: d, who: svc ? ["Printer queue","Door sync","Kiosk bot"][i % 3] : NM[(i % 16) + 16 * (((i * 7) % 15) % 3)], holder: svc ? "Service account" : "Member", role: r[0], key: r[1],
           reason: k === "unknown" ? [T("Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra gives it: no direct access, no bundle, no automatic rule.")] : svc ? [T("Created in Zitadel on " + dt(d) + " by this account itself. Nothing in Syndra gives it.")] : [T("Created in Zitadel on " + dt(d) + " by "), L(mk[i % 3], PER), T(". Nothing in Syndra gives it.")],
           ask: k === "unknown", adoptOff: svc || deg, isService: svc && !deg, adoptVariant: svc ? "ghost" : "accent", found: d + " days" }));
       }
       for (let i = 0; i < 8; i++) {
         const k = i % 3 === 0 ? "never" : "removed", d = 4 + i * 3, r = RL[i % RL.length];
-        rows.push(R({ only: "s", kind: k, days: d, who: fn[15 - i] + " " + ln[(i * 4) % 15], holder: "Member", role: r[0], key: r[1],
+        rows.push(R({ only: "s", kind: k, days: d, who: NM[(15 - i) + 16 * (((i * 4) % 15) % 3)], holder: "Member", role: r[0], key: r[1],
           reason: k === "never" ? [T("Given by "), L("Kanishk Singh", PER), T(" on " + dt(d + 2) + ". Zitadel has never been seen holding it, so the change most likely never went through. Check "), L("Pending changes", PEND), T(".")] : [T("Given by "), L("Kanishk Singh", PER), T(". Syndra applied it and Zitadel accepted it. Zitadel held it on " + dt(d) + " and does not now, so somebody removed it there.")],
           found: d + " days" }));
       }

@@ -316,8 +316,8 @@ export async function recordFirstSignIn(
 }
 
 /**
- * Last resort before giving up on a name: "priya.sharma@example.org" reads
- * as "Priya Sharma". Still a person's name rather than an opaque id, which is
+ * Last resort before giving up on a name: "dana.brooke@example.org" reads
+ * as "Dana Brooke". Still a person's name rather than an opaque id, which is
  * the whole point — a raw `sub` is never an acceptable display name.
  */
 export function nameFromEmail(email: string): string {

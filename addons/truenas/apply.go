@@ -567,7 +567,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		// No binding and no identity to derive a name from. The fallback exists
 		// for a localpart that normalizes to nothing, not for a caller that sent
 		// no localpart at all: applied here it would create `u3f2a9c11` for
-		// somebody whose plan said `ada`, and the plan is what an operator
+		// somebody whose plan said `charlotte`, and the plan is what an operator
 		// approved. Refused so the disagreement is visible instead of being a
 		// name nobody chose.
 		return nil, Binding{}, nil, false, errNoIdentityToDeriveFrom

@@ -75,7 +75,7 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 		if !h.bound {
 			return db.TargetBinding{}, false, nil
 		}
-		return db.TargetBinding{Target: "truenas", SubjectID: "u1", Username: "ada"}, true, nil
+		return db.TargetBinding{Target: "truenas", SubjectID: "u1", Username: "charlotte"}, true, nil
 	}
 	dbHasShadowCredential = func(context.Context, string, string) (models.ShadowCredentialStatus, error) {
 		return models.ShadowCredentialStatus{}, nil
@@ -397,7 +397,7 @@ func TestEachPlaceCarriesBothAddressesBuiltFromTheHost(t *testing.T) {
 	}
 	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus {
 		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, PlacesReadable: true, Places: []addons.Place{
-			{Share: "main", Folder: "home_dir/ada", Access: "change", Home: true},
+			{Share: "main", Folder: "home_dir/charlotte", Access: "change", Home: true},
 			{Share: "main", Folder: "laser cutter", Access: "read"},
 			{Share: "open", Access: "read"},
 		}}
@@ -410,7 +410,7 @@ func TestEachPlaceCarriesBothAddressesBuiltFromTheHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := [][2]string{
-		{"smb://nas.example.edu/main/home_dir/ada", `\\nas.example.edu\main\home_dir\ada`},
+		{"smb://nas.example.edu/main/home_dir/charlotte", `\\nas.example.edu\main\home_dir\charlotte`},
 		{"smb://nas.example.edu/main/laser%20cutter", `\\nas.example.edu\main\laser cutter`},
 		{"smb://nas.example.edu/open", `\\nas.example.edu\open`},
 	}
@@ -460,7 +460,7 @@ func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
 	t.Cleanup(func() { addonsMyStorage, addonsReadReach = storage, reach })
 	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus {
 		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, PlacesReadable: true, Places: []addons.Place{
-			{Share: "main", Folder: "home_dir/ada", Path: "/mnt/p/main/home_dir/ada", Access: "change", Home: true},
+			{Share: "main", Folder: "home_dir/charlotte", Path: "/mnt/p/main/home_dir/charlotte", Access: "change", Home: true},
 			{Share: "main", Folder: "waddle_share", Path: "/mnt/p/main/waddle_share", Access: "change"},
 			{Share: "main", Folder: "quack_share", Path: "/mnt/p/main/quack_share", Access: "read"},
 		}}

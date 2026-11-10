@@ -22,7 +22,7 @@ vi.mock("@/components/shell/AccountSheet", () => ({ AccountSheet: () => <span>ac
 vi.mock("@/components/shell/ThemeToggle", () => ({ ThemeToggle: () => <span>theme</span> }));
 vi.mock("@/components/shell/GoToHost", () => ({ OPEN_GO_TO: "syndra:open-go-to" }));
 
-const session = { id: "u1", name: "Iyo Example", email: "iyo@example.edu" } as SessionUser;
+const session = { id: "u1", name: "Dexter Lumis", email: "dexter@example.edu" } as SessionUser;
 
 beforeEach(() => {
   view.audience = "basic";

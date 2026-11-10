@@ -139,7 +139,7 @@ function PersonRow({
   // The name, because both dialogs speak to and about a person — and rung 3
   // asks the operator to type it. Through the same resolver every other surface
   // uses, so the name in the dialog is the name in the row: asking somebody to
-  // type "Ada Rivera" beside a row that says "Ada" is a puzzle, not a check.
+  // type "Molly Holly" beside a row that says "Molly" is a puzzle, not a check.
   const resolver = useNameResolver();
   const accountHref = useAccountHref();
   const name = resolver.resolveUser(account.subject_id).value?.display_name ?? UNKNOWN_ACCOUNT;
@@ -194,7 +194,7 @@ function PersonRow({
           // `enabled = true`, the state being refused — and `label` is what the
           // operator reads. Sending the label would be a malformed term the
           // backend refuses; showing the value would be a dialog saying "Hold
-          // true for Ada".
+          // true for Charlotte".
           field="enabled"
           value="true"
           label={`access to ${targetLabel(target)}`}

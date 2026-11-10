@@ -64,7 +64,7 @@ describe("a revoke dialog while Zitadel is not answering", () => {
           grantsResolved: true,
         }}
         userId="u1"
-        userName="Sneha Yeole"
+        userName="Nikki Cross"
         onClose={vi.fn()}
       />
       </QueryClientProvider>,
@@ -85,7 +85,7 @@ describe("a revoke dialog while Zitadel is not answering", () => {
           sources: [{ kind: "bundle", bundle_id: "b1", bundle_name: "Ops Admin", description: "" }],
         }}
         userId="u1"
-        userName="Sneha Yeole"
+        userName="Nikki Cross"
         onClose={vi.fn()}
       />
       </QueryClientProvider>,

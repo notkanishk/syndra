@@ -298,8 +298,8 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
           have called a bundle an unknown account.
 
           Affected: the passive, because the person it happened to is the
-          heading of this page. "Gave Gaurav Prem Singh a bundle" on
-          Gaurav's own Activity tab says his name twice and buries the one
+          heading of this page. "Gave Bobby Roode a bundle" on
+          Bobby's own Activity tab says his name twice and buries the one
           fact the row adds, which is who did it. */}
       <span className="min-w-[240px] flex-1 text-[14px]">
         {isPasswordSend(entry) ? (

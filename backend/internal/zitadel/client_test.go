@@ -436,16 +436,16 @@ func TestGetUser_Success(t *testing.T) {
 		return jsonResp(200, map[string]any{
 			"user": map[string]any{
 				"id":       "u42",
-				"userName": "jane",
+				"userName": "jacqueline",
 				"state":    "USER_STATE_ACTIVE",
 				"human": map[string]any{
 					"profile": map[string]any{
-						"displayName": "Jane Doe",
-						"firstName":   "Jane",
+						"displayName": "Jacqueline Moore",
+						"firstName":   "Jacqueline",
 						"lastName":    "Doe",
 					},
 					"email": map[string]any{
-						"email":           "jane@example.com",
+						"email":           "jacqueline@example.com",
 						"isEmailVerified": true,
 					},
 				},
@@ -460,14 +460,14 @@ func TestGetUser_Success(t *testing.T) {
 	if user.ID != "u42" {
 		t.Errorf("expected ID u42, got %q", user.ID)
 	}
-	if user.Username != "jane" {
+	if user.Username != "jacqueline" {
 		t.Errorf("expected username jane, got %q", user.Username)
 	}
-	if user.DisplayName != "Jane Doe" {
-		t.Errorf("expected displayName 'Jane Doe', got %q", user.DisplayName)
+	if user.DisplayName != "Jacqueline Moore" {
+		t.Errorf("expected displayName 'Jacqueline Moore', got %q", user.DisplayName)
 	}
-	if user.Email != "jane@example.com" {
-		t.Errorf("expected email jane@example.com, got %q", user.Email)
+	if user.Email != "jacqueline@example.com" {
+		t.Errorf("expected email jacqueline@example.com, got %q", user.Email)
 	}
 	if user.State != "USER_STATE_ACTIVE" {
 		t.Errorf("expected state USER_STATE_ACTIVE, got %q", user.State)

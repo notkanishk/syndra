@@ -134,22 +134,22 @@ class Component extends DCLogic {
     const row = (who, verb, role, cause, causeHref, waiting, x) => Object.assign({ who, verb, role, cause, causeHref, causeLinks: !!causeHref, causePlain: !causeHref, waiting, hasSub: false, sub: "", failed: false, fail: "", hasBy: false, by: "", hasHandle: false, handle: "", bg: "transparent", failTone: "danger", failInk: "var(--danger-text)" }, x || {}); const WAITS = new Set(["Laser cutter · Operator", "Laser cutter · Supervisor", "Welder · Member", "Storage · Member"]);
     const lab = (who) => row(who, "Give", "Laser cutter · Operator", "Lab Tech v3", BUN, "3h", { hasHandle: true, handle: "b_lab-tech" });
     const all = [
-      { key: "lena", rows: [row("Zoey Stark", "Give", "Studio · Booking", "Her request, approved", REQ, "1d", { hasBy: true, by: "Kanishk Singh", failed: true, failTone: "warn", failInk: "var(--warn-text)", fail: "Tried when it was approved at 10:42. Zitadel didn't answer." })] },
-      { key: "meera", rows: [row("Finn Balor", "Give", "Electronics bench · Operator", "Given by hand", null, "5h", { hasBy: true, by: "Kanishk Singh", failed: true, fail: "Tried twice. Zitadel says Electronics has no Operator role. Sending tries again; fix the role in Zitadel first." })] },
+      { key: "zoey", rows: [row("Zoey Stark", "Give", "Studio · Booking", "Her request, approved", REQ, "1d", { hasBy: true, by: "Kanishk Singh", failed: true, failTone: "warn", failInk: "var(--warn-text)", fail: "Tried when it was approved at 10:42. Zitadel didn't answer." })] },
+      { key: "finn", rows: [row("Finn Balor", "Give", "Electronics bench · Operator", "Given by hand", null, "5h", { hasBy: true, by: "Kanishk Singh", failed: true, fail: "Tried twice. Zitadel says Electronics has no Operator role. Sending tries again; fix the role in Zitadel first." })] },
       { key: "labtech", multi: true, handle: "c_7f2a91", parts: [T("These 6 changes come from one edit: "), L("Kanishk Singh", PER), T(" moved 6 people to "), L("Lab Tech v3", BUN), T(". They wait because Laser cutter · Operator always waits for you, and are sent together or not at all.")], rows: ["Piper Niven", "Shayna Baszler", "Iyo Sky", "Kairi Sane", "Santos Escobar", "Shawn Michaels"].map(lab) },
-      { key: "jules", multi: true, handle: "c_19bd04", parts: [T("These 2 changes come from one rule: anyone with Metal shop · Induction also gets Welder · Member. They wait because Welder · Member always waits for you, and are sent together or not at all.")], rows: [
+      { key: "jade", multi: true, handle: "c_19bd04", parts: [T("These 2 changes come from one rule: anyone with Metal shop · Induction also gets Welder · Member. They wait because Welder · Member always waits for you, and are sent together or not at all.")], rows: [
         row("Jade Cargill", "Give", "Welder · Member", "Induction → Welder", null, "2h", { hasHandle: true, handle: "R_014" }),
         row("Angelo Dawkins", "Give", "Welder · Member", "Induction → Welder", null, "2h", { hasHandle: true, handle: "R_014" }),
       ] },
-      { key: "priya", rows: [row("Cody Rhodes", "Give", "Laser cutter · Supervisor", "Given by hand", null, "40m", { hasSub: true, sub: "Waits because Supervisor always waits for you.", hasBy: true, by: "Kanishk Singh", bg: person ? "color-mix(in oklab, var(--accent-soft) 30%, transparent)" : "transparent" })] },
-      { key: "omar", rows: [row("Tiffany Stratton", "Revoke", "Wood shop · Member", "Left the makerspace", null, "4m", { hasSub: true, sub: "A revocation: it also sends on its own within a few minutes." })] },
+      { key: "cody", rows: [row("Cody Rhodes", "Give", "Laser cutter · Supervisor", "Given by hand", null, "40m", { hasSub: true, sub: "Waits because Supervisor always waits for you.", hasBy: true, by: "Kanishk Singh", bg: person ? "color-mix(in oklab, var(--accent-soft) 30%, transparent)" : "transparent" })] },
+      { key: "tiffany", rows: [row("Tiffany Stratton", "Revoke", "Wood shop · Member", "Left the makerspace", null, "4m", { hasSub: true, sub: "A revocation: it also sends on its own within a few minutes." })] },
     ];
     all.forEach(g => g.rows.forEach(r => { r.waits = WAITS.has(r.role); }));
     const fd = this.state && this.state.folded || {};
     all.forEach(g => { g.open = !g.multi || !fd[g.key]; g.fold = this.foldS(g.open); g.chevEl = g.multi ? this.chev(g.open, (g.open ? "Fold " : "Open ") + "these " + g.rows.length + " changes", () => this.fold(g.key)) : null; });
     let groups = all;
-    if (person) groups = all.filter(g => g.key === "priya");
-    if (sent) groups = all.filter(g => g.key === "meera");
+    if (person) groups = all.filter(g => g.key === "cody");
+    if (sent) groups = all.filter(g => g.key === "finn");
     const count = sent ? 1 : 12;
     const known = !/^(loading|error)$/.test(st) && st !== "empty";
     const sendLabel = known ? "Send " + count + (count === 1 ? " change" : " changes") : "Send changes";

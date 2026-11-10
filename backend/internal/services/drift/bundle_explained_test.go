@@ -34,10 +34,10 @@ func TestSweep_ABundleRoleIsNotDrift(t *testing.T) {
 	stubSweep(t)
 
 	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
-		return []db.ObservedGrant{observedGrant("g1", "sneha", "p-admin", "admin-staff")}, nil
+		return []db.ObservedGrant{observedGrant("g1", "nikki", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
-		return []db.BundleDerivedGrant{bundleHolderGrant("sneha", "p-admin", "admin-staff")}, nil
+		return []db.BundleDerivedGrant{bundleHolderGrant("nikki", "p-admin", "admin-staff")}, nil
 	}))
 
 	var raised []string
@@ -67,11 +67,11 @@ func TestSweep_ARoleTheHoldersVersionDoesNotCarryIsStillDrift(t *testing.T) {
 	stubSweep(t)
 
 	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
-		return []db.ObservedGrant{observedGrant("g1", "sneha", "p-admin", "admin-staff")}, nil
+		return []db.ObservedGrant{observedGrant("g1", "nikki", "p-admin", "admin-staff")}, nil
 	}))
 	// Their pin carries a DIFFERENT role. Nothing accounts for admin-staff.
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
-		return []db.BundleDerivedGrant{bundleHolderGrant("sneha", "p-admin", "something-else")}, nil
+		return []db.BundleDerivedGrant{bundleHolderGrant("nikki", "p-admin", "something-else")}, nil
 	}))
 
 	var raised []string
@@ -96,7 +96,7 @@ func TestSweep_AFailedBundleReadAbortsRatherThanFlaggingEverything(t *testing.T)
 	stubSweep(t)
 
 	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
-		return []db.ObservedGrant{observedGrant("g1", "sneha", "p-admin", "admin-staff")}, nil
+		return []db.ObservedGrant{observedGrant("g1", "nikki", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
 		return nil, context.DeadlineExceeded
@@ -127,15 +127,15 @@ func TestSweep_RetractsAFindingItCanNowExplain(t *testing.T) {
 	stubSweep(t)
 
 	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
-		return []db.ObservedGrant{observedGrant("g1", "sneha", "p-admin", "admin-staff")}, nil
+		return []db.ObservedGrant{observedGrant("g1", "nikki", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
-		return []db.BundleDerivedGrant{bundleHolderGrant("sneha", "p-admin", "admin-staff")}, nil
+		return []db.BundleDerivedGrant{bundleHolderGrant("nikki", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
 		return []models.DriftItem{{
 			ID: "d-stale", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
-			UserID: "sneha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
+			UserID: "nikki", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
 		}}, nil
 	}))
 
@@ -189,12 +189,12 @@ func TestSweep_DoesNotRetractAPartlyExplainedFinding(t *testing.T) {
 	stubSweep(t)
 
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
-		return []db.BundleDerivedGrant{bundleHolderGrant("sneha", "p-admin", "admin-staff")}, nil
+		return []db.BundleDerivedGrant{bundleHolderGrant("nikki", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
 		return []models.DriftItem{{
 			ID: "d-mixed", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
-			UserID: "sneha", ProjectID: "p-admin",
+			UserID: "nikki", ProjectID: "p-admin",
 			RoleKeys: []string{"admin-staff", "not-accounted-for"},
 		}}, nil
 	}))
@@ -226,13 +226,13 @@ func TestSweep_RetractsAnExcludedFindingAsExternalNotAsOwned(t *testing.T) {
 
 	t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
 		return []models.ExternalGrantExclusion{{
-			Target: db.TargetZitadel, UserID: "sneha", ProjectID: "p-admin", RoleKey: "admin-staff",
+			Target: db.TargetZitadel, UserID: "nikki", ProjectID: "p-admin", RoleKey: "admin-staff",
 		}}, nil
 	}))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
 		return []models.DriftItem{{
 			ID: "d-external", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
-			UserID: "sneha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
+			UserID: "nikki", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
 		}}, nil
 	}))
 
@@ -269,7 +269,7 @@ func TestSweep_ClosesAFindingWhoseGrantHasVanished(t *testing.T) {
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
 		return []models.DriftItem{{
 			ID: "d-gone", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
-			UserID: "sneha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
+			UserID: "nikki", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
 		}}, nil
 	}))
 
@@ -297,12 +297,12 @@ func TestSweep_LeavesAFindingWhoseGrantIsStillPresent(t *testing.T) {
 	stubSweep(t)
 
 	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
-		return []db.ObservedGrant{observedGrant("g1", "sneha", "p-admin", "admin-staff")}, nil
+		return []db.ObservedGrant{observedGrant("g1", "nikki", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
 		return []models.DriftItem{{
 			ID: "d-live", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
-			UserID: "sneha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
+			UserID: "nikki", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
 		}}, nil
 	}))
 
@@ -341,7 +341,7 @@ func TestSweep_TruncatedObservationClosesNothing(t *testing.T) {
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
 		return []models.DriftItem{{
 			ID: "d-gone", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
-			UserID: "sneha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
+			UserID: "nikki", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
 		}}, nil
 	}))
 
@@ -370,17 +370,17 @@ func TestSweep_LeavesAFindingWithMixedExplanations(t *testing.T) {
 	stubSweep(t)
 
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
-		return []db.BundleDerivedGrant{bundleHolderGrant("sneha", "p-admin", "by-bundle")}, nil
+		return []db.BundleDerivedGrant{bundleHolderGrant("nikki", "p-admin", "by-bundle")}, nil
 	}))
 	t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
 		return []models.ExternalGrantExclusion{{
-			Target: db.TargetZitadel, UserID: "sneha", ProjectID: "p-admin", RoleKey: "by-exclusion",
+			Target: db.TargetZitadel, UserID: "nikki", ProjectID: "p-admin", RoleKey: "by-exclusion",
 		}}, nil
 	}))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
 		return []models.DriftItem{{
 			ID: "d-mixed-source", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
-			UserID: "sneha", ProjectID: "p-admin",
+			UserID: "nikki", ProjectID: "p-admin",
 			RoleKeys: []string{"by-bundle", "by-exclusion"},
 		}}, nil
 	}))

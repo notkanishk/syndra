@@ -64,7 +64,7 @@ func TestWhatIf_RetiredBundleOrRuleIsNotFound(t *testing.T) {
 		"bundle": {Kind: "bundle_gone", BundleID: "b1"},
 		"rule":   {Kind: "rule_gone", RuleID: "r1"},
 	} {
-		w := newWhatIfWorld("Amy")
+		w := newWhatIfWorld("Asuka")
 		w.install(t)
 		svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 			return models.Bundle{ID: id, RetiredAt: &at}, nil

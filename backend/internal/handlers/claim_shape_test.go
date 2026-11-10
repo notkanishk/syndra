@@ -47,7 +47,7 @@ func stubClaimHandlers(t *testing.T) (*[]auditLine, *[]string) {
 		return models.ApplicationCatalog{}, false, nil
 	}
 	svcDebugFindUser = func(_ context.Context, id string) (models.UserProfile, bool, error) {
-		return models.UserProfile{ID: id}, id == "aanya", nil
+		return models.UserProfile{ID: id}, id == "roman", nil
 	}
 	return &audits, dropped
 }
@@ -125,7 +125,7 @@ func TestPreview_LiveCheck_HTTP(t *testing.T) {
 	orig, origPreview := claimDebug, svcPreviewAppClaimShape
 	t.Cleanup(func() { claimDebug, svcPreviewAppClaimShape = orig, origPreview })
 	claimDebug = claimdebug.New(time.Now, nil, nil)
-	claimDebug.Start("aNB", "cNB", "aanya", "kanishk")
+	claimDebug.Start("aNB", "cNB", "roman", "kanishk")
 
 	tok := claims.NewObject()
 	tok.Set("groups", []any{"netbird-staff"})
@@ -140,7 +140,7 @@ func TestPreview_LiveCheck_HTTP(t *testing.T) {
 	preview := func() map[string]services.LiveCheck {
 		rr := httptest.NewRecorder()
 		req := asOperator(httptest.NewRequest(http.MethodPost, "/api/v1/applications/aNB/claim-shape/preview",
-			strings.NewReader(`{"user_ids":["aanya","grace"]}`)), "kanishk")
+			strings.NewReader(`{"user_ids":["roman","grace"]}`)), "kanishk")
 		req.SetPathValue("id", "aNB")
 		handlePreviewAppClaimShape(rr, req)
 		var out struct {
@@ -153,7 +153,7 @@ func TestPreview_LiveCheck_HTTP(t *testing.T) {
 	}
 	capture := func(answer string) {
 		n := len(claimDebug.SignIns("aNB", 0))
-		claimDebug.Record(claimdebug.Capture{At: time.Now(), Function: claims.FunctionPreAccessToken, ClientID: "cNB", UserID: "aanya",
+		claimDebug.Record(claimdebug.Capture{At: time.Now(), Function: claims.FunctionPreAccessToken, ClientID: "cNB", UserID: "roman",
 			ProjectID: "pNet", Request: []byte(`{}`), Response: []byte(answer)})
 		for deadline := time.Now().Add(2 * time.Second); len(claimDebug.SignIns("aNB", 0)) == n; {
 			if time.Now().After(deadline) {
@@ -168,7 +168,7 @@ func TestPreview_LiveCheck_HTTP(t *testing.T) {
 	}
 	capture(`{"append_claims":[{"key":"groups","value":["netbird-staff"]}]}`)
 	live := preview()
-	if lc, ok := live["aanya"]; !ok || !lc.Match || lc.Function != claims.FunctionPreAccessToken {
+	if lc, ok := live["roman"]; !ok || !lc.Match || lc.Function != claims.FunctionPreAccessToken {
 		t.Fatalf("match: %+v", live)
 	}
 	if _, ok := live["grace"]; ok {
@@ -176,7 +176,7 @@ func TestPreview_LiveCheck_HTTP(t *testing.T) {
 	}
 	// The newest capture is the one compared.
 	capture(`{"append_claims":[]}`)
-	if lc := preview()["aanya"]; lc.Match || len(lc.Served) != 0 || len(lc.Expected) != 1 {
+	if lc := preview()["roman"]; lc.Match || len(lc.Served) != 0 || len(lc.Expected) != 1 {
 		t.Fatalf("mismatch: %+v", lc)
 	}
 }
@@ -202,7 +202,7 @@ func TestAppDebug_HTTP(t *testing.T) {
 	if rr.Code != http.StatusOK || on.Session.UserID != "kanishk" || on.EndsAt == "" {
 		t.Fatalf("on for the caller: %d %s", rr.Code, rr.Body.String())
 	}
-	rr = put("aNB", `{"user_id":"aanya"}`)
+	rr = put("aNB", `{"user_id":"roman"}`)
 	var sw struct {
 		EndsAt   string `json:"ends_at"`
 		Switched bool   `json:"switched"`
@@ -230,8 +230,8 @@ func TestAppDebug_HTTP(t *testing.T) {
 	}
 	want := []auditLine{
 		{"kanishk", "kanishk", "claim_debug.started", "aNB"},
-		{"kanishk", "aanya", "claim_debug.switched", "aNB"},
-		{"kanishk", "aanya", "claim_debug.ended", "aNB"},
+		{"kanishk", "roman", "claim_debug.switched", "aNB"},
+		{"kanishk", "roman", "claim_debug.ended", "aNB"},
 	}
 	if len(*audits) != len(want) {
 		t.Fatalf("audits: %v", *audits)

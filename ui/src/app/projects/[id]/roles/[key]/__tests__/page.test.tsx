@@ -59,14 +59,14 @@ describe("role members — holding is observed", () => {
         },
       ],
       observed_only: [
-        { id: "u2", name: "Nina Roy", email: "nina@example.edu", title: "", team: "", status: "active", avatar: "" },
+        { id: "u2", name: "Alba Fyre", email: "alba@example.edu", title: "", team: "", status: "active", avatar: "" },
       ],
     });
     renderPage();
 
     expect(screen.getByText("2 people hold this role")).toBeInTheDocument();
     expect(screen.getByText("In Zitadel only")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Nina Roy/ })).toHaveAttribute("href", "/users/u2");
+    expect(screen.getByRole("link", { name: /Alba Fyre/ })).toHaveAttribute("href", "/users/u2");
     expect(screen.getByRole("link", { name: /Review in drift/ })).toHaveAttribute(
       "href",
       "/governance/drift?project=pLaser&role=trained",

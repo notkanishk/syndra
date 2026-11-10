@@ -47,7 +47,7 @@ func stubDormant(t *testing.T) {
 		return EntitlementSet{Fields: map[string][]string{}}, nil
 	}
 	dormantSubjectStatus = func(_ context.Context, subjectID string) (string, bool) {
-		return "Seth Marsh", true
+		return "CM Punk", true
 	}
 	dormantSubjectRoles = func(context.Context, string) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{ID: "g1"}}, nil

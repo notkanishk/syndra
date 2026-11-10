@@ -14,7 +14,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
   useTargetInventory: () => ({
     data: {
       bound: 1,
-      accounts: [{ subject_id: "zq-9981", username: "ada.l", bound_at: "2026-10-15T10:00:00Z" }],
+      accounts: [{ subject_id: "zq-9981", username: "charlotte.l", bound_at: "2026-10-15T10:00:00Z" }],
     },
     isLoading: false,
     error: null,

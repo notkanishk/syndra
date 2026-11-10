@@ -152,7 +152,7 @@ describe("getSession", () => {
       accessToken: "tok",
       userId: "u1",
       role: "user",
-      name: "Mallory",
+      name: "Maven",
       email: "m@x.test",
       title: "",
       team: "",
@@ -204,7 +204,7 @@ describe("getSession", () => {
       userId: "u-1",
       role: "user",
       name: "",
-      email: "jane.doe@example.edu",
+      email: "jacqueline.moore@example.edu",
       title: "",
       team: "",
       status: "active",
@@ -212,7 +212,7 @@ describe("getSession", () => {
     });
     const session = await getSession();
     expect(session?.avatar).not.toBe("");
-    expect(session?.avatar).toBe("JA"); // from email local-part "jane.doe"
+    expect(session?.avatar).toBe("JA"); // from email local-part "jacqueline.moore"
   });
 
   it("getSession surfaces title/team on OidcSessionUser", async () => {

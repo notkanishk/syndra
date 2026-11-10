@@ -29,7 +29,7 @@ import { personOr, roleName } from "@/lib/names";
  * that dialog shows it as a step pushed inside its own sheet: sheets never
  * stack, and no route can skip it because the backend refuses until told.
  *
- *   const step = useCancelStep({ host: "Give Rohan a role", goAhead: "give Member" });
+ *   const step = useCancelStep({ host: "Give Liv a role", goAhead: "give Member" });
  *   const done = await step.run((ids) => retire.mutateAsync({ id, cancelIds: ids }));   // KEPT, or the write's result
  *   <PushedStep step={step}>…the form…</PushedStep>
  *

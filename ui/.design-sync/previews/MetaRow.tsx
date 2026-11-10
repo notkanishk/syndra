@@ -6,7 +6,7 @@ import { MetaRow, Mono } from "ui";
 
 export const PersonFacts = () => (
   <MetaRow>
-    {["kabir.mehta_ug24@example.edu", "Lab assistant", "Makerspace staff", <Mono key="id">312874519023645698</Mono>]}
+    {["alexa.bliss_ug24@example.edu", "Lab assistant", "Makerspace staff", <Mono key="id">312874519023645698</Mono>]}
   </MetaRow>
 );
 

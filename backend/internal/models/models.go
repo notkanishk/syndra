@@ -70,7 +70,7 @@ type Bundle struct {
 	// version of it THEY hold. Zero elsewhere.
 	//
 	// It is on the person's copy of the bundle rather than looked up separately
-	// because "Ada has Lab Tech" and "Ada has Lab Tech v2" are the same fact,
+	// because "Charlotte has Lab Tech" and "Charlotte has Lab Tech v2" are the same fact,
 	// and the screens that say the first should not have to fetch again to say
 	// the second.
 	PinnedVersion int `json:"pinned_version,omitempty"`
@@ -760,7 +760,7 @@ type GrantProvenance struct {
 	// The strongest thing Syndra can say about a removed entitlement, and the
 	// only one available when no read ever saw it: a grant applied at noon and
 	// removed at one is invisible to every observation and plain here. "Syndra
-	// applied this at 12:04 on Marta's approval, and it is not there now" is a
+	// applied this at 12:04 on Mandy's approval, and it is not there now" is a
 	// different row from "expected, missing".
 	AppliedAt *time.Time `json:"applied_at,omitempty"`
 	AppliedBy string     `json:"applied_by,omitempty"`
@@ -817,7 +817,7 @@ type DriftTriageItem struct {
 	Provenance *GrantProvenance `json:"provenance,omitempty"`
 
 	// OtherItemsForUser is how many OTHER pending items this same person has.
-	// "Marta has 2 more items" is the context that changes a revoke decision.
+	// "Mandy has 2 more items" is the context that changes a revoke decision.
 	OtherItemsForUser int `json:"other_items_for_user"`
 }
 

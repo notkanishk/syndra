@@ -139,7 +139,7 @@ Response (200):
 
 ```json
 {
-  "users":    {"uid-1": {"display_name": "Anita Sharma", "email": "anita@..."}},
+  "users":    {"uid-1": {"display_name": "Shotzi Blackheart", "email": "shotzi@..."}},
   "projects": {"pid-1": {"name": "3D Lab"}},
   "roles":    {"pid-1:lab_member": {"display_name": "Member"}},
   "bundles":  {"bid-1": {"name": "Lab core"}}

@@ -37,7 +37,7 @@ func only(t *testing.T, changes []MappingChange) MappingChange {
 // double the cohort the ceremony states.
 func TestAValueThatMovedIsOneChangeAndNotTwo(t *testing.T) {
 	changes := classifyMappingChanges(
-		[]RoleMapping{live("p_archive", "admin", "group", "archive-write", "a.devi")},
+		[]RoleMapping{live("p_archive", "admin", "group", "archive-write", "s.austin")},
 		[]MappingVersionEntry{published("p_archive", "admin", "group", "archive-admins")},
 	)
 
@@ -52,7 +52,7 @@ func TestAValueThatMovedIsOneChangeAndNotTwo(t *testing.T) {
 
 func TestABindingTheVersionDoesNotHoldIsAnAddition(t *testing.T) {
 	changes := classifyMappingChanges(
-		[]RoleMapping{live("p_laser", "operator", "group", "laser-users", "a.devi")},
+		[]RoleMapping{live("p_laser", "operator", "group", "laser-users", "s.austin")},
 		[]MappingVersionEntry{},
 	)
 
@@ -89,8 +89,8 @@ func TestARemovalCarriesWhatItWasAndNobodyToBlame(t *testing.T) {
 
 func TestAMatchingWorkingCopyHasNothingToPublish(t *testing.T) {
 	set := []RoleMapping{
-		live("p_fab", "lead", "group", "fabrication", "a.devi"),
-		live("p_archive", "admin", "group", "archive-admins", "r.iyer"),
+		live("p_fab", "lead", "group", "fabrication", "s.austin"),
+		live("p_archive", "admin", "group", "archive-admins", "s.baszler"),
 	}
 	snapshot := []MappingVersionEntry{
 		published("p_archive", "admin", "group", "archive-admins"),
@@ -110,8 +110,8 @@ func TestAMatchingWorkingCopyHasNothingToPublish(t *testing.T) {
 func TestWithNothingPublishedEveryBindingIsAnAddition(t *testing.T) {
 	changes := classifyMappingChanges(
 		[]RoleMapping{
-			live("p_fab", "lead", "group", "fabrication", "a.devi"),
-			live("p_archive", "admin", "group", "archive-admins", "r.iyer"),
+			live("p_fab", "lead", "group", "fabrication", "s.austin"),
+			live("p_archive", "admin", "group", "archive-admins", "s.baszler"),
 		},
 		nil,
 	)
@@ -132,8 +132,8 @@ func TestWithNothingPublishedEveryBindingIsAnAddition(t *testing.T) {
 func TestTwoChangesOnOneRoleStayTwoChangesOnOneRole(t *testing.T) {
 	changes := classifyMappingChanges(
 		[]RoleMapping{
-			live("p_fab", "lead", "group", "fabrication-2026", "a.devi"),
-			live("p_fab", "lead", "quota", "500G", "a.devi"),
+			live("p_fab", "lead", "group", "fabrication-2026", "s.austin"),
+			live("p_fab", "lead", "quota", "500G", "s.austin"),
 		},
 		[]MappingVersionEntry{published("p_fab", "lead", "group", "fabrication")},
 	)
@@ -151,14 +151,14 @@ func TestTwoChangesOnOneRoleStayTwoChangesOnOneRole(t *testing.T) {
 // An attribution prefers who last CHANGED a row over who created it: an
 // unpublished edit belongs to the edit, not to the row's origin.
 func TestAnEditIsAttributedToWhoeverMadeItRatherThanWhoeverCreatedTheRow(t *testing.T) {
-	m := live("p_fab", "lead", "group", "fabrication-2026", "r.iyer")
-	m.UpdatedBy = "a.devi"
+	m := live("p_fab", "lead", "group", "fabrication-2026", "s.baszler")
+	m.UpdatedBy = "s.austin"
 
 	c := only(t, classifyMappingChanges(
 		[]RoleMapping{m},
 		[]MappingVersionEntry{published("p_fab", "lead", "group", "fabrication")},
 	))
-	if c.Actor != "a.devi" {
+	if c.Actor != "s.austin" {
 		t.Errorf("want the editor, got %q", c.Actor)
 	}
 }

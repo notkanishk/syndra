@@ -182,9 +182,9 @@ class Component extends DCLogic {
     if (noSpent) rows = rows.filter(r => r.k === "q");
     if (deg) rows = rows.map(r => r.k === "q" && r.where === "Zitadel" ? Object.assign({}, r, { tries: r.tries + 3, next: "Waits for Zitadel" }) : r);
     if (many) {
-      const fn = ["Carmelo","Bron","Chelsea","Lyra","Dominik","Trick","Ana","Montez","Akira","Michelle","Sara","Dev","Angelo","Stacy","Kelly","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ansari","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
+      const NM = ["AJ Styles", "Sheamus", "Gunther", "Matt Riddle", "Bayley", "Asuka", "Rikishi", "Booker T", "Batista", "Triple H", "Jeff Hardy", "Matt Hardy", "Rusev", "Elias", "Dean Ambrose", "Bray Wyatt", "Luke Harper", "Erick Rowan", "Roderick Strong", "Kyle O'Reilly", "Adam Cole", "Aleister Black", "Ricochet", "Andrade", "Samoa Joe", "Cesaro", "Tyson Kidd", "Naomi", "Jimmy Snuka", "Ric Flair", "Hulk Hogan", "Ultimate Warrior", "Sting", "Goldberg", "Lex Luger", "Ted DiBiase", "Razor Ramon", "Vader", "Scott Hall", "Road Dogg", "Billy Gunn", "Mr Perfect", "Yokozuna", "Jinder Mahal", "Lance Storm", "Rhyno", "Tazz", "Rick Steiner"];
       const RL = [["Wood shop · Member","wood.member","Zitadel"],["3D printers · Member","printers.member","Zitadel"],["Members share","smb.members","TrueNAS"],["Studio · Booking","studio.booking","Zitadel"]];
-      for (let i = 0; i < 39; i++) { const r = RL[i % 4]; rows.push(R("q", fn[i % 16] + " " + ln[(i * 7) % 15], r[0], r[1], r[2], 6 + i * 2, { tries: 1 + (i % 5), next: "Next try in " + (1 + (i % 9)) + " min" })); }
+      for (let i = 0; i < 39; i++) { const r = RL[i % 4]; rows.push(R("q", NM[(i % 16) + 16 * (((i * 7) % 15) % 3)], r[0], r[1], r[2], 6 + i * 2, { tries: 1 + (i % 5), next: "Next try in " + (1 + (i % 9)) + " min" })); }
     }
     const so = this.state.sort, dir = this.state.dir;
     const keyOf = { who: r => r.who, what: r => r.role, where: r => r.where };

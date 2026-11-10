@@ -531,7 +531,7 @@ Actions: an expiry pill (`Expires End of term · 18 Dec ⌄` — the same preset
 - *What do you need to do with it?* → radio options written as capabilities: `Watch during open hours` ("No safety training needed") / `Cut and engrave on my own` ("Needs laser safety — a manager will check", amber)
 - *Anything they should know?* → free text
 
-**Your requests** list with three states as pills: `Waiting` (accent tint), `Granted` (neutral), `Declined` (red tint). A decline **always carries the operator's own words** — "Come to a Thursday induction first and I'll approve it the same day. — A. Osei". A bare "Declined" generates a support conversation every time.
+**Your requests** list with three states as pills: `Waiting` (accent tint), `Granted` (neutral), `Declined` (red tint). A decline **always carries the operator's own words** — "Come to a Thursday induction first and I'll approve it the same day. — A. Crews". A bare "Declined" generates a support conversation every time.
 
 Members see only their own — enforced at the backend, and the UI must match rather than filter client-side.
 
@@ -601,7 +601,7 @@ Actions that don't apply are neutralised rather than hidden: a service-account r
 - **If you adopt** — what Syndra records, who becomes granter of record, and that nothing changes upstream.
 - **Evidence** — mono `grant_id / created / actor / last_seen`.
 
-**Revoke dialog.** The only place a solid red fill appears. Red-tint outcome callout, a paragraph on what happens both sides (and that the item will reappear tomorrow if an integration re-creates it), and the one piece of context that changes the decision — "Marta left in March 2026 … 2 more items for this person".
+**Revoke dialog.** The only place a solid red fill appears. Red-tint outcome callout, a paragraph on what happens both sides (and that the item will reappear tomorrow if an integration re-creates it), and the one piece of context that changes the decision — "Mandy left in March 2026 … 2 more items for this person".
 
 **Reconciliation tab.** Syndra ↔ provider diff. Columns: Project/role · Syndra (right) · Provider (right) · Difference (sentence) · Action. Two directions of drift, named differently:
 
@@ -620,7 +620,7 @@ Own route (`/review/expiring-access`), not an `/audit` tab: audit is a record yo
 
 Header sub-line states the mechanism: *"Direct grants inside the next 30 days, soonest first. The sweep removes each one on its date whether or not you visit this page."*
 
-Columns: Who (210px) · What (260px) · Granted (180px, "by P. Raghunathan, 4 Jul") · **State** (flex — `No action — expires 2 Aug`) · Remaining (110px, right) · Action (110px, right).
+Columns: Who (210px) · What (260px) · Granted (180px, "by L. Kaiser, 4 Jul") · **State** (flex — `No action — expires 2 Aug`) · Remaining (110px, right) · Action (110px, right).
 
 **There is exactly one action: extend.** Only the soonest row is emphasised (amber left border, amber tint, accent-fill `Extend`); the rest carry outline `Extend` and neutral remaining-time. Amber is a deadline signal, not a decoration for the whole table.
 

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { EventSentence } from "@/components/audit/EventLine";
 import type { AuditEntry } from "@/lib/queries/useAudit";
 
-const NAMES: Record<string, string> = { u1: "Gaurav Prem Singh", op1: "Kanishk Singh", op2: "Asha Rao" };
+const NAMES: Record<string, string> = { u1: "Bobby Roode", op1: "Kanishk Singh", op2: "Candice Michelle" };
 vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{NAMES[id] ?? id}</span>,
   BundleName: ({ id }: { id: string }) => <span>{id === "b1" ? "Community · Basic" : id}</span>,
@@ -50,7 +50,7 @@ describe("EventSentence", () => {
 
   it("names a person through the person resolver", () => {
     render(<EventSentence entry={entry({ action: "bundle.assigned", target_id: "u1" })} />);
-    expect(document.body.textContent).toBe("Gave Gaurav Prem Singh a bundle");
+    expect(document.body.textContent).toBe("Gave Bobby Roode a bundle");
   });
 
   // The thing acted on belongs INSIDE the sentence. "Removed a role from a
@@ -71,7 +71,7 @@ describe("EventSentence", () => {
   it("joins the target with a colon, never a dash, for an action with no template", () => {
     render(<EventSentence entry={entry({ action: "bundle.updated", target_id: "u1" })} />);
     expect(document.body.textContent).not.toContain("—");
-    expect(document.body.textContent).toContain(": Gaurav Prem Singh");
+    expect(document.body.textContent).toContain(": Bobby Roode");
   });
 
   it("names a rule or a retired bundle in words, never by its handle", () => {
@@ -96,7 +96,7 @@ describe("EventSentence", () => {
   it("an operator's cancellation says what was cancelled and for whom", () => {
     render(<EventSentence entry={entry({ action: "propagation.cancelled_unsent", actor_id: "op1", target_id: "u1" })} />);
     expect(document.body.textContent).toBe(
-      "Cancelled a change that was waiting for you to send, for Gaurav Prem Singh",
+      "Cancelled a change that was waiting for you to send, for Bobby Roode",
     );
     expect(document.body.textContent).not.toMatch(/waiting to be sent|makerspace staff to send/);
   });
@@ -104,7 +104,7 @@ describe("EventSentence", () => {
   it("Syndra's own cancellation says Syndra, and that nobody was asked", () => {
     render(<EventSentence entry={entry({ action: "propagation.cancelled_unsent", actor_id: "system:scheduler", target_id: "u1" })} />);
     expect(document.body.textContent).toContain(
-      "Syndra cancelled a change that was waiting for you to send, for Gaurav Prem Singh",
+      "Syndra cancelled a change that was waiting for you to send, for Bobby Roode",
     );
     expect(document.body.textContent).toContain("Nobody was asked.");
   });
@@ -134,8 +134,8 @@ describe("EventSentence", () => {
     const t = document.body.textContent!;
     expect(t).toContain("Cancelled a change that was waiting for you to send");
     expect(t).not.toContain("Kanishk Singh cancelled");
-    expect(t).toContain("Removing Network storage · Member from Gaurav Prem Singh");
-    expect(t).toContain("Queued by Asha Rao · 2 hours ago");
+    expect(t).toContain("Removing Network storage · Member from Bobby Roode");
+    expect(t).toContain("Queued by Candice Michelle · 2 hours ago");
     expect(t).toContain("“Left the lab”");
     expect(t).toContain("cancelled when Kanishk gave it back");
     expect(t).not.toMatch(/waiting to be sent/);
@@ -143,7 +143,7 @@ describe("EventSentence", () => {
 
   it("words a give, and each act that can cancel", () => {
     const { unmount } = render(<EventSentence entry={cancelled({ kind: "give" })} />);
-    expect(document.body.textContent).toContain("Giving Network storage · Member to Gaurav Prem Singh");
+    expect(document.body.textContent).toContain("Giving Network storage · Member to Bobby Roode");
     unmount();
     const a = render(<EventSentence entry={cancelled({}, { action: "remove", via: "direct" })} />);
     expect(document.body.textContent).toContain("cancelled when Kanishk removed it");
@@ -154,7 +154,7 @@ describe("EventSentence", () => {
 
   it("without a reason, says so by first name, never a pronoun", () => {
     render(<EventSentence entry={cancelled({ reason: undefined })} />);
-    expect(document.body.textContent).toContain("Asha gave no reason.");
+    expect(document.body.textContent).toContain("Candice gave no reason.");
     expect(document.body.textContent).not.toMatch(/\b(he|she|they|his|her|their)\b/i);
   });
 
@@ -162,7 +162,7 @@ describe("EventSentence", () => {
     render(<EventSentence entry={cancelled({ initiated_by: undefined, reason: undefined }, { action: "remove", via: "rule" }, "system")} />);
     const t = document.body.textContent!;
     expect(t).toContain("Syndra cancelled a change that was waiting for you to send");
-    expect(t).toContain("Removing Network storage · Member from Gaurav Prem Singh");
+    expect(t).toContain("Removing Network storage · Member from Bobby Roode");
     expect(t).toContain("Nobody was asked.");
     expect(t).not.toContain("cancelled when");
   });
@@ -176,11 +176,11 @@ describe("EventSentence", () => {
  */
 describe("EventSentence · the reason", () => {
   it.each([
-    ["bundle.assigned", "Gave Gaurav Prem Singh a bundle"],
-    ["bundle.unassigned", "Removed Gaurav Prem Singh from a bundle"],
-    ["direct_grant.upserted", "Gave Gaurav Prem Singh a role"],
-    ["direct_grant.removed", "Revoked Gaurav Prem Singh's direct access by hand"],
-    ["direct_grant.revoked", "Revoked Gaurav Prem Singh's direct access"],
+    ["bundle.assigned", "Gave Bobby Roode a bundle"],
+    ["bundle.unassigned", "Removed Bobby Roode from a bundle"],
+    ["direct_grant.upserted", "Gave Bobby Roode a role"],
+    ["direct_grant.removed", "Revoked Bobby Roode's direct access by hand"],
+    ["direct_grant.revoked", "Revoked Bobby Roode's direct access"],
   ])("quotes it under %s", (action, sentence) => {
     render(<EventSentence entry={entry({ action, details: { reason: "term start" }, said: "term start" })} />);
     expect(document.body.textContent).toBe(`${sentence}“term start”`);
@@ -189,13 +189,13 @@ describe("EventSentence · the reason", () => {
 
   it("says nothing when none was given", () => {
     render(<EventSentence entry={entry({ action: "bundle.assigned" })} />);
-    expect(document.body.textContent).toBe("Gave Gaurav Prem Singh a bundle");
+    expect(document.body.textContent).toBe("Gave Bobby Roode a bundle");
   });
 
   // A removal recorded on 8 Nov with Syndra's label: the backend says nothing was said.
   it("never quotes a label of Syndra's kept as the reason", () => {
     render(<EventSentence entry={entry({ action: "direct_grant.removed", details: { reason: "Direct access removal" } })} />);
-    expect(document.body.textContent).toBe("Revoked Gaurav Prem Singh's direct access by hand");
+    expect(document.body.textContent).toBe("Revoked Bobby Roode's direct access by hand");
   });
 
   it("never quotes another event's details as a reason", () => {
@@ -217,6 +217,6 @@ describe("EventSentence · the reason", () => {
       />,
     );
     expect(document.body.textContent).not.toContain("“");
-    expect(document.body.textContent).toContain("Asha gave no reason.");
+    expect(document.body.textContent).toContain("Candice gave no reason.");
   });
 });

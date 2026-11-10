@@ -51,7 +51,7 @@ func TestEveryGivingWriteWaitsForTheProject(t *testing.T) {
 		{"POST", "/api/v1/targets/truenas/mappings/versions/3/rollback", `{}`},
 		{"POST", "/api/v1/targets/truenas/binding-conflicts/c1/resolve", `{}`},
 		{"POST", "/api/v1/targets/truenas/reconcile", `{}`},
-		{"POST", "/api/v1/targets/truenas/inventory/ada/adopt", `{}`},
+		{"POST", "/api/v1/targets/truenas/inventory/charlotte/adopt", `{}`},
 		{"POST", "/api/v1/targets/truenas/merge-findings/f1/resolve", `{}`},
 		{"POST", "/api/v1/targets/truenas/entitlements/rehearse", `{}`},
 		{"POST", "/api/v1/targets/truenas/entitlements/apply", `{}`},

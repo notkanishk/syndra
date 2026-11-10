@@ -365,7 +365,7 @@ func TestFindingReasonCarriesNoIDs(t *testing.T) {
 // operator with no role in Syndra's own project signing in to Syndra). It is
 // a failure only when Syndra knows they hold one.
 func TestClassify_NoGrantsIsOnlyAFailureWhenThePersonHoldsRoles(t *testing.T) {
-	s := SignIn{UserID: "ada", ClientID: "c1", Scopes: []string{"openid"}}
+	s := SignIn{UserID: "charlotte", ClientID: "c1", Scopes: []string{"openid"}}
 	worst := map[string]Outcome{FnPreUserinfo: NoGrants}
 	if got := Classify(s, worst, false, false, true, false, true).Verdict; got != NothingToDeliver {
 		t.Fatalf("holds no role: got %s, want %s", got, NothingToDeliver)

@@ -31,24 +31,24 @@ func parityFixture() parity {
 	return parity{
 		users: []models.UserProfile{
 			{ID: "becky", Name: "Becky", Status: "active"},
-			{ID: "bob", Name: "Bob", Status: "active"},
-			{ID: "carol", Name: "Carol", Status: "active"},
-			{ID: "dave", Name: "Dave", Status: "locked"}, // has left
-			{ID: "erin", Name: "Erin", Status: "active"}, // holds only in Zitadel
+			{ID: "brock", Name: "Brock", Status: "active"},
+			{ID: "carol", Name: "Cesaro", Status: "active"},
+			{ID: "dave", Name: "Dean", Status: "locked"}, // has left
+			{ID: "erin", Name: "Elias", Status: "active"}, // holds only in Zitadel
 		},
 		direct: map[string][]models.DirectGrant{
 			"becky": {{UserID: "becky", ProjectID: "p", RoleKey: "a", ExpiresAt: &june}},
 			"carol": {{UserID: "carol", ProjectID: "p", RoleKey: "z"}},
 			"dave":  {{UserID: "dave", ProjectID: "p", RoleKey: "a"}},
 		},
-		bundles: map[string][]models.Bundle{"bob": {{ID: "b1", Name: "Makers", PinnedVersion: 2}}},
-		pinned: map[string][]models.BundleRole{"bob": {
+		bundles: map[string][]models.Bundle{"brock": {{ID: "b1", Name: "Makers", PinnedVersion: 2}}},
+		pinned: map[string][]models.BundleRole{"brock": {
 			{BundleID: "b1", ProjectID: "p", RoleKey: "x"},
 			{BundleID: "b1", ProjectID: "p", RoleKey: "a", ViaBundleID: "b2"}, // through an include
 		}},
 		seen: map[string][]db.ObservedGrant{
 			"becky": {{UserID: "becky", ProjectID: "p", RoleKeys: []string{"a", "b"}}}, // q:c never arrived
-			"bob":   {{UserID: "bob", ProjectID: "p", RoleKeys: []string{"x", "a", "b"}}, {UserID: "bob", ProjectID: "q", RoleKeys: []string{"c"}}},
+			"brock":   {{UserID: "brock", ProjectID: "p", RoleKeys: []string{"x", "a", "b"}}, {UserID: "brock", ProjectID: "q", RoleKeys: []string{"c"}}},
 			"dave":  {{UserID: "dave", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
 			"erin":  {{UserID: "erin", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
 		},
@@ -154,7 +154,7 @@ func TestParity_MappingHoldersAgreeWithThePersonView(t *testing.T) {
 	// Spelled out once, so the parity above is not vacuous: bob reaches q:c
 	// through an include and two rules; dave has left; erin is only observed.
 	got, _ := MappingHolders(context.Background(), "q", "c")
-	if !slices.Equal(got, []string{"becky", "bob"}) {
+	if !slices.Equal(got, []string{"becky", "brock"}) {
 		t.Fatalf("holders of q:c = %v, want becky and bob", got)
 	}
 }
@@ -198,7 +198,7 @@ func TestParity_ARuleRoleEndsWithItsSourceOnThePersonView(t *testing.T) {
 			t.Errorf("becky %v ends %v, want %v", k, r, june)
 		}
 	}
-	bob, _, err := collectUserRoles(context.Background(), "bob")
+	bob, _, err := collectUserRoles(context.Background(), "brock")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestParity_ARuleRoleEndsWithItsSourceOnThePersonView(t *testing.T) {
 	}
 }
 
-// Bundle and rule counts are observed. Bob's bundle is held: Zitadel shows
+// Bundle and rule counts are observed. Brock's bundle is held: Zitadel shows
 // every role his pinned version gives, the included one too. The rule counts
 // separate who should have the target (records) from who has it (Zitadel).
 func TestHolding_BundleAndRuleCountsAreObserved(t *testing.T) {
@@ -235,9 +235,9 @@ func TestHolding_BundleAndRuleCountsAreObserved(t *testing.T) {
 		t.Fatalf("rules: given %v observed %v", r.Given, r.Observed)
 	}
 
-	// Bob's include stops arriving: the bundle is no longer held, though it is
+	// Brock's include stops arriving: the bundle is no longer held, though it is
 	// still assigned.
-	f.seen["bob"] = []db.ObservedGrant{{UserID: "bob", ProjectID: "p", RoleKeys: []string{"x"}}}
+	f.seen["brock"] = []db.ObservedGrant{{UserID: "brock", ProjectID: "p", RoleKeys: []string{"x"}}}
 	if b, _ = BundleHolding(context.Background()); b.Given["b1"] != 1 || b.Observed["b1"] != 0 {
 		t.Fatalf("partly delivered bundle: given %v observed %v", b.Given, b.Observed)
 	}

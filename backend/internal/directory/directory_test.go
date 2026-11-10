@@ -164,7 +164,7 @@ func TestZitadelSource_Users_MapsFields(t *testing.T) {
 		return &zitadel.SearchResult[zitadel.ZitadelUser]{
 			Items: []zitadel.ZitadelUser{
 				{ID: "u1", DisplayName: "Becky Doe", Email: "becky@example.com", State: "USER_STATE_ACTIVE"},
-				{ID: "u2", Username: "bob", Email: "bob@example.com", State: "USER_STATE_LOCKED"},
+				{ID: "u2", Username: "brock", Email: "bob@example.com", State: "USER_STATE_LOCKED"},
 			},
 			Total: 2,
 		}, nil
@@ -182,7 +182,7 @@ func TestZitadelSource_Users_MapsFields(t *testing.T) {
 		t.Fatalf("user[0] mapping wrong: %+v", users[0])
 	}
 	// DisplayName empty → fall back to Username.
-	if users[1].Name != "bob" || users[1].Status != "locked" {
+	if users[1].Name != "brock" || users[1].Status != "locked" {
 		t.Fatalf("user[1] mapping wrong: %+v", users[1])
 	}
 }
@@ -459,7 +459,7 @@ func TestZitadelSource_Users_MetadataOverlay(t *testing.T) {
 		return &zitadel.SearchResult[zitadel.ZitadelUser]{
 			Items: []zitadel.ZitadelUser{
 				{ID: "u1", DisplayName: "Becky"},
-				{ID: "u2", DisplayName: "Bob"},
+				{ID: "u2", DisplayName: "Brock"},
 			},
 			Total: 2,
 		}, nil

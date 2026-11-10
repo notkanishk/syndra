@@ -69,7 +69,7 @@ Cross-route:
 - [med] board "Zitadel project Network storage" as a labelled two-column strip / dev shows labelled rows with "Unnamed project".
 - [med] board "What it can do" uses plain verbs ("Creates an account", "Runs by itself") with the id in mono underneath, beside a Reconciliation card / dev lists raw ids (account.adopt, account.purge) with admin / member / "confirmation required" / "never logged: elevated_key" tags, full width, with "Check for differences" as a separate card.
 - [med] board "What TrueNAS reports" rewrites device messages in plain words ("Uncorrectable error on /dev/sde ... its words, not Syndra's") / dev prints the device text as-is ("1 uncorrectable errors reported for sde (<drive-serial>)", "Storage pool raid-z1-slow ONLINE ...").
-- [med] board Not-created-by-Syndra rows carry a reason ("Built in...", "Made by hand ... last signed in 5 weeks ago") / dev rows are bare account names (sana, test_user, kanishk.singh) with Assign to a person.
+- [med] board Not-created-by-Syndra rows carry a reason ("Built in...", "Made by hand ... last signed in 5 weeks ago") / dev rows are bare account names (iyo, test_user, kanishk.singh) with Assign to a person.
 - [low] board "Accounts Syndra manages" is a table with Place a hold / Revoke per row / dev shows a large "Nobody yet" heading in the empty card (state-driven); the empty heading is larger than the card title.
 - [low] board has no top-level "Maintenance" heading above the Active row / dev adds one. Maintenance wording is as decided; heading is extra.
 - [low] dev "Waiting on a decision 0 / Merge findings" is a nested card with its own large heading inside "Waiting on you"; board has a single flat section.

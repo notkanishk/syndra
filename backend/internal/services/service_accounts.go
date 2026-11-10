@@ -139,7 +139,7 @@ func serviceAccountViews(snap *accessSnapshot, marks map[string]db.ServiceAccoun
 		}
 		out = append(out, v)
 	}
-	// By name as a person reads it: "netbird" does not sort after "Zed".
+	// By name as a person reads it: "netbird" does not sort after "Zack".
 	textsort.ByName(out, func(v models.ServiceAccount) string { return v.Name }, nil)
 	return out, nil
 }

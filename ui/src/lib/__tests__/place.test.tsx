@@ -206,7 +206,7 @@ describe("Your last view (P8)", () => {
     const first = render(<Sorted />);
     fireEvent.click(screen.getByText("sort name 1"));
     fireEvent.click(screen.getByText("pill 14"));
-    fireEvent.change(screen.getByLabelText("search"), { target: { value: "priya" } });
+    fireEvent.change(screen.getByLabelText("search"), { target: { value: "cody" } });
     first.unmount();
 
     later(); // a visit, not a Back
@@ -214,7 +214,7 @@ describe("Your last view (P8)", () => {
     expect(screen.getByText("sort people 1")).toBeTruthy();
     expect(screen.getByText("pill 30")).toBeTruthy();
     expect((screen.getByLabelText("search") as HTMLInputElement).value).toBe("");
-    expect(window.localStorage.getItem("syndra:view:t")).not.toContain("priya");
+    expect(window.localStorage.getItem("syndra:view:t")).not.toContain("cody");
     expect(window.localStorage.length).toBe(1);
   });
 

@@ -981,10 +981,10 @@ func TestAnApplyFindsAnAccountPastTheListCap(t *testing.T) {
 // happily, so the recorded query is what proves it.
 func TestAReadBackAsksForOneAccount(t *testing.T) {
 	s, rpc := applyServer(t, `[{"username":"charlotte","uid":5500,"locked":false,"smb":true,"groups":[42]},
-		{"username":"bob","uid":5501,"locked":false,"smb":true,"groups":[42]}]`)
+		{"username":"brock","uid":5501,"locked":false,"smb":true,"groups":[42]}]`)
 
-	got, err := s.readBack("bob")
-	if err != nil || got == nil || got.Username != "bob" {
+	got, err := s.readBack("brock")
+	if err != nil || got == nil || got.Username != "brock" {
 		t.Fatalf("readBack(bob) = %+v, %v", got, err)
 	}
 	var sawFilter bool

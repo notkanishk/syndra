@@ -40,11 +40,11 @@ func myChangesRequest(subject, query string) *http.Request {
 func TestMyChanges_ReadsOnlyTheCallersOwn(t *testing.T) {
 	user, days := stubMyChanges(t, nil)
 	w := httptest.NewRecorder()
-	handleMyChanges(w, myChangesRequest("priya", "?user_id=someone-else"))
+	handleMyChanges(w, myChangesRequest("cody", "?user_id=someone-else"))
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
 	}
-	if *user != "priya" || *days != 30 {
+	if *user != "cody" || *days != 30 {
 		t.Fatalf("read %q over %d days, want priya over 30", *user, *days)
 	}
 	if !strings.Contains(w.Body.String(), `"items":[]`) {
@@ -61,13 +61,13 @@ func TestMyChanges_RefusesAnonymousAndOddWindows(t *testing.T) {
 	}
 	for _, q := range []string{"?days=0", "?days=91", "?days=week"} {
 		w := httptest.NewRecorder()
-		handleMyChanges(w, myChangesRequest("priya", q))
+		handleMyChanges(w, myChangesRequest("cody", q))
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("%s: got %d", q, w.Code)
 		}
 	}
 	_, days := stubMyChanges(t, nil)
-	handleMyChanges(httptest.NewRecorder(), myChangesRequest("priya", "?days=7"))
+	handleMyChanges(httptest.NewRecorder(), myChangesRequest("cody", "?days=7"))
 	if *days != 7 {
 		t.Fatalf("days=7 read %d", *days)
 	}
@@ -144,7 +144,7 @@ func TestMyChanges_ViaRuleCarriesItsTriggerRole(t *testing.T) {
 	}
 	stubMyChanges(t, rows)
 	w := httptest.NewRecorder()
-	handleMyChanges(w, myChangesRequest("priya", ""))
+	handleMyChanges(w, myChangesRequest("cody", ""))
 	var resp struct {
 		Items []struct {
 			Via map[string]any `json:"via"`
@@ -176,7 +176,7 @@ func TestMyChanges_RulesReadFailureKeepsTheFeed(t *testing.T) {
 	dbGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return nil, context.DeadlineExceeded }
 	stubMyChanges(t, []db.MyChangeRow{{Kind: "given", ProjectID: "p", RoleKey: "r", Source: "rule", SourceRef: "r1"}})
 	w := httptest.NewRecorder()
-	handleMyChanges(w, myChangesRequest("priya", ""))
+	handleMyChanges(w, myChangesRequest("cody", ""))
 	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "trigger") {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}

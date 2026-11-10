@@ -1103,8 +1103,8 @@ describe("where home folders go", () => {
       usage_read: true,
       accounts: [
         { subject_id: "a", username: "charlotte", gives_home: true, home: "/mnt/p/main/home_dir/charlotte" },
-        { subject_id: "b", username: "bo", gives_home: true, home: "/mnt/p/main/home_dir/bo" },
-        { subject_id: "c", username: "cy", gives_home: false },
+        { subject_id: "b", username: "booker", gives_home: true, home: "/mnt/p/main/home_dir/booker" },
+        { subject_id: "c", username: "cora", gives_home: false },
       ],
     };
     renderTarget();

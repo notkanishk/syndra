@@ -480,8 +480,8 @@ See design Decisions 18 and 19.
 > **Caught in review — two faults in the extend path around it, both older than C4.**
 >
 > **The queue's rows are grants; the bulk contract was keyed on people.** The screen bridged that
-> by reducing ticked rows to user ids, so ticking "Ada / Laser Lab / trained" extended every
-> expiring grant Ada held — other projects, and dates months past the 30 days the screen is scoped
+> by reducing ticked rows to user ids, so ticking "Charlotte / Laser Lab / trained" extended every
+> expiring grant Charlotte held — other projects, and dates months past the 30 days the screen is scoped
 > to. Rows the queue had never rendered. Fixed by carrying `grant_ids` on the contract rather than
 > by making the UI select people, which would have fixed the honesty and lost the capability: on a
 > per-grant queue, renewing one role and letting another lapse is the ordinary case. `grant_ids` is

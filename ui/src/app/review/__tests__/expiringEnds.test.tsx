@@ -46,7 +46,7 @@ beforeEach(() => {
     user_id: "u1",
     project_id: "pLaser",
     role_key: "trained",
-    granted_by: "priya",
+    granted_by: "cody",
     reason: "",
     expires_at: new Date(Date.now() + 5 * 86_400_000).toISOString(),
     created_at: "2026-06-01T12:00:00Z",

@@ -132,9 +132,9 @@ func TestDriftTriageQueue_UncataloguedRoleOutranksKnownRoutineRole(t *testing.T)
 func TestDriftTriageQueue_CountsOtherItemsForTheSamePerson(t *testing.T) {
 	now := time.Now()
 	withTriageDeps(t, []models.DriftItem{
-		{ID: "a", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
-		{ID: "b", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
-		{ID: "c", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read3"}, DetectedAt: now},
+		{ID: "a", Target: db.TargetZitadel, UserID: "mandy", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
+		{ID: "b", Target: db.TargetZitadel, UserID: "mandy", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
+		{ID: "c", Target: db.TargetZitadel, UserID: "mandy", ProjectID: "p_wiki", RoleKeys: []string{"read3"}, DetectedAt: now},
 		{ID: "d", Target: db.TargetZitadel, UserID: "solo", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
 	}, nil)
 
@@ -264,15 +264,15 @@ func TestDriftTriageRows_EnrichesAFilteredSubset(t *testing.T) {
 	}
 }
 
-// "Marta has 2 more items" is a fact about Marta, not about the query. Counted
+// "Mandy has 2 more items" is a fact about Mandy, not about the query. Counted
 // within the filter it would shrink to match whatever the operator happened to
 // be looking at, and read as reassurance.
 func TestDriftTriageRows_CountsOtherItemsOverTheWholeQueue(t *testing.T) {
 	now := time.Now()
 	pending := []models.DriftItem{
-		{ID: "a", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
-		{ID: "b", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
-		{ID: "c", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read3"}, DetectedAt: now},
+		{ID: "a", Target: db.TargetZitadel, UserID: "mandy", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
+		{ID: "b", Target: db.TargetZitadel, UserID: "mandy", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
+		{ID: "c", Target: db.TargetZitadel, UserID: "mandy", ProjectID: "p_wiki", RoleKeys: []string{"read3"}, DetectedAt: now},
 	}
 	withTriageDeps(t, pending, nil)
 
@@ -290,12 +290,12 @@ func TestDriftTriageRows_CountsOtherItemsOverTheWholeQueue(t *testing.T) {
 func TestDriftTriageRows_DoesNotDiscountARowOutsideThePendingQueue(t *testing.T) {
 	now := time.Now()
 	pending := []models.DriftItem{
-		{ID: "a", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
-		{ID: "b", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
+		{ID: "a", Target: db.TargetZitadel, UserID: "mandy", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: now},
+		{ID: "b", Target: db.TargetZitadel, UserID: "mandy", ProjectID: "p_wiki", RoleKeys: []string{"read2"}, DetectedAt: now},
 	}
 	withTriageDeps(t, pending, nil)
 
-	resolved := models.DriftItem{ID: "old", Target: db.TargetZitadel, UserID: "marta", ProjectID: "p_wiki",
+	resolved := models.DriftItem{ID: "old", Target: db.TargetZitadel, UserID: "mandy", ProjectID: "p_wiki",
 		RoleKeys: []string{"read9"}, Status: "revoked", DetectedAt: now}
 	got, err := DriftTriageRows(context.Background(), []models.DriftItem{resolved})
 	if err != nil {
@@ -342,7 +342,7 @@ func TestDriftTriage_ARemovedGrantCarriesItsOwnHistory(t *testing.T) {
 	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{
 			UserID: "u1", ProjectID: "p_laser", RoleKey: "operator",
-			GrantedBy: "op-ada", Reason: "inducted on the laser", CreatedAt: granted,
+			GrantedBy: "op-charlotte", Reason: "inducted on the laser", CreatedAt: granted,
 			Source: "direct",
 		}}, nil
 	}
@@ -364,7 +364,7 @@ func TestDriftTriage_ARemovedGrantCarriesItsOwnHistory(t *testing.T) {
 	if p == nil {
 		t.Fatal("a removal of something Syndra applied must not read as a stranger")
 	}
-	if p.GrantedBy != "op-ada" || p.Reason != "inducted on the laser" {
+	if p.GrantedBy != "op-charlotte" || p.Reason != "inducted on the laser" {
 		t.Fatalf("the decision behind the access must travel: %+v", p)
 	}
 	if p.GrantedAt == nil || !p.GrantedAt.Equal(granted) {
@@ -387,7 +387,7 @@ func TestDriftTriage_UnexplainedAccessCarriesNoProvenance(t *testing.T) {
 	}}, nil)
 	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{
-			UserID: "u1", ProjectID: "p_laser", RoleKey: "operator", GrantedBy: "op-ada",
+			UserID: "u1", ProjectID: "p_laser", RoleKey: "operator", GrantedBy: "op-charlotte",
 		}}, nil
 	}
 
@@ -410,7 +410,7 @@ func TestDriftTriage_AnUnobservedGrantIsNotDated(t *testing.T) {
 		Status: "pending_triage", DetectedAt: time.Now(),
 	}}, nil)
 	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{{UserID: "u1", ProjectID: "p_laser", RoleKey: "operator", GrantedBy: "op-ada"}}, nil
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p_laser", RoleKey: "operator", GrantedBy: "op-charlotte"}}, nil
 	}
 	svcMergeBases = func(context.Context, string) (map[string]db.MergeBase, error) {
 		return map[string]db.MergeBase{"u1": {
@@ -444,7 +444,7 @@ func TestDriftTriage_ARemovalCarriesWhenTheWriteLanded(t *testing.T) {
 		Status: "pending_triage", DetectedAt: applied.Add(time.Hour),
 	}}, nil)
 	svcGetAllDirectGrants = func(context.Context, bool) ([]models.DirectGrant, error) {
-		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer", GrantedBy: "op-ada"}}, nil
+		return []models.DirectGrant{{UserID: "u1", ProjectID: "p1", RoleKey: "viewer", GrantedBy: "op-charlotte"}}, nil
 	}
 	// No observation at all: no sweep ran between the write and the removal.
 	svcPropagations = func(context.Context, string) (map[string]map[string]db.Propagation, error) {

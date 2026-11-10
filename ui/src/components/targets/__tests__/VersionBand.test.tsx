@@ -45,7 +45,7 @@ function change(over: Partial<MappingChange> = {}): MappingChange {
     field: "group",
     value: "archive-write",
     was_value: "archive-admins",
-    actor: "a.devi",
+    actor: "s.austin",
     at: "2026-08-25T09:00:00Z",
     holders: 3,
     ...over,
@@ -62,7 +62,7 @@ function history(over: Partial<MappingHistory> = {}): MappingHistory {
       {
         version: 4,
         note: "summer build cohort",
-        published_by: "a.devi",
+        published_by: "s.austin",
         published_at: "2026-08-05T09:00:00Z",
         entries: [],
       },
@@ -161,7 +161,7 @@ describe("the band enumerates what a rollback would undo", () => {
     expect(screen.getByText("Added")).toBeTruthy();
     expect(screen.getByText(/3 people/)).toBeTruthy();
     expect(screen.getByText(/12 people/)).toBeTruthy();
-    expect(screen.getAllByText("a.devi").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("s.austin").length).toBeGreaterThan(0);
   });
 
   // The sentence an operator needs most, because every other tool has taught

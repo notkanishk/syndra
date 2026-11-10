@@ -550,7 +550,7 @@ func TestRehearseBulk_NeverPromisesAShorterEnd(t *testing.T) {
 		users: []models.UserProfile{
 			{ID: "u_forever", Name: "Charlotte", Status: "active"},
 			{ID: "u_far", Name: "Randy", Status: "active"},
-			{ID: "u_soon", Name: "Lee", Status: "active"},
+			{ID: "u_soon", Name: "Lince", Status: "active"},
 		},
 		grants: map[string][]models.DirectGrant{
 			"u_forever": {{ID: "g1", ProjectID: "pLaser", RoleKey: "trained"}},
@@ -594,7 +594,7 @@ func TestRehearseBulk_NeverPromisesAShorterEnd(t *testing.T) {
 func TestABulkRowNamesWhatItWouldCancel(t *testing.T) {
 	queuedAt := time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
 	setupBulk(t, bulkFixture{
-		users: []models.UserProfile{{ID: "u1", Name: "Charlotte", Status: "active"}, {ID: "u2", Name: "Bo", Status: "active"}},
+		users: []models.UserProfile{{ID: "u1", Name: "Charlotte", Status: "active"}, {ID: "u2", Name: "Booker", Status: "active"}},
 		queued: map[string][]models.QueuedChange{
 			"u1/add/trained": {{ID: "q1", OpType: "revoke", RoleKeys: []string{"trained"}, QueuedAt: queuedAt, Reason: "left the course"}},
 		},

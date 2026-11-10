@@ -9,7 +9,7 @@ import type { AccessRequest } from "@/lib/queries/useRequests";
 // A-20 P19: the status pill is remembered across visits, so anything but Open is also said in words.
 
 const queue = vi.hoisted(() => ({ data: [] as AccessRequest[] }));
-const NAMES = vi.hoisted(() => ({ u1: "Charlotte Flair", u2: "Sami Zayn", u3: "Alan Turing" }) as Record<string, string>);
+const NAMES = vi.hoisted(() => ({ u1: "Charlotte Flair", u2: "Sami Zayn", u3: "Roddy Piper" }) as Record<string, string>);
 const ROLES = vi.hoisted(() => ({ operator: "Laser operator", trained: "Bandsaw trained" }) as Record<string, string>);
 
 vi.mock("next/navigation", () => ({
