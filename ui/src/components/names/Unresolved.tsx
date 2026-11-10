@@ -18,10 +18,10 @@ export const UNKNOWN_PROJECT = "Unknown project";
 /**
  * A project's name as a string, for the places that sort, filter or build a
  * sentence from it. The API sends no name ("") for a project it could not
- * read (one-path W2d), never its id; a name that IS the id is still not a name.
+ * read, never its id (one-path W2d), so an empty name is the one signal.
  */
-export function projectLabel(name: string | null | undefined, id: string | null | undefined): string {
-  return name && name !== id ? name : UNKNOWN_PROJECT;
+export function projectLabel(name: string | null | undefined): string {
+  return name || UNKNOWN_PROJECT;
 }
 
 export function Unresolved({

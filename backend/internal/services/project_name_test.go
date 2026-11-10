@@ -49,3 +49,30 @@ func TestExplainUserAccess_ObservedUnlistedProjectIsUnresolved(t *testing.T) {
 		t.Errorf("got name=%q resolved=%v", got.ProjectName, got.ProjectNameResolved)
 	}
 }
+
+// A project the map references (here through a rule) and the directory doesn't
+// list has no label: the id never stands in for its name, and the map's one
+// fallback says "Unknown project" (ui/src/components/insights/model.ts).
+func TestTopology_AnUnlistedProjectHasNoLabel(t *testing.T) {
+	setupSnapshotTestFixtures(t, 1, 0, 1)
+	svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{{ID: "r1", SourceProject: "pGone", SourceRole: "old", TargetProject: "p0", TargetRole: "role0"}}, nil
+	}
+	snap, err := newAccessSnapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, err := topologyFromSnapshot(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range graph.Nodes {
+		if n.ID == "project:pGone" {
+			if n.Label != "" || n.ProjectID != "pGone" {
+				t.Fatalf("placeholder %+v, want no label and its project id", n)
+			}
+			return
+		}
+	}
+	t.Fatalf("no placeholder node for the unlisted project in %+v", graph.Nodes)
+}

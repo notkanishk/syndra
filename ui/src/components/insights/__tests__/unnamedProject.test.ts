@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { buildModel } from "@/components/insights/model";
 
-// With Zitadel unreachable the API labels a project it cannot read with the
-// project's own id, and that id then led every role in it on the map
-// ("382075332397630470 · Community"). The model is the one place every reader
-// of the map takes its names from, so it is renamed there.
+// The API sends no label for a project it cannot read (one-path W2d; it once
+// sent the id, which then led every role in it: "382075332397630470 ·
+// Community"). The model is the one place every reader of the map takes its
+// names from, so the shared phrase stands in there.
 describe("a project the map could not name", () => {
   const graph = {
     nodes: [
-      { id: "project:382075332397630470", label: "382075332397630470", kind: "project", project_id: "382075332397630470" },
+      { id: "project:382075332397630470", label: "", kind: "project", project_id: "382075332397630470" },
       { id: "role:382075332397630470:community", label: "Community", kind: "role", project_id: "382075332397630470", meta: { role_key: "community" } },
       { id: "project:p1", label: "Laser Lab", kind: "project", project_id: "p1" },
     ],

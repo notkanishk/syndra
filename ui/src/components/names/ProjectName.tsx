@@ -9,9 +9,9 @@ import { useNameResolver } from "@/lib/queries/useNameResolver";
 interface ProjectNameProps {
   id: string | null | undefined;
   /**
-   * The name a server view already carries for this project. Used when it is a
-   * real name; the API sends the id (or nothing) for a project it could not
-   * read, and that falls through to the resolver and then the shared fallback.
+   * The name a server view already carries for this project. The API sends no
+   * name ("") for a project it could not read (one-path W2d), never its id; an
+   * empty one falls through to the resolver and then the shared fallback.
    */
   name?: string | null;
   fallback?: React.ReactNode;
@@ -24,7 +24,7 @@ export function ProjectName({ id, name, fallback, className = "", link: linkProp
   const inDialog = useNameLinks();
   const link = linkProp ?? inDialog;
   const resolver = useNameResolver();
-  const lookup = Boolean(id) && !(name && name !== id) && id !== "-";
+  const lookup = Boolean(id) && !name && id !== "-";
   const { value, resolved } = lookup ? resolver.resolveProject(id ?? "") : { value: undefined, resolved: true };
   // The name that lands after a skeleton tints in, not snaps (S7).
   const tint = useTintAfterSkeleton(lookup && !value && !resolved);
@@ -32,7 +32,7 @@ export function ProjectName({ id, name, fallback, className = "", link: linkProp
   if (!id) {
     return <span className={className}>{fallback ?? "—"}</span>;
   }
-  if (name && name !== id) {
+  if (name) {
     return linked(id, name, className, link);
   }
   if (id === "-") {

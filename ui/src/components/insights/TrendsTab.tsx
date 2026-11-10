@@ -197,7 +197,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                     .map((p) => (
                       <div key={p.project_id} role="row" className={`${ENDING_ROW} text-[13.5px]`}>
                         <span role="cell" className="text-muted">
-                          {projectLabel(p.project_name, p.project_id)}
+                          {projectLabel(p.project_name)}
                         </span>
                         <span role="cell" className="text-right font-semibold tabular-nums">
                           <EndingLink within={14} n={p.d14} />

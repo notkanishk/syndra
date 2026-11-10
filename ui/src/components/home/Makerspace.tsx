@@ -304,7 +304,7 @@ function AccessShape() {
                     {roleName(role.display_name, role.role_key)}
                   </span>
                   <span className="shrink-0 truncate text-right text-[13px] text-faint">
-                    {projectLabel(role.project_name, role.project_id)}
+                    {projectLabel(role.project_name)}
                     {/* What Zitadel shows right now, not Syndra's record of who
                         was granted this — see the confirmation line above. */}
                     {holders.note && (

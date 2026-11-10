@@ -1417,12 +1417,14 @@ func topologyFromSnapshot(snap *accessSnapshot) (models.TopologyGraph, error) {
 			return
 		}
 
+		// No name: the directory doesn't list it, and the id never stands in
+		// for one. The map's one fallback ("Unknown project") labels it.
 		addNode(models.TopologyNode{
 			ID:          projectNodeID,
-			Label:       projectID,
+			Label:       "",
 			Kind:        "project",
 			ProjectID:   projectID,
-			Description: "Referenced by persisted rules or bundle grants that do not exist in the seeded demo catalog yet.",
+			Description: "Referenced by Syndra's rules or grants, and not listed in the directory.",
 			Meta: map[string]string{
 				"kind":   "external",
 				"source": "database",

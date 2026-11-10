@@ -69,8 +69,8 @@ describe("a name nothing could place", () => {
     expect(container.textContent).not.toContain("—");
   });
 
-  it("never takes the id a server view sends for a project's name, though it shows it beside the words", () => {
-    const { container } = inView("basic", <ProjectName id={PROJECT_ID} name={PROJECT_ID} />);
+  it("says Unknown project for a view that has no name for it, with the id beside the words", () => {
+    const { container } = inView("basic", <ProjectName id={PROJECT_ID} name="" />);
     expect(container.textContent).toBe(`Unknown project ${PROJECT_ID}`);
   });
 
@@ -80,9 +80,8 @@ describe("a name nothing could place", () => {
   });
 
   it("gives the same words where a string is needed", () => {
-    expect(projectLabel("Laser Lab", PROJECT_ID)).toBe("Laser Lab");
-    expect(projectLabel(PROJECT_ID, PROJECT_ID)).toBe("Unknown project");
-    expect(projectLabel("", PROJECT_ID)).toBe("Unknown project");
-    expect(projectLabel(undefined, null)).toBe("Unknown project");
+    expect(projectLabel("Laser Lab")).toBe("Laser Lab");
+    expect(projectLabel("")).toBe("Unknown project");
+    expect(projectLabel(undefined)).toBe("Unknown project");
   });
 });

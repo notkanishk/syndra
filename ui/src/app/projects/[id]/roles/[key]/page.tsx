@@ -56,7 +56,7 @@ export default function RoleMembersPage({
   const [removal, setRemoval] = useState<(Removal & { userName: string }) | null>(null);
 
   const view = members.data;
-  useCrumb(view ? `${projectLabel(view.project_name, id)} / ${roleKey}` : null);
+  useCrumb(view ? `${projectLabel(view.project_name)} / ${roleKey}` : null);
 
   const rows = useMemo(() => {
     const all = sortByName(view?.members ?? [], (member) => member.user.name, (member) => member.user.id);
@@ -186,7 +186,7 @@ export default function RoleMembersPage({
               key={member.user.id}
               member={member}
               projectId={id}
-              projectName={projectLabel(view?.project_name, id)}
+              projectName={projectLabel(view?.project_name)}
               roleKey={roleKey}
               onRemove={setRemoval}
             />

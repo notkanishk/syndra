@@ -224,7 +224,7 @@ export function useUserAccess(userId: string) {
         // The server sends no name ("") for a project it could not read; the one
         // shared phrase stands in here so no screen builds a label from nothing.
         projects: sortByName(
-          (view.projects ?? []).map((p) => ({ ...p, project_name: projectLabel(p.project_name, p.project_id) })),
+          (view.projects ?? []).map((p) => ({ ...p, project_name: projectLabel(p.project_name) })),
           (p) => p.project_name,
           (p) => p.project_id,
         ),

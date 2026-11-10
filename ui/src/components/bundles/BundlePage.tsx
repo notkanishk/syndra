@@ -421,7 +421,7 @@ function WhatItGives({
     // Projects A to Z, and the roles inside each A to Z by their shown name.
     const nameOfRole = (r: BundleRoleRow) => roleName(byId.get(idOf(r))?.display_name, r.zitadel_role_key);
     return Array.from(out.entries())
-      .sort(([, a], [, b]) => compareNames(projectLabel(a.name, null), projectLabel(b.name, null)))
+      .sort(([, a], [, b]) => compareNames(projectLabel(a.name), projectLabel(b.name)))
       .map(([id, g]) => [id, { ...g, list: sortByName(g.list, nameOfRole, idOf) }] as const);
   }, [drawn.rows, byId]);
   const next = draft?.next_version;
@@ -1075,7 +1075,7 @@ function IncludedBundleCard({
     : [];
   const label = (r: BundleRoleRow) => {
     const entry = catalog.get(idOf(r));
-    return roleLabel(projectLabel(entry?.project_name, r.zitadel_project_id), r.zitadel_role_key, entry?.display_name);
+    return roleLabel(projectLabel(entry?.project_name), r.zitadel_role_key, entry?.display_name);
   };
   async function run(act: () => Promise<unknown>) {
     setFailure(null);
