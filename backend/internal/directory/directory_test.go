@@ -569,8 +569,7 @@ func TestZitadelSource_Cache_TTLExpires(t *testing.T) {
 
 // A users-list rebuild every 30s must not be a metadata call per person every
 // 30s (assessment SC3): metadata keeps its own, longer TTL, so a rebuild past
-// the list's TTL costs only the ListUsers pages. An edit through Syndra still
-// drops it at once.
+// the list's TTL costs only the ListUsers pages.
 func TestZitadelSource_MetadataOutlivesTheUsersList(t *testing.T) {
 	mc := newMockClient()
 	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {

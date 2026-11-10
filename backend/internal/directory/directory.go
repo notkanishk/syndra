@@ -55,8 +55,11 @@ type Source interface {
 	// No InvalidateUsers: Syndra never writes a person's profile or metadata
 	// (its Zitadel client edits roles and grants only), so nothing it does can
 	// make the users list stale; the list refreshes on CacheTTL, metadata on
-	// MetadataTTL. A feature that edits people adds the invalidation with it
-	// (the in-flight-rebuild guard it needs is commit 43e412d4).
+	// MetadataTTL. A change made in Zitadel can still be up to CacheTTL old
+	// here: a reader that must act on it at once (a deactivation's webhook)
+	// reads that person, not the list (one-path open item). A feature that
+	// edits people adds an invalidation with it (the in-flight-rebuild guard it
+	// needs is commit 43e412d4).
 }
 
 // ErrUnreachable is a read Zitadel didn't answer, with no last good read to
