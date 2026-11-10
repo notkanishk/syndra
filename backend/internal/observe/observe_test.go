@@ -27,7 +27,9 @@ func TestOrgAndUserReadsAreDatedWhenTheyBegan(t *testing.T) {
 		order = append(order, "list")
 		return &zitadel.SearchResult[zitadel.UserGrant]{}, nil
 	}
-	listAllGrants = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) { return page() }
+	listAllGrants = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
+		return page()
+	}
 	listUserGrants = func(context.Context, string, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 		return page()
 	}

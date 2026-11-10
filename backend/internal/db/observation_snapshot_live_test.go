@@ -1,10 +1,10 @@
 package db
 
 import (
-	"time"
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 // The straddle this exists to close.

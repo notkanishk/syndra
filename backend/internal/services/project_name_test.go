@@ -2,8 +2,11 @@ package services
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 )
 
@@ -75,4 +78,31 @@ func TestTopology_AnUnlistedProjectHasNoLabel(t *testing.T) {
 		}
 	}
 	t.Fatalf("no placeholder node for the unlisted project in %+v", graph.Nodes)
+}
+
+// Projects without a name come back in one order, by id, every time: the
+// response never depends on map iteration.
+func TestExplainUserAccess_UnnamedProjectsAreOrderedById(t *testing.T) {
+	noRecordsFor(t, nil)
+	observedStore(t, db.Observation{ObservedAt: time.Now(), Complete: true}, nil, []db.ObservedGrant{
+		{GrantID: "g1", ProjectID: "pZulu", RoleKeys: []string{"a"}},
+		{GrantID: "g2", ProjectID: "pAlpha", RoleKeys: []string{"a"}},
+		{GrantID: "g3", ProjectID: "pMike", RoleKeys: []string{"a"}},
+	})
+	for range 5 {
+		view, err := ExplainUserAccess(context.Background(), "dev_admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, p := range view.Projects {
+			if p.ProjectName != "" {
+				t.Fatalf("%s has a name %q; the test wants unlisted projects", p.ProjectID, p.ProjectName)
+			}
+			got = append(got, p.ProjectID)
+		}
+		if strings.Join(got, ",") != "pAlpha,pMike,pZulu" {
+			t.Fatalf("order %v, want by id", got)
+		}
+	}
 }

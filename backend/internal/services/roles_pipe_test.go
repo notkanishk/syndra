@@ -424,3 +424,21 @@ func TestCreateRole_RejectsABadKeyBeforeAnything(t *testing.T) {
 		t.Fatalf("nothing may happen for an invalid key; log: %v", p.log)
 	}
 }
+
+// A role created without a display name is named the way every screen would
+// name it (roleLabel, the UI's humanizeKey), never by its key.
+func TestCreateRole_NoDisplayNameIsTheHumanizedKey(t *testing.T) {
+	newRolePipe(t)
+	var stored string
+	create := svcDbCreateRole
+	svcDbCreateRole = func(ctx context.Context, projectID, key, name, description, group, by string, fromProject, fromRole *string) (string, error) {
+		stored = name
+		return create(ctx, projectID, key, name, description, group, by, fromProject, fromRole)
+	}
+	if _, err := CreateRole(context.Background(), CreateRoleRequest{ProjectID: "p1", RoleKey: "laser_trained"}, "op"); err != nil {
+		t.Fatal(err)
+	}
+	if stored != "Laser Trained" {
+		t.Fatalf("display name stored %q, want %q", stored, "Laser Trained")
+	}
+}

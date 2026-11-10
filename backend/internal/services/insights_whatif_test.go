@@ -163,7 +163,7 @@ func wiChg(kind string) models.InsightsWhatIfChange {
 func TestWhatIf_GivesNot_LossOnlyWhereTheBundleIsTheOnlyRoute(t *testing.T) {
 	w := newWhatIfWorld("Zack", "Asuka", "Brock")
 	w.holds("Zack", wiLaser, wiMill) // only via the bundle: loses laser
-	w.holds("Asuka", wiLaser)         // also holds laser directly: keeps it
+	w.holds("Asuka", wiLaser)        // also holds laser directly: keeps it
 	w.direct["Asuka"] = []roleKey{wiLaser}
 	w.holds("Brock", wiMill) // bundle never gave laser: unchanged
 

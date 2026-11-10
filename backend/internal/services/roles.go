@@ -67,7 +67,9 @@ func CreateRole(ctx context.Context, req CreateRoleRequest, createdBy string) (m
 	}
 
 	if req.DisplayName == "" {
-		req.DisplayName = req.RoleKey // Zitadel and the roles table both need one
+		// Zitadel and the roles table both need one: the name every screen
+		// would give it anyway (roleLabel, the UI's humanizeKey), never the key.
+		req.DisplayName = roleLabel(req.RoleKey)
 	}
 
 	var clonedFromProject, clonedFromRole *string

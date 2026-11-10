@@ -1,9 +1,9 @@
 package db
 
 import (
-	"time"
 	"context"
 	"testing"
+	"time"
 )
 
 // The property this store exists for: an incomplete answer may not delete

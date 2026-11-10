@@ -1,10 +1,12 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"syndra/internal/textsort"
@@ -825,8 +827,10 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		}
 		projects = append(projects, *bucket)
 	}
-	sort.Slice(projects, func(i, j int) bool {
-		return projects[i].ProjectName < projects[j].ProjectName
+	// By name, then id: unnamed projects ("") would otherwise come out in map
+	// order, a different answer on every call.
+	slices.SortFunc(projects, func(a, b models.ProjectAccessView) int {
+		return cmp.Or(cmp.Compare(a.ProjectName, b.ProjectName), cmp.Compare(a.ProjectID, b.ProjectID))
 	})
 
 	// The third band. Read failure is non-fatal and says so rather than

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { ProjectName } from "@/components/names";
-import { projectLabel, UNKNOWN_PROJECT } from "@/components/names/Unresolved";
+import { projectLabel } from "@/components/names/Unresolved";
 import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -269,7 +269,7 @@ export default function RolesPage() {
           {leaving.rows.map((role, index) => {
             const run = runAt(index);
             const underRun =
-              view.sort.key === "project" && projectLabel(role.project_name) !== UNKNOWN_PROJECT;
+              view.sort.key === "project" && Boolean(role.project_name);
             const holders = holdersLine(
               role.assigned_user_count,
               role.confirmed_user_count,

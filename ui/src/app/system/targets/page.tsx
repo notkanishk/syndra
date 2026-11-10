@@ -20,7 +20,7 @@ import {
   useTargets,
   type TargetSummary,
 } from "@/lib/queries/useTargets";
-import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
+import { projectLabel } from "@/components/names/Unresolved";
 import { sortByName } from "@/lib/sort";
 
 /**
@@ -208,7 +208,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           <span className="text-[13px] text-muted">
             Zitadel project{" "}
             <Link href={`/projects/${row.project.id}`} className="text-ink link-hover">
-              {row.project.name || UNKNOWN_PROJECT}
+              {projectLabel(row.project.name)}
             </Link>
           </span>
         ) : row.project === null ? (

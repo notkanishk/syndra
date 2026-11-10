@@ -34,7 +34,7 @@ import { NOT_CHECKED, holdersLine, holdersToneClass } from "@/lib/holders";
 import { fetchWhatIf } from "@/lib/queries/useInsights";
 import { retireOutcome } from "@/lib/retry";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
-import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
+import { projectLabel } from "@/components/names/Unresolved";
 import { sortByName, sortNames } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 import { roleName } from "@/lib/names";
@@ -173,10 +173,9 @@ function RetireRule({ rule, onClose }: { rule: MappingRuleRow; onClose: () => vo
   const entry = (catalog.data ?? []).find(
     (r) => r.project_id === rule.target_project && r.role_key === rule.target_role,
   );
-  const project =
-    entry?.project_name ||
-    (projects.data ?? []).find((p) => p.project.id === rule.target_project)?.project.name ||
-    UNKNOWN_PROJECT;
+  const project = projectLabel(
+    entry?.project_name || (projects.data ?? []).find((p) => p.project.id === rule.target_project)?.project.name,
+  );
   return <DeleteRuleConfirm rule={rule} label={`${project} / ${rule.target_role}`} onCancel={onClose} onDeleted={onClose} />;
 }
 
@@ -231,10 +230,9 @@ function RuleEditor({
     for (const role of catalog.data ?? []) {
       const place = byProject.get(role.project_id) ?? {
         id: role.project_id,
-        name:
-          role.project_name ||
-          (projects.data ?? []).find((p) => p.project.id === role.project_id)?.project.name ||
-          UNKNOWN_PROJECT,
+        name: projectLabel(
+          role.project_name || (projects.data ?? []).find((p) => p.project.id === role.project_id)?.project.name,
+        ),
         roles: [],
       };
       place.roles.push({
@@ -258,11 +256,9 @@ function RuleEditor({
     const entry = (catalog.data ?? []).find(
       (role) => role.project_id === projectId && role.role_key === roleKey,
     );
-    const project =
-      entry?.project_name ||
-      (projects.data ?? []).find((p) => p.project.id === projectId)?.project
-        .name ||
-      UNKNOWN_PROJECT;
+    const project = projectLabel(
+      entry?.project_name || (projects.data ?? []).find((p) => p.project.id === projectId)?.project.name,
+    );
     return `${project} / ${roleKey}`;
   };
 

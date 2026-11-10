@@ -1,6 +1,8 @@
 import type { Panel } from "@/components/insights/AnswerPanel";
 import { dayLabel, dayOf } from "@/components/insights/days";
 import type { Model } from "@/components/insights/model";
+import { projectLabel } from "@/components/names/Unresolved";
+import { roleName as roleDisplayName } from "@/lib/names";
 import type { InsightsLens, InsightsUsage } from "@/lib/queries/useInsights";
 import { RECENT_USE } from "@/components/insights/useInsightsUrl";
 
@@ -26,11 +28,15 @@ const roles = (n: number) => `${n} ${n === 1 ? "role" : "roles"}`;
 
 type Named = { project_id: string; role_key: string; project_name?: string; role_label?: string };
 
-/** A role as a person says it. The map's own name wins; the lens's names cover a role the map has not drawn. */
+/**
+ * A role as a person says it. The map's own name wins; for a role the map has
+ * not drawn, the same "Project · Role" through the one fallbacks (an unnamed
+ * project is "Unknown project", an unlabelled role its humanized key).
+ */
 export function roleName(m: Model, r: Named): string {
   const id = m.roleId(r.project_id, r.role_key);
   if (id) return m.nameOf(id);
-  return [r.project_name, r.role_label].filter(Boolean).join(" · ") || "A role no longer on the map";
+  return `${projectLabel(r.project_name)} · ${roleDisplayName(r.role_label, r.role_key)}`;
 }
 
 function tally(m: Model, rows: Array<Named & { people: number }>): Map<string, number> {

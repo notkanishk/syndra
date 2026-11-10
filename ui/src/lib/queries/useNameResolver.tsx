@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { request } from "@/lib/api-client";
-import { NAME_BUNDLES_KEY, NAME_CATALOG_KEY } from "./useNameCatalog";
+import { nameBundlesQuery, nameCatalogQuery } from "./useNameCatalog";
 import {
   type LookupResponse,
   type ResolvedBundle,
@@ -208,22 +208,11 @@ export function NameResolverProvider({
   bundles?: boolean;
 }) {
   // Catalog: users + projects + nested roles. Member-allowed via proxy.
-  const catalogQ = useQuery({
-    queryKey: NAME_CATALOG_KEY,
-    queryFn: () => request<CatalogResponse>("catalog"),
-    enabled,
-    staleTime: STALE_TIME,
-  });
+  const catalogQ = useQuery({ ...nameCatalogQuery, enabled, staleTime: STALE_TIME });
   // Bundles: separate + non-retrying. Member GET /bundles is 403 by design;
   // on failure data is undefined → resolveBundle yields fallback, isolated
   // from catalog. Members don't surface bundle names on their own pages.
-  const bundlesQ = useQuery({
-    queryKey: NAME_BUNDLES_KEY,
-    queryFn: () => request<Bundle[]>("bundles"),
-    enabled: bundles,
-    staleTime: STALE_TIME,
-    retry: false,
-  });
+  const bundlesQ = useQuery({ ...nameBundlesQuery, enabled: bundles, staleTime: STALE_TIME, retry: false });
 
   const catalogMaps = useMemo(() => buildCatalogMaps(catalogQ.data), [catalogQ.data]);
   const bundleMap = useMemo(() => buildBundleMap(bundlesQ.data), [bundlesQ.data]);

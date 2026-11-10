@@ -88,9 +88,9 @@ export interface UserAccessProject {
   project_id: string;
   project_name: string;
   /**
-   * False when the directory couldn't name this project and `project_name`
-   * is the raw id standing in for one — the id an operator needs to search,
-   * not a name. Render it labelled, not as the heading.
+   * False when the directory couldn't name this project. The server then sends
+   * no name, and `useUserAccess` puts the one fallback ("Unknown project") in
+   * `project_name`; show the id beside it, not a raw id as the heading.
    */
   project_name_resolved: boolean;
   source_roles: AccessRole[];
