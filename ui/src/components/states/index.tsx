@@ -217,7 +217,10 @@ function NeverRead() {
   const client = useQueryClient();
   useEffect(() => {
     const again = setInterval(
-      () => client.invalidateQueries({ predicate: (q) => q.state.status === "error" }),
+      // Not a write: the failed reads on screen ask again (a refetch, not the
+      // write map). Only those on screen: a failed read nobody is showing is
+      // retried when it is next shown (TanStack's retryOnMount).
+      () => client.refetchQueries({ type: "active", predicate: (q) => q.state.status === "error" }),
       60_000,
     );
     return () => clearInterval(again);

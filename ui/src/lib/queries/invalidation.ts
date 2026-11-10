@@ -9,8 +9,9 @@ import { NAME_BUNDLES_KEY, NAME_CATALOG_KEY } from "./useNameCatalog";
  * else; no hook names a query key to invalidate. Before this each hook listed
  * its own, and they disagreed: approving a request missed People and Pending
  * changes, draining missed People, and two hooks for the same kind of change
- * covered different sets. `invalidation.test.ts` fails a mutation that does
- * not call this and a raw `invalidateQueries` outside this file.
+ * covered different sets. `invalidationMap.test.tsx` fails a mutation that
+ * does not call this; the lint rule in `ui/eslint.config.mjs` fails a raw
+ * `invalidateQueries` anywhere else.
  *
  * The rail's counts are `["governance", "indicators"]`, so any write that can
  * move a count includes `["governance"]` (see RAIL_KINDS in the test).
@@ -50,7 +51,11 @@ export type WriteKind =
    * Zitadel was read again for a person (the person page's look-again): what
    * Syndra observed moved, so every standing and observed count may have.
    */
-  | "observed";
+  | "observed"
+  /** A write on the Zitadel screen settled (even unknown): every reader of Zitadel's records re-reads. */
+  | "upstream"
+  /** Zitadel answered again after it was down: every read asks again. */
+  | "reconnected";
 
 export interface WriteScope {
   target?: string;
@@ -120,6 +125,22 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
         // That person's access view (standings, holdings); every person's when
         // no one is named. A holder list refetches when it is next opened.
         return [user ? ["users", "access", user] : ["users"]];
+      case "upstream":
+        return [
+          ["upstream"],
+          ["drift"],
+          // A role created or renamed here changes the names every screen resolves.
+          NAME_CATALOG_KEY,
+          // The same records the everyday screens read: a person's access, a
+          // role's holders and the catalogue, the queue of changes to send.
+          ["users"],
+          ["roles"],
+          GOVERNANCE,
+          ["propagations"],
+        ];
+      case "reconnected":
+        // The empty key prefix matches every query.
+        return [[]];
     }
   })();
   return [...keys, ...(scope.extra ?? [])];

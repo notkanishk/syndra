@@ -39,6 +39,31 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    /**
+     * One invalidation map (one-path W2c). A write learns which reads it made
+     * stale in exactly one place, `invalidateAfter` in
+     * src/lib/queries/invalidation.ts; nothing else names a key to
+     * invalidate. Matched on the syntax tree, so `x.invalidateQueries`,
+     * `x["invalidateQueries"]` and destructuring it out all fail. Tests may
+     * spy on it.
+     */
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/lib/queries/invalidation.ts", "src/**/__tests__/**", "src/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...[
+          "MemberExpression[property.name='invalidateQueries']",
+          "MemberExpression[computed=true][property.value='invalidateQueries']",
+          "ObjectPattern > Property[key.name='invalidateQueries']",
+        ].map((selector) => ({
+          selector,
+          message: "Invalidate through invalidateAfter(qc, kind, scope) in lib/queries/invalidation.ts, the one map.",
+        })),
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;
