@@ -40,7 +40,10 @@ const routes: Record<string, unknown> = {
   "/targets": { targets: ["truenas-lab", "nas-annex", "backup"].map((target) => ({ target })) },
   "/projects/p1/roles/op/members": {
     members: SHUFFLED.map((name, i) => ({ user: { id: `u${i}`, name }, reasons: [] })),
-    observed_only: [{ id: "o1", name: "zack" }, { id: "o2", name: "Alicia" }],
+    observed_only: [
+      { user: { id: "o1", name: "zack" }, reasons: [] },
+      { user: { id: "o2", name: "Alicia" }, reasons: [] },
+    ],
   },
 };
 
@@ -99,7 +102,7 @@ describe("every source a picker reads is A to Z", () => {
     const { result } = renderHook(() => useRoleMembers("p1", "op"), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data!.members.map((m) => m.user.name)).toEqual(SORTED);
-    expect(result.current.data!.observed_only!.map((p) => p.name)).toEqual(["Alicia", "zack"]);
+    expect(result.current.data!.observed_only!.map((m) => m.user.name)).toEqual(["Alicia", "zack"]);
   });
 });
 

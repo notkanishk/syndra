@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RoleReason } from "@/components/access/AccessSource";
 import { request } from "@/lib/api-client";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
-import type { UserProfile } from "@/lib/types";
 import type { RoleStanding } from "@/lib/standing";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
@@ -73,7 +72,12 @@ export interface RoleMembersView {
    * empty array, when the role has never been observed: an empty array would
    * read as "checked, and nobody extra holds it".
    */
-  observed_only: UserProfile[] | null;
+  /**
+   * Who Zitadel shows holding it with no record in Syndra: members with no
+   * reasons, each with the same standing a member's row has (held, or being
+   * removed while a removal is on its way). Null when Zitadel was never read.
+   */
+  observed_only: RoleMember[] | null;
   observation?: ObservationBasis;
 }
 
@@ -88,7 +92,7 @@ export function useRoleMembers(projectId: string, roleKey: string) {
     select: (view) => ({
       ...view,
       members: sortByName(view.members ?? [], (m) => m.user.name, (m) => m.user.id),
-      observed_only: view.observed_only && sortByName(view.observed_only, (p) => p.name),
+      observed_only: view.observed_only && sortByName(view.observed_only, (m) => m.user.name, (m) => m.user.id),
     }),
   });
 }
