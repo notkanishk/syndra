@@ -580,13 +580,6 @@ func (z *zitadelSource) Tag() string { return "zitadel" }
 
 // --- Invalidation -----------------------------------------------------------
 
-func (z *zitadelSource) InvalidateAll() {
-	z.cache.Range(func(k, _ any) bool {
-		z.expire(k)
-		return true
-	})
-}
-
 func (z *zitadelSource) InvalidateProject(projectID string) {
 	z.expire(projectRolesCacheKey(projectID))
 	z.expire(projectsCacheKey)

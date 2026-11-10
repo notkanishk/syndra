@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"syndra/internal/extcall"
 )
 
 // Outcome is what the backend knows about a dispatched call. Four states, not
@@ -249,6 +251,22 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 	return resp
 }
 
+// addonAttempts is how many times one add-on call is sent. 1, as before W1d:
+// the transport never retried (a 5xx may have acted; the pipe's callers and the
+// member's page own any resend). It is an explicit extcall option, so raising
+// it is one visible change, after which extcall's rule applies (reads retry on
+// 408/429/5xx, writes only on 429).
+var (
+	addonAttempts = 1
+	addonBackoff  = time.Second // first wait between tries; a var so tests do not wait it out
+)
+
+// addonPolicy is the extcall Policy of an add-on call: the caller's
+// per-attempt timeout and addonAttempts tries.
+func addonPolicy(timeout time.Duration) extcall.Policy {
+	return extcall.Policy{Attempts: addonAttempts, Base: addonBackoff, Max: 10 * time.Second, Timeout: timeout}
+}
+
 // doAuthenticated performs one authenticated request and classifies it. Shared
 // by Call and the manifest read so both legs are authenticated by construction
 // — a manifest fetched over an unauthenticated channel is a capability set an
@@ -265,34 +283,40 @@ func doAuthenticatedWith(ctx context.Context, cred *credential, method, url stri
 		// Already cancelled: nothing is sent, so nothing happened.
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	var rdr io.Reader
-	if body != nil {
-		rdr = bytes.NewReader(body)
+	// Timeout, retry spacing and "which statuses may be tried again" are
+	// extcall's (W1d), not decided here. The request is rebuilt and re-signed
+	// per attempt, so a retry never reuses a spent timestamp or body reader.
+	call := extcall.Call{
+		Name:       method + " " + url,
+		Idempotent: method == http.MethodGet,
+		Subsystem:  "ADDON",
 	}
-	req, err := http.NewRequestWithContext(ctx, method, url, rdr)
-	if err != nil {
-		return CallResponse{Outcome: OutcomeUnreached, Err: err}
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	// Every request is signed. There is no mode in which it is not: the
-	// signature is what authenticates the caller now that no client certificate
-	// exists, so a conditional here would be a path on which the add-on is
-	// called anonymously.
-	//
-	// req.URL.Path rather than the string this was built from: it is what the
-	// add-on will see after its own parse, and signing anything else would be
-	// signing a value the two ends could disagree about.
-	for k, v := range hdr {
-		req.Header[k] = v
-	}
-	req.Header.Set(SignatureHeader, ComputeSignature(timeNow(), method, req.URL.Path, body, cred.signingKey))
-
-	httpResp, err := cred.client.Do(req)
+	httpResp, err := extcall.Do(ctx, addonPolicy(timeout), call, func(ctx context.Context) (*http.Response, error) {
+		var rdr io.Reader
+		if body != nil {
+			rdr = bytes.NewReader(body)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, url, rdr)
+		if err != nil {
+			return nil, err
+		}
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		// Every request is signed. There is no mode in which it is not: the
+		// signature is what authenticates the caller now that no client certificate
+		// exists, so a conditional here would be a path on which the add-on is
+		// called anonymously.
+		//
+		// req.URL.Path rather than the string this was built from: it is what the
+		// add-on will see after its own parse, and signing anything else would be
+		// signing a value the two ends could disagree about.
+		for k, v := range hdr {
+			req.Header[k] = v
+		}
+		req.Header.Set(SignatureHeader, ComputeSignature(timeNow(), method, req.URL.Path, body, cred.signingKey))
+		return cred.client.Do(req)
+	})
 	if err != nil {
 		if dialFailed(err) {
 			return CallResponse{Outcome: OutcomeUnreached, Err: err}

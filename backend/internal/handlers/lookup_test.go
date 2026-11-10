@@ -47,7 +47,6 @@ func (s lookupStubSource) ProjectName(context.Context, string) (string, bool, er
 	return "", false, nil
 }
 func (s lookupStubSource) Tag() string              { return "stub" }
-func (s lookupStubSource) InvalidateAll()           {}
 func (s lookupStubSource) InvalidateProject(string) {}
 func (s lookupStubSource) InvalidateUsers()         {}
 

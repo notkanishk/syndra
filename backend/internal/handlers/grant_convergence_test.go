@@ -46,11 +46,11 @@ func TestAHoldAndItsLiftConvergeThatPerson(t *testing.T) {
 // A person Zitadel deactivates is converged on every system they have an
 // account on, so the account is switched off at the next send.
 func TestADeactivatedPersonIsConvergedWhereTheyHaveAnAccount(t *testing.T) {
-	reg, binding, converge, rebuild := addonsRegistered, dbGetTargetBinding, svcConvergeSubjectOn, cacheRebuildUser
+	reg, binding, converge, refresh := addonsRegistered, dbGetTargetBinding, svcConvergeSubjectOn, cacheRefresh
 	t.Cleanup(func() {
-		addonsRegistered, dbGetTargetBinding, svcConvergeSubjectOn, cacheRebuildUser = reg, binding, converge, rebuild
+		addonsRegistered, dbGetTargetBinding, svcConvergeSubjectOn, cacheRefresh = reg, binding, converge, refresh
 	})
-	cacheRebuildUser = func(context.Context, string, []string) {}
+	cacheRefresh = func(context.Context, []string, ...string) error { return nil }
 	addonsRegistered = func() []addons.Registration { return []addons.Registration{{Target: "truenas"}, {Target: "door"}} }
 	dbGetTargetBinding = func(_ context.Context, target, _ string) (db.TargetBinding, bool, error) {
 		return db.TargetBinding{}, target == "truenas", nil

@@ -64,12 +64,12 @@ export default function RoleMembersPage({
     return all.filter((member) => member.reasons.some((reason) => reason.kind === filter));
   }, [view, filter]);
 
-  const observedOnly = sortByName(view?.observed_only ?? [], (person) => person.name);
+  const observedOnly = sortByName(view?.observed_only ?? [], (m) => m.user.name, (m) => m.user.id);
   // Holding is observed: a record Zitadel does not show explains, it does not
   // hold. The backend's standing says who holds (a role being removed is still
   // held); Zitadel never read is not a count, the way the roles index says it.
   const holdCount =
-    (view?.members.filter((member) => holds(member.standing)).length ?? 0) + observedOnly.length;
+    [...(view?.members ?? []), ...observedOnly].filter((member) => holds(member.standing)).length;
   // Each member's standing stands on their own read or the org sweep, so the
   // count is "not checked" only while nobody's has been read at all.
   const notChecked = !view?.observation?.read_at && !(view?.members ?? []).some((m) => fromARead(m.standing));
@@ -200,7 +200,7 @@ export default function RoleMembersPage({
             title="In Zitadel only"
             action={<ArrowLink href={driftHref({ project: id, role: roleKey })}>Review in drift</ArrowLink>}
           />
-          {observedOnly.map((person) => (
+          {observedOnly.map(({ user: person, standing }) => (
             <Link
               data-row
               key={person.id}
@@ -211,6 +211,16 @@ export default function RoleMembersPage({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-semibold">{person.name}</span>
                 <span className="block truncate text-[13px] text-faint">{person.email}</span>
+                {/* Held is why they are listed; only a removal on its way is news. */}
+                {standing && standing !== "held" && (
+                  <span
+                    className={`block text-[12.5px] ${
+                      standingTone(standing) === "warn" ? "font-semibold text-warn-text" : "text-faint"
+                    }`}
+                  >
+                    {standingWords(standing, "operator")}
+                  </span>
+                )}
               </span>
             </Link>
           ))}

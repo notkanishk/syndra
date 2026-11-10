@@ -103,7 +103,7 @@ func (q *repairQueue) repair(ctx context.Context, userID string) {
 	defer periodic.Recover("CLAIM-REPAIR")
 	c, cancel := context.WithTimeout(ctx, repairTimeout)
 	defer cancel()
-	if err := cacheRefreshUser(c, userID); err != nil {
+	if err := cacheRefresh(c, []string{userID}); err != nil {
 		q.failed.Add(1)
 		log.Printf("[CACHE] repair: recompiling %s after a cache miss failed: %v", userID, err)
 		return

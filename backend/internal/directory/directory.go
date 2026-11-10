@@ -49,13 +49,11 @@ type Source interface {
 	// local-dev fallback, "zitadel" for the live Management API backing.
 	Tag() string
 
-	// InvalidateAll drops every cached entry. Called by bulk/unknown-scope writes.
-	InvalidateAll()
 	// InvalidateProject drops the given project's cached roles + any list-level
 	// entries that embed project data (projects list, applications list).
 	InvalidateProject(projectID string)
-	// InvalidateUsers drops the users list cache. Called after user-facing
-	// mutations in the /zitadel admin surface.
+	// InvalidateUsers drops the users list cache. No production path calls it
+	// today; tests use it to expire the list.
 	InvalidateUsers()
 }
 
@@ -129,6 +127,5 @@ func (unreachableSource) ProjectName(context.Context, string) (string, bool, err
 }
 func (unreachableSource) Tag() string                  { return "unreachable" }
 func (unreachableSource) Freshness() (time.Time, bool) { return time.Time{}, false }
-func (unreachableSource) InvalidateAll()               {}
 func (unreachableSource) InvalidateProject(string)     {}
 func (unreachableSource) InvalidateUsers()             {}

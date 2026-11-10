@@ -82,6 +82,7 @@ This file holds the waves that have landed. Tasks and evidence are in [tasks.md]
 - `backend/internal/addons/pipe.go`: `(*Addon).send` is the one request path (breaker, credential, claim, signed call, record). `operate` adds the row and audit line before the call and settles after. `StatusFor` is the one outcome-to-status map.
 - A write is refused unless it carries a trace made before the call. Every write carries an `Idempotency-Key` header.
 - Lifecycle now begins an `addon_operations` row (`lifecycle.set`, subject = the target, about = the new state), which writes the audit line `addon.<target>.lifecycle.set.dispatched` in the same transaction. It still skips the breaker, on purpose.
+- One-path 1.9: the signed HTTP call in `addons/transport.go` is one `extcall.Do` (per-attempt timeout is `Policy.Timeout`, retry/status rules are extcall's). The transport had no retry of its own, so `addonAttempts = 1` keeps send-once as an explicit option; `classifyStatus` and the breaker are untouched.
 - `addons/truenas`: `decide(current, desired, home) change` is the one decision. `plan` reads it to say what would happen; `converge` and `createAndConverge` read it to do it.
 
 **Behaviour.** The same outcomes for the same inputs, except two additions: a lifecycle flip leaves a row and an audit line, and writes carry the `Idempotency-Key` header. Wording is untouched: plan keeps `describePlannedChange`, apply keeps `describeChange`.
@@ -92,7 +93,7 @@ Verified on main before changing: `drain.go` refreshed the cache only after an a
 
 Change: `cache.Refresh(ctx, people, projects...)` in `cache/refresh.go` is the one call a write path makes after its commit. Routed through it: the drain (applied, failed, exhausted via `refreshAfterRow`), service-account mark/unmark, and a bundle rename (every holder from `db.GetBundleHoldersByVersion`, on a detached bounded context). A cache failure is logged and never fails the write; the 12-hour warm stays the backstop. Guard: `cache/refresh_guard_test.go` fails if a listed write path stops calling it, or if new code calls `cache.RefreshUser` directly.
 
-Not moved (outside W2b's file list, still on `RefreshUser`/`RebuildUserCache`): `handlers/webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go`, `services/expiry/sweep.go`. They are allow-listed in the guard.
+Finished on `fix/one-refresh-rest` (10 Nov 2026): `handlers/webhook.go`, `access.go`, `bulk.go`, `role_members.go`, `claim_delivery.go` and `services/expiry/sweep.go` now reach `cache.Refresh` through their seams (`handlers/deps.go`, `expiry/deps.go`); `cache.RebuildUserCache` is gone and `seed/demo.go` calls `Refresh`. The guard's allow-list is empty: `TestNoRawRefreshOutsideThePackage` fails any use of `cache.RefreshUser` or `cache.RebuildUserCache` outside `cache/`, and `writePaths` lists each moved file. `processGrantAdded` refreshes after the onboarding write. `directory.InvalidateAll` was dead and is deleted; `InvalidateUsers` has no production caller but tests use it, so it stays with its comment corrected.
 
 ## W2c · One invalidation map (audit family 10, item 12, UI)
 
