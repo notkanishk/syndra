@@ -191,6 +191,16 @@ export function failureMessage(error: unknown): string {
 }
 
 /**
+ * True when Syndra's server answered and named Zitadel as the one that did not:
+ * the only failure beside which "Syndra itself is fine." is true. A network
+ * fault, any other code, and "Zitadel is not set up" (a gap on Syndra's side)
+ * are not.
+ */
+export function zitadelFailed(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "ZITADEL_ERROR" && !/not set up/i.test(error.message);
+}
+
+/**
  * {@link failureMessage} for a line that stands alone. A server fault says what
  * to do and carries its reference in full, because a bare line has no card
  * beneath it to hold them (copy guide §8). Surfaces that show the reference

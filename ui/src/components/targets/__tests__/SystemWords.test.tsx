@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { reconcileLine } from "@/components/targets/TargetOverview";
 import { SYSTEM_WORDS, targetReading, zitadelReading } from "@/components/targets/TargetReading";
 
 /**
@@ -47,5 +48,21 @@ describe("one word per state", () => {
   it("a missed check does not make a system anything but Answering until the third", () => {
     const missed = ["answered", "missed", "missed"] as ("answered" | "missed")[];
     expect(system(undefined, missed)).toBe(SYSTEM_WORDS.answering);
+  });
+});
+
+/** Counts of persons in the System group say "people" / "person", never "accounts". */
+describe("counts of people", () => {
+  it("say person for one and people for the rest", () => {
+    expect(reconcileLine(1, 1, 1, "TrueNAS")).toBe(
+      "1 person with a managed account · 1 fix waiting for you to send · 1 person with an account missing from TrueNAS",
+    );
+    expect(reconcileLine(0, 2, 3, "TrueNAS")).toBe(
+      "0 people with a managed account · 2 fixes waiting for you to send · 3 people with an account missing from TrueNAS",
+    );
+  });
+
+  it("never count people as accounts, users, members or holders", () => {
+    expect(reconcileLine(5, 0, 2, "TrueNAS")).not.toMatch(/\d (accounts|users|members|holders)\b/);
   });
 });

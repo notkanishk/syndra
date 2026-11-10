@@ -20,7 +20,7 @@ function show(error: unknown, fine?: string) {
 }
 
 describe("an error carries the copy guide's four parts", () => {
-  const withId = new ApiError(500, { message: "Zitadel didn't answer", details: { request_id: "req-123" } });
+  const withId = new ApiError(502, { error: "ZITADEL_ERROR", message: "Zitadel didn't answer", details: { request_id: "req-123" } });
 
   it("says what failed, what did not, the world, the next step and the reference", () => {
     const text = show(withId, "Syndra itself is fine");
@@ -43,6 +43,28 @@ describe("an error carries the copy guide's four parts", () => {
 
   it("carries no em dash or exclamation mark", () => {
     expect(show(withId)).not.toMatch(/[—!]/);
+  });
+});
+
+describe("fine is never said beside a failure that is Syndra's own", () => {
+  const FINE = "Syndra itself is fine";
+  const zitadelDown = new ApiError(502, { error: "ZITADEL_ERROR", message: "Zitadel gave an answer Syndra could not use." });
+
+  it("says it when Syndra answered and Zitadel did not", () => {
+    expect(show(zitadelDown, FINE)).toContain("Syndra itself is fine.");
+  });
+  it.each([
+    ["a network fault", new TypeError("Failed to fetch")],
+    ["Zitadel not set up", new ApiError(502, { error: "ZITADEL_ERROR", message: "Zitadel is not set up — Syndra has no connection configured to it" })],
+    ["Syndra's own 500", new ApiError(500, { error: "INTERNAL_ERROR", message: "Something went wrong inside Syndra." })],
+    ["a plain Error", new Error("boom")],
+  ])("drops it for %s", (_n, err) => {
+    expect(show(err, FINE)).not.toContain("Syndra itself is fine");
+  });
+  it("never sits beside the network sentence", () => {
+    const text = show(new TypeError("Failed to fetch"), FINE);
+    expect(text).toContain(NETWORK_FAULT);
+    expect(text).not.toContain("is fine");
   });
 });
 

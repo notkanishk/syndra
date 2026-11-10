@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { request } from "@/lib/api-client";
 import type { RetryState } from "@/lib/retry";
 import { invalidateAfter } from "./invalidation";
+import { settleIndicators } from "./useIndicators";
 
 /**
  * Bulk access changes, rehearsed before they land.
@@ -166,7 +167,16 @@ export function useApplyBulk() {
   return useMutation({
     mutationFn: (input: BulkGrantInput) =>
       request<BulkPlan>(bulkPath(true), { method: "POST", body: input }),
-    onSuccess: () => invalidateAfter(qc, "access"),
+    onSuccess: (plan, input) => {
+      // A bulk extend moves grants out of the expiring window; nothing is sent (delivery "none").
+      if (input.op === "extend") {
+        const extended = plan.outcomes
+          ?.filter((row) => row.effect === "applied")
+          .reduce((n, row) => n + Math.max(1, row.grant_ids?.length ?? 0), 0);
+        settleIndicators(qc, { expiring_grants: -(extended ?? 0) });
+      }
+      invalidateAfter(qc, "access");
+    },
   });
 }
 

@@ -34,7 +34,7 @@ Each agent adds its own section.
 - [x] P7: `describeFailure` maps raw network errors to "Syndra's server didn't answer."
 - [x] P7: project page and app page keep the seeded name on error
 - [x] P7: tests for the four parts, no raw network text, seeded name
-- [ ] P7: pass `fine` ("Syndra itself is fine.") from Zitadel-facing pages `ready-for-agent`
+- [x] P7: pass `fine` ("Syndra itself is fine.") from Zitadel-facing pages: `ListStates` takes `fine`; Zitadel projects (both lists), people, roles held and the health card pass it. `ErrorState` says it only when `zitadelFailed` (`lib/outcome.ts`): Syndra answered with `ZITADEL_ERROR` and it is not "Zitadel is not set up". A network fault, any other code or a not-set-up never carry it, so it cannot sit beside "Syndra's server didn't answer." (`error-parts.test.tsx`; the not-set-up pages stay covered by `noRawErrorStrings.test.tsx`). The project, app and other pages read Syndra's own records, so they do not pass it
 
 Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 
@@ -50,7 +50,7 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 - [x] "Not created by Syndra" in `UnconfirmedChanges`; "by hand"; "Cancel the change"; five EmptyState full stops; connected-systems empty state
 - [x] Tests: `SystemWords.test.tsx`, Zitadel page tests (Not answering, Offline after three, Check again, no count while loading), `TargetOverview.test.tsx` (empty and unread), `MyStorage.test.tsx` (Answering)
 - [ ] `plain-language.test.ts` guard for "Online" / "Unreachable" as state words and "accounts" as a count word (`needs-triage`: "Online" has legitimate uses in `useOnline`)
-- [ ] "people" for every count in the System group (`ready-for-agent`)
+- [x] "people" for every count in the System group: the reconcile line on a system's page (`reconcileLine`, `TargetOverview.tsx`) counted people as "accounts" ("1 accounts managed"); it now says person/people, fix/fixes. Every other person count there already said people. Counts of accounts themselves (unmanaged accounts, Dormant accounts, service accounts) are of things, not people, and the "Accounts" tab and card heading are names of the section, so they stay. Tests: `SystemWords.test.tsx`, `HaltedReconcile.test.tsx`
 - [ ] Offline for Zitadel counts polls the page has seen; a backend `recent` array on `/zitadel/health` would make it survive a reload (`needs-triage`)
 - [x] P11, Technical detail and raw ids (see P11 below)
 
@@ -63,7 +63,7 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 - [x] `settleIndicators` in `onSuccess` of decide, Drift (single and bulk), lift, give, cancel, withdraw; confirmed by the existing refetch
 - [x] Tests: `forecastReach.test.tsx`, `requestForecast.test.tsx`, `RemovalForecast.test.tsx`, `GrantForecast.test.tsx`, `CancelForecast.test.tsx`, `RehearsalForecast.test.tsx`, Drift cases in `UnexplainedAccess.test.tsx`
 - [ ] Remove's rail count: only a withdrawn queued grant moves it; a direct revoke's count is left to the refetch (`needs-triage`)
-- [ ] Bulk decision and bulk extend rail counts (`ready-for-agent`)
+- [x] Bulk decision and bulk extend rail counts: `useApplyBulkDecision` (`useRequests.ts`) settles `pending_requests` by decided requests and `pending_propagation` by queued approvals that wait; `useApplyBulk` (`useBulkGrants.ts`) settles `expiring_grants` by extended grants for `op: "extend"` only. Apply only, never the rehearsal, never an error. Tests: `bulkRail.test.tsx`
 
 ### P18 · since you were last here (owner, Q9, 5 Nov 2026)
 
