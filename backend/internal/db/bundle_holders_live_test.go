@@ -15,7 +15,7 @@ import (
 func TestBundleHolderSourceAndDiscardDraft_AgainstTheSchema(t *testing.T) {
 	ctx := liveDB(t)
 	suffix := time.Now().Format("150405.000000000")
-	alice, bob := "live-holder-a-"+suffix, "live-holder-b-"+suffix
+	becky, brock := "live-holder-a-"+suffix, "live-holder-b-"+suffix
 	v1Role := models.BundleRole{ProjectID: "live-holders", RoleKey: "v1." + suffix}
 
 	bundleID, err := CreateBundle(ctx, "live holders "+suffix, "", []models.BundleRole{v1Role})
@@ -24,22 +24,22 @@ func TestBundleHolderSourceAndDiscardDraft_AgainstTheSchema(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		_, _ = PG.Exec(ctx, `DELETE FROM bundles WHERE id = $1`, bundleID)
-		_, _ = PG.Exec(ctx, `DELETE FROM audit_logs WHERE target_zitadel_user_id = ANY($1)`, []string{bundleID, alice, bob})
+		_, _ = PG.Exec(ctx, `DELETE FROM audit_logs WHERE target_zitadel_user_id = ANY($1)`, []string{bundleID, becky, brock})
 	})
 	v1, err := LatestVersion(ctx, bundleID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, ok, err := AssignBundleAndEnqueue(ctx, "op-1", "", alice, bundleID, v1.ID, nil); err != nil || !ok {
+	if _, ok, err := AssignBundleAndEnqueue(ctx, "op-1", "", becky, bundleID, v1.ID, nil); err != nil || !ok {
 		t.Fatalf("assign: %v %v", ok, err)
 	}
-	if _, ok, err := AssignBundleAndEnqueue(ctx, WelcomeActor, "", bob, bundleID, v1.ID, nil); err != nil || !ok {
+	if _, ok, err := AssignBundleAndEnqueue(ctx, WelcomeActor, "", brock, bundleID, v1.ID, nil); err != nil || !ok {
 		t.Fatalf("welcome: %v %v", ok, err)
 	}
 	holders := holdersByUser(t, ctx, bundleID)
-	expectHolder(t, holders[alice], "direct", "op-1", 0)
-	expectHolder(t, holders[bob], "welcome", "", 0)
+	expectHolder(t, holders[becky], "direct", "op-1", 0)
+	expectHolder(t, holders[brock], "welcome", "", 0)
 
 	// Discard: an unpublished add goes away, nothing is queued, it is audited.
 	if _, err := AddRoleToBundleAndEnqueue(ctx, "op-1", bundleID, "live-holders", "draft."+suffix, nil); err != nil {
@@ -64,25 +64,25 @@ func TestBundleHolderSourceAndDiscardDraft_AgainstTheSchema(t *testing.T) {
 		t.Fatal("discarding an unknown bundle's draft is refused, not an emptied working copy")
 	}
 
-	// Publish v2, moving alice only; then move her back.
-	v2, _, err := PublishVersionAndEnqueue(ctx, "op-3", bundleID, "v2", working, []string{alice}, nil)
+	// Publish v2, moving becky only; then move her back.
+	v2, _, err := PublishVersionAndEnqueue(ctx, "op-3", bundleID, "v2", working, []string{becky}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	holders = holdersByUser(t, ctx, bundleID)
-	expectHolder(t, holders[alice], "moved", "op-3", 1)
-	expectHolder(t, holders[bob], "welcome", "", 0)
+	expectHolder(t, holders[becky], "moved", "op-3", 1)
+	expectHolder(t, holders[brock], "welcome", "", 0)
 
-	if _, err := MoveHoldersAndEnqueue(ctx, "op-4", bundleID, v1.ID, []string{alice}, nil); err != nil {
+	if _, err := MoveHoldersAndEnqueue(ctx, "op-4", bundleID, v1.ID, []string{becky}, nil); err != nil {
 		t.Fatal(err)
 	}
-	expectHolder(t, holdersByUser(t, ctx, bundleID)[alice], "moved", "op-4", v2.Version)
+	expectHolder(t, holdersByUser(t, ctx, bundleID)[becky], "moved", "op-4", v2.Version)
 
 	// A move onto the version they already sit on records nothing.
-	if _, err := MoveHoldersAndEnqueue(ctx, "op-5", bundleID, v1.ID, []string{bob}, nil); err != nil {
+	if _, err := MoveHoldersAndEnqueue(ctx, "op-5", bundleID, v1.ID, []string{brock}, nil); err != nil {
 		t.Fatal(err)
 	}
-	expectHolder(t, holdersByUser(t, ctx, bundleID)[bob], "welcome", "", 0)
+	expectHolder(t, holdersByUser(t, ctx, bundleID)[brock], "welcome", "", 0)
 }
 
 func holdersByUser(t *testing.T, ctx context.Context, bundleID string) map[string]models.BundleHolder {

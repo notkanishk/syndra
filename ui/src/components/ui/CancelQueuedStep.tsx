@@ -84,7 +84,7 @@ export interface CancelStep {
   /** The step is on screen (or fading back to the form). */
   asking: Asking | null;
   open: boolean;
-  /** Footer note after Keep: "Nothing changed. Sam's removal is still waiting." */
+  /** Footer note after Keep: "Nothing changed. Seth's removal is still waiting." */
   note: ReactNode;
   /** The faint line after going ahead, under the host's result. */
   after: ReactNode;
@@ -118,7 +118,7 @@ type Who = ReturnType<typeof useWho>;
 
 /**
  * The sentence that foretells the step, said in the sheet before the press
- * from the act's plan (A-21 §3.2): "Giving it cancels removing Member from Sam,
+ * from the act's plan (A-21 §3.2): "Giving it cancels removing Member from Seth,
  * which was waiting for you to send." `lead` is the act: "Giving it", "Revoking it", "Approving".
  */
 export function useForetell() {
@@ -155,7 +155,7 @@ function group(changes: QueuedChange[], fresh: Set<string>, who: Who): Group[] {
   return [...groups.filter((g) => g.fresh), ...groups.filter((g) => !g.fresh)];
 }
 
-/** "giving Member in Laser Lab to Sam" / "removing Member in Laser Lab from Sam". */
+/** "giving Member in Laser Lab to Seth" / "removing Member in Laser Lab from Seth". */
 function doing(change: QueuedChange, who: Who): string {
   const first = firstOf(who.person(change.user_id));
   return isRemoval(change) ? `removing ${who.role(change)} from ${first}` : `giving ${who.role(change)} to ${first}`;

@@ -22,7 +22,7 @@ import { useShownNames } from "@/components/names/shownNames";
 
 type Tab = "history" | "gave";
 
-/** "Retired 19 Oct 2026 by Sam": the one status a retired bundle or rule carries. */
+/** "Retired 19 Oct 2026 by Seth": the one status a retired bundle or rule carries. */
 export function RetiredStatus({ at, by }: { at?: string | null; by?: string }) {
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">

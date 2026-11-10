@@ -34,7 +34,7 @@ func demoRequest(t *testing.T, subject string) string {
 }
 
 func TestDemoSubjectNamesTheActor(t *testing.T) {
-	if got := demoRequest(t, "sam_student"); got != "sam_student" {
+	if got := demoRequest(t, "rey_student"); got != "rey_student" {
 		t.Fatalf("want the named subject, got %q", got)
 	}
 }
@@ -87,7 +87,7 @@ func TestTheDemoSubjectCarriesNoRoles(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
-	req.Header.Set(demoSubjectHeader, "sam_student")
+	req.Header.Set(demoSubjectHeader, "rey_student")
 	handler(httptest.NewRecorder(), req)
 
 	if hasRole {

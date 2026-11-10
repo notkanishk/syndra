@@ -7,7 +7,7 @@ import { loginFailure } from "@/lib/login-error";
 
 const IDENTITIES = [
   { id: "dev_admin", name: "Becky Lynch", role: "admin" as const },
-  { id: "sam_student", name: "Rey Mysterio", role: "user" as const },
+  { id: "rey_student", name: "Rey Mysterio", role: "user" as const },
 ];
 
 function stage() {
@@ -80,10 +80,10 @@ describe("LoginDoor", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /choose an identity/i }));
 
-    const alice = screen.getByRole("button", { name: /becky lynch/i });
-    expect(alice.closest("form")).toHaveAttribute("action", "/auth/login");
-    expect(alice.closest("form")?.querySelector("input")).toHaveValue("dev_admin");
-    expect(alice).toHaveFocus();
+    const becky = screen.getByRole("button", { name: /becky lynch/i });
+    expect(becky.closest("form")).toHaveAttribute("action", "/auth/login");
+    expect(becky.closest("form")?.querySelector("input")).toHaveValue("dev_admin");
+    expect(becky).toHaveFocus();
     expect(screen.getByRole("button", { name: /rey mysterio · member/i })).toBeInTheDocument();
   });
 

@@ -18,9 +18,9 @@
 #### Scenario: Subsequent user additions overwrite the bind-DN placeholder
 
 - **GIVEN** a freshly-bootstrapped group whose only `member` is the bind DN
-- **WHEN** `AddUserToGroup(ctx, "u-alice", "samba_share_admin")` is called and the operation succeeds
+- **WHEN** `AddUserToGroup(ctx, "u-becky", "samba_share_admin")` is called and the operation succeeds
 - **AND** the next reconciliation pass observes the group
-- **THEN** the group's `member` attribute MUST contain `"uid=u-alice,ou=people,<base_dn>"`
+- **THEN** the group's `member` attribute MUST contain `"uid=u-becky,ou=people,<base_dn>"`
 - **AND** the bind-DN placeholder MAY remain or be removed depending on the reconciliation policy — neither outcome breaks correctness, because the bind DN is a real principal in the directory
 
 ### Requirement: LLDAP operations MUST honour context cancellation at mutex-boundary checkpoints

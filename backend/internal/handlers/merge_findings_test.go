@@ -618,7 +618,7 @@ func TestASecondValueDecisionIsRefused(t *testing.T) {
 	h := &findingHarness{finding: db.MergeFinding{
 		ID: "f1", Target: "truenas", SubjectID: "sub-1", Field: "enabled",
 		Outcome: "theirs_only", Theirs: json.RawMessage(`false`),
-		Decision: db.ResolutionTakeTheirs, DecidedBy: "op-marta",
+		Decision: db.ResolutionTakeTheirs, DecidedBy: "op-mandy",
 	}}
 	stubFindings(t, h)
 
@@ -779,8 +779,8 @@ func TestARefusedDecisionCarriesWhatWasChosenAndWhy(t *testing.T) {
 	h := &findingHarness{finding: theirsOnly("uid", "3120")}
 	decidedAt := time.Now().UTC().Add(-40 * time.Second)
 	h.standing = db.MergeFinding{
-		ID: "f1", Target: "truenas", SubjectID: "u_moller", Field: "uid",
-		Decision: db.ResolutionTakeTheirs, DecidedBy: "u_iyer", DecidedAt: &decidedAt,
+		ID: "f1", Target: "truenas", SubjectID: "u_sammartino", Field: "uid",
+		Decision: db.ResolutionTakeTheirs, DecidedBy: "u_damian", DecidedAt: &decidedAt,
 		DecisionReason: "renumbered by hand during the migration; her files are all under 3120",
 	}
 	h.decideErr = db.ErrMergeFindingDecided
@@ -795,7 +795,7 @@ func TestARefusedDecisionCarriesWhatWasChosenAndWhy(t *testing.T) {
 	for _, want := range []string{
 		"ALREADY_DECIDED",
 		db.ResolutionTakeTheirs,
-		"u_iyer",
+		"u_damian",
 		"renumbered by hand during the migration",
 	} {
 		if !strings.Contains(body, want) {

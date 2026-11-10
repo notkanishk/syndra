@@ -32,7 +32,7 @@ describe("getDemoUsers", () => {
     const users = getDemoUsers();
     expect(users).toHaveLength(5);
     expect(users.map((u) => u.id)).toContain("dev_admin");
-    expect(users.map((u) => u.id)).toContain("sam_student");
+    expect(users.map((u) => u.id)).toContain("rey_student");
   });
 });
 

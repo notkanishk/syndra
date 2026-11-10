@@ -213,7 +213,7 @@ func seedDirectGrants(ctx context.Context) error {
 	}
 
 	expiresAt := clock.EndAfterDays(time.Now(), 5)
-	if _, err := db.UpsertDirectGrant(ctx, "ava_guest", "printing", "member", "seed", "Temporary residency printer access", &expiresAt); err != nil {
+	if _, err := db.UpsertDirectGrant(ctx, "nikki_guest", "printing", "member", "seed", "Temporary residency printer access", &expiresAt); err != nil {
 		return err
 	}
 	return nil
@@ -237,9 +237,9 @@ func seedClaimProfiles(ctx context.Context) error {
 
 func seedAssignments(ctx context.Context) error {
 	assignments := map[string]string{
-		"sam_student": "Student Access",
-		"maya_staff":  "Staff Onboarding",
-		"leo_mentor":  "Prototyping Mentor",
+		"rey_student":  "Student Access",
+		"bianca_staff": "Staff Onboarding",
+		"seth_mentor":  "Prototyping Mentor",
 	}
 
 	for userID, bundleName := range assignments {
@@ -270,9 +270,9 @@ func seedAuditLogs(ctx context.Context) error {
 	}
 
 	events := [][4]string{
-		{"becky.lynch", "sam_student", "bundle.assigned", "Student Access"},
+		{"becky.lynch", "rey_student", "bundle.assigned", "Student Access"},
 		{"becky.lynch", "-", "mapping_rule.created", "printing:member->doors:3d_lab_pin"},
-		{"bianca.belair", "leo_mentor", "bundle.assigned", "Prototyping Mentor"},
+		{"bianca.belair", "seth_mentor", "bundle.assigned", "Prototyping Mentor"},
 		{"system", "-", "cache.rebuilt", "demo_seed_v1"},
 	}
 
@@ -298,10 +298,10 @@ func seedAccessRequests(ctx context.Context) error {
 	}
 
 	durationDays := 21
-	if _, err := db.CreateAccessRequest(ctx, "ava_guest", "laser", "trainee", "Needs supervised laser access during the current residency block.", &durationDays); err != nil {
+	if _, err := db.CreateAccessRequest(ctx, "nikki_guest", "laser", "trainee", "Needs supervised laser access during the current residency block.", &durationDays); err != nil {
 		return err
 	}
-	if _, err := db.CreateAccessRequest(ctx, "sam_student", "finance", "material_checkout", "Helping with weekend materials desk coverage.", nil); err != nil {
+	if _, err := db.CreateAccessRequest(ctx, "rey_student", "finance", "material_checkout", "Helping with weekend materials desk coverage.", nil); err != nil {
 		return err
 	}
 	return nil

@@ -38,12 +38,12 @@ func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 	k1, r1 := role("p_laser", "trained", "Laser Lab")
 	users := []models.UserProfile{
 		{ID: "u_kevin", Name: "Kevin Owens"},
-		{ID: "u_amara", Name: "Apollo Crews"},
+		{ID: "u_apollo", Name: "Apollo Crews"},
 	}
 	snap := snapshotWith(users,
 		map[string]map[roleKey]*models.EffectiveRole{
-			"u_kevin": {k1: r1},
-			"u_amara": {},
+			"u_kevin":  {k1: r1},
+			"u_apollo": {},
 		},
 		map[string][]models.Bundle{
 			"u_kevin": {{ID: "b1", Name: "Lab Tech"}, {ID: "b2", Name: "Studio Member"}},
@@ -53,7 +53,7 @@ func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 	attention := attentionIndex{
 		expiring:    map[string]int{"u_kevin": 1},
 		soonest:     map[string]time.Time{"u_kevin": soon},
-		requests:    map[string]int{"u_amara": 1},
+		requests:    map[string]int{"u_apollo": 1},
 		unexplained: map[string]int{},
 	}
 
@@ -81,11 +81,11 @@ func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 		t.Errorf("project count = %d, want 1", kevin.ProjectCount)
 	}
 
-	amara := byID["u_amara"]
-	if amara.OpenRequestCount != 1 {
-		t.Errorf("Apollo has one open request, got %d", amara.OpenRequestCount)
+	apollo := byID["u_apollo"]
+	if apollo.OpenRequestCount != 1 {
+		t.Errorf("Apollo has one open request, got %d", apollo.OpenRequestCount)
 	}
-	if amara.ExpiringCount != 0 || amara.SoonestExpiry != nil {
+	if apollo.ExpiringCount != 0 || apollo.SoonestExpiry != nil {
 		t.Error("Apollo has nothing expiring; the row must say so with a dash, not borrow Kevin's date")
 	}
 }
@@ -148,14 +148,14 @@ func TestLoadAttention_CountsUnseenWritesPerPerson(t *testing.T) {
 	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
 	svcGetPendingDriftItems = func(context.Context) ([]models.DriftItem, error) { return nil, nil }
 	svcGetUnconfirmedWrites = func(context.Context) (models.UnconfirmedWriteSummary, error) {
-		return models.UnconfirmedWriteSummary{Count: 3, Users: map[string]int{"u_kevin": 2, "u_amara": 1}}, nil
+		return models.UnconfirmedWriteSummary{Count: 3, Users: map[string]int{"u_kevin": 2, "u_apollo": 1}}, nil
 	}
 
 	idx, err := loadAttention(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if idx.unseen["u_kevin"] != 2 || idx.unseen["u_amara"] != 1 || idx.unseen["u_nobody"] != 0 {
+	if idx.unseen["u_kevin"] != 2 || idx.unseen["u_apollo"] != 1 || idx.unseen["u_nobody"] != 0 {
 		t.Errorf("unseen = %v", idx.unseen)
 	}
 

@@ -665,7 +665,7 @@ func TestTheFakeStillAnswersTheQueriesTheAddonSends(t *testing.T) {
 	// `lookupOne`: one equality, one row.
 	got := filterRows(rows, []any{[]any{[]any{"uid", "=", int64(3002)}}, map[string]any{"limit": 2}})
 	if !strings.Contains(got, "seth") || strings.Contains(got, "charlotte") {
-		t.Errorf("want only leo, got %s", got)
+		t.Errorf("want only seth, got %s", got)
 	}
 }
 
