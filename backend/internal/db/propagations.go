@@ -314,9 +314,10 @@ const sendsOnItsOwn = `(p.op_type = 'revoke' OR p.withdraws_only)`
 // sends one with nobody pressing Send (ClaimPendingRevocations), beyond its
 // target, its status and its backoff: it is a withdrawal (sendsOnItsOwn), no
 // role on it waits for the operator, nothing queued earlier for the same
-// person could confer, and an add-on withdrawal for them has not already
-// failed with nothing applied since. Every outbox row carries it (outboxRowColumns), so
-// Pending changes says "sends on its own" only of a row the runner will take.
+// person could confer, and no add-on withdrawal for them was refused by the
+// target with nothing applied since. Every outbox row carries it
+// (outboxRowColumns), so Pending changes says "sends on its own" only of a row
+// the runner will take.
 const runnerSends = `(` + sendsOnItsOwn + `
 			  -- A role that always waits waits for the operator on the way
 			  -- out too, however the loss came about (an expiry, a removal):
@@ -342,7 +343,8 @@ const runnerSends = `(` + sendsOnItsOwn + `
 			         AND e.status     IN ('pending', 'in_flight')
 			         AND e.intent_seq < p.intent_seq)
 			  -- One try on its own per person and target. A withdrawal the
-			  -- target already gave up on, with nothing applied for them since,
+			  -- target refused (not one that ran out of retries against an
+			  -- unreachable target), with nothing applied for them since,
 			  -- means the next one waits for an operator: the drift sweep
 			  -- re-queues a failed row, and without this a lock the target
 			  -- always refuses would fail again on every pass, unattended.
@@ -350,7 +352,8 @@ const runnerSends = `(` + sendsOnItsOwn + `
 			      SELECT 1 FROM propagation_outbox f
 			       WHERE f.target = p.target AND f.user_id = p.user_id
 			         AND f.op_type = 'apply' AND f.withdraws_only
-			         AND f.status = 'failed' AND f.intent_seq < p.intent_seq
+			         AND f.status = 'failed' AND f.wait_reason = '` + WaitReasonTargetRefused + `'
+			         AND f.intent_seq < p.intent_seq
 			         AND NOT EXISTS (
 			             SELECT 1 FROM propagation_outbox a
 			              WHERE a.target = p.target AND a.user_id = p.user_id
@@ -783,6 +786,14 @@ func MarkPropagationRefused(ctx context.Context, id, errMsg, cause string) error
 	return settleOne(ctx, "mark propagation refused", id,
 		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2, wait_reason=$3
 		 WHERE id=$1 AND status='in_flight'`, errMsg, WaitReasonRefused(cause))
+}
+
+// MarkPropagationTargetRefused is MarkPropagationFailed for an add-on row the
+// target refused deterministically (WaitReasonTargetRefused).
+func MarkPropagationTargetRefused(ctx context.Context, id, errMsg string) error {
+	return settleOne(ctx, "mark propagation refused by its target", id,
+		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2, wait_reason='`+WaitReasonTargetRefused+`'
+		 WHERE id=$1 AND status='in_flight'`, errMsg)
 }
 
 // outboxBackoff spaces a row's tries: 1m doubling to a 30m cap, jittered. With

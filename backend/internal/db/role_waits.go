@@ -27,6 +27,13 @@ const (
 	WaitReasonManual    = "manual"
 	waitReasonHalted    = "halted:"
 	waitReasonRefused   = "refused:"
+	// WaitReasonTargetRefused is an add-on row the target refused
+	// deterministically: it rejected the call, its plan blocked the subject,
+	// or the account's name is held by another. Terminal like a failed row,
+	// and, unlike one that ran out of retries, it makes the person's next
+	// withdrawal wait for an operator (runnerSends). Kept apart from
+	// refused:<cause>, which the screens say as Zitadel's refusal.
+	WaitReasonTargetRefused = "target_refused"
 )
 
 // WaitReasonHalted is a row that was meant to go and whose send stopped.

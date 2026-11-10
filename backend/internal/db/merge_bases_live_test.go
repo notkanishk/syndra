@@ -5,30 +5,36 @@ import (
 	"testing"
 )
 
-// An observation updates the fields it saw and keeps the rest. A withdraw-only
-// apply sees only the lifecycle fields; if it replaced the base, the groups a
-// person held before leaving would be forgotten while they are away.
-func TestAnObservationKeepsTheFieldsItDidNotSee(t *testing.T) {
+// A whole observation replaces the base: that is what keeps the Zitadel
+// sweep's bases self-pruning (a revoke Syndra performed leaves no stale key to
+// read against a later re-grant). A Partial one, a withdraw-only apply's two
+// lifecycle fields, updates only its own and keeps the groups a person held
+// while they are away.
+func TestAPartialObservationKeepsTheFieldsItDidNotSee(t *testing.T) {
 	ctx := liveDB(t)
 	subject := freshSubject(t, ctx)
 	t.Cleanup(func() { _ = ForgetMergeBase(ctx, "truenas", subject) })
-
+	record := func(base map[string]json.RawMessage, partial bool) map[string]json.RawMessage {
+		t.Helper()
+		if err := RecordMergeBase(ctx, MergeBase{Target: "truenas", SubjectID: subject, Base: base, Partial: partial}); err != nil {
+			t.Fatal(err)
+		}
+		bases, err := MergeBasesFor(ctx, "truenas")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bases[subject].Base
+	}
 	full := map[string]json.RawMessage{"group": json.RawMessage(`["lab"]`), "enabled": json.RawMessage(`true`)}
-	if err := RecordMergeBase(ctx, MergeBase{Target: "truenas", SubjectID: subject, Base: full}); err != nil {
-		t.Fatal(err)
-	}
 	lock := map[string]json.RawMessage{"enabled": json.RawMessage(`false`), "smb_enabled": json.RawMessage(`false`)}
-	if err := RecordMergeBase(ctx, MergeBase{Target: "truenas", SubjectID: subject, Base: lock}); err != nil {
-		t.Fatal(err)
-	}
 
-	bases, err := MergeBasesFor(ctx, "truenas")
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := bases[subject].Base
-	if string(got["group"]) != `["lab"]` || string(got["enabled"]) != "false" || string(got["smb_enabled"]) != "false" {
+	record(full, false)
+	if got := record(lock, true); string(got["group"]) != `["lab"]` || string(got["enabled"]) != "false" {
 		b, _ := json.Marshal(got)
-		t.Fatalf("base = %s, want group kept from the first read and the lifecycle fields from the second", b)
+		t.Fatalf("partial: base = %s, want group kept and the lifecycle fields updated", b)
+	}
+	if got := record(lock, false); got["group"] != nil {
+		b, _ := json.Marshal(got)
+		t.Fatalf("whole: base = %s, want it replaced, group gone", b)
 	}
 }

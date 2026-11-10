@@ -764,6 +764,39 @@ func TestAnAgreementIsObservedSoItIsNotRediscoveredForever(t *testing.T) {
 	if string(h.basesWritten[0].Base["enabled"]) != "true" {
 		t.Fatalf("the base must hold what the target reported: %v", h.basesWritten[0].Base)
 	}
+	if h.basesWritten[0].Partial {
+		t.Fatal("an ordinary intent observes the whole managed set: its base replaces the last")
+	}
+}
+
+// A departed person already locked by hand: the sweep records the agreement,
+// and since the intent is the switch alone, Partial, so the groups the base
+// held before they left stand for their return (db.MergeBase.Partial).
+func TestADepartedPersonsObservationKeepsTheRestOfTheBase(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{
+			Username: "charlotte", UID: 3001, State: state(map[string]any{"enabled": false}),
+		}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountUID: uid(3001)}},
+		bases:    baseFor("sub-1", map[string]any{"enabled": true, "group": []string{"lab_makers"}}),
+	}
+	stubAddonReconcile(t, h)
+	resolveIntent = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{
+			Fields:    map[string][]string{"group": {"lab_makers"}},
+			Lifecycle: services.LifecycleState{NotAMember: true},
+		}, nil
+	}
+
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.basesWritten) != 1 || !h.basesWritten[0].Partial {
+		t.Fatalf("want one Partial observation, got %+v", h.basesWritten)
+	}
+	if _, has := h.basesWritten[0].Base["group"]; has {
+		t.Fatalf("a withdraw-only intent manages the lifecycle fields alone: %v", h.basesWritten[0].Base)
+	}
 }
 
 func contains(all []string, want string) bool {

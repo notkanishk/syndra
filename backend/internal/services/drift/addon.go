@@ -392,7 +392,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		// target's current state as the last agreed one — the silent revert,
 		// through the bookkeeping.
 		if len(found) == 0 && theirs != nil {
-			observeState(ctx, target, b.SubjectID, intent, theirs)
+			observeState(ctx, target, b.SubjectID, intent, theirs, set.WithdrawsOnly())
 		}
 
 		desired[b.SubjectID] = set
@@ -511,7 +511,7 @@ func persistFindings(ctx context.Context, target string, state merge.Subject, fo
 // is out of scope, and a base claiming authority over one would raise findings
 // about values nobody here decided.
 func observeState(ctx context.Context, target, subjectID string,
-	managed, theirs map[string]json.RawMessage) {
+	managed, theirs map[string]json.RawMessage, partial bool) {
 	observed := make(map[string]json.RawMessage, len(managed))
 	for field := range managed {
 		if value, seen := theirs[field]; seen {
@@ -523,6 +523,9 @@ func observeState(ctx context.Context, target, subjectID string,
 	}
 	if err := saveMergeBase(ctx, db.MergeBase{
 		Target: target, SubjectID: subjectID, Base: observed,
+		// A withdraw-only intent manages the lifecycle fields alone; the rest
+		// of the base stands (MergeBase.Partial).
+		Partial: partial,
 	}); err != nil {
 		log.Printf("[ADDON-RECONCILE] could not record what %s was seen holding on %s: %v",
 			subjectID, target, err)

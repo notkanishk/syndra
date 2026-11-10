@@ -224,7 +224,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 				log.Printf("[ADDON-DRAIN] binding conflict on %s for %s could not be recorded: %v",
 					intent.Target, intent.SubjectID, cerr)
 			}
-			if err := markFailed(ctx, row.ID, bindingConflictReason(intent, resp, err)); err != nil {
+			if err := markTargetRefused(ctx, row.ID, bindingConflictReason(intent, resp, err)); err != nil {
 				res.settleFailure(row.ID, "mark failed", err)
 				return false
 			}
@@ -257,7 +257,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 	case resp.Outcome == addons.OutcomeRejected:
 		// The add-on validated the call and refused; it did not act. Terminal,
 		// because retrying a deterministic refusal changes nothing.
-		if err := markFailed(ctx, row.ID, refusalReason(resp)); err != nil {
+		if err := markTargetRefused(ctx, row.ID, refusalReason(resp)); err != nil {
 			res.settleFailure(row.ID, "mark failed", err)
 			return false
 		}
@@ -386,7 +386,7 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 		// one case where the apply might succeed and be wrong: it would write
 		// into somebody else's account. Terminal, because no retry resolves a
 		// conflict; an operator does.
-		if err := markFailed(ctx, intent.OutboxID, "the target refused: "+answer.Outcomes[0].Detail); err != nil {
+		if err := markTargetRefused(ctx, intent.OutboxID, "the target refused: "+answer.Outcomes[0].Detail); err != nil {
 			res.settleFailure(intent.OutboxID, "mark failed", err)
 		} else {
 			res.Failed++
@@ -463,6 +463,7 @@ func recordMergeBase(ctx context.Context, intent db.EntitlementIntent, resp addo
 	}
 	if err := saveMergeBase(ctx, db.MergeBase{
 		Target: intent.Target, SubjectID: intent.SubjectID, Base: resp.Observed,
+		Partial: intent.WithdrawsOnly,
 	}); err != nil {
 		log.Printf("[ADDON-DRAIN] converged %s on %s and could not record its merge base: %v (non-fatal)",
 			intent.SubjectID, intent.Target, err)

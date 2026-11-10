@@ -61,7 +61,10 @@ var (
 	// markRefused is markFailed for a target's outright refusal: it keeps the
 	// plain cause on the row for the stopped-sending list.
 	markRefused = db.MarkPropagationRefused
-	requeue     = db.RequeuePropagation
+	// markTargetRefused is markFailed for an add-on's deterministic refusal,
+	// which a retry would not change (db.WaitReasonTargetRefused).
+	markTargetRefused = db.MarkPropagationTargetRefused
+	requeue           = db.RequeuePropagation
 	// release returns a row to pending without spending a retry, for the one
 	// case where nothing was attempted at all.
 	release = db.ReleasePropagation

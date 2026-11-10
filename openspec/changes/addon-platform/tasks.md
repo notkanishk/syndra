@@ -1223,13 +1223,18 @@ too. Production showed every `system:reconcile` row to the NAS sent by hand.
   says `groups: []`. Tests `TestWithdrawOnlyDesiredIsTheSwitchAlone` and
   `TestADepartedPersonsDisableDrainsOnItsOwn` (the row and the plan are the
   same map; both mutation-checked).
-- [x] 37.6a A merge base updates per field (`db.RecordMergeBase`,
-  `base || EXCLUDED.base`). Replacing it with a lock's two-field observation
-  forgot the groups a person held while away, so on their return a hand change
-  made before they left classified as NoBase and was overwritten with no
-  finding. A field the base keeps but no longer manages is out of scope for
-  Classify; the base still goes whole with the binding. Live test
-  `TestAnObservationKeepsTheFieldsItDidNotSee` (mutation-checked).
+- [x] 37.6a A withdraw-only observation keeps the rest of the base
+  (`db.MergeBase.Partial`, set from the set by the drift sweep and from the
+  row by the drain): its two lifecycle fields update and the groups a person
+  held while away stand, so a hand change made before they left is still a
+  finding on their return. Every other observation replaces the base whole,
+  which the Zitadel sweep relies on (a revoke Syndra performed leaves no stale
+  key to read against a later re-grant) and which keeps a field managed again
+  after a gap NoBase. Opus review: an earlier per-field merge for every write
+  reintroduced the Zitadel "revoked grant read as removed by hand" defect.
+  Tests: live `TestAPartialObservationKeepsTheFieldsItDidNotSee` (both
+  directions), `TestADepartedPersonsObservationKeepsTheRestOfTheBase`,
+  `TestAWithdrawOnlyApplyRecordsAPartialBase`; all mutation-checked.
 - [x] 37.7 The add-on never makes an account that is wanted off
   (`noAccountToSwitchOff`, asked by plan and apply after the truncation
   refusal): a subject with no account, never bound or bound to one an operator
@@ -1243,10 +1248,15 @@ too. Production showed every `system:reconcile` row to the NAS sent by hand.
   departed member planned "nothing to switch off" and was never locked.
   `TestThePlanFindsABoundAccountAsTheApplyDoes` (both branches mutation-checked).
 - [x] 37.7b One try on its own per person and target (`db.runnerSends`): after
-  a withdrawal the target gave up on, with nothing applied for them since, the
-  next one waits for Send. The drift sweep re-queues a failed row, so a lock
-  the target always refused failed again every pass, unattended. Live test
-  `TestAFailedWithdrawalMakesTheNextOneWait` (both clauses mutation-checked).
+  a withdrawal the target REFUSED (`wait_reason = 'target_refused'`, migration
+  000086, settled by `markTargetRefused` for a rejected call, a blocked plan or
+  a binding conflict), with nothing applied for them since, the next one waits
+  for Send. The drift sweep re-queues a failed row, so a lock the target always
+  refused failed again every pass, unattended. A send that ran out of retries
+  against an unreachable target refused nothing and holds nobody, so an outage
+  does not turn departures manual. Pending changes already says "{target}
+  refused it" for such a row. Tests: live `TestARefusedWithdrawalMakesTheNextOneWait`,
+  `TestATargetsRefusalIsMarkedAsOne`, the spent-row test (all mutation-checked).
 - [ ] 37.8 Locking a password-disabled account on the real NAS. TrueNAS
   middleware source (24.10/25.04) refuses SMB with `password_disabled` but
   allows `locked` on such an account; not yet seen on the makerspace NAS. The

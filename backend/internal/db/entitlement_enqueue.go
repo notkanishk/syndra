@@ -303,6 +303,10 @@ type EntitlementIntent struct {
 	// verifying against a trigger-time read would fail an ordinary access change
 	// because somebody edited the target in between.
 	Surface string
+	// WithdrawsOnly is the row's flag: its desired state is the lifecycle
+	// switch alone, so what it observes back is part of the managed set
+	// (MergeBase.Partial).
+	WithdrawsOnly bool
 }
 
 // Desired decodes the approved snapshot into the per-field shape the transport
@@ -334,7 +338,7 @@ func (i EntitlementIntent) Desired() map[string]json.RawMessage {
 // loop reverts an intentional edit.)
 func ReadEntitlementIntent(ctx context.Context, outboxID string) (EntitlementIntent, error) {
 	const q = `
-		SELECT p.id, p.target, ps.plan_id, s.subject_id, ps.fingerprint, s.state_json, s.version, pl.surface
+		SELECT p.id, p.target, ps.plan_id, s.subject_id, ps.fingerprint, s.state_json, s.version, pl.surface, p.withdraws_only
 		  FROM propagation_outbox p
 		  JOIN plan_subjects ps ON ps.id = p.plan_subject_id
 		  JOIN plans pl ON pl.id = ps.plan_id
@@ -342,7 +346,7 @@ func ReadEntitlementIntent(ctx context.Context, outboxID string) (EntitlementInt
 		 WHERE p.id = $1`
 	var out EntitlementIntent
 	err := querier(ctx).QueryRow(ctx, q, outboxID).Scan(
-		&out.OutboxID, &out.Target, &out.PlanID, &out.SubjectID, &out.Fingerprint, &out.DesiredJSON, &out.Version, &out.Surface)
+		&out.OutboxID, &out.Target, &out.PlanID, &out.SubjectID, &out.Fingerprint, &out.DesiredJSON, &out.Version, &out.Surface, &out.WithdrawsOnly)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A row with no approval chain is not a row this drain may dispatch.
 		// Reported rather than defaulted: dispatching an empty desired state
