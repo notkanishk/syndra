@@ -355,6 +355,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 const (
 	kindApply     = "apply"
 	kindOperation = "operation:"
+	kindSetting   = "setting:"
 )
 
 // decodeStrict parses a request body and refuses what it does not understand.

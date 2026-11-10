@@ -639,8 +639,8 @@ func ReadSettings(ctx context.Context, target string) (settings []TargetSetting,
 // addon_operations row and its audit line committed before the call, claimed as
 // the request goes out, and settled with how it ended. The row's id is the
 // idempotency key, sent as the Idempotency-Key header (the add-on's setting
-// endpoint decodes strictly and takes no call id in its body yet); writing the
-// same value twice is harmless, which is why it is safe until it does.
+// endpoint decodes its body strictly, so the key travels beside it): a replay
+// is answered from the first call and writes nothing.
 func PutSetting(ctx context.Context, target, name, value, actor string) (CallResponse, bool) {
 	a, err := Get(target)
 	if err != nil {
