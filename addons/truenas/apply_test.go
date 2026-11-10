@@ -1184,3 +1184,67 @@ func TestNoAccountIsMadeForASubjectWantedOff(t *testing.T) {
 		t.Fatalf("an absent subject wanted on must still be created: %+v (%d creates)", out, len(m.creates))
 	}
 }
+
+// The plan finds a bound account the way the apply does (boundAccount): by its
+// uid after an out-of-band rename, and as a conflict when its name now belongs
+// to a different account of ours. Planning by name alone said "nothing to
+// switch off" for a renamed departed member, and the sweep never locked them.
+func TestThePlanFindsABoundAccountAsTheApplyDoes(t *testing.T) {
+	planFor := func(t *testing.T, users, desired string) (ApplyOutcome, *mutatingRPC) {
+		t.Helper()
+		s, m := applyServer(t, users)
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 300001}); err != nil {
+			t.Fatal(err)
+		}
+		rr := httptest.NewRecorder()
+		planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu","desired":`+desired+`}]}`)
+		var plan PlanResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+			t.Fatalf("plan: %v %s", err, rr.Body.String())
+		}
+		return plan.Outcomes[0], m
+	}
+
+	t.Run("renamed, wanted off: it is locked", func(t *testing.T) {
+		out, m := planFor(t, `[{"username":"charlotte_renamed","id":11,"uid":300001,"locked":false,"smb":false,"groups":[42]}]`,
+			`{"enabled":false,"smb_enabled":false}`)
+		if out.Effect != EffectApply || out.Username != "charlotte_renamed" {
+			t.Fatalf("want the renamed account planned for its lock, got %+v", out)
+		}
+		if len(m.updates)+len(m.creates) != 0 {
+			t.Fatal("planning must mutate nothing")
+		}
+	})
+	t.Run("renamed, wanted on: no create is promised", func(t *testing.T) {
+		out, _ := planFor(t, `[{"username":"charlotte_renamed","id":11,"uid":300001,"locked":false,"smb":false,"groups":[42]}]`,
+			`{"enabled":true}`)
+		if strings.HasPrefix(out.Detail, "Creates") {
+			t.Fatalf("a renamed account must not be planned as a create: %+v", out)
+		}
+	})
+	t.Run("the name now holds another of our accounts", func(t *testing.T) {
+		out, _ := planFor(t, `[{"username":"charlotte","id":12,"uid":300002,"locked":false,"smb":false,"groups":[]}]`,
+			`{"enabled":false,"smb_enabled":false}`)
+		if out.Effect != EffectBlocked || out.Conflict == nil {
+			t.Fatalf("want the reused name blocked as a conflict, as the apply does, got %+v", out)
+		}
+	})
+}
+
+// An unbound subject with no email cannot be named, which only matters for
+// making an account. Wanted off, there is nothing to make: no_change, as the
+// plan says. Wanted on, the refusal stands.
+func TestNoIdentityIsNeededToSwitchOffAnAccountThatIsNotThere(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	off := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"","desired":{"enabled":false,"smb_enabled":false}}`)
+	if out := decodeOutcome(t, off); off.Code != http.StatusOK || out.Effect != EffectNoChange {
+		t.Fatalf("wanted off with no identity: want 200 no_change, got %d %+v", off.Code, out)
+	}
+	on := postApply(t, s, `{"call_id":"c2","subject":"sub-1","email":"","desired":{"enabled":true}}`)
+	if on.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("wanted on with no identity: want 422, got %d", on.Code)
+	}
+	if len(m.creates)+len(m.updates) != 0 {
+		t.Fatal("nothing may be written")
+	}
+}

@@ -116,8 +116,10 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		snap, current = cached, false
 	}
 	byName := make(map[string]*Subject, len(snap.Subjects))
+	byUID := make(map[int64]*Subject, len(snap.Subjects))
 	for i := range snap.Subjects {
 		byName[snap.Subjects[i].Username] = &snap.Subjects[i]
+		byUID[snap.Subjects[i].UID] = &snap.Subjects[i]
 	}
 	claimed, err := s.store.BoundUsernames()
 	if err != nil {
@@ -132,13 +134,13 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		Truncated: snap.Truncated,
 	}
 	for _, subject := range req.Subjects {
-		out.Outcomes = append(out.Outcomes, s.planOne(subject, byName, claimed, snap.Truncated))
+		out.Outcomes = append(out.Outcomes, s.planOne(subject, byName, byUID, claimed, snap.Truncated))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
 // planOne says what would happen to one subject, and issues no mutating call.
-func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed map[string]string, truncated bool) ApplyOutcome {
+func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[int64]*Subject, claimed map[string]string, truncated bool) ApplyOutcome {
 	desired, err := s.decodeDesired(req.Desired)
 	if err != nil {
 		return ApplyOutcome{
@@ -155,7 +157,22 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 	var current *Subject
 	name := binding.Username
 	if bound {
-		current = byName[binding.Username]
+		// The rule the apply's locate uses, read from this snapshot.
+		floor, ceiling := s.idRange()
+		found, resolved, conflict, _ := boundAccount(binding, floor, ceiling,
+			func(n string) (*Subject, error) { return byName[n], nil },
+			func(u int64) (*Subject, error) { return byUID[u], nil })
+		if conflict != nil {
+			return ApplyOutcome{
+				Subject: req.Subject, Effect: EffectBlocked,
+				Detail:      fmt.Sprintf("An account named %s already exists and is not bound to anyone.", conflict.Username),
+				Consequence: "Nothing would change. Adopt it, or create under a suffixed name.",
+				Username:    conflict.Username,
+				Fingerprint: fingerprintSubject(byName[conflict.Username]),
+				Conflict:    conflict,
+			}
+		}
+		current, name = found, resolved.Username
 	} else {
 		// The same rule the apply uses, or the plan predicts a name the apply
 		// does not produce — and a plan that disagrees with its apply is worse

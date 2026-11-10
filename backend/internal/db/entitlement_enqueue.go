@@ -53,14 +53,13 @@ type EntitlementApply struct {
 	Source string
 	// WithdrawsOnly declares that this convergence can only take access away.
 	//
-	// Set by the caller, because the caller is the only thing that knows. An
-	// apply carries a whole resolved set and the row cannot be read to find out
-	// which way it moves; a revocation, on the other hand, resolved that set
-	// with the lifecycle field denied and cannot confer anything.
+	// Carried from SystemConvergence, whose one constructor
+	// (services.EntitlementSet.Convergence) sets it from the set together with
+	// a desired state that is then the lifecycle switch alone. An operator's
+	// apply passes false.
 	//
-	// It is what lets the background runner drain a revocation without an
-	// operator. False is the safe default: an undeclared row waits, which is
-	// where every convergence waited before this existed.
+	// It is what lets the background runner drain the row without an operator
+	// (db.runnerSends). False is the safe default: an undeclared row waits.
 	WithdrawsOnly bool
 	// Reason is why it was queued, as Pending changes says it. Optional.
 	Reason string

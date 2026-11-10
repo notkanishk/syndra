@@ -1220,15 +1220,33 @@ too. Production showed every `system:reconcile` row to the NAS sent by hand.
   leaves an absent field alone, so groups, home and quota are untouched; on a
   locked account the groups it keeps reach nothing. A fully suspended set
   (every value suppressed, `enabled` not denied) is not withdraw-only and still
-  says `groups: []`. Consequence: the merge base recorded after such an apply
-  holds only the two lifecycle fields, so the next full apply after a return
-  classifies groups without a base. Conservative: it surfaces rather than
-  merges. Test `TestWithdrawOnlyDesiredIsTheSwitchAlone` (mutation-checked).
+  says `groups: []`. Tests `TestWithdrawOnlyDesiredIsTheSwitchAlone` and
+  `TestADepartedPersonsDisableDrainsOnItsOwn` (the row and the plan are the
+  same map; both mutation-checked).
+- [x] 37.6a A merge base updates per field (`db.RecordMergeBase`,
+  `base || EXCLUDED.base`). Replacing it with a lock's two-field observation
+  forgot the groups a person held while away, so on their return a hand change
+  made before they left classified as NoBase and was overwritten with no
+  finding. A field the base keeps but no longer manages is out of scope for
+  Classify; the base still goes whole with the binding. Live test
+  `TestAnObservationKeepsTheFieldsItDidNotSee` (mutation-checked).
 - [x] 37.7 The add-on never makes an account that is wanted off
   (`noAccountToSwitchOff`, asked by plan and apply after the truncation
   refusal): a subject with no account, never bound or bound to one an operator
   deleted, gets `no_change` "nothing to switch off". Test
-  `TestNoAccountIsMadeForASubjectWantedOff` (both sites mutation-checked).
+  `TestNoAccountIsMadeForASubjectWantedOff` (both sites mutation-checked). An
+  unbound subject with no email wanted off is `no_change` too, not the 422
+  that naming a new account needs (`TestNoIdentityIsNeededToSwitchOffAnAccountThatIsNotThere`).
+- [x] 37.7a Plan and apply find a bound account by one rule (`boundAccount`):
+  by name, by uid after an out-of-band rename, a conflict when the name now
+  holds another account of ours. The plan read by name only, so a renamed
+  departed member planned "nothing to switch off" and was never locked.
+  `TestThePlanFindsABoundAccountAsTheApplyDoes` (both branches mutation-checked).
+- [x] 37.7b One try on its own per person and target (`db.runnerSends`): after
+  a withdrawal the target gave up on, with nothing applied for them since, the
+  next one waits for Send. The drift sweep re-queues a failed row, so a lock
+  the target always refused failed again every pass, unattended. Live test
+  `TestAFailedWithdrawalMakesTheNextOneWait` (both clauses mutation-checked).
 - [ ] 37.8 Locking a password-disabled account on the real NAS. TrueNAS
   middleware source (24.10/25.04) refuses SMB with `password_disabled` but
   allows `locked` on such an account; not yet seen on the makerspace NAS. The

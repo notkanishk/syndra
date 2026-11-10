@@ -203,3 +203,46 @@ func TestPendingRowsSayWhetherTheySendOnTheirOwn(t *testing.T) {
 		}
 	}
 }
+
+// The runner gets one try per person and target: after a withdrawal it sent
+// failed, the next one for them waits for an operator, until something is
+// applied for them again. Otherwise the drift sweep's re-queue would have the
+// runner fail the same refused lock on every pass.
+func TestAFailedWithdrawalMakesTheNextOneWait(t *testing.T) {
+	ctx := liveDB(t)
+	seed := func(user, status string) string {
+		id := seedOutbox(t, ctx, "apply", status, user, "pSO", "direct", "", []string{"r"})
+		if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET target = 'truenas', withdraws_only = true WHERE id = $1`, id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	sendsOnItsOwn := func(id string) bool {
+		rows, err := GetPendingPropagations(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range rows {
+			if r.ID == id {
+				return r.SendsOnItsOwn
+			}
+		}
+		t.Fatalf("row %s not pending", id)
+		return false
+	}
+
+	refused := freshSubject(t, ctx)
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, refused) })
+	seed(refused, "failed")
+	if next := seed(refused, "pending"); sendsOnItsOwn(next) {
+		t.Fatal("after a failed withdrawal the next one must wait for an operator")
+	}
+
+	recovered := freshSubject(t, ctx)
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, recovered) })
+	seed(recovered, "failed")
+	seed(recovered, "applied")
+	if next := seed(recovered, "pending"); !sendsOnItsOwn(next) {
+		t.Fatal("once something was applied since the failure, the runner sends again")
+	}
+}

@@ -836,8 +836,9 @@ func TestADepartedPersonsDisableDrainsOnItsOwn(t *testing.T) {
 		set  services.EntitlementSet
 		want bool
 	}{
-		{"the directory reports them gone", services.EntitlementSet{Lifecycle: services.LifecycleState{NotAMember: true}}, true},
-		{"no mapped role reaches them", services.EntitlementSet{}, false},
+		{"the directory reports them gone", services.EntitlementSet{
+			Fields: map[string][]string{"group": {"lab_makers"}}, Lifecycle: services.LifecycleState{NotAMember: true}}, true},
+		{"no mapped role reaches them", services.EntitlementSet{Fields: map[string][]string{"group": nil}}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := &addonReconcileHarness{
@@ -857,8 +858,18 @@ func TestADepartedPersonsDisableDrainsOnItsOwn(t *testing.T) {
 			if len(h.converged) != 1 {
 				t.Fatalf("want one convergence, got %+v", h.converged)
 			}
-			if c := h.converged[0]; c.WithdrawsOnly != tc.want || string(c.Desired["enabled"]) != "false" {
+			c := h.converged[0]
+			if c.WithdrawsOnly != tc.want || string(c.Desired["enabled"]) != "false" {
 				t.Fatalf("queued WithdrawsOnly=%v enabled=%s, want %v and false", c.WithdrawsOnly, c.Desired["enabled"], tc.want)
+			}
+			// A withdrawal goes unreviewed, so it carries the switch alone; an
+			// ordinary lock still says what to do with the groups.
+			if _, carriesGroups := c.Desired["group"]; carriesGroups == tc.want {
+				t.Fatalf("withdraw-only=%v but the row carries group=%v: %v", tc.want, carriesGroups, c.Desired)
+			}
+			// And what the target was asked to plan is the row it will run.
+			if len(h.planAsked) != 1 || len(h.planAsked[0].Desired) != len(c.Desired) {
+				t.Fatalf("planned %v, queued %v: the plan must be of the instruction queued", h.planAsked, c.Desired)
 			}
 		})
 	}
