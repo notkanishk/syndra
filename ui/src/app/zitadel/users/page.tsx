@@ -246,10 +246,10 @@ export default function UpstreamUsersPage() {
             error={users.error}
             isEmpty={rows.length === 0}
             onRetry={() => users.refetch()}
-            // Not "Syndra itself is fine" — the commonest cause here is Zitadel
-            // never having been configured at all, which IS a Syndra-side gap.
-            // The detail line below names which one it is.
+            // `fine` is said only when Syndra answered and Zitadel did not; ErrorState drops it for
+            // "not set up" (a Syndra-side gap) and for a network fault.
             errorTitle="Couldn't read people from Zitadel."
+            fine="Syndra itself is fine."
             skeleton={<RowSkeleton rows={6} label="Reading people" />}
             empty={
               <EmptyState

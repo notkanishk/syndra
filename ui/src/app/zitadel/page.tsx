@@ -191,6 +191,7 @@ export default function IdentityProviderPage() {
       ) : health.error ? (
         <ErrorState
           title="Couldn't check whether Zitadel is reachable."
+          fine="Syndra itself is fine."
           error={health.error}
           onRetry={() => health.refetch()}
         />

@@ -12,7 +12,7 @@ import { Notice } from "@/components/ui/Notice";
 // The prose a failure wears lives in one place, shared with every surface that
 // reports a mutation. A read that fails and a write that fails were describing
 // the same 403 in two files until this import existed.
-import { NOTHING_CHANGED, failureMessage, mayHaveGoneThrough, nextStep, partialSentence, sentence } from "@/lib/outcome";
+import { NOTHING_CHANGED, failureMessage, zitadelFailed, mayHaveGoneThrough, nextStep, partialSentence, sentence } from "@/lib/outcome";
 import { TINT_MS, stillMotion } from "@/lib/motion";
 import { useUiView } from "@/lib/ui-view";
 
@@ -166,6 +166,10 @@ export function ErrorState({
   onRetry?: () => void;
   bare?: boolean;
 }) {
+  // "Syndra itself is fine" is only true when Syndra's server answered and named Zitadel as the
+  // one that did not. A network fault ("Syndra's server didn't answer.") or any other code would
+  // be contradicted by it, and "Zitadel is not set up" is a gap on Syndra's side.
+  const sayFine = fine && zitadelFailed(error) ? fine : undefined;
   // Zitadel never read: the degraded Notice above the page already says so,
   // and a second, red one here would call it a failure of this list (N23).
   if (isNeverRead(error)) return <NeverRead />;
@@ -186,7 +190,7 @@ export function ErrorState({
         reference={typeof requestId === "string" ? requestId : undefined}
         next={nextStep(typeof requestId === "string")}
       >
-        {[sentence(failureMessage(error)), fine && sentence(fine), partialWhere ? partialSentence(partialWhere) : NOTHING_CHANGED]
+        {[sentence(failureMessage(error)), sayFine && sentence(sayFine), partialWhere ? partialSentence(partialWhere) : NOTHING_CHANGED]
           .filter(Boolean)
           .join(" ")}
         {typeof requestId === "string" && <span className="mt-1 block text-muted">Quote this if you ask for help.</span>}
@@ -240,6 +244,7 @@ export function ListStates({
   isEmpty,
   onRetry,
   errorTitle,
+  fine,
   empty,
   skeleton,
   head,
@@ -250,6 +255,8 @@ export function ListStates({
   isEmpty: boolean;
   onRetry?: () => void;
   errorTitle: string;
+  /** Passed by Zitadel-facing lists; ErrorState says it only when it is true. */
+  fine?: string;
   empty: React.ReactNode;
   skeleton?: React.ReactNode;
   /** Column headings (A-20 P4): drawn with rows only, so an empty list is not a table with no table. */
@@ -290,7 +297,7 @@ export function ListStates({
   if (fading) return <div className="tint-out pointer-events-none">{skeleton ?? <RowSkeleton />}</div>;
   // Never read (N23): no skeleton, no empty state, no rows.
   if (isNeverRead(error)) return <NeverRead />;
-  if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} bare />;
+  if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} fine={fine} bare />;
   if (isEmpty) return <>{empty}</>;
   // `arrive`, applied at the one place every list in the product already
   // passes through — so a new list gets it by being a list, and no view can

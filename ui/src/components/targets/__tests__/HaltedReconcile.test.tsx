@@ -105,7 +105,7 @@ describe("a reconcile pass that halted", () => {
 
     // The exact sentence a healthy run produces. A halted pass must never be
     // able to render it.
-    expect(screen.queryByText(/0 accounts managed/)).toBeNull();
+    expect(screen.queryByText(/0 people with a managed account/)).toBeNull();
     expect(screen.queryByText(/fixes waiting for you to send/)).toBeNull();
   });
 });

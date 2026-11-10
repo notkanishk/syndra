@@ -529,7 +529,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
               again once it is reachable.
             </span>
           ) : (
-            `${result.bound} accounts managed · ${result.queued} fixes waiting for you to send · ${result.stale?.length ?? 0} accounts missing from ${name}`
+            reconcileLine(result.bound, result.queued, result.stale?.length ?? 0, name)
           )}
         </div>
         {/* It reads the system first, so it waits while that can't answer
@@ -1894,4 +1894,10 @@ function LifecycleControl({
       )}
     </Card>
   );
+}
+
+/** The reconcile result in one line. Counts of people, singular and plural both right. */
+export function reconcileLine(bound: number, queued: number, missing: number, name: string): string {
+  const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
+  return `${people(bound)} with a managed account · ${queued} ${queued === 1 ? "fix" : "fixes"} waiting for you to send · ${people(missing)} with an account missing from ${name}`;
 }

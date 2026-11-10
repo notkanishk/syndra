@@ -198,8 +198,15 @@ function useBulkDecisionMutation(apply: boolean) {
         method: "POST",
         body: input,
       }),
-    onSuccess: () => {
+    onSuccess: (plan) => {
       if (!apply) return;
+      // Every request that was decided (applied, or recorded and queued) has left the queue; an
+      // approval that waits joins Pending changes. Same arithmetic as one decision, summed.
+      const waiting = plan.outcomes?.filter((row) => row.effect === "queued" && row.wait_reason).length ?? 0;
+      settleIndicators(qc, {
+        pending_requests: -((plan.summary?.succeeded ?? 0) + (plan.summary?.queued ?? 0)),
+        pending_propagation: waiting,
+      });
       invalidateAfter(qc, "access");
     },
   });
