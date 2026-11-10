@@ -140,3 +140,61 @@ func TestHomesListsEachHomeWithItsUseAndLimit(t *testing.T) {
 		t.Fatalf("charlotte = %+v", h)
 	}
 }
+
+func putHomeRootKeyed(t *testing.T, s *server, value, key string) *httptest.ResponseRecorder {
+	t.Helper()
+	body := []byte(`{"value":"` + value + `","actor":"op-1"}`)
+	r := httptest.NewRequest(http.MethodPut, "/settings/home_root", nil)
+	r.SetPathValue("name", "home_root")
+	r.Header.Set("Idempotency-Key", key)
+	rr := httptest.NewRecorder()
+	s.handlePutSetting(rr, r, body)
+	return rr
+}
+
+// The backend sends its operation id as Idempotency-Key. A replay of the same
+// key answers what the first call answered and writes nothing, whatever it
+// carries: it is the same call, retried after a lost answer. A call without a
+// key (an older backend) is written as before.
+func TestASettingReplayIsAnsweredFromTheFirstCall(t *testing.T) {
+	s := testServer(t, reachFake())
+	first := putHomeRootKeyed(t, s, "/mnt/tank/main/home_dir", "op-row-1")
+	if first.Code != http.StatusOK {
+		t.Fatalf("first: %d %s", first.Code, first.Body.String())
+	}
+	replay := putHomeRootKeyed(t, s, "/mnt/tank/main/quack", "op-row-1")
+	if replay.Code != http.StatusOK || replay.Body.String() != first.Body.String() {
+		t.Fatalf("replay must answer as the first call did:\n first  %s\n replay %d %s", first.Body.String(), replay.Code, replay.Body.String())
+	}
+	if root, _ := s.homeRoot(); root != "/mnt/tank/main/home_dir" {
+		t.Fatalf("a replay must write nothing; home root is now %q", root)
+	}
+
+	if rr := putHomeRootKeyed(t, s, "/mnt/tank/main/quack", "op-row-2"); rr.Code != http.StatusOK {
+		t.Fatalf("a new key is a new call: %d", rr.Code)
+	}
+	if root, _ := s.homeRoot(); root != "/mnt/tank/main/quack" {
+		t.Fatalf("a new key must write; home root is %q", root)
+	}
+	if rr := putHomeRoot(t, s, "/mnt/tank/main/waddle"); rr.Code != http.StatusOK {
+		t.Fatalf("no key: %d", rr.Code)
+	}
+	if root, _ := s.homeRoot(); root != "/mnt/tank/main/waddle" {
+		t.Fatalf("a call without a key writes as before; home root is %q", root)
+	}
+}
+
+// A refused call is not remembered: nothing was written, so a retry under the
+// same key is judged afresh rather than answered with the refusal.
+func TestARefusedSettingIsNotRemembered(t *testing.T) {
+	s := testServer(t, reachFake())
+	if rr := putHomeRootKeyed(t, s, "/mnt/tank/main/not_a_place", "op-row-9"); rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422 for a place the NAS does not offer, got %d", rr.Code)
+	}
+	if rr := putHomeRootKeyed(t, s, "/mnt/tank/main/home_dir", "op-row-9"); rr.Code != http.StatusOK {
+		t.Fatalf("retry: %d %s", rr.Code, rr.Body.String())
+	}
+	if root, _ := s.homeRoot(); root != "/mnt/tank/main/home_dir" {
+		t.Fatalf("a retry after a refusal must write; home root is %q", root)
+	}
+}

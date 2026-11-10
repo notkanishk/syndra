@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -88,6 +90,26 @@ func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body [
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "INVALID_BODY"})
 		return
 	}
+	// The same dedup the apply and the operations use, keyed by the backend's
+	// operation id. It travels as the Idempotency-Key header because this body
+	// is decoded strictly and has no call id. A replay answers what the first
+	// call answered and writes nothing; a call without a key (an older backend)
+	// is written as before.
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key != "" {
+		if cached, found, err := s.store.Recall(key, kindSetting+settingHomeRoot); err != nil {
+			writeRecallFailure(w, err)
+			return
+		} else if found {
+			var previous SettingView
+			if err := json.Unmarshal(cached, &previous); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+				return
+			}
+			writeJSON(w, http.StatusOK, previous)
+			return
+		}
+	}
 	if req.Value != "" {
 		// A current read, not the last one: a place gone since must not pass.
 		if _, _, current, err := s.readACLs(); err != nil || !current {
@@ -114,6 +136,11 @@ func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body [
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "SETTINGS_UNREADABLE"})
 		return
+	}
+	if key != "" {
+		if err := s.store.Remember(key, kindSetting+settingHomeRoot, view); err != nil {
+			logStoreFailure("idempotency", key, err)
+		}
 	}
 	writeJSON(w, http.StatusOK, view)
 }
