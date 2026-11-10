@@ -135,7 +135,7 @@ func setupSignInDeps(t *testing.T) *[]usageCall {
 		return false, nil
 	}
 	webhookTriggerOnboarding = func(context.Context, string, string, string) error { trip("onboarding"); return nil }
-	cacheRebuildUser = func(context.Context, string, []string) { trip("the cache") }
+	cacheRefresh = func(context.Context, []string, ...string) error { trip("the cache"); return nil }
 	observeUser = func(context.Context, string) (db.Observation, error) {
 		trip("observation")
 		return db.Observation{}, nil

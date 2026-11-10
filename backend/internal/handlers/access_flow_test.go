@@ -240,7 +240,7 @@ func resetAccessDeps(t *testing.T) {
 	origUpsert := dbUpsertDirectGrant
 	origCreate := dbCreateAccessRequestOfKind
 	origAudit := dbInsertAuditLog
-	origRebuild := cacheRebuildUser
+	origRefresh := cacheRefresh
 	origEnqueue := dbEnqueueDirectGrantPropagation
 	origApprove := dbApproveRequestAndEnqueue
 	origDrain := svcDrainPropagations
@@ -261,7 +261,7 @@ func resetAccessDeps(t *testing.T) {
 		dbUpsertDirectGrant = origUpsert
 		dbCreateAccessRequestOfKind = origCreate
 		dbInsertAuditLog = origAudit
-		cacheRebuildUser = origRebuild
+		cacheRefresh = origRefresh
 		dbEnqueueDirectGrantPropagation = origEnqueue
 		dbApproveRequestAndEnqueue = origApprove
 		svcDrainPropagations = origDrain

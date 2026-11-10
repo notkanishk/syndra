@@ -277,7 +277,7 @@ func TestCompileFacts_AnUnreadableBundleIsNotAnEmptyOne(t *testing.T) {
 	if _, err := CompileFacts(context.Background(), "user1", "proj1"); err == nil {
 		t.Fatal("facts were compiled from roles that could not be read")
 	}
-	if err := RefreshUser(context.Background(), "user1", "proj1"); err == nil {
+	if err := refreshPerson(context.Background(), "user1", "proj1"); err == nil {
 		t.Fatal("a refresh stored facts compiled from roles that could not be read")
 	}
 	if len(store.hashes) != 0 {

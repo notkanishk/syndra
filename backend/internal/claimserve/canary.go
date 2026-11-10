@@ -9,7 +9,7 @@ import (
 // The L1 canary (claims-delivery-integrity S6, assessment §4d). A fixed
 // person, project and client that exist only in Redis: the write side
 // publishes the project like any other (Publish), the compiler writes the
-// person's facts like any other (cache.RefreshUser), and the probe asks the
+// person's facts like any other (the one cache refresh), and the probe asks the
 // public URL for their claims. None of the three is in Zitadel or Postgres,
 // so no screen lists them as an app or a person; the reconciler and the
 // snapshot's project count leave the project out, and telemetry counts the

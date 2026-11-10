@@ -61,7 +61,11 @@ describe("role members — holding is observed", () => {
         },
       ],
       observed_only: [
-        { id: "u2", name: "Alba Fyre", email: "alba@example.edu", title: "", team: "", status: "active", avatar: "" },
+        {
+          user: { id: "u2", name: "Alba Fyre", email: "alba@example.edu", title: "", team: "" },
+          reasons: [],
+          standing: "held",
+        },
       ],
     });
     renderPage();
@@ -73,6 +77,25 @@ describe("role members — holding is observed", () => {
       "href",
       "/governance/drift?project=pLaser&role=trained",
     );
+  });
+
+  // A removal of access Syndra didn't give is on its way: they still hold it,
+  // so they still count, and their row says it is going.
+  it("says a Zitadel-only holder is being removed, and still counts them", () => {
+    state.data = view({
+      members: [],
+      observed_only: [
+        {
+          user: { id: "u2", name: "Alba Fyre", email: "alba@example.edu", title: "", team: "" },
+          reasons: [],
+          standing: "removing",
+        },
+      ],
+    });
+    renderPage();
+
+    expect(screen.getByText("1 person holds this role")).toBeInTheDocument();
+    expect(screen.getByText("Being removed")).toBeInTheDocument();
   });
 
   it("says nothing extra when nothing was observed beyond Syndra's record", () => {

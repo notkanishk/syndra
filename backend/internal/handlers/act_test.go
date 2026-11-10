@@ -40,10 +40,10 @@ func stubAct(t *testing.T) *actProbe {
 	t.Helper()
 	p := &actProbe{RebuildDetached: true}
 	origApply, origDeliver := svcApplyAct, svcDeliverChange
-	origFn, origRebuild := rebuildUserCacheDetachedFn, cacheRebuildUser
+	origFn, origRefresh := rebuildUserCacheDetachedFn, cacheRefresh
 	t.Cleanup(func() {
 		svcApplyAct, svcDeliverChange = origApply, origDeliver
-		rebuildUserCacheDetachedFn, cacheRebuildUser = origFn, origRebuild
+		rebuildUserCacheDetachedFn, cacheRefresh = origFn, origRefresh
 	})
 	svcApplyAct = func(_ context.Context, a services.Action, w services.ActWrite, seen *services.Seen) (services.Change, error) {
 		p.Order = append(p.Order, "apply")
@@ -61,10 +61,11 @@ func stubAct(t *testing.T) *actProbe {
 		p.RebuildUsers = append(p.RebuildUsers, userID)
 		p.RebuildDetached = p.RebuildDetached && ctx.Err() == nil
 	}
-	cacheRebuildUser = func(ctx context.Context, userID string, _ []string) {
+	cacheRefresh = func(ctx context.Context, users []string, _ ...string) error {
 		p.Order = append(p.Order, "rebuild")
-		p.RebuildUsers = append(p.RebuildUsers, userID)
+		p.RebuildUsers = append(p.RebuildUsers, users...)
 		p.RebuildDetached = p.RebuildDetached && ctx.Err() == nil
+		return nil
 	}
 	return p
 }

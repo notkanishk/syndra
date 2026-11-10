@@ -75,8 +75,10 @@ type RoleMembersView struct {
 	Members     []RoleMember `json:"members"`
 	// ObservedOnly is who Zitadel shows holding this role with no Syndra record
 	// behind it — drift, listed here so the page cannot say "4 people hold
-	// this role" while Zitadel holds twelve. Nil when never observed.
-	ObservedOnly []models.UserProfile    `json:"observed_only"`
+	// this role" while Zitadel holds twelve. Nil when never observed. Each has
+	// no reasons and the same standing a member's row has: held, or being
+	// removed while a removal is on its way.
+	ObservedOnly []RoleMember            `json:"observed_only"`
 	Observation  models.ObservationBasis `json:"observation"`
 	// WithheldCount is how many of them are holding the role with something
 	// taken away. Its own number rather than a length the client computes: the
@@ -174,24 +176,37 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 	}
 	view.Observation = basis
 	if basis.ReadAt != nil {
-		view.ObservedOnly = []models.UserProfile{}
+		view.ObservedOnly = []RoleMember{}
 	}
 
-	// The members' standings rest on their outbox rows and own reads: read for
-	// all of them at once, never per member, and never for the rest of the
-	// directory. For is memoised, so the loop below reads nothing again.
-	var members []string
+	// Who the list is about: the members (Syndra gave it) and, once Zitadel
+	// has been read, whoever Zitadel shows holding it with no record. Their
+	// standings rest on their outbox rows and own reads: read for all of them
+	// at once, never per person, and never for the rest of the directory. For
+	// and Observed are memoised, so the loop below reads nothing again.
+	want := projectID + ":" + key
+	var asked []string
 	for _, user := range snap.Users() {
 		roleMap, _, ferr := snap.For(user.ID)
 		if ferr != nil {
 			return RoleMembersView{}, ferr
 		}
 		if roleMap[roleKey{projectID: projectID, roleKey: key}] != nil {
-			members = append(members, user.ID)
+			asked = append(asked, user.ID)
+			continue
+		}
+		if basis.ReadAt != nil {
+			observed, oerr := snap.Observed(user.ID)
+			if oerr != nil {
+				return RoleMembersView{}, oerr
+			}
+			if observed[want] {
+				asked = append(asked, user.ID)
+			}
 		}
 	}
-	if len(members) > 0 {
-		if err := snap.Prime(members); err != nil {
+	if len(asked) > 0 {
+		if err := snap.Prime(asked); err != nil {
 			return RoleMembersView{}, err
 		}
 	}
@@ -208,8 +223,17 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 				if oerr != nil {
 					return RoleMembersView{}, oerr
 				}
-				if observed[projectID+":"+key] {
-					view.ObservedOnly = append(view.ObservedOnly, user)
+				if observed[want] {
+					// Held in Zitadel with no reason in Syndra, and said with the
+					// same standing a member's row has: held, or being removed
+					// once somebody has queued its removal.
+					standings, serr := snap.Standing(user.ID)
+					if serr != nil {
+						return RoleMembersView{}, serr
+					}
+					view.ObservedOnly = append(view.ObservedOnly, RoleMember{
+						User: user, Reasons: []models.RoleReason{}, Standing: standings.Of(projectID, key),
+					})
 				}
 			}
 			continue

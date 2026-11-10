@@ -133,7 +133,9 @@ var (
 	dbGetStaleHolderCounts  = db.GetStaleHolderCounts
 	dbGetUserBundleVersions = db.GetUserBundleVersions
 
-	cacheRebuildUser = cache.RebuildUserCache
+	// cacheRefresh is the one way this package refreshes the cache after a
+	// write (cache.Refresh); the cache package's guard fails any other.
+	cacheRefresh = cache.Refresh
 
 	// Webhook handler injectable vars.
 	webhookTriggerOnboarding               = services.TriggerOnboarding
@@ -324,9 +326,6 @@ var (
 		}
 		return db.Redis
 	}
-
-	// cacheRefreshUser recompiles a person after a facts miss (repair on miss).
-	cacheRefreshUser = cache.RefreshUser
 
 	// Claim delivery telemetry (claims-delivery-integrity S1).
 	dbWriteClaimDelivery       = db.WriteClaimDelivery

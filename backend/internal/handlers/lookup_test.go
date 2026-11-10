@@ -45,7 +45,6 @@ func (s lookupStubSource) RoleKeysForProject(context.Context, string) ([]string,
 }
 func (s lookupStubSource) ProjectName(context.Context, string) (string, error) { return "", nil }
 func (s lookupStubSource) Tag() string                                         { return "stub" }
-func (s lookupStubSource) InvalidateAll()                                      {}
 func (s lookupStubSource) InvalidateProject(string)                            {}
 func (s lookupStubSource) InvalidateUsers()                                    {}
 

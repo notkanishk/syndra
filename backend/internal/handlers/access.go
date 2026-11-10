@@ -618,7 +618,15 @@ func rebuildUserCacheOrSkip(ctx context.Context, userID string) {
 		log.Printf("[ACCESS] Skipping cache rebuild for user %s: directory lookup failed: %v", userID, err)
 		return
 	}
-	cacheRebuildUser(ctx, userID, projectIDs)
+	refreshOrLog(ctx, userID, projectIDs...)
+}
+
+// refreshOrLog recompiles one person's claims after a write whose caller has
+// nothing to do about a failure but say so: the 12-hour warm is the backstop.
+func refreshOrLog(ctx context.Context, userID string, projectIDs ...string) {
+	if err := cacheRefresh(ctx, []string{userID}, projectIDs...); err != nil {
+		log.Printf("[CACHE] refresh failed for %s: %v", userID, err)
+	}
 }
 
 // cacheRebuildProjectIDs returns the set of project IDs the cache compiler

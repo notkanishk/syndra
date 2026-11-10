@@ -613,7 +613,6 @@ func (d *snapshotFixtureDirectory) ProjectName(_ context.Context, id string) (st
 	return id, nil
 }
 func (d *snapshotFixtureDirectory) Tag() string              { return "snapshot-fixture" }
-func (d *snapshotFixtureDirectory) InvalidateAll()           {}
 func (d *snapshotFixtureDirectory) InvalidateProject(string) {}
 func (d *snapshotFixtureDirectory) InvalidateUsers()         {}
 

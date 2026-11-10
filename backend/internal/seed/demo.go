@@ -65,7 +65,9 @@ func EnsureDemoData(ctx context.Context) error {
 		projectIDs = append(projectIDs, app.ProjectID)
 	}
 	for _, user := range demo.Users() {
-		cache.RebuildUserCache(ctx, user.ID, projectIDs)
+		if err := cache.Refresh(ctx, []string{user.ID}, projectIDs...); err != nil {
+			log.Printf("[SEED] cache refresh failed for %s: %v", user.ID, err)
+		}
 	}
 
 	demoSeedActive.Store(true)
