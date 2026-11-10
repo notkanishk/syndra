@@ -309,7 +309,7 @@ func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string
 
 	// After the onboarding write above, so the facts compiled are the ones the
 	// write left, not the ones before it.
-	cacheRebuildUser(ctx, event.UserID, append([]string{event.SourceProject}, event.ProjectIDs...))
+	refreshOrLog(ctx, event.UserID, append([]string{event.SourceProject}, event.ProjectIDs...)...)
 
 	// Real-time drift: a surviving (non-self, per the self-mutation guard)
 	// grant event that Syndra neither expects nor has excluded is out-of-band.
@@ -414,7 +414,7 @@ func detectWebhookRemoval(ctx context.Context, event WebhookPayload) {
 // closure, the token and what Syndra owes Zitadel are unchanged too. The
 // removal itself is the finding.
 func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID string) error {
-	cacheRebuildUser(ctx, event.UserID, []string{event.SourceProject})
+	refreshOrLog(ctx, event.UserID, event.SourceProject)
 	detectWebhookRemoval(ctx, event)
 	return nil
 }
@@ -429,7 +429,7 @@ func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID stri
 // the backstop, and a 5xx here would only make Zitadel redeliver an event this
 // handler has already acted on as far as it can.
 func processUserDeactivated(ctx context.Context, event WebhookPayload) error {
-	cacheRebuildUser(ctx, event.UserID, nil)
+	refreshOrLog(ctx, event.UserID)
 	for _, reg := range addonsRegistered() {
 		if _, bound, err := dbGetTargetBinding(ctx, reg.Target, event.UserID); err != nil || !bound {
 			continue

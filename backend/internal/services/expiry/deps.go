@@ -28,9 +28,9 @@ var (
 	svcExpireDirectGrant = services.ExpireDirectGrant
 	// Sends what an expiry's plan said goes now, after its commit.
 	svcDeliverChange = services.DeliverChange
-	cacheRefreshUser = func(ctx context.Context, userID string, projectIDs ...string) error {
-		return cache.Refresh(ctx, []string{userID}, projectIDs...)
-	}
+	// cacheRefresh is the one way the sweep refreshes the cache after a write
+	// (cache.Refresh); the cache package's guard fails any other.
+	cacheRefresh = cache.Refresh
 
 	// Allowance expiry. Its own seams and its own pass: grant expiry removes
 	// access and this restores it, and a batch that aborted halfway through the

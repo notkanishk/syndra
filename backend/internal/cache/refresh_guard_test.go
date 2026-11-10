@@ -36,12 +36,12 @@ var writePaths = map[string][2]string{
 	"../services/propagation/drain.go": {"deps.go", "refreshClaims("},
 	"../services/service_accounts.go":  {"", "svcRefresh("},
 	"../handlers/bundles.go":           {"", "bundleRefresh("},
-	"../handlers/webhook.go":           {"deps.go", "cacheRebuildUser("},
-	"../handlers/access.go":            {"deps.go", "cacheRebuildUser("},
+	"../handlers/webhook.go":           {"deps.go", "refreshOrLog("},
+	"../handlers/access.go":            {"deps.go", "refreshOrLog("},
 	"../handlers/bulk.go":              {"deps.go", "rebuildUserCacheDetachedFn("},
 	"../handlers/role_members.go":      {"deps.go", "rebuildUserCacheDetachedFn"},
-	"../handlers/claim_delivery.go":    {"deps.go", "cacheRefreshUser("},
-	"../services/expiry/sweep.go":      {"deps.go", "cacheRefreshUser("},
+	"../handlers/claim_delivery.go":    {"deps.go", "cacheRefresh("},
+	"../services/expiry/sweep.go":      {"deps.go", "cacheRefresh("},
 }
 
 func TestWritePathsCallTheOneRefresh(t *testing.T) {

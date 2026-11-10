@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -134,13 +133,9 @@ var (
 	dbGetStaleHolderCounts  = db.GetStaleHolderCounts
 	dbGetUserBundleVersions = db.GetUserBundleVersions
 
-	// Both seams are cache.Refresh for one person; the cache package's guard
-	// fails any other way to refresh.
-	cacheRebuildUser = func(ctx context.Context, userID string, projectIDs []string) {
-		if err := cache.Refresh(ctx, []string{userID}, projectIDs...); err != nil {
-			log.Printf("[CACHE] rebuild failed for %s: %v", userID, err)
-		}
-	}
+	// cacheRefresh is the one way this package refreshes the cache after a
+	// write (cache.Refresh); the cache package's guard fails any other.
+	cacheRefresh = cache.Refresh
 
 	// Webhook handler injectable vars.
 	webhookTriggerOnboarding               = services.TriggerOnboarding
@@ -330,11 +325,6 @@ var (
 			return nil
 		}
 		return db.Redis
-	}
-
-	// cacheRefreshUser recompiles a person after a facts miss (repair on miss).
-	cacheRefreshUser = func(ctx context.Context, userID string, projectIDs ...string) error {
-		return cache.Refresh(ctx, []string{userID}, projectIDs...)
 	}
 
 	// Claim delivery telemetry (claims-delivery-integrity S1).
