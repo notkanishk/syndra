@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { holds, onItsWay, standingTone, standingWords, type RoleStanding } from "@/lib/standing";
+import { fromARead, holds, onItsWay, standingTone, standingWords, type RoleStanding } from "@/lib/standing";
 
 const ALL: Array<RoleStanding | null> = ["held", "sent", "waiting", "removing", "not_held", null];
 
@@ -44,5 +44,11 @@ describe("standingTone", () => {
     expect(standingTone("not_held")).toBe("warn");
     expect(standingTone("removing")).toBe("warn");
     for (const s of ["held", "sent", "waiting", null] as const) expect(standingTone(s)).toBe("quiet");
+  });
+});
+
+describe("fromARead", () => {
+  it("is true only for what a read of Zitadel gives", () => {
+    expect(ALL.filter(fromARead)).toEqual(["held", "removing", "not_held"]);
   });
 });

@@ -1173,10 +1173,11 @@ func QueuedRevocations(ctx context.Context, userID string) ([]RoleRef, error) {
 // queuedRevocationsFor is QueuedRevocations for several people in one read:
 // the one statement of it, which the planner's snapshot reads too.
 //
-// A role is being revoked when its latest Zitadel row is a queued removal
-// (Deliveries.Taking, the rule a role's standing reads): so an add queued
-// behind a revoke, which a cascade does when it wants the role back, means it
-// is no longer on its way out. The roles asked about are the ones a revoke
+// A role is being revoked when its latest QUEUED Zitadel row takes it
+// (Deliveries.Taking, the rule a role's standing reads): an add queued behind a
+// revoke, which a cascade does when it wants the role back, means it is no
+// longer on its way out; a newer row already sent never hides an older revoke
+// still waiting, since that revoke will still go. The roles asked about are the ones a revoke
 // names, and the direct-sourced ledger roles on a project with a replace:
 // `replace` names the roles that SURVIVE, and its removals are the direct
 // roles its set omits, the same predicate ReconcileLedgerOnApplied deletes by.
@@ -1193,13 +1194,11 @@ func queuedRevocationsFor(ctx context.Context, userIDs []string) (map[string][]R
 	out := map[string][]RoleRef{}
 	for user, ds := range latest {
 		asked := map[RoleRef]bool{}
-		for ref, d := range ds.byRole {
-			if d.OpType == "revoke" {
-				asked[ref] = true
-			}
+		for _, ref := range ds.QueuedRevokes() {
+			asked[ref] = true
 		}
 		for _, g := range direct[user] {
-			if _, replaced := ds.byProject[g.ProjectID]; replaced && g.Source == "direct" {
+			if ds.HasQueuedReplace(g.ProjectID) && g.Source == "direct" {
 				asked[RoleRef{ProjectID: g.ProjectID, RoleKey: g.RoleKey}] = true
 			}
 		}

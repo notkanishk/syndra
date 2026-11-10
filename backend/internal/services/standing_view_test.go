@@ -198,3 +198,25 @@ func TestExplainUserAccess_ABundleRoleIsHadThroughItsLedgerRow(t *testing.T) {
 		t.Fatalf("holding %q, want for_good", got)
 	}
 }
+
+// A role their bundle gives is had even with no ledger row and Zitadel unread
+// (production, 10 Nov 2026: 23 of 24 bundle-held roles have no ledger row), so
+// the member catalogue never offers it and a second ask is refused.
+func TestRequestHolding_ARecordedRoleIsHadWithoutALedgerRow(t *testing.T) {
+	noRecordsFor(t, nil)
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) {
+		return []models.Bundle{{ID: "b1", Name: "Makers"}}, nil
+	}
+	svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{"b1": {{ProjectID: "p1", RoleKey: "laser"}}}, nil
+	}
+	observedStore(t, db.Observation{}, db.ErrNoObservation, nil)
+
+	h, err := RequestHolding(context.Background(), "dev_admin", "p1", "laser")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Kind != models.HoldingForGood {
+		t.Fatalf("holding %+v, want for_good: the bundle gives it", h)
+	}
+}

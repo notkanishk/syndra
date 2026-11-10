@@ -177,6 +177,25 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		view.ObservedOnly = []models.UserProfile{}
 	}
 
+	// The members' standings rest on their outbox rows and own reads: read for
+	// all of them at once, never per member, and never for the rest of the
+	// directory. For is memoised, so the loop below reads nothing again.
+	var members []string
+	for _, user := range snap.Users() {
+		roleMap, _, ferr := snap.For(user.ID)
+		if ferr != nil {
+			return RoleMembersView{}, ferr
+		}
+		if roleMap[roleKey{projectID: projectID, roleKey: key}] != nil {
+			members = append(members, user.ID)
+		}
+	}
+	if len(members) > 0 {
+		if err := snap.Prime(members); err != nil {
+			return RoleMembersView{}, err
+		}
+	}
+
 	for _, user := range snap.Users() {
 		roleMap, _, ferr := snap.For(user.ID)
 		if ferr != nil {

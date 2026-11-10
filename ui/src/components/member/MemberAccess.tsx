@@ -344,6 +344,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                     expiresAt={role.expiresAt}
                     endKnown={grantsRead}
                     standing={standing(project, role.role_key)}
+                    unread={unread}
                     waiting={waiting.get(`${project.project_id}/${role.role_key}`)}
                     askedToKeep={(myRequests.data ?? []).some(
                       (r) =>
@@ -366,7 +367,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                 ).map((roleKey) => (
                     <div key={`held-${roleKey}`} className="row-divider px-5 py-3">
                       <span className="text-[15px] font-semibold">{roleNameIn(project.project_id, roleKey)}</span>
-                      <StandingMark standing={standing(project, roleKey)} />
+                      <StandingMark standing={standing(project, roleKey)} unread={unread} />
                     </div>
                   ))}
               </Card>
@@ -406,7 +407,9 @@ export function MemberAccess({ session }: { session: SessionUser }) {
  * only "Not there yet" (after a complete read that lacks it) and "Couldn't
  * check" (a partial or failed read cannot conclude an absence) speak.
  */
-function StandingMark({ standing }: { standing: Standing }) {
+function StandingMark({ standing, unread }: { standing: Standing; unread: boolean }) {
+  // Zitadel not read yet is not a failure: nothing to say until it has been.
+  if (standing == null && unread) return null;
   const words = standingWords(standing, "member");
   if (!words) return null;
   const warn = standingTone(standing) === "warn";
@@ -425,6 +428,7 @@ function RoleRow({
   expiresAt,
   endKnown,
   standing,
+  unread,
   waiting,
   askedToKeep,
   onAskToKeep,
@@ -435,6 +439,8 @@ function RoleRow({
   /** Whether the grants list was read: without it a missing end date is unknown, not absent. */
   endKnown: boolean;
   standing: Standing;
+  /** Zitadel has not been read for them yet (the view's observation). */
+  unread: boolean;
   waiting?: MyChange;
   /** A request to keep this role is waiting for makerspace staff. */
   askedToKeep: boolean;
@@ -456,7 +462,7 @@ function RoleRow({
           ) : (
             <>
               <Reason strongest={strongest} expiresAt={ends ? expiresAt : null} endKnown={endKnown} />
-              <StandingMark standing={standing} />
+              <StandingMark standing={standing} unread={unread} />
             </>
           )}
         </span>

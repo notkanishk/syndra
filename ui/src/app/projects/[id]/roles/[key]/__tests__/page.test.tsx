@@ -168,6 +168,23 @@ describe("role members — holding is observed", () => {
     expect(screen.queryByText(/^\d+ (people hold|person holds) this role$/)).not.toBeInTheDocument();
   });
 
+  // The org was never swept, but this member was read on their own: the
+  // count stands on that read, as their row does.
+  it("counts when a member's own read settled their standing, though the org was never swept", () => {
+    state.data = view({
+      members: [
+        {
+          user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
+          reasons: [{ kind: "direct" }],
+          standing: "held",
+        },
+      ],
+      observation: { read_at: null, current: false, truncated: false },
+    });
+    renderPage();
+    expect(screen.getByText("1 person holds this role")).toBeInTheDocument();
+  });
+
   it("shows the email when there is no title or team to show instead", () => {
     state.data = view({
       members: [

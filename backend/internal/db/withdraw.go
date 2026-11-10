@@ -146,8 +146,8 @@ func deliveredFor(ctx context.Context, q Querier, target string, userIDs []strin
 	}
 	out := map[string]map[RoleRef]bool{}
 	for user, ds := range latest {
-		for _, ref := range ds.Roles() {
-			if d, ok := ds.Latest(ref.ProjectID, ref.RoleKey); ok && d.Gives(ref.RoleKey) {
+		for _, ref := range ds.SettledRoles() {
+			if d, ok := ds.LatestSettled(ref.ProjectID, ref.RoleKey); ok && d.Gives(ref.RoleKey) {
 				if out[user] == nil {
 					out[user] = map[RoleRef]bool{}
 				}

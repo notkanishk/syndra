@@ -115,9 +115,9 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
         // The rail's count and Pending changes' "Syndra stopped sending" list.
         return [GOVERNANCE, ["propagations"]];
       case "observed":
-        // That person's access view (standings, holdings), and the holder
-        // lists they may be on; every person's views when no one is named.
-        return [user ? ["users", "access", user] : ["users"], ["roles", "members"]];
+        // That person's access view (standings, holdings); every person's when
+        // no one is named. A holder list refetches when it is next opened.
+        return [user ? ["users", "access", user] : ["users"]];
     }
   })();
   return [...keys, ...(scope.extra ?? [])];

@@ -25,6 +25,13 @@ func row(op, status string, seq int64, keys ...string) db.RoleDelivery {
 
 func confirmed(d db.RoleDelivery) db.RoleDelivery { d.Confirmed = true; return d }
 
+// answered is a row Zitadel answered at now+offset (read() is now).
+func answered(d db.RoleDelivery, offset time.Duration) db.RoleDelivery {
+	at := time.Now().Add(offset)
+	d.CompletedAt = &at
+	return d
+}
+
 // The design's table (one-path design.md, W3b), one case per line of it.
 func TestStanding_TheDesignTable(t *testing.T) {
 	seen := map[string]bool{"p:r": true}
@@ -52,6 +59,11 @@ func TestStanding_TheDesignTable(t *testing.T) {
 		{"no row, incomplete read without it", nil, none, read(false), ""},
 		{"no row, Zitadel never read", nil, none, models.ObservationBasis{}, ""},
 		{"a sent removal, incomplete read without it", []db.RoleDelivery{row("revoke", "applied", 1, "r")}, none, read(false), ""},
+		// A sent row is answered by the first complete read after it.
+		{"a sent give a later complete read doesn't show", []db.RoleDelivery{answered(row("add", "applied", 1, "r"), -time.Hour)}, none, read(true), models.StandingNotHeld},
+		{"a sent removal a later complete read still shows", []db.RoleDelivery{answered(row("revoke", "applied", 1, "r"), -time.Hour)}, seen, read(true), models.StandingHeld},
+		{"a sent give, the complete read was before it", []db.RoleDelivery{answered(row("add", "applied", 1, "r"), time.Hour)}, none, read(true), models.StandingSent},
+		{"a queued removal behind a newer sent give", []db.RoleDelivery{row("revoke", "pending", 1, "r"), row("add", "applied", 2, "r")}, seen, read(true), models.StandingRemoving},
 		// Holding is observed: a row on its way never overrides what Zitadel shows.
 		{"a give on its way to a role Zitadel already shows (a second source)", []db.RoleDelivery{row("add", "pending", 1, "r")}, seen, read(true), models.StandingHeld},
 		{"a removal on its way of a role Zitadel doesn't show", []db.RoleDelivery{row("revoke", "pending", 1, "r")}, none, read(true), models.StandingNotHeld},
@@ -102,6 +114,7 @@ func TestPersonBasis_TheNewerReadIsTheFooting(t *testing.T) {
 		{"own complete read before a capped sweep", capped, &older, false},
 		{"own capped read after a capped sweep", capped, &newerCapped, false},
 		{"own complete read, no sweep ever", models.ObservationBasis{}, &newer, true},
+		{"own failed read after a complete sweep keeps the sweep", read(true), &db.Observation{ObservedAt: now.Add(time.Hour), Error: "Zitadel did not answer"}, true},
 		{"never read on their own", capped, nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

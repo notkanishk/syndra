@@ -46,9 +46,9 @@ describe("the write-to-keys map", () => {
     }
   });
 
-  it("a look-again reaches that person's access view and the holder lists, nobody else's", () => {
+  it("a look-again reaches that person's access view, nobody else's", () => {
     const keys = keysFor("observed", { user: "u1" }) as unknown[][];
-    expect(keys).toEqual([["users", "access", "u1"], ["roles", "members"]]);
+    expect(keys).toEqual([["users", "access", "u1"]]);
   });
 
   it("an access change reaches people, bundles, roles, pending, drift's neighbours and the rail", () => {

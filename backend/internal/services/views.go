@@ -62,8 +62,8 @@ type accessSnapshot struct {
 	// standings is the lazy, memoised standing of each user's roles, from
 	// Observed, BasisFor and the user's outbox rows. See Standing.
 	standings map[string]Standings
-	// deliveries and ownReads are read once for every user of the snapshot
-	// (or once for the one person of a personSnapshot): see primeFor.
+	// deliveries and ownReads are read once per person asked about, or once
+	// for many (Prime): see primeFor.
 	deliveries map[string]db.Deliveries
 	ownReads   map[string]db.Observation
 	primed     map[string]bool
@@ -123,21 +123,18 @@ func (s *accessSnapshot) BasisFor(userID string) (models.ObservationBasis, error
 	return personBasis(org, nil), nil
 }
 
-// primeFor reads the outbox rows and own reads behind standings once: for
-// every user of the snapshot in one read each (a role's holder list asks for
-// many), or for the one person a personSnapshot is about.
+// primeFor reads the outbox rows and own reads behind userID's standing, unless
+// Prime already read them with others'.
 func (s *accessSnapshot) primeFor(userID string) error {
 	if s.primed[userID] {
 		return nil
 	}
-	ids := []string{userID}
-	if len(s.users) > 0 {
-		ids = make([]string, 0, len(s.users)+1)
-		for _, u := range s.users {
-			ids = append(ids, u.ID)
-		}
-		ids = append(ids, userID) // asked about, whether or not the directory lists them
-	}
+	return s.Prime([]string{userID})
+}
+
+// Prime reads the outbox rows and own reads behind the standings of ids in one
+// read each: a role's holder list primes its members before asking each.
+func (s *accessSnapshot) Prime(ids []string) error {
 	deliveries, err := svcRoleDeliveries(s.ctx, ids)
 	if err != nil {
 		return err
@@ -371,13 +368,14 @@ func basisOf(obs db.Observation) models.ObservationBasis {
 	}
 }
 
-// personBasis is the footing for one person: the newer of the org sweep and
-// their own latest read. A complete read of one person rewrites all of their
-// rows (db.RecordUserObservation), so when it is the newer it settles their
-// absences as a complete sweep would; an older one never overrides a newer
-// sweep, which may have seen them change.
+// personBasis is the footing for one person: the org sweep, unless their own
+// latest read is newer and complete. A complete read of one person rewrites
+// all of their rows (db.RecordUserObservation), so it settles their absences
+// as a complete sweep would. One that failed or stopped at its cap deleted
+// nothing, so the sweep's answer still stands; and an older one never
+// overrides a newer sweep, which may have seen them change.
 func personBasis(org models.ObservationBasis, own *db.Observation) models.ObservationBasis {
-	if own == nil || (org.ReadAt != nil && !own.ObservedAt.After(*org.ReadAt)) {
+	if own == nil || !own.Complete || own.Error != "" || (org.ReadAt != nil && !own.ObservedAt.After(*org.ReadAt)) {
 		return org
 	}
 	return basisOf(*own)
@@ -822,7 +820,8 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 			for _, key := range keys {
 				st := standings.Of(bucket.ProjectID, key)
 				bucket.Standings[key] = st
-				bucket.Holdings[key] = holdingFrom(st, standings.Taking(bucket.ProjectID, key), direct[access.Role{ProjectID: bucket.ProjectID, RoleKey: key}])
+				_, recorded := roleMap[roleKey{projectID: bucket.ProjectID, roleKey: key}]
+				bucket.Holdings[key] = holdingFrom(st, standings.Taking(bucket.ProjectID, key), recorded, direct[access.Role{ProjectID: bucket.ProjectID, RoleKey: key}])
 			}
 		}
 		projects = append(projects, *bucket)

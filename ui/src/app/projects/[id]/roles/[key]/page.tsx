@@ -30,7 +30,7 @@ import { peopleHref } from "@/lib/people-filters";
 import { useRoleMembers, type RoleMember } from "@/lib/queries/useRoleMembers";
 import { formatShortDate } from "@/lib/format";
 import { roleName } from "@/lib/names";
-import { holds, standingTone, standingWords } from "@/lib/standing";
+import { fromARead, holds, standingTone, standingWords } from "@/lib/standing";
 
 type Filter = "all" | SourceKind;
 
@@ -70,7 +70,9 @@ export default function RoleMembersPage({
   // held); Zitadel never read is not a count, the way the roles index says it.
   const holdCount =
     (view?.members.filter((member) => holds(member.standing)).length ?? 0) + observedOnly.length;
-  const notChecked = !view?.observation?.read_at;
+  // Each member's standing stands on their own read or the org sweep, so the
+  // count is "not checked" only while nobody's has been read at all.
+  const notChecked = !view?.observation?.read_at && !(view?.members ?? []).some((m) => fromARead(m.standing));
 
   return (
     <div className="flex flex-col gap-4">

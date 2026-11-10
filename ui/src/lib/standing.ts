@@ -14,6 +14,9 @@ export type StandingAudience = "operator" | "member";
 /** Still held: Zitadel shows it, even if a removal is on its way. */
 export const holds = (s: Standing): boolean => s === "held" || s === "removing";
 
+/** A standing only a read of Zitadel can give: held, being removed, or not held. */
+export const fromARead = (s: Standing): boolean => holds(s) || s === "not_held";
+
 /** Given, and not seen in Zitadel yet. */
 export const onItsWay = (s: Standing): boolean => s === "sent" || s === "waiting";
 
