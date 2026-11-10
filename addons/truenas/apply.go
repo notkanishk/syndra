@@ -322,14 +322,14 @@ func fingerprintSubject(s *Subject) string {
 func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req ApplyRequest
 	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
 		return
 	}
 	if !writeContractRefusal(w, req.ContractVersion) {
 		return
 	}
 	if strings.TrimSpace(req.CallID) == "" || strings.TrimSpace(req.Subject) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
 		return
 	}
 	if strings.TrimSpace(req.Fingerprint) == "" {
@@ -338,7 +338,7 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 		// silently passes when the field is absent is a guarantee that holds
 		// only for callers who chose to be bound by it.
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error":  "FINGERPRINT_REQUIRED",
+			"error":  CodeFingerprintRequired,
 			"detail": "this call carries no fingerprint, so there is nothing to verify the plan against",
 		})
 		return
@@ -358,7 +358,7 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 		// told they differ because one went through a different encoder.
 		var previous ApplyOutcome
 		if err := json.Unmarshal(cached, &previous); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
 			return
 		}
 		writeJSON(w, http.StatusOK, previous)
@@ -377,7 +377,7 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 		// A mutation against an untested major is refused, not attempted. Reads
 		// continue; this is the half that could break something.
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
-			"error": "TARGET_VERSION_UNSUPPORTED", "detail": why,
+			"error": CodeTargetVersionUnsupported, "detail": why,
 		})
 		return
 	}
@@ -390,13 +390,13 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 			// the subject moved since the diff was approved, and what has to
 			// happen next is a re-plan somebody reads.
 			writeJSON(w, status, map[string]string{
-				"error":   "PLAN_STALE",
+				"error":   CodePlanStale,
 				"subject": req.Subject,
 				"detail":  "the subject's state on the target has changed since the plan was computed",
 			})
 			return
 		}
-		writeJSON(w, status, map[string]string{"error": "APPLY_FAILED", "detail": err.Error()})
+		writeJSON(w, status, map[string]string{"error": CodeApplyFailed, "detail": err.Error()})
 		return
 	}
 

@@ -8,8 +8,8 @@
 > **Owner decisions 1–23 were accepted on 10 Nov 2026**; the role names are
 > final (`account, channel, membership, flag, limit`), and 14 was decided by
 > the owner verbatim: admins see usage and statistics directly, no view
-> logging. **Decisions 24–27 (raw query signing, RFC 9457 envelope,
-> `account_id`, paging deferred) are open and are needed before slice 1a.**
+> logging. Decisions 24–27 (raw query signing, RFC 9457 envelope,
+> `account_id`, paging deferred) accepted as recommended, 10 Nov 2026.
 > Revised after the two Opus reviews of 10 Nov 2026
 > (`.claude/jobs/146ae399/tmp/addon-contract-review{,-2}.md`).
 >
@@ -22,27 +22,27 @@
 
 ## 0. Pin today (contract 1, no wire change)
 
-- [ ] 0.1 `addons/contract/schema/` with one JSON Schema 2020-12 per message
+- [x] 0.1 `addons/contract/schema/` with one JSON Schema 2020-12 per message
   for all twelve routes exactly as the wire is today
   (`research/contract-1-inventory.md` is the inventory, derived from
   `addons/truenas/server.go:68-93`; `health.log_records` pinned as integer
   ≥ 0; `taken_at` as RFC 3339), the v1 error body as `error.json`
   (`{"error": "<CODE>", ...extras}`, `server.go:396-410`),
   `common/{field,effect,outcome}.json`, `profiles/storage/{reach,homes}.json` #ready-for-agent
-- [ ] 0.2 `addons/contract/openapi.yaml` naming every route, method, status
+- [x] 0.2 `addons/contract/openapi.yaml` naming every route, method, status
   code and body `$ref`; validated by `go test` in the kit module once it
   exists, by a `bunx @redocly/cli lint` step until then #ready-for-agent
-- [ ] 0.3 A fixture for every message that has none today: manifest,
+- [x] 0.3 A fixture for every message that has none today: manifest,
   health, subjects, values, reach, settings list + one setting, the
   `PUT /settings/{name}` request body, homes, lifecycle request/response,
   plan response, the operation **response** (`OperationResult` with its
   `Activity`/`StorageStatus`/`Health` pockets, one fixture per pocket), and
   one error body; every field populated, WWE ring names and `example.org`
   only; the four existing fixtures move to `fixtures/` #ready-for-agent
-- [ ] 0.4 Two-ended assertions for all twelve, as `contract_test.go` does for
+- [x] 0.4 Two-ended assertions for all twelve, as `contract_test.go` does for
   four: producer marshals byte-equal after normalisation, consumer decodes and
   every field it reads lands. Backend reads the fixtures by path as today #ready-for-agent
-- [ ] 0.5 `registry/errors.json` (every `error` code the add-on writes, all
+- [x] 0.5 `registry/errors.json` (every `error` code the add-on writes, all
   24 distinct ones including `NO_CURRENT_READ`, `REACH_NEVER_READ`,
   `STORE_UNREADABLE`, with status and retry class) and
   `registry/operations.json` (every id in `operationPolicy`, with scope
@@ -52,15 +52,15 @@
   the code equals the registry (a code the add-on writes and the registry
   lacks fails the add-on's suite; a policy entry the registry lacks fails
   the backend's) #ready-for-agent
-- [ ] 0.6 Schema validation in both suites: every fixture validates against
+- [x] 0.6 Schema validation in both suites: every fixture validates against
   its schema (`santhosh-tekuri/jsonschema/v6`, test scope, `AssertFormat`
   on). Owner decision 4, accepted #ready-for-agent
-- [ ] 0.7 `addons/contract/README.md` rewritten around the directory above;
+- [x] 0.7 `addons/contract/README.md` rewritten around the directory above;
   `addons/README.md` route table corrected to twelve #ready-for-agent
 
 ## 1a. The contract-2 schemas, alone (a schemas-only PR, before slice 4)
 
-Decisions 24–27 first (27 decides whether 1a carries a subjects cursor);
+Decisions 24–27 accepted 10 Nov 2026 (27: no subjects cursor in 1a);
 nothing here is code.
 
 - [ ] 1a.1 Manifest v2 schema and fixture: `contract_version: 2`, `kind` from
@@ -99,8 +99,24 @@ nothing here is code.
 
 ## 1. Contract 2 on the wire (one deploy, both containers)
 
-Decisions 1, 3 (names final), 6, 10, 22, 23 accepted 10 Nov 2026; 24–27
-needed. Depends on 1a and on slice 4 having passed against the v2 add-on.
+Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a and on slice 4 having passed against the v2 add-on.
+
+- [ ] 1.0 (found by slice 0) The backend's `Homes.Read` and `Reach.Read`
+  (`addons/read.go`) are its own "the read succeeded" flags but share the
+  wire's JSON key `read`, so a tolerant decode would let an add-on claim a
+  read. Split the wire type (decoded from the add-on) from the view type
+  (sent to the UI) for every read reply, so a backend-only field can never
+  be set by an add-on; the v2 schemas then stay the only description of
+  what the add-on sends #ready-for-agent
+
+- [ ] 1.0a (found by slice 0 review) The add-on emits `[]`, not `null`, for an
+  empty list field (wire change): `entitlementState` (`apply.go`) builds the
+  group list with `append([]string(nil), ...)`, so an account with no groups
+  is `"group": null` in `/subjects` `state` and in apply `observed`. Contract 1
+  pins that (the reply schemas allow null for list fields; `desired` stays
+  arrays only). `services/merge` canonical must also treat a null list as `[]`
+  (today `sameValue(null, [])` is false; harmless now because the add-on's plan
+  compares groups as sets) #ready-for-agent
 
 - [ ] 1.2 TrueNAS add-on declares it (`capabilities.go`): `kind: storage`,
   features `operations, settings, storage.reach, storage.homes`, the five

@@ -1,50 +1,97 @@
-# The add-on wire contract, as artifacts
+# The add-on wire contract
 
 > The model these artifacts serve is in [`../README.md`](../README.md);
-> the add-on held to them is [`../truenas/`](../truenas/README.md).
+> the add-on held to them is [`../truenas/`](../truenas/README.md). The change
+> that built this directory, and the contract 2 that follows it, is
+> `openspec/changes/addon-contract/`.
 
-These files are the request bodies the backend sends and the add-on decodes.
-They exist because the two are separately compiled modules with no shared type,
-and the failure that follows from that is not theoretical: the backend's
-envelopes carried `contract_version` (and `operation`, `plan_id`, `fingerprint`
-on the operation leg) while the add-on's structs declared none of them. The
-add-on decodes strictly, so **every real `/apply` and `/operations/*` call would
-have been answered `400 BAD_REQUEST`** — and neither side's tests could see it,
-because each was exercised against its own fake and the two fakes agreed with
-each other. That is the same shape as the defect §13.1 records against
-`truenas_api.Client.Call`.
+This directory is **contract 1 exactly as it stands**: twelve routes, pinned
+before anything about them changes. A schema written after the wire moves pins
+whatever the code happened to do, which is the defect these files exist to stop.
+Where the schema and the code ever disagree, the schema follows the code and the
+disagreement is written down; nothing here describes how the wire ought to be.
 
-So each fixture is held from both ends:
+The backend and the add-on are separately compiled modules with no shared type,
+and the failure that follows is not theoretical: the backend's envelopes carried
+`contract_version` (and `operation`, `plan_id`, `fingerprint` on the operation
+leg) while the add-on's structs declared none of them. The add-on decodes
+strictly, so **every real `/apply` and `/operations/*` call would have been
+answered `400 BAD_REQUEST`**, and neither side's tests could see it, because each
+was exercised against its own fake and the two fakes agreed with each other. So
+the contract is these files, and each module is held to them in its own suite.
 
-| File | Backend assertion | Add-on assertion |
+## What is here
+
+| Path | What it pins |
+|---|---|
+| [`openapi.yaml`](openapi.yaml) | OpenAPI 3.1: every route, method, status and body, by `$ref` into `schema/`; the HMAC signature header as the security scheme |
+| [`schema/`](schema/) | One JSON Schema 2020-12 per message, `error.json` for `{"error": "<CODE>", ...}`, `common/` for shapes shared across messages, `profiles/storage/` for the two routes only a storage target serves (`/reach`, `/homes`). Every file has a stable `$id`; `$ref`s are relative |
+| [`fixtures/`](fixtures/) | A golden document per message, every field populated. Ring names and `example.org` only; addresses from RFC 5737 |
+| [`registry/errors.json`](registry/errors.json) | Every `error` code the add-on writes: its statuses and its retry class |
+| [`registry/operations.json`](registry/operations.json) | Every operation id in the backend's `operationPolicy`: scope ceiling, confirm, params, secret params |
+| [`transport_derivation.json`](transport_derivation.json) | How both ends derive their keys and sign requests (below) |
+| [`truenas_observed.json`](truenas_observed.json) | What a real TrueNAS answered, recorded rather than written (below) |
+
+Request schemas are closed (`additionalProperties: false`), mirroring the
+add-on's strict decode. Reply schemas describe the fields sent today and invent
+no constraint the code does not enforce; the one reply that is closed is the
+manifest, because the backend decodes it strictly. `format: date-time` is
+asserted, not annotated: the validator runs with format assertion on.
+
+## How each end is held to it
+
+Every message has a producer and a consumer, and each suite asserts the half it
+owns. The comparison is over the WHOLE document rather than over a field list,
+because a list is a third place to forget something.
+
+| Route | Sent by | Fixtures |
 |---|---|---|
-| `apply_request.json` | `json.Marshal(applyEnvelope{…})` is byte-equal after normalisation | `decodeStrict` into `ApplyRequest` succeeds and every field lands |
-| `operation_request.json` | `json.Marshal(callEnvelope{…})` is byte-equal after normalisation | `decodeStrict` into `OperationRequest` succeeds and every field lands |
-| `plan_request.json` | `json.Marshal(planEnvelope{…})` is byte-equal after normalisation | `decodeStrict` into `PlanRequest` succeeds and every field lands |
-| `apply_response.json` | decodes into `ApplyResponse` and every field this side reads lands | `json.Marshal(ApplyOutcome{…})` is byte-equal after normalisation |
+| `GET /capabilities` | add-on | `manifest.json` |
+| `GET /health` | add-on | `health.json` |
+| `GET /subjects` | add-on | `subjects.json` |
+| `GET /values/{field}` | add-on | `values.json` |
+| `GET /reach` | add-on | `reach.json` |
+| `GET /settings` | add-on | `settings.json` |
+| `PUT /settings/{name}` | backend | `setting_put_request.json`; reply `setting.json` |
+| `GET /homes` | add-on | `homes.json` |
+| `POST /plan` | backend | `plan_request.json`; reply `plan_response.json` |
+| `POST /apply` | backend | `apply_request.json`; reply `apply_response.json` |
+| `POST /operations/{name}` | backend | `operation_request.json`; reply `operation_response.json` plus one per pocket: `_activity`, `_storage`, `_health` |
+| `POST /lifecycle` | backend | `lifecycle_request.json`; reply `lifecycle_response.json` |
+| any refusal | add-on | `error.json` |
 
-`apply_response.json` runs the other way, because the add-on is the producer on
-the reply leg. Two things follow from that and both are deliberate.
+- **What a side produces**: the Go value it builds from the fixture marshals
+  byte-equal to the fixture after normalisation, and satisfies the schema. The
+  backend's inline bodies (setting, lifecycle, the three read operations) are
+  captured as they leave the real function, not rebuilt in the test.
+- **What a side consumes**: the fixture decodes (strictly, where the code is
+  strict) and every field that side reads lands. The backend runs the real
+  client function against a server answering with the fixture.
+- **Every fixture validates against its schema**, in both modules
+  (`santhosh-tekuri/jsonschema/v6`, test scope; schemas load from disk by
+  `$id`, nothing is fetched). A fixture on disk that no test lists fails.
+- **The registries are compared with the code.** An error code the add-on writes
+  and `errors.json` lacks fails the add-on's suite; an add-on source file that
+  writes a code as an inline literal fails it too. An operation in the backend's
+  `operationPolicy` that `operations.json` lacks, or lists differently, fails the
+  backend's suite.
 
-The backend does NOT decode strictly here. That is a choice, not an oversight —
-an add-on ahead of its backend must not break it by reporting more than it is
-asked about — and it is the reason this fixture exists at all: "the reply
-direction is lenient" was an assumption held in one comment, and an assumption
-about a boundary is exactly what the other three files were written to stop.
+Changing one of these files is a wire-contract change. It fails test suites in
+two modules until both ends move, which is the point.
 
-It pins the SUCCESSFUL shape only. A refusal, a binding conflict and an
-unverified apply are mutually exclusive with it and with each other, so a single
-"fully populated" document cannot represent them; each is asserted in the suite
-that produces or consumes it. `observed` is the managed fields as the TARGET
-reported them after the write — never as the add-on requested them, which is the
-whole of `apply-reads-back-what-it-wrote`.
+## What the fixtures deliberately do not cover
 
-Every field is populated on purpose. A field the sender drops and a field the
-receiver never declared both fail, because the comparison is over the whole
-document rather than over the fields somebody remembered to check.
+`apply_response.json` pins the SUCCESSFUL shape. A refusal, a binding conflict and
+an unverified apply are mutually exclusive with it and with each other, so a
+single fully populated document cannot represent them; each is asserted in the
+suite that produces it. `plan_response.json` carries one of each kind of outcome
+for the same reason. `operation_response.json` populates the scalar fields of the
+reply (`rotated` and `account_uid` belong to different operations in practice) so
+that the whole document is held; the three pocket fixtures are realistic.
 
-Changing one of these files is a wire-contract change. It fails two test suites
-in two modules until both ends move, which is the point.
+The backend does NOT decode replies strictly, except the manifest. That is a
+choice: an add-on ahead of its backend must not break it by reporting more than
+it is asked about. It is asserted, not assumed (`contract_test.go`).
 
 ## `transport_derivation.json` — the same idea, one layer down
 

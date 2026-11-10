@@ -197,7 +197,7 @@ func (a *authenticator) authenticated(next func(http.ResponseWriter, *http.Reque
 			// failed, and the operator debugging a real misconfiguration reads
 			// the add-on's log.
 			logRefusal(r, err)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "UNAUTHENTICATED"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": CodeUnauthenticated})
 			return
 		}
 		next(w, r, body)

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/1/schema/common/field.json",
+  "title": "Entitlement field vocabulary",
+  "description": "Shapes shared by every message that names an entitlement field: the manifest declares fields, and desired, observed and state carry their values.",
+  "$defs": {
+    "FieldType": {
+      "type": "string",
+      "description": "The shape Syndra must supply for a field, as the manifest declares it.",
+      "enum": [
+        "string",
+        "string[]",
+        "bool",
+        "int"
+      ]
+    },
+    "FieldValue": {
+      "description": "One field's value: a list of strings, a boolean, an integer or a string. Which one applies to a given field is stated by its entry in the manifest's entitlement_schema.",
+      "type": [
+        "array",
+        "boolean",
+        "integer",
+        "string"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "FieldValues": {
+      "type": "object",
+      "description": "Entitlement field values keyed by field name. Absent and empty differ: an absent key is unmanaged, an empty value is 'make it empty'.",
+      "additionalProperties": {
+        "$ref": "#/$defs/FieldValue"
+      }
+    },
+    "ReportedValues": {
+      "type": "object",
+      "description": "Entitlement field values as an add-on reports them (state, observed). Unlike desired, a list-valued field may be null: today's add-on reports an account with no groups as null, not []. Contract 2 emits [] (addon-contract tasks, slice 1).",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/FieldValue"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    }
+  }
+}

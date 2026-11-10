@@ -143,7 +143,7 @@ const retryAfterSeconds = "30"
 func writeLifecycleRefusal(w http.ResponseWriter, state string) {
 	w.Header().Set("Retry-After", retryAfterSeconds)
 	writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-		"error":     "LIFECYCLE_REFUSAL",
+		"error":     CodeLifecycleRefusal,
 		"lifecycle": state,
 	})
 }
@@ -172,7 +172,7 @@ type LifecycleRequest struct {
 func (s *server) handleLifecycle(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req LifecycleRequest
 	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
 		return
 	}
 	if !writeContractRefusal(w, req.ContractVersion) {
@@ -180,7 +180,7 @@ func (s *server) handleLifecycle(w http.ResponseWriter, r *http.Request, body []
 	}
 	if strings.TrimSpace(req.Reason) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error":  "REASON_REQUIRED",
+			"error":  CodeReasonRequired,
 			"detail": "a state nobody explained is indistinguishable from a fault",
 		})
 		return
@@ -190,7 +190,7 @@ func (s *server) handleLifecycle(w http.ResponseWriter, r *http.Request, body []
 		// echoed onto a surface an operator reads, and the closed set is the
 		// whole of what may appear there.
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-			"error":  "UNKNOWN_LIFECYCLE_STATE",
+			"error":  CodeUnknownLifecycleState,
 			"detail": "state must be one of " + strings.Join([]string{LifecycleActive, LifecycleDraining, LifecycleReadOnly}, ", "),
 		})
 		return

@@ -3,9 +3,12 @@ package addonop
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -662,5 +665,21 @@ func TestTheActorTravelsToTheAddon(t *testing.T) {
 	}
 	if h.calls[0].Subject != "operator-7" {
 		t.Errorf("subject = %q", h.calls[0].Subject)
+	}
+}
+
+// The one field of an add-on's answer this layer parses, held against the
+// contract's own operation reply (addons/contract/fixtures/operation_response.json).
+func TestOperationAnswerReadsAccountUIDFromTheContractFixture(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "addons", "contract", "fixtures", "operation_response.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var answer operationAnswer
+	if err := json.Unmarshal(raw, &answer); err != nil {
+		t.Fatalf("fixtures/operation_response.json: %v", err)
+	}
+	if answer.AccountUID != 3051 {
+		t.Errorf("account_uid did not land: %d", answer.AccountUID)
 	}
 }

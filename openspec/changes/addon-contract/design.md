@@ -1512,7 +1512,8 @@ were answered "all yes" on 10 Nov 2026 (7 re-read under 23). Decisions
 answered "all yes" the same day, with 14 decided by the owner in his own
 words and 3 made final. The second Opus review (10 Nov 2026) refined the
 mechanics under 18, 21 and 22 without changing what was decided (each says
-so inline) and raised **24–27, which are open**.
+so inline) and raised 24–27, which the owner accepted as recommended the
+same day ("do what fable recommends"). Nothing is open.
 
 1. **Major 2 now, in one coordinated deploy of both containers.** Recommend
    yes. The alternative, stretching 1 with reply-side additions only, cannot
@@ -1679,19 +1680,19 @@ Raised by the second review (10 Nov 2026), open:
     vectors. Recommend yes; two containers on one host have no intermediary
     that rewrites a query, and SigV4's seven canonicalisation rules are
     exactly what a Python add-on built on `urlencode` gets wrong on its
-    first `cursor`. Replaces the form in 22.
+    first `cursor`. Replaces the form in 22. **Accepted 10 Nov 2026.**
 25. **The error envelope is RFC 9457 `application/problem+json`** (`type`
     as a `urn:syndra:addon:error:<CODE>`, `title`, `status`, `detail`, with
     `code` and `retry` as extensions), on every non-2xx. Recommend yes;
     major 2 is the cheap moment, every HTTP client library already parses
-    it, and the add-on's `writeError` changes four field names.
+    it, and the add-on's `writeError` changes four field names. **Accepted 10 Nov 2026.**
 26. **The target's id is `account_id`, not `external_id`,** on the wire and
     in the new column (§5). Recommend yes; SCIM's `externalId` is the
     *client's* id (here the Syndra subject id, which UniFi stores as
     `employee_number`), the target's id is SCIM's `id`, and the existing
-    column is already `account_uid`.
+    column is already `account_uid`. **Accepted 10 Nov 2026.**
 27. **`subjects.paged` is deferred out of slice 1** (§11) and built when a
     target needs it. Recommend yes; ~300 members fit well inside 1 MiB,
     and a snapshot cursor means mirror generations in the TrueNAS add-on
     for no reader today. `/stats` pages from the start with a keyset
-    cursor, which needs no snapshot.
+    cursor, which needs no snapshot. **Accepted 10 Nov 2026.**

@@ -40,7 +40,7 @@ is survivable.
 
 ## The contract
 
-Eight routes. Every one is authenticated — there is no unauthenticated health
+Twelve routes. Every one is authenticated — there is no unauthenticated health
 check, because a target's reachability is itself information.
 
 | Endpoint | What it is for |
@@ -51,7 +51,12 @@ check, because a target's reachability is itself information.
 | `GET /values/{field}` | Enumerates the legal values of one entitlement field, so an operator authoring a mapping picks a group that exists instead of typing one |
 | `POST /plan` → `POST /apply` | Rehearse, then converge. The apply carries a plan id and never the original submission |
 | `POST /operations/{name}` | The one-shot half — the operation named in the path, the deduplication token in the body |
+| `GET /reach` | What each of the makerspace's groups opens, read from the folder permissions (storage profile) |
+| `GET /settings` · `PUT /settings/{name}` | System-wide choices, such as where home folders go |
+| `GET /homes` | Every home folder's use and limit (storage profile) |
 | `POST /lifecycle` | `active` · `draining` · `read_only`, at runtime |
+
+The schemas, fixtures and registries for all twelve are in [`contract/`](contract/README.md).
 
 ### The two halves, and why the line is where it is
 

@@ -340,7 +340,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 		// list: an empty list is a statement that the target holds no accounts,
 		// and the drift sweep would act on it.
 		log.Printf("[SUBJECTS] live read failed (%v) and no snapshot is available", err)
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "NO_CURRENT_READ"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": CodeNoCurrentRead})
 		return
 	}
 	writeJSON(w, http.StatusOK, SubjectsResponse{
@@ -394,7 +394,7 @@ func writeContractRefusal(w http.ResponseWriter, declared int) (ok bool) {
 		return true
 	}
 	writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-		"error":          "CONTRACT_VERSION_MISMATCH",
+		"error":          CodeContractVersionMismatch,
 		"caller_version": declared,
 		"addon_version":  ContractVersion,
 	})
@@ -406,10 +406,10 @@ func writeContractRefusal(w http.ResponseWriter, declared int) (ok bool) {
 // will not fix it, so it must not read as a transient failure.
 func writeRecallFailure(w http.ResponseWriter, err error) {
 	if errors.Is(err, errKindMismatch) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "CALL_ID_REUSED"})
+		writeJSON(w, http.StatusConflict, map[string]string{"error": CodeCallIDReused})
 		return
 	}
-	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

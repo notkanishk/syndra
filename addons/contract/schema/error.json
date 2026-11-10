@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/1/schema/error.json",
+  "title": "Error body",
+  "description": "The body of every non-2xx reply: {\"error\": \"<CODE>\", ...extras}. Codes are listed in registry/errors.json.",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "string",
+      "description": "A registered error code.",
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "detail": {
+      "type": "string",
+      "description": "A sentence for an operator; never the target's own error text."
+    },
+    "subject": {
+      "type": "string",
+      "description": "The subject a PLAN_STALE refusal is about."
+    },
+    "subjects": {
+      "type": "integer",
+      "description": "SCOPE_ACKNOWLEDGEMENT_REQUIRED: how many subjects the request carried."
+    },
+    "limit": {
+      "type": "integer",
+      "description": "SCOPE_ACKNOWLEDGEMENT_REQUIRED: the per-request cap."
+    },
+    "caller_version": {
+      "type": "integer",
+      "description": "CONTRACT_VERSION_MISMATCH: the version the caller declared (0 when absent)."
+    },
+    "addon_version": {
+      "type": "integer",
+      "description": "CONTRACT_VERSION_MISMATCH: the version this add-on speaks."
+    },
+    "lifecycle": {
+      "$ref": "lifecycle_request.json#/$defs/LifecycleState"
+    }
+  },
+  "required": [
+    "error"
+  ],
+  "additionalProperties": true
+}

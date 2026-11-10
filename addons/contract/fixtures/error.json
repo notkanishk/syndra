@@ -1,0 +1,5 @@
+{
+  "error": "CONTRACT_VERSION_MISMATCH",
+  "caller_version": 2,
+  "addon_version": 1
+}

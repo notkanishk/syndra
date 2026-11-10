@@ -1,0 +1,17 @@
+{
+  "field": "group",
+  "values": [
+    "fabrication",
+    "lab_makers"
+  ],
+  "enumerable": true,
+  "labels": {
+    "fabrication": "Fabrication",
+    "lab_makers": "Lab makers"
+  },
+  "builtin_count": 34,
+  "builtin_examples": [
+    "builtin_users",
+    "builtin_administrators"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/1/schema/setting_put_request.json",
+  "title": "Setting write request",
+  "description": "PUT /settings/{name}. Carries no contract_version today and no call id; the Idempotency-Key header deduplicates. The add-on decodes it strictly.",
+  "type": "object",
+  "properties": {
+    "value": {
+      "type": "string",
+      "description": "A value the target offers right now, or empty to stop making new home folders."
+    },
+    "actor": {
+      "type": "string",
+      "description": "Who is setting it."
+    }
+  },
+  "required": [
+    "value",
+    "actor"
+  ],
+  "additionalProperties": false
+}

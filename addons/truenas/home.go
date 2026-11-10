@@ -242,12 +242,12 @@ type HomesResponse struct {
 func (s *server) handleHomes(w http.ResponseWriter, _ *http.Request, _ []byte) {
 	snap, err := s.readSubjects()
 	if err != nil {
-		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+		writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
 		return
 	}
 	shares, err := s.enabledShares()
 	if err != nil {
-		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+		writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
 		return
 	}
 	out := HomesResponse{Homes: []HomeUsage{}, UsageRead: true}

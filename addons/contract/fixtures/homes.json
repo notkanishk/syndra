@@ -1,0 +1,12 @@
+{
+  "homes": [
+    {
+      "username": "rey_mysterio",
+      "uid": 3051,
+      "home": "/mnt/tank/homes/rey_mysterio",
+      "used_bytes": 19756849561,
+      "quota_bytes": 53687091200
+    }
+  ],
+  "usage_read": true
+}

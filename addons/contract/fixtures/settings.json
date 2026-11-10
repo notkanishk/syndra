@@ -1,0 +1,20 @@
+{
+  "settings": [
+    {
+      "name": "home_root",
+      "label": "Where home folders go",
+      "value": "/mnt/tank/homes",
+      "set_by": "operator-289471021834760199",
+      "set_at": "2026-11-09T14:05:00Z",
+      "values": [
+        "/mnt/tank/homes",
+        "/mnt/tank/members"
+      ],
+      "labels": {
+        "/mnt/tank/homes": "tank › homes",
+        "/mnt/tank/members": "tank › members"
+      },
+      "values_read": true
+    }
+  ]
+}

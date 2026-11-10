@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/1/schema/apply_response.json",
+  "title": "Apply outcome",
+  "description": "POST /apply reply, and each entry of a plan's outcomes. Also the body of a blocked (422) or conflicting (409) apply.",
+  "type": "object",
+  "properties": {
+    "subject": {
+      "type": "string"
+    },
+    "effect": {
+      "$ref": "common/effect.json"
+    },
+    "detail": {
+      "type": "string",
+      "description": "The sentence an operator reads."
+    },
+    "consequence": {
+      "type": "string",
+      "description": "What the subject is left holding."
+    },
+    "username": {
+      "type": "string",
+      "description": "The derived or bound account name."
+    },
+    "uid": {
+      "type": "integer",
+      "description": "The target's stable identity for the account."
+    },
+    "fingerprint": {
+      "type": "string",
+      "description": "The subject's state the outcome was computed against (plan) or left in (apply)."
+    },
+    "observed": {
+      "$ref": "common/field.json#/$defs/ReportedValues",
+      "description": "The managed fields as the TARGET reported them after the write; absent when unverified."
+    },
+    "unverified": {
+      "type": "boolean",
+      "description": "The mutation landed and its result could not be read."
+    },
+    "conflict": {
+      "$ref": "#/$defs/BindingConflict"
+    }
+  },
+  "required": [
+    "subject",
+    "effect",
+    "detail"
+  ],
+  "$defs": {
+    "BindingConflict": {
+      "type": "object",
+      "description": "An unbound target account already holds the derived name.",
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "uid": {
+          "type": "integer"
+        },
+        "adoptable": {
+          "type": "boolean",
+          "description": "No other subject is bound to the account."
+        },
+        "bound_to": {
+          "type": "string",
+          "description": "The subject already holding it."
+        }
+      },
+      "required": [
+        "username",
+        "uid",
+        "adoptable"
+      ]
+    }
+  }
+}

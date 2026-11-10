@@ -56,7 +56,7 @@ Per-target secret -> HKDF-derived Ed25519 TLS key (BE pins the public key) and H
 read.go:772-781 Place.Address builds smb://; read.go:755-759 SMBAddress/UNCAddress; read.go:541-553 SMB follows password; services/entitlement.go SMB as lifecycle field (87-88,96,111,117,260-295,512); role_members.go:306-313 group as sole field; many comments only. policy.go:48-50 says the operation policy is target-neutral by design.
 
 ## Observed mismatches
-- BE ActivityEvent has Detail (read.go:875); AO ActivityEvent (operations.go:505-516) has no detail.
+- ActivityEvent `detail`: both sides carry it (BE read.go:875; AO operations.go:507-516). Corrected by slice 0, which found the original note wrong.
 - AO Health.CheckedAt (checked_at) has no BE counterpart.
 - LogRecords: AO uint64, BE int64.
 - PUT /settings/{name} carries no contract_version.

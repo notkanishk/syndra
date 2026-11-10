@@ -237,7 +237,7 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 			// empty enumerable list: the backend fails open on a read it could
 			// not make, and an empty list would make it fail closed on every
 			// mapping while the target is down.
-			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+			writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
 			return
 		}
 		out := ValuesResponse{Field: field, Values: []string{}, Enumerable: true}
@@ -273,7 +273,7 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: []string{"false", "true"}, Enumerable: true})
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{
-			"error": "UNKNOWN_FIELD", "detail": "this field is not in the entitlement schema",
+			"error": CodeUnknownField, "detail": "this field is not in the entitlement schema",
 		})
 	}
 }

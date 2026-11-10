@@ -66,7 +66,7 @@ func (s *server) homeRootView() (SettingView, error) {
 func (s *server) handleSettings(w http.ResponseWriter, _ *http.Request, _ []byte) {
 	view, err := s.homeRootView()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "SETTINGS_UNREADABLE"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeSettingsUnreadable})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string][]SettingView{"settings": {view}})
@@ -82,12 +82,12 @@ type putSettingRequest struct {
 // read refuses the write rather than accepting a place nobody checked.
 func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body []byte) {
 	if r.PathValue("name") != settingHomeRoot {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "NO_SUCH_SETTING"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": CodeNoSuchSetting})
 		return
 	}
 	var req putSettingRequest
 	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "INVALID_BODY"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeInvalidBody})
 		return
 	}
 	// The same dedup the apply and the operations use, keyed by the backend's
@@ -103,7 +103,7 @@ func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body [
 		} else if found {
 			var previous SettingView
 			if err := json.Unmarshal(cached, &previous); err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
 				return
 			}
 			writeJSON(w, http.StatusOK, previous)
@@ -113,28 +113,28 @@ func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body [
 	if req.Value != "" {
 		// A current read, not the last one: a place gone since must not pass.
 		if _, _, current, err := s.readACLs(); err != nil || !current {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "TARGET_UNREADABLE"})
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": CodeTargetUnreadable})
 			return
 		}
 		places, _, err := s.homePlaces()
 		if err != nil {
-			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+			writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
 			return
 		}
 		if !slices.Contains(places, req.Value) {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "NOT_A_HOME_PLACE",
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": CodeNotAHomePlace,
 				"detail": "That isn't a folder at the top of a file share that is a dataset of its own."})
 			return
 		}
 	}
 	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: req.Value, SetBy: req.Actor, SetAt: time.Now().UTC()}); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "SETTING_NOT_SAVED"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeSettingNotSaved})
 		return
 	}
 	s.record("settings."+settingHomeRoot, "", req.Actor, "", "succeeded")
 	view, err := s.homeRootView()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "SETTINGS_UNREADABLE"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeSettingsUnreadable})
 		return
 	}
 	if key != "" {
