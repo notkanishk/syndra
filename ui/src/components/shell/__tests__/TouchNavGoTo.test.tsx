@@ -27,8 +27,8 @@ function openSheet() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(["name-catalog"], {
     users: [
-      { id: "u2", name: "Priya Nair", email: "", title: "", team: "Fabrication" },
-      { id: "u1", name: "Arjun Priest", email: "", title: "", team: "" },
+      { id: "u2", name: "Primo Colon", email: "", title: "", team: "Fabrication" },
+      { id: "u1", name: "Damian Priest", email: "", title: "", team: "" },
     ],
     projects: [],
     applications: [],
@@ -66,8 +66,8 @@ describe("the phone's Go to sheet", () => {
 
   it("closes the sheet when a match is opened", () => {
     const sheet = openSheet();
-    fireEvent.change(within(sheet).getByRole("combobox"), { target: { value: "priya" } });
-    fireEvent.click(within(sheet).getByRole("option", { name: /Priya Nair/ }));
+    fireEvent.change(within(sheet).getByRole("combobox"), { target: { value: "primo" } });
+    fireEvent.click(within(sheet).getByRole("option", { name: /Primo Colon/ }));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

@@ -46,7 +46,7 @@ type plannerFixture struct {
 	ctx            context.Context
 	project        string
 	bundle         string
-	alice, bob     string
+	becky, bob     string
 	actor          string
 	member, trains string
 }
@@ -55,7 +55,7 @@ func newPlannerFixture(t *testing.T) plannerFixture {
 	t.Helper()
 	ctx := db.LiveDB(t)
 	sfx := time.Now().Format("150405.000000000")
-	f := plannerFixture{ctx: ctx, project: "plan-p-" + sfx, alice: "plan-a-" + sfx, bob: "plan-b-" + sfx,
+	f := plannerFixture{ctx: ctx, project: "plan-p-" + sfx, becky: "plan-a-" + sfx, bob: "plan-b-" + sfx,
 		actor: "op@example.org", member: "member", trains: "trained"}
 
 	var err error
@@ -69,7 +69,7 @@ func newPlannerFixture(t *testing.T) plannerFixture {
 	if _, err := db.MarkRoleWaits(ctx, f.project, f.trains, f.actor); err != nil {
 		t.Fatal(err)
 	}
-	people := []string{f.alice, f.bob}
+	people := []string{f.becky, f.bob}
 	t.Cleanup(func() {
 		_, _ = db.PG.Exec(ctx, `DELETE FROM user_bundle_assignments WHERE bundle_id = $1`, f.bundle)
 		_, _ = db.PG.Exec(ctx, `DELETE FROM bundles WHERE id = $1`, f.bundle)
@@ -81,7 +81,7 @@ func newPlannerFixture(t *testing.T) plannerFixture {
 	origDir, origCat := directory.Default, services.PlannerCatalogue
 	t.Cleanup(func() { directory.Default, services.PlannerCatalogue = origDir, origCat })
 	dir := plannerDirectory{
-		users: []models.UserProfile{{ID: f.alice, Name: "Alice Example", Status: "active"}, {ID: f.bob, Name: "Bob Example", Status: "active"}},
+		users: []models.UserProfile{{ID: f.becky, Name: "Becky Example", Status: "active"}, {ID: f.bob, Name: "Bob Example", Status: "active"}},
 		project: models.ProjectCatalog{ID: f.project, Name: "Laser Lab", Roles: []models.ProjectRole{
 			{Key: f.member, Label: "Member"}, {Key: f.trains, Label: "Trained"}, {Key: "advanced", Label: "Advanced"},
 		}},
@@ -172,15 +172,15 @@ func status(t *testing.T, ctx context.Context, id string) string {
 
 func TestPlanner_AssignBundle_OutboxIsThePlan(t *testing.T) {
 	f := newPlannerFixture(t)
-	// Alice has a removal of "member" waiting to be sent; giving the bundle
+	// Becky has a removal of "member" waiting to be sent; giving the bundle
 	// cancels it, and the plan says so. Bob already holds "member" directly.
-	revoke := f.queue(t, f.alice, "revoke", f.member, "direct", "")
+	revoke := f.queue(t, f.becky, "revoke", f.member, "direct", "")
 	if _, err := db.EnqueueDirectGrantPropagation(f.ctx, db.EnqueueParams{UserID: f.bob, ProjectID: f.project,
 		RoleKeys: []string{f.member}, GrantedBy: f.actor, OpType: "add", NoPropagation: true, PayloadJSON: "{}"}); err != nil {
 		t.Fatal(err)
 	}
 	ctx, gate := db.GuardCancellations(f.ctx, nil, func(context.Context) bool { return true })
-	req := f.request(services.BulkOpAssignBundle, f.alice, f.bob)
+	req := f.request(services.BulkOpAssignBundle, f.becky, f.bob)
 
 	changes, _, err := services.PlanBulk(ctx, req)
 	if err != nil {
@@ -190,12 +190,12 @@ func TestPlanner_AssignBundle_OutboxIsThePlan(t *testing.T) {
 	for _, ch := range changes {
 		shown[ch.UserID] = ch
 	}
-	if ids := shown[f.alice].Row.CancelIDs; len(ids) != 1 || ids[0] != revoke {
-		t.Fatalf("Alice's row names the removal it cancels: %v", ids)
+	if ids := shown[f.becky].Row.CancelIDs; len(ids) != 1 || ids[0] != revoke {
+		t.Fatalf("Becky's row names the removal it cancels: %v", ids)
 	}
-	if !strings.Contains(shown[f.alice].Row.Consequence, "Cancels a change waiting for you to send") ||
-		!strings.Contains(shown[f.alice].Row.Consequence, "Giving Trained in Laser Lab waits for you to send.") {
-		t.Fatalf("Alice's row: %q", shown[f.alice].Row.Consequence)
+	if !strings.Contains(shown[f.becky].Row.Consequence, "Cancels a change waiting for you to send") ||
+		!strings.Contains(shown[f.becky].Row.Consequence, "Giving Trained in Laser Lab waits for you to send.") {
+		t.Fatalf("Becky's row: %q", shown[f.becky].Row.Consequence)
 	}
 
 	result, written, err := services.ApplyPlannedBulk(ctx, req, f.issue(t, ctx, req, changes))
@@ -206,7 +206,7 @@ func TestPlanner_AssignBundle_OutboxIsThePlan(t *testing.T) {
 		t.Fatalf("a named cancellation was refused: %+v", gate.Refused())
 	}
 	deliveries := map[string]int{}
-	for _, who := range []string{f.alice, f.bob} {
+	for _, who := range []string{f.becky, f.bob} {
 		got, want := sentRows(t, ctx, outboxIDs(written[who])), shownWrites(shown[who])
 		if strings.Join(got, "|") != strings.Join(want, "|") || len(got) == 0 {
 			t.Errorf("%s: outbox %v, plan showed %v", who, got, want)
@@ -239,11 +239,11 @@ func TestPlanner_AssignBundle_OutboxIsThePlan(t *testing.T) {
 	// The dialog says the reason lands in Change history: it does.
 	var cascade string
 	if err := db.PG.QueryRow(ctx, `SELECT cascade_id::text FROM propagation_outbox WHERE id = $1::uuid`,
-		outboxIDs(written[f.alice])[0]).Scan(&cascade); err != nil {
+		outboxIDs(written[f.becky])[0]).Scan(&cascade); err != nil {
 		t.Fatal(err)
 	}
 	if groups, err := db.GetCascadeGroups(ctx, 0, cascade); err != nil || len(groups) != 1 || groups[0].Said != "term start" {
-		t.Fatalf("Change history for Alice's change: %+v %v, want the operator's reason", groups, err)
+		t.Fatalf("Change history for Becky's change: %+v %v, want the operator's reason", groups, err)
 	}
 	if s := status(t, ctx, revoke); s != "superseded" {
 		t.Errorf("the named removal is cancelled, got %s", s)
@@ -259,11 +259,11 @@ func TestPlanner_RemoveBundle_UnnamedCancellationIsStaleThenOutboxIsThePlan(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, "", f.alice, f.bundle, v.ID, nil); err != nil || !ok {
+	if _, ok, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, "", f.becky, f.bundle, v.ID, nil); err != nil || !ok {
 		t.Fatalf("assign: %v %v", ok, err)
 	}
 	ctx, _ := db.GuardCancellations(f.ctx, nil, func(context.Context) bool { return true })
-	req := f.request(services.BulkOpRemoveBundle, f.alice)
+	req := f.request(services.BulkOpRemoveBundle, f.becky)
 
 	changes, _, err := services.PlanBulk(ctx, req)
 	if err != nil {
@@ -273,22 +273,22 @@ func TestPlanner_RemoveBundle_UnnamedCancellationIsStaleThenOutboxIsThePlan(t *t
 
 	// After the preview, someone queues a give of "member" from this bundle.
 	// The removal would cancel it, and the plan never named it.
-	unnamed := f.queue(t, f.alice, "add", f.member, "bundle", f.bundle)
-	before := len(sentRowsFor(t, ctx, f.alice))
+	unnamed := f.queue(t, f.becky, "add", f.member, "bundle", f.bundle)
+	before := len(sentRowsFor(t, ctx, f.becky))
 
 	_, _, err = services.ApplyPlannedBulk(ctx, req, cite)
 	var stale *services.StalePlan
-	if !errors.As(err, &stale) || len(stale.IDs) != 1 || stale.IDs[0] != f.alice {
-		t.Fatalf("want the plan stale for Alice, got %v", err)
+	if !errors.As(err, &stale) || len(stale.IDs) != 1 || stale.IDs[0] != f.becky {
+		t.Fatalf("want the plan stale for Becky, got %v", err)
 	}
 	if s := status(t, ctx, unnamed); s != "pending" {
 		t.Errorf("the unnamed change is untouched, got %s", s)
 	}
-	if after := len(sentRowsFor(t, ctx, f.alice)); after != before {
+	if after := len(sentRowsFor(t, ctx, f.becky)); after != before {
 		t.Errorf("a stale plan wrote %d outbox row(s)", after-before)
 	}
 	var held, unspent bool
-	_ = db.PG.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM user_bundle_assignments WHERE user_id = $1 AND bundle_id = $2)`, f.alice, f.bundle).Scan(&held)
+	_ = db.PG.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM user_bundle_assignments WHERE user_id = $1 AND bundle_id = $2)`, f.becky, f.bundle).Scan(&held)
 	_ = db.PG.QueryRow(ctx, `SELECT applied_at IS NULL FROM plans WHERE id = $1::uuid`, cite.PlanID).Scan(&unspent)
 	if !held || !unspent {
 		t.Fatalf("nothing written and the plan unspent: still holds=%v unspent=%v", held, unspent)
@@ -306,10 +306,10 @@ func TestPlanner_RemoveBundle_UnnamedCancellationIsStaleThenOutboxIsThePlan(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if said := auditReason(t, ctx, f.alice, "bundle.unassigned"); said != "term start" {
+	if said := auditReason(t, ctx, f.becky, "bundle.unassigned"); said != "term start" {
 		t.Errorf("the removal's audit row says %q, want the operator's reason", said)
 	}
-	got, want := sentRows(t, ctx, outboxIDs(written[f.alice])), shownWrites(changes[0])
+	got, want := sentRows(t, ctx, outboxIDs(written[f.becky])), shownWrites(changes[0])
 	if strings.Join(got, "|") != strings.Join(want, "|") || len(got) == 0 {
 		t.Errorf("outbox %v, plan showed %v", got, want)
 	}
@@ -377,11 +377,11 @@ func (f plannerFixture) withRule(t *testing.T) string {
 	return id
 }
 
-// assignWithRule gives Alice the bundle through the planner and returns the
+// assignWithRule gives Becky the bundle through the planner and returns the
 // rows it queued, none of them sent yet.
 func (f plannerFixture) assignWithRule(t *testing.T, ctx context.Context, rule string) []string {
 	t.Helper()
-	req := f.request(services.BulkOpAssignBundle, f.alice)
+	req := f.request(services.BulkOpAssignBundle, f.becky)
 	changes, _, err := services.PlanBulk(ctx, req)
 	if err != nil {
 		t.Fatal(err)
@@ -390,7 +390,7 @@ func (f plannerFixture) assignWithRule(t *testing.T, ctx context.Context, rule s
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := outboxIDs(written[f.alice])
+	ids := outboxIDs(written[f.becky])
 	// The bundle's roles are its rows; the role the rule follows with is the
 	// rule's, with the rule (task 1.6), the shape FollowRules writes.
 	want := []string{"add advanced rule " + rule, "add member bundle " + f.bundle, "add trained bundle " + f.bundle}
@@ -420,10 +420,10 @@ func TestPlanner_RemoveBundle_CancelsItsOwnAndItsRulesQueuedRows(t *testing.T) {
 		t.Fatalf("Change history: %+v %v, want one bundle entry with its 3 writes", groups, err)
 	}
 
-	otherBundle := f.queue(t, f.alice, "add", f.member, "bundle", "another-bundle")
-	direct := f.queue(t, f.alice, "add", "advanced", "direct", "")
+	otherBundle := f.queue(t, f.becky, "add", f.member, "bundle", "another-bundle")
+	direct := f.queue(t, f.becky, "add", "advanced", "direct", "")
 
-	req := f.request(services.BulkOpRemoveBundle, f.alice)
+	req := f.request(services.BulkOpRemoveBundle, f.becky)
 	changes, _, err := services.PlanBulk(ctx, req)
 	if err != nil {
 		t.Fatal(err)
@@ -456,7 +456,7 @@ func TestPlanner_RemoveBundle_CancelsItsOwnAndItsRulesQueuedRows(t *testing.T) {
 		}
 	}
 	// Nothing had reached Zitadel, so nothing is sent to take it back.
-	if ids := outboxIDs(written[f.alice]); len(ids) != 0 {
+	if ids := outboxIDs(written[f.becky]); len(ids) != 0 {
 		t.Errorf("the removal queued %v, want nothing", sentRows(t, ctx, ids))
 	}
 }
@@ -474,7 +474,7 @@ func TestPlanner_RuleRetiredCancelsTheRowItSetOffUnderABundle(t *testing.T) {
 		row[id] = sentRows(t, ctx, []string{id})[0]
 	}
 
-	revoke := db.EnqueueParams{UserID: f.alice, ProjectID: f.project, RoleKeys: []string{"advanced"}, OpType: "revoke",
+	revoke := db.EnqueueParams{UserID: f.becky, ProjectID: f.project, RoleKeys: []string{"advanced"}, OpType: "revoke",
 		Source: "rule", SourceRef: rule, GrantedBy: f.actor, PayloadJSON: "{}"}
 	// Not a plan: the retirement runs outside the plan's cancel gate, which
 	// refuses any cancellation the plan didn't name.

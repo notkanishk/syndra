@@ -18,16 +18,16 @@ func TestDerivationIsDeterministicAndAlwaysValid(t *testing.T) {
 		want  string
 		why   string
 	}{
-		{"ordinary", "ada.lovelace@example.edu", "ada.lovelace",
+		{"ordinary", "charlotte.flair@example.edu", "charlotte.flair",
 			"the common case must produce the obvious name"},
-		{"uppercase", "Ada.Lovelace@example.edu", "ada.lovelace",
+		{"uppercase", "Charlotte.Flair@example.edu", "charlotte.flair",
 			"case is not identity: two capitalisations are one mailbox"},
-		{"sub-addressed", "ada+lab@example.edu", "ada",
+		{"sub-addressed", "charlotte+lab@example.edu", "charlotte",
 			"a tagged address is the same mailbox, and must not buy a second account"},
 		{"non-ascii", "adá@example.edu", "ad_",
 			"characters outside the pattern are replaced, never dropped — dropping merges two people"},
-		{"leading dot", ".ada@example.edu", "u.ada",
-			"the first character is narrower than the rest, and trimming would merge .ada with ..ada"},
+		{"leading dot", ".charlotte@example.edu", "u.charlotte",
+			"the first character is narrower than the rest, and trimming would merge .charlotte with ..charlotte"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := DeriveUsername(tc.email, "sub-1", never)
@@ -46,8 +46,8 @@ func TestDerivationIsDeterministicAndAlwaysValid(t *testing.T) {
 
 // The whole point of a mailbox-derived name is that one mailbox is one account.
 func TestSubAddressingCannotBuyASecondAccount(t *testing.T) {
-	plain := DeriveUsername("ada@example.edu", "sub-1", never)
-	tagged := DeriveUsername("ada+printing@example.edu", "sub-1", never)
+	plain := DeriveUsername("charlotte@example.edu", "sub-1", never)
+	tagged := DeriveUsername("charlotte+printing@example.edu", "sub-1", never)
 	if plain != tagged {
 		t.Fatalf("one mailbox must be one account: %q vs %q", plain, tagged)
 	}
@@ -121,20 +121,20 @@ func TestANameNeedingBothTruncationAndASuffixStaysValidAndDistinct(t *testing.T)
 // else's suffix to this person — and re-derivation existing at all depends on
 // producing the same answer twice.
 func TestAForcedCollisionResolvesReproduciblyAndNeverReusesAnotherSubjectsName(t *testing.T) {
-	taken := map[string]bool{"ada": true}
+	taken := map[string]bool{"charlotte": true}
 	collides := func(s string) bool { return taken[s] }
 
-	first := DeriveUsername("ada@example.edu", "sub-2", collides)
-	second := DeriveUsername("ada@example.edu", "sub-2", collides)
+	first := DeriveUsername("charlotte@example.edu", "sub-2", collides)
+	second := DeriveUsername("charlotte@example.edu", "sub-2", collides)
 	if first != second {
 		t.Fatalf("collision resolution must be reproducible: %q then %q", first, second)
 	}
-	if first == "ada" {
+	if first == "charlotte" {
 		t.Fatal("it must not hand over the taken name")
 	}
 
 	// A third subject with the same localpart gets a different suffix again.
-	third := DeriveUsername("ada@example.edu", "sub-3", collides)
+	third := DeriveUsername("charlotte@example.edu", "sub-3", collides)
 	if third == first {
 		t.Fatalf("two subjects resolved onto one name %q", first)
 	}
@@ -163,12 +163,12 @@ func TestATruncatedNameDoesNotEndInASeparator(t *testing.T) {
 // The validator's first-character rule is narrower than the rest, which is the
 // asymmetry a reader otherwise misses.
 func TestTheValidatorMatchesTheTargetsPattern(t *testing.T) {
-	for _, ok := range []string{"ada", "_ada", "a", "ada.lovelace", "ada-l", "machine$", "a1"} {
+	for _, ok := range []string{"charlotte", "_charlotte", "a", "charlotte.flair", "charlotte-l", "machine$", "a1"} {
 		if !ValidUsername(ok) {
 			t.Errorf("%q must be valid", ok)
 		}
 	}
-	for _, bad := range []string{"", ".ada", "-ada", "ada lovelace", "adá", "$", strings.Repeat("a", usernameMaxLen+1)} {
+	for _, bad := range []string{"", ".charlotte", "-charlotte", "charlotte flair", "adá", "$", strings.Repeat("a", usernameMaxLen+1)} {
 		if ValidUsername(bad) {
 			t.Errorf("%q must be invalid", bad)
 		}

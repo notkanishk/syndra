@@ -19,7 +19,7 @@ const nav = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(nav.search) }));
 
 vi.mock("@/lib/queries/useNameResolver", () => {
-  const people: Record<string, string> = { u1: "Ada Lovelace", u2: "Priya Nair" };
+  const people: Record<string, string> = { u1: "Charlotte Flair", u2: "Cody Rhodes" };
   const miss = { value: undefined, resolved: true } as const;
   return {
     useNameResolver: () => ({
@@ -86,20 +86,20 @@ describe("Pending changes opened for a person", () => {
   it("shows the whole queue with no person asked for, and no chip", () => {
     renderPending();
     expect(screen.queryByRole("button", { name: "Show everyone's changes" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Ada Lovelace" })).toHaveLength(1);
-    expect(screen.getAllByRole("link", { name: "Priya Nair" })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Charlotte Flair" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Cody Rhodes" })).toHaveLength(2);
     // A-20 P1: the name is the row's one link to the person, and nothing nests.
-    expect(screen.getByRole("link", { name: "Ada Lovelace" })).toHaveAttribute("href", "/users/u1");
+    expect(screen.getByRole("link", { name: "Charlotte Flair" })).toHaveAttribute("href", "/users/u1");
     expect(document.querySelector("a a")).toBeNull();
   });
 
   it("narrows to that person under an in-force chip, and says Send still sends all", () => {
     nav.search = "person=u2";
     renderPending();
-    expect(screen.queryByText("Ada Lovelace", { selector: "a *, a" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Priya Nair" })).toHaveLength(2);
+    expect(screen.queryByText("Charlotte Flair", { selector: "a *, a" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Cody Rhodes" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Show everyone's changes" })).toBeInTheDocument();
-    expect(document.body).toHaveTextContent("Showing Priya Nair’s 2 changes. Sending sends all 3, in order.");
+    expect(document.body).toHaveTextContent("Showing Cody Rhodes’s 2 changes. Sending sends all 3, in order.");
   });
 
   it("clears with the chip's own ✕: everyone returns and the address is clean", () => {
@@ -114,7 +114,7 @@ describe("Pending changes opened for a person", () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(screen.getByRole("link", { name: "Ada Lovelace" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Charlotte Flair" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Show everyone's changes" })).not.toBeInTheDocument();
     expect(window.location.search).toBe("");
   });
@@ -128,7 +128,7 @@ describe("Pending changes opened for a person", () => {
 
   it("links the names to the people", () => {
     renderPending();
-    expect(screen.getAllByRole("link", { name: "Ada Lovelace" })[0]).toHaveAttribute("href", "/users/u1");
+    expect(screen.getAllByRole("link", { name: "Charlotte Flair" })[0]).toHaveAttribute("href", "/users/u1");
   });
 });
 
@@ -144,11 +144,11 @@ describe("Pending changes' one narrowing model (A-20 P16)", () => {
       nav.search = "person=u2&role=p1%2Flaser.operator";
       window.history.replaceState(null, "", "/governance/pending?q=&person=u2&role=p1%2Flaser.operator");
       renderPending();
-      expect(document.body).toHaveTextContent(/Showing Priya Nair’s 1 change for .*\. Sending sends all 3, in order\./);
+      expect(document.body).toHaveTextContent(/Showing Cody Rhodes’s 1 change for .*\. Sending sends all 3, in order\./);
       fireEvent.click(screen.getByRole("button", { name: "Show every role's changes" }));
       vi.advanceTimersByTime(500);
       expect(window.location.search).toBe("?q=&person=u2");
-      expect(document.body).toHaveTextContent("Showing Priya Nair’s 2 changes. Sending sends all 3, in order.");
+      expect(document.body).toHaveTextContent("Showing Cody Rhodes’s 2 changes. Sending sends all 3, in order.");
       fireEvent.click(screen.getByRole("button", { name: "Show everyone's changes" }));
       vi.advanceTimersByTime(500);
       expect(window.location.search).toBe("?q=");
@@ -176,8 +176,8 @@ describe("Pending changes opened for a role", () => {
   it("narrows to that role (the same key in another project stays out) and says Send still sends all", () => {
     nav.search = "role=p1%2Flaser.operator";
     renderPending();
-    expect(screen.getAllByRole("link", { name: "Ada Lovelace" })).toHaveLength(1);
-    expect(screen.queryByRole("link", { name: "Priya Nair" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Charlotte Flair" })).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: "Cody Rhodes" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show every role's changes" })).toBeInTheDocument();
     expect(screen.getByText(/^Showing the 1 change for .*\. Sending sends all 3, in order\.$/)).toBeInTheDocument();
   });
@@ -193,8 +193,8 @@ describe("Pending changes opened for a role", () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(screen.getByRole("link", { name: "Ada Lovelace" })).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Priya Nair" })).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Charlotte Flair" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Cody Rhodes" })).toHaveLength(2);
     expect(window.location.search).toBe("");
   });
 

@@ -23,7 +23,7 @@ beforeEach(() => {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <IntentPrefetchHost />
-      <Link href="/users/u1">Priya</Link>
+      <Link href="/users/u1">Cody</Link>
       <Link href="/applications/a1">Wiki</Link>
       <a href="/roles">Roles</a>
       <a href="https://example.com/users/x">Away</a>
@@ -42,7 +42,7 @@ const rest = () => act(() => void vi.advanceTimersByTime(INTENT_MS));
 
 describe("intent prefetch (P9)", () => {
   it("warms the route and the person's read once the pointer rests", () => {
-    fireEvent.pointerOver(screen.getByText("Priya"));
+    fireEvent.pointerOver(screen.getByText("Cody"));
     expect(prefetch).not.toHaveBeenCalled(); // not yet: it might only be passing over
     rest();
     expect(prefetch).toHaveBeenCalledWith("/users/u1");
@@ -51,7 +51,7 @@ describe("intent prefetch (P9)", () => {
   });
 
   it("fires once per address, however often it is hovered or focused", () => {
-    const link = screen.getByText("Priya");
+    const link = screen.getByText("Cody");
     for (let i = 0; i < 3; i += 1) {
       fireEvent.pointerOver(link);
       rest();
@@ -71,7 +71,7 @@ describe("intent prefetch (P9)", () => {
   });
 
   it("a pointer that only passes over warms nothing", () => {
-    const link = screen.getByText("Priya");
+    const link = screen.getByText("Cody");
     fireEvent.pointerOver(link);
     act(() => void vi.advanceTimersByTime(INTENT_MS - 30));
     fireEvent.pointerOut(link);
@@ -92,7 +92,7 @@ describe("intent prefetch (P9)", () => {
 
   it("does nothing with Data Saver on", () => {
     setConnection({ saveData: true });
-    fireEvent.pointerOver(screen.getByText("Priya"));
+    fireEvent.pointerOver(screen.getByText("Cody"));
     rest();
     expect(prefetch).not.toHaveBeenCalled();
     expect(user).not.toHaveBeenCalled();
@@ -100,7 +100,7 @@ describe("intent prefetch (P9)", () => {
 
   it("does nothing on a slow connection", () => {
     setConnection({ effectiveType: "2g" });
-    fireEvent.focusIn(screen.getByText("Priya"));
+    fireEvent.focusIn(screen.getByText("Cody"));
     rest();
     expect(prefetch).not.toHaveBeenCalled();
   });

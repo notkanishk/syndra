@@ -57,22 +57,22 @@ function plan(outcomes: BulkOutcome[], over: Partial<BulkPlan> = {}): BulkPlan {
 // change and Refused.
 const board = () =>
   plan([
-    row("omar", { consequence: `Gains Member in Laser Lab. ${CANCEL}` }),
-    row("Jules", {
+    row("tiffany", { consequence: `Gains Member in Laser Lab. ${CANCEL}` }),
+    row("Roman", {
       delivery: "waits_for_you",
       waits: ["Trained in Laser Lab"],
       goes: ["Member in Laser Lab"],
       consequence: "Gains Member in Laser Lab and Trained in Laser Lab. Giving Trained in Laser Lab waits for you to send.",
     }),
-    row("Kabir", {
+    row("Alexa", {
       delivery: "none",
       detail: "Leaves Safety.",
       consequence: `Cancels giving Member in Laser Lab, which was waiting for you to send, so nothing is sent to Zitadel. ${CANCEL}`,
     }),
-    row("Lena", { delivery: "none", consequence: "Already holds every role it gives, so nothing is sent to Zitadel." }),
-    row("Aanya", { delivery: "waits_for_you", waits: ["Supervisor in Laser Lab"] }),
-    row("Dev", { effect: "no_change", delivery: undefined, detail: "Already in Safety.", consequence: undefined }),
-    row("Sam", { effect: "blocked", delivery: undefined, detail: "Syndra couldn't read Zitadel's list of roles." }),
+    row("Zoey", { delivery: "none", consequence: "Already holds every role it gives, so nothing is sent to Zitadel." }),
+    row("Jade", { delivery: "waits_for_you", waits: ["Supervisor in Laser Lab"] }),
+    row("Candice", { effect: "no_change", delivery: undefined, detail: "Already in Safety.", consequence: undefined }),
+    row("Randy", { effect: "blocked", delivery: undefined, detail: "Syndra couldn't read Zitadel's list of roles." }),
   ]);
 
 const names = (g: { rows: BulkOutcome[] }) => g.rows.map((o) => o.name);
@@ -81,9 +81,9 @@ describe("groupPlan before Apply", () => {
   it("draws the three folds in their fixed order, one row per person, alphabetical inside each", () => {
     const groups = groupPlan(board())!;
     expect(groups.map((g) => g.heading)).toEqual(["Straight away", "Will wait for you to send", "Left as they are"]);
-    expect(names(groups[0])).toEqual(["Kabir", "Lena", "omar"]); // case-insensitive
-    expect(names(groups[1])).toEqual(["Aanya", "Jules"]);
-    expect(names(groups[2])).toEqual(["Dev", "Sam"]);
+    expect(names(groups[0])).toEqual(["Alexa", "tiffany", "Zoey"]); // case-insensitive
+    expect(names(groups[1])).toEqual(["Jade", "Roman"]);
+    expect(names(groups[2])).toEqual(["Candice", "Randy"]);
     expect(groups.flatMap(names)).toHaveLength(7);
     expect(groups.map((g) => g.count)).toEqual(["3 people", "2 people", "2 people"]);
   });
@@ -94,30 +94,30 @@ describe("groupPlan before Apply", () => {
     expect(wait.dot).toBe("warn");
     expect(wait.link).toBeUndefined();
     expect(wait.note).toBe("Because Supervisor in Laser Lab and Trained in Laser Lab always wait for you.");
-    const one = groupPlan(plan([row("Jules", { delivery: "waits_for_you", waits: ["Trained in Laser Lab"] })]))!;
+    const one = groupPlan(plan([row("Jade", { delivery: "waits_for_you", waits: ["Trained in Laser Lab"] })]))!;
     expect(one[0].note).toBe("Because Trained in Laser Lab always waits for you.");
     expect(one[0].count).toBe("1 person");
   });
 
   it("puts a cancel-only row and a row that sends nothing under Straight away, and only the third fold carries no dot", () => {
     const [go, , left] = groupPlan(board())!;
-    expect(go.rows.map((o) => o.name)).toContain("Kabir");
+    expect(go.rows.map((o) => o.name)).toContain("Alexa");
     expect(go.dot).toBeUndefined();
     expect(left.dot).toBeUndefined();
   });
 
   it("does not draw a fold with nobody in it", () => {
-    expect(groupPlan(plan([row("Ada")]))!.map((g) => g.key)).toEqual(["go"]);
-    const nothing = groupPlan(plan([row("Dev", { effect: "no_change", delivery: undefined })]))!;
+    expect(groupPlan(plan([row("Charlotte")]))!.map((g) => g.key)).toEqual(["go"]);
+    const nothing = groupPlan(plan([row("Candice", { effect: "no_change", delivery: undefined })]))!;
     expect(nothing.map((g) => g.heading)).toEqual(["Left as they are"]);
   });
 
   it("is flat when a row that goes ahead says nothing of how it travels: no op half-claims Straight away", () => {
-    const mixed = plan([row("Ada"), row("Bo", { delivery: undefined })]);
+    const mixed = plan([row("Charlotte"), row("Bo", { delivery: undefined })]);
     expect(groupable(mixed)).toBe(false);
     expect(groupPlan(mixed)).toBeNull();
     expect(groupPlan(plan([]))).toBeNull();
-    expect(groupPlan(plan([row("Ada", { delivery: undefined })], { op: "edit_mapping" }))).toBeNull();
+    expect(groupPlan(plan([row("Charlotte", { delivery: undefined })], { op: "edit_mapping" }))).toBeNull();
   });
 });
 
@@ -159,12 +159,12 @@ describe("groupPlan after Apply", () => {
   const applied = () =>
     plan(
       [
-        row("Ada", { effect: "applied" }),
+        row("Charlotte", { effect: "applied" }),
         row("Bo", { effect: "applied" }),
-        row("Jules", { effect: "queued", wait_reason: "role_waits", delivery: "waits_for_you", waits: ["Trained in Laser Lab"] }),
+        row("Jade", { effect: "queued", wait_reason: "role_waits", delivery: "waits_for_you", waits: ["Trained in Laser Lab"] }),
         row("Kai", { effect: "queued", wait_reason: "halted:retrying", retry: { state: "retrying", try: 2, of: 6, next_try: "2099-11-08T14:05:00Z" } }),
-        row("Sam", { effect: "failed", wait_reason: "refused:not_found" }),
-        row("Dev", { effect: "no_change", delivery: undefined }),
+        row("Randy", { effect: "failed", wait_reason: "refused:not_found" }),
+        row("Candice", { effect: "no_change", delivery: undefined }),
       ],
       { applied: true, plan_id: undefined },
     );
@@ -185,21 +185,21 @@ describe("groupPlan after Apply", () => {
 
   it("blooms Done only when every written row reached Zitadel", () => {
     expect(groupPlan(applied())![0].bloom).toBe(false);
-    const all = plan([row("Ada", { effect: "applied" }), row("Dev", { effect: "no_change", delivery: undefined })], { applied: true });
+    const all = plan([row("Charlotte", { effect: "applied" }), row("Candice", { effect: "no_change", delivery: undefined })], { applied: true });
     expect(groupPlan(all)![0].bloom).toBe(true);
   });
 });
 
 describe("beforeLine", () => {
   it("says every shape of finishes-now-or-waits, by changes", () => {
-    expect(beforeLine(plan([row("Ada"), row("Bo")]))).toBe("Every change goes to Zitadel when you apply.");
-    expect(beforeLine(plan([row("Ada", { delivery: "waits_for_you" })]))).toBe(
+    expect(beforeLine(plan([row("Charlotte"), row("Bo")]))).toBe("Every change goes to Zitadel when you apply.");
+    expect(beforeLine(plan([row("Charlotte", { delivery: "waits_for_you" })]))).toBe(
       "Every change waits for you to send. Nothing reaches Zitadel until you press Send on Pending changes.",
     );
-    expect(beforeLine(plan([row("Ada"), row("Bo", { delivery: "waits_for_you" }), row("Cy", { delivery: "waits_for_you" })]))).toBe(
+    expect(beforeLine(plan([row("Charlotte"), row("Bo", { delivery: "waits_for_you" }), row("Cy", { delivery: "waits_for_you" })]))).toBe(
       "Apply sends 1 change to Zitadel now. 2 wait for you to send.",
     );
-    expect(beforeLine(plan([row("Ada"), row("Bo"), row("Cy", { delivery: "waits_for_you" })]))).toBe(
+    expect(beforeLine(plan([row("Charlotte"), row("Bo"), row("Cy", { delivery: "waits_for_you" })]))).toBe(
       "Apply sends 2 changes to Zitadel now. 1 waits for you to send.",
     );
   });
@@ -209,13 +209,13 @@ describe("beforeLine", () => {
   it("counts each person's roles, so a bundle with one waiting role is not all waiting", () => {
     const basic = (name: string) =>
       row(name, { delivery: "waits_for_you", goes: ["Audio-Dash", "Homeassistant"], waits: ["Navidrome community"] });
-    const p = plan([basic("Avani"), basic("Bo"), basic("Cy")]);
+    const p = plan([basic("Raquel"), basic("Bo"), basic("Cy")]);
     expect(groupPlan(p)!.map((g) => g.key)).toEqual(["wait"]);
     expect(beforeLine(p)).toBe("Apply sends 6 changes to Zitadel now. 3 wait for you to send.");
     expect(beforeLine(p)).not.toMatch(/Every change waits|Nothing reaches Zitadel/);
-    const allWait = plan([row("Ada", { delivery: "waits_for_you", waits: ["A", "B"] })]);
+    const allWait = plan([row("Charlotte", { delivery: "waits_for_you", waits: ["A", "B"] })]);
     expect(beforeLine(allWait)).toBe("Every change waits for you to send. Nothing reaches Zitadel until you press Send on Pending changes.");
-    const allNow = plan([row("Ada", { goes: ["A", "B"] })]);
+    const allNow = plan([row("Charlotte", { goes: ["A", "B"] })]);
     expect(beforeLine(allNow)).toBe("Every change goes to Zitadel when you apply.");
   });
 
@@ -223,15 +223,15 @@ describe("beforeLine", () => {
     expect(beforeLine(board())).toBe(
       "Apply sends 2 changes to Zitadel now. 2 wait for you to send. For 1, this only cancels a change that's waiting; nothing is sent.",
     );
-    const two = plan([row("Ada"), row("K1", { delivery: "none", consequence: CANCEL }), row("K2", { delivery: "none", consequence: CANCEL })]);
+    const two = plan([row("Charlotte"), row("K1", { delivery: "none", consequence: CANCEL }), row("K2", { delivery: "none", consequence: CANCEL })]);
     expect(beforeLine(two)).toBe(
       "Every change goes to Zitadel when you apply. For 2, this only cancels changes that are waiting; nothing is sent.",
     );
   });
 
   it("says there is nothing to apply when no row acts, and nothing for a flat plan", () => {
-    expect(beforeLine(plan([row("Dev", { effect: "no_change", delivery: undefined })]))).toBe(NOTHING_TO_APPLY);
-    expect(beforeLine(plan([row("Ada", { delivery: undefined })], { op: "edit_mapping" }))).toBeUndefined();
+    expect(beforeLine(plan([row("Candice", { effect: "no_change", delivery: undefined })]))).toBe(NOTHING_TO_APPLY);
+    expect(beforeLine(plan([row("Charlotte", { delivery: undefined })], { op: "edit_mapping" }))).toBeUndefined();
     expect(beforeLine({ ...board(), applied: true })).toBeUndefined();
   });
 
@@ -242,14 +242,14 @@ describe("beforeLine", () => {
 
 describe("applyLabel", () => {
   it("carries the number, and the cancels in the cancel step's shape", () => {
-    expect(applyLabel(plan([row("Ada"), row("Bo")]), ["person", "people"])).toBe("Apply to 2 people");
+    expect(applyLabel(plan([row("Charlotte"), row("Bo")]), ["person", "people"])).toBe("Apply to 2 people");
     expect(applyLabel(board(), ["person", "people"])).toBe("Cancel 2 and apply to 5 people");
     expect(applyLabel(plan([row("K", { delivery: "none", consequence: CANCEL })]), ["person", "people"])).toBe("Cancel 1 and apply to 1 person");
     expect(applyLabel({ ...board(), summary: undefined } as unknown as BulkPlan, ["person", "people"])).toBe("Apply the change");
   });
 
   it("nobody to apply to is plain Apply; the held button's reason says why", () => {
-    expect(applyLabel(plan([row("Dev", { effect: "no_change", delivery: undefined })]), ["person", "people"])).toBe("Apply");
+    expect(applyLabel(plan([row("Candice", { effect: "no_change", delivery: undefined })]), ["person", "people"])).toBe("Apply");
   });
 });
 
@@ -257,26 +257,26 @@ describe("resultOutcome", () => {
   const done = (outcomes: BulkOutcome[], op: BulkPlan["op"] = "assign_bundle") => resultOutcome(plan(outcomes, { applied: true, op }))!;
 
   it("all reached: Given to N people, All N are in Zitadel now, nothing for you to do", () => {
-    const r = done([row("Ada", { effect: "applied" }), row("Bo", { effect: "applied" })]);
+    const r = done([row("Charlotte", { effect: "applied" }), row("Bo", { effect: "applied" })]);
     expect(r.word).toBe("Given to 2 people");
     expect(r.outcome).toMatchObject({ kind: "applied", message: "All 2 are in Zitadel now.", next: NOTHING_TO_DO });
   });
 
   it("some wait: one clause per fold, ending on the Send link", () => {
-    const r = done([row("Ada", { effect: "applied" }), row("Bo", { effect: "queued", wait_reason: "role_waits" })]);
+    const r = done([row("Charlotte", { effect: "applied" }), row("Bo", { effect: "queued", wait_reason: "role_waits" })]);
     expect(r.outcome.message).toBe("1 is in Zitadel now. 1 waits for you to send.");
     expect(waitsForSend(r.outcome)).toBe(true);
   });
 
   it("all wait", () => {
-    const r = done([row("Ada", { effect: "queued", wait_reason: "role_waits" }), row("Bo", { effect: "queued", wait_reason: "role_waits" })]);
+    const r = done([row("Charlotte", { effect: "queued", wait_reason: "role_waits" }), row("Bo", { effect: "queued", wait_reason: "role_waits" })]);
     expect(r.outcome.message).toBe("All 2 wait for you to send. Nothing has reached Zitadel yet.");
   });
 
   it("some not answered: Syndra sends them again, and when, as the one step", () => {
     const retry = { state: "retrying" as const, try: 2, of: 6, next_try: "2999-01-01T14:05:00Z" };
     const r = done([
-      row("Ada", { effect: "applied" }),
+      row("Charlotte", { effect: "applied" }),
       row("Bo", { effect: "queued", wait_reason: "halted:retrying", retry }),
       row("Cy", { effect: "queued", wait_reason: "halted:retrying", retry }),
     ]);
@@ -286,7 +286,7 @@ describe("resultOutcome", () => {
   });
 
   it("some refused: of N in the word, the refused clause last, and the step on each row", () => {
-    const r = done([row("Ada", { effect: "applied" }), row("Sam", { effect: "failed", wait_reason: "refused:not_found" })], "remove_bundle");
+    const r = done([row("Charlotte", { effect: "applied" }), row("Randy", { effect: "failed", wait_reason: "refused:not_found" })], "remove_bundle");
     expect(r.word).toBe("Revoked from 1 of 2 people");
     expect(r.outcome).toMatchObject({ kind: "failed", recorded: true, message: "1 is in Zitadel now. Zitadel refused 1; the row says why.", next: REFUSED_ROWS_NEXT });
   });
@@ -310,10 +310,10 @@ describe("resultOutcome", () => {
 
   it("never counts automatic rules apart, and never says the act that went has not", () => {
     // The row's roles say its own role went and the rule's two wait.
-    const listed = done([row("Ada", { effect: "applied", rule_waiting: 2, delivery: "waits_for_you", goes: ["Member"], waits: ["A", "B"] })]);
+    const listed = done([row("Charlotte", { effect: "applied", rule_waiting: 2, delivery: "waits_for_you", goes: ["Member"], waits: ["A", "B"] })]);
     expect(listed.outcome.message).toBe("1 is in Zitadel now. 2 wait for you to send.");
     // Without its roles, only what waits is counted.
-    const r = done([row("Ada", { effect: "applied", rule_waiting: 2, delivery: "waits_for_you" })]);
+    const r = done([row("Charlotte", { effect: "applied", rule_waiting: 2, delivery: "waits_for_you" })]);
     expect(r.outcome.message).toBe("All 2 wait for you to send. Nothing has reached Zitadel yet.");
     expect(r.outcome.message).not.toMatch(/automatic rules/);
   });
@@ -330,26 +330,26 @@ describe("resultOutcome", () => {
         waits: ["Navidrome community"],
         ...over,
       });
-    const r = done([basic("Avani"), basic("Bo"), basic("Cy")]);
+    const r = done([basic("Raquel"), basic("Bo"), basic("Cy")]);
     expect(r.word).toBe("Given to 3 people");
     expect(r.outcome).toMatchObject({ kind: "queued", message: "6 are in Zitadel now. 3 wait for you to send." });
     expect(waitsForSend(r.outcome)).toBe(true);
     // The roles sent with it left to a retry are not claimed as in Zitadel.
     const retry = { state: "retrying" as const, try: 2, of: 6 };
-    const halted = done([basic("Avani"), basic("Bo", { retry })]);
+    const halted = done([basic("Raquel"), basic("Bo", { retry })]);
     expect(halted.outcome.message).toBe("2 are in Zitadel now. 2 wait for you to send. 2 aren't in Zitadel yet; Syndra sends them again on its own.");
     // A halt with no retry: its unsent roles are not claimed as in Zitadel, and the step stays Send.
-    const stopped = done([basic("Avani"), basic("Bo", { unsent: 2 })]);
+    const stopped = done([basic("Raquel"), basic("Bo", { unsent: 2 })]);
     expect(stopped.outcome.message).toBe("2 are in Zitadel now. 2 wait for you to send. 2 didn't go to Zitadel.");
     expect(waitsForSend(stopped.outcome)).toBe(true);
     // Every role waits: the all-wait shape still holds when it is true.
-    const all = done([basic("Avani", { goes: [] }), basic("Bo", { goes: [] })]);
+    const all = done([basic("Raquel", { goes: [] }), basic("Bo", { goes: [] })]);
     expect(all.outcome.message).toBe("All 2 wait for you to send. Nothing has reached Zitadel yet.");
   });
 
   it("is null for a flat plan or a plan not yet applied", () => {
     expect(resultOutcome(board())).toBeNull();
-    expect(resultOutcome(plan([row("Ada", { delivery: undefined, effect: "applied" })], { applied: true, op: "edit_mapping" }))).toBeNull();
+    expect(resultOutcome(plan([row("Charlotte", { delivery: undefined, effect: "applied" })], { applied: true, op: "edit_mapping" }))).toBeNull();
   });
 });
 

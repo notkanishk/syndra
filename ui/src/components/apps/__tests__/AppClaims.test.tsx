@@ -66,7 +66,7 @@ const netbird: Profile = {
 const pass = (facts: Record<string, unknown> = {}) => ({ state: "pass" as const, facts });
 function explanation(token: Record<string, unknown>, draft = false): Explanation {
   return {
-    user_id: "ada",
+    user_id: "charlotte",
     read_at: "2026-11-03T09:54:00Z",
     token,
     checks: [
@@ -107,7 +107,7 @@ function routes(shape: AppClaimShape) {
         { id: "custom", version: 1, name: "Custom", profile: shape.project_default },
       ],
     }),
-    "GET /catalog": () => ({ users: [{ id: "me", name: "Kanishk Singh", email: "k@example.edu", title: "" }, { id: "ada", name: "Ada Lovelace", email: "ada@example.edu", title: "" }], projects: [] }),
+    "GET /catalog": () => ({ users: [{ id: "me", name: "Kanishk Singh", email: "k@example.edu", title: "" }, { id: "charlotte", name: "Charlotte Flair", email: "charlotte@example.edu", title: "" }], projects: [] }),
     "GET /applications": () => [],
     "GET /zitadel/health": () => ({ domain: "auth.example.edu" }),
     [`GET /applications/${id}/claim-shape/versions`]: () => ({ versions: [] }),
@@ -115,11 +115,11 @@ function routes(shape: AppClaimShape) {
     [`POST /applications/${id}/claim-shape/preview`]: (body) => {
       const draft = (body as { draft?: Profile }).draft;
       const now = explanation({ groups: words(shape.profile) });
-      if (!draft) return { people: [{ user_id: "ada", now }], changes: [], breaking: [], left_out: [] };
+      if (!draft) return { people: [{ user_id: "charlotte", now }], changes: [], breaking: [], left_out: [] };
       const renamed = words(draft).includes("network-staff");
       const change = { kind: "rename", role: "staff", from: "netbird-staff", to: "network-staff" };
       return {
-        people: [{ user_id: "ada", now, draft: explanation({ groups: words(draft).length ? words(draft) : [] }, true) }],
+        people: [{ user_id: "charlotte", now, draft: explanation({ groups: words(draft).length ? words(draft) : [] }, true) }],
         changes: renamed ? [change] : [],
         breaking: renamed && shape.source === "app" ? [change] : [],
         reach: renamed ? { by_role: { staff: 12 }, people: 23 } : null,
@@ -304,12 +304,12 @@ describe("what the page keeps while you are away", () => {
     const first = renderScreen();
     const who = (await screen.findByLabelText("Preview for")) as HTMLSelectElement;
     await waitFor(() => expect(who.value).toBe("me"));
-    fireEvent.change(who, { target: { value: "ada" } });
+    fireEvent.change(who, { target: { value: "charlotte" } });
     first.unmount();
 
     renderScreen();
     const again = (await screen.findByLabelText("Preview for")) as HTMLSelectElement;
-    await waitFor(() => expect(again.value).toBe("ada"));
+    await waitFor(() => expect(again.value).toBe("charlotte"));
   });
 
   it("falls back to the usual first choice when the remembered person is no longer listed", async () => {
@@ -535,7 +535,7 @@ describe("the page, calm by default (A-15)", () => {
     };
     routes(shapeOf({}));
     api.routes["POST /applications/a1/claim-shape/preview"] = () => ({
-      people: [{ user_id: "ada", now: failing({ groups: ["netbird-staff"] }) }],
+      people: [{ user_id: "charlotte", now: failing({ groups: ["netbird-staff"] }) }],
       changes: [],
       breaking: [],
       left_out: [],
@@ -813,7 +813,7 @@ describe("debug mode", () => {
 
   it("switches to one other person, keeping the end", async () => {
     api.signIns = { on: true, session: session(), sign_ins: [] };
-    api.routes["PUT /applications/a1/debug"] = () => ({ ends_at: session().ends_at, switched: true, session: session({ user_id: "ada" }) });
+    api.routes["PUT /applications/a1/debug"] = () => ({ ends_at: session().ends_at, switched: true, session: session({ user_id: "charlotte" }) });
     renderScreen();
     expect(await screen.findByText("Waiting for your next sign-in to NetBird.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Change account" }));
@@ -821,12 +821,12 @@ describe("debug mode", () => {
     // The one captured now is ticked grey; there is no "everyone".
     expect(within(dialog).getByText("Captured now")).toBeInTheDocument();
     expect(within(dialog).queryByText(/everyone/i)).toBeNull();
-    fireEvent.change(within(dialog).getByPlaceholderText("Choose a person"), { target: { value: "Ada" } });
-    fireEvent.click(within(dialog).getByText("Ada Lovelace"));
+    fireEvent.change(within(dialog).getByPlaceholderText("Choose a person"), { target: { value: "Charlotte" } });
+    fireEvent.click(within(dialog).getByText("Charlotte Flair"));
     expect(within(dialog).getByText(/It still ends at/)).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Switch to Ada Lovelace" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Switch to Charlotte Flair" }));
     await within(dialog).findByText("Switched");
-    expect(api.calls.find((c) => c.method === "PUT" && c.path === "/applications/a1/debug")?.body).toEqual({ user_id: "ada" });
+    expect(api.calls.find((c) => c.method === "PUT" && c.path === "/applications/a1/debug")?.body).toEqual({ user_id: "charlotte" });
   });
 
   it("says it ended by itself, keeps the list as a record, and offers to turn on again", async () => {

@@ -55,8 +55,8 @@ func randomPerson(rng *rand.Rand) models.UserProfile {
 	if rng.IntN(5) == 0 {
 		return models.UserProfile{ID: "u1", Kind: models.UserKindMachine, Username: pick("probe-bot")}
 	}
-	return models.UserProfile{ID: "u1", Kind: models.UserKindHuman, Username: pick("ada"),
-		GivenName: pick("Ada"), FamilyName: pick("Lovelace"), Email: pick("ada@example.edu")}
+	return models.UserProfile{ID: "u1", Kind: models.UserKindHuman, Username: pick("charlotte"),
+		GivenName: pick("Charlotte"), FamilyName: pick("Flair"), Email: pick("charlotte@example.edu")}
 }
 
 // payloadUser is u as Zitadel's query.User serialises it into the payload:

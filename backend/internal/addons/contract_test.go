@@ -78,7 +78,7 @@ func TestApplyEnvelopeMatchesContract(t *testing.T) {
 		ContractVersion: ContractVersion,
 		CallID:          "0f8b7a1c-6d2e-4c53-9a10-2b7c9d4e5f60",
 		Subject:         "289471021834760193",
-		Email:           "maya.chen@example.edu",
+		Email:           "bianca.belair@example.edu",
 		Fingerprint:     "sha256:9d1c4f0b7e2a",
 		PlanID:          "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd",
 		Actor:           "operator-289471021834760199",
@@ -120,7 +120,7 @@ func TestPlanEnvelopeMatchesContract(t *testing.T) {
 		ContractVersion: ContractVersion,
 		Subjects: []planSubjectWire{{
 			Subject: "289471021834760193",
-			Email:   "maya.chen@example.edu",
+			Email:   "bianca.belair@example.edu",
 			Desired: map[string]json.RawMessage{
 				"group":       json.RawMessage(`["lab_makers","fabrication"]`),
 				"enabled":     json.RawMessage(`true`),
@@ -187,7 +187,7 @@ func TestTheAddOnsApplyOutcomeDecodesHere(t *testing.T) {
 	if out.Effect != "applied" {
 		t.Errorf("effect did not arrive: %q", out.Effect)
 	}
-	if out.Username != "maya.chen" || out.UID != 3042 {
+	if out.Username != "bianca.belair" || out.UID != 3042 {
 		t.Errorf("the account identity did not arrive: %q/%d", out.Username, out.UID)
 	}
 	if out.Fingerprint == "" {
@@ -204,8 +204,8 @@ func TestTheAddOnsApplyOutcomeDecodesHere(t *testing.T) {
 // of the defect the request fixtures exist for, where a field the add-on did
 // not declare would have failed every apply in production.
 func TestAnOutcomeCarryingFieldsThisSideIgnoresStillDecodes(t *testing.T) {
-	body := []byte(`{"subject":"sub-1","effect":"applied","detail":"Updated ada.",
-		"username":"ada","uid":3001,"fingerprint":"abc123",
+	body := []byte(`{"subject":"sub-1","effect":"applied","detail":"Updated charlotte.",
+		"username":"charlotte","uid":3001,"fingerprint":"abc123",
 		"observed":{"group":["lab_makers"],"enabled":true},
 		"consequence":"ignored here","a_field_from_a_newer_addon":42}`)
 
@@ -213,7 +213,7 @@ func TestAnOutcomeCarryingFieldsThisSideIgnoresStillDecodes(t *testing.T) {
 	if err := json.Unmarshal(body, &out); err != nil {
 		t.Fatalf("the backend must tolerate fields it does not read: %v", err)
 	}
-	if out.Effect != "applied" || out.Username != "ada" || out.Fingerprint != "abc123" {
+	if out.Effect != "applied" || out.Username != "charlotte" || out.Fingerprint != "abc123" {
 		t.Fatalf("the fields this side does read must survive: %+v", out)
 	}
 }
@@ -224,7 +224,7 @@ func TestAnOutcomeCarryingFieldsThisSideIgnoresStillDecodes(t *testing.T) {
 // looks at that key.
 func TestAnUnverifiedApplyCarriesItsSentenceWhereTheBackendReadsIt(t *testing.T) {
 	body := []byte(`{"subject":"sub-1","effect":"applied","unverified":true,
-		"detail":"Updated ada. The account could not be read back afterwards, so what the target now holds has not been confirmed.",
+		"detail":"Updated charlotte. The account could not be read back afterwards, so what the target now holds has not been confirmed.",
 		"consequence":"ignored by this side"}`)
 
 	var out ApplyResponse

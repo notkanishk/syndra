@@ -75,7 +75,7 @@ beforeEach(() => {
 async function give(role: string) {
   render(
     <QueryClientProvider client={client}>
-      <GrantDirectAccess userId="u1" userName="Ada Lovelace" open onClose={vi.fn()} />
+      <GrantDirectAccess userId="u1" userName="Charlotte Flair" open onClose={vi.fn()} />
     </QueryClientProvider>,
   );
   const dialog = screen.getByRole("dialog");

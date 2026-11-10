@@ -26,8 +26,8 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 
 const GB = 1024 ** 3;
 const base: AccountHome = {
-  subject_id: "u-ada",
-  username: "ada",
+  subject_id: "u-charlotte",
+  username: "charlotte",
   gives_home: true,
   roles_limit: 20 * GB,
   roles_limit_from: { project_id: "p", role_key: "fab_lead" },
@@ -81,8 +81,8 @@ describe("the home line", () => {
 describe("giving one person their own limit", () => {
   it("sends a bounded per-person value, and says what it replaces", async () => {
     const onClose = vi.fn();
-    wrap(<LimitDialog target="truenas" name="Ada Rao" home={base} onClose={onClose} />);
-    expect(screen.getByText("Give Ada Rao their own home folder limit")).toBeTruthy();
+    wrap(<LimitDialog target="truenas" name="Charlotte Flair" home={base} onClose={onClose} />);
+    expect(screen.getByText("Give Charlotte Flair their own home folder limit")).toBeTruthy();
     expect(screen.getByText(/Their roles give them up to 20 GB, from Fabrication lead/)).toBeTruthy();
     expect(screen.getByText(/They have 18\.4 GiB in their home folder now/)).toBeTruthy();
 
@@ -100,7 +100,7 @@ describe("giving one person their own limit", () => {
     expect(onClose).toHaveBeenCalled();
     expect(sent[0].path).toBe("/allowances");
     expect(sent[0].body).toMatchObject({
-      subject_id: "u-ada",
+      subject_id: "u-charlotte",
       target: "truenas",
       field: "home_quota",
       value: String(50 * GB),
@@ -113,8 +113,8 @@ describe("giving one person their own limit", () => {
   it("keeps a reviewed limit as one write (the server replaces the old), or just ends it", async () => {
     const own = { allowance_id: "a1", bytes: 50 * GB, reason: "thesis data", actor_id: "op", set_at: "", review_date: "2026-11-30T00:00:00Z", review_due: true };
     const onClose = vi.fn();
-    const { unmount } = wrap(<LimitDialog target="truenas" name="Ada Rao" home={{ ...base, own }} onClose={onClose} />);
-    expect(screen.getByText("Review Ada Rao's own home folder limit")).toBeTruthy();
+    const { unmount } = wrap(<LimitDialog target="truenas" name="Charlotte Flair" home={{ ...base, own }} onClose={onClose} />);
+    expect(screen.getByText("Review Charlotte Flair's own home folder limit")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Review on"), { target: { value: "2027-02-28" } });
     fireEvent.click(screen.getByRole("button", { name: "Keep this limit" }));
     await waitFor(() => expect(screen.getByText("Kept")).toBeTruthy());
@@ -123,7 +123,7 @@ describe("giving one person their own limit", () => {
     unmount();
 
     sent.length = 0;
-    wrap(<LimitDialog target="truenas" name="Ada Rao" home={{ ...base, own }} onClose={vi.fn()} />);
+    wrap(<LimitDialog target="truenas" name="Charlotte Flair" home={{ ...base, own }} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "End this limit" }));
     await waitFor(() => expect(sent.map((s) => s.path)).toEqual(["/allowances/a1/lift"]));
     await waitFor(() => expect(screen.getByText("Ended")).toBeTruthy());

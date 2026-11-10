@@ -147,7 +147,7 @@ func TestTheApplyOutcomeMatchesContract(t *testing.T) {
 		Effect:      EffectApplied,
 		Detail:      "Added fabrication. Unlocked the account.",
 		Consequence: "In lab_makers, fabrication. Enabled, SMB on.",
-		Username:    "maya.chen",
+		Username:    "bianca.belair",
 		UID:         3042,
 		Fingerprint: "sha256:9d1c4f0b7e2a",
 		Observed: map[string]any{
@@ -170,7 +170,7 @@ func TestAnUnverifiedOutcomeCarriesNoObservation(t *testing.T) {
 	body, err := json.Marshal(ApplyOutcome{
 		Subject: "289471021834760193", Effect: EffectApplied, Unverified: true,
 		Detail:   "Unlocked the account. The account could not be read back afterwards, so what the target now holds has not been confirmed.",
-		Username: "maya.chen", UID: 3042,
+		Username: "bianca.belair", UID: 3042,
 	})
 	if err != nil {
 		t.Fatalf("encode outcome: %v", err)

@@ -134,7 +134,7 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 ### P16 · Pending's narrowings become one
 
 - [x] `lib/pending-filter.ts`: one `usePendingFilters` (read, clear, drop the URL parameter) and one `narrow`; `?q=` stays the search
-- [x] One FilterChip per filter in force; read line "Showing Priya Nair's 2 changes. Sending sends all 7."; search alone keeps "N of the M changes match."
+- [x] One FilterChip per filter in force; read line "Showing Cody Rhodes's 2 changes. Sending sends all 7."; search alone keeps "N of the M changes match."
 - [x] The three `NextStep` callers carry a person or a role: `CancelQueuedStep` (when every kept change is one person's), `RolePickerOne` (the role), `PersonStorage` (the person)
 - [x] Tests: `person.test.tsx` (the combined line, each chip clears only its own parameter), the three callers' link assertions
 

@@ -270,9 +270,9 @@ func seedAuditLogs(ctx context.Context) error {
 	}
 
 	events := [][4]string{
-		{"alice.rivera", "sam_student", "bundle.assigned", "Student Access"},
-		{"alice.rivera", "-", "mapping_rule.created", "printing:member->doors:3d_lab_pin"},
-		{"maya.chen", "leo_mentor", "bundle.assigned", "Prototyping Mentor"},
+		{"becky.lynch", "sam_student", "bundle.assigned", "Student Access"},
+		{"becky.lynch", "-", "mapping_rule.created", "printing:member->doors:3d_lab_pin"},
+		{"bianca.belair", "leo_mentor", "bundle.assigned", "Prototyping Mentor"},
 		{"system", "-", "cache.rebuilt", "demo_seed_v1"},
 	}
 

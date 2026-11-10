@@ -30,13 +30,13 @@ const kiosk = { id: "kiosk", name: "Ingestion Station" };
 beforeEach(() => {
   save.mockReset().mockResolvedValue({});
   unmark.mockReset().mockResolvedValue({});
-  people.data = [entry("u9", "Sana Kohli"), entry("svc", "netbird", { service_account: true }), entry("kiosk", "Ingestion Station")];
+  people.data = [entry("u9", "Iyo Sky"), entry("svc", "netbird", { service_account: true }), entry("kiosk", "Ingestion Station")];
 });
 afterEach(cleanup);
 
 async function chooseOwner() {
   fireEvent.change(screen.getByLabelText("Search people by name or email"), { target: { value: "sa" } });
-  fireEvent.click(await screen.findByText("Sana Kohli"));
+  fireEvent.click(await screen.findByText("Iyo Sky"));
 }
 
 describe("Mark as a service account", () => {
@@ -66,7 +66,7 @@ describe("Mark as a service account", () => {
     await waitFor(() => expect(save).toHaveBeenCalledWith({ kind: "device", purpose: "Intake kiosk", owner_id: "u9" }));
     const result = await screen.findByRole("status");
     expect(result).toHaveTextContent("Marked");
-    expect(result).toHaveTextContent("Ingestion Station is a service account now, and Sana Kohli answers for it.");
+    expect(result).toHaveTextContent("Ingestion Station is a service account now, and Iyo Sky answers for it.");
     expect(result).toHaveTextContent("If this was wrong, Mark as a person on its page puts it back.");
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
@@ -84,7 +84,7 @@ describe("Mark as a service account", () => {
     render(<ServiceAccountDialog mode="mark" account={kiosk} onClose={() => {}} />);
     fireEvent.change(screen.getByLabelText("Search people by name or email"), { target: { value: "n" } });
 
-    expect(await screen.findByText("Sana Kohli")).toBeInTheDocument();
+    expect(await screen.findByText("Iyo Sky")).toBeInTheDocument();
     expect(screen.queryByText("netbird")).not.toBeInTheDocument();
     // The account's own name is only in the title; the picker must not list it.
     expect(screen.queryByText("Ingestion Station")).not.toBeInTheDocument();

@@ -91,7 +91,7 @@ vi.mock("@/components/names", () => ({
 
 function person(overrides: Partial<UserListEntry> = {}): UserListEntry {
   return {
-    user: { id: "u1", name: "Ada", email: "", title: "", team: "", status: "active", avatar: "A" },
+    user: { id: "u1", name: "Charlotte", email: "", title: "", team: "", status: "active", avatar: "A" },
     bundle_count: 0,
     bundle_names: [],
     effective_role_count: 3,

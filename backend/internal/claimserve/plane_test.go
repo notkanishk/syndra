@@ -192,7 +192,7 @@ func TestAnswer_RolesAreZitadelsFactsEnrich(t *testing.T) {
 	}
 	p := New(r, func() time.Time { return time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC) })
 	_ = p.Poll(ctx)
-	b, _ := json.Marshal(claims.Facts{UserID: "u1", ProjectID: "p1", Roles: []string{"admin", "queued"}, GivenName: "Ada", Bundles: []string{"Makers"},
+	b, _ := json.Marshal(claims.Facts{UserID: "u1", ProjectID: "p1", Roles: []string{"admin", "queued"}, GivenName: "Charlotte", Bundles: []string{"Makers"},
 		RoleEnds: map[string]string{"admin": "2026-12-01", "queued": "2026-12-31", "ended": "2026-11-01"}})
 	r.SetField(FactsKey("u1"), "p1", string(b))
 	listed := []string{"admin", "ended", "hidden", "zitadel-only"} // Request.Roles order
@@ -200,7 +200,7 @@ func TestAnswer_RolesAreZitadelsFactsEnrich(t *testing.T) {
 	res := p.Answer(ctx, "u1", "p1", "", pre, listed, claims.Identity{})
 	got, _ := json.Marshal(res.Claims)
 	want := `[{"key":"roles","value":["boss","ended","zitadel-only"]},{"key":"bundles","value":["Makers"]},{"key":"ends","value":{"boss":"2026-12-01","ended":"2026-11-01"}},` +
-		`{"key":"is_boss","value":true},{"key":"name","value":"Ada"},{"key":"svc","value":false},{"key":"uid","value":"u1"}]`
+		`{"key":"is_boss","value":true},{"key":"name","value":"Charlotte"},{"key":"svc","value":false},{"key":"uid","value":"u1"}]`
 	if res.Outcome != claimtel.Served || string(got) != want {
 		t.Fatalf("with facts, %s:\n got %s\nwant %s", res.Outcome, got, want)
 	}
@@ -400,7 +400,7 @@ func TestAnswer_IdentityFromThePayload(t *testing.T) {
 	if err := p.Poll(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ada := claims.Identity{Human: true, GivenName: "Ada", FamilyName: "Lovelace"}
+	charlotte := claims.Identity{Human: true, GivenName: "Charlotte", FamilyName: "Flair"}
 	answer := func(client string, id claims.Identity) (string, Result) {
 		res := p.Answer(ctx, "u1", "p1", client, pre, admin, id)
 		b, _ := json.Marshal(res.Claims)
@@ -411,7 +411,7 @@ func TestAnswer_IdentityFromThePayload(t *testing.T) {
 	}
 
 	// No facts: the names are the payload's, and the token is whole.
-	if got, res := answer("", ada); got != v1Token("Ada", "Lovelace", "Ada Lovelace") || res.Outcome != claimtel.Served || !res.Miss {
+	if got, res := answer("", charlotte); got != v1Token("Charlotte", "Flair", "Charlotte Flair") || res.Outcome != claimtel.Served || !res.Miss {
 		t.Fatalf("no facts, %s miss=%v: %s", res.Outcome, res.Miss, got)
 	}
 	// A machine user: v1 sent its three names as empty strings.
@@ -419,24 +419,24 @@ func TestAnswer_IdentityFromThePayload(t *testing.T) {
 		t.Fatalf("machine: %s", got)
 	}
 	// A shape asking for a fact: the names still, the team left out, counted.
-	if got, res := answer("cTeam", ada); got != v1Token("Ada", "Lovelace", "Ada Lovelace") || res.Outcome != claimtel.ServedRolesOnly {
+	if got, res := answer("cTeam", charlotte); got != v1Token("Charlotte", "Flair", "Charlotte Flair") || res.Outcome != claimtel.ServedRolesOnly {
 		t.Fatalf("no facts, a fact asked for, %s: %s", res.Outcome, got)
 	}
 
 	// Facts with a stale copy: the payload wins, a field it lacks keeps the
 	// copy, and the name is never the display name.
-	b, _ := json.Marshal(claims.Facts{UserID: "u1", ProjectID: "p1", GivenName: "Augusta", FamilyName: "Byron", Name: "Lady Lovelace", Team: "Fab"})
+	b, _ := json.Marshal(claims.Facts{UserID: "u1", ProjectID: "p1", GivenName: "Rhea", FamilyName: "Ripley", Name: "Mami", Team: "Fab"})
 	r.SetField(FactsKey("u1"), "p1", string(b))
-	if got, res := answer("", ada); got != v1Token("Ada", "Lovelace", "Ada Lovelace") || res.Outcome != claimtel.Served {
+	if got, res := answer("", charlotte); got != v1Token("Charlotte", "Flair", "Charlotte Flair") || res.Outcome != claimtel.Served {
 		t.Fatalf("payload over facts, %s: %s", res.Outcome, got)
 	}
-	if got, _ := answer("", claims.Identity{Human: true, GivenName: "Ada"}); got != v1Token("Ada", "Byron", "Ada Byron") {
+	if got, _ := answer("", claims.Identity{Human: true, GivenName: "Charlotte"}); got != v1Token("Charlotte", "Ripley", "Charlotte Ripley") {
 		t.Fatalf("a field the payload lacks: %s", got)
 	}
-	if got, _ := answer("", claims.Identity{}); got != v1Token("Augusta", "Byron", "Lady Lovelace") {
+	if got, _ := answer("", claims.Identity{}); got != v1Token("Rhea", "Ripley", "Mami") {
 		t.Fatalf("no user in the payload, the facts stand: %s", got)
 	}
-	if got, res := answer("cTeam", ada); got != v1Token("Ada", "Lovelace", "Ada Lovelace")[:len(v1Token("Ada", "Lovelace", "Ada Lovelace"))-1]+`,{"key":"team","value":"Fab"}]` || res.Outcome != claimtel.Served {
+	if got, res := answer("cTeam", charlotte); got != v1Token("Charlotte", "Flair", "Charlotte Flair")[:len(v1Token("Charlotte", "Flair", "Charlotte Flair"))-1]+`,{"key":"team","value":"Fab"}]` || res.Outcome != claimtel.Served {
 		t.Fatalf("with facts, the team, %s: %s", res.Outcome, got)
 	}
 }

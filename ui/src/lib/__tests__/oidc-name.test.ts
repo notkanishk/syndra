@@ -29,11 +29,11 @@ describe("extractSessionFields — name", () => {
   });
 
   it("prefers the name claim, then preferred_username", () => {
-    expect(extractSessionFields({ sub, name: "Ada Lovelace" }, "admin").name).toBe("Ada Lovelace");
-    expect(extractSessionFields({ sub, preferred_username: "ada" }, "admin").name).toBe("ada");
+    expect(extractSessionFields({ sub, name: "Charlotte Flair" }, "admin").name).toBe("Charlotte Flair");
+    expect(extractSessionFields({ sub, preferred_username: "charlotte" }, "admin").name).toBe("charlotte");
     expect(
-      extractSessionFields({ sub, name: "Ada Lovelace", preferred_username: "ada" }, "admin").name,
-    ).toBe("Ada Lovelace");
+      extractSessionFields({ sub, name: "Charlotte Flair", preferred_username: "charlotte" }, "admin").name,
+    ).toBe("Charlotte Flair");
   });
 
   it("still derives the admin role independent of the name claims", () => {
@@ -45,12 +45,12 @@ describe("extractSessionFields — name", () => {
 
 describe("nameFromEmail", () => {
   it("title-cases a dotted local part", () => {
-    expect(nameFromEmail("priya.sharma@example.org")).toBe("Priya Sharma");
+    expect(nameFromEmail("cody.rhodes@example.org")).toBe("Cody Rhodes");
   });
 
   it("handles underscores and hyphens", () => {
-    expect(nameFromEmail("ada_lovelace@example.com")).toBe("Ada Lovelace");
-    expect(nameFromEmail("ada-lovelace@example.com")).toBe("Ada Lovelace");
+    expect(nameFromEmail("charlotte_flair@example.com")).toBe("Charlotte Flair");
+    expect(nameFromEmail("charlotte-flair@example.com")).toBe("Charlotte Flair");
   });
 
   it("returns empty for a blank or malformed address", () => {
@@ -67,7 +67,7 @@ describe("resolveDisplayName", () => {
   });
 
   it("treats whitespace-only sources as absent", () => {
-    expect(resolveDisplayName("  ", "  ", "ada.lovelace@example.com")).toBe("Ada Lovelace");
+    expect(resolveDisplayName("  ", "  ", "charlotte.flair@example.com")).toBe("Charlotte Flair");
   });
 
   it("returns empty rather than inventing a name when nothing knows", () => {

@@ -91,7 +91,7 @@ describe("the Keys sheet (A-19 P7)", () => {
 function rows() {
   return (
     <ArriveList startSettled>
-      {["Ada", "Ben", "Chi"].map((name) => (
+      {["Charlotte", "Ben", "Chi"].map((name) => (
         <div key={name}>
           <a data-row href={`/users/${name}`}>
             {name}
@@ -106,7 +106,7 @@ function rows() {
 describe("arrows between rows (A-19 P7)", () => {
   it("puts one row in the Tab order and the rest out of it", () => {
     render(rows());
-    expect(screen.getByRole("link", { name: "Ada" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("link", { name: "Charlotte" })).toHaveAttribute("tabindex", "0");
     expect(screen.getByRole("link", { name: "Ben" })).toHaveAttribute("tabindex", "-1");
     expect(screen.getByRole("link", { name: "Chi" })).toHaveAttribute("tabindex", "-1");
     // The row's own buttons stay on Tab.
@@ -115,12 +115,12 @@ describe("arrows between rows (A-19 P7)", () => {
 
   it("moves down and up, and the row focused takes the Tab stop", () => {
     render(rows());
-    const [ada, ben, chi] = ["Ada", "Ben", "Chi"].map((n) => screen.getByRole("link", { name: n }));
-    ada.focus();
-    key({ key: "ArrowDown" }, ada);
+    const [charlotte, ben, chi] = ["Charlotte", "Ben", "Chi"].map((n) => screen.getByRole("link", { name: n }));
+    charlotte.focus();
+    key({ key: "ArrowDown" }, charlotte);
     expect(document.activeElement).toBe(ben);
     expect(ben).toHaveAttribute("tabindex", "0");
-    expect(ada).toHaveAttribute("tabindex", "-1");
+    expect(charlotte).toHaveAttribute("tabindex", "-1");
     key({ key: "ArrowDown" }, ben);
     expect(document.activeElement).toBe(chi);
     key({ key: "ArrowUp" }, chi);
@@ -129,10 +129,10 @@ describe("arrows between rows (A-19 P7)", () => {
 
   it("stops at the ends rather than wrapping", () => {
     render(rows());
-    const [ada, , chi] = ["Ada", "Ben", "Chi"].map((n) => screen.getByRole("link", { name: n }));
-    ada.focus();
-    key({ key: "ArrowUp" }, ada);
-    expect(document.activeElement).toBe(ada);
+    const [charlotte, , chi] = ["Charlotte", "Ben", "Chi"].map((n) => screen.getByRole("link", { name: n }));
+    charlotte.focus();
+    key({ key: "ArrowUp" }, charlotte);
+    expect(document.activeElement).toBe(charlotte);
     chi.focus();
     key({ key: "ArrowDown" }, chi);
     expect(document.activeElement).toBe(chi);
@@ -165,7 +165,7 @@ describe("arrows between rows (A-19 P7)", () => {
         </ArriveList>
       </>,
     );
-    const button = screen.getByRole("button", { name: "Extend Ada" });
+    const button = screen.getByRole("button", { name: "Extend Charlotte" });
     button.focus();
     const ev = key({ key: "ArrowDown" }, button);
     expect(ev).toBe(true); // not prevented: the button's arrow is its own
@@ -183,7 +183,7 @@ describe("arrows between rows (A-19 P7)", () => {
     expect(ben).toHaveAttribute("tabindex", "0");
     rerender(
       <ArriveList startSettled>
-        {["Ada", "Ben", "Chi", "Dev"].map((name) => (
+        {["Charlotte", "Ben", "Chi", "Dev"].map((name) => (
           <div key={name}>
             <a data-row href={`/users/${name}`}>
               {name}
@@ -193,7 +193,7 @@ describe("arrows between rows (A-19 P7)", () => {
       </ArriveList>,
     );
     expect(screen.getByRole("link", { name: "Ben" })).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("link", { name: "Ada" })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("link", { name: "Charlotte" })).toHaveAttribute("tabindex", "-1");
     expect(screen.getByRole("link", { name: "Dev" })).toHaveAttribute("tabindex", "-1");
   });
 });

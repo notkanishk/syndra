@@ -79,7 +79,7 @@ vi.mock("@/components/names", async () => {
   };
 });
 
-const session = { id: "op", name: "Ada", email: "ada@example.org" } as unknown as SessionUser;
+const session = { id: "op", name: "Charlotte", email: "charlotte@example.org" } as unknown as SessionUser;
 
 function renderHome() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

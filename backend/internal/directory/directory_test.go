@@ -163,7 +163,7 @@ func TestZitadelSource_Users_MapsFields(t *testing.T) {
 	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
 		return &zitadel.SearchResult[zitadel.ZitadelUser]{
 			Items: []zitadel.ZitadelUser{
-				{ID: "u1", DisplayName: "Alice Doe", Email: "alice@example.com", State: "USER_STATE_ACTIVE"},
+				{ID: "u1", DisplayName: "Becky Doe", Email: "becky@example.com", State: "USER_STATE_ACTIVE"},
 				{ID: "u2", Username: "bob", Email: "bob@example.com", State: "USER_STATE_LOCKED"},
 			},
 			Total: 2,
@@ -178,7 +178,7 @@ func TestZitadelSource_Users_MapsFields(t *testing.T) {
 	if len(users) != 2 {
 		t.Fatalf("got %d users, want 2", len(users))
 	}
-	if users[0].Name != "Alice Doe" || users[0].Avatar != "AD" || users[0].Status != "active" {
+	if users[0].Name != "Becky Doe" || users[0].Avatar != "BD" || users[0].Status != "active" {
 		t.Fatalf("user[0] mapping wrong: %+v", users[0])
 	}
 	// DisplayName empty → fall back to Username.
@@ -458,7 +458,7 @@ func TestZitadelSource_Users_MetadataOverlay(t *testing.T) {
 	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
 		return &zitadel.SearchResult[zitadel.ZitadelUser]{
 			Items: []zitadel.ZitadelUser{
-				{ID: "u1", DisplayName: "Alice"},
+				{ID: "u1", DisplayName: "Becky"},
 				{ID: "u2", DisplayName: "Bob"},
 			},
 			Total: 2,
@@ -540,7 +540,7 @@ func TestZitadelSource_Users_MetadataErrorDoesntFailList(t *testing.T) {
 func TestZitadelSource_Cache_TTLExpires(t *testing.T) {
 	mc := newMockClient()
 	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
-		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1", DisplayName: "Alice"}}}, nil
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1", DisplayName: "Becky"}}}, nil
 	}
 	src := newZitadelSourceForTest(mc)
 
@@ -717,7 +717,7 @@ func TestZitadelSource_FindUser_FallsBackToGetUser(t *testing.T) {
 	// ListUsers returns just u1; FindUser("u2") should fan out to GetUser.
 	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
 		return &zitadel.SearchResult[zitadel.ZitadelUser]{
-			Items: []zitadel.ZitadelUser{{ID: "u1", DisplayName: "Alice"}},
+			Items: []zitadel.ZitadelUser{{ID: "u1", DisplayName: "Becky"}},
 		}, nil
 	}
 	mc.getUserFn = func(_ context.Context, id string) (*zitadel.ZitadelUser, error) {
@@ -770,7 +770,7 @@ func TestZitadelSource_ServesLastGoodReadWhileZitadelIsDown(t *testing.T) {
 		if down {
 			return nil, errors.New("connection refused")
 		}
-		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1", DisplayName: "Alice"}}}, nil
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1", DisplayName: "Becky"}}}, nil
 	}
 	src := newZitadelSourceForTest(mc)
 	readAt := time.Now()

@@ -325,7 +325,7 @@ func TestDeleteRole_HeldInZitadel_RefusedUntilTheCountIsConfirmed(t *testing.T) 
 	now := time.Now()
 	roleMembersFor = func(context.Context, string, string) (RoleMembersView, error) {
 		return RoleMembersView{
-			ObservedOnly: []models.UserProfile{{ID: "u2", Name: "grace Hopper"}, {ID: "u1", Name: "Ada Lovelace"}},
+			ObservedOnly: []models.UserProfile{{ID: "u2", Name: "sami Zayn"}, {ID: "u1", Name: "Charlotte Flair"}},
 			Observation:  models.ObservationBasis{ReadAt: &now, Current: true},
 		}, nil
 	}

@@ -160,7 +160,7 @@ knows more than it does, and in each case the honest version is the same move:
 say what is true, offer what works, and do not invent the missing half.
 
 - **B14 · the empty member landing.** The reply: *"Nobody has given you access
-  yet. Ask Kabir Rao, who looks after Fabrication."* Nothing in Syndra records
+  yet. Ask Kairi Sane, who looks after Fabrication."* Nothing in Syndra records
   who looks after a project — there is no owner field on a project, in the
   models or in the API — so the name would be fabricated, on the one screen
   whose whole job is telling somebody with no access what to do next. It

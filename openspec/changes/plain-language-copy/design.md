@@ -88,7 +88,7 @@ The character is in *when* she speaks and *how exactly*, not in extra words. Str
 | Where | Words |
 |---|---|
 | My access, calm | "Nothing needs you right now." (the same words as Home) |
-| My access, greeting | "Morning, Priya. Here's what you can use." (Morning before 12, Afternoon before 17, Evening after) |
+| My access, greeting | "Morning, Cody. Here's what you can use." (Morning before 12, Afternoon before 17, Evening after) |
 | My access, quiet month | "Nothing has changed in the last 30 days." |
 | My access, access starts | "From today, you can use Laser cutting." |
 | Drift, all clear | "Everyone inside is on the list, and everyone on the list is inside." |
@@ -160,7 +160,7 @@ opens *Network storage* has not read *Bundles*.
 ## 5. What every action carries
 
 **The button names its object.** "Revoke this role", "Send 12 changes",
-"Approve for Priya". Never "OK", "Go", "Submit", "Confirm" alone. Out of
+"Approve for Cody". Never "OK", "Go", "Submit", "Confirm" alone. Out of
 context — read by a screen reader from a list of buttons — the label must
 still say what it does.
 
@@ -206,7 +206,7 @@ words live in `ui/src/lib/retry.ts` and nowhere else.
 2026: "along with clear communication, there should be clear next steps or
 lack thereof"). Every outcome, state and notice ends on one of two things: what
 to do and where, as a link or button when there is one ("Press Send on Pending
-changes", "Check TrueNAS under System", "Ask Priya to sign in once"), or an
+changes", "Check TrueNAS under System", "Ask Cody to sign in once"), or an
 explicit *Nothing for you to do.* ("Nothing for you to do. Syndra sends it
 again at 14:05 and says on Home if it stops sending it."). Silence is never the "none".
 It holds by construction: `nextStepOf` (`lib/outcome.ts`) gives every outcome
@@ -292,11 +292,11 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 **A single act that would cancel a waiting change says so before the press**
 (A-21 §3, architecture deepening 1.2). The sheet reads the act's plan as soon
 as it has enough to plan, and its before-line says it: "Giving it cancels the
-removal Sam Lee queued 2h ago. Nothing is cancelled until you choose on the
+removal Randy Orton queued 2h ago. Nothing is cancelled until you choose on the
 next step." became, with the owner's 8 Nov rule that give is only a verb,
-"Giving it cancels removing Member in Laser Lab from Sam, which was waiting for
+"Giving it cancels removing Member in Laser Lab from Randy, which was waiting for
 you to send." (several: "Giving it cancels 2 changes that are waiting.");
-"Revoking it cancels giving Member in Laser Lab to Sam, which was waiting for
+"Revoking it cancels giving Member in Laser Lab to Randy, which was waiting for
 you to send.", "Approving cancels removing … from …, which was waiting for you to
 send." (in the
 row's "If you approve:" line), "Applying cancels …" (Manage bundles),
@@ -342,13 +342,13 @@ change." and the sign-in lookup's "It's on the Audit page with your reason."
 (it said Change history, which holds bundle and rule changes only).
 
 **A revoke that only cancels is the cancel, said plainly** (owner, 8 Nov: "give" is only a verb, so the sheet says what was going to happen, to whom, and that it has not). Lede: "Given to
-Rohan on 3 Nov by Sam Lee, and still waiting for you to send." Title: "Cancel giving Member in
-Laser Lab to Rohan?" (never "Revoke direct access to …", which is not the act). Body: "It's still waiting for you to send, so Rohan never had it. Nothing is sent to Zitadel."
-Button: "Cancel giving it" ("Cancel giving the Safety bundle to Rohan?" for a bundle, same buttons;
-"Cancel removing Member in Laser Lab from Sam?" and "Cancel removing it" for a waiting removal); the
+Liv on 3 Nov by Randy Orton, and still waiting for you to send." Title: "Cancel giving Member in
+Laser Lab to Liv?" (never "Revoke direct access to …", which is not the act). Body: "It's still waiting for you to send, so Liv never had it. Nothing is sent to Zitadel."
+Button: "Cancel giving it" ("Cancel giving the Safety bundle to Liv?" for a bundle, same buttons;
+"Cancel removing Member in Laser Lab from Randy?" and "Cancel removing it" for a waiting removal); the
 dismiss beside it is "Keep it waiting", never a second "Cancel". Once pressed, the sheet
 is its result (A-22 G22): the lede, body and before-line leave with the form. Result: **Cancelled**, "Member in
-Laser Lab won't be given to Rohan. It never reached Zitadel." / "Member in Laser Lab stays with Sam. The removal never reached Zitadel.", then "Nothing for you
+Laser Lab won't be given to Liv. It never reached Zitadel." / "Member in Laser Lab stays with Randy. The removal never reached Zitadel.", then "Nothing for you
 to do."
 
 **A plan is grouped by how each change travels** (A-21 §Q1, architecture
@@ -392,13 +392,13 @@ person's fold), and the sentences that overwrote a row after Apply ("Recorded
 in Syndra. A role it gives always waits for you, …").
 
 **When a person's access moved while the sheet was open, nothing is written**
-(A-21 §3.3). In a sheet, one Notice: "Nothing was changed. Rohan's access
+(A-21 §3.3). In a sheet, one Notice: "Nothing was changed. Liv's access
 moved while this was open." with "Read the note under the form, then press
 Give role again." (the button's own label), and the note is the fresh plan. In
-a row (Approve): "Nothing was changed. Rohan's access moved while you looked."
+a row (Approve): "Nothing was changed. Liv's access moved while you looked."
 then "Read the line above, then approve again." Extend on a row: "Nothing was
-changed. Rohan's access moved while you looked." then "Press Extend again to
-read it afresh." Drift's Adopt sheet: "Nothing was changed. Rohan's access
+changed. Liv's access moved while you looked." then "Press Extend again to
+read it afresh." Drift's Adopt sheet: "Nothing was changed. Liv's access
 moved while this was open." with "Read the lines under the role, then press
 Adopt in Syndra again." Never "stale" or "plan".
 
@@ -502,7 +502,7 @@ thing under two names reads as two things.
 | **makerspace staff** — in member-facing copy | lab manager, steward, operator, whoever runs the makerspace |
 | **revoke** — end a person's access | withdraw access, take away, drop, retire access |
 | **withdraw** — a member takes back their own request | — |
-| **cancel** — undo a change still waiting for you to send ("Cancel giving it", "Cancel removing it", the row verb "Cancel"; the dismiss is "Keep it waiting"; result **Cancelled**). A waiting change is named by what it was going to do ("giving Member in Laser Lab to Sam", "removing it from Sam"), never "the waiting give" | withdraw the queued grant, withdraw the queued change, withdraw (of a queued change) (A-21 §3.2, 8 Nov) |
+| **cancel** — undo a change still waiting for you to send ("Cancel giving it", "Cancel removing it", the row verb "Cancel"; the dismiss is "Keep it waiting"; result **Cancelled**). A waiting change is named by what it was going to do ("giving Member in Laser Lab to Randy", "removing it from Randy"), never "the waiting give" | withdraw the queued grant, withdraw the queued change, withdraw (of a queued change) (A-21 §3.2, 8 Nov) |
 | **remove** — take a thing out of a set | — |
 | **delete** — an object ceases to exist | purge |
 | **retire** — a bundle closes to new members | delete (of a bundle) |

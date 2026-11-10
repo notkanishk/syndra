@@ -18,8 +18,8 @@ function person(overrides: Partial<UserListEntry> = {}): UserListEntry {
   return {
     user: {
       id: "u1",
-      name: "Ada Lovelace",
-      email: "ada@example.edu",
+      name: "Charlotte Flair",
+      email: "charlotte@example.edu",
       title: "",
       team: "",
       status: "active",
@@ -87,10 +87,10 @@ describe("parseFilters", () => {
 
   it("reads every filter out of the query string", () => {
     const filters = parseFilters(
-      new URLSearchParams("q=ada&project=pLaser&role=trained&bundle=Safety&attention=expiring"),
+      new URLSearchParams("q=charlotte&project=pLaser&role=trained&bundle=Safety&attention=expiring"),
     );
     expect(filters).toEqual({
-      q: "ada",
+      q: "charlotte",
       project: "pLaser",
       role: "trained",
       bundle: "Safety",
@@ -102,13 +102,13 @@ describe("parseFilters", () => {
 
 describe("serializeFilters", () => {
   it("omits empty values so a cleared filter leaves no trace", () => {
-    expect(serializeFilters({ ...EMPTY_FILTERS, q: "ada" })).toBe("?q=ada");
+    expect(serializeFilters({ ...EMPTY_FILTERS, q: "charlotte" })).toBe("?q=charlotte");
     expect(serializeFilters(EMPTY_FILTERS)).toBe("");
   });
 
   it("round-trips through parseFilters", () => {
     const original = {
-      q: "ada",
+      q: "charlotte",
       project: "pLaser",
       role: "trained",
       bundle: "Safety",
@@ -205,8 +205,8 @@ describe("describeFilters", () => {
     // operator to trust a number they cannot check.
     expect(describeFilters({ ...EMPTY_FILTERS, project: "pLaser" }, "Laser Lab")).toBe("in Laser Lab");
     expect(
-      describeFilters({ ...EMPTY_FILTERS, q: "ada", attention: "expiring" }),
-    ).toBe("matching “ada” and with access ending within 30 days");
+      describeFilters({ ...EMPTY_FILTERS, q: "charlotte", attention: "expiring" }),
+    ).toBe("matching “charlotte” and with access ending within 30 days");
   });
 
   it("says nothing when nothing is filtered", () => {
@@ -318,14 +318,14 @@ describe("primaryBulkVerb", () => {
       "bundle=Lab%20Tech",
       "attention=unexplained",
       "attention=requests",
-      "q=ada",
+      "q=charlotte",
     ]) {
       expect(read(query), query).toBe("assign_role");
     }
   });
 
   it("reads the job, not the other narrowing around it", () => {
-    expect(read("q=ada&project=pLaser&attention=departed")).toBe("remove_role");
+    expect(read("q=charlotte&project=pLaser&attention=departed")).toBe("remove_role");
     // An unknown cohort degrades to unset, and so to the default.
     expect(read("attention=everyone")).toBe("assign_role");
   });

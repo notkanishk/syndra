@@ -17,7 +17,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
       accounts: [
         {
           subject_id: "u1",
-          username: "ada.l",
+          username: "charlotte.l",
           account_uid: 200001,
           bound_at: "2026-10-15T10:00:00Z",
         },
@@ -30,11 +30,11 @@ vi.mock("@/lib/queries/useTargets", () => ({
   useTargetHomes: () => ({ data: { accounts: [] }, isLoading: false, error: null }),
 }));
 vi.mock("@/components/names", () => ({
-  UserName: () => <span>Ada Lovelace</span>,
+  UserName: () => <span>Charlotte Flair</span>,
   UserAvatar: () => null,
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
-  useNameResolver: () => ({ resolveUser: () => ({ value: { display_name: "Ada Lovelace" }, resolved: true }) }),
+  useNameResolver: () => ({ resolveUser: () => ({ value: { display_name: "Charlotte Flair" }, resolved: true }) }),
 }));
 vi.mock("@/components/targets/HomeLimit", () => ({
   HomeLine: () => null,
@@ -48,8 +48,8 @@ describe("accounts on a connected system", () => {
   it("names the person and the account, and prints no numeric id", () => {
     render(<PeopleOnTarget target="truenas" />);
 
-    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
-    expect(screen.getByText("ada.l")).toBeInTheDocument();
+    expect(screen.getByText("Charlotte Flair")).toBeInTheDocument();
+    expect(screen.getByText("charlotte.l")).toBeInTheDocument();
     expect(screen.queryByText(/200001/)).not.toBeInTheDocument();
   });
 });

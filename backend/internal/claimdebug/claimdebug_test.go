@@ -37,31 +37,31 @@ func capture(r *Recorder, c *clock, user string) {
 // the end; the end is enforced server-side and recorded once.
 func TestRecorder_OneAccountFifteenMinutes(t *testing.T) {
 	r, c, ended := newTest(t)
-	if r.Wants("cNB", "ada") {
+	if r.Wants("cNB", "charlotte") {
 		t.Fatal("off by default")
 	}
-	s, switched := r.Start("aNB", "cNB", "ada", "kanishk")
+	s, switched := r.Start("aNB", "cNB", "charlotte", "kanishk")
 	if switched || !s.EndsAt.Equal(c.now().Add(Window)) {
 		t.Fatalf("start: %+v switched=%v", s, switched)
 	}
-	if !r.Wants("cNB", "ada") || r.Wants("cNB", "grace") || r.Wants("cOther", "ada") {
-		t.Fatal("only Ada's sign-ins to NetBird")
+	if !r.Wants("cNB", "charlotte") || r.Wants("cNB", "sami") || r.Wants("cOther", "charlotte") {
+		t.Fatal("only Charlotte's sign-ins to NetBird")
 	}
-	capture(r, c, "ada")
-	capture(r, c, "grace") // never held
+	capture(r, c, "charlotte")
+	capture(r, c, "sami") // never held
 
 	c.add(5 * time.Minute)
-	s2, switched := r.Start("aNB", "cNB", "aanya", "kanishk")
-	if !switched || !s2.EndsAt.Equal(s.EndsAt) || s2.UserID != "aanya" {
+	s2, switched := r.Start("aNB", "cNB", "roman", "kanishk")
+	if !switched || !s2.EndsAt.Equal(s.EndsAt) || s2.UserID != "roman" {
 		t.Fatalf("a switch moves the capture and never the end: %+v", s2)
 	}
-	if r.Wants("cNB", "ada") || !r.Wants("cNB", "aanya") {
-		t.Fatal("after the switch only Aanya")
+	if r.Wants("cNB", "charlotte") || !r.Wants("cNB", "roman") {
+		t.Fatal("after the switch only Roman")
 	}
-	capture(r, c, "aanya")
+	capture(r, c, "roman")
 
 	list := r.SignIns("aNB", 0)
-	if len(list) != 2 || list[0].UserID != "aanya" || list[1].UserID != "ada" || list[0].Checks != "checks" {
+	if len(list) != 2 || list[0].UserID != "roman" || list[1].UserID != "charlotte" || list[0].Checks != "checks" {
 		t.Fatalf("newest first, both people, checks kept: %+v", list)
 	}
 	if after := r.SignIns("aNB", list[0].Seq); len(after) != 0 {
@@ -69,7 +69,7 @@ func TestRecorder_OneAccountFifteenMinutes(t *testing.T) {
 	}
 
 	c.add(10 * time.Minute)
-	if r.Wants("cNB", "aanya") {
+	if r.Wants("cNB", "roman") {
 		t.Fatal("15 minutes is enforced here, not by the page")
 	}
 	r.Sweep()
@@ -92,20 +92,20 @@ func TestRecorder_OneAccountFifteenMinutes(t *testing.T) {
 
 func TestRecorder_StopAndCap(t *testing.T) {
 	r, c, ended := newTest(t)
-	r.Start("aNB", "cNB", "ada", "kanishk")
+	r.Start("aNB", "cNB", "charlotte", "kanishk")
 	for i := 0; i < Cap+5; i++ {
-		capture(r, c, "ada")
+		capture(r, c, "charlotte")
 	}
 	if got := r.SignIns("aNB", 0); len(got) != Cap || got[0].Seq != int64(Cap+5) {
 		t.Fatalf("cap %d, newest kept: len=%d", Cap, len(got))
 	}
 	s, ok := r.Stop("aNB", "kanishk")
-	if !ok || s.EndedBy != "kanishk" || r.Wants("cNB", "ada") || len(*ended) != 0 {
+	if !ok || s.EndedBy != "kanishk" || r.Wants("cNB", "charlotte") || len(*ended) != 0 {
 		t.Fatalf("stopped by hand: %+v", s)
 	}
 	// Turn on again: a fresh 15 minutes.
 	c.add(time.Minute)
-	s2, switched := r.Start("aNB", "cNB", "ada", "kanishk")
+	s2, switched := r.Start("aNB", "cNB", "charlotte", "kanishk")
 	if switched || !s2.EndsAt.Equal(c.now().Add(Window)) {
 		t.Fatalf("on again: %+v", s2)
 	}
@@ -143,9 +143,9 @@ func TestRecorder_PanicInExplainIsSurvived(t *testing.T) {
 		}
 		return "checks"
 	}, nil)
-	r.Start("aNB", "cNB", "ada", "kanishk")
-	r.Record(Capture{At: c.now(), ClientID: "cNB", UserID: "ada"})
-	r.Record(Capture{At: c.now(), ClientID: "cNB", UserID: "ada"})
+	r.Start("aNB", "cNB", "charlotte", "kanishk")
+	r.Record(Capture{At: c.now(), ClientID: "cNB", UserID: "charlotte"})
+	r.Record(Capture{At: c.now(), ClientID: "cNB", UserID: "charlotte"})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && len(r.SignIns("aNB", 0)) == 0 {
 		time.Sleep(5 * time.Millisecond)

@@ -75,7 +75,7 @@ func TestInsightsWhoHandler_PassesParsedRefs(t *testing.T) {
 	var gotHas, gotWithout services.InsightRef
 	svcInsightsWho = func(_ context.Context, has, without services.InsightRef) (models.InsightsWho, error) {
 		gotHas, gotWithout = has, without
-		return models.InsightsWho{People: []models.InsightPerson{{UserID: "u1", Name: "Ada", Email: "ada@example.org"}}}, nil
+		return models.InsightsWho{People: []models.InsightPerson{{UserID: "u1", Name: "Charlotte", Email: "charlotte@example.org"}}}, nil
 	}
 	rr := getWho(url.Values{"has": {"role:p1:x"}, "without": {"bundle:b1"}})
 	if rr.Code != http.StatusOK {
@@ -199,7 +199,7 @@ func TestInsightsWhatIfHandler_PassesTheChangeAndReturnsTheAnswer(t *testing.T) 
 		got = c
 		return models.InsightsWhatIf{
 			Change: c, Unchanged: 3,
-			Gains:  []models.InsightWhatIfPerson{{UserID: "u1", Name: "Ada", Roles: []models.RoleGrant{{ProjectID: "p1", RoleKey: "x"}}}},
+			Gains:  []models.InsightWhatIfPerson{{UserID: "u1", Name: "Charlotte", Roles: []models.RoleGrant{{ProjectID: "p1", RoleKey: "x"}}}},
 			Losses: []models.InsightWhatIfPerson{},
 		}, nil
 	}

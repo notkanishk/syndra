@@ -108,8 +108,8 @@ vi.mock("@/lib/queries/useMappings", async () => {
         outcomes: [
           {
             user_id: "u1",
-            name: "Ada",
-            email: "ada@example.org",
+            name: "Charlotte",
+            email: "charlotte@example.org",
             effect: "apply",
             detail: "maker confers group = lab_x on truenas instead of lab_makers.",
           },

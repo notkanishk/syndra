@@ -92,7 +92,7 @@ describe("driftRequest", () => {
 
 describe("originOf", () => {
   it("prefers a named actor over any weaker claim", () => {
-    expect(originOf(row({ upstream_actor: "sana", event_possibly_missed: true }))).toBe("named");
+    expect(originOf(row({ upstream_actor: "iyo", event_possibly_missed: true }))).toBe("named");
   });
 
   it("tells a missing event apart from an unattributable one", () => {
@@ -107,7 +107,7 @@ describe("originOf", () => {
 
 describe("applyDriftFilters", () => {
   it("narrows by origin", () => {
-    const rows = [row({ id: "a", upstream_actor: "sana" }), row({ id: "b" })];
+    const rows = [row({ id: "a", upstream_actor: "iyo" }), row({ id: "b" })];
     expect(applyDriftFilters(rows, { ...EMPTY_DRIFT_FILTERS, origin: "named" }, NOW)).toHaveLength(1);
   });
 
@@ -197,7 +197,7 @@ describe("driftReason", () => {
 });
 
 describe("sortDrift", () => {
-  const who: Record<string, string> = { u1: "Meera", u2: "Arjun", u3: "Tomas" };
+  const who: Record<string, string> = { u1: "Finn", u2: "Chad", u3: "Kevin" };
   const names = { who: (item: DriftTriageItem) => who[item.user_id] ?? "", what: () => "" };
   const rows = [
     row({ id: "a", user_id: "u1", detected_at: "2026-09-10T00:00:00Z" }),
@@ -236,9 +236,9 @@ describe("sortDrift", () => {
 describe("matchesDriftSearch", () => {
   it("matches a person or a role, in any case, and everything when empty", () => {
     const item = row({ role_keys: ["wood.member"] });
-    const text = { who: "Meera Pillai", what: "Wood shop Member" };
+    const text = { who: "Finn Balor", what: "Wood shop Member" };
     expect(matchesDriftSearch(item, "", text)).toBe(true);
-    expect(matchesDriftSearch(item, "  MEERA ", text)).toBe(true);
+    expect(matchesDriftSearch(item, "  FINN ", text)).toBe(true);
     expect(matchesDriftSearch(item, "wood.member", text)).toBe(true);
     expect(matchesDriftSearch(item, "shop", text)).toBe(true);
     expect(matchesDriftSearch(item, "laser", text)).toBe(false);

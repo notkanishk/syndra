@@ -25,7 +25,7 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
     data: state.loading
       ? undefined
       : {
-          user: { id: "u1", name: "Ada Lovelace", email: "ada@example.edu", title: "", team: "Fabrication", status: "active", avatar: "AL" },
+          user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "Fabrication", status: "active", avatar: "AL" },
           bundles: [],
           projects: [],
           cleanup_hints: [],
@@ -45,7 +45,7 @@ vi.mock("@/lib/queries/useRequests", () => ({
 }));
 
 const row = {
-  user: { id: "u1", name: "Ada Lovelace", email: "ada@example.edu", title: "Student Staff", team: "Fabrication", status: "active", avatar: "AL" },
+  user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "Student Staff", team: "Fabrication", status: "active", avatar: "AL" },
 } as UserListEntry;
 
 function Crumb() {
@@ -75,9 +75,9 @@ describe("the name arrives with you", () => {
   it("paints the name, the meta and the breadcrumb on the first frame, before any skeleton", () => {
     renderPerson(true);
     // No timers have run: this is the first paint, and the skeleton is 200ms away.
-    expect(screen.getByRole("heading", { name: "Ada Lovelace" })).toBeInTheDocument();
-    expect(screen.getByText("ada@example.edu")).toBeInTheDocument();
-    expect(screen.getByTestId("crumb")).toHaveTextContent("Ada Lovelace");
+    expect(screen.getByRole("heading", { name: "Charlotte Flair" })).toBeInTheDocument();
+    expect(screen.getByText("charlotte@example.edu")).toBeInTheDocument();
+    expect(screen.getByTestId("crumb")).toHaveTextContent("Charlotte Flair");
     expect(screen.queryByLabelText("Loading this person's access")).not.toBeInTheDocument();
   });
 
@@ -89,7 +89,7 @@ describe("the name arrives with you", () => {
         await vi.advanceTimersByTimeAsync(250);
       });
       expect(screen.getByLabelText("Loading this person's access")).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "Ada Lovelace" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Charlotte Flair" })).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

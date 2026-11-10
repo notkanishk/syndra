@@ -34,4 +34,4 @@
 ## Open
 
 - [ ] ORS-18 `all --apply` has still never been committed against a real database. Its plan is rehearsed and rolls back clean, and `demo --apply` has run for real, but the `TRUNCATE ... RESTART IDENTITY CASCADE` itself has never been allowed to commit.
-- [ ] ORS-19 `CountDemoResidue` matches audit rows by actor/target user id, but the seeder writes audit actors as display names (`alice.rivera`), so two of its four seeded audit rows are invisible to the count. Harmless while other tables carry residue; it would under-report on a database where only audit rows remain.
+- [ ] ORS-19 `CountDemoResidue` matches audit rows by actor/target user id, but the seeder writes audit actors as display names (`becky.lynch`), so two of its four seeded audit rows are invisible to the count. Harmless while other tables carry residue; it would under-report on a database where only audit rows remain.

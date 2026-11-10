@@ -6,7 +6,7 @@ import type { CheckState, Explanation } from "@/lib/queries/useClaimShape";
 const ctx: CheckContext = {
   app: "NetBird",
   project: "Network",
-  person: "Ada",
+  person: "Charlotte",
   roles: [],
   profile: { claims: [{ path: ["groups"], kind: "roles" }], include_new: true, lands: "both" },
   templates: [],
@@ -14,7 +14,7 @@ const ctx: CheckContext = {
 
 function explanation(states: CheckState[], facts: Record<string, unknown>[] = []): Explanation {
   return {
-    user_id: "ada",
+    user_id: "charlotte",
     checks: states.map((state, i) => ({ state, facts: facts[i] ?? {} })),
     token: { groups: ["netbird-staff"] },
     read_at: new Date().toISOString(),
@@ -31,7 +31,7 @@ describe("claim words, with a token's roles from Zitadel (ADR-004)", () => {
   it("never reads an unread grants list as no roles", () => {
     const e = explanation(["pass", "stale", "pass", "pass", "pass", "none"], [{}, { roles: [], unread: true }]);
     const c2 = checkWords(e, ctx)[1];
-    expect(c2.sentence).toBe("Syndra couldn't read Ada's roles from Zitadel just now.");
+    expect(c2.sentence).toBe("Syndra couldn't read Charlotte's roles from Zitadel just now.");
     expect(c2.tone).toBe("warn");
   });
 });
@@ -40,7 +40,7 @@ describe("before Actions v1 goes off", () => {
   it("says a person Zitadel lists no project for gets nothing, as the token does", () => {
     const e = explanation(["pass", "none", "none", "pass", "none", "pass"], [{}, { roles: [] }, {}, {}, { unlisted: true }]);
     const c5 = check5(e, ctx, false);
-    expect(c5.sentence).toBe("Zitadel doesn't list Network in Ada's token, so Syndra adds nothing.");
+    expect(c5.sentence).toBe("Zitadel doesn't list Network in Charlotte's token, so Syndra adds nothing.");
     expect(c5.tone).toBe("neutral");
   });
 

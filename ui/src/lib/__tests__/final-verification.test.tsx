@@ -68,7 +68,7 @@ describe("N1: a refusal, with its plain cause, on every result surface", () => {
   });
 
   it("give: given in Syndra, refused by Zitadel, and given again from their page", () => {
-    const o = refusedOutcome("Laser is given to Sam in Syndra", NOT_FOUND);
+    const o = refusedOutcome("Laser is given to Randy in Syndra", NOT_FOUND);
     expectRefusal(o);
     expect(nextStepOf(o)).toBe("Open their page to see what they hold now, then give it again once the reason is fixed.");
   });
@@ -78,7 +78,7 @@ describe("N1: a refusal, with its plain cause, on every result surface", () => {
   });
 
   it("approve: never 'can use it now'", () => {
-    const o = approvalOutcome(NOT_FOUND, "Sam", "Laser");
+    const o = approvalOutcome(NOT_FOUND, "Randy", "Laser");
     expectRefusal(o);
     expect(o.message).not.toMatch(/can use it now/);
   });
@@ -117,7 +117,7 @@ describe("N1: a refusal, with its plain cause, on every result surface", () => {
   });
 });
 
-const row = (o: Partial<BulkOutcome>): BulkOutcome => ({ user_id: "u", name: "Sam", email: "sam@example.org", effect: "applied", detail: "", ...o });
+const row = (o: Partial<BulkOutcome>): BulkOutcome => ({ user_id: "u", name: "Randy", email: "randy@example.org", effect: "applied", detail: "", ...o });
 const plan = (op: BulkPlan["op"], outcomes: BulkOutcome[]): BulkPlan => {
   const count = (e: string) => outcomes.filter((o) => o.effect === e).length;
   return {

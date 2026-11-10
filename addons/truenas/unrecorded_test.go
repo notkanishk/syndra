@@ -17,13 +17,13 @@ import (
 // remembered as a result, a name is bound once, a torn log line is not carried
 // forward, and an unknown is not read as a no.
 
-const applyBody = `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+const applyBody = `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
 	"desired":{"group":["lab_makers"],"enabled":true}}`
 
 // A blocked outcome changed nothing, so a replay re-runs it. Remembered, it
 // came back as a 200 — which the backend reads as applied.
 func TestAReplayedRefusalIsRunAgainNotRememberedAsAnApply(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","id":19,"uid":9001,"locked":false,"smb":false,"groups":[]}]`)
+	s, m := applyServer(t, `[{"username":"charlotte","id":19,"uid":9001,"locked":false,"smb":false,"groups":[]}]`)
 
 	first := postApply(t, s, applyBody)
 	if first.Code != http.StatusConflict {
@@ -47,14 +47,14 @@ func TestAReplayedRefusalIsRunAgainNotRememberedAsAnApply(t *testing.T) {
 
 func TestOneUsernameBindsToOneSubject(t *testing.T) {
 	s, _ := applyServer(t, `[]`)
-	if err := s.store.BindIfFree(Binding{SubjectID: "sub-1", Username: "ada", UID: 1}); err != nil {
+	if err := s.store.BindIfFree(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	// The same subject again is fine; another subject is refused.
-	if err := s.store.BindIfFree(Binding{SubjectID: "sub-1", Username: "ada", UID: 1}); err != nil {
+	if err := s.store.BindIfFree(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 1}); err != nil {
 		t.Fatalf("rebinding the same subject: %v", err)
 	}
-	err := s.store.BindIfFree(Binding{SubjectID: "sub-2", Username: "ada", UID: 1})
+	err := s.store.BindIfFree(Binding{SubjectID: "sub-2", Username: "charlotte", UID: 1})
 	var taken ErrUsernameBound
 	if !errors.As(err, &taken) || taken.Owner != "sub-1" {
 		t.Fatalf("want ErrUsernameBound naming sub-1, got %v", err)
@@ -149,7 +149,7 @@ func TestAnUnknownOwnAccountIsAskedForAgain(t *testing.T) {
 func TestACreateAdoptsAnEmptyOrphanGroupAndRefusesOccupiedOnes(t *testing.T) {
 	s, m := applyServer(t, `[]`)
 	m.refuseGroupCreate = true
-	m.fakeRPC.groups = `[{"id":42,"gid":900,"group":"lab_makers"},{"id":93,"gid":250000,"group":"ada","builtin":false,"users":[]}]`
+	m.fakeRPC.groups = `[{"id":42,"gid":900,"group":"lab_makers"},{"id":93,"gid":250000,"group":"charlotte","builtin":false,"users":[]}]`
 	rr := postApply(t, s, applyBody)
 	if rr.Code != http.StatusOK || len(m.creates) != 1 || fmt.Sprint(m.creates[0]["group"]) != "93" {
 		t.Fatalf("want the empty orphan adopted as the primary group, got %d creates=%v (%s)",
@@ -160,8 +160,8 @@ func TestACreateAdoptsAnEmptyOrphanGroupAndRefusesOccupiedOnes(t *testing.T) {
 	}
 
 	for name, groups := range map[string]string{
-		"occupied":     `[{"id":93,"gid":250000,"group":"ada","builtin":false,"users":[7]}]`,
-		"out of range": `[{"id":93,"gid":5000,"group":"ada","builtin":false,"users":[]}]`,
+		"occupied":     `[{"id":93,"gid":250000,"group":"charlotte","builtin":false,"users":[7]}]`,
+		"out of range": `[{"id":93,"gid":5000,"group":"charlotte","builtin":false,"users":[]}]`,
 	} {
 		s2, m2 := applyServer(t, `[]`)
 		m2.refuseGroupCreate = true
@@ -178,7 +178,7 @@ func TestARefusedCreateLeavesAnAdoptedGroupAlone(t *testing.T) {
 	s, m := applyServer(t, `[]`)
 	m.refuseGroupCreate = true
 	m.refuseUserCreate = true
-	m.fakeRPC.groups = `[{"id":93,"gid":250000,"group":"ada","builtin":false,"users":[]}]`
+	m.fakeRPC.groups = `[{"id":93,"gid":250000,"group":"charlotte","builtin":false,"users":[]}]`
 	if rr := postApply(t, s, applyBody); rr.Code == http.StatusOK {
 		t.Fatalf("a refused account must not read as success: %s", rr.Body.String())
 	}
@@ -196,7 +196,7 @@ func TestACreateThatCannotBeReadBackStillRecordsTheBinding(t *testing.T) {
 		t.Fatalf("an unverified create must not read as a clean success: %s", rr.Body.String())
 	}
 	b, bound, err := s.store.GetBinding("sub-1")
-	if err != nil || !bound || b.Username != "ada" || b.UID == 0 {
+	if err != nil || !bound || b.Username != "charlotte" || b.UID == 0 {
 		t.Fatalf("the created account must be bound: %+v bound=%t err=%v", b, bound, err)
 	}
 }

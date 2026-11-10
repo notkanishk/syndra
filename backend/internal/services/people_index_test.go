@@ -37,22 +37,22 @@ func role(projectID, key, projectName string) (roleKey, *models.EffectiveRole) {
 func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 	k1, r1 := role("p_laser", "trained", "Laser Lab")
 	users := []models.UserProfile{
-		{ID: "u_tomas", Name: "Tomas Beck"},
+		{ID: "u_kevin", Name: "Kevin Owens"},
 		{ID: "u_amara", Name: "Amara Osei"},
 	}
 	snap := snapshotWith(users,
 		map[string]map[roleKey]*models.EffectiveRole{
-			"u_tomas": {k1: r1},
+			"u_kevin": {k1: r1},
 			"u_amara": {},
 		},
 		map[string][]models.Bundle{
-			"u_tomas": {{ID: "b1", Name: "Lab Tech"}, {ID: "b2", Name: "Studio Member"}},
+			"u_kevin": {{ID: "b1", Name: "Lab Tech"}, {ID: "b2", Name: "Studio Member"}},
 		})
 
 	soon := time.Now().Add(48 * time.Hour)
 	attention := attentionIndex{
-		expiring:    map[string]int{"u_tomas": 1},
-		soonest:     map[string]time.Time{"u_tomas": soon},
+		expiring:    map[string]int{"u_kevin": 1},
+		soonest:     map[string]time.Time{"u_kevin": soon},
 		requests:    map[string]int{"u_amara": 1},
 		unexplained: map[string]int{},
 	}
@@ -67,18 +67,18 @@ func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 		byID[item.User.ID] = item
 	}
 
-	tomas := byID["u_tomas"]
-	if tomas.ExpiringCount != 1 || tomas.SoonestExpiry == nil {
-		t.Errorf("Tomas has an expiring grant; got count=%d soonest=%v", tomas.ExpiringCount, tomas.SoonestExpiry)
+	kevin := byID["u_kevin"]
+	if kevin.ExpiringCount != 1 || kevin.SoonestExpiry == nil {
+		t.Errorf("Kevin has an expiring grant; got count=%d soonest=%v", kevin.ExpiringCount, kevin.SoonestExpiry)
 	}
-	if tomas.OpenRequestCount != 0 {
-		t.Errorf("Amara's request must not land on Tomas's row, got %d", tomas.OpenRequestCount)
+	if kevin.OpenRequestCount != 0 {
+		t.Errorf("Amara's request must not land on Kevin's row, got %d", kevin.OpenRequestCount)
 	}
-	if len(tomas.BundleNames) != 2 || tomas.BundleNames[0] != "Lab Tech" {
-		t.Errorf("bundle names are pills, not a count: got %v", tomas.BundleNames)
+	if len(kevin.BundleNames) != 2 || kevin.BundleNames[0] != "Lab Tech" {
+		t.Errorf("bundle names are pills, not a count: got %v", kevin.BundleNames)
 	}
-	if tomas.ProjectCount != 1 {
-		t.Errorf("project count = %d, want 1", tomas.ProjectCount)
+	if kevin.ProjectCount != 1 {
+		t.Errorf("project count = %d, want 1", kevin.ProjectCount)
 	}
 
 	amara := byID["u_amara"]
@@ -86,7 +86,7 @@ func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 		t.Errorf("Amara has one open request, got %d", amara.OpenRequestCount)
 	}
 	if amara.ExpiringCount != 0 || amara.SoonestExpiry != nil {
-		t.Error("Amara has nothing expiring; the row must say so with a dash, not borrow Tomas's date")
+		t.Error("Amara has nothing expiring; the row must say so with a dash, not borrow Kevin's date")
 	}
 }
 
@@ -95,7 +95,7 @@ func TestPeopleIndex_CarriesNeedsAttentionPerPerson(t *testing.T) {
 func TestPeopleIndex_SearchMatchesRoleKeys(t *testing.T) {
 	k1, r1 := role("p_laser", "trained", "Laser Lab")
 	users := []models.UserProfile{
-		{ID: "u_holder", Name: "Sofia Marchetti", Email: "sofia@example.org"},
+		{ID: "u_holder", Name: "Nia Jax", Email: "nia@example.org"},
 		{ID: "u_other", Name: "Wen-Li Chao", Email: "wenli@example.org"},
 	}
 	snap := snapshotWith(users,
@@ -120,12 +120,12 @@ func TestPeopleIndex_SearchMatchesRoleKeys(t *testing.T) {
 // key happens to contain these letters".
 func TestPeopleIndex_SearchStillMatchesNames(t *testing.T) {
 	users := []models.UserProfile{
-		{ID: "u1", Name: "Sofia Marchetti", Email: "sofia@example.org"},
+		{ID: "u1", Name: "Nia Jax", Email: "nia@example.org"},
 		{ID: "u2", Name: "Wen-Li Chao", Email: "wenli@example.org"},
 	}
 	snap := snapshotWith(users, map[string]map[roleKey]*models.EffectiveRole{"u1": {}, "u2": {}}, nil)
 
-	items, err := listUsersFromSnapshot(snap, "sofia", attentionIndex{
+	items, err := listUsersFromSnapshot(snap, "nia", attentionIndex{
 		expiring: map[string]int{}, soonest: map[string]time.Time{},
 		requests: map[string]int{}, unexplained: map[string]int{},
 	})
@@ -148,14 +148,14 @@ func TestLoadAttention_CountsUnseenWritesPerPerson(t *testing.T) {
 	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
 	svcGetPendingDriftItems = func(context.Context) ([]models.DriftItem, error) { return nil, nil }
 	svcGetUnconfirmedWrites = func(context.Context) (models.UnconfirmedWriteSummary, error) {
-		return models.UnconfirmedWriteSummary{Count: 3, Users: map[string]int{"u_tomas": 2, "u_amara": 1}}, nil
+		return models.UnconfirmedWriteSummary{Count: 3, Users: map[string]int{"u_kevin": 2, "u_amara": 1}}, nil
 	}
 
 	idx, err := loadAttention(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if idx.unseen["u_tomas"] != 2 || idx.unseen["u_amara"] != 1 || idx.unseen["u_nobody"] != 0 {
+	if idx.unseen["u_kevin"] != 2 || idx.unseen["u_amara"] != 1 || idx.unseen["u_nobody"] != 0 {
 		t.Errorf("unseen = %v", idx.unseen)
 	}
 

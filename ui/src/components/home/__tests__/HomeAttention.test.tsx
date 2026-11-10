@@ -102,7 +102,7 @@ vi.mock("@/components/names", async () => {
   };
 });
 
-const session = { id: "u1", name: "Ada", email: "ada@example.org" } as unknown as SessionUser;
+const session = { id: "u1", name: "Charlotte", email: "charlotte@example.org" } as unknown as SessionUser;
 
 function renderHome() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -137,7 +137,7 @@ describe("Home never claims a read it did not make", () => {
   it("names no 'last checked' time until the summary has been read", async () => {
     state.summaryRead = false;
     renderHome();
-    await screen.findByText(/Ada/);
+    await screen.findByText(/Charlotte/);
     expect(screen.queryByText(/last checked/)).toBeNull();
   });
 });

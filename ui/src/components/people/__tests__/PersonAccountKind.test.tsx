@@ -52,7 +52,7 @@ function renderPerson(isOperator = true) {
 
 beforeEach(() => {
   state.advanced = true;
-  state.user = { id: "u1", name: "Priya Nair", email: "priya@example.edu", title: "", team: "", status: "active", avatar: "PN" };
+  state.user = { id: "u1", name: "Cody Rhodes", email: "cody@example.edu", title: "", team: "", status: "active", avatar: "PN" };
 });
 afterEach(cleanup);
 
@@ -64,7 +64,7 @@ describe("This account · Kind", () => {
     expect(within(card).getByText("A person")).toBeInTheDocument();
     expect(within(card).getByText("Signs in with a password in Zitadel")).toBeInTheDocument();
     fireEvent.click(within(card).getByRole("button", { name: "Mark as a service account" }));
-    expect(screen.getByRole("heading", { name: "Mark Priya Nair as a service account" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mark Cody Rhodes as a service account" })).toBeInTheDocument();
   });
 
   it("is Advanced, and an operator's: Basic and a member never see it", () => {

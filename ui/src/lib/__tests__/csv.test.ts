@@ -8,7 +8,7 @@ describe("csv", () => {
   });
 
   it("leaves ordinary cells alone and still doubles quotes", () => {
-    expect(csvCell("Ada Lin")).toBe('"Ada Lin"');
+    expect(csvCell("Charlotte Flair")).toBe('"Charlotte Flair"');
     expect(csvCell("2026-10-27T10:00:00Z")).toBe('"2026-10-27T10:00:00Z"');
     expect(csvCell('say "hi"')).toBe('"say ""hi"""');
     expect(csvCell(null)).toBe('""');

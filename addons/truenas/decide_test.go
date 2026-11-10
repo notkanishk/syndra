@@ -11,7 +11,7 @@ import (
 // both and checks they agree on whether anything is written and on what the
 // account is left holding.
 func TestPlanAndApplyAgreeOnEveryConvergence(t *testing.T) {
-	const bound = `{"subject":"sub-1","email":"ada@example.edu","desired":`
+	const bound = `{"subject":"sub-1","email":"charlotte@example.edu","desired":`
 	cases := []struct {
 		name    string
 		current string
@@ -43,8 +43,8 @@ func TestPlanAndApplyAgreeOnEveryConvergence(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,`+c.current+`}]`)
-			if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+			s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,`+c.current+`}]`)
+			if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -59,7 +59,7 @@ func TestPlanAndApplyAgreeOnEveryConvergence(t *testing.T) {
 				t.Fatal("a plan wrote something")
 			}
 
-			applied := decodeOutcome(t, postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":`+c.desired+`}`))
+			applied := decodeOutcome(t, postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":`+c.desired+`}`))
 
 			// A plan says "apply" for what an apply then reports as "applied".
 			plannedWant := c.effect
@@ -93,11 +93,11 @@ func TestDecideIsPureAndWritesOnlyWhatDiffers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	same := &Subject{Username: "ada", Groups: []string{"lab_makers"}, Enabled: true, SMBEnabled: true}
+	same := &Subject{Username: "charlotte", Groups: []string{"lab_makers"}, Enabled: true, SMBEnabled: true}
 	if c := decide(same, desired, homeDecision{}); c.writes() || c.smbPending {
 		t.Errorf("a converged subject needs no write: %+v", c)
 	}
-	smbOff := &Subject{Username: "ada", Groups: []string{"lab_makers"}, Enabled: true}
+	smbOff := &Subject{Username: "charlotte", Groups: []string{"lab_makers"}, Enabled: true}
 	if c := decide(smbOff, desired, homeDecision{}); c.writes() || !c.smbPending {
 		t.Errorf("SMB wanted on is pending and never a write: %+v", c)
 	}

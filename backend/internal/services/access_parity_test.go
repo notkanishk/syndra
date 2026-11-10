@@ -30,14 +30,14 @@ func parityFixture() parity {
 	june := time.Date(2027, 6, 30, 0, 0, 0, 0, time.UTC)
 	return parity{
 		users: []models.UserProfile{
-			{ID: "alice", Name: "Alice", Status: "active"},
+			{ID: "becky", Name: "Becky", Status: "active"},
 			{ID: "bob", Name: "Bob", Status: "active"},
 			{ID: "carol", Name: "Carol", Status: "active"},
 			{ID: "dave", Name: "Dave", Status: "locked"}, // has left
 			{ID: "erin", Name: "Erin", Status: "active"}, // holds only in Zitadel
 		},
 		direct: map[string][]models.DirectGrant{
-			"alice": {{UserID: "alice", ProjectID: "p", RoleKey: "a", ExpiresAt: &june}},
+			"becky": {{UserID: "becky", ProjectID: "p", RoleKey: "a", ExpiresAt: &june}},
 			"carol": {{UserID: "carol", ProjectID: "p", RoleKey: "z"}},
 			"dave":  {{UserID: "dave", ProjectID: "p", RoleKey: "a"}},
 		},
@@ -47,7 +47,7 @@ func parityFixture() parity {
 			{BundleID: "b1", ProjectID: "p", RoleKey: "a", ViaBundleID: "b2"}, // through an include
 		}},
 		seen: map[string][]db.ObservedGrant{
-			"alice": {{UserID: "alice", ProjectID: "p", RoleKeys: []string{"a", "b"}}}, // q:c never arrived
+			"becky": {{UserID: "becky", ProjectID: "p", RoleKeys: []string{"a", "b"}}}, // q:c never arrived
 			"bob":   {{UserID: "bob", ProjectID: "p", RoleKeys: []string{"x", "a", "b"}}, {UserID: "bob", ProjectID: "q", RoleKeys: []string{"c"}}},
 			"dave":  {{UserID: "dave", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
 			"erin":  {{UserID: "erin", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
@@ -154,8 +154,8 @@ func TestParity_MappingHoldersAgreeWithThePersonView(t *testing.T) {
 	// Spelled out once, so the parity above is not vacuous: bob reaches q:c
 	// through an include and two rules; dave has left; erin is only observed.
 	got, _ := MappingHolders(context.Background(), "q", "c")
-	if !slices.Equal(got, []string{"alice", "bob"}) {
-		t.Fatalf("holders of q:c = %v, want alice and bob", got)
+	if !slices.Equal(got, []string{"becky", "bob"}) {
+		t.Fatalf("holders of q:c = %v, want becky and bob", got)
 	}
 }
 
@@ -183,19 +183,19 @@ func TestParity_PersonViewIsTheCoreClosure(t *testing.T) {
 }
 
 // A rule role ends when its source ends, on the person view as in the token:
-// alice's direct grant of a ends in June, so b and c (through two rules) end
+// becky's direct grant of a ends in June, so b and c (through two rules) end
 // then too. bob's come from a bundle and never end.
 func TestParity_ARuleRoleEndsWithItsSourceOnThePersonView(t *testing.T) {
 	f := parityFixture()
 	f.install(t)
 	june := time.Date(2027, 6, 30, 0, 0, 0, 0, time.UTC)
-	alice, _, err := collectUserRoles(context.Background(), "alice")
+	becky, _, err := collectUserRoles(context.Background(), "becky")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, k := range []roleKey{{"p", "a"}, {"p", "b"}, {"q", "c"}} {
-		if r := alice[k]; r == nil || r.Ends == nil || !r.Ends.Equal(june) {
-			t.Errorf("alice %v ends %v, want %v", k, r, june)
+		if r := becky[k]; r == nil || r.Ends == nil || !r.Ends.Equal(june) {
+			t.Errorf("becky %v ends %v, want %v", k, r, june)
 		}
 	}
 	bob, _, err := collectUserRoles(context.Background(), "bob")
@@ -228,7 +228,7 @@ func TestHolding_BundleAndRuleCountsAreObserved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// r1 (a→b) applies to alice, bob, dave (records); all three hold p:b.
+	// r1 (a→b) applies to becky, bob, dave (records); all three hold p:b.
 	// r2 (b→c) applies to the same three; only bob holds q:c in Zitadel.
 	// erin holds a and b only in Zitadel: no rule applies to her.
 	if r.Given["r1"] != 3 || r.Observed["r1"] != 3 || r.Given["r2"] != 3 || r.Observed["r2"] != 1 {

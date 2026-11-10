@@ -14,8 +14,8 @@ vi.mock("@/lib/ui-view", () => ({
 
 const catalog = {
   users: [
-    { id: "u2", name: "Priya Nair", email: "p@example.edu", title: "Student Staff", team: "Fabrication" },
-    { id: "u1", name: "Arjun Priest", email: "a@example.edu", title: "", team: "Wood shop" },
+    { id: "u2", name: "Primo Colon", email: "p@example.edu", title: "Student Staff", team: "Fabrication" },
+    { id: "u1", name: "Damian Priest", email: "a@example.edu", title: "", team: "Wood shop" },
   ],
   projects: [{ id: "p1", name: "Print Lab", kind: "", description: "", roles: [{ key: "trained", label: "Trained", description: "" }] }],
   applications: [{ id: "a1", name: "Print Queue", project_id: "p1", description: "", consumer: "oidc", claim_name: "", format_type: "" }],
@@ -74,8 +74,8 @@ describe("Go to", () => {
     type("pri");
     const groups = screen.getAllByRole("group").map((g) => g.getAttribute("aria-labelledby")).map((id) => document.getElementById(id!)!.textContent);
     expect(groups).toEqual(["People", "Projects", "Apps", "Bundles"]);
-    expect(names()).toEqual(["Arjun Priest", "Priya Nair", "Print Lab", "Print Queue", "Printing basics"]);
-    expect(within(screen.getByRole("option", { name: /Priya Nair/ })).getByText("Person")).toBeInTheDocument();
+    expect(names()).toEqual(["Damian Priest", "Primo Colon", "Print Lab", "Print Queue", "Printing basics"]);
+    expect(within(screen.getByRole("option", { name: /Primo Colon/ })).getByText("Person")).toBeInTheDocument();
   });
 
   it("shows Advanced pages only in Advanced, and no Bundles in Basic", () => {
@@ -115,8 +115,8 @@ describe("Go to", () => {
   it("opens the selected row on Enter, as a link does, and closes", () => {
     const onClose = vi.fn();
     renderIn(<GoTo open onClose={onClose} nav={ADVANCED_NAV} />);
-    type("priya");
-    const link = screen.getByRole("option", { name: /Priya Nair/ });
+    type("primo");
+    const link = screen.getByRole("option", { name: /Primo Colon/ });
     expect(link).toHaveAttribute("href", "/users/u2");
     const click = vi.fn((event: Event) => event.preventDefault());
     link.addEventListener("click", click);
@@ -147,7 +147,7 @@ describe("Go to inside the phone sheet", () => {
     expect(screen.getByRole("combobox")).toHaveAttribute("aria-expanded", "false");
     type("pri");
     expect(screen.queryByText("the sheet pages")).not.toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /Priya Nair/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Primo Colon/ })).toBeInTheDocument();
     // No key hints on a phone.
     expect(screen.queryByText("Esc")).not.toBeInTheDocument();
   });

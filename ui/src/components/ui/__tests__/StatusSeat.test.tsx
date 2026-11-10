@@ -17,7 +17,7 @@ describe("StatusSeat", () => {
   it("changes the dot's colour where it sits and crossfades the words, with no bloom", () => {
     const { container, rerender } = render(<StatusSeat tone="warn" word="Waiting on a decision" />);
     const dot = container.querySelector("span[aria-hidden]")!;
-    rerender(<StatusSeat tone="healthy" word="Approved" note="by Ada" />);
+    rerender(<StatusSeat tone="healthy" word="Approved" note="by Charlotte" />);
 
     expect(container.querySelector("span[aria-hidden]")).toBe(dot);
     expect(dot.className).toContain("bg-healthy");
@@ -29,6 +29,6 @@ describe("StatusSeat", () => {
 
     act(() => void vi.advanceTimersByTime(120));
     expect(screen.queryByText("Waiting on a decision")).not.toBeInTheDocument();
-    expect(screen.getByText("by Ada")).toBeInTheDocument();
+    expect(screen.getByText("by Charlotte")).toBeInTheDocument();
   });
 });

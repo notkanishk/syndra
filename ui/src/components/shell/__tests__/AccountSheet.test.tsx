@@ -12,9 +12,9 @@ vi.mock("@/lib/theme", () => ({
 
 const session = {
   id: "u_1",
-  name: "Kabir Rao",
-  email: "kabir@example.edu",
-  avatar: "KR",
+  name: "Kairi Sane",
+  email: "kairi@example.edu",
+  avatar: "KS",
   role: "admin",
 } as SessionUser;
 
@@ -75,8 +75,8 @@ describe("the account sheet", () => {
     const sheet = screen.getByRole("dialog");
     // The trigger also carries the name at tablet width, so scope to the
     // sheet rather than the document.
-    expect(within(sheet).getByText("Kabir Rao")).toBeTruthy();
-    expect(within(sheet).getByText("kabir@example.edu")).toBeTruthy();
+    expect(within(sheet).getByText("Kairi Sane")).toBeTruthy();
+    expect(within(sheet).getByText("kairi@example.edu")).toBeTruthy();
   });
 
   it("offers appearance where a narrow header has no room for a toggle", () => {
@@ -103,17 +103,17 @@ describe("the account sheet", () => {
     expect(screen.queryByText("In this browser only")).toBeNull();
   });
 
-  // A-20 P15: the chip says "Kabir", as RULES does; the sheet keeps the full name.
+  // A-20 P15: the chip says "Kairi", as RULES does; the sheet keeps the full name.
   it("shows the first name on the chip and never the full name", () => {
     render(<AccountSheet session={session} />);
     const chip = screen.getByRole("button", { name: /Account/ });
-    expect(within(chip).getByText("Kabir")).toBeTruthy();
-    expect(within(chip).queryByText("Kabir Rao")).toBeNull();
+    expect(within(chip).getByText("Kairi")).toBeTruthy();
+    expect(within(chip).queryByText("Kairi Sane")).toBeNull();
   });
 
   it("falls back to the start of the address, never an id, when there is no name", () => {
     render(<AccountSheet session={{ ...session, name: "" } as SessionUser} />);
-    expect(within(screen.getByRole("button", { name: /Account/ })).getByText("kabir")).toBeTruthy();
+    expect(within(screen.getByRole("button", { name: /Account/ })).getByText("kairi")).toBeTruthy();
   });
 
   // Every control in here is something a thumb has to land on.

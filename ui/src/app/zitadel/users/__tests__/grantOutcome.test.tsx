@@ -37,7 +37,7 @@ const each = (c: (key: string) => PlanConsent) => (actions: Array<{ roleKey: str
 
 vi.mock("@/lib/queries/useUpstream", () => ({
   useUpstreamUsers: () => ({
-    data: { items: [{ id: "u1", displayName: "Priya", userName: "priya", email: "priya@example.org", state: "USER_STATE_ACTIVE" }] },
+    data: { items: [{ id: "u1", displayName: "Cody", userName: "cody", email: "cody@example.org", state: "USER_STATE_ACTIVE" }] },
     isLoading: false,
     error: null,
     refetch: () => {},

@@ -21,7 +21,7 @@ const nameResolverMiss = { value: undefined, resolved: true } as const;
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
     resolveUser: (id: string) =>
-      id === "s-99" ? { value: { display_name: "Sana Kohli" }, resolved: true } : nameResolverMiss,
+      id === "s-99" ? { value: { display_name: "Iyo Sky" }, resolved: true } : nameResolverMiss,
     resolveProject: () => nameResolverMiss,
     resolveRole: () => nameResolverMiss,
     resolveBundle: () => nameResolverMiss,
@@ -55,8 +55,8 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
   useUsers: (q: string) => ({
     data: q
       ? [
-          { user: { id: "s-99", name: "Sana Kohli", email: "sana@example.edu", title: "Lab technician", team: "Design", status: "active", avatar: "" } },
-          { user: { id: "s-12", name: "Kabir Rao", email: "kabir@example.edu", title: "Student", team: "", status: "active", avatar: "" } },
+          { user: { id: "s-99", name: "Iyo Sky", email: "iyo@example.edu", title: "Lab technician", team: "Design", status: "active", avatar: "" } },
+          { user: { id: "s-12", name: "Kairi Sane", email: "kairi@example.edu", title: "Student", team: "", status: "active", avatar: "" } },
         ]
       : [],
     isLoading: false,
@@ -204,7 +204,7 @@ describe("one target's page", () => {
       // list renders unadoptable and this test would pass for the wrong reason.
       read_at: new Date().toISOString(),
       unmanaged: [
-        { username: "sana", uid: 3000 },
+        { username: "iyo", uid: 3000 },
         { username: "syndra", uid: 3001, self: true },
       ],
     };
@@ -267,12 +267,12 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
       target: "truenas", bound: 4, queued: 1, current: true,
-      stale: [{ subject_id: "s1", username: "alice", uid: 3999 }],
+      stale: [{ subject_id: "s1", username: "becky", uid: 3999 }],
     };
     renderTarget();
 
     expect(screen.getByText(/recorded as owning an account that is no longer/i)).toBeTruthy();
-    expect(screen.getByText("alice")).toBeTruthy();
+    expect(screen.getByText("becky")).toBeTruthy();
     expect(screen.getByText(/yours to decide/i)).toBeTruthy();
   });
 
@@ -288,7 +288,7 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
       target: "truenas", bound: 4, queued: 1, current: true,
-      stale: [{ subject_id: "s1", username: "alice", uid: 3999 }],
+      stale: [{ subject_id: "s1", username: "becky", uid: 3999 }],
     };
     renderTarget();
 
@@ -296,7 +296,7 @@ describe("one target's page", () => {
     expect(state.released).toEqual([]);
     expect(screen.getByText(/Nothing is deleted/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Stop tracking alice"));
+    fireEvent.click(screen.getByText("Stop tracking becky"));
     expect(state.released).toEqual(["s1"]);
     // The row it acted on must stop saying it is unresolved. The reconcile
     // result is a mutation's answer, so nothing refetches it.
@@ -319,16 +319,16 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
       target: "truenas", bound: 4, queued: 1, current: true,
-      stale: [{ subject_id: "s1", username: "alice", uid: 3999 }],
+      stale: [{ subject_id: "s1", username: "becky", uid: 3999 }],
     };
     renderTarget();
 
     fireEvent.click(screen.getByText("Stop tracking this account"));
-    fireEvent.click(screen.getByText("Stop tracking alice"));
+    fireEvent.click(screen.getByText("Stop tracking becky"));
 
     expect(screen.queryByText(/Stopped tracking it\. Nothing on TrueNAS was changed/i)).toBeNull();
     expect(screen.getByText(/did not confirm the release/i)).toBeTruthy();
-    expect(screen.getByText("Stop tracking alice")).toBeTruthy();
+    expect(screen.getByText("Stop tracking becky")).toBeTruthy();
   });
 
   // The split case. The add-on let go, Syndra's copy did not, and the answer
@@ -346,16 +346,16 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
       target: "truenas", bound: 4, queued: 1, current: true,
-      stale: [{ subject_id: "s1", username: "alice", uid: 3999 }],
+      stale: [{ subject_id: "s1", username: "becky", uid: 3999 }],
     };
     renderTarget();
 
     fireEvent.click(screen.getByText("Stop tracking this account"));
-    fireEvent.click(screen.getByText("Stop tracking alice"));
+    fireEvent.click(screen.getByText("Stop tracking becky"));
 
     expect(screen.queryByText(/Stopped tracking it\. Nothing on TrueNAS was changed/i)).toBeNull();
     expect(screen.getByText(/Press release again to repair it/i)).toBeTruthy();
-    expect(screen.getByText("Stop tracking alice")).toBeTruthy();
+    expect(screen.getByText("Stop tracking becky")).toBeTruthy();
   });
 
   it("says a transport secret that stopped loading is a fault on THIS host", () => {
@@ -784,7 +784,7 @@ describe("a disputed account", () => {
         {
           id: "c1",
           target: "truenas",
-          username: "ada",
+          username: "charlotte",
           account_uid: 3001,
           converged_subject_id: "u-converged",
           bound_subject_id: "u-bound",
@@ -821,7 +821,7 @@ describe("a disputed account", () => {
     expect(record).toBeDisabled(); // the name is still untyped
 
     fireEvent.change(screen.getByRole("textbox", { name: /type the account/i }), {
-      target: { value: "ada" },
+      target: { value: "charlotte" },
     });
     // Re-queried for the same reason as the log-finding dialog above: losing
     // its reason swaps the button's DOM node, not just its `disabled` attribute.
@@ -940,11 +940,11 @@ describe("adopting an account", () => {
     target: "truenas",
     bound: 1,
     accounts: [
-      { target: "truenas", subject_id: "s-12", username: "kabir.r", bound_by: "op", bound_at: "", last_seen_at: "" },
+      { target: "truenas", subject_id: "s-12", username: "alexa.r", bound_by: "op", bound_at: "", last_seen_at: "" },
     ],
     unmanaged: [
-      { username: "sana", uid: 3000 },
-      { username: "kabir", uid: 3002 },
+      { username: "iyo", uid: 3000 },
+      { username: "alexa", uid: 3002 },
     ],
     current: true,
     // Adoption is blocked off anything but a live or ageing read (§31 A), so
@@ -958,28 +958,28 @@ describe("adopting an account", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.inventory = twoAccounts;
     renderTarget();
-    // A to Z: kabir, then sana.
+    // A to Z: alexa, then iyo.
     fireEvent.click(screen.getAllByRole("button", { name: "Assign to a person" })[1]);
   }
 
   function chooseSai() {
     fireEvent.change(screen.getByLabelText("Search people by name or email"), { target: { value: "sa" } });
-    fireEvent.click(screen.getByRole("radio", { name: /Sana Kohli/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Iyo Sky/ }));
   }
 
   // #57: a dialog about the account it was opened from.
   it("opens a dialog about the account it was opened from", () => {
     openAdoptForSai();
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Assign sana to a person")).toBeInTheDocument();
-    expect(dialog.textContent).not.toContain("kabir ");
+    expect(within(dialog).getByText("Assign iyo to a person")).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain("alexa ");
   });
 
   // Red is this product's word for a click that takes access away. This one
   // gives somebody an account.
   it("does not dress a grant as a destruction", () => {
     openAdoptForSai();
-    const submit = screen.getByRole("button", { name: /^Assign sana/ });
+    const submit = screen.getByRole("button", { name: /^Assign iyo/ });
     expect(submit.className, "dangerConfirm is reserved for removing access").not.toContain("bg-danger");
     expect(screen.getByText(/There is no undo/)).toBeInTheDocument();
     expect(screen.getByText(/Type the account name/)).toBeInTheDocument();
@@ -991,45 +991,45 @@ describe("adopting an account", () => {
     openAdoptForSai();
     fireEvent.change(screen.getByLabelText("Search people by name or email"), { target: { value: "a" } });
 
-    const sana = screen.getByRole("radio", { name: /Sana Kohli/ }).closest("label")!;
-    expect(sana.textContent).toContain("Lab technician · Design");
-    expect(sana.textContent).toContain("sana@example.edu");
-    const kabirRadio = screen.getByRole("radio", { name: /Kabir Rao/ });
-    const kabir = kabirRadio.closest("label")!;
+    const iyo = screen.getByRole("radio", { name: /Iyo Sky/ }).closest("label")!;
+    expect(iyo.textContent).toContain("Lab technician · Design");
+    expect(iyo.textContent).toContain("iyo@example.edu");
+    const kabirRadio = screen.getByRole("radio", { name: /Kairi Sane/ });
+    const alexa = kabirRadio.closest("label")!;
     expect(kabirRadio).toBeDisabled();
-    expect(kabir.textContent).toContain("Already has kabir.r on TrueNAS");
-    expect(kabir.textContent).not.toMatch(/—/);
+    expect(alexa.textContent).toContain("Already has alexa.r on TrueNAS");
+    expect(alexa.textContent).not.toMatch(/—/);
   });
 
   it("says what changes and what stays, once someone is chosen", () => {
     openAdoptForSai();
     expect(screen.queryByText("Changes")).toBeNull();
     chooseSai();
-    expect(screen.getByRole("radio", { name: /Sana Kohli/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Iyo Sky/ })).toBeChecked();
     expect(screen.getByText("Changes")).toBeInTheDocument();
-    expect(screen.getByText(/belongs to/).textContent).toContain("Sana Kohli");
+    expect(screen.getByText(/belongs to/).textContent).toContain("Iyo Sky");
     expect(screen.getByText(/Its home folder, its shares and its group memberships/)).toBeInTheDocument();
   });
 
   it("assigns only once the name is typed, and reports it under the account", () => {
     openAdoptForSai();
     chooseSai();
-    const submit = screen.getByRole("button", { name: "Assign sana to Sana Kohli" });
+    const submit = screen.getByRole("button", { name: "Assign iyo to Iyo Sky" });
     expect(submit.hasAttribute("disabled")).toBe(true);
 
-    fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "sana" } });
-    fireEvent.click(screen.getByRole("button", { name: "Assign sana to Sana Kohli" }));
+    fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "iyo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Assign iyo to Iyo Sky" }));
 
-    expect(state.adopted).toEqual([{ username: "sana", subjectId: "s-99" }]);
+    expect(state.adopted).toEqual([{ username: "iyo", subjectId: "s-99" }]);
     // The sheet is its result (Assigned, Close); no Dismiss button anywhere.
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /dismiss this result/i })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     const outcome = screen.getByText(/bound to that person/).closest("[role=status]")!;
-    expect(outcome.closest(".unfold")!.parentElement!.textContent).toContain("sana");
+    expect(outcome.closest(".unfold")!.parentElement!.textContent).toContain("iyo");
     expect(screen.getByText("Assigned")).toBeInTheDocument();
-    expect(outcome.textContent).toContain("sana is now Sana Kohli");
+    expect(outcome.textContent).toContain("iyo is now Iyo Sky");
   });
 });
 
@@ -1102,7 +1102,7 @@ describe("where home folders go", () => {
       read: true,
       usage_read: true,
       accounts: [
-        { subject_id: "a", username: "ada", gives_home: true, home: "/mnt/p/main/home_dir/ada" },
+        { subject_id: "a", username: "charlotte", gives_home: true, home: "/mnt/p/main/home_dir/charlotte" },
         { subject_id: "b", username: "bo", gives_home: true, home: "/mnt/p/main/home_dir/bo" },
         { subject_id: "c", username: "cy", gives_home: false },
       ],
@@ -1156,7 +1156,7 @@ describe("while TrueNAS isn't answering", () => {
     state.inventory = {
       target: "truenas",
       bound: 1,
-      accounts: [{ target: "truenas", subject_id: "s-99", username: "sana", bound_by: "op", bound_at: "2026-10-01T00:00:00Z", last_seen_at: "2026-10-01T00:00:00Z" }],
+      accounts: [{ target: "truenas", subject_id: "s-99", username: "iyo", bound_by: "op", bound_at: "2026-10-01T00:00:00Z", last_seen_at: "2026-10-01T00:00:00Z" }],
       unmanaged: [{ username: "kiosk", uid: 1001 }, { username: "lab", uid: 1002 }],
       current: false,
       read_at: new Date().toISOString(),

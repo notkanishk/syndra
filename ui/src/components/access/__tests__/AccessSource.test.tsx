@@ -134,7 +134,7 @@ describe("the source chip", () => {
   });
 
   it("is a button that opens when it has a body", () => {
-    render(<SourcePopover reason={direct} by="Ada" />);
+    render(<SourcePopover reason={direct} by="Charlotte" />);
     const trigger = screen.getByRole("button");
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(trigger);

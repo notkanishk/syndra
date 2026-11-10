@@ -20,7 +20,7 @@ function list(isEmpty: boolean) {
           head={<div>Person</div>}
           empty={<p>Nobody matches that.</p>}
         >
-          <p>Aanya Rao</p>
+          <p>Roman Reigns</p>
         </ListStates>
       </UiViewProvider>
     </QueryClientProvider>,
@@ -31,7 +31,7 @@ describe("column headings leave with the rows (A-20 P4)", () => {
   it("draws the headings with rows", () => {
     list(false);
     expect(screen.getByText("Person")).toBeTruthy();
-    expect(screen.getByText("Aanya Rao")).toBeTruthy();
+    expect(screen.getByText("Roman Reigns")).toBeTruthy();
   });
 
   it("draws no headings over the empty state", () => {

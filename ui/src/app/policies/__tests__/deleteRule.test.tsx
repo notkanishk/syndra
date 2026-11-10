@@ -202,7 +202,7 @@ describe("deleting an automatic rule", () => {
       role_keys: ["trained"],
       source: "rule",
       initiated_by: "op-2",
-      initiated_by_name: "Sam Lee",
+      initiated_by_name: "Randy Orton",
       queued_at: new Date(Date.now() - 3_600_000).toISOString(),
     };
     state.remove = vi

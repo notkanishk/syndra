@@ -254,7 +254,7 @@ func TestHandleActPlan_SerialisesTheSheetAndNeverNullLists(t *testing.T) {
 	orig, origUsers := svcPlanAct, directoryUsers
 	t.Cleanup(func() { svcPlanAct, directoryUsers = orig, origUsers })
 	directoryUsers = func(context.Context) ([]models.UserProfile, error) {
-		return []models.UserProfile{{ID: "admin-1", Name: "Ada"}}, nil
+		return []models.UserProfile{{ID: "admin-1", Name: "Charlotte"}}, nil
 	}
 	const cancelID = "11111111-1111-1111-1111-111111111111"
 
@@ -295,7 +295,7 @@ func TestHandleActPlan_SerialisesTheSheetAndNeverNullLists(t *testing.T) {
 			t.Errorf("%s = %v, want a list of %d", k, full[k], n)
 		}
 	}
-	if c := full["cancels"].([]any)[0].(map[string]any); c["id"] != cancelID || c["initiated_by_name"] != "Ada" {
+	if c := full["cancels"].([]any)[0].(map[string]any); c["id"] != cancelID || c["initiated_by_name"] != "Charlotte" {
 		t.Errorf("cancel not named: %v", c)
 	}
 	if _, has := full["consequence"]; has {

@@ -69,7 +69,7 @@ vi.mock("@/components/names", () => ({
   UserAvatar: () => null,
   ProjectName: () => null,
   RoleRef: () => null,
-  UserName: ({ id }: { id: string }) => <span>{id === "u1" ? "Ada Lovelace" : id}</span>,
+  UserName: ({ id }: { id: string }) => <span>{id === "u1" ? "Charlotte Flair" : id}</span>,
 }));
 
 function request(): AccessRequest {
@@ -116,7 +116,7 @@ async function decisionSeat() {
 describe("a decided request names its person and its next step", () => {
   it("renders the requester's name, not their id", () => {
     renderQueue();
-    expect(screen.getByText("Ada Lovelace")).toBeTruthy();
+    expect(screen.getByText("Charlotte Flair")).toBeTruthy();
     expect(screen.queryByText("u1")).toBeNull();
   });
 
@@ -226,7 +226,7 @@ describe("approving a request that would cancel a change still waiting", () => {
     user_id: "u1",
     project_id: "pLaser",
     role_keys: ["trained"],
-    initiated_by_name: "Sam Iyer",
+    initiated_by_name: "Tegan Nox",
   });
 
   it("says before the press what approving cancels, in the row's If you approve line", async () => {

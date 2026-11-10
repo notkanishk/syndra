@@ -81,7 +81,7 @@ vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 // One object, as the query cache gives: a fresh one per render reads as a new list.
 const EMPTY_REPORT = { welcome_bundle_configured: true, missed: [] };
 
-const session = { id: "u1", name: "Ada", email: "ada@example.org" } as unknown as SessionUser;
+const session = { id: "u1", name: "Charlotte", email: "charlotte@example.org" } as unknown as SessionUser;
 
 function renderHome() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

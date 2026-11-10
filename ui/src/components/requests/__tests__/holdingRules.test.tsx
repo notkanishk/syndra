@@ -168,9 +168,9 @@ describe("approving, while the plan is not read", () => {
   });
 
   it("holds it, with the planner's reason, when the planner refuses the approval", async () => {
-    wire.plan = actPlan({ effect: "blocked", detail: "Ada has left.", consequence: "Decline the request to close it." });
+    wire.plan = actPlan({ effect: "blocked", detail: "Charlotte has left.", consequence: "Decline the request to close it." });
     render(withPlanClient(<ApproveButton request={ask()} onClick={vi.fn()} />));
-    expect(await screen.findByText("Ada has left. Decline the request to close it.")).toBeInTheDocument();
+    expect(await screen.findByText("Charlotte has left. Decline the request to close it.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
   });
 

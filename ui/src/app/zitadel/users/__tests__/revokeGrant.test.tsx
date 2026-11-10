@@ -19,7 +19,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@/lib/queries/useUpstream", () => ({
   useUpstreamUsers: () => ({
-    data: { items: [{ id: "u1", displayName: "Priya", userName: "priya", email: "priya@example.org", state: "USER_STATE_ACTIVE" }] },
+    data: { items: [{ id: "u1", displayName: "Cody", userName: "cody", email: "cody@example.org", state: "USER_STATE_ACTIVE" }] },
     isLoading: false,
     error: null,
     refetch: () => {},
@@ -63,7 +63,7 @@ describe("revoking a person's roles in Zitadel", () => {
     openRevoke();
 
     expect(state.remove).not.toHaveBeenCalled();
-    expect(document.body.textContent).toMatch(/Priya loses it once the change reaches Zitadel/);
+    expect(document.body.textContent).toMatch(/Cody loses it once the change reaches Zitadel/);
     expect(document.body.textContent).toMatch(/It is sent to Zitadel straight away\./);
     expect(screen.getByRole("button", { name: "Revoke this role in Zitadel" })).toBeDisabled();
 

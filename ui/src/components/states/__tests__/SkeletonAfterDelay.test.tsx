@@ -15,7 +15,7 @@ function loading(isLoading: boolean) {
       errorTitle="People couldn't be loaded."
       empty={<p>Nobody yet</p>}
     >
-      <p>Aanya Rao</p>
+      <p>Roman Reigns</p>
     </ListStates>
   );
 }
@@ -43,7 +43,7 @@ describe("a skeleton shows only for a read that is slow (A-05 S7)", () => {
       vi.advanceTimersByTime(SKELETON_DELAY_MS);
     });
     expect(screen.queryByLabelText("Loading")).not.toBeInTheDocument();
-    expect(screen.getByText("Aanya Rao")).toBeInTheDocument();
+    expect(screen.getByText("Roman Reigns")).toBeInTheDocument();
   });
 });
 
@@ -61,20 +61,20 @@ describe("a skeleton hands over to its rows (A-05 S7)", () => {
 
     const skeleton = screen.getByLabelText("Loading");
     expect(skeleton.parentElement).toHaveClass("tint-out");
-    expect(screen.queryByText("Aanya Rao")).not.toBeInTheDocument();
+    expect(screen.queryByText("Roman Reigns")).not.toBeInTheDocument();
 
     act(() => void vi.advanceTimersByTime(119));
-    expect(screen.queryByText("Aanya Rao")).not.toBeInTheDocument();
+    expect(screen.queryByText("Roman Reigns")).not.toBeInTheDocument();
     act(() => void vi.advanceTimersByTime(2));
     expect(screen.queryByLabelText("Loading")).not.toBeInTheDocument();
-    expect(screen.getByText("Aanya Rao")).toBeInTheDocument();
+    expect(screen.getByText("Roman Reigns")).toBeInTheDocument();
   });
 
   it("a read that never showed a skeleton has nothing to fade: its rows are there at once", () => {
     const { rerender } = render(loading(true));
     act(() => void vi.advanceTimersByTime(SKELETON_DELAY_MS - 1));
     rerender(loading(false));
-    expect(screen.getByText("Aanya Rao")).toBeInTheDocument();
+    expect(screen.getByText("Roman Reigns")).toBeInTheDocument();
   });
 
   it("in reduced motion the skeleton and the rows swap at once", () => {
@@ -83,7 +83,7 @@ describe("a skeleton hands over to its rows (A-05 S7)", () => {
     act(() => void vi.advanceTimersByTime(SKELETON_DELAY_MS));
     rerender(loading(false));
     expect(screen.queryByLabelText("Loading")).not.toBeInTheDocument();
-    expect(screen.getByText("Aanya Rao")).toBeInTheDocument();
+    expect(screen.getByText("Roman Reigns")).toBeInTheDocument();
   });
 
   it("a failed read hands over the same way, to its Notice", () => {
@@ -91,7 +91,7 @@ describe("a skeleton hands over to its rows (A-05 S7)", () => {
     act(() => void vi.advanceTimersByTime(SKELETON_DELAY_MS));
     rerender(
       <ListStates isLoading={false} error={new Error("boom")} isEmpty={false} errorTitle="People couldn't be loaded." empty={null}>
-        <p>Aanya Rao</p>
+        <p>Roman Reigns</p>
       </ListStates>,
     );
     expect(screen.queryByText("People couldn't be loaded.")).not.toBeInTheDocument();

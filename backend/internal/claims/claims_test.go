@@ -42,8 +42,8 @@ func tokenJSON(t *testing.T, p Profile, f Facts) string {
 // merged into one object, in the editor's order: the roles claim first, then A
 // to Z, and A to Z inside the object (A-16 §1).
 func TestShape_ActionsV1(t *testing.T) {
-	f := Facts{Roles: []string{"staff", "admin"}, GivenName: "Ada", FamilyName: "Lovelace", Name: "Ada Lovelace"}
-	want := `{"groups":["staff","admin"],"custom_claims":{"family_name":"Lovelace","given_name":"Ada","groups":["staff","admin"],"name":"Ada Lovelace"}}`
+	f := Facts{Roles: []string{"staff", "admin"}, GivenName: "Charlotte", FamilyName: "Flair", Name: "Charlotte Flair"}
+	want := `{"groups":["staff","admin"],"custom_claims":{"family_name":"Flair","given_name":"Charlotte","groups":["staff","admin"],"name":"Charlotte Flair"}}`
 	if got := tokenJSON(t, ActionsV1(), f); got != want {
 		t.Fatalf("v1 shape:\n got %s\nwant %s", got, want)
 	}
@@ -54,7 +54,7 @@ func TestShape_ActionsV1(t *testing.T) {
 // A nested roles claim brings its object first; with no roles claim it is A to
 // Z throughout. Rows sharing a path keep their saved order, so the first wins.
 func TestShape_Order(t *testing.T) {
-	f := Facts{Roles: []string{"admin"}, GivenName: "Ada", Email: "e@example.edu"}
+	f := Facts{Roles: []string{"admin"}, GivenName: "Charlotte", Email: "e@example.edu"}
 	p := Profile{Lands: LandsBoth, IncludeNew: true, Claims: []Claim{
 		{Path: []string{"zeta"}, Kind: KindStatic, Value: json.RawMessage(`1`)},
 		{Path: []string{"Beta"}, Kind: KindStatic, Value: json.RawMessage(`2`)},
@@ -63,7 +63,7 @@ func TestShape_Order(t *testing.T) {
 		{Path: []string{"groups"}, Kind: KindRoles},
 		{Path: []string{"alpha"}, Kind: KindStatic, Value: json.RawMessage(`4`)},
 	}}
-	if got, want := tokenJSON(t, p, f), `{"groups":["admin"],"alpha":4,"Beta":2,"obj":{"a":"Ada","z":3},"zeta":1}`; got != want {
+	if got, want := tokenJSON(t, p, f), `{"groups":["admin"],"alpha":4,"Beta":2,"obj":{"a":"Charlotte","z":3},"zeta":1}`; got != want {
 		t.Fatalf("top-level roles:\n got %s\nwant %s", got, want)
 	}
 	if got := RolesKey(p.Claims); got != "groups" {

@@ -66,14 +66,14 @@ function renderPeople() {
 }
 
 beforeEach(() => {
-  users.data = [person("u1", "Tomas Beck"), person("u2", "Amara Osei", { unseen_count: 2 })];
+  users.data = [person("u1", "Kevin Owens"), person("u2", "Amara Osei", { unseen_count: 2 })];
   nav.url = "/users?bulk=1";
   nav.replaced = [];
 });
 
 function openBulk() {
   renderPeople();
-  fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select Kevin Owens" }));
   fireEvent.click(screen.getByRole("button", { name: "Give a bundle" }));
   expect(screen.getByRole("dialog")).toBeInTheDocument();
 }
@@ -91,7 +91,7 @@ describe("Select ends with the result (Q9)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close without applying" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(nav.replaced).toEqual([]);
-    expect(screen.getByRole("checkbox", { name: "Select Tomas Beck" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Select Kevin Owens" })).toBeChecked();
   });
 
   it("a bare close is a close without a result", () => {
@@ -102,7 +102,7 @@ describe("Select ends with the result (Q9)", () => {
 
   it("leaves the filters in force when it ends", () => {
     nav.url = "/users?bulk=1&attention=expiring";
-    users.data = [person("u1", "Tomas Beck", { expiring_count: 1 })];
+    users.data = [person("u1", "Kevin Owens", { expiring_count: 1 })];
     openBulk();
     fireEvent.click(screen.getByRole("button", { name: "Close on the result" }));
     expect(nav.replaced.at(-1)).toBe("/users?attention=expiring");
@@ -114,20 +114,20 @@ describe("Sent, not seen back opens People on those people (P10.5)", () => {
     nav.url = "/users?attention=unseen";
     renderPeople();
     expect(screen.getByText("Amara Osei")).toBeInTheDocument();
-    expect(screen.queryByText("Tomas Beck")).toBeNull();
+    expect(screen.queryByText("Kevin Owens")).toBeNull();
   });
 
   it("without the filter, everyone is listed", () => {
     nav.url = "/users";
     renderPeople();
     expect(screen.getByText("Amara Osei")).toBeInTheDocument();
-    expect(screen.getByText("Tomas Beck")).toBeInTheDocument();
+    expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
   });
 
   it("a person's row is a link marked as a stop for the arrow keys", () => {
     nav.url = "/users";
     renderPeople();
-    const link = screen.getByText("Tomas Beck").closest("a")!;
+    const link = screen.getByText("Kevin Owens").closest("a")!;
     expect(link).toHaveAttribute("href", "/users/u1");
     expect(link).toHaveAttribute("data-row");
   });

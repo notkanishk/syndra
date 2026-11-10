@@ -46,11 +46,11 @@ describe("the Removal dialog's way to Pending changes", () => {
             projectName: "Laser Lab",
             roleKey: "trained",
             userId: "u 2f/81",
-            userName: "Tomas Beck",
+            userName: "Kevin Owens",
             sources: [bundle],
           }}
           userId="u 2f/81"
-          userName="Tomas Beck"
+          userName="Kevin Owens"
           onClose={() => {}}
         />
       </QueryClientProvider>,

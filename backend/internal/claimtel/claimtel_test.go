@@ -166,8 +166,8 @@ func TestUpperBoundMS(t *testing.T) {
 	}
 }
 
-const payloadA = `{"function":"function/preaccesstoken","user":{"id":"111","human":{"email":"ada@example.edu"}},
- "userinfo":{"email":"ada@example.edu","name":"Ada"},"user_grants":[{"project_id":"pNet","roles":["staff"],"user_id":"111"}],
+const payloadA = `{"function":"function/preaccesstoken","user":{"id":"111","human":{"email":"charlotte@example.edu"}},
+ "userinfo":{"email":"charlotte@example.edu","name":"Charlotte"},"user_grants":[{"project_id":"pNet","roles":["staff"],"user_id":"111"}],
  "application":{"client_id":"c1"},"org":{"id":"o1","name":"Lab"}}`
 
 // The fingerprint follows the payload's contract, not the person: another
@@ -202,7 +202,7 @@ func TestFingerprint_FollowsTheContractNotThePerson(t *testing.T) {
 // The stored example carries the contract and nothing about the person.
 func TestRedacted_KeepsTheContractDropsThePerson(t *testing.T) {
 	ex := string(Redacted([]byte(payloadA)))
-	for _, pii := range []string{"ada@example.edu", "Ada", "111", "Lab"} {
+	for _, pii := range []string{"charlotte@example.edu", "Charlotte", "111", "Lab"} {
 		if strings.Contains(ex, pii) {
 			t.Errorf("example still holds %q: %s", pii, ex)
 		}
@@ -223,7 +223,7 @@ func TestRecord_NewShapeQueuedOnce(t *testing.T) {
 	c := &capture{}
 	_ = r.Flush(context.Background(), c.write)
 	fps := c.batches[0].Fingerprints
-	if len(fps) != 1 || fps[0].Example == nil || strings.Contains(string(fps[0].Example), "ada@") {
+	if len(fps) != 1 || fps[0].Example == nil || strings.Contains(string(fps[0].Example), "charlotte@") {
 		t.Fatalf("fingerprints = %+v", fps)
 	}
 }
@@ -288,7 +288,7 @@ func TestOutcomes_SeverityCoversEveryClass(t *testing.T) {
 	if ServedRolesOnly.Severity() != Informational || Rank(ServedRolesOnly) > Rank(ServedLKG) {
 		t.Error("a roles-only answer is delivered, not a fault")
 	}
-	s := SignIn{UserID: "ada", ClientID: "c1", Scopes: []string{"openid"}}
+	s := SignIn{UserID: "charlotte", ClientID: "c1", Scopes: []string{"openid"}}
 	if got := Classify(s, map[string]Outcome{FnPreUserinfo: ServedRolesOnly}, false, false, true, false, false).Verdict; got != Delivered {
 		t.Errorf("a roles-only sign-in: %s, want delivered", got)
 	}

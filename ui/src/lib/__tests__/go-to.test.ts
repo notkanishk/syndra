@@ -10,7 +10,7 @@ const source = (over: Partial<GoToSource> = {}): GoToSource => ({
   nav: ADVANCED_NAV,
   names: true,
   bundles: true,
-  people: [user("u3", "Priya Nair"), user("u1", "Prisha Rao"), user("s1", "Printer Bot", { service_account: true }), user("u2", "Arjun Priest")],
+  people: [user("u3", "Priscilla Kelly"), user("u1", "Primo Colon"), user("s1", "Printer Bot", { service_account: true }), user("u2", "Damian Priest")],
   projects: [
     { id: "p2", name: "Print Lab", kind: "", description: "", roles: [{ key: "trained", label: "Trained", description: "" }] },
     { id: "p1", name: "Laser Lab", kind: "", description: "", roles: [] },
@@ -30,7 +30,7 @@ describe("Go to", () => {
     expect(groups.map((g) => g.group)).toEqual(["People", "Projects", "Apps", "Bundles"]);
     const people = groups.find((g) => g.group === "People")!.items.map((i) => i.name);
     // People A to Z, service accounts after them under the same group.
-    expect(people).toEqual(["Arjun Priest", "Prisha Rao", "Priya Nair", "Printer Bot"]);
+    expect(people).toEqual(["Damian Priest", "Primo Colon", "Priscilla Kelly", "Printer Bot"]);
     // Pages come first and are A to Z too.
     const [pages, ...rest] = goTo(source(), "s");
     expect(pages.group).toBe("Pages");

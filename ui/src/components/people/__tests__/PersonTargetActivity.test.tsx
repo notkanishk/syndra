@@ -29,7 +29,7 @@ function renderTab() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <PersonActivity userId="u1" name="Ada" />
+      <PersonActivity userId="u1" name="Charlotte" />
     </QueryClientProvider>,
   );
 }

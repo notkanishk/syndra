@@ -63,7 +63,7 @@ func stubDecisionWorld(t *testing.T, w *decisionWorld) {
 		return db.AccessSnapshot{People: map[string]db.PersonAccess{"u1": {Direct: direct}}, RoleWaits: map[db.RoleRef]bool{}}, nil
 	}
 	svcFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
-		return models.UserProfile{ID: "u1", Name: "Ada Lovelace", Status: "active"}, true, nil
+		return models.UserProfile{ID: "u1", Name: "Charlotte Flair", Status: "active"}, true, nil
 	}
 	PlannerCatalogue = func(context.Context) ([]models.ProjectCatalog, error) {
 		return []models.ProjectCatalog{{ID: "pLab", Name: "Laser Lab", Roles: []models.ProjectRole{{Key: "member", Label: "Member"}}}}, nil

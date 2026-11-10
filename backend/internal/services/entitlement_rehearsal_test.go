@@ -42,7 +42,7 @@ func stubDirectory(t *testing.T, email string) {
 	t.Helper()
 	prev := directoryFindUser
 	directoryFindUser = func(_ context.Context, id string) (models.UserProfile, bool, error) {
-		return models.UserProfile{ID: id, Name: "Ada", Email: email}, true, nil
+		return models.UserProfile{ID: id, Name: "Charlotte", Email: email}, true, nil
 	}
 	t.Cleanup(func() { directoryFindUser = prev })
 }
@@ -60,7 +60,7 @@ func TestTheRehearsalAsksAboutTheSetTheApplyWouldSend(t *testing.T) {
 		mappings: []db.RoleMapping{mapping("trained", "group", "lab_makers")},
 	}
 	f.install(t)
-	stubDirectory(t, "ada@example.edu")
+	stubDirectory(t, "charlotte@example.edu")
 	stub := &planStub{result: okPlan(addons.SubjectOutcome{
 		Subject: "u1", Effect: EffectApply, Detail: "Joins lab_makers.", Fingerprint: "fp-1",
 	})}
@@ -76,7 +76,7 @@ func TestTheRehearsalAsksAboutTheSetTheApplyWouldSend(t *testing.T) {
 	if stub.target != "truenas" || len(stub.asked) != 1 {
 		t.Fatalf("the add-on was asked the wrong question: target=%s subjects=%d", stub.target, len(stub.asked))
 	}
-	if stub.asked[0].Email != "ada@example.edu" {
+	if stub.asked[0].Email != "charlotte@example.edu" {
 		t.Errorf("the email a username is derived from did not travel: %q", stub.asked[0].Email)
 	}
 	// The set asked about IS the resolved set. A rehearsal that asked about
@@ -102,7 +102,7 @@ func TestAnAnswerFromTheMirrorIsAProvisionalPlan(t *testing.T) {
 		mappings: []db.RoleMapping{mapping("trained", "group", "lab_makers")},
 	}
 	f.install(t)
-	stubDirectory(t, "ada@example.edu")
+	stubDirectory(t, "charlotte@example.edu")
 
 	taken := time.Date(2026, 8, 8, 9, 30, 0, 0, time.UTC)
 	stub := &planStub{result: addons.PlanResult{
@@ -132,7 +132,7 @@ func TestAnAnswerFromTheMirrorIsAProvisionalPlan(t *testing.T) {
 func TestAnUnreachableAddonRefusesRatherThanPlanningFromNothing(t *testing.T) {
 	f := &resolverFixture{roles: []db.RoleRef{{ProjectID: "pLab", RoleKey: "trained"}}}
 	f.install(t)
-	stubDirectory(t, "ada@example.edu")
+	stubDirectory(t, "charlotte@example.edu")
 	stub := &planStub{result: addons.PlanResult{
 		Outcome: addons.OutcomeUnreached, Err: errors.New("connection refused"),
 	}}
@@ -152,7 +152,7 @@ func TestAnUnreachableAddonRefusesRatherThanPlanningFromNothing(t *testing.T) {
 func TestASubjectTheTargetDidNotAnswerForIsReported(t *testing.T) {
 	f := &resolverFixture{roles: []db.RoleRef{{ProjectID: "pLab", RoleKey: "trained"}}}
 	f.install(t)
-	stubDirectory(t, "ada@example.edu")
+	stubDirectory(t, "charlotte@example.edu")
 	stub := &planStub{result: okPlan(addons.SubjectOutcome{
 		Subject: "u1", Effect: EffectNoChange, Fingerprint: "fp-1",
 	})}

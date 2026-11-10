@@ -19,7 +19,7 @@ function renderList(error: unknown, isOperator = true) {
           errorTitle="People couldn't be loaded."
           empty={<p>Nobody yet</p>}
         >
-          <p>Aanya Rao</p>
+          <p>Roman Reigns</p>
         </ListStates>
       </UiViewProvider>
     </QueryClientProvider>,
@@ -37,7 +37,7 @@ describe("ListStates arrival", () => {
           errorTitle="People couldn't be loaded."
           empty={<p>Nobody yet</p>}
         >
-          <p>Aanya Rao</p>
+          <p>Roman Reigns</p>
         </ListStates>
       </UiViewProvider>
     </QueryClientProvider>
@@ -87,7 +87,7 @@ describe("ListStates", () => {
     expect(status.className).toContain("warn");
     expect(status.querySelector(".breathe")).not.toBeNull();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.queryByText("Aanya Rao")).not.toBeInTheDocument();
+    expect(screen.queryByText("Roman Reigns")).not.toBeInTheDocument();
   });
 
   it("says any other failed read as the danger Notice, ending Nothing was changed", () => {

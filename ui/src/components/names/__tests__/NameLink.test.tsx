@@ -11,7 +11,7 @@ const miss = { value: undefined, resolved: true } as const;
 
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
-    resolveUser: (id: string) => (id === "u1" ? { value: { display_name: "Aanya Rao", email: "a@example.org" }, resolved: true } : miss),
+    resolveUser: (id: string) => (id === "u1" ? { value: { display_name: "Roman Reigns", email: "a@example.org" }, resolved: true } : miss),
     resolveProject: (id: string) => (id === "p1" ? { value: { name: "Laser Lab" }, resolved: true } : miss),
     resolveRole: () => miss,
     resolveBundle: (id: string) => (id === "b1" ? { value: { name: "Lab Tech" }, resolved: true } : miss),
@@ -28,7 +28,7 @@ describe("name parts link by default", () => {
         <UserName id="u1" /> <ProjectName id="p1" /> <BundleName id="b1" />
       </p>,
     );
-    expect(screen.getByRole("link", { name: "Aanya Rao" })).toHaveAttribute("href", "/users/u1");
+    expect(screen.getByRole("link", { name: "Roman Reigns" })).toHaveAttribute("href", "/users/u1");
     expect(screen.getByRole("link", { name: "Laser Lab" })).toHaveAttribute("href", "/projects/p1");
     expect(screen.getByRole("link", { name: "Lab Tech" })).toHaveAttribute("href", "/bundles/b1");
   });
@@ -52,12 +52,12 @@ describe("name parts link by default", () => {
   it("the email suffix is part of the one link, not a second", () => {
     render(<UserName id="u1" showEmail />);
     expect(screen.getAllByRole("link")).toHaveLength(1);
-    expect(screen.getByRole("link")).toHaveTextContent("Aanya Rao · a@example.org");
+    expect(screen.getByRole("link")).toHaveTextContent("Roman Reigns · a@example.org");
   });
 
   it("href sends a service account to its own page", () => {
     render(<UserName id="u1" href="/system/service-accounts/u1" />);
-    expect(screen.getByRole("link", { name: "Aanya Rao" })).toHaveAttribute("href", "/system/service-accounts/u1");
+    expect(screen.getByRole("link", { name: "Roman Reigns" })).toHaveAttribute("href", "/system/service-accounts/u1");
   });
 
   it("a name nothing could place still links, and its copy control stays outside the link", () => {
@@ -86,7 +86,7 @@ describe("the opt-out", () => {
       </p>,
     );
     expect(screen.queryAllByRole("link")).toHaveLength(0);
-    for (const words of ["Aanya Rao", "Laser Lab", "Lab Tech", "Unknown account"]) {
+    for (const words of ["Roman Reigns", "Laser Lab", "Lab Tech", "Unknown account"]) {
       expect(screen.getAllByText(words).length).toBeGreaterThan(0);
     }
   });
@@ -97,7 +97,7 @@ describe("the opt-out", () => {
         <UserName id="u1" /> <ProjectName id="p1" link />
       </Modal>,
     );
-    expect(screen.queryByRole("link", { name: "Aanya Rao" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Roman Reigns" })).toBeNull();
     expect(screen.getByRole("link", { name: "Laser Lab" })).toBeInTheDocument();
   });
 });

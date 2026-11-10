@@ -60,11 +60,11 @@ function open(removal: Partial<Removal> & { sources: RoleReason[] }) {
           projectName: "Laser Lab",
           roleKey: "trained",
           userId: "u_2f81",
-          userName: "Tomas Beck",
+          userName: "Kevin Owens",
           ...removal,
         }}
         userId="u_2f81"
-        userName="Tomas Beck"
+        userName="Kevin Owens"
         onClose={() => {}}
       />
     </QueryClientProvider>,
@@ -112,7 +112,7 @@ describe("source-specific removal", () => {
   it("names the bundle and what is lost with it", () => {
     open({ sources: [bundle] });
 
-    expect(screen.getByText(/Remove the Lab Tech bundle from Tomas Beck\?/)).toBeInTheDocument();
+    expect(screen.getByText(/Remove the Lab Tech bundle from Kevin Owens\?/)).toBeInTheDocument();
     expect(screen.getByText("They will lose")).toBeInTheDocument();
     expect(
       screen.getByText(/Every other role this bundle carries is removed too/i),
@@ -176,7 +176,7 @@ describe("a removal that would cancel a give still waiting (the plan says so bef
     role_keys: ["trained"],
     source: "bundle",
     initiated_by: "op-2",
-    initiated_by_name: "Sam Iyer",
+    initiated_by_name: "Tegan Nox",
     said: "joined the course",
   });
 
@@ -196,7 +196,7 @@ describe("a removal that would cancel a give still waiting (the plan says so bef
     fireEvent.click(screen.getByRole("button", { name: "Keep it waiting" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Remove the bundle" })).toBeInTheDocument());
     expect(removeBundle).not.toHaveBeenCalled();
-    expect(screen.getByText("Nothing changed. Sam's change is still waiting.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing changed. Tegan's change is still waiting.")).toBeInTheDocument();
   });
 
   it("going ahead sends one removal that carries the fingerprint and the ids it showed", async () => {
@@ -212,7 +212,7 @@ describe("a removal that would cancel a give still waiting (the plan says so bef
       bundleId: "b1",
       seen: { fingerprint: "fp-4", cancel_ids: [waiting.id] },
     });
-    expect(await screen.findByText(/The change Sam queued 2h ago is cancelled, so nothing goes to Zitadel/)).toBeInTheDocument();
+    expect(await screen.findByText(/The change Tegan queued 2h ago is cancelled, so nothing goes to Zitadel/)).toBeInTheDocument();
   });
 
   it("a revoke whose plan cancels something pushes the step at press: Cancel it and revoke", async () => {
@@ -248,7 +248,7 @@ describe("a give that never reached Zitadel: the dialog is the cancel", () => {
     project_id: "pLaser",
     role_keys: ["trained"],
     source: "direct",
-    initiated_by_name: "Sam Iyer",
+    initiated_by_name: "Tegan Nox",
     queued_at: "2026-10-12T08:00:00Z",
   });
   const cancelOnly = () => cancelling([waitingGive], { delivery: "none", fingerprint: "fp-c" });
@@ -258,9 +258,9 @@ describe("a give that never reached Zitadel: the dialog is the cancel", () => {
     open({ sources: [{ ...direct, queued: true }], grantId: "g_88" });
     await planRead("Cancel giving it");
 
-    expect(screen.getByText("Waiting for you to send since 12 Oct, queued by Sam Iyer.")).toBeInTheDocument();
-    expect(screen.getByText("Tomas never had it, so nothing is sent to Zitadel.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /^Cancel giving .+ in Laser Lab to Tomas\?$/ })).toBeInTheDocument();
+    expect(screen.getByText("Waiting for you to send since 12 Oct, queued by Tegan Nox.")).toBeInTheDocument();
+    expect(screen.getByText("Kevin never had it, so nothing is sent to Zitadel.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Cancel giving .+ in Laser Lab to Kevin\?$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Keep it waiting" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Revoke this role" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Withdraw the queued grant" })).toBeNull();
@@ -281,7 +281,7 @@ describe("a give that never reached Zitadel: the dialog is the cancel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel giving it" }));
 
     expect(await screen.findByText("Cancelled")).toBeInTheDocument();
-    expect(screen.getByText(/^.+ in Laser Lab won't be given to Tomas\. It never reached Zitadel\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/^.+ in Laser Lab won't be given to Kevin\. It never reached Zitadel\.$/)).toBeInTheDocument();
     // The sheet is its result: lede and body are gone, the pair is one Close.
     expect(screen.queryByText(/still waiting for you to send/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Keep it waiting" })).toBeNull();
@@ -307,7 +307,7 @@ describe("a give that never reached Zitadel: the dialog is the cancel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel giving it" }));
     expect(await screen.findByText("Cancelled")).toBeInTheDocument();
     expect(
-      screen.getByText("The Lab Tech bundle won't be given to Tomas. It never reached Zitadel."),
+      screen.getByText("The Lab Tech bundle won't be given to Kevin. It never reached Zitadel."),
     ).toBeInTheDocument();
     expect(screen.getByText("Nothing for you to do.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /This cancels/ })).not.toBeInTheDocument();
@@ -367,7 +367,7 @@ describe("when their access moved while the dialog was open", () => {
     wire.plan = actPlan({ fingerprint: "fp-new" });
     fireEvent.click(screen.getByRole("button", { name: "Revoke this role" }));
 
-    expect(await screen.findByText("Nothing was changed. Tomas's access moved while this was open.")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing was changed. Kevin's access moved while this was open.")).toBeInTheDocument();
     expect(screen.getByText("Read the note under the form, then press Revoke this role again.")).toBeInTheDocument();
     await waitFor(() => expect(wire.calls.length).toBeGreaterThan(reads));
     // Still the form, with its button: not a result.

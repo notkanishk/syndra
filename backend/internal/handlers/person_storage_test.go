@@ -50,7 +50,7 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 		if !h.bound {
 			return db.TargetBinding{}, false, nil
 		}
-		return db.TargetBinding{Target: "truenas", SubjectID: "u1", Username: "aanya.rao", BoundAt: bound}, true, nil
+		return db.TargetBinding{Target: "truenas", SubjectID: "u1", Username: "roman.reigns", BoundAt: bound}, true, nil
 	}
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
 		lead := services.RoleSource{ProjectID: "fab", RoleKey: "lead"}
@@ -65,13 +65,13 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 		if h.failRead || h.unreachable {
 			return addons.StorageStatus{Outcome: addons.OutcomeUnreached}
 		}
-		home := addons.Place{Share: "main", Folder: "homes/aanya.rao", Path: "/mnt/main/homes/aanya.rao", Access: "change", Home: true}
+		home := addons.Place{Share: "main", Folder: "homes/roman.reigns", Path: "/mnt/main/homes/roman.reigns", Access: "change", Home: true}
 		home.Usage = &struct {
 			UsedBytes  int64 `json:"used_bytes"`
 			QuotaBytes int64 `json:"quota_bytes,omitempty"`
 		}{UsedBytes: 18 * gb, QuotaBytes: 50 * gb}
 		renders := addons.Place{Share: "main", Folder: "projects/renders", Path: "/mnt/main/projects/renders", Access: "change"}
-		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, Username: "aanya.rao", Usable: true,
+		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, Username: "roman.reigns", Usable: true,
 			PlacesReadable: true, Places: []addons.Place{home, renders}}
 	}
 	addonsRegistered = func() []addons.Registration { return []addons.Registration{{Target: "truenas"}} }
@@ -141,7 +141,7 @@ func TestPersonTargets_TheMembersViewPlusTheOperatorsFacts(t *testing.T) {
 	if len(h.asked) != 1 || h.asked[0] != "u1/op-1" {
 		t.Fatalf("asked %v; want subject u1 with the operator as actor", h.asked)
 	}
-	if view.Account == nil || view.Account.Username != "aanya.rao" || view.Setup != "" || view.Adopted != nil {
+	if view.Account == nil || view.Account.Username != "roman.reigns" || view.Setup != "" || view.Adopted != nil {
 		t.Fatalf("view %+v", view)
 	}
 	home := view.Home

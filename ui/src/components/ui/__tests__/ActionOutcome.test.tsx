@@ -22,11 +22,11 @@ describe("ActionOutcome", () => {
       <ActionOutcome
         placement="seat"
         word="Approved"
-        outcome={{ kind: "applied", message: "Done", detail: "Ada now holds Operator." }}
+        outcome={{ kind: "applied", message: "Done", detail: "Charlotte now holds Operator." }}
       />,
     );
     expect(screen.getByText("Approved")).toBeInTheDocument();
-    expect(screen.getByText("Ada now holds Operator.")).toBeInTheDocument();
+    expect(screen.getByText("Charlotte now holds Operator.")).toBeInTheDocument();
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
@@ -65,7 +65,7 @@ describe("ActionOutcome", () => {
 });
 
 describe("block form with a word", () => {
-  const done = { kind: "applied" as const, message: "Rohan can use the laser cutter on his own now" };
+  const done = { kind: "applied" as const, message: "Liv can use the laser cutter on his own now" };
 
   it("is a dot, the word in the display face, one sentence, one faint line", () => {
     render(<ActionOutcome word="Given" outcome={{ ...done, detail: "He was in no other room." }} />);
@@ -73,7 +73,7 @@ describe("block form with a word", () => {
     const word = screen.getByText("Given");
     expect(word.className).toContain("font-display");
     expect(word.className).toContain("text-[22px]");
-    expect(screen.getByText("Rohan can use the laser cutter on his own now.")).toBeInTheDocument();
+    expect(screen.getByText("Liv can use the laser cutter on his own now.")).toBeInTheDocument();
     expect(screen.getByText("He was in no other room.").className).toContain("text-faint");
     // The old pill is gone: the word is the status.
     expect(status).not.toHaveTextContent("Applied");

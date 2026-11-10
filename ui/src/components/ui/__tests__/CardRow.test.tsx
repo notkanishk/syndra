@@ -13,11 +13,11 @@ describe("a row that discloses the rest of itself", () => {
     render(
       <Card>
         <CardRow first>
-          <span>Aditi Rao</span>
+          <span>Drew McIntyre</span>
         </CardRow>
       </Card>,
     );
-    expect(screen.getByText("Aditi Rao")).toBeTruthy();
+    expect(screen.getByText("Drew McIntyre")).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
   });
 
@@ -26,7 +26,7 @@ describe("a row that discloses the rest of itself", () => {
   it("makes the whole row the control, not a chevron", () => {
     const onToggle = vi.fn();
     render(
-      <CardRow disclosure={<RowField label="Granted by">Kabir</RowField>} onToggle={onToggle}>
+      <CardRow disclosure={<RowField label="Granted by">Kairi</RowField>} onToggle={onToggle}>
         <span>Laser cutter</span>
       </CardRow>,
     );
@@ -55,12 +55,12 @@ describe("a row that discloses the rest of itself", () => {
 
   it("labels a disclosed field with what its column used to say", () => {
     render(
-      <CardRow disclosure={<RowField label="Granted by">Kabir Rao</RowField>} expanded onToggle={() => {}}>
+      <CardRow disclosure={<RowField label="Granted by">Kairi Sane</RowField>} expanded onToggle={() => {}}>
         <span>Laser cutter</span>
       </CardRow>,
     );
     expect(screen.getByText("Granted by")).toBeTruthy();
-    expect(screen.getByText("Kabir Rao")).toBeTruthy();
+    expect(screen.getByText("Kairi Sane")).toBeTruthy();
   });
 });
 
@@ -114,8 +114,8 @@ describe("a row opened by a control inside it", () => {
   it("puts the panel under its own row, not somewhere else", () => {
     render(
       <Card>
-        <CardRow first expanded disclosure={<span>adopt sana</span>}>
-          <span>sana</span>
+        <CardRow first expanded disclosure={<span>adopt iyo</span>}>
+          <span>iyo</span>
           <button type="button">Adopt</button>
         </CardRow>
         <CardRow expanded={false} disclosure={null}>
@@ -125,8 +125,8 @@ describe("a row opened by a control inside it", () => {
     );
 
     // The wrapper the panel lives in: the unfolding region, then the row wrapper.
-    const owner = screen.getByText("adopt sana").closest(".unfold")!.parentElement!;
-    expect(owner.textContent, "the panel belongs to the row it is about").toContain("sana");
+    const owner = screen.getByText("adopt iyo").closest(".unfold")!.parentElement!;
+    expect(owner.textContent, "the panel belongs to the row it is about").toContain("iyo");
     expect(
       owner.textContent,
       "and not to the last row in the list, which is where it used to appear",
@@ -136,7 +136,7 @@ describe("a row opened by a control inside it", () => {
   it("keeps the row inert — no button inside a button", () => {
     render(
       <CardRow expanded disclosure={<span>body</span>}>
-        <span>sana</span>
+        <span>iyo</span>
         <button type="button">Adopt</button>
       </CardRow>,
     );
@@ -151,7 +151,7 @@ describe("a row opened by a control inside it", () => {
   it("opens as an unfold, never a scale", () => {
     render(
       <CardRow expanded disclosure={<span>body</span>}>
-        <span>sana</span>
+        <span>iyo</span>
       </CardRow>,
     );
     expect(screen.getByText("body").closest(".unfold")).not.toBeNull();
@@ -161,7 +161,7 @@ describe("a row opened by a control inside it", () => {
   it("renders nothing while it is closed", () => {
     render(
       <CardRow disclosure={<span>body</span>}>
-        <span>sana</span>
+        <span>iyo</span>
       </CardRow>,
     );
     expect(screen.queryByText("body")).toBeNull();
