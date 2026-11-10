@@ -234,16 +234,7 @@ function useUpstreamMutation<V, R = unknown>(fn: (value: V) => Promise<R>) {
     // Settled, not only succeeded: a write whose outcome is unknown (the
     // answer was lost, C6) may have changed Zitadel, so every reader re-reads.
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: ["upstream"] });
-      qc.invalidateQueries({ queryKey: ["drift"] });
-      // A role created or renamed here changes the names every screen resolves.
-      qc.invalidateQueries({ queryKey: ["name-catalog"] });
-      // The same records the everyday screens read: a person's access, a
-      // role's holders and the catalogue, the queue of changes to send.
-      qc.invalidateQueries({ queryKey: ["users"] });
-      qc.invalidateQueries({ queryKey: ["roles"] });
-      qc.invalidateQueries({ queryKey: ["governance"] });
-      qc.invalidateQueries({ queryKey: ["propagations"] });
+      invalidateAfter(qc, "upstream");
     },
   });
 }

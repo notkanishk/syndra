@@ -2,6 +2,8 @@
 import { personOr } from "@/lib/names";
 
 import { useQueryClient } from "@tanstack/react-query";
+
+import { invalidateAfter } from "@/lib/queries/invalidation";
 import { useState } from "react";
 
 import { UserName } from "@/components/names";
@@ -61,8 +63,7 @@ export function UnconfirmedChanges({
             setOpen(null);
             // The row leaves on the next read, after the result was seen (A-05 §2.6).
             if (answered) {
-              client.invalidateQueries({ queryKey: ["targets", target, "unconfirmed"] });
-              client.invalidateQueries({ queryKey: ["governance", "indicators"] });
+              invalidateAfter(client, "target", { target });
             }
           }}
         />

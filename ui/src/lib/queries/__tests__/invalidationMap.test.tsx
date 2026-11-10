@@ -33,6 +33,9 @@ const KINDS: Record<WriteKind, { rail: boolean }> = {
   retriesSeen: { rail: true },
   // A look-again moves what was observed, never the rail.
   observed: { rail: false },
+  upstream: { rail: true },
+  // Every read asks again, the rail's included.
+  reconnected: { rail: false },
 };
 
 const has = (keys: readonly unknown[][], key: readonly unknown[]) =>
@@ -49,6 +52,22 @@ describe("the write-to-keys map", () => {
   it("a look-again reaches that person's access view, nobody else's", () => {
     const keys = keysFor("observed", { user: "u1" }) as unknown[][];
     expect(keys).toEqual([["users", "access", "u1"]]);
+  });
+
+  it("a Zitadel-screen write reaches the readers of Zitadel's records and the rail", () => {
+    const keys = keysFor("upstream") as unknown[][];
+    for (const k of [["upstream"], ["drift"], ["name-catalog"], ["users"], ["roles"], ["governance"], ["propagations"]]) {
+      expect(has(keys, k), JSON.stringify(k)).toBe(true);
+    }
+  });
+
+  it("reconnecting drops every query, the rail's too", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(["governance", "indicators"], 1);
+    qc.setQueryData(["anything", "else"], 2);
+    invalidateAfter(qc, "reconnected");
+    expect(qc.getQueryState(["governance", "indicators"])?.isInvalidated).toBe(true);
+    expect(qc.getQueryState(["anything", "else"])?.isInvalidated).toBe(true);
   });
 
   it("an access change reaches people, bundles, roles, pending, drift's neighbours and the rail", () => {
@@ -128,9 +147,18 @@ const READ_ONLY = new Set([
   "useLookUpSignIns",
   // Writes its answer straight into the cache with setQueryData.
   "useSaveWelcomeClaims",
-  // W1a's: the Zitadel screen's own pipe, not this map.
-  "useUpstreamMutation",
 ]);
+
+const SRC = join(QUERIES_DIR, "..", "..");
+
+/** Every non-test source file under src/. */
+function srcFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) return e.name === "__tests__" ? [] : srcFiles(p);
+    return /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [p] : [];
+  });
+}
 
 function hookFiles(): string[] {
   return readdirSync(QUERIES_DIR)
@@ -170,14 +198,11 @@ describe("every mutation hook goes through the map", () => {
     expect(mutationsMissingTheMap(broken)).toEqual(["useX.ts: useX"]);
   });
 
-  it("no hook names a key to invalidate: only invalidation.ts does", () => {
-    // ponytail: lib/queries only. Four screens still call invalidateQueries
-    // (HomeLimit, UnconfirmedChanges, DegradedBanner, states/index), outside
-    // W2c's file list; widen this scan to src/ when they move.
-    const offenders = Object.entries(files)
-      .filter(([f]) => !f.endsWith("useUpstream.ts"))
-      .filter(([, src]) => /\.invalidateQueries\(/.test(src))
-      .map(([f]) => f);
+  it("nothing in src names a key to invalidate: only invalidation.ts does", () => {
+    const offenders = srcFiles(SRC)
+      .filter((f) => !f.endsWith("lib/queries/invalidation.ts"))
+      .filter((f) => /\.invalidateQueries\(/.test(readFileSync(f, "utf8")))
+      .map((f) => f.slice(SRC.length));
     expect(offenders).toEqual([]);
   });
 });

@@ -16,6 +16,8 @@ import { useLiftHold } from "@/lib/queries/useHolds";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { AccountHome } from "@/lib/queries/useTargets";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+import { invalidateAfter } from "@/lib/queries/invalidation";
 import { endOfDayISO } from "@/lib/time";
 import { roleName } from "@/lib/names";
 
@@ -115,9 +117,7 @@ function useSetOwnLimit(target: string) {
         },
       }),
     onSuccess: () => {
-      client.invalidateQueries({ queryKey: ["targets", target, "homes"] });
-      client.invalidateQueries({ queryKey: ["governance", "holds", "review-due"] });
-      client.invalidateQueries({ queryKey: ["users"] });
+      invalidateAfter(client, "access");
     },
   });
 }

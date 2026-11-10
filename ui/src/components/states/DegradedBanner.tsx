@@ -1,6 +1,8 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { invalidateAfter } from "@/lib/queries/invalidation";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -92,7 +94,7 @@ export function DegradedBanner({ under = false }: { under?: boolean } = {}) {
   // Zitadel answering again: every list read while it was down asks again,
   // rather than waiting out its stale time.
   useEffect(() => {
-    if (wasDegraded.current && !degraded) void client.invalidateQueries();
+    if (wasDegraded.current && !degraded) invalidateAfter(client, "reconnected");
     wasDegraded.current = degraded;
   }, [client, degraded]);
   const residue = data?.seed_residue ?? 0;
