@@ -43,7 +43,7 @@ func DriftTriageQueue(ctx context.Context) ([]models.DriftTriageItem, error) {
 // from rows that had earned it. One shape, whether or not a filter was applied.
 //
 // The other-items count is taken over the whole pending queue rather than over
-// the subset, because "Marta has 2 more items" is a fact about Marta, not about
+// the subset, because "Mandy has 2 more items" is a fact about Mandy, not about
 // the query. Counted within a filter it would shrink to match whatever the
 // operator happened to be looking at, and read as reassurance.
 func DriftTriageRows(ctx context.Context, items []models.DriftItem) ([]models.DriftTriageItem, error) {
@@ -76,7 +76,7 @@ func enrichForTriage(ctx context.Context, items, population []models.DriftItem) 
 		known[key] = true
 	}
 
-	// How many OTHER pending items each person has. "Marta has 2 more items"
+	// How many OTHER pending items each person has. "Mandy has 2 more items"
 	// is the single piece of context most likely to change a revoke decision
 	// — one stray grant is a mistake, three is an offboarding that never ran.
 	//

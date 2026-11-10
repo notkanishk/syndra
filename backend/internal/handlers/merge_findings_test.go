@@ -566,7 +566,7 @@ func TestADecisionSaysItIsWaitingRatherThanDone(t *testing.T) {
 func TestASecondDecisionIsRefusedRatherThanOverwriting(t *testing.T) {
 	h := &findingHarness{finding: db.MergeFinding{
 		ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream",
-		Decision: db.ResolutionReprovisioned, DecidedBy: "op-ada",
+		Decision: db.ResolutionReprovisioned, DecidedBy: "op-charlotte",
 	}}
 	stubFindings(t, h)
 
@@ -576,7 +576,7 @@ func TestASecondDecisionIsRefusedRatherThanOverwriting(t *testing.T) {
 	}
 	// It names who decided, because a second operator has to know somebody
 	// chose — not merely that their own request failed.
-	if !strings.Contains(rr.Body.String(), "op-ada") {
+	if !strings.Contains(rr.Body.String(), "op-charlotte") {
 		t.Fatalf("the refusal must name who decided: %s", rr.Body.String())
 	}
 	if len(h.dispatched) != 0 {
@@ -724,7 +724,7 @@ func TestRepeatingAHalfDoneUnbindFinishesIt(t *testing.T) {
 	h := &findingHarness{finding: db.MergeFinding{
 		ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream",
 		// The earlier attempt's reservation, still standing.
-		Decision: db.ResolutionUnbound, DecidedBy: "op-ada",
+		Decision: db.ResolutionUnbound, DecidedBy: "op-charlotte",
 	}}
 	stubFindings(t, h)
 
@@ -750,7 +750,7 @@ func TestRepeatingAHalfDoneUnbindFinishesIt(t *testing.T) {
 func TestARepairIsNotAWayToChangeTheAnswer(t *testing.T) {
 	h := &findingHarness{finding: db.MergeFinding{
 		ID: "f1", Target: "truenas", SubjectID: "sub-1", Outcome: "deleted_upstream",
-		Decision: db.ResolutionUnbound, DecidedBy: "op-ada",
+		Decision: db.ResolutionUnbound, DecidedBy: "op-charlotte",
 	}}
 	stubFindings(t, h)
 

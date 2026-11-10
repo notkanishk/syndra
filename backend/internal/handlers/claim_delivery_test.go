@@ -499,14 +499,14 @@ func TestClaimsHealth(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		r := freshRecorder(t)
 		stubHealthDeps(t, nil, goodWarm, 0)
-		r.Record(claimtel.Call{Outcome: claimtel.Served, UserID: "ada-secret-id", ClientID: "client-secret", Function: pre})
+		r.Record(claimtel.Call{Outcome: claimtel.Served, UserID: "charlotte-secret-id", ClientID: "client-secret", Function: pre})
 		r.Record(claimtel.Call{Outcome: claimtel.SigMissing}) // a scanner, or the deploy check
 		r.Record(claimtel.Call{Outcome: claimtel.NoGrants, Function: pre})
 		code, h, raw := getHealth(t)
 		if code != 200 || h.Status != "ok" || len(h.Reasons) != 0 || h.Calls10m != 3 || h.LastServedAgeS == nil {
 			t.Fatalf("HTTP %d %+v", code, h)
 		}
-		if strings.Contains(raw, "ada-secret-id") || strings.Contains(raw, "client-secret") {
+		if strings.Contains(raw, "charlotte-secret-id") || strings.Contains(raw, "client-secret") {
 			t.Fatalf("health leaked an id: %s", raw)
 		}
 	})

@@ -122,9 +122,9 @@ git commit -m "refactor(ui): delete dead lib/api.ts fetchers (U4)"
 ```ts
 it("OIDC avatar falls back to email then userId when name is empty", () => {
   // build an OIDC session cookie payload with empty name, present email
-  const s = decodeOidcForTest({ userId: "u-1", name: "", email: "jane.doe@example.edu", role: "user" });
+  const s = decodeOidcForTest({ userId: "u-1", name: "", email: "jacqueline.moore@example.edu", role: "user" });
   expect(s.avatar).not.toBe("");
-  expect(s.avatar).toBe("JA"); // from email local-part "jane.doe"
+  expect(s.avatar).toBe("JA"); // from email local-part "jacqueline.moore"
 });
 ```
 (Use the file's existing helper for constructing a session from an OIDC payload; mirror the neighbouring tests' setup.)

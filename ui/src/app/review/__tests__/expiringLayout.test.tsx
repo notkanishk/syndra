@@ -41,7 +41,7 @@ function grant(over: Partial<ExpiringGrantRow> = {}): ExpiringGrantRow {
     user_id: "u1",
     project_id: "pLaser",
     role_key: "trained",
-    granted_by: "priya",
+    granted_by: "cody",
     reason: "",
     expires_at: days(5),
     created_at: "2026-06-01T12:00:00Z",
@@ -96,7 +96,7 @@ describe("Expiring access, laid out as its board", () => {
   });
 
   it("a decided row is not dimmed and its decision sits under the role", () => {
-    state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z", note: "Cohort ends" } })];
+    state.rows = [grant({ acknowledged: { by: "cody", at: "2026-08-04T09:00:00Z", note: "Cohort ends" } })];
     const { container } = renderPage();
     expect(container.querySelector(".opacity-\\[\\.72\\]")).toBeNull();
     expect(document.body.textContent).toMatch(/let it lapse on .*Cohort ends/i);
@@ -117,7 +117,7 @@ describe("Expiring access, laid out as its board", () => {
   });
 
   it("the Undecided section goes when everything is decided, and Let lapse stays", () => {
-    state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
+    state.rows = [grant({ acknowledged: { by: "cody", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
     expect(screen.queryByText("Undecided")).toBeNull();
     expect(screen.getByText("Let lapse")).toBeTruthy();

@@ -244,7 +244,7 @@ func TestUnmarkServiceAccount(t *testing.T) {
 func TestListUsers_CarriesEffectiveServiceAccountFlag(t *testing.T) {
 	users := []models.UserProfile{
 		{ID: "u-person", Name: "Person"},
-		{ID: "u-zed", Name: "Zed", Kind: models.UserKindHuman},
+		{ID: "u-zed", Name: "Zack", Kind: models.UserKindHuman},
 		{ID: "u-netbird", Name: "netbird", Kind: models.UserKindMachine},
 	}
 	flagged := flagServiceAccounts(users, marksAt(db.ServiceAccountRow{UserID: "u-zed"}))

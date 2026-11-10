@@ -20,7 +20,7 @@ vi.mock("@/lib/ui-view", () => ({
 vi.mock("@/components/shell/AccountSheet", () => ({ AccountSheet: () => <span>account</span> }));
 vi.mock("@/components/shell/ThemeToggle", () => ({ ThemeToggle: () => <span>theme</span> }));
 
-const session = { id: "u1", name: "Iyo Example", email: "iyo@example.edu" } as SessionUser;
+const session = { id: "u1", name: "Dexter Lumis", email: "dexter@example.edu" } as SessionUser;
 
 beforeEach(() => {
   view.audience = "basic";

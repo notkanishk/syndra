@@ -36,7 +36,7 @@ interface SelectionBarProps {
   count: number;
   /** Singular/plural noun for what is selected: "person"/"people", "item"/"items". */
   noun: [string, string];
-  /** Where the selection came from — "in Laser Lab", "matching 'ada'". */
+  /** Where the selection came from — "in Laser Lab", "matching 'charlotte'". */
   scope?: string;
   /** What it is made of — "8 safety-gated · 3 people". */
   composition?: string;

@@ -65,7 +65,7 @@ function place(over: Partial<StoragePlace> & { path: string }): StoragePlace {
   };
 }
 
-const HOME = place({ path: "main/home_dir/ada", home: true, usage: { used_bytes: 0, quota_bytes: 50 * 2 ** 30 } });
+const HOME = place({ path: "main/home_dir/charlotte", home: true, usage: { used_bytes: 0, quota_bytes: 50 * 2 ** 30 } });
 const WADDLE = place({ path: "main/waddle_share", usage: { used_bytes: 46 * 2 ** 30, quota_bytes: 50 * 2 ** 30 }, roles: [{ project_id: "p1", role_key: "fab_lead" }] });
 // Usage on a read-only place is drawn nowhere, even if one arrived.
 const QUACK = place({ path: "main/quack_share", access: "read", usage: { used_bytes: 5 * 2 ** 30 }, roles: [{ project_id: "p1", role_key: "fab_lead" }] });
@@ -74,7 +74,7 @@ function view(over: Partial<MyTargetView> = {}): MyTargetView {
   return {
     target: "truenas",
     entitled: true,
-    account: { username: "ada" },
+    account: { username: "charlotte" },
     credential: { set: true, last_changed_at: "2026-09-20T10:00:00Z" },
     reachable: true,
     health: "online",
@@ -83,7 +83,7 @@ function view(over: Partial<MyTargetView> = {}): MyTargetView {
     connection: { protocol: "smb", host: HOST },
     roles: [{ project_id: "p1", role_key: "fab_lead" }],
     storage: {
-      username: "ada",
+      username: "charlotte",
       usable: true,
       needs_password: false,
       smb_enabled: true,
@@ -324,7 +324,7 @@ describe("the connection guide", () => {
     fireEvent.change(within(dialog).getByLabelText("Folder"), { target: { value: "2" } });
     fireEvent.click(within(dialog).getByRole("radio", { name: "Android" }));
     expect(within(dialog).getByText(/Android has no built-in way/)).toBeTruthy();
-    expect(within(dialog).getByText(/share: main\. Then open home_dir › ada inside it/)).toBeTruthy();
+    expect(within(dialog).getByText(/share: main\. Then open home_dir › charlotte inside it/)).toBeTruthy();
   });
 
   it("picks the device from the browser, Mac when it can't tell", () => {
@@ -353,7 +353,7 @@ describe("what the page hands to the mutation", () => {
 describe("a folder over its limit", () => {
   it("says it's full, and that opening and deleting still work", () => {
     state.targets = [
-      view({ storage: { ...view().storage!, places: [place({ path: "main/home_dir/ada", home: true, usage: { used_bytes: 34 * 2 ** 30, quota_bytes: 20 * 2 ** 30 } })] } }),
+      view({ storage: { ...view().storage!, places: [place({ path: "main/home_dir/charlotte", home: true, usage: { used_bytes: 34 * 2 ** 30, quota_bytes: 20 * 2 ** 30 } })] } }),
     ];
     renderStorage();
     expect(screen.getByText(/^Full\. You can open and delete files here, but not save new ones until you're under 20\.0 GiB\.$/)).toBeTruthy();

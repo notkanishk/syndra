@@ -82,19 +82,19 @@ func TestPurgingABindingOntoTheOwnAccountIsRefused(t *testing.T) {
 // treating "I could not find out" as "this is me" would refuse adoption of
 // every account on the target.
 func TestAnUnknownSelfRefusesNothing(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3005,"locked":false,"smb":false,"groups":[]}]`)
+	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3005,"locked":false,"smb":false,"groups":[]}]`)
 	s.nas.selfName = "" // auth.me failed
 
-	if err := s.refuseSelfAccount("ada"); err != nil {
+	if err := s.refuseSelfAccount("charlotte"); err != nil {
 		t.Fatalf("an unknown identity refused an ordinary account: %v", err)
 	}
 }
 
 // And an ordinary account is still adoptable, so the guard above is not vacuous.
 func TestAnOrdinaryAccountIsStillAdoptable(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3005,"locked":false,"smb":false,"groups":[]}]`)
+	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3005,"locked":false,"smb":false,"groups":[]}]`)
 	s.nas.selfName, s.nas.selfUID = "syndra", 3001
-	if err := s.refuseSelfAccount("ada"); err != nil {
+	if err := s.refuseSelfAccount("charlotte"); err != nil {
 		t.Fatalf("a member account was refused: %v", err)
 	}
 }

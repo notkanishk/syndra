@@ -41,7 +41,7 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useUsers")>()),
   useUserAccess: () => ({
     data: {
-      user: { id: "u1", name: "Sneha Yeole", email: "s@example.edu", status: "active", avatar: "SY" },
+      user: { id: "u1", name: "Nikki Cross", email: "s@example.edu", status: "active", avatar: "SY" },
       bundles: [],
       projects: [
         {
@@ -76,7 +76,7 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
         id: "g1",
         project_id: "p-audio",
         role_key: "community",
-        granted_by: "priya",
+        granted_by: "cody",
         expires_at:
           state.endsInDays === null ? null : new Date(Date.now() + state.endsInDays * 86_400_000).toISOString(),
       },
@@ -188,7 +188,7 @@ describe("a person's row that ends soon", () => {
     state.extend = vi.fn().mockRejectedValue(new ApiError(409, { error: "PLAN_STALE", message: "Nothing was changed." }));
     renderPerson();
     fireEvent.click(screen.getByRole("button", { name: /^Extend/ }));
-    expect(await screen.findByText(/^Nothing was changed\. (Sneha's|Their) access moved while you looked\.$/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Nothing was changed\. (Nikki's|Their) access moved while you looked\.$/)).toBeInTheDocument();
     expect(screen.getByText("Press Extend again to read it afresh.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Extend/ })).toBeEnabled();
   });

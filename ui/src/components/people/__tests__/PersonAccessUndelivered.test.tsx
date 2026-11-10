@@ -45,7 +45,7 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useUsers")>()),
   useUserAccess: () => ({
     data: {
-      user: { id: "u1", name: "Sneha Yeole", email: "s@example.edu", status: "active", avatar: "SY" },
+      user: { id: "u1", name: "Nikki Cross", email: "s@example.edu", status: "active", avatar: "SY" },
       bundles: [],
       projects: state.projects,
       allowances: [],

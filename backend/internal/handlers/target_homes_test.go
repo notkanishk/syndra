@@ -23,7 +23,7 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 	})
 	const gb = int64(1 << 30)
 	dbListTargetBindings = func(context.Context, string) ([]db.TargetBinding, error) {
-		return []db.TargetBinding{{SubjectID: "u-ada", Username: "ada"}, {SubjectID: "u-bo", Username: "bo"}}, nil
+		return []db.TargetBinding{{SubjectID: "u-charlotte", Username: "charlotte"}, {SubjectID: "u-booker", Username: "booker"}}, nil
 	}
 	svcResolveEntitlementSet = func(_ context.Context, subject, _ string) (services.EntitlementSet, error) {
 		return services.EntitlementSet{
@@ -38,7 +38,7 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 	review := time.Now().Add(-24 * time.Hour)
 	ended := time.Now().Add(-48 * time.Hour)
 	dbAllowancesInForce = func(_ context.Context, subject, _ string) ([]db.Allowance, error) {
-		if subject != "u-ada" {
+		if subject != "u-charlotte" {
 			return nil, nil
 		}
 		return []db.Allowance{{ID: "a1", Target: "truenas", Field: "home_quota", Value: "53687091200",
@@ -50,8 +50,8 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 	}
 	addonsReadHomes = func(context.Context, string) addons.Homes {
 		return addons.Homes{Read: true, UsageRead: true, Homes: []addons.HomeUsage{
-			{Username: "ada", Home: "/mnt/p/main/home_dir/ada", UsedBytes: 18 * gb},
-			{Username: "bo", Home: "/mnt/p/main/home_dir/bo", UsedBytes: 34 * gb},
+			{Username: "charlotte", Home: "/mnt/p/main/home_dir/charlotte", UsedBytes: 18 * gb},
+			{Username: "booker", Home: "/mnt/p/main/home_dir/booker", UsedBytes: 34 * gb},
 		}}
 	}
 
@@ -65,18 +65,18 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil || len(body.Accounts) != 2 {
 		t.Fatalf("%d %s", rr.Code, rr.Body.String())
 	}
-	ada, bo := body.Accounts[0], body.Accounts[1]
-	if !ada.GivesHome || ada.RolesLimit == nil || *ada.RolesLimit != 20*gb || ada.RolesLimitFrom.RoleKey != "fab_lead" {
-		t.Errorf("ada's roles' limit: %+v from %+v", ada.RolesLimit, ada.RolesLimitFrom)
+	booker, charlotte := body.Accounts[0], body.Accounts[1]
+	if !charlotte.GivesHome || charlotte.RolesLimit == nil || *charlotte.RolesLimit != 20*gb || charlotte.RolesLimitFrom.RoleKey != "fab_lead" {
+		t.Errorf("charlotte's roles' limit: %+v from %+v", charlotte.RolesLimit, charlotte.RolesLimitFrom)
 	}
-	if ada.Own == nil || ada.Own.Bytes != 50*gb || !ada.Own.ReviewDue || ada.OwnEnded != nil {
-		t.Errorf("ada's own limit: %+v ended %+v", ada.Own, ada.OwnEnded)
+	if charlotte.Own == nil || charlotte.Own.Bytes != 50*gb || !charlotte.Own.ReviewDue || charlotte.OwnEnded != nil {
+		t.Errorf("charlotte's own limit: %+v ended %+v", charlotte.Own, charlotte.OwnEnded)
 	}
-	if bo.Own != nil || bo.OwnEnded == nil || bo.OwnEnded.Bytes != 50*gb {
-		t.Errorf("bo's own limit ended at 50 GB with 34 GB in a 20 GB home: %+v", bo.OwnEnded)
+	if booker.Own != nil || booker.OwnEnded == nil || booker.OwnEnded.Bytes != 50*gb {
+		t.Errorf("booker's own limit ended at 50 GB with 34 GB in a 20 GB home: %+v", booker.OwnEnded)
 	}
-	if bo.UsedBytes == nil || *bo.UsedBytes != 34*gb {
-		t.Errorf("bo's use: %v", bo.UsedBytes)
+	if booker.UsedBytes == nil || *booker.UsedBytes != 34*gb {
+		t.Errorf("booker's use: %v", booker.UsedBytes)
 	}
 }
 

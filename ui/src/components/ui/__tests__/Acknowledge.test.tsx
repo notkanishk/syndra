@@ -43,8 +43,8 @@ describe("rung 2 — ticking the number", () => {
 
 describe("rung 3 — typing the name", () => {
   it("matches on trimmed, case-insensitive input", () => {
-    expect(typedMatches("ada", "  ADA ")).toBe(true);
-    expect(typedMatches("ada", "adam")).toBe(false);
+    expect(typedMatches("charlotte", "  CHARLOTTE ")).toBe(true);
+    expect(typedMatches("charlotte", "charlottes")).toBe(false);
   });
 
   // An empty expectation must never match, or a dialog rendered before its

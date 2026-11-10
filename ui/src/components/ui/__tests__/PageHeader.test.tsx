@@ -10,7 +10,7 @@ import { TINT_MS } from "@/lib/motion";
  * `/users/<id>` paired a `flex-1` (basis 0%) title block against `actions`
  * on the same un-wrapped flex line: the title reported zero size to the
  * wrap decision, so `actions` claimed the line and the title was squeezed
- * into whatever sliver was left — "Rey Mysterio" wrapped into "Rey" / "Patel"
+ * into whatever sliver was left — "Rey Mysterio" wrapped into "Rey" / "Mysterio"
  * with the rest of the row empty. `flex-auto` (basis auto) makes the title
  * count its real size, so a tight line wraps `actions` below instead.
  */

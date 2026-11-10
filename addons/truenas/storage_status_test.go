@@ -13,8 +13,8 @@ import (
 // that showed only the first read as a broken system rather than an unfinished
 // step. This is the operation that tells them apart.
 func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -32,7 +32,7 @@ func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 	if !got.NeedsPassword {
 		t.Error("the member is not told the one action that fixes it")
 	}
-	if got.Username != "ada" {
+	if got.Username != "charlotte" {
 		t.Errorf("username = %q", got.Username)
 	}
 }
@@ -41,8 +41,8 @@ func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 // rather than something the member can act on — so it must not be reported as
 // "set a password".
 func TestALockedAccountIsNotUsableAndNotTheMembersToFix(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":true,"smb":true,"password_disabled":false,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":true,"password_disabled":false,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,8 +96,8 @@ func TestTheDatasetIsDerivedFromTheSharePath(t *testing.T) {
 // it was the irreversible one, and the reconciliation surface that says "re-
 // provision or unbind" was naming a resolution nothing implemented.
 func TestReleasingForgetsTheBindingAndLeavesTheAccount(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 

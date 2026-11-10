@@ -1015,7 +1015,7 @@ drain on a timer, because access that should be gone should not wait for an
 operator to be at a desk.)
 
 What the drain does, in this order: derives the account name from the person's
-email localpart — `ada.lovelace@example.edu` becomes `ada.lovelace` — creates
+email localpart — `charlotte.flair@example.edu` becomes `charlotte.flair` — creates
 the account with `password_disabled` and `smb: false`, and puts it in the
 mapped group. SMB is deliberately *not* requested here: TrueNAS refuses the
 pair outright, and it is turned on by the same call that sets the first

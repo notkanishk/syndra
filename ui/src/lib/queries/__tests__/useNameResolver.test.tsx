@@ -26,7 +26,7 @@ let lookupUsers: Record<string, { display_name: string; email: string }>;
 
 beforeEach(() => {
   catalog = {
-    users: [{ id: USER_ID, name: "Jane Doe", email: "jane@example.edu" }],
+    users: [{ id: USER_ID, name: "Jacqueline Moore", email: "jacqueline@example.edu" }],
     projects: [{ id: PROJECT_ID, name: "Lab Ops", roles: [{ key: ROLE_KEY, label: "Mentor" }] }],
     applications: [],
   };
@@ -107,14 +107,14 @@ describe("useNameResolver (full-catalog)", () => {
 
   it("resolves a known user, project, and nested role after the catalog loads", async () => {
     renderProbe();
-    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
+    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jacqueline Moore"));
     expect(screen.getByTestId("project").textContent).toBe("Lab Ops");
     expect(screen.getByTestId("role").textContent).toBe("Mentor");
   });
 
   it("settles on MISS only after the backend lookup also fails to place the id", async () => {
     renderProbe();
-    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
+    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jacqueline Moore"));
     // The catalog missed, so the resolver asks the backend — which is where
     // deleted accounts and machine principals still resolve from. Only when
     // that also comes back empty is the id genuinely unknown.
@@ -192,7 +192,7 @@ describe("useNameResolver (full-catalog)", () => {
     bundlesStatus = 403; // member context — proxy forbids GET /bundles
     renderProbe();
     // Catalog-backed resolvers still work...
-    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
+    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jacqueline Moore"));
     expect(screen.getByTestId("project").textContent).toBe("Lab Ops");
     expect(screen.getByTestId("role").textContent).toBe("Mentor");
     // ...while the bundle query failed and yields a fallback, not a stuck skeleton.
@@ -201,7 +201,7 @@ describe("useNameResolver (full-catalog)", () => {
 
   it("refetches the catalog on invalidation so newly-present ids resolve", async () => {
     const { client } = renderProbe();
-    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jane Doe"));
+    await waitFor(() => expect(screen.getByTestId("user").textContent).toBe("Jacqueline Moore"));
     await waitFor(() => expect(screen.getByTestId("user-unknown").textContent).toBe("MISS"));
 
     // Simulate a user-create: the catalog now includes the previously-unknown id.
@@ -270,6 +270,6 @@ describe("NameResolverProvider — the unauthenticated gate", () => {
 
   it("still resolves names for a signed-in visitor", async () => {
     mount(true, USER_ID);
-    await waitFor(() => expect(screen.getByTestId("name")).toHaveTextContent("Jane Doe"));
+    await waitFor(() => expect(screen.getByTestId("name")).toHaveTextContent("Jacqueline Moore"));
   });
 });

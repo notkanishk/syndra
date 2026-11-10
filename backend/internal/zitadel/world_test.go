@@ -17,9 +17,9 @@ func testWorld() World {
 	return World{
 		V: WorldVersion,
 		Users: []WorldUser{
-			{ID: "u1", Username: "charlotte", DisplayName: "Charlotte Example", GivenName: "Charlotte", FamilyName: "Example", Email: "charlotte@example.org", State: "USER_STATE_ACTIVE", Type: "human",
+			{ID: "u1", Username: "stephanie", DisplayName: "Stephanie McMahon", GivenName: "Stephanie", FamilyName: "McMahon", Email: "stephanie@example.org", State: "USER_STATE_ACTIVE", Type: "human",
 				Created: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), Metadata: []UserMetadata{{Key: "title", Value: "Steward"}}},
-			{ID: "u2", Username: "bo", DisplayName: "Bo Example", Email: "bo@example.org", State: "USER_STATE_ACTIVE", Type: "human"},
+			{ID: "u2", Username: "dolph", DisplayName: "Dolph Ziggler", Email: "dolph@example.org", State: "USER_STATE_ACTIVE", Type: "human"},
 			{ID: "m1", Username: "sync-bot", State: "USER_STATE_ACTIVE", Type: "machine"},
 		},
 		Projects: []WorldProject{
@@ -82,7 +82,7 @@ func TestWorldReads(t *testing.T) {
 	c := loadWorld(t, writeWorld(t, testWorld()))
 
 	u, err := c.GetUser(ctx, "u1")
-	if err != nil || u.Email != "charlotte@example.org" || u.GivenName != "Charlotte" || u.Machine || u.Created.IsZero() {
+	if err != nil || u.Email != "stephanie@example.org" || u.GivenName != "Stephanie" || u.Machine || u.Created.IsZero() {
 		t.Fatalf("GetUser u1 = %+v, %v", u, err)
 	}
 	if m, _ := c.GetUser(ctx, "m1"); !m.Machine {

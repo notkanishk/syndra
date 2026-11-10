@@ -114,7 +114,7 @@ func TestARepeatedRefusalMarksWhatWasQueuedSinceAndNamesWhoStartedIt(t *testing.
 	orig := directoryUsers
 	t.Cleanup(func() { directoryUsers = orig })
 	directoryUsers = func(context.Context) ([]models.UserProfile, error) {
-		return []models.UserProfile{{ID: "op-2", Name: "Randy Example"}}, nil
+		return []models.UserProfile{{ID: "op-2", Name: "Christian Cage"}}, nil
 	}
 	two := func(w http.ResponseWriter, r *http.Request) {
 		db.AdmitCancellations(r.Context(), []models.QueuedChange{
@@ -151,7 +151,7 @@ func TestARepeatedRefusalMarksWhatWasQueuedSinceAndNamesWhoStartedIt(t *testing.
 		t.Fatalf("only the one not acknowledged is new: %v", byID)
 	}
 	// A name where the directory has one, and none where it doesn't.
-	if byID[queuedID]["initiated_by_name"] != "Randy Example" {
+	if byID[queuedID]["initiated_by_name"] != "Christian Cage" {
 		t.Fatalf("name: %v", byID[queuedID])
 	}
 	if _, has := byID[laterQueuedID]["initiated_by_name"]; has {

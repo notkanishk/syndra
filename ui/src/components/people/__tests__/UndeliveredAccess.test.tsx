@@ -57,7 +57,7 @@ beforeEach(() => {
 /** The dialog, with the plan the backend would give for what it shows. */
 function show(removal: Removal, neverSent: boolean) {
   removed.plan = actPlan(neverSent ? { delivery: "none" } : {});
-  return render(withPlanClient(<RemovalDialog removal={removal} userId="sneha" userName="Sneha Yeole" onClose={vi.fn()} />));
+  return render(withPlanClient(<RemovalDialog removal={removal} userId="nikki" userName="Nikki Cross" onClose={vi.fn()} />));
 }
 
 const bundleSource = (queued: boolean) => ({
@@ -160,7 +160,7 @@ describe("the action, once it has run", () => {
     fireEvent.click(screen.getByRole("button", { name: /Cancel giving it/ }));
     await waitFor(() => expect(screen.getByText("Cancelled")).toBeInTheDocument());
     expect(
-      screen.getByText("The Ops Admin bundle won't be given to Sneha. It never reached Zitadel."),
+      screen.getByText("The Ops Admin bundle won't be given to Nikki. It never reached Zitadel."),
     ).toBeInTheDocument();
     // The sentence that contradicted the dialog one centimetre above it.
     expect(screen.queryByText(/are revoked once you send/i)).toBeNull();

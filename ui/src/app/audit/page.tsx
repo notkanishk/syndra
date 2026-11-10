@@ -35,7 +35,7 @@ type Window = "7" | "30" | "all";
  * with a deadline, is a separate destination rather than a tab in here.
  *
  * Every line names a human or a NAMED machine, and reads as a sentence rather
- * than a verb key: "Approved request — Ike Nwosu, Laser Lab / operator" is
+ * than a verb key: "Approved request — Big E, Laser Lab / operator" is
  * something an operator can scan; `request.approve` is something they have to
  * decode. Colour marks the exception only — a destructive verb takes the
  * danger tone on the word itself, and nothing else on the row is coloured.

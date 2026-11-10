@@ -65,11 +65,11 @@ describe("RemovalDialog with a bundle source", () => {
   it("names the person and offers a live button when the caller passes one", async () => {
     render(
       withPlanClient(
-        <RemovalDialog removal={bundleRemoval} userId="sneha" userName="Sneha Rao" onClose={vi.fn()} />,
+        <RemovalDialog removal={bundleRemoval} userId="nikki" userName="Alundra Blayze" onClose={vi.fn()} />,
       ),
     );
 
-    expect(screen.getByText(/from Sneha Rao/)).toBeInTheDocument();
+    expect(screen.getByText(/from Alundra Blayze/)).toBeInTheDocument();
     expect(screen.queryByText(/from this person/)).toBeNull();
     // Live once the plan is read.
     await waitFor(() => expect(screen.getByRole("button", { name: "Remove the bundle" })).toBeEnabled());

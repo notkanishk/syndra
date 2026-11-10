@@ -214,7 +214,7 @@ left column `gap:6px`: name `15.5px/600`, then permission `13px` `.5` + capsule;
 right chevron `width:20px`, rotated 90°) → body `padding:4px 16px 16px`, `gap:9px`
 of key–value pairs, then a `padding-top:9px; border-top:1px solid rgba(255,255,255,.05)`
 closing sentence at `13px`/`.5`.
-Copy: `"3D printers"`, `"operate"`, `"Comes from"` → `"Workshop basics"` (link), `"Assigned by"` → `"K. Rao"`, `"Assigned"` → `"02 Jan 2026"` (mono 12.5px), `"To remove this, change the bundle or unassign it. It cannot be removed from here."`
+Copy: `"3D printers"`, `"operate"`, `"Comes from"` → `"Workshop basics"` (link), `"Assigned by"` → `"K. Sane"`, `"Assigned"` → `"02 Jan 2026"` (mono 12.5px), `"To remove this, change the bundle or unassign it. It cannot be removed from here."`
 Caption: "One row open at a time, on *settle*. The sentence about where a bundle grant can be removed moves from the popover into the disclosure — otherwise touch loses it entirely."
 
 ---
@@ -281,7 +281,7 @@ focused field + `"Cancel"` `14px`/`.62`) → results grouped **by kind** → key
 - Result row `min-height:60px`, `padding:11px 16px`.
 - Match highlight: `background:rgba(155,123,255,.24)`, `radius:3px` —
   **highlighted, not bolded.**
-Copy: `"rao"`, `"Cancel"`, `"People · 2"`, `"Rao, Drew"` / `"Studio · 4 roles"`, `"K. Rao"` / `"Operator · Fabrication"`, `"Accounts on targets · 1"`, `"drew.mcintyre"` (mono 13.5px) / `"fileserver-01 · adopted"`.
+Copy: `"mcintyre"`, `"Cancel"`, `"People · 2"`, `"McIntyre, Drew"` / `"Studio · 4 roles"`, `"K. Sane"` / `"Operator · Fabrication"`, `"Accounts on targets · 1"`, `"drew.mcintyre"` (mono 13.5px) / `"fileserver-01 · adopted"`.
 Caption: "Results group by what they are, because an operator searching a name is sometimes after an account on a target. Matches are highlighted, not bolded — bold already means the primary line."
 
 ### M05c — "Filter sheet"
@@ -313,7 +313,7 @@ section header row (eyebrow + action link) → grant cards → second section he
   `border:1px solid rgba(255,92,77,.4)`, `background:transparent`, `#ff8d82`,
   `14.5px/600`.
 - Non-removable cards carry a `13px`/`.5` sentence instead of a button.
-Copy: `"People · Studio"`, `"Drew McIntyre"`, `"Studio · member since Jan 2026"`, `"Granted · 2"`, `"Give access"`, `"Laser cutter"` / `"operate"` / direct, `"Granted by"` → `"K. Rao"`, `"Until"` → `"30 May 2026"` (mono, amber), `"Remove this grant"`, `"3D printers"` / `"operate"` / bundle `"Workshop basics"`, `"Comes from a bundle. Change the bundle or unassign it — it cannot be removed here."`, `"Automatic · 1"`, `"Studio Access"` / `"enter"` / mapping, `"Follows the Studio membership rule. Ends when membership does."`
+Copy: `"People · Studio"`, `"Drew McIntyre"`, `"Studio · member since Jan 2026"`, `"Granted · 2"`, `"Give access"`, `"Laser cutter"` / `"operate"` / direct, `"Granted by"` → `"K. Sane"`, `"Until"` → `"30 May 2026"` (mono, amber), `"Remove this grant"`, `"3D printers"` / `"operate"` / bundle `"Workshop basics"`, `"Comes from a bundle. Change the bundle or unassign it — it cannot be removed here."`, `"Automatic · 1"`, `"Studio Access"` / `"enter"` / mapping, `"Follows the Studio membership rule. Ends when membership does."`
 Caption: "Granted above automatic, with the section counts as headers. Only the direct grant carries a remove button; the other two explain in place why they have none — the same sentences the desktop popovers carry."
 
 ### M06b — "Person · withheld and cards"
@@ -324,7 +324,7 @@ withheld card first, then normal cards.
   (`7px` amber dot + `"Withheld"` 11px/.1em/uppercase `#f5a524`); resource
   `16px/600`; explanation `13.5px/1.55` `.7`; key–value; then a `min-height:44px`
   link row.
-Copy: `"People · Studio"`, `"Natalya Neidhart"`, tabs `"Access"` / `"Holds 1"` / `"Cards 2"` / `"History"`, `"Withheld"`, `"CNC router"`, `"Fabrication Access still grants this. A hold placed by K. Rao on 09 Aug takes it away until the refresher induction is done."`, `"Hold ends"` → `"When lifted by hand"`, `"Open the hold"`, `"Laser cutter"` / `"operate"` / bundle `"Fabrication Access"`, `"Studio shares"` / `"read, write"` / mapping, `"On fileserver-01. Account adopted 14 Feb."`
+Copy: `"People · Studio"`, `"Natalya Neidhart"`, tabs `"Access"` / `"Holds 1"` / `"Cards 2"` / `"History"`, `"Withheld"`, `"CNC router"`, `"Fabrication Access still grants this. A hold placed by K. Sane on 09 Aug takes it away until the refresher induction is done."`, `"Hold ends"` → `"When lifted by hand"`, `"Open the hold"`, `"Laser cutter"` / `"operate"` / bundle `"Fabrication Access"`, `"Studio shares"` / `"read, write"` / mapping, `"On fileserver-01. Account adopted 14 Feb."`
 Caption: "Tabs replace the desktop's side panels — four fit at 390px without scrolling, with counts inline. A withheld row leads its section: it is the one thing on the page that contradicts what a role says."
 
 ---
@@ -342,7 +342,7 @@ answer sentence `13.5px`/`.62`) → list with the first row disclosed → "N mor
 - Collapsed member row `min-height:60px`; name `15px/600` then the capsule as
   the whole second line.
 - Overflow row: `min-height:52px`, `padding:0 16px`, `13.5px`/`.42`.
-Copy: `"Roles · Fabrication"`, `"Laser cutter · operate"`, `"23 people can currently use this"`, `"Drew McIntyre"`, `"Granted by"` → `"K. Rao · 14 Feb"`, `"Until"` → `"30 May 2026"`, `"Open Drew's access"`, `"Natalya Neidhart"`, `"John Cena"`, `"Dakota Kai"`, `"19 more"`.
+Copy: `"Roles · Fabrication"`, `"Laser cutter · operate"`, `"23 people can currently use this"`, `"Drew McIntyre"`, `"Granted by"` → `"K. Sane · 14 Feb"`, `"Until"` → `"30 May 2026"`, `"Open Drew's access"`, `"Natalya Neidhart"`, `"John Cena"`, `"Dakota Kai"`, `"19 more"`.
 Caption: "The name is the primary line and the capsule is the whole second line — at this width the source is the only other thing worth a row. The header sentence answers the question in words before the list does."
 
 ### M07b — "Expiring · from Today"
@@ -604,7 +604,7 @@ A timeline spine. Each entry: row `gap:14px`; left `width:9px` column with a
 - Dot vocabulary: **filled `#7f5af0` = an operator act; filled `#a3e635` = done;
   ringed `1.5px solid rgba(155,123,255,.7)` = a rule firing; hollow
   `1.5px solid rgba(243,245,239,.3)` = not yet** (last entry drops the connector).
-Copy: `"Queued writes"` · `"csc_2f81b0"`, `"What happened"`, `"K. Rao gave Studio Access"` / `"to Drew McIntyre · 09:26"`, `"Studio membership fired"` / `"queued 2 writes · 09:26"`, `"Account created"` / `"drew.mcintyre on fileserver-01 · 09:28"`, `"Grant read, write"` / `"still queued"`.
+Copy: `"Queued writes"` · `"csc_2f81b0"`, `"What happened"`, `"K. Sane gave Studio Access"` / `"to Drew McIntyre · 09:26"`, `"Studio membership fired"` / `"queued 2 writes · 09:26"`, `"Account created"` / `"drew.mcintyre on fileserver-01 · 09:28"`, `"Grant read, write"` / `"still queued"`.
 Caption: "The chain becomes a spine with one dot per event: filled for done, ringed for a rule firing, hollow for not yet. The operator can read cause and effect top to bottom without a table."
 
 ---
@@ -617,7 +617,7 @@ field + **time-window control** (`min-height:44px`, `radius:14px`, outline,
 `padding:0 14px`, `13.5px`, label `"7 days"`) → date-grouped list of
 `min-height:64px` rows (`padding:11px 16px`, column `gap:4px`; sentence
 `14.5px/600`, consequence `13px`/`.5`). **[CONTRADICTION: 64px]**
-Copy: `"History"`, `"Search a person or id"`, `"7 days"`, `"Today"`, `"K. Rao gave Studio Access to Drew McIntyre"` / `"09:26 · caused 2 writes"`, `"Hold placed on Natalya Neidhart"` / `"08:52 · CNC router · by K. Rao"`, `"3 accounts adopted on fileserver-01"` / `"08:14 · by M. Iyer"`, `"Yesterday"`, `"Card 04 revoked · John Cena"` / `"17:40 · reported lost"`.
+Copy: `"History"`, `"Search a person or id"`, `"7 days"`, `"Today"`, `"K. Sane gave Studio Access to Drew McIntyre"` / `"09:26 · caused 2 writes"`, `"Hold placed on Natalya Neidhart"` / `"08:52 · CNC router · by K. Sane"`, `"3 accounts adopted on fileserver-01"` / `"08:14 · by K. Kingston"`, `"Yesterday"`, `"Card 04 revoked · John Cena"` / `"17:40 · reported lost"`.
 Caption: "One sentence per event, in the product's own words, with the consequence on the second line. A time window replaces the desktop filter bar; everything else is search."
 
 ### M17b — "Provider health"
@@ -708,7 +708,7 @@ Same header + tab strip (Accounts active) → grouped list, **unclaimed above
 claimed** → pinned action bar.
 - Account row `min-height:60px`; identifier mono `13.5px`; unclaimed rows end in
   a named text control `"Adopt"` `13px` `#9b7bff` 600; claimed rows end in `›`.
-Copy: `"Unclaimed · 3"`, `"legacy.build"` / `"Last login 8 months ago"` / `"Adopt"`, `"r.krishnan"` / `"Last login 3 days ago"` / `"Adopt"`, `"Claimed · 38"`, `"drew.mcintyre"` / `"Drew McIntyre · adopted 14 Feb"`, `"dakota.kai"` / `"Dakota Kai · adopted 02 Jan"`, `"Select"`, `"Adopt 3 accounts"`.
+Copy: `"Unclaimed · 3"`, `"legacy.build"` / `"Last login 8 months ago"` / `"Adopt"`, `"o.hart"` / `"Last login 3 days ago"` / `"Adopt"`, `"Claimed · 38"`, `"drew.mcintyre"` / `"Drew McIntyre · adopted 14 Feb"`, `"dakota.kai"` / `"Dakota Kai · adopted 02 Jan"`, `"Select"`, `"Adopt 3 accounts"`.
 Caption: "Unclaimed sits above claimed, because that is the work. Adoption binds identity, so this whole screen is unavailable when the read passes ten minutes — see M02b."
 
 ---
@@ -726,7 +726,7 @@ groups, **each header carrying its own explanatory subtitle**
 - Group 1 rows `min-height:64px`, two lines. **[CONTRADICTION: 64px]**
 - Group 2 entry is a block (`padding:12px 16px`, `gap:8px`) ending in a
   `min-height:44px` link.
-Copy: `"Review"`, `"Withdrawn access"`, `"Three revocations Syndra could not complete on the target"`, `"Will end by itself · 2"` / `"Open sessions. They end when the person reconnects."`, `"John Cena · studio"` / `"Session open since 08:10 · fileserver-01"`, `"Natalya Neidhart · exhibition-2026"` / `"Session open since 09:02 · fileserver-01"`, `"Will not end by itself · 1"` / `"The target refused the revocation. This needs a decision."`, `"r.krishnan · studio"`, `"Target refused: account is the owner of 41 files. Reassign ownership or delete the account."`, `"Open on fileserver-01"`.
+Copy: `"Review"`, `"Withdrawn access"`, `"Three revocations Syndra could not complete on the target"`, `"Will end by itself · 2"` / `"Open sessions. They end when the person reconnects."`, `"John Cena · studio"` / `"Session open since 08:10 · fileserver-01"`, `"Natalya Neidhart · exhibition-2026"` / `"Session open since 09:02 · fileserver-01"`, `"Will not end by itself · 1"` / `"The target refused the revocation. This needs a decision."`, `"o.hart · studio"`, `"Target refused: account is the owner of 41 files. Reassign ownership or delete the account."`, `"Open on fileserver-01"`.
 Caption: "Each group's header explains itself in a subtitle, so the distinction survives without the desktop's two panels. Only the second group carries amber — the first is expected behaviour."
 
 ### M21b — "Revoke on a target · rung 3"
@@ -741,7 +741,7 @@ labelled input (`12.5px` label with the target string inline in mono `13px`
 mono `15px`, caret `1.5px × 20px` `#9b7bff`) → gated destructive button
 (`height:50px`, `background:rgba(255,92,77,.3)`, `color:rgba(247,244,255,.6)`).
 Below: keyboard `height:186px`, `#1c1d19`.
-Copy: `"Take away studio from r.krishnan"`, `"This target cannot close an open session. If they are connected now, they keep working until they reconnect — Syndra cannot stop that."`, `"Type r.krishnan to confirm"`, field content `"r.krishna"` (mid-typing), `"Take it away"`.
+Copy: `"Take away studio from o.hart"`, `"This target cannot close an open session. If they are connected now, they keep working until they reconnect — Syndra cannot stop that."`, `"Type o.hart to confirm"`, field content `"o.har"` (mid-typing), `"Take it away"`.
 Caption: "The sheet docks to the top of the keyboard so the sentence, the field and the button are visible together — the button never hides behind the keys. The name is monospace and selectable but not tap-copyable; typing it is the gesture."
 
 ---
@@ -764,7 +764,7 @@ Structure:
    `background:rgba(11,12,10,.66)`, `gap:10px`: counts row (`13px`/`.62`
    + plan age with a `6px` lime dot at `12.5px`/`.5`) → `height:50px` accent button.
 - **A plan older than five minutes replaces `Apply` with `Rehearse again`.**
-Copy: `"Rehearsal"`, `"Close"`, `"Fixing 3 differences"`, `"Nothing has happened yet. This is what will happen if you apply."`, `"Will change · 2"`, `"drew.mcintyre"` / `"Remove write on studio"`, `"natalya.neidhart"` / `"Create account, then grant read, write"`, `"Will be left alone · 1"`, `"legacy.build"` / `"Unknown to Syndra. Adopting it is a separate decision."`, `"Cannot be done · 1"`, `"r.krishnan"` / `"Owns 41 files. The target will refuse until ownership moves."`, `"2 changes · 1 skipped · 1 will fail"`, `"planned 30s ago"`, `"Apply this plan"`.
+Copy: `"Rehearsal"`, `"Close"`, `"Fixing 3 differences"`, `"Nothing has happened yet. This is what will happen if you apply."`, `"Will change · 2"`, `"drew.mcintyre"` / `"Remove write on studio"`, `"natalya.neidhart"` / `"Create account, then grant read, write"`, `"Will be left alone · 1"`, `"legacy.build"` / `"Unknown to Syndra. Adopting it is a separate decision."`, `"Cannot be done · 1"`, `"o.hart"` / `"Owns 41 files. The target will refuse until ownership moves."`, `"2 changes · 1 skipped · 1 will fail"`, `"planned 30s ago"`, `"Apply this plan"`.
 Caption: "Full-height, four honest groups, and a sticky footer that never leaves the counts and the plan's age off-screen. A plan older than five minutes replaces *Apply* with *Rehearse again*."
 
 ### M22b — "Mappings · versions"
@@ -776,7 +776,7 @@ earlier-versions card (`radius:18px`, `overflow:hidden`; rows `min-height:56px`,
 `padding:9px 16px`, `border-top:.05`) → footnote → pinned action bar
 (`Remove` **destructive outline** `border:1px solid rgba(255,92,77,.4)` `#ff8d82`
 `padding:0 18px`; `Edit the mapping` benign `flex:1` outline).
-Copy: `"fileserver-01 · Mappings"`, `"Studio shares → studio"`, `"38 people are affected by changing this"`, `"Live · v4"`, `"since 02 Aug"`, `"Grants read, write on the studio dataset"`, `"Changed by M. Iyer"`, `"Earlier versions"`, `"v3 · read only"` / `"14 Jun – 02 Aug · K. Rao"`, `"v2 · read only, no delete"` / `"02 Jan – 14 Jun · K. Rao"`, `"Versions are a record, not a rollback button. Restoring one is an edit like any other and goes through rehearsal."`, `"Remove"`, `"Edit the mapping"`.
+Copy: `"fileserver-01 · Mappings"`, `"Studio shares → studio"`, `"38 people are affected by changing this"`, `"Live · v4"`, `"since 02 Aug"`, `"Grants read, write on the studio dataset"`, `"Changed by K. Kingston"`, `"Earlier versions"`, `"v3 · read only"` / `"14 Jun – 02 Aug · K. Sane"`, `"v2 · read only, no delete"` / `"02 Jan – 14 Jun · K. Sane"`, `"Versions are a record, not a rollback button. Restoring one is an edit like any other and goes through rehearsal."`, `"Remove"`, `"Edit the mapping"`.
 Caption: "The live version is the card; history is a list under it. *Remove* is rung 3 — it opens the type-to-confirm sheet from M21b — and sits away from the thumb, 12px clear of the benign action."
 > The bar's `gap` is `10px`, not the 12px the caption and `MOBILE.md` require.
 
@@ -810,7 +810,7 @@ definition sentence) → body `padding:13px 16px`, `gap:12px`: hold cards.
   attributor.
 - Action: `min-height:44px` outline pill, full width via `flex:1`.
 - Stale-hold sentence `12.5px/1.5` `#f5a524`.
-Copy: `"Review"`, `"Holds · 3"`, `"Access a role grants that somebody is withholding"`, `"Natalya Neidhart"` / `"CNC router · operate"` / `"4 days"`, `"“Until your refresher induction” — K. Rao"`, `"Lift the hold"`, `"John Cena"` / `"Studio shares · read, write"` / `"61 days"`, `"“Pending fee settlement” — Accounts"`, `"Older than 60 days. A hold this old is usually a decision nobody made."`
+Copy: `"Review"`, `"Holds · 3"`, `"Access a role grants that somebody is withholding"`, `"Natalya Neidhart"` / `"CNC router · operate"` / `"4 days"`, `"“Until your refresher induction” — K. Sane"`, `"Lift the hold"`, `"John Cena"` / `"Studio shares · read, write"` / `"61 days"`, `"“Pending fee settlement” — Accounts"`, `"Older than 60 days. A hold this old is usually a decision nobody made."`
 Caption: "Age is the column that matters, so it sits top-right and turns amber past 60 days with a sentence saying why. The reason is quoted verbatim — it is what the member was told."
 
 ---
@@ -861,7 +861,7 @@ title → definition sentence → list, **no checkboxes at all**.
   mono `13.5px`; context `13px`/`.5`. **[CONTRADICTION: 66px]**
 - Unselectable row: `border-left:2px dashed rgba(255,255,255,.16)`, identifier
   dimmed to `.55`, reason on the second line at `13px/1.45` `.62`. No icon, no tooltip.
-Copy: `"Review"`, `"Select"`, `"Dormant accounts · 12"`, `"Accounts on targets that nothing in Syndra points at any more"`, `"legacy.build"` / `"fileserver-01 · last login 8 months ago"`, `"t.varma"` / `"fileserver-01 · membership ended 14 Mar"`, `"svc.backup"` / `"Cannot be removed — it owns the nightly snapshot task"`, `"r.krishnan"` / `"fileserver-02 · last login 3 days ago"`.
+Copy: `"Review"`, `"Select"`, `"Dormant accounts · 12"`, `"Accounts on targets that nothing in Syndra points at any more"`, `"legacy.build"` / `"fileserver-01 · last login 8 months ago"`, `"g.valentine"` / `"fileserver-01 · membership ended 14 Mar"`, `"svc.backup"` / `"Cannot be removed — it owns the nightly snapshot task"`, `"o.hart"` / `"fileserver-02 · last login 3 days ago"`.
 Caption: "Reading mode has no checkboxes at all, so the list stays a list. The unselectable row carries a dashed left edge and its reason on the second line — no icon, no tooltip."
 
 ### M25b — "Selecting"
@@ -874,7 +874,7 @@ with an exclusion note + destructive action.
 - Action bar: column `gap:9px`; note `12.5px`/`.5`; button `min-height:50px`,
   `border:1px solid rgba(255,92,77,.4)`, `background:rgba(255,92,77,.14)`,
   `#ff8d82`, `14.5px/600`. **The action names rehearsal, not removal.**
-Copy: `"Select all 11"`, `"Done"`, `"2 selected"`, `"legacy.build"` / `"last login 8 months ago"`, `"t.varma"` / `"membership ended 14 Mar"`, `"svc.backup"` / `"Owns the nightly snapshot task"`, `"r.krishnan"` / `"last login 3 days ago"`, `"One row cannot be selected. Its reason is on the row."`, `"Rehearse removing 2"`.
+Copy: `"Select all 11"`, `"Done"`, `"2 selected"`, `"legacy.build"` / `"last login 8 months ago"`, `"g.valentine"` / `"membership ended 14 Mar"`, `"svc.backup"` / `"Owns the nightly snapshot task"`, `"o.hart"` / `"last login 3 days ago"`, `"One row cannot be selected. Its reason is on the row."`, `"Rehearse removing 2"`.
 Caption: "The title becomes the count, the header's left control becomes select-all, and the action bar names the next step — rehearsal, not removal. Bulk work never skips the plan."
 
 ---

@@ -81,7 +81,7 @@ func newPlannerFixture(t *testing.T) plannerFixture {
 	origDir, origCat := directory.Default, services.PlannerCatalogue
 	t.Cleanup(func() { directory.Default, services.PlannerCatalogue = origDir, origCat })
 	dir := plannerDirectory{
-		users: []models.UserProfile{{ID: f.becky, Name: "Becky Example", Status: "active"}, {ID: f.bob, Name: "Bob Example", Status: "active"}},
+		users: []models.UserProfile{{ID: f.becky, Name: "Ember Moon", Status: "active"}, {ID: f.bob, Name: "Brock Lesnar", Status: "active"}},
 		project: models.ProjectCatalog{ID: f.project, Name: "Laser Lab", Roles: []models.ProjectRole{
 			{Key: f.member, Label: "Member"}, {Key: f.trains, Label: "Trained"}, {Key: "advanced", Label: "Advanced"},
 		}},

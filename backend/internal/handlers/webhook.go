@@ -355,7 +355,7 @@ func detectWebhookDrift(ctx context.Context, event WebhookPayload) {
 // Zitadel holds. Two things this adds that the comparison cannot:
 //
 // It knows WHO. A set comparison can say a grant is gone and never who removed
-// it; the event carries the editor, and "Marta removed this at 14:02" is a
+// it; the event carries the editor, and "Mandy removed this at 14:02" is a
 // different triage row from "it is missing". That is the same evidence
 // `detectWebhookDrift` already records for access appearing, and the removal
 // side had none.

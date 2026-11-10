@@ -79,7 +79,7 @@ func DeriveUsername(email, subjectID string, collides func(string) bool) string 
 func normalizeLocalpart(email string) string {
 	local, _, _ := strings.Cut(email, "@")
 	local = strings.ToLower(strings.TrimSpace(local))
-	// Sub-addressing: `ada+lab@example.edu` and `ada@example.edu` are one mailbox and must
+	// Sub-addressing: `charlotte+lab@example.edu` and `charlotte@example.edu` are one mailbox and must
 	// be one account, or a member gets a second one by using a tagged address.
 	local, _, _ = strings.Cut(local, "+")
 
@@ -105,7 +105,7 @@ func normalizeLocalpart(email string) string {
 		return ""
 	}
 	// A leading character outside `[a-zA-Z0-9_]` is invalid. Prefixed rather
-	// than trimmed: trimming `.ada` and `..ada` gives one name for two people.
+	// than trimmed: trimming `.charlotte` and `..charlotte` gives one name for two people.
 	if c := out[0]; !(c >= 'a' && c <= 'z') && !(c >= '0' && c <= '9') && c != '_' {
 		out = "u" + out
 	}

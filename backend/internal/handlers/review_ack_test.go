@@ -220,7 +220,7 @@ func TestGetExpiringGrants_CarriesTheAcknowledgement(t *testing.T) {
 	dbGetExpiringWithAcks = func(context.Context, time.Duration) ([]models.ExpiringGrant, error) {
 		return []models.ExpiringGrant{{
 			DirectGrant:  models.DirectGrant{ID: "g1", UserID: "u1", RoleKey: "trained"},
-			Acknowledged: &models.GrantExpiryAcknowledgement{By: "priya", At: at, Note: "Cohort ends"},
+			Acknowledged: &models.GrantExpiryAcknowledgement{By: "cody", At: at, Note: "Cohort ends"},
 		}}, nil
 	}
 
@@ -244,7 +244,7 @@ func TestGetExpiringGrants_CarriesTheAcknowledgement(t *testing.T) {
 	if len(body.Grants) != 1 || body.Grants[0].RoleKey != "trained" {
 		t.Fatalf("expected the grant's own fields flattened, got %s", rr.Body.String())
 	}
-	if body.Grants[0].Acknowledged == nil || body.Grants[0].Acknowledged.By != "priya" {
+	if body.Grants[0].Acknowledged == nil || body.Grants[0].Acknowledged.By != "cody" {
 		t.Fatalf("expected the acknowledgement on the row, got %s", rr.Body.String())
 	}
 }

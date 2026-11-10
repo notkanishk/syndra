@@ -38,10 +38,10 @@ New assignments MUST pin the latest published version.
 
 #### Scenario: Somebody left on an older version keeps it
 
-- **GIVEN** Ada is pinned to Lab Tech v2, which grants `laser/trained`
+- **GIVEN** Charlotte is pinned to Lab Tech v2, which grants `laser/trained`
 - **AND** v3 removes that role
 - **WHEN** v3 is published without migrating her
-- **THEN** Ada still holds `laser/trained`
+- **THEN** Charlotte still holds `laser/trained`
 - **AND** her person page names the source as "Lab Tech v2"
 
 #### Scenario: A bundle with no published version cannot exist

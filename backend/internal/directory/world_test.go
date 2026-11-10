@@ -13,7 +13,7 @@ import (
 // everything downstream runs the real code; with neither env it keeps the demo.
 func TestInitOverTheStandIn(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "world.json")
-	world := `{"v":1,"users":[{"id":"u1","username":"charlotte","displayName":"Charlotte Example","email":"charlotte@example.org","state":"USER_STATE_ACTIVE","type":"human","metadata":[{"key":"title","value":"Steward"}]}],` +
+	world := `{"v":1,"users":[{"id":"u1","username":"stephanie","displayName":"Stephanie McMahon","email":"stephanie@example.org","state":"USER_STATE_ACTIVE","type":"human","metadata":[{"key":"title","value":"Steward"}]}],` +
 		`"projects":[{"id":"p1","name":"Laser","state":"PROJECT_STATE_ACTIVE","roles":[{"key":"member","displayName":"Member","group":""}],"apps":[]}],"grants":[]}`
 	if err := os.WriteFile(path, []byte(world), 0o600); err != nil {
 		t.Fatal(err)

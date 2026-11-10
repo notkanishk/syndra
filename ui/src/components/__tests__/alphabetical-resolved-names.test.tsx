@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
  * sort by the name shown, and one not yet resolved sorts by its id, so the
  * list settles at most once.
  */
-const NAMES: Record<string, string> = { u1: "Kanishk Singh", u2: "alia Ahuja", u3: "Disha R" };
+const NAMES: Record<string, string> = { u1: "Kanishk Singh", u2: "aleister Black", u3: "Disha R" };
 
 vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
   ...(await original<typeof import("@/lib/queries/useServiceAccounts")>()),
@@ -42,7 +42,7 @@ describe("lists named by lookup are A to Z by the shown name", () => {
   it("accounts on a system: by the person's name, an unresolved one by its id", () => {
     render(<PeopleOnTarget target="truenas" />);
     const text = document.body.textContent ?? "";
-    const at = ["alia Ahuja", "Disha R", "Kanishk Singh"].map((n) => text.indexOf(n));
+    const at = ["aleister Black", "Disha R", "Kanishk Singh"].map((n) => text.indexOf(n));
     expect(at.every((i) => i >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     // "u0-unnamed" has no name yet, so it sorts as its id: after "Kanishk".

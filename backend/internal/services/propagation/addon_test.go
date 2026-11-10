@@ -448,7 +448,7 @@ func TestAStalePlanIsWithheldAndSaysSo(t *testing.T) {
 	h.resp = addons.ApplyResponse{
 		Outcome: addons.OutcomeRejected, Status: 409,
 		Code:   addons.CodePlanStale,
-		Detail: "ada moved on the target since the plan was approved",
+		Detail: "charlotte moved on the target since the plan was approved",
 	}
 
 	res, err := DrainAddon(context.Background(), "truenas")
@@ -606,9 +606,9 @@ func TestThePreflightProbesTheTargetRatherThanTheAddon(t *testing.T) {
 // so it is never revisited.
 func TestARefusedBindingDoesNotSettleApplied(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
 	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
-		return fmt.Errorf("%w: ada on truenas", db.ErrBindingConflict)
+		return fmt.Errorf("%w: charlotte on truenas", db.ErrBindingConflict)
 	}))
 
 	res, err := DrainAddon(context.Background(), "truenas")
@@ -629,7 +629,7 @@ func TestARefusedBindingDoesNotSettleApplied(t *testing.T) {
 	if !strings.Contains(reason, "was applied") {
 		t.Errorf("the reason must say the change landed: %q", reason)
 	}
-	if !strings.Contains(reason, "ada") || !strings.Contains(reason, "another subject") {
+	if !strings.Contains(reason, "charlotte") || !strings.Contains(reason, "another subject") {
 		t.Errorf("it must name the account and what is wrong with it: %q", reason)
 	}
 	if !strings.Contains(reason, "Do not retry") {
@@ -643,7 +643,7 @@ func TestARefusedBindingDoesNotSettleApplied(t *testing.T) {
 // failure an operator has to triage.
 func TestATransientBindingWriteFailureStillSettlesApplied(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
 	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
 		return errors.New("connection reset by peer")
 	}))
@@ -667,15 +667,15 @@ func TestATransientBindingWriteFailureStillSettlesApplied(t *testing.T) {
 // has to outlive the drain that produced it, like the log anchor's does.
 func TestABindingConflictIsRecordedAsAStandingFinding(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
 	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
-		return fmt.Errorf("%w: ada on truenas", db.ErrBindingConflict)
+		return fmt.Errorf("%w: charlotte on truenas", db.ErrBindingConflict)
 	}))
 	// The other claimant is READ BACK rather than inferred: the conflict may
 	// have been raised by the uid index on an account renamed out of band, and
 	// guessing from the reported name would put the wrong person on a screen.
 	t.Cleanup(swap(&bindingHolder, func(_ context.Context, target, username string, uid int64) (string, bool, error) {
-		if target != "truenas" || username != "ada" || uid != 3001 {
+		if target != "truenas" || username != "charlotte" || uid != 3001 {
 			t.Errorf("the holder lookup must carry both keys: %s %s %d", target, username, uid)
 		}
 		return "subject-a", true, nil
@@ -696,7 +696,7 @@ func TestABindingConflictIsRecordedAsAStandingFinding(t *testing.T) {
 	if got.ConvergedSubjectID != "sub-1" || got.BoundSubjectID != "subject-a" {
 		t.Errorf("both claimants must be named: %+v", got)
 	}
-	if got.Username != "ada" || got.AccountUID == nil || *got.AccountUID != 3001 {
+	if got.Username != "charlotte" || got.AccountUID == nil || *got.AccountUID != 3001 {
 		t.Errorf("the account must be identified by name and uid: %+v", got)
 	}
 	if got.OutboxID == "" {
@@ -709,9 +709,9 @@ func TestABindingConflictIsRecordedAsAStandingFinding(t *testing.T) {
 // row's reason, which already carries the account name.
 func TestAConflictWithNoTraceableHolderStillSettlesTerminally(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
 	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
-		return fmt.Errorf("%w: ada on truenas", db.ErrBindingConflict)
+		return fmt.Errorf("%w: charlotte on truenas", db.ErrBindingConflict)
 	}))
 	t.Cleanup(swap(&bindingHolder, func(context.Context, string, string, int64) (string, bool, error) {
 		return "", false, nil
@@ -742,7 +742,7 @@ func TestAConflictWithNoTraceableHolderStillSettlesTerminally(t *testing.T) {
 func TestAConfirmedApplyRecordsWhatTheTargetReported(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
 	h.resp = addons.ApplyResponse{
-		Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001,
+		Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001,
 		Observed: map[string]json.RawMessage{
 			"group":   json.RawMessage(`["lab_makers"]`),
 			"enabled": json.RawMessage(`true`),
@@ -769,7 +769,7 @@ func TestAnUnverifiedApplyRecordsNoBase(t *testing.T) {
 	// The write landed; the read after it did not. The add-on says so and sends
 	// no observation.
 	h.resp = addons.ApplyResponse{
-		Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001, Unverified: true,
+		Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001, Unverified: true,
 	}
 
 	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
@@ -789,7 +789,7 @@ func TestAnUnverifiedApplyRecordsNoBase(t *testing.T) {
 // absence is legible rather than an error.
 func TestAnApplyWithNoObservationRecordsNoBase(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "ada", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
 
 	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
 		t.Fatal(err)

@@ -222,10 +222,10 @@ class Component extends DCLogic {
     ];
     if (decided) rows = rows.map(r => r.k === "u" ? Object.assign({}, r, { k: "l", ack: { by: "Kanishk Singh", on: D(-1), note: "." } }) : r).filter((r, i) => i < 3 || r.who === "Kairi Sane" || r.who === "Xavier Woods");
     if (many) {
-      const fn = ["Carmelo","Bron","Chelsea","Lyra","Dominik","Trick","Ana","Montez","Akira","Michelle","Sara","Dev","Angelo","Stacy","Kelly","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ansari","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
+      const NM = ["AJ Styles", "Sheamus", "Gunther", "Matt Riddle", "Bayley", "Asuka", "Rikishi", "Booker T", "Batista", "Triple H", "Jeff Hardy", "Matt Hardy", "Rusev", "Elias", "Dean Ambrose", "Bray Wyatt", "Luke Harper", "Erick Rowan", "Roderick Strong", "Kyle O'Reilly", "Adam Cole", "Aleister Black", "Ricochet", "Andrade", "Samoa Joe", "Cesaro", "Tyson Kidd", "Naomi", "Jimmy Snuka", "Ric Flair", "Hulk Hogan", "Ultimate Warrior", "Sting", "Goldberg", "Lex Luger", "Ted DiBiase", "Razor Ramon", "Vader", "Scott Hall", "Road Dogg", "Billy Gunn", "Mr Perfect", "Yokozuna", "Jinder Mahal", "Lance Storm", "Rhyno", "Tazz", "Rick Steiner"];
       const RL = [["Wood shop · Member","wood.member"],["3D printers · Member","printers.member"],["Laser cutter · Operator","laser.operator"],["Studio · Booking","studio.booking"],["Bandsaw · Member","bandsaw.member"]];
-      for (let i = 0; i < 32; i++) { const r = RL[(i * 3) % 5]; rows.push(B("u", fn[i % 16] + " " + ln[(i * 7) % 15], r[0], r[1], i % 3 ? "Kanishk Singh" : "Zoey Stark", 40 + i, Math.min(30, 3 + Math.floor(i * 27 / 32)))); }
-      for (let i = 0; i < 4; i++) { const r = RL[i]; rows.push(B("l", fn[15 - i] + " " + ln[(i * 4) % 15], r[0], r[1], "Kanishk Singh", 60, 8 + i * 5, { by: "Zoey Stark", on: D(-3), note: "." })); }
+      for (let i = 0; i < 32; i++) { const r = RL[(i * 3) % 5]; rows.push(B("u", NM[(i % 16) + 16 * (((i * 7) % 15) % 3)], r[0], r[1], i % 3 ? "Kanishk Singh" : "Zoey Stark", 40 + i, Math.min(30, 3 + Math.floor(i * 27 / 32)))); }
+      for (let i = 0; i < 4; i++) { const r = RL[i]; rows.push(B("l", NM[(15 - i) + 16 * (((i * 4) % 15) % 3)], r[0], r[1], "Kanishk Singh", 60, 8 + i * 5, { by: "Zoey Stark", on: D(-3), note: "." })); }
     }
     const win = st === "window-30" ? 30 : 14; rows = rows.filter(r => r.days <= win);
     const so = this.state.sort, dir = this.state.dir;

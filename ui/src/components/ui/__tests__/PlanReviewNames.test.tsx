@@ -51,7 +51,7 @@ describe("PlanReview queued rows", () => {
     applied: false,
     outcomes: [
       { user_id: "u1", name: "Roman Reigns", effect: "queued", detail: "Supervisor always waits for you." },
-      { user_id: "u2", name: "Ben Ito", effect: "apply", detail: "Gets Member." },
+      { user_id: "u2", name: "Cedric Alexander", effect: "apply", detail: "Gets Member." },
     ],
     summary: { total: 2, apply: 1, no_change: 0, blocked: 0, failed: 0, succeeded: 0, queued: 1 },
   } as BulkPlan;

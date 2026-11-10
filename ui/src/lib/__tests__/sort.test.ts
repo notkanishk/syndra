@@ -14,7 +14,7 @@ describe("sortByName", () => {
   });
 
   it("ignores accents: É sorts with E, not after z", () => {
-    expect(sortNames(["Zoë", "Émile", "Eva", "Alia"])).toEqual(["Alia", "Émile", "Eva", "Zoë"]);
+    expect(sortNames(["Zoë", "Émile", "Eugene", "Edge"])).toEqual(["Edge", "Émile", "Eugene", "Zoë"]);
   });
 
   it("reads numbers as numbers: Lab 2 before Lab 10", () => {
@@ -40,7 +40,7 @@ describe("sortByName", () => {
   });
 
   it("compareNames treats case and accent variants as equal", () => {
-    expect(compareNames("ada", "ADA")).toBe(0);
+    expect(compareNames("charlotte", "CHARLOTTE")).toBe(0);
     expect(compareNames("resume", "résumé")).toBe(0);
   });
 });
@@ -52,11 +52,11 @@ describe("sortAccounts", () => {
       { id: "2", name: "Kanishk Singh" },
       { id: "3", name: "claude code", service_account: true },
       { id: "4", name: "Admin Makerspace", service_account: false },
-      { id: "5", name: "Alia Ahuja" },
+      { id: "5", name: "Edge" },
     ];
     expect(sortAccounts(accounts).map((a) => a.name)).toEqual([
       "Admin Makerspace",
-      "Alia Ahuja",
+      "Edge",
       "Kanishk Singh",
       "claude code",
       "netbird",

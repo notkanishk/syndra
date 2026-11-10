@@ -161,14 +161,14 @@ func wiChg(kind string) models.InsightsWhatIfChange {
 }
 
 func TestWhatIf_GivesNot_LossOnlyWhereTheBundleIsTheOnlyRoute(t *testing.T) {
-	w := newWhatIfWorld("Zed", "Amy", "Bob")
-	w.holds("Zed", wiLaser, wiMill) // only via the bundle: loses laser
-	w.holds("Amy", wiLaser)         // also holds laser directly: keeps it
-	w.direct["Amy"] = []roleKey{wiLaser}
-	w.holds("Bob", wiMill) // bundle never gave laser: unchanged
+	w := newWhatIfWorld("Zack", "Asuka", "Brock")
+	w.holds("Zack", wiLaser, wiMill) // only via the bundle: loses laser
+	w.holds("Asuka", wiLaser)         // also holds laser directly: keeps it
+	w.direct["Asuka"] = []roleKey{wiLaser}
+	w.holds("Brock", wiMill) // bundle never gave laser: unchanged
 
 	got := w.ask(t, wiChg("bundle_gives_not"))
-	if want := []string{"Zed"}; !reflect.DeepEqual(wiNames(got.Losses), want) {
+	if want := []string{"Zack"}; !reflect.DeepEqual(wiNames(got.Losses), want) {
 		t.Fatalf("losses = %v, want %v", wiNames(got.Losses), want)
 	}
 	if !reflect.DeepEqual(got.Losses[0].Roles, wiGrants(wiLaser)) {
@@ -183,8 +183,8 @@ func TestWhatIf_GivesNot_LossOnlyWhereTheBundleIsTheOnlyRoute(t *testing.T) {
 }
 
 func TestWhatIf_GivesNot_AMappedRoleGoesWithItsTrigger(t *testing.T) {
-	w := newWhatIfWorld("Amy")
-	w.holds("Amy", wiLaser)
+	w := newWhatIfWorld("Asuka")
+	w.holds("Asuka", wiLaser)
 	w.rules = []models.MappingRule{{ID: "r1", SourceProject: "p1", SourceRole: "laser", TargetProject: "p2", TargetRole: "door"}}
 
 	got := w.ask(t, wiChg("bundle_gives_not"))
@@ -194,11 +194,11 @@ func TestWhatIf_GivesNot_AMappedRoleGoesWithItsTrigger(t *testing.T) {
 }
 
 func TestWhatIf_GivesNot_ARoleTheBundleAlsoGetsThroughAnIncludeIsNoLoss(t *testing.T) {
-	w := newWhatIfWorld("Amy", "Bob")
+	w := newWhatIfWorld("Asuka", "Brock")
 	// The bundle gives laser itself AND through included bundle "s".
 	w.includes = map[string][]models.BundleRole{"s": {{BundleID: "s", ProjectID: "p1", RoleKey: "laser"}}}
-	w.holds("Amy", wiLaser)
-	w.holds("Bob", wiLaser, wiMill)
+	w.holds("Asuka", wiLaser)
+	w.holds("Brock", wiLaser, wiMill)
 
 	got := w.ask(t, wiChg("bundle_gives_not"))
 	if len(got.Losses) != 0 || got.Unchanged != 2 {
@@ -210,9 +210,9 @@ func TestWhatIf_GivesNot_ARoleTheBundleAlsoGetsThroughAnIncludeIsNoLoss(t *testi
 }
 
 func TestWhatIf_GivesNot_AnIncludeGivingSomethingElseDoesNotShieldTheRole(t *testing.T) {
-	w := newWhatIfWorld("Amy")
+	w := newWhatIfWorld("Asuka")
 	w.includes = map[string][]models.BundleRole{"s": {{BundleID: "s", ProjectID: "p1", RoleKey: "mill"}}}
-	w.holds("Amy", wiLaser, wiMill)
+	w.holds("Asuka", wiLaser, wiMill)
 
 	got := w.ask(t, wiChg("bundle_gives_not"))
 	if len(got.Losses) != 1 || !reflect.DeepEqual(got.Losses[0].Roles, wiGrants(wiLaser)) {
@@ -221,16 +221,16 @@ func TestWhatIf_GivesNot_AnIncludeGivingSomethingElseDoesNotShieldTheRole(t *tes
 }
 
 func TestWhatIf_GivesAlso_GainOnlyForThoseWhoLackIt(t *testing.T) {
-	w := newWhatIfWorld("Zed", "Amy", "Bob", "Cy")
-	w.holds("Zed", wiMill)
-	w.holds("Amy", wiMill)
-	w.direct["Amy"] = []roleKey{wiLaser} // already holds it directly: not a gain
-	w.holds("Bob", wiMill, wiLaser)      // pinned version already gives it: not a gain
-	w.holds("Cy")                        // holds the bundle at an empty version: gains
+	w := newWhatIfWorld("Zack", "Asuka", "Brock", "Cora")
+	w.holds("Zack", wiMill)
+	w.holds("Asuka", wiMill)
+	w.direct["Asuka"] = []roleKey{wiLaser} // already holds it directly: not a gain
+	w.holds("Brock", wiMill, wiLaser)      // pinned version already gives it: not a gain
+	w.holds("Cora")                        // holds the bundle at an empty version: gains
 	w.rules = []models.MappingRule{{ID: "r1", SourceProject: "p1", SourceRole: "laser", TargetProject: "p2", TargetRole: "door"}}
 
 	got := w.ask(t, wiChg("bundle_gives_also"))
-	if want := []string{"Cy", "Zed"}; !reflect.DeepEqual(wiNames(got.Gains), want) {
+	if want := []string{"Cora", "Zack"}; !reflect.DeepEqual(wiNames(got.Gains), want) {
 		t.Fatalf("gains = %v, want %v (sorted by name)", wiNames(got.Gains), want)
 	}
 	// Mapping rules are part of the closure: laser opens the door too.
@@ -243,18 +243,18 @@ func TestWhatIf_GivesAlso_GainOnlyForThoseWhoLackIt(t *testing.T) {
 }
 
 func TestWhatIf_BundleGone_EveryHolderLosesWhatNothingElseGives(t *testing.T) {
-	w := newWhatIfWorld("Amy", "Bob", "Nobody")
-	w.holds("Amy", wiLaser, wiMill)
-	w.direct["Amy"] = []roleKey{wiMill}
-	w.holds("Bob", wiLaser)
+	w := newWhatIfWorld("Asuka", "Brock", "Nobody")
+	w.holds("Asuka", wiLaser, wiMill)
+	w.direct["Asuka"] = []roleKey{wiMill}
+	w.holds("Brock", wiLaser)
 	// Nobody holds no bundle, so is not examined at all.
 
 	got := w.ask(t, models.InsightsWhatIfChange{Kind: "bundle_gone", BundleID: "b1"})
-	if want := []string{"Amy", "Bob"}; !reflect.DeepEqual(wiNames(got.Losses), want) {
+	if want := []string{"Asuka", "Brock"}; !reflect.DeepEqual(wiNames(got.Losses), want) {
 		t.Fatalf("losses = %v, want %v", wiNames(got.Losses), want)
 	}
 	if !reflect.DeepEqual(got.Losses[0].Roles, wiGrants(wiLaser)) || !reflect.DeepEqual(got.Losses[1].Roles, wiGrants(wiLaser)) {
-		t.Fatalf("Amy keeps mill directly: %+v", got.Losses)
+		t.Fatalf("Asuka keeps mill directly: %+v", got.Losses)
 	}
 	if got.Unchanged != 0 {
 		t.Fatalf("unchanged = %d", got.Unchanged)
@@ -262,17 +262,17 @@ func TestWhatIf_BundleGone_EveryHolderLosesWhatNothingElseGives(t *testing.T) {
 }
 
 func TestWhatIf_RuleGone_DropsTheDerivedRole(t *testing.T) {
-	w := newWhatIfWorld("Amy", "Bob", "Cy")
+	w := newWhatIfWorld("Asuka", "Brock", "Cora")
 	w.rules = []models.MappingRule{
 		{ID: "r1", SourceProject: "p1", SourceRole: "laser", TargetProject: "p2", TargetRole: "door"},
 		{ID: "r2", SourceProject: "p1", SourceRole: "mill", TargetProject: "p2", TargetRole: "door"},
 	}
-	w.direct["Amy"] = []roleKey{wiLaser}         // door only through r1: loses it
-	w.direct["Bob"] = []roleKey{wiLaser, wiMill} // r2 still gives the door: keeps it
-	w.direct["Cy"] = []roleKey{wiMill}           // r1 never fired for Cy
+	w.direct["Asuka"] = []roleKey{wiLaser}         // door only through r1: loses it
+	w.direct["Brock"] = []roleKey{wiLaser, wiMill} // r2 still gives the door: keeps it
+	w.direct["Cora"] = []roleKey{wiMill}           // r1 never fired for Cora
 
 	got := w.ask(t, models.InsightsWhatIfChange{Kind: "rule_gone", RuleID: "r1"})
-	if want := []string{"Amy"}; !reflect.DeepEqual(wiNames(got.Losses), want) {
+	if want := []string{"Asuka"}; !reflect.DeepEqual(wiNames(got.Losses), want) {
 		t.Fatalf("losses = %v, want %v", wiNames(got.Losses), want)
 	}
 	if !reflect.DeepEqual(got.Losses[0].Roles, wiGrants(wiDoor)) || len(got.Gains) != 0 || got.Unchanged != 2 {
@@ -281,11 +281,11 @@ func TestWhatIf_RuleGone_DropsTheDerivedRole(t *testing.T) {
 }
 
 func TestWhatIf_PeopleMissingFromTheDirectoryAreLeftOut(t *testing.T) {
-	w := newWhatIfWorld("Amy")
-	w.holds("Amy", wiLaser)
+	w := newWhatIfWorld("Asuka")
+	w.holds("Asuka", wiLaser)
 	w.holds("ghost", wiLaser)
 	got := w.ask(t, models.InsightsWhatIfChange{Kind: "bundle_gone", BundleID: "b1"})
-	if want := []string{"Amy"}; !reflect.DeepEqual(wiNames(got.Losses), want) {
+	if want := []string{"Asuka"}; !reflect.DeepEqual(wiNames(got.Losses), want) {
 		t.Fatalf("losses = %v, want %v", wiNames(got.Losses), want)
 	}
 }
@@ -295,7 +295,7 @@ func TestWhatIf_UnknownBundleOrRuleIsNotFound(t *testing.T) {
 		"bundle": {Kind: "bundle_gone", BundleID: "nope"},
 		"rule":   {Kind: "rule_gone", RuleID: "nope"},
 	} {
-		w := newWhatIfWorld("Amy")
+		w := newWhatIfWorld("Asuka")
 		w.install(t)
 		_, err := InsightsWhatIf(context.Background(), c)
 		if !errors.Is(err, ErrWhatIfNotFound) {
@@ -317,7 +317,7 @@ func TestWhatIf_MalformedChangesAreRefusedBeforeAnyRead(t *testing.T) {
 		"stray field":        {Kind: "bundle_gone", BundleID: "b1", RuleID: "r1"},
 		"stray role":         {Kind: "rule_gone", RuleID: "r1", RoleKey: "x"},
 	} {
-		w := newWhatIfWorld("Amy")
+		w := newWhatIfWorld("Asuka")
 		w.install(t)
 		_, err := InsightsWhatIf(context.Background(), c)
 		if !errors.Is(err, ErrInvalidWhatIf) {

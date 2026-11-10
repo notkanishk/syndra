@@ -562,13 +562,13 @@ it("does not call an add-on role retired", () => {
 // sentence every syndra_only row used to get — it reads as a stranger, and
 // the operator's next move is wrong.
 it("tells a removal as the history of the grant Syndra applied", () => {
-  NAMES.current = { "op-ada": "Charlotte Rivera", "op-marta": "Marta Reyes" };
+  NAMES.current = { "op-charlotte": "Molly Holly", "op-marta": "Lacey Evans" };
   drift.data = [
     item({
       drift_type: "syndra_only",
       upstream_actor: "op-marta",
       provenance: {
-        granted_by: "op-ada",
+        granted_by: "op-charlotte",
         granted_at: "2026-08-03T09:00:00Z",
         reason: "inducted on the laser",
         last_observed_at: "2026-08-19T03:00:00Z",
@@ -577,10 +577,10 @@ it("tells a removal as the history of the grant Syndra applied", () => {
   ];
   renderTriage();
 
-  expect(screen.getByText(/Given by Charlotte Rivera/i)).toBeTruthy();
+  expect(screen.getByText(/Given by Molly Holly/i)).toBeTruthy();
   expect(screen.getByText(/inducted on the laser/i)).toBeTruthy();
   expect(screen.getByText(/does not now, so somebody removed it there/i)).toBeTruthy();
-  expect(screen.getByText(/Removed by Marta Reyes/i)).toBeTruthy();
+  expect(screen.getByText(/Removed by Lacey Evans/i)).toBeTruthy();
 });
 
 // And one nobody ever saw the target holding keeps the old reading, which is
@@ -589,7 +589,7 @@ it("still calls an unobserved grant a write that never landed", () => {
   drift.data = [
     item({
       drift_type: "syndra_only",
-      provenance: { granted_by: "op-ada", granted_at: "2026-08-03T09:00:00Z" },
+      provenance: { granted_by: "op-charlotte", granted_at: "2026-08-03T09:00:00Z" },
     }),
   ];
   renderTriage();
@@ -605,7 +605,7 @@ it("tells a removal by when the write landed, even with nothing ever observed", 
     item({
       drift_type: "syndra_only",
       provenance: {
-        granted_by: "op-ada",
+        granted_by: "op-charlotte",
         reason: "inducted on the laser",
         applied_at: "2026-08-19T12:04:00Z",
       },

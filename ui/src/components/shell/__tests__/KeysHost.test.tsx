@@ -91,7 +91,7 @@ describe("the Keys sheet (A-19 P7)", () => {
 function rows() {
   return (
     <ArriveList startSettled>
-      {["Charlotte", "Ben", "Chi"].map((name) => (
+      {["Charlotte", "Bray", "Chris"].map((name) => (
         <div key={name}>
           <a data-row href={`/users/${name}`}>
             {name}
@@ -107,15 +107,15 @@ describe("arrows between rows (A-19 P7)", () => {
   it("puts one row in the Tab order and the rest out of it", () => {
     render(rows());
     expect(screen.getByRole("link", { name: "Charlotte" })).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("link", { name: "Ben" })).toHaveAttribute("tabindex", "-1");
-    expect(screen.getByRole("link", { name: "Chi" })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("link", { name: "Bray" })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("link", { name: "Chris" })).toHaveAttribute("tabindex", "-1");
     // The row's own buttons stay on Tab.
-    expect(screen.getByRole("button", { name: "Extend Ben" })).not.toHaveAttribute("tabindex");
+    expect(screen.getByRole("button", { name: "Extend Bray" })).not.toHaveAttribute("tabindex");
   });
 
   it("moves down and up, and the row focused takes the Tab stop", () => {
     render(rows());
-    const [charlotte, ben, chi] = ["Charlotte", "Ben", "Chi"].map((n) => screen.getByRole("link", { name: n }));
+    const [charlotte, ben, chi] = ["Charlotte", "Bray", "Chris"].map((n) => screen.getByRole("link", { name: n }));
     charlotte.focus();
     key({ key: "ArrowDown" }, charlotte);
     expect(document.activeElement).toBe(ben);
@@ -129,7 +129,7 @@ describe("arrows between rows (A-19 P7)", () => {
 
   it("stops at the ends rather than wrapping", () => {
     render(rows());
-    const [charlotte, , chi] = ["Charlotte", "Ben", "Chi"].map((n) => screen.getByRole("link", { name: n }));
+    const [charlotte, , chi] = ["Charlotte", "Bray", "Chris"].map((n) => screen.getByRole("link", { name: n }));
     charlotte.focus();
     key({ key: "ArrowUp" }, charlotte);
     expect(document.activeElement).toBe(charlotte);
@@ -140,7 +140,7 @@ describe("arrows between rows (A-19 P7)", () => {
 
   it("opens the focused row on Enter, which is the link's own press", () => {
     render(rows());
-    const ben = screen.getByRole("link", { name: "Ben" });
+    const ben = screen.getByRole("link", { name: "Bray" });
     let opened = "";
     ben.addEventListener("click", (event) => {
       event.preventDefault();
@@ -150,7 +150,7 @@ describe("arrows between rows (A-19 P7)", () => {
     // jsdom does not turn Enter into a click; the browser does, for a link. The row is a link.
     expect(ben.tagName).toBe("A");
     fireEvent.click(ben);
-    expect(opened).toBe("/users/Ben");
+    expect(opened).toBe("/users/Bray");
   });
 
   it("leaves a row's own button alone, and a field too", () => {
@@ -178,12 +178,12 @@ describe("arrows between rows (A-19 P7)", () => {
 
   it("keeps the Tab stop on the row the reader was on when rows change", () => {
     const { rerender } = render(rows());
-    const ben = screen.getByRole("link", { name: "Ben" });
+    const ben = screen.getByRole("link", { name: "Bray" });
     ben.focus();
     expect(ben).toHaveAttribute("tabindex", "0");
     rerender(
       <ArriveList startSettled>
-        {["Charlotte", "Ben", "Chi", "Dev"].map((name) => (
+        {["Charlotte", "Bray", "Chris", "Dean"].map((name) => (
           <div key={name}>
             <a data-row href={`/users/${name}`}>
               {name}
@@ -192,8 +192,8 @@ describe("arrows between rows (A-19 P7)", () => {
         ))}
       </ArriveList>,
     );
-    expect(screen.getByRole("link", { name: "Ben" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("link", { name: "Bray" })).toHaveAttribute("tabindex", "0");
     expect(screen.getByRole("link", { name: "Charlotte" })).toHaveAttribute("tabindex", "-1");
-    expect(screen.getByRole("link", { name: "Dev" })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("link", { name: "Dean" })).toHaveAttribute("tabindex", "-1");
   });
 });

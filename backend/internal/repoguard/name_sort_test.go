@@ -13,7 +13,7 @@ import (
 // accents aside, "Lab 2" before "Lab 10" (owner, 4 Nov 2026; ui/src/lib/sort.ts).
 // internal/textsort is the one place the backend does that. This guard refuses
 // the two ways a name list was sorted another way: sort.Strings on a list of
-// names (byte order, so "netbird" sorts after "Zed"), and a sort.Slice whose
+// names (byte order, so "netbird" sorts after "Zack"), and a sort.Slice whose
 // less function compares a name with < or strings.ToLower (the same byte order,
 // or case folded and nothing more).
 //

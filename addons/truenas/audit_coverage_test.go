@@ -72,7 +72,7 @@ func activityReport(t *testing.T, s *server) *ActivityReport {
 	return out.Activity
 }
 
-// The regression. `ada` is in `lab_makers` (fixture group 42) and nothing else;
+// The regression. `charlotte` is in `lab_makers` (fixture group 42) and nothing else;
 // both shares are switched ON, and neither is watching her.
 func TestAnEnabledShareScopedPastTheMemberIsReportedAsNotWatchingThem(t *testing.T) {
 	s, m := opServer(t)
@@ -105,8 +105,8 @@ func TestAShareWatchingTheMembersOwnGroupIsNotReported(t *testing.T) {
 // hides a gap rather than inventing one.
 func TestTheMembersPrimaryGroupCountsTowardsCoverage(t *testing.T) {
 	s, m := applyServer(t,
-		`[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"group":{"id":41}}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		`[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"group":{"id":41}}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 	m.fakeRPC.audit = `[]`

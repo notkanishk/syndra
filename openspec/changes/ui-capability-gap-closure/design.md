@@ -605,8 +605,8 @@ easier to see.
 
 Review › Expiring access has always put its checkbox on a **grant**. The bulk
 contract has always been keyed on **people**. The screen bridged the two by
-reducing its ticked rows to user ids, so ticking "Ada / Laser Lab / trained"
-extended every expiring direct grant Ada held: other projects, and dates months
+reducing its ticked rows to user ids, so ticking "Charlotte / Laser Lab / trained"
+extended every expiring direct grant Charlotte held: other projects, and dates months
 past the 30 days the screen is scoped to. Rows the queue had never rendered, on a
 record of who may operate machinery.
 

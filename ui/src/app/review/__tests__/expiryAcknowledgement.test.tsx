@@ -79,7 +79,7 @@ function grant(over: Partial<ExpiringGrantRow> = {}): ExpiringGrantRow {
     user_id: "u1",
     project_id: "pLaser",
     role_key: "trained",
-    granted_by: "priya",
+    granted_by: "cody",
     reason: "",
     expires_at: "2026-09-01T12:00:00Z",
     created_at: "2026-06-01T12:00:00Z",
@@ -236,7 +236,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   it("names who decided, and why, on the row itself", () => {
     state.rows = [
       grant({
-        acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z", note: "Cohort ends" },
+        acknowledged: { by: "cody", at: "2026-08-04T09:00:00Z", note: "Cohort ends" },
       }),
     ];
     renderPage();
@@ -253,7 +253,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
       grant({
         id: "g2",
         user_id: "u2",
-        acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" },
+        acknowledged: { by: "cody", at: "2026-08-04T09:00:00Z" },
       }),
     ];
     renderPage();
@@ -263,7 +263,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   });
 
   it("takes an acknowledgement back", async () => {
-    state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
+    state.rows = [grant({ acknowledged: { by: "cody", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Undo letting it lapse" }));
     await waitFor(() => expect(state.clear).toHaveBeenCalledWith("g1"));
@@ -271,7 +271,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
 
   // Changing your mind toward KEEPING access must never be harder than letting it go.
   it("keeps Extend available on an acknowledged row", () => {
-    state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
+    state.rows = [grant({ acknowledged: { by: "cody", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
     expect(screen.getByRole("button", { name: "Extend 90 days" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Let it lapse" })).toBeNull();
@@ -279,7 +279,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
 
   // A queue whose only rows are acknowledged ones looks identical to one nobody has touched.
   it("says outright when nothing is waiting on a decision", () => {
-    state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
+    state.rows = [grant({ acknowledged: { by: "cody", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
     expect(document.body.textContent).toMatch(/Nothing here is waiting on a decision/i);
   });
@@ -292,7 +292,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
       grant({
         id: "g2",
         user_id: "u2",
-        acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" },
+        acknowledged: { by: "cody", at: "2026-08-04T09:00:00Z" },
       }),
     ];
     renderPage();

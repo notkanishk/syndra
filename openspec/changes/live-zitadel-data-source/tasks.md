@@ -49,6 +49,6 @@
 - [x] 7.1 `go vet ./... && go build ./...` in `backend/` — clean.
 - [x] 7.2 `go test ./...` in `backend/` — 253 tests pass (10 new in `internal/directory/`; existing suite unchanged because tests run in demo mode, which is the default when `zitadel.MgmtClient` is nil).
 - [x] 7.3 Frontend: `bun run test && bun run lint` in `ui/` — 6 tests pass, no lint errors.
-- [ ] 7.4 Manual smoke on the operator's configured Zitadel: confirm `[DIRECTORY] Source=zitadel` log line at startup; load `/users`, `/projects`, `/bundles`, `/applications` and verify real Zitadel entities appear instead of Alice/Sam/Laser-Lab.
+- [ ] 7.4 Manual smoke on the operator's configured Zitadel: confirm `[DIRECTORY] Source=zitadel` log line at startup; load `/users`, `/projects`, `/bundles`, `/applications` and verify real Zitadel entities appear instead of Rey/Bianca/Laser-Lab.
 - [ ] 7.5 Demo mode regression: unset `ZITADEL_MACHINE_KEY_PATH`, restart → `[DIRECTORY] Source=demo` log, UI unchanged.
 - [ ] 7.6 `mcp__codebase-memory-mcp__detect_changes` + reindex the new `internal/directory/` package.

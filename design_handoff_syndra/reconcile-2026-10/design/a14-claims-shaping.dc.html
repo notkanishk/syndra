@@ -926,22 +926,22 @@ class Component extends DCLogic {
         c5tone = "danger"; c5text = "Zitadel receives this, but only for userinfo:";
         tokenNote = "NetBird reads its access token, so it sees no groups, and it empties every group it made from a token.";
       }
-      const how = { ada: "Given by hand", aanya: "From the [[Makers]] bundle", grace: "From an automatic rule", rohan: "No roles in Network" };
+      const how = { charlotte: "Given by hand", roman: "From the [[Makers]] bundle", grace: "From an automatic rule", liv: "No roles in Network" };
       if (draft) {
         editing = true;
         testRows = [
-          { name: "Charlotte Flair", how: P(how.ada), nowEmpty: false, now: commas([L("same", "groups", NB)]), after: commas([L("added", "groups", NB4)]), diff: P("`netbird-staff` becomes `network-staff`.") },
-          { name: "Roman Reigns", how: P(how.aanya), nowEmpty: false, now: commas([L("same", "groups", '["netbird-members", "netbird-guests"]')]), after: commas([L("added", "groups", '["netbird-members"]')]), diff: P("Leaves `netbird-guests`.") },
+          { name: "Charlotte Flair", how: P(how.charlotte), nowEmpty: false, now: commas([L("same", "groups", NB)]), after: commas([L("added", "groups", NB4)]), diff: P("`netbird-staff` becomes `network-staff`.") },
+          { name: "Roman Reigns", how: P(how.roman), nowEmpty: false, now: commas([L("same", "groups", '["netbird-members", "netbird-guests"]')]), after: commas([L("added", "groups", '["netbird-members"]')]), diff: P("Leaves `netbird-guests`.") },
           { name: "Sami Zayn", how: P(how.grace), nowEmpty: false, now: commas([L("same", "groups", '["netbird-staff"]')]), after: commas([L("added", "groups", '["network-staff"]')]), diff: P("`netbird-staff` becomes `network-staff`.") },
-          { name: "Liv Morgan", how: P(how.rohan), nowEmpty: false, now: commas([L("same", "groups", "[]")]), after: commas([L("same", "groups", "[]")]), diff: P("None. He holds no roles in Network.") },
+          { name: "Liv Morgan", how: P(how.liv), nowEmpty: false, now: commas([L("same", "groups", "[]")]), after: commas([L("same", "groups", "[]")]), diff: P("None. He holds no roles in Network.") },
         ];
       } else {
         const g = (s) => commas([L("same", "groups", s)]);
         testRows = [
-          { name: "Charlotte Flair", how: P(how.ada), now: g(v4 ? NB4 : NB), tone: "healthy", word: "All pass" },
-          { name: "Roman Reigns", how: P(how.aanya), now: g(v4 ? '["netbird-members"]' : '["netbird-members", "netbird-guests"]'), tone: "healthy", word: "All pass" },
+          { name: "Charlotte Flair", how: P(how.charlotte), now: g(v4 ? NB4 : NB), tone: "healthy", word: "All pass" },
+          { name: "Roman Reigns", how: P(how.roman), now: g(v4 ? '["netbird-members"]' : '["netbird-members", "netbird-guests"]'), tone: "healthy", word: "All pass" },
           { name: "Sami Zayn", how: P(how.grace), now: g(v4 ? '["network-staff"]' : '["netbird-staff"]'), tone: "healthy", word: "All pass" },
-          { name: "Liv Morgan", how: P(how.rohan), now: g("[]"), tone: "neutral", word: "No roles" },
+          { name: "Liv Morgan", how: P(how.liv), now: g("[]"), tone: "neutral", word: "No roles" },
         ];
         if (landsFail) testRows = testRows.map((r) => ({ ...r, tone: "danger", word: "Fails check 1" }));
       }
@@ -968,11 +968,11 @@ class Component extends DCLogic {
       tplCaption = "Supabase keeps these in `user_metadata`, which the signed-in person can edit. Don't trust them for row-level security as they arrive; the template says how.";
       roles = [R("Analyst", "analyst", "analyst", true), R("Editor", "editor", "editor", true), R("Owner", "owner", "owner", true), R("Viewer", "viewer", "viewer", true)];
       incNote = "4 of 4 included";
-      const obj = '{"custom_claims": {"groups": ["analyst", "editor"], "given_name": "Charlotte", "family_name": "Lovelace"}}';
+      const obj = '{"custom_claims": {"groups": ["analyst", "editor"], "given_name": "Charlotte", "family_name": "Flair"}}';
       claims = [
         C({ parent: "custom_claims", key: "groups", kind: "Roles Supabase sees", kv: "roles", sent: "Sent as `" + obj + "` for Charlotte Flair, with `\"groups\": []` for anyone who holds none." }),
         C({ parent: "custom_claims", key: "given_name", kind: "Given name", kv: "given_name", sent: "Sent as `\"Charlotte\"` for Charlotte Flair, inside the same object." }),
-        C({ parent: "custom_claims", key: "family_name", kind: "Family name", kv: "family_name", sent: "Sent as `\"Lovelace\"` for Charlotte Flair, inside the same object." }),
+        C({ parent: "custom_claims", key: "family_name", kind: "Family name", kv: "family_name", sent: "Sent as `\"Flair\"` for Charlotte Flair, inside the same object." }),
       ];
       landsValue = "The ID token and userinfo"; landsNote = "Supabase reads only the ID token. Set by the template."; landsKey = "idtoken";
       checks = [
@@ -981,7 +981,7 @@ class Component extends DCLogic {
         ck("healthy", "Her claims are ready.", "Built at 09:52 today, after her last change."),
         ck("healthy", "What Supabase is told applies, version 3.", "It makes one object, `custom_claims`, holding `groups`, `given_name` and `family_name`."),
       ];
-      tokenLines = [L("same", "custom_claims", '{"groups": ["analyst", "editor"], "given_name": "Charlotte", "family_name": "Lovelace"}')];
+      tokenLines = [L("same", "custom_claims", '{"groups": ["analyst", "editor"], "given_name": "Charlotte", "family_name": "Flair"}')];
       tokenNote = "Sent in the ID token and userinfo. Supabase keeps it in `user_metadata.custom_claims`, where she can edit it, so don't trust it for row-level security as it arrives.";
       const cc = (g) => commas([L("same", "custom_claims", '{"groups": ' + g + ', …}')]);
       testRows = [
@@ -1142,7 +1142,7 @@ class Component extends DCLogic {
     // ---------------------------------------------------------------- Debug mode
     const dbgOff = !(dbgOn || dbgEmptyS || dbgEndedS);
     const SI = (time, who, asked, ans, tone, word, open) => ({ time, who, asked, ans: P(ans), tone, word, open: !!open, chev: open ? "⌄" : "›" });
-    const ada = [
+    const charlotte = [
       SI("10:09:14", "Charlotte Flair", "Access token", "`groups`, 2 values", "healthy", "All pass", dbgOpen),
       SI("10:09:13", "Charlotte Flair", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
       SI("10:08:02", "Charlotte Flair", "Access token", "Nothing: NetBird asked for two projects", "danger", "Refused"),
@@ -1156,7 +1156,7 @@ class Component extends DCLogic {
       SI("10:15:02", "Roman Reigns", "Access token", "`groups`, 2 values", "healthy", "All pass"),
       SI("10:15:01", "Roman Reigns", "Userinfo", "`groups`, 2 values", "healthy", "All pass"),
       SI("10:13:22", "Roman Reigns", "Access token", "`groups`, 2 values", "healthy", "All pass"),
-    ].concat(ada) : ada;
+    ].concat(charlotte) : charlotte;
     const reqJson = J([
       '{',
       '  "function": "function/preaccesstoken",',
@@ -1165,7 +1165,7 @@ class Component extends DCLogic {
       '    "id": "298113054121345501",',
       '    "human": {',
       '      "first_name": "Charlotte",',
-      '      "last_name": "Lovelace",',
+      '      "last_name": "Flair",',
       '      "display_name": "Charlotte Flair",',
       '      "email": "charlotte@example.edu",',
       '      "is_email_verified": true',
@@ -1190,7 +1190,7 @@ class Component extends DCLogic {
       '~  "email": "charlotte@example.edu",',
       '~  "email_verified": true,',
       '~  "name": "Charlotte Flair",',
-      '~  "preferred_username": "ada",',
+      '~  "preferred_username": "charlotte",',
       '  "groups": ["netbird-staff", "netbird-admins"]',
       '}',
     ]);

@@ -66,7 +66,7 @@ function renderPeople() {
 }
 
 beforeEach(() => {
-  users.data = [person("u1", "Kevin Owens"), person("u2", "Amara Osei", { unseen_count: 2 })];
+  users.data = [person("u1", "Kevin Owens"), person("u2", "Apollo Crews", { unseen_count: 2 })];
   nav.url = "/users?bulk=1";
   nav.replaced = [];
 });
@@ -113,14 +113,14 @@ describe("Sent, not seen back opens People on those people (P10.5)", () => {
   it("narrows to the people with a write that has not been seen back", () => {
     nav.url = "/users?attention=unseen";
     renderPeople();
-    expect(screen.getByText("Amara Osei")).toBeInTheDocument();
+    expect(screen.getByText("Apollo Crews")).toBeInTheDocument();
     expect(screen.queryByText("Kevin Owens")).toBeNull();
   });
 
   it("without the filter, everyone is listed", () => {
     nav.url = "/users";
     renderPeople();
-    expect(screen.getByText("Amara Osei")).toBeInTheDocument();
+    expect(screen.getByText("Apollo Crews")).toBeInTheDocument();
     expect(screen.getByText("Kevin Owens")).toBeInTheDocument();
   });
 

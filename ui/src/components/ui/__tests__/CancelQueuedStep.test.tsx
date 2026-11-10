@@ -12,7 +12,7 @@ import { motionInTests } from "@/test-utils/motion";
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
     resolveUser: (id: string) => {
-      const names: Record<string, string> = { u1: "Liv Morgan", "op-2": "Tegan Nox", "op-3": "Zoey Ortiz" };
+      const names: Record<string, string> = { u1: "Liv Morgan", "op-2": "Tegan Nox", "op-3": "Wendy Choo" };
       return names[id] ? { value: { display_name: names[id], email: "" }, resolved: true } : { value: undefined, resolved: true };
     },
     resolveProject: (id: string) => ({ value: id === "pNas" ? { name: "Network storage" } : undefined, resolved: true }),
@@ -208,13 +208,13 @@ describe("the step pushed inside the host sheet", () => {
 
   it("a longer refusal after going ahead: the new one is first, labelled, counted, and nothing was changed", async () => {
     const first = change({ id: idOf(1) });
-    const added = change({ id: idOf(2), initiated_by: "op-3", initiated_by_name: "Zoey Ortiz", said: "wrong person", queued_at: hoursAgo(0), new: true });
+    const added = change({ id: idOf(2), initiated_by: "op-3", initiated_by_name: "Wendy Choo", said: "wrong person", queued_at: hoursAgo(0), new: true });
     const write = refusedOnce([first], [first, added]);
     render(<Host write={write} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel removing it and give Member" }));
 
-    expect(await screen.findByText(/One more since you looked\. Zoey queued it just now, so it's added at the top and nothing was changed\./)).toBeInTheDocument();
+    expect(await screen.findByText(/One more since you looked\. Wendy queued it just now, so it's added at the top and nothing was changed\./)).toBeInTheDocument();
     expect(screen.getByText("New since you looked")).toBeInTheDocument();
     const lines = screen.getAllByText(/Removing/);
     expect(lines).toHaveLength(2);

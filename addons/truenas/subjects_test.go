@@ -269,8 +269,8 @@ func testServer(t *testing.T, fake *fakeRPC) *server {
 
 const (
 	fixtureUsers = `[
-		{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]},
-		{"username":"leo","id":12,"uid":3002,"locked":true,"smb":false,"groups":[42]}
+		{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]},
+		{"username":"seth","id":12,"uid":3002,"locked":true,"smb":false,"groups":[42]}
 	]`
 	fixtureGroups = `[{"id":41,"gid":545,"group":"builtin_users","builtin":true},{"id":42,"gid":900,"group":"lab_makers"}]`
 )
@@ -281,7 +281,7 @@ const (
 func TestNoHashFieldIsRequestedOrReturnedOnAnyPath(t *testing.T) {
 	rpc := &fakeRPC{
 		// The NAS offering them anyway, which is exactly what it does.
-		users:  `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"unixhash":"$6$deadbeef","smbhash":"AAD3B435B51404EE"}]`,
+		users:  `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"unixhash":"$6$deadbeef","smbhash":"AAD3B435B51404EE"}]`,
 		groups: fixtureGroups,
 	}
 	s := testServer(t, rpc)
@@ -560,14 +560,14 @@ func TestAReplayedOperationIdReturnsTheRecordedResult(t *testing.T) {
 	}
 	defer store.Close()
 
-	if err := store.Remember("c1", kindApply, map[string]string{"created": "ada"}); err != nil {
+	if err := store.Remember("c1", kindApply, map[string]string{"created": "charlotte"}); err != nil {
 		t.Fatal(err)
 	}
 	got, found, err := store.Recall("c1", kindApply)
 	if err != nil || !found {
 		t.Fatalf("recall: %v found=%t", err, found)
 	}
-	if !strings.Contains(string(got), `"created":"ada"`) {
+	if !strings.Contains(string(got), `"created":"charlotte"`) {
 		t.Fatalf("the original outcome must come back, got %s", got)
 	}
 
@@ -604,7 +604,7 @@ func TestTheFakeRefusesAQueryItDoesNotImplement(t *testing.T) {
 	}{
 		{
 			"an unhandled operator",
-			`[{"username":"ada","uid":3001}]`,
+			`[{"username":"charlotte","uid":3001}]`,
 			[]any{[]any{[]any{"username", "~", "ad"}}, map[string]any{"limit": 2}},
 		},
 		{
@@ -620,12 +620,12 @@ func TestTheFakeRefusesAQueryItDoesNotImplement(t *testing.T) {
 			// malformed-filter panic could only fire for a bad filter inside a
 			// well-formed list.
 			"a filter list that is not a list",
-			`[{"username":"ada","uid":3001}]`,
-			[]any{"username = ada", map[string]any{"limit": 2}},
+			`[{"username":"charlotte","uid":3001}]`,
+			[]any{"username = charlotte", map[string]any{"limit": 2}},
 		},
 		{
 			"a malformed filter",
-			`[{"username":"ada","uid":3001}]`,
+			`[{"username":"charlotte","uid":3001}]`,
 			[]any{[]any{[]any{"username", "="}}, map[string]any{"limit": 2}},
 		},
 		{
@@ -635,12 +635,12 @@ func TestTheFakeRefusesAQueryItDoesNotImplement(t *testing.T) {
 			// comparison and this is the path where there is no string.
 			"an operator that is not a string, against an empty fixture",
 			`[]`,
-			[]any{[]any{[]any{"username", nil, "ada"}}, map[string]any{"limit": 2}},
+			[]any{[]any{[]any{"username", nil, "charlotte"}}, map[string]any{"limit": 2}},
 		},
 		{
 			"a fixture that is not a list of rows",
-			`{"username":"ada"}`,
-			[]any{[]any{[]any{"username", "=", "ada"}}, map[string]any{"limit": 2}},
+			`{"username":"charlotte"}`,
+			[]any{[]any{[]any{"username", "=", "charlotte"}}, map[string]any{"limit": 2}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -657,14 +657,14 @@ func TestTheFakeRefusesAQueryItDoesNotImplement(t *testing.T) {
 // And the two shapes that are genuinely answerable still are, so the guard has
 // not been tightened into refusing the queries this add-on actually sends.
 func TestTheFakeStillAnswersTheQueriesTheAddonSends(t *testing.T) {
-	const rows = `[{"username":"ada","uid":3001},{"username":"leo","uid":3002}]`
+	const rows = `[{"username":"charlotte","uid":3001},{"username":"seth","uid":3002}]`
 	// `readSubjects`: no filters, everything.
 	if got := filterRows(rows, []any{[]any{}, map[string]any{"limit": 5001}}); got != rows {
 		t.Errorf("an unfiltered query must answer with everything, got %s", got)
 	}
 	// `lookupOne`: one equality, one row.
 	got := filterRows(rows, []any{[]any{[]any{"uid", "=", int64(3002)}}, map[string]any{"limit": 2}})
-	if !strings.Contains(got, "leo") || strings.Contains(got, "ada") {
+	if !strings.Contains(got, "seth") || strings.Contains(got, "charlotte") {
 		t.Errorf("want only leo, got %s", got)
 	}
 }
@@ -682,7 +682,7 @@ func TestTheOperatingSystemsOwnAccountsAreNotReported(t *testing.T) {
 			{"username":"root","id":1,"uid":0,"locked":false,"smb":false,"groups":[41],"builtin":true},
 			{"username":"nobody","id":2,"uid":65534,"locked":true,"smb":false,"groups":[41],"builtin":true},
 			{"username":"svc-backup","id":3,"uid":999,"locked":false,"smb":false,"groups":[41]},
-			{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}
+			{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}
 		]`,
 		groups: fixtureGroups,
 	}
@@ -692,7 +692,7 @@ func TestTheOperatingSystemsOwnAccountsAreNotReported(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snap.Subjects) != 1 || snap.Subjects[0].Username != "ada" {
+	if len(snap.Subjects) != 1 || snap.Subjects[0].Username != "charlotte" {
 		var got []string
 		for _, s := range snap.Subjects {
 			got = append(got, s.Username)

@@ -43,7 +43,7 @@ func TestHandleGetMissedOnboarding_ReturnsFoundPeople(t *testing.T) {
 	svcFindMissedOnboarding = func(context.Context) (services.MissedOnboardingReport, error) {
 		return services.MissedOnboardingReport{
 			WelcomeBundleConfigured: true,
-			Missed:                  []services.MissedOnboarding{{UserID: "u1", Name: "Jamie", Email: "jamie@example.edu"}},
+			Missed:                  []services.MissedOnboarding{{UserID: "u1", Name: "Julius", Email: "julius@example.edu"}},
 		}, nil
 	}
 
