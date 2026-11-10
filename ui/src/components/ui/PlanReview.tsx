@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
-import { OUTCOME_LABEL, PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE, type AutoRetry } from "@/lib/outcome";
-import { groupPlan, onlyCancels, refusedSeat, splitCancels, type PlanGroup } from "@/lib/plan-groups";
+import { OUTCOME_LABEL, PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE, REVOKE_SENDS_ITSELF_WORD, type AutoRetry } from "@/lib/outcome";
+import { goesItself, groupPlan, onlyCancels, refusedSeat, splitCancels, type PlanGroup } from "@/lib/plan-groups";
 import { Badge, StatusDot } from "@/components/ui/Badge";
 import { FoldHeading } from "@/components/ui/FoldHeading";
 import { NextStep } from "@/components/ui/NextStep";
@@ -96,7 +96,7 @@ export function PlanReview({
             {groups
               ? groups.map((group) => <PlanFold key={group.key} group={group} plan={plan} system={system} />)
               : sortByName(outcomes, (o) => o.name || o.email || "", (o) => o.user_id).map((outcome) => (
-                  <PlanRow key={outcome.user_id} outcome={outcome} applied={plan.applied} />
+                  <PlanRow key={outcome.user_id} outcome={outcome} applied={plan.applied} word={queuedWord(outcome, plan.op, auto, system)} />
                 ))}
             {/* #32: the requester, left out of anything that takes access away. */}
             {plan.excluded?.map((left) => (
@@ -132,13 +132,24 @@ export function PlanReview({
   );
 }
 
-function PlanRow({ outcome, applied }: { outcome: BulkOutcome; applied: boolean }) {
+/**
+ * A queued row's word once the plan has run, by who sends it (goesItself, the
+ * reading the folds and the result sentence use): on its way when Syndra sends
+ * it, waiting for you when you do, not yet in the system while that is unknown.
+ */
+function queuedWord(outcome: BulkOutcome, op: BulkPlan["op"], auto: AutoRetry, system: string): string {
+  const goes = goesItself(outcome, op, auto);
+  if (goes === null) return `Not in ${system} yet`;
+  return goes ? REVOKE_SENDS_ITSELF_WORD : OUTCOME_LABEL.queued;
+}
+
+function PlanRow({ outcome, applied, word }: { outcome: BulkOutcome; applied: boolean; word: string }) {
   // Before the apply, a queued row forecasts ("Will wait for you to send");
-  // once the plan has run it is true, and says so in the operator's words.
+  // once the plan has run it is true, and says who sends it (queuedWord).
   const forecast = outcome.effect === "queued" && !applied;
   const label =
     outcome.effect === "queued" && applied
-      ? OUTCOME_LABEL.queued
+      ? word
       : (PLAN_EFFECT_LABEL[outcome.effect] ?? PLAN_EFFECT_LABEL.no_change);
   const tone = PLAN_EFFECT_TONE[outcome.effect] ?? PLAN_EFFECT_TONE.no_change;
 
