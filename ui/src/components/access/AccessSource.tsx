@@ -141,19 +141,6 @@ export function SourceChip({ kind }: { kind: SourceKind }) {
  * height. Never a wall of chips.
  */
 /**
- * True when NOTHING that gives this role has been sent yet.
- *
- * Deliberately "every", not "some". A role held twice — delivered directly and
- * queued by a bundle — is one the person genuinely has, and marking that row as
- * waiting would be as wrong in the other direction. The row is only untrue when
- * every source of it is still in the queue.
- */
-export function nothingSentYet(reasons: RoleReason[] | undefined | null): boolean {
-  const ordered = orderedSources(reasons);
-  return ordered.length > 0 && ordered.every((reason) => reason.queued === true);
-}
-
-/**
  * When the role was given and queued: the earliest time among the sources still
  * waiting, which is when someone decided it. Absent when none carries one.
  */

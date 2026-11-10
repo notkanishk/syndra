@@ -1,5 +1,6 @@
 "use client";
 
+import type { RoleStanding } from "@/lib/standing";
 import { settleIndicators } from "@/lib/queries/useIndicators";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
@@ -103,6 +104,13 @@ export interface UserAccessProject {
    * a checked absence and may be rendered as one; null may not.
    */
   observed_role_keys: string[] | null;
+  /**
+   * Whether the person holds each role on this project, keyed by role key and
+   * covering every role in the lists above and every observed one. The one
+   * answer to render (lib/standing.ts); null for a role whose absence can't be
+   * concluded.
+   */
+  standings?: Record<string, RoleStanding | null>;
 }
 
 export interface UserAccessView {

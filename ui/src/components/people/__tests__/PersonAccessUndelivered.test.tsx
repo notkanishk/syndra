@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { RoleStanding } from "@/lib/standing";
 import { PersonAccess } from "@/components/people/PersonAccess";
 
 /**
@@ -66,7 +67,8 @@ vi.mock("@/lib/queries/useRequests", () => ({
   useDecideRequest: () => ({ isPending: false, mutateAsync: vi.fn() }),
 }));
 
-function project(reasons: Array<Record<string, unknown>>) {
+// The backend's standing for the one role (RoleStanding); the page only renders it.
+function project(reasons: Array<Record<string, unknown>>, standing: RoleStanding | null = "held") {
   return [
     {
       project_id: "p-audio",
@@ -76,6 +78,7 @@ function project(reasons: Array<Record<string, unknown>>) {
       ],
       derived_roles: [],
       effective_role_keys: ["community"],
+      standings: { community: standing },
     },
   ];
 }
@@ -102,7 +105,7 @@ describe("a role whose grant has not been sent", () => {
   it("says so, in the slot that otherwise dates the access", () => {
     state.projects = project([
       { kind: "bundle", bundle_id: "b1", bundle_name: "Ops Admin", description: "", queued: true },
-    ]);
+    ], "waiting");
     renderPerson();
 
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending?person=u1");
@@ -121,7 +124,7 @@ describe("a role whose grant has not been sent", () => {
         queued: true,
         queued_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
       },
-    ]);
+    ], "waiting");
     renderPerson();
 
     expect(screen.getByText("Given 2h ago")).toBeInTheDocument();
@@ -174,7 +177,7 @@ describe("the project header when Zitadel has no grant", () => {
     state.advanced = true;
     state.projects = project([
       { kind: "bundle", bundle_id: "b1", bundle_name: "Ops Admin", description: "", queued: true },
-    ]);
+    ], "waiting");
     renderPerson();
 
     expect(screen.getByText(/Not sent to Zitadel yet/i)).toBeInTheDocument();
@@ -188,7 +191,7 @@ describe("the project header when Zitadel has no grant", () => {
     state.advanced = true;
     state.projects = project([
       { kind: "bundle", bundle_id: "b1", bundle_name: "Ops Admin", description: "" },
-    ]);
+    ], "not_held");
     renderPerson();
 
     // A link to the place, not a sentence naming it.
@@ -207,7 +210,7 @@ describe("a role Syndra records that Zitadel does not have", () => {
     state.zitadel = [];
     state.projects = project([
       { kind: "bundle", bundle_id: "b1", bundle_name: "Ops Admin", description: "" },
-    ]);
+    ], "not_held");
     renderPerson();
 
     expect(screen.getByText("Not in Zitadel")).toBeInTheDocument();
@@ -220,10 +223,10 @@ describe("a role Syndra records that Zitadel does not have", () => {
     state.unreachable = true;
     state.projects = project([
       { kind: "bundle", bundle_id: "b1", bundle_name: "Ops Admin", description: "" },
-    ]);
+    ], null);
     renderPerson();
 
-    expect(screen.getByText(/Could not check Zitadel/i)).toBeInTheDocument();
+    expect(screen.getByText(/Couldn’t check Zitadel/i)).toBeInTheDocument();
     expect(screen.queryByText("Not in Zitadel")).toBeNull();
   });
 });
@@ -252,6 +255,38 @@ describe("a role Zitadel confirms", () => {
   });
 });
 
+describe("the two states between given and held, and held on the backend's word", () => {
+  const bundle = [{ kind: "bundle", bundle_id: "b1", bundle_name: "Ops Admin", description: "" }];
+
+  it("says a role Zitadel accepted and has not shown back yet", () => {
+    state.projects = project(bundle, "sent");
+    renderPerson();
+
+    expect(screen.getByText("Sent, not seen back yet")).toBeInTheDocument();
+    expect(screen.queryByText("Not in Zitadel")).toBeNull();
+    expect(screen.queryByText("No end date")).toBeNull();
+  });
+
+  it("says a role being removed is being removed, not held and not missing", () => {
+    state.projects = project(bundle, "removing");
+    renderPerson();
+
+    expect(screen.getByText("Being removed")).toBeInTheDocument();
+    expect(screen.queryByText("In Zitadel")).toBeNull();
+    expect(screen.queryByText("Not in Zitadel")).toBeNull();
+  });
+
+  // The look-again read is a trigger, not a source: its payload never decides a row.
+  it("renders held from the standing even when the look-again payload lacks the role", () => {
+    state.zitadel = [];
+    state.projects = project(bundle, "held");
+    renderPerson();
+
+    expect(screen.getByText("In Zitadel")).toBeInTheDocument();
+    expect(screen.queryByText("Not in Zitadel")).toBeNull();
+  });
+});
+
 describe("the group label above a role Syndra decided", () => {
   // "Granted" sat above a row reading "Waiting for you to send" — contradictory.
   // The per-row state carries the truth now; the label just names the group.
@@ -267,7 +302,7 @@ describe("the group label above a role Syndra decided", () => {
 describe("a role whose standing Zitadel has not answered yet", () => {
   it("says it is checking, never nothing", () => {
     state.loading = true;
-    state.projects = project([{ kind: "direct", description: "" }]);
+    state.projects = project([{ kind: "direct", description: "" }], null);
     renderPerson();
 
     expect(screen.getByText("Checking Zitadel…")).toBeInTheDocument();

@@ -14,13 +14,13 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
 import {
   givenAt,
-  nothingSentYet,
   orderedSources,
   sourceQualifier,
   type RoleReason,
 } from "@/components/access/AccessSource";
 import { Withheld } from "@/components/ui/Withheld";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
+import { holds, onItsWay as onItsWayStanding, standingWords, type Standing } from "@/lib/standing";
 import { useMyChanges, type MyChange } from "@/lib/queries/useMyChanges";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
@@ -67,13 +67,10 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   // Zitadel's — two answers to one question, disagreeing in front of the
   // person whose access it is.
   const observation = access.data?.observation;
-  const standing = (project: (typeof projects)[number], roleKey: string): Standing => {
-    // Absent, not empty: nothing has been observed yet, so nothing may be
-    // reported as missing.
-    if (!project.observed_role_keys || !observation?.read_at) return "checking";
-    if (project.observed_role_keys.includes(roleKey)) return "held";
-    return observation.current === false || observation.truncated ? "unreachable" : "missing";
-  };
+  // Whether they hold a role is the backend's answer (lib/standing.ts), only
+  // read here. A role it says nothing about has no standing: not checked.
+  const standing = (project: (typeof projects)[number], roleKey: string): Standing =>
+    project.standings?.[roleKey] ?? null;
 
   if (access.error) {
     return (
@@ -127,13 +124,13 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   const heldByProject = new Map(
     projects.map((project) => [
       project.project_id,
-      // What Zitadel shows too: holding is observed, so a role they hold with
-      // no record of why is still held.
-      new Set([
-        ...project.source_roles.map((role) => role.role_key),
-        ...project.derived_roles.map((role) => role.role_key),
-        ...(project.observed_role_keys ?? []),
-      ]),
+      // Holding is observed, and a role on its way counts as had (owner, 10 Nov):
+      // so one they hold with no record of why is marked too.
+      new Set(
+        Object.entries(project.standings ?? {})
+          .filter(([, s]) => holds(s) || onItsWayStanding(s))
+          .map(([roleKey]) => roleKey),
+      ),
     ]),
   );
 
@@ -156,10 +153,10 @@ export function MemberAccess({ session }: { session: SessionUser }) {
     return { label: project ? `${role} in ${project}` : role, projectId, project };
   };
   const held = (projectId: string, roleKey: string) =>
-    projects.find((p) => p.project_id === projectId)?.observed_role_keys?.includes(roleKey) ?? false;
+    holds(projects.find((p) => p.project_id === projectId)?.standings?.[roleKey]);
   const today = (iso: string) => now !== null && new Date(iso).toDateString() === now.toDateString();
-  // Roles that are on their way, from either answer: an approval in the feed,
-  // or a grant the row itself says hasn't been sent.
+  // Roles that are on their way, from either answer: an approval in the feed
+  // (a request, not a role's holding), or a role whose standing says so.
   const onItsWay = new Map<string, NamedRole>();
   waiting.forEach((change) => onItsWay.set(`${change.project_id}/${change.role_key}`, named(change.project_id, change.role_key)));
   const missing = new Map<string, NamedRole>();
@@ -167,8 +164,9 @@ export function MemberAccess({ session }: { session: SessionUser }) {
     for (const role of [...project.source_roles, ...project.derived_roles]) {
       const key = `${project.project_id}/${role.role_key}`;
       if (waiting.has(key)) continue;
-      if (nothingSentYet(role.reasons)) onItsWay.set(key, named(project.project_id, role.role_key));
-      else if (standing(project, role.role_key) === "missing") missing.set(key, named(project.project_id, role.role_key));
+      const s = standing(project, role.role_key);
+      if (onItsWayStanding(s)) onItsWay.set(key, named(project.project_id, role.role_key));
+      else if (s === "not_held") missing.set(key, named(project.project_id, role.role_key));
     }
   }
   const line = now
@@ -361,12 +359,14 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                     operator's People page calls this "unexplained"; the person
                     holding it should not be the only one who cannot see it. */}
                 {sortByName(
+                  // Only to LIST them; what each says comes from its standing.
                   (project.observed_role_keys ?? []).filter((roleKey) => !project.effective_role_keys.includes(roleKey)),
                   (roleKey) => roleNameIn(project.project_id, roleKey),
                   (roleKey) => roleKey,
                 ).map((roleKey) => (
                     <div key={`held-${roleKey}`} className="row-divider px-5 py-3">
                       <span className="text-[15px] font-semibold">{roleNameIn(project.project_id, roleKey)}</span>
+                      <StandingMark standing={standing(project, roleKey)} />
                     </div>
                   ))}
               </Card>
@@ -406,16 +406,11 @@ export function MemberAccess({ session }: { session: SessionUser }) {
  * only "Not there yet" (after a complete read that lacks it) and "Couldn't
  * check" (a partial or failed read cannot conclude an absence) speak.
  */
-type Standing = "held" | "missing" | "checking" | "unreachable";
-
 function StandingMark({ standing }: { standing: Standing }) {
-  if (standing === "missing") {
-    return <span className="text-[13.5px] font-semibold text-warn-text">Not there yet</span>;
-  }
-  if (standing === "unreachable") {
-    return <span className="text-[13.5px] text-faint">Couldn&rsquo;t check</span>;
-  }
-  return null;
+  const words = standingWords(standing, "member");
+  if (!words) return null;
+  const warn = standing === "not_held" || standing === "removing";
+  return <span className={`text-[13.5px] ${warn ? "font-semibold text-warn-text" : "text-faint"}`}>{words}</span>;
 }
 
 /**
@@ -455,9 +450,9 @@ function RoleRow({
       <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
         <span className="text-[15px] font-semibold">{name}</span>
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {waiting || nothingSentYet(reasons) ? (
+          {waiting || onItsWayStanding(standing) ? (
             // When it was queued, from the record; the feed's time only when the read has none.
-            <OnItsWay at={givenAt(reasons) ?? waiting?.at} />
+            <OnItsWay at={givenAt(reasons) ?? waiting?.at} sent={standing === "sent"} />
           ) : (
             <>
               <Reason strongest={strongest} expiresAt={ends ? expiresAt : null} endKnown={endKnown} />
@@ -493,7 +488,7 @@ function RoleRow({
  * reaching the sign-in system) is the operator's to read; the member's
  * question is only whether to expect it.
  */
-function OnItsWay({ at }: { at?: string }) {
+function OnItsWay({ at, sent }: { at?: string; sent?: boolean }) {
   return (
     <span className="flex flex-col gap-0.5">
       <span className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-muted">
@@ -501,7 +496,8 @@ function OnItsWay({ at }: { at?: string }) {
         On its way
       </span>
       <span className="pl-[15px] text-[12.5px] text-faint">
-        {at ? `Given ${givenWhen(at)}. ` : ""}It starts working once makerspace staff send it.
+        {at ? `Given ${givenWhen(at)}. ` : ""}
+        {sent ? "Syndra has sent it. It should show up soon." : "It starts working once makerspace staff send it."}
       </span>
     </span>
   );

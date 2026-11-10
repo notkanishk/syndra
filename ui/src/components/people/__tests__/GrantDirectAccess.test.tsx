@@ -21,6 +21,8 @@ const state = vi.hoisted(() => ({
   grants: [] as unknown[],
   queued: [] as string[],
   queuedAt: undefined as string | undefined,
+  // The backend's standing for the operator role; the dialog only reads it.
+  standing: undefined as string | undefined,
   terms: undefined as Array<{ name: string; start: string; end: string }> | undefined,
   // What the planner answers (GET /users/{id}/plan), and the reads it was asked.
   plan: undefined as unknown as ActPlan,
@@ -85,7 +87,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
       projects: [
         {
           project_id: "p1",
-          observed_role_keys: [],
+          standings: state.standing ? { operator: state.standing } : {},
           source_roles: state.queued.map((key) => ({ role_key: key, reasons: [{ kind: "direct", description: "", queued: true, queued_at: state.queuedAt }] })),
           derived_roles: [],
         },
@@ -99,6 +101,7 @@ beforeEach(() => {
   state.grants = [];
   state.queued = [];
   state.queuedAt = undefined;
+  state.standing = undefined;
   state.terms = undefined;
   state.plan = actPlan();
   state.planFails = false;
@@ -149,6 +152,7 @@ describe("GrantDirectAccess · choosing the role", () => {
 
   it("says a role already held with no end changes nothing, and will not send it", () => {
     state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: null }];
+    state.standing = "held";
     open();
     fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
     expect(screen.getByText("Has this")).toBeInTheDocument();
@@ -158,6 +162,7 @@ describe("GrantDirectAccess · choosing the role", () => {
 
   it("a role given and not yet sent says so, with the way to send it", () => {
     state.queued = ["operator"];
+    state.standing = "waiting";
     open();
     fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
     expect(screen.getByText("Given")).toBeInTheDocument();
@@ -167,6 +172,7 @@ describe("GrantDirectAccess · choosing the role", () => {
 
   it("says when it was given, from the time the read carries, beside the way to send it", () => {
     state.queued = ["operator"];
+    state.standing = "waiting";
     state.queuedAt = new Date(Date.now() - 2 * 3_600_000).toISOString();
     open();
     fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
@@ -179,6 +185,7 @@ describe("GrantDirectAccess · choosing the role", () => {
     // outbox; the row said "Has this until 31 Dec · Extend" for access not yet in Zitadel.
     state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: "2026-12-18T12:00:00Z" }];
     state.queued = ["operator"];
+    state.standing = "waiting";
     state.queuedAt = new Date(Date.now() - 60_000).toISOString();
     open();
     fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
@@ -188,8 +195,37 @@ describe("GrantDirectAccess · choosing the role", () => {
     expect(screen.queryByRole("link", { name: /Extend/ })).toBeNull();
   });
 
+  it("a role sent and not seen back yet is on its way, with no end and no Extend", () => {
+    state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: "2026-12-18T12:00:00Z" }];
+    state.standing = "sent";
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    expect(screen.getByText("Sent, not seen back yet")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).toBeNull();
+    expect(screen.queryByText(/Has this until/)).toBeNull();
+    expect(screen.getByRole("radio", { name: /Operator/ })).toBeDisabled();
+  });
+
+  it("a role being removed says so and can be chosen again", () => {
+    state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: null }];
+    state.standing = "removing";
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    expect(screen.getByText("Being removed")).toBeInTheDocument();
+    expect(screen.queryByText("Has this")).toBeNull();
+    expect(screen.getByRole("radio", { name: /Operator/ })).toBeEnabled();
+  });
+
+  it("a role the backend can't place is not marked held, whatever the grants say", () => {
+    state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: null }];
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    expect(screen.queryByText("Has this")).toBeNull();
+  });
+
   it("a role held with an end is listed, not pickable, and offers Extend", () => {
     state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: "2026-12-18T12:00:00Z" }];
+    state.standing = "held";
     open();
     fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
     expect(screen.getByText("Has this until 18 Dec")).toBeInTheDocument();

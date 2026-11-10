@@ -1,5 +1,6 @@
 "use client";
 
+import { standingWords } from "@/lib/standing";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { FoldHeading } from "@/components/ui/FoldHeading";
@@ -25,8 +26,10 @@ export type RoleNote =
   /** Held until a date. A member can pick it (Ask to keep it); an operator is offered Extend. */
   | { kind: "until"; until: string }
   | { kind: "asked"; at?: string }
-  /** Given, and not yet sent to Zitadel. */
-  | { kind: "onway"; at?: string };
+  /** Given, and not yet sent to Zitadel (or sent, `sent`, and not seen back yet). */
+  | { kind: "onway"; at?: string; sent?: boolean }
+  /** A removal is on its way and Zitadel still shows it: choosable, the backend treats it as not had. */
+  | { kind: "removing" };
 
 export interface PickerRole {
   key: string;
@@ -72,7 +75,7 @@ export const roleId = (placeId: string, roleKey: string) => `${placeId}:${roleKe
 
 /** Held, asked for and on its way can't be chosen; one with an end can, for a member. */
 function pickable(role: PickerRole, audience: "member" | "operator"): boolean {
-  if (role.note.kind === "none") return true;
+  if (role.note.kind === "none" || role.note.kind === "removing") return true;
   return role.note.kind === "until" && audience === "member";
 }
 
@@ -255,6 +258,8 @@ function noteSeat(role: PickerRole, audience: "member" | "operator", projectId: 
     case "asked":
       return n.at ? `Asked ${formatAgoShort(n.at)}` : "Asked";
     case "onway":
+      // Sent is nothing for the operator to send: Zitadel has it, and hasn't shown it back.
+      if (operator && n.sent) return standingWords("sent", "operator");
       return operator ? (
         <>
           <span>{n.at ? `Given ${formatAgoShort(n.at)}` : "Given"}</span>
@@ -263,6 +268,8 @@ function noteSeat(role: PickerRole, audience: "member" | "operator", projectId: 
       ) : (
         "On its way"
       );
+    case "removing":
+      return standingWords("removing", audience);
     default:
       if (!operator || role.people === undefined) return undefined;
       return plural(role.people, "person", "people");

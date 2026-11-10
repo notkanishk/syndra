@@ -10,8 +10,9 @@ const MOST = 3;
  * People holding each role that day, by map node. The backend keys them
  * "project_id:role_key"; the map knows roles by node id.
  */
-export function pastHeld(m: Model, rolePeople: Record<string, number>): Map<string, number> {
+export function pastHeld(m: Model, rolePeople: Record<string, number> | null): Map<string, number> {
   const held = new Map<string, number>();
+  if (!rolePeople) return held;
   for (const [key, n] of Object.entries(rolePeople)) {
     const cut = key.indexOf(":");
     const id = cut > 0 ? m.roleId(key.slice(0, cut), key.slice(cut + 1)) : null;
@@ -47,7 +48,9 @@ export function asOfPanel(
     };
   }
 
-  const changed = Array.from(then, ([id, was]) => ({ id, was, now: today.held.get(id) }))
+  // Zitadel was never read that day: no number to set against today's.
+  const notChecked = read.role_people === null;
+  const changed = notChecked ? [] : Array.from(then, ([id, was]) => ({ id, was, now: today.held.get(id) }))
     .filter((r): r is { id: string; was: number; now: number } => r.now != null && r.now !== r.was)
     .sort((a, b) => Math.abs(b.now - b.was) - Math.abs(a.now - a.was));
 
@@ -59,6 +62,9 @@ export function asOfPanel(
     lines: [
       ...(read.day !== asked
         ? [{ tone: "accent" as const, text: `The nearest picture is from ${dayLabel(read.day)}.` }]
+        : []),
+      ...(notChecked
+        ? [{ tone: "ink" as const, text: "Who held each role that day wasn't checked: Zitadel hadn't been read yet." }]
         : []),
       ...changed.slice(0, MOST).map((r) => ({
         tone: "accent" as const,

@@ -4,7 +4,8 @@ import { useState } from "react";
 
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
 import { type PickerPlace, type RoleNote } from "@/components/bundles/RolePickerOne";
-import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
+import { givenAt } from "@/components/access/AccessSource";
+import { onItsWay } from "@/lib/standing";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
@@ -78,17 +79,21 @@ function GrantDirectAccessOpen({
   // What the person holds already, so giving it again is said before the click,
   // in the row's note seat. A role given and not yet sent is on its way first:
   // it isn't theirs in Zitadel yet, so an end or an Extend would describe a
-  // grant that hasn't arrived (A-04 §12.4). Then a direct grant's own end; then
-  // what Zitadel shows is held with no end Syndra knows of.
+  // grant that hasn't arrived (A-04 §12.4). Then a role being removed; then a
+  // direct grant's own end; then what Zitadel shows is held with no end Syndra
+  // knows of. The standing is the backend's; nothing here decides holding.
   const heldGrants = useUserGrants(userId);
   const heldAccess = useUserAccess(userId);
   const noteOf = (project: string, key: string): RoleNote => {
     const g = (heldGrants.data ?? []).find((x) => x.project_id === project && x.role_key === key);
     const entry = (heldAccess.data?.projects ?? []).find((p) => p.project_id === project);
     const queued = [...(entry?.source_roles ?? []), ...(entry?.derived_roles ?? [])].find((r) => r.role_key === key);
-    if (queued && nothingSentYet(queued.reasons)) return { kind: "onway", at: givenAt(queued.reasons) };
-    if (g?.expires_at) return { kind: "until", until: g.expires_at };
-    if (g || entry?.observed_role_keys?.includes(key)) return { kind: "held" };
+    // Whether they have it is the backend's answer (lib/standing.ts), only read here.
+    const standing = entry?.standings?.[key];
+    if (onItsWay(standing)) return { kind: "onway", at: givenAt(queued?.reasons), sent: standing === "sent" };
+    if (standing === "removing") return { kind: "removing" };
+    if (standing === "held" && g?.expires_at) return { kind: "until", until: g.expires_at };
+    if (standing === "held") return { kind: "held" };
     return { kind: "none" };
   };
   const places: PickerPlace[] = (projects.data ?? []).map((entry) => ({

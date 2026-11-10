@@ -9,7 +9,6 @@ import {
   AccessSourceList,
   NotSentYet,
   givenAt,
-  nothingSentYet,
   orderedSources,
   sourceQualifier,
   type RoleReason,
@@ -50,6 +49,7 @@ import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useSeededUser } from "@/lib/queries/seed";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
+import { standingWords, type RoleStanding } from "@/lib/standing";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { EXTEND_DAYS, FORECAST, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useExtend } from "@/lib/useExtend";
@@ -221,19 +221,6 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
   const upstreamGrants = useUpstreamUserGrants(userId);
   const zitadelGrantByProject = useMemo(
     () => new Map((upstreamGrants.data?.items ?? []).map((grant) => [grant.projectId, grant.id])),
-    [upstreamGrants.data],
-  );
-  // The role keys, which the map above threw away. Per-PROJECT presence cannot
-  // answer a question asked per role: a grant exists for the project while the
-  // one role this row is about is missing from it, and the page said "Granted".
-  const zitadelRolesByProject = useMemo(
-    () =>
-      new Map(
-        (upstreamGrants.data?.items ?? []).map((grant) => [
-          grant.projectId,
-          new Set(grant.roleKeys ?? []),
-        ]),
-      ),
     [upstreamGrants.data],
   );
   // Three states, never two. "Zitadel does not have it" and "Syndra could not
@@ -546,8 +533,8 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                     // Drift for the first is a wrong turn that ends in an
                     // empty screen — worse than saying nothing, because they
                     // conclude the drift report is broken.
-                    unsent={[...project.source_roles, ...project.derived_roles].every((role) =>
-                      nothingSentYet(role.reasons),
+                    unsent={[...project.source_roles, ...project.derived_roles].every(
+                      (role) => project.standings?.[role.role_key] === "waiting",
                     )}
                   />
                 </div>
@@ -556,7 +543,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                   <RoleGroup
                     userId={userId}
                     confirmation={confirmation}
-                    inZitadel={zitadelRolesByProject.get(project.project_id)}
+                    standings={project.standings}
                     label="Given"
                     roles={project.source_roles}
                     projectId={project.project_id}
@@ -571,7 +558,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                   <RoleGroup
                     userId={userId}
                     confirmation={confirmation}
-                    inZitadel={zitadelRolesByProject.get(project.project_id)}
+                    standings={project.standings}
                     label="Automatic"
                     roles={project.derived_roles}
                     projectId={project.project_id}
@@ -777,7 +764,7 @@ function ZitadelGrantId({
 }) {
   if (loading) return null;
   if (!id) {
-    if (unsent) return <span className="text-[13px] text-faint">Not sent to Zitadel yet</span>;
+    if (unsent) return <span className="text-[13px] text-faint">{standingWords("waiting", "operator")}</span>;
     if (isOperator) {
       return <ArrowLink href={driftHref({ project: projectId, user: userId })}>Side by side on Drift</ArrowLink>;
     }
@@ -846,7 +833,7 @@ function RoleGroup({
   userId,
   label,
   confirmation,
-  inZitadel,
+  standings,
   roles,
   projectId,
   projectName,
@@ -864,8 +851,8 @@ function RoleGroup({
   label: "Given" | "Automatic";
   /** Whether Zitadel could be asked at all, and what it said. */
   confirmation: Confirmation;
-  /** The roles Zitadel reports for this project. Absent when it was not asked. */
-  inZitadel: Set<string> | undefined;
+  /** Whether they hold each role here, worked out by the backend; only rendered. */
+  standings: Record<string, RoleStanding | null> | undefined;
   roles: AccessRole[];
   projectId: string;
   projectName: string;
@@ -897,15 +884,12 @@ function RoleGroup({
         // source, and a dated grant of a role a bundle also gives never ends.
         const expires = role.ends ?? null;
         const remaining = daysUntil(expires);
-        // Nothing that gives this role has left the queue, so the row is a
-        // record of a decision and not a description of their access. It takes
-        // the status slot outright: an expiry date on access that does not
-        // exist yet is answering a question nobody can ask.
-        const waiting = nothingSentYet(role.reasons);
-        // What Zitadel says, which is the only thing that decides whether this
-        // person can actually open the door. Syndra's tables say what was
-        // DECIDED; they were being rendered as though they said what is true.
-        const standing = confirmation === "read" ? Boolean(inZitadel?.has(role.role_key)) : null;
+        // What Zitadel says decides whether this person can actually open the
+        // door, and the backend works it out (lib/standing.ts): this only
+        // renders it. A role not sent yet is a record of a decision and
+        // takes the status slot outright: an expiry date on access that does
+        // not exist yet is answering a question nobody can ask.
+        const standing = standings?.[role.role_key] ?? null;
         const verb = strongest?.queued ? "Cancel" : strongest?.kind === "direct" ? "Revoke" : "Remove";
 
         return (
@@ -930,27 +914,29 @@ function RoleGroup({
             </div>
 
             <span className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]">
-              {waiting ? (
+              {standing === "waiting" ? (
                 <>
                   {givenAt(role.reasons) && (
                     <span className="text-muted">Given {formatAgoShort(givenAt(role.reasons))}</span>
                   )}
                   <NotSentYet person={userId} />
                 </>
-              ) : standing === false ? (
+              ) : standing === "sent" ? (
+                <StatusSeat tone="neutral" word={standingWords(standing, "operator")!} />
+              ) : standing === "removing" ? (
+                <StatusSeat tone="warn" word={standingWords(standing, "operator")!} />
+              ) : standing === "not_held" ? (
                 // Recorded here, absent there, and nothing queued to carry it.
                 // This is the state the whole page exists to make visible: the
                 // one time it happened, every element said "Granted" and only a
                 // note at the top of the project said otherwise.
-                <StatusSeat tone="danger" word="Not in Zitadel" />
-              ) : standing === null && confirmation === "unreachable" ? (
-                <StatusSeat tone="warn" word="Could not check Zitadel" />
-              ) : standing === null ? (
-                // confirmation === "unknown": still loading, or the read has
-                // not settled yet. Never nothing here — an unlabeled blank
-                // reads as the row having no status at all, which is one more
-                // wrong reading this page exists to rule out.
+                <StatusSeat tone="danger" word={standingWords(standing, "operator")!} />
+              ) : standing === null && confirmation === "unknown" ? (
+                // The look-again read is still out. Never nothing here — an
+                // unlabeled blank reads as the row having no status at all.
                 <StatusSeat tone="neutral" word="Checking Zitadel…" />
+              ) : standing === null ? (
+                <StatusSeat tone="warn" word={standingWords(null, "operator")!} />
               ) : (
                 <>
                   {/* The positive mark. The truth is Zitadel, so a role it
@@ -958,7 +944,7 @@ function RoleGroup({
                       negative states would otherwise complain. The read time
                       is on the read line: every role was read from the same
                       observation. */}
-                  <StatusSeat tone="healthy" word="In Zitadel" />
+                  <StatusSeat tone="healthy" word={standingWords("held", "operator")!} />
                   {expires ? (
                     <span className="font-semibold text-warn-text">
                       Ends {formatShortDate(expires)}

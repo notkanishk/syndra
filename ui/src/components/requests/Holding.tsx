@@ -6,7 +6,8 @@ import { askLengthForMember, askLengthForOperator, formatShortDate } from "@/lib
 import { civilDay } from "@/lib/time";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestsMine } from "@/lib/queries/useRequests";
-import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
+import { onItsWay } from "@/lib/standing";
+import { givenAt } from "@/components/access/AccessSource";
 import { useMyChanges } from "@/lib/queries/useMyChanges";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { RuleConsentFailed } from "@/components/requests/RuleConsent";
@@ -194,7 +195,9 @@ export type AskState =
   | { kind: "for_good" }
   | { kind: "until"; until: string }
   /** Given, and not yet sent to Zitadel. */
-  | { kind: "onway"; at?: string };
+  | { kind: "onway"; at?: string }
+  /** A removal is on its way and Zitadel still shows it; it can be asked for again. */
+  | { kind: "removing" };
 
 /**
  * What a person already has, or has asked for, of each role: the dialog's
@@ -218,20 +221,22 @@ export function useAskState(userId: string) {
     const role = [...(project?.source_roles ?? []), ...(project?.derived_roles ?? [])].find(
       (r) => r.role_key === roleKey,
     );
-    if (role && nothingSentYet(role.reasons)) {
+    // Whether they have it is the backend's answer (lib/standing.ts), only read here.
+    const standing = project?.standings?.[roleKey];
+    if (onItsWay(standing)) {
       // When it was queued, from the access read; failing that, the newest
       // thing that gave it: when the member was told.
-      const at = givenAt(role.reasons) ?? (changes.data ?? [])
+      const at = givenAt(role?.reasons) ?? (changes.data ?? [])
         .filter((c) => c.project_id === projectId && c.role_key === roleKey && (c.kind === "given" || c.waiting))
         .map((c) => c.at)
         .sort()
         .pop();
       return { kind: "onway", at };
     }
+    if (standing === "removing") return { kind: "removing" };
     // After "on its way": an end on a grant that hasn't reached Zitadel isn't theirs to keep yet.
-    if (grant?.expires_at) return { kind: "until", until: grant.expires_at };
-    const observed = project?.observed_role_keys?.includes(roleKey);
-    if (grant || observed) return { kind: "for_good" };
+    if (standing === "held" && grant?.expires_at) return { kind: "until", until: grant.expires_at };
+    if (standing === "held") return { kind: "for_good" };
     return { kind: "none" };
   };
 }

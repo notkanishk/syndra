@@ -126,10 +126,20 @@ export function useGrantRemovalPreview(userId: string, grantId: string, roles?: 
   });
 }
 
+/**
+ * Asks Zitadel again about one person. The read re-observes them into the store
+ * the access view's standings are worked out from, so on success the view is
+ * refetched; this payload is never what a screen renders holding from.
+ */
 export function useUpstreamUserGrants(userId: string | null) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: userId ? KEYS.userGrants(userId) : ["upstream", "users", "none", "grants"],
-    queryFn: () => page<UpstreamGrant>(`/zitadel/users/${userId}/grants?limit=${PAGE_SIZE}`),
+    queryFn: async () => {
+      const read = await page<UpstreamGrant>(`/zitadel/users/${userId}/grants?limit=${PAGE_SIZE}`);
+      void qc.invalidateQueries({ queryKey: ["users", "access", userId] });
+      return read;
+    },
     enabled: Boolean(userId),
     retry: false,
   });

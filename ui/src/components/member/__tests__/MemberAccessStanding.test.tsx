@@ -56,7 +56,16 @@ function view(
   observedRoleKeys: string[] | undefined,
   extra: Record<string, unknown> = {},
   reasons: Record<string, unknown> = {},
+  standings?: Record<string, string | null>,
 ) {
+  // What the backend works out per role, for the two roles on the page: the
+  // page only renders it. A queued give waits; otherwise Zitadel's own
+  // answer, and no answer from a read that never finished.
+  const standingOf = (roleKey: string): string | null => {
+    if (reasons.queued) return "waiting";
+    if (observedRoleKeys?.includes(roleKey)) return "held";
+    return observation?.read_at && observation.current !== false && !observation.truncated ? "not_held" : null;
+  };
   return {
     isLoading: false,
     error: null,
@@ -73,6 +82,12 @@ function view(
           ],
           derived_roles: [],
           observed_role_keys: observedRoleKeys,
+          standings: {
+            laser: standingOf("laser"),
+            mill: standingOf("mill"),
+            ...Object.fromEntries((observedRoleKeys ?? []).filter((k) => k !== "laser" && k !== "mill").map((k) => [k, "held"])),
+            ...standings,
+          },
         },
       ],
       bundles: [],
@@ -154,6 +169,31 @@ describe("MemberAccess standing", () => {
     expect(screen.getByText("Kiln")).toBeTruthy();
     // Said nothing about who gave it: unknown is silent (G17).
     expect(screen.queryByText(/Nobody wrote down/)).toBeNull();
+  });
+
+  it("says a role sent and not seen back yet is on its way, without telling a member to send", () => {
+    reset();
+    access.value = view(COMPLETE, ["mill"], {}, {}, { laser: "sent" });
+    render(<MemberAccess session={session} />);
+    expect(screen.getAllByText("On its way")).toHaveLength(1);
+    expect(screen.getByText("Syndra has sent it. It should show up soon.")).toBeTruthy();
+    expect(screen.queryByText("It starts working once makerspace staff send it.")).toBeNull();
+    expect(screen.queryByText("Not there yet")).toBeNull();
+  });
+
+  it("says a role being removed is being removed, and still holds it", () => {
+    reset();
+    access.value = view(COMPLETE, ["laser", "mill"], {}, {}, { laser: "removing" });
+    render(<MemberAccess session={session} />);
+    expect(screen.getAllByText("Being removed")).toHaveLength(1);
+    expect(screen.queryByText("Not there yet")).toBeNull();
+  });
+
+  it("marks the role as not there when only the standing says so, whatever the observed list holds", () => {
+    reset();
+    access.value = view(COMPLETE, ["laser", "mill"], {}, {}, { mill: "not_held" });
+    render(<MemberAccess session={session} />);
+    expect(screen.getAllByText("Not there yet")).toHaveLength(1);
   });
 
   // Members never see the operator's step: they can't send.

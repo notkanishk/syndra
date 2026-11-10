@@ -61,6 +61,7 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
           ],
           derived_roles: [],
           effective_role_keys: ["community"],
+          standings: { community: "held" },
         },
       ],
       allowances: [],
