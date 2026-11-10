@@ -355,7 +355,7 @@
 </sc-if>
 
 <sc-if value="{{ fPerson }}" hint-placeholder-val="{{ false }}">
-  <div style="padding-bottom:4px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Liv Morgan" meta="{{ rohanMeta }}" actions="{{ giveBtn }}" hint-size="100%,110px"></x-import></div>
+  <div style="padding-bottom:4px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Liv Morgan" meta="{{ livMeta }}" actions="{{ giveBtn }}" hint-size="100%,110px"></x-import></div>
   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 20px;border-radius:var(--radius-panel);border:1px solid var(--line);background:var(--surface-0)"><span class="type-label">Bundles</span><x-import component-from-global-scope="Syndra.Chip" hint-size="120px,30px">Lab Tech v3</x-import><span style="flex:1"></span><a href="route-automation-settings-v5.dc.html?frame=bundle" style="font-size:13.5px;font-weight:600">Manage bundles →</a></div>
   <div style="padding:2px 20px 0">{{ personRead }}</div>
   <x-import component-from-global-scope="Syndra.Card" hint-size="100%,320px">
@@ -696,7 +696,7 @@ class Component extends DCLogic {
         { waits: true, label: "Laser cutter · Operator", key: "laser.operator", project: "Laser Lab", isIn: true, isNew: false, isWaiting: false },
         { label: "Bandsaw · Member", key: "wood.bandsaw", project: "Wood shop", isIn: true, isNew: false, isWaiting: false },
       ],
-      rohanMeta: S ? h(S.MetaRow, null, ["liv.morgan@makerspace.edu", "Research assistant", "Mechanical Engineering"]) : null,
+      livMeta: S ? h(S.MetaRow, null, ["liv.morgan@makerspace.edu", "Research assistant", "Mechanical Engineering"]) : null,
       giveBtn: hbtn("Give a role", () => this.setState({ picker: "give", pickDone: false })),
       personRoles, personRoleCount: personRoles.length,
       requests,
