@@ -1,0 +1,103 @@
+{
+  "$comment": "Every operation id in the backend's operationPolicy. scope is the broadest scope it may be offered at; confirm is whether the backend requires it; effect is read (never dispatched or logged), account, credential or physical; result names the schema of the reply under feature results (health.get declares its own and is shown raw). secret_result would mark an operation whose reply carries a secret; none does yet.",
+  "operations": {
+    "account.adopt": {
+      "meaning": "Bind an existing unbound target account to the subject.",
+      "scope": "admin",
+      "confirm": true,
+      "params": [
+        {
+          "name": "username",
+          "type": "string",
+          "required": true,
+          "secret": false
+        }
+      ],
+      "secret_params": [],
+      "effect": "account"
+    },
+    "account.purge": {
+      "meaning": "Remove a disabled account from the target, with an elevated credential.",
+      "scope": "admin",
+      "confirm": true,
+      "params": [
+        {
+          "name": "elevated_key",
+          "type": "string",
+          "required": true,
+          "secret": true
+        }
+      ],
+      "secret_params": [
+        "elevated_key"
+      ],
+      "effect": "account"
+    },
+    "account.release": {
+      "meaning": "Forget the binding without touching the account.",
+      "scope": "admin",
+      "confirm": true,
+      "params": [],
+      "secret_params": [],
+      "effect": "account"
+    },
+    "activity.get": {
+      "meaning": "What the subject did on the target, read live.",
+      "scope": "admin",
+      "confirm": false,
+      "params": [
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "secret": false
+        }
+      ],
+      "secret_params": [],
+      "effect": "read",
+      "result": "common/activity.json"
+    },
+    "health.get": {
+      "meaning": "The target's own health, read live.",
+      "scope": "admin",
+      "confirm": false,
+      "params": [],
+      "secret_params": [],
+      "effect": "read"
+    },
+    "password.rotate": {
+      "meaning": "Replace the subject's password with a generated one the member never sees.",
+      "scope": "admin",
+      "confirm": true,
+      "params": [],
+      "secret_params": [],
+      "effect": "credential"
+    },
+    "password.set": {
+      "meaning": "The member sets their own password.",
+      "scope": "member",
+      "confirm": false,
+      "params": [
+        {
+          "name": "password",
+          "type": "string",
+          "required": true,
+          "secret": true
+        }
+      ],
+      "secret_params": [
+        "password"
+      ],
+      "effect": "credential"
+    },
+    "storage.status": {
+      "meaning": "Whether the member can use the storage and how much room is left, read live.",
+      "scope": "member",
+      "confirm": false,
+      "params": [],
+      "secret_params": [],
+      "effect": "read",
+      "result": "common/status.json"
+    }
+  }
+}

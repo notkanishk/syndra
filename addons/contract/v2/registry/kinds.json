@@ -1,0 +1,27 @@
+{
+  "$comment": "The closed kind list every add-on declares. The kind keys the credential-scope denylist (advisory: health.credential_scopes is self-reported) and the UI module. A new word is one entry here. `inventory` has no concrete denylist entry yet: its product is unresearched (design §4).",
+  "kinds": {
+    "storage": {
+      "meaning": "A file or object store.",
+      "profile": "profiles/storage",
+      "scope_denylist": []
+    },
+    "access": {
+      "meaning": "A door or building access system.",
+      "profile": null,
+      "scope_denylist": [
+        "edit:space"
+      ]
+    },
+    "inventory": {
+      "meaning": "A stock or loan system.",
+      "profile": null,
+      "scope_denylist": []
+    },
+    "machine": {
+      "meaning": "A tool with a job log, such as the laser.",
+      "profile": null,
+      "scope_denylist": []
+    }
+  }
+}

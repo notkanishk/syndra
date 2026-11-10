@@ -1,0 +1,64 @@
+{
+  "subjects": [
+    {
+      "id": 17,
+      "username": "rey_mysterio",
+      "account_id": "3051",
+      "groups": [
+        "fabrication",
+        "lab_makers"
+      ],
+      "home": "/mnt/tank/homes/rey_mysterio",
+      "enabled": true,
+      "smb_enabled": true,
+      "state": {
+        "group": [
+          "fabrication",
+          "lab_makers"
+        ],
+        "home": [
+          "true"
+        ],
+        "home_quota": [
+          "0",
+          "5368709120"
+        ],
+        "enabled": true,
+        "smb_enabled": true
+      },
+      "standing": {
+        "usable": false,
+        "waiting_on": "member",
+        "note": "No password set yet",
+        "next": "Set a storage password on your page"
+      }
+    },
+    {
+      "id": "4",
+      "username": "syndra_service",
+      "account_id": "3001",
+      "groups": [],
+      "enabled": true,
+      "smb_enabled": false,
+      "self": true,
+      "state": {
+        "group": [],
+        "home": [],
+        "enabled": true,
+        "smb_enabled": false
+      },
+      "standing": {
+        "usable": true,
+        "waiting_on": "none"
+      }
+    }
+  ],
+  "current": false,
+  "taken_at": "2026-11-10T08:00:00Z",
+  "truncated": false,
+  "stale": {
+    "reason": "cached",
+    "retry_after": 20,
+    "note": "Answered from the add-on's mirror; the NAS was last read at 08:00."
+  }
+}

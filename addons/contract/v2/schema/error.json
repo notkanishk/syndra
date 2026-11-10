@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/error.json",
+  "title": "Error body",
+  "description": "The body of every non-2xx reply, application/problem+json (RFC 9457), with no exception. code is registry/errors.json; type is urn:syndra:addon:error:<code>. A blocked or conflicting apply carries its outcome fields as extension members.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "pattern": "^urn:syndra:addon:error:[A-Z][A-Z0-9_]*$"
+    },
+    "title": {
+      "type": "string",
+      "description": "Constant per code (registry/errors.json)."
+    },
+    "status": {
+      "type": "integer",
+      "minimum": 400,
+      "maximum": 599
+    },
+    "detail": {
+      "type": "string",
+      "description": "A sentence for an operator; never the target's own error text."
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "A registered error code."
+    },
+    "retry": {
+      "type": "string",
+      "enum": [
+        "never",
+        "backoff",
+        "retry_after",
+        "replan"
+      ],
+      "description": "What a caller may do about it, resolved for this status."
+    },
+    "subject": {
+      "type": "string"
+    },
+    "subjects": {
+      "type": "integer"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "caller_version": {
+      "type": "integer"
+    },
+    "addon_version": {
+      "type": "integer"
+    },
+    "lifecycle": {
+      "$ref": "lifecycle_request.json#/$defs/LifecycleState"
+    },
+    "effect": {
+      "$ref": "common/effect.json",
+      "description": "APPLY_BLOCKED, BINDING_CONFLICT: the apply outcome's effect, as an extension member (RFC 9457 section 3.2)."
+    },
+    "consequence": {
+      "type": "string"
+    },
+    "username": {
+      "type": "string"
+    },
+    "account_id": {
+      "$ref": "common/field.json#/$defs/AccountId"
+    },
+    "standing": {
+      "$ref": "common/standing.json"
+    },
+    "fingerprint": {
+      "type": "string"
+    },
+    "conflict": {
+      "$ref": "apply_response.json#/$defs/BindingConflict"
+    }
+  },
+  "required": [
+    "type",
+    "title",
+    "status",
+    "code"
+  ],
+  "dependentRequired": {
+    "account_id": [
+      "standing"
+    ],
+    "standing": [
+      "account_id"
+    ]
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "APPLY_BLOCKED"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "required": [
+          "subject",
+          "effect",
+          "consequence"
+        ],
+        "properties": {
+          "effect": {
+            "const": "blocked"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "BINDING_CONFLICT"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "required": [
+          "subject",
+          "effect",
+          "conflict"
+        ],
+        "properties": {
+          "effect": {
+            "const": "blocked"
+          }
+        }
+      }
+    }
+  ]
+}

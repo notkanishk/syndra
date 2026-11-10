@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/plan_request.json",
+  "title": "Plan request",
+  "description": "POST /plan. A proposed change across a cohort. The add-on decodes it strictly; it refuses more than limits.subjects_per_plan with PLAN_TOO_LARGE and the backend owns acknowledgement.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": 2,
+      "description": "The wire contract major both ends speak. Contract 2: equality-checked, a mismatch is refused with CONTRACT_VERSION_MISMATCH."
+    },
+    "subjects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "email": {
+            "type": "string"
+          },
+          "desired": {
+            "$ref": "common/field.json#/$defs/FieldValues"
+          }
+        },
+        "required": [
+          "subject",
+          "email",
+          "desired"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "contract_version",
+    "subjects"
+  ],
+  "additionalProperties": false
+}

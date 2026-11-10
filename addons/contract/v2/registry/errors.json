@@ -1,0 +1,276 @@
+{
+  "$comment": "Every `code` a contract 2 add-on writes in a problem+json body. type is urn:syndra:addon:error:<code>. retry: never, backoff (transient), retry_after (honour Retry-After), replan (re-plan, then apply), by_status (read the status). Removed from major 1: SCOPE_ACKNOWLEDGEMENT_REQUIRED (the backend owns acknowledgement, design §11).",
+  "codes": {
+    "APPLY_BLOCKED": {
+      "title": "Apply blocked",
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The apply was refused with an outcome (effect blocked); the outcome fields ride as extension members."
+    },
+    "APPLY_FAILED": {
+      "title": "Apply failed",
+      "statuses": [
+        400,
+        409,
+        422,
+        429,
+        500,
+        502,
+        503
+      ],
+      "retry": "by_status",
+      "meaning": "An apply could not be completed; the status says whether retrying can help."
+    },
+    "BAD_REQUEST": {
+      "title": "Bad request",
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "A required field is missing (call_id, subject) or the body is not JSON."
+    },
+    "BINDING_CONFLICT": {
+      "title": "Binding conflict",
+      "statuses": [
+        409
+      ],
+      "retry": "never",
+      "meaning": "An unbound target account already holds the derived name; the conflict rides as an extension member. An operator adopts or renames."
+    },
+    "CALL_ID_REUSED": {
+      "title": "Call id reused",
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The call id was used before with a different identity (draft-ietf-httpapi-idempotency-key-header: 422; 409 is for a request still in flight)."
+    },
+    "CALL_IN_PROGRESS": {
+      "title": "Call in progress",
+      "statuses": [
+        409
+      ],
+      "retry": "retry_after",
+      "meaning": "A request with this call id is executing in this process now; Retry-After is present."
+    },
+    "CALL_UNSETTLED": {
+      "title": "Call unsettled",
+      "statuses": [
+        409
+      ],
+      "retry": "never",
+      "meaning": "A physical operation for this subject has an intent with no recorded result; nothing may re-execute it until it settles."
+    },
+    "CONTRACT_VERSION_MISMATCH": {
+      "title": "Contract version mismatch",
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The body's contract_version is not the one this add-on speaks; both numbers are in the body."
+    },
+    "FINGERPRINT_REQUIRED": {
+      "title": "Fingerprint required",
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "An apply carried no fingerprint, so there is nothing to verify the plan against."
+    },
+    "FRESH_READ_COOLDOWN": {
+      "title": "Fresh read cooldown",
+      "statuses": [
+        429
+      ],
+      "retry": "retry_after",
+      "meaning": "A fresh read was asked for inside the cooldown and the add-on has nothing to serve; Retry-After is present."
+    },
+    "INVALID_BODY": {
+      "title": "Invalid body",
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "The setting write body is not valid."
+    },
+    "LIFECYCLE_REFUSAL": {
+      "title": "Lifecycle refusal",
+      "statuses": [
+        503
+      ],
+      "retry": "retry_after",
+      "meaning": "The add-on is draining or read-only and declined a mutation; Retry-After is always present. Detected by this code alone."
+    },
+    "NOT_A_HOME_PLACE": {
+      "title": "Not a home place",
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The value is not a folder the target offers for home folders."
+    },
+    "NO_CURRENT_READ": {
+      "title": "No current read",
+      "statuses": [
+        503
+      ],
+      "retry": "backoff",
+      "meaning": "The target could not be read and the add-on holds no mirror to serve instead."
+    },
+    "NO_SUCH_SETTING": {
+      "title": "No such setting",
+      "statuses": [
+        404
+      ],
+      "retry": "never",
+      "meaning": "The named setting does not exist."
+    },
+    "OPERATION_FAILED": {
+      "title": "Operation failed",
+      "statuses": [
+        400,
+        404,
+        409,
+        422,
+        429,
+        500,
+        502,
+        503
+      ],
+      "retry": "by_status",
+      "meaning": "An operation could not be completed, or does not exist (404); the status says whether retrying can help."
+    },
+    "OPERATION_MISMATCH": {
+      "title": "Operation mismatch",
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "The operation named in the body is not the one the route runs."
+    },
+    "PLAN_STALE": {
+      "title": "Plan stale",
+      "statuses": [
+        409
+      ],
+      "retry": "replan",
+      "meaning": "The subject changed on the target since the plan; re-plan before applying."
+    },
+    "PLAN_TOO_LARGE": {
+      "title": "Plan too large",
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The plan carries more subjects than limits.subjects_per_plan; the limit is in the body."
+    },
+    "REACH_NEVER_READ": {
+      "title": "Reach never read",
+      "statuses": [
+        503
+      ],
+      "retry": "backoff",
+      "meaning": "The folder permissions have not been read since the add-on started."
+    },
+    "REASON_REQUIRED": {
+      "title": "Reason required",
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "A lifecycle change must carry a reason."
+    },
+    "SETTINGS_UNREADABLE": {
+      "title": "Settings unreadable",
+      "statuses": [
+        500
+      ],
+      "retry": "backoff",
+      "meaning": "The settings could not be read from the add-on's store."
+    },
+    "SETTING_NOT_SAVED": {
+      "title": "Setting not saved",
+      "statuses": [
+        500
+      ],
+      "retry": "backoff",
+      "meaning": "The setting could not be stored."
+    },
+    "STORE_UNREADABLE": {
+      "title": "Store unreadable",
+      "statuses": [
+        500
+      ],
+      "retry": "backoff",
+      "meaning": "The add-on's local store could not be read."
+    },
+    "TARGET_UNREACHABLE": {
+      "title": "Target unreachable",
+      "statuses": [
+        503
+      ],
+      "retry": "retry_after",
+      "meaning": "The target cannot be reached and the add-on has nothing to serve; Retry-After is present. Never a lifecycle refusal."
+    },
+    "TARGET_UNREADABLE": {
+      "title": "Target unreadable",
+      "statuses": [
+        429,
+        502,
+        503
+      ],
+      "retry": "backoff",
+      "meaning": "The target could not be read; the status distinguishes rate-limiting, unreachable and failing."
+    },
+    "TARGET_VERSION_UNSUPPORTED": {
+      "title": "Target version unsupported",
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "A mutation against a target major this add-on has not been tested with."
+    },
+    "UNAUTHENTICATED": {
+      "title": "Unauthenticated",
+      "statuses": [
+        401
+      ],
+      "retry": "never",
+      "meaning": "The request signature is missing or wrong; the add-on does not say which half."
+    },
+    "UNKNOWN_FIELD": {
+      "title": "Unknown field",
+      "statuses": [
+        404
+      ],
+      "retry": "never",
+      "meaning": "The field is not in the entitlement schema."
+    },
+    "UNKNOWN_LIFECYCLE_STATE": {
+      "title": "Unknown lifecycle state",
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The state is not one of active, draining, read_only."
+    },
+    "UNKNOWN_METRIC": {
+      "title": "Unknown metric",
+      "statuses": [
+        404
+      ],
+      "retry": "never",
+      "meaning": "The metric is not in the manifest."
+    },
+    "UNKNOWN_REQUEST_FIELD": {
+      "title": "Unknown request field",
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "The strict decoder met a field the route does not know."
+    }
+  }
+}

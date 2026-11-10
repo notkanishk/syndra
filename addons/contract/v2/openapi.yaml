@@ -1,0 +1,484 @@
+openapi: 3.1.0
+info:
+  title: Syndra add-on contract 2
+  version: 2.0.0
+  summary: The wire between the Syndra backend and a target add-on, contract 2.
+  description: >-
+    Fourteen routes, every one authenticated; the routes marked x-feature are served only by an
+    add-on whose manifest lists that feature (registry/features.json), and anything else answers
+    404. Bodies are the JSON Schemas under schema/; fixtures/ holds a golden document per message;
+    registry/ lists the error codes and operation ids. Every non-2xx is application/problem+json.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Syndra
+servers:
+  - url: https://addon.example.org:8443
+    description: An add-on, on the internal network only.
+security:
+  - addonSignature: []
+paths:
+  /capabilities:
+    get:
+      operationId: getCapabilities
+      summary: The manifest
+      description: >-
+        What the add-on is and can do. Served even while the target is unreachable.
+      security:
+        - addonSignature: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/manifest.json
+        "401":
+          $ref: "#/components/responses/Error"
+  /health:
+    get:
+      operationId: getHealth
+      summary: The add-on's own health
+      description: >-
+        Own view, target view and log anchor.
+      security:
+        - addonSignature: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/health.json
+        "401":
+          $ref: "#/components/responses/Error"
+  /subjects:
+    get:
+      operationId: listSubjects
+      summary: Every account the target holds
+      description: >-
+        One reply. With feature freshness, fresh=true asks for a read of the app now.
+      security:
+        - addonSignature: []
+      parameters:
+        - $ref: "#/components/parameters/Fresh"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/subjects.json
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /values/{field}:
+    get:
+      operationId: getValues
+      summary: What a field's values may be
+      description: >-
+        Read live; membership is runtime state. Exempt from taken_at and current.
+      security:
+        - addonSignature: []
+      parameters:
+        - name: field
+          in: path
+          required: true
+          schema:
+            type: string
+          description: An entitlement field name from the manifest.
+        - $ref: "#/components/parameters/Fresh"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/values.json
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /reach:
+    get:
+      operationId: getReach
+      summary: What each group opens
+      description: >-
+        Storage profile.
+      x-feature: storage.reach
+      security:
+        - addonSignature: []
+      parameters:
+        - $ref: "#/components/parameters/Fresh"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/profiles/storage/reach.json
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /homes:
+    get:
+      operationId: getHomes
+      summary: Every home folder and its use
+      description: >-
+        Storage profile: the current usage query.
+      x-feature: storage.homes
+      security:
+        - addonSignature: []
+      parameters:
+        - $ref: "#/components/parameters/Fresh"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/profiles/storage/homes.json
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /settings:
+    get:
+      operationId: listSettings
+      summary: System-wide settings
+      description: >-
+        Where home folders go.
+      x-feature: settings
+      security:
+        - addonSignature: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/settings.json
+        "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /settings/{name}:
+    put:
+      operationId: putSetting
+      summary: Set one setting
+      description: >-
+        The body carries contract_version and call_id. The value must be one the target offers right now, or empty.
+      x-feature: settings
+      security:
+        - addonSignature: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The setting's name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: schema/setting_put_request.json
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/setting.json
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /plan:
+    post:
+      operationId: planChange
+      summary: Rehearse a change
+      description: >-
+        Not a write. Computed against a live read; never cooled down. Above limits.subjects_per_plan the add-on answers 422 PLAN_TOO_LARGE.
+      security:
+        - addonSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: schema/plan_request.json
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/plan_response.json
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /apply:
+    post:
+      operationId: applyChange
+      summary: Converge one subject
+      description: >-
+        Deduplicated on the body's call_id and the request identity (identity/apply.json): the same identity is answered from the first reply before the fingerprint is checked. A blocked apply (422 APPLY_BLOCKED) or a binding conflict (409 BINDING_CONFLICT) is a problem+json whose outcome fields (effect, consequence, username, account_id, standing, fingerprint, conflict) are extension members.
+      security:
+        - addonSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: schema/apply_request.json
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/apply_ok.json
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /operations/{name}:
+    post:
+      operationId: runOperation
+      summary: Run one named operation
+      description: >-
+        The path names the operation; the body repeats it. Deduplicated on call_id and identity/operation.json. An unknown operation id answers 404 OPERATION_FAILED.
+      x-feature: operations
+      security:
+        - addonSignature: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The operation id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: schema/operation_request.json
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/operation_response.json
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /lifecycle:
+    post:
+      operationId: setLifecycle
+      summary: Change the add-on's state
+      description: >-
+        The operator's stop switch; not optional.
+      security:
+        - addonSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: schema/lifecycle_request.json
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/lifecycle_response.json
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+  /calls/{call_id}:
+    get:
+      operationId: getCall
+      summary: What was recorded for a write
+      description: >-
+        recorded, in_doubt or unknown; how a physical operation is settled.
+      x-feature: calls
+      security:
+        - addonSignature: []
+      parameters:
+        - name: call_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The call id the write carried.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/call.json
+        "401":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /stats:
+    get:
+      operationId: getStats
+      summary: Bucketed points for one metric
+      description: >-
+        One metric per call, since that metric's watermark. Not subject to fresh.
+      x-feature: stats
+      security:
+        - addonSignature: []
+      parameters:
+        - name: metric
+          in: query
+          required: true
+          schema:
+            type: string
+          description: A metric name from the manifest.
+        - name: since
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: The previous page's next_cursor.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schema/stats.json
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    addonSignature:
+      type: apiKey
+      in: header
+      name: X-Syndra-Addon-Signature
+      description: >-
+        HMAC over ts.method.target.body, where target is the escaped path as sent plus "?" and the
+        raw query when it is not empty (no sorting, no re-encoding), keyed from the per-target
+        secret; see transport_derivation.json, raw_query_signatures. Two minutes' tolerance.
+  headers:
+    RetryAfter:
+      description: Seconds to wait; present on CALL_IN_PROGRESS, FRESH_READ_COOLDOWN, TARGET_UNREACHABLE and LIFECYCLE_REFUSAL.
+      schema:
+        type: integer
+  parameters:
+    Fresh:
+      name: fresh
+      in: query
+      required: false
+      x-feature: freshness
+      schema:
+        type: boolean
+      description: Read the app now rather than answer from the mirror (feature freshness).
+  responses:
+    Error:
+      description: >-
+        A refusal, application/problem+json (RFC 9457). code, statuses and retry classes are in
+        registry/errors.json.
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/problem+json:
+          schema:
+            $ref: schema/error.json

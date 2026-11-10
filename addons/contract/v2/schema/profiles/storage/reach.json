@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/profiles/storage/reach.json",
+  "title": "Reach",
+  "description": "GET /reach (feature storage.reach, kind storage), and the Place shape storage.status shares. What each group opens, read from folder permissions.",
+  "type": "object",
+  "properties": {
+    "taken_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the folder permissions were read (renamed from read_at)."
+    },
+    "current": {
+      "type": "boolean"
+    },
+    "groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Place"
+        }
+      }
+    },
+    "everyone": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Place"
+      }
+    },
+    "stale": {
+      "$ref": "../../common/stale.json"
+    }
+  },
+  "required": [
+    "taken_at",
+    "current",
+    "groups",
+    "everyone"
+  ],
+  "allOf": [
+    {
+      "$ref": "../../common/stale.json#/$defs/Invariant"
+    }
+  ],
+  "$defs": {
+    "Place": {
+      "type": "object",
+      "description": "Somewhere a person can connect, and what they can do there.",
+      "properties": {
+        "share": {
+          "type": "string"
+        },
+        "folder": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "access": {
+          "type": "string",
+          "enum": [
+            "read",
+            "change"
+          ]
+        },
+        "dataset": {
+          "type": "string"
+        },
+        "home": {
+          "type": "boolean"
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "used_bytes": {
+              "type": "integer"
+            },
+            "quota_bytes": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "used_bytes"
+          ]
+        }
+      },
+      "required": [
+        "share",
+        "path",
+        "access"
+      ]
+    }
+  }
+}

@@ -21,7 +21,7 @@ import (
 // otherwise, so a `date-time` that is never asserted is a comment. Schemas load
 // from disk by `$id`; a test run fetches nothing.
 
-var contractDir = filepath.Join("..", "..", "..", "addons", "contract")
+var contractDir = filepath.Join("..", "..", "..", "addons", "contract", "v1")
 
 const schemaBase = "https://syndra.example.org/addon-contract/1/schema/"
 
@@ -217,8 +217,17 @@ type operationRegistry struct {
 	} `json:"operations"`
 }
 
+// Both majors' registries must say what the policy says (id, scope, confirm,
+// params, secrets). Major 2's adds effect and result, which the policy does not
+// carry yet; slice 1 moves them in.
 func TestEveryPolicyOperationIsInTheRegistry(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(contractDir, "registry", "operations.json"))
+	for name, dir := range map[string]string{"v1": contractDir, "v2": v2Dir} {
+		t.Run(name, func(t *testing.T) { checkPolicyAgainstRegistry(t, dir) })
+	}
+}
+
+func checkPolicyAgainstRegistry(t *testing.T, dir string) {
+	raw, err := os.ReadFile(filepath.Join(dir, "registry", "operations.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

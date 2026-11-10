@@ -1,0 +1,42 @@
+{
+  "operation": "health.get",
+  "subject": "",
+  "outcome": "succeeded",
+  "health": {
+    "system": {
+      "hostname": "nas.example.org",
+      "version": "TrueNAS-25.10.5",
+      "uptime_seconds": 864000.5
+    },
+    "alerts": [
+      {
+        "level": "WARNING",
+        "klass": "SMART",
+        "text": "Disk sda reports pending sectors.",
+        "at": "2026-11-09T22:41:00Z",
+        "dismissed": false
+      }
+    ],
+    "pools": [
+      {
+        "name": "tank",
+        "status": "ONLINE",
+        "healthy": true,
+        "warning": false,
+        "free_bytes": 4398046511104,
+        "allocated_bytes": 2199023255552,
+        "size_bytes": 6597069766656
+      }
+    ],
+    "services": [
+      {
+        "service": "cifs",
+        "state": "RUNNING",
+        "enable": true
+      }
+    ],
+    "degraded": [
+      "alert.list"
+    ]
+  }
+}

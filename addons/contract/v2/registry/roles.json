@@ -1,0 +1,48 @@
+{
+  "$comment": "The field-role vocabulary (owner decision 3, final 10 Nov 2026). One role per field; `feature` is reserved because the manifest's features list owns the word. A new role is a feature (roles.<name>) and a core change.",
+  "roles": {
+    "account": {
+      "meaning": "The on/off of the subject's account on the target. Exactly one per schema.",
+      "wire": "boolean",
+      "set_by": "resolver",
+      "mapping_bindable": false,
+      "combine": null
+    },
+    "channel": {
+      "meaning": "A way of using the account, off whenever the account is off.",
+      "wire": "boolean",
+      "set_by": "resolver",
+      "mapping_bindable": false,
+      "combine": null
+    },
+    "membership": {
+      "meaning": "A set of target-defined values a role confers.",
+      "wire": "sorted, deduplicated list of strings",
+      "set_by": "mappings and allowances",
+      "mapping_bindable": true,
+      "combine": "union"
+    },
+    "flag": {
+      "meaning": "One thing a role gives or does not.",
+      "wire": "[\"true\"] or []",
+      "set_by": "mappings and allowances",
+      "mapping_bindable": true,
+      "combine": "any"
+    },
+    "limit": {
+      "meaning": "A numeric ceiling with a unit; `unlimited` names the value meaning no ceiling and dominates when roles combine.",
+      "wire": "list of decimal strings",
+      "set_by": "mappings and allowances",
+      "mapping_bindable": true,
+      "combine": "max",
+      "requires": [
+        "unit",
+        "combine",
+        "unlimited"
+      ]
+    }
+  },
+  "reserved_words": [
+    "feature"
+  ]
+}

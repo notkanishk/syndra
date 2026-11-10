@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/lifecycle_request.json",
+  "title": "Lifecycle request",
+  "description": "POST /lifecycle. An operator changing the add-on's state at runtime. The add-on decodes it strictly. Request identity: identity/lifecycle.json.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": 2,
+      "description": "The wire contract major both ends speak. Contract 2: equality-checked, a mismatch is refused with CONTRACT_VERSION_MISMATCH."
+    },
+    "call_id": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "state": {
+      "$ref": "#/$defs/LifecycleState"
+    },
+    "reason": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Required and non-blank: a state nobody explained is indistinguishable from a fault."
+    }
+  },
+  "required": [
+    "contract_version",
+    "call_id",
+    "state",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "LifecycleState": {
+      "type": "string",
+      "enum": [
+        "active",
+        "draining",
+        "read_only"
+      ],
+      "description": "active accepts work; draining finishes what is running and refuses more; read_only serves reads only."
+    }
+  }
+}

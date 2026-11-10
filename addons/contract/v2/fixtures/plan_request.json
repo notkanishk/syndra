@@ -1,0 +1,23 @@
+{
+  "contract_version": 2,
+  "subjects": [
+    {
+      "subject": "289471021834760193",
+      "email": "bianca.belair@example.org",
+      "desired": {
+        "group": [
+          "lab_makers",
+          "fabrication"
+        ],
+        "home": [
+          "true"
+        ],
+        "home_quota": [
+          "5368709120"
+        ],
+        "enabled": true,
+        "smb_enabled": true
+      }
+    }
+  ]
+}

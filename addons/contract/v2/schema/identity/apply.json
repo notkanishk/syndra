@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/identity/apply.json",
+  "title": "Apply identity",
+  "description": "The object whose RFC 8785 canonical form is SHA-256 hashed to identify an apply. plan_id, fingerprint and email are excluded: a re-plan changes them for the same call.",
+  "type": "object",
+  "properties": {
+    "subject": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "desired": {
+      "$ref": "../common/field.json#/$defs/FieldValues"
+    }
+  },
+  "required": [
+    "subject",
+    "desired"
+  ],
+  "additionalProperties": false
+}

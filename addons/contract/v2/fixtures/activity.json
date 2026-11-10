@@ -1,0 +1,18 @@
+{
+  "events": [
+    {
+      "at": "2026-11-10T08:12:30Z",
+      "event": "CONNECT",
+      "success": false,
+      "address": "192.0.2.17",
+      "detail": "NT_STATUS_NO_SUCH_USER",
+      "x-truenas-share": "makers"
+    }
+  ],
+  "uncovered": [
+    "scratch"
+  ],
+  "truncated": true,
+  "taken_at": "2026-11-10T09:30:00Z",
+  "current": true
+}

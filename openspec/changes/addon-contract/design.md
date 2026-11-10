@@ -89,6 +89,19 @@ fixture and check every field it uses landed. The schema validation uses
 dependency; the only JSON Schema 2020-12 implementation in Go that is
 complete and maintained).
 
+**One directory per major while two coexist** (decided 10 Nov 2026, building
+slice 1a). From slice 1a until slice 1 ships, `addons/contract/v1/` holds the
+pinned contract 1 (schema, fixtures, registry, openapi; slice 0's files, which
+today's code is still tested against) and `addons/contract/v2/` holds major 2.
+Files that do not change with the major (`transport_derivation.json`, the
+cross-binary vectors) stay at the top level; the raw-query vectors 1a adds are
+tagged with the major that introduces them. When slice 1 ships, `v1/` is
+deleted in the same PR (decision 2: one supported major) and `v2/` is the
+contract until a major 3 adds `v3/` beside it the same way. Versioned
+directories, as protobuf packages and versioned API specs do, rather than a
+version field inside one file set: a test then loads exactly one major and
+cannot validate a v1 fixture against a v2 schema by accident.
+
 **Rejected: a shared Go module (`addons/contract` as a package).** The owner
 widened the scope to add-ons built by other people and other agents; a Go
 package is a contract only for Go. It would also undo a standing rule
@@ -755,7 +768,7 @@ keep, and it does not pretend to.
 | subjects | validates; every `state` key is a schema field; `current`, `truncated`, `taken_at` present; `current: false` ⇔ `stale` present; cursor checks `skip` unless `subjects.paged` |
 | values | every schema field answers; `account`/`channel` answer `{false,true}`; unknown field → 404 `UNKNOWN_FIELD` |
 | strict requests | unknown field → 400 `UNKNOWN_REQUEST_FIELD` (its own code, because `BAD_REQUEST` is also a missing `call_id` or `subject`, `apply.go:331-332`, which must stay `rejected`); wrong or **absent** `contract_version` → 422 `CONTRACT_VERSION_MISMATCH`, both numbers in the body |
-| error envelope | every non-2xx is `application/problem+json` and validates against `error.json` (RFC 9457: `type`, `title`, `status`, `detail`, plus the `code` and `retry` extensions) with a registered code and the registry's status |
+| error envelope | every non-2xx is `application/problem+json` and validates against `error.json` (RFC 9457: `type`, `title`, `status`, `detail`, plus the `code` and `retry` extensions) with a registered code and the registry's status. Blocked (422 `APPLY_BLOCKED`) and binding-conflict (409 `BINDING_CONFLICT`) apply outcomes travel as problem extensions (RFC 9457 §3.2): `effect`, `consequence`, `username`, `account_id`, `standing`, `fingerprint`, `conflict` ride beside `code`, so there is no non-2xx that is not a problem. |
 | plan | shape; fingerprint per subject; effect in the closed set; above `limits.subjects_per_plan` → 422 `PLAN_TOO_LARGE` with the limit (the backend chunks and acknowledges, §11; the add-on only refuses) |
 | plan = apply | the plan's effect and consequence for the kit subject equal the apply's |
 | fingerprint | apply without one → `FINGERPRINT_REQUIRED`; with a wrong one → `PLAN_STALE`, nothing written (`log_records` unchanged) |
@@ -1652,8 +1665,9 @@ Statistics, records and the fourth target (10 Nov 2026):
     `current == false` ⇔ `stale` on every reply the §4 table marks; the
     drift sweep's `/subjects` read is the one scheduled sender (a cooldown
     answer is a skipped pass), a person's "Refresh" the other; one name,
-    `taken_at`, with `reach.read_at` and `homes.usage_read` renamed *to*
-    it and the reply fields listed per message; `limits.fresh_read_cooldown`
+    `taken_at`, with `reach.read_at` renamed *to* it, `homes` gaining it
+    (its `usage_read` becomes the completeness flag `quota_read`, per the
+    §4 table) and the reply fields listed per message; `limits.fresh_read_cooldown`
     declared; `health.target_reads` required with the feature so the kit
     can prove it. Recommend yes; Syndra states the need, the add-on knows
     its app, and the planner is never cooled down. **Accepted 10 Nov 2026**

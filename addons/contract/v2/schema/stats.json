@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/stats.json",
+  "title": "Stats",
+  "description": "GET /stats?metric=&since=[&cursor=] (feature stats). One metric per call: bucketed points (each the complete total for its UTC day, equal keys replace), the windows the add-on could not observe, and a watermark through which the metric is final.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": 2,
+      "description": "The wire contract major both ends speak. Contract 2: equality-checked, a mismatch is refused with CONTRACT_VERSION_MISMATCH."
+    },
+    "metric": {
+      "type": "string"
+    },
+    "taken_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the add-on's collector last read the app."
+    },
+    "watermark": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The instant through which this metric is final, including absence."
+    },
+    "points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "A UTC day start."
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "start + P1D."
+          },
+          "dimensions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "subject": {
+            "type": "string",
+            "description": "The Syndra subject id, never a local name; absent for a total."
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "value"
+        ]
+      }
+    },
+    "unbound": {
+      "type": "object",
+      "properties": {
+        "accounts": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "accounts"
+      ],
+      "description": "How many accounts Syndra does not manage contributed to the totals."
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "A UTC day start."
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "End of the unobserved window, a UTC day boundary."
+          },
+          "dimensions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "description": "In the member's words."
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "reason"
+        ]
+      }
+    },
+    "next_cursor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "A keyset cursor; null on the last page."
+    }
+  },
+  "required": [
+    "contract_version",
+    "metric",
+    "taken_at",
+    "watermark",
+    "points",
+    "unbound",
+    "gaps",
+    "next_cursor"
+  ]
+}

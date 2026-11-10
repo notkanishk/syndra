@@ -1,0 +1,10 @@
+{
+  "type": "urn:syndra:addon:error:CONTRACT_VERSION_MISMATCH",
+  "title": "Contract version mismatch",
+  "status": 422,
+  "detail": "This add-on speaks contract 2; the request declared 1.",
+  "code": "CONTRACT_VERSION_MISMATCH",
+  "retry": "never",
+  "caller_version": 1,
+  "addon_version": 2
+}

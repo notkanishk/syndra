@@ -1,0 +1,30 @@
+{
+  "$comment": "Contract and Syndra constants an add-on never declares. Every duration is ISO 8601.",
+  "constants": {
+    "max_reply_bytes": {
+      "value": 1048576,
+      "type": "integer",
+      "meaning": "The largest reply Syndra reads (1 MiB); it bounds a /subjects reply and a /stats page."
+    },
+    "call_memory": {
+      "value": "P30D",
+      "type": "duration",
+      "meaning": "How long an add-on remembers a call, at least."
+    },
+    "in_doubt_bound": {
+      "value": "PT1H",
+      "type": "duration",
+      "meaning": "How long a call may stay in_doubt before it becomes a human's item."
+    },
+    "series_per_metric": {
+      "value": 500,
+      "type": "integer",
+      "meaning": "The most series Syndra keeps for one metric."
+    },
+    "cooldown_default": {
+      "value": "PT30S",
+      "type": "duration",
+      "meaning": "fresh_read_cooldown when a manifest declares none."
+    }
+  }
+}

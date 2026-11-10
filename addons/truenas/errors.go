@@ -4,7 +4,7 @@ package main
 // reply is `{"error": "<CODE>", ...extras}`.
 //
 // Named here, once, so the set the add-on can say is a list a test can compare
-// against `addons/contract/registry/errors.json`. A code written inline at its
+// against `addons/contract/v1/registry/errors.json`. A code written inline at its
 // call site is a code nothing checks: the registry would be a document, not a
 // contract. The values are the wire and never change with the names.
 const (

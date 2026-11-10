@@ -63,7 +63,18 @@
 Decisions 24–27 accepted 10 Nov 2026 (27: no subjects cursor in 1a);
 nothing here is code.
 
-- [ ] 1a.1 Manifest v2 schema and fixture: `contract_version: 2`, `kind` from
+Decided while building (10 Nov 2026; where design and tasks were silent or
+disagreed, design won): four raw-query vectors (design §4), not three;
+`PLAN_TOO_LARGE` 422, `UNKNOWN_METRIC` 404 (statuses unspecified); a blocked (422 `APPLY_BLOCKED`) or conflicting (409 `BINDING_CONFLICT`) apply is problem+json with the outcome as extension members; a preview carries no `call_id`; the
+`acknowledge_scope` request field and `SCOPE_ACKNOWLEDGEMENT_REQUIRED` are
+gone from major 2 (§11); `homes.usage_read` becomes `quota_read` (the §4
+table, over decision 21's wording); `status.json` lists its rows as `meters`;
+`activity` events drop `share` (vendor data goes under `x-`); `retry` in
+`error.json` is optional and one of `never|backoff|retry_after|replan`;
+identity objects always carry `params` and `subject`; files `v1/`, `v2/` per
+design §1; `CHANGELOG.md` at `addons/contract/`.
+
+- [x] 1a.1 Manifest v2 schema and fixture: `contract_version: 2`, `kind` from
   `registry/kinds.json` (`storage|access|inventory|machine`, each with its
   scope denylist; required), `features[]`, `entitlement_schema[].role` with
   `unit`/`combine`/`unlimited` required on `limit` through `if`/`then`,
@@ -81,7 +92,7 @@ nothing here is code.
   `CALL_ID_REUSED` moves to 422; feature-introduced keys listed under
   their feature in `features.json`; OpenAPI feature gates as `x-feature`;
   the validator with `AssertFormat` on in every suite. Decision 23 #ready-for-agent
-- [ ] 1a.2 Every other major-2 schema and fixture: the per-message reply
+- [x] 1a.2 Every other major-2 schema and fixture: the per-message reply
   fields exactly as design §4's table lists them (`reach.read_at` →
   `taken_at`; `homes` gains `taken_at` + `current` and keeps its
   completeness flag as `quota_read`; plan keeps `truncated`; values exempt;
@@ -195,7 +206,8 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   `smbWaiting` sentence as `note` and the storage page's next step as `next`;
   `password_set` removed from the wire #ready-for-agent
 - [ ] 1.7 `account_id` (string) replaces `uid` on `subjects[]`, the apply
-  reply and the binding conflict (decision 26); migration adds
+  reply and the binding conflict (decision 26), and on `homes[]` and the
+  `account.adopt` reply (`account_uid`), which carry it too in major 2; migration adds
   `account_id TEXT` beside `account_uid BIGINT` in **both** tables
   (`000032:38`, `000039:22`), the partial unique index **on
   `target_account_bindings` only** (`target_binding_conflicts` keeps

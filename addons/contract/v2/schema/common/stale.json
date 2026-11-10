@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/common/stale.json",
+  "title": "Stale",
+  "description": "Why a read reply is not current. A reply that carries current carries stale if and only if current is false.",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "enum": [
+        "cached",
+        "cooldown",
+        "unreachable",
+        "draining",
+        "never_read"
+      ],
+      "description": "cached: answered from the add-on's mirror. cooldown: a fresh read was asked for inside the cooldown. unreachable: the target could not be read. draining: the add-on is not accepting work. never_read: nothing has been read since the add-on started."
+    },
+    "retry_after": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Seconds until a fresh read may succeed, mirroring the Retry-After header."
+    },
+    "note": {
+      "type": "string",
+      "description": "A sentence for a person, in the add-on's words."
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "$defs": {
+    "Invariant": {
+      "description": "current == false if and only if stale is present. Referenced by every reply that carries current.",
+      "if": {
+        "properties": {
+          "current": {
+            "const": false
+          }
+        },
+        "required": [
+          "current"
+        ]
+      },
+      "then": {
+        "required": [
+          "stale"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "stale"
+          ]
+        }
+      }
+    }
+  }
+}

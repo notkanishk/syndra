@@ -1,0 +1,24 @@
+{
+  "usable": false,
+  "standing": {
+    "usable": false,
+    "waiting_on": "member",
+    "note": "No password set yet",
+    "next": "Set a storage password on your page"
+  },
+  "meters": [
+    {
+      "label": "Home folder",
+      "used": 19756849561,
+      "limit": 53687091200,
+      "unit": "bytes"
+    },
+    {
+      "label": "Scratch",
+      "used": 1048576,
+      "unit": "bytes"
+    }
+  ],
+  "taken_at": "2026-11-10T09:30:00Z",
+  "current": true
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/call.json",
+  "title": "Call",
+  "description": "GET /calls/{call_id} (feature calls). What the add-on recorded for a write. recorded carries the original reply, omitted when the operation's reply is secret; in_doubt: intent logged, no result, still finding out; unknown: no effect recorded, safe to retry.",
+  "type": "object",
+  "properties": {
+    "call_id": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "recorded",
+        "in_doubt",
+        "unknown"
+      ]
+    },
+    "reply": {
+      "type": "object",
+      "description": "The first call's reply; only with recorded, and absent when redacted (secret_result)."
+    }
+  },
+  "required": [
+    "call_id",
+    "state"
+  ],
+  "if": {
+    "properties": {
+      "state": {
+        "const": "recorded"
+      }
+    },
+    "required": [
+      "state"
+    ]
+  },
+  "else": {
+    "not": {
+      "required": [
+        "reply"
+      ]
+    }
+  }
+}

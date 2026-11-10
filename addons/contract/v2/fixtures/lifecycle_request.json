@@ -1,0 +1,6 @@
+{
+  "contract_version": 2,
+  "call_id": "7c1e5b92-3a08-4d6f-b1c4-90e2d8a7f314",
+  "state": "read_only",
+  "reason": "Moving the pool to new disks."
+}

@@ -1,0 +1,17 @@
+{
+  "type": "urn:syndra:addon:error:BINDING_CONFLICT",
+  "title": "Binding conflict",
+  "status": 409,
+  "detail": "An account named seth_rollins already exists and is not bound to anyone.",
+  "code": "BINDING_CONFLICT",
+  "retry": "never",
+  "subject": "289471021834760194",
+  "effect": "blocked",
+  "consequence": "Nothing was changed.",
+  "conflict": {
+    "username": "seth_rollins",
+    "account_id": "3077",
+    "adoptable": false,
+    "bound_to": "289471021834760195"
+  }
+}

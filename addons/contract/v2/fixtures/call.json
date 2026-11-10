@@ -1,0 +1,11 @@
+{
+  "call_id": "5a2d9e30-1b44-4f7c-9e08-6d3a2c1b0f95",
+  "state": "recorded",
+  "reply": {
+    "operation": "account.adopt",
+    "subject": "289471021834760193",
+    "outcome": "succeeded",
+    "detail": "Bound the existing account rey_mysterio.",
+    "account_id": "3051"
+  }
+}

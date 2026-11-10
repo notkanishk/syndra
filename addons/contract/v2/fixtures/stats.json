@@ -1,0 +1,39 @@
+{
+  "contract_version": 2,
+  "metric": "laser.job_seconds",
+  "taken_at": "2026-11-10T07:40:00Z",
+  "watermark": "2026-11-08T00:00:00Z",
+  "points": [
+    {
+      "start": "2026-11-07T00:00:00Z",
+      "end": "2026-11-08T00:00:00Z",
+      "subject": "289471021834760193",
+      "dimensions": {
+        "machine": "speedy-400"
+      },
+      "value": 2520
+    },
+    {
+      "start": "2026-11-07T00:00:00Z",
+      "end": "2026-11-08T00:00:00Z",
+      "dimensions": {
+        "machine": "speedy-400"
+      },
+      "value": 3660
+    }
+  ],
+  "unbound": {
+    "accounts": 2
+  },
+  "gaps": [
+    {
+      "start": "2026-11-08T00:00:00Z",
+      "end": "2026-11-10T00:00:00Z",
+      "dimensions": {
+        "machine": "speedy-400"
+      },
+      "reason": "The laser PC was off"
+    }
+  ],
+  "next_cursor": "eyJzIjoiMjAyNi0xMS0wN1QwMDowMDowMFoiLCJ1Ijoic3ViLTdmM2EifQ"
+}

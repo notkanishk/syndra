@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/values.json",
+  "title": "Values",
+  "description": "GET /values/{field}. What a value on one entitlement field may be, read live. Exempt from taken_at and current: an enumeration of legal values is not an observation.",
+  "type": "object",
+  "properties": {
+    "field": {
+      "type": "string"
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What exists right now, sorted; empty with enumerable false."
+    },
+    "enumerable": {
+      "type": "boolean"
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "builtin_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "builtin_examples": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "field",
+    "values",
+    "enumerable"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/common/standing.json",
+  "title": "Standing",
+  "description": "Whether a converged account can be used yet, and who is waited on. Observed, never desired. Present on a subject or an apply outcome if and only if an account exists on the target.",
+  "type": "object",
+  "properties": {
+    "usable": {
+      "type": "boolean",
+      "description": "The account can be used right now."
+    },
+    "waiting_on": {
+      "type": "string",
+      "enum": [
+        "member",
+        "operator",
+        "target",
+        "none"
+      ],
+      "description": "Who must act before it is usable."
+    },
+    "note": {
+      "type": "string",
+      "description": "Why, in the add-on's words, e.g. 'No password set yet'."
+    },
+    "next": {
+      "type": "string",
+      "description": "What the person waited on does next."
+    }
+  },
+  "required": [
+    "usable",
+    "waiting_on"
+  ]
+}

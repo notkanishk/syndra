@@ -1,0 +1,8 @@
+{
+  "operation": "account.adopt",
+  "subject": "289471021834760193",
+  "outcome": "succeeded",
+  "detail": "Bound the existing account rey_mysterio.",
+  "rotated": true,
+  "account_id": "3051"
+}

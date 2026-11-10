@@ -28,7 +28,7 @@ import (
 // from disk by `$id` and never over the network, so a test run needs nothing
 // that is not in the checkout.
 
-const contractDir = "../contract"
+const contractDir = "../contract/v1"
 
 // contractMessages pairs every fixture with the schema it must satisfy. A
 // fixture on disk that is not listed here fails TestEveryFixtureIsCovered, so

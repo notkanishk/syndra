@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/identity/operation.json",
+  "title": "Operation identity",
+  "description": "Identity of an operation call. params has every secret parameter removed, so the store never holds even a hash of a member's password; params and subject are always present (an empty object, an empty string).",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject": {
+      "type": "string"
+    },
+    "params": {
+      "type": "object",
+      "propertyNames": {
+        "not": {
+          "enum": [
+            "elevated_key",
+            "password"
+          ]
+        }
+      },
+      "description": "Names refused here are the secret_params of registry/operations.json."
+    }
+  },
+  "required": [
+    "name",
+    "subject",
+    "params"
+  ],
+  "additionalProperties": false
+}

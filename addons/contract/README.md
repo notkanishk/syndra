@@ -20,6 +20,20 @@ answered `400 BAD_REQUEST`**, and neither side's tests could see it, because eac
 was exercised against its own fake and the two fakes agreed with each other. So
 the contract is these files, and each module is held to them in its own suite.
 
+## Two majors, two directories
+
+`v1/` is contract 1, pinned by slice 0 and still what the code speaks and is tested
+against. `v2/` is contract 2 as written by slice 1a (schemas only; nothing sends it
+yet). A test loads exactly one major, so a v1 fixture cannot validate against a v2
+schema by accident. When slice 1 ships, `v1/` is deleted. `transport_derivation.json`,
+`truenas_observed.json` and [`CHANGELOG.md`](CHANGELOG.md) stay here at the top. Every
+path below that begins `schema/`, `fixtures/`, `registry/` or `openapi.yaml` is inside
+`v1/` (or `v2/`, which has the same layout plus `schema/identity/`, `schema/common/` additions
+and `registry/{roles,features,kinds,units,constants}.json`).
+
+Go's test cache does not see these files, which sit outside each module's root: after
+editing one, run `go test -count=1`, or a stale pass is reported.
+
 ## What is here
 
 | Path | What it pins |

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/common/field.json",
+  "title": "Entitlement field vocabulary",
+  "description": "Shapes shared by every message that names an entitlement field. Contract 2 states the wire shape by role: account and channel travel as booleans, every other role as a sorted list of strings, and an empty list is [] never null.",
+  "$defs": {
+    "Role": {
+      "type": "string",
+      "enum": [
+        "account",
+        "channel",
+        "membership",
+        "flag",
+        "limit"
+      ],
+      "description": "What a field is; registry/roles.json says what each implies. One role per field."
+    },
+    "FieldValue": {
+      "type": [
+        "array",
+        "boolean"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "One field's value: a boolean (roles account, channel) or a list of strings (every other role). A limit is a list of decimal strings such as [\"0\",\"5368709120\"]."
+    },
+    "FieldValues": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/FieldValue"
+      },
+      "description": "Field values keyed by field name, in desired, observed and state alike. Absent and empty differ: an absent key is unmanaged, an empty list is 'make it empty'."
+    },
+    "Unit": {
+      "type": "string",
+      "enum": [
+        "count",
+        "items",
+        "bytes",
+        "seconds",
+        "grams"
+      ],
+      "description": "A unit from registry/units.json, a closed list the UI formats."
+    },
+    "Duration": {
+      "type": "string",
+      "format": "duration",
+      "description": "An ISO 8601 duration such as PT30S or P90D. Every duration a manifest or registry declares is one."
+    },
+    "AccountId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The target's own stable, opaque id for an account (a uid, a UUID); survives a rename."
+    }
+  }
+}

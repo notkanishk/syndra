@@ -1,0 +1,29 @@
+{
+  "subject": "289471021834760193",
+  "effect": "applied",
+  "detail": "Added fabrication. Unlocked the account.",
+  "consequence": "In lab_makers, fabrication. Enabled, SMB on.",
+  "username": "bianca.belair",
+  "account_id": "3042",
+  "standing": {
+    "usable": false,
+    "waiting_on": "member",
+    "note": "No password set yet",
+    "next": "Set a storage password on your page"
+  },
+  "fingerprint": "sha256:9d1c4f0b7e2a",
+  "observed": {
+    "group": [
+      "fabrication",
+      "lab_makers"
+    ],
+    "home": [
+      "true"
+    ],
+    "home_quota": [
+      "5368709120"
+    ],
+    "enabled": true,
+    "smb_enabled": true
+  }
+}

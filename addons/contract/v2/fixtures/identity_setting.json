@@ -1,0 +1,10 @@
+{
+  "kind": "setting",
+  "description": "{name, value}: a non-ASCII value (U+203A) is emitted raw, not escaped.",
+  "input": {
+    "value": "tank › homes",
+    "name": "home_root"
+  },
+  "canonical": "{\"name\":\"home_root\",\"value\":\"tank › homes\"}",
+  "sha256": "7f30356dbde7ee45f057afc434aa439332e4541e16c0396b82f3c3496eb672f0"
+}
