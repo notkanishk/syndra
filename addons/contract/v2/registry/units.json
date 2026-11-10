@@ -1,0 +1,20 @@
+{
+  "$comment": "The closed unit list. A new unit is one entry here and one formatter case in the UI.",
+  "units": {
+    "count": {
+      "format": "A plain integer."
+    },
+    "items": {
+      "format": "An integer with the noun item or items."
+    },
+    "bytes": {
+      "format": "Binary prefixes (KiB, MiB, GiB), one decimal."
+    },
+    "seconds": {
+      "format": "Minutes or hours; there is no minutes unit."
+    },
+    "grams": {
+      "format": "Grams, or kilograms from 1000."
+    }
+  }
+}

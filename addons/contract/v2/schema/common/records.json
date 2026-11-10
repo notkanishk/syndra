@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/common/records.json",
+  "title": "Records",
+  "description": "A result shape for operations with effect read: a list of things the subject holds or did. Read live, never stored by Syndra.",
+  "type": "object",
+  "properties": {
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Record"
+      }
+    },
+    "taken_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the app was read."
+    },
+    "current": {
+      "type": "boolean",
+      "description": "This answer comes from a read of the app that began after the request arrived."
+    },
+    "stale": {
+      "$ref": "stale.json"
+    }
+  },
+  "required": [
+    "records",
+    "taken_at",
+    "current"
+  ],
+  "allOf": [
+    {
+      "$ref": "stale.json#/$defs/Invariant"
+    }
+  ],
+  "$defs": {
+    "Record": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "description": "What a person calls it."
+        },
+        "category": {
+          "type": "string"
+        },
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the subject came to hold it."
+        },
+        "due": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When it is due back, if it is."
+        },
+        "standing": {
+          "$ref": "standing.json"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "patternProperties": {
+        "^x-": {
+          "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

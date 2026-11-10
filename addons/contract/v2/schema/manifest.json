@@ -1,0 +1,321 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/manifest.json",
+  "title": "Manifest",
+  "description": "GET /capabilities. What the add-on is, what it can do beyond the core, and what its fields mean. The schema is strict (field, operation and metric objects refuse an unknown key unless it begins x-); the backend's decode of it is tolerant.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": 2,
+      "description": "The wire contract major both ends speak. Contract 2: equality-checked, a mismatch is refused with CONTRACT_VERSION_MISMATCH."
+    },
+    "product": {
+      "type": "string"
+    },
+    "product_version": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "storage",
+        "access",
+        "inventory",
+        "machine"
+      ],
+      "description": "The closed kind list in registry/kinds.json; it keys the credential-scope denylist and the UI module."
+    },
+    "features": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$"
+      },
+      "description": "Additive capabilities, listed in registry/features.json. An unknown name is skipped, never refused."
+    },
+    "entitlement_schema": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EntitlementField"
+      },
+      "contains": {
+        "properties": {
+          "role": {
+            "const": "account"
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "minContains": 1,
+      "maxContains": 1,
+      "description": "The fields of desired state Syndra may fill. Exactly one has role account."
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Operation"
+      },
+      "description": "Feature operations.",
+      "x-feature": "operations"
+    },
+    "connection": {
+      "$ref": "#/$defs/Connection"
+    },
+    "metrics": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/$defs/Metric"
+      },
+      "description": "Feature stats.",
+      "x-feature": "stats"
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits"
+    }
+  },
+  "required": [
+    "contract_version",
+    "product",
+    "product_version",
+    "kind",
+    "features",
+    "entitlement_schema"
+  ],
+  "patternProperties": {
+    "^x-": {
+      "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."
+    }
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "EntitlementField": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The field name, e.g. group."
+        },
+        "role": {
+          "$ref": "common/field.json#/$defs/Role"
+        },
+        "label": {
+          "type": "string",
+          "description": "The field's name for a person."
+        },
+        "per_person": {
+          "type": "boolean",
+          "description": "An operator may set this field for one person, over what roles give."
+        },
+        "unit": {
+          "$ref": "common/field.json#/$defs/Unit"
+        },
+        "combine": {
+          "const": "max",
+          "description": "How several roles' values for a limit combine. Unlimited dominates."
+        },
+        "unlimited": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "description": "The value that means no ceiling, e.g. \"0\"."
+        }
+      },
+      "required": [
+        "name",
+        "role"
+      ],
+      "if": {
+        "properties": {
+          "role": {
+            "const": "limit"
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "then": {
+        "required": [
+          "unit",
+          "combine",
+          "unlimited"
+        ]
+      },
+      "patternProperties": {
+        "^x-": {
+          "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "Operation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$",
+          "description": "The operation id, e.g. password.set; a name in registry/operations.json."
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "member",
+            "admin"
+          ],
+          "description": "The broadest scope the add-on offers it at; the backend narrows it to its own ceiling."
+        },
+        "confirm": {
+          "type": "boolean"
+        },
+        "secret_params": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Parameter names whose values are never persisted, logged or hashed."
+        },
+        "available": {
+          "type": "boolean",
+          "description": "The target can perform it right now."
+        },
+        "unavailable_reason": {
+          "type": "string"
+        },
+        "params": {
+          "type": [
+            "object",
+            "boolean"
+          ],
+          "description": "A JSON Schema for the parameters, a UI hint only (labels, placeholders, an enum for a picker). The backend validates against its own policy and ignores this for any decision."
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "confirm",
+        "available"
+      ],
+      "patternProperties": {
+        "^x-": {
+          "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "Metric": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$",
+          "description": "Lowercase, dot-namespaced; the first segment is the kind or product."
+        },
+        "instrument": {
+          "type": "string",
+          "enum": [
+            "counter",
+            "gauge"
+          ]
+        },
+        "unit": {
+          "$ref": "common/field.json#/$defs/Unit"
+        },
+        "label": {
+          "type": "string"
+        },
+        "per_subject": {
+          "type": "boolean",
+          "description": "Reported per person as well as in total."
+        },
+        "dimensions": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "label"
+            ],
+            "patternProperties": {
+              "^x-": {
+                "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."
+              }
+            },
+            "unevaluatedProperties": false
+          },
+          "description": "At most four, naming resources and never people."
+        },
+        "against": {
+          "type": "string",
+          "description": "A limit field of the same unit; the UI draws the gauge as a meter against the subject's observed limit."
+        }
+      },
+      "required": [
+        "name",
+        "instrument",
+        "unit",
+        "label"
+      ],
+      "patternProperties": {
+        "^x-": {
+          "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "Connection": {
+      "type": "object",
+      "description": "How a member reaches the target; a storage fact. Absent when the deployment has not said.",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "description": "What a member connects with, e.g. smb."
+        },
+        "host": {
+          "type": "string",
+          "description": "The name a member types, never the API URL."
+        }
+      },
+      "required": [
+        "protocol",
+        "host"
+      ],
+      "additionalProperties": false
+    },
+    "Limits": {
+      "type": "object",
+      "description": "What only the add-on knows. Syndra's own caps live in registry/constants.json and are never declared here.",
+      "properties": {
+        "subjects_per_plan": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The most subjects one /plan may carry; above it the add-on answers PLAN_TOO_LARGE."
+        },
+        "fresh_read_cooldown": {
+          "$ref": "common/field.json#/$defs/Duration",
+          "description": "Feature freshness. Default constants.cooldown_default.",
+          "x-feature": "freshness"
+        },
+        "stats_buffer": {
+          "$ref": "common/field.json#/$defs/Duration",
+          "description": "Feature stats. How long a point stays buffered; default P90D, ceiling P400D.",
+          "x-feature": "stats"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

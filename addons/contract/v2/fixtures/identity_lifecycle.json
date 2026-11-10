@@ -1,0 +1,10 @@
+{
+  "kind": "lifecycle",
+  "description": "{state, reason}: a reason with an em dash, a quote, a backslash and a newline.",
+  "input": {
+    "reason": "Pool move — \"night shift\" back by C:\\18:00.\nDesk will say.",
+    "state": "read_only"
+  },
+  "canonical": "{\"reason\":\"Pool move — \\\"night shift\\\" back by C:\\\\18:00.\\nDesk will say.\",\"state\":\"read_only\"}",
+  "sha256": "b90d2b6a55bd8ee97cc0c6dcc6bf03cfa7f9f5554132bfbf63e4bdd8e92afda1"
+}

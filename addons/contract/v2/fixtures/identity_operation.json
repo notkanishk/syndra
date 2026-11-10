@@ -1,0 +1,11 @@
+{
+  "kind": "operation",
+  "description": "{name, subject, params minus secret_params}: a password.set whose params held {password} is hashed with params {}, so the store never holds even a hash of the password; params is present though empty.",
+  "input": {
+    "params": {},
+    "subject": "289471021834760193",
+    "name": "password.set"
+  },
+  "canonical": "{\"name\":\"password.set\",\"params\":{},\"subject\":\"289471021834760193\"}",
+  "sha256": "42af6c48833f3e1177dd0ee5cae90a3f4ca286d5086c1ed39957ef003d09ebbb"
+}

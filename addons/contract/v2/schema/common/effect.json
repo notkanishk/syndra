@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/common/effect.json",
+  "title": "Effect",
+  "description": "What an apply did, or a plan says it would do, to one subject.",
+  "type": "string",
+  "enum": [
+    "applied",
+    "no_change",
+    "blocked",
+    "apply"
+  ],
+  "$comment": "applied/no_change/blocked are apply outcomes; apply is what a plan reports for a subject it would change."
+}

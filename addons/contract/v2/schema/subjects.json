@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/subjects.json",
+  "title": "Subjects",
+  "description": "GET /subjects. Every account the target holds, in entitlement vocabulary, and how far to trust the read. Every subject has an account, so every subject carries standing.",
+  "type": "object",
+  "properties": {
+    "subjects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Subject"
+      }
+    },
+    "current": {
+      "type": "boolean",
+      "description": "This answer comes from a read of the app that began after the request arrived."
+    },
+    "taken_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the read happened."
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "The read hit its cap; it cannot support a conclusion about absence."
+    },
+    "stale": {
+      "$ref": "common/stale.json"
+    }
+  },
+  "required": [
+    "subjects",
+    "current",
+    "taken_at",
+    "truncated"
+  ],
+  "allOf": [
+    {
+      "$ref": "common/stale.json#/$defs/Invariant"
+    }
+  ],
+  "$defs": {
+    "Subject": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "The target's record key."
+        },
+        "username": {
+          "type": "string",
+          "description": "Display; never identity."
+        },
+        "account_id": {
+          "$ref": "common/field.json#/$defs/AccountId"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "smb_enabled": {
+          "type": "boolean"
+        },
+        "self": {
+          "type": "boolean",
+          "description": "The add-on's own service account; it refuses to adopt or purge it."
+        },
+        "state": {
+          "$ref": "common/field.json#/$defs/FieldValues",
+          "description": "The account's current values by entitlement field, in the manifest's vocabulary."
+        },
+        "standing": {
+          "$ref": "common/standing.json"
+        }
+      },
+      "required": [
+        "id",
+        "username",
+        "account_id",
+        "state",
+        "standing"
+      ]
+    }
+  }
+}

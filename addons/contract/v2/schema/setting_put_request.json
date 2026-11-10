@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/setting_put_request.json",
+  "title": "Setting write request",
+  "description": "PUT /settings/{name}. Carries contract_version and call_id in the body like every write (the Idempotency-Key header is gone). The add-on decodes it strictly. Request identity: identity/setting.json.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": 2,
+      "description": "The wire contract major both ends speak. Contract 2: equality-checked, a mismatch is refused with CONTRACT_VERSION_MISMATCH."
+    },
+    "call_id": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "value": {
+      "type": "string",
+      "description": "A value the target offers right now, or empty."
+    },
+    "actor": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "contract_version",
+    "call_id",
+    "value",
+    "actor"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/operation_request.json",
+  "title": "Operation request",
+  "description": "POST /operations/{name}. One invocation; the name is repeated in the body because the signature covers the body. The add-on decodes it strictly. Request identity: identity/operation.json.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": 2,
+      "description": "The wire contract major both ends speak. Contract 2: equality-checked, a mismatch is refused with CONTRACT_VERSION_MISMATCH."
+    },
+    "call_id": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "The deduplication token. Required, except that a preview (preview: true) carries none."
+    },
+    "operation": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "actor": {
+      "type": "string"
+    },
+    "plan_id": {
+      "type": "string"
+    },
+    "fingerprint": {
+      "type": "string"
+    },
+    "params": {
+      "type": "object",
+      "description": "Names and secrecy are in registry/operations.json."
+    },
+    "preview": {
+      "type": "boolean",
+      "description": "Feature calls. Return the would-be result with no effect; never recorded.",
+      "x-feature": "calls"
+    },
+    "fresh": {
+      "type": "boolean",
+      "description": "Feature freshness. Read the app now (an effect read operation only).",
+      "x-feature": "freshness"
+    }
+  },
+  "required": [
+    "contract_version",
+    "operation"
+  ],
+  "additionalProperties": false,
+  "if": {
+    "properties": {
+      "preview": {
+        "const": true
+      }
+    },
+    "required": [
+      "preview"
+    ]
+  },
+  "then": {
+    "not": {
+      "required": [
+        "call_id"
+      ]
+    }
+  },
+  "else": {
+    "required": [
+      "call_id"
+    ]
+  }
+}

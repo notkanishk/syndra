@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/health.json",
+  "title": "Health",
+  "description": "GET /health. The add-on's own account of itself and of its target. Served even when the target is unreachable.",
+  "type": "object",
+  "properties": {
+    "reachable": {
+      "type": "boolean",
+      "description": "A real call to the target just succeeded."
+    },
+    "product": {
+      "type": "string"
+    },
+    "product_version": {
+      "type": "string"
+    },
+    "version_tested": {
+      "type": "boolean"
+    },
+    "version_note": {
+      "type": "string"
+    },
+    "last_read_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the add-on last read the target."
+    },
+    "credential_scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The scopes the target credential holds, self-reported and advisory; the kit warns on the kind's denylist."
+    },
+    "credential_expiry": {
+      "type": "string",
+      "enum": [
+        "set",
+        "none",
+        "unrecorded"
+      ],
+      "description": "Which of three states the credential is in."
+    },
+    "credential_expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the credential expires; present only when credential_expiry is set."
+    },
+    "unaudited_shares": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "shares_readable": {
+      "type": "boolean"
+    },
+    "circuit_open": {
+      "type": "boolean"
+    },
+    "lifecycle": {
+      "$ref": "lifecycle_request.json#/$defs/LifecycleState"
+    },
+    "lifecycle_note": {
+      "type": "string"
+    },
+    "in_flight": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "drained": {
+      "type": "boolean"
+    },
+    "log_head": {
+      "type": "string"
+    },
+    "log_records": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The mutation log's length."
+    },
+    "target_reads": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Feature freshness. A monotonic count of reads the add-on has made of its app, so a kit can prove a fresh read happened.",
+      "x-feature": "freshness"
+    },
+    "snapshot_taken_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the add-on's mirror of the target was taken."
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this report was composed."
+    }
+  },
+  "required": [
+    "reachable",
+    "product",
+    "product_version",
+    "version_tested",
+    "credential_expiry",
+    "circuit_open",
+    "lifecycle",
+    "in_flight",
+    "drained",
+    "log_head",
+    "log_records",
+    "checked_at"
+  ]
+}

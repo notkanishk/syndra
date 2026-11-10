@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/identity/vector.json",
+  "title": "Identity vector",
+  "description": "A golden RFC 8785 (JCS) vector: the identity object, its canonical form, and the SHA-256 of those bytes. Both ends reproduce canonical and sha256 from input.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "apply",
+        "operation",
+        "lifecycle",
+        "setting"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "input": {
+      "type": "object"
+    },
+    "canonical": {
+      "type": "string",
+      "description": "The JCS output, as UTF-8 text."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hex of SHA-256 over the canonical bytes."
+    }
+  },
+  "required": [
+    "kind",
+    "input",
+    "canonical",
+    "sha256"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "apply"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input": {
+            "$ref": "apply.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "operation"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input": {
+            "$ref": "operation.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "lifecycle"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input": {
+            "$ref": "lifecycle.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "setting"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "input": {
+            "$ref": "setting.json"
+          }
+        }
+      }
+    }
+  ]
+}

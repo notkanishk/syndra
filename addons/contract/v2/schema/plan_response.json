@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/plan_response.json",
+  "title": "Plan response",
+  "description": "POST /plan reply. What would happen to each subject, in the shape the apply returns afterwards. current means computed against a live read.",
+  "type": "object",
+  "properties": {
+    "outcomes": {
+      "type": "array",
+      "items": {
+        "$ref": "apply_response.json"
+      }
+    },
+    "current": {
+      "type": "boolean"
+    },
+    "taken_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "The read hit the cap; the drain refuses a truncated plan."
+    },
+    "stale": {
+      "$ref": "common/stale.json"
+    }
+  },
+  "required": [
+    "outcomes",
+    "current",
+    "taken_at",
+    "truncated"
+  ],
+  "allOf": [
+    {
+      "$ref": "common/stale.json#/$defs/Invariant"
+    }
+  ]
+}

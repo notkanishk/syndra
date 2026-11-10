@@ -1,0 +1,103 @@
+{
+  "$comment": "Additive capabilities. Every key a feature introduces is listed under it, so an older kit answers skip, never fail. request_fields name `<schema>.<property>` or `<METHOD route>?<param>`; reply_fields `<schema>.<property>`. Each is marked x-feature in the schema or OpenAPI. Nothing is deprecated in major 2. `subjects.paged` is deferred (decision 27) and not listed.",
+  "features": {
+    "operations": {
+      "meaning": "One-shot operations.",
+      "routes": [
+        "POST /operations/{name}"
+      ],
+      "request_fields": [],
+      "manifest_keys": [
+        "operations"
+      ],
+      "health_fields": [],
+      "reply_fields": []
+    },
+    "settings": {
+      "meaning": "System-wide settings.",
+      "routes": [
+        "GET /settings",
+        "PUT /settings/{name}"
+      ],
+      "request_fields": [],
+      "manifest_keys": [],
+      "health_fields": [],
+      "reply_fields": []
+    },
+    "storage.reach": {
+      "meaning": "What each group opens.",
+      "routes": [
+        "GET /reach"
+      ],
+      "request_fields": [],
+      "manifest_keys": [],
+      "health_fields": [],
+      "reply_fields": [],
+      "requires_kind": "storage"
+    },
+    "storage.homes": {
+      "meaning": "Home folders and their use.",
+      "routes": [
+        "GET /homes"
+      ],
+      "request_fields": [],
+      "manifest_keys": [],
+      "health_fields": [],
+      "reply_fields": [],
+      "requires_kind": "storage"
+    },
+    "calls": {
+      "meaning": "Settling a write: GET /calls, and the preview request field.",
+      "routes": [
+        "GET /calls/{call_id}"
+      ],
+      "request_fields": [
+        "operation_request.preview"
+      ],
+      "manifest_keys": [],
+      "health_fields": [],
+      "reply_fields": []
+    },
+    "freshness": {
+      "meaning": "Syndra may ask for a fresh read; the add-on says how fresh an answer is.",
+      "routes": [],
+      "request_fields": [
+        "GET /subjects?fresh",
+        "GET /values/{field}?fresh",
+        "GET /reach?fresh",
+        "GET /homes?fresh",
+        "operation_request.fresh"
+      ],
+      "manifest_keys": [
+        "limits.fresh_read_cooldown"
+      ],
+      "health_fields": [
+        "target_reads"
+      ],
+      "reply_fields": []
+    },
+    "stats": {
+      "meaning": "Bucketed statistics pulled on a schedule.",
+      "routes": [
+        "GET /stats"
+      ],
+      "request_fields": [],
+      "manifest_keys": [
+        "metrics",
+        "limits.stats_buffer"
+      ],
+      "health_fields": [],
+      "reply_fields": []
+    },
+    "results": {
+      "meaning": "An operation's reply is one result object validated by a registry schema.",
+      "routes": [],
+      "request_fields": [],
+      "manifest_keys": [],
+      "health_fields": [],
+      "reply_fields": [
+        "operation_response.result"
+      ]
+    }
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/common/status.json",
+  "title": "Status",
+  "description": "A result shape for operations with effect read: whether the subject can use the target now, and how much room is left. Read live, never stored.",
+  "type": "object",
+  "properties": {
+    "usable": {
+      "type": "boolean"
+    },
+    "standing": {
+      "$ref": "standing.json"
+    },
+    "meters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Meter"
+      }
+    },
+    "taken_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the app was read."
+    },
+    "current": {
+      "type": "boolean",
+      "description": "This answer comes from a read of the app that began after the request arrived."
+    },
+    "stale": {
+      "$ref": "stale.json"
+    }
+  },
+  "required": [
+    "usable",
+    "standing",
+    "meters",
+    "taken_at",
+    "current"
+  ],
+  "allOf": [
+    {
+      "$ref": "stale.json#/$defs/Invariant"
+    }
+  ],
+  "$defs": {
+    "Meter": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "used": {
+          "type": "number",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Absent when there is no ceiling."
+        },
+        "unit": {
+          "$ref": "field.json#/$defs/Unit"
+        }
+      },
+      "required": [
+        "label",
+        "used",
+        "unit"
+      ],
+      "patternProperties": {
+        "^x-": {
+          "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

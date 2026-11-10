@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/apply_ok.json",
+  "title": "Apply 200 body",
+  "description": "POST /apply 200: an apply outcome that was not refused. Same shape as apply_response.json, but the effect is applied or no_change and there is no conflict; blocked and conflict outcomes are problem+json (APPLY_BLOCKED, BINDING_CONFLICT).",
+  "allOf": [
+    {
+      "$ref": "apply_response.json"
+    }
+  ],
+  "properties": {
+    "effect": {
+      "enum": [
+        "applied",
+        "no_change"
+      ]
+    }
+  },
+  "not": {
+    "required": [
+      "conflict"
+    ]
+  }
+}

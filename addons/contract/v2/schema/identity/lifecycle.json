@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/identity/lifecycle.json",
+  "title": "Lifecycle identity",
+  "description": "Identity of a lifecycle change.",
+  "type": "object",
+  "properties": {
+    "state": {
+      "$ref": "../lifecycle_request.json#/$defs/LifecycleState"
+    },
+    "reason": {
+      "type": "string",
+      "pattern": "\\S"
+    }
+  },
+  "required": [
+    "state",
+    "reason"
+  ],
+  "additionalProperties": false
+}

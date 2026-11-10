@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/common/activity.json",
+  "title": "Activity",
+  "description": "A result shape for operations with effect read: what the subject did on the target, newest first, read live and never stored.",
+  "type": "object",
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Event"
+      }
+    },
+    "uncovered": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Resources that were not recording this subject, so their silence is not 'did nothing'."
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "Older events exist than the newest returned."
+    },
+    "taken_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the app was read."
+    },
+    "current": {
+      "type": "boolean",
+      "description": "This answer comes from a read of the app that began after the request arrived."
+    },
+    "stale": {
+      "$ref": "stale.json"
+    }
+  },
+  "required": [
+    "events",
+    "uncovered",
+    "truncated",
+    "taken_at",
+    "current"
+  ],
+  "allOf": [
+    {
+      "$ref": "stale.json#/$defs/Invariant"
+    }
+  ],
+  "$defs": {
+    "Event": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the event happened."
+        },
+        "event": {
+          "type": "string"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "address": {
+          "type": "string",
+          "description": "Where it came from."
+        },
+        "detail": {
+          "type": "string",
+          "description": "The target's own status token only, never its prose."
+        }
+      },
+      "required": [
+        "at",
+        "event",
+        "success"
+      ],
+      "patternProperties": {
+        "^x-": {
+          "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "state": "read_only",
+  "reason": "Moving the pool to new disks.",
+  "in_flight": 0,
+  "drained": true
+}

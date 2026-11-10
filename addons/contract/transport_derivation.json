@@ -17,6 +17,66 @@
   "hash": "SHA-256",
   "hmac_info": "syndra/addon-hmac/v1",
   "kdf": "HKDF (RFC 5869), salt = target name, info as below",
+  "raw_query_signatures": {
+    "$comment": "Major 2 signs ts.method.target.body where target = the escaped path exactly as sent + \"?\" + the raw query when it is non-empty (RFC 9421 @query as sent: no sorting, no re-encoding; an empty query adds nothing). Major 1 signed the decoded path and no query; vector 1 shows the two agree when there is no query and the path needs no decoding. Same HMAC procedure as `signature`.",
+    "introduced_by_major": 2,
+    "mac_input": "<unix> '.' <method> '.' <target> '.' <body>",
+    "vectors": [
+      {
+        "body_utf8": "{\"contract_version\":1,\"plan_id\":\"p-1\"}",
+        "hmac_key_hex": "5416a42a673c585c7ae01ec78f1cf054817722405b9265ce7547833f09678eac",
+        "mac_hex": "b9b8305bfbb5996fb90d7275f7b9cfc9b772349c4c62fb6f56efadd1bca224e3",
+        "method": "POST",
+        "name": "no_query",
+        "path_as_sent": "/apply",
+        "raw_query": "",
+        "target": "/apply",
+        "target_name": "truenas",
+        "unix": "1786500000",
+        "why": "No query: the target is the path alone, so the MAC equals major 1's signature.mac_hex."
+      },
+      {
+        "body_utf8": "",
+        "hmac_key_hex": "5416a42a673c585c7ae01ec78f1cf054817722405b9265ce7547833f09678eac",
+        "mac_hex": "9c94ec05fa5d6cd9409775f44efa1ac92e0d3d841c9f5291ff70b2238e37d6bf",
+        "method": "GET",
+        "name": "base64url_cursor",
+        "path_as_sent": "/stats",
+        "raw_query": "metric=laser.job_seconds&since=2026-11-07T00%3A00%3A00Z&cursor=eyJzIjoiMjAyNi0xMS0wN1QwMDowMDowMFoiLCJ1Ijoic3ViLTdmM2E_In0-",
+        "target": "/stats?metric=laser.job_seconds&since=2026-11-07T00%3A00%3A00Z&cursor=eyJzIjoiMjAyNi0xMS0wN1QwMDowMDowMFoiLCJ1Ijoic3ViLTdmM2E_In0-",
+        "target_name": "truenas",
+        "unix": "1786500000",
+        "why": "A base64url cursor (with - and _), signed exactly as sent."
+      },
+      {
+        "body_utf8": "",
+        "hmac_key_hex": "5416a42a673c585c7ae01ec78f1cf054817722405b9265ce7547833f09678eac",
+        "mac_hex": "65a7243e54e3d0a84bfbb8ab91fbee09db3bbdd06bad308be64caf4fb20a503b",
+        "method": "GET",
+        "name": "reserved_and_repeated",
+        "path_as_sent": "/values/group",
+        "raw_query": "tag=y&q=a%26b%3Dc%2B+d&tag=x&flag",
+        "target": "/values/group?tag=y&q=a%26b%3Dc%2B+d&tag=x&flag",
+        "target_name": "truenas",
+        "unix": "1786500000",
+        "why": "Reserved characters percent-encoded, a repeated key out of order, a bare key: no sorting, no re-encoding."
+      },
+      {
+        "body_utf8": "",
+        "decoded_path_mac_hex": "72999a686c994767186d499711a91d68173239efd6ef2e6028169b3a5d34c905",
+        "hmac_key_hex": "5416a42a673c585c7ae01ec78f1cf054817722405b9265ce7547833f09678eac",
+        "mac_hex": "9742af4a3d7604ae1ec9ae1cff40eeddcf83d94bc1194449cacce98fbb4acd95",
+        "method": "GET",
+        "name": "escaped_path",
+        "path_as_sent": "/values/lab%20makers",
+        "raw_query": "fresh=true",
+        "target": "/values/lab%20makers?fresh=true",
+        "target_name": "truenas",
+        "unix": "1786500000",
+        "why": "The path is signed escaped, as sent; signing the decoded path gives a different MAC (decoded_path_mac_hex)."
+      }
+    ]
+  },
   "secret_bytes_hex": "39663261316337653462386430333536613165396334663730623264386536313335613763393066653262346431363834376361303365356239643766323831",
   "secret_encoding": "The configured value's UTF-8 bytes AFTER trimming surrounding whitespace. NOT hex-decoded, even when the value looks like hex.",
   "secret_utf8": "9f2a1c7e4b8d0356a1e9c4f70b2d8e6135a7c90fe2b4d16847ca03e5b9d7f281",

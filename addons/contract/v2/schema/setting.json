@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/setting.json",
+  "title": "Setting",
+  "description": "One system-wide setting: its value, who set it, and what it may be. The reply of PUT /settings/{name} and each entry of GET /settings.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "value": {
+      "type": "string",
+      "description": "Empty means not chosen."
+    },
+    "set_by": {
+      "type": "string"
+    },
+    "set_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "values_read": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "name",
+    "label",
+    "value",
+    "values",
+    "values_read"
+  ]
+}

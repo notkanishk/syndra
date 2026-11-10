@@ -1,0 +1,36 @@
+{
+  "taken_at": "2026-11-10T09:20:00Z",
+  "current": true,
+  "groups": {
+    "fabrication": [
+      {
+        "share": "makers",
+        "folder": "fabrication",
+        "path": "/mnt/tank/makers/fabrication",
+        "access": "change",
+        "dataset": "tank/makers/fabrication"
+      }
+    ],
+    "lab_makers": [
+      {
+        "share": "homes",
+        "folder": "rey_mysterio",
+        "path": "/mnt/tank/homes/rey_mysterio",
+        "access": "change",
+        "dataset": "tank/homes",
+        "home": true,
+        "usage": {
+          "used_bytes": 19756849561,
+          "quota_bytes": 53687091200
+        }
+      }
+    ]
+  },
+  "everyone": [
+    {
+      "share": "makers",
+      "path": "/mnt/tank/makers",
+      "access": "read"
+    }
+  ]
+}

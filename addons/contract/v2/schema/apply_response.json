@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/apply_response.json",
+  "title": "Apply outcome",
+  "description": "POST /apply 200 reply, and each entry of a plan's outcomes. A blocked or conflicting apply is not this body: it is a problem+json (APPLY_BLOCKED 422, BINDING_CONFLICT 409) carrying these fields as extension members. account_id and standing appear together, and only when an account exists.",
+  "type": "object",
+  "properties": {
+    "subject": {
+      "type": "string"
+    },
+    "effect": {
+      "$ref": "common/effect.json"
+    },
+    "detail": {
+      "type": "string"
+    },
+    "consequence": {
+      "type": "string"
+    },
+    "username": {
+      "type": "string"
+    },
+    "account_id": {
+      "$ref": "common/field.json#/$defs/AccountId"
+    },
+    "standing": {
+      "$ref": "common/standing.json"
+    },
+    "fingerprint": {
+      "type": "string"
+    },
+    "observed": {
+      "$ref": "common/field.json#/$defs/FieldValues",
+      "description": "The managed fields as the TARGET reported them after the write; absent when unverified."
+    },
+    "unverified": {
+      "type": "boolean"
+    },
+    "conflict": {
+      "$ref": "#/$defs/BindingConflict"
+    }
+  },
+  "required": [
+    "subject",
+    "effect",
+    "detail"
+  ],
+  "dependentRequired": {
+    "account_id": [
+      "standing"
+    ],
+    "standing": [
+      "account_id"
+    ]
+  },
+  "$defs": {
+    "BindingConflict": {
+      "type": "object",
+      "description": "An unbound target account already holds the derived name.",
+      "properties": {
+        "username": {
+          "type": "string"
+        },
+        "account_id": {
+          "$ref": "common/field.json#/$defs/AccountId"
+        },
+        "adoptable": {
+          "type": "boolean"
+        },
+        "bound_to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username",
+        "account_id",
+        "adoptable"
+      ]
+    }
+  }
+}

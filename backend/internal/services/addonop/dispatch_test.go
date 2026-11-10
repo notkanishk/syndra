@@ -669,9 +669,9 @@ func TestTheActorTravelsToTheAddon(t *testing.T) {
 }
 
 // The one field of an add-on's answer this layer parses, held against the
-// contract's own operation reply (addons/contract/fixtures/operation_response.json).
+// contract's own operation reply (addons/contract/v1/fixtures/operation_response.json).
 func TestOperationAnswerReadsAccountUIDFromTheContractFixture(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "addons", "contract", "fixtures", "operation_response.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "addons", "contract", "v1", "fixtures", "operation_response.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

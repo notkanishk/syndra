@@ -27,7 +27,7 @@ import (
 // disagree with the first.
 func contractFixture(t *testing.T, name string) []byte {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "addons", "contract", "fixtures", name))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "addons", "contract", "v1", "fixtures", name))
 	if err != nil {
 		t.Fatalf("read contract fixture %s: %v", name, err)
 	}

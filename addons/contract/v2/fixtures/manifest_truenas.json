@@ -1,0 +1,106 @@
+{
+  "contract_version": 2,
+  "product": "truenas",
+  "product_version": "TrueNAS-25.10.5",
+  "kind": "storage",
+  "features": [
+    "operations",
+    "settings",
+    "storage.reach",
+    "storage.homes"
+  ],
+  "entitlement_schema": [
+    {
+      "name": "group",
+      "role": "membership",
+      "label": "Group"
+    },
+    {
+      "name": "home",
+      "role": "flag",
+      "label": "Gives a home folder"
+    },
+    {
+      "name": "home_quota",
+      "role": "limit",
+      "label": "Home folder limit",
+      "unit": "bytes",
+      "combine": "max",
+      "unlimited": "0",
+      "per_person": true
+    },
+    {
+      "name": "enabled",
+      "role": "account"
+    },
+    {
+      "name": "smb_enabled",
+      "role": "channel",
+      "label": "SMB"
+    }
+  ],
+  "operations": [
+    {
+      "id": "password.set",
+      "scope": "member",
+      "confirm": false,
+      "secret_params": [
+        "password"
+      ],
+      "available": true
+    },
+    {
+      "id": "password.rotate",
+      "scope": "admin",
+      "confirm": false,
+      "available": true
+    },
+    {
+      "id": "account.adopt",
+      "scope": "admin",
+      "confirm": true,
+      "available": true
+    },
+    {
+      "id": "storage.status",
+      "scope": "member",
+      "confirm": false,
+      "available": true
+    },
+    {
+      "id": "account.release",
+      "scope": "admin",
+      "confirm": true,
+      "available": true
+    },
+    {
+      "id": "account.purge",
+      "scope": "admin",
+      "confirm": true,
+      "secret_params": [
+        "elevated_key"
+      ],
+      "available": false,
+      "unavailable_reason": "This TrueNAS release lacks the method the operation needs."
+    },
+    {
+      "id": "activity.get",
+      "scope": "admin",
+      "confirm": false,
+      "available": true
+    },
+    {
+      "id": "health.get",
+      "scope": "admin",
+      "confirm": false,
+      "available": true
+    }
+  ],
+  "connection": {
+    "protocol": "smb",
+    "host": "nas.example.org"
+  },
+  "limits": {
+    "subjects_per_plan": 200
+  }
+}
