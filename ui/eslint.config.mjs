@@ -78,11 +78,14 @@ const eslintConfig = [
       "no-restricted-imports": [
         "error",
         {
-          paths: ["@/components/names/Unresolved", "@/components/names"].map((name) => ({
-            name,
-            importNames: ["UNKNOWN_PROJECT"],
-            message: "Say a missing project name through projectLabel(name) or <ProjectName>, the one fallback.",
-          })),
+          // By pattern, so the alias and any relative path are both caught.
+          patterns: [
+            {
+              group: ["**/components/names", "**/components/names/Unresolved", "**/names/Unresolved"],
+              importNames: ["UNKNOWN_PROJECT"],
+              message: "Say a missing project name through projectLabel(name) or <ProjectName>, the one fallback.",
+            },
+          ],
         },
       ],
     },

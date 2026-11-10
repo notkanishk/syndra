@@ -442,3 +442,30 @@ func TestCreateRole_NoDisplayNameIsTheHumanizedKey(t *testing.T) {
 		t.Fatalf("display name stored %q, want %q", stored, "Laser Trained")
 	}
 }
+
+// Clearing a role's name on edit names it the same way a create does, never by
+// its key; a key with no word in it keeps itself rather than a blank.
+func TestUpdateRole_NoDisplayNameIsTheHumanizedKey(t *testing.T) {
+	p := newRolePipe(t)
+	p.roles["laser_trained"] = zitadel.ProjectRoleResult{Key: "laser_trained", DisplayName: "Laser Trained"}
+	var sent string
+	update := svcDbUpdateRole
+	svcDbUpdateRole = func(ctx context.Context, projectID, key, name, group string) error {
+		sent = name
+		return update(ctx, projectID, key, name, group)
+	}
+	if err := UpdateRole(context.Background(), "p1", "laser_trained", "", "", "op"); err != nil {
+		t.Fatal(err)
+	}
+	if sent != "Laser Trained" {
+		t.Fatalf("display name stored %q, want %q", sent, "Laser Trained")
+	}
+}
+
+func TestDefaultRoleName(t *testing.T) {
+	for key, want := range map[string]string{"laser_trained": "Laser Trained", "_x": "X", "-": "-", "trained-": "Trained"} {
+		if got := defaultRoleName(key); got != want {
+			t.Errorf("defaultRoleName(%q) = %q, want %q", key, got, want)
+		}
+	}
+}

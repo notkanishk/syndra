@@ -7,6 +7,7 @@ import (
 	"log"
 	"regexp"
 	"sort"
+	"strings"
 	"syndra/internal/textsort"
 	"time"
 
@@ -67,9 +68,7 @@ func CreateRole(ctx context.Context, req CreateRoleRequest, createdBy string) (m
 	}
 
 	if req.DisplayName == "" {
-		// Zitadel and the roles table both need one: the name every screen
-		// would give it anyway (roleLabel, the UI's humanizeKey), never the key.
-		req.DisplayName = roleLabel(req.RoleKey)
+		req.DisplayName = defaultRoleName(req.RoleKey)
 	}
 
 	var clonedFromProject, clonedFromRole *string
@@ -107,11 +106,23 @@ func CreateRole(ctx context.Context, req CreateRoleRequest, createdBy string) (m
 	return role, nil
 }
 
+// defaultRoleName is a role's display name when none is given, on create and
+// on edit alike: Zitadel and the roles table both need one, and it is the name
+// every screen would give the role anyway (roleLabel, the UI's humanizeKey),
+// never the key. Trimmed, since Zitadel may trim it and the write's read-back
+// compares the two; a key with no word in it keeps itself.
+func defaultRoleName(roleKey string) string {
+	if name := strings.TrimSpace(roleLabel(roleKey)); name != "" {
+		return name
+	}
+	return roleKey
+}
+
 // UpdateRole renames a role or changes its group, in Zitadel and in Syndra's
 // record of it (when there is one: a role made in Zitadel directly has none).
 func UpdateRole(ctx context.Context, projectID, roleKey, displayName, group, actor string) error {
 	if displayName == "" {
-		displayName = roleKey
+		displayName = defaultRoleName(roleKey)
 	}
 	var before *models.Role
 	return writeRole(ctx, roleWrite{

@@ -9,7 +9,8 @@ import (
 // Migration 000085: a stored day's unlisted project, labelled with its id,
 // gets the empty label (the map's one "no name" signal); a named project and
 // every other node are left as they were, in their order; running it again
-// changes nothing; the down migration brings the id back.
+// changes nothing; the down migration brings the id back. The migrations run
+// over the whole table, as they do on deploy: syndra_test only.
 func TestStoredMapsLoseTheIdAsAProjectsName(t *testing.T) {
 	ctx := liveDB(t)
 	const day = "1999-01-02"

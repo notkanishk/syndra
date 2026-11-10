@@ -30,13 +30,15 @@ type Named = { project_id: string; role_key: string; project_name?: string; role
 
 /**
  * A role as a person says it. The map's own name wins; for a role the map has
- * not drawn, the same "Project · Role" through the one fallbacks (an unnamed
- * project is "Unknown project", an unlabelled role its humanized key).
+ * not drawn, the same "Project · Role": the project as the row names it, else
+ * as the map does (a row may carry ids only), through the one fallbacks (an
+ * unnamed project is "Unknown project", an unlabelled role its humanized key).
  */
 export function roleName(m: Model, r: Named): string {
   const id = m.roleId(r.project_id, r.role_key);
   if (id) return m.nameOf(id);
-  return `${projectLabel(r.project_name)} · ${roleDisplayName(r.role_label, r.role_key)}`;
+  const project = r.project_name || m.byId.get(`project:${r.project_id}`)?.label;
+  return `${projectLabel(project)} · ${roleDisplayName(r.role_label, r.role_key)}`;
 }
 
 function tally(m: Model, rows: Array<Named & { people: number }>): Map<string, number> {

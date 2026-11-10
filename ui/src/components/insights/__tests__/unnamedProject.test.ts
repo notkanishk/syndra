@@ -37,6 +37,13 @@ describe("a role the map has not drawn", () => {
       "Laser Lab · Laser Trained",
     );
   });
+  it("takes its project's name from the map when the row carries ids only", () => {
+    const withProject = buildModel({
+      nodes: [{ id: "project:p1", label: "Laser Lab", kind: "project", project_id: "p1" }],
+      edges: [],
+    } as never);
+    expect(roleName(withProject, { project_id: "p1", role_key: "old_trained" })).toBe("Laser Lab · Old Trained");
+  });
   it("says Unknown project when the project has no name", () => {
     expect(roleName(m, { project_id: "382075", role_key: "trained", project_name: "", role_label: "" })).toBe(
       "Unknown project · Trained",
