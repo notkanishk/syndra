@@ -59,6 +59,9 @@ type accessSnapshot struct {
 	// Basis(). Computed at most once per request, same as everything else here.
 	basis         models.ObservationBasis
 	basisComputed bool
+	// standings is the lazy, memoised standing of each user's roles, from
+	// Observed, Basis and the user's outbox rows. See Standing.
+	standings map[string]Standings
 }
 
 // newAccessSnapshot primes the user list (single directory call) but defers
@@ -74,6 +77,42 @@ func newAccessSnapshot(ctx context.Context) (*accessSnapshot, error) {
 		roles:    make(map[string]userRoles, len(users)),
 		observed: make(map[string]map[string]bool, len(users)),
 	}, nil
+}
+
+// Standing is the standing of each of userID's roles: the one answer to "does
+// this person hold this role", from what Zitadel shows (Observed, under Basis)
+// and the latest outbox row for the role. Lazy and memoised like For.
+//
+// ponytail: one outbox read per person, like Observed; a role-members page
+// pays one per member. Batch through RoleDeliveries' []string if that is slow.
+func (s *accessSnapshot) Standing(userID string) (Standings, error) {
+	if st, ok := s.standings[userID]; ok {
+		return st, nil
+	}
+	observed, err := s.Observed(userID)
+	if err != nil {
+		return Standings{}, err
+	}
+	basis, err := s.Basis()
+	if err != nil {
+		return Standings{}, err
+	}
+	deliveries, err := svcRoleDeliveries(s.ctx, []string{userID})
+	if err != nil {
+		return Standings{}, err
+	}
+	if s.standings == nil {
+		s.standings = map[string]Standings{}
+	}
+	st := newStandings(deliveries[userID], observed, basis)
+	s.standings[userID] = st
+	return st, nil
+}
+
+// personSnapshot is a snapshot for one person's page: no directory listing,
+// since For, Observed, Basis and Standing need only the id.
+func personSnapshot(ctx context.Context) *accessSnapshot {
+	return &accessSnapshot{ctx: ctx, roles: map[string]userRoles{}, observed: map[string]map[string]bool{}}
 }
 
 // For returns the cached (roleMap, bundles) for userID, computing-and-
@@ -611,13 +650,20 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 	// so one response carries both — a screen that fetched the records and
 	// then asked a second endpoint what was real could render the two against
 	// each other, and the member landing did exactly that.
-	observed, basis, err := observedRolesByProject(ctx, userID)
+	snap := personSnapshot(ctx)
+	observed, basis, err := observedRolesByProject(snap, userID)
 	if err != nil {
 		return models.UserAccessView{}, err
 	}
 	// Presence may be concluded from any read; absence only from a complete
 	// one. Everything below that states "you hold nothing here" checks this.
-	completeRead := basis.ReadAt != nil && basis.Current && !basis.Truncated
+	completeRead := basis.ConcludesAbsence()
+	// Each role's standing, from the same read and the person's outbox rows:
+	// the one answer the screens render (design.md, W3b).
+	standings, err := snap.Standing(userID)
+	if err != nil {
+		return models.UserAccessView{}, err
+	}
 
 	projectBuckets := make(map[string]*models.ProjectAccessView)
 	for _, role := range roleMap {
@@ -695,6 +741,12 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 				bucket.ObservedRoleKeys = []string{}
 			}
 		}
+		bucket.Standings = map[string]*models.RoleStanding{}
+		for _, keys := range [][]string{bucket.EffectiveRoleKeys, bucket.ObservedRoleKeys} {
+			for _, key := range keys {
+				bucket.Standings[key] = standings.Of(bucket.ProjectID, key)
+			}
+		}
 		projects = append(projects, *bucket)
 	}
 	sort.Slice(projects, func(i, j int) bool {
@@ -745,29 +797,33 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 }
 
 // observedRolesByProject is what the observation store holds for one person,
-// folded to project → roles, with the basis it rests on.
+// folded to project → roles, with the basis it rests on. Read through the
+// snapshot, so it is the same read the standings rest on, and a person with two
+// grant rows on one project keeps the roles of both.
 //
 // Returns a nil map — never an empty one — when nothing has ever been observed.
 // The distinction is the whole point: an empty map is "we looked and they hold
 // nothing", and nil is "we have not looked", and a screen that confuses the two
 // tells somebody their access is gone when it is merely unread.
-func observedRolesByProject(ctx context.Context, userID string) (map[string][]string, models.ObservationBasis, error) {
-	basis, err := observationBasis(ctx)
+func observedRolesByProject(snap *accessSnapshot, userID string) (map[string][]string, models.ObservationBasis, error) {
+	basis, err := snap.Basis()
 	if err != nil {
 		return nil, models.ObservationBasis{}, err
 	}
 	if basis.ReadAt == nil {
 		return nil, basis, nil
 	}
-	grants, err := svcObservedGrantsFor(ctx, userID)
+	seen, err := snap.Observed(userID)
 	if err != nil {
 		return nil, models.ObservationBasis{}, fmt.Errorf("observed grants for %s: %w", userID, err)
 	}
-	byProject := make(map[string][]string, len(grants))
-	for _, g := range grants {
-		keys := append([]string{}, g.RoleKeys...)
+	byProject := make(map[string][]string, len(seen))
+	for key := range seen {
+		projectID, roleKey, _ := strings.Cut(key, ":")
+		byProject[projectID] = append(byProject[projectID], roleKey)
+	}
+	for _, keys := range byProject {
 		sort.Strings(keys)
-		byProject[g.ProjectID] = keys
 	}
 	return byProject, basis, nil
 }

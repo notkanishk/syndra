@@ -40,7 +40,7 @@ func PendingDeliveriesForUser(ctx context.Context, userID string) ([]PendingDeli
 	const q = `
 		SELECT project_id, unnest(role_keys) AS role_key, source, COALESCE(source_ref, ''), created_at
 		  FROM propagation_outbox
-		 WHERE user_id = $1
+		 WHERE user_id = $1 AND target = 'zitadel'
 		   AND op_type IN ('add','replace')
 		   AND status IN ('pending','in_flight')`
 	rows, err := querier(ctx).Query(ctx, q, userID)

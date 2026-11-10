@@ -112,3 +112,33 @@ records (direct grants with ends, pinned bundle versions incl. includes)
 **Previews.** The three UI previews ask `POST /insights/whatif`, which already ran the cascade's readers and closure. New kinds: `rule_added` (project/role = source, `target_project_id`/`target_role_key`, optional `rule_id` replaced), `bundle_assigned` and `bundle_unassigned` (`user_id`, `bundle_id`). BundlePage uses the existing `bundle_gives_not`.
 
 **Evidence.** `access/closure_test.go`; `cache/compiler_ends_test.go`; `services/access_parity_test.go` (cohort = person view minus people who left; person view = core closure; rule roles end with their source; bundle and rule counts observed; never read is nil); `services/expected_test.go` `TestRuleDerived_AgreesWithThePersonView`; `drift/intent_sources_test.go` `TestSweep_ARuleTargetFromAnUnrecordedSourceIsDrift`; `services/insights_whatif_preview_test.go`; `handlers/holder_counts_test.go`; UI `holders.test.ts`, `list.test.tsx`, `removal-impact.test.tsx`, `saveRule.test.tsx`, `ManageBundlesPublished.test.tsx`, `Makerspace.test.tsx`. Mutation-checked: dropping the departed filter fails three parity assertions; making rule targets endless in `access.Ends` fails three `Ends` tests.
+
+## W3b · One holding index, and each role's standing (2a.13, 2a.14, 2a.17)
+
+Owner, 10 Nov 2026: one answer to "does this person hold this role, and why", worked out once by the backend and sent with each role; the UI only renders it. Five standings.
+
+**Today (mapped 10 Nov, before the change).** No reader gives that answer. `/users/{id}/access` sends the recorded closure, a per-source `queued` flag and `observed_role_keys` per project, and never reads queued removals or unconfirmed writes; `/projects/{id}/roles/{key}/members` sends `in_zitadel` and no `queued`. The UI then combines them in six places (`MemberAccess` `standing()`, `PersonAccess` `RoleGroup` with a second fetch of Zitadel's grants, `GrantDirectAccess` `noteOf`, `Holding.tsx` `askState`, the role page's `holdCount`, `answers.ts`), each with its own order. A role whose removal is queued shows as held, or as missing, depending on the page. `db.RequestHolding` is the only reader that already treats a queued removal as leaving. `db.PendingDeliveriesForUser` does not filter `target`, so an add-on row can mark a Zitadel role as not sent.
+
+**The standing.** For one person and one role (`project:role`):
+
+```
+latest outbox row for this role (target zitadel; add naming it, revoke naming it,
+or any replace on its project — a replace gives what it names and takes the rest),
+by intent_seq
+   pending / in_flight, gives      → waiting      "waiting to be sent"
+   pending / in_flight, takes      → removing     "being removed" (still held)
+   applied, not confirmed, takes   → removing if Zitadel still shows it, else not_held
+   applied, not confirmed, gives   → held if Zitadel shows it, else sent
+otherwise (no row, confirmed, failed, discarded)
+   Zitadel shows it                → held
+   Zitadel read, complete, absent  → not_held
+   Zitadel not read / incomplete   → no standing (null): absence can't be concluded
+```
+
+The latest row decides, so an add a later revoke took back, or the other way round, is never read as two states. `held` with no reasons is access Syndra didn't give (unexplained); `not_held` with reasons is access given and not in Zitadel. Neither needs a sixth word.
+
+**Where it lives.** `services.accessSnapshot` becomes the holding index: beside `For` (records) and `Observed` (Zitadel), `Standing(userID)` reads the person's outbox rows once (`db.RoleDeliveries`, latest row per role, batch for many people) and applies a pure `standingOf` (table-tested). `ExplainUserAccess` and `RoleMembers` read it from the snapshot and send `standing` on each `EffectiveRole` and member. The UI gets one helper, `standingWords`, and the six derivations call it. `in_zitadel` and the second fetch of Zitadel's grants on the person page go once nothing reads them.
+
+**The rest of W3b.** `RequestHolding` answers from the standing plus the direct grant's end (the request guard); `MemberAccess`'s overwrite of `observed_role_keys` goes; `reachOf` already reads the snapshot (a role being removed is still held, so no change); `insights_asof` stores nothing for a day before Zitadel was ever read (no recorded fallback); the "unused bundle" hint stays a question about assignments, and stays on its one grouped count (`db.GetBundleHolderCounts`): reading it through the snapshot would walk every person's records on Home for the same answer.
+
+**Owner's answers, 10 Nov 2026.** (1) Zitadel never read or read incompletely: no standing (null); the page says it couldn't check, from the view's `observation`. The four outbox-based standings still show. (2) A role sent and not seen back yet counts as already had: the request guard and the pickers say it is on its way, and no duplicate request is made. (3) Insights history says "not checked" for days before the first read. (4) "Unused bundle" stays about assignments.

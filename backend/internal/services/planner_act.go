@@ -280,7 +280,7 @@ func (e *Refused) Code() string { code, _, _ := strings.Cut(e.Change.Refusal, ":
 
 var (
 	svcGetAccessRequestByID     = db.GetAccessRequestByID
-	svcRequestHolding           = db.RequestHolding
+	svcRequestHolding           = RequestHolding
 	svcApproveRequestAndEnqueue = db.ApproveRequestAndEnqueue
 	svcEnqueueDirectGrant       = db.EnqueueDirectGrantPropagation
 	svcResolveAccessRequest     = db.ResolveAccessRequest

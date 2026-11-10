@@ -28,9 +28,10 @@ import (
 // RoleMember is one holder of a (project, role) pair.
 type RoleMember struct {
 	User models.UserProfile `json:"user"`
-	// InZitadel is whether the observation store shows this holder actually
-	// holding the role. Nil when never observed; false is "given, not there".
-	InZitadel *bool `json:"in_zitadel,omitempty"`
+	// Standing is whether this person holds the role (models.RoleStanding),
+	// the same answer their own page gives; null when Zitadel hasn't been read
+	// completely and no outbox row settles it.
+	Standing *models.RoleStanding `json:"standing"`
 	// Reasons is ordered direct → bundle → mapping, the fixed reading order
 	// the Access source component uses everywhere.
 	Reasons []models.RoleReason `json:"reasons"`
@@ -182,24 +183,21 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 			return RoleMembersView{}, ferr
 		}
 		role := roleMap[roleKey{projectID: projectID, roleKey: key}]
-		var inZitadel *bool
-		if basis.ReadAt != nil {
-			observed, oerr := snap.Observed(user.ID)
-			if oerr != nil {
-				return RoleMembersView{}, oerr
-			}
-			// Presence is evidence under any read; absence only under a
-			// complete one. A truncated listing leaves "not held" unknown.
-			held := observed[projectID+":"+key]
-			if held || !basis.Truncated {
-				inZitadel = &held
-			}
-			if role == nil && held {
-				view.ObservedOnly = append(view.ObservedOnly, user)
-			}
-		}
 		if role == nil {
+			if basis.ReadAt != nil {
+				observed, oerr := snap.Observed(user.ID)
+				if oerr != nil {
+					return RoleMembersView{}, oerr
+				}
+				if observed[projectID+":"+key] {
+					view.ObservedOnly = append(view.ObservedOnly, user)
+				}
+			}
 			continue
+		}
+		standings, serr := snap.Standing(user.ID)
+		if serr != nil {
+			return RoleMembersView{}, serr
 		}
 
 		reasons := append([]models.RoleReason(nil), role.Reasons...)
@@ -207,7 +205,7 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 			return reasonRank(reasons[i].Kind) < reasonRank(reasons[j].Kind)
 		})
 
-		member := RoleMember{User: user, Reasons: reasons, InZitadel: inZitadel}
+		member := RoleMember{User: user, Reasons: reasons, Standing: standings.Of(projectID, key)}
 		// Pills count people, not reasons: two bundles granting the same role
 		// are one person on the Bundle pill, so each kind counts once per member.
 		seen := map[string]bool{}

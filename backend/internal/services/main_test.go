@@ -28,6 +28,8 @@ func TestMain(m *testing.M) {
 	svcSetWorkingInclude = func(context.Context, string, string, string, int) (models.BundleInclude, error) {
 		return models.BundleInclude{}, nil
 	}
+	// No outbox rows behind any standing unless a test says so.
+	svcRoleDeliveries = func(context.Context, []string) (map[string][]db.RoleDelivery, error) { return nil, nil }
 	// The term dates are the defaults unless a test sets them.
 	termsSetting = func(context.Context, string) (db.ConfigSetting, bool, error) { return db.ConfigSetting{}, false, nil }
 	os.Exit(m.Run())

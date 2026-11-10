@@ -17,7 +17,7 @@ type InsightsSnapshot struct {
 	Day        string
 	TakenAt    time.Time
 	Topology   models.TopologyGraph
-	RolePeople map[string]int // "project_id:role_key" -> people holding it
+	RolePeople map[string]int // "project_id:role_key" -> people holding it; nil: Zitadel not read yet that day
 }
 
 // InsightsSnapshotExists says whether `day` already has its row.

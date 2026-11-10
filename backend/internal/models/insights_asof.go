@@ -8,9 +8,10 @@ import "time"
 // access given or taken away from that day to now: the distance between this
 // picture and today, not a correction of it.
 type InsightsAsOf struct {
-	Day          string         `json:"day"`
-	TakenAt      time.Time      `json:"taken_at"`
-	Topology     TopologyGraph  `json:"topology"`
+	Day      string        `json:"day"`
+	TakenAt  time.Time     `json:"taken_at"`
+	Topology TopologyGraph `json:"topology"`
+	// RolePeople is null for a day before Zitadel was ever read: not checked.
 	RolePeople   map[string]int `json:"role_people"`
 	FirstDay     string         `json:"first_day"`
 	ChangesSince int            `json:"changes_since"`
