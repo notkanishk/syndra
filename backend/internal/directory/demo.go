@@ -55,4 +55,3 @@ func (d *demoSource) Tag() string { return "demo" }
 // Invalidate* are no-ops — the demo catalog is in-memory and has no TTL.
 
 func (d *demoSource) InvalidateProject(_ string) {}
-func (d *demoSource) InvalidateUsers()           {}

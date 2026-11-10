@@ -614,7 +614,6 @@ func (d *snapshotFixtureDirectory) ProjectName(_ context.Context, id string) (st
 }
 func (d *snapshotFixtureDirectory) Tag() string              { return "snapshot-fixture" }
 func (d *snapshotFixtureDirectory) InvalidateProject(string) {}
-func (d *snapshotFixtureDirectory) InvalidateUsers()         {}
 
 // setupSnapshotTestFixtures swaps directory.Default for a fixture source
 // seeded with the requested number of users, apps, and projects; neutralises

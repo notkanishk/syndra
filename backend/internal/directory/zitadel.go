@@ -48,10 +48,6 @@ type zitadelSource struct {
 	// together would otherwise multiply that by N.
 	usersFlight singleflight.Group
 
-	// Bumped by InvalidateUsers. A rebuild that began before a bump read a
-	// directory the edit has since changed, so it must not cache what it read.
-	usersGen atomic.Int64
-
 	// When Zitadel last answered a list read, and since when it hasn't (zero
 	// while it answers). ponytail: one flag for every key, so in a partial
 	// outage a good read of one list reports the whole directory current;
@@ -162,9 +158,9 @@ func (z *zitadelSource) cachePutFor(key string, val any, ttl time.Duration) {
 // MetadataTTL is how long one person's metadata (title, team) is reused. It is
 // a call per person, so at the list's 30s it turned every users-list rebuild
 // into thousands of IdP calls against the Zitadel that is issuing everyone's
-// tokens (assessment SC3). Metadata is edited by hand in Zitadel's console and
-// reaches a token only at the person's next compile anyway; an edit through
-// Syndra drops it at once (InvalidateUsers).
+// tokens (assessment SC3). Metadata is edited by hand in Zitadel's console
+// (Syndra never writes a person's profile or metadata) and reaches a token
+// only at the person's next compile anyway, so an hour's lag costs nothing.
 var MetadataTTL = time.Hour
 
 // --- Users ------------------------------------------------------------------
@@ -206,7 +202,6 @@ func (z *zitadelSource) Users(ctx context.Context) ([]models.UserProfile, error)
 }
 
 func (z *zitadelSource) rebuildUsers(ctx context.Context) ([]models.UserProfile, error) {
-	gen := z.usersGen.Load()
 	items, err := paginate(func(p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
 		return z.client.ListUsers(ctx, p)
 	})
@@ -229,9 +224,7 @@ func (z *zitadelSource) rebuildUsers(ctx context.Context) ([]models.UserProfile,
 	// blank out every card on /users.
 	z.applyUserMetadataOverlay(ctx, out)
 
-	if z.usersGen.Load() == gen {
-		z.cachePut(usersCacheKey, out)
-	}
+	z.cachePut(usersCacheKey, out)
 	return out, nil
 }
 
@@ -298,7 +291,6 @@ func (z *zitadelSource) fetchUserMetadata(ctx context.Context, userID string) ([
 	if cached, ok := z.cacheGet(key); ok {
 		return cached.([]zitadel.UserMetadata), true
 	}
-	gen := z.usersGen.Load()
 	items, err := paginate(func(p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserMetadata], error) {
 		return z.client.ListUserMetadata(ctx, userID, p)
 	})
@@ -306,9 +298,7 @@ func (z *zitadelSource) fetchUserMetadata(ctx context.Context, userID string) ([
 		log.Printf("[DIRECTORY] list metadata for user %s failed (skipping overlay): %v", userID, err)
 		return nil, false
 	}
-	if z.usersGen.Load() == gen {
-		z.cachePutFor(key, items, MetadataTTL)
-	}
+	z.cachePutFor(key, items, MetadataTTL)
 	return items, true
 }
 
@@ -585,22 +575,6 @@ func (z *zitadelSource) InvalidateProject(projectID string) {
 	z.expire(projectsCacheKey)
 	z.expire(applicationsCacheKey)
 	z.expire(appsByProjectCacheKey(projectID))
-}
-
-func (z *zitadelSource) InvalidateUsers() {
-	z.usersGen.Add(1)
-	// Forget so the next read starts a fresh rebuild instead of joining one
-	// that began before the edit.
-	z.usersFlight.Forget(usersCacheKey)
-	z.expire(usersCacheKey)
-	// Metadata caches are keyed per-user; drop them too so a newly-set title
-	// shows up after an invalidation, not only after TTL.
-	z.cache.Range(func(k, _ any) bool {
-		if key, ok := k.(string); ok && strings.HasPrefix(key, userMetadataCachePrefix) {
-			z.expire(key)
-		}
-		return true
-	})
 }
 
 // --- Mapping helpers --------------------------------------------------------

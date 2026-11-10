@@ -52,9 +52,11 @@ type Source interface {
 	// InvalidateProject drops the given project's cached roles + any list-level
 	// entries that embed project data (projects list, applications list).
 	InvalidateProject(projectID string)
-	// InvalidateUsers drops the users list cache. No production path calls it
-	// today; tests use it to expire the list.
-	InvalidateUsers()
+	// No InvalidateUsers: Syndra never writes a person's profile or metadata
+	// (its Zitadel client edits roles and grants only), so nothing it does can
+	// make the users list stale; the list refreshes on CacheTTL, metadata on
+	// MetadataTTL. A feature that edits people adds the invalidation with it
+	// (the in-flight-rebuild guard it needs is commit 43e412d4).
 }
 
 // ErrUnreachable is a read Zitadel didn't answer, with no last good read to
@@ -128,4 +130,3 @@ func (unreachableSource) ProjectName(context.Context, string) (string, bool, err
 func (unreachableSource) Tag() string                  { return "unreachable" }
 func (unreachableSource) Freshness() (time.Time, bool) { return time.Time{}, false }
 func (unreachableSource) InvalidateProject(string)     {}
-func (unreachableSource) InvalidateUsers()             {}

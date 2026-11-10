@@ -44,7 +44,7 @@ Branch `release/coherence`: groups A (delivery and one retry model), B (rule con
 
 ## 0d. One refresh path, W2b and W2c (5 Nov 2026)
 
-Branch `fix/one-refresh-path`; detail in [`changes/one-path`](changes/one-path/proposal.md). Backend: `cache.Refresh` is the one post-commit refresh; the drain (including failed and exhausted rows), service-account mark/unmark and bundle rename now call it. UI: `lib/queries/invalidation.ts` maps writes to keys and every mutation hook uses it; both are guard-tested. Closed on `fix/one-refresh-rest`: every refresh site is on `Refresh`, guard allow-list empty, webhook refreshes after its write, `directory.InvalidateAll` deleted. Open: `directory.InvalidateUsers` (no production caller, five tests use it); `HomeLimit.tsx` and `UnconfirmedChanges.tsx` still call `invalidateQueries` directly.
+Branch `fix/one-refresh-path`; detail in [`changes/one-path`](changes/one-path/proposal.md). Backend: `cache.Refresh` is the one post-commit refresh; the drain (including failed and exhausted rows), service-account mark/unmark and bundle rename now call it. UI: `lib/queries/invalidation.ts` maps writes to keys and every mutation hook uses it; both are guard-tested. Closed on `fix/one-refresh-rest`: every refresh site is on `Refresh`, guard allow-list empty, webhook refreshes after its write, `directory.InvalidateAll` deleted. `directory.InvalidateUsers` removed with its race guard (owner, 10 Nov 2026: nothing in Syndra edits people). Every invalidation goes through `invalidateAfter` too (W2c, 10 Nov 2026: `HomeLimit.tsx`, `UnconfirmedChanges.tsx`, `DegradedBanner.tsx` moved; a lint rule keeps it so). Nothing open.
 
 ## 0d. One access core (one-path W2a, 5 Nov 2026)
 
