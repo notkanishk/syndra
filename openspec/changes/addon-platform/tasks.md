@@ -1235,6 +1235,18 @@ too. Production showed every `system:reconcile` row to the NAS sent by hand.
   Tests: live `TestAPartialObservationKeepsTheFieldsItDidNotSee` (both
   directions), `TestADepartedPersonsObservationKeepsTheRestOfTheBase`,
   `TestAWithdrawOnlyApplyRecordsAPartialBase`; all mutation-checked.
+- [x] 37.6b Withdraw-only is a fact about the desired state, so it is recorded
+  with it (`desired_state_snapshots.withdraws_only`, migration 000087) and the
+  outbox row copies it from the snapshot its approval cites; no caller passes
+  it to the enqueue. Both paths set it from the set: the system convergence
+  and the operator's rehearsal (`NewPlanSubject.WithdrawsOnly`). Before, only
+  the system path declared it, so an operator's approved lock for a departed
+  member replaced the merge base. An operator-approved withdrawal is now also
+  one the runner may send. Tests: live `TestTheRowCopiesWithdrawsOnlyFromItsSnapshot`,
+  `TestAnOperatorsApprovalForADepartedPersonIsRecordedWithdrawOnly`, migration
+  guards for 000086/000087; the runner-licence guard reads `runnerSends`
+  structurally (its top level after `sendsOnItsOwn` is ANDs only; the claim's
+  own text has no OR or op_type). All mutation-checked.
 - [x] 37.7 The add-on never makes an account that is wanted off
   (`noAccountToSwitchOff`, asked by plan and apply after the truncation
   refusal): a subject with no account, never bound or bound to one an operator

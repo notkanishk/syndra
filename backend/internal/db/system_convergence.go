@@ -70,8 +70,10 @@ type SystemConvergence struct {
 	// Never declared by a caller: services.EntitlementSet.Convergence is the
 	// one constructor, and it sets this from the set (WithdrawsOnly) together
 	// with a Desired that is then the lifecycle switch alone, so the flag and
-	// what the row can do cannot disagree. A lock because no mapped role reaches
-	// the target stays false: the same resolution confers on the next person.
+	// what the row can do cannot disagree. Recorded on the snapshot beside
+	// Desired; the outbox row copies it from there. A lock because no mapped
+	// role reaches the target stays false: the same resolution confers on the
+	// next person.
 	WithdrawsOnly bool
 }
 
@@ -141,10 +143,11 @@ func RecordSystemConvergence(ctx context.Context, c SystemConvergence) (planID, 
 		StateReadAt:        time.Now().UTC(),
 		RequestFingerprint: requestFP,
 		Subjects: []NewPlanSubject{{
-			SubjectID:    c.SubjectID,
-			DesiredState: c.Desired,
-			Fingerprint:  SystemFingerprint,
-			Outcome:      PlanOutcome{Effect: PlanEffectApply},
+			SubjectID:     c.SubjectID,
+			DesiredState:  c.Desired,
+			WithdrawsOnly: c.WithdrawsOnly,
+			Fingerprint:   SystemFingerprint,
+			Outcome:       PlanOutcome{Effect: PlanEffectApply},
 		}},
 	})
 	if err != nil {
@@ -164,7 +167,6 @@ func RecordSystemConvergence(ctx context.Context, c SystemConvergence) (planID, 
 
 	outboxID, err = EnqueueEntitlementApplyTx(ctx, tx, EntitlementApply{
 		PlanSubjectID: subjects[0].ID,
-		WithdrawsOnly: c.WithdrawsOnly,
 		Reason:        c.Reason,
 	})
 	if err != nil {

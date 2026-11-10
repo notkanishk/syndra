@@ -143,18 +143,28 @@ func TestRevocationClaimReturnsOnlyWithdrawalsAndNeverOvertakesOlderIntent(t *te
 
 	// Two withdrawal shapes and no third. Zitadel names the direction in
 	// op_type; an add-on apply carries a resolved set and cannot be read for it,
-	// so the writer declares it and the claim reads the declaration.
+	// so its snapshot records it and the claim reads the row's copy.
 	if !strings.Contains(body, "sendsOnItsOwn") ||
 		!strings.Contains(src, "const sendsOnItsOwn = `(p.op_type = 'revoke' OR p.withdraws_only)`") {
 		t.Fatal("the background claim must return only withdrawals: 'add' confers, 'replace' both confers and withdraws, and an undeclared 'apply' may do either")
 	}
-	// And never on op_type alone for the conferring shapes. An `apply` selected
-	// without its declaration is the exclusion this claim used to make outright,
-	// re-entered by the back door.
-	for _, conferring := range []string{"'add'", "'apply'"} {
-		if regexp.MustCompile(`p\.op_type\s*(=|IN\s*\([^)]*)` + regexp.QuoteMeta(conferring)).MatchString(body) {
-			t.Errorf("the background claim must never select %s on op_type alone: nobody gains access without an operator", conferring)
-		}
+	// And nothing widens it. runnerSends is sendsOnItsOwn followed only by
+	// restrictions: with its comments and every parenthesised group removed,
+	// what is left after sendsOnItsOwn is a chain of ANDs, so no OR can admit a
+	// row sendsOnItsOwn did not. Nested clauses (the hold's `p.op_type =
+	// 'apply'`) only ever narrow, inside an AND NOT.
+	def := constDef(t, src, "runnerSends")
+	after := def[strings.Index(def, "sendsOnItsOwn")+len("sendsOnItsOwn"):]
+	if top := topLevelSQL(after); regexp.MustCompile(`\bOR\b`).MatchString(top) {
+		t.Errorf("runnerSends may only narrow sendsOnItsOwn; its top level has an OR: %q", top)
+	}
+	// Nor does the claim add a way in of its own: its own text has no OR and
+	// no op_type at all, so every row it takes is one runnerSends admitted. An
+	// `apply` selected on op_type without its declaration is the exclusion
+	// this claim used to make outright, re-entered by the back door.
+	own := regexp.MustCompile(`(--|//)[^\n]*`).ReplaceAllString(claim, "")
+	if regexp.MustCompile(`\bOR\b|op_type`).MatchString(own) {
+		t.Error("the background claim must select through runnerSends alone: nobody gains access without an operator")
 	}
 	guard := regexp.MustCompile(`(?s)NOT EXISTS \(.*?e\.intent_seq < p\.intent_seq\)`).FindString(body)
 	if guard == "" {
@@ -244,6 +254,17 @@ func constValue(t *testing.T, src, name string) string {
 
 // constDef is the text of a const declaration in src, from its name to the end
 // of its (possibly concatenated) value.
+// topLevelSQL is sql without its `--` comments and without every parenthesised
+// group, innermost first: what is left is the clause's top level.
+func topLevelSQL(sql string) string {
+	sql = regexp.MustCompile(`--[^\n]*`).ReplaceAllString(sql, "")
+	group := regexp.MustCompile(`\([^()]*\)`)
+	for group.MatchString(sql) {
+		sql = group.ReplaceAllString(sql, " ")
+	}
+	return sql
+}
+
 func constDef(t *testing.T, src, name string) string {
 	t.Helper()
 	i := strings.Index(src, "const "+name+" =")

@@ -38,3 +38,43 @@ func TestAPartialObservationKeepsTheFieldsItDidNotSee(t *testing.T) {
 		t.Fatalf("whole: base = %s, want it replaced, group gone", b)
 	}
 }
+
+// Whether a desired state can only take access away is recorded with the state
+// (desired_state_snapshots.withdraws_only), and the outbox row copies it from
+// the snapshot its approval cites: no caller passes it to the enqueue, so the
+// row, the drain's intent (and so MergeBase.Partial) and the runner all read
+// one fact, on the system path and the operator's alike.
+func TestTheRowCopiesWithdrawsOnlyFromItsSnapshot(t *testing.T) {
+	ctx := liveDB(t)
+	if _, err := PG.Exec(ctx, `INSERT INTO targets (target) VALUES ('truenas') ON CONFLICT DO NOTHING`); err != nil {
+		t.Fatal(err)
+	}
+	lock := map[string]json.RawMessage{"enabled": json.RawMessage(`false`), "smb_enabled": json.RawMessage(`false`)}
+	for _, want := range []bool{true, false} {
+		subject := freshSubject(t, ctx)
+		t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, subject) })
+		_, outboxID, err := RecordSystemConvergence(ctx, SystemConvergence{
+			Target: "truenas", SubjectID: subject, Actor: "system:reconcile", Reason: "test",
+			Desired: lock, WithdrawsOnly: want,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var row, snapshot bool
+		if err := PG.QueryRow(ctx, `
+			SELECT p.withdraws_only, s.withdraws_only
+			  FROM propagation_outbox p
+			  JOIN plan_subjects ps ON ps.id = p.plan_subject_id
+			  JOIN desired_state_snapshots s ON s.id = ps.snapshot_id
+			 WHERE p.id = $1`, outboxID).Scan(&row, &snapshot); err != nil {
+			t.Fatal(err)
+		}
+		intent, err := ReadEntitlementIntent(ctx, outboxID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if snapshot != want || row != want || intent.WithdrawsOnly != want {
+			t.Fatalf("withdraws-only %v: snapshot %v, row %v, intent %v", want, snapshot, row, intent.WithdrawsOnly)
+		}
+	}
+}

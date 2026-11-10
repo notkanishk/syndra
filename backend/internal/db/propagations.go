@@ -303,9 +303,9 @@ const revocationFirst = `
 const notBeforeDue = `(p.not_before IS NULL OR p.not_before <= NOW())`
 
 // sendsOnItsOwn is the one statement of which queued rows the background
-// runner sends without an operator: a revoke, or a row its writer declared
-// withdraw-only (an add-on apply that can only take access away,
-// EntitlementSet.WithdrawsOnly). The claims read it, and every outbox row
+// runner sends without an operator: a revoke, or an add-on apply whose
+// snapshot is withdraw-only (it can only take access away,
+// EntitlementSet.WithdrawsOnly; the row copies the flag from the snapshot). The claims read it, and every outbox row
 // carries it (outboxRowColumns), so a screen says "goes on its own" from the same
 // rule rather than its own copy.
 const sendsOnItsOwn = `(p.op_type = 'revoke' OR p.withdraws_only)`
@@ -488,12 +488,12 @@ func ClaimPropagationByID(ctx context.Context, target, id string) (*models.Pendi
 //
 // Two shapes qualify. `op_type = 'revoke'` is Zitadel's, where the row itself
 // names the direction. An add-on revocation is an `apply` carrying a resolved
-// set, and the row cannot be read to find out which way it moves — so the
-// writer declares it, and `withdraws_only` is that declaration. This used to be
+// set, and the row cannot be read to find out which way it moves — so its
+// snapshot records it, and `withdraws_only` is the row's copy of that record. This used to be
 // excluded outright, and the exclusion was worse than it looked: a target
 // revocation queued a lock nothing would claim, on a response that told the
-// operator it drains on its own, appearing on no surface. `apply` rows that
-// have NOT declared themselves are still excluded, which is the same rule, now
+// operator it drains on its own, appearing on no surface. `apply` rows whose
+// snapshot is not withdraw-only are still excluded, which is the same rule, now
 // answered rather than assumed.
 //
 // And never ahead of older conferring intent for the same subject. A grant

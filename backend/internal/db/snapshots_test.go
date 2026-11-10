@@ -53,7 +53,7 @@ func TestASnapshotIsRefusedBeforeTheTransactionIsTouched(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := WriteDesiredStateSnapshotTx(context.Background(), nil, tc.subject, tc.target, tc.actor, tc.state)
+			_, err := WriteDesiredStateSnapshotTx(context.Background(), nil, tc.subject, tc.target, tc.actor, tc.state, false)
 			if !errors.Is(err, ErrInvalidSnapshot) {
 				t.Fatalf("want ErrInvalidSnapshot (%s), got %v", tc.because, err)
 			}
@@ -73,7 +73,7 @@ func TestAnEmptyDesiredStateIsNotTheSameAsNoneAtAll(t *testing.T) {
 			t.Error("an empty set was refused before the write; empty means manage nothing, which is a legitimate instruction")
 		}
 	}()
-	_, err := WriteDesiredStateSnapshotTx(context.Background(), nil, "u1", "truenas", "op_1", map[string]json.RawMessage{})
+	_, err := WriteDesiredStateSnapshotTx(context.Background(), nil, "u1", "truenas", "op_1", map[string]json.RawMessage{}, false)
 	if errors.Is(err, ErrInvalidSnapshot) {
 		t.Fatalf("an empty set must reach the database: %v", err)
 	}

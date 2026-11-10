@@ -51,16 +51,6 @@ type EntitlementApply struct {
 	PlanSubjectID string
 	// Source is how the change came about. Defaults to `direct`.
 	Source string
-	// WithdrawsOnly declares that this convergence can only take access away.
-	//
-	// Carried from SystemConvergence, whose one constructor
-	// (services.EntitlementSet.Convergence) sets it from the set together with
-	// a desired state that is then the lifecycle switch alone. An operator's
-	// apply passes false.
-	//
-	// It is what lets the background runner drain the row without an operator
-	// (db.runnerSends). False is the safe default: an undeclared row waits.
-	WithdrawsOnly bool
 	// Reason is why it was queued, as Pending changes says it. Optional.
 	Reason string
 }
@@ -158,10 +148,14 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 		)
 		INSERT INTO propagation_outbox
 			(op_type, user_id, payload_json, idempotency_key, initiated_by, source, target, plan_subject_id, withdraws_only, reason)
-		SELECT 'apply', ps.subject_id, '{}'::jsonb, $1, p.created_by, $2, p.target, ps.id, $5, $6
+		SELECT 'apply', ps.subject_id, '{}'::jsonb, $1, p.created_by, $2, p.target, ps.id, s.withdraws_only IS TRUE, $5
 		  FROM plan_subjects ps
 		  JOIN plans        p ON p.id = ps.plan_id
 		  JOIN locked_target lt ON lt.target = p.target
+		  -- The flag is the snapshot's (services.EntitlementSet.WithdrawsOnly),
+		  -- read from the approval like the subject and target: no caller
+		  -- passes it, so the row cannot say something its state does not.
+		  LEFT JOIN desired_state_snapshots s ON s.id = ps.snapshot_id
 		 WHERE ps.id = $4::uuid
 		   AND p.applied_at IS NOT NULL
 		   AND p.target <> $3
@@ -169,7 +163,7 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 		RETURNING id, user_id, initiated_by, target`
 
 	var outboxID, subjectID, initiatedBy, target string
-	err = tx.QueryRow(ctx, insertOutbox, key, source, TargetZitadel, p.PlanSubjectID, p.WithdrawsOnly, nullIfEmpty(p.Reason)).
+	err = tx.QueryRow(ctx, insertOutbox, key, source, TargetZitadel, p.PlanSubjectID, nullIfEmpty(p.Reason)).
 		Scan(&outboxID, &subjectID, &initiatedBy, &target)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", explainEnqueueRefusal(ctx, tx, p.PlanSubjectID)
@@ -303,9 +297,9 @@ type EntitlementIntent struct {
 	// verifying against a trigger-time read would fail an ordinary access change
 	// because somebody edited the target in between.
 	Surface string
-	// WithdrawsOnly is the row's flag: its desired state is the lifecycle
-	// switch alone, so what it observes back is part of the managed set
-	// (MergeBase.Partial).
+	// WithdrawsOnly is the row's copy of its snapshot's flag: the desired state
+	// is the lifecycle switch alone, so what it observes back is part of the
+	// managed set (MergeBase.Partial).
 	WithdrawsOnly bool
 }
 
