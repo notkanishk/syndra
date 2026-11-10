@@ -35,7 +35,6 @@ func (s stubSource) RoleKeysForProject(context.Context, string) ([]string, error
 func (s stubSource) ProjectName(context.Context, string) (string, bool, error)    { return "", false, nil }
 func (s stubSource) Tag() string                                                  { return s.tag }
 func (s stubSource) InvalidateProject(string)                                     {}
-func (s stubSource) InvalidateUsers()                                             {}
 
 func withSystemDeps(t *testing.T, source directory.Source, configured, seeded bool) {
 	t.Helper()

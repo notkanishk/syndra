@@ -53,6 +53,10 @@ type Request struct {
 type QueuedSubject struct {
 	SubjectID string `json:"subject_id"`
 	OutboxID  string `json:"outbox_id"`
+	// SendsOnItsOwn says the background runner sends this row with nobody
+	// pressing Send: it only switches an account off (a departure, a denied
+	// account). Read from the row (db.runnerSends), as Pending changes reads it.
+	SendsOnItsOwn bool `json:"sends_on_its_own"`
 }
 
 // Result is what an accepted apply produced. Queued, never applied: nothing has
@@ -170,8 +174,24 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 			summary.Queued++
 		}
 
+		ids := make([]string, len(queued))
+		for i, q := range queued {
+			ids[i] = q.OutboxID
+		}
+		sends, err := sendsOnTheirOwn(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
+		itself := 0
+		for i := range queued {
+			queued[i].SendsOnItsOwn = sends[queued[i].OutboxID]
+			if queued[i].SendsOnItsOwn {
+				itself++
+			}
+		}
+
 		res = Result{PlanID: plan.ID, Target: plan.Target, Provisional: plan.Provisional,
-			Queued: queued, Summary: summary, Disclosure: disclose(len(queued), plan.Provisional)}
+			Queued: queued, Summary: summary, Disclosure: disclose(len(queued), itself, plan.Provisional)}
 		return nil
 	})
 	if err != nil {
@@ -189,15 +209,23 @@ func Apply(ctx context.Context, req Request) (Result, error) {
 // drain rule. An entitlement apply confers access, so it waits for an operator —
 // the rule narrowed to grants rather than disappearing, and this is where a
 // person finds that out.
-func disclose(queued int, provisional bool) string {
+//
+// itself is how many of the queued rows the background runner sends on its own
+// (QueuedSubject.SendsOnItsOwn): each only switches an account off, which is a
+// revocation, and a delayed revocation is retained access.
+func disclose(queued, itself int, provisional bool) string {
+	const waits = "reach the target when an operator resumes the drain — access is never granted without somebody deciding to."
 	switch {
 	case queued == 0:
 		return "Nothing was queued: the plan you approved said none of these people would change."
 	case provisional:
 		return "Recorded against the target's last-known state while it was unreachable. " +
 			"It will be re-checked when the target comes back, and applied only if nothing moved."
+	case itself == queued:
+		return "Queued. Each one only switches an account off, so Syndra sends them on its own within a minute."
+	case itself > 0:
+		return fmt.Sprintf("Queued. %d only switch an account off, so Syndra sends them on its own within a minute. The rest ", itself) + waits
 	default:
-		return "Queued. These changes reach the target when an operator resumes the drain — " +
-			"access is never granted without somebody deciding to."
+		return "Queued. These changes " + waits
 	}
 }

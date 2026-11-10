@@ -123,6 +123,32 @@ func TestTheApprovalCarriesTheResolvedSetItWasComputedFrom(t *testing.T) {
 	}
 }
 
+// An operator's approval for a departed person records the state as the
+// lifecycle switch alone AND says so (NewPlanSubject.WithdrawsOnly), which the
+// outbox row copies: without it the drain replaced the merge base with the two
+// fields it observed and forgot the groups the person held.
+func TestAnOperatorsApprovalForADepartedPersonIsRecordedWithdrawOnly(t *testing.T) {
+	plan := onePersonPlan(services.EffectApply)
+	departed := plan.Desired["u1"]
+	departed.Lifecycle = services.LifecycleState{NotAMember: true}
+	plan.Desired["u1"] = departed
+	rec := stubEntitlementPlan(t, plan, nil)
+
+	if rr := rehearsal(t, "truenas", `{"subject_ids":["u1"]}`); rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	sub := rec.created[0].Subjects[0]
+	if !sub.WithdrawsOnly || len(sub.DesiredState) != 2 {
+		t.Fatalf("want a withdraw-only subject carrying the switch alone, got withdraws=%v desired=%v", sub.WithdrawsOnly, sub.DesiredState)
+	}
+
+	rec = stubEntitlementPlan(t, onePersonPlan(services.EffectApply), nil)
+	rehearsal(t, "truenas", `{"subject_ids":["u1"]}`)
+	if rec.created[0].Subjects[0].WithdrawsOnly {
+		t.Fatal("an ordinary approval is not withdraw-only")
+	}
+}
+
 // A provisional plan carries no lifetime and must carry the age of the read it
 // was computed against. Its gate is the re-fingerprint when the target returns,
 // not a clock — expiring it would discard an approved change because an outage

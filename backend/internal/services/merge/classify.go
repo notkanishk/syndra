@@ -120,7 +120,10 @@ type Subject struct {
 // The alternative — applying a partial set — is worse than it looks. Desired
 // state is level-triggered: the fields it omits are the ones Syndra does not
 // manage, so a partial apply would say "Syndra no longer manages `enabled`",
-// which is a policy statement nobody made.
+// which is a policy statement nobody made. The one exception is deliberate: a
+// withdraw-only set (services.EntitlementSet.WithdrawsOnly) is the lifecycle
+// fields alone, the add-on leaves the rest as they are, and the merge base
+// keeps what it last saw of them (db.RecordMergeBase updates per field).
 func (s Subject) Convergeable() bool {
 	if s.Absent {
 		// Never. The plan for an absent account says "create", and an

@@ -12,6 +12,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
 
@@ -59,13 +60,13 @@ func stubFindings(t *testing.T, h *findingHarness) {
 	t.Cleanup(func() {
 		dbRecordMergeDecision, dbReleaseMergeDecision = decide, releaseDecision
 	})
-	resolveSet, inTx := svcResolveEntitlementsFor, svcInTxLockingAccess
+	resolveSet, inTx := svcResolveEntitlementSet, svcInTxLockingAccess
 	forget, forgetBase := dbForgetTargetBinding, dbForgetMergeBase
 	dispatch := svcDispatchOperation
 	t.Cleanup(func() {
 		dbGetStandingMergeFinding, dbResolveMergeFinding = get, resolve
 		dbRecordSystemConvergence, dbCreateAllowance = converge, allow
-		svcResolveEntitlementsFor, svcInTxLockingAccess = resolveSet, inTx
+		svcResolveEntitlementSet, svcInTxLockingAccess = resolveSet, inTx
 		dbForgetTargetBinding, dbForgetMergeBase = forget, forgetBase
 		svcDispatchOperation = dispatch
 	})
@@ -113,8 +114,8 @@ func stubFindings(t *testing.T, h *findingHarness) {
 		h.allowances = append(h.allowances, a)
 		return a, nil
 	}
-	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
-		return map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}, nil
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true}}, nil
 	}
 	getBinding := dbGetTargetBinding
 	t.Cleanup(func() { dbGetTargetBinding = getBinding })

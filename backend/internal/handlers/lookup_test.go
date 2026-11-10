@@ -48,7 +48,6 @@ func (s lookupStubSource) ProjectName(context.Context, string) (string, bool, er
 }
 func (s lookupStubSource) Tag() string              { return "stub" }
 func (s lookupStubSource) InvalidateProject(string) {}
-func (s lookupStubSource) InvalidateUsers()         {}
 
 func withLookupDeps(t *testing.T,
 	src directory.Source,

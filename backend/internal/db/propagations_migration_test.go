@@ -111,7 +111,10 @@ func funcBody(t *testing.T, src, name string) string {
 		t.Fatalf("func %s not found in source", name)
 	}
 	rest := src[start[1]:]
-	if next := regexp.MustCompile(`(?m)^func `).FindStringIndex(rest); next != nil {
+	// Up to the next top-level declaration, not only the next func: a const
+	// declared after the function (runnerSends after terminateSuperseded) is
+	// not part of its body, and reading into it judged one by the other.
+	if next := regexp.MustCompile(`(?m)^(func|const|var|type) `).FindStringIndex(rest); next != nil {
 		return rest[:next[0]]
 	}
 	return rest

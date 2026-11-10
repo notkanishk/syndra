@@ -338,11 +338,28 @@ describe("Pending changes · board layout", () => {
   it("marks a role that always waits, and says a revocation also sends on its own", () => {
     pending.data = [
       row({ id: "o1", role_keys: ["supervisor"], wait_reason: "role_waits", cascade_id: "c1" }),
-      row({ id: "o2", op_type: "revoke", cascade_id: "c2" }),
+      row({ id: "o2", op_type: "revoke", cascade_id: "c2", sends_on_its_own: true }),
     ];
     renderPending();
     expect(screen.getByRole("img", { name: "Waits for you" })).toBeInTheDocument();
     expect(screen.getByText(/also sends on its own within a minute/)).toBeInTheDocument();
+  });
+
+  // The row says what the backend's rule says (sends_on_its_own), not what its
+  // op_type suggests: a departed member's account switched off on a connected
+  // system goes on its own; an ordinary change there waits for Send.
+  it("says a revocation on a connected system (a departed member's account switched off) also sends on its own", () => {
+    pending.data = [
+      row({ id: "o3", op_type: "apply", target: "truenas", cascade_id: "c3", sends_on_its_own: true }),
+    ];
+    renderPending();
+    expect(screen.getByText(/also sends on its own within a minute/)).toBeInTheDocument();
+  });
+
+  it("an ordinary change on a connected system waits for Send, and says nothing of going on its own", () => {
+    pending.data = [row({ id: "o4", op_type: "apply", target: "truenas", cascade_id: "c4" })];
+    renderPending();
+    expect(screen.queryByText(/also sends on its own/)).toBeNull();
   });
 
   // S4: this list holds only pending and in-flight rows; a failed row is
@@ -372,7 +389,7 @@ describe("Pending changes · board layout", () => {
   });
 
   it("a revocation that waits for you does not claim to send on its own", () => {
-    pending.data = [row({ id: "o2", op_type: "revoke", wait_reason: "role_waits", cascade_id: "c2" })];
+    pending.data = [row({ id: "o2", op_type: "revoke", wait_reason: "role_waits", cascade_id: "c2", sends_on_its_own: true })];
     renderPending();
     expect(screen.queryByText(/also sends on its own/)).toBeNull();
   });

@@ -210,8 +210,11 @@ type NewPlanSubject struct {
 	// terminally fails an approved change on. Mutually exclusive with SnapshotID:
 	// two ways to say which intent was approved is one way for them to disagree.
 	DesiredState map[string]json.RawMessage
-	Fingerprint  string
-	Outcome      PlanOutcome
+	// WithdrawsOnly says DesiredState is the lifecycle switch alone
+	// (services.EntitlementSet.WithdrawsOnly), recorded with it on the snapshot.
+	WithdrawsOnly bool
+	Fingerprint   string
+	Outcome       PlanOutcome
 	// Person is whose queued changes the row may cancel, when the subject is
 	// not a person (a request a decision approves, a drift row an adoption
 	// resolves). Empty: the subject is the person. Checked, not stored.
@@ -398,7 +401,7 @@ func createPlanTx(ctx context.Context, tx pgx.Tx, p NewPlan) (Plan, error) {
 			// Written on this transaction, so the intent and the approval citing
 			// it commit together or neither does. Provenance needs no check: the
 			// row was created here, for this subject, on this target.
-			written, err := WriteDesiredStateSnapshotTx(ctx, tx, s.SubjectID, p.Target, p.CreatedBy, s.DesiredState)
+			written, err := WriteDesiredStateSnapshotTx(ctx, tx, s.SubjectID, p.Target, p.CreatedBy, s.DesiredState, s.WithdrawsOnly)
 			if err != nil {
 				return Plan{}, err
 			}

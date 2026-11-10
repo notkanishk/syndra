@@ -137,10 +137,11 @@ func issueEntitlementPlan(ctx context.Context, target, actor string, ack bool, p
 			return errNoResolvedIntent
 		}
 		subjects = append(subjects, db.NewPlanSubject{
-			SubjectID:    out.UserID,
-			DesiredState: set.Desired(),
-			Fingerprint:  out.Fingerprint,
-			Outcome:      db.PlanOutcome{Effect: effect},
+			SubjectID:     out.UserID,
+			DesiredState:  set.Desired(),
+			WithdrawsOnly: set.WithdrawsOnly(),
+			Fingerprint:   out.Fingerprint,
+			Outcome:       db.PlanOutcome{Effect: effect},
 		})
 	}
 	if len(subjects) == 0 {

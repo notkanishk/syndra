@@ -30,12 +30,25 @@ type MergeBase struct {
 	// target rather than to this schema: a list of groups, a boolean, and
 	// whatever a later add-on declares.
 	Base map[string]json.RawMessage `json:"base"`
-	// ObservedAt dates the READ, not the row. An operator asking what a value
-	// used to be is asking about a moment on the target.
+	// Partial says the observation covers part of the managed set by design:
+	// a withdraw-only apply's two lifecycle fields (EntitlementSet.WithdrawsOnly).
+	// The fields it does not name keep their last value. Replacing them would
+	// forget the groups a person held while away, and on their return a hand
+	// change made before they left would classify as NoBase and be overwritten
+	// with no finding.
+	Partial bool `json:"-"`
+	// ObservedAt dates the latest READ, not the row. An operator asking what a
+	// value used to be is asking about a moment on the target.
 	ObservedAt time.Time `json:"observed_at"`
 }
 
 // RecordMergeBase writes what the target reported after an apply.
+//
+// The whole base is replaced, which is what keeps it self-pruning: the Zitadel
+// sweep relies on a revoke Syndra performed leaving no stale observation to be
+// read against a later re-grant, and a field that stops being managed is then
+// NoBase when it comes back. A Partial observation updates only its own fields
+// (see MergeBase.Partial).
 //
 // An empty observation is refused rather than stored. The add-on omits
 // `observed` when it wrote and could not read back — deliberately, so that an
@@ -63,8 +76,9 @@ func RecordMergeBase(ctx context.Context, base MergeBase) error {
 		INSERT INTO target_merge_bases (target, subject_id, base, observed_at)
 		VALUES ($1, $2, $3::jsonb, NOW())
 		ON CONFLICT (target, subject_id)
-		DO UPDATE SET base = EXCLUDED.base, observed_at = EXCLUDED.observed_at`
-	if _, err := querier(ctx).Exec(ctx, q, base.Target, base.SubjectID, string(encoded)); err != nil {
+		DO UPDATE SET base = CASE WHEN $4 THEN target_merge_bases.base || EXCLUDED.base ELSE EXCLUDED.base END,
+		              observed_at = EXCLUDED.observed_at`
+	if _, err := querier(ctx).Exec(ctx, q, base.Target, base.SubjectID, string(encoded), base.Partial); err != nil {
 		return fmt.Errorf("record merge base for %s on %s: %w", base.SubjectID, base.Target, err)
 	}
 	return nil

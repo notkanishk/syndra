@@ -2,11 +2,11 @@ package drift
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services"
 )
 
 // A person who holds a mapped role and has no account is converged by the
@@ -25,11 +25,14 @@ func TestThePassCreatesAccountsForUnboundHolders(t *testing.T) {
 		waiting:  map[string]bool{"u_waiting": true},
 	}
 	stubAddonReconcile(t, h)
-	resolveIntent = func(_ context.Context, subject, _ string) (map[string]json.RawMessage, error) {
+	resolveIntent = func(_ context.Context, subject, _ string) (services.EntitlementSet, error) {
 		if subject == "u_held" {
-			return map[string]json.RawMessage{"enabled": json.RawMessage(`false`)}, nil
+			return services.EntitlementSet{}, nil
 		}
-		return map[string]json.RawMessage{"enabled": json.RawMessage(`true`), "group": json.RawMessage(`["Community"]`)}, nil
+		return services.EntitlementSet{
+			Fields:    map[string][]string{"group": {"Community"}},
+			Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true},
+		}, nil
 	}
 
 	n, err := convergeUnbound(context.Background(), "truenas", h.bindings)

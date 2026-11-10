@@ -131,20 +131,49 @@ func TestEveryClaimRejectsStaleVersionsBeforeItClaims(t *testing.T) {
 // The background runner's licence, stated in the statement. A caller cannot
 // widen it, which is why the restriction is here rather than in the runner.
 func TestRevocationClaimReturnsOnlyWithdrawalsAndNeverOvertakesOlderIntent(t *testing.T) {
-	body := funcBody(t, readDBSource(t, "propagations.go"), "ClaimPendingRevocations")
+	src := readDBSource(t, "propagations.go")
+	claim := funcBody(t, src, "ClaimPendingRevocations")
+	// The claim's predicate has one statement (runnerSends), which every outbox
+	// row also carries, so Pending changes and the claim cannot disagree. The
+	// checks below read the claim together with that statement.
+	if !strings.Contains(claim, "runnerSends") {
+		t.Fatal("the background claim must use runnerSends, the one statement of what it takes")
+	}
+	body := claim + constDef(t, src, "runnerSends")
 
 	// Two withdrawal shapes and no third. Zitadel names the direction in
 	// op_type; an add-on apply carries a resolved set and cannot be read for it,
-	// so the writer declares it and the claim reads the declaration.
-	if !strings.Contains(body, "(p.op_type = 'revoke' OR p.withdraws_only)") {
+	// so its snapshot records it and the claim reads the row's copy.
+	if !strings.Contains(body, "sendsOnItsOwn") ||
+		!strings.Contains(src, "const sendsOnItsOwn = `(p.op_type = 'revoke' OR p.withdraws_only)`") {
 		t.Fatal("the background claim must return only withdrawals: 'add' confers, 'replace' both confers and withdraws, and an undeclared 'apply' may do either")
 	}
-	// And never on op_type alone for the conferring shapes. An `apply` selected
-	// without its declaration is the exclusion this claim used to make outright,
-	// re-entered by the back door.
-	for _, conferring := range []string{"'add'", "'apply'"} {
-		if regexp.MustCompile(`p\.op_type\s*(=|IN\s*\([^)]*)` + regexp.QuoteMeta(conferring)).MatchString(body) {
-			t.Errorf("the background claim must never select %s on op_type alone: nobody gains access without an operator", conferring)
+	// And nothing widens it. runnerSends is sendsOnItsOwn followed only by
+	// restrictions: with its comments and every parenthesised group removed,
+	// what is left after sendsOnItsOwn is a chain of ANDs, so no OR can admit a
+	// row sendsOnItsOwn did not. Nested clauses (the hold's `p.op_type =
+	// 'apply'`) only ever narrow, inside an AND NOT.
+	def := constDef(t, src, "runnerSends")
+	after := def[strings.Index(def, "sendsOnItsOwn")+len("sendsOnItsOwn"):]
+	if top := topLevelSQL(after); regexp.MustCompile(`\bOR\b`).MatchString(top) {
+		t.Errorf("runnerSends may only narrow sendsOnItsOwn; its top level has an OR: %q", top)
+	}
+	// Nor does the claim add a way in of its own: its own text has no OR and
+	// no op_type at all, so every row it takes is one runnerSends admitted. An
+	// `apply` selected on op_type without its declaration is the exclusion
+	// this claim used to make outright, re-entered by the back door.
+	own := regexp.MustCompile(`(--|//)[^\n]*`).ReplaceAllString(claim, "")
+	if regexp.MustCompile(`\bOR\b|op_type`).MatchString(own) {
+		t.Error("the background claim must select through runnerSends alone: nobody gains access without an operator")
+	}
+	// And every constant it splices in is one bracketed group. AND binds
+	// tighter than OR, so an unbracketed OR in any of them (notBeforeDue's
+	// `IS NULL OR <= NOW()`) would split the WHERE in two, and one half would
+	// claim rows runnerSends never admitted.
+	for _, m := range regexp.MustCompile("` \\+ (\\w+) \\+ `").FindAllStringSubmatch(claim, -1) {
+		def := constDef(t, src, m[1])
+		if top := topLevelSQL(def[strings.Index(def, "=")+1:]); regexp.MustCompile(`\bOR\b`).MatchString(top) {
+			t.Errorf("%s is spliced into the background claim with an OR outside brackets: %q", m[1], top)
 		}
 	}
 	guard := regexp.MustCompile(`(?s)NOT EXISTS \(.*?e\.intent_seq < p\.intent_seq\)`).FindString(body)
@@ -231,4 +260,30 @@ func constValue(t *testing.T, src, name string) string {
 		t.Fatalf("const %s not found", name)
 	}
 	return m[1]
+}
+
+// constDef is the text of a const declaration in src, from its name to the end
+// of its (possibly concatenated) value.
+// topLevelSQL is sql without its `--` comments and without every parenthesised
+// group, innermost first: what is left is the clause's top level.
+func topLevelSQL(sql string) string {
+	sql = regexp.MustCompile(`--[^\n]*`).ReplaceAllString(sql, "")
+	group := regexp.MustCompile(`\([^()]*\)`)
+	for group.MatchString(sql) {
+		sql = group.ReplaceAllString(sql, " ")
+	}
+	return sql
+}
+
+func constDef(t *testing.T, src, name string) string {
+	t.Helper()
+	i := strings.Index(src, "const "+name+" =")
+	if i < 0 {
+		t.Fatalf("no const %s", name)
+	}
+	j := strings.Index(src[i:], "\n\n")
+	if j < 0 {
+		return src[i:]
+	}
+	return src[i : i+j]
 }

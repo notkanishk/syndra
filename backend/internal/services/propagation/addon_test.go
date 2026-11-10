@@ -32,6 +32,7 @@ type addonHarness struct {
 	intentErr  error
 	applied    []string
 	failed     map[string]string
+	refused    []string
 	requeued   []string
 	released   []string
 	attempts   int
@@ -82,6 +83,13 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 	}))
 	markApplied = func(_ context.Context, id string) error { h.applied = append(h.applied, id); return nil }
 	markFailed = func(_ context.Context, id, msg string) error { h.failed[id] = msg; return nil }
+	// A refusal is a failure too, marked so the runner holds the person's next
+	// withdrawal (db.WaitReasonTargetRefused); h.refused says which ones.
+	t.Cleanup(swap(&markTargetRefused, func(_ context.Context, id, msg string) error {
+		h.failed[id] = msg
+		h.refused = append(h.refused, id)
+		return nil
+	}))
 	requeue = func(_ context.Context, id, _ string) (int, error) {
 		h.requeued = append(h.requeued, id)
 		h.attempts++
@@ -248,6 +256,9 @@ func TestTheAddonDrainTerminatesASpentRowAndKeepsGoing(t *testing.T) {
 	}
 	if !strings.Contains(h.failed["o1"], "out of retries") {
 		t.Errorf("the reason must say nobody will try again: %q", h.failed["o1"])
+	}
+	if len(h.refused) != 0 {
+		t.Errorf("an unreachable target refused nothing; marking it refused would hold the person's next withdrawal: %v", h.refused)
 	}
 	if len(h.requeued) != 1 || h.requeued[0] != "o2" {
 		t.Fatalf("the pass must reach the rows behind it: %v", h.requeued)
@@ -762,6 +773,27 @@ func TestAConfirmedApplyRecordsWhatTheTargetReported(t *testing.T) {
 	if string(base.Base["enabled"]) != "true" {
 		t.Fatalf("the base must hold what the target reported: %v", base.Base)
 	}
+	if base.Partial {
+		t.Fatal("an ordinary apply observes the whole managed set: its base replaces the last")
+	}
+}
+
+// A withdraw-only row sends the lifecycle switch alone, so what it reads back
+// is part of the managed set: recorded Partial, and the groups the base held
+// before stand.
+func TestAWithdrawOnlyApplyRecordsAPartialBase(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.intent.WithdrawsOnly = true
+	h.resp = addons.ApplyResponse{
+		Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001,
+		Observed: map[string]json.RawMessage{"enabled": json.RawMessage(`false`), "smb_enabled": json.RawMessage(`false`)},
+	}
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.bases) != 1 || !h.bases[0].Partial {
+		t.Fatalf("want one Partial base, got %+v", h.bases)
+	}
 }
 
 func TestAnUnverifiedApplyRecordsNoBase(t *testing.T) {
@@ -796,5 +828,33 @@ func TestAnApplyWithNoObservationRecordsNoBase(t *testing.T) {
 	}
 	if len(h.bases) != 0 {
 		t.Fatalf("no observation means no base: %+v", h.bases)
+	}
+}
+
+// A deterministic refusal is marked as the target's (db.WaitReasonTargetRefused),
+// which is what makes the person's next withdrawal wait for an operator: a
+// retry of the same call would be refused the same way.
+func TestATargetsRefusalIsMarkedAsOne(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 422}
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.refused) != 1 || h.refused[0] != "o1" {
+		t.Fatalf("want o1 marked as refused by its target, got %v (failed %v)", h.refused, h.failed)
+	}
+}
+
+// A stale plan is not a refusal a retry would repeat: the subject moved since
+// the approval. Marked as a plain failure, so it holds nobody's next
+// withdrawal.
+func TestAStalePlanIsNotMarkedAsTheTargetsRefusal(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeRejected, Status: 409, Code: addons.CodePlanStale}
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.refused) != 0 || !strings.Contains(h.failed["o1"], "PLAN_STALE") {
+		t.Fatalf("want a plain PLAN_STALE failure, got refused %v failed %v", h.refused, h.failed)
 	}
 }

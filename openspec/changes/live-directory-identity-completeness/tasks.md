@@ -10,7 +10,7 @@
 - [x] 2.2 `zitadelSource.Users()` enrichment: errgroup(SetLimit(8)) `ListUserMetadata` per user. Merge well-known keys (case-insensitive: `title`, `team`) into `UserProfile`. Per-user failure tolerance.
 - [x] 2.3 `FindUser` applies same metadata overlay on `GetUser` fallback path.
 - [x] 2.4 `InvalidateProject` drops `apps_by_project:<id>` in addition to existing keys.
-- [x] 2.5 `InvalidateUsers` drops per-user metadata caches so newly-set metadata shows up without waiting for TTL.
+- [x] 2.5 `InvalidateUsers` drops per-user metadata caches so newly-set metadata shows up without waiting for TTL. Removed 10 Nov 2026 (owner): Syndra never writes a person's profile or metadata, so nothing called it; the list refreshes on its TTL (see `directory/directory.go`).
 
 ## 3. Mock/stub extensions
 

@@ -151,3 +151,109 @@ func TestAReadIsRecordedAtItsStart(t *testing.T) {
 		t.Fatalf("own read %+v (ok %v), want complete, dated %v", o, ok, start)
 	}
 }
+
+// Every pending row carries the runner's own rule (sendsOnItsOwn): a revoke
+// and a withdraw-only apply go on their own, an ordinary apply waits for Send.
+func TestPendingRowsSayWhetherTheySendOnTheirOwn(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user) })
+	revoke := seedOutbox(t, ctx, "revoke", "pending", user, "pSO", "direct", "", []string{"r"})
+	departure := seedOutbox(t, ctx, "apply", "pending", user, "pSO", "direct", "", []string{"r"})
+	ordinary := seedOutbox(t, ctx, "apply", "pending", user, "pSO2", "direct", "", []string{"r"})
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET target = 'truenas' WHERE id = ANY($1)`, []string{departure, ordinary}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET withdraws_only = true WHERE id = $1`, departure); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := GetPendingPropagations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, r := range rows {
+		if r.UserID == user {
+			got[r.ID] = r.SendsOnItsOwn
+		}
+	}
+	if len(got) != 3 || !got[revoke] || !got[departure] || got[ordinary] {
+		t.Fatalf("sends on its own %v, want revoke and the withdraw-only apply true, the ordinary apply false", got)
+	}
+
+	// Held: a withdraw-only row queued after an ordinary one for the same
+	// person and target waits behind it, so it must not promise to send.
+	held := freshSubject(t, ctx)
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, held) })
+	older := seedOutbox(t, ctx, "apply", "pending", held, "pSO", "direct", "", []string{"r"})
+	behind := seedOutbox(t, ctx, "apply", "pending", held, "pSO", "direct", "", []string{"r"})
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET target = 'truenas' WHERE id = ANY($1)`, []string{older, behind}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET withdraws_only = true WHERE id = $1`, behind); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = GetPendingPropagations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.ID == behind && r.SendsOnItsOwn {
+			t.Fatal("a withdraw-only row held behind an older conferring row must not say it sends on its own")
+		}
+	}
+}
+
+// The runner gets one try per person and target: after a withdrawal the
+// target refused, the next one for them waits for an operator, until something
+// is applied for them again. Otherwise the drift sweep's re-queue would have the
+// runner fail the same refused lock on every pass. A withdrawal that ran out of
+// retries against an unreachable target refused nothing, and holds nobody.
+func TestARefusedWithdrawalMakesTheNextOneWait(t *testing.T) {
+	ctx := liveDB(t)
+	seed := func(user, status, reason string) string {
+		id := seedOutbox(t, ctx, "apply", status, user, "pSO", "direct", "", []string{"r"})
+		if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET target = 'truenas', withdraws_only = true,
+			wait_reason = NULLIF($2, '') WHERE id = $1`, id, reason); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	sendsOnItsOwn := func(id string) bool {
+		rows, err := GetPendingPropagations(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range rows {
+			if r.ID == id {
+				return r.SendsOnItsOwn
+			}
+		}
+		t.Fatalf("row %s not pending", id)
+		return false
+	}
+	subject := func() string {
+		u := freshSubject(t, ctx)
+		t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, u) })
+		return u
+	}
+
+	refused := subject()
+	seed(refused, "failed", WaitReasonTargetRefused)
+	if next := seed(refused, "pending", ""); sendsOnItsOwn(next) {
+		t.Fatal("after a refused withdrawal the next one must wait for an operator")
+	}
+
+	recovered := subject()
+	seed(recovered, "failed", WaitReasonTargetRefused)
+	seed(recovered, "applied", "")
+	if next := seed(recovered, "pending", ""); !sendsOnItsOwn(next) {
+		t.Fatal("once something was applied since the refusal, the runner sends again")
+	}
+
+	unreachable := subject()
+	seed(unreachable, "failed", "")
+	if next := seed(unreachable, "pending", ""); !sendsOnItsOwn(next) {
+		t.Fatal("a withdrawal that ran out of retries refused nothing: the next one still sends on its own")
+	}
+}

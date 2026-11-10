@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services"
 	"syndra/internal/services/drift"
 )
 
@@ -92,9 +93,9 @@ func TestResolvingABindingConflict(t *testing.T) {
 	var got struct{ id, owner, actor, note string }
 	var converged []string
 	orig, origTx, origResolve, origRecord :=
-		dbResolveBindingConflict, svcInTxLockingAccess, svcResolveEntitlementsFor, dbRecordSystemConvergence
+		dbResolveBindingConflict, svcInTxLockingAccess, svcResolveEntitlementSet, dbRecordSystemConvergence
 	t.Cleanup(func() {
-		dbResolveBindingConflict, svcInTxLockingAccess, svcResolveEntitlementsFor, dbRecordSystemConvergence =
+		dbResolveBindingConflict, svcInTxLockingAccess, svcResolveEntitlementSet, dbRecordSystemConvergence =
 			orig, origTx, origResolve, origRecord
 	})
 	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
@@ -105,8 +106,8 @@ func TestResolvingABindingConflict(t *testing.T) {
 			ConvergedSubjectID: "subject-b", BoundSubjectID: "subject-a",
 		}, nil
 	}
-	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
-		return map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}, nil
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true}}, nil
 	}
 	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
 		converged = append(converged, c.SubjectID)
@@ -171,9 +172,9 @@ func TestResolvingABindingConflict(t *testing.T) {
 // state this endpoint exists to leave behind, not to create.
 func TestAResolutionThatCannotQueueIsRolledBack(t *testing.T) {
 	origTx, origResolve, origRecord, origConflict :=
-		svcInTxLockingAccess, svcResolveEntitlementsFor, dbRecordSystemConvergence, dbResolveBindingConflict
+		svcInTxLockingAccess, svcResolveEntitlementSet, dbRecordSystemConvergence, dbResolveBindingConflict
 	t.Cleanup(func() {
-		svcInTxLockingAccess, svcResolveEntitlementsFor, dbRecordSystemConvergence, dbResolveBindingConflict =
+		svcInTxLockingAccess, svcResolveEntitlementSet, dbRecordSystemConvergence, dbResolveBindingConflict =
 			origTx, origResolve, origRecord, origConflict
 	})
 	var rolledBack bool
@@ -186,8 +187,8 @@ func TestAResolutionThatCannotQueueIsRolledBack(t *testing.T) {
 		return db.BindingConflict{Target: "truenas", Username: "charlotte",
 			ConvergedSubjectID: "subject-b", BoundSubjectID: "subject-a"}, nil
 	}
-	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
-		return map[string]json.RawMessage{}, nil
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{}, nil
 	}
 	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, error) {
 		return "", "", errors.New("the outbox is unavailable")

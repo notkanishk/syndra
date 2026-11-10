@@ -10,6 +10,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services"
 	"syndra/internal/services/merge"
 )
 
@@ -346,12 +347,13 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 	current := stateByBinding(accounts)
 
 	subjects := make([]addons.PlanSubject, 0, len(bindings))
-	desired := make(map[string]map[string]json.RawMessage, len(bindings))
+	desired := make(map[string]services.EntitlementSet, len(bindings))
 	for _, b := range bindings {
 		set, err := resolveIntent(ctx, b.SubjectID, target)
 		if err != nil {
 			return 0, findings, fmt.Errorf("resolve %s: %w", b.SubjectID, err)
 		}
+		intent := set.Desired() // the wire map: what the target is told
 
 		// The classification, before anything is planned. A subject whose
 		// difference this pass may not resolve is never asked about: planning it
@@ -372,7 +374,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 			// version skew nobody chose.
 			base = nil
 		}
-		state := merge.Classify(b.SubjectID, set, theirs, base)
+		state := merge.Classify(b.SubjectID, intent, theirs, base)
 		found := state.Findings()
 		findings = append(findings, found...)
 		*unrecorded += persistFindings(ctx, target, state, found)
@@ -390,11 +392,11 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		// target's current state as the last agreed one — the silent revert,
 		// through the bookkeeping.
 		if len(found) == 0 && theirs != nil {
-			observeState(ctx, target, b.SubjectID, set, theirs)
+			observeState(ctx, target, b.SubjectID, intent, theirs, set.WithdrawsOnly())
 		}
 
 		desired[b.SubjectID] = set
-		subjects = append(subjects, addons.PlanSubject{Subject: b.SubjectID, Desired: set})
+		subjects = append(subjects, addons.PlanSubject{Subject: b.SubjectID, Desired: intent})
 	}
 	if len(subjects) == 0 {
 		return 0, findings, nil
@@ -424,7 +426,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		// One row in Pending changes per person and difference, as for the
 		// unbound below. A waiting row that wants something else is not a
 		// reason to skip: it would apply its older snapshot.
-		waiting, err := pendingApply(ctx, target, out.Subject, set)
+		waiting, err := pendingApply(ctx, target, out.Subject, set.Desired())
 		if err != nil {
 			return queued, findings, err
 		}
@@ -437,11 +439,9 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		if reason == "" {
 			reason = "Out of step with their roles."
 		}
-		if _, _, err := recordConvergence(ctx, db.SystemConvergence{
-			Target: target, SubjectID: out.Subject, Actor: reconcileActor,
-			Reason:  reason,
-			Desired: set,
-		}); err != nil {
+		// Built from the set, so a departed person's disable is declared
+		// withdraw-only and the background runner sends it (EntitlementSet.WithdrawsOnly).
+		if _, _, err := recordConvergence(ctx, set.Convergence(target, out.Subject, reconcileActor, reason)); err != nil {
 			return queued, findings, fmt.Errorf("queue convergence for %s: %w", out.Subject, err)
 		}
 		queued++
@@ -511,7 +511,7 @@ func persistFindings(ctx context.Context, target string, state merge.Subject, fo
 // is out of scope, and a base claiming authority over one would raise findings
 // about values nobody here decided.
 func observeState(ctx context.Context, target, subjectID string,
-	managed, theirs map[string]json.RawMessage) {
+	managed, theirs map[string]json.RawMessage, partial bool) {
 	observed := make(map[string]json.RawMessage, len(managed))
 	for field := range managed {
 		if value, seen := theirs[field]; seen {
@@ -523,6 +523,9 @@ func observeState(ctx context.Context, target, subjectID string,
 	}
 	if err := saveMergeBase(ctx, db.MergeBase{
 		Target: target, SubjectID: subjectID, Base: observed,
+		// A withdraw-only intent manages the lifecycle fields alone; the rest
+		// of the base stands (MergeBase.Partial).
+		Partial: partial,
 	}); err != nil {
 		log.Printf("[ADDON-RECONCILE] could not record what %s was seen holding on %s: %v",
 			subjectID, target, err)
@@ -717,21 +720,17 @@ func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBin
 		if err != nil {
 			return queued, fmt.Errorf("resolve %s: %w", id, err)
 		}
-		if string(set["enabled"]) != "true" {
+		if !set.Lifecycle.Enabled {
 			continue
 		}
-		waiting, err := pendingApply(ctx, target, id, set)
+		waiting, err := pendingApply(ctx, target, id, set.Desired())
 		if err != nil {
 			return queued, err
 		}
 		if waiting {
 			continue
 		}
-		if _, _, err := recordConvergence(ctx, db.SystemConvergence{
-			Target: target, SubjectID: id, Actor: reconcileActor,
-			Reason:  "Gets an account, for a role they hold.",
-			Desired: set,
-		}); err != nil {
+		if _, _, err := recordConvergence(ctx, set.Convergence(target, id, reconcileActor, "Gets an account, for a role they hold.")); err != nil {
 			return queued, fmt.Errorf("queue convergence for %s: %w", id, err)
 		}
 		queued++

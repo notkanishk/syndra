@@ -35,13 +35,11 @@ var ErrBuiltInTarget = errors.New("zitadel is the built-in target and has its ow
 //
 // Operator-triggered like the Zitadel pass, and for the same reason: these rows
 // confer access, and the drain rule narrows to grants rather than disappearing.
-// Revocation-shaped add-on work is not separated out yet — an `apply` carries a
-// resolved set rather than a direction, so "does this withdraw access" is a
-// question only a diff against the last applied snapshot can answer.
-//
-// ponytail: until that diff exists, add-on rows wait for an operator in both
-// directions. The conservative half of the rule, and stated rather than
-// silently assumed.
+// An `apply` carries a resolved set rather than a direction, so the one kind
+// the background runner sends without an operator is a withdraw-only row
+// (EntitlementSet.WithdrawsOnly: a departure or a denied account), whose
+// desired state is the lifecycle switch alone and so cannot give anything.
+// Every other add-on row waits for this pass.
 func DrainAddon(ctx context.Context, target string) (DrainResult, error) {
 	if target == db.TargetZitadel {
 		// Refused rather than ignored. The Zitadel pass exists and is not this
@@ -226,7 +224,7 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 				log.Printf("[ADDON-DRAIN] binding conflict on %s for %s could not be recorded: %v",
 					intent.Target, intent.SubjectID, cerr)
 			}
-			if err := markFailed(ctx, row.ID, bindingConflictReason(intent, resp, err)); err != nil {
+			if err := markTargetRefused(ctx, row.ID, bindingConflictReason(intent, resp, err)); err != nil {
 				res.settleFailure(row.ID, "mark failed", err)
 				return false
 			}
@@ -259,7 +257,15 @@ func (res *DrainResult) dispatchEntitlement(ctx context.Context, row models.Pend
 	case resp.Outcome == addons.OutcomeRejected:
 		// The add-on validated the call and refused; it did not act. Terminal,
 		// because retrying a deterministic refusal changes nothing.
-		if err := markFailed(ctx, row.ID, refusalReason(resp)); err != nil {
+		// A stale plan is not the target refusing the change: the subject moved
+		// since the approval, and a fresh plan may well be accepted. Only a
+		// refusal a retry would repeat is marked as one, because only that
+		// holds the person's next withdrawal (db.WaitReasonTargetRefused).
+		settle := markTargetRefused
+		if resp.Code == addons.CodePlanStale {
+			settle = markFailed
+		}
+		if err := settle(ctx, row.ID, refusalReason(resp)); err != nil {
 			res.settleFailure(row.ID, "mark failed", err)
 			return false
 		}
@@ -388,7 +394,7 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 		// one case where the apply might succeed and be wrong: it would write
 		// into somebody else's account. Terminal, because no retry resolves a
 		// conflict; an operator does.
-		if err := markFailed(ctx, intent.OutboxID, "the target refused: "+answer.Outcomes[0].Detail); err != nil {
+		if err := markTargetRefused(ctx, intent.OutboxID, "the target refused: "+answer.Outcomes[0].Detail); err != nil {
 			res.settleFailure(intent.OutboxID, "mark failed", err)
 		} else {
 			res.Failed++
@@ -465,6 +471,7 @@ func recordMergeBase(ctx context.Context, intent db.EntitlementIntent, resp addo
 	}
 	if err := saveMergeBase(ctx, db.MergeBase{
 		Target: intent.Target, SubjectID: intent.SubjectID, Base: resp.Observed,
+		Partial: intent.WithdrawsOnly,
 	}); err != nil {
 		log.Printf("[ADDON-DRAIN] converged %s on %s and could not record its merge base: %v (non-fatal)",
 			intent.SubjectID, intent.Target, err)

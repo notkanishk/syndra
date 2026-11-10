@@ -130,20 +130,16 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	// every other add-on row — the response says so rather than implying the
 	// account is already locked.
 	if !queued {
-		set, err := svcResolveEntitlementsFor(r.Context(), subject, target)
+		set, err := svcResolveEntitlementSet(r.Context(), subject, target)
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
 			return
 		}
-		if _, _, err := dbRecordSystemConvergence(r.Context(), db.SystemConvergence{
-			Target: target, SubjectID: subject, Actor: actor,
-			Reason: "Their access was revoked.", Desired: set,
-			// Declared here because here is where it is knowably true: the set was
-			// resolved with `enabled` denied, so this row can disable and cannot
-			// confer. It is what lets the background runner drain the lock — and
-			// without it the disclosure below is a promise nothing keeps.
-			WithdrawsOnly: true,
-		}); err != nil {
+		// The set was resolved with `enabled` denied, so it disables and cannot
+		// confer: EntitlementSet.WithdrawsOnly declares it, which is what lets
+		// the background runner drain the lock. Without it the disclosure below
+		// is a promise nothing keeps.
+		if _, _, err := dbRecordSystemConvergence(r.Context(), set.Convergence(target, subject, actor, "Their access was revoked.")); err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_NOT_QUEUED",
 				"The suspension was recorded and the change to the target was not queued: "+err.Error())
 			return

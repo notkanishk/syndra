@@ -425,6 +425,11 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	}
 
 	current, binding, conflict, truncated, err := s.locate(req)
+	if errors.Is(err, errNoIdentityToDeriveFrom) && noAccountToSwitchOff(nil, desired) {
+		// No binding, so no account of theirs here, and nothing to make: the
+		// identity is only needed to name a new account. What the plan said.
+		return noAccountToSwitchOffOutcome(req.Subject), http.StatusOK, nil
+	}
 	if errors.Is(err, errNoIdentityToDeriveFrom) {
 		// Blocked rather than a transport-shaped failure: nothing is wrong with
 		// the target, and retrying the identical call will not fix it.
@@ -471,6 +476,9 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 				Consequence: "Nothing was changed.",
 			}, http.StatusConflict, nil
 		}
+		if noAccountToSwitchOff(current, desired) {
+			return noAccountToSwitchOffOutcome(req.Subject), http.StatusOK, nil
+		}
 		out, status, err := s.createAndConverge(req, desired, binding)
 		s.rememberWantedSMB(req.Subject, desired, err)
 		return out, status, err
@@ -478,6 +486,26 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	out, status, err := s.converge(req, desired, current)
 	s.rememberWantedSMB(req.Subject, desired, err)
 	return out, status, err
+}
+
+// noAccountToSwitchOff is a subject with no account here whose wanted state is
+// off. There is nothing to lock, and creating an account only to lock it would
+// give a departed person's name, groups and home back to the target, or remake
+// one an operator deleted on purpose. A withdraw-only instruction is sent with
+// nobody reviewing it, so this is what keeps it from ever creating anything.
+// Plan and apply both ask it, so the plan never promises a create the apply
+// refuses. Asked after the truncation refusal: an absence read out of a capped
+// list is not an absence, and "nothing to switch off" would then be a lie.
+func noAccountToSwitchOff(current *Subject, desired desiredState) bool {
+	return current == nil && desired.managed[FieldEnabled] && !desired.enabled
+}
+
+func noAccountToSwitchOffOutcome(subject string) ApplyOutcome {
+	return ApplyOutcome{
+		Subject: subject, Effect: EffectNoChange,
+		Detail:      "This subject has no account here and is wanted switched off, so there is nothing to switch off.",
+		Consequence: "Nothing changes. No account is made.",
+	}
 }
 
 // rememberWantedSMB keeps what this apply asked for SMB on the subject's
@@ -499,6 +527,58 @@ func (s *server) rememberWantedSMB(subject string, desired desiredState, applyEr
 	}
 }
 
+// boundAccount is the one rule for which account a binding names. Plan asks
+// it of its snapshot and apply of the target, so the plan never says "absent"
+// (or "creates") for an account the apply would find, or the other way round.
+// byName and byUID look up one account by an exact key. It returns the account
+// (nil when there is none), the binding as it should now read, and a conflict
+// when the name is held by a different account of ours.
+func boundAccount(binding Binding, floor, ceiling int64,
+	byName func(string) (*Subject, error), byUID func(int64) (*Subject, error),
+) (*Subject, Binding, *BindingConflict, error) {
+	found, err := byName(binding.Username)
+	if err != nil {
+		return nil, binding, nil, err
+	}
+	owned := binding.UID >= floor && binding.UID <= ceiling
+	if found != nil {
+		if owned && found.UID != binding.UID {
+			// A name some other account now holds (the original was deleted
+			// and the name reused). Converging it would hand this subject's
+			// entitlements to a stranger, so it halts like any foreign name.
+			return nil, binding, &BindingConflict{Username: found.Username, UID: found.UID}, nil
+		}
+		if !owned && found.UID >= floor && found.UID <= ceiling {
+			// A legacy binding holding a record key, not a uid: the real one,
+			// so the next pass is guarded by the check above.
+			binding.UID = found.UID
+		}
+		return found, binding, nil, nil
+	}
+	if !owned {
+		// A legacy uid of 0 or a record key must never match root or a
+		// built-in account: with no name hit the account is missing.
+		return nil, binding, nil, nil
+	}
+	// The name moved. A stable uid whose username changed out of band is a
+	// RENAME, not a missing account: reporting it as missing would create a
+	// replacement while the original kept the home data, or, for a subject
+	// wanted off, leave the original unlocked.
+	renamed, err := byUID(binding.UID)
+	if err != nil {
+		return nil, binding, nil, err
+	}
+	if renamed != nil {
+		binding.Username = renamed.Username
+		return renamed, binding, nil, nil
+	}
+	// Bound, and neither the name nor the uid is there. The account was
+	// deleted out of band; convergence re-creates it under the recorded name
+	// rather than re-deriving, because the recorded name is what every ACL and
+	// share still refers to.
+	return nil, binding, nil, nil
+}
+
 // locate finds the subject's account, by binding first and derivation second.
 //
 // The binding is authoritative and the derivation is a recovery path. Asking
@@ -514,53 +594,29 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		return nil, Binding{}, nil, false, err
 	}
 	if bound {
-		found, cut, err := s.subjectWhere("username", binding.Username)
-		if err != nil {
-			return nil, Binding{}, nil, false, err
+		// Each lookup is one account by an exact key; a cut-short answer only
+		// matters when the conclusion is that the account is not there.
+		cut := false
+		lookup := func(field string, value any) (*Subject, error) {
+			found, c, err := s.subjectWhere(field, value)
+			cut = cut || c
+			return found, err
 		}
 		floor, ceiling := s.idRange()
-		owned := binding.UID >= floor && binding.UID <= ceiling
-		if found != nil {
-			if owned && found.UID != binding.UID {
-				// A name some other account now holds (the original was deleted
-				// and the name reused). Converging it would hand this subject's
-				// entitlements to a stranger, so it halts like any foreign name.
-				return nil, binding, &BindingConflict{Username: found.Username, UID: found.UID}, false, nil
-			}
-			if !owned && found.UID >= floor && found.UID <= ceiling {
-				// A legacy binding holding a record key, not a uid: record the
-				// real one so the next pass is guarded by the check above.
-				binding.UID = found.UID
-				if err := s.store.PutBinding(binding); err != nil {
-					logStoreFailure("binding", req.Subject, err)
-				}
-			}
-			return found, binding, nil, false, nil
-		}
-		if !owned {
-			// A legacy uid of 0 or a record key must never match root or a
-			// built-in account: with no name hit the account is missing.
-			return nil, binding, nil, cut, nil
-		}
-		// The name moved. A stable uid whose username changed out of band is a
-		// RENAME, not a missing account — reporting it as missing would create
-		// a replacement while the original kept the home data.
-		byUID, cutUID, err := s.subjectWhere("uid", binding.UID)
+		found, resolved, conflict, err := boundAccount(binding, floor, ceiling,
+			func(name string) (*Subject, error) { return lookup("username", name) },
+			func(uid int64) (*Subject, error) { return lookup("uid", uid) })
 		if err != nil {
 			return nil, Binding{}, nil, false, err
 		}
-		if byUID != nil {
-			binding.Username = byUID.Username
-			if err := s.store.PutBinding(binding); err != nil {
+		if resolved.Username != binding.Username || resolved.UID != binding.UID {
+			// A rename, or a legacy binding's real uid: recorded so the next
+			// pass finds the account by name and is guarded by its uid.
+			if err := s.store.PutBinding(resolved); err != nil {
 				logStoreFailure("binding", req.Subject, err)
 			}
-			return byUID, binding, nil, false, nil
 		}
-		// Bound, and neither the name nor the uid is there. The account was
-		// deleted out of band; convergence re-creates it under the recorded
-		// name rather than re-deriving, because the recorded name is what every
-		// ACL and share still refers to.
-		return nil, binding, nil, cut || cutUID, nil
+		return found, resolved, conflict, found == nil && conflict == nil && cut, nil
 	}
 
 	if strings.TrimSpace(req.Email) == "" {

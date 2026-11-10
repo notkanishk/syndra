@@ -422,8 +422,14 @@ func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID stri
 // processUserDeactivated handles user_deactivated and user_locked events: the
 // cache is recompiled, and every system the person has an account on gets a
 // convergence. The resolver reads their directory standing and disables the
-// account there; before this it waited for the next resolution, up to six
-// hours, with a departed member's storage account still switched on.
+// account there, and that disable is withdraw-only (EntitlementSet.WithdrawsOnly),
+// so the background runner sends it without waiting for an operator. Without
+// the event, the drift sweep finds the same difference on its next pass (every
+// observation interval, five minutes by default) and queues the same row.
+//
+// The standing is read from the directory's cached people list, which can be
+// up to CacheTTL old: an event arriving within that window may resolve the
+// person as still a member, and the sweep then carries the disable.
 //
 // Best-effort and never a reason to fail the delivery: the reconcile pass is
 // the backstop, and a 5xx here would only make Zitadel redeliver an event this

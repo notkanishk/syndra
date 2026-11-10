@@ -39,7 +39,6 @@ func (s *stubDirectory) ProjectName(_ context.Context, _ string) (string, bool, 
 }
 func (s *stubDirectory) Tag() string                { return "stub" }
 func (s *stubDirectory) InvalidateProject(_ string) {}
-func (s *stubDirectory) InvalidateUsers()           {}
 
 func TestHandleGetMyProfile_Success(t *testing.T) {
 	orig := directory.Default

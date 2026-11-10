@@ -606,10 +606,10 @@ func TestAMappingEditAffectingManyNeedsTheAcknowledgement(t *testing.T) {
 
 func stubResolvedIntent(t *testing.T) {
 	t.Helper()
-	orig := svcResolveEntitlementsFor
-	t.Cleanup(func() { svcResolveEntitlementsFor = orig })
-	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
-		return map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}, nil
+	orig := svcResolveEntitlementSet
+	t.Cleanup(func() { svcResolveEntitlementSet = orig })
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true}}, nil
 	}
 }
 

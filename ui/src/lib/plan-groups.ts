@@ -82,7 +82,7 @@ export const REVOKING_OPS: ReadonlySet<BulkPlan["op"]> = new Set<BulkPlan["op"]>
  */
 export function goesItself(o: BulkOutcome, op: BulkPlan["op"], auto: AutoRetry = true): boolean | null {
   if (o.wait_reason === RETRYING) return o.retry ? o.retry.state === "retrying" : auto;
-  return waitIsChosen(o.wait_reason) || !REVOKING_OPS.has(op) ? false : auto;
+  return waitIsChosen(o.wait_reason) || !(REVOKING_OPS.has(op) || o.sends_on_its_own) ? false : auto;
 }
 
 /**

@@ -452,6 +452,40 @@ func effectiveRoleRefs(ctx context.Context, subjectID string) ([]db.RoleRef, err
 	return refs, nil
 }
 
+// WithdrawsOnly says a convergence carrying this set can only take access
+// away, which is what lets the background runner send it without an operator,
+// as it sends a revoke. True exactly when the account ends switched off for a
+// reason no policy change confers back by itself: the directory reports the
+// person as gone (NotAMember), or an operator's allowance denies `enabled`.
+// A disabled account confers nothing, so such a row disables and cannot
+// confer. A lock because no mapped role reaches the target is not one: that
+// is whatever policy now says, and the same path confers for the next person,
+// so it waits for an operator like every other convergence.
+func (s EntitlementSet) WithdrawsOnly() bool {
+	if s.Lifecycle.Enabled || s.Lifecycle.SMBEnabled {
+		return false
+	}
+	if s.Lifecycle.NotAMember {
+		return true
+	}
+	for _, x := range s.Suppressed {
+		if x.Field == FieldEnabled {
+			return true
+		}
+	}
+	return false
+}
+
+// Convergence is the one way a resolved set becomes a queued convergence:
+// the intent it executes (Desired) and whether it may drain on its own
+// (WithdrawsOnly) both come from the set, so no caller declares a direction.
+func (s EntitlementSet) Convergence(target, subjectID, actor, reason string) db.SystemConvergence {
+	return db.SystemConvergence{
+		Target: target, SubjectID: subjectID, Actor: actor, Reason: reason,
+		Desired: s.Desired(), WithdrawsOnly: s.WithdrawsOnly(),
+	}
+}
+
 // Desired encodes the resolved set as the wire's field map.
 //
 // Level-triggered, so this is the whole instruction and not a delta. Two rules
@@ -465,11 +499,25 @@ func effectiveRoleRefs(ctx context.Context, subjectID string) ([]db.RoleRef, err
 //     than mapping-derived, so there is no mapping whose absence could excuse
 //     omitting them — and omitting them is how a deprovisioned account stays
 //     usable while Syndra believes it is locked.
+//   - A withdraw-only set (WithdrawsOnly) is the lifecycle fields and nothing
+//     else. It is the one instruction the runner sends unreviewed, and it is
+//     this same map that the drift plan, the queue's dedupe and every preview
+//     read, so what is planned is what is sent.
 //
 // It returns a map that is never nil, because nil is what a snapshot records as
 // `null` and the drain reads back as "no approved desired state".
 func (s EntitlementSet) Desired() map[string]json.RawMessage {
 	out := make(map[string]json.RawMessage, len(s.Fields)+2)
+	out[FieldEnabled] = boolJSON(s.Lifecycle.Enabled)
+	out[FieldSMBEnabled] = boolJSON(s.Lifecycle.SMBEnabled)
+	if s.WithdrawsOnly() {
+		// Only the switch. This instruction may be sent with nobody reviewing
+		// it, so it must not be able to give anything: a full replacement of
+		// groups, home or quota could add what the target does not have yet.
+		// The add-on leaves an absent field alone, and on a locked account the
+		// groups it keeps reach nothing.
+		return out
+	}
 	for field, values := range s.Fields {
 		if IsLifecycleField(field) {
 			// Cannot be reached through mappings — validation refuses those, and
@@ -493,8 +541,6 @@ func (s EntitlementSet) Desired() map[string]json.RawMessage {
 		}
 		out[field] = encoded
 	}
-	out[FieldEnabled] = boolJSON(s.Lifecycle.Enabled)
-	out[FieldSMBEnabled] = boolJSON(s.Lifecycle.SMBEnabled)
 	return out
 }
 

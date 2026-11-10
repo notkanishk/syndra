@@ -302,6 +302,75 @@ const revocationFirst = `
 // budget still bounds it.
 const notBeforeDue = `(p.not_before IS NULL OR p.not_before <= NOW())`
 
+// sendsOnItsOwn is the one statement of which queued rows the background
+// runner sends without an operator: a revoke, or an add-on apply whose
+// snapshot is withdraw-only (it can only take access away,
+// EntitlementSet.WithdrawsOnly; the row copies the flag from the snapshot). The claims read it, and every outbox row
+// carries it (outboxRowColumns), so a screen says "goes on its own" from the same
+// rule rather than its own copy.
+const sendsOnItsOwn = `(p.op_type = 'revoke' OR p.withdraws_only)`
+
+// runnerSends is everything the background runner asks of a row before it
+// sends one with nobody pressing Send (ClaimPendingRevocations), beyond its
+// target, its status and its backoff: it is a withdrawal (sendsOnItsOwn), no
+// role on it waits for the operator, nothing queued earlier for the same
+// person could confer, and no add-on withdrawal for them was refused by the
+// target with nothing applied since. Every outbox row carries it
+// (outboxRowColumns), so Pending changes says "sends on its own" only of a row
+// the runner will take.
+const runnerSends = `(` + sendsOnItsOwn + `
+			  -- A role that always waits waits for the operator on the way
+			  -- out too, however the loss came about (an expiry, a removal):
+			  -- losing it is theirs to send (N14 B). Read from role_waits
+			  -- itself, not only the row's stamp, so a row written without
+			  -- one (expiry, an unreadable flag) is held all the same; and a
+			  -- row held because its role waited stays held after unmarking.
+			  AND p.wait_reason IS DISTINCT FROM 'role_waits'
+			  AND NOT EXISTS (SELECT 1 FROM role_waits w
+			                  WHERE w.project_id = p.project_id AND w.role_key = ANY(p.role_keys))
+			  AND NOT EXISTS (
+			      SELECT 1 FROM propagation_outbox e
+			       WHERE e.target     = p.target
+			         AND e.user_id    = p.user_id
+			         AND e.project_id IS NOT DISTINCT FROM p.project_id
+			         -- Anything queued earlier that could confer. On the add-on
+			         -- side that is an apply which did not declare itself a
+			         -- withdrawal: it carries a whole resolved set, so draining
+			         -- it after this one would restore exactly what is being
+			         -- withdrawn, silently, with neither row having failed.
+			         AND (e.op_type IN ('add', 'replace')
+			              OR (e.op_type = 'apply' AND NOT e.withdraws_only))
+			         AND e.status     IN ('pending', 'in_flight')
+			         AND e.intent_seq < p.intent_seq)
+			  -- One try on its own per person and target. A withdrawal the
+			  -- target refused (not one that ran out of retries against an
+			  -- unreachable target), with nothing applied for them since,
+			  -- means the next one waits for an operator: the drift sweep
+			  -- re-queues a failed row, and without this a lock the target
+			  -- always refuses would fail again on every pass, unattended.
+			  AND NOT (p.op_type = 'apply' AND EXISTS (
+			      SELECT 1 FROM propagation_outbox f
+			       WHERE f.target = p.target AND f.user_id = p.user_id
+			         AND f.op_type = 'apply' AND f.withdraws_only
+			         AND f.status = 'failed' AND f.wait_reason = '` + WaitReasonTargetRefused + `'
+			         AND f.intent_seq < p.intent_seq
+			         AND NOT EXISTS (
+			             SELECT 1 FROM propagation_outbox a
+			              WHERE a.target = p.target AND a.user_id = p.user_id
+			                AND a.op_type = 'apply' AND a.status = 'applied'
+			                AND a.intent_seq > f.intent_seq)))
+			  )`
+
+// outboxRowColumns is the column list scanPropagations reads, in its order, over the
+// alias p. Every query that returns outbox rows selects exactly this, so a
+// column is added in one place.
+const outboxRowColumns = `p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
+		       p.source, COALESCE(p.source_ref,''), p.payload_json->'rule_from',
+		       COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
+		       p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by,
+		       p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''),
+		       p.not_before, ` + runnerSends
+
 // ClaimPendingPropagations atomically transitions up to `limit` claimable rows
 // to in_flight and returns them in dispatch order. FOR UPDATE SKIP LOCKED makes
 // concurrent drains safe (mirrors ClaimPendingIntents).
@@ -350,10 +419,7 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 		SET status = 'in_flight', started_at = NOW()
 		FROM claimed
 		WHERE p.id = claimed.id
-		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
-		          p.source, COALESCE(p.source_ref,''), p.payload_json->'rule_from', COALESCE(p.cascade_id::text,''),
-		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
-		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
+		RETURNING ` + outboxRowColumns
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim propagations: %w", err)
@@ -393,10 +459,7 @@ func ClaimPropagationByID(ctx context.Context, target, id string) (*models.Pendi
 		FROM targets t
 		WHERE p.id=$1 AND p.status IN ('pending','in_flight') AND p.target = $2
 		  AND t.target = p.target AND t.state = 'active'
-		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
-		          p.source, COALESCE(p.source_ref,''), p.payload_json->'rule_from',
-		          COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
-		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
+		RETURNING ` + outboxRowColumns
 	rows, err := querier(ctx).Query(ctx, q, id, target)
 	if err != nil {
 		return nil, false, fmt.Errorf("claim propagation %s: %w", id, err)
@@ -425,12 +488,12 @@ func ClaimPropagationByID(ctx context.Context, target, id string) (*models.Pendi
 //
 // Two shapes qualify. `op_type = 'revoke'` is Zitadel's, where the row itself
 // names the direction. An add-on revocation is an `apply` carrying a resolved
-// set, and the row cannot be read to find out which way it moves — so the
-// writer declares it, and `withdraws_only` is that declaration. This used to be
+// set, and the row cannot be read to find out which way it moves — so its
+// snapshot records it, and `withdraws_only` is the row's copy of that record. This used to be
 // excluded outright, and the exclusion was worse than it looked: a target
 // revocation queued a lock nothing would claim, on a response that told the
-// operator it drains on its own, appearing on no surface. `apply` rows that
-// have NOT declared themselves are still excluded, which is the same rule, now
+// operator it drains on its own, appearing on no surface. `apply` rows whose
+// snapshot is not withdraw-only are still excluded, which is the same rule, now
 // answered rather than assumed.
 //
 // And never ahead of older conferring intent for the same subject. A grant
@@ -453,31 +516,8 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 			SELECT p.id FROM propagation_outbox p
 			JOIN targets t ON t.target = p.target AND t.state = 'active'
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
-			  AND (p.op_type = 'revoke' OR p.withdraws_only)
 			  AND ` + notBeforeDue + `
-			  -- A role that always waits waits for the operator on the way
-			  -- out too, however the loss came about (an expiry, a removal):
-			  -- losing it is theirs to send (N14 B). Read from role_waits
-			  -- itself, not only the row's stamp, so a row written without
-			  -- one (expiry, an unreadable flag) is held all the same; and a
-			  -- row held because its role waited stays held after unmarking.
-			  AND p.wait_reason IS DISTINCT FROM 'role_waits'
-			  AND NOT EXISTS (SELECT 1 FROM role_waits w
-			                  WHERE w.project_id = p.project_id AND w.role_key = ANY(p.role_keys))
-			  AND NOT EXISTS (
-			      SELECT 1 FROM propagation_outbox e
-			       WHERE e.target     = p.target
-			         AND e.user_id    = p.user_id
-			         AND e.project_id IS NOT DISTINCT FROM p.project_id
-			         -- Anything queued earlier that could confer. On the add-on
-			         -- side that is an apply which did not declare itself a
-			         -- withdrawal: it carries a whole resolved set, so draining
-			         -- it after this one would restore exactly what is being
-			         -- withdrawn, silently, with neither row having failed.
-			         AND (e.op_type IN ('add', 'replace')
-			              OR (e.op_type = 'apply' AND NOT e.withdraws_only))
-			         AND e.status     IN ('pending', 'in_flight')
-			         AND e.intent_seq < p.intent_seq)
+			  AND ` + runnerSends + `
 			ORDER BY p.intent_seq
 			LIMIT $1
 			FOR UPDATE OF p SKIP LOCKED
@@ -486,10 +526,7 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 		SET status = 'in_flight', started_at = NOW()
 		FROM claimed
 		WHERE p.id = claimed.id
-		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
-		          p.source, COALESCE(p.source_ref,''), p.payload_json->'rule_from', COALESCE(p.cascade_id::text,''),
-		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
-		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
+		RETURNING ` + outboxRowColumns
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim pending revocations: %w", err)
@@ -530,7 +567,7 @@ func ClaimDueRetries(ctx context.Context, target string, limit int) ([]models.Pe
 			WHERE p.target = $2
 			  AND (p.status = 'in_flight' OR (p.status = 'pending' AND p.not_before IS NOT NULL))
 			  AND ` + notBeforeDue + `
-			  AND NOT (p.op_type = 'revoke' OR p.withdraws_only)
+			  AND NOT ` + sendsOnItsOwn + `
 			  AND p.wait_reason IS DISTINCT FROM 'role_waits'
 			  AND p.wait_reason IS DISTINCT FROM 'manual'
 			  AND NOT EXISTS (SELECT 1 FROM role_waits w
@@ -543,10 +580,7 @@ func ClaimDueRetries(ctx context.Context, target string, limit int) ([]models.Pe
 		SET status = 'in_flight', started_at = NOW()
 		FROM claimed
 		WHERE p.id = claimed.id
-		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
-		          p.source, COALESCE(p.source_ref,''), p.payload_json->'rule_from', COALESCE(p.cascade_id::text,''),
-		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
-		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,''), p.not_before`
+		RETURNING ` + outboxRowColumns
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim due retries: %w", err)
@@ -754,6 +788,40 @@ func MarkPropagationRefused(ctx context.Context, id, errMsg, cause string) error
 		 WHERE id=$1 AND status='in_flight'`, errMsg, WaitReasonRefused(cause))
 }
 
+// SendsOnTheirOwnTx says, for rows just written on tx, which the background
+// runner will send with nobody pressing Send: runnerSends, the same statement
+// the claim and every pending row read, so an apply's result and Pending
+// changes cannot disagree about a row.
+func SendsOnTheirOwnTx(ctx context.Context, tx pgx.Tx, ids []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT p.id::text, `+runnerSends+`
+		  FROM propagation_outbox p WHERE p.id::text = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("read whether rows send on their own: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var sends bool
+		if err := rows.Scan(&id, &sends); err != nil {
+			return nil, fmt.Errorf("read whether rows send on their own: %w", err)
+		}
+		out[id] = sends
+	}
+	return out, rows.Err()
+}
+
+// MarkPropagationTargetRefused is MarkPropagationFailed for an add-on row the
+// target refused deterministically (WaitReasonTargetRefused).
+func MarkPropagationTargetRefused(ctx context.Context, id, errMsg string) error {
+	return settleOne(ctx, "mark propagation refused by its target", id,
+		`UPDATE propagation_outbox SET status='failed', completed_at=NOW(), last_error=$2, wait_reason='`+WaitReasonTargetRefused+`'
+		 WHERE id=$1 AND status='in_flight'`, errMsg)
+}
+
 // outboxBackoff spaces a row's tries: 1m doubling to a 30m cap, jittered. With
 // the default budget of five that is roughly 1+2+4+8+16 minutes before a row
 // lands in failed, long enough to outlast a Zitadel blip, which an unspaced
@@ -855,11 +923,8 @@ func ReleasePropagation(ctx context.Context, id, reason string) error {
 // tried next.
 func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, error) {
 	const q = `
-		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
-		       source, COALESCE(source_ref,''), payload_json->'rule_from',
-		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
-		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,''), COALESCE(wait_reason,''), not_before
-		FROM propagation_outbox
+		SELECT ` + outboxRowColumns + `
+		FROM propagation_outbox p
 		WHERE status IN ('pending','in_flight')
 		ORDER BY cascade_id NULLS LAST, created_at`
 	rows, err := querier(ctx).Query(ctx, q)
@@ -955,11 +1020,8 @@ func CountRetries(ctx context.Context, actor string) (retrying, gaveUp map[strin
 // first: what Home's "Syndra stopped sending" points at, on Pending changes.
 func ListGaveUp(ctx context.Context, actor string) ([]models.PendingPropagation, error) {
 	q := `
-		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
-		       source, COALESCE(source_ref,''), payload_json->'rule_from',
-		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
-		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,''), COALESCE(wait_reason,''), not_before
-		FROM propagation_outbox
+		SELECT ` + outboxRowColumns + `
+		FROM propagation_outbox p
 		WHERE ` + gaveUpRow + `
 		ORDER BY completed_at DESC
 		LIMIT 200`
@@ -1126,7 +1188,7 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 		if err := rows.Scan(&p.ID, &p.Target, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
 			&p.Source, &p.SourceRef, &p.RuleFrom, &p.CascadeID,
 			&p.ZitadelGrantID, &p.Status, &p.Attempts, &p.LastError, &p.InitiatedBy,
-			&p.CreatedAt, &p.StartedAt, &p.CompletedAt, &p.Reason, &p.WaitReason, &p.NotBefore); err != nil {
+			&p.CreatedAt, &p.StartedAt, &p.CompletedAt, &p.Reason, &p.WaitReason, &p.NotBefore, &p.SendsOnItsOwn); err != nil {
 			return nil, fmt.Errorf("scan propagation: %w", err)
 		}
 		if p.OpType != "apply" {

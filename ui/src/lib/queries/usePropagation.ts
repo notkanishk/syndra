@@ -51,6 +51,12 @@ export interface PendingRow {
    * older rows.
    */
   wait_reason?: string;
+  /**
+   * Syndra sends it without anyone: a revocation, including a departed
+   * member's account switched off on a connected system. The backend's own
+   * rule (db.sendsOnItsOwn); never worked out from op_type here.
+   */
+  sends_on_its_own?: boolean;
   /** When a row Zitadel didn't take is tried again. Absent on a row never tried. */
   not_before?: string;
   /** Where it stands under the one retry model, when Syndra sends it again on its own. */

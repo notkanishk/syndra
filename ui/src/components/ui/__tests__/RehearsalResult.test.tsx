@@ -155,6 +155,24 @@ describe("queued rows say who sends them", () => {
     expect(waitsForSend({ kind: "queued", message: "x", ...step })).toBe(false);
   });
 
+  // An entitlement check is not a revoking op, but a departed member's lock in
+  // it goes on its own (planapply QueuedSubject.SendsOnItsOwn): said as the
+  // revocation it is, and only the rest wait for Send.
+  it("a departed member's lock in an entitlement check goes on its own; the rest wait", () => {
+    const row = (id: string, itself: boolean) => ({
+      user_id: id, name: id, email: `${id}@example.org`, effect: "queued" as const, detail: "", sends_on_its_own: itself,
+    });
+    const p = { ...plan({ queued: 2 }, "converge_entitlements" as BulkPlan["op"]), outcomes: [row("a", true), row("b", false)] };
+    expect(queuedNote(p, "TrueNAS")).toBe(
+      "Recorded in Syndra, not yet sent to TrueNAS. Syndra sends revocations on their own, within a minute; until then the person still has the access. " +
+        "Recorded in Syndra and waiting for you to send to TrueNAS. Nothing has changed there yet; send it from Pending changes.",
+    );
+    expect(queuedStep(p).sendsItself).toBeUndefined();
+
+    const lockOnly = { ...p, summary: { ...p.summary, queued: 1 }, outcomes: [row("a", true)] };
+    expect(queuedStep(lockOnly).sendsItself).toBe(true);
+  });
+
   it("a bulk removal goes on its own: no Send link", () => {
     const p = plan({ queued: 3 }, "remove_role");
     expect(resultSentence(p, noun)).toBe("3 people are not in Zitadel yet; Syndra sends them on its own.");

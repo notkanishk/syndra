@@ -54,7 +54,11 @@ type DesiredStateSnapshot struct {
 // level-triggered, so the set IS the instruction — and an absent field and an
 // empty one say different things: one is "do not manage this", the other is
 // "make it empty".
-func WriteDesiredStateSnapshotTx(ctx context.Context, tx pgx.Tx, subjectID, target, createdBy string, state map[string]json.RawMessage) (DesiredStateSnapshot, error) {
+//
+// withdrawsOnly records that the state is the lifecycle switch alone and can
+// only take access away (services.EntitlementSet.WithdrawsOnly). The outbox row
+// that executes it copies it from here, so no caller declares it twice.
+func WriteDesiredStateSnapshotTx(ctx context.Context, tx pgx.Tx, subjectID, target, createdBy string, state map[string]json.RawMessage, withdrawsOnly bool) (DesiredStateSnapshot, error) {
 	switch {
 	case strings.TrimSpace(subjectID) == "":
 		return DesiredStateSnapshot{}, fmt.Errorf("%w: no subject", ErrInvalidSnapshot)
@@ -91,12 +95,12 @@ func WriteDesiredStateSnapshotTx(ctx context.Context, tx pgx.Tx, subjectID, targ
 	// allocates it, and a supplied value is replaced. Naming it here would let a
 	// future edit pass one and believe it took.
 	const q = `
-		INSERT INTO desired_state_snapshots (subject_id, target, state_json, created_by)
-		VALUES ($1, $2, $3::jsonb, $4)
+		INSERT INTO desired_state_snapshots (subject_id, target, state_json, created_by, withdraws_only)
+		VALUES ($1, $2, $3::jsonb, $4, $5)
 		RETURNING id::text, version`
 
 	out := DesiredStateSnapshot{SubjectID: subjectID, Target: target}
-	if err := tx.QueryRow(ctx, q, subjectID, target, string(encoded), createdBy).
+	if err := tx.QueryRow(ctx, q, subjectID, target, string(encoded), createdBy, withdrawsOnly).
 		Scan(&out.ID, &out.Version); err != nil {
 		return DesiredStateSnapshot{}, fmt.Errorf("write desired state snapshot for %s on %s: %w", subjectID, target, err)
 	}

@@ -112,6 +112,27 @@ describe("converging a cohort", () => {
     expect(body).toMatch(/waiting for you to send/i);
   });
 
+  // A departed member's lock goes on its own (the apply result says so per
+  // row), so the result never says it waits for Send. With the background
+  // drain's state not yet read (as here), it makes no promise either way (N3);
+  // splitQueued's own test covers the within-a-minute line.
+  it("says a departed member's lock goes on its own", async () => {
+    const before = state.applied;
+    state.applied = { ...before, queued: [{ subject_id: "u1", outbox_id: "o1", sends_on_its_own: true }] };
+    try {
+      renderConverge();
+      await waitFor(() => expect(screen.getByText(/Already correct/)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole("button", { name: /queue|apply/i }));
+      await waitFor(() => expect(state.applyCalls.length).toBe(1));
+
+      const body = document.body.textContent ?? "";
+      expect(body).toMatch(/Pending changes lists it until it is sent/);
+      expect(body).not.toMatch(/waiting for you to send to TrueNAS/i);
+    } finally {
+      state.applied = before;
+    }
+  });
+
   // Labelled with the AGE, not merely with the word: "computed against
   // last-known state" with no number is a label nobody can act on.
   it("labels a provisional plan with how old the state it saw is", async () => {

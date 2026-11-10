@@ -1175,3 +1175,117 @@ whole job is to say whether the machine is there.
   seen" with its age, and a quiet target with no mirror at all says so rather
   than implying a copy exists. Both of the first two assertions fail against the
   old component
+
+## 37. A departed member's account goes off without waiting (owner, 10 Nov 2026)
+
+Found tracing a review: a person deactivated or locked in Zitadel had their
+account on a connected system resolved disabled (`applyDirectoryStanding`) and
+queued, on the drift sweep every observation interval, but as an ordinary
+convergence, which waits in Pending changes for an operator's Send. A queued
+revoke is retained access and drains on its own; a departure is retained access
+too. Production showed every `system:reconcile` row to the NAS sent by hand.
+
+- [x] 37.1 One rule for "can only take access away", on the resolved set:
+  `EntitlementSet.WithdrawsOnly()` is true exactly when the account ends switched
+  off for a reason no policy change confers back by itself: the directory reports
+  the person gone (`NotAMember`), or an operator's allowance denies `enabled`
+  (the existing revocation). A lock because no mapped role reaches the target
+  stays operator-gated, as cascades always were.
+- [x] 37.2 One way to queue a set: `EntitlementSet.Convergence(target, subject,
+  actor, reason)` builds `Desired` and `WithdrawsOnly` from the set. All ten
+  queue sites use it (drift sweep, lifecycle trigger and the deactivation
+  webhook, expiry, mapping edits and rollback, merge findings, binding
+  conflicts, revocation); the handlers' map-only wrapper
+  (`svcResolveEntitlementsFor`) is gone, and the revocation's hand-written
+  `WithdrawsOnly: true` is now the rule's answer.
+- [x] 37.3 One statement of what the background runner sends in the outbox
+  (`db.runnerSends`: the kind, `sendsOnItsOwn`, and nothing holding it: no
+  role wait, no older conferring row for the same person and target). The
+  runner's claim is that predicate, and every pending row carries it
+  (`sends_on_its_own`, one shared column list `outboxRowColumns` for the six
+  queries that return rows), so Pending changes never promises a send the
+  runner would not make. The retry claim takes the complement of the kind.
+- [x] 37.4 Tests: `TestWithdrawsOnly`, `TestADepartedPersonsDisableDrainsOnItsOwn`
+  (sweep), `TestConvergeSubjectOn_ADepartureIsWithdrawOnly` (webhook path),
+  `TestPendingRowsSayWhetherTheySendOnTheirOwn` (live), Pending changes page
+  tests; mutation-checked (dropping the departure case fails five).
+- [ ] 37.5 Zitadel's event target delivers user events (`user.deactivated`,
+  `user.locked`): production has received only grant events, the last on
+  15 Sep. Console steps are the owner's; until then the sweep carries every
+  departure within an observation interval. `ready-for-human`
+- [x] 37.6 A withdraw-only instruction cannot give (Opus review): its
+  `Desired` is `enabled` and `smb_enabled` alone, set in
+  `EntitlementSet.Desired()` itself, so the drift plan, the queue's dedupe
+  (`PendingApplyWants`), previews and the queued row read one map. The add-on
+  leaves an absent field alone, so groups, home and quota are untouched; on a
+  locked account the groups it keeps reach nothing. A fully suspended set
+  (every value suppressed, `enabled` not denied) is not withdraw-only and still
+  says `groups: []`. Tests `TestWithdrawOnlyDesiredIsTheSwitchAlone` and
+  `TestADepartedPersonsDisableDrainsOnItsOwn` (the row and the plan are the
+  same map; both mutation-checked).
+- [x] 37.6a A withdraw-only observation keeps the rest of the base
+  (`db.MergeBase.Partial`, set from the set by the drift sweep and from the
+  row by the drain): its two lifecycle fields update and the groups a person
+  held while away stand, so a hand change made before they left is still a
+  finding on their return. Every other observation replaces the base whole,
+  which the Zitadel sweep relies on (a revoke Syndra performed leaves no stale
+  key to read against a later re-grant) and which keeps a field managed again
+  after a gap NoBase. Opus review: an earlier per-field merge for every write
+  reintroduced the Zitadel "revoked grant read as removed by hand" defect.
+  Tests: live `TestAPartialObservationKeepsTheFieldsItDidNotSee` (both
+  directions), `TestADepartedPersonsObservationKeepsTheRestOfTheBase`,
+  `TestAWithdrawOnlyApplyRecordsAPartialBase`; all mutation-checked.
+- [x] 37.6b Withdraw-only is a fact about the desired state, so it is recorded
+  with it (`desired_state_snapshots.withdraws_only`, migration 000087) and the
+  outbox row copies it from the snapshot its approval cites; no caller passes
+  it to the enqueue. Both paths set it from the set: the system convergence
+  and the operator's rehearsal (`NewPlanSubject.WithdrawsOnly`). Before, only
+  the system path declared it, so an operator's approved lock for a departed
+  member replaced the merge base. An operator-approved withdrawal is now also
+  one the runner may send. Tests: live `TestTheRowCopiesWithdrawsOnlyFromItsSnapshot`,
+  `TestAnOperatorsApprovalForADepartedPersonIsRecordedWithdrawOnly`, migration
+  guards for 000086/000087; the runner-licence guard reads `runnerSends`
+  structurally (its top level after `sendsOnItsOwn` is ANDs only; the claim's
+  own text has no OR or op_type). All mutation-checked.
+- [x] 37.6c An operator-approved withdrawal says it goes on its own. The
+  entitlement apply's result carries `sends_on_its_own` per queued row, read
+  from the row by `db.SendsOnTheirOwnTx` (`runnerSends`, as Pending changes
+  reads it), and `disclose` says how many go within a minute. "Check for
+  differences" treats such a row as the revocation it is (`goesItself`,
+  `queuedNote`). Its lede (a prop the dialog never renders, having no compose
+  step) no longer claims every change waits.
+  A snapshot marked withdraw-only is held to its meaning by a CHECK (the switch
+  alone, off; 000087). A stale plan (PLAN_STALE) is a plain failure, not a
+  target refusal, so it holds nobody. The runner-licence guard also requires
+  every constant spliced into the claim to be one bracketed group (an
+  unbracketed OR in `notBeforeDue` would split the WHERE). Tests:
+  `TestTheResultSaysWhichRowsSendOnTheirOwn`, the disclosure table, live
+  `TestAWithdrawOnlySnapshotCanOnlySwitchOff`, `TestAStalePlanIsNotMarkedAsTheTargetsRefusal`,
+  `RehearsalResult` and `ConvergeEntitlements` tests; all mutation-checked.
+- [x] 37.7 The add-on never makes an account that is wanted off
+  (`noAccountToSwitchOff`, asked by plan and apply after the truncation
+  refusal): a subject with no account, never bound or bound to one an operator
+  deleted, gets `no_change` "nothing to switch off". Test
+  `TestNoAccountIsMadeForASubjectWantedOff` (both sites mutation-checked). An
+  unbound subject with no email wanted off is `no_change` too, not the 422
+  that naming a new account needs (`TestNoIdentityIsNeededToSwitchOffAnAccountThatIsNotThere`).
+- [x] 37.7a Plan and apply find a bound account by one rule (`boundAccount`):
+  by name, by uid after an out-of-band rename, a conflict when the name now
+  holds another account of ours. The plan read by name only, so a renamed
+  departed member planned "nothing to switch off" and was never locked.
+  `TestThePlanFindsABoundAccountAsTheApplyDoes` (both branches mutation-checked).
+- [x] 37.7b One try on its own per person and target (`db.runnerSends`): after
+  a withdrawal the target REFUSED (`wait_reason = 'target_refused'`, migration
+  000086, settled by `markTargetRefused` for a rejected call, a blocked plan or
+  a binding conflict), with nothing applied for them since, the next one waits
+  for Send. The drift sweep re-queues a failed row, so a lock the target always
+  refused failed again every pass, unattended. A send that ran out of retries
+  against an unreachable target refused nothing and holds nobody, so an outage
+  does not turn departures manual. Pending changes already says "{target}
+  refused it" for such a row. Tests: live `TestARefusedWithdrawalMakesTheNextOneWait`,
+  `TestATargetsRefusalIsMarkedAsOne`, the spent-row test (all mutation-checked).
+- [ ] 37.8 Locking a password-disabled account on the real NAS. TrueNAS
+  middleware source (24.10/25.04) refuses SMB with `password_disabled` but
+  allows `locked` on such an account; not yet seen on the makerspace NAS. The
+  first departure the runner sends is the check: its outcome should be
+  `applied` with `locked: true` observed. `ready-for-human`

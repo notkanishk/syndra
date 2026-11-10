@@ -80,7 +80,7 @@ export function ConvergeEntitlements({
       {open && (
       <RehearsalDialog
         title={`Check for differences on ${targetLabel(target)}`}
-        lede={`Compares what ${label} should have on ${targetLabel(target)} with what they have, and records the differences as changes waiting for you to send. Nothing reaches ${targetLabel(target)} until somebody sends them from Pending changes.`}
+        lede={`Compares what ${label} should have on ${targetLabel(target)} with what they have, and records the differences as changes. Pending changes lists each one until it reaches ${targetLabel(target)}.`}
         noun={["account", "accounts"]}
         system={targetLabel(target)}
         onRehearse={async (acknowledgeScope) => {
@@ -194,13 +194,14 @@ function asBulkPlan(plan: EntitlementPlan): BulkPlan {
  * cannot default it — so the word "done" and the tick never appear.
  */
 function applyAsBulkPlan(plan: EntitlementPlan | null, result: EntitlementApplyResult): BulkPlan {
-  const queuedIDs = new Set(result.queued.map((q) => q.subject_id));
+  const queued = new Map(result.queued.map((q) => [q.subject_id, q]));
   const outcomes = (plan?.outcomes ?? []).map(
     (outcome): BulkOutcome => ({
       user_id: outcome.user_id,
       name: outcome.name ?? "",
       email: outcome.email ?? "",
-      effect: queuedIDs.has(outcome.user_id) ? "queued" : outcome.effect,
+      effect: queued.has(outcome.user_id) ? "queued" : outcome.effect,
+      sends_on_its_own: queued.get(outcome.user_id)?.sends_on_its_own,
       detail: outcome.detail,
       consequence: outcome.consequence,
     }),

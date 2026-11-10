@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -570,8 +569,7 @@ func TestZitadelSource_Cache_TTLExpires(t *testing.T) {
 
 // A users-list rebuild every 30s must not be a metadata call per person every
 // 30s (assessment SC3): metadata keeps its own, longer TTL, so a rebuild past
-// the list's TTL costs only the ListUsers pages. An edit through Syndra still
-// drops it at once.
+// the list's TTL costs only the ListUsers pages.
 func TestZitadelSource_MetadataOutlivesTheUsersList(t *testing.T) {
 	mc := newMockClient()
 	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
@@ -601,13 +599,6 @@ func TestZitadelSource_MetadataOutlivesTheUsersList(t *testing.T) {
 	}
 	if metadataCalls() != 4 {
 		t.Fatalf("metadata past its TTL was not read again: %d calls", metadataCalls())
-	}
-	src.InvalidateUsers()
-	if _, err := src.Users(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if metadataCalls() != 6 {
-		t.Fatalf("an invalidation did not drop metadata: %d calls", metadataCalls())
 	}
 }
 
@@ -835,7 +826,9 @@ func TestZitadelSource_NeverReadIsUnreachable(t *testing.T) {
 	}
 }
 
-func TestZitadelSource_InvalidateKeepsTheLastGoodRead(t *testing.T) {
+// An expired list still answers as the last good read while Zitadel is down,
+// and the read asked Zitadel first.
+func TestZitadelSource_AnExpiredListKeepsTheLastGoodRead(t *testing.T) {
 	mc := newMockClient()
 	down := false
 	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
@@ -845,50 +838,20 @@ func TestZitadelSource_InvalidateKeepsTheLastGoodRead(t *testing.T) {
 		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1"}}}, nil
 	}
 	src := newZitadelSourceForTest(mc)
+	now := time.Now()
+	src.now = func() time.Time { return now }
 	if _, err := src.Users(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
-	src.InvalidateUsers()
+	now = now.Add(CacheTTL + time.Second)
 	down = true
 	users, err := src.Users(context.Background())
 	if err != nil || len(users) != 1 {
-		t.Fatalf("an invalidated entry still serves as the last good read; got %v %v", users, err)
+		t.Fatalf("an expired list still serves as the last good read; got %v %v", users, err)
 	}
 	if mc.listUsersCalls != 2 {
-		t.Fatalf("invalidation must make the next read ask Zitadel; got %d calls", mc.listUsersCalls)
-	}
-}
-
-// An edit that lands while a rebuild is in flight: the rebuild read the old
-// directory, so the next read must neither join it nor see what it cached.
-func TestZitadelSource_InvalidateDuringARebuildIsNotUndone(t *testing.T) {
-	mc := newMockClient()
-	var calls atomic.Int32
-	started, release := make(chan struct{}), make(chan struct{})
-	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
-		if calls.Add(1) == 1 {
-			close(started)
-			<-release
-			return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "old"}}}, nil
-		}
-		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "new"}}}, nil
-	}
-	src := newZitadelSourceForTest(mc)
-
-	done := make(chan struct{})
-	go func() { defer close(done); _, _ = src.Users(context.Background()) }()
-	<-started
-	src.InvalidateUsers()
-
-	users, err := src.Users(context.Background())
-	if err != nil || len(users) != 1 || users[0].ID != "new" {
-		t.Fatalf("a read after the edit must not join the earlier rebuild; got %v %v", users, err)
-	}
-	close(release)
-	<-done
-	if users, _ := src.Users(context.Background()); len(users) != 1 || users[0].ID != "new" {
-		t.Fatalf("the earlier rebuild must not overwrite the cache; got %v", users)
+		t.Fatalf("an expired list must make the next read ask Zitadel; got %d calls", mc.listUsersCalls)
 	}
 }
 
@@ -942,10 +905,12 @@ func TestZitadelSource_RefusalsAndCancellationsAreNotOutages(t *testing.T) {
 				return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1"}}}, nil
 			}
 			src := newZitadelSourceForTest(mc)
+			now := time.Now()
+			src.now = func() time.Time { return now }
 			if _, err := src.Users(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			src.InvalidateUsers()
+			now = now.Add(CacheTTL + time.Second)
 			fail = true
 			if _, err := src.Users(context.Background()); err == nil || errors.Is(err, ErrUnreachable) {
 				t.Fatalf("want the refusal itself, got %v", err)
@@ -972,10 +937,12 @@ func TestZitadelSource_FindUserDoesNotProbeWhileDown(t *testing.T) {
 		return nil, errors.New("connection refused")
 	}
 	src := newZitadelSourceForTest(mc)
+	now := time.Now()
+	src.now = func() time.Time { return now }
 	if _, err := src.Users(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	src.InvalidateUsers()
+	now = now.Add(CacheTTL + time.Second)
 	down = true
 
 	if _, found, err := src.FindUser(context.Background(), "u1"); err != nil || !found {
