@@ -66,7 +66,7 @@ function AskForAccessOpen({
     return askState(place, role);
   };
   const arrivedState: AskState | null = arrived ? stateOfId(arrived) : null;
-  const arrivedPickable = arrivedState?.kind === "none" || arrivedState?.kind === "until";
+  const arrivedPickable = arrivedState?.kind === "none" || arrivedState?.kind === "until" || arrivedState?.kind === "removing";
   const value = picked !== undefined ? picked : arrived && arrivedPickable ? arrived : null;
   const blockedArrival = picked === undefined && arrived && !arrivedPickable ? arrived : null;
 
@@ -318,6 +318,8 @@ function noteOf(state: AskState) {
       return { kind: "asked", at: state.at } as const;
     case "onway":
       return { kind: "onway", at: state.at } as const;
+    case "removing":
+      return { kind: "removing" } as const;
     default:
       return { kind: "none" } as const;
   }

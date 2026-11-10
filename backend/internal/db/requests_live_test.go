@@ -6,8 +6,6 @@ import (
 	"os"
 	"testing"
 	"time"
-
-	"syndra/internal/models"
 )
 
 // Found on production, 15 Oct 2026: one person, one role, five waiting copies
@@ -51,41 +49,6 @@ func TestOnlyOneRequestWaitsPerPersonAndRole(t *testing.T) {
 	}
 	if _, err := CreateAccessRequest(ctx, user, "pLaser", "trained", "asking again", nil); err != nil {
 		t.Fatalf("after a decision they may ask again: %v", err)
-	}
-}
-
-func TestWhatARequesterHoldsIsReadFromGrantsAndZitadel(t *testing.T) {
-	ctx := liveDB(t)
-	user := freshSubject(t, ctx)
-	kind := func(role string) models.RequestHolding {
-		h, err := RequestHolding(ctx, user, "pLaser", role)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return h
-	}
-	if k := kind("trained").Kind; k != models.HoldingNone {
-		t.Fatalf("nothing held, got %s", k)
-	}
-	until := time.Now().Add(48 * time.Hour).UTC()
-	if _, err := PG.Exec(ctx, `INSERT INTO direct_role_grants (user_id, zitadel_project_id, zitadel_role_key, granted_by, expires_at) VALUES ($1,'pLaser','trained','op',$2)`, user, until); err != nil {
-		t.Fatal(err)
-	}
-	if h := kind("trained"); h.Kind != models.HoldingUntil || h.Until == nil {
-		t.Fatalf("an ending grant is held until it ends, got %+v", h)
-	}
-	if _, err := PG.Exec(ctx, `INSERT INTO direct_role_grants (user_id, zitadel_project_id, zitadel_role_key, granted_by) VALUES ($1,'pLaser','door','op')`, user); err != nil {
-		t.Fatal(err)
-	}
-	if k := kind("door").Kind; k != models.HoldingForGood {
-		t.Fatalf("a grant with no end is held for good, got %s", k)
-	}
-	// Held in Zitadel by a bundle or a rule, with no grant from Syndra.
-	if _, err := PG.Exec(ctx, `INSERT INTO zitadel_grants_index (grant_id, user_id, project_id, role_keys) VALUES ($1,$2,'pLaser',ARRAY['staff'])`, "g-"+user, user); err != nil {
-		t.Fatal(err)
-	}
-	if k := kind("staff").Kind; k != models.HoldingForGood {
-		t.Fatalf("observed in Zitadel with no ending grant is held for good, got %s", k)
 	}
 }
 
@@ -345,75 +308,6 @@ func TestABundleClosesTheRequestItAnswers(t *testing.T) {
 	}
 	if status, _, note := requestStatus(t, ctx, asked); status != "fulfilled" || note != givenNote("bundle") {
 		t.Fatalf("closed as given through a bundle, got %s (%q)", status, note)
-	}
-}
-
-// Given but not sent is held and says so; a role whose removal is queued is
-// not held, even while Zitadel still lists it.
-func TestHoldingReadsWhatIsQueued(t *testing.T) {
-	ctx := liveDB(t)
-	user := freshSubject(t, ctx)
-	dropOutboxAfter(t, ctx, user)
-	read := func(role string) models.RequestHolding {
-		t.Helper()
-		h, err := RequestHolding(ctx, user, "pLaser", role)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return h
-	}
-	seedOutbox(t, ctx, "add", "pending", user, "pLaser", "bundle", "b1", []string{"trained"})
-	if h := read("trained"); h.Kind != models.HoldingForGood || !h.Waiting {
-		t.Fatalf("a queued bundle add is held and waiting, got %+v", h)
-	}
-	if _, err := PG.Exec(ctx, `INSERT INTO zitadel_grants_index (grant_id, user_id, project_id, role_keys) VALUES ($1,$2,'pLaser',ARRAY['door'])`, "g-"+user, user); err != nil {
-		t.Fatal(err)
-	}
-	if h := read("door"); h.Kind != models.HoldingForGood || h.Waiting {
-		t.Fatalf("observed and nothing queued is held, not waiting, got %+v", h)
-	}
-	seedOutbox(t, ctx, "revoke", "pending", user, "pLaser", "direct", "", []string{"door"})
-	if h := read("door"); h.Kind != models.HoldingNone {
-		t.Fatalf("a role whose removal is queued is not held, got %+v", h)
-	}
-}
-
-// A direct grant is held until its removal is sent, but a queued revoke, or a
-// queued replace whose set omits the role, means it is on its way out: giving
-// it back must not be refused as "already has this".
-func TestHoldingTreatsAQueuedRevokeOrOmittingReplaceAsLeaving(t *testing.T) {
-	ctx := liveDB(t)
-	user := freshSubject(t, ctx)
-	dropOutboxAfter(t, ctx, user)
-	read := func(role string) models.RequestHolding {
-		t.Helper()
-		h, err := RequestHolding(ctx, user, "pLaser", role)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return h
-	}
-	for _, role := range []string{"door", "saw"} {
-		if _, err := UpsertDirectGrant(ctx, user, "pLaser", role, "op", "", nil); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if h := read("door"); h.Kind != models.HoldingForGood {
-		t.Fatalf("a direct grant with nothing queued is held, got %+v", h)
-	}
-	seedOutbox(t, ctx, "revoke", "pending", user, "pLaser", "direct", "", []string{"door"})
-	if h := read("door"); h.Kind != models.HoldingNone {
-		t.Fatalf("a direct grant with a queued revoke is leaving, got %+v", h)
-	}
-	if h := read("saw"); h.Kind != models.HoldingForGood {
-		t.Fatalf("a revoke of another role leaves this one held, got %+v", h)
-	}
-	seedOutbox(t, ctx, "replace", "pending", user, "pLaser", "direct", "", []string{"keep"})
-	if h := read("saw"); h.Kind != models.HoldingNone {
-		t.Fatalf("a queued replace that omits the role removes it, got %+v", h)
-	}
-	if h := read("keep"); !h.Waiting {
-		t.Fatalf("a role the replace names is on its way in, got %+v", h)
 	}
 }
 

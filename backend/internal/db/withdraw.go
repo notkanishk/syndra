@@ -45,8 +45,8 @@ const withdrawnReason = "withdrawn before it was sent: the change that queued it
 //     therefore still has to be undone;
 //   - it came from the SAME source that is now being taken away, so a grant
 //     delivered by some other route is never spared by a bundle's removal;
-//   - and no delivery of this triple is still STANDING — the last `applied`
-//     row for it is not an add.
+//   - and no delivery of this triple is still DELIVERED — the latest
+//     `applied` row for it does not give it (deliveredFor).
 //
 // Any of those failing leaves today's behaviour untouched.
 //
@@ -66,7 +66,7 @@ const withdrawnReason = "withdrawn before it was sent: the change that queued it
 // The same holds the other way round (found 15 Oct): a role removed and given
 // back before the removal was sent queued the add behind the revoke, two
 // changes to confirm that net to nothing. An add cancels the queued revoke it
-// answers, and is owed only when the grant is not still standing. From any
+// answers, and is owed only when the grant is not still delivered. From any
 // source: a cascade queues a revoke only when nothing else holds the role, so
 // whatever gives it back answers that revoke.
 func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p EnqueueParams) (owed bool, err error) {
@@ -119,57 +119,51 @@ func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p Enqueu
 		}
 	}
 
-	// Is a delivery still standing? See standingFor.
-	standing, err := standingFor(ctx, tx, target, []string{p.UserID})
+	// Is a delivery still standing? See deliveredFor.
+	delivered, err := deliveredFor(ctx, tx, target, []string{p.UserID})
 	if err != nil {
 		return false, fmt.Errorf("withdraw queued delivery: %w", err)
 	}
-	return OwedAfterCancel(p, standing[p.UserID][RoleRef{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]}]), nil
+	return OwedAfterCancel(p, delivered[p.UserID][RoleRef{ProjectID: p.ProjectID, RoleKey: p.RoleKeys[0]}]), nil
 }
 
-// standingFor is, per person, the roles whose delivery still stands on target.
-// Only the LAST applied row decides: an add after the last revoke means the
-// grant is live there and a revoke is the only thing that takes it back. A
-// revoke after the last add means it is already gone, and a queued row just
+// deliveredFor is, per person, the roles whose delivery still stands on
+// target: the latest APPLIED row for the role gives it (RoleDelivery.Gives).
+// An add after the last revoke means the grant is live there and a revoke is
+// the only thing that takes it back; a revoke, or a replace that leaves the
+// role out, after the last add means it is already gone, and a queued row just
 // cancelled was a re-delivery that never went out, so there is nothing left
 // to undo.
 //
-// `MAX ... FILTER`, not `EXISTS`: existence is what the first version of this
-// asked, and existence cannot tell an order. One statement for the write
+// Which row came last is latestDeliveries' answer, the same one a role's
+// standing reads; existence is what the first version of this asked, and
+// existence cannot tell an order. One statement for the write
 // (withdrawUndelivered) and the plan (ReadAccessSnapshot).
-func standingFor(ctx context.Context, q Querier, target string, userIDs []string) (map[string]map[RoleRef]bool, error) {
-	rows, err := q.Query(ctx, `
-		SELECT user_id, project_id, rk
-		  FROM propagation_outbox, UNNEST(role_keys) AS rk
-		 WHERE target = $1 AND user_id = ANY($2) AND status = 'applied' AND project_id IS NOT NULL
-		 GROUP BY user_id, project_id, rk
-		HAVING COALESCE(MAX(intent_seq) FILTER (WHERE op_type IN ('add','replace')), 0)
-		     > COALESCE(MAX(intent_seq) FILTER (WHERE op_type = 'revoke'), 0)`, target, userIDs)
+func deliveredFor(ctx context.Context, q Querier, target string, userIDs []string) (map[string]map[RoleRef]bool, error) {
+	latest, err := latestDeliveries(ctx, q, target, userIDs, []string{"applied"})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	out := map[string]map[RoleRef]bool{}
-	for rows.Next() {
-		var user string
-		var r RoleRef
-		if err := rows.Scan(&user, &r.ProjectID, &r.RoleKey); err != nil {
-			return nil, err
+	for user, ds := range latest {
+		for _, ref := range ds.SettledRoles() {
+			if d, ok := ds.LatestSettled(ref.ProjectID, ref.RoleKey); ok && d.Gives(ref.RoleKey) {
+				if out[user] == nil {
+					out[user] = map[RoleRef]bool{}
+				}
+				out[user][ref] = true
+			}
 		}
-		if out[user] == nil {
-			out[user] = map[RoleRef]bool{}
-		}
-		out[user][r] = true
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // OwedAfterCancel says whether a write that cancelled a queued change is
 // still owed: a revoke while the grant stands in Zitadel, an add only once it
-// doesn't. standing is the last applied delivery of the role being an add.
+// doesn't. delivered is the latest applied delivery of the role giving it.
 // The planner says it ahead of time from the same fact.
-func OwedAfterCancel(p EnqueueParams, standing bool) bool {
-	return standing == (p.OpType == "revoke")
+func OwedAfterCancel(p EnqueueParams, delivered bool) bool {
+	return delivered == (p.OpType == "revoke")
 }
 
 // cancelledUnsentAudit is the Change history action for each cancellation.

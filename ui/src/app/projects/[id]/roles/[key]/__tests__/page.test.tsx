@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import RoleMembersPage from "@/app/projects/[id]/roles/[key]/page";
-import type { RoleMembersView } from "@/lib/queries/useRoleMembers";
+import type { RoleMember, RoleMembersView } from "@/lib/queries/useRoleMembers";
 
 /**
  * The page reads its route params through React's `use()` on a Promise,
@@ -41,6 +41,7 @@ function view(overrides: Partial<RoleMembersView> = {}): RoleMembersView {
     bundle_count: 0,
     automatic_count: 0,
     observed_only: null,
+    observation: { read_at: "2026-11-10T08:00:00Z", current: true, truncated: false },
     ...overrides,
   };
 }
@@ -56,6 +57,7 @@ describe("role members — holding is observed", () => {
         {
           user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
           reasons: [{ kind: "direct" }],
+          standing: "held",
         },
       ],
       observed_only: [
@@ -79,6 +81,7 @@ describe("role members — holding is observed", () => {
         {
           user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
           reasons: [{ kind: "direct" }],
+          standing: "held",
         },
       ],
       observed_only: null,
@@ -95,29 +98,91 @@ describe("role members — holding is observed", () => {
         {
           user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
           reasons: [{ kind: "direct" }],
-          in_zitadel: false,
+          standing: "not_held",
         },
       ],
     });
     renderPage();
 
-    expect(screen.getByText("Not in Zitadel yet")).toBeInTheDocument();
+    expect(screen.getByText("Not in Zitadel")).toBeInTheDocument();
     // A record explains; it does not hold. The sentence counts what Zitadel shows.
     expect(screen.getByText("0 people hold this role")).toBeInTheDocument();
   });
 
-  it("counts a record with no observation as held, and one Zitadel contradicts as not", () => {
-    const member = (id: string, extra: object) => ({
+  it("counts held and being removed as holding, and sent, waiting and not held as not", () => {
+    const member = (id: string, standing: RoleMember["standing"]) => ({
       user: { id, name: `Person ${id}`, email: `${id}@example.edu`, title: "", team: "" },
       reasons: [{ kind: "direct" }],
-      ...extra,
+      standing,
     });
     state.data = view({
-      members: [member("a", {}), member("b", { in_zitadel: true }), member("c", { in_zitadel: false })],
+      members: [
+        member("a", "held"),
+        member("b", "removing"),
+        member("c", "not_held"),
+        member("d", "sent"),
+        member("e", "waiting"),
+      ],
     });
     renderPage();
 
     expect(screen.getByText("2 people hold this role")).toBeInTheDocument();
+    expect(screen.getByText("Being removed")).toBeInTheDocument();
+    expect(screen.getByText("Not in Zitadel")).toBeInTheDocument();
+    expect(screen.getByText("Sent, not seen back yet")).toBeInTheDocument();
+    expect(screen.getByText("Not sent to Zitadel yet")).toBeInTheDocument();
+  });
+
+  // An unread Zitadel is said once, in the card's title (next test), never on
+  // every row: forty identical warnings say less than one line.
+  it("a member the backend can't place has no row label, and isn't counted as holding it", () => {
+    state.data = view({
+      members: [
+        {
+          user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
+          reasons: [{ kind: "direct" }],
+          standing: null,
+        },
+      ],
+    });
+    renderPage();
+
+    expect(screen.queryByText("Couldn\u2019t check Zitadel")).toBeNull();
+    expect(screen.getByText("0 people hold this role")).toBeInTheDocument();
+  });
+
+  it("does not count when Zitadel was never read", () => {
+    state.data = view({
+      members: [
+        {
+          user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
+          reasons: [{ kind: "direct" }],
+          standing: "waiting",
+        },
+      ],
+      observation: { read_at: null, current: false, truncated: false },
+    });
+    renderPage();
+
+    expect(screen.getByText("Not checked yet")).toBeInTheDocument();
+    expect(screen.queryByText(/^\d+ (people hold|person holds) this role$/)).not.toBeInTheDocument();
+  });
+
+  // The org was never swept, but this member was read on their own: the
+  // count stands on that read, as their row does.
+  it("counts when a member's own read settled their standing, though the org was never swept", () => {
+    state.data = view({
+      members: [
+        {
+          user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
+          reasons: [{ kind: "direct" }],
+          standing: "held",
+        },
+      ],
+      observation: { read_at: null, current: false, truncated: false },
+    });
+    renderPage();
+    expect(screen.getByText("1 person holds this role")).toBeInTheDocument();
   });
 
   it("shows the email when there is no title or team to show instead", () => {
@@ -126,6 +191,7 @@ describe("role members — holding is observed", () => {
         {
           user: { id: "u1", name: "Charlotte Flair", email: "charlotte@example.edu", title: "", team: "" },
           reasons: [{ kind: "direct" }],
+          standing: "held",
         },
       ],
     });

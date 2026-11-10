@@ -127,7 +127,7 @@ func TestConfirmFromObservationStampsWhatTheIndexShows(t *testing.T) {
 		RETURNING id`, key).Scan(&unseen); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if err := RecordOrgObservation(ctx, []ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}}, true, ""); err != nil {
+	if err := RecordOrgObservation(ctx, time.Time{}, []ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}}, true, ""); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 	n, err := ConfirmFromObservation(ctx)
@@ -154,7 +154,7 @@ func TestConfirmFromObservationStampsWhatTheIndexShows(t *testing.T) {
 func TestConfirmFromObservationRefusesAPartialListing(t *testing.T) {
 	ctx := liveDB(t)
 	id := appliedRow(t, ctx, time.Hour)
-	if err := RecordOrgObservation(ctx, []ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}}, false, ""); err != nil {
+	if err := RecordOrgObservation(ctx, time.Time{}, []ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}}, false, ""); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 	n, err := ConfirmFromObservation(ctx)
@@ -196,7 +196,7 @@ func TestConfirmFromObservationSettlesARevokeOvertakenByALaterAdd(t *testing.T) 
 		        NOW(), nextval('propagation_outbox_intent_seq'))`, key2); err != nil {
 		t.Fatalf("seed add: %v", err)
 	}
-	if err := RecordOrgObservation(ctx, []ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}}, true, ""); err != nil {
+	if err := RecordOrgObservation(ctx, time.Time{}, []ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}}, true, ""); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 	if _, err := ConfirmFromObservation(ctx); err != nil {
@@ -233,7 +233,7 @@ func TestConfirmFromObservationSettlesAnAddALaterRevokeTookBack(t *testing.T) {
 		        NOW(), nextval('propagation_outbox_intent_seq'))`, key2); err != nil {
 		t.Fatalf("seed revoke: %v", err)
 	}
-	if err := RecordOrgObservation(ctx, nil, true, ""); err != nil {
+	if err := RecordOrgObservation(ctx, time.Time{}, nil, true, ""); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 	if _, err := ConfirmFromObservation(ctx); err != nil {

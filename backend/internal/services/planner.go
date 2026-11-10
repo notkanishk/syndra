@@ -398,7 +398,7 @@ func (ch Change) deliver(writes []db.EnqueueParams, person db.PersonAccess, s Pl
 		answered := db.AnsweredBy(p, person.Queued)
 		ch.Cancels = append(ch.Cancels, answered...)
 		switch {
-		case len(answered) > 0 && !db.OwedAfterCancel(p, person.Standing[ref]):
+		case len(answered) > 0 && !db.OwedAfterCancel(p, person.Delivered[ref]):
 			w.Delivery = DeliveryNone
 		case s.Access.RoleWaits[ref]:
 			w.Delivery, w.WaitReason = DeliveryWaits, db.WaitReasonRoleWaits

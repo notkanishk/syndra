@@ -59,6 +59,14 @@ type accessSnapshot struct {
 	// Basis(). Computed at most once per request, same as everything else here.
 	basis         models.ObservationBasis
 	basisComputed bool
+	// standings is the lazy, memoised standing of each user's roles, from
+	// Observed, BasisFor and the user's outbox rows. See Standing.
+	standings map[string]Standings
+	// deliveries and ownReads are read once per person asked about, or once
+	// for many (Prime): see primeFor.
+	deliveries map[string]db.Deliveries
+	ownReads   map[string]db.Observation
+	primed     map[string]bool
 }
 
 // newAccessSnapshot primes the user list (single directory call) but defers
@@ -74,6 +82,86 @@ func newAccessSnapshot(ctx context.Context) (*accessSnapshot, error) {
 		roles:    make(map[string]userRoles, len(users)),
 		observed: make(map[string]map[string]bool, len(users)),
 	}, nil
+}
+
+// Standing is the standing of each of userID's roles: the one answer to "does
+// this person hold this role", from what Zitadel shows (Observed, under
+// BasisFor) and the latest outbox row for the role. Lazy and memoised like For.
+func (s *accessSnapshot) Standing(userID string) (Standings, error) {
+	if st, ok := s.standings[userID]; ok {
+		return st, nil
+	}
+	observed, err := s.Observed(userID)
+	if err != nil {
+		return Standings{}, err
+	}
+	basis, err := s.BasisFor(userID)
+	if err != nil {
+		return Standings{}, err
+	}
+	if s.standings == nil {
+		s.standings = map[string]Standings{}
+	}
+	st := newStandings(s.deliveries[userID], observed, basis)
+	s.standings[userID] = st
+	return st, nil
+}
+
+// BasisFor is the footing for one person's absences (personBasis): the newer
+// of the org sweep and their own latest read.
+func (s *accessSnapshot) BasisFor(userID string) (models.ObservationBasis, error) {
+	org, err := s.Basis()
+	if err != nil {
+		return models.ObservationBasis{}, err
+	}
+	if err := s.primeFor(userID); err != nil {
+		return models.ObservationBasis{}, err
+	}
+	if own, ok := s.ownReads[userID]; ok {
+		return personBasis(org, &own), nil
+	}
+	return personBasis(org, nil), nil
+}
+
+// primeFor reads the outbox rows and own reads behind userID's standing, unless
+// Prime already read them with others'.
+func (s *accessSnapshot) primeFor(userID string) error {
+	if s.primed[userID] {
+		return nil
+	}
+	return s.Prime([]string{userID})
+}
+
+// Prime reads the outbox rows and own reads behind the standings of ids in one
+// read each: a role's holder list primes its members before asking each.
+func (s *accessSnapshot) Prime(ids []string) error {
+	deliveries, err := svcRoleDeliveries(s.ctx, ids)
+	if err != nil {
+		return err
+	}
+	own, err := svcLatestUserObservations(s.ctx, ids)
+	if err != nil {
+		return err
+	}
+	if s.primed == nil {
+		s.primed, s.deliveries, s.ownReads = map[string]bool{}, map[string]db.Deliveries{}, map[string]db.Observation{}
+	}
+	for _, id := range ids {
+		s.primed[id] = true
+		if d, ok := deliveries[id]; ok {
+			s.deliveries[id] = d
+		}
+		if o, ok := own[id]; ok {
+			s.ownReads[id] = o
+		}
+	}
+	return nil
+}
+
+// personSnapshot is a snapshot for one person's page: no directory listing,
+// since For, Observed, Basis and Standing need only the id.
+func personSnapshot(ctx context.Context) *accessSnapshot {
+	return &accessSnapshot{ctx: ctx, roles: map[string]userRoles{}, observed: map[string]map[string]bool{}}
 }
 
 // For returns the cached (roleMap, bundles) for userID, computing-and-
@@ -264,14 +352,33 @@ func observationBasis(ctx context.Context) (models.ObservationBasis, error) {
 	if err != nil {
 		return models.ObservationBasis{}, err
 	}
+	return basisOf(obs), nil
+}
+
+// basisOf is one read as the footing a number rests on, for the org sweep and
+// a person's own read alike.
+func basisOf(obs db.Observation) models.ObservationBasis {
 	at := obs.ObservedAt
 	return models.ObservationBasis{
 		ReadAt: &at,
-		// Current is false only when the sweep itself failed. A capped-but-
+		// Current is false only when the read itself failed. A capped-but-
 		// clean read is still current; Truncated says the cap part on its own.
 		Current:   obs.Error == "",
 		Truncated: !obs.Complete,
-	}, nil
+	}
+}
+
+// personBasis is the footing for one person: the org sweep, unless their own
+// latest read is newer and complete. A complete read of one person rewrites
+// all of their rows (db.RecordUserObservation), so it settles their absences
+// as a complete sweep would. One that failed or stopped at its cap deleted
+// nothing, so the sweep's answer still stands; and an older one never
+// overrides a newer sweep, which may have seen them change.
+func personBasis(org models.ObservationBasis, own *db.Observation) models.ObservationBasis {
+	if own == nil || !own.Complete || own.Error != "" || (org.ReadAt != nil && !own.ObservedAt.After(*org.ReadAt)) {
+		return org
+	}
+	return basisOf(*own)
 }
 
 // ConfirmedHolderCounts is HolderCounts' companion: of the people HolderCounts
@@ -599,25 +706,37 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		return models.UserAccessView{}, err
 	}
 
-	// Here and not inside collectUserRoles. Delivery is a fact this VIEW owes
-	// its reader; the drift detector and the entitlement resolver call the same
-	// collector and want Syndra's records exactly as recorded — and neither
-	// should pay a per-user query for a marker it never renders.
-	if err := markQueuedDeliveries(ctx, userID, roleMap); err != nil {
-		return models.UserAccessView{}, err
-	}
-
 	// What Zitadel shows this person holding. Read here, beside the records,
 	// so one response carries both — a screen that fetched the records and
 	// then asked a second endpoint what was real could render the two against
 	// each other, and the member landing did exactly that.
-	observed, basis, err := observedRolesByProject(ctx, userID)
+	snap := personSnapshot(ctx)
+	observed, basis, err := observedRolesByProject(snap, userID)
 	if err != nil {
 		return models.UserAccessView{}, err
 	}
 	// Presence may be concluded from any read; absence only from a complete
 	// one. Everything below that states "you hold nothing here" checks this.
-	completeRead := basis.ReadAt != nil && basis.Current && !basis.Truncated
+	completeRead := basis.ConcludesAbsence()
+	// Each role's standing, from the same read and the person's outbox rows:
+	// the one answer the screens render (design.md, W3b).
+	standings, err := snap.Standing(userID)
+	if err != nil {
+		return models.UserAccessView{}, err
+	}
+	// Here and not inside collectUserRoles. Delivery is a fact this VIEW owes
+	// its reader; the drift detector and the entitlement resolver call the same
+	// collector and want Syndra's records exactly as recorded — and neither
+	// should pay a per-user query for a marker it never renders. A source is
+	// marked only while the role's latest row is a give on its way
+	// (standings.Giving), so the marker and the standing never disagree.
+	if err := markQueuedDeliveries(ctx, userID, roleMap, standings.Giving); err != nil {
+		return models.UserAccessView{}, err
+	}
+	direct, err := directGrantsByRole(ctx, userID)
+	if err != nil {
+		return models.UserAccessView{}, err
+	}
 
 	projectBuckets := make(map[string]*models.ProjectAccessView)
 	for _, role := range roleMap {
@@ -695,6 +814,16 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 				bucket.ObservedRoleKeys = []string{}
 			}
 		}
+		bucket.Standings = map[string]*models.RoleStanding{}
+		bucket.Holdings = map[string]models.RequestHolding{}
+		for _, keys := range [][]string{bucket.EffectiveRoleKeys, bucket.ObservedRoleKeys} {
+			for _, key := range keys {
+				st := standings.Of(bucket.ProjectID, key)
+				bucket.Standings[key] = st
+				_, recorded := roleMap[roleKey{projectID: bucket.ProjectID, roleKey: key}]
+				bucket.Holdings[key] = holdingFrom(st, standings.Taking(bucket.ProjectID, key), recorded, direct[access.Role{ProjectID: bucket.ProjectID, RoleKey: key}])
+			}
+		}
 		projects = append(projects, *bucket)
 	}
 	sort.Slice(projects, func(i, j int) bool {
@@ -745,29 +874,34 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 }
 
 // observedRolesByProject is what the observation store holds for one person,
-// folded to project → roles, with the basis it rests on.
+// folded to project → roles, with the basis it rests on: the person's own
+// (BasisFor), so the page's read line, its observed lists and its standings all
+// stand on one footing. A person with two grant rows on one project keeps the
+// roles of both.
 //
 // Returns a nil map — never an empty one — when nothing has ever been observed.
 // The distinction is the whole point: an empty map is "we looked and they hold
 // nothing", and nil is "we have not looked", and a screen that confuses the two
 // tells somebody their access is gone when it is merely unread.
-func observedRolesByProject(ctx context.Context, userID string) (map[string][]string, models.ObservationBasis, error) {
-	basis, err := observationBasis(ctx)
+func observedRolesByProject(snap *accessSnapshot, userID string) (map[string][]string, models.ObservationBasis, error) {
+	basis, err := snap.BasisFor(userID)
 	if err != nil {
 		return nil, models.ObservationBasis{}, err
 	}
 	if basis.ReadAt == nil {
 		return nil, basis, nil
 	}
-	grants, err := svcObservedGrantsFor(ctx, userID)
+	seen, err := snap.Observed(userID)
 	if err != nil {
 		return nil, models.ObservationBasis{}, fmt.Errorf("observed grants for %s: %w", userID, err)
 	}
-	byProject := make(map[string][]string, len(grants))
-	for _, g := range grants {
-		keys := append([]string{}, g.RoleKeys...)
+	byProject := make(map[string][]string, len(seen))
+	for key := range seen {
+		projectID, roleKey, _ := strings.Cut(key, ":")
+		byProject[projectID] = append(byProject[projectID], roleKey)
+	}
+	for _, keys := range byProject {
 		sort.Strings(keys)
-		byProject[g.ProjectID] = keys
 	}
 	return byProject, basis, nil
 }
@@ -1561,7 +1695,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 // role is derived by one rule, and the failure mode of the rest is a marker
 // that appears while a sibling derivation is queued, which overstates the wait
 // rather than the delivery.
-func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKey]*models.EffectiveRole) error {
+func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKey]*models.EffectiveRole, giving func(projectID, roleKey string) bool) error {
 	pending, err := svcPendingDeliveries(ctx, userID)
 	if err != nil {
 		return err
@@ -1585,7 +1719,7 @@ func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKe
 	}
 
 	for key, role := range roleMap {
-		if role == nil {
+		if role == nil || !giving(key.projectID, key.roleKey) {
 			continue
 		}
 		for i, reason := range role.Reasons {

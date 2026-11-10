@@ -1,10 +1,12 @@
 package db
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -1170,44 +1172,44 @@ func QueuedRevocations(ctx context.Context, userID string) ([]RoleRef, error) {
 
 // queuedRevocationsFor is QueuedRevocations for several people in one read:
 // the one statement of it, which the planner's snapshot reads too.
+//
+// A role is being revoked when its latest QUEUED Zitadel row takes it
+// (Deliveries.Taking, the rule a role's standing reads): an add queued behind a
+// revoke, which a cascade does when it wants the role back, means it is no
+// longer on its way out; a newer row already sent never hides an older revoke
+// still waiting, since that revoke will still go. The roles asked about are the ones a revoke
+// names, and the direct-sourced ledger roles on a project with a replace:
+// `replace` names the roles that SURVIVE, and its removals are the direct
+// roles its set omits, the same predicate ReconcileLedgerOnApplied deletes by.
+// Sorted, so every reader sees the same order.
 func queuedRevocationsFor(ctx context.Context, userIDs []string) (map[string][]RoleRef, error) {
-	// `replace` names the roles that SURVIVE, not the ones being taken away, so
-	// it cannot be unioned with revoke's role_keys. Its removals are the
-	// direct-sourced ledger roles on that project which the new set omits —
-	// the same predicate ReconcileLedgerOnApplied deletes by, asked ahead of
-	// time instead of after.
-	const q = `
-		SELECT user_id, project_id, UNNEST(role_keys) AS role_key
-		FROM propagation_outbox
-		WHERE user_id = ANY($1)
-		  AND op_type = 'revoke'
-		  AND status IN ('pending', 'in_flight')
-		  AND project_id IS NOT NULL AND role_keys IS NOT NULL
-		UNION
-		SELECT o.user_id, g.zitadel_project_id, g.zitadel_role_key
-		FROM propagation_outbox o
-		JOIN direct_role_grants g
-		  ON g.user_id = o.user_id
-		 AND g.zitadel_project_id = o.project_id
-		 AND g.source = 'direct'
-		WHERE o.user_id = ANY($1)
-		  AND o.op_type = 'replace'
-		  AND o.status IN ('pending', 'in_flight')
-		  AND o.project_id IS NOT NULL AND o.role_keys IS NOT NULL
-		  AND NOT (g.zitadel_role_key = ANY(o.role_keys))`
-	rows, err := querier(ctx).Query(ctx, q, userIDs)
+	latest, err := latestDeliveries(ctx, querier(ctx), "zitadel", userIDs, Live)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := map[string][]RoleRef{}
-	for rows.Next() {
-		var user string
-		var r RoleRef
-		if err := rows.Scan(&user, &r.ProjectID, &r.RoleKey); err != nil {
-			return nil, fmt.Errorf("scan queued revocation: %w", err)
-		}
-		out[user] = append(out[user], r)
+	direct, err := directGrantsFor(ctx, userIDs, true)
+	if err != nil {
+		return nil, err
 	}
-	return out, rows.Err()
+	out := map[string][]RoleRef{}
+	for user, ds := range latest {
+		asked := map[RoleRef]bool{}
+		for _, ref := range ds.QueuedRevokes() {
+			asked[ref] = true
+		}
+		for _, g := range direct[user] {
+			if ds.HasQueuedReplace(g.ProjectID) && g.Source == "direct" {
+				asked[RoleRef{ProjectID: g.ProjectID, RoleKey: g.RoleKey}] = true
+			}
+		}
+		for ref := range asked {
+			if ds.Taking(ref.ProjectID, ref.RoleKey) {
+				out[user] = append(out[user], ref)
+			}
+		}
+		slices.SortFunc(out[user], func(a, b RoleRef) int {
+			return cmp.Or(cmp.Compare(a.ProjectID, b.ProjectID), cmp.Compare(a.RoleKey, b.RoleKey))
+		})
+	}
+	return out, nil
 }

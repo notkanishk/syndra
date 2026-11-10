@@ -27,3 +27,22 @@ func TestPendingDeliveriesCarryTheirQueueTime(t *testing.T) {
 		t.Fatalf("got %+v, want only r1 queued at %v", got, want)
 	}
 }
+
+// An add-on's unsent row is not a Zitadel grant waiting: "Not sent to Zitadel
+// yet" is said only of Zitadel's own rows.
+func TestPendingDeliveriesAreZitadelsOnly(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user) })
+	addon := seedOutbox(t, ctx, "add", "pending", user, "pPend", "direct", "", []string{"r1"})
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET target = 'truenas' WHERE id = $1`, addon); err != nil {
+		t.Fatal(err)
+	}
+	got, err := PendingDeliveriesForUser(ctx, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %+v, want nothing: the only unsent row is an add-on's", got)
+	}
+}

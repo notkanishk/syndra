@@ -199,8 +199,12 @@ export type InsightsAsOf =
       kind: "picture";
       day: string;
       topology: TopologyGraph;
-      /** "project_id:role_key" to the people holding it that day. */
-      role_people: Record<string, number>;
+      /**
+       * "project_id:role_key" to the people holding it that day. null, not
+       * empty: Zitadel had never been read that day, so there is nothing to
+       * count, and an empty map would read as nobody holding anything.
+       */
+      role_people: Record<string, number> | null;
       first_day: string | null;
       changes_since: number;
     }
@@ -219,7 +223,7 @@ export function useInsightsAsOf(date: string | null) {
           kind: "picture",
           ...d,
           topology: { nodes: list(d.topology?.nodes), edges: list(d.topology?.edges) },
-          role_people: d.role_people ?? {},
+          role_people: d.role_people ?? null,
         };
       } catch (e) {
         if (e instanceof ApiError && e.code === "NO_SNAPSHOT") {

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { holdingsFor } from "@/test-utils/holdings";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { actPlan } from "@/test-utils/plan";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -15,7 +16,8 @@ const search = vi.hoisted(() => ({ value: "" }));
 const mine = vi.hoisted(() => ({ data: [] as Array<Record<string, unknown>> }));
 const held = vi.hoisted(() => ({
   grants: [] as Array<{ id: string; project_id: string; role_key: string; expires_at?: string | null }>,
-  observed: [] as string[],
+  // The backend's standing per role key; the dialog only reads it.
+  standings: {} as Record<string, string>,
   queued: [] as string[],
   queuedAt: undefined as string | undefined,
 }));
@@ -96,7 +98,8 @@ vi.mock("@/lib/queries/useUsers", () => ({
       projects: [
         {
           project_id: "pLaser",
-          observed_role_keys: held.observed,
+          standings: held.standings,
+          holdings: holdingsFor(held.grants.filter((g) => g.project_id === "pLaser"), held.standings),
           source_roles: held.queued.map((key) => ({ role_key: key, reasons: [{ kind: "direct", description: "", queued: true, queued_at: held.queuedAt }] })),
           derived_roles: [],
         },
@@ -124,7 +127,7 @@ beforeEach(() => {
   search.value = "";
   mine.data = [];
   held.grants = [];
-  held.observed = [];
+  held.standings = {};
   held.queued = [];
   held.queuedAt = undefined;
   create.calls = 0;
@@ -192,7 +195,7 @@ describe("Ask for access", () => {
 // role (owner, 15 Oct).
 describe("Ask for access · only what they lack, once", () => {
   it("arriving on a role they have: outlined, a sentence in place of the hint, nothing to fill in", () => {
-    held.observed = ["trained"];
+    held.standings = { trained: "held" };
     search.value = "project=pLaser&role=trained";
     renderAs(false);
     expect(
@@ -207,7 +210,7 @@ describe("Ask for access · only what they lack, once", () => {
   });
 
   it("choosing another role brings the form back", () => {
-    held.observed = ["trained"];
+    held.standings = { trained: "held" };
     search.value = "project=pLaser&role=trained";
     renderAs(false);
     fireEvent.click(within(dialog()).getByRole("radio", { name: /Viewer/ }));
@@ -227,8 +230,44 @@ describe("Ask for access · only what they lack, once", () => {
     expect(sendButton()).toBeDisabled();
   });
 
+  it("a role sent and not seen back yet is on its way too: nothing to ask for", () => {
+    held.standings = { trained: "sent" };
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    expect(within(dialog()).getByText("On its way")).toBeInTheDocument();
+    expect(sendButton()).toBeDisabled();
+  });
+
+  it("a role being removed says so and can be asked for again", () => {
+    held.standings = { trained: "removing" };
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    expect(within(dialog()).getByText("Being removed")).toBeInTheDocument();
+    expect(within(dialog()).getByRole("radio", { name: /Trained operator/ })).toBeEnabled();
+  });
+
+  // The dialog reads the backend's holding, never the grants: one whose
+  // removal is on its way can be asked for again; one given and not in
+  // Zitadel can't, since the ask would be refused as already had.
+  it("a role being removed can be asked for again, whatever the grants say", () => {
+    held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: null }];
+    held.standings = { trained: "removing" };
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    expect(within(dialog()).queryByText("You have this")).toBeNull();
+  });
+
+  it("a role given and not in Zitadel is had: a second ask would be refused", () => {
+    held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: null }];
+    held.standings = { trained: "not_held" };
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    expect(within(dialog()).getByText("You have this")).toBeInTheDocument();
+  });
+
   it("arriving on one given and not yet sent says it's on its way", () => {
     held.queued = ["trained"];
+    held.standings = { trained: "waiting" };
     search.value = "project=pLaser&role=trained";
     renderAs(false);
     expect(
@@ -244,6 +283,7 @@ describe("Ask for access · only what they lack, once", () => {
     // An approved request's grant has an end and waits in the outbox: it isn't theirs to keep yet.
     held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: new Date(2026, 11, 18, 12).toISOString() }];
     held.queued = ["trained"];
+    held.standings = { trained: "waiting" };
     search.value = "project=pLaser&role=trained";
     renderAs(false);
     expect(within(dialog()).getByText("On its way")).toBeInTheDocument();
@@ -252,6 +292,7 @@ describe("Ask for access · only what they lack, once", () => {
 
   it("arriving on one given and not yet sent dates it from when it was queued", () => {
     held.queued = ["trained"];
+    held.standings = { trained: "waiting" };
     held.queuedAt = "2026-01-15T09:00:00Z";
     search.value = "project=pLaser&role=trained";
     renderAs(false);
@@ -338,6 +379,7 @@ describe("Ask for access · Until the end of term", () => {
 
   it("keeping a role to the end of next term sends that term's end date", async () => {
     held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: new Date(2026, 11, 18, 12).toISOString() }];
+    held.standings = { trained: "held" };
     search.value = "project=pLaser&role=trained&extend=1";
     renderAs(false);
     fireEvent.click(screen.getByRole("radio", { name: "To the end of next term" }));
@@ -361,6 +403,7 @@ describe("Ask for access · Until the end of term", () => {
 describe("Ask for access · asking to keep a role that ends", () => {
   const ends = () => {
     held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: new Date(2026, 11, 18, 12).toISOString() }];
+    held.standings = { trained: "held" };
     search.value = "project=pLaser&role=trained&extend=1";
   };
 

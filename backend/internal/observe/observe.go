@@ -14,7 +14,6 @@ package observe
 import (
 	"context"
 	"log"
-	"time"
 
 	"syndra/internal/db"
 	"syndra/internal/zitadel"
@@ -38,6 +37,7 @@ var (
 	}
 	recordOrg  = db.RecordOrgObservation
 	recordUser = db.RecordUserObservation
+	readStart  = db.ReadStart
 	confirm    = db.ConfirmFromObservation
 	clientOK   = func() bool { return zitadel.MgmtClient != nil }
 )
@@ -51,6 +51,11 @@ var (
 func Org(ctx context.Context) (db.Observation, error) {
 	if !clientOK() {
 		return db.Observation{}, nil
+	}
+	// The read's time is when it began listing (db.ReadStart).
+	started, err := readStart(ctx)
+	if err != nil {
+		return db.Observation{}, err
 	}
 	var seen []db.ObservedGrant
 	complete, readErr := true, ""
@@ -79,11 +84,11 @@ func Org(ctx context.Context) (db.Observation, error) {
 		}
 	}
 
-	if err := recordOrg(ctx, seen, complete, readErr); err != nil {
+	if err := recordOrg(ctx, started, seen, complete, readErr); err != nil {
 		return db.Observation{}, err
 	}
 	return db.Observation{
-		Scope: "org", ObservedAt: time.Now().UTC(),
+		Scope: "org", ObservedAt: started,
 		Complete: complete, GrantsSeen: len(seen), Error: readErr,
 	}, nil
 }
@@ -118,6 +123,11 @@ func observeUser(ctx context.Context, userID string) (db.Observation, []db.Obser
 	if !clientOK() || userID == "" {
 		return db.Observation{}, nil, nil
 	}
+	// The read's time is when it began listing (db.ReadStart).
+	started, err := readStart(ctx)
+	if err != nil {
+		return db.Observation{}, nil, err
+	}
 	var seen []db.ObservedGrant
 	complete, readErr := true, ""
 
@@ -146,11 +156,11 @@ func observeUser(ctx context.Context, userID string) (db.Observation, []db.Obser
 		}
 	}
 
-	if err := recordUser(ctx, userID, seen, complete, readErr); err != nil {
+	if err := recordUser(ctx, userID, started, seen, complete, readErr); err != nil {
 		return db.Observation{}, nil, err
 	}
 	return db.Observation{
-		Scope: "user", SubjectID: userID, ObservedAt: time.Now().UTC(),
+		Scope: "user", SubjectID: userID, ObservedAt: started,
 		Complete: complete, GrantsSeen: len(seen), Error: readErr,
 	}, seen, nil
 }

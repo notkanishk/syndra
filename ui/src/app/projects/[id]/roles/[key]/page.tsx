@@ -30,6 +30,7 @@ import { peopleHref } from "@/lib/people-filters";
 import { useRoleMembers, type RoleMember } from "@/lib/queries/useRoleMembers";
 import { formatShortDate } from "@/lib/format";
 import { roleName } from "@/lib/names";
+import { fromARead, holds, standingTone, standingWords } from "@/lib/standing";
 
 type Filter = "all" | SourceKind;
 
@@ -64,11 +65,14 @@ export default function RoleMembersPage({
   }, [view, filter]);
 
   const observedOnly = sortByName(view?.observed_only ?? [], (person) => person.name);
-  // Holding is observed: a record Zitadel does not show (`in_zitadel === false`)
-  // explains, it does not hold. Same count the roles index gives.
+  // Holding is observed: a record Zitadel does not show explains, it does not
+  // hold. The backend's standing says who holds (a role being removed is still
+  // held); Zitadel never read is not a count, the way the roles index says it.
   const holdCount =
-    (view?.members.filter((member) => member.in_zitadel !== false).length ?? 0) +
-    observedOnly.length;
+    (view?.members.filter((member) => holds(member.standing)).length ?? 0) + observedOnly.length;
+  // Each member's standing stands on their own read or the org sweep, so the
+  // count is "not checked" only while nobody's has been read at all.
+  const notChecked = !view?.observation?.read_at && !(view?.members ?? []).some((m) => fromARead(m.standing));
 
   return (
     <div className="flex flex-col gap-4">
@@ -135,7 +139,13 @@ export default function RoleMembersPage({
             orthogonal to how somebody came to hold it. Nothing while loading (a fabricated zero). */}
         {view && (
           <CardHeader
-            title={holdCount === 1 ? "1 person holds this role" : `${holdCount} people hold this role`}
+            title={
+              notChecked
+                ? "Not checked yet"
+                : holdCount === 1
+                  ? "1 person holds this role"
+                  : `${holdCount} people hold this role`
+            }
             note={
               !view.withheld_unavailable && view.withheld_count > 0 ? (
                 <span className="text-warn-text">
@@ -260,9 +270,15 @@ function MemberRow({
         {member.user.title || member.user.team || member.user.email}
       </div>
       <div className="min-w-0 flex-1">
-        {member.in_zitadel === false && (
-          <span className="mb-0.5 block text-[12.5px] font-semibold text-warn-text">
-            Not in Zitadel yet
+        {/* Held is the healthy case, and an unread Zitadel is said once, in
+            the card's title, not on every row. */}
+        {member.standing && member.standing !== "held" && (
+          <span
+            className={`mb-0.5 block text-[12.5px] ${
+              standingTone(member.standing) === "warn" ? "font-semibold text-warn-text" : "text-faint"
+            }`}
+          >
+            {standingWords(member.standing, "operator")}
           </span>
         )}
         <AccessSourceList reasons={member.reasons} />

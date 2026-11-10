@@ -253,3 +253,18 @@ func TestInsightsTimeline_FillsEveryDayAndReportsSnapshotDays(t *testing.T) {
 		t.Fatalf("empty store: %+v", got)
 	}
 }
+
+// A day before Zitadel was ever read stores no holder counts: "not checked",
+// never the recorded count standing in for people (owner, 10 Nov 2026).
+func TestInsightsSnapshot_BeforeTheFirstReadIsNotChecked(t *testing.T) {
+	setupSnapshotTestFixtures(t, 2, 1, 1)
+	observedStore(t, db.Observation{}, db.ErrNoObservation, nil)
+
+	snap, err := buildInsightsSnapshot(context.Background(), "2026-11-10")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.RolePeople != nil {
+		t.Fatalf("never read, yet a count was stored: %v", snap.RolePeople)
+	}
+}

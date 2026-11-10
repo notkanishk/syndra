@@ -349,6 +349,15 @@ type ProjectAccessView struct {
 	// nil and the empty case into the same absent field and destroys the very
 	// distinction this comment describes. null and [] must both reach the wire.
 	ObservedRoleKeys []string `json:"observed_role_keys"`
+	// Standings is whether the person holds each role on this page, keyed by
+	// role key: every role in the lists above and every observed one. The one
+	// answer the screens render (RoleStanding); null for a role whose absence
+	// can't be concluded.
+	Standings map[string]*RoleStanding `json:"standings"`
+	// Holdings is what they already have of each of those roles for a give or
+	// an ask (services.RequestHolding's rule, holdingFrom): the pickers read it
+	// so they never offer what the backend refuses as "already has this".
+	Holdings map[string]RequestHolding `json:"holdings"`
 }
 
 // AllowanceBand is the third band beside Source and Derived (design §6).
@@ -1101,6 +1110,35 @@ type ObservationBasis struct {
 	// complete one, and absence can never be concluded from it.
 	Truncated bool `json:"truncated"`
 }
+
+// ConcludesAbsence is the one footing for "Zitadel does not show it": a read
+// happened, it was current, and it was complete. Anything less can only say
+// what it saw, never what is missing.
+func (b ObservationBasis) ConcludesAbsence() bool {
+	return b.ReadAt != nil && b.Current && !b.Truncated
+}
+
+// RoleStanding is the one answer to "does this person hold this role": five
+// values, worked out once by the backend (services.standingOf), only rendered
+// by the UI. Holding is observed: held means Zitadel shows it. On the wire it
+// is null when Zitadel has not been read completely and no outbox row settles
+// it, because absence can't be concluded then.
+type RoleStanding string
+
+const (
+	// StandingHeld: Zitadel shows it. No reasons means Syndra didn't give it.
+	StandingHeld RoleStanding = "held"
+	// StandingSent: Zitadel accepted the give and hasn't shown it back yet.
+	StandingSent RoleStanding = "sent"
+	// StandingWaiting: the give is recorded and waits to be sent.
+	StandingWaiting RoleStanding = "waiting"
+	// StandingRemoving: a removal is queued or sent and Zitadel still shows
+	// it, so the person still holds it.
+	StandingRemoving RoleStanding = "removing"
+	// StandingNotHeld: a complete read doesn't show it. With reasons, it was
+	// given and isn't in Zitadel.
+	StandingNotHeld RoleStanding = "not_held"
+)
 
 // CatalogRole is the computed view for the global role inventory.
 //

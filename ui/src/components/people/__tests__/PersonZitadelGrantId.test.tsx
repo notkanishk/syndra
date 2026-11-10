@@ -10,6 +10,8 @@ const state = vi.hoisted(() => ({
   askedFor: null as string | null,
   grants: [{ id: "zg-77", userId: "u1", projectId: "p1", roleKeys: ["trained"] }],
   error: null as Error | null,
+  // The backend's standing for the one role; the page only renders it.
+  standing: "held" as string | null,
 }));
 
 vi.mock("@/lib/ui-view", () => ({
@@ -41,6 +43,7 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
           effective_role_keys: ["trained"],
           source_roles: [{ role_key: "trained", reasons: [{ kind: "direct" }] }],
           derived_roles: [],
+          standings: { trained: state.standing },
         },
       ],
       cleanup_hints: [],
@@ -74,6 +77,7 @@ beforeEach(() => {
   state.askedFor = null;
   state.grants = [{ id: "zg-77", userId: "u1", projectId: "p1", roleKeys: ["trained"] }];
   state.error = null;
+  state.standing = "held";
 });
 
 describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
@@ -113,6 +117,7 @@ describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
   // "none" names it; a dash would let it read as "not loaded".
   it("says a missing grant is missing, and points at where that gets triaged", () => {
     state.grants = [];
+    state.standing = "not_held";
     renderPerson(true);
     expect(document.body.textContent).toMatch(/Not in Zitadel/);
     expect(document.body.textContent).toMatch(/Side by side/);

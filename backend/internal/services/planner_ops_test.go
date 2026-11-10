@@ -115,7 +115,7 @@ func TestPlanExtend_CancelsAWaitingRemoval(t *testing.T) {
 	withGrantEnding(&s, member, &soon)
 	withQueued(&s, models.QueuedChange{ID: "q1", OpType: "revoke", ProjectID: "pLab", RoleKeys: []string{"member"}, Source: "direct"})
 	p := s.Access.People["u1"]
-	p.Standing = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "member"}: true}
+	p.Delivered = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "member"}: true}
 	s.Access.People["u1"] = p
 
 	ch := extend(s, 30)
@@ -334,7 +334,7 @@ func TestPlanMove_GivesARoleWhoseRemovalIsQueuedAndCancelsIt(t *testing.T) {
 	withQueued(&s, models.QueuedChange{ID: "q1", OpType: "revoke", ProjectID: "pLab", RoleKeys: []string{"advanced"}, Source: "direct"})
 	p := s.Access.People["u1"]
 	p.Revoking = []db.RoleRef{{ProjectID: "pLab", RoleKey: "advanced"}}
-	p.Standing = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "advanced"}: true}
+	p.Delivered = map[db.RoleRef]bool{{ProjectID: "pLab", RoleKey: "advanced"}: true}
 	s.Access.People["u1"] = p
 	ch := Plan(Action{Op: OpMove, UserID: "u1", BundleID: "b1"}, s)
 	if got := plannedWrites(ch); !slices.Equal(got, []sentWrite{{"add", "advanced", DeliveryNone}, {"revoke", "trained", DeliveryStraightAway}}) {

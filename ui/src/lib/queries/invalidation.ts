@@ -43,11 +43,18 @@ export type WriteKind =
   /** The welcome-claims switch. */
   | "welcomeClaims"
   /** Changes Syndra gave up on were marked seen: Home and the rail stop raising them. */
-  | "retriesSeen";
+  | "retriesSeen"
+  /**
+   * Zitadel was read again for a person (the person page's look-again): what
+   * Syndra observed moved, so every standing and observed count may have.
+   */
+  | "observed";
 
 export interface WriteScope {
   target?: string;
   appId?: string;
+  /** The one person a write is about, when it is about one ("observed"). */
+  user?: string;
   /** Keys only the calling hook knows (its own list or a local constant). */
   extra?: readonly QueryKey[];
 }
@@ -72,7 +79,7 @@ const ACCESS: readonly QueryKey[] = [
 
 /** Pure: the keys a write of this kind makes stale. Exported for the test. */
 export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
-  const { target, appId } = scope;
+  const { target, appId, user } = scope;
   const keys: QueryKey[] = (() => {
     switch (kind) {
       case "access":
@@ -107,6 +114,10 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "retriesSeen":
         // The rail's count and Pending changes' "Syndra stopped sending" list.
         return [GOVERNANCE, ["propagations"]];
+      case "observed":
+        // That person's access view (standings, holdings); every person's when
+        // no one is named. A holder list refetches when it is next opened.
+        return [user ? ["users", "access", user] : ["users"]];
     }
   })();
   return [...keys, ...(scope.extra ?? [])];

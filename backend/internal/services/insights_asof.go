@@ -92,7 +92,8 @@ func TakeDailyInsightsSnapshot(ctx context.Context) error {
 //
 // role_people is what Zitadel shows holding each role (the only reading a screen
 // may call people). Before anything has ever been observed that reading is nil,
-// and the recorded one (people Syndra gave the role to) is stored instead.
+// and nil is stored: "not checked", never the recorded count in its place
+// (owner, 10 Nov 2026).
 func buildInsightsSnapshot(ctx context.Context, day string) (db.InsightsSnapshot, error) {
 	snap, err := newAccessSnapshot(ctx)
 	if err != nil {
@@ -103,14 +104,8 @@ func buildInsightsSnapshot(ctx context.Context, day string) (db.InsightsSnapshot
 		return db.InsightsSnapshot{}, err
 	}
 	people, err := snap.ObservedHolderCounts()
-	if err == nil && people == nil {
-		people, err = snap.HolderCounts()
-	}
 	if err != nil {
 		return db.InsightsSnapshot{}, err
-	}
-	if people == nil {
-		people = map[string]int{}
 	}
 	return db.InsightsSnapshot{Day: day, Topology: topology, RolePeople: people}, nil
 }
