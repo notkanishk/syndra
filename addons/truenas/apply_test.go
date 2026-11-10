@@ -985,7 +985,7 @@ func TestAReadBackAsksForOneAccount(t *testing.T) {
 
 	got, err := s.readBack("brock")
 	if err != nil || got == nil || got.Username != "brock" {
-		t.Fatalf("readBack(bob) = %+v, %v", got, err)
+		t.Fatalf("readBack(brock) = %+v, %v", got, err)
 	}
 	var sawFilter bool
 	for i, m := range rpc.fakeRPC.calls {

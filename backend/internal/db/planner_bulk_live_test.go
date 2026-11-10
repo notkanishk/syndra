@@ -66,14 +66,14 @@ func bulkStaleThenThePlan(t *testing.T, f plannerFixture, req services.BulkReque
 
 	stale := plan()
 	unnamed := queue()
-	before := len(sentRowsFor(t, ctx, f.becky))
+	before := len(sentRowsFor(t, ctx, f.ember))
 	if _, _, err := services.ApplyPlannedBulk(ctx, req, stale); !errors.As(err, new(*services.StalePlan)) {
 		t.Fatalf("a change queued since the plan was read makes it stale, got %v", err)
 	}
 	if s := status(t, ctx, unnamed); s != "pending" {
 		t.Errorf("the change nobody was shown is untouched, got %s", s)
 	}
-	if after := len(sentRowsFor(t, ctx, f.becky)); after != before {
+	if after := len(sentRowsFor(t, ctx, f.ember)); after != before {
 		t.Fatalf("a stale plan wrote %d outbox row(s)", after-before)
 	}
 
@@ -107,13 +107,13 @@ func bulkStaleThenThePlan(t *testing.T, f plannerFixture, req services.BulkReque
 
 func TestPlannerBulk_AssignRole(t *testing.T) {
 	f := newPlannerFixture(t)
-	req := services.BulkRequest{Op: services.BulkOpAssignRole, UserIDs: []string{f.becky}, ProjectID: f.project, RoleKey: f.member,
+	req := services.BulkRequest{Op: services.BulkOpAssignRole, UserIDs: []string{f.ember}, ProjectID: f.project, RoleKey: f.member,
 		DurationDays: 30, Reason: "term start", Actor: f.actor}
 	written := bulkStaleThenThePlan(t, f, req, "grants.bulk",
-		func() string { return f.queue(t, f.becky, "revoke", f.member, "direct", "") })
+		func() string { return f.queue(t, f.ember, "revoke", f.member, "direct", "") })
 	var ends *time.Time
 	if err := db.PG.QueryRow(f.ctx, `SELECT expires_at FROM direct_role_grants WHERE user_id = $1 AND zitadel_role_key = $2`,
-		f.becky, f.member).Scan(&ends); err != nil || ends == nil {
+		f.ember, f.member).Scan(&ends); err != nil || ends == nil {
 		t.Fatalf("the give is on the ledger with its end: %v %v", ends, err)
 	}
 	_ = written
@@ -121,16 +121,16 @@ func TestPlannerBulk_AssignRole(t *testing.T) {
 
 func TestPlannerBulk_RemoveRole(t *testing.T) {
 	f := newPlannerFixture(t)
-	if _, err := db.EnqueueDirectGrantPropagation(f.ctx, db.EnqueueParams{UserID: f.becky, ProjectID: f.project,
+	if _, err := db.EnqueueDirectGrantPropagation(f.ctx, db.EnqueueParams{UserID: f.ember, ProjectID: f.project,
 		RoleKeys: []string{f.member}, GrantedBy: f.actor, OpType: "add", NoPropagation: true, PayloadJSON: "{}"}); err != nil {
 		t.Fatal(err)
 	}
-	req := services.BulkRequest{Op: services.BulkOpRemoveRole, UserIDs: []string{f.becky}, ProjectID: f.project, RoleKey: f.member,
+	req := services.BulkRequest{Op: services.BulkOpRemoveRole, UserIDs: []string{f.ember}, ProjectID: f.project, RoleKey: f.member,
 		Reason: "left the course", Actor: f.actor}
 	bulkStaleThenThePlan(t, f, req, "grants.bulk",
-		func() string { return f.queue(t, f.becky, "add", f.member, "direct", "") })
+		func() string { return f.queue(t, f.ember, "add", f.member, "direct", "") })
 	var left bool
-	_ = db.PG.QueryRow(f.ctx, `SELECT EXISTS (SELECT 1 FROM direct_role_grants WHERE user_id = $1)`, f.becky).Scan(&left)
+	_ = db.PG.QueryRow(f.ctx, `SELECT EXISTS (SELECT 1 FROM direct_role_grants WHERE user_id = $1)`, f.ember).Scan(&left)
 	if left {
 		t.Fatal("the grant is gone from the ledger")
 	}
@@ -141,55 +141,55 @@ func TestPlannerBulk_RemoveRole(t *testing.T) {
 func TestPlannerBulk_ExtendWritesNoOutboxRow(t *testing.T) {
 	f := newPlannerFixture(t)
 	soon := time.Now().Add(3 * 24 * time.Hour)
-	if _, err := db.EnqueueDirectGrantPropagation(f.ctx, db.EnqueueParams{UserID: f.becky, ProjectID: f.project,
+	if _, err := db.EnqueueDirectGrantPropagation(f.ctx, db.EnqueueParams{UserID: f.ember, ProjectID: f.project,
 		RoleKeys: []string{f.member}, GrantedBy: f.actor, OpType: "add", NoPropagation: true, ExpiresAt: &soon, PayloadJSON: "{}"}); err != nil {
 		t.Fatal(err)
 	}
 	ctx, _ := db.GuardCancellations(f.ctx, nil, func(context.Context) bool { return true })
-	req := services.BulkRequest{Op: services.BulkOpExtend, UserIDs: []string{f.becky}, DurationDays: 30, Reason: "term", Actor: f.actor}
+	req := services.BulkRequest{Op: services.BulkOpExtend, UserIDs: []string{f.ember}, DurationDays: 30, Reason: "term", Actor: f.actor}
 	changes, _, err := services.PlanBulk(ctx, req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	before := len(sentRowsFor(t, ctx, f.becky))
+	before := len(sentRowsFor(t, ctx, f.ember))
 	_, written, err := services.ApplyPlannedBulk(ctx, req, f.issueRows(t, ctx, "grants.bulk", services.FingerprintBulkRequest(req), changes))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after := len(sentRowsFor(t, ctx, f.becky)); after != before || len(outboxIDs(written[f.becky])) != 0 {
+	if after := len(sentRowsFor(t, ctx, f.ember)); after != before || len(outboxIDs(written[f.ember])) != 0 {
 		t.Fatalf("an extension sends nothing to Zitadel: %d new row(s)", after-before)
 	}
 	var ends time.Time
-	if err := db.PG.QueryRow(f.ctx, `SELECT expires_at FROM direct_role_grants WHERE user_id = $1`, f.becky).Scan(&ends); err != nil ||
+	if err := db.PG.QueryRow(f.ctx, `SELECT expires_at FROM direct_role_grants WHERE user_id = $1`, f.ember).Scan(&ends); err != nil ||
 		!ends.After(soon.Add(24*time.Hour)) {
 		t.Fatalf("the ledger's end moved: %v %v", ends, err)
 	}
 
 	// The one case it reaches the outbox: a removal still waiting is
 	// cancelled, and named.
-	bulkStaleThenThePlan(t, f, services.BulkRequest{Op: services.BulkOpExtend, UserIDs: []string{f.becky}, DurationDays: 60,
+	bulkStaleThenThePlan(t, f, services.BulkRequest{Op: services.BulkOpExtend, UserIDs: []string{f.ember}, DurationDays: 60,
 		Reason: "term", Actor: f.actor}, "grants.bulk",
-		func() string { return f.queue(t, f.becky, "revoke", f.member, "direct", "") })
+		func() string { return f.queue(t, f.ember, "revoke", f.member, "direct", "") })
 }
 
 func TestPlannerBulk_Approve(t *testing.T) {
 	f := newPlannerFixture(t)
 	days := 30
-	req1, err := db.CreateAccessRequest(f.ctx, f.becky, f.project, f.member, "induction done", &days)
+	req1, err := db.CreateAccessRequest(f.ctx, f.ember, f.project, f.member, "induction done", &days)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = db.PG.Exec(f.ctx, `DELETE FROM access_requests WHERE id = $1::uuid`, req1) })
 	req := services.BulkRequest{Op: services.OpApprove, UserIDs: []string{req1}, Actor: f.actor, Note: "ok"}
 	bulkStaleThenThePlan(t, f, req, "requests.bulk_decision",
-		func() string { return f.queue(t, f.becky, "revoke", f.member, "direct", "") })
+		func() string { return f.queue(t, f.ember, "revoke", f.member, "direct", "") })
 	var st string
 	_ = db.PG.QueryRow(f.ctx, `SELECT status FROM access_requests WHERE id = $1::uuid`, req1).Scan(&st)
 	if st != "approved" {
 		t.Fatalf("approved, got %s", st)
 	}
 	var audited int
-	_ = db.PG.QueryRow(f.ctx, `SELECT count(*) FROM audit_logs WHERE target_zitadel_user_id = $1 AND action = 'access_request.approved'`, f.becky).Scan(&audited)
+	_ = db.PG.QueryRow(f.ctx, `SELECT count(*) FROM audit_logs WHERE target_zitadel_user_id = $1 AND action = 'access_request.approved'`, f.ember).Scan(&audited)
 	if audited != 1 {
 		t.Fatalf("one decision audited, got %d", audited)
 	}
@@ -198,14 +198,14 @@ func TestPlannerBulk_Approve(t *testing.T) {
 func TestPlannerBulk_Adopt(t *testing.T) {
 	f := newPlannerFixture(t)
 	rule := f.withRule(t) // trained gives advanced
-	drift, _, err := db.UpsertDriftItem(f.ctx, db.TargetZitadel, f.becky, f.project, []string{f.trains}, "zg-1", "reconciliation_sweep", db.DriftTargetOnly)
+	drift, _, err := db.UpsertDriftItem(f.ctx, db.TargetZitadel, f.ember, f.project, []string{f.trains}, "zg-1", "reconciliation_sweep", db.DriftTargetOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = db.PG.Exec(f.ctx, `DELETE FROM drift_items WHERE id = $1::uuid`, drift) })
 	req := services.BulkRequest{Op: services.OpAdopt, UserIDs: []string{drift}, Actor: f.actor}
 	written := bulkStaleThenThePlan(t, f, req, "drift.bulk_attribute",
-		func() string { return f.queue(t, f.becky, "revoke", "advanced", "rule", rule) })
+		func() string { return f.queue(t, f.ember, "revoke", "advanced", "rule", rule) })
 	// The adopted role is a ledger row and nothing else; the rule's row is the rule's.
 	if got := sentRows(t, f.ctx, outboxIDs(written[drift])); slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, "add trained") }) {
 		t.Fatalf("no outbox row for the adopted role: %v", got)
@@ -217,14 +217,14 @@ func TestPlannerBulk_Adopt(t *testing.T) {
 	}
 }
 
-// publishWithAdvanced puts Becky on v1 and adds "advanced" to the working copy.
+// publishWithAdvanced puts Ember on v1 and adds "advanced" to the working copy.
 func (f plannerFixture) publishWithAdvanced(t *testing.T) {
 	t.Helper()
 	v, err := db.LatestVersion(f.ctx, f.bundle)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, "", f.becky, f.bundle, v.ID, nil); err != nil || !ok {
+	if _, ok, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, "", f.ember, f.bundle, v.ID, nil); err != nil || !ok {
 		t.Fatalf("assign: %v %v", ok, err)
 	}
 	if _, err := db.AddRoleToBundleAndEnqueue(f.ctx, f.actor, f.bundle, f.project, "advanced", nil); err != nil {
@@ -237,7 +237,7 @@ func TestPlannerBulk_Publish(t *testing.T) {
 	f.publishWithAdvanced(t)
 	req := services.BulkRequest{Op: services.OpPublish, BundleID: f.bundle, Migrate: true, Note: "adds advanced", Actor: f.actor}
 	bulkStaleThenThePlan(t, f, req, "bundles.publish",
-		func() string { return f.queue(t, f.becky, "revoke", "advanced", "direct", "") })
+		func() string { return f.queue(t, f.ember, "revoke", "advanced", "direct", "") })
 }
 
 func TestPlannerBulk_Move(t *testing.T) {
@@ -251,7 +251,7 @@ func TestPlannerBulk_Move(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := services.BulkRequest{Op: services.OpMove, BundleID: f.bundle, VersionID: v2.ID, UserIDs: []string{f.becky}, Actor: f.actor}
+	req := services.BulkRequest{Op: services.OpMove, BundleID: f.bundle, VersionID: v2.ID, UserIDs: []string{f.ember}, Actor: f.actor}
 	bulkStaleThenThePlan(t, f, req, "bundles.move_holders",
-		func() string { return f.queue(t, f.becky, "revoke", "advanced", "direct", "") })
+		func() string { return f.queue(t, f.ember, "revoke", "advanced", "direct", "") })
 }

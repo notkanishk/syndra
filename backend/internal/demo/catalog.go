@@ -8,10 +8,10 @@ import (
 
 var users = []models.UserProfile{
 	{ID: "dev_admin", Name: "Becky Lynch", Email: "becky@makerspace.local", Title: "Makerspace Director", Team: "Operations", Status: "active", Kind: models.UserKindHuman, Avatar: "BL"},
-	{ID: "sam_student", Name: "Rey Mysterio", Email: "rey@makerspace.local", Title: "Student Maker", Team: "Members", Status: "active", Kind: models.UserKindHuman, Avatar: "RM"},
-	{ID: "maya_staff", Name: "Bianca Belair", Email: "bianca@makerspace.local", Title: "Lab Coordinator", Team: "Staff", Status: "active", Kind: models.UserKindHuman, Avatar: "BB"},
-	{ID: "leo_mentor", Name: "Seth Rollins", Email: "seth@makerspace.local", Title: "Laser Mentor", Team: "Training", Status: "active", Kind: models.UserKindHuman, Avatar: "SR"},
-	{ID: "ava_guest", Name: "Nikki Bella", Email: "nikki@makerspace.local", Title: "Visiting Artist", Team: "Residency", Status: "pending", Kind: models.UserKindHuman, Avatar: "NB"},
+	{ID: "rey_student", Name: "Rey Mysterio", Email: "rey@makerspace.local", Title: "Student Maker", Team: "Members", Status: "active", Kind: models.UserKindHuman, Avatar: "RM"},
+	{ID: "bianca_staff", Name: "Bianca Belair", Email: "bianca@makerspace.local", Title: "Lab Coordinator", Team: "Staff", Status: "active", Kind: models.UserKindHuman, Avatar: "BB"},
+	{ID: "seth_mentor", Name: "Seth Rollins", Email: "seth@makerspace.local", Title: "Laser Mentor", Team: "Training", Status: "active", Kind: models.UserKindHuman, Avatar: "SR"},
+	{ID: "nikki_guest", Name: "Nikki Bella", Email: "nikki@makerspace.local", Title: "Visiting Artist", Team: "Residency", Status: "pending", Kind: models.UserKindHuman, Avatar: "NB"},
 }
 
 var projects = []models.ProjectCatalog{
@@ -127,17 +127,17 @@ var baseGrants = map[string][]models.RoleGrant{
 		{ProjectID: "printing", RoleKey: "manager"},
 		{ProjectID: "laser", RoleKey: "mentor"},
 	},
-	"sam_student": {
+	"rey_student": {
 		{ProjectID: "printing", RoleKey: "member"},
 	},
-	"maya_staff": {
+	"bianca_staff": {
 		{ProjectID: "platform", RoleKey: "support"},
 	},
-	"leo_mentor": {
+	"seth_mentor": {
 		{ProjectID: "laser", RoleKey: "mentor"},
 		{ProjectID: "printing", RoleKey: "calibrator"},
 	},
-	"ava_guest": {
+	"nikki_guest": {
 		{ProjectID: "wiki", RoleKey: "member"},
 	},
 }
@@ -157,8 +157,8 @@ func Applications() []models.ApplicationCatalog {
 // ProjectIDs and UserIDs are the fingerprint of the demo seeder.
 //
 // Every row EnsureDemoData writes references one of these — a bundle role on
-// `printing`, a mapping rule into `doors`, an assignment to `sam_student`. Real
-// Zitadel ids are numeric snowflakes, so a stored `wiki` or `leo_mentor` in a
+// `printing`, a mapping rule into `doors`, an assignment to `rey_student`. Real
+// Zitadel ids are numeric snowflakes, so a stored `wiki` or `seth_mentor` in a
 // live deployment can only have come from the seeder.
 //
 // This exists because SYNDRA_SEED_DEMO answers the wrong question. It says

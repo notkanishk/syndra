@@ -416,7 +416,7 @@ func TestABindingWhoseAccountIsGoneIsReportedNotQueued(t *testing.T) {
 		t.Fatalf("live = %+v, want only sub-live", live)
 	}
 	if len(stale) != 1 || stale[0].Username != "becky" || stale[0].UID != 3999 {
-		t.Fatalf("stale = %+v, want alice/3999", stale)
+		t.Fatalf("stale = %+v, want becky/3999", stale)
 	}
 }
 

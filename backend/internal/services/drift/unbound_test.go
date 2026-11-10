@@ -48,11 +48,11 @@ func TestAPassDoesNotQueueASecondRowForABoundSubjectAlreadyWaiting(t *testing.T)
 	h := &addonReconcileHarness{
 		read: currentRead(
 			addons.TargetAccount{Username: "charlotte", UID: 3001},
-			addons.TargetAccount{Username: "bea", UID: 3002},
+			addons.TargetAccount{Username: "booker", UID: 3002},
 		),
 		bindings: []db.TargetBinding{
 			{Target: "truenas", SubjectID: "u_waiting", Username: "charlotte", AccountUID: uid(3001)},
-			{Target: "truenas", SubjectID: "u_new", Username: "bea", AccountUID: uid(3002)},
+			{Target: "truenas", SubjectID: "u_new", Username: "booker", AccountUID: uid(3002)},
 		},
 		plan: addons.PlanResult{
 			Outcome: addons.OutcomeSucceeded, Current: true,

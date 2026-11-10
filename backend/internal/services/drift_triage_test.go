@@ -449,7 +449,7 @@ func TestDriftTriage_ARemovalCarriesWhenTheWriteLanded(t *testing.T) {
 	// No observation at all: no sweep ran between the write and the removal.
 	svcPropagations = func(context.Context, string) (map[string]map[string]db.Propagation, error) {
 		return map[string]map[string]db.Propagation{
-			"u1": {"p1/viewer": {SubjectID: "u1", Field: "p1/viewer", AppliedAt: applied, Actor: "op-marta"}},
+			"u1": {"p1/viewer": {SubjectID: "u1", Field: "p1/viewer", AppliedAt: applied, Actor: "op-mandy"}},
 		}, nil
 	}
 
@@ -461,7 +461,7 @@ func TestDriftTriage_ARemovalCarriesWhenTheWriteLanded(t *testing.T) {
 	if p == nil || p.AppliedAt == nil || !p.AppliedAt.Equal(applied) {
 		t.Fatalf("the row must remember that the write landed: %+v", p)
 	}
-	if p.AppliedBy != "op-marta" {
+	if p.AppliedBy != "op-mandy" {
 		t.Fatalf("and who it was attributed to: %+v", p)
 	}
 	if p.LastObservedAt != nil {

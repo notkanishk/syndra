@@ -44,7 +44,7 @@ function conflict(): MergeFinding {
   return {
     id: "f_2210",
     target: "truenas",
-    subject_id: "u_moller",
+    subject_id: "u_sammartino",
     field: "uid",
     outcome: "conflict",
     base: 3104,
@@ -59,10 +59,10 @@ function conflict(): MergeFinding {
 function alreadyDecided(): ApiError {
   return new ApiError(409, {
     error: "ALREADY_DECIDED",
-    message: "f_2210 already decided as take_theirs by u_iyer",
+    message: "f_2210 already decided as take_theirs by u_damian",
     details: {
       decision: "take_theirs",
-      decided_by: "u_iyer",
+      decided_by: "u_damian",
       decision_reason: "renumbered by hand during the migration; her files are all under 3120",
       decided_at: "2026-08-27T09:04:00Z",
     },

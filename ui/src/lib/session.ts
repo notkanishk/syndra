@@ -75,7 +75,7 @@ const DEMO_USERS: SessionUser[] = [
     sessionType: "demo",
   },
   {
-    id: "sam_student",
+    id: "rey_student",
     name: "Rey Mysterio",
     email: "rey@makerspace.local",
     title: "Student Maker",
@@ -86,7 +86,7 @@ const DEMO_USERS: SessionUser[] = [
     sessionType: "demo",
   },
   {
-    id: "maya_staff",
+    id: "bianca_staff",
     name: "Bianca Belair",
     email: "bianca@makerspace.local",
     title: "Lab Coordinator",
@@ -97,7 +97,7 @@ const DEMO_USERS: SessionUser[] = [
     sessionType: "demo",
   },
   {
-    id: "leo_mentor",
+    id: "seth_mentor",
     name: "Seth Rollins",
     email: "seth@makerspace.local",
     title: "Laser Mentor",
@@ -108,7 +108,7 @@ const DEMO_USERS: SessionUser[] = [
     sessionType: "demo",
   },
   {
-    id: "ava_guest",
+    id: "nikki_guest",
     name: "Nikki Bella",
     email: "nikki@makerspace.local",
     title: "Visiting Artist",

@@ -37,7 +37,7 @@
 | `backend/internal/handlers/router.go` | modify | Wire `GET /api/v1/me/profile` under `withUserAuth` (C2/D5) |
 | `backend/internal/handlers/profile_test.go` | create | Test self-resolution against demo + live (mocked) directories (C2/D5) |
 | `backend/internal/handlers/vault.go` | modify | Refuse vault mutations in dev mode unless `?actor=` is supplied (C3) |
-| `backend/internal/handlers/vault_test.go` | modify | Cover dev-mode 400 path and dev-mode `?actor=alice` happy path (C3) |
+| `backend/internal/handlers/vault_test.go` | modify | Cover dev-mode 400 path and dev-mode `?actor=becky` happy path (C3) |
 | `backend/internal/handlers/router.go` | modify | Wire `PUT /api/v1/bundles/{id}/welcome` (D1) |
 | `ui/src/lib/session.ts` | modify | Extend `OidcSessionCookie` with `title`/`team`/`location`; map into `SessionUser` (C2/D5) |
 | `ui/src/lib/__tests__/session.test.ts` | modify | Assert OIDC profile fields round-trip through encode/decode (C2/D5) |
@@ -1026,7 +1026,7 @@ func TestHandleSetShadowCredential_DevModeWithExplicitActor(t *testing.T) {
 	}
 
 	body := `{"password":"Str0ng!Pass99"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential?actor=alice@cli", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/users/u1/shadow-credential?actor=becky@cli", strings.NewReader(body))
 	req.SetPathValue("uid", "u1")
 	rr := httptest.NewRecorder()
 
@@ -1035,8 +1035,8 @@ func TestHandleSetShadowCredential_DevModeWithExplicitActor(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 with explicit actor, got %d: %s", rr.Code, rr.Body.String())
 	}
-	if receivedActor != "alice@cli" {
-		t.Fatalf("expected actor=alice@cli, got %q", receivedActor)
+	if receivedActor != "becky@cli" {
+		t.Fatalf("expected actor=becky@cli, got %q", receivedActor)
 	}
 }
 
@@ -1201,7 +1201,7 @@ func (s *stubDirectory) InvalidateUsers()                                       
 func TestHandleGetMyProfile_Success(t *testing.T) {
 	orig := directory.Default
 	directory.Default = &stubDirectory{users: map[string]models.UserProfile{
-		"u1": {ID: "u1", Name: "Alice", Email: "alice@x.test", Title: "Director", Team: "Ops", Location: "HQ", Status: "active"},
+		"u1": {ID: "u1", Name: "Becky", Email: "becky@x.test", Title: "Director", Team: "Ops", Location: "HQ", Status: "active"},
 	}}
 	t.Cleanup(func() { directory.Default = orig })
 
@@ -1486,8 +1486,8 @@ describe("OidcSessionCookie metadata round-trip", () => {
       accessToken: "tok",
       userId: "u1",
       role: "user",
-      name: "Alice",
-      email: "alice@x.test",
+      name: "Becky",
+      email: "becky@x.test",
       title: "Director",
       team: "Ops",
       location: "HQ",
@@ -1508,8 +1508,8 @@ describe("OidcSessionCookie metadata round-trip", () => {
       accessToken: "tok",
       userId: "u1",
       role: "user",
-      name: "Alice",
-      email: "alice@x.test",
+      name: "Becky",
+      email: "becky@x.test",
       title: "Director",
       team: "Ops",
       location: "HQ",

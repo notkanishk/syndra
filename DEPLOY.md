@@ -630,8 +630,8 @@ five identities. Anything that walks the user directory — the role-holder list
 is the one to watch — answers only for those five, so a cohort read against a
 real Zitadel subject id **comes back empty and reads as "nothing to report"**
 rather than as "nobody here". A smoke test written against the wrong ids gets a
-green result from a query that examined nobody. Use `sam_student`, `maya_staff`,
-`leo_mentor`, `ava_guest` or `dev_admin`, and assert a non-zero cohort before
+green result from a query that examined nobody. Use `rey_student`, `bianca_staff`,
+`seth_mentor`, `nikki_guest` or `dev_admin`, and assert a non-zero cohort before
 asserting anything about its contents.
 
 ### Rollback

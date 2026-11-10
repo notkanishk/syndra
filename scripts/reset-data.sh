@@ -52,7 +52,7 @@ fi
 # and missed here would survive a reset and keep being served as real.
 # backend/internal/demo/catalog_test.go asserts these two lists match.
 DEMO_PROJECTS="'platform','printing','laser','doors','wiki','finance'"
-DEMO_USERS="'dev_admin','sam_student','maya_staff','leo_mentor','ava_guest'"
+DEMO_USERS="'dev_admin','rey_student','bianca_staff','seth_mentor','nikki_guest'"
 
 # Two helpers, and the difference matters.
 #

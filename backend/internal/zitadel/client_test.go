@@ -461,7 +461,7 @@ func TestGetUser_Success(t *testing.T) {
 		t.Errorf("expected ID u42, got %q", user.ID)
 	}
 	if user.Username != "jacqueline" {
-		t.Errorf("expected username jane, got %q", user.Username)
+		t.Errorf("expected username jacqueline, got %q", user.Username)
 	}
 	if user.DisplayName != "Jacqueline Moore" {
 		t.Errorf("expected displayName 'Jacqueline Moore', got %q", user.DisplayName)

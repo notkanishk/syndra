@@ -164,7 +164,7 @@ func TestZitadelSource_Users_MapsFields(t *testing.T) {
 		return &zitadel.SearchResult[zitadel.ZitadelUser]{
 			Items: []zitadel.ZitadelUser{
 				{ID: "u1", DisplayName: "Becky Doe", Email: "becky@example.com", State: "USER_STATE_ACTIVE"},
-				{ID: "u2", Username: "brock", Email: "bob@example.com", State: "USER_STATE_LOCKED"},
+				{ID: "u2", Username: "brock", Email: "brock@example.com", State: "USER_STATE_LOCKED"},
 			},
 			Total: 2,
 		}, nil

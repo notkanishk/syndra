@@ -45,7 +45,7 @@ func TestMyChanges_ReadsOnlyTheCallersOwn(t *testing.T) {
 		t.Fatalf("status %d: %s", w.Code, w.Body)
 	}
 	if *user != "cody" || *days != 30 {
-		t.Fatalf("read %q over %d days, want priya over 30", *user, *days)
+		t.Fatalf("read %q over %d days, want cody over 30", *user, *days)
 	}
 	if !strings.Contains(w.Body.String(), `"items":[]`) {
 		t.Fatalf("an empty month is an empty list, not null: %s", w.Body)

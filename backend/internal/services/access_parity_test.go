@@ -30,16 +30,16 @@ func parityFixture() parity {
 	june := time.Date(2027, 6, 30, 0, 0, 0, 0, time.UTC)
 	return parity{
 		users: []models.UserProfile{
-			{ID: "becky", Name: "Becky", Status: "active"},
+			{ID: "ember", Name: "Ember", Status: "active"},
 			{ID: "brock", Name: "Brock", Status: "active"},
-			{ID: "carol", Name: "Cesaro", Status: "active"},
-			{ID: "dave", Name: "Dean", Status: "locked"}, // has left
-			{ID: "erin", Name: "Elias", Status: "active"}, // holds only in Zitadel
+			{ID: "cesaro", Name: "Cesaro", Status: "active"},
+			{ID: "dean", Name: "Dean", Status: "locked"},  // has left
+			{ID: "elias", Name: "Elias", Status: "active"}, // holds only in Zitadel
 		},
 		direct: map[string][]models.DirectGrant{
-			"becky": {{UserID: "becky", ProjectID: "p", RoleKey: "a", ExpiresAt: &june}},
-			"carol": {{UserID: "carol", ProjectID: "p", RoleKey: "z"}},
-			"dave":  {{UserID: "dave", ProjectID: "p", RoleKey: "a"}},
+			"ember": {{UserID: "ember", ProjectID: "p", RoleKey: "a", ExpiresAt: &june}},
+			"cesaro": {{UserID: "cesaro", ProjectID: "p", RoleKey: "z"}},
+			"dean":  {{UserID: "dean", ProjectID: "p", RoleKey: "a"}},
 		},
 		bundles: map[string][]models.Bundle{"brock": {{ID: "b1", Name: "Makers", PinnedVersion: 2}}},
 		pinned: map[string][]models.BundleRole{"brock": {
@@ -47,10 +47,10 @@ func parityFixture() parity {
 			{BundleID: "b1", ProjectID: "p", RoleKey: "a", ViaBundleID: "b2"}, // through an include
 		}},
 		seen: map[string][]db.ObservedGrant{
-			"becky": {{UserID: "becky", ProjectID: "p", RoleKeys: []string{"a", "b"}}}, // q:c never arrived
-			"brock":   {{UserID: "brock", ProjectID: "p", RoleKeys: []string{"x", "a", "b"}}, {UserID: "brock", ProjectID: "q", RoleKeys: []string{"c"}}},
-			"dave":  {{UserID: "dave", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
-			"erin":  {{UserID: "erin", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
+			"ember": {{UserID: "ember", ProjectID: "p", RoleKeys: []string{"a", "b"}}}, // q:c never arrived
+			"brock": {{UserID: "brock", ProjectID: "p", RoleKeys: []string{"x", "a", "b"}}, {UserID: "brock", ProjectID: "q", RoleKeys: []string{"c"}}},
+			"dean":  {{UserID: "dean", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
+			"elias":  {{UserID: "elias", ProjectID: "p", RoleKeys: []string{"a", "b"}}},
 		},
 		rules: []models.MappingRule{
 			{ID: "r1", SourceProject: "p", SourceRole: "a", TargetProject: "p", TargetRole: "b"},
@@ -146,16 +146,16 @@ func TestParity_MappingHoldersAgreeWithThePersonView(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := slices.DeleteFunc(viewHolders(t, f, role), func(u string) bool { return u == "dave" })
+		want := slices.DeleteFunc(viewHolders(t, f, role), func(u string) bool { return u == "dean" })
 		if !slices.Equal(got, want) {
 			t.Errorf("%v: cohort %v, person view (minus people who left) %v", role, got, want)
 		}
 	}
-	// Spelled out once, so the parity above is not vacuous: bob reaches q:c
-	// through an include and two rules; dave has left; erin is only observed.
+	// Spelled out once, so the parity above is not vacuous: brock reaches q:c
+	// through an include and two rules; dean has left; elias is only observed.
 	got, _ := MappingHolders(context.Background(), "q", "c")
-	if !slices.Equal(got, []string{"becky", "brock"}) {
-		t.Fatalf("holders of q:c = %v, want becky and bob", got)
+	if !slices.Equal(got, []string{"brock", "ember"}) {
+		t.Fatalf("holders of q:c = %v, want brock and ember", got)
 	}
 }
 
@@ -183,28 +183,28 @@ func TestParity_PersonViewIsTheCoreClosure(t *testing.T) {
 }
 
 // A rule role ends when its source ends, on the person view as in the token:
-// becky's direct grant of a ends in June, so b and c (through two rules) end
-// then too. bob's come from a bundle and never end.
+// ember's direct grant of a ends in June, so b and c (through two rules) end
+// then too. brock's come from a bundle and never end.
 func TestParity_ARuleRoleEndsWithItsSourceOnThePersonView(t *testing.T) {
 	f := parityFixture()
 	f.install(t)
 	june := time.Date(2027, 6, 30, 0, 0, 0, 0, time.UTC)
-	becky, _, err := collectUserRoles(context.Background(), "becky")
+	ember, _, err := collectUserRoles(context.Background(), "ember")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, k := range []roleKey{{"p", "a"}, {"p", "b"}, {"q", "c"}} {
-		if r := becky[k]; r == nil || r.Ends == nil || !r.Ends.Equal(june) {
-			t.Errorf("becky %v ends %v, want %v", k, r, june)
+		if r := ember[k]; r == nil || r.Ends == nil || !r.Ends.Equal(june) {
+			t.Errorf("ember %v ends %v, want %v", k, r, june)
 		}
 	}
-	bob, _, err := collectUserRoles(context.Background(), "brock")
+	brock, _, err := collectUserRoles(context.Background(), "brock")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for k, r := range bob {
+	for k, r := range brock {
 		if r.Ends != nil {
-			t.Errorf("bob %v ends %v, want never (a bundle gives it)", k, r.Ends)
+			t.Errorf("brock %v ends %v, want never (a bundle gives it)", k, r.Ends)
 		}
 	}
 }
@@ -228,9 +228,9 @@ func TestHolding_BundleAndRuleCountsAreObserved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// r1 (a→b) applies to becky, bob, dave (records); all three hold p:b.
-	// r2 (b→c) applies to the same three; only bob holds q:c in Zitadel.
-	// erin holds a and b only in Zitadel: no rule applies to her.
+	// r1 (a→b) applies to ember, brock, dean (records); all three hold p:b.
+	// r2 (b→c) applies to the same three; only brock holds q:c in Zitadel.
+	// elias holds a and b only in Zitadel: no rule applies to her.
 	if r.Given["r1"] != 3 || r.Observed["r1"] != 3 || r.Given["r2"] != 3 || r.Observed["r2"] != 1 {
 		t.Fatalf("rules: given %v observed %v", r.Given, r.Observed)
 	}

@@ -309,9 +309,9 @@ class Component extends DCLogic {
     this.groupN = { safety: 4, lab: 2, hand: 1, front: 4, lock: 4, mem: 2, band: 2, wdoor: 2, sup: 1, op: 1, door: 1, main: 4, laser: 2, wood: 2, badge: 6, booking: 2 };
     this.pastN = { band: 58, mem: 36, newm: 25, op: 6, wdoor: 22, laser: 45 };
     this.addedSince = new Set(["lab>op", "op>door"]);
-    const aanya = ["metalb>welder", "welder>metal", "metal>badge", "lab>mem", "lab>band", "band>wdoor", "band>wood", "wdoor>wood", "mem>laser", "laser>badge", "laser>booking", "wood>badge", "safety>front", "front>main", "main>badge"];
-    const priya = ["hand>op", "op>door", "op>laser", "door>laser", "lab>mem", "lab>band", "band>wdoor", "band>wood", "wdoor>wood", "mem>laser", "laser>badge", "laser>booking", "wood>badge"];
-    this.cmp = { a: new Set(aanya), p: new Set(priya) };
+    const roman = ["metalb>welder", "welder>metal", "metal>badge", "lab>mem", "lab>band", "band>wdoor", "band>wood", "wdoor>wood", "mem>laser", "laser>badge", "laser>booking", "wood>badge", "safety>front", "front>main", "main>badge"];
+    const cody = ["hand>op", "op>door", "op>laser", "door>laser", "lab>mem", "lab>band", "band>wdoor", "band>wood", "wdoor>wood", "mem>laser", "laser>badge", "laser>booking", "wood>badge"];
+    this.cmp = { a: new Set(roman), p: new Set(cody) };
   }
   componentDidMount() { this._t = setTimeout(() => this.setState({ ready: true, drawn: this.key() }), 60); this._k = (e) => this.onKey(e); if (this.frame) window.addEventListener("keydown", this._k); }
   componentWillUnmount() { clearTimeout(this._t); clearTimeout(this._d); clearTimeout(this._c); window.removeEventListener("keydown", this._k); }

@@ -360,30 +360,30 @@ func TestRehearseBulk_ExtendDoesNotCrossBetweenPeople(t *testing.T) {
 			{ID: "u2", Name: "Randy", Status: "active"},
 		},
 		grants: map[string][]models.DirectGrant{
-			"u1": {{ID: "g_ada", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon}},
-			"u2": {{ID: "g_sam", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon}},
+			"u1": {{ID: "g_charlotte", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon}},
+			"u2": {{ID: "g_randy", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon}},
 		},
 	})
 
 	plan, err := RehearseBulk(context.Background(), BulkRequest{
 		Op: BulkOpExtend, UserIDs: []string{"u1", "u2"}, DurationDays: 90,
-		GrantIDs: []string{"g_ada"},
+		GrantIDs: []string{"g_charlotte"},
 	})
 	if err != nil {
 		t.Fatalf("rehearse: %v", err)
 	}
 
-	if ids := outcomeFor(t, plan, "u1").GrantIDs; len(ids) != 1 || ids[0] != "g_ada" {
+	if ids := outcomeFor(t, plan, "u1").GrantIDs; len(ids) != 1 || ids[0] != "g_charlotte" {
 		t.Errorf("expected Charlotte's ticked grant, got %v", ids)
 	}
-	sam := outcomeFor(t, plan, "u2")
-	if sam.Effect != EffectNoChange || len(sam.GrantIDs) != 0 {
-		t.Errorf("Randy's grant was not selected and must not be extended: %+v", sam)
+	randy := outcomeFor(t, plan, "u2")
+	if randy.Effect != EffectNoChange || len(randy.GrantIDs) != 0 {
+		t.Errorf("Randy's grant was not selected and must not be extended: %+v", randy)
 	}
 	// And the plan must say why his row does nothing, so an operator reading it is not left to
 	// guess whether he has no expiring access at all.
-	if !strings.Contains(sam.Detail, "selected") {
-		t.Errorf("the plan must distinguish 'not selected' from 'nothing expiring': %q", sam.Detail)
+	if !strings.Contains(randy.Detail, "selected") {
+		t.Errorf("the plan must distinguish 'not selected' from 'nothing expiring': %q", randy.Detail)
 	}
 }
 
@@ -676,26 +676,26 @@ func TestRehearseBulk_NeverTakesAccessFromTheRequester(t *testing.T) {
 	setupBulk(t, bulkFixture{
 		users: []models.UserProfile{
 			{ID: "u_me", Name: "Kanishk", Status: "active"},
-			{ID: "u_ada", Name: "Charlotte", Status: "active"},
+			{ID: "u_charlotte", Name: "Charlotte", Status: "active"},
 		},
 		grants: map[string][]models.DirectGrant{
-			"u_me":  {{ID: "g1", ProjectID: "pLaser", RoleKey: "trained"}},
-			"u_ada": {{ID: "g2", ProjectID: "pLaser", RoleKey: "trained"}},
+			"u_me":        {{ID: "g1", ProjectID: "pLaser", RoleKey: "trained"}},
+			"u_charlotte": {{ID: "g2", ProjectID: "pLaser", RoleKey: "trained"}},
 		},
 		roles: map[string]map[roleKey]*models.EffectiveRole{
-			"u_me":  {laser("trained"): {Reasons: []models.RoleReason{{Kind: "direct"}}}},
-			"u_ada": {laser("trained"): {Reasons: []models.RoleReason{{Kind: "direct"}}}},
+			"u_me":        {laser("trained"): {Reasons: []models.RoleReason{{Kind: "direct"}}}},
+			"u_charlotte": {laser("trained"): {Reasons: []models.RoleReason{{Kind: "direct"}}}},
 		},
 	})
 
 	plan, err := RehearseBulk(context.Background(), BulkRequest{
-		Op: BulkOpRemoveRole, UserIDs: []string{"u_me", "u_ada"},
+		Op: BulkOpRemoveRole, UserIDs: []string{"u_me", "u_charlotte"},
 		ProjectID: "pLaser", RoleKey: "trained", Actor: "u_me",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Outcomes) != 1 || plan.Outcomes[0].UserID != "u_ada" {
+	if len(plan.Outcomes) != 1 || plan.Outcomes[0].UserID != "u_charlotte" {
 		t.Fatalf("only the others are in the plan: %+v", plan.Outcomes)
 	}
 	if len(plan.Excluded) != 1 || plan.Excluded[0] != (BulkExclusion{UserID: "u_me", Reason: "self"}) {
@@ -703,7 +703,7 @@ func TestRehearseBulk_NeverTakesAccessFromTheRequester(t *testing.T) {
 	}
 
 	give, err := RehearseBulk(context.Background(), BulkRequest{
-		Op: BulkOpAssignRole, UserIDs: []string{"u_me", "u_ada"},
+		Op: BulkOpAssignRole, UserIDs: []string{"u_me", "u_charlotte"},
 		ProjectID: "pLaser", RoleKey: "other", Actor: "u_me",
 	})
 	if err != nil {

@@ -696,7 +696,7 @@ func TestTheFakeAppliesTheFiltersTheLookupSends(t *testing.T) {
 		t.Fatalf("a filtered lookup must find its row: %v", err)
 	}
 	if id.String() != "12" {
-		t.Fatalf("want leo's record id, got %s", id.String())
+		t.Fatalf("want seth's record id, got %s", id.String())
 	}
 	if _, err := s.lookupOne("uid", int64(9999)); !errors.Is(err, errNoSuchAccount) {
 		t.Fatalf("want errNoSuchAccount, got %v", err)

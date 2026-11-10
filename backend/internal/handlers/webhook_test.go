@@ -909,7 +909,7 @@ func TestProcessGrantRemoved_ARemovalOfSomethingSyndraIntendsIsAFinding(t *testi
 
 	ev := WebhookPayload{
 		EventType: "grant_removed", UserID: "u1", SourceProject: "p1",
-		RoleKeys: []string{"operator"}, GrantID: "g1", EditorID: "op-marta",
+		RoleKeys: []string{"operator"}, GrantID: "g1", EditorID: "op-mandy",
 	}
 	if err := processGrantRemoved(context.Background(), ev, "evt-1"); err != nil {
 		t.Fatal(err)
@@ -918,7 +918,7 @@ func TestProcessGrantRemoved_ARemovalOfSomethingSyndraIntendsIsAFinding(t *testi
 		t.Fatalf("want a syndra_only finding for u1, got user=%q type=%q", user, kind)
 	}
 	// The half a set comparison can never supply.
-	if actor != "op-marta" {
+	if actor != "op-mandy" {
 		t.Fatalf("the finding must name who removed it, got %q", actor)
 	}
 }

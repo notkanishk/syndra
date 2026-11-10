@@ -76,14 +76,14 @@ func (f plannerFixture) waitsToo(t *testing.T, role string) {
 func TestPlannerSystem_Expiry(t *testing.T) {
 	f := newPlannerFixture(t)
 	ended := time.Now().Add(-time.Hour)
-	g := f.grant(t, f.becky, f.trains, &ended)
+	g := f.grant(t, f.ember, f.trains, &ended)
 	rule := f.withRule(t) // trained gives advanced
 	f.waitsToo(t, "advanced")
-	own := f.queue(t, f.becky, "add", f.trains, "direct", "")
-	other := f.queue(t, f.bob, "add", f.trains, "direct", "")
+	own := f.queue(t, f.ember, "add", f.trains, "direct", "")
+	other := f.queue(t, f.brock, "add", f.trains, "direct", "")
 
 	res, err := services.ExpireDirectGrant(f.ctx,
-		models.DirectGrant{ID: g, UserID: f.becky, ProjectID: f.project, RoleKey: f.trains, ExpiresAt: &ended}, "system:scheduler")
+		models.DirectGrant{ID: g, UserID: f.ember, ProjectID: f.project, RoleKey: f.trains, ExpiresAt: &ended}, "system:scheduler")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,13 +108,13 @@ func TestPlannerSystem_Expiry(t *testing.T) {
 
 	// A grant whose end is still ahead is not ended, and nothing is written.
 	later := time.Now().Add(time.Hour)
-	g2 := f.grant(t, f.bob, f.member, &later)
-	before := sentRowsFor(t, f.ctx, f.bob)
+	g2 := f.grant(t, f.brock, f.member, &later)
+	before := sentRowsFor(t, f.ctx, f.brock)
 	if _, err := services.ExpireDirectGrant(f.ctx,
-		models.DirectGrant{ID: g2, UserID: f.bob, ProjectID: f.project, RoleKey: f.member, ExpiresAt: &ended}, "system:scheduler"); !errors.Is(err, db.ErrGrantRenewed) {
+		models.DirectGrant{ID: g2, UserID: f.brock, ProjectID: f.project, RoleKey: f.member, ExpiresAt: &ended}, "system:scheduler"); !errors.Is(err, db.ErrGrantRenewed) {
 		t.Fatalf("a renewed grant is ErrGrantRenewed, got %v", err)
 	}
-	if rows := newRows(t, f.ctx, f.bob, before); len(rows) != 0 {
+	if rows := newRows(t, f.ctx, f.brock, before); len(rows) != 0 {
 		t.Fatalf("a renewed grant writes nothing, got %v", rows)
 	}
 }
@@ -125,15 +125,15 @@ func TestPlannerSystem_Expiry(t *testing.T) {
 func TestPlannerSystem_WelcomeBundle(t *testing.T) {
 	f := newPlannerFixture(t)
 	rule := f.withRule(t)
-	removal := f.queue(t, f.becky, "revoke", f.member, "direct", "")
-	other := f.queue(t, f.bob, "revoke", f.member, "direct", "")
-	before := sentRowsFor(t, f.ctx, f.becky)
+	removal := f.queue(t, f.ember, "revoke", f.member, "direct", "")
+	other := f.queue(t, f.brock, "revoke", f.member, "direct", "")
+	before := sentRowsFor(t, f.ctx, f.ember)
 
-	res, err := services.CascadeBundleAssignedToUser(f.ctx, db.WelcomeActor, f.becky, f.bundle)
+	res, err := services.CascadeBundleAssignedToUser(f.ctx, db.WelcomeActor, f.ember, f.bundle)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := newRows(t, f.ctx, f.becky, before)
+	rows := newRows(t, f.ctx, f.ember, before)
 	want := []string{"add advanced rule " + rule, "add member bundle " + f.bundle, "add trained bundle " + f.bundle}
 	if got := sentRows(t, f.ctx, rows); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("welcome wrote %v, want %v", got, want)
@@ -155,9 +155,9 @@ func TestPlannerSystem_WelcomeBundle(t *testing.T) {
 // written; shown that give, it cancels it and has nothing left to send.
 func TestPlannerSystem_RuleRetired(t *testing.T) {
 	f := newPlannerFixture(t)
-	f.grant(t, f.becky, f.trains, nil)
+	f.grant(t, f.ember, f.trains, nil)
 	rule := f.withRule(t)
-	queued := f.queue(t, f.becky, "add", "advanced", "rule", rule)
+	queued := f.queue(t, f.ember, "add", "advanced", "rule", rule)
 	old := models.MappingRule{ID: rule, SourceProject: f.project, SourceRole: f.trains, TargetProject: f.project, TargetRole: "advanced"}
 	operator := func(context.Context) bool { return true }
 
@@ -169,7 +169,7 @@ func TestPlannerSystem_RuleRetired(t *testing.T) {
 		t.Fatalf("refused, naming the give, with nothing written: %+v", gate.Refused())
 	}
 
-	before := sentRowsFor(t, f.ctx, f.becky)
+	before := sentRowsFor(t, f.ctx, f.ember)
 	ctx, _ = db.GuardCancellations(f.ctx, []string{queued}, operator)
 	if _, err := services.CascadeRuleRetired(ctx, f.actor, old); err != nil {
 		t.Fatal(err)
@@ -177,7 +177,7 @@ func TestPlannerSystem_RuleRetired(t *testing.T) {
 	if status(t, f.ctx, queued) != "superseded" {
 		t.Errorf("the shown give is cancelled")
 	}
-	if rows := newRows(t, f.ctx, f.becky, before); len(rows) != 0 {
+	if rows := newRows(t, f.ctx, f.ember, before); len(rows) != 0 {
 		t.Errorf("advanced was never sent, so nothing is owed: %v", sentRows(t, f.ctx, rows))
 	}
 }
@@ -188,18 +188,18 @@ func TestPlannerSystem_RuleRetired(t *testing.T) {
 // retiring the rule still cancels the gives it queued, as before.
 func TestPlannerSystem_RuleChainNamesEachHop(t *testing.T) {
 	f := newPlannerFixture(t)
-	f.grant(t, f.becky, f.member, nil)
+	f.grant(t, f.ember, f.member, nil)
 	r2 := f.withRule(t) // trained gives advanced
 	operator := func(context.Context) bool { return true }
 
-	before := sentRowsFor(t, f.ctx, f.becky)
+	before := sentRowsFor(t, f.ctx, f.ember)
 	ctx, _ := db.GuardCancellations(f.ctx, nil, operator)
 	r1, _, err := services.CascadeRuleCreated(ctx, f.actor, f.project, f.member, f.project, f.trains)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = db.PG.Exec(f.ctx, `DELETE FROM mapping_rules WHERE id = $1::uuid`, r1) })
-	rows := newRows(t, f.ctx, f.becky, before)
+	rows := newRows(t, f.ctx, f.ember, before)
 	if got, want := sentRows(t, f.ctx, rows), []string{"add advanced rule " + r2, "add trained rule " + r1}; !slices.Equal(got, want) {
 		t.Fatalf("create wrote %v, want %v (advanced is the next rule's row, not the new rule's)", got, want)
 	}
@@ -225,7 +225,7 @@ func TestPlannerSystem_RuleChainNamesEachHop(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, p := range pending {
-			if p.UserID == f.becky && p.RuleFrom != nil {
+			if p.UserID == f.ember && p.RuleFrom != nil {
 				from["pending "+p.RoleKeys[0]] = p.RuleFrom.RoleKey
 			}
 		}
@@ -249,7 +249,7 @@ func TestPlannerSystem_RuleChainNamesEachHop(t *testing.T) {
 
 	// Retired: a rule's revoke answers any queued rule give of its role, so
 	// both gives are cancelled, the hop's too, and nothing is owed.
-	before = sentRowsFor(t, f.ctx, f.becky)
+	before = sentRowsFor(t, f.ctx, f.ember)
 	ctx, _ = db.GuardCancellations(f.ctx, rows, operator)
 	old := models.MappingRule{ID: r1, SourceProject: f.project, SourceRole: f.member, TargetProject: f.project, TargetRole: f.trains}
 	if _, err := services.CascadeRuleRetired(ctx, f.actor, old); err != nil {
@@ -260,7 +260,7 @@ func TestPlannerSystem_RuleChainNamesEachHop(t *testing.T) {
 			t.Errorf("queued give %s is %s, want superseded", id, s)
 		}
 	}
-	if got := newRows(t, f.ctx, f.becky, before); len(got) != 0 {
+	if got := newRows(t, f.ctx, f.ember, before); len(got) != 0 {
 		t.Errorf("nothing was ever sent, so nothing is owed: %v", sentRows(t, f.ctx, got))
 	}
 }
@@ -273,16 +273,16 @@ func TestPlannerSystem_BundleRetired(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, "", f.becky, f.bundle, v.ID, nil); err != nil {
+	if _, _, err := db.AssignBundleAndEnqueue(f.ctx, f.actor, "", f.ember, f.bundle, v.ID, nil); err != nil {
 		t.Fatal(err)
 	}
-	before := sentRowsFor(t, f.ctx, f.becky)
+	before := sentRowsFor(t, f.ctx, f.ember)
 	ctx, _ := db.GuardCancellations(f.ctx, nil, func(context.Context) bool { return true })
 	res, err := services.CascadeBundleRetired(ctx, f.actor, f.bundle)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := newRows(t, f.ctx, f.becky, before)
+	rows := newRows(t, f.ctx, f.ember, before)
 	want := []string{"revoke member bundle " + f.bundle, "revoke trained bundle " + f.bundle}
 	if got := sentRows(t, f.ctx, rows); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("retire wrote %v, want %v", got, want)
@@ -297,15 +297,15 @@ func TestPlannerSystem_BundleRetired(t *testing.T) {
 // as decided, and the drift row resolved.
 func TestPlannerSystem_DriftRevoke(t *testing.T) {
 	f := newPlannerFixture(t)
-	drift, _, err := db.UpsertDriftItem(f.ctx, db.TargetZitadel, f.becky, f.project, []string{f.member, f.trains}, "zg-1", "reconciliation_sweep", db.DriftTargetOnly)
+	drift, _, err := db.UpsertDriftItem(f.ctx, db.TargetZitadel, f.ember, f.project, []string{f.member, f.trains}, "zg-1", "reconciliation_sweep", db.DriftTargetOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = db.PG.Exec(f.ctx, `DELETE FROM drift_items WHERE id = $1::uuid`, drift) })
 
-	written := actStaleThenThePlan(t, f, services.Action{Op: services.OpRevoke, UserID: f.becky, DriftID: drift},
+	written := actStaleThenThePlan(t, f, services.Action{Op: services.OpRevoke, UserID: f.ember, DriftID: drift},
 		services.ActWrite{Actor: f.actor},
-		func() string { return f.queue(t, f.becky, "add", f.member, "direct", "") })
+		func() string { return f.queue(t, f.ember, "add", f.member, "direct", "") })
 	// member's give never went, so its revoke only cancels it; trained's waits.
 	if got := sentRows(t, f.ctx, outboxIDs(written)); !slices.Equal(got, []string{"revoke trained direct "}) {
 		t.Fatalf("rows = %v", got)
@@ -320,9 +320,9 @@ func TestPlannerSystem_DriftRevoke(t *testing.T) {
 // Zitadel › Users revoke of a role Syndra gives no way: the same planned act.
 func TestPlannerSystem_UsersRevoke(t *testing.T) {
 	f := newPlannerFixture(t)
-	written := actStaleThenThePlan(t, f, services.Action{Op: services.OpRevoke, UserID: f.becky, ProjectID: f.project, RoleKey: "stray"},
+	written := actStaleThenThePlan(t, f, services.Action{Op: services.OpRevoke, UserID: f.ember, ProjectID: f.project, RoleKey: "stray"},
 		services.ActWrite{Actor: f.actor},
-		func() string { return f.queue(t, f.becky, "add", "stray", "direct", "") })
+		func() string { return f.queue(t, f.ember, "add", "stray", "direct", "") })
 	if written.Delivery() != services.DeliveryNone {
 		t.Fatalf("a revoke of a give that never went only cancels it: %+v", written.Writes)
 	}
