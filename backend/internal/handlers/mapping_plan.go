@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -290,15 +289,11 @@ func applyMappingChange(ctx context.Context, m db.RoleMapping, surface, actor, p
 			return err
 		}
 		for _, id := range holders {
-			set, err := svcResolveEntitlementsFor(ctx, id, m.Target)
+			set, err := svcResolveEntitlementSet(ctx, id, m.Target)
 			if err != nil {
 				return err
 			}
-			if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
-				Target: m.Target, SubjectID: id, Actor: actor,
-				Reason:  "A mapping for their role changed.",
-				Desired: set,
-			}); err != nil {
+			if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(m.Target, id, actor, "A mapping for their role changed.")); err != nil {
 				return err
 			}
 			converged++
@@ -335,21 +330,6 @@ func writeMappingPlanError(w http.ResponseWriter, err error) {
 	default:
 		writeMappingError(w, err)
 	}
-}
-
-// svcResolveEntitlementsFor is the resolver as this file needs it: the encoded
-// intent rather than the whole set, so nothing here has to know the shape.
-//
-// It goes through `svcResolveEntitlementSet` rather than calling the service
-// itself. Two seams over one function is a trap: substituting the one in
-// deps.go left these four call sites talking to the real resolver, and a test
-// that thought it had stubbed the package had stubbed one fifth of it.
-var svcResolveEntitlementsFor = func(ctx context.Context, subjectID, target string) (map[string]json.RawMessage, error) {
-	set, err := svcResolveEntitlementSet(ctx, subjectID, target)
-	if err != nil {
-		return nil, err
-	}
-	return set.Desired(), nil
 }
 
 // rollbackAndConverge restores a mapping version and re-resolves everyone it
@@ -447,15 +427,11 @@ func rollbackAndConverge(ctx context.Context, target string, version int, actor,
 		for _, id := range cohort {
 			// Resolved AFTER the restore, so somebody who lost a mapping
 			// converges to a set that no longer contains what it granted.
-			set, err := svcResolveEntitlementsFor(ctx, id, target)
+			set, err := svcResolveEntitlementSet(ctx, id, target)
 			if err != nil {
 				return err
 			}
-			if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
-				Target: target, SubjectID: id, Actor: actor,
-				Reason:  fmt.Sprintf("Mapping set rolled back to v%d", version),
-				Desired: set,
-			}); err != nil {
+			if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(target, id, actor, fmt.Sprintf("Mapping set rolled back to v%d", version))); err != nil {
 				return err
 			}
 			converged++
@@ -770,15 +746,11 @@ func createMappingAndConverge(ctx context.Context, m db.RoleMapping, actor, plan
 		// contains what the new mapping confers. Reading before would queue
 		// everybody's old state, which is the change not happening at all.
 		for _, id := range holders {
-			set, err := svcResolveEntitlementsFor(ctx, id, m.Target)
+			set, err := svcResolveEntitlementSet(ctx, id, m.Target)
 			if err != nil {
 				return err
 			}
-			if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
-				Target: m.Target, SubjectID: id, Actor: actor,
-				Reason:  "A mapping for their role was added.",
-				Desired: set,
-			}); err != nil {
+			if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(m.Target, id, actor, "A mapping for their role was added.")); err != nil {
 				return err
 			}
 			converged++

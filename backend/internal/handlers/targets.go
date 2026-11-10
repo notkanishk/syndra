@@ -450,15 +450,11 @@ func handleResolveBindingConflict(w http.ResponseWriter, r *http.Request) {
 		// it — a convergence for somebody already correct is a no-op the add-on
 		// answers without writing.
 		for _, subject := range []string{conflict.ConvergedSubjectID, conflict.BoundSubjectID} {
-			set, resolveErr := svcResolveEntitlementsFor(ctx, subject, conflict.Target)
+			set, resolveErr := svcResolveEntitlementSet(ctx, subject, conflict.Target)
 			if resolveErr != nil {
 				return fmt.Errorf("resolve %s on %s: %w", subject, conflict.Target, resolveErr)
 			}
-			if _, _, qerr := dbRecordSystemConvergence(ctx, db.SystemConvergence{
-				Target: conflict.Target, SubjectID: subject, Actor: actor,
-				Reason:  "Their account was given an owner.",
-				Desired: set,
-			}); qerr != nil {
+			if _, _, qerr := dbRecordSystemConvergence(ctx, set.Convergence(conflict.Target, subject, actor, "Their account was given an owner.")); qerr != nil {
 				return fmt.Errorf("queue convergence for %s: %w", subject, qerr)
 			}
 			queued = append(queued, subject)

@@ -624,6 +624,10 @@ type PendingPropagation struct {
 	// manual (a bundle or rule set to wait, before the switch over). Empty for
 	// rows from before roles that wait.
 	WaitReason string `json:"wait_reason,omitempty"`
+	// SendsOnItsOwn says the background runner sends this row without an
+	// operator (db.sendsOnItsOwn: a revoke, or a withdraw-only row). The one
+	// answer a screen gives to "does this wait for Send?".
+	SendsOnItsOwn bool `json:"sends_on_its_own"`
 	// NotBefore is when a row Zitadel didn't take is tried again: set by a
 	// requeue, nil on a row never tried. The background drain sends it then,
 	// unless it waits for the operator.

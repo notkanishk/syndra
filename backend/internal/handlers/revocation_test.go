@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
 
@@ -34,9 +34,9 @@ type revokeHarness struct {
 func stubRevocation(t *testing.T) *revokeHarness {
 	t.Helper()
 	h := &revokeHarness{}
-	create, record, dispatch, resolve, unfinished := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementsFor, dbHasUnfinishedConvergence
+	create, record, dispatch, resolve, unfinished := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet, dbHasUnfinishedConvergence
 	t.Cleanup(func() {
-		dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementsFor = create, record, dispatch, resolve
+		dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementSet = create, record, dispatch, resolve
 		dbHasUnfinishedConvergence = unfinished
 	})
 	// What the outbox would say: a convergence queued earlier is still waiting.
@@ -67,8 +67,9 @@ func stubRevocation(t *testing.T) *revokeHarness {
 		}
 		return addonop.Result{OperationID: "op_1", Outcome: outcome, Err: h.rotateReason}, nil
 	}
-	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
-		return map[string]json.RawMessage{"enabled": json.RawMessage(`false`)}, nil
+	// Resolved with `enabled` denied, as the revocation's allowance makes it.
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Suppressed: []services.SuppressedEntitlement{{Field: services.FieldEnabled, Value: "true"}}}, nil
 	}
 	return h
 }

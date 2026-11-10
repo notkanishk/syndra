@@ -354,3 +354,24 @@ func sliceBetween(t *testing.T, src, from, to string) string {
 	}
 	return rest
 }
+
+// The deactivation webhook's convergence (ConvergeSubjectOn) is built from the
+// resolved set, so a departure is queued withdraw-only and drains on its own.
+func TestConvergeSubjectOn_ADepartureIsWithdrawOnly(t *testing.T) {
+	origResolve, origRecord := svcResolveEntitlements, dbRecordSystemConvergence
+	t.Cleanup(func() { svcResolveEntitlements, dbRecordSystemConvergence = origResolve, origRecord })
+	svcResolveEntitlements = func(context.Context, string, string) (EntitlementSet, error) {
+		return EntitlementSet{Lifecycle: LifecycleState{NotAMember: true}}, nil
+	}
+	var got db.SystemConvergence
+	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
+		got = c
+		return "p", "o", nil
+	}
+	if err := convergeOn(context.Background(), "zitadel:user_deactivated", "u1", "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if !got.WithdrawsOnly || got.Target != "truenas" || got.SubjectID != "u1" {
+		t.Fatalf("queued %+v, want truenas/u1 withdraw-only", got)
+	}
+}

@@ -521,7 +521,7 @@ func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeF
 		// convergence rather than written here: the apply path is the only thing
 		// that talks to a target, and its read-back is what records the new base
 		// — which is what stops this finding returning on the next pass.
-		set, err := svcResolveEntitlementsFor(ctx, f.SubjectID, f.Target)
+		set, err := svcResolveEntitlementSet(ctx, f.SubjectID, f.Target)
 		if err != nil {
 			return fmt.Errorf("resolve %s on %s: %w", f.SubjectID, f.Target, err)
 		}
@@ -529,10 +529,7 @@ func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeF
 		if req.Resolution == db.ResolutionReprovisioned {
 			reason = "An operator asked for a deleted account to be provisioned again"
 		}
-		if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
-			Target: f.Target, SubjectID: f.SubjectID, Actor: actor,
-			Reason: reason, Desired: set,
-		}); err != nil {
+		if _, _, err := dbRecordSystemConvergence(ctx, set.Convergence(f.Target, f.SubjectID, actor, reason)); err != nil {
 			return fmt.Errorf("queue convergence for %s: %w", f.SubjectID, err)
 		}
 		return nil

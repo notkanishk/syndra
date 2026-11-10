@@ -136,7 +136,11 @@ func TestRevocationClaimReturnsOnlyWithdrawalsAndNeverOvertakesOlderIntent(t *te
 	// Two withdrawal shapes and no third. Zitadel names the direction in
 	// op_type; an add-on apply carries a resolved set and cannot be read for it,
 	// so the writer declares it and the claim reads the declaration.
-	if !strings.Contains(body, "(p.op_type = 'revoke' OR p.withdraws_only)") {
+	// The rule has one statement (sendsOnItsOwn), which every outbox row also
+	// carries, so a screen and the claim cannot disagree; the claim must use it.
+	src := readDBSource(t, "propagations.go")
+	if !strings.Contains(body, "sendsOnItsOwn") ||
+		!strings.Contains(src, "const sendsOnItsOwn = `(p.op_type = 'revoke' OR p.withdraws_only)`") {
 		t.Fatal("the background claim must return only withdrawals: 'add' confers, 'replace' both confers and withdraws, and an undeclared 'apply' may do either")
 	}
 	// And never on op_type alone for the conferring shapes. An `apply` selected

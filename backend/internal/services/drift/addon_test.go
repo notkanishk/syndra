@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services"
 	"syndra/internal/services/merge"
 )
 
@@ -104,8 +105,8 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 		h.planAsked = subjects
 		return h.plan
 	}
-	resolveIntent = func(_ context.Context, subjectID, _ string) (map[string]json.RawMessage, error) {
-		return map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}, nil
+	resolveIntent = func(_ context.Context, subjectID, _ string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true}}, nil
 	}
 	recordConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
 		h.converged = append(h.converged, c)
@@ -823,5 +824,42 @@ func TestAFindingThatCouldNotBeWrittenLeavesTheTargetUnreconciled(t *testing.T) 
 	}
 	if res.Reason != db.UnreconciledFindingsUnrecorded {
 		t.Fatalf("want the findings-unrecorded reason, got %q", res.Reason)
+	}
+}
+
+// A person the directory reports gone: the sweep's disable is declared
+// withdraw-only, so the background runner sends it instead of leaving it for
+// an operator. A lock because no mapped role reaches them is not: it waits.
+func TestADepartedPersonsDisableDrainsOnItsOwn(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		set  services.EntitlementSet
+		want bool
+	}{
+		{"the directory reports them gone", services.EntitlementSet{Lifecycle: services.LifecycleState{NotAMember: true}}, true},
+		{"no mapped role reaches them", services.EntitlementSet{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &addonReconcileHarness{
+				read:     currentRead(addons.TargetAccount{Username: "charlotte", UID: 3001}),
+				bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountUID: uid(3001)}},
+				plan: addons.PlanResult{
+					Outcome: addons.OutcomeSucceeded, Current: true,
+					Outcomes: []addons.SubjectOutcome{{Subject: "u1", Effect: db.PlanEffectApply}},
+				},
+			}
+			stubAddonReconcile(t, h)
+			resolveIntent = func(context.Context, string, string) (services.EntitlementSet, error) { return tc.set, nil }
+
+			if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+				t.Fatal(err)
+			}
+			if len(h.converged) != 1 {
+				t.Fatalf("want one convergence, got %+v", h.converged)
+			}
+			if c := h.converged[0]; c.WithdrawsOnly != tc.want || string(c.Desired["enabled"]) != "false" {
+				t.Fatalf("queued WithdrawsOnly=%v enabled=%s, want %v and false", c.WithdrawsOnly, c.Desired["enabled"], tc.want)
+			}
+		})
 	}
 }

@@ -151,3 +151,33 @@ func TestAReadIsRecordedAtItsStart(t *testing.T) {
 		t.Fatalf("own read %+v (ok %v), want complete, dated %v", o, ok, start)
 	}
 }
+
+// Every pending row carries the runner's own rule (sendsOnItsOwn): a revoke
+// and a withdraw-only apply go on their own, an ordinary apply waits for Send.
+func TestPendingRowsSayWhetherTheySendOnTheirOwn(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user) })
+	revoke := seedOutbox(t, ctx, "revoke", "pending", user, "pSO", "direct", "", []string{"r"})
+	departure := seedOutbox(t, ctx, "apply", "pending", user, "pSO", "direct", "", []string{"r"})
+	ordinary := seedOutbox(t, ctx, "apply", "pending", user, "pSO2", "direct", "", []string{"r"})
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET target = 'truenas' WHERE id = ANY($1)`, []string{departure, ordinary}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET withdraws_only = true WHERE id = $1`, departure); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := GetPendingPropagations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, r := range rows {
+		if r.UserID == user {
+			got[r.ID] = r.SendsOnItsOwn
+		}
+	}
+	if len(got) != 3 || !got[revoke] || !got[departure] || got[ordinary] {
+		t.Fatalf("sends on its own %v, want revoke and the withdraw-only apply true, the ordinary apply false", got)
+	}
+}

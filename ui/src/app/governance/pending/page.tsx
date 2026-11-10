@@ -582,7 +582,9 @@ function sharedWait(rows: PendingPropagationRow[]): string | undefined {
  * What state the change is in, under it: a change Zitadel didn't take says
  * when Syndra sends it again and which try (RetryStatus, the one retry model);
  * otherwise why it waits (warn only for a send that stopped, not for a wait the
- * operator chose), and that a revocation also goes on its own. `skipWait` is
+ * operator chose), and that a revocation also goes on its own: the row's
+ * sends_on_its_own, the backend's rule, which counts a departed member's
+ * account switched off on a connected system as one. `skipWait` is
  * the batch's shared reason, already said in its band.
  *
  * No failed line: this list holds only pending and in-flight rows, and a
@@ -605,7 +607,7 @@ function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: s
             <span className="text-warn-text">{line}</span>
           </span>
         ))}
-      {row.op_type === "revoke" && !waitIsChosen(row.wait_reason) && auto && (
+      {row.sends_on_its_own && !waitIsChosen(row.wait_reason) && auto && (
         <span className="text-[12.5px] text-faint">
           A revocation: it also sends on its own within a minute.
         </span>

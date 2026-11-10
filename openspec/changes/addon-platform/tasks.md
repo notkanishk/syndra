@@ -1175,3 +1175,39 @@ whole job is to say whether the machine is there.
   seen" with its age, and a quiet target with no mirror at all says so rather
   than implying a copy exists. Both of the first two assertions fail against the
   old component
+
+## 37. A departed member's account goes off without waiting (owner, 10 Nov 2026)
+
+Found tracing a review: a person deactivated or locked in Zitadel had their
+account on a connected system resolved disabled (`applyDirectoryStanding`) and
+queued, on the drift sweep every observation interval, but as an ordinary
+convergence, which waits in Pending changes for an operator's Send. A queued
+revoke is retained access and drains on its own; a departure is retained access
+too. Production showed every `system:reconcile` row to the NAS sent by hand.
+
+- [x] 37.1 One rule for "can only take access away", on the resolved set:
+  `EntitlementSet.WithdrawsOnly()` is true exactly when the account ends switched
+  off for a reason no policy change confers back by itself: the directory reports
+  the person gone (`NotAMember`), or an operator's allowance denies `enabled`
+  (the existing revocation). A lock because no mapped role reaches the target
+  stays operator-gated, as cascades always were.
+- [x] 37.2 One way to queue a set: `EntitlementSet.Convergence(target, subject,
+  actor, reason)` builds `Desired` and `WithdrawsOnly` from the set. All ten
+  queue sites use it (drift sweep, lifecycle trigger and the deactivation
+  webhook, expiry, mapping edits and rollback, merge findings, binding
+  conflicts, revocation); the handlers' map-only wrapper
+  (`svcResolveEntitlementsFor`) is gone, and the revocation's hand-written
+  `WithdrawsOnly: true` is now the rule's answer.
+- [x] 37.3 One statement of "sends on its own" in the outbox
+  (`db.sendsOnItsOwn`), read by the background claims and carried on every
+  pending row (`sends_on_its_own`, one shared column list `outboxRowColumns`
+  for the six queries that return rows). Pending changes says "A revocation:
+  it also sends on its own" from that flag, not from `op_type`.
+- [x] 37.4 Tests: `TestWithdrawsOnly`, `TestADepartedPersonsDisableDrainsOnItsOwn`
+  (sweep), `TestConvergeSubjectOn_ADepartureIsWithdrawOnly` (webhook path),
+  `TestPendingRowsSayWhetherTheySendOnTheirOwn` (live), Pending changes page
+  tests; mutation-checked (dropping the departure case fails five).
+- [ ] 37.5 Zitadel's event target delivers user events (`user.deactivated`,
+  `user.locked`): production has received only grant events, the last on
+  15 Sep. Console steps are the owner's; until then the sweep carries every
+  departure within an observation interval. `ready-for-human`

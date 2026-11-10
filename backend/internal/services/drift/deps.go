@@ -6,7 +6,6 @@ package drift
 
 import (
 	"context"
-	"encoding/json"
 
 	"syndra/internal/addons"
 
@@ -135,11 +134,8 @@ var (
 	saveMergeFinding  = db.RecordMergeFinding
 	clearMergeFinding = db.ClearMergeFinding
 
-	resolveIntent = func(ctx context.Context, subjectID, target string) (map[string]json.RawMessage, error) {
-		set, err := services.ResolveEntitlements(ctx, subjectID, target)
-		if err != nil {
-			return nil, err
-		}
-		return set.Desired(), nil
-	}
+	// The resolved set itself, not only its wire map: a convergence is built
+	// from the set (EntitlementSet.Convergence), which also says whether it
+	// may drain on its own.
+	resolveIntent = services.ResolveEntitlements
 )

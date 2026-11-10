@@ -452,6 +452,40 @@ func effectiveRoleRefs(ctx context.Context, subjectID string) ([]db.RoleRef, err
 	return refs, nil
 }
 
+// WithdrawsOnly says a convergence carrying this set can only take access
+// away, which is what lets the background runner send it without an operator,
+// as it sends a revoke. True exactly when the account ends switched off for a
+// reason no policy change confers back by itself: the directory reports the
+// person as gone (NotAMember), or an operator's allowance denies `enabled`.
+// A disabled account confers nothing, so such a row disables and cannot
+// confer. A lock because no mapped role reaches the target is not one: that
+// is whatever policy now says, and the same path confers for the next person,
+// so it waits for an operator like every other convergence.
+func (s EntitlementSet) WithdrawsOnly() bool {
+	if s.Lifecycle.Enabled || s.Lifecycle.SMBEnabled {
+		return false
+	}
+	if s.Lifecycle.NotAMember {
+		return true
+	}
+	for _, x := range s.Suppressed {
+		if x.Field == FieldEnabled {
+			return true
+		}
+	}
+	return false
+}
+
+// Convergence is the one way a resolved set becomes a queued convergence:
+// the intent it executes (Desired) and whether it may drain on its own
+// (WithdrawsOnly) both come from the set, so no caller declares a direction.
+func (s EntitlementSet) Convergence(target, subjectID, actor, reason string) db.SystemConvergence {
+	return db.SystemConvergence{
+		Target: target, SubjectID: subjectID, Actor: actor, Reason: reason,
+		Desired: s.Desired(), WithdrawsOnly: s.WithdrawsOnly(),
+	}
+}
+
 // Desired encodes the resolved set as the wire's field map.
 //
 // Level-triggered, so this is the whole instruction and not a delta. Two rules
