@@ -9,7 +9,7 @@ Researched 2026-11-10.
   - Every fact below is **VERIFIED** unless it is tagged **INFERRED** or **UNVERIFIED**.
   - Section numbers (e.g. #3.6) refer to this PDF.
 - **[SECONDARY]** Ubiquiti help centre pointer, https://help.ui.com/hc/en-us/articles/30076656117655. Seen only as a search snippet and not read. It points to the developer portal.
-- **[UNOFFICIAL]** Community mirror of the PDF as OpenAPI, https://unifi-access-api-openapi.pages.dev/. Seen only in search results. It agrees on port 12445, the token location and the user and access-policy paths. Do not cite it as authoritative.
+- **[UNOFFICIAL]** A community-hosted OpenAPI rendering of the PDF (URL deliberately not recorded: a third-party mirror, not a source). Seen only in search results. It agrees on port 12445, the token location and the user and access-policy paths. Do not cite it as authoritative.
 - **NOT consulted:**
   - The API docs page served by the Access app itself.
   - Home Assistant `unifi_access` and community clients.

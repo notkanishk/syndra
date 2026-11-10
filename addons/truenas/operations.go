@@ -84,14 +84,14 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 	name := r.PathValue("name")
 	var req OperationRequest
 	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
 		return
 	}
 	if !writeContractRefusal(w, req.ContractVersion) {
 		return
 	}
 	if strings.TrimSpace(req.CallID) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
 		return
 	}
 	// The path decides which operation runs; the body says which one the caller
@@ -101,7 +101,7 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 	// operator authorised be swapped underneath them.
 	if req.Operation != "" && req.Operation != name {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error":  "OPERATION_MISMATCH",
+			"error":  CodeOperationMismatch,
 			"detail": "the operation named in the body is not the one this route runs",
 		})
 		return
@@ -120,7 +120,7 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 	} else if found {
 		var previous OperationResult
 		if err := json.Unmarshal(cached, &previous); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
 			return
 		}
 		writeJSON(w, http.StatusOK, previous)
@@ -139,7 +139,7 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 
 		if supported, why := s.nas.MajorSupported(); !supported {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
-				"error": "TARGET_VERSION_UNSUPPORTED", "detail": why,
+				"error": CodeTargetVersionUnsupported, "detail": why,
 			})
 			return
 		}
@@ -149,7 +149,7 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 	if err != nil {
 		// The error's text is this add-on's own, never the target's response
 		// body: that body is where a submitted password comes back.
-		writeJSON(w, status, map[string]string{"error": "OPERATION_FAILED", "detail": err.Error()})
+		writeJSON(w, status, map[string]string{"error": CodeOperationFailed, "detail": err.Error()})
 		return
 	}
 	// Mutations only. A cached read is a 30-day copy of a health report nobody

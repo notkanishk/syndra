@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/1/schema/plan_response.json",
+  "title": "Plan response",
+  "description": "POST /plan reply. What would happen to each subject, in the shape the apply returns afterwards.",
+  "type": "object",
+  "properties": {
+    "outcomes": {
+      "type": "array",
+      "items": {
+        "$ref": "apply_response.json"
+      },
+      "description": "One per subject."
+    },
+    "current": {
+      "type": "boolean",
+      "description": "Computed against a live read rather than the mirror."
+    },
+    "taken_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the read behind the outcomes happened."
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "The read hit the cap."
+    }
+  },
+  "required": [
+    "outcomes",
+    "current",
+    "taken_at",
+    "truncated"
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/1/schema/manifest.json",
+  "title": "Manifest",
+  "description": "GET /capabilities. What the add-on can do; the backend intersects it with its own operation policy. The backend decodes it strictly, so the schema is closed.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": 1,
+      "description": "The wire contract major both ends speak. Contract 1: equality-checked, a mismatch is refused with CONTRACT_VERSION_MISMATCH."
+    },
+    "product": {
+      "type": "string",
+      "description": "The target product, e.g. truenas."
+    },
+    "product_version": {
+      "type": "string",
+      "description": "The target's own version string."
+    },
+    "entitlement_schema": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EntitlementField"
+      },
+      "description": "The fields of desired state Syndra may fill."
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Operation"
+      },
+      "description": "The one-shot operations the add-on offers."
+    },
+    "connection": {
+      "$ref": "#/$defs/Connection"
+    }
+  },
+  "required": [
+    "contract_version",
+    "product",
+    "product_version",
+    "entitlement_schema",
+    "operations"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "EntitlementField": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The field name, e.g. group."
+        },
+        "type": {
+          "$ref": "common/field.json#/$defs/FieldType"
+        },
+        "lifecycle": {
+          "type": "boolean",
+          "description": "Resolver-computed; no role-to-target mapping may name it."
+        },
+        "label": {
+          "type": "string",
+          "description": "The field's name for a person."
+        },
+        "single": {
+          "type": "boolean",
+          "description": "A person has one value whatever their roles say."
+        },
+        "per_person": {
+          "type": "boolean",
+          "description": "An operator may set this field for one person, over what roles give."
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "lifecycle"
+      ],
+      "additionalProperties": false
+    },
+    "Operation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The operation id, e.g. password.set; a name in registry/operations.json."
+        },
+        "scope": {
+          "type": "string",
+          "description": "The broadest scope the add-on offers it at; the backend narrows it to its own ceiling.",
+          "enum": [
+            "member",
+            "admin"
+          ]
+        },
+        "confirm": {
+          "type": "boolean",
+          "description": "The operation needs confirmation."
+        },
+        "secret_params": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Parameter names whose values are never persisted or logged."
+        },
+        "available": {
+          "type": "boolean",
+          "description": "The target can perform it right now."
+        },
+        "unavailable_reason": {
+          "type": "string",
+          "description": "Why it is not available."
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "confirm",
+        "available"
+      ],
+      "additionalProperties": false
+    },
+    "Connection": {
+      "type": "object",
+      "description": "How a member reaches the target; absent when the deployment has not said.",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "description": "What a member connects with, e.g. smb."
+        },
+        "host": {
+          "type": "string",
+          "description": "The name a member types, never the API URL."
+        }
+      },
+      "required": [
+        "protocol",
+        "host"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

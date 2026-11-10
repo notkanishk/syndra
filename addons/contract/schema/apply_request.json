@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/1/schema/apply_request.json",
+  "title": "Apply request",
+  "description": "POST /apply. One subject's resolved desired state. The add-on decodes it strictly.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": 1,
+      "description": "The wire contract major both ends speak. Contract 1: equality-checked, a mismatch is refused with CONTRACT_VERSION_MISMATCH."
+    },
+    "call_id": {
+      "type": "string",
+      "description": "The deduplication token; a replay is answered from the first call.",
+      "pattern": "\\S"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "email": {
+      "type": "string",
+      "description": "What a username is derived from, only when an account must be created."
+    },
+    "fingerprint": {
+      "type": "string",
+      "description": "The target state the plan was computed against; the add-on refuses an apply without one. Must not be blank.",
+      "pattern": "\\S"
+    },
+    "plan_id": {
+      "type": "string",
+      "description": "The approval this apply executes; recorded, not checked."
+    },
+    "actor": {
+      "type": "string",
+      "description": "Who the backend recorded as deciding this."
+    },
+    "desired": {
+      "$ref": "common/field.json#/$defs/FieldValues"
+    }
+  },
+  "required": [
+    "contract_version",
+    "call_id",
+    "subject",
+    "fingerprint",
+    "desired"
+  ],
+  "additionalProperties": false
+}

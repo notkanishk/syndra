@@ -1,0 +1,188 @@
+{
+  "$comment": "Every `error` code a contract 1 add-on writes. retry: never (an identical retry fails identically), backoff (transient), retry_after (honour Retry-After), replan (re-plan, then apply), by_status (read the status).",
+  "codes": {
+    "APPLY_FAILED": {
+      "statuses": [
+        400,
+        409,
+        422,
+        429,
+        500,
+        502,
+        503
+      ],
+      "retry": "by_status",
+      "meaning": "An apply could not be completed; the status says whether retrying can help."
+    },
+    "BAD_REQUEST": {
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "The body is not valid for this route, or lacks call_id or subject."
+    },
+    "CALL_ID_REUSED": {
+      "statuses": [
+        409
+      ],
+      "retry": "never",
+      "meaning": "The call id was minted for a different kind of call."
+    },
+    "CONTRACT_VERSION_MISMATCH": {
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The body's contract_version is not the one this add-on speaks; both numbers are in the body."
+    },
+    "FINGERPRINT_REQUIRED": {
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "An apply carried no fingerprint, so there is nothing to verify the plan against."
+    },
+    "INVALID_BODY": {
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "The setting write body is not valid."
+    },
+    "LIFECYCLE_REFUSAL": {
+      "statuses": [
+        503
+      ],
+      "retry": "retry_after",
+      "meaning": "The add-on is draining or read-only and declined a mutation; the Retry-After header is always present."
+    },
+    "NO_CURRENT_READ": {
+      "statuses": [
+        503
+      ],
+      "retry": "backoff",
+      "meaning": "The target could not be read and the add-on holds no mirror to serve instead."
+    },
+    "NO_SUCH_SETTING": {
+      "statuses": [
+        404
+      ],
+      "retry": "never",
+      "meaning": "The named setting does not exist."
+    },
+    "NOT_A_HOME_PLACE": {
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The value is not a folder the target offers for home folders."
+    },
+    "OPERATION_FAILED": {
+      "statuses": [
+        400,
+        404,
+        409,
+        422,
+        429,
+        500,
+        502,
+        503
+      ],
+      "retry": "by_status",
+      "meaning": "An operation could not be completed, or does not exist (404); the status says whether retrying can help."
+    },
+    "OPERATION_MISMATCH": {
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "The operation named in the body is not the one the route runs."
+    },
+    "PLAN_STALE": {
+      "statuses": [
+        409
+      ],
+      "retry": "replan",
+      "meaning": "The subject changed on the target since the plan; re-plan before applying."
+    },
+    "REACH_NEVER_READ": {
+      "statuses": [
+        503
+      ],
+      "retry": "backoff",
+      "meaning": "The folder permissions have not been read since the add-on started."
+    },
+    "REASON_REQUIRED": {
+      "statuses": [
+        400
+      ],
+      "retry": "never",
+      "meaning": "A lifecycle change must carry a reason."
+    },
+    "SCOPE_ACKNOWLEDGEMENT_REQUIRED": {
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The plan is larger than one request may carry unacknowledged; the count and limit are in the body."
+    },
+    "SETTING_NOT_SAVED": {
+      "statuses": [
+        500
+      ],
+      "retry": "backoff",
+      "meaning": "The setting could not be stored."
+    },
+    "SETTINGS_UNREADABLE": {
+      "statuses": [
+        500
+      ],
+      "retry": "backoff",
+      "meaning": "The settings could not be read from the add-on's store."
+    },
+    "STORE_UNREADABLE": {
+      "statuses": [
+        500
+      ],
+      "retry": "backoff",
+      "meaning": "The add-on's local store could not be read."
+    },
+    "TARGET_UNREADABLE": {
+      "statuses": [
+        429,
+        502,
+        503
+      ],
+      "retry": "backoff",
+      "meaning": "The target could not be read; the status distinguishes rate-limiting, unreachable and failing."
+    },
+    "TARGET_VERSION_UNSUPPORTED": {
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "A mutation against a target major this add-on has not been tested with."
+    },
+    "UNAUTHENTICATED": {
+      "statuses": [
+        401
+      ],
+      "retry": "never",
+      "meaning": "The request signature is missing or wrong; the add-on does not say which half."
+    },
+    "UNKNOWN_FIELD": {
+      "statuses": [
+        404
+      ],
+      "retry": "never",
+      "meaning": "The field is not in the entitlement schema."
+    },
+    "UNKNOWN_LIFECYCLE_STATE": {
+      "statuses": [
+        422
+      ],
+      "retry": "never",
+      "meaning": "The state is not one of active, draining, read_only."
+    }
+  }
+}

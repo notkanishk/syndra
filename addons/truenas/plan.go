@@ -75,7 +75,7 @@ const perRequestSubjectCap = 200
 func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req PlanRequest
 	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "BAD_REQUEST"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
 		return
 	}
 	if !writeContractRefusal(w, req.ContractVersion) {
@@ -86,7 +86,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		// at what it is being warned about, and the caller here is a backend
 		// that has to decide whether to acknowledge.
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-			"error": "SCOPE_ACKNOWLEDGEMENT_REQUIRED", "subjects": n, "limit": perRequestSubjectCap,
+			"error": CodeScopeAcknowledgementRequired, "subjects": n, "limit": perRequestSubjectCap,
 		})
 		return
 	}
@@ -110,7 +110,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 			// Nothing current and nothing remembered. Refused rather than
 			// planned against an empty world, which would read as "everybody
 			// needs an account creating".
-			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE", "detail": err.Error()})
+			writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable, "detail": err.Error()})
 			return
 		}
 		snap, current = cached, false
@@ -123,7 +123,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 	}
 	claimed, err := s.store.BoundUsernames()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "STORE_UNREADABLE"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
 		return
 	}
 

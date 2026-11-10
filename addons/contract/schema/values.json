@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/1/schema/values.json",
+  "title": "Values",
+  "description": "GET /values/{field}. What a value on one entitlement field may be, read live.",
+  "type": "object",
+  "properties": {
+    "field": {
+      "type": "string",
+      "description": "The field asked about."
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What exists right now, sorted; empty with enumerable false."
+    },
+    "enumerable": {
+      "type": "boolean",
+      "description": "The add-on can bound this field's values at all."
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Value to the way a person says it."
+    },
+    "builtin_count": {
+      "type": "integer",
+      "description": "How many values were left out because they are built in.",
+      "minimum": 0
+    },
+    "builtin_examples": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The first built-in values the read returned."
+    }
+  },
+  "required": [
+    "field",
+    "values",
+    "enumerable"
+  ]
+}

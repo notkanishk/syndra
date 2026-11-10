@@ -394,16 +394,16 @@ type ReachResponse struct {
 func (s *server) handleReach(w http.ResponseWriter, _ *http.Request, _ []byte) {
 	groups, err := s.readGroups()
 	if err != nil {
-		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+		writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
 		return
 	}
 	read, at, current, err := s.readACLs()
 	if errors.Is(err, errNeverRead) {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "REACH_NEVER_READ"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": CodeReachNeverRead})
 		return
 	}
 	if err != nil {
-		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+		writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
 		return
 	}
 	nobody := principals{} // an account in no group: what everyone@ alone opens

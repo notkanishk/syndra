@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/1/schema/common/outcome.json",
+  "title": "Operation outcome",
+  "description": "The outcome the add-on reports for an operation it ran. The backend's own transport outcomes (rejected, unreached, indeterminate) are derived from what happens to the call and never appear on the wire.",
+  "type": "string",
+  "enum": [
+    "succeeded"
+  ]
+}
