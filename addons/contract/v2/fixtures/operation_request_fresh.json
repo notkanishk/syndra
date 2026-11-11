@@ -1,0 +1,9 @@
+{
+  "contract_version": 2,
+  "call_id": "read-truenas-289471021834760193",
+  "operation": "storage.status",
+  "subject": "289471021834760193",
+  "actor": "289471021834760193",
+  "params": {},
+  "fresh": true
+}

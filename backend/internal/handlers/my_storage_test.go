@@ -68,7 +68,7 @@ func answerStorage(t *testing.T, status func(subject, actor string) addons.Stora
 	read, reads := addonsRead, addonsMemberReads
 	t.Cleanup(func() { addonsRead, addonsMemberReads = read, reads })
 	addonsMemberReads = func(string) []string { return []string{"storage.status"} }
-	addonsRead = func(_ context.Context, _, op, subject, actor string, _ map[string]any) addons.ReadReply {
+	addonsRead = func(_ context.Context, _, op, subject, actor string, _ map[string]any, _ bool) addons.ReadReply {
 		if op != "storage.status" {
 			t.Errorf("read %s, which the target does not offer", op)
 		}
@@ -491,7 +491,7 @@ func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
 			{Share: "main", Folder: "quack_share", Path: "/mnt/p/main/quack_share", Access: "read"},
 		}}
 	})
-	addonsReadReach = func(context.Context, string) addons.Reach {
+	addonsReadReach = func(context.Context, string, bool) addons.Reach {
 		return addons.Reach{Read: true, Groups: map[string][]addons.Place{
 			"community": {{Path: "/mnt/p/main/waddle_share"}},
 			"staff":     {{Path: "/mnt/p/main/waddle_share"}, {Path: "/mnt/p/main/quack_share"}},

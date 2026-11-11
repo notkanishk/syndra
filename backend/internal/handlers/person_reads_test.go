@@ -28,7 +28,7 @@ func TestAnAdminsReadOfHoldingsWritesNoOperationsRow(t *testing.T) {
 	}
 	var asked []string
 	addonsMemberReads = func(string) []string { return []string{"holdings.list", "storage.status"} }
-	addonsRead = func(_ context.Context, _, op, subject, actor string, _ map[string]any) addons.ReadReply {
+	addonsRead = func(_ context.Context, _, op, subject, actor string, _ map[string]any, _ bool) addons.ReadReply {
 		asked = append(asked, op+" "+subject+"/"+actor)
 		if op == "storage.status" {
 			return storageReply(addons.StorageStatus{Outcome: addons.OutcomeSucceeded, Usable: true})

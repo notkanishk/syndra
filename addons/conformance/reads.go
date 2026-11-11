@@ -21,6 +21,7 @@ type manifest struct {
 	account  string
 	ops      map[string]bool // id → available
 	perPlan  int64           // limits.subjects_per_plan, 0 when undeclared
+	cooldown string          // limits.fresh_read_cooldown as declared, "" when undeclared
 }
 
 func (m *manifest) has(feature string) bool { return slices.Contains(m.features, feature) }
@@ -84,11 +85,7 @@ func (k *kit) reads() {
 	k.refused(k.at("error-envelope"), ex, 404, "UNKNOWN_ROUTE", "an unknown route")
 
 	k.at("operations.physical").skip("feature calls: this kit does not check it yet")
-	if k.m.has("freshness") {
-		k.at("freshness").skip("declared; this kit does not check it yet")
-	} else {
-		k.at("freshness").skip("feature freshness not declared")
-	}
+	k.freshness()
 	k.scopes(k.at("dangerous-scopes"), health)
 }
 
@@ -173,6 +170,7 @@ func (k *kit) manifest(c *check, ex *exchange) *manifest {
 	}
 	if limits, _ := doc["limits"].(map[string]any); limits != nil {
 		m.perPlan, _ = num(limits["subjects_per_plan"])
+		m.cooldown = str(limits, "fresh_read_cooldown")
 	}
 	return m
 }

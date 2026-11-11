@@ -23,7 +23,7 @@ import (
 // halves that agreed with each other and never met, which is the defect shape
 // this whole branch kept finding.
 
-func withActivity(t *testing.T, stub func(ctx context.Context, target, subject, actor, since string) addons.ActivityReport) {
+func withActivity(t *testing.T, stub func(ctx context.Context, target, subject, actor, since string, fresh bool) addons.ActivityReport) {
 	t.Helper()
 	original := addonsActivity
 	addonsActivity = stub
@@ -39,7 +39,7 @@ func activityRequest(query string) *httptest.ResponseRecorder {
 }
 
 func TestTargetActivity_RequiresASubject(t *testing.T) {
-	withActivity(t, func(context.Context, string, string, string, string) addons.ActivityReport {
+	withActivity(t, func(context.Context, string, string, string, string, bool) addons.ActivityReport {
 		t.Fatal("the add-on must not be called without a subject")
 		return addons.ActivityReport{}
 	})
@@ -54,7 +54,7 @@ func TestTargetActivity_RequiresASubject(t *testing.T) {
 // parse is one the add-on would have to decide about, which is the wrong place
 // for that decision.
 func TestTargetActivity_RefusesAnUnparseableSince(t *testing.T) {
-	withActivity(t, func(context.Context, string, string, string, string) addons.ActivityReport {
+	withActivity(t, func(context.Context, string, string, string, string, bool) addons.ActivityReport {
 		t.Fatal("the add-on must not be called with a since it cannot trust")
 		return addons.ActivityReport{}
 	})
@@ -67,7 +67,7 @@ func TestTargetActivity_RefusesAnUnparseableSince(t *testing.T) {
 
 func TestTargetActivity_PassesSubjectAndSinceThrough(t *testing.T) {
 	var gotSubject, gotSince string
-	withActivity(t, func(_ context.Context, _, subject, _, since string) addons.ActivityReport {
+	withActivity(t, func(_ context.Context, _, subject, _, since string, _ bool) addons.ActivityReport {
 		gotSubject, gotSince = subject, since
 		return addons.ActivityReport{Events: []addons.ActivityEvent{}, Outcome: addons.OutcomeSucceeded}
 	})
@@ -84,7 +84,7 @@ func TestTargetActivity_PassesSubjectAndSinceThrough(t *testing.T) {
 // The distinction this surface exists for. "Nobody was watching" and "nothing
 // happened" are the same empty list otherwise, and they are opposite answers.
 func TestTargetActivity_UnreadableIsNotEmpty(t *testing.T) {
-	withActivity(t, func(context.Context, string, string, string, string) addons.ActivityReport {
+	withActivity(t, func(context.Context, string, string, string, string, bool) addons.ActivityReport {
 		return addons.ActivityReport{Outcome: addons.OutcomeUnreached, Err: errors.New("target unreachable")}
 	})
 
@@ -113,7 +113,7 @@ func TestTargetActivity_UnreadableIsNotEmpty(t *testing.T) {
 // account — a positive fact, not a failure — and it must never surface as
 // "addon returned 422".
 func TestTargetActivity_NoBoundAccountIsNotAFailure(t *testing.T) {
-	withActivity(t, func(context.Context, string, string, string, string) addons.ActivityReport {
+	withActivity(t, func(context.Context, string, string, string, string, bool) addons.ActivityReport {
 		return addons.ActivityReport{
 			Outcome: addons.OutcomeRejected,
 			Status:  http.StatusUnprocessableEntity,
@@ -143,7 +143,7 @@ func TestTargetActivity_NoBoundAccountIsNotAFailure(t *testing.T) {
 // Every other failure keeps its own plain-language detail — never a raw
 // status number leaking to the client.
 func TestTargetActivity_OtherFailuresGetPlainLanguageDetail(t *testing.T) {
-	withActivity(t, func(context.Context, string, string, string, string) addons.ActivityReport {
+	withActivity(t, func(context.Context, string, string, string, string, bool) addons.ActivityReport {
 		return addons.ActivityReport{
 			Outcome: addons.OutcomeIndeterminate,
 			Status:  http.StatusInternalServerError,
@@ -167,7 +167,7 @@ func TestTargetActivity_OtherFailuresGetPlainLanguageDetail(t *testing.T) {
 
 func TestTargetActivity_CarriesTheUncoveredResources(t *testing.T) {
 	taken := time.Date(2026, 8, 20, 10, 5, 0, 0, time.UTC)
-	withActivity(t, func(context.Context, string, string, string, string) addons.ActivityReport {
+	withActivity(t, func(context.Context, string, string, string, string, bool) addons.ActivityReport {
 		return addons.ActivityReport{
 			Events:      []addons.ActivityEvent{{At: "2026-08-20T10:00:00Z", Event: "CONNECT", Resource: "lab", Success: true}},
 			Uncovered:   []string{"scratch"},
@@ -210,7 +210,7 @@ func TestTargetOperatorReads_CarryTheOperatorAsActor(t *testing.T) {
 	}
 
 	var subject, actor string
-	withActivity(t, func(_ context.Context, _, s, a, _ string) addons.ActivityReport {
+	withActivity(t, func(_ context.Context, _, s, a, _ string, _ bool) addons.ActivityReport {
 		subject, actor = s, a
 		return addons.ActivityReport{Outcome: addons.OutcomeSucceeded}
 	})

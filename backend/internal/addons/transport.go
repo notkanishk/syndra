@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -168,6 +169,10 @@ type CallResponse struct {
 	// unreached, and the manifest is read again: the add-on is not the one the
 	// backend thinks it is (a rollback, an add-on that dropped a feature).
 	ShapeRefusal bool
+	// RetryAfter is the reply's Retry-After in seconds (RFC 9110 §10.2.3,
+	// delay-seconds only, as registry/errors.json has it): 0 when absent or
+	// not an integer. A cooldown's countdown (FRESH_READ_COOLDOWN, 429).
+	RetryAfter int
 }
 
 // callEnvelope is the wire body. Everything that binds the call to an approval
@@ -347,6 +352,9 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 	if out.Status < 200 || out.Status >= 300 {
 		out.Code = refusalCode(respBody)
 	}
+	if secs, err := strconv.Atoi(httpResp.Header.Get("Retry-After")); err == nil && secs > 0 {
+		out.RetryAfter = secs
+	}
 	out.Outcome, out.LifecycleRefusal, out.ShapeRefusal = classifyStatus(out.Status, out.Code)
 	switch {
 	case readErr != nil && out.Outcome == OutcomeSucceeded:
@@ -384,6 +392,7 @@ const (
 	codeContractVersionMismatch = "CONTRACT_VERSION_MISMATCH"
 	codeUnknownRequestField     = "UNKNOWN_REQUEST_FIELD"
 	codeCallInProgress          = "CALL_IN_PROGRESS"
+	codeFreshReadCooldown       = "FRESH_READ_COOLDOWN"
 	codeTargetUnreachable       = "TARGET_UNREACHABLE"
 	codeUnknownRoute            = "UNKNOWN_ROUTE"
 )
@@ -534,7 +543,12 @@ func (b *breaker) record(now time.Time, resp CallResponse) {
 	// add-on alternate 5xx with lifecycle refusals and keep the breaker shut for
 	// ever. Skipped, not reset: the window pauses the count, it does not
 	// forgive it.
-	if resp.LifecycleRefusal {
+	//
+	// A fresh read refused inside the add-on's cooldown (FRESH_READ_COOLDOWN,
+	// 429) is the same: the add-on answering on purpose. Counted, five presses
+	// of "Read again" would open the breaker and take the target away from
+	// everybody for its cooldown.
+	if resp.LifecycleRefusal || resp.Code == codeFreshReadCooldown {
 		return
 	}
 	b.failures++

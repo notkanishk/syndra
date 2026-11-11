@@ -93,6 +93,12 @@ type AddonReconcileResult struct {
 	// Truncated says the read hit the add-on's cap, so the inventory is what was
 	// seen rather than everything there is.
 	Truncated bool `json:"truncated,omitempty"`
+	// ReadStale is why the read is not current, as the add-on said it
+	// (cached, cooldown, unreachable, ...): the inventory's "Read again" line.
+	ReadStale *addons.Stale `json:"read_stale,omitempty"`
+	// RetryAfter is a fresh read the add-on refused inside its cooldown with
+	// nothing to serve: halted, readable again in this many seconds.
+	RetryAfter int `json:"retry_after,omitempty"`
 	// LogVerdict is what the add-on's mutation-log head said when compared
 	// against the anchor. Carried on the reconcile result because this is the
 	// pass that reads it, and because a finding that lives only in a log line is
@@ -111,15 +117,23 @@ type AddonReconcileResult struct {
 // convergences by looking at it — and because the inventory is the one thing
 // here that is still worth showing when the read is stale or capped, labelled
 // with which it was.
-func Inventory(ctx context.Context, target string) (AddonReconcileResult, error) {
+//
+// fresh is a person pressing "Read again" (feature freshness); a page load
+// accepts the add-on's copy, which is shown dated and, not being current,
+// adopted from by nobody until it is read again (owner Q2).
+func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileResult, error) {
 	if target == db.TargetZitadel {
 		return AddonReconcileResult{}, fmt.Errorf("inventory: %s holds no accounts of its own", target)
 	}
 	res := AddonReconcileResult{Target: target}
 
-	read := addonSubjects(ctx, target)
+	read := addonSubjects(ctx, target, fresh)
 	if read.Outcome != addons.OutcomeSucceeded {
-		res.Halted, res.Reason = true, db.UnreconciledUnreachable
+		res.Halted, res.Reason, res.RetryAfter = true, db.UnreconciledUnreachable, read.RetryAfter
+		if read.RetryAfter > 0 {
+			// Inside the cooldown with nothing to serve: not an outage.
+			res.Reason = db.UnreconciledStaleRead
+		}
 		return res, nil
 	}
 	bindings, err := listBindings(ctx, target)
@@ -147,7 +161,7 @@ func Inventory(ctx context.Context, target string) (AddonReconcileResult, error)
 		res.Accounts = append(res.Accounts, BoundAccount{TargetBinding: b, Standing: s})
 	}
 	res.Unmanaged = unmanaged(read.Accounts, bindings)
-	res.ReadAt, res.Current, res.Truncated = read.TakenAt, read.Current, read.Truncated
+	res.ReadAt, res.Current, res.Truncated, res.ReadStale = read.TakenAt, read.Current, read.Truncated, read.Stale
 	if !read.Current {
 		// Shown, and labelled. An operator asking what else lives on the target
 		// during an outage is better served by a dated answer than by nothing —
@@ -171,7 +185,14 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	}
 	res := AddonReconcileResult{Target: target}
 
-	read := addonSubjects(ctx, target)
+	// Always fresh: the sweep is the one scheduled sender (design §4), it
+	// needs a current read, and a cooldown answer is a skipped pass, recorded
+	// as a stale read (no new reason, no migration; B6), never as unreachable.
+	read := addonSubjects(ctx, target, true)
+	if wait, cooled := read.CooledDown(); cooled {
+		return halt(ctx, res, db.UnreconciledStaleRead,
+			fmt.Sprintf("skipped: the target was read moments ago and can be read again in %d s", wait))
+	}
 	switch {
 	case read.Outcome != addons.OutcomeSucceeded:
 		return halt(ctx, res, db.UnreconciledUnreachable,

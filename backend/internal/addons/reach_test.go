@@ -25,7 +25,7 @@ func TestReadReachDecodesTheAnswerAndSaysWhenNothingWasRead(t *testing.T) {
 	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 
-	got := ReadReach(context.Background(), "truenas")
+	got := ReadReach(context.Background(), "truenas", false)
 	if !got.Read || !got.Current || got.ReadAt.IsZero() {
 		t.Fatalf("got %+v", got)
 	}
@@ -37,10 +37,10 @@ func TestReadReachDecodesTheAnswerAndSaysWhenNothingWasRead(t *testing.T) {
 	}
 
 	status, body = http.StatusServiceUnavailable, `{"error":"REACH_NEVER_READ"}`
-	if got := ReadReach(context.Background(), "truenas"); got.Read {
+	if got := ReadReach(context.Background(), "truenas", false); got.Read {
 		t.Fatalf("a refusal read as an answer: %+v", got)
 	}
-	if got := ReadReach(context.Background(), "nobody"); got.Read {
+	if got := ReadReach(context.Background(), "nobody", false); got.Read {
 		t.Fatalf("an unregistered target read as an answer: %+v", got)
 	}
 }

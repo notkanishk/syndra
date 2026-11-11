@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -180,7 +181,22 @@ func handleListTargets(w http.ResponseWriter, r *http.Request) {
 // page: one line per place under each mapping, and the read's age said once.
 // Always 200: "not read from TrueNAS yet" is an answer the page renders.
 func handleTargetReach(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, addonsReadReach(r.Context(), r.PathValue("target")))
+	jsonResponse(w, http.StatusOK, addonsReadReach(r.Context(), r.PathValue("target"), wantsFresh(r)))
+}
+
+// wantsFresh is a person pressing "Read again" (feature freshness): the same
+// GET the card already makes, with `?fresh=true` (a safe, idempotent read,
+// RFC 9110 §9.2.1), passed to the add-on as its `fresh`. Only the literal
+// true asks; a page load or a poll never sends it, and then accepts the
+// add-on's copy, dated.
+func wantsFresh(r *http.Request) bool { return r.URL.Query().Get("fresh") == "true" }
+
+// writeCooledDown answers a fresh read the add-on would not make yet, inside
+// its cooldown, with nothing to serve instead: 429 with Retry-After (RFC 6585
+// §4, RFC 9110 §10.2.3) and retry_after in the body, for a countdown.
+func writeCooledDown(w http.ResponseWriter, retryAfter int, msg string) {
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+	jsonResponse(w, http.StatusTooManyRequests, ErrorResponse{Error: "FRESH_READ_COOLDOWN", Message: msg, RetryAfter: retryAfter})
 }
 
 func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
@@ -614,7 +630,16 @@ func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	report := addonsActivity(r.Context(), target, subject, resolveActor(r, ""), since)
+	report := addonsActivity(r.Context(), target, subject, resolveActor(r, ""), since, wantsFresh(r))
+	if report.RetryAfter > 0 {
+		// Read again inside the add-on's cooldown, nothing kept to show: not
+		// an outage, a countdown.
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"target": target, "subject": subject, "readable": false,
+			"reason": "cooldown", "retry_after": report.RetryAfter, "detail": "",
+		})
+		return
+	}
 	if report.Outcome != addons.OutcomeSucceeded {
 		// 200 with `readable: false`, for the same reason the health surface
 		// answers 200 when the add-on is down: "the log could not be read" is
@@ -658,6 +683,9 @@ func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 	// When the log was read, from an add-on that says (feature results).
 	if report.Observation != nil {
 		body["taken_at"], body["current"] = report.TakenAt, report.Current
+		if report.Stale != nil {
+			body["stale"] = report.Stale
+		}
 	}
 	jsonResponse(w, http.StatusOK, body)
 }

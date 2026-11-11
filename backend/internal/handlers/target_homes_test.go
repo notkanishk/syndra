@@ -50,7 +50,7 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 		return []db.Allowance{{ID: "a0", Target: "truenas", Field: "home_quota", Value: "53687091200",
 			Direction: db.AllowanceSet, ExpiresAt: &ended}}, nil
 	}
-	addonsReadHomes = func(context.Context, string) addons.Homes {
+	addonsReadHomes = func(context.Context, string, bool) addons.Homes {
 		return addons.Homes{Read: true, UsageRead: true, Homes: []addons.HomeUsage{
 			{Username: "charlotte", Home: "/mnt/p/main/home_dir/charlotte", UsedBytes: 18 * gb},
 			{Username: "booker", Home: "/mnt/p/main/home_dir/booker", UsedBytes: 34 * gb},

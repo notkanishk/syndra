@@ -307,10 +307,32 @@ type SubjectsResult struct {
 	// inventory listing and half a drift diff both are.
 	Truncated bool
 	TakenAt   time.Time
+	// Stale is why the read is not current, as the add-on said it (present
+	// exactly when Current is false on a reply that kept the invariant).
+	Stale *Stale
+	// RetryAfter is a fresh read refused inside the add-on's cooldown with
+	// nothing to serve (cooldownOf).
+	RetryAfter int
 
 	Outcome Outcome
 	Status  int
 	Err     error
+}
+
+// CooledDown reports a fresh read the add-on would not make yet, inside its
+// cooldown: refused with nothing to serve, or answered with its last read
+// (stale.reason cooldown). retryAfter is the seconds until it may.
+func (r SubjectsResult) CooledDown() (retryAfter int, ok bool) {
+	if r.RetryAfter > 0 {
+		return r.RetryAfter, true
+	}
+	if r.Stale != nil && r.Stale.Reason == StaleCooldown {
+		if r.Stale.RetryAfter != nil {
+			return *r.Stale.RetryAfter, true
+		}
+		return 0, true
+	}
+	return 0, false
 }
 
 // Usable reports whether this read may be concluded from.
@@ -334,6 +356,7 @@ type subjectsWire struct {
 	Current   *bool           `json:"current"`
 	TakenAt   *string         `json:"taken_at"`
 	Truncated *bool           `json:"truncated"`
+	Stale     *Stale          `json:"stale"`
 }
 
 // Subjects reads every account the target holds.
@@ -342,17 +365,21 @@ type subjectsWire struct {
 // answers from its mirror and says so. What it must not do is turn a failure
 // into an empty list — every consumer reads absence from this list, and an
 // empty one says the target holds nothing at all.
-func Subjects(ctx context.Context, target string) SubjectsResult {
+//
+// fresh asks for a read of the app now (feature freshness): the drift sweep
+// always, the dormant list and its removal always, the inventory when a
+// person presses "Read again". Without it an add-on may answer its copy.
+func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 	a, err := Get(target)
 	if err != nil {
 		return SubjectsResult{Outcome: OutcomeUnreached, Err: err}
 	}
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/subjects"})
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/subjects", Fresh: fresh})
 	if err != nil {
 		return SubjectsResult{Outcome: OutcomeUnreached, Err: err}
 	}
 
-	out := SubjectsResult{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err}
+	out := SubjectsResult{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err, RetryAfter: cooldownOf(resp)}
 	if resp.Outcome != OutcomeSucceeded {
 		log.Printf("[ADDON] %s/subjects outcome=%s status=%d err=%v", target, out.Outcome, out.Status, out.Err)
 		return out
@@ -363,9 +390,14 @@ func Subjects(ctx context.Context, target string) SubjectsResult {
 		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode subjects: %w", target, err)
 		return out
 	}
-	out.Accounts = decoded.Subjects
+	out.Accounts, out.Stale = decoded.Subjects, decoded.Stale
 	out.Current = decoded.Current != nil && *decoded.Current
 	out.Truncated = decoded.Truncated == nil || *decoded.Truncated
+	if err := staleInvariant(resp.Body); err != nil {
+		// Two answers about one read: served, labelled, never concluded from.
+		log.Printf("[ADDON] %s/subjects: %v; the read is not usable", target, err)
+		out.Current, out.Truncated = false, true
+	}
 	// Every subject is an account, so every one carries standing.usable; one
 	// that does not makes the read one nothing may be concluded from.
 	var standing struct {
@@ -809,6 +841,12 @@ type Homes struct {
 	// UsageRead is the add-on's quota_read: every quota table was read.
 	UsageRead bool        `json:"usage_read"`
 	Homes     []HomeUsage `json:"homes"`
+	// Observation is when the add-on read them, and whether this is that read
+	// or its copy; nil when Read is false.
+	*Observation
+	// RetryAfter is a fresh read refused inside the add-on's cooldown with
+	// nothing to serve (cooldownOf).
+	RetryAfter int `json:"retry_after,omitempty"`
 }
 
 // homesWire is profiles/storage/homes.json as it travels.
@@ -817,22 +855,36 @@ type homesWire struct {
 	QuotaRead *bool       `json:"quota_read"`
 	TakenAt   *string     `json:"taken_at"`
 	Current   *bool       `json:"current"`
+	Stale     *Stale      `json:"stale"`
 }
 
-// ReadHomes asks a target for every home folder and its use.
-func ReadHomes(ctx context.Context, target string) Homes {
-	resp, ok := settingsCall(ctx, target, http.MethodGet, "/homes", nil)
-	if !ok || resp.Outcome != OutcomeSucceeded {
+// ReadHomes asks a target for every home folder and its use; fresh asks for a
+// read of the app now (a person pressing "Read again").
+func ReadHomes(ctx context.Context, target string, fresh bool) Homes {
+	a, err := Get(target)
+	if err != nil {
 		return Homes{}
 	}
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/homes", Fresh: fresh})
+	if err != nil {
+		return Homes{}
+	}
+	if resp.Outcome != OutcomeSucceeded {
+		return Homes{RetryAfter: cooldownOf(resp)}
+	}
 	var wire homesWire
-	if err := json.Unmarshal(resp.Body, &wire); err != nil || wire.TakenAt == nil || wire.Current == nil {
-		// A reply that does not say when it read, or whether that read is
-		// current, is not one to show as a reading (design §2(b)).
+	if err := json.Unmarshal(resp.Body, &wire); err != nil || wire.Current == nil || staleInvariant(resp.Body) != nil {
+		// A reply that does not say whether its read is current, or says it
+		// two ways, is not one to show as a reading (design §2(b), §4).
+		return Homes{}
+	}
+	at, ok := takenAt(wire.TakenAt)
+	if !ok {
 		return Homes{}
 	}
 	// A reply that does not say the usage was read whole did not read it.
-	return Homes{Read: true, UsageRead: wire.QuotaRead != nil && *wire.QuotaRead, Homes: wire.Homes}
+	return Homes{Read: true, UsageRead: wire.QuotaRead != nil && *wire.QuotaRead, Homes: wire.Homes,
+		Observation: &Observation{TakenAt: at, Current: *wire.Current, Stale: wire.Stale}}
 }
 
 // Reach is what each of a target's own groups opens, as the target last read
@@ -845,6 +897,11 @@ type Reach struct {
 	Read    bool      `json:"read"`
 	ReadAt  time.Time `json:"read_at,omitempty"`
 	Current bool      `json:"current"`
+	// Stale is why it is not current, as the add-on said it.
+	Stale *Stale `json:"stale,omitempty"`
+	// RetryAfter is a fresh read refused inside the add-on's cooldown with
+	// nothing to serve (cooldownOf).
+	RetryAfter int `json:"retry_after,omitempty"`
 	// Groups is every group of the makerspace's own; an empty list is "opens
 	// nothing yet". Each list is what holding the group ADDS to what every
 	// account opens.
@@ -852,24 +909,26 @@ type Reach struct {
 	Everyone []Place            `json:"everyone,omitempty"`
 }
 
-// ReadReach asks a target what its groups open.
-func ReadReach(ctx context.Context, target string) Reach {
+// ReadReach asks a target what its groups open; fresh asks for a read of the
+// app now (a person pressing "Read again").
+func ReadReach(ctx context.Context, target string, fresh bool) Reach {
 	a, err := Get(target)
 	if err != nil {
 		return Reach{}
 	}
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/reach"})
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/reach", Fresh: fresh})
 	if err != nil {
 		return Reach{}
 	}
 	if resp.Outcome != OutcomeSucceeded {
-		return Reach{}
+		return Reach{RetryAfter: cooldownOf(resp)}
 	}
 	var wire reachWire
-	if err := json.Unmarshal(resp.Body, &wire); err != nil || wire.TakenAt == nil || wire.TakenAt.IsZero() {
+	if err := json.Unmarshal(resp.Body, &wire); err != nil || wire.TakenAt == nil || wire.TakenAt.IsZero() ||
+		staleInvariant(resp.Body) != nil {
 		return Reach{}
 	}
-	out := Reach{Read: true, ReadAt: *wire.TakenAt, Current: wire.Current != nil && *wire.Current,
+	out := Reach{Read: true, ReadAt: *wire.TakenAt, Current: wire.Current != nil && *wire.Current, Stale: wire.Stale,
 		Groups: map[string][]Place{}, Everyone: placesOf(wire.Everyone)}
 	for g, ps := range wire.Groups {
 		out.Groups[g] = placesOf(ps)
@@ -882,6 +941,7 @@ func ReadReach(ctx context.Context, target string) Reach {
 type reachWire struct {
 	TakenAt  *time.Time             `json:"taken_at"`
 	Current  *bool                  `json:"current"`
+	Stale    *Stale                 `json:"stale"`
 	Groups   map[string][]placeWire `json:"groups"`
 	Everyone []placeWire            `json:"everyone"`
 }
@@ -1017,6 +1077,9 @@ type ActivityReport struct {
 	// string-matching Err's text.
 	Status int   `json:"-"`
 	Err    error `json:"-"`
+	// RetryAfter is a fresh read refused inside the add-on's cooldown with
+	// nothing to serve (cooldownOf).
+	RetryAfter int `json:"-"`
 }
 
 // ActivityEvent is one entry from the target's audit log.
@@ -1047,12 +1110,12 @@ type ActivityEvent struct {
 // The subject is the person whose log it is and the actor whoever asked (the
 // operator on the person page): the guide's subject/actor split, never the
 // member named as their own reader.
-func Activity(ctx context.Context, target, subject, actor, since string) ActivityReport {
+func Activity(ctx context.Context, target, subject, actor, since string, fresh bool) ActivityReport {
 	params := map[string]any{}
 	if since != "" {
 		params["since"] = since
 	}
-	return Read(ctx, target, "activity.get", subject, actor, params).Activity()
+	return Read(ctx, target, "activity.get", subject, actor, params, fresh).Activity()
 }
 
 // Activity is an activity.get reply read into Syndra's view.
@@ -1082,7 +1145,7 @@ func (r ReadReply) Activity() ActivityReport {
 		}
 	}
 	if err != nil {
-		out = ActivityReport{Status: r.Status}
+		out = ActivityReport{Status: r.Status, RetryAfter: r.RetryAfter}
 		out.Outcome, out.Err = r.failed(err)
 		return out
 	}
@@ -1172,7 +1235,7 @@ type ServiceState struct {
 // It is about the target, so it has no subject; actor is the operator who
 // opened the page.
 func SystemHealth(ctx context.Context, target, actor string) SystemReport {
-	return Read(ctx, target, "health.get", "", actor, nil).Health()
+	return Read(ctx, target, "health.get", "", actor, nil, false).Health()
 }
 
 // Health is a health.get reply read into Syndra's view: `result` from a

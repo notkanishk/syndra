@@ -52,6 +52,8 @@ type addonReconcileHarness struct {
 	// waitingFor is what a waiting row wants, as JSON; absent means the same
 	// as this pass resolves.
 	waitingFor map[string]string
+	// askedFresh is each subjects read's fresh, in order.
+	askedFresh []bool
 }
 
 func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
@@ -102,7 +104,10 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 		return h.bases, nil
 	}
 
-	addonSubjects = func(context.Context, string) addons.SubjectsResult { return h.read }
+	addonSubjects = func(_ context.Context, _ string, fresh bool) addons.SubjectsResult {
+		h.askedFresh = append(h.askedFresh, fresh)
+		return h.read
+	}
 	listBindings = func(context.Context, string) ([]db.TargetBinding, error) { return h.bindings, nil }
 	origRoles := fieldRoles
 	t.Cleanup(func() { fieldRoles = origRoles })
@@ -344,7 +349,7 @@ func TestTheInventoryListingQueuesNothing(t *testing.T) {
 	}
 	stubAddonReconcile(t, h)
 
-	res, err := Inventory(context.Background(), "truenas")
+	res, err := Inventory(context.Background(), "truenas", false)
 	if err != nil {
 		t.Fatalf("Inventory: %v", err)
 	}
@@ -1070,7 +1075,7 @@ func TestTheInventorysBoundAccountsCarryTheirStanding(t *testing.T) {
 	}
 	stubAddonReconcile(t, h)
 
-	res, err := Inventory(context.Background(), "truenas")
+	res, err := Inventory(context.Background(), "truenas", false)
 	if err != nil {
 		t.Fatal(err)
 	}

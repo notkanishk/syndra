@@ -15,6 +15,8 @@ type ErrorResponse struct {
 	Error   string            `json:"error"`
 	Message string            `json:"message"`
 	Details map[string]string `json:"details,omitempty"`
+	// RetryAfter is the seconds a refusal says to wait (writeCooledDown).
+	RetryAfter int `json:"retry_after,omitempty"`
 }
 
 // upstreamSentenceFor is what an operator reads when Zitadel or an add-on fails:

@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 func getSettings(t *testing.T, s *server) SettingView {
@@ -98,7 +97,7 @@ func TestTheHomeLocationIsNotSetAgainstAStaleRead(t *testing.T) {
 	fake := reachFake()
 	s := testServer(t, fake)
 	getSettings(t, s) // a good read, now cached
-	s.reach.readAt = time.Now().Add(-2 * reachMaxAge)
+	ageCopies(s, 2*freshMaxAge)
 	fake.refuse = map[string]string{"filesystem.getacl": "[EACCES] no"}
 	if rr := putHomeRoot(t, s, "/mnt/tank/main/home_dir"); rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("want 503 against a stale read, got %d", rr.Code)

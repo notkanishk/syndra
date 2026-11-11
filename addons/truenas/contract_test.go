@@ -96,23 +96,24 @@ func TestApplyRequestAcceptsContract(t *testing.T) {
 // The operation fixture is what Syndra sends: no plan_id or fingerprint (an
 // operation is approved by confirmation, not rehearsed against a plan) and no
 // feature key. The schema allows plan_id and fingerprint, so they are accepted
-// when present; a feature's key (preview, fresh) is refused with the strict
-// decoder's own code, because this add-on declares neither feature.
+// when present; a feature's key is accepted when this add-on declares the
+// feature (fresh, freshness) and refused with the strict decoder's own code
+// when it does not (preview, calls).
 func TestOperationRequestAcceptsContract(t *testing.T) {
 	var req OperationRequest
 	if err := decodeStrict(contractFixture(t, "operation_request.json"), &req); err != nil {
 		t.Fatalf("the backend's operation body was refused: %v", err)
 	}
 	doc := v2JSON(t, "fixtures", "operation_request.json")
-	doc["plan_id"], doc["fingerprint"] = "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd", "sha256:9d1c4f0b7e2a"
+	doc["plan_id"], doc["fingerprint"], doc["fresh"] = "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd", "sha256:9d1c4f0b7e2a", true
 	raw, _ := json.Marshal(doc)
 	req = OperationRequest{}
 	if err := decodeStrict(raw, &req); err != nil {
 		t.Fatalf("an operation body with plan_id and fingerprint was refused: %v", err)
 	}
 	noZeroFields(t, req, "OperationRequest")
-	refused := 0
-	for _, f := range v2Features(t) {
+	refused, accepted := 0, 0
+	for name, f := range v2Features(t) {
 		for _, field := range f.RequestFields {
 			key, found := strings.CutPrefix(field, "operation_request.")
 			if !found {
@@ -122,14 +123,22 @@ func TestOperationRequestAcceptsContract(t *testing.T) {
 			with[key] = true
 			raw, _ := json.Marshal(with)
 			var unknown errUnknownRequestField
-			if err := decodeStrict(raw, &OperationRequest{}); !errors.As(err, &unknown) {
+			err := decodeStrict(raw, &OperationRequest{})
+			switch {
+			case slices.Contains(features, name):
+				if err != nil {
+					t.Errorf("feature key %s, declared here (%s), was refused: %v", key, name, err)
+				}
+				accepted++
+			case !errors.As(err, &unknown):
 				t.Errorf("feature key %s, undeclared here, must be refused as an unknown field, got %v", key, err)
+			default:
+				refused++
 			}
-			refused++
 		}
 	}
-	if refused == 0 {
-		t.Fatal("no feature adds an operation_request key, so this proved nothing")
+	if refused == 0 || accepted == 0 {
+		t.Fatalf("refused %d undeclared and accepted %d declared feature keys, so this proved too little", refused, accepted)
 	}
 }
 
@@ -201,7 +210,6 @@ func strp(s string) *string { return &s }
 var notProduced = map[string]map[string]string{
 	"health.json": {
 		"credential_scopes": "TrueNAS cannot read its own API key's roles; the field is optional and advisory (design §4)",
-		"target_reads":      "feature freshness, not declared",
 	},
 }
 
@@ -231,14 +239,14 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 	activity := opOK("activity.get", "289471021834760193")
 	activity.Result = &ActivityReport{
 		Events:    []ActivityEvent{{At: "2026-11-10T08:12:30Z", Event: "CONNECT", Resource: "makers", Success: false, Address: "192.0.2.17", Detail: "NT_STATUS_NO_SUCH_USER"}},
-		Uncovered: []string{"scratch"}, Truncated: true, TakenAt: "2026-11-10T09:30:00Z", Current: true,
+		Uncovered: []string{"scratch"}, Truncated: true, Observed: Observed{TakenAt: "2026-11-10T09:30:00Z", Current: true},
 	}
 	quota := int64(53687091200)
 	storage := opOK("storage.status", "289471021834760193")
 	storage.Result = &StorageStatus{
 		Usable: false, Standing: member, Meters: []Meter{{Label: "makers", Used: 19756849561, Limit: &quota, Unit: "bytes"}},
-		TakenAt: "2026-11-10T09:30:00Z", Current: true,
-		Places: []Place{placeHome}, PlacesReadable: true, NeedsPassword: true, NeedsNewPassword: false, QuotaRead: true,
+		Observed: Observed{TakenAt: "2026-11-10T09:30:00Z", Current: true},
+		Places:   []Place{placeHome}, PlacesReadable: true, NeedsPassword: true, NeedsNewPassword: false, QuotaRead: true,
 	}
 	health := opOK("health.get", "")
 	health.Result = &TargetHealth{
@@ -270,7 +278,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 				{ID: "health.get", Scope: "admin", Available: true},
 			},
 			Connection: &Connection{Protocol: "smb", Host: "nas.example.org"},
-			Limits:     Limits{SubjectsPerPlan: perRequestSubjectCap},
+			Limits:     Limits{SubjectsPerPlan: perRequestSubjectCap, FreshReadCooldown: "PT30S"},
 		}},
 		{"GET /health", "health.json", "health.json", Health{
 			Reachable: true, Product: productName, ProductVersion: "TrueNAS-25.10.5", VersionTested: true,
@@ -278,7 +286,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 			CredentialExpiresAt: strp("2027-02-01T00:00:00Z"), CredentialExpiry: "set", UnauditedShares: []string{"scratch"},
 			SharesReadable: true, Lifecycle: LifecycleReadOnly, LifecycleNote: "Maintenance window.", Drained: true,
 			LogHead: "sha256:7be1c0a94d2f", LogRecords: 1284, SnapshotAge: strp("2026-11-10T09:25:00Z"),
-			CheckedAt: ts(t, "2026-11-10T09:30:00Z"),
+			CheckedAt: ts(t, "2026-11-10T09:30:00Z"), TargetReads: 412,
 		}},
 		{"GET /subjects", "subjects.json", "subjects.json", SubjectsResponse{
 			Subjects: []SubjectView{
@@ -292,7 +300,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 					State:    map[string]any{FieldGroup: []string{}, FieldHome: []string{}, FieldEnabled: true, FieldSMBEnabled: false},
 					Standing: &Standing{Usable: true, WaitingOn: "none"}},
 			},
-			Current: true, TakenAt: "2026-11-10T09:30:00Z",
+			Observed: Observed{Current: true, TakenAt: "2026-11-10T09:30:00Z"},
 		}},
 		{"GET /subjects (from the mirror)", "subjects_stale.json", "subjects.json", nil}, // driven below
 		{"GET /values/{field}", "values.json", "values.json", ValuesResponse{
@@ -301,7 +309,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 			BuiltinCount: 34, BuiltinExamples: []string{"builtin_users", "builtin_administrators"},
 		}},
 		{"GET /reach", "reach.json", "profiles/storage/reach.json", ReachResponse{
-			TakenAt: ts(t, "2026-11-10T09:20:00Z"), Current: true,
+			Observed: Observed{TakenAt: "2026-11-10T09:20:00Z", Current: true},
 			Groups: map[string][]Place{
 				"fabrication": {{Share: "makers", Folder: "fabrication", Path: "/mnt/tank/makers/fabrication", Access: accessChange, Dataset: "tank/makers/fabrication"}},
 				"lab_makers":  {placeHome},
@@ -309,7 +317,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 			Everyone: []Place{{Share: "makers", Path: "/mnt/tank/makers", Access: accessRead}},
 		}},
 		{"PUT /settings/{name} reply", "setting.json", "setting.json", setting},
-		{"GET /homes", "homes.json", "profiles/storage/homes.json", HomesResponse{QuotaRead: true, TakenAt: "2026-11-10T09:30:00Z", Current: true,
+		{"GET /homes", "homes.json", "profiles/storage/homes.json", HomesResponse{QuotaRead: true, Observed: Observed{TakenAt: "2026-11-10T09:30:00Z", Current: true},
 			Homes: []HomeUsage{{Username: "rey_mysterio", AccountID: "3051", Home: "/mnt/tank/homes/rey_mysterio", UsedBytes: 19756849561, QuotaBytes: 53687091200}}}},
 		{"POST /plan reply", "plan_response.json", "plan_response.json", PlanResponse{
 			Outcomes: []ApplyOutcome{
@@ -404,6 +412,7 @@ func TestSubjectsAnswersCarryStaleExactlyWhenNotCurrent(t *testing.T) {
 	}
 
 	fake.err = errReadAfterWrite
+	s.fresh.forget() // as after a restart: no copy in memory, the mirror on disk
 	mirror := httptest.NewRecorder()
 	s.handleSubjects(mirror, httptest.NewRequest(http.MethodGet, "/subjects", nil), nil)
 	assertSchema(t, "subjects.json", mirror.Body.Bytes(), "a mirror /subjects")
@@ -533,11 +542,15 @@ func TestEveryReadAnswersTheSchemaItsRegistryNames(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
 		t.Fatal(err)
 	}
-	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
-	if err != nil {
-		t.Fatal(err)
+	// Through the route, as served: the observation is readNow's (fresh.go).
+	rr := postOperation(t, s, "storage.status", `{"call_id":"c0","subject":"sub-1"}`)
+	var served struct {
+		Result *StorageStatus `json:"result"`
 	}
-	st := res.Result.(*StorageStatus)
+	if err := json.Unmarshal(rr.Body.Bytes(), &served); rr.Code != http.StatusOK || err != nil || served.Result == nil {
+		t.Fatalf("storage.status: %d %s", rr.Code, rr.Body)
+	}
+	st := served.Result
 	answers = append(answers, answer{"storage.status", st})
 	limits := map[string]string{}
 	for _, m := range st.Meters {

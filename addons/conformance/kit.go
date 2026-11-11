@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	contractfiles "syndra/addons/contract"
@@ -41,6 +42,10 @@ type Config struct {
 	// CurrentGap separates the two reads the current check compares; it must
 	// exceed the resolution of taken_at. Default 1.1 s.
 	CurrentGap time.Duration
+	// FreshWait is the longest limits.fresh_read_cooldown the freshness checks
+	// wait out (they wait it before each fresh read); a longer one is a skip.
+	// Default 35 s, above constants.cooldown_default.
+	FreshWait time.Duration
 }
 
 // spansTheRun are the checks judged across several steps or over every reply
@@ -140,6 +145,10 @@ func (ex *exchange) doc() map[string]any {
 func (ex *exchange) code() string { s, _ := ex.doc()["code"].(string); return s }
 
 type kit struct {
+	// mu is held by send except while a request is on the wire, so the two
+	// concurrent reads of freshness.coalesce share one kit; every other
+	// request is sent one at a time.
+	mu         sync.Mutex
 	ctx        context.Context
 	cleaning   bool   // the run's last requests, sent even when ctx is done
 	wrote      bool   // a write route was called (whether or not it answered)
@@ -262,6 +271,9 @@ func newKit(ctx context.Context, cfg Config) (*kit, error) {
 	}
 	if cfg.CurrentGap == 0 {
 		cfg.CurrentGap = 1100 * time.Millisecond
+	}
+	if cfg.FreshWait == 0 {
+		cfg.FreshWait = 35 * time.Second
 	}
 	pub, key, err := deriveKeys(bytes.TrimSpace(cfg.Secret), cfg.Target)
 	if err != nil {
@@ -411,7 +423,34 @@ type request struct {
 }
 
 func (k *kit) send(r request) *exchange {
-	ex := &exchange{method: r.method, target: r.target}
+	k.mu.Lock()
+	ex, req, write := k.prepare(r)
+	k.mu.Unlock()
+	if req == nil {
+		return ex
+	}
+	resp, err := k.client.Do(req)
+	defer k.observe(r, ex) // answered or not; outside the lock, since it may send
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if err != nil {
+		ex.err = err
+		k.unanswered = k.unanswered || write
+		return ex
+	}
+	defer resp.Body.Close()
+	ex.status, ex.header = resp.StatusCode, resp.Header
+	ex.body, ex.err = io.ReadAll(io.LimitReader(resp.Body, k.c.maxReplyBytes+1))
+	if int64(len(ex.body)) > k.c.maxReplyBytes {
+		ex.err = fmt.Errorf("reply larger than constants.max_reply_bytes (%d)", k.c.maxReplyBytes)
+	}
+	return ex
+}
+
+// prepare logs the exchange and builds the signed request, or refuses it
+// (nil request, ex.err saying why). Under k.mu.
+func (k *kit) prepare(r request) (ex *exchange, _ *http.Request, write bool) {
+	ex = &exchange{method: r.method, target: r.target}
 	k.log = append(k.log, ex)
 	if r.body != nil {
 		ex.request, _ = json.Marshal(r.body)
@@ -423,7 +462,7 @@ func (k *kit) send(r request) *exchange {
 		_ = dec.Decode(&doc)
 		if err := k.c.validate(r.schema, doc); err != nil {
 			ex.err = fmt.Errorf("kit defect, its own request %s", err)
-			return ex
+			return ex, nil, false
 		}
 	}
 	ctx := k.ctx
@@ -432,27 +471,27 @@ func (k *kit) send(r request) *exchange {
 	}
 	if ctx.Err() != nil {
 		ex.err = errors.New("not sent: the run was interrupted")
-		return ex
+		return ex, nil, false
 	}
 	k.halting = k.halting || k.frozen()
 	if path, _, _ := strings.Cut(r.target, "?"); k.frozen() && (path == "/apply" || strings.HasPrefix(path, "/operations/")) {
 		// Every apply and operation, whatever subject it names: once an
 		// account the kit does not own has answered, the kit writes no more.
 		ex.err = errors.New("not sent: the kit stopped writing (see bound-to-created)")
-		return ex
+		return ex, nil, false
 	}
 	if about, write := k.about(r); about && write && k.created.id != "" && !r.owned {
 		// Once the kit owns an account, toOwned is the only way to its subject.
 		ex.err = errors.New("not sent: no plan naming the kit's account was read just before it")
-		return ex
+		return ex, nil, false
 	}
 	req, err := http.NewRequestWithContext(ctx, r.method, k.base+r.target, bytes.NewReader(ex.request))
 	if err != nil {
 		ex.err = err
-		return ex
+		return ex, nil, false
 	}
 	path, _, _ := strings.Cut(r.target, "?")
-	write := r.method != http.MethodGet && path != "/plan"
+	write = r.method != http.MethodGet && path != "/plan"
 	k.wrote = k.wrote || write // before it is sent: a write that never answers may still have landed
 	if r.body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -471,20 +510,7 @@ func (k *kit) send(r request) *exchange {
 	if r.sign != unsigned {
 		req.Header.Set(signatureHeader, fmt.Sprintf("t=%d,v1=%s", ts.Unix(), mac(ts.Unix(), r.method, target, ex.request, key)))
 	}
-	resp, err := k.client.Do(req)
-	defer k.observe(r, ex) // answered or not
-	if err != nil {
-		ex.err = err
-		k.unanswered = k.unanswered || write
-		return ex
-	}
-	defer resp.Body.Close()
-	ex.status, ex.header = resp.StatusCode, resp.Header
-	ex.body, ex.err = io.ReadAll(io.LimitReader(resp.Body, k.c.maxReplyBytes+1))
-	if int64(len(ex.body)) > k.c.maxReplyBytes {
-		ex.err = fmt.Errorf("reply larger than constants.max_reply_bytes (%d)", k.c.maxReplyBytes)
-	}
-	return ex
+	return ex, req, write
 }
 
 // ok asserts a 200 that validates against schema and returns it decoded.

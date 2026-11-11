@@ -18,7 +18,7 @@ func TestTargetReachIsAnAnswerEvenWhenNothingWasRead(t *testing.T) {
 	t.Cleanup(func() { addonsReadReach = reach })
 
 	read := time.Date(2026, 10, 14, 9, 2, 0, 0, time.UTC)
-	addonsReadReach = func(context.Context, string) addons.Reach {
+	addonsReadReach = func(context.Context, string, bool) addons.Reach {
 		return addons.Reach{Read: true, ReadAt: read, Current: false, Groups: map[string][]addons.Place{
 			"community": {{Share: "main", Folder: "waddle_share", Access: "change"}},
 			"interns":   {},
@@ -32,7 +32,7 @@ func TestTargetReachIsAnAnswerEvenWhenNothingWasRead(t *testing.T) {
 		t.Fatalf("a group that opens nothing must arrive as an empty list: %v %v", opens, ok)
 	}
 
-	addonsReadReach = func(context.Context, string) addons.Reach { return addons.Reach{} }
+	addonsReadReach = func(context.Context, string, bool) addons.Reach { return addons.Reach{} }
 	if got := getTargetReach(t); got.Read {
 		t.Fatalf("nothing read, yet the answer says read: %+v", got)
 	}

@@ -1,0 +1,8 @@
+{
+  "type": "urn:syndra:addon:error:FRESH_READ_COOLDOWN",
+  "title": "Fresh read cooldown",
+  "status": 429,
+  "detail": "A fresh read was asked for inside the cooldown; try again in 20 s.",
+  "code": "FRESH_READ_COOLDOWN",
+  "retry": "retry_after"
+}

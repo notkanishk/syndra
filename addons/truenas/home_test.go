@@ -27,11 +27,10 @@ func homeServer(t *testing.T, users string, answers map[string]string, refuse ma
 		t.Fatal(err)
 	}
 	// main › home_dir, a dataset of its own: the one home place.
-	s.reach.last = shareRead{
+	keepCopy(s, "reach", reachRead{shareRead: shareRead{
 		places: []aclPlace{{path: homePlace, share: "main", folder: "home_dir"}},
 		mounts: map[string]string{homePlace: "pool/main/home_dir"},
-	}
-	s.reach.readAt = time.Now()
+	}}, time.Now())
 	return s, m
 }
 

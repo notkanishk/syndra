@@ -41,7 +41,7 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 		dbListRoleMappings = prev[2].(func(context.Context, string) ([]db.RoleMapping, error))
 		dbAllowancesInForce = prev[3].(func(context.Context, string, string) ([]db.Allowance, error))
 		dbAllowancesForSubject = prev[4].(func(context.Context, string) ([]db.Allowance, error))
-		addonsReadReach = prev[5].(func(context.Context, string) addons.Reach)
+		addonsReadReach = prev[5].(func(context.Context, string, bool) addons.Reach)
 		dbLastSucceededAddonOperation = prev[6].(func(context.Context, string, string, string) (db.AddonOperation, bool, error))
 		addonsConnection = prev[7].(func(string) (*addons.Connection, error))
 	})
@@ -100,7 +100,7 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 		}, nil
 	}
 	dbAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) { return nil, nil }
-	addonsReadReach = func(context.Context, string) addons.Reach {
+	addonsReadReach = func(context.Context, string, bool) addons.Reach {
 		return addons.Reach{Read: true, Groups: map[string][]addons.Place{
 			"fab_leads": {
 				{Share: "main", Folder: "projects/renders", Path: "/mnt/main/projects/renders", Access: "read"},

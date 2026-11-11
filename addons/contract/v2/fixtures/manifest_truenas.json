@@ -8,7 +8,8 @@
     "settings",
     "storage.reach",
     "storage.homes",
-    "results"
+    "results",
+    "freshness"
   ],
   "entitlement_schema": [
     {
@@ -102,6 +103,7 @@
     "host": "nas.example.org"
   },
   "limits": {
-    "subjects_per_plan": 200
+    "subjects_per_plan": 200,
+    "fresh_read_cooldown": "PT30S"
   }
 }

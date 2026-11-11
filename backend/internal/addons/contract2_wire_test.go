@@ -173,7 +173,7 @@ func TestTheNewBackendAgainstAContractOneAddOn(t *testing.T) {
 	// re-read too; on a core route it stays a refusal.
 	addonServingStatus(t, http.StatusNotFound, []byte(`{"type":"urn:syndra:addon:error:UNKNOWN_ROUTE","title":"Unknown route","status":404,"code":"UNKNOWN_ROUTE","retry":"never"}`))
 	before := reread.Load()
-	if r := ReadReach(context.Background(), "truenas"); r.Read || reread.Load() != before+1 {
+	if r := ReadReach(context.Background(), "truenas", false); r.Read || reread.Load() != before+1 {
 		t.Errorf("a 404 on /reach did not re-read the manifest: %+v (%d)", r, reread.Load()-before)
 	}
 	if out := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "s", CallID: "c", Fingerprint: "f", Desired: fixtureDesired}); out.Outcome != OutcomeRejected {
@@ -375,10 +375,10 @@ func TestAnUndeclaredFeatureIsNeverCalled(t *testing.T) {
 	began, _ := stubOperationRecord(t, nil)
 
 	ctx := context.Background()
-	if r := ReadReach(ctx, "truenas"); r.Read {
+	if r := ReadReach(ctx, "truenas", false); r.Read {
 		t.Error("an undeclared storage.reach was read")
 	}
-	if h := ReadHomes(ctx, "truenas"); h.Read {
+	if h := ReadHomes(ctx, "truenas", false); h.Read {
 		t.Error("an undeclared storage.homes was read")
 	}
 	if _, ok := ReadSettings(ctx, "truenas"); ok {
@@ -387,14 +387,14 @@ func TestAnUndeclaredFeatureIsNeverCalled(t *testing.T) {
 	if resp, _ := PutSetting(ctx, "truenas", "home_root", "/mnt/x", "op"); !errors.Is(resp.Err, ErrFeatureNotDeclared) {
 		t.Errorf("an undeclared setting write: %+v", resp)
 	}
-	if st := Read(ctx, "truenas", "storage.status", "s", "s", nil).Storage(); !errors.Is(st.Err, ErrFeatureNotDeclared) {
+	if st := Read(ctx, "truenas", "storage.status", "s", "s", nil, false).Storage(); !errors.Is(st.Err, ErrFeatureNotDeclared) {
 		t.Errorf("an undeclared operation was dispatched: %+v", st)
 	}
 	if hits.Load() != 0 || len(*began) != 0 || a.CircuitOpen() {
 		t.Fatalf("an undeclared feature reached the add-on (%d), began a row (%d) or moved the breaker (%t)", hits.Load(), len(*began), a.CircuitOpen())
 	}
 	// A core route still goes, and still feeds the breaker.
-	Subjects(ctx, "truenas")
+	Subjects(ctx, "truenas", false)
 	if hits.Load() != 1 || !a.CircuitOpen() {
 		t.Errorf("a core route must still be called and recorded: hits %d open %t", hits.Load(), a.CircuitOpen())
 	}

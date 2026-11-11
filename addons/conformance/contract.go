@@ -49,7 +49,9 @@ type contract struct {
 		ScopeDenylist []string `json:"scope_denylist"`
 	}
 	maxReplyBytes int64
-	vectors       []byte // transport_derivation.json, raw
+	// cooldownDefault is constants.cooldown_default: limits.fresh_read_cooldown when undeclared.
+	cooldownDefault string
+	vectors         []byte // transport_derivation.json, raw
 }
 
 type offline struct{}
@@ -95,6 +97,9 @@ func loadContract(files fs.FS) (*contract, error) {
 			MaxReplyBytes struct {
 				Value int64 `json:"value"`
 			} `json:"max_reply_bytes"`
+			CooldownDefault struct {
+				Value string `json:"value"`
+			} `json:"cooldown_default"`
 		} `json:"constants"`
 	}
 	for file, into := range map[string]any{
@@ -112,7 +117,8 @@ func loadContract(files fs.FS) (*contract, error) {
 			return nil, fmt.Errorf("registry %s: %w", file, err)
 		}
 	}
-	if c.maxReplyBytes = constants.Constants.MaxReplyBytes.Value; c.maxReplyBytes <= 0 || len(c.errors) == 0 || len(c.kinds) == 0 {
+	c.cooldownDefault = constants.Constants.CooldownDefault.Value
+	if c.maxReplyBytes = constants.Constants.MaxReplyBytes.Value; c.maxReplyBytes <= 0 || c.cooldownDefault == "" || len(c.errors) == 0 || len(c.kinds) == 0 {
 		return nil, fmt.Errorf("the registries under %s are incomplete", v2)
 	}
 	if c.vectors, err = fs.ReadFile(files, "transport_derivation.json"); err != nil {

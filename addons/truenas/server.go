@@ -60,8 +60,9 @@ type server struct {
 	// one. A share outside it is not read, offered, counted or audited.
 	shares map[string]bool
 
-	// reach is the last read of the shares' folder permissions (reach.go).
-	reach reachCache
+	// fresh keeps the last read of each thing a read may be answered from
+	// (fresh.go, feature freshness).
+	fresh fresher
 
 	// calls is every write executing now, by call_id, and subjects the one
 	// write per subject allowed at a time (calls.go).
@@ -113,7 +114,7 @@ func (s *server) routes() http.Handler {
 // that are merely unobservable — the same mistake as concluding an absence from
 // a read that could not happen.
 func (s *server) handleCapabilities(w http.ResponseWriter, r *http.Request, _ []byte) {
-	writeJSON(w, http.StatusOK, manifest(productName, s.nas.Version(), s, s.connection))
+	writeJSON(w, http.StatusOK, manifest(productName, s.nas.Version(), s, s.connection, s.fresh.cooldownISO()))
 }
 
 // availability answers the capability probe for one operation (4.7).
@@ -236,6 +237,9 @@ type Health struct {
 	LogRecords    uint64    `json:"log_records"`
 	SnapshotAge   *string   `json:"snapshot_taken_at,omitempty"`
 	CheckedAt     time.Time `json:"checked_at"`
+	// TargetReads is every read of the NAS since the add-on started, this
+	// health read's own included (feature freshness; NAS.reads).
+	TargetReads uint64 `json:"target_reads"`
 }
 
 // handleHealth composes the operator shape, degrading per source rather than
@@ -295,26 +299,23 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 		formatted := snap.TakenAt.UTC().Format(time.RFC3339)
 		h.SnapshotAge = &formatted
 	}
+	h.TargetReads = s.nas.reads.Load()
 	writeJSON(w, http.StatusOK, h)
 }
 
 // SubjectsResponse carries the read AND how much to trust it.
 type SubjectsResponse struct {
 	Subjects []SubjectView `json:"subjects"`
-	// Current says this came from the target just now: a read that began after
-	// the request arrived (design §4). The backend's drift sweep consumes only
-	// current reads: comparing desired state against an ageing mirror would
-	// report every intervening change as out-of-band, so an outage would
-	// manufacture findings rather than reporting itself.
-	Current bool   `json:"current"`
-	TakenAt string `json:"taken_at"`
+	// Observed's Current says this came from the target just now: a read that
+	// began after the request arrived (design §4). The backend's drift sweep
+	// consumes only current reads: comparing desired state against an ageing
+	// mirror would report every intervening change as out-of-band, so an
+	// outage would manufacture findings rather than reporting itself.
+	Observed
 	// Truncated says the read hit its cap. A capped read is current and still
 	// unusable for concluding an ABSENCE, which is what half the drift diff
 	// does — so the flag travels separately from `Current`.
 	Truncated bool `json:"truncated"`
-	// Stale says why a reply is not current, and is present exactly when
-	// Current is false.
-	Stale *Stale `json:"stale,omitempty"`
 }
 
 // Stale is why a read reply is not current (common/stale.json): `unreachable`
@@ -408,39 +409,62 @@ func subjectViews(subjects []Subject, limits map[int64]string) []SubjectView {
 	return out
 }
 
-// handleSubjects serves the full state read, live if it can and from the mirror
-// if it cannot — labelled either way.
+// wantsFresh is the request asking for a read of the NAS now (`?fresh=true`,
+// feature freshness). Only the literal true asks.
+func wantsFresh(r *http.Request) bool { return r.URL.Query().Get("fresh") == "true" }
+
+// subjectsRead is one read of every account, as served.
+type subjectsRead struct {
+	views     []SubjectView
+	truncated bool
+}
+
+// handleSubjects serves the full state read: the copy, a read of the NAS now,
+// or the mirror on disk when the NAS cannot be read and nothing newer is kept
+// (fresh.go) — labelled whichever it is.
 func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte) {
-	snap, err := s.readSubjects()
-	if err == nil {
+	val, obs, err := s.fresh.read("subjects", wantsFresh(r), func() (any, time.Time, error) {
+		snap, err := s.readSubjects()
+		if err != nil {
+			return nil, time.Time{}, err
+		}
 		if putErr := s.store.PutSnapshot(snap); putErr != nil {
 			// The read is good; only the mirror failed. Logged and served,
 			// because refusing a current read to protect a backstop inverts
 			// which of the two matters.
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
-		writeJSON(w, http.StatusOK, SubjectsResponse{
-			Subjects: subjectViews(snap.Subjects, s.homeLimits(snap.Subjects)), Current: true,
-			TakenAt: snap.TakenAt.UTC().Format(time.RFC3339), Truncated: snap.Truncated,
-		})
+		return subjectsRead{subjectViews(snap.Subjects, s.homeLimits(snap.Subjects)), snap.Truncated}, snap.TakenAt, nil
+	})
+	if writeCooldown(w, err) {
+		return
+	}
+	if err == nil {
+		read := val.(subjectsRead)
+		writeJSON(w, http.StatusOK, SubjectsResponse{Subjects: read.views, Truncated: read.truncated, Observed: obs})
 		return
 	}
 
 	cached, found, cacheErr := s.store.GetSnapshot()
 	if cacheErr != nil || !found {
-		// Nothing current and nothing remembered. 503 rather than an empty
-		// list: an empty list is a statement that the target holds no accounts,
-		// and the drift sweep would act on it.
+		// Nothing current and nothing remembered: an error, never an empty
+		// list, which is a statement that the target holds no accounts and the
+		// drift sweep would act on it. TARGET_UNREACHABLE when no request
+		// reached the NAS (B3), NO_CURRENT_READ when it answered and failed.
 		log.Printf("[SUBJECTS] live read failed (%v) and no snapshot is available", err)
+		if errors.Is(err, ErrNotSent) {
+			writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
+				"The NAS could not be reached and there is no earlier read to answer from.", nil)
+			return
+		}
 		writeError(w, http.StatusServiceUnavailable, CodeNoCurrentRead,
 			"The NAS could not be read and there is no earlier read to answer from.", nil)
 		return
 	}
 	// The mirror holds no limits: they are read live or not reported.
 	writeJSON(w, http.StatusOK, SubjectsResponse{
-		Subjects: subjectViews(cached.Subjects, nil), Current: false,
-		TakenAt: cached.TakenAt.UTC().Format(time.RFC3339), Truncated: cached.Truncated,
-		Stale: unreachableSince(cached.TakenAt),
+		Subjects: subjectViews(cached.Subjects, nil), Truncated: cached.Truncated,
+		Observed: Observed{TakenAt: rfc3339(cached.TakenAt), Stale: unreachableSince(cached.TakenAt)},
 	})
 }
 

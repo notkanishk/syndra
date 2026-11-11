@@ -3,6 +3,35 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Feature `freshness` served (slice 6b, 11 Nov 2026)
+
+Additive within major 2; no schema shape changed. Syndra now sends `fresh`
+(`?fresh=true` on `GET /subjects`, `/values/{field}`, `/reach`, `/homes`;
+`"fresh": true` in an `effect: read` operation's body) to an add-on
+declaring `freshness`, and only there: the drift sweep's `/subjects` read
+always, the dormant accounts list and its removal always, and a person's
+"Read again". Never on `/plan`, `/apply` or `/stats` (the backend refuses
+it before anything leaves). A `FRESH_READ_COOLDOWN` is never a breaker
+failure. The TrueNAS add-on declares `freshness`.
+
+- Decided while building: a fresh read joining one already under way is
+  answered `cooldown` (B1); `health.target_reads` never decreases while the
+  add-on runs and may start again at 0 (B2, `v2/schema/health.json`'s
+  description); with nothing to serve, `TARGET_UNREACHABLE` when no request
+  reached the app and `NO_CURRENT_READ` when it was asked and failed (B3, the
+  guide's "Nothing to serve" rule).
+- The guide's appendix A.1 moved into chapter 4 as "Fresh reads"; A.2-A.5
+  are A.1-A.4.
+- Fixtures: new `subjects_cooldown.json` (a cooldown answer),
+  `error_fresh_read_cooldown.json` (429), `error_target_unreachable.json`
+  (503), `operation_request_fresh.json` (a read asking for a fresh one, as
+  the backend sends it); `manifest_truenas.json` declares `freshness` with
+  `limits.fresh_read_cooldown: PT30S`.
+- Deploy and rollback: the backend and the TrueNAS add-on ship and roll back
+  together. A TrueNAS add-on declaring `freshness` beside a backend that
+  never sends `fresh` answers every `/subjects` from its copy, and the drift
+  sweep then skips every pass (safe, and silent).
+
 ## Feature `results` served (slice 6a, 11 Nov 2026)
 
 Additive within major 2. Syndra now reads `result` from an add-on declaring

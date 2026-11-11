@@ -197,7 +197,7 @@ func adoptionOf(r *http.Request, target, subject string, boundAt *time.Time) *pe
 // with the roles behind each, as the target last read its folders. Nil when
 // that hasn't been read.
 func previewPlaces(r *http.Request, target string, set services.EntitlementSet) []addons.Place {
-	reach := addonsReadReach(r.Context(), target)
+	reach := addonsReadReach(r.Context(), target, wantsFresh(r))
 	if !reach.Read {
 		return nil
 	}

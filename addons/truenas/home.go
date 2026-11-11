@@ -242,11 +242,11 @@ func humanBytes(n int64) string {
 // NAS an application's share has two dozen of each, and none is a place for
 // people's homes. Each is labelled the way people say it, `main › home_dir`.
 func (s *server) homePlaces() (paths []string, labels map[string]string, err error) {
-	read, _, _, err := s.readACLs()
+	read, _, err := s.reach(false)
 	if err != nil {
 		return nil, nil, err
 	}
-	paths, labels = homePlacesIn(read)
+	paths, labels = homePlacesIn(read.shareRead)
 	return paths, labels, nil
 }
 
@@ -281,28 +281,42 @@ type HomeUsage struct {
 type HomesResponse struct {
 	Homes     []HomeUsage `json:"homes"`
 	QuotaRead bool        `json:"quota_read"`
-	// TakenAt and Current are the account read behind the list. It is always
-	// live: a NAS that cannot be read is refused, never answered from the
-	// mirror, so Current is true and no stale is ever sent.
-	TakenAt string `json:"taken_at"`
-	Current bool   `json:"current"`
+	// Observed is the account read behind the list, or the copy of it
+	// (fresh.go).
+	Observed
 }
 
-// handleHomes reads every home folder once: one user read, one quota read per
+// handleHomes answers every home folder: the copy, or a read of the NAS now
+// (fresh.go).
+func (s *server) handleHomes(w http.ResponseWriter, r *http.Request, _ []byte) {
+	val, obs, err := s.fresh.read("homes", wantsFresh(r), func() (any, time.Time, error) {
+		out, err := s.readHomes()
+		return out, time.Now(), err
+	})
+	if writeCooldown(w, err) {
+		return
+	}
+	if err != nil {
+		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's accounts or shares could not be read.", nil)
+		return
+	}
+	out := val.(HomesResponse)
+	out.Observed = obs
+	writeJSON(w, http.StatusOK, out)
+}
+
+// readHomes reads every home folder once: one user read, one quota read per
 // dataset that holds homes.
-func (s *server) handleHomes(w http.ResponseWriter, _ *http.Request, _ []byte) {
+func (s *server) readHomes() (HomesResponse, error) {
 	snap, err := s.readSubjects()
 	if err != nil {
-		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's accounts could not be read.", nil)
-		return
+		return HomesResponse{}, err
 	}
 	shares, err := s.enabledShares()
 	if err != nil {
-		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's shares could not be read.", nil)
-		return
+		return HomesResponse{}, err
 	}
-	out := HomesResponse{Homes: []HomeUsage{}, QuotaRead: true,
-		TakenAt: snap.TakenAt.UTC().Format(time.RFC3339), Current: true}
+	out := HomesResponse{Homes: []HomeUsage{}, QuotaRead: true}
 	quotas := map[string]map[int64]PlaceUsage{}
 	for _, sub := range snap.Subjects {
 		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
@@ -325,5 +339,5 @@ func (s *server) handleHomes(w http.ResponseWriter, _ *http.Request, _ []byte) {
 		out.Homes = append(out.Homes, h)
 	}
 	sort.Slice(out.Homes, func(i, j int) bool { return out.Homes[i].Username < out.Homes[j].Username })
-	writeJSON(w, http.StatusOK, out)
+	return out, nil
 }

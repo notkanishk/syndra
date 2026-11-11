@@ -40,9 +40,8 @@ func loadErrorRegistry(t *testing.T) errorRegistry {
 // notWritten is every registered code this add-on never writes, with why. A
 // code it adds must be written or listed here.
 var notWritten = map[string]string{
-	"CALL_UNSETTLED":      "feature calls (physical operations), not declared",
-	"FRESH_READ_COOLDOWN": "feature freshness, not declared",
-	"UNKNOWN_METRIC":      "feature stats, not declared",
+	"CALL_UNSETTLED": "feature calls (physical operations), not declared",
+	"UNKNOWN_METRIC": "feature stats, not declared",
 }
 
 // codesInSource reads this package's own non-test source and returns the codes

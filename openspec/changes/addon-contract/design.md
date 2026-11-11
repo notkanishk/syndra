@@ -551,8 +551,10 @@ answer, and the drain refuses a non-current fingerprint as it does now, so
 nothing about the planner changes and N departures never cost N × 30 s;
 `/stats` is not in scope because when the app is read for statistics is the
 add-on's (§9.1). A read answers with an error only when the add-on has
-nothing to serve at all: `FRESH_READ_COOLDOWN` (429, `Retry-After`) or
-`TARGET_UNREACHABLE` (503, `Retry-After`), both registered, and the backend
+nothing to serve at all: `FRESH_READ_COOLDOWN` (429, `Retry-After`),
+`TARGET_UNREACHABLE` (503, `Retry-After`) when no request reached the app,
+or `NO_CURRENT_READ` (503) when the app was asked and failed (B3), all
+registered, and the backend
 reads `TARGET_UNREACHABLE` as `unreached`, never as a lifecycle refusal:
 with the envelope in place a lifecycle refusal is detected by the code
 `LIFECYCLE_REFUSAL` alone, no longer by "503 with `Retry-After`"
@@ -561,11 +563,16 @@ its app: single-flight coalescing of concurrent fresh reads of the same
 thing; a per-subject and a per-target cooldown (`limits.fresh_read_cooldown`,
 default `constants.cooldown_default = PT30S`, declared so the UI can say
 "refreshed 10 s ago, again in 20 s"); the target-wide read (`/subjects`) is
-the rate-limited one, and the drift sweep's hourly `fresh` read is well
-inside any sane cooldown. For the kit to prove any of this black-box, an
-add-on declaring `freshness` MUST carry `health.target_reads`, a monotonic
-count of reads it has made of its app (`log_records` counts mutations and
-cannot serve); it is required with the feature, not in the core. Syndra
+the rate-limited one, and the drift sweep's `fresh` read (every
+`DRIFT_RECONCILIATION_INTERVAL_HOURS`, 6 h by default) is far outside any
+sane cooldown. A fresh read that joins one already under way arrived after
+it began, so it is answered as `cooldown`, never `current` (decided while
+building 6b, B1). For the kit to prove any of this black-box, an add-on
+declaring `freshness` MUST carry `health.target_reads`, every read it has
+made of its app since it started, never decreasing while it runs and free to
+start again at 0, like an OpenMetrics counter (`log_records` counts
+mutations and cannot serve); it is required with the feature, not in the
+core (B2). Syndra
 cannot use `fresh` to dictate *how* the app is read, and it is not a bulk
 mechanism.
 
@@ -856,7 +863,7 @@ keep, and it does not pretend to.
 | results (feature `results`) | every available `effect: read` operation answers one `result` valid against the schema `registry/operations.json` names for it (which holds `current: false` ⇔ `stale`), or an object for an id that declares its own; without the feature, a read with no registry `pocket` (`holdings.list`) declared available is a `fail`, and otherwise `skip` |
 | operations | unknown → 404; missing required param → 400; a canary secret value never appears in any later byte of any reply, health, error, replay or `/calls` answer (`secret_result` redaction included); a `physical` operation refuses without `confirm`, answers `preview: true` with no effect and no record (`log_records` unchanged; a preview sends nothing to `/calls`, and `/calls` on a never-used id → `unknown`), and `GET /calls/{call_id}` answers `recorded` after the confirm; a second call while the first is `in_doubt` → 409 `CALL_UNSETTLED` |
 | transport | unsigned → 401; stale timestamp → 401; wrong key → 401 without saying which half; a signed request with its query reordered or altered → 401; the served key equals the derived one; the three query vectors in `transport_derivation.json` reproduce |
-| freshness (feature `freshness`) | the reads in scope carry `taken_at` and `current`, and `current == false` ⇔ `stale` present; a read without `fresh` answered from the mirror says `stale.reason: cached` and does not advance `health.target_reads`; `fresh: true` advances it by one or answers `stale.reason: cooldown` with `retry_after`; two concurrent `fresh: true` reads advance it by **one**; with the target unreachable, a read answers the last known value with `stale.reason: unreachable`, not an error |
+| freshness (feature `freshness`) | four checks, each `skip` without the feature, measured by `health.target_reads` against a baseline of two back-to-back `/health` reads: `freshness.cached` (a read without `fresh` answered from the mirror says `stale.reason: cached` and does not advance the count); `freshness.cooldown` (`fresh: true` advances it, by what one read of the app costs, and a second at once answers `stale.reason: cooldown` with `retry_after` or 429 `FRESH_READ_COOLDOWN` with `Retry-After`, advancing it by nothing; `/plan` straight after is `current`); `freshness.coalesce` (two concurrent `fresh: true` reads advance it by what **one** fresh read alone does, and one of them is current); `freshness.unreachable` always skips (a black-box kit cannot take the app down; the add-on's own test holds the last known value answered as `stale.reason: unreachable`, not an error). The cooldown is read from `limits.fresh_read_cooldown`; one longer than the kit's `FreshWait` (35 s) is a skip with the reason. Every reply in scope holds `current == false` ⇔ `stale` present |
 | dangerous scopes | warn when `health.credential_scopes` intersects the declared kind's denylist (advisory: self-reported) |
 
 Two things the kit does not claim: that the add-on never follows a 3xx

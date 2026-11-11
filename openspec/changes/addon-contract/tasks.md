@@ -1230,6 +1230,13 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     ignored, every lifecycle, 422 for an unbound subject), and `health.get`
     answers under `result`; defects `result-off-schema` and
     `result-in-pocket`. The other four halves stay open.
+  - [x] The `freshness` half (slice 6b, 11 Nov 2026): `-features freshness`
+    declares it with `limits.fresh_read_cooldown: PT1S` and `target_reads`;
+    `/subjects` from a mirror (`cached`), `fresh` within the cooldown
+    `cooldown` + `retry_after` (429 with nothing kept), one app read for
+    concurrent asks (a joiner is `cooldown`), the last value `unreachable`
+    (`Config.Down`, test-only), every write forgets the mirror, `/plan` live;
+    defects `cached-as-current`, `reads-per-request`, `cooldown-ignored`.
 
 **`results` (decision 20)**
 
@@ -1340,6 +1347,24 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   answer marked `current`, a drift sweep that omits `fresh`, a `/plan` that
   is cooled down). The UI shows `taken_at` on every card and a "Refresh"
   that sends `fresh: true` #ready-for-agent
+  - [x] Go side (slice 6b, 11 Nov 2026): contract fixtures and tests, the
+    backend, the TrueNAS add-on (declares `freshness`), the reference and
+    the kit. The UI half is open (a separate builder, from the handoff).
+  - Decided while building, one line each:
+  - One sender of `fresh`: `sendSpec.Fresh` in the pipe adds the query on a GET and the body key on an operation, only for an add-on declaring the feature, and refuses it outside `GET /subjects|/values/|/reach|/homes` and read operations (`ErrFreshOutOfScope`), so never `/plan`, `/apply`, `/stats` is code, not a comment.
+  - A `FRESH_READ_COOLDOWN` neither opens nor clears the backend's breaker (five "Read again" presses used to open it for the whole target).
+  - A cooldown has one shape everywhere: `stale.reason: cooldown` when the add-on served its copy, `retry_after` on the view (reach, homes, read views, activity, inventory) when it refused with nothing to serve; `CallResponse.RetryAfter` is RFC 9110 delay-seconds only.
+  - The invariant is held on read in one helper (`staleInvariant`): a reply whose `current` and `stale` disagree is not a reading (subjects unusable, reach/homes/results unreadable).
+  - "Read again" is the card's own GET with `?fresh=true` (`wantsFresh`, literal `true` only), no new endpoint; a page load and the waiting poll never send it.
+  - The drift sweep always asks fresh; a cooldown halts as `read_stale` with "skipped" in the log (no new reason, no migration, B6).
+  - The dormant list and its removal always ask fresh; inside the cooldown both answer 429 with `Retry-After` and `retry_after` (owner Q1). `DormantAccounts` takes no flag: both callers would pass true.
+  - The inventory takes "Read again"; a page load shows the copy dated, and Adopt stays blocked until read again (owner Q2).
+  - `SystemHealth` takes no `fresh`: TrueNAS `health.get` carries no `current`, so it is read live every time, like `/values` (not in its fresher).
+  - TrueNAS: one `fresher` (`fresh.go`) keyed per route and per subject (+ public params), 5-minute copy, 30 s cooldown begun at the read's start, request collapsing with a channel (no `x/sync`), a generation so a read begun before a write is never kept; `forget()` in `mutate`; a copy covers a NAS that cannot be read, never an operation's 4xx refusal; `target_reads` counted in `NAS.call` (probes included, writes not), in memory (B2).
+  - TrueNAS `/reach` keeps groups and ACLs as one copy (a cached `/reach` reads nothing), and the home-place check before a setting write reads the NAS directly, unkept.
+  - With nothing to serve, `/subjects` answers 503 `TARGET_UNREACHABLE` when nothing was sent and `NO_CURRENT_READ` otherwise (B3).
+  - A joiner of a read in flight is `cooldown`, never `current` (B1); the kit accepts either for the joiner and wants one of two current.
+  - Deploy and rollback: the backend and the TrueNAS add-on ship and roll back together (NEXT.md).
 
 **`calls` and `effect` (decision 18)**
 
@@ -1470,6 +1495,17 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     (`TestTheResultsCheckJudgesOnlyWhatIsDeclared`). The appendix lost A.2
     to chapter 7, so A.3–A.6 are A.2–A.5 and `operations.physical` cites
     `a2-…`.
+  - [x] The `freshness` part (slice 6b, 11 Nov 2026): checks
+    `freshness.cached`, `.cooldown`, `.coalesce`, `.unreachable` (always
+    skips; held by the reference's own test, B4), counted by `target_reads`
+    against a baseline of two `/health` reads, in units of one fresh read's
+    cost (a TrueNAS read is several NAS calls). Watched to fail against
+    `cached-as-current`, `cooldown-ignored` and `reads-per-request` and
+    against rewritten replies; skip without the feature, pass with
+    `-features freshness`, `-mutate` included; the TrueNAS kit test requires
+    all three to pass. A mirroring add-on's `-mutate` "before" read asks
+    fresh and waits a cooldown out once. The guide's A.1 moved into chapter
+    4, so A.2–A.5 are A.1–A.4 and `operations.physical` cites `a1-…`.
 
 ## Out of scope, stated so nobody builds it here
 

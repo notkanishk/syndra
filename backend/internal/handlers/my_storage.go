@@ -345,7 +345,9 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 		// member on their own page, the operator on the person's page (each
 		// route decides who may ask).
 		for _, op := range addonsMemberReads(target) {
-			reply := addonsRead(r.Context(), target, op, subject, resolveActor(r, ""), nil)
+			// fresh only when the person pressed "Read again" (wantsFresh);
+			// a page load and the waiting poll accept the add-on's copy.
+			reply := addonsRead(r.Context(), target, op, subject, resolveActor(r, ""), nil, wantsFresh(r))
 			if reply.Results {
 				view.Reads = append(view.Reads, reply.View())
 			}
@@ -357,7 +359,7 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 					kinds.Address(view.Connection, &status.Places[i])
 				}
 				view.Standing = status.Standing
-				attributePlaces(r.Context(), target, set, status.Places)
+				attributePlaces(r.Context(), target, set, status.Places, wantsFresh(r))
 				view.HomeKept = homeKept(set, status.Places)
 				view.Storage = &status
 				rememberStorage(target, subject, status)
@@ -373,13 +375,13 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 // attributePlaces names the member's own roles behind each place: the roles
 // that put them in a group that opens it. Best-effort, from the target's last
 // read of its folder permissions; a place with no attribution just says less.
-func attributePlaces(ctx context.Context, target string, set services.EntitlementSet, places []addons.Place) {
+func attributePlaces(ctx context.Context, target string, set services.EntitlementSet, places []addons.Place, fresh bool) {
 	membership := kinds.Storage(set.Roles).Membership
 	groups := set.Fields[membership]
 	if len(places) == 0 || len(groups) == 0 {
 		return
 	}
-	reach := addonsReadReach(ctx, target)
+	reach := addonsReadReach(ctx, target, fresh)
 	if !reach.Read {
 		return
 	}

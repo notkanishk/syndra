@@ -70,7 +70,7 @@ func TestAnOperatorsReadOfHoldingsWritesNoRow(t *testing.T) {
 	if reads := MemberReads("truenas"); !slices.Equal(reads, []string{"holdings.list"}) {
 		t.Fatalf("member reads %v, want holdings.list alone", reads)
 	}
-	reply := Read(context.Background(), "truenas", "holdings.list", "289471021834760193", "operator-289471021834760199", nil)
+	reply := Read(context.Background(), "truenas", "holdings.list", "289471021834760193", "operator-289471021834760199", nil, false)
 	assertOperationRequest(t, got, "holdings.list")
 	var sent struct{ Subject, Actor string }
 	_ = json.Unmarshal(got.body, &sent)
@@ -100,7 +100,7 @@ func TestAnOperatorsReadOfHoldingsWritesNoRow(t *testing.T) {
 func TestReadRefusesAnOperationThatIsNotARead(t *testing.T) {
 	got := addonAnswering(t, "operation_response.json")
 	noRecord(t)
-	reply := Read(context.Background(), "truenas", "password.set", "s", "s", map[string]any{"password": "x"})
+	reply := Read(context.Background(), "truenas", "password.set", "s", "s", map[string]any{"password": "x"}, false)
 	if !errors.Is(reply.Err, ErrNotARead) || reply.Outcome != OutcomeUnreached || got.method != "" {
 		t.Fatalf("a write through Read: %+v, sent %s %s", reply, got.method, got.path)
 	}
@@ -130,7 +130,7 @@ func TestAReadWithNoPocketNeedsResults(t *testing.T) {
 	registryMu.Unlock()
 
 	var unavailable *ErrOperationUnavailable
-	if reply := Read(context.Background(), "truenas", "holdings.list", "s", "s", nil); !errors.As(reply.Err, &unavailable) ||
+	if reply := Read(context.Background(), "truenas", "holdings.list", "s", "s", nil, false); !errors.As(reply.Err, &unavailable) ||
 		!strings.Contains(unavailable.Reason, "results") || got.method != "" {
 		t.Fatalf("holdings.list without results: %+v, sent %s", reply, got.path)
 	}
@@ -144,15 +144,15 @@ func TestAReadWithNoPocketNeedsResults(t *testing.T) {
 func TestResultIsReadOnlyFromAResultsAddOn(t *testing.T) {
 	ctx := context.Background()
 	addonAnswering(t, "operation_response_result.json") // result, no pocket; goodManifest has no results
-	if st := Read(ctx, "truenas", "storage.status", "s", "s", nil).Storage(); st.Outcome != OutcomeIndeterminate {
+	if st := Read(ctx, "truenas", "storage.status", "s", "s", nil, false).Storage(); st.Outcome != OutcomeIndeterminate {
 		t.Errorf("a result from an add-on without results was read: %+v", st)
 	}
 	addonAnswering(t, "operation_response_storage.json") // the pocket, from an add-on declaring results
 	declareResults(t)
-	if st := Read(ctx, "truenas", "storage.status", "s", "s", nil).Storage(); st.Outcome != OutcomeIndeterminate {
+	if st := Read(ctx, "truenas", "storage.status", "s", "s", nil, false).Storage(); st.Outcome != OutcomeIndeterminate {
 		t.Errorf("a pocket from an add-on declaring results was read: %+v", st)
 	}
-	if v := Read(ctx, "truenas", "storage.status", "s", "s", nil).View(); v.Readable {
+	if v := Read(ctx, "truenas", "storage.status", "s", "s", nil, false).View(); v.Readable {
 		t.Errorf("a results add-on answering a pocket is readable: %+v", v)
 	}
 }
@@ -203,7 +203,7 @@ func TestAResultMissingWhatItsSchemaRequiresIsNotAReading(t *testing.T) {
 				manifest = "manifest_inventory.json"
 			}
 			underManifest(t, manifest)
-			reply := Read(context.Background(), "truenas", tc.op, "s", "s", nil)
+			reply := Read(context.Background(), "truenas", tc.op, "s", "s", nil, false)
 			if v := reply.View(); v.Readable {
 				t.Errorf("read as a reading: %+v", v)
 			}
@@ -231,7 +231,7 @@ func TestTheTrueNASAddOnWithResultsLandsInTheReader(t *testing.T) {
 	if reads := MemberReads("truenas"); !slices.Equal(reads, []string{"storage.status"}) {
 		t.Fatalf("member reads %v", reads)
 	}
-	reply := Read(context.Background(), "truenas", "storage.status", "289471021834760193", "289471021834760193", nil)
+	reply := Read(context.Background(), "truenas", "storage.status", "289471021834760193", "289471021834760193", nil, false)
 	st := reply.Storage()
 	if st.Outcome != OutcomeSucceeded || !st.NeedsPassword || st.NeedsNewPassword || st.Usable || !st.PlacesReadable || !st.QuotaRead ||
 		len(st.Places) != 1 || st.Places[0].Usage == nil || st.Standing == nil || st.Standing.WaitingOn != "member" {
@@ -252,7 +252,7 @@ func TestTheTrueNASAddOnWithResultsLandsInTheReader(t *testing.T) {
 	} {
 		addonAnswering(t, tc.fixture)
 		underManifest(t, "manifest_truenas.json")
-		switch reply := Read(context.Background(), "truenas", tc.op, "289471021834760193", "op", nil); tc.op {
+		switch reply := Read(context.Background(), "truenas", tc.op, "289471021834760193", "op", nil, false); tc.op {
 		case "activity.get":
 			if act := reply.Activity(); act.Outcome != OutcomeSucceeded || len(act.Events) != 1 || act.Events[0].Resource != "makers" || act.Observation == nil {
 				t.Errorf("activity: %+v", act)
@@ -270,7 +270,7 @@ func TestTheTrueNASAddOnWithResultsLandsInTheReader(t *testing.T) {
 func TestARefusedReadCarriesItsStatus(t *testing.T) {
 	addonServingStatus(t, http.StatusUnprocessableEntity, []byte(`{"type":"urn:syndra:addon:error:OPERATION_FAILED","title":"Operation failed",`+
 		`"status":422,"detail":"No account is bound to this subject yet.","code":"OPERATION_FAILED","retry":"never"}`))
-	act := Activity(context.Background(), "truenas", "s", "s", "")
+	act := Activity(context.Background(), "truenas", "s", "s", "", false)
 	if act.Outcome != OutcomeRejected || act.Status != http.StatusUnprocessableEntity {
 		t.Fatalf("a refused read: %+v", act)
 	}
@@ -289,7 +289,7 @@ func TestAnUnreadQuotaReachesThePageAsUnread(t *testing.T) {
 	addonServing(t, body)
 	underManifest(t, "manifest_truenas.json")
 
-	reply := Read(context.Background(), "truenas", "storage.status", "s", "s", nil)
+	reply := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, false)
 	if st := reply.Storage(); st.Outcome != OutcomeSucceeded || st.QuotaRead {
 		t.Errorf("view.storage: %+v, want quota_read false", st)
 	}
@@ -305,7 +305,7 @@ func TestAnUnreadQuotaReachesThePageAsUnread(t *testing.T) {
 		doc["storage"].(map[string]any)["usage_readable"] = readable
 		body, _ := json.Marshal(doc)
 		addonServing(t, body)
-		if st := Read(context.Background(), "truenas", "storage.status", "s", "s", nil).Storage(); st.QuotaRead != readable {
+		if st := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, false).Storage(); st.QuotaRead != readable {
 			t.Errorf("legacy usage_readable %v landed as quota_read %v", readable, st.QuotaRead)
 		}
 	}

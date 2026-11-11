@@ -7,7 +7,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -23,11 +22,6 @@ import (
 // folders. That matches a layout where each first-level folder is its own
 // dataset; a grant deeper down shows as the folder above it. Read a level
 // further if a share ever grants below its first level.
-
-// reachMaxAge is how long one read of the ACLs is served before it is read
-// again. A dozen ACL reads per page view would put the NAS's latency in front
-// of every member, and ACLs change by hand, rarely.
-const reachMaxAge = 5 * time.Minute
 
 const (
 	accessNone   = ""
@@ -178,59 +172,36 @@ type shareRead struct {
 	mounts map[string]string
 }
 
-// reachCache is the last shareRead.
-type reachCache struct {
-	mu     sync.Mutex
-	readAt time.Time
-	last   shareRead
-}
-
-// errNeverRead is a NAS that can't be read now and never has been: there is
-// no last-known answer to fall back on.
+// errNeverRead is a NAS whose folder permissions can't be read now and that
+// fresh.go holds no earlier read of: there is no last-known answer.
 var errNeverRead = errors.New("the folder permissions have not been read yet")
 
-// How a shareRead was come by, in common/stale.json's words: "" is a read of
-// the NAS that began after the request arrived (current), "cached" the last
-// read served on purpose while it is fresh enough, "unreachable" the last read
-// because this one failed. Design §4: only the first is `current`.
-const (
-	aclCached      = "cached"
-	aclUnreachable = "unreachable"
-)
-
-// readACLs serves the last read while it is fresh, and reads again when it
-// isn't. A failed read falls back to the last one. stale says which.
-func (s *server) readACLs() (read shareRead, readAt time.Time, stale string, err error) {
-	c := &s.reach
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !c.readAt.IsZero() && time.Since(c.readAt) < reachMaxAge {
-		return c.last, c.readAt, aclCached, nil
-	}
-	fresh, err := s.readSharesACLs()
-	if err != nil {
-		if c.readAt.IsZero() {
-			return shareRead{}, time.Time{}, "", fmt.Errorf("%w: %w", errNeverRead, err)
-		}
-		return c.last, c.readAt, aclUnreachable, nil
-	}
-	c.last, c.readAt = fresh, time.Now().UTC()
-	return c.last, c.readAt, "", nil
+// reachRead is one read of who opens what: the groups, and the folder ACLs
+// they are named in.
+type reachRead struct {
+	shareRead
+	groups []nasGroup
 }
 
-// readACLsNow reads the NAS now, whatever the cache holds, and keeps the read:
-// for a write that must be judged against what is there (a place deleted a
-// minute ago must not pass). A failed read is an error, never the last read.
-func (s *server) readACLsNow() (shareRead, error) {
-	c := &s.reach
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	fresh, err := s.readSharesACLs()
+// reach is who opens what, through the fresher (fresh.go): the copy unless
+// fresh asks for a read of the NAS now. A write that must be judged against
+// what is there reads readSharesACLs itself.
+func (s *server) reach(fresh bool) (reachRead, Observed, error) {
+	val, obs, err := s.fresh.read("reach", fresh, func() (any, time.Time, error) {
+		groups, err := s.readGroups()
+		if err != nil {
+			return nil, time.Time{}, err
+		}
+		acls, err := s.readSharesACLs()
+		if err != nil {
+			return nil, time.Time{}, fmt.Errorf("%w: %w", errNeverRead, err)
+		}
+		return reachRead{acls, groups}, time.Now(), nil
+	})
 	if err != nil {
-		return shareRead{}, err
+		return reachRead{}, Observed{}, err
 	}
-	c.last, c.readAt = fresh, time.Now().UTC()
-	return fresh, nil
+	return val.(reachRead), obs, nil
 }
 
 // readSharesACLs reads each enabled share's root and first-level folders.
@@ -401,12 +372,9 @@ func gidsOf(groups []nasGroup) map[string]int64 {
 
 // ReachResponse is what each of the makerspace's groups opens.
 type ReachResponse struct {
-	// TakenAt is when the folder permissions were read (contract 1's read_at).
-	// Current is false when the NAS couldn't be read just now and this is the
-	// last read, and Stale then says so.
-	TakenAt time.Time `json:"taken_at"`
-	Current bool      `json:"current"`
-	Stale   *Stale    `json:"stale,omitempty"`
+	// Observed is when the folder permissions were read (contract 1's
+	// read_at), and whether this is that read or a copy of it.
+	Observed
 	// Groups is every group of the makerspace's own, with what holding it opens
 	// beyond what every account opens. An empty list is "opens nothing yet".
 	Groups map[string][]Place `json:"groups"`
@@ -417,33 +385,23 @@ type ReachResponse struct {
 }
 
 // handleReach answers what each group opens, for the mappings page.
-func (s *server) handleReach(w http.ResponseWriter, _ *http.Request, _ []byte) {
-	groups, err := s.readGroups()
-	if err != nil {
-		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's groups could not be read.", nil)
+func (s *server) handleReach(w http.ResponseWriter, r *http.Request, _ []byte) {
+	read, obs, err := s.reach(wantsFresh(r))
+	if writeCooldown(w, err) {
 		return
 	}
-	read, at, stale, err := s.readACLs()
 	if errors.Is(err, errNeverRead) {
 		writeError(w, http.StatusServiceUnavailable, CodeReachNeverRead,
 			"The folder permissions have not been read since the add-on started.", nil)
 		return
 	}
 	if err != nil {
-		writeError(w, statusFor(err), CodeTargetUnreadable, "The folder permissions could not be read.", nil)
+		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's groups could not be read.", nil)
 		return
 	}
 	nobody := principals{} // an account in no group: what everyone@ alone opens
-	out := ReachResponse{TakenAt: at, Current: stale == "", Groups: map[string][]Place{},
-		Everyone: placesFor(read.places, nobody, nil)}
-	switch stale {
-	case aclCached:
-		out.Stale = &Stale{Reason: aclCached, RetryAfter: int(max(0, (reachMaxAge - time.Since(at)).Seconds())),
-			Note: "The folder permissions as read at " + at.UTC().Format(time.RFC3339) + "; they are read again after five minutes."}
-	case aclUnreachable:
-		out.Stale = unreachableSince(at)
-	}
-	for _, g := range groups {
+	out := ReachResponse{Observed: obs, Groups: map[string][]Place{}, Everyone: placesFor(read.places, nobody, nil)}
+	for _, g := range read.groups {
 		if !g.Builtin {
 			out.Groups[g.Name] = placesFor(read.places, principals{g.GID: true}, nobody)
 		}
@@ -455,15 +413,11 @@ func (s *server) handleReach(w http.ResponseWriter, _ *http.Request, _ []byte) {
 // open, then its home folder first. Usage is filled in for the places it can
 // change, one quota read per dataset.
 func (s *server) memberPlaces(uid int64, groupIDs []apiID, home string) ([]Place, error) {
-	groups, err := s.readGroups()
+	read, _, err := s.reach(false)
 	if err != nil {
 		return nil, err
 	}
-	read, _, _, err := s.readACLs()
-	if err != nil {
-		return nil, err
-	}
-	byID := gidsOf(groups)
+	byID := gidsOf(read.groups)
 	who := principals{}
 	for _, id := range groupIDs {
 		if gid, ok := byID[id.String()]; ok {

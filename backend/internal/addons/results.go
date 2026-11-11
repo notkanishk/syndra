@@ -52,10 +52,15 @@ type ReadReply struct {
 	// refusal (422: no bound account) from any other.
 	Status int
 	Err    error
+	// RetryAfter is the add-on refusing a fresh read inside its cooldown with
+	// nothing to serve (cooldownOf): the seconds until it may read the app.
+	RetryAfter int
 }
 
 // Read sends one effect: read operation about subject, on behalf of actor.
-func Read(ctx context.Context, target, op, subject, actor string, params map[string]any) ReadReply {
+// fresh asks for a read of the app now (feature freshness): a person pressing
+// "Read again", never a page load or a poll.
+func Read(ctx context.Context, target, op, subject, actor string, params map[string]any, fresh bool) ReadReply {
 	out := ReadReply{Operation: op, Outcome: OutcomeUnreached}
 	eff, err := ResolveOperation(target, op)
 	if err != nil {
@@ -100,12 +105,12 @@ func Read(ctx context.Context, target, op, subject, actor string, params map[str
 		out.Err = err
 		return out
 	}
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/" + url.PathEscape(op), Body: body})
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/" + url.PathEscape(op), Body: body, Fresh: fresh})
 	if err != nil {
 		out.Err = err
 		return out
 	}
-	out.Body, out.Outcome, out.Status, out.Err = resp.Body, resp.Outcome, resp.Status, resp.Err
+	out.Body, out.Outcome, out.Status, out.Err, out.RetryAfter = resp.Body, resp.Outcome, resp.Status, resp.Err, cooldownOf(resp)
 	return out
 }
 
@@ -304,12 +309,50 @@ func (spec needSpec) check(raw json.RawMessage) error {
 	return nil
 }
 
-// decodeShape unmarshals raw into into once it holds to spec.
+// decodeShape unmarshals raw into into once it holds to spec and to the stale
+// invariant.
 func decodeShape(spec needSpec, raw json.RawMessage, into any) error {
 	if err := spec.check(raw); err != nil {
 		return err
 	}
+	if err := staleInvariant(raw); err != nil {
+		return err
+	}
 	return json.Unmarshal(raw, into)
+}
+
+// StaleCooldown is stale.reason for a fresh read asked inside the add-on's
+// cooldown and answered with the last read (common/stale.json).
+const StaleCooldown = "cooldown"
+
+// staleInvariant holds a reply to design §4's `current == false` ⇔ `stale`
+// present (common/stale.json#/$defs/Invariant). A reply breaking it says two
+// things about one read, and is not a reading. One with no `current` says
+// nothing here; whether it must is the shape's own need.
+func staleInvariant(raw []byte) error {
+	var o struct {
+		Current *bool           `json:"current"`
+		Stale   json.RawMessage `json:"stale"`
+	}
+	if json.Unmarshal(raw, &o) != nil || o.Current == nil {
+		return nil
+	}
+	if hasStale := len(o.Stale) > 0 && string(o.Stale) != "null"; *o.Current == hasStale {
+		return fmt.Errorf("current is %t and stale is %s: current is false exactly when stale is present", *o.Current,
+			map[bool]string{true: "present", false: "absent"}[hasStale])
+	}
+	return nil
+}
+
+// cooldownOf is a reply refusing a fresh read inside the add-on's cooldown
+// with nothing to serve (FRESH_READ_COOLDOWN, 429): the seconds until another
+// may read the app, at least 1, so a missing Retry-After still reads as a
+// cooldown. 0 for any other reply.
+func cooldownOf(resp CallResponse) int {
+	if resp.Code != codeFreshReadCooldown {
+		return 0
+	}
+	return max(1, resp.RetryAfter)
 }
 
 // ReadView is one read for a generic renderer: the shape, the decoded result,
@@ -323,6 +366,9 @@ type ReadView struct {
 	Readable bool     `json:"readable"`
 	Result   any      `json:"result,omitempty"`
 	AlsoSays []string `json:"also_says,omitempty"`
+	// RetryAfter is a fresh read refused inside the add-on's cooldown with
+	// nothing to serve: unreadable, and readable again in this many seconds.
+	RetryAfter int `json:"retry_after,omitempty"`
 }
 
 // rawResultCap bounds an id's own result shown raw: the least trusted
@@ -333,12 +379,15 @@ const rawResultCap = 4 << 10
 // one; a legacy pocket is read by its own typed reader alone.
 func (r ReadReply) View() ReadView {
 	sh := shapes[r.Schema]
-	v := ReadView{Operation: r.Operation, Shape: sh.shape}
+	v := ReadView{Operation: r.Operation, Shape: sh.shape, RetryAfter: r.RetryAfter}
 	raw, err := r.answer()
 	if err != nil || !r.Results {
 		return v
 	}
 	if sh.shape == "" {
+		if staleInvariant(raw) != nil {
+			return v
+		}
 		shown := string(raw)
 		if len(shown) > rawResultCap {
 			shown = shown[:rawResultCap] + "…"

@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -141,7 +142,8 @@ func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
 			skipped = append(skipped, res.ID)
 		}
 	}
-	want := []string{"subjects.paged", "replay.29d", "results", "operations.physical", "freshness", "dangerous-scopes"}
+	want := []string{"subjects.paged", "replay.29d", "results", "operations.physical",
+		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable", "dangerous-scopes"}
 	if !slices.Equal(skipped, want) {
 		t.Errorf("skipped %v, want exactly %v", skipped, want)
 	}
@@ -223,9 +225,13 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.StateShowsUnlisted:  "unlisted-hidden",
 		reference.ResultOffSchema:     "results",
 		reference.ResultInPocket:      "results",
+		reference.CachedAsCurrent:     "freshness.cached",
+		reference.ReadsPerRequest:     "freshness.coalesce",
+		reference.CooldownIgnored:     "freshness.cooldown",
 	}
 	// A defect in a feature's half is served with that feature declared.
-	features := map[reference.Defect][]string{reference.ResultOffSchema: {"results"}, reference.ResultInPocket: {"results"}}
+	features := map[reference.Defect][]string{reference.ResultOffSchema: {"results"}, reference.ResultInPocket: {"results"},
+		reference.CachedAsCurrent: {"freshness"}, reference.ReadsPerRequest: {"freshness"}, reference.CooldownIgnored: {"freshness"}}
 	for _, d := range reference.Defects {
 		id, ok := catches[d]
 		if !ok {
@@ -1616,5 +1622,184 @@ func TestTheResultsCheckJudgesOnlyWhatIsDeclared(t *testing.T) {
 	}
 	if got := r.Status("results"); got != "fail" {
 		t.Errorf("holdings.list declared without results: results says %s, want fail", got)
+	}
+}
+
+// The freshness checks skip against a reference without the feature and pass
+// against one serving it, -mutate run and all: its mirror must not stop the
+// writes (mutate's before read is fresh), and the writes clear the mirror so
+// every read after one is live. A fresh read never reaches /plan or a write.
+func TestTheFreshnessChecksJudgeOnlyWhatIsDeclared(t *testing.T) {
+	url, _ := serve(t, testSecret, nil)
+	r := run(t, config(url, false))
+	for _, res := range r.Results {
+		if slices.Contains(freshChecks, res.ID) && (res.Status != "skip" || !slices.Equal(res.Detail, []string{"feature freshness not declared"})) {
+			t.Errorf("%s says %s %v against a reference without freshness, want skip: feature freshness not declared", res.ID, res.Status, res.Detail)
+		}
+	}
+
+	var fresh []string
+	var mu sync.Mutex
+	url, _ = serveRewriting(t, testSecret, func(r *http.Request, body []byte, answered bool) {
+		if !answered && (r.URL.Query().Has("fresh") || bytes.Contains(body, []byte(`"fresh"`))) {
+			mu.Lock()
+			fresh = append(fresh, r.Method+" "+r.URL.Path)
+			mu.Unlock()
+		}
+	}, nil, []string{"freshness"})
+	r = run(t, config(url, true))
+	for _, f := range failures(r) {
+		t.Errorf("%s failed against the reference serving freshness: %v", f.ID, f.Detail)
+	}
+	for _, id := range freshChecks[:3] {
+		if got := r.Status(id); got != "pass" {
+			t.Errorf("%s says %s against the reference serving freshness, want pass", id, got)
+		}
+	}
+	if r.Status("freshness.unreachable") != "skip" || r.Left != leftOne {
+		t.Errorf("freshness.unreachable %s, left %q", r.Status("freshness.unreachable"), r.Left)
+	}
+	if bad := slices.DeleteFunc(slices.Clone(fresh), func(s string) bool { return s == "GET /subjects" }); len(bad) > 0 || len(fresh) == 0 {
+		t.Errorf("fresh was sent on %v; want GET /subjects only, at least once", fresh)
+	}
+}
+
+func TestIsoDurationReadsOnlyTheTwoForms(t *testing.T) {
+	for in, want := range map[string]time.Duration{"PT1S": time.Second, "PT30S": 30 * time.Second, "PT2M": 2 * time.Minute} {
+		if got, ok := isoDuration(in); !ok || got != want {
+			t.Errorf("%s read as %v %v, want %v", in, got, ok, want)
+		}
+	}
+	for _, in := range []string{"", "30S", "PT", "PTS", "PT1H", "P1D", "PT-1S", "PT1.5S"} {
+		if _, ok := isoDuration(in); ok {
+			t.Errorf("%q read as a cooldown", in)
+		}
+	}
+}
+
+// Three wrong answers no defect of the reference serves, made by rewriting its
+// replies: a cached answer that read the app all the same (each plain read
+// counted in target_reads), a cooled answer that did (each fresh read
+// counted), and a fresh read past the cooldown that is never current.
+func TestTheFreshnessChecksCatchWhatTheDefectsCannotServe(t *testing.T) {
+	for _, tc := range []struct {
+		name, check string
+		rewrite     func(plain, fresh *atomic.Int64) func(*http.Request, []byte) []byte
+	}{
+		{"a cached answer reads the app", "freshness.cached", func(plain, _ *atomic.Int64) func(*http.Request, []byte) []byte {
+			return countedIn(plain)
+		}},
+		{"a cooled answer reads the app", "freshness.cooldown", func(_, fresh *atomic.Int64) func(*http.Request, []byte) []byte {
+			return countedIn(fresh)
+		}},
+		{"a cooled answer says current", "freshness.cooldown", func(_, _ *atomic.Int64) func(*http.Request, []byte) []byte {
+			return func(r *http.Request, reply []byte) []byte {
+				var doc map[string]any
+				if r.URL.Path != "/subjects" || json.Unmarshal(reply, &doc) != nil {
+					return reply
+				}
+				if s, _ := doc["stale"].(map[string]any); s["reason"] == "cooldown" {
+					delete(doc, "stale")
+					doc["current"] = true
+				}
+				out, _ := json.Marshal(doc)
+				return out
+			}
+		}},
+		{"a fresh read reads nothing and says current", "freshness.cooldown", func(_, _ *atomic.Int64) func(*http.Request, []byte) []byte {
+			return func(r *http.Request, reply []byte) []byte {
+				if r.URL.Path != "/health" {
+					return reply
+				}
+				var doc map[string]any
+				_ = json.Unmarshal(reply, &doc)
+				doc["target_reads"] = 7 // the app is never read
+				out, _ := json.Marshal(doc)
+				return out
+			}
+		}},
+		{"a fresh read is never current", "freshness.cooldown", func(_, _ *atomic.Int64) func(*http.Request, []byte) []byte {
+			return func(r *http.Request, reply []byte) []byte {
+				if r.URL.Path != "/subjects" || !r.URL.Query().Has("fresh") {
+					return reply
+				}
+				var doc map[string]any
+				_ = json.Unmarshal(reply, &doc)
+				doc["current"], doc["stale"] = false, map[string]any{"reason": "cooldown", "retry_after": 1}
+				out, _ := json.Marshal(doc)
+				return out
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var plain, fresh atomic.Int64
+			rewrite := tc.rewrite(&plain, &fresh)
+			url, _ := serveRewriting(t, testSecret, func(r *http.Request, _ []byte, answered bool) {
+				if !answered && r.URL.Path == "/subjects" {
+					map[bool]*atomic.Int64{false: &plain, true: &fresh}[r.URL.Query().Has("fresh")].Add(1)
+				}
+			}, rewrite, []string{"freshness"})
+			if got := run(t, config(url, false)).Status(tc.check); got != "fail" {
+				t.Errorf("%s says %s, want fail", tc.check, got)
+			}
+		})
+	}
+}
+
+// countedIn adds n to every health.target_reads, as if each request it counts
+// had read the app.
+func countedIn(n *atomic.Int64) func(*http.Request, []byte) []byte {
+	return func(r *http.Request, reply []byte) []byte {
+		if r.URL.Path != "/health" {
+			return reply
+		}
+		var doc map[string]any
+		_ = json.Unmarshal(reply, &doc)
+		doc["target_reads"] = doc["target_reads"].(float64) + float64(n.Load())
+		out, _ := json.Marshal(doc)
+		return out
+	}
+}
+
+// A fresh read inside the cooldown may instead be 429 FRESH_READ_COOLDOWN, the
+// TrueNAS add-on's answer with nothing kept: passed with Retry-After in
+// delay-seconds (RFC 9110 §10.2.3), failed without one or with 0.
+func TestACooldownMayBeA429WithRetryAfter(t *testing.T) {
+	for header, want := range map[string]string{"1": "pass", "": "fail", "0": "fail"} {
+		t.Run("Retry-After "+strconv.Quote(header), func(t *testing.T) {
+			t.Parallel()
+			addon, err := reference.New(reference.Config{Target: "reference", Secret: []byte(testSecret), Features: []string{"freshness"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := addon.Handler()
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, r)
+				var doc map[string]any
+				_ = json.Unmarshal(rec.Body.Bytes(), &doc)
+				if s, _ := doc["stale"].(map[string]any); r.URL.Path != "/subjects" || s["reason"] != "cooldown" {
+					maps.Copy(w.Header(), rec.Header())
+					w.WriteHeader(rec.Code)
+					_, _ = w.Write(rec.Body.Bytes())
+					return
+				}
+				w.Header().Set("Content-Type", "application/problem+json")
+				if header != "" {
+					w.Header().Set("Retry-After", header)
+				}
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = fmt.Fprint(w, `{"type":"urn:syndra:addon:error:FRESH_READ_COOLDOWN","title":"Fresh read cooldown","status":429,`+
+					`"detail":"Read under a second ago.","code":"FRESH_READ_COOLDOWN","retry":"retry_after"}`)
+			}))
+			srv.TLS = &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{addon.Certificate()}}
+			srv.StartTLS()
+			t.Cleanup(srv.Close)
+			r := run(t, config(srv.URL, false))
+			if got := r.Status("freshness.cooldown"); got != want {
+				t.Errorf("freshness.cooldown says %s, want %s: %v", got, want, failures(r))
+			}
+		})
 	}
 }

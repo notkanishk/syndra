@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // storage.status answers the two questions a member actually has: can I use
@@ -37,9 +36,8 @@ type StorageStatus struct {
 	// Meters is what they hold in each share they can see, against its quota.
 	// Empty is a real answer when QuotaRead is true.
 	Meters []Meter `json:"meters"`
-	// TakenAt is when the account was read: always now, never the mirror.
-	TakenAt string `json:"taken_at"`
-	Current bool   `json:"current"`
+	// Observed is when the account was read, set by readNow (fresh.go).
+	Observed
 	// Places is everywhere this account can connect, read from the folder
 	// ACLs for the groups it is actually in, home folder first (reach.go).
 	// PlacesReadable is false when the ACLs have never been read; an empty
@@ -85,11 +83,13 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 
-	status := StorageStatus{Meters: []Meter{}, Places: []Place{}, TakenAt: time.Now().UTC().Format(time.RFC3339), Current: true}
+	status := StorageStatus{Meters: []Meter{}, Places: []Place{}}
 
-	// Account state from a live read, not the mirror. This is the field a
-	// member is about to act on, and a mirror could be six hours old — telling
-	// somebody to set a password they set this morning.
+	// Account state from a read of the NAS, not the subjects mirror. This is
+	// the field a member is about to act on, and that mirror could be six hours
+	// old — telling somebody to set a password they set this morning. Its own
+	// copy (fresh.go) is forgotten by every write, so a password set through
+	// this add-on shows on the next read.
 	var accounts []struct {
 		UID              int64   `json:"uid"`
 		SMB              bool    `json:"smb"`
