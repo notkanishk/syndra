@@ -14,6 +14,9 @@
 
 import { sortByName } from "@/lib/sort";
 
+/** What the storage page is called, said once. */
+export const STORAGE_LABEL = "Network storage";
+
 export type UiView = "basic" | "advanced";
 export type Audience = UiView | "member";
 
@@ -277,7 +280,7 @@ export const MEMBER_NAV: NavEntry[] = [
    * answer to the question a member without access is asking, which is "can I
    * get storage?". The page answers that; a missing row does not.
    */
-  leaf("Network storage", "/storage"),
+  leaf(STORAGE_LABEL, "/storage"),
   /**
    * The family seat (addon-contract 3.10): last, so nothing above it ever
    * moves. `memberNav` draws one row here per system Syndra has read whose kind
@@ -333,7 +336,7 @@ export function memberNav(systems: readonly NavSystem[]): NavEntry[] {
  * an operator. A member already has the same page in their rail, and one row
  * per job means the sheet doesn't offer it to them twice.
  */
-export const ACCOUNT_NAV: NavLeaf[] = [leaf("My access", "/me"), leaf("Network storage", "/storage")];
+export const ACCOUNT_NAV: NavLeaf[] = [leaf("My access", "/me"), leaf(STORAGE_LABEL, "/storage")];
 
 /**
  * The account sheet's rows: `ACCOUNT_NAV`, then the operator's own systems

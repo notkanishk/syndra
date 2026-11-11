@@ -106,13 +106,17 @@ func TestNamingASystem(t *testing.T) {
 	set := dbSetTargetName
 	t.Cleanup(func() { dbSetTargetName = set })
 	var wrote []string
+	stored := "Big laser"
 	dbSetTargetName = func(_ context.Context, target, name, actor string) error {
 		if len(name) > 60 {
 			return db.ErrTargetNameInvalid
 		}
 		wrote = append(wrote, target+"="+name)
+		stored = name
 		return nil
 	}
+	// The stored name follows the writes, so a clear reads back as the product.
+	dbTargetName = func(context.Context, string) (string, error) { return stored, nil }
 	put := func(target, body string) *httptest.ResponseRecorder {
 		rr := httptest.NewRecorder()
 		NewRouter().ServeHTTP(rr, operatorRequest(http.MethodPut, "/api/v1/targets/"+target+"/name", body))
@@ -133,10 +137,12 @@ func TestNamingASystem(t *testing.T) {
 		t.Errorf("a long name is a sentence, got %d %s", rr.Code, rr.Body.String())
 	}
 	rr := put("laser", `{"name":"  Big laser  "}`)
-	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"name":"Big laser"`) {
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"name":"Big laser"`) ||
+		!strings.Contains(rr.Body.String(), `"name_from":"operator"`) {
 		t.Errorf("naming: %d %s", rr.Code, rr.Body.String())
 	}
-	if rr := put("laser", `{"name":"   "}`); rr.Code != http.StatusOK {
+	if rr := put("laser", `{"name":"   "}`); rr.Code != http.StatusOK ||
+		!strings.Contains(rr.Body.String(), `"name_from":"product"`) {
 		t.Errorf("clearing: %d %s", rr.Code, rr.Body.String())
 	}
 	if strings.Join(wrote, ",") != "laser=Big laser,laser=" {

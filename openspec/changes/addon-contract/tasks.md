@@ -701,6 +701,12 @@ already did). See 3.7.
       (`stateOf`/`PASSWORD_STEP`, moved there from `MyStorage`), only for kind
       `storage`; a door, a laser or a system not read never asks. No other
       kind-blind credential read exists.
+    - `versionLabel` also strips the whole product name off a version that
+      starts with it ("TrueNAS-SCALE-24.04.0" beside "TrueNAS"), as text.
+    - The Name hint for a named storage system says "Network storage page"
+      (it has no menu row of its own); the account hold is found by the
+      schema's account ROLE (`isHold`, `kinds/storage/state.ts`), never the
+      field name `enabled`.
     - `product` is a display name: the TrueNAS add-on reports `"TrueNAS"` from
       one constant (`productName`) that its fixture test pins; fixtures,
       `contract_routes_test`, the schema's `product` description and the

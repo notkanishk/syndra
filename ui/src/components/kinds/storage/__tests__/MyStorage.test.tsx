@@ -310,6 +310,33 @@ describe("when changes can't happen", () => {
     expect(passwordField()).toBeNull();
   });
 
+  it("held: found by the schema's account role, whatever the add-on calls the field", () => {
+    const schema = TRUENAS_SCHEMA.map((f) => (f.role === "account" ? { ...f, name: "active" } : f));
+    state.targets = [
+      view({
+        entitled: false,
+        entitlement_schema: schema,
+        suspended: [{ field: "active", value: "true", reason: "safety review", actor_id: "op", since: "2026-10-09T10:00:00Z" }],
+      }),
+    ];
+    renderStorage();
+    expect(screen.getByText("Your account is switched off for now")).toBeTruthy();
+    expect(screen.getByText("On hold since 9 Oct")).toBeTruthy();
+  });
+
+  it("a field named enabled that is not the account is a held-back change, not a hold", () => {
+    const schema = TRUENAS_SCHEMA.map((f) => (f.role === "account" ? { ...f, name: "active" } : f));
+    state.targets = [
+      view({
+        entitled: false,
+        entitlement_schema: schema,
+        suspended: [{ field: "enabled", value: "true", reason: "safety review", actor_id: "op" }],
+      }),
+    ];
+    renderStorage();
+    expect(screen.queryByText("Your account is switched off for now")).toBeNull();
+  });
+
   it("a held-back folder is named with its reason, never dropped", () => {
     state.targets = [view({ suspended: [{ field: "group", value: "lab_archive", reason: "moving pools", actor_id: "op" }] })];
     renderStorage();

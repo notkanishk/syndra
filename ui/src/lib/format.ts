@@ -327,11 +327,17 @@ export function whyNotChecked(reason: string): string {
  * ("TrueNAS-25.10.5"), which doubled the name wherever it was shown beside
  * one ("TrueNAS TrueNAS-25.10.5"). Stripped once, here, so every caller gets
  * a plain version number: the words before the number go when the product's
- * name starts with them ("TrueNAS SCALE" beside "TrueNAS-24.10.2"). Compared
+ * name starts with them ("TrueNAS SCALE" beside "TrueNAS-24.10.2"), or the
+ * whole product name when the version starts with it ("TrueNAS-SCALE-24.04.0"
+ * beside "TrueNAS" leaves "SCALE-24.04.0"). Compared
  * as text, never built into a pattern: the name is the add-on's data.
  */
 export function versionLabel(product: string, productVersion?: string): string {
   if (!productVersion) return "";
+  if (product && productVersion.toLowerCase().startsWith(product.toLowerCase())) {
+    const rest = productVersion.slice(product.length).replace(/^[-\s]/, "");
+    return rest || productVersion;
+  }
   const [, lead, number] = /^(\D*?)[-\s]*(\d.*)$/.exec(productVersion) ?? [];
   return lead && product.toLowerCase().startsWith(lead.toLowerCase()) ? number : productVersion;
 }

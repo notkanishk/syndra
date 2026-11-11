@@ -1,3 +1,4 @@
+import { accountField } from "@/lib/fields";
 import { isStorage } from "@/lib/nav";
 import type { MyTargetView } from "@/lib/queries/useMyStorage";
 
@@ -18,11 +19,19 @@ export type State =
   | "opens-nothing"
   | "nohost";
 
+/**
+ * The pause on the account itself, found by the schema's account ROLE, never
+ * by a field's name: another storage add-on may call it anything.
+ */
+export function isHold(view: MyTargetView, s: { field: string }): boolean {
+  return s.field === accountField(view.entitlement_schema)?.name;
+}
+
 /** Where this member is, as one of the board's states. */
 export function stateOf(view: MyTargetView): State {
   const suspended = view.suspended ?? [];
   if (!view.entitled) {
-    return suspended.some((s) => s.field === "enabled") ? "held" : "none";
+    return suspended.some((s) => isHold(view, s)) ? "held" : "none";
   }
   if (!view.account) return "waiting";
   const storage = view.storage;

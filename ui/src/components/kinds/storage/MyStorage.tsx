@@ -18,7 +18,7 @@ import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
 import type { GuideFolder } from "@/components/kinds/storage/ConnectionGuide";
 import { deviceFrom, type Device } from "@/components/kinds/storage/device";
-import { PASSWORD_STEP, stateOf, type State } from "@/components/kinds/storage/state";
+import { PASSWORD_STEP, isHold, stateOf, type State } from "@/components/kinds/storage/state";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
@@ -189,9 +189,9 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
         </>
       )}
 
-      {!hasAccount && (view.suspended ?? []).filter((s) => s.field !== "enabled").length > 0 && (
+      {!hasAccount && (view.suspended ?? []).filter((s) => !isHold(view, s)).length > 0 && (
         <div className="px-5 pb-5">
-          <Withheld items={(view.suspended ?? []).filter((s) => s.field !== "enabled")} schemaOf={() => view.entitlement_schema} />
+          <Withheld items={(view.suspended ?? []).filter((s) => !isHold(view, s))} schemaOf={() => view.entitlement_schema} />
         </div>
       )}
     </Card>
@@ -206,7 +206,7 @@ const PAUSE_ENDS = "Makerspace staff end the pause; account changes held back wa
 const PERSON = "Need it today? Ask makerspace staff: they can see this pause and how long it should last.";
 
 function copyFor(state: State, label: string, view: MyTargetView): [string, string, React.ReactNode] {
-  const hold = (view.suspended ?? []).find((s) => s.field === "enabled");
+  const hold = (view.suspended ?? []).find((s) => isHold(view, s));
   const ready = "Copy an address below into your computer, then sign in with your account name and storage password.";
   switch (state) {
     case "none":
@@ -393,7 +393,7 @@ function Folders({
   const storage = view.storage;
   const offline = view.health === "offline";
   const locked = PASSWORD_STEP.has(state);
-  const withheld = (view.suspended ?? []).filter((s) => s.field !== "enabled");
+  const withheld = (view.suspended ?? []).filter((s) => !isHold(view, s));
   const host = view.connection?.host;
   // Nothing is pinned: the home folder sorts by its name like the rest.
   const places = sortByName(storage?.places ?? [], placeName, (p) => p.path);

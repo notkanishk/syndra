@@ -6,6 +6,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { STORAGE_LABEL, isStorage } from "@/lib/nav";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { useSetTargetName, type TargetSummary } from "@/lib/queries/useTargets";
 
@@ -28,7 +29,11 @@ export function nameHint(registered: TargetSummary): string {
       ? "Members don't see this system until Syndra has read it. Then they see this name."
       : `Members don't see this system until Syndra has read it. Until you name it, it is ${name}, from its id.`;
   }
-  if (from === "operator") return "Members see this on their menu and their pages. Clear it to go back to the default name.";
+  if (from === "operator") {
+    // Storage folds into the fixed Network storage row: no menu row of its own.
+    const where = isStorage(registered) ? `on their ${STORAGE_LABEL} page` : "on their menu and their pages";
+    return `Members see this ${where}. Clear it to go back to the default name.`;
+  }
   return from === "product"
     ? `Members see it as ${name}, the product's own name. Name it here to tell two of the same make apart.`
     : `Members see it as ${name}, from its id. Name it here to give it a name people know.`;
