@@ -212,7 +212,7 @@ func fieldIsInt(target, field string) bool {
 	}
 	for _, f := range schema {
 		if f.Name == field {
-			return f.Type == "int"
+			return f.IsLimit()
 		}
 	}
 	return false

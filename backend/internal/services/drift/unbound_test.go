@@ -50,12 +50,12 @@ func TestThePassCreatesAccountsForUnboundHolders(t *testing.T) {
 func TestAPassDoesNotQueueASecondRowForABoundSubjectAlreadyWaiting(t *testing.T) {
 	h := &addonReconcileHarness{
 		read: currentRead(
-			addons.TargetAccount{Username: "charlotte", UID: 3001},
-			addons.TargetAccount{Username: "booker", UID: 3002},
+			addons.TargetAccount{Username: "charlotte", AccountID: "3001"},
+			addons.TargetAccount{Username: "booker", AccountID: "3002"},
 		),
 		bindings: []db.TargetBinding{
-			{Target: "truenas", SubjectID: "u_waiting", Username: "charlotte", AccountUID: uid(3001)},
-			{Target: "truenas", SubjectID: "u_new", Username: "booker", AccountUID: uid(3002)},
+			{Target: "truenas", SubjectID: "u_waiting", Username: "charlotte", AccountID: uid(3001)},
+			{Target: "truenas", SubjectID: "u_new", Username: "booker", AccountID: uid(3002)},
 		},
 		plan: addons.PlanResult{
 			Outcome: addons.OutcomeSucceeded, Current: true,
@@ -82,8 +82,8 @@ func TestAPassDoesNotQueueASecondRowForABoundSubjectAlreadyWaiting(t *testing.T)
 // apply the older state (an account enabled for someone deactivated since).
 func TestAPassQueuesANewRowWhenTheWaitingOneWantsSomethingElse(t *testing.T) {
 	h := &addonReconcileHarness{
-		read:     currentRead(addons.TargetAccount{Username: "charlotte", UID: 3001}),
-		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountUID: uid(3001)}},
+		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
 		plan: addons.PlanResult{
 			Outcome: addons.OutcomeSucceeded, Current: true,
 			Outcomes: []addons.SubjectOutcome{{Subject: "u1", Effect: db.PlanEffectApply}},

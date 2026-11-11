@@ -24,7 +24,7 @@ import (
 type adoptHarness struct {
 	outcome   addons.Outcome
 	addonErr  error
-	uid       int64
+	uid       string
 	dispatchd []addonop.Request
 	recorded  []db.TargetBinding
 }
@@ -40,7 +40,7 @@ func stubAdopt(t *testing.T, h *adoptHarness) {
 		if outcome == "" {
 			outcome = addons.OutcomeSucceeded
 		}
-		return addonop.Result{OperationID: "op_1", Outcome: outcome, Err: h.addonErr, AccountUID: h.uid}, nil
+		return addonop.Result{OperationID: "op_1", Outcome: outcome, Err: h.addonErr, AccountID: h.uid}, nil
 	}
 	dbRecordTargetBinding = func(_ context.Context, b db.TargetBinding) error {
 		h.recorded = append(h.recorded, b)
@@ -63,7 +63,7 @@ func adopt(t *testing.T, body string) *httptest.ResponseRecorder {
 // account the moment somebody renames it, and the account then reappears in the
 // unmanaged inventory for a second person to adopt.
 func TestASuccessfulAdoptionRecordsTheAccountsUID(t *testing.T) {
-	h := &adoptHarness{uid: 3002}
+	h := &adoptHarness{uid: "3002"}
 	stubAdopt(t, h)
 
 	rr := adopt(t, `{"subject_id":"u1","confirmed":true}`)
@@ -73,21 +73,21 @@ func TestASuccessfulAdoptionRecordsTheAccountsUID(t *testing.T) {
 	if len(h.recorded) != 1 {
 		t.Fatalf("want one binding, got %d", len(h.recorded))
 	}
-	if h.recorded[0].AccountUID == nil || *h.recorded[0].AccountUID != 3002 {
-		t.Errorf("the uid must travel into the binding: %+v", h.recorded[0].AccountUID)
+	if h.recorded[0].AccountID == nil || *h.recorded[0].AccountID != "3002" {
+		t.Errorf("the account id must travel into the binding: %+v", h.recorded[0].AccountID)
 	}
 }
 
 // And a uid nobody reported is absent rather than zero. uid 0 is root.
 func TestAnUnreportedUIDIsNotRecordedAsRoot(t *testing.T) {
-	h := &adoptHarness{uid: 0}
+	h := &adoptHarness{uid: ""}
 	stubAdopt(t, h)
 
 	if rr := adopt(t, `{"subject_id":"u1","confirmed":true}`); rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rr.Code)
 	}
-	if len(h.recorded) != 1 || h.recorded[0].AccountUID != nil {
-		t.Errorf("a missing uid must stay missing, got %+v", h.recorded[0].AccountUID)
+	if len(h.recorded) != 1 || h.recorded[0].AccountID != nil {
+		t.Errorf("a missing account id must stay missing, got %+v", h.recorded[0].AccountID)
 	}
 }
 

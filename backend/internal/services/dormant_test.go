@@ -27,7 +27,7 @@ func stubDormant(t *testing.T) {
 			Outcome:  addons.OutcomeSucceeded,
 			Current:  true,
 			TakenAt:  time.Now(),
-			Accounts: []addons.TargetAccount{{Username: "charlotte", UID: 3001}, {Username: "seth", UID: 3002}},
+			Accounts: []addons.TargetAccount{{Username: "charlotte", AccountID: "3001"}, {Username: "seth", AccountID: "3002"}},
 		}
 	}
 	dormantBindings = func(context.Context, string) ([]db.TargetBinding, error) {
@@ -139,7 +139,7 @@ func TestABindingToAnAbsentAccountIsNotDormant(t *testing.T) {
 	dormantSubjects = func(context.Context, string) addons.SubjectsResult {
 		return addons.SubjectsResult{
 			Outcome: addons.OutcomeSucceeded, Current: true, TakenAt: time.Now(),
-			Accounts: []addons.TargetAccount{{Username: "charlotte", UID: 3001}},
+			Accounts: []addons.TargetAccount{{Username: "charlotte", AccountID: "3001"}},
 		}
 	}
 

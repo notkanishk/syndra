@@ -14,7 +14,7 @@ import (
 // A hold takes effect at the next send, not at the next reconcile up to six
 // hours later. So does lifting it.
 func TestAHoldAndItsLiftConvergeThatPerson(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	create, lift, converge := dbCreateAllowance, dbLiftAllowance, svcConvergeSubjectOn
 	t.Cleanup(func() { dbCreateAllowance, dbLiftAllowance, svcConvergeSubjectOn = create, lift, converge })
 	var asked []string
@@ -71,8 +71,8 @@ func TestADeactivatedPersonIsConvergedWhereTheyHaveAnAccount(t *testing.T) {
 // Only a field the add-on marks per-person can be set for one person.
 func TestOnlyPerPersonFieldsCanBeSetForOnePerson(t *testing.T) {
 	stubMappingDeps(t, []addons.EntitlementField{
-		{Name: "group", Type: "string[]"},
-		{Name: "home_quota", Type: "int", PerPerson: true},
+		{Name: "group", Role: "membership"},
+		{Name: "home_quota", Role: "limit", PerPerson: true},
 	})
 	create := dbCreateAllowance
 	t.Cleanup(func() { dbCreateAllowance = create })
@@ -103,7 +103,7 @@ func TestOnlyPerPersonFieldsCanBeSetForOnePerson(t *testing.T) {
 // A home folder limit is a whole number of bytes; anything else is refused
 // before the add-on is asked.
 func TestALimitMustBeAWholeNumber(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "home_quota", Type: "int", Label: "Home folder limit", Single: true}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "home_quota", Role: "limit", Label: "Home folder limit"}})
 	rr := postMapping(`{"target":"truenas","project_id":"p","role_key":"maker","field":"home_quota","value":"lots"}`)
 	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "Home folder limit takes a whole number") {
 		t.Fatalf("want a refusal naming the field, got %d %s", rr.Code, rr.Body.String())

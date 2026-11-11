@@ -271,6 +271,15 @@ func (k *kit) current(c *check) {
 		schema string
 	}
 	reads := []pair{{"/subjects", nil, ""}, {"/plan", k.planBody(map[string]any{k.m.account: false}), "plan_request.json"}}
+	// The storage profile's reads carry current too (design §4's table), and
+	// a cache served as current is the same mirror answering as if it were
+	// live: held to the same rule when the feature is declared.
+	if k.m.has("storage.reach") {
+		reads = append(reads, pair{"/reach", nil, ""})
+	}
+	if k.m.has("storage.homes") {
+		reads = append(reads, pair{"/homes", nil, ""})
+	}
 	first := make([]map[string]any, len(reads))
 	for i, r := range reads {
 		first[i] = k.readFor(r.target, r.body, r.schema)

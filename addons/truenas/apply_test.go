@@ -267,6 +267,40 @@ func withFingerprint(t *testing.T, s *server, body string) string {
 	return string(encoded)
 }
 
+// problemCode is a refusal's code, from the problem+json body (contract 2).
+func problemCode(t *testing.T, rr *httptest.ResponseRecorder) string {
+	t.Helper()
+	var p struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &p)
+	return p.Code
+}
+
+// decodeOutcome reads an apply outcome from a 200, or from a blocked or
+// conflicting apply's problem, whose extension members are the outcome.
+// A channel is off whenever the account is (design §3): switching the account
+// off takes SMB with it whatever the request said of SMB, and the observation
+// reports both, since both were converged.
+func TestSwitchingTheAccountOffTakesSMBWithIt(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+	for i, desired := range []string{`{"enabled":false}`, `{"enabled":false,"smb_enabled":true}`} {
+		m.updates = nil
+		m.fakeRPC.users = `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`
+		rr := postApply(t, s, `{"call_id":"off-`+strconvI(int64(i+1))+`","subject":"sub-1","email":"charlotte@example.edu","desired":`+desired+`}`)
+		out := decodeOutcome(t, rr)
+		if rr.Code != http.StatusOK || len(m.updates) != 1 || m.updates[0]["smb"] != false || m.updates[0]["locked"] != true {
+			t.Fatalf("%s: want one update locking the account and turning SMB off, got %d %v", desired, rr.Code, m.updates)
+		}
+		if out.Observed[FieldSMBEnabled] != false || out.Observed[FieldEnabled] != false {
+			t.Errorf("%s: observed %v", desired, out.Observed)
+		}
+	}
+}
+
 func decodeOutcome(t *testing.T, rr *httptest.ResponseRecorder) ApplyOutcome {
 	t.Helper()
 	var out ApplyOutcome
@@ -397,7 +431,7 @@ func TestACollidingUnboundAccountHaltsAndSurfacesTheDecision(t *testing.T) {
 	if out.Effect != EffectBlocked || out.Conflict == nil {
 		t.Fatalf("want a surfaced conflict: %+v", out)
 	}
-	if !out.Conflict.Adoptable || out.Conflict.UID != 9001 {
+	if !out.Conflict.Adoptable || out.Conflict.AccountID != "9001" {
 		t.Errorf("the conflict must carry what an operator needs to decide: %+v", out.Conflict)
 	}
 	// No create, no adopt, no modify.
@@ -494,7 +528,7 @@ func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
 		t.Fatalf("want 409, got %d (%s)", rr.Code, rr.Body.String())
 	}
 	out := decodeOutcome(t, rr)
-	if out.Effect != EffectBlocked || out.Conflict == nil || out.Conflict.UID != 300777 || out.Conflict.Adoptable {
+	if out.Effect != EffectBlocked || out.Conflict == nil || out.Conflict.AccountID != "300777" || out.Conflict.Adoptable {
 		t.Fatalf("want a non-adoptable conflict naming the stranger's uid: %+v", out)
 	}
 	if len(m.creates) != 0 || len(m.updates) != 0 {
@@ -1080,18 +1114,18 @@ func TestTheFingerprintComesFromTheReadAndNotFromTheRequest(t *testing.T) {
 // and reporting it would invite a base claiming authority over something Syndra
 // never set.
 func TestObservedCarriesOnlyTheFieldsTheApplyManages(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]}]`)
+	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":true,"smb":true,"groups":[41,42]}]`)
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
 
 	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu",
-		"desired":{"enabled":false}}`)
+		"desired":{"enabled":true}}`)
 	out := decodeOutcome(t, rr)
 	if _, present := out.Observed[FieldEnabled]; !present {
 		t.Fatalf("the managed field must be observed: %v", out.Observed)
 	}
-	for _, unmanaged := range []string{FieldGroup, FieldSMBEnabled} {
+	for _, unmanaged := range []string{FieldGroup, FieldSMBEnabled, FieldHome} {
 		if _, present := out.Observed[unmanaged]; present {
 			t.Errorf("%s is not managed by this apply and must not be reported as observed: %v",
 				unmanaged, out.Observed)

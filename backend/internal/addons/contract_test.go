@@ -2,13 +2,14 @@ package addons
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-// The backend half of the wire contract (see addons/contract/README.md).
+// The backend half of the wire contract, major 2 (see addons/contract/README.md).
 //
 // These assert that what this package MARSHALS is byte-for-byte the document
 // the add-on's own suite decodes strictly. Two modules, no shared type, so the
@@ -27,11 +28,27 @@ import (
 // disagree with the first.
 func contractFixture(t *testing.T, name string) []byte {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "addons", "contract", "v1", "fixtures", name))
+	raw, err := os.ReadFile(filepath.Join(contractDir, "fixtures", name))
 	if err != nil {
 		t.Fatalf("read contract fixture %s: %v", name, err)
 	}
 	return raw
+}
+
+// fixtureWithout is a fixture less some keys: the keys a feature this backend
+// does not send introduces, or a value only the run decides (a call_id minted
+// from a row).
+func fixtureWithout(t *testing.T, name string, keys ...string) []byte {
+	t.Helper()
+	var doc map[string]any
+	if err := json.Unmarshal(contractFixture(t, name), &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range keys {
+		delete(doc, k)
+	}
+	out, _ := json.Marshal(doc)
+	return out
 }
 
 // sameJSON compares two documents by value, ignoring key order and whitespace.
@@ -47,29 +64,20 @@ func sameJSON(t *testing.T, got, want []byte, what string) {
 	}
 	gn, _ := json.Marshal(g)
 	wn, _ := json.Marshal(w)
-	if !bytes.Equal(canonical(t, gn), canonical(t, wn)) {
+	if !bytes.Equal(gn, wn) {
 		t.Errorf("%s: the encoded envelope does not match the contract fixture\n got: %s\nwant: %s", what, gn, wn)
 	}
 }
 
-// canonical re-encodes through a map so key order is Go's sorted order on both
-// sides.
-func canonical(t *testing.T, in []byte) []byte {
-	t.Helper()
-	var v any
-	if err := json.Unmarshal(in, &v); err != nil {
-		t.Fatalf("canonicalise: %v", err)
-	}
-	out, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("canonicalise: %v", err)
-	}
-	return out
+var fixtureDesired = map[string]json.RawMessage{
+	"group":       json.RawMessage(`["lab_makers","fabrication"]`),
+	"home":        json.RawMessage(`["true"]`),
+	"home_quota":  json.RawMessage(`["5368709120"]`),
+	"enabled":     json.RawMessage(`true`),
+	"smb_enabled": json.RawMessage(`true`),
 }
 
 func TestApplyEnvelopeMatchesContract(t *testing.T) {
-	fixture := contractFixture(t, "apply_request.json")
-
 	// Built from the fixture's own values, so a failure is about the SHAPE. A
 	// field the add-on declares and this envelope omits shows up as a missing
 	// key; a field this envelope sends and the add-on's struct does not declare
@@ -78,61 +86,57 @@ func TestApplyEnvelopeMatchesContract(t *testing.T) {
 		ContractVersion: ContractVersion,
 		CallID:          "0f8b7a1c-6d2e-4c53-9a10-2b7c9d4e5f60",
 		Subject:         "289471021834760193",
-		Email:           "bianca.belair@example.edu",
+		Email:           "bianca.belair@example.org",
 		Fingerprint:     "sha256:9d1c4f0b7e2a",
 		PlanID:          "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd",
 		Actor:           "operator-289471021834760199",
-		Desired: map[string]json.RawMessage{
-			"group":       json.RawMessage(`["lab_makers","fabrication"]`),
-			"enabled":     json.RawMessage(`true`),
-			"smb_enabled": json.RawMessage(`true`),
-		},
+		Desired:         fixtureDesired,
 	})
 	if err != nil {
 		t.Fatalf("encode apply envelope: %v", err)
 	}
-	sameJSON(t, body, fixture, "apply")
+	sameJSON(t, body, contractFixture(t, "apply_request.json"), "apply")
 }
 
+// The operation fixture carries preview (feature calls) and fresh (feature
+// freshness), which this backend never sends: it knows neither feature yet,
+// and a strict add-on that did not declare one refuses the key. Everything
+// else is the fixture, byte for byte.
 func TestCallEnvelopeMatchesContract(t *testing.T) {
-	fixture := contractFixture(t, "operation_request.json")
-
 	body, err := json.Marshal(callEnvelope{
 		ContractVersion: ContractVersion,
 		CallID:          "5a2d9e30-1b44-4f7c-9e08-6d3a2c1b0f95",
-		Operation:       "password.set",
+		Operation:       "storage.status",
 		Subject:         "289471021834760193",
 		Actor:           "289471021834760193",
 		PlanID:          "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd",
 		Fingerprint:     "sha256:9d1c4f0b7e2a",
-		Params:          map[string]any{"password": "fixture-value-not-a-credential"},
+		Params:          map[string]any{"since": "2026-11-01T00:00:00Z"},
 	})
 	if err != nil {
 		t.Fatalf("encode call envelope: %v", err)
 	}
-	sameJSON(t, body, fixture, "operation")
+	sameJSON(t, body, fixtureWithout(t, "operation_request.json", "preview", "fresh"), "operation")
+	for _, key := range []string{`"preview"`, `"fresh"`} {
+		if bytes.Contains(body, []byte(key)) {
+			t.Errorf("the backend sends %s, a feature key it does not know", key)
+		}
+	}
 }
 
 func TestPlanEnvelopeMatchesContract(t *testing.T) {
-	fixture := contractFixture(t, "plan_request.json")
-
 	body, err := json.Marshal(planEnvelope{
 		ContractVersion: ContractVersion,
 		Subjects: []planSubjectWire{{
 			Subject: "289471021834760193",
-			Email:   "bianca.belair@example.edu",
-			Desired: map[string]json.RawMessage{
-				"group":       json.RawMessage(`["lab_makers","fabrication"]`),
-				"enabled":     json.RawMessage(`true`),
-				"smb_enabled": json.RawMessage(`true`),
-			},
+			Email:   "bianca.belair@example.org",
+			Desired: fixtureDesired,
 		}},
-		AcknowledgeScope: true,
 	})
 	if err != nil {
 		t.Fatalf("encode plan envelope: %v", err)
 	}
-	sameJSON(t, body, fixture, "plan")
+	sameJSON(t, body, contractFixture(t, "plan_request.json"), "plan")
 }
 
 // TestContractVersionIsDeclaredOnEveryMutatingEnvelope is the guard for the
@@ -157,81 +161,80 @@ func TestContractVersionIsDeclaredOnEveryMutatingEnvelope(t *testing.T) {
 		if err := json.Unmarshal(body, &fields); err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
-		raw, present := fields["contract_version"]
-		if !present {
-			t.Errorf("%s envelope carries no contract_version", tc.name)
-			continue
-		}
-		if string(raw) == "0" {
-			t.Errorf("%s envelope sends contract_version 0, which every receiver reads as a caller from before the field existed", tc.name)
+		if raw := fields["contract_version"]; string(raw) != "2" {
+			t.Errorf("%s envelope sends contract_version %s, want 2", tc.name, raw)
 		}
 	}
 }
 
-// The reply leg, against the artifact the add-on produces.
-//
-// This direction had no fixture, and the safety of adding `observed` to it
-// rested on "the backend decodes leniently" — true, and written in a comment,
-// which is the form an assumption takes right up until it is wrong. It is now
-// the same kind of artifact as the three request bodies, held from both ends:
-// the add-on's suite asserts it ENCODES this document, and this asserts the
-// backend decodes it and keeps every field it reads.
-func TestTheAddOnsApplyOutcomeDecodesHere(t *testing.T) {
-	var out ApplyResponse
-	if err := json.Unmarshal(contractFixture(t, "apply_response.json"), &out); err != nil {
-		t.Fatalf("the add-on's apply outcome was refused: %v", err)
+// applyAgainst runs the real Apply against an add-on answering status and body.
+func applyAgainst(t *testing.T, status int, body []byte) ApplyResponse {
+	t.Helper()
+	addonServingStatus(t, status, body)
+	return Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "289471021834760193",
+		CallID: "row-1", Fingerprint: "f", Desired: fixtureDesired})
+}
+
+// The reply leg: what the backend keeps of the add-on's apply outcome, through
+// the real Apply.
+func TestTheAddOnsApplyOutcomeLandsHere(t *testing.T) {
+	out := applyAgainst(t, 200, contractFixture(t, "apply_response.json"))
+	if out.Outcome != OutcomeSucceeded || out.Effect != "applied" || out.Detail == "" {
+		t.Fatalf("the outcome did not land: %+v", out)
 	}
-	// Every field this side reads, named individually. A list is a third place
-	// to forget something — but the alternative here, a whole-struct zero check,
-	// would fail on the fields this side deliberately does not decode.
-	if out.Effect != "applied" {
-		t.Errorf("effect did not arrive: %q", out.Effect)
+	if out.Username != "bianca.belair" || out.AccountID != "3042" {
+		t.Errorf("the account identity did not land: %q/%q", out.Username, out.AccountID)
 	}
-	if out.Username != "bianca.belair" || out.UID != 3042 {
-		t.Errorf("the account identity did not arrive: %q/%d", out.Username, out.UID)
+	if out.Standing == nil || out.Standing.WaitingOn != "member" || out.Standing.Usable || out.Standing.Note == "" || out.Standing.Next == "" {
+		t.Errorf("standing did not land: %+v", out.Standing)
 	}
-	if out.Fingerprint == "" {
-		t.Error("fingerprint did not arrive")
-	}
-	if out.Detail == "" {
-		t.Error("detail did not arrive — it is the only prose this side renders")
+	if out.Fingerprint == "" || len(out.Observed) != 5 || out.Unverified {
+		t.Errorf("fingerprint and observation did not land: %q %v", out.Fingerprint, out.Observed)
 	}
 }
 
-// And the leniency itself, asserted rather than assumed. `observed` is not read
-// here yet; its consumer is the merge base. What must be true TODAY is that a
-// field this side does not declare cannot break the call — which is the mirror
-// of the defect the request fixtures exist for, where a field the add-on did
-// not declare would have failed every apply in production.
+// A blocked or conflicting apply is a problem whose extension members are the
+// outcome (contract 2): rejected, with the code, the detail and the account.
+func TestABlockedApplyLandsAsARejectionWithItsOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		fixture, code, username string
+		status                  int
+	}{
+		{"error_apply_blocked.json", "APPLY_BLOCKED", "bianca.belair", 422},
+		{"error_binding_conflict.json", "BINDING_CONFLICT", "", 409},
+	} {
+		out := applyAgainst(t, tc.status, contractFixture(t, tc.fixture))
+		if out.Outcome != OutcomeRejected || out.Code != tc.code || out.Effect != effectBlocked || out.Detail == "" || out.Username != tc.username {
+			t.Errorf("%s: %+v", tc.fixture, out)
+		}
+		if out.Fingerprint != "" || out.Observed != nil {
+			t.Errorf("%s: a refusal must carry no observation: %+v", tc.fixture, out)
+		}
+	}
+}
+
+// And the leniency, asserted rather than assumed: a field this side does not
+// declare cannot break the call; an outcome that names no effect is not one.
 func TestAnOutcomeCarryingFieldsThisSideIgnoresStillDecodes(t *testing.T) {
-	body := []byte(`{"subject":"sub-1","effect":"applied","detail":"Updated charlotte.",
-		"username":"charlotte","uid":3001,"fingerprint":"abc123",
-		"observed":{"group":["lab_makers"],"enabled":true},
-		"consequence":"ignored here","a_field_from_a_newer_addon":42}`)
-
-	var out ApplyResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		t.Fatalf("the backend must tolerate fields it does not read: %v", err)
-	}
-	if out.Effect != "applied" || out.Username != "charlotte" || out.Fingerprint != "abc123" {
+	out := applyAgainst(t, 200, []byte(`{"subject":"sub-1","effect":"applied","detail":"Updated charlotte.",
+		"username":"charlotte","account_id":"3001","standing":{"usable":true,"waiting_on":"none"},"fingerprint":"abc123",
+		"observed":{"group":["lab_makers"],"enabled":true},"consequence":"ignored here","a_field_from_a_newer_addon":42}`))
+	if out.Outcome != OutcomeSucceeded || out.Effect != "applied" || out.Username != "charlotte" || out.Fingerprint != "abc123" {
 		t.Fatalf("the fields this side does read must survive: %+v", out)
 	}
+	out = applyAgainst(t, 200, []byte(`{"subject":"sub-1","detail":"Updated charlotte.","username":"charlotte"}`))
+	if out.Outcome != OutcomeIndeterminate {
+		t.Fatalf("a 200 naming no effect said what it did not do: %+v", out)
+	}
 }
 
-// And the unverified case, whose sentence has to reach a surface. It travels in
-// `detail` because that is the field this struct decodes — a statement carried
-// only in `consequence` would be read by nobody, since nothing on this side
-// looks at that key.
+// And the unverified case, whose sentence has to reach a surface: in `detail`,
+// which this side reads.
 func TestAnUnverifiedApplyCarriesItsSentenceWhereTheBackendReadsIt(t *testing.T) {
-	body := []byte(`{"subject":"sub-1","effect":"applied","unverified":true,
+	out := applyAgainst(t, 200, []byte(`{"subject":"sub-1","effect":"applied","unverified":true,
 		"detail":"Updated charlotte. The account could not be read back afterwards, so what the target now holds has not been confirmed.",
-		"consequence":"ignored by this side"}`)
-
-	var out ApplyResponse
-	if err := json.Unmarshal(body, &out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if !bytes.Contains([]byte(out.Detail), []byte("has not been confirmed")) {
-		t.Fatalf("the operator-facing sentence must be in a field this side decodes: %q", out.Detail)
+		"consequence":"ignored by this side"}`))
+	if !out.Unverified || !bytes.Contains([]byte(out.Detail), []byte("has not been confirmed")) {
+		t.Fatalf("the operator-facing sentence must be in a field this side decodes: %+v", out)
 	}
 }

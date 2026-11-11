@@ -66,7 +66,7 @@ func stubAddonDrain(t *testing.T, rows ...models.PendingPropagation) *addonHarne
 	// not reach the real database. "Nobody else holds it" is the ordinary case
 	// and makes the finding unrecordable, which is the right default: a test
 	// that wants a conflict recorded says so.
-	t.Cleanup(swap(&bindingHolder, func(context.Context, string, string, int64) (string, bool, error) {
+	t.Cleanup(swap(&bindingHolder, func(context.Context, string, string, string) (string, bool, error) {
 		return "", false, nil
 	}))
 	t.Cleanup(swap(&saveConflict, func(context.Context, db.BindingConflict) error { return nil }))
@@ -617,7 +617,7 @@ func TestThePreflightProbesTheTargetRatherThanTheAddon(t *testing.T) {
 // so it is never revisited.
 func TestARefusedBindingDoesNotSettleApplied(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001"}
 	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
 		return fmt.Errorf("%w: charlotte on truenas", db.ErrBindingConflict)
 	}))
@@ -654,7 +654,7 @@ func TestARefusedBindingDoesNotSettleApplied(t *testing.T) {
 // failure an operator has to triage.
 func TestATransientBindingWriteFailureStillSettlesApplied(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001"}
 	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
 		return errors.New("connection reset by peer")
 	}))
@@ -678,16 +678,16 @@ func TestATransientBindingWriteFailureStillSettlesApplied(t *testing.T) {
 // has to outlive the drain that produced it, like the log anchor's does.
 func TestABindingConflictIsRecordedAsAStandingFinding(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001"}
 	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
 		return fmt.Errorf("%w: charlotte on truenas", db.ErrBindingConflict)
 	}))
 	// The other claimant is READ BACK rather than inferred: the conflict may
 	// have been raised by the uid index on an account renamed out of band, and
 	// guessing from the reported name would put the wrong person on a screen.
-	t.Cleanup(swap(&bindingHolder, func(_ context.Context, target, username string, uid int64) (string, bool, error) {
-		if target != "truenas" || username != "charlotte" || uid != 3001 {
-			t.Errorf("the holder lookup must carry both keys: %s %s %d", target, username, uid)
+	t.Cleanup(swap(&bindingHolder, func(_ context.Context, target, username string, uid string) (string, bool, error) {
+		if target != "truenas" || username != "charlotte" || uid != "3001" {
+			t.Errorf("the holder lookup must carry both keys: %s %s %s", target, username, uid)
 		}
 		return "subject-a", true, nil
 	}))
@@ -707,7 +707,7 @@ func TestABindingConflictIsRecordedAsAStandingFinding(t *testing.T) {
 	if got.ConvergedSubjectID != "sub-1" || got.BoundSubjectID != "subject-a" {
 		t.Errorf("both claimants must be named: %+v", got)
 	}
-	if got.Username != "charlotte" || got.AccountUID == nil || *got.AccountUID != 3001 {
+	if got.Username != "charlotte" || got.AccountID == nil || *got.AccountID != "3001" {
 		t.Errorf("the account must be identified by name and uid: %+v", got)
 	}
 	if got.OutboxID == "" {
@@ -720,11 +720,11 @@ func TestABindingConflictIsRecordedAsAStandingFinding(t *testing.T) {
 // row's reason, which already carries the account name.
 func TestAConflictWithNoTraceableHolderStillSettlesTerminally(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001"}
 	t.Cleanup(swap(&saveBinding, func(context.Context, db.TargetBinding) error {
 		return fmt.Errorf("%w: charlotte on truenas", db.ErrBindingConflict)
 	}))
-	t.Cleanup(swap(&bindingHolder, func(context.Context, string, string, int64) (string, bool, error) {
+	t.Cleanup(swap(&bindingHolder, func(context.Context, string, string, string) (string, bool, error) {
 		return "", false, nil
 	}))
 	t.Cleanup(swap(&saveConflict, func(context.Context, db.BindingConflict) error {
@@ -753,7 +753,7 @@ func TestAConflictWithNoTraceableHolderStillSettlesTerminally(t *testing.T) {
 func TestAConfirmedApplyRecordsWhatTheTargetReported(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
 	h.resp = addons.ApplyResponse{
-		Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001,
+		Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001",
 		Observed: map[string]json.RawMessage{
 			"group":   json.RawMessage(`["lab_makers"]`),
 			"enabled": json.RawMessage(`true`),
@@ -785,7 +785,7 @@ func TestAWithdrawOnlyApplyRecordsAPartialBase(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
 	h.intent.WithdrawsOnly = true
 	h.resp = addons.ApplyResponse{
-		Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001,
+		Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001",
 		Observed: map[string]json.RawMessage{"enabled": json.RawMessage(`false`), "smb_enabled": json.RawMessage(`false`)},
 	}
 	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
@@ -801,7 +801,7 @@ func TestAnUnverifiedApplyRecordsNoBase(t *testing.T) {
 	// The write landed; the read after it did not. The add-on says so and sends
 	// no observation.
 	h.resp = addons.ApplyResponse{
-		Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001, Unverified: true,
+		Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001", Unverified: true,
 	}
 
 	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
@@ -821,7 +821,7 @@ func TestAnUnverifiedApplyRecordsNoBase(t *testing.T) {
 // absence is legible rather than an error.
 func TestAnApplyWithNoObservationRecordsNoBase(t *testing.T) {
 	h := stubAddonDrain(t, addonRow("o1"))
-	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", UID: 3001}
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001"}
 
 	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
 		t.Fatal(err)
@@ -856,5 +856,28 @@ func TestAStalePlanIsNotMarkedAsTheTargetsRefusal(t *testing.T) {
 	}
 	if len(h.refused) != 0 || !strings.Contains(h.failed["o1"], "PLAN_STALE") {
 		t.Fatalf("want a plain PLAN_STALE failure, got refused %v failed %v", h.refused, h.failed)
+	}
+}
+
+// The rollback shape (contract 2, task 1.5): the new backend against a
+// contract-1 add-on. Its CONTRACT_VERSION_MISMATCH reaches here as unreached
+// (addons.classifyStatus), so the row is requeued and, once spent, failed as
+// out of retries: never target_refused, so the person's next withdrawal never
+// waits for an operator.
+func TestAShapeRefusalIsRequeuedNeverTargetRefused(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Status: 422, Code: "CONTRACT_VERSION_MISMATCH"}
+	res, _ := DrainAddon(context.Background(), "truenas")
+	if res.Requeued != 1 || len(h.refused) != 0 || res.Failed != 0 {
+		t.Fatalf("a shape refusal must requeue and refuse nothing: %+v refused %v", res, h.refused)
+	}
+
+	spent := addonRow("o2")
+	spent.Attempts = maxRetries
+	h = stubAddonDrain(t, spent)
+	h.resp = addons.ApplyResponse{Outcome: addons.OutcomeUnreached, Status: 422, Code: "CONTRACT_VERSION_MISMATCH"}
+	DrainAddon(context.Background(), "truenas")
+	if len(h.refused) != 0 || !strings.Contains(h.failed["o2"], "out of retries") {
+		t.Fatalf("a spent shape refusal must fail as out of retries, never target_refused: %v %v", h.refused, h.failed)
 	}
 }

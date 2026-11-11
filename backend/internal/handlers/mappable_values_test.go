@@ -17,9 +17,9 @@ func stubValuesSchema(t *testing.T) {
 	t.Cleanup(func() { addonsEntitlementSchema = schema })
 	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) {
 		return []addons.EntitlementField{
-			{Name: "group", Type: "string[]", Label: "Group on TrueNAS"},
-			{Name: "home", Type: "bool", Label: "Gives a home folder", Single: true},
-			{Name: "enabled", Type: "bool", Lifecycle: true},
+			{Name: "group", Role: "membership", Label: "Group on TrueNAS"},
+			{Name: "home", Role: "flag", Label: "Gives a home folder"},
+			{Name: "enabled", Role: "account"},
 		}, nil
 	}
 }

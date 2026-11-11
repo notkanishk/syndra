@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -37,7 +38,7 @@ const SignatureHeader = "X-Syndra-Addon-Signature"
 // ContractVersion is what this add-on speaks. The backend refuses to register a
 // version it does not support, loudly and at startup, rather than discovering
 // the mismatch later as a field that is silently absent.
-const ContractVersion = 1
+const ContractVersion = 2
 
 // signatureTolerance bounds how old a signed request may be.
 //
@@ -101,14 +102,27 @@ func (a *authenticator) verify(r *http.Request) ([]byte, error) {
 		// holding one refactor later.
 		return nil, errNoSigningKey
 	}
-	if err := a.verifySignature(r.Header.Get(SignatureHeader), r.Method, r.URL.Path, body); err != nil {
+	if err := a.verifySignature(r.Header.Get(SignatureHeader), r.Method, signedTarget(r.URL), body); err != nil {
 		return nil, err
 	}
 	return body, nil
 }
 
+// signedTarget is what the MAC covers of the URL (contract 2, decision 24): the
+// path ESCAPED, exactly as sent, plus "?" and the raw query when there is one —
+// as RFC 9421's @query has it, never sorted or re-encoded. An empty query adds
+// nothing, so a query-less MAC is byte-identical to contract 1's whenever the
+// path needs no escaping. Contract 1 signed the decoded path and no query, which
+// left a query (a cursor, a since) outside the signature.
+func signedTarget(u *url.URL) string {
+	if u.RawQuery == "" {
+		return u.EscapedPath()
+	}
+	return u.EscapedPath() + "?" + u.RawQuery
+}
+
 // verifySignature checks "t=<unix>,v1=<hex>" over
-// "<unix>.<method>.<path>.<body>".
+// "<unix>.<method>.<target>.<body>", target being signedTarget.
 //
 // The timestamp is inside the MAC input rather than merely beside it, so it
 // cannot be edited to extend a captured signature's life; the body is inside
@@ -120,7 +134,7 @@ func (a *authenticator) verify(r *http.Request) ([]byte, error) {
 // inside the two-minute window, whichever path it was replayed at. The call-id
 // dedup happened to block the sequential version of that, which is a mitigation
 // standing where a check should be.
-func (a *authenticator) verifySignature(header, method, path string, body []byte) error {
+func (a *authenticator) verifySignature(header, method, target string, body []byte) error {
 	if strings.TrimSpace(header) == "" {
 		return errNoSignature
 	}
@@ -153,7 +167,7 @@ func (a *authenticator) verifySignature(header, method, path string, body []byte
 		return errStaleSignature
 	}
 
-	want := computeMAC(seconds, method, path, body, a.signingKey)
+	want := computeMAC(seconds, method, target, body, a.signingKey)
 	got, err := hex.DecodeString(mac)
 	if err != nil {
 		return errBadSignature
@@ -170,13 +184,13 @@ func (a *authenticator) verifySignature(header, method, path string, body []byte
 // two are separately deployed binaries and the constant is written out on both
 // sides on purpose — a shared module would hide the version skew the contract
 // version exists to surface — so a change to one is a change to both.
-func computeMAC(unix int64, method, path string, body, key []byte) []byte {
+func computeMAC(unix int64, method, target string, body, key []byte) []byte {
 	m := hmac.New(sha256.New, key)
 	fmt.Fprintf(m, "%d", unix)
 	m.Write([]byte("."))
 	m.Write([]byte(method))
 	m.Write([]byte("."))
-	m.Write([]byte(path))
+	m.Write([]byte(target))
 	m.Write([]byte("."))
 	m.Write(body)
 	return m.Sum(nil)
@@ -197,7 +211,7 @@ func (a *authenticator) authenticated(next func(http.ResponseWriter, *http.Reque
 			// failed, and the operator debugging a real misconfiguration reads
 			// the add-on's log.
 			logRefusal(r, err)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": CodeUnauthenticated})
+			writeError(w, http.StatusUnauthorized, CodeUnauthenticated, "The request is not signed by this add-on's caller.", nil)
 			return
 		}
 		next(w, r, body)

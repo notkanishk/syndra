@@ -67,7 +67,8 @@ type OperationResult struct {
 	// Storage is a member's own account state and usage (storage.status).
 	Storage *StorageStatus `json:"storage,omitempty"`
 	Health  *TargetHealth  `json:"health,omitempty"`
-	// AccountUID is the unix identity of the account an adoption bound.
+	// AccountID is the identity (the unix uid, as contract 2's string
+	// account_id) of the account an adoption bound.
 	//
 	// Returned because the backend keeps its own copy of the binding and had no
 	// way to learn this: it knows the NAME the operator clicked, and a name is
@@ -76,22 +77,18 @@ type OperationResult struct {
 	// the field that survives a rename — and a renamed account came back as
 	// unmanaged, adoptable by somebody else, while the backend's binding still
 	// claimed it.
-	AccountUID int64 `json:"account_uid,omitempty"`
+	AccountID string `json:"account_id,omitempty"`
 }
 
 // handleOperation dispatches one named operation.
 func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []byte) {
 	name := r.PathValue("name")
 	var req OperationRequest
-	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
-		return
-	}
-	if !writeContractRefusal(w, req.ContractVersion) {
+	if !decodeRequest(w, body, &req, CodeBadRequest) || !writeContractRefusal(w, req.ContractVersion) {
 		return
 	}
 	if strings.TrimSpace(req.CallID) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "An operation needs a call_id.", nil)
 		return
 	}
 	// The path decides which operation runs; the body says which one the caller
@@ -100,35 +97,27 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 	// drive `account.purge`, and picking the body would let the route the
 	// operator authorised be swapped underneath them.
 	if req.Operation != "" && req.Operation != name {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error":  CodeOperationMismatch,
-			"detail": "the operation named in the body is not the one this route runs",
-		})
+		writeError(w, http.StatusBadRequest, CodeOperationMismatch,
+			"The operation named in the body is not the one this route runs.", nil)
 		return
 	}
-
+	if !mutatingOperation(name) {
+		// A read is never recorded: a read that happens again is a read, and a
+		// 30-day copy of a health report is a copy nobody will ask for.
+		s.operateNow(w, name, req)
+		return
+	}
 	// The same dedup the apply uses, and universal for the same reason: §16
 	// declines a separate nonce store on the grounds that the call id already
-	// prevents replay, and that argument only holds if nothing is exempt.
-	// Keyed by the operation NAME as well as the id. One namespace, so a call
-	// id reused anywhere is still caught — but a cached apply outcome decoded
-	// as an operation result is an all-zero success, and a password.set replayed
-	// at a different operation is a different call, not a duplicate.
-	if cached, found, err := s.store.Recall(req.CallID, kindOperation+name); err != nil {
-		writeRecallFailure(w, err)
-		return
-	} else if found {
-		var previous OperationResult
-		if err := json.Unmarshal(cached, &previous); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
-			return
-		}
-		writeJSON(w, http.StatusOK, previous)
-		return
-	}
-
-	// Reads are never gated by lifecycle state; mutations always are.
-	if mutatingOperation(name) {
+	// prevents replay, and that argument only holds if nothing is exempt. The
+	// kind carries the operation NAME, so a password.set replayed at a
+	// different operation is a different call, not a duplicate. The identity
+	// leaves the secret parameters out, so the store never holds even a hash
+	// of a member's password, and a re-send with another password is a replay
+	// of the first (design §5).
+	identity := map[string]any{"name": name, "subject": req.Subject, "params": publicParams(name, req.Params)}
+	s.once(w, req.CallID, kindOperation+name, identity, func(w http.ResponseWriter) {
+		// Mutations are gated by lifecycle state; reads never are.
 		done, err := s.life.Begin()
 		if err != nil {
 			state, _ := s.life.State()
@@ -136,31 +125,44 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 			return
 		}
 		defer done()
-
 		if supported, why := s.nas.MajorSupported(); !supported {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
-				"error": CodeTargetVersionUnsupported, "detail": why,
-			})
+			writeError(w, http.StatusUnprocessableEntity, CodeTargetVersionUnsupported, why, nil)
 			return
 		}
-	}
+		s.operateNow(w, name, req)
+	})
+}
 
+// operateNow runs one operation and answers it.
+func (s *server) operateNow(w http.ResponseWriter, name string, req OperationRequest) {
 	result, status, err := s.runOperation(name, req)
 	if err != nil {
 		// The error's text is this add-on's own, never the target's response
 		// body: that body is where a submitted password comes back.
-		writeJSON(w, status, map[string]string{"error": CodeOperationFailed, "detail": err.Error()})
+		writeError(w, status, CodeOperationFailed, err.Error(), nil)
 		return
 	}
-	// Mutations only. A cached read is a 30-day copy of a health report nobody
-	// will ask for twice — the dedup exists so a replayed MUTATION does not
-	// happen again, and a read that happens again is a read.
-	if mutatingOperation(name) {
-		if err := s.store.Remember(req.CallID, kindOperation+name, result); err != nil {
-			logStoreFailure("idempotency", req.CallID, err)
+	writeJSON(w, status, result)
+}
+
+// publicParams is params without the ones this add-on declares secret for the
+// operation: what a request identity may carry (design §5).
+func publicParams(name string, params map[string]any) map[string]any {
+	secret := map[string]bool{}
+	for _, op := range operationSet(nil) {
+		if op.ID == name {
+			for _, p := range op.SecretParams {
+				secret[p] = true
+			}
 		}
 	}
-	writeJSON(w, status, result)
+	out := map[string]any{}
+	for k, v := range params {
+		if !secret[k] {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func mutatingOperation(name string) bool {
@@ -1055,8 +1057,8 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 				// adoption would hand the backend a zero and overwrite a
 				// binding that was correct with one that is not — the repeat
 				// path making the state worse than the first attempt left it.
-				AccountUID: existing.UID,
-				Detail:     fmt.Sprintf("%s was already bound to this subject.", username),
+				AccountID: accountID(existing.UID),
+				Detail:    fmt.Sprintf("%s was already bound to this subject.", username),
 			}, http.StatusOK, nil
 		}
 		// Rebinding is not adoption. The subject already has an account here,
@@ -1120,7 +1122,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	s.record("account.adopt", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
-		AccountUID: account.UID,
-		Detail:     fmt.Sprintf("%s is now bound to this subject. Nothing on the account was changed.", account.Username),
+		AccountID: accountID(account.UID),
+		Detail:    fmt.Sprintf("%s is now bound to this subject. Nothing on the account was changed.", account.Username),
 	}, http.StatusOK, nil
 }

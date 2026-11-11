@@ -105,6 +105,7 @@ var (
 	addonSubjects = addons.Subjects
 	addonPlan     = addons.Plan
 	listBindings  = db.ListTargetBindings
+	fieldRoles    = addons.FieldRoles
 
 	recordConvergence = db.RecordSystemConvergence
 

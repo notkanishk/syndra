@@ -11,7 +11,7 @@ const people = [
 
 function account(i: number) {
   const [id, username] = people[i % 2];
-  return { subject_id: `${id}-${i}`, username: i < 2 ? username : `${username}${i}`, account_uid: 200000 + i, bound_at: "2026-10-15T10:00:00Z" };
+  return { subject_id: `${id}-${i}`, username: i < 2 ? username : `${username}${i}`, account_id: String(200000 + i), bound_at: "2026-10-15T10:00:00Z" };
 }
 
 const state = { count: 2 };

@@ -11,7 +11,7 @@ import (
 // What a target's groups open crosses the wire whole, and an add-on that can't
 // say (never read, or not answering) is "not read yet", never "opens nothing".
 func TestReadReachDecodesTheAnswerAndSaysWhenNothingWasRead(t *testing.T) {
-	status, body := http.StatusOK, `{"read_at":"2026-10-14T09:02:00Z","current":true,
+	status, body := http.StatusOK, `{"taken_at":"2026-10-14T09:02:00Z","current":true,
 		"groups":{"community":[{"share":"main","folder":"waddle_share","path":"/mnt/p/main/waddle_share","access":"change"}],"interns":[]},
 		"everyone":[{"share":"main","path":"/mnt/p/main","access":"read"}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

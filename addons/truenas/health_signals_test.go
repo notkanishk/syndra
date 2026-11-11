@@ -34,11 +34,11 @@ func TestHealthDistinguishesNoExpiryFromAnUnrecordedOne(t *testing.T) {
 			var h Health
 			decodeHealth(t, s, &h)
 
-			if h.KeyExpiry != tc.want {
-				t.Errorf("key_expiry = %q, want %q", h.KeyExpiry, tc.want)
+			if h.CredentialExpiry != tc.want {
+				t.Errorf("credential_expiry = %q, want %q", h.CredentialExpiry, tc.want)
 			}
-			if (h.KeyExpiresAt != nil) != tc.hasDate {
-				t.Errorf("key_expires_at present = %v, want %v", h.KeyExpiresAt != nil, tc.hasDate)
+			if (h.CredentialExpiresAt != nil) != tc.hasDate {
+				t.Errorf("credential_expires_at present = %v, want %v", h.CredentialExpiresAt != nil, tc.hasDate)
 			}
 		})
 	}

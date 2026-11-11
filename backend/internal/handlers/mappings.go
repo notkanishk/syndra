@@ -322,7 +322,7 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 		// sides say so — the manifest flag and the backend's own list — because
 		// the manifest is the least trusted input in the system and this is a
 		// rule about Syndra's resolver, not about the target.
-		if f.Lifecycle || services.IsLifecycleField(f.Name) {
+		if f.IsLifecycle() || services.IsLifecycleField(f.Name) {
 			continue
 		}
 		declared = append(declared, f.Name)
@@ -333,7 +333,7 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 	// A whole-number field (a home folder limit, in bytes) is checked here: the
 	// add-on cannot enumerate it, so nothing downstream would.
 	for _, f := range schema {
-		if f.Name == field && f.Type == "int" {
+		if f.Name == field && f.IsLimit() {
 			if n, err := strconv.ParseInt(value, 10, 64); err != nil || n < 0 {
 				return "", "", addons.Resolution{}, fmt.Errorf("%w: %s takes a whole number, and %q is not one", db.ErrMappingInvalid, fieldLabel(f), value)
 			}

@@ -173,10 +173,12 @@ func goodManifest() Manifest {
 		ContractVersion: ContractVersion,
 		Product:         "TrueNAS SCALE",
 		ProductVersion:  "25.10.0",
+		Kind:            "storage",
+		Features:        []string{"operations", "settings", "storage.reach", "storage.homes"},
 		EntitlementSchema: []EntitlementField{
-			{Name: "group", Type: "string[]"},
-			{Name: "enabled", Type: "bool", Lifecycle: true},
-			{Name: "smb_enabled", Type: "bool", Lifecycle: true},
+			{Name: "group", Role: RoleMembership},
+			{Name: "enabled", Role: RoleAccount},
+			{Name: "smb_enabled", Role: RoleChannel},
 		},
 		Operations: []Operation{
 			{ID: "health.get", Scope: ScopeAdmin, Available: true},
@@ -849,7 +851,7 @@ func TestPendingManifestsNamesWhatHasNotAnswered(t *testing.T) {
 
 	// And it stops naming it the moment one is accepted, so the retry that
 	// start-up runs terminates rather than spinning for its whole budget.
-	withManifest(t, Manifest{ContractVersion: ContractVersion}, nil)
+	withManifest(t, goodManifest(), nil)
 	if err := Refresh(context.Background(), "truenas"); err != nil {
 		t.Fatalf("Refresh: %v", err)
 	}

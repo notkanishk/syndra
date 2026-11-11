@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -181,4 +183,39 @@ func abandonQueuedWorkTx(ctx context.Context, tx pgx.Tx, target string) ([]Aband
 		return nil, fmt.Errorf("abandon queued work for %s: %w", target, err)
 	}
 	return work, nil
+}
+
+// TargetFieldRoles is a target's persisted role map, field name → role, as the
+// backend last accepted it from the add-on's manifest (migration 000088,
+// design §3). found is false before any contract-2 manifest was accepted.
+func TargetFieldRoles(ctx context.Context, target string) (roles map[string]string, found bool, err error) {
+	var raw []byte
+	err = querier(ctx).QueryRow(ctx, `SELECT field_roles FROM targets WHERE target = $1`, target).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && raw == nil) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("read field roles of %s: %w", target, err)
+	}
+	if err := json.Unmarshal(raw, &roles); err != nil {
+		return nil, false, fmt.Errorf("field roles of %s are unreadable: %w", target, err)
+	}
+	return roles, true, nil
+}
+
+// SaveTargetFieldRoles replaces a target's persisted role map. The caller has
+// already refused a map that changes an existing field's role.
+func SaveTargetFieldRoles(ctx context.Context, target string, roles map[string]string) error {
+	raw, err := json.Marshal(roles)
+	if err != nil {
+		return err
+	}
+	tag, err := querier(ctx).Exec(ctx, `UPDATE targets SET field_roles = $2::jsonb WHERE target = $1`, target, raw)
+	if err != nil {
+		return fmt.Errorf("save field roles of %s: %w", target, err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("save field roles of %s: no such target", target)
+	}
+	return nil
 }

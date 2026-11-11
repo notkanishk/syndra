@@ -54,9 +54,6 @@ type EntitlementRehearsal struct {
 	// these people to their resolved state" rather than "give them X".
 	SubjectIDs []string
 	Actor      string
-	// AcknowledgeScope is the operator confirming the blast radius. Checked
-	// against the number of subjects that would CHANGE, not the number selected.
-	AcknowledgeScope bool
 }
 
 // EntitlementPlan is a rehearsal and, once recorded, its citation.
@@ -126,7 +123,7 @@ func RehearseEntitlements(ctx context.Context, req EntitlementRehearsal) (Entitl
 		})
 	}
 
-	answer := addonsPlan(ctx, req.Target, subjects, req.AcknowledgeScope)
+	answer := addonsPlan(ctx, req.Target, subjects)
 	if answer.Outcome != addons.OutcomeSucceeded {
 		return EntitlementPlan{}, fmt.Errorf("%w: %v", ErrTargetUnplannable, answer.Err)
 	}

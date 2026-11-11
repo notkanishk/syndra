@@ -45,7 +45,7 @@ func handleMappableValues(w http.ResponseWriter, r *http.Request) {
 		// What a mapping can set is every field the resolver doesn't compute
 		// itself: `enabled` and `smb_enabled` follow whether someone holds a
 		// mapped role at all.
-		if schema[i].Name == field && !schema[i].Lifecycle {
+		if schema[i].Name == field && !schema[i].IsLifecycle() {
 			spec = &schema[i]
 		}
 	}
@@ -59,7 +59,7 @@ func handleMappableValues(w http.ResponseWriter, r *http.Request) {
 	lastMappableValues.Lock()
 	defer lastMappableValues.Unlock()
 	if got.Outcome == addons.OutcomeSucceeded {
-		answer := mappableValuesAnswer{Field: field, Label: fieldLabel(*spec), Single: spec.Single,
+		answer := mappableValuesAnswer{Field: field, Label: fieldLabel(*spec), Single: spec.IsSingle(),
 			Values: got, ReadAt: time.Now().UTC(), Current: true}
 		lastMappableValues.byKey[key] = answer
 		jsonResponse(w, http.StatusOK, answer)

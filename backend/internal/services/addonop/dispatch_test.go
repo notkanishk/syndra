@@ -669,9 +669,9 @@ func TestTheActorTravelsToTheAddon(t *testing.T) {
 }
 
 // The one field of an add-on's answer this layer parses, held against the
-// contract's own operation reply (addons/contract/v1/fixtures/operation_response.json).
-func TestOperationAnswerReadsAccountUIDFromTheContractFixture(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "addons", "contract", "v1", "fixtures", "operation_response.json"))
+// contract's own operation reply (addons/contract/v2/fixtures/operation_response.json).
+func TestOperationAnswerReadsAccountIDFromTheContractFixture(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "addons", "contract", "v2", "fixtures", "operation_response.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -679,7 +679,7 @@ func TestOperationAnswerReadsAccountUIDFromTheContractFixture(t *testing.T) {
 	if err := json.Unmarshal(raw, &answer); err != nil {
 		t.Fatalf("fixtures/operation_response.json: %v", err)
 	}
-	if answer.AccountUID != 3051 {
-		t.Errorf("account_uid did not land: %d", answer.AccountUID)
+	if answer.AccountID != "3051" {
+		t.Errorf("account_id did not land: %q", answer.AccountID)
 	}
 }

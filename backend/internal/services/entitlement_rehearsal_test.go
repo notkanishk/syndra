@@ -24,15 +24,14 @@ import (
 type planStub struct {
 	asked  []addons.PlanSubject
 	target string
-	ack    bool
 	result addons.PlanResult
 }
 
 func (p *planStub) install(t *testing.T) {
 	t.Helper()
 	prev := addonsPlan
-	addonsPlan = func(_ context.Context, target string, subjects []addons.PlanSubject, ack bool) addons.PlanResult {
-		p.target, p.asked, p.ack = target, subjects, ack
+	addonsPlan = func(_ context.Context, target string, subjects []addons.PlanSubject) addons.PlanResult {
+		p.target, p.asked = target, subjects
 		return p.result
 	}
 	t.Cleanup(func() { addonsPlan = prev })

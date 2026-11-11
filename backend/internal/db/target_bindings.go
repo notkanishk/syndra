@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,11 +27,16 @@ import (
 var ErrBindingConflict = errors.New("db: that account on that target is already bound to another subject")
 
 // TargetBinding is one subject's account on one target.
+//
+// AccountID is the target's own stable id for the account (contract 2's
+// account_id, a string). It is stored in account_id and, while it is a
+// number, in account_uid too, for one release (migration 000088, decision 10),
+// so a rolled-back contract-1 backend still reads it.
 type TargetBinding struct {
 	Target     string    `json:"target"`
 	SubjectID  string    `json:"subject_id"`
 	Username   string    `json:"username"`
-	AccountUID *int64    `json:"account_uid,omitempty"`
+	AccountID  *string   `json:"account_id,omitempty"`
 	BoundBy    string    `json:"bound_by"`
 	BoundAt    time.Time `json:"bound_at"`
 	LastSeenAt time.Time `json:"last_seen_at"`
@@ -59,12 +65,18 @@ func RecordTargetBinding(ctx context.Context, b TargetBinding) error {
 		return fmt.Errorf("%w: no actor", ErrInvalidTargetBinding)
 	}
 
+	// account_uid follows account_id whenever the write carries one (NULL for
+	// a non-numeric id), and stays as it was otherwise: so the two differ only
+	// where a contract-1 backend wrote account_uid, which is exactly what
+	// BackfillAccountIDs corrects. An id, once recorded, is never erased by a
+	// write that reported none.
 	const q = `
-		INSERT INTO target_account_bindings (target, subject_id, username, account_uid, bound_by)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO target_account_bindings (target, subject_id, username, account_id, account_uid, bound_by)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (target, subject_id) DO UPDATE
 		   SET username     = EXCLUDED.username,
-		       account_uid  = COALESCE(EXCLUDED.account_uid, target_account_bindings.account_uid),
+		       account_id   = COALESCE(EXCLUDED.account_id, target_account_bindings.account_id),
+		       account_uid  = CASE WHEN EXCLUDED.account_id IS NOT NULL THEN EXCLUDED.account_uid ELSE target_account_bindings.account_uid END,
 		       last_seen_at = NOW()`
 
 	tx, owned, err := beginOrJoin(ctx)
@@ -74,7 +86,7 @@ func RecordTargetBinding(ctx context.Context, b TargetBinding) error {
 	if owned {
 		defer tx.Rollback(ctx)
 	}
-	if _, err := tx.Exec(ctx, q, b.Target, b.SubjectID, b.Username, b.AccountUID, b.BoundBy); err != nil {
+	if _, err := tx.Exec(ctx, q, b.Target, b.SubjectID, b.Username, b.AccountID, legacyUID(b.AccountID), b.BoundBy); err != nil {
 		// The unique indexes on (target, username) and (target, uid) are what
 		// this can violate, and both mean the same thing: the account belongs to
 		// somebody else already. Reported as that rather than as a constraint
@@ -92,18 +104,51 @@ func RecordTargetBinding(ctx context.Context, b TargetBinding) error {
 	return nil
 }
 
+// accountIDColumn reads account_id, or account_uid where only that was written
+// (a row a contract-1 backend wrote since the last backfill).
+const accountIDColumn = `COALESCE(account_id, account_uid::text)`
+
+// legacyUID is account_id as contract 1's account_uid, written beside it for
+// one release (decision 10): the number when it is one, NULL when it is not
+// (a UUID has no account_uid, and contract 1 never bound one).
+func legacyUID(accountID *string) *int64 {
+	if accountID == nil {
+		return nil
+	}
+	n, err := strconv.ParseInt(*accountID, 10, 64)
+	if err != nil || strconv.FormatInt(n, 10) != *accountID {
+		return nil
+	}
+	return &n
+}
+
+// BackfillAccountIDs makes account_id say what account_uid says wherever a
+// contract-1 backend wrote or updated only the second: before 000088, or
+// during a rollback (a rename it recorded, an account recreated with a new
+// uid). Re-runnable, and run at every start, so a rollback and a forward
+// deploy again lose nothing (task 1.7).
+func BackfillAccountIDs(ctx context.Context) error {
+	for _, table := range []string{"target_account_bindings", "target_binding_conflicts"} {
+		if _, err := querier(ctx).Exec(ctx, `UPDATE `+table+` SET account_id = account_uid::text
+			WHERE account_uid IS NOT NULL AND account_id IS DISTINCT FROM account_uid::text`); err != nil {
+			return fmt.Errorf("backfill account_id in %s: %w", table, err)
+		}
+	}
+	return nil
+}
+
 // ErrInvalidTargetBinding refuses a binding that records nothing usable.
 var ErrInvalidTargetBinding = errors.New("db: invalid target account binding")
 
 // GetTargetBinding returns one subject's account on one target.
 func GetTargetBinding(ctx context.Context, target, subjectID string) (TargetBinding, bool, error) {
 	const q = `
-		SELECT target, subject_id, username, account_uid, bound_by, bound_at, last_seen_at
+		SELECT target, subject_id, username, ` + accountIDColumn + `, bound_by, bound_at, last_seen_at
 		  FROM target_account_bindings
 		 WHERE target = $1 AND subject_id = $2`
 	var b TargetBinding
 	err := querier(ctx).QueryRow(ctx, q, target, subjectID).Scan(
-		&b.Target, &b.SubjectID, &b.Username, &b.AccountUID, &b.BoundBy, &b.BoundAt, &b.LastSeenAt)
+		&b.Target, &b.SubjectID, &b.Username, &b.AccountID, &b.BoundBy, &b.BoundAt, &b.LastSeenAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TargetBinding{}, false, nil
 	}
@@ -120,7 +165,7 @@ func GetTargetBinding(ctx context.Context, target, subjectID string) (TargetBind
 // a full state read.
 func ListTargetBindings(ctx context.Context, target string) ([]TargetBinding, error) {
 	const q = `
-		SELECT target, subject_id, username, account_uid, bound_by, bound_at, last_seen_at
+		SELECT target, subject_id, username, ` + accountIDColumn + `, bound_by, bound_at, last_seen_at
 		  FROM target_account_bindings
 		 WHERE target = $1
 		 ORDER BY username`
@@ -133,7 +178,7 @@ func ListTargetBindings(ctx context.Context, target string) ([]TargetBinding, er
 	var out []TargetBinding
 	for rows.Next() {
 		var b TargetBinding
-		if err := rows.Scan(&b.Target, &b.SubjectID, &b.Username, &b.AccountUID,
+		if err := rows.Scan(&b.Target, &b.SubjectID, &b.Username, &b.AccountID,
 			&b.BoundBy, &b.BoundAt, &b.LastSeenAt); err != nil {
 			return nil, fmt.Errorf("scan binding: %w", err)
 		}

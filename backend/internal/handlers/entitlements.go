@@ -56,7 +56,6 @@ func handleRehearseEntitlements(w http.ResponseWriter, r *http.Request) {
 	actor := resolveActor(r, "")
 	plan, err := svcRehearseEntitlements(r.Context(), services.EntitlementRehearsal{
 		Target: target, SubjectIDs: req.SubjectIDs, Actor: actor,
-		AcknowledgeScope: req.AcknowledgeScope,
 	})
 	if err != nil {
 		writeEntitlementError(w, err)

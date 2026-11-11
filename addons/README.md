@@ -58,7 +58,9 @@ check, because a target's reachability is itself information.
 | `GET /homes` | Every home folder's use and limit (storage profile) |
 | `POST /lifecycle` | `active` · `draining` · `read_only`, at runtime |
 
-The schemas, fixtures and registries for all twelve are in [`contract/`](contract/README.md).
+Every other route answers `404 UNKNOWN_ROUTE`, authenticated like the rest.
+The schemas, fixtures and registries for all twelve (contract 2) are in
+[`contract/`](contract/README.md).
 
 ### The two halves, and why the line is where it is
 
@@ -88,14 +90,23 @@ a supported major is not a promise that every method is present.
 
 ## What an add-on owes
 
-- **Strict decoding, both ways.** Unknown fields are refused rather than
-  ignored, at every boundary. The backend and the add-on are separately
-  deployed binaries and the first real deployment found envelopes carrying
-  fields the other end's decoders never declared.
-- **A contract version**, declared and checked at registration. The two ends
-  never share a Go module: a shared constant would hide exactly the version skew
-  the contract version exists to surface. Constants that must match are written
-  out on both sides and asserted against `contract/`.
+- **Strict requests, tolerant replies.** An add-on refuses a request field it
+  does not know (`400 UNKNOWN_REQUEST_FIELD`), because the backend sends a new
+  field only to an add-on that declared the feature introducing it. The backend
+  reads every reply tolerantly, the manifest included, and shows what it does
+  not know on the target page rather than refusing it (contract 2, design §2).
+- **A contract major and features**, declared in the manifest. The major is
+  checked by equality at registration; everything after it is a feature the
+  backend uses only when the add-on declares it. The two ends never share a Go
+  module: a shared constant would hide exactly the version skew the major exists
+  to surface. Constants that must match are written out on both sides and
+  asserted against `contract/`.
+- **One refusal shape**: every non-2xx is an RFC 9457 `application/problem+json`
+  with a registered `code` (`contract/v2/registry/errors.json`).
+- **Every write carries `contract_version` and `call_id` in its body**, and is
+  answered at most once per `call_id` (design §5): the recorded reply for the
+  same request, `422 CALL_ID_REUSED` for another, `409 CALL_IN_PROGRESS` while
+  it runs. Only a 2xx is recorded.
 - **A mutation log** — append-only, `0600`, fsynced *before* the operation it
   describes. The backend anchors the head, so a truncation or a rewrite is
   detected rather than believed.

@@ -22,7 +22,7 @@ var catalogue = []struct {
 	{id: "health", must: "§6: health validates; log_head and log_records present and typed, log_records advancing on a write; target_reads when freshness is declared"},
 	{id: "subjects", must: "§4, §6: subjects validates; every state key is a schema field in its role's wire shape; current false iff stale"},
 	{id: "subjects.paged", must: "§11: snapshot cursor paging (feature subjects.paged)"},
-	{id: "current", must: "§4: current: true means a read of the app that began after the request arrived, never a mirror"},
+	{id: "current", must: "§4: current: true means a read of the app that began after the request arrived, never a mirror (subjects, plan, and the storage profile's reach and homes when declared)"},
 	{id: "values", must: "§3: every schema field answers /values; account and channel answer false,true; an unknown field is 404 UNKNOWN_FIELD"},
 	{id: "settings", must: "feature settings: GET /settings validates; with -mutate-settings, writing the current value back is accepted (not in design §7's table)"},
 	{id: "plan", must: "§4, §11: plan validates; one outcome with a fingerprint per subject; above limits.subjects_per_plan 422 PLAN_TOO_LARGE with the limit"},

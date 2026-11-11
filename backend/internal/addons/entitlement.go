@@ -57,6 +57,9 @@ type ApplyRequest struct {
 }
 
 // ApplyResponse is what the target did.
+//
+// A view: built from the add-on's reply (applyWire), never decoded into, so a
+// field the backend sets for itself cannot arrive from an add-on (task 1.0).
 type ApplyResponse struct {
 	Outcome Outcome
 	Status  int
@@ -64,35 +67,62 @@ type ApplyResponse struct {
 	// Effect and Username come back from the add-on. `Username` is why account
 	// creation needs no separate operation sequenced before the apply: the
 	// derived name is reported by the convergence that created it.
-	Effect   string `json:"effect"`
-	Username string `json:"username"`
-	// UID is the target's stable identity for the account. Recorded beside the
-	// name because the name can move out of band and this cannot.
-	UID    int64  `json:"uid"`
-	Detail string `json:"detail"`
+	Effect   string
+	Username string
+	// AccountID is the target's stable identity for the account (contract 2's
+	// account_id). Recorded beside the name because the name can move out of
+	// band and this cannot.
+	AccountID string
+	// Standing is whether the account can be used yet, and who is waited on.
+	Standing *Standing
+	Detail   string
 	// Fingerprint is the subject's state afterwards, so the next plan starts
 	// from something current rather than from a read the backend has to make.
-	Fingerprint string `json:"fingerprint"`
+	Fingerprint string
 	// Observed is the managed fields as the TARGET reported them after the
 	// write, which is what becomes the merge base. Never what was requested: a
 	// base that equals the desired state by construction can never produce a
 	// conflict, which is the behaviour the base exists to replace.
-	Observed map[string]json.RawMessage `json:"observed,omitempty"`
+	Observed map[string]json.RawMessage
 	// Unverified says the write landed and could not be read back. The apply is
 	// still an apply — the effect says so — but nothing here may be recorded as
 	// an observation, and that is the point of carrying it separately from the
 	// outcome rather than folding it in.
-	Unverified bool `json:"unverified,omitempty"`
-	// Code is the add-on's own error code on a refusal, from a closed set it
-	// declares. Read for one reason: `PLAN_STALE` is the refusal that means the
-	// subject moved since the diff was approved, and the operator action for it
-	// is a re-plan somebody reads — not "fix it and retry", which is what every
-	// other refusal means.
-	Code string `json:"error"`
+	Unverified bool
+	// Code is the add-on's own code on a refusal, from the registry. Read for
+	// one reason: `PLAN_STALE` is the refusal that means the subject moved since
+	// the diff was approved, and the operator action for it is a re-plan
+	// somebody reads — not "fix it and retry", which is what every other
+	// refusal means.
+	Code string
 	// LifecycleRefusal says the add-on is draining or read-only. Carried apart
 	// from the outcome for the reason `CallResponse` carries it apart: one says
 	// what happened to the work, the other says whether the target is healthy.
 	LifecycleRefusal bool
+}
+
+// Standing is whether an account on a target can be used yet, and who is
+// waited on (contract 2, common/standing.json). Observed, never desired.
+type Standing struct {
+	Usable    bool   `json:"usable"`
+	WaitingOn string `json:"waiting_on"`
+	Note      string `json:"note,omitempty"`
+	Next      string `json:"next,omitempty"`
+}
+
+// applyWire is the add-on's apply outcome as it travels: a 200's body, or a
+// blocked or conflicting apply's problem, whose extension members are the
+// same fields (APPLY_BLOCKED, BINDING_CONFLICT). Effect is a pointer because
+// absence is never a value: an outcome that says no effect says nothing.
+type applyWire struct {
+	Effect      *string                    `json:"effect"`
+	Username    string                     `json:"username"`
+	AccountID   string                     `json:"account_id"`
+	Standing    *Standing                  `json:"standing"`
+	Detail      string                     `json:"detail"`
+	Fingerprint string                     `json:"fingerprint"`
+	Observed    map[string]json.RawMessage `json:"observed"`
+	Unverified  bool                       `json:"unverified"`
 }
 
 // CodePlanStale is the add-on refusing because live state no longer matches the
@@ -166,34 +196,36 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 
 	out := ApplyResponse{
 		Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err,
-		LifecycleRefusal: resp.LifecycleRefusal,
+		LifecycleRefusal: resp.LifecycleRefusal, Code: resp.Code,
 	}
-	if resp.Outcome == OutcomeSucceeded {
-		// A 2xx whose body will not decode is not a success the backend can
-		// record: the add-on acted and did not say what it did, which is the
-		// definition of indeterminate.
-		if err := json.Unmarshal(resp.Body, &out); err != nil {
-			out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode apply outcome: %w", req.Target, err)
-		} else if out.Effect == effectBlocked {
-			// A refusal wearing a 2xx (an add-on image that replayed a
-			// remembered refusal as a 200): nothing changed, so it is rejected,
-			// never recorded as a convergence.
-			out.Outcome, out.Err = OutcomeRejected, fmt.Errorf("addon %s: apply was blocked: %s", req.Target, out.Detail)
+	var wire applyWire
+	decodeErr := json.Unmarshal(resp.Body, &wire)
+	if decodeErr == nil {
+		out.Username, out.AccountID, out.Standing, out.Detail = wire.Username, wire.AccountID, wire.Standing, wire.Detail
+		if wire.Effect != nil {
+			out.Effect = *wire.Effect
 		}
 	}
-	if resp.Outcome == OutcomeRejected {
-		// Only the code and the detail, and only into fields that already
-		// exist. A refusal body is whatever the least trusted component chose
-		// to send; a failure to decode one leaves the refusal exactly as
-		// classified rather than reclassifying it.
-		var refusal struct {
-			Code   string `json:"error"`
-			Detail string `json:"detail"`
+	switch {
+	case resp.Outcome == OutcomeSucceeded && (decodeErr != nil || wire.Effect == nil):
+		// A 2xx whose body will not decode, or names no effect, is not a
+		// success the backend can record: the add-on acted and did not say what
+		// it did, which is the definition of indeterminate.
+		if decodeErr == nil {
+			decodeErr = errors.New("the outcome names no effect")
 		}
-		if err := json.Unmarshal(resp.Body, &refusal); err == nil {
-			out.Code, out.Detail = refusal.Code, refusal.Detail
-		}
+		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode apply outcome: %w", req.Target, decodeErr)
+	case resp.Outcome == OutcomeSucceeded && out.Effect == effectBlocked:
+		// A refusal wearing a 2xx (an add-on image that replayed a remembered
+		// refusal as a 200): nothing changed, so it is rejected, never recorded
+		// as a convergence.
+		out.Outcome, out.Err = OutcomeRejected, fmt.Errorf("addon %s: apply was blocked: %s", req.Target, out.Detail)
+	case resp.Outcome == OutcomeSucceeded:
+		out.Fingerprint, out.Observed, out.Unverified = wire.Fingerprint, wire.Observed, wire.Unverified
 	}
+	// A refusal's body is whatever the least trusted component chose to send;
+	// only its code and detail are read, and only into fields that already
+	// exist. A failure to decode one leaves the refusal exactly as classified.
 	if out.Outcome != OutcomeSucceeded {
 		// Neither body is logged. The request carries a resolved entitlement
 		// set — not a secret, but a person's access — and the response carries

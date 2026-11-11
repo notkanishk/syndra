@@ -33,9 +33,9 @@ type BindingConflict struct {
 	ID       string `json:"id"`
 	Target   string `json:"target"`
 	Username string `json:"username"`
-	// AccountUID is the target's stable identity for the account when it
-	// reported one.
-	AccountUID *int64 `json:"account_uid,omitempty"`
+	// AccountID is the target's stable identity for the account when it
+	// reported one (account_id, beside account_uid for one release).
+	AccountID *string `json:"account_id,omitempty"`
 	// ConvergedSubjectID's change landed on the account; BoundSubjectID is who
 	// Syndra's own binding says owns it. Named apart rather than as
 	// expected/actual, because neither is authoritative.
@@ -69,11 +69,11 @@ func RecordBindingConflict(ctx context.Context, c BindingConflict) error {
 
 	const q = `
 		INSERT INTO target_binding_conflicts
-			(target, username, account_uid, converged_subject_id, bound_subject_id, outbox_id)
-		VALUES ($1, $2, $3, $4, $5, $6::uuid)
+			(target, username, account_id, account_uid, converged_subject_id, bound_subject_id, outbox_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::uuid)
 		ON CONFLICT (target, username) WHERE resolved_at IS NULL DO NOTHING`
 	if _, err := querier(ctx).Exec(ctx, q,
-		c.Target, c.Username, c.AccountUID, c.ConvergedSubjectID, c.BoundSubjectID, c.OutboxID); err != nil {
+		c.Target, c.Username, c.AccountID, legacyUID(c.AccountID), c.ConvergedSubjectID, c.BoundSubjectID, c.OutboxID); err != nil {
 		return fmt.Errorf("record binding conflict on %s: %w", c.Target, err)
 	}
 	return nil
@@ -82,7 +82,7 @@ func RecordBindingConflict(ctx context.Context, c BindingConflict) error {
 // StandingBindingConflicts lists what is still unresolved on a target.
 func StandingBindingConflicts(ctx context.Context, target string) ([]BindingConflict, error) {
 	const q = `
-		SELECT id, target, username, account_uid, converged_subject_id, bound_subject_id,
+		SELECT id, target, username, ` + accountIDColumn + `, converged_subject_id, bound_subject_id,
 		       outbox_id::text, detected_at
 		  FROM target_binding_conflicts
 		 WHERE target = $1 AND resolved_at IS NULL
@@ -96,7 +96,7 @@ func StandingBindingConflicts(ctx context.Context, target string) ([]BindingConf
 	var out []BindingConflict
 	for rows.Next() {
 		var c BindingConflict
-		if err := rows.Scan(&c.ID, &c.Target, &c.Username, &c.AccountUID,
+		if err := rows.Scan(&c.ID, &c.Target, &c.Username, &c.AccountID,
 			&c.ConvergedSubjectID, &c.BoundSubjectID, &c.OutboxID, &c.DetectedAt); err != nil {
 			return nil, fmt.Errorf("scan binding conflict: %w", err)
 		}
@@ -133,13 +133,13 @@ func ResolveBindingConflict(ctx context.Context, id, owner, actor, note string) 
 	}
 
 	const read = `
-		SELECT id, target, username, account_uid, converged_subject_id, bound_subject_id,
+		SELECT id, target, username, ` + accountIDColumn + `, converged_subject_id, bound_subject_id,
 		       outbox_id::text, detected_at
 		  FROM target_binding_conflicts
 		 WHERE id = $1::uuid AND resolved_at IS NULL
 		 FOR UPDATE`
 	var c BindingConflict
-	if err := tx.QueryRow(ctx, read, id).Scan(&c.ID, &c.Target, &c.Username, &c.AccountUID,
+	if err := tx.QueryRow(ctx, read, id).Scan(&c.ID, &c.Target, &c.Username, &c.AccountID,
 		&c.ConvergedSubjectID, &c.BoundSubjectID, &c.OutboxID, &c.DetectedAt); err != nil {
 		return BindingConflict{}, fmt.Errorf("%w: %s", ErrNoSuchConflict, id)
 	}
@@ -163,13 +163,14 @@ func ResolveBindingConflict(ctx context.Context, id, owner, actor, note string) 
 		return BindingConflict{}, fmt.Errorf("forget the losing binding: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO target_account_bindings (target, subject_id, username, account_uid, bound_by)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO target_account_bindings (target, subject_id, username, account_id, account_uid, bound_by)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (target, subject_id) DO UPDATE
 		   SET username = EXCLUDED.username,
-		       account_uid = COALESCE(EXCLUDED.account_uid, target_account_bindings.account_uid),
+		       account_id = COALESCE(EXCLUDED.account_id, target_account_bindings.account_id),
+		       account_uid = CASE WHEN EXCLUDED.account_id IS NOT NULL THEN EXCLUDED.account_uid ELSE target_account_bindings.account_uid END,
 		       last_seen_at = NOW()`,
-		c.Target, owner, c.Username, c.AccountUID, actor); err != nil {
+		c.Target, owner, c.Username, c.AccountID, legacyUID(c.AccountID), actor); err != nil {
 		return BindingConflict{}, fmt.Errorf("record the winning binding: %w", err)
 	}
 
@@ -197,21 +198,21 @@ func ResolveBindingConflict(ctx context.Context, id, owner, actor, note string) 
 
 // BindingHolder answers "who does this backend say owns this account".
 //
-// Matched on the name OR the uid, because a conflict is raised by whichever of
-// the two unique indexes fired and the answer has to cover both. Guessing from
-// the name alone would name the wrong person exactly when the account was
-// renamed out of band — which is the case the uid index exists for.
+// Matched on the name OR the account id, because a conflict is raised by
+// whichever of the unique indexes fired and the answer has to cover both.
+// Guessing from the name alone would name the wrong person exactly when the
+// account was renamed out of band — which is the case the id index exists for.
 //
-// The uid arm is guarded on non-zero: zero is "the target reported none", and a
-// binding with a NULL uid must not match every account that also has none.
-func BindingHolder(ctx context.Context, target, username string, uid int64) (string, bool, error) {
+// The id arm is guarded on non-empty: empty is "the target reported none", and
+// a binding with no id must not match every account that also has none.
+func BindingHolder(ctx context.Context, target, username, accountID string) (string, bool, error) {
 	const q = `
 		SELECT subject_id FROM target_account_bindings
 		 WHERE target = $1
-		   AND (username = $2 OR ($3 <> 0 AND account_uid = $3))
+		   AND (username = $2 OR ($3 <> '' AND ` + accountIDColumn + ` = $3))
 		 LIMIT 1`
 	var subject string
-	err := querier(ctx).QueryRow(ctx, q, target, username, uid).Scan(&subject)
+	err := querier(ctx).QueryRow(ctx, q, target, username, accountID).Scan(&subject)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}

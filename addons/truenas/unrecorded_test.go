@@ -26,10 +26,10 @@ func TestAReplayedRefusalIsRunAgainNotRememberedAsAnApply(t *testing.T) {
 	s, m := applyServer(t, `[{"username":"charlotte","id":19,"uid":9001,"locked":false,"smb":false,"groups":[]}]`)
 
 	first := postApply(t, s, applyBody)
-	if first.Code != http.StatusConflict {
-		t.Fatalf("want the first call blocked with 409, got %d", first.Code)
+	if first.Code != http.StatusConflict || problemCode(t, first) != CodeBindingConflict {
+		t.Fatalf("want the first call blocked with 409 BINDING_CONFLICT, got %d %s", first.Code, first.Body)
 	}
-	if _, found, _ := s.store.Recall("c1", kindApply); found {
+	if recordedEntry(t, s.store, "c1") != nil {
 		t.Fatal("a refusal must not be remembered")
 	}
 	// The target moves on: the account is gone, so the same call now creates.

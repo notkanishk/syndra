@@ -112,7 +112,108 @@ design §1; `CHANGELOG.md` at `addons/contract/`.
 
 Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a and on slice 4 having passed against the v2 add-on.
 
-- [ ] 1.0 (found by slice 0) The backend's `Homes.Read` and `Reach.Read`
+Built 11 Nov 2026 (branch feat/addon-contract-1). The kit passes against the
+v2 TrueNAS add-on in process (`addons/truenas/conformance_test.go`: the kit's
+binary over the add-on's real routes, transport and derived TLS key, on a fake
+NAS; reads only, `-mutate`, `-mutate -mutate-settings`; no MUST fails), and
+CI runs it inside the add-on's `go test`. `addons/contract/v1/` is deleted.
+No schema, fixture or registry changed. Decided while building, where the
+design and tasks were silent (design won where they disagreed):
+
+- *The effective limit is observed.* TrueNAS reports `home_quota` in
+  `/subjects` `state` as the limit it holds (one quota table per home
+  dataset, the way `/homes` reads usage; `"0"` when there is no limit) and
+  leaves it out when the table could not be read (unknown, never "none").
+  It is not in an apply's `observed` (the read-back does not read quotas).
+  The kit's `limit-combine` needs it (design §3). **The backend does not
+  compare a limit-role field in the drift sweep in slice 1**
+  (`drift.stateByBinding` drops them by `targets.field_roles`): the core
+  compares limits only once it combines them (slice 2, 2.x below), and an
+  unreadable quota table must never surface as a finding.
+- *A channel is off whenever the account is*, enforced by TrueNAS too
+  (`decodeDesiredFields`): the backend always sent `smb_enabled: false` with
+  `enabled: false`; the kit's `channel-follows-account` asks the add-on.
+- *Plan equals apply, word for word*: an apply's `no_change` (and its
+  quota-only `applied`) carries the plan's consequence (`describeHolding`).
+  A plan outcome about an existing account carries `account_id` and
+  `standing` (the kit writes only after a plan names its own account).
+- *Standing (TrueNAS)*: the add-on's own account usable; a switched-off
+  account `none` ("The account is switched off."); no password `member` with
+  `smbWaiting`'s sentence and "Set a storage password on your storage page.";
+  otherwise usable. An unverified apply reports the standing last read.
+- *Call identity*: the lease is keyed by call_id; another request under a
+  running call_id is 422 `CALL_ID_REUSED`, the same one 409
+  `CALL_IN_PROGRESS` with `Retry-After: 30`. Read operations
+  (`storage.status`, `activity.get`, `health.get`) are neither leased nor
+  recorded, as in contract 1, and still need a call_id. A contract-1 apply
+  entry replays with `account_id` and `standing` read from the mirror, or
+  without both when the mirror lacks the account; an `account.adopt` entry's
+  `account_uid` replays as `account_id`. A replayed lifecycle change is the
+  recorded reply even if the state moved since. A blocked apply from a
+  truncated read is 422 `APPLY_BLOCKED` (contract 1 answered 409). A planned
+  subject with a blank `subject` is 400 `BAD_REQUEST`.
+- *Refusals*: every route not served (and a known path with another method)
+  is 404 `UNKNOWN_ROUTE`, authenticated. A `by_status` code's `retry` is
+  `backoff` for 429/5xx, else `never`. The backend's feature routes for the
+  404 rule are `/operations/`, `/settings`, `/reach`, `/homes`, `/calls/`,
+  `/stats`, and the 404 must name no code or `UNKNOWN_ROUTE`: a 404 with
+  another code (`NO_SUCH_SETTING`, an adoption's `OPERATION_FAILED`) is the
+  add-on answering about the request and stays a refusal; a shape refusal re-reads the manifest in the background,
+  single-flighted on the on-demand read's 30 s cooldown. A role outside the
+  vocabulary is refused at registration like an unknown kind. The persisted
+  role map is a union: a field the manifest drops keeps its role, so it cannot
+  return meaning something else.
+- *Plans in chunks*: the backend plans below `limits.subjects_per_plan`, and
+  the chunks answer as one plan (current only if every chunk was, truncated
+  if any was, dated by the oldest read; one failing chunk fails the plan).
+  `acknowledge_scope` left `addons.Plan` and `EntitlementRehearsal`; every
+  plan surface's own acknowledgement at issue time is unchanged.
+- *Views keep the UI's names* (task 1.0): `TargetHealth` keeps
+  `key_expiry`/`key_expires_at` (wire: `credential_*`), `Homes` keeps
+  `read`/`usage_read` (wire: `quota_read`), `Reach` keeps `read`/`read_at`
+  (wire: `taken_at`). `TestEveryReplyDecodesIntoAWireTypeOfContractFields`
+  holds every decode target to its schema's properties. The UI moved only
+  its types (`account_id`, `standing`, `also_says`).
+- *account_id in Postgres*: written to `account_id` and, while it is a
+  canonical decimal, to `account_uid` (a UUID leaves `account_uid` NULL); read
+  as `COALESCE(account_id, account_uid::text)`; `db.BackfillAccountIDs` runs at
+  every backend start after the migrations. The add-on's bbolt store keeps the
+  same rule (`uid` beside `account_id`; a binding with `account_id` alone is
+  read too).
+- *Not built*: TrueNAS never adopts an unbound account by derived name, so
+  the crash window between `user.create` and the binding is a
+  `BINDING_CONFLICT` an operator adopts (the MUST "only under a logged create
+  intent" holds trivially); the intent-based adoption waits for an add-on
+  that needs it. `credential_scopes` is not reported (TrueNAS cannot read its
+  own key's roles; advisory). The target page does not yet render
+  `also_says` or the refusal reason (3.6).
+
+After the two Opus reviews (11 Nov 2026), decided by the owner and built:
+
+- *A cache is not current* (design §4): `/reach` serves its five-minute cache
+  as `current: false, stale.reason: cached` (with `retry_after`), and the
+  failed-read fallback as `unreachable`; `/homes` never caches. The home
+  location write reads the NAS now, never the cache (a place deleted a minute
+  ago must not pass). The kit's `current` check covers `/reach` and `/homes`
+  when the storage features are declared.
+- *Every backend-filled field is out of reach of the wire* (1.0): a place's
+  `smb_address`, `unc_address` and `roles` are decoded through `placeWire`,
+  in `/reach` and the `storage.status` pocket alike, and no wire type holds a
+  view type anywhere inside it (`TestNoWireTypeHoldsAView`).
+- *An unreadable `taken_at` is no reading* (§2(b)): absent, unparseable or
+  zero, it makes `/subjects` and `/plan` not current and truncated, so a plan
+  is refused and a chunk merge never meets a zero date.
+- *A feature's route is called only when declared* (§2 rule 2): the pipe
+  refuses `/operations/`, `/settings`, `/reach`, `/homes`, `/calls/`,
+  `/stats` on an add-on whose accepted manifest does not declare the feature,
+  before the breaker and before any operation row; no manifest yet is no
+  feature yet.
+- *account_uid never outvotes account_id*: a write that carries an id sets
+  `account_uid` from it (NULL for a non-numeric one), so the backfill
+  (`account_id IS DISTINCT FROM account_uid::text`) corrects exactly what a
+  rolled-back contract-1 backend wrote or updated.
+
+- [x] 1.0 (found by slice 0) The backend's `Homes.Read` and `Reach.Read`
   (`addons/read.go`) are its own "the read succeeded" flags but share the
   wire's JSON key `read`, so a tolerant decode would let an add-on claim a
   read. Split the wire type (decoded from the add-on) from the view type
@@ -120,7 +221,7 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   be set by an add-on; the v2 schemas then stay the only description of
   what the add-on sends #ready-for-agent
 
-- [ ] 1.0a (found by slice 0 review) The add-on emits `[]`, not `null`, for an
+- [x] 1.0a (found by slice 0 review) The add-on emits `[]`, not `null`, for an
   empty list field (wire change): `entitlementState` (`apply.go`) builds the
   group list with `append([]string(nil), ...)`, so an account with no groups
   is `"group": null` in `/subjects` `state` and in apply `observed`. Contract 1
@@ -129,10 +230,10 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   (today `sameValue(null, [])` is false; harmless now because the add-on's plan
   compares groups as sets) #ready-for-agent
 
-- [ ] 1.2 TrueNAS add-on declares it (`capabilities.go`): `kind: storage`,
+- [x] 1.2 TrueNAS add-on declares it (`capabilities.go`): `kind: storage`,
   features `operations, settings, storage.reach, storage.homes`, the five
   fields by role as in design §3; `ContractVersion = 2` #ready-for-agent
-- [ ] 1.3 Backend manifest decode becomes tolerant **everywhere**, inside
+- [x] 1.3 Backend manifest decode becomes tolerant **everywhere**, inside
   objects too; every unknown key and `x-` key shown raw (quoted, escaped,
   length-capped) on the target page and logged once; unknown features
   skipped; `FieldsByRole()`, exactly-one-`account` and an unknown `kind`
@@ -145,7 +246,7 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   table decoded as pointers per message and an absent one makes the read
   unusable (`current: false`, `truncated: true`), test per field per
   message #ready-for-agent
-- [ ] 1.4 Every write carries `contract_version` and `call_id` in the body:
+- [x] 1.4 Every write carries `contract_version` and `call_id` in the body:
   `/apply`, `/operations/{name}`, `/lifecycle`, `PUT /settings/{name}`.
   Backend `pipe.go` drops `Idempotency-Key`; the add-on's `kindSetting` and
   lifecycle dedupe read `call_id` through the one store; **request identity
@@ -171,7 +272,7 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   replay; the store holds no secret and no hash of one (test: grep the
   bbolt file for the canary after `password.set`); call memory ≥
   `constants.call_memory`. Mutation-checked on all four #ready-for-agent
-- [ ] 1.4a The raw query joins the MAC: `ts.method.target.body` with
+- [x] 1.4a The raw query joins the MAC: `ts.method.target.body` with
   `target` = escaped path as sent + `"?" + RawQuery` when non-empty, on
   both ends (`backend/internal/addons/transport.go:441-450`,
   `addons/truenas/transport.go:173`), the path signed **as sent, escaped**
@@ -180,7 +281,7 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   MAC equals major 1's; a base64url `cursor`; a value with a reserved
   character; an escaped path); tests: each vector reproduces, a reordered
   or altered query → 401. Decision 24 #ready-for-agent
-- [ ] 1.5 Error envelope: every add-on refusal is `application/problem+json`
+- [x] 1.5 Error envelope: every add-on refusal is `application/problem+json`
   per `schema/error.json` through one `writeError` (decision 25); the
   strict decoder answers its own code `UNKNOWN_REQUEST_FIELD` (400), and
   `BAD_REQUEST` keeps meaning a missing `call_id`/`subject`
@@ -201,11 +302,11 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   still `rejected` and does not requeue; the deploy-window shape, old
   backend against v2 add-on, cannot be tested in the new suite and is
   closed by the 1.10 order instead) #ready-for-agent
-- [ ] 1.6 `standing` on every subject (`common/standing.json`) and on the
+- [x] 1.6 `standing` on every subject (`common/standing.json`) and on the
   apply outcome; TrueNAS: no password → `member` with the existing
   `smbWaiting` sentence as `note` and the storage page's next step as `next`;
   `password_set` removed from the wire #ready-for-agent
-- [ ] 1.7 `account_id` (string) replaces `uid` on `subjects[]`, the apply
+- [x] 1.7 `account_id` (string) replaces `uid` on `subjects[]`, the apply
   reply and the binding conflict (decision 26), and on `homes[]` and the
   `account.adopt` reply (`account_uid`), which carry it too in major 2; migration adds
   `account_id TEXT` beside `account_uid BIGINT` in **both** tables
@@ -228,7 +329,7 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   the same account inserts after the first is resolved) #ready-for-agent
 - [ ] 1.7b A release later: drop `account_uid` from both tables and the
   dual write; the one task the earlier draft lacked #ready-for-agent
-- [ ] 1.9 Code for every message that moved in 1a: `PLAN_TOO_LARGE` (422)
+- [x] 1.9 Code for every message that moved in 1a: `PLAN_TOO_LARGE` (422)
   replaces `SCOPE_ACKNOWLEDGEMENT_REQUIRED` in the add-on (the backend
   chunks under `limits.subjects_per_plan` and owns the acknowledgement);
   `reach.read_at` → `taken_at`, `homes` gains `taken_at` + `current` and
@@ -238,7 +339,27 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   `stale.reason: unreachable`, not `cached`, which is reserved for a
   deliberate mirror answer under `freshness` (6.2); the drift sweep already
   treats `current: false` as a skipped pass #ready-for-agent
-- [ ] 1.10 Deploy. **The order is written into `deploy.yml`'s production
+- [ ] 1.10 (the workflow order is written, 11 Nov 2026, held by
+  `repoguard/deploy_order_test.go`: the images are built first, while the old
+  containers serve, then the stop order below, then `up -d --build
+  --remove-orphans` from the cached images, and an `if: failure()` step
+  starts everything again so a failure never leaves the target down.
+  **Rollback = dispatch `deploy.yml` (from main) with `ref=<previous
+  production commit SHA>`** (from the deploy run history; the repo has no
+  tags): a `resolve` job deploys only a full SHA on `main` whose `ci-ok`
+  passed, and staging and production check out exactly that SHA; the current
+  workflow file, with its stop order, deploys the old code; never a revert
+  commit (it reverts the file too) and never the old commit's own workflow.
+  A backend from this commit on starts on a clean database that is ahead of
+  it (`db.migrateUp`, never migrating down), and staging's migration check
+  is "at least, and clean"; **the first rollback across 000088 to a pre-088
+  backend needs `schema_migrations` reset to 87 by hand first, then a fresh
+  dump pushed to staging (`/usr/local/bin/syndra-push-staging-dump`, as
+  root on production), then the dispatch** (DEPLOY.md, Rollback, has the
+  SQL; 000088 is additive, the old backend ignores it; without the push,
+  staging restores last night's copy at 88 and the old backend refuses it).
+  The staging rehearsal and the after-deploy check below are the owner's)
+  Deploy. **The order is written into `deploy.yml`'s production
   job and into `_staging.yml` in this PR**, because merging to main runs
   `deploy.yml` on push (`deploy.yml:31-34`) at the pushed commit, and the
   standing job is `pg_dump` → `compose up -d --build --remove-orphans`
@@ -258,7 +379,7 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   starts backend v2 against the **v1** add-on first and sees
   `ErrUnsupportedContract` once in the log (proof the gate works), then
   swaps the add-on. After each deploy: no `target_refused` row from the
-  window. Rollback = both previous tags through the same workflow; **no
+  window. Rollback = the previous production commit dispatched through the same workflow (both containers); **no
   store restore** (the store is additive, 1.7; the dated copy is a fallback
   only if a v1 binary cannot open the file); the re-runnable backfill
   (1.7) covers rows v1 writes meanwhile #ready-for-human
@@ -319,6 +440,14 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
 - [ ] 2.6 Staging run: a mapping edit, a departure (withdraw-only), a
   suspension and a home limit each plan and apply as before; Pending changes,
   the person's page and the holds review read the same words #ready-for-human
+- [ ] 2.7 (from slice 1) The drift sweep compares a `limit` field: the
+  desired limit combined the way the add-on combines (`combine: max`,
+  `unlimited` dominant) against the observed effective limit an add-on now
+  reports in `/subjects` `state`, and a limit absent from `state` (a quota
+  table the add-on could not read) is "unknown, not compared", never
+  `theirs_only`; then `drift.stateByBinding` stops dropping limit-role fields
+  (slice 1 drops them, so no limit is compared, as before contract 2).
+  Merge bases recorded before this hold no limit #ready-for-agent
 
 ## 3. The UI reads roles (UI only)
 
@@ -339,6 +468,12 @@ Decisions 1, 3 (names final), 6, 10, 22-27 accepted 10 Nov 2026. Depends on 1a a
   under `components/kinds/storage/` and tests #ready-for-agent
 - [ ] 3.5 Copy guard run (`plain-language-copy`): every new sentence passes;
   `standing.next` always ends in a next step or "nothing for you to do" #ready-for-agent
+- [ ] 3.6 (from slice 1) The target page renders what the backend now
+  carries: `also_says` (the manifest's keys Syndra does not use, shown raw
+  under "What the add-on also says") and `last_error` when a manifest was
+  refused (the reason, and that the last good one is still in use), and
+  `standing` where an unmanaged account's `password_set` used to be read
+  #ready-for-agent
 
 ## 4. The conformance kit and the reference add-on
 

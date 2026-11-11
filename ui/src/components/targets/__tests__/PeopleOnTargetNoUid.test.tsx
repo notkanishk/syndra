@@ -18,7 +18,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
         {
           subject_id: "u1",
           username: "charlotte.l",
-          account_uid: 200001,
+          account_id: "200001",
           bound_at: "2026-10-15T10:00:00Z",
         },
       ],

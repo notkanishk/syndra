@@ -493,7 +493,7 @@ func TestTheLifecycleExceptionRestsOnEverySchemaFieldBeingSMBMediated(t *testing
 		if !strings.HasPrefix(name, "{Name: Field") {
 			continue
 		}
-		known := strings.Contains(name, "Lifecycle: true")
+		known := strings.Contains(name, `Role: "account"`) || strings.Contains(name, `Role: "channel"`)
 		for _, d := range decided {
 			known = known || strings.HasPrefix(name, d)
 		}

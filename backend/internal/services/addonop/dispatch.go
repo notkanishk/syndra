@@ -117,8 +117,8 @@ type Result struct {
 	// Err is the add-on's own answer, when it was not success. Held here rather
 	// than returned so that reading it is a choice and not an accident.
 	Err error
-	// AccountUID is the unix identity of the account an `account.adopt` bound,
-	// as the add-on read it from the target.
+	// AccountID is the identity (contract 2's account_id) of the account an
+	// `account.adopt` bound, as the add-on read it from the target.
 	//
 	// The only field of an add-on's answer this layer parses, and it is parsed
 	// because the backend writes its own copy of the binding: a copy keyed only
@@ -126,17 +126,17 @@ type Result struct {
 	// renames the account, and a binding that cannot recognise its own account
 	// hands it back to the unmanaged inventory for anybody to claim.
 	//
-	// Zero when the add-on did not send one. Deliberately not an error: an
+	// Empty when the add-on did not send one. Deliberately not an error: an
 	// operation that succeeded must not be reported as failed because its
-	// answer lacked an optional field, and the caller decides what a zero means
-	// for the record it is about to write.
-	AccountUID int64
+	// answer lacked an optional field, and the caller decides what an empty
+	// one means for the record it is about to write.
+	AccountID string
 }
 
 // operationAnswer is the add-on's response envelope, narrowed to what this
 // layer reads. Everything else in it belongs to the caller that asked for it.
 type operationAnswer struct {
-	AccountUID int64 `json:"account_uid"`
+	AccountID string `json:"account_id"`
 }
 
 // ErrRateLimited refuses a member driving a secret-bearing path faster than any
@@ -326,7 +326,7 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	if resp.Outcome == addons.OutcomeSucceeded && len(resp.Body) > 0 {
 		var answer operationAnswer
 		if err := json.Unmarshal(resp.Body, &answer); err == nil {
-			result.AccountUID = answer.AccountUID
+			result.AccountID = answer.AccountID
 		}
 	}
 	if err := settleOperation(ctx, id, status); err != nil {

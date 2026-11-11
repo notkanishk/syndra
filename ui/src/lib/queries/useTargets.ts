@@ -65,7 +65,12 @@ export interface TargetSummary {
   operations: TargetOperation[];
   manifest_fetched_at?: string;
   circuit_open: boolean;
+  /** Why the add-on's latest manifest was not accepted (a contract it does
+   * not speak, a field whose meaning changed); the last good one stays. */
   last_error?: string;
+  /** What the add-on's manifest says that Syndra does not use, as
+   * `path: value`, quoted and capped: shown raw, never acted on. */
+  also_says?: string[];
   health?: HealthState;
   status?: TargetStatus;
   /** The Zitadel project this system serves; null until chosen. */
@@ -142,7 +147,8 @@ export interface BindingConflict {
   id: string;
   target: string;
   username: string;
-  account_uid?: number;
+  /** The target's own id for the account (contract 2's account_id). */
+  account_id?: string;
   /** Whose change landed on the account. */
   converged_subject_id: string;
   /** Who Syndra's own binding says owns it. Neither is authoritative. */
@@ -216,9 +222,21 @@ export function useResolveBindingConflict(target: string) {
   });
 }
 
+/**
+ * Whether an account on a target can be used yet, and who is waited on, in
+ * the add-on's words (contract 2's standing). Observed, never desired.
+ */
+export interface Standing {
+  usable: boolean;
+  waiting_on: "member" | "operator" | "target" | "none";
+  note?: string;
+  next?: string;
+}
+
 export interface UnmanagedAccount {
   username: string;
-  uid?: number;
+  /** The target's own id for the account (contract 2's account_id). */
+  account_id?: string;
   /**
    * The add-on's own service account on the target.
    *
@@ -228,8 +246,8 @@ export interface UnmanagedAccount {
    * of offering an action that will be refused.
    */
   self?: boolean;
-  /** Whether the account has a usable credential yet. */
-  password_set?: boolean;
+  /** Whether the account can be used yet, and who is waited on. */
+  standing?: Standing;
 }
 
 /**
@@ -252,7 +270,7 @@ export interface BoundAccount {
   target: string;
   subject_id: string;
   username: string;
-  account_uid?: number;
+  account_id?: string;
   bound_by: string;
   bound_at: string;
   last_seen_at: string;
@@ -491,7 +509,7 @@ export function useResolveMergeFinding(target: string) {
 export interface StaleBinding {
   subject_id: string;
   username: string;
-  uid?: number;
+  account_id?: string;
 }
 
 export interface TargetReconcileResult {
@@ -510,7 +528,7 @@ export interface TargetReconcileResult {
    */
   halted?: boolean;
   reason?: string;
-  unmanaged?: Array<{ username: string; uid: number }>;
+  unmanaged?: UnmanagedAccount[];
   /** Bindings whose account is no longer on the target. Never converged — the
    * plan for one says "create", and acting on it would recreate an account
    * somebody deleted. */

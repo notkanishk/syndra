@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Home folders by role (truenas-reconcile D10, owner 14 Oct 2026).
@@ -187,6 +188,39 @@ func (s *server) quotaOwed(desired desiredState, home string, uid int64) (datase
 }
 
 // humanBytes says a limit the way a person reads one.
+// homeLimits is each home folder's limit as TrueNAS holds it, by uid: the
+// effective one, already combined (design §3: the add-on combines once, and
+// holding is observed), in the field's wire shape ("0" is no limit). Read the
+// way /homes reads usage, one quota table per dataset. An account with no home
+// folder in a share, or whose table could not be read, is left out: its limit
+// is unknown, which is never the same as "no limit".
+func (s *server) homeLimits(subjects []Subject) map[int64]string {
+	shares, err := s.enabledShares()
+	if err != nil {
+		return nil
+	}
+	out := map[int64]string{}
+	tables := map[string]map[int64]PlaceUsage{}
+	for _, sub := range subjects {
+		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
+			continue
+		}
+		dataset := datasetOf(path.Dir(sub.Home))
+		if dataset == "" {
+			continue
+		}
+		table, read := tables[dataset]
+		if !read {
+			table = s.userQuotas(dataset)
+			tables[dataset] = table
+		}
+		if table != nil {
+			out[sub.UID] = strconv.FormatInt(table[sub.UID].QuotaBytes, 10) // no row: no limit
+		}
+	}
+	return out
+}
+
 func humanBytes(n int64) string {
 	const gib = 1 << 30
 	if n%gib == 0 {
@@ -207,6 +241,12 @@ func (s *server) homePlaces() (paths []string, labels map[string]string, err err
 	if err != nil {
 		return nil, nil, err
 	}
+	paths, labels = homePlacesIn(read)
+	return paths, labels, nil
+}
+
+// homePlacesIn is homePlaces of one read.
+func homePlacesIn(read shareRead) (paths []string, labels map[string]string) {
 	labels = map[string]string{}
 	for _, p := range read.places {
 		if p.folder != "" && !strings.HasPrefix(p.folder, ".") && read.mounts[p.path] != "" {
@@ -214,14 +254,14 @@ func (s *server) homePlaces() (paths []string, labels map[string]string, err err
 			labels[p.path] = p.share + " › " + p.folder
 		}
 	}
-	return uniqueSorted(paths), labels, nil
+	return uniqueSorted(paths), labels
 }
 
 // HomeUsage is one account's home folder: where it is, what is saved in it, and
 // the limit TrueNAS holds for it. QuotaBytes 0 is no limit set.
 type HomeUsage struct {
 	Username   string `json:"username"`
-	UID        int64  `json:"uid"`
+	AccountID  string `json:"account_id"`
 	Home       string `json:"home"`
 	UsedBytes  int64  `json:"used_bytes"`
 	QuotaBytes int64  `json:"quota_bytes,omitempty"`
@@ -230,11 +270,17 @@ type HomeUsage struct {
 // HomesResponse is every account with a home folder in a share Syndra
 // considers, with its use, for the system page: "She has 18.4 GB in her home
 // folder now", and how many homes are already in a folder before the location
-// changes. UsageRead is false when a dataset's quota table couldn't be read;
-// the homes are still listed, with no use.
+// changes. QuotaRead is false when a dataset's quota table couldn't be read;
+// the homes are still listed, with no use: a partial read, not a stale one
+// (design §4's table: contract 1's usage_read).
 type HomesResponse struct {
 	Homes     []HomeUsage `json:"homes"`
-	UsageRead bool        `json:"usage_read"`
+	QuotaRead bool        `json:"quota_read"`
+	// TakenAt and Current are the account read behind the list. It is always
+	// live: a NAS that cannot be read is refused, never answered from the
+	// mirror, so Current is true and no stale is ever sent.
+	TakenAt string `json:"taken_at"`
+	Current bool   `json:"current"`
 }
 
 // handleHomes reads every home folder once: one user read, one quota read per
@@ -242,21 +288,22 @@ type HomesResponse struct {
 func (s *server) handleHomes(w http.ResponseWriter, _ *http.Request, _ []byte) {
 	snap, err := s.readSubjects()
 	if err != nil {
-		writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
+		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's accounts could not be read.", nil)
 		return
 	}
 	shares, err := s.enabledShares()
 	if err != nil {
-		writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
+		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's shares could not be read.", nil)
 		return
 	}
-	out := HomesResponse{Homes: []HomeUsage{}, UsageRead: true}
+	out := HomesResponse{Homes: []HomeUsage{}, QuotaRead: true,
+		TakenAt: snap.TakenAt.UTC().Format(time.RFC3339), Current: true}
 	quotas := map[string]map[int64]PlaceUsage{}
 	for _, sub := range snap.Subjects {
 		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
 			continue
 		}
-		h := HomeUsage{Username: sub.Username, UID: sub.UID, Home: sub.Home}
+		h := HomeUsage{Username: sub.Username, AccountID: accountID(sub.UID), Home: sub.Home}
 		// The limit is a user quota on the dataset holding the home's parent,
 		// the same one convergeQuota sets.
 		dataset := datasetOf(path.Dir(sub.Home))
@@ -266,7 +313,7 @@ func (s *server) handleHomes(w http.ResponseWriter, _ *http.Request, _ []byte) {
 			quotas[dataset] = table
 		}
 		if table == nil {
-			out.UsageRead = false
+			out.QuotaRead = false
 		} else if u, ok := table[sub.UID]; ok {
 			h.UsedBytes, h.QuotaBytes = u.UsedBytes, u.QuotaBytes
 		}

@@ -126,26 +126,14 @@ func (l *lifecycle) Drained() bool {
 	return state != LifecycleActive && l.inFlight.Load() == 0
 }
 
-// retryAfterSeconds is how long a refused caller is told to wait.
-//
-// It is the field that distinguishes a deliberate refusal from an add-on that
-// fell over: without it the backend records the change as indeterminate — it
-// may have got halfway — rather than as queued. Short, because a maintenance
-// window is usually minutes and the backend is polling rather than sleeping.
-const retryAfterSeconds = "30"
-
-// writeLifecycleRefusal answers a mutation the current state forbids.
-//
-// 503 with Retry-After is what an HTTP service already says for "not now, come
-// back", so the contract borrows it rather than inventing a code. The state is
-// named in the body because "unavailable" and "we put it in read-only on
-// purpose" send an operator to different places.
+// writeLifecycleRefusal answers a mutation the current state forbids: 503
+// LIFECYCLE_REFUSAL with Retry-After (writeError adds it for the code's retry
+// class). Contract 2 detects a lifecycle refusal by this code alone, never by
+// "503 with Retry-After". The state is named in the body because "unavailable"
+// and "we put it in read-only on purpose" send an operator to different places.
 func writeLifecycleRefusal(w http.ResponseWriter, state string) {
-	w.Header().Set("Retry-After", retryAfterSeconds)
-	writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-		"error":     CodeLifecycleRefusal,
-		"lifecycle": state,
-	})
+	writeError(w, http.StatusServiceUnavailable, CodeLifecycleRefusal,
+		"The add-on is "+state+" and is not accepting changes.", map[string]any{"lifecycle": state})
 }
 
 // LifecycleRequest is an operator changing the state at runtime.
@@ -155,8 +143,11 @@ func writeLifecycleRefusal(w http.ResponseWriter, state string) {
 // this add-on writing during an incident — and a value an on-path peer could
 // edit is not one.
 type LifecycleRequest struct {
-	ContractVersion int    `json:"contract_version"`
-	State           string `json:"state"`
+	ContractVersion int `json:"contract_version"`
+	// CallID makes a re-sent state change a replay (calls.go), like every
+	// other write.
+	CallID string `json:"call_id"`
+	State  string `json:"state"`
 	// Reason is what an operator will read on the health surface while
 	// wondering why nothing is applying. Required, because "read_only" with no
 	// explanation is indistinguishable from a bug.
@@ -171,38 +162,40 @@ type LifecycleRequest struct {
 // startup, which is exactly the restart it says is not needed.
 func (s *server) handleLifecycle(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req LifecycleRequest
-	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
+	if !decodeRequest(w, body, &req, CodeBadRequest) || !writeContractRefusal(w, req.ContractVersion) {
 		return
 	}
-	if !writeContractRefusal(w, req.ContractVersion) {
+	switch {
+	case strings.TrimSpace(req.CallID) == "":
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "A lifecycle change needs a call_id.", nil)
 		return
-	}
-	if strings.TrimSpace(req.Reason) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error":  CodeReasonRequired,
-			"detail": "a state nobody explained is indistinguishable from a fault",
-		})
+	case strings.TrimSpace(req.Reason) == "":
+		writeError(w, http.StatusBadRequest, CodeReasonRequired,
+			"A state nobody explained is indistinguishable from a fault.", nil)
 		return
-	}
-	if err := s.life.Set(req.State, req.Reason); err != nil {
+	case req.State != LifecycleActive && req.State != LifecycleDraining && req.State != LifecycleReadOnly:
 		// The vocabulary, never the value. This is the one route whose input is
 		// echoed onto a surface an operator reads, and the closed set is the
 		// whole of what may appear there.
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-			"error":  CodeUnknownLifecycleState,
-			"detail": "state must be one of " + strings.Join([]string{LifecycleActive, LifecycleDraining, LifecycleReadOnly}, ", "),
-		})
+		writeError(w, http.StatusUnprocessableEntity, CodeUnknownLifecycleState,
+			"The state must be one of "+strings.Join([]string{LifecycleActive, LifecycleDraining, LifecycleReadOnly}, ", ")+".", nil)
 		return
 	}
-	state, reason := s.life.State()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"state":  state,
-		"reason": reason,
-		// What an operator waits on before pulling a credential out from under a
-		// call. Reported here so the state change and the answer to "is it safe
-		// yet" arrive together.
-		"in_flight": s.life.InFlight(),
-		"drained":   s.life.Drained(),
+	identity := map[string]any{"state": req.State, "reason": req.Reason}
+	s.once(w, req.CallID, kindLifecycle, identity, func(w http.ResponseWriter) {
+		if err := s.life.Set(req.State, req.Reason); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, CodeUnknownLifecycleState, "The state is not one this add-on knows.", nil)
+			return
+		}
+		state, reason := s.life.State()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"state":  state,
+			"reason": reason,
+			// What an operator waits on before pulling a credential out from
+			// under a call. Reported here so the state change and the answer
+			// to "is it safe yet" arrive together.
+			"in_flight": s.life.InFlight(),
+			"drained":   s.life.Drained(),
+		})
 	})
 }

@@ -1,5 +1,0 @@
-{
-  "contract_version": 1,
-  "state": "read_only",
-  "reason": "Moving the pool to new disks."
-}

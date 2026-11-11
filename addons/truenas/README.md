@@ -12,16 +12,29 @@ go test ./... && go vet ./...
 
 ## What it maps
 
-| Syndra says | TrueNAS does |
+| Field (role) | TrueNAS does |
 |---|---|
-| `group: string[]` | Membership of the named SMB groups, resolved by NAME rather than gid — a mapping binds a role to a group name, and a number compared against a name makes every subject look like drift |
-| `enabled: bool` | `locked`, inverted. TrueNAS's word for it is not Syndra's, and the translation belongs here |
-| `smb_enabled: bool` | The account's SMB flag |
+| `group` (membership) | Membership of the named SMB groups, resolved by NAME rather than gid — a mapping binds a role to a group name, and a number compared against a name makes every subject look like drift. A built-in group is never listed and never removed |
+| `home` (flag) | A private home folder under the system's one home location (settings) |
+| `home_quota` (limit, bytes, `"0"` is no limit) | The user quota on the home folder's dataset; several roles combine by max, and no limit dominates. `/subjects` reports the effective limit TrueNAS holds, when the quota table could be read |
+| `enabled` (account) | `locked`, inverted. TrueNAS's word for it is not Syndra's, and the translation belongs here |
+| `smb_enabled` (channel) | The account's SMB flag. Off whenever the account is off, whatever the request said. On only together with a password (TrueNAS refuses it otherwise), so it waits for the member's next `password.set` |
 
-Both booleans are **lifecycle** fields: the backend's resolver computes them
-from whether the subject holds any mapped role, overridable only by an
-allowance. A mapping that named one would fight the derived state on every
-resolution, so the backend refuses to accept one.
+The account and its channel are computed by the backend's resolver from whether
+the subject holds any mapped role, overridable only by an allowance. A mapping
+that named one would fight the derived state on every resolution, so the
+backend refuses to accept one.
+
+It speaks contract 2 (`../contract/v2`): `kind: storage`, features
+`operations`, `settings`, `storage.reach`, `storage.homes`; a plan of more than
+200 subjects is `422 PLAN_TOO_LARGE`; every account it reports carries its
+`account_id` (the uid, as a string) and its `standing` (no password yet: waiting
+on the member). Its store (`state.db`) writes each binding's `account_id`
+beside its `uid` and each recorded call's identity digest beside what contract
+1 wrote, so a contract-1 binary rolled back onto it reads it unchanged.
+`conformance_test.go` runs the conformance kit (`../conformance`) against it,
+over its real transport and a fake NAS: reads only, `-mutate`, and
+`-mutate -mutate-settings`, with no MUST failing.
 
 Eight operations: `password.set` (the only one a member drives),
 `password.rotate`, `account.adopt`, `account.release`, `account.purge`,

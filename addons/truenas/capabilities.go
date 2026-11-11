@@ -17,9 +17,15 @@ import (
 // backend's decoder exactly; the two are separately deployed, which is what
 // ContractVersion exists to make survivable.
 type Manifest struct {
-	ContractVersion   int                `json:"contract_version"`
-	Product           string             `json:"product"`
-	ProductVersion    string             `json:"product_version"`
+	ContractVersion int    `json:"contract_version"`
+	Product         string `json:"product"`
+	ProductVersion  string `json:"product_version"`
+	// Kind is what kind of system this add-on fronts (registry/kinds.json).
+	Kind string `json:"kind"`
+	// Features are the capabilities beyond the core this add-on serves
+	// (registry/features.json): the backend calls a feature's route, or sends a
+	// feature's request field, only to an add-on that declares it.
+	Features          []string           `json:"features"`
 	EntitlementSchema []EntitlementField `json:"entitlement_schema"`
 	Operations        []Operation        `json:"operations"`
 	// Connection is how a MEMBER reaches this target, for the instructions on
@@ -32,6 +38,13 @@ type Manifest struct {
 	// host — a path that does not work teaches somebody to distrust the whole
 	// page, and the next thing they distrust is the part that was right.
 	Connection *Connection `json:"connection,omitempty"`
+	Limits     Limits      `json:"limits"`
+}
+
+// Limits are what this add-on refuses beyond: a plan above SubjectsPerPlan is
+// PLAN_TOO_LARGE, and the backend chunks below it (design §11).
+type Limits struct {
+	SubjectsPerPlan int `json:"subjects_per_plan"`
 }
 
 // Connection is the member-facing address of the target, and nothing else.
@@ -47,24 +60,25 @@ type Connection struct {
 	Host     string `json:"host"`
 }
 
-// EntitlementField names one field of desired state Syndra may fill. Syndra
-// never learns what a value means here; it fills the field and this add-on
-// translates.
+// EntitlementField names one field of desired state Syndra may fill, and what
+// it IS: its role (registry/roles.json, design §3), from which the backend
+// derives behaviour. Syndra never learns what a value means here; it fills the
+// field by its role and this add-on translates.
 type EntitlementField struct {
 	Name string `json:"name"`
-	Type string `json:"type"`
-	// Lifecycle marks a field the backend's resolver computes from whether the
-	// subject holds any mapped role, overridable only by an allowance. Declared
-	// so the backend refuses a role-to-target mapping naming one: a mapping
-	// binding a role to a disabled account would fight the derived lifecycle
-	// state on every resolution.
-	Lifecycle bool `json:"lifecycle"`
+	// Role: account (the on/off, exactly one), channel (a way of using the
+	// account, off whenever it is), membership (a set of values), flag
+	// (["true"] or []), limit (a ceiling in a unit).
+	Role string `json:"role"`
 	// Label is the field's name for a person ("Home folder"). The mapping
 	// screen shows it; nothing in the frontend names a field itself.
 	Label string `json:"label,omitempty"`
-	// Single means a person has one value, whatever their roles say: a home
-	// folder is one place. The add-on decides what several values mean.
-	Single bool `json:"single,omitempty"`
+	// Unit, Combine and Unlimited say what a limit is: its unit, how several
+	// combine (this add-on combines, once, and reports the effective limit),
+	// and the value that means no limit at all, which dominates.
+	Unit      string `json:"unit,omitempty"`
+	Combine   string `json:"combine,omitempty"`
+	Unlimited string `json:"unlimited,omitempty"`
 	// PerPerson means an operator may set this one field for one person, over
 	// what their roles give (an allowance with direction "set").
 	PerPerson bool `json:"per_person,omitempty"`
@@ -107,13 +121,20 @@ const (
 // nothing special-cases restoration because nothing special-cased suspension.
 func entitlementSchema() []EntitlementField {
 	return []EntitlementField{
-		{Name: FieldGroup, Type: "string[]", Label: "Group"},
-		{Name: FieldHome, Type: "bool", Label: "Gives a home folder", Single: true},
-		{Name: FieldHomeQuota, Type: "int", Label: "Home folder limit", Single: true, PerPerson: true},
-		{Name: FieldEnabled, Type: "bool", Lifecycle: true},
-		{Name: FieldSMBEnabled, Type: "bool", Lifecycle: true},
+		{Name: FieldGroup, Role: "membership", Label: "Group"},
+		{Name: FieldHome, Role: "flag", Label: "Gives a home folder"},
+		// TrueNAS's "no quota" is 0, which is why "0" is the unlimited value.
+		{Name: FieldHomeQuota, Role: "limit", Label: "Home folder limit", Unit: "bytes", Combine: "max", Unlimited: "0", PerPerson: true},
+		{Name: FieldEnabled, Role: "account"},
+		{Name: FieldSMBEnabled, Role: "channel", Label: "SMB"},
 	}
 }
+
+// kindStorage is what this add-on fronts, and features are what it serves
+// beyond the core (design §2, §4).
+const kindStorage = "storage"
+
+var features = []string{"operations", "settings", "storage.reach", "storage.homes"}
 
 // operationSet is the one-shot, event-shaped half. Anything with a desired
 // state belongs in the schema above instead.
@@ -166,7 +187,9 @@ func operationSet(probe capabilityProbe) []Operation {
 		{ID: "health.get", Scope: "admin"},
 	}
 	for i := range ops {
-		ops[i].Available, ops[i].UnavailableReason = probe.availability(ops[i].ID)
+		if probe != nil { // nil: the declaration alone (publicParams)
+			ops[i].Available, ops[i].UnavailableReason = probe.availability(ops[i].ID)
+		}
 	}
 	return ops
 }
@@ -188,9 +211,12 @@ func manifest(product, productVersion string, probe capabilityProbe, connection 
 		ContractVersion:   ContractVersion,
 		Product:           product,
 		ProductVersion:    productVersion,
+		Kind:              kindStorage,
+		Features:          features,
 		EntitlementSchema: entitlementSchema(),
 		Operations:        operationSet(probe),
 		Connection:        connection,
+		Limits:            Limits{SubjectsPerPlan: perRequestSubjectCap},
 	}
 }
 
@@ -237,7 +263,7 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 			// empty enumerable list: the backend fails open on a read it could
 			// not make, and an empty list would make it fail closed on every
 			// mapping while the target is down.
-			writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
+			writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's groups could not be read.", nil)
 			return
 		}
 		out := ValuesResponse{Field: field, Values: []string{}, Enumerable: true}
@@ -267,13 +293,11 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 		// "any value of the declared type", never as "no value is valid".
 		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: []string{}, Enumerable: false})
 	case FieldEnabled, FieldSMBEnabled:
-		// Lifecycle fields are resolver-computed and not mapping-bindable, so
-		// there is no legitimate reason to ask. Answered rather than refused,
+		// The account and its channel are resolver-computed and not
+		// mapping-bindable, so there is no legitimate reason to ask. Answered rather than refused,
 		// because the honest answer is a closed set of two.
 		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: []string{"false", "true"}, Enumerable: true})
 	default:
-		writeJSON(w, http.StatusNotFound, map[string]string{
-			"error": CodeUnknownField, "detail": "this field is not in the entitlement schema",
-		})
+		writeError(w, http.StatusNotFound, CodeUnknownField, "This field is not in the entitlement schema.", nil)
 	}
 }

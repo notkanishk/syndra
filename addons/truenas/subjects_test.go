@@ -446,16 +446,14 @@ func TestCapabilitiesAnswerWhileTheTargetIsDown(t *testing.T) {
 	if len(m.Operations) == 0 || len(m.EntitlementSchema) == 0 {
 		t.Fatal("the manifest must be served whole")
 	}
-	// Lifecycle fields are declared and flagged, so the backend refuses a
-	// role-to-target mapping naming one.
-	var flagged int
+	// The account and its channel are declared by role, so the backend refuses
+	// a role-to-target mapping naming either (design §3): exactly one account.
+	roles := map[string]string{}
 	for _, f := range m.EntitlementSchema {
-		if f.Lifecycle {
-			flagged++
-		}
+		roles[f.Name] = f.Role
 	}
-	if flagged != 2 {
-		t.Errorf("enabled and smb_enabled must both be flagged lifecycle, got %d", flagged)
+	if roles[FieldEnabled] != "account" || roles[FieldSMBEnabled] != "channel" || m.Kind != kindStorage {
+		t.Errorf("enabled must be the account and smb_enabled its channel, on a storage kind: %v %s", roles, m.Kind)
 	}
 }
 
@@ -560,25 +558,28 @@ func TestAReplayedOperationIdReturnsTheRecordedResult(t *testing.T) {
 	}
 	defer store.Close()
 
-	if err := store.Remember("c1", kindApply, map[string]string{"created": "charlotte"}); err != nil {
+	if err := store.Remember("c1", kindApply, "d1", map[string]string{"created": "charlotte"}); err != nil {
 		t.Fatal(err)
 	}
-	got, found, err := store.Recall("c1", kindApply)
+	got, found, err := store.Recall("c1", kindApply, "d1")
 	if err != nil || !found {
 		t.Fatalf("recall: %v found=%t", err, found)
 	}
-	if !strings.Contains(string(got), `"created":"charlotte"`) {
-		t.Fatalf("the original outcome must come back, got %s", got)
+	if !strings.Contains(string(got.Result), `"created":"charlotte"`) {
+		t.Fatalf("the original outcome must come back, got %s", got.Result)
+	}
+	if _, _, err := store.Recall("c1", kindApply, "d2"); !errors.Is(err, errIdentityMismatch) {
+		t.Errorf("the same id for another identity must be refused, got %v", err)
 	}
 
-	if _, found, _ := store.Recall("never-seen", kindApply); found {
+	if _, found, _ := store.Recall("never-seen", kindApply, "d1"); found {
 		t.Error("an unseen id must not be found")
 	}
 
 	// Past the window it is reported absent rather than deleted on a read path:
 	// a read that writes turns a replay storm into a write storm.
 	store.now = func() time.Time { return time.Now().Add(idempotencyTTL + time.Hour) }
-	if _, found, _ := store.Recall("c1", kindApply); found {
+	if _, found, _ := store.Recall("c1", kindApply, "d1"); found {
 		t.Error("an entry past its retention must not be recalled")
 	}
 	removed, err := store.SweepIdempotency()

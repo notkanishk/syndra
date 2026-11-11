@@ -35,14 +35,12 @@ type PlanSubject struct {
 }
 
 // PlanRequest is a proposed change across a cohort.
+//
+// There is no acknowledgement field: contract 2 gives the cohort guard to the
+// backend, which chunks below limits.subjects_per_plan (design §11).
 type PlanRequest struct {
 	ContractVersion int           `json:"contract_version"`
 	Subjects        []PlanSubject `json:"subjects"`
-	// AcknowledgeScope is the caller confirming an oversized request. Defence in
-	// depth only — this add-on sees one request and cannot observe a cohort
-	// spanning several, so the authoritative guard is the backend's at plan
-	// time, where the cohort actually exists.
-	AcknowledgeScope bool `json:"acknowledge_scope,omitempty"`
 }
 
 type PlanResponse struct {
@@ -62,9 +60,12 @@ type PlanResponse struct {
 	// outcome means, not merely how confident it is: an absence in a capped read
 	// is not an absence.
 	Truncated bool `json:"truncated"`
+	// Stale says why, exactly when Current is false.
+	Stale *Stale `json:"stale,omitempty"`
 }
 
-// perRequestSubjectCap bounds one request.
+// perRequestSubjectCap bounds one request, and is the manifest's
+// limits.subjects_per_plan.
 //
 // A backstop against a backend asking for too much at once, and explicitly not
 // the cohort guard: `/apply` is per subject, so this add-on can never compute
@@ -74,21 +75,21 @@ const perRequestSubjectCap = 200
 
 func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req PlanRequest
-	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
+	if !decodeRequest(w, body, &req, CodeBadRequest) || !writeContractRefusal(w, req.ContractVersion) {
 		return
 	}
-	if !writeContractRefusal(w, req.ContractVersion) {
+	if n := len(req.Subjects); n > perRequestSubjectCap {
+		// Reports the count it computed and the limit, so the caller can chunk.
+		writeError(w, http.StatusUnprocessableEntity, CodePlanTooLarge,
+			fmt.Sprintf("A plan may name at most %d subjects; this one names %d.", perRequestSubjectCap, n),
+			map[string]any{"subjects": n, "limit": perRequestSubjectCap})
 		return
 	}
-	if n := len(req.Subjects); n > perRequestSubjectCap && !req.AcknowledgeScope {
-		// Reports the count it computed. "Too large" leaves the caller guessing
-		// at what it is being warned about, and the caller here is a backend
-		// that has to decide whether to acknowledge.
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-			"error": CodeScopeAcknowledgementRequired, "subjects": n, "limit": perRequestSubjectCap,
-		})
-		return
+	for _, subject := range req.Subjects {
+		if strings.TrimSpace(subject.Subject) == "" {
+			writeError(w, http.StatusBadRequest, CodeBadRequest, "Every planned subject needs a subject.", nil)
+			return
+		}
 	}
 
 	// One read for the whole cohort. Planning forty subjects must not be forty
@@ -110,7 +111,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 			// Nothing current and nothing remembered. Refused rather than
 			// planned against an empty world, which would read as "everybody
 			// needs an account creating".
-			writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable, "detail": err.Error()})
+			writeError(w, statusFor(err), CodeTargetUnreadable, err.Error(), nil)
 			return
 		}
 		snap, current = cached, false
@@ -123,7 +124,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 	}
 	claimed, err := s.store.BoundUsernames()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
+		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, "The add-on's bindings could not be read.", nil)
 		return
 	}
 
@@ -132,6 +133,9 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		Current:   current,
 		TakenAt:   snap.TakenAt.UTC().Format(time.RFC3339),
 		Truncated: snap.Truncated,
+	}
+	if !current {
+		out.Stale = unreachableSince(snap.TakenAt)
 	}
 	for _, subject := range req.Subjects {
 		out.Outcomes = append(out.Outcomes, s.planOne(subject, byName, byUID, claimed, snap.Truncated))
@@ -191,7 +195,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 				Username:    name,
 				Fingerprint: fingerprintSubject(existing),
 				Conflict: &BindingConflict{
-					Username: name, UID: existing.UID,
+					Username: name, AccountID: accountID(existing.UID),
 					Adoptable: claimed[name] == "", BoundTo: claimed[name],
 				},
 			}
@@ -241,6 +245,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 			Detail:      "Where the home folder would go could not be read: " + err.Error() + ".",
 			Consequence: "Nothing would change.",
 			Username:    current.Username, Fingerprint: fingerprint,
+			AccountID: accountID(current.UID), Standing: standingOf(current),
 		}
 	}
 	// The one decision `apply` also executes (apply.go decide), so what is
@@ -267,6 +272,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 			Detail:      detail,
 			Consequence: describeHolding(*current),
 			Username:    current.Username, Fingerprint: fingerprint,
+			AccountID: accountID(current.UID), Standing: standingOf(current),
 		}
 	}
 	detail := ""
@@ -281,6 +287,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 		Detail:      detail,
 		Consequence: describeHolding(after),
 		Username:    current.Username, Fingerprint: fingerprint,
+		AccountID: accountID(current.UID), Standing: standingOf(current),
 	}
 }
 

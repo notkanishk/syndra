@@ -43,9 +43,15 @@ var (
 	// wait for the next tick.
 	manifestRetryCooldown = 30 * time.Second
 
+	// rereadAfterShapeRefusal reads a target's manifest again, in the
+	// background, after the add-on refused a request's shape (pipe.go).
+	rereadAfterShapeRefusal = func(a *Addon) { go a.rereadManifest() }
+
 	dbClaimAddonOperation        = db.ClaimAddonOperation
 	dbBeginAddonOperation        = db.BeginAddonOperation
 	dbSettleAddonOperation       = db.SettleAddonOperation
 	dbUpsertTarget               = db.UpsertTarget
 	dbDisableUnconfiguredTargets = db.DisableUnconfiguredTargets
+	dbTargetFieldRoles           = db.TargetFieldRoles
+	dbSaveTargetFieldRoles       = db.SaveTargetFieldRoles
 )
