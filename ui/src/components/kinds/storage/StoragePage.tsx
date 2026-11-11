@@ -3,7 +3,7 @@
 import { MemberTargetCard } from "@/components/kinds/MemberTargetCard";
 import { EmptyState, ListStates } from "@/components/states";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { isStorage } from "@/lib/nav";
+import { STORAGE_LABEL, isStorage } from "@/lib/nav";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
 
@@ -21,7 +21,7 @@ export function StoragePage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="Network storage"
+        title={STORAGE_LABEL}
         lede="Your account on the makerspace's shared storage, and how to connect to it. Your access follows the roles you hold."
       />
       <ListStates

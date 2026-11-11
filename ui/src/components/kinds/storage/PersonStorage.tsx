@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 
-import { isStorage } from "@/lib/nav";
+import { STORAGE_LABEL, isStorage } from "@/lib/nav";
 import { UserName } from "@/components/names/UserName";
 import {
   CardTop,
@@ -52,7 +52,7 @@ function gbWords(bytes: number | undefined): string {
 export function PersonStorage({ userId, name }: { userId: string; name: string }) {
   return (
     <SystemsSection
-      label="Network storage"
+      label={STORAGE_LABEL}
       noun="storage"
       userId={userId}
       name={name}
@@ -214,7 +214,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
 
 function PasswordRow({ view, name, storage }: { view: PersonTargetView; name: string; storage: PersonTargetView["storage"] }) {
   const label = view.name;
-  const own = `on their Network storage page`;
+  const own = `on their ${STORAGE_LABEL} page`;
   if (storage?.needs_new_password) {
     return (
       <Row label="Password">

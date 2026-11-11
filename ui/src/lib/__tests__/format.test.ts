@@ -178,6 +178,12 @@ describe("versionLabel", () => {
     expect(versionLabel("truenas", "TrueNAS 25.04.1")).toBe("25.04.1");
     expect(versionLabel("TrueNAS", "TrueNAS")).toBe("TrueNAS");
     expect(versionLabel("TrueNAS", "25.04.1")).toBe("25.04.1");
+    expect(versionLabel("TrueNAS", "TrueNAS - 25.1")).toBe("25.1");
+  });
+
+  it("strips the product only as a whole word", () => {
+    expect(versionLabel("True", "TrueNAS-25.10.5")).toBe("TrueNAS-25.10.5");
+    expect(versionLabel("Laser", "Laser2 1.0")).toBe("Laser2 1.0");
   });
 
   it("keeps the version when the product is empty", () => {
@@ -190,6 +196,7 @@ describe("versionLabel", () => {
     expect(versionLabel("Laser (big", "Laser (big 2.1")).toBe("2.1");
     expect(versionLabel("A.B", "AxB 1.0")).toBe("AxB 1.0");
     expect(versionLabel("A.B", "A.B-1.0")).toBe("1.0");
-    expect(versionLabel("(", "(1.0")).toBe("1.0");
+    expect(versionLabel("(", "( 1.0")).toBe("1.0");
+    expect(versionLabel("(", "(1.0")).toBe("(1.0");
   });
 });
