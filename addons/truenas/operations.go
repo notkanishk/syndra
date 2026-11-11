@@ -715,13 +715,16 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	if report.Truncated {
 		rows = rows[:activityLimit]
 	}
+	// With the shares unread, no service is a known share, so no event names
+	// one: an empty resource, never a name the add-on cannot place.
+	shares, _ := s.enabledShares()
 	for _, r := range rows {
 		report.Events = append(report.Events, ActivityEvent{
 			At:       time.Unix(r.Timestamp, 0).UTC().Format(time.RFC3339),
 			Event:    r.Event,
 			Success:  r.Success,
 			Address:  r.Address,
-			Resource: r.ServiceData.Service,
+			Resource: r.share(shares),
 			Detail:   eventDetail(r.EventData),
 		})
 	}
@@ -751,11 +754,25 @@ type auditRow struct {
 	Session   string          `json:"session"`
 	AuditID   string          `json:"audit_id"`
 	EventData json.RawMessage `json:"event_data"`
-	// ServiceData names the share an SMB event is on (`service`, Samba's
-	// word for a share).
+	// ServiceData says what an SMB event connected to (`service`, Samba's
+	// word for a share; share says whether it is one).
 	ServiceData struct {
 		Service string `json:"service"`
 	} `json:"service_data"`
+}
+
+// share is the share a row's event is on: its service, only when that is a
+// known enabled share (enabledShares), else "". Samba's service is what the
+// client connected to, and on a [homes]-style share that is the member's own
+// username, which is never passed on as a share. The one rule, for
+// activity.get and the collector alike.
+func (r auditRow) share(shares []smbShare) string {
+	for _, sh := range shares {
+		if sh.Name == r.ServiceData.Service {
+			return sh.Name
+		}
+	}
+	return ""
 }
 
 // decodeAnswer refuses an answer that is absent as well as one that is wrong.
@@ -774,8 +791,8 @@ func decodeAnswer(raw json.RawMessage, into any) error {
 }
 
 // eventDetail pulls the result out of a payload whose shape changes with the
-// event type. The share is not in it: it is the row's service_data.service
-// (auditRow.ServiceData), for activity.get and the collector alike.
+// event type. The share is not in it: it is the row's service_data.service,
+// read by auditRow.share for activity.get and the collector alike.
 //
 // Decoded separately from the row so a surprise in here costs one field rather
 // than the whole read.

@@ -1384,7 +1384,7 @@ Kit checks under `stats` (skipped when the feature is absent):
 | since | no point with `end <= since`; the watermark a midnight in `stats_zone`, ≤ the start of `taken_at`'s day; a second collection never moves it backwards; an unknown `metric` → 404 `UNKNOWN_METRIC` |
 | idempotent | the same `(metric, since)` twice → the same points at or before the watermark, and the same final gaps |
 | gaps | every gap has `start < end`, a `reason`, and only declared dimensions; a gap at or before the watermark is unchanged on the next collection |
-| no people in dimensions | no dimension value equals the username of an account `/subjects` lists (`stats.no-people`, a MUST); none equals such an account's `account_id` (`stats.no-people.ids`, warn: an id may also be a resource's name) |
+| no people in dimensions | no dimension value equals the username or `account_id` of the account the kit created (`stats.no-people`, a MUST); none equals those of any other account `/subjects` lists (`stats.no-people.ids`, warn: a service account may share a resource's name) |
 | unbound | with `--mutate`, usage by an account the kit created *outside* the binding (where the target allows it) appears in the total and in `unbound.accounts`, never as a per-subject point |
 | buffer | `since` older than the buffer → a gap from `since` to the oldest point with the buffer reason, and points still answer |
 | page size | no reply page exceeds `constants.max_reply_bytes`; a keyset cursor continues it with no duplicate and no omission across two pages |

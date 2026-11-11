@@ -1651,7 +1651,7 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       count yet") and the watermark stops there; the next run goes on.
     - Decided while building: a CONNECT row's share is
       `service_data.service` (the observed key, Samba's word for a share),
-      for the collector and `activity.get` alike (`auditRow.ServiceData`).
+      for the collector and `activity.get` alike (`auditRow.share`).
       `activity.get` read `event_data.share`, which no observed row has, so
       it never named the share (a live bug, also on main); fixed in the
       review round below.
@@ -1685,6 +1685,7 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       - `TZ` is refused at startup unless it matches the manifest schema's
         `stats_zone` pattern (`statsZonePattern`, held equal to the schema
         by `TestTheZonePatternIsTheSchemas`): `Singapore`, `EST5EDT`.
+    - Decided while building (6d-1 fix round): an `activity.get` event's `resource` is its service only when that is a known enabled share (`auditRow.share`, the one rule the collector also counts by), else empty, never a name: a `[homes]`-style share's service is the username (`TestAnActivityEventNamesOnlyAKnownShare`); backend and UI already took an absent resource.
 Items 6.6, 6.7 and 6.8 are slice 6d-2 (backend collection, migration and
 retention, access); 6d-1 changed no backend behaviour (a backend before 6d-2
 ignores `metrics` and `stats_zone` and never calls `/stats`). With rulings
@@ -1798,9 +1799,10 @@ per-person only) applied there.
   - [x] The `stats` part (slice 6d-1, 12 Nov 2026): checks
     `stats.descriptors`, `.points`, `.totals`, `.since`, `.idempotent`,
     `.gaps`, `.unbound`, `.buffer`, `.page-size`, `.no-people` (a MUST: no
-    dimension value is a username `/subjects` lists, the kit's own account's
-    included) and `.no-people.ids` (advisory: an `account_id`, which may
-    also be a resource's name), each citing the guide's chapter 4 section "Statistics". In
+    dimension value is the username or `account_id` of the account the kit
+    created) and `.no-people.ids` (advisory: those of any other account
+    `/subjects` lists, which may be a service account a resource is named
+    after), each citing the guide's chapter 4 section "Statistics". In
     the reads step every metric is read from now minus `stats_buffer`, all
     pages, twice; from a later since; from ten days before the buffer; and
     an undeclared metric; with `-mutate`, a `stats` step after the writes
@@ -1811,7 +1813,7 @@ per-person only) applied there.
     `.no-people`, and only it, so the run fails) and against rewrites the reference cannot serve
     (a meter against a non-limit, an unknown zone, P401D, UTC days, a 23-hour
     day, a negative value, an off-midnight watermark, a gap with no reason,
-    usage by nobody it names, a dimension naming an account id); skip without the
+    usage by nobody it names, a dimension naming the kit's own account id); skip without the
     feature and pass with `-features stats`, `-mutate` included.
     - Decided while building: the explicit-counter-zero warning is not
       built (no defect asks for it; an open question), and the `-mutate`
@@ -1820,6 +1822,7 @@ per-person only) applied there.
       names both halves the add-on's own tests carry. A 503
       `NO_CURRENT_READ` (nothing collected yet) skips the stats checks with
       the reason.
+    - Decided while building (6d-1 fix round): the `.no-people` MUST is the kit's own account only (username and `account_id`, which it makes unique); any other listed account is advisory (`.no-people.ids`), since TrueNAS lists service accounts and a `scanner` share by a `scanner` user is no leak (`TestAResourceNamedLikeAServiceAccountIsAdvisory`; `stats-dimension-names-person` still fails the MUST).
 
 ## Out of scope, stated so nobody builds it here
 

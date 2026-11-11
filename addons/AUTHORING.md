@@ -1305,8 +1305,10 @@ rules the schema cannot express:
 - Each dimension MUST name a **resource, never a person** (a machine, a
   share, a category). Syndra will drop and log a dimension value equal to a
   subject's `account_id` or name. The kit fails a dimension value equal to
-  the username of an account `/subjects` lists, and warns on one equal to
-  an `account_id` (an id may also be a resource's name).
+  the username or `account_id` of the account it created, and warns on one
+  equal to those of any other account `/subjects` lists (a service account
+  may share a resource's name: a `scanner` share written by a `scanner`
+  user).
 - `against` names a `limit` field of the same unit, and Syndra then draws the
   gauge as a meter against that person's observed limit. The schema allows
   it only on a `per_subject` gauge with no dimensions: a meter is one series
@@ -2256,7 +2258,9 @@ has the full map.
 - Read operations (`storage.status`, `activity.get`, `health.get`) are never
   recorded, held or gated (`readOperation` in `addons/truenas/operations.go`),
   and answer under `result` (feature `results`): `storage.status` the storage
-  profile, `activity.get` the share as each event's `resource`.
+  profile, `activity.get` the share as each event's `resource`, only when
+  it is a known enabled share (`auditRow.share`, the collector's rule; on a
+  `[homes]`-style share Samba's service is the username, so none).
   Call records last 30 days (`idempotencyTTL` in `addons/truenas/store.go`).
 - A NAS that cannot be reached answers a write `TARGET_UNREACHABLE`
   (`ErrNotSent` in `addons/truenas/nas.go`).

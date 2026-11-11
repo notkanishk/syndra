@@ -222,18 +222,14 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	for _, sub := range snap.Subjects {
 		uidOf[sub.Username] = sub.UID
 	}
-	enabled := map[string]bool{}
-	for _, sh := range shares {
-		enabled[sh.Name] = true
-	}
 	type session struct{ day, who, share, id string }
 	seen := map[session]bool{}
 	totals := map[[2]string]int64{}  // day, share
 	people := map[[3]string]int64{}  // day, share, subject
 	unbound := map[string][]string{} // day → account keys
 	for _, r := range rows {
-		share, day := r.ServiceData.Service, c.day(time.Unix(r.Timestamp, 0))
-		if r.Event != "CONNECT" || !r.Success || day < count || day >= until || !enabled[share] || !counted[share] {
+		share, day := r.share(shares), c.day(time.Unix(r.Timestamp, 0))
+		if r.Event != "CONNECT" || !r.Success || day < count || day >= until || share == "" || !counted[share] {
 			continue
 		}
 		uid, known := uidOf[r.Username]

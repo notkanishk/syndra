@@ -337,19 +337,30 @@ const recordedConnect = `[{"audit_id":"6f1d2c3b-0001","message_timestamp":170000
 	`"event":"CONNECT","success":true,"event_data":{"host":"192.0.2.17","unix_token":{"uid":3051,"gid":3051,"groups":[]},` +
 	`"result":{"type":"NTSTATUS","value_parsed":"NT_STATUS_OK","value_raw":0},"vers":{"major":3,"minor":1}}}]`
 
-// An event names the share it happened on, read where the NAS puts it.
-func TestAnActivityEventNamesItsShare(t *testing.T) {
-	s, m := opServer(t)
-	m.fakeRPC.audit, m.fakeRPC.shares = recordedConnect, `[]`
-	rr := postOperation(t, s, "activity.get", `{"call_id":"c1","subject":"sub-1"}`)
-	var out struct {
-		Result *ActivityReport `json:"result"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &out); rr.Code != http.StatusOK || err != nil || out.Result == nil {
-		t.Fatalf("%d %s", rr.Code, rr.Body)
-	}
-	if ev := out.Result.Events; len(ev) != 1 || ev[0].Resource != "lab" || ev[0].Detail != "NT_STATUS_OK" {
-		t.Errorf("events %+v, want one on share lab with NT_STATUS_OK", ev)
+// An event names the share it happened on, read where the NAS puts it, and
+// only a known enabled share: on a [homes]-style share Samba's service is the
+// member's username, which is never passed on as a resource.
+func TestAnActivityEventNamesOnlyAKnownShare(t *testing.T) {
+	for _, tc := range []struct{ name, service, shares, want string }{
+		{"a known share", "lab", `[{"name":"lab","path":"/mnt/tank/lab","enabled":true}]`, "lab"},
+		{"a username", "rey_mysterio", `[{"name":"lab","path":"/mnt/tank/lab","enabled":true}]`, ""},
+		{"a disabled share", "lab", `[{"name":"lab","path":"/mnt/tank/lab","enabled":false}]`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, m := opServer(t)
+			m.fakeRPC.audit = strings.Replace(recordedConnect, `"service":"lab"`, `"service":"`+tc.service+`"`, 1)
+			m.fakeRPC.shares = tc.shares
+			rr := postOperation(t, s, "activity.get", `{"call_id":"c1","subject":"sub-1"}`)
+			var out struct {
+				Result *ActivityReport `json:"result"`
+			}
+			if err := json.Unmarshal(rr.Body.Bytes(), &out); rr.Code != http.StatusOK || err != nil || out.Result == nil {
+				t.Fatalf("%d %s", rr.Code, rr.Body)
+			}
+			if ev := out.Result.Events; len(ev) != 1 || ev[0].Resource != tc.want || ev[0].Detail != "NT_STATUS_OK" {
+				t.Errorf("events %+v, want one with resource %q and NT_STATUS_OK", ev, tc.want)
+			}
+		})
 	}
 }
 

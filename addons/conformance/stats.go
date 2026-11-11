@@ -44,8 +44,8 @@ type statsRead struct {
 type statsSetup struct {
 	zone   *time.Location
 	since  time.Time
-	locals map[string]bool // every target account id and name /subjects lists, but the kit's own subject
-	names  map[string]bool // every username /subjects lists, the kit's own account's included
+	locals map[string]bool // every target account id and username /subjects lists, but the kit's own subject
+	own    map[string]bool // the username and account_id of the account the kit created, once it has
 }
 
 func (k *kit) stats() {
@@ -160,16 +160,21 @@ func (k *kit) statsSetup(c *check) (statsSetup, string) {
 		}
 	}
 	set.zone, set.since = zone, time.Now().In(zone).AddDate(0, 0, -days)
-	set.locals, set.names = map[string]bool{}, map[string]bool{}
+	set.locals = map[string]bool{}
 	for _, s := range objects(k.send(request{method: http.MethodGet, target: "/subjects"}).doc()["subjects"]) {
-		set.locals[str(s, "account_id")], set.locals[str(s, "username")], set.names[str(s, "username")] = true, true, true
+		set.locals[str(s, "account_id")], set.locals[str(s, "username")] = true, true
 	}
 	delete(set.locals, "")
-	delete(set.names, "")
 	// A subject id the kit knows is Syndra's: its own, so a point may carry
 	// it. A dimension may not, even where the add-on named the account after
-	// it (the reference does).
+	// it (the reference does): that is the kit's own username.
 	delete(set.locals, k.cfg.Subject)
+	// Only the kit's own account is surely a person: its name and id are the
+	// kit's to make unique. Another listed account may be a service account a
+	// resource is named after (a scanner share, a scanner user), so a match on
+	// it is advisory (stats.no-people.ids).
+	set.own = map[string]bool{k.created.username: true, k.created.id: true}
+	delete(set.own, "")
 	return set, ""
 }
 
@@ -303,8 +308,8 @@ func (k *kit) judgeStats(m map[string]any, r statsRead, set statsSetup) {
 		for key, v := range d {
 			c.expect(declared[key], "%s: %s names dimension %q, which the metric does not declare", name, what, key)
 			s, _ := v.(string)
-			if people.expect(!set.names[s], "%s: dimension %s is %q, the username of an account on the target", name, key, s) {
-				ids.expect(!set.locals[s], "%s: dimension %s is %q, the account_id of an account on the target", name, key, s)
+			if people.expect(!set.own[s], "%s: dimension %s is %q, the username or account_id of the kit's own account", name, key, s) {
+				ids.expect(!set.locals[s], "%s: dimension %s is %q, the username or account_id of an account on the target", name, key, s)
 			}
 		}
 		return d

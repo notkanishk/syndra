@@ -173,6 +173,10 @@ func TestSessionsAreCountedByUIDAndNoNameCrossesTheWire(t *testing.T) {
 	nas.connect(day0.Add(-40*time.Minute), "rey_mysterio", "main", "s2")
 	nas.connect(day0.Add(-30*time.Minute), "seth_rollins", "main", "s3")
 	nas.connect(day0.Add(-20*time.Minute), "seth_rollins", "open", "s4") // auditing off there: not counted
+	// A disabled share audited for everyone is not a known share (auditRow.share): not counted.
+	nas.shares = strings.TrimSuffix(statsShares, "]") +
+		`,{"name":"old","path":"/mnt/tank/old","enabled":false,"audit":{"enable":true,"watch_list":[],"ignore_list":[]}}]`
+	nas.connect(day0.Add(-10*time.Minute), "seth_rollins", "old", "s5")
 	s.collectStatsOnce()
 	*at = day0.Add(24 * time.Hour)
 	s.collectStatsOnce()
@@ -190,7 +194,7 @@ func TestSessionsAreCountedByUIDAndNoNameCrossesTheWire(t *testing.T) {
 			t.Errorf("a per-person point for someone no binding names: %+v", p)
 		}
 		if p.Dimensions["share"] != "main" {
-			t.Errorf("a point on a share whose auditing does not record everyone: %+v", p)
+			t.Errorf("a point on a share that is not a known share audited for everyone: %+v", p)
 		}
 	}
 	if first.Unbound.Accounts != 1 {

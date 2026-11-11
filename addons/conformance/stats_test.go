@@ -96,7 +96,7 @@ func TestTheStatsChecksCatchWhatTheDefectsCannotServe(t *testing.T) {
 		{"usage by nobody it names", "stats.unbound", false, "/stats", func(doc map[string]any) {
 			doc["unbound"] = map[string]any{"accounts": 0}
 		}},
-		{"a dimension naming an account id", "stats.no-people.ids", true, "/stats", eachPoint(func(p map[string]any) {
+		{"a dimension naming the kit's own account id", "stats.no-people", true, "/stats", eachPoint(func(p map[string]any) {
 			if dims, ok := p["dimensions"].(map[string]any); ok && dims["printer"] == "mk4-a" {
 				dims["printer"] = "1001" // the kit's own account, once it exists
 			}
@@ -113,6 +113,29 @@ func TestTheStatsChecksCatchWhatTheDefectsCannotServe(t *testing.T) {
 				t.Errorf("%s says %s, want fail: %v", tc.check, got, result(r, tc.check).Detail)
 			}
 		})
+	}
+}
+
+// Only the kit's own account is surely a person. A correct add-on whose
+// resource is named like a listed service account (the mk4-a printer, run by
+// an mk4-a account, as a scanner share is written by a scanner user) passes
+// the MUST and draws only the advisory.
+func TestAResourceNamedLikeAServiceAccountIsAdvisory(t *testing.T) {
+	service := map[string]any{"id": "1500", "username": "mk4-a", "account_id": "1500",
+		"state":    map[string]any{"enabled": true, "remote": false, "printers": []any{}, "after_hours": []any{}, "job_seconds": []any{"0"}},
+		"standing": map[string]any{"usable": true, "waiting_on": "none"}}
+	url, _ := serveRewriting(t, testSecret, nil, statsRewrite("/subjects", func(doc map[string]any) {
+		doc["subjects"] = append(doc["subjects"].([]any), service)
+	}), []string{"stats"})
+	r, err := Run(context.Background(), config(url, true))
+	if err != nil {
+		t.Fatal(err, failures(r))
+	}
+	if got := r.Status("stats.no-people"); got != "pass" {
+		t.Errorf("stats.no-people says %s, want pass: %v", got, result(r, "stats.no-people").Detail)
+	}
+	if f := failures(r); len(f) != 1 || f[0].ID != "stats.no-people.ids" || f[0].Level != "ADVISORY" || r.Failed() {
+		t.Errorf("failures %+v (run failed %v), want only the advisory stats.no-people.ids", f, r.Failed())
 	}
 }
 
