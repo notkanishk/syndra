@@ -353,7 +353,7 @@ func (n *NAS) Probe() error {
 func (n *NAS) recordFailureLocked(err error) {
 	// The breaker sees logins too, which reach here as the client's text and
 	// not as an answer, so their rate-limit wording is read directly.
-	if errors.Is(classifyNASError(err), ErrRateLimited) || (err != nil && rateLimitWording(err.Error())) {
+	if err != nil && rateLimitWording(err.Error()) {
 		n.failures = breakerThreshold
 	} else {
 		n.failures++

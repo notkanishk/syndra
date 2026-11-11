@@ -690,3 +690,18 @@ func TestABindingTheLogRefusesAfterACreateSaysTheAccountWasCreated(t *testing.T)
 		t.Fatalf("want a 500 saying the account was created, got %d %q", rr.Code, p.Detail)
 	}
 }
+
+// A log that fails after this apply's personal group was sent is not "it did
+// not send it": the group was sent. Still the 500 a person sees.
+func TestALogThatFailsAfterTheGroupWasSentSaysPartWasSent(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	m.after = map[string]func(){"group.create": func() { s.log.sync = func() error { return errors.New("disk gone") } }}
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"enabled":true}}`)
+	var p struct {
+		Detail string `json:"detail"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &p)
+	if rr.Code != http.StatusInternalServerError || m.groupCreates != 1 || !strings.HasPrefix(p.Detail, "part of this change was already sent") {
+		t.Fatalf("want a 500 saying part was sent, got %d (%d groups) %q", rr.Code, m.groupCreates, p.Detail)
+	}
+}

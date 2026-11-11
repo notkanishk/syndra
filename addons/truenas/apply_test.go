@@ -1666,7 +1666,7 @@ func TestAFailureAfterAGroupCreateWithNoAnswerIsPossiblyActed(t *testing.T) {
 	if !slices.Contains(m.fakeRPC.calls, "user.create") {
 		t.Fatalf("the group was not adopted; calls %v", m.fakeRPC.calls)
 	}
-	if rr.Code < 500 || rr.Code == http.StatusServiceUnavailable && problemCode(t, rr) == CodeTargetUnreachable || m.groupDeletes != 0 {
+	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeApplyFailed || m.groupDeletes != 0 {
 		t.Fatalf("want a possibly-acted 5xx and the group kept, got %d deletes=%d %s", rr.Code, m.groupDeletes, rr.Body.String())
 	}
 }

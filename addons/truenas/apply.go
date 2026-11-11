@@ -1366,13 +1366,19 @@ func describeHolding(s Subject) string {
 // failure is "may have acted", a 5xx APPLY_FAILED a person looks at, never an
 // answer Syndra reads as not reached and re-queues by itself. So a later
 // call's "nothing was sent" is dropped (never TARGET_UNREACHABLE), and a 429
-// from a rate-limited NAS becomes 503. The text is kept.
+// from a rate-limited NAS becomes 503. The text is kept, except after a log
+// that could not be written: "it did not send it" would read as "nothing
+// happened", and the earlier write did happen.
 func acted(err error) (ApplyOutcome, int, error) {
 	status := statusFor(err)
 	if status == http.StatusTooManyRequests {
 		status = http.StatusServiceUnavailable
 	}
-	if errors.Is(err, ErrNotSent) {
+	switch {
+	case errors.Is(err, errNotLogged):
+		return ApplyOutcome{}, http.StatusInternalServerError,
+			errors.New("part of this change was already sent to the NAS, then the add-on could not write the rest to its mutation log, so the rest was not sent; check the add-on's log volume, then try again")
+	case errors.Is(err, ErrNotSent):
 		err = errors.New(err.Error())
 	}
 	return ApplyOutcome{}, status, err
