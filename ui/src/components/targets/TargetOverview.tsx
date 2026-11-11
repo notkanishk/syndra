@@ -28,7 +28,7 @@ import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
-import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
+import { blocksIrreversibleAction, ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
@@ -1458,10 +1458,10 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
 
   // Refused inside the cooldown (a 429, nothing to show): the page's own load, or a press.
   const refused = inventory.data
-    ? cooldownOf(again.error, again.errorAt)
+    ? again.cooldown
     : inventory.error
       ? cooldownOf(inventory.error, inventory.errorUpdatedAt)
-      : cooldownOf(again.error, again.errorAt);
+      : again.cooldown;
   const read = {
     readAt: inventory.data?.read_at,
     current: inventory.data?.current,
@@ -1491,6 +1491,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
           refreshing={again.pending}
         />
       </div>
+      <ReadAgainError error={again.error} />
       {!inventory.data && refused ? null : (
       <ListStates
         isLoading={inventory.isLoading}

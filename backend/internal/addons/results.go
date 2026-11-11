@@ -312,16 +312,34 @@ func (spec needSpec) check(raw json.RawMessage) error {
 }
 
 // decodeShape unmarshals raw into into once it holds to spec and to the stale
-// invariant.
-func decodeShape(spec needSpec, raw json.RawMessage, into any) error {
+// invariant, and holds its taken_at to this clock (ahead): a reply dated the
+// zero time is not a reading, and one dated ahead is read as now.
+func (r ReadReply) decodeShape(spec needSpec, raw json.RawMessage, into any) error {
 	if err := spec.check(raw); err != nil {
 		return err
 	}
 	if err := staleInvariant(raw); err != nil {
 		return err
 	}
-	return json.Unmarshal(raw, into)
+	if err := json.Unmarshal(raw, into); err != nil {
+		return err
+	}
+	if o, ok := into.(observed); ok {
+		if seen := o.observation(); seen != nil {
+			if seen.TakenAt.IsZero() {
+				return errors.New("taken_at is the zero time")
+			}
+			seen.TakenAt = ahead(r.Target, seen.TakenAt)
+		}
+	}
+	return nil
 }
+
+// observed is a result that carries an Observation: every shape does, by
+// embedding it (a nil embedded *Observation answers nil).
+type observed interface{ observation() *Observation }
+
+func (o *Observation) observation() *Observation { return o }
 
 // StaleCooldown is stale.reason for a fresh read asked inside the add-on's
 // cooldown and answered with the last read (common/stale.json).
@@ -398,7 +416,7 @@ func (r ReadReply) View() ReadView {
 		return v
 	}
 	decoded := sh.result()
-	if err := decodeShape(sh.need, raw, decoded); err != nil {
+	if err := r.decodeShape(sh.need, raw, decoded); err != nil {
 		return v
 	}
 	var doc any

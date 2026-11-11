@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { copyLine, cooldownLine } from "@/components/results/copy";
 import { TargetOverview } from "@/components/targets/TargetOverview";
 import { ApiError } from "@/lib/api-client";
+import { cooldownOf } from "@/lib/queries/fresh";
 import { formatRelative } from "@/lib/format";
 
 /**
@@ -35,7 +36,10 @@ vi.mock("@/lib/queries/useTargets", () => {
     useMergeFindings: () => ({ ...idle(), data: [] }),
     useTargetHealth: () => ({ ...idle(), data: { reachable: true, lifecycle: "active" } }),
     useTargetInventory: () => ({ ...idle(), refetch: vi.fn(), ...state.inventory }),
-    useTargetInventoryAgain: () => ({ press: state.press, pending: false, error: state.again.error, errorAt: state.again.errorAt }),
+    useTargetInventoryAgain: () => {
+      const cooldown = cooldownOf(state.again.error, state.again.errorAt);
+      return { press: state.press, pending: false, error: state.again.error, errorAt: state.again.errorAt, cooldown: cooldown && { ...cooldown, pressed: true } };
+    },
     useResolveLogFinding: inert,
     useResolveBindingConflict: inert,
     useReconcileTarget: inert,
@@ -112,5 +116,20 @@ describe("a Read again the add-on refused inside its cooldown", () => {
     expect(screen.queryByText("The account list could not be read")).toBeNull();
     expect(screen.queryByText("Nothing outside Syndra.")).toBeNull();
     expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+  });
+
+  // Only a wait the reader pressed into is a warning.
+  it("draws the refusal of the reader's own press amber, and a page load inside someone else's wait neutral", () => {
+    const dot = () => document.querySelector("[data-freshness-dot]") as HTMLElement;
+    state.inventory = copyOf();
+    state.again = { error: cooling(9) };
+    const mine = renderTarget();
+    expect(dot().className).toContain("bg-warn");
+    mine.unmount();
+    state.inventory = { error: cooling(9) };
+    state.again = { error: null };
+    renderTarget();
+    expect(dot().className).toContain("bg-faint");
+    expect(dot().className).not.toContain("warn");
   });
 });

@@ -59,7 +59,10 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   const accounts = dormant.data?.accounts ?? [];
   // The list always reads the target itself, so a load inside the cooldown is refused (429, nothing was read).
   // That is said once, by the freshness line and its waiting button: no other block, and no "nothing was changed".
-  const refused = cooldownOf(dormant.error, dormant.errorUpdatedAt);
+  // Amber only when the reader's own press ran into it, not a page load inside someone else's wait.
+  const [pressedAt, setPressedAt] = useState(0);
+  const cooldown = cooldownOf(dormant.error, dormant.errorUpdatedAt);
+  const refused = cooldown && { ...cooldown, pressed: pressedAt > 0 && dormant.errorUpdatedAt >= pressedAt };
   const name = nameOf(target);
   const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);
   const safe = byName(accounts.filter((a) => !a.subject_still_member));
@@ -94,16 +97,20 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
               truncated: dormant.data?.truncated,
               stale: refused,
             }}
-            onRefresh={() => dormant.refetch()}
+            onRefresh={() => {
+              setPressedAt(Date.now());
+              return dormant.refetch();
+            }}
             refreshing={dormant.isFetching}
           />
         </div>
       )}
 
-      {refused ? null : (
+      {!dormant.data && refused ? null : (
       <ListStates
         isLoading={dormant.isLoading}
-        error={dormant.error}
+        // A refusal is the line's to say, never a reason to take the list away while it is on hand.
+        error={refused ? null : dormant.error}
         isEmpty={accounts.length === 0}
         onRetry={() => dormant.refetch()}
         errorTitle="This list could not be read"

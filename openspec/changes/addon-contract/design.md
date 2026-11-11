@@ -577,7 +577,12 @@ cooldown, the declared cooldown, 60 s)`, the ceiling twice
 `constants.cooldown_default`; "Check now" runs the same pass inside a
 person's request and never waits (`ReconcileAddonNow`). An add-on's
 `taken_at` more than two minutes ahead of the backend's clock is read as
-now, logged once per target (decided while building 6b, review round 2). For the kit to prove any of this black-box, an add-on
+now, logged once per target (decided while building 6b, review round 2),
+and one dated the zero time is not a reading: every reply shape, the typed
+readers' and every `results` shape's, through one clamp (round 3). A kept
+copy is re-clamped on every serve, so behind a clock S ahead it reads "just
+now" for about S − 2 min; correcting by the add-on's `Date` header (RFC 9111
+§4.2.3) is a follow-up. For the kit to prove any of this black-box, an add-on
 declaring `freshness` MUST carry `health.target_reads`, every read it has
 made of its app since it started, never decreasing while it runs and free to
 start again at 0, like an OpenMetrics counter (`log_records` counts

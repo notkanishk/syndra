@@ -28,7 +28,7 @@ import {
 } from "@/lib/role-mapping-plan";
 import { HOME_ROOT, useTargetReach, useTargetReachAgain, useTargetSettings, type ReachPlace } from "@/lib/queries/useTargets";
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
-import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { STALE } from "@/lib/queries/fresh";
 import { UserName } from "@/components/names";
@@ -83,7 +83,7 @@ export function MappingManagement({ target }: { target: string }) {
   const mappings = useMappings(target);
   const reach = useTargetReach(target);
   const reachAgain = useTargetReachAgain(target);
-  const reachCopy = reach.data?.stale ?? (reach.data?.retry_after ? { reason: STALE.cooldown, retry_after: reach.data.retry_after } : undefined);
+  const reachCopy = reach.data?.stale ?? (reach.data?.retry_after ? { reason: STALE.cooldown, retry_after: reach.data.retry_after, since: reach.dataUpdatedAt } : undefined);
   const settings = useTargetSettings(target);
   const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
@@ -127,6 +127,7 @@ export function MappingManagement({ target }: { target: string }) {
             />
           </div>
         )}
+        <ReadAgainError error={reachAgain.error} />
         <ListStates
           isLoading={mappings.isLoading}
           error={mappings.error}

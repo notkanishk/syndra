@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -255,6 +256,54 @@ func TestAReadJoiningAFailedReadIsAnsweredAsItWas(t *testing.T) {
 	if got := reads() - before; got != 1 {
 		t.Errorf("joining a failed read read the app %d times, want 1", got)
 	}
+}
+
+// A reader joining a read that fails is answered as that failure is, even when
+// another reader starts a new read before the joiner wakes: it never joins the
+// second read and answers its result as its own. The two reads are played by
+// hand, as freshSubjects leaves them under a.mu, so the interleaving the
+// scheduler rarely gives is the only one there is; synctest says when the
+// joiner is parked on the read it joined.
+func TestAJoinerOfAFailedReadNeverJoinsTheNextRead(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		a, err := New(Config{Target: "reference", Secret: []byte("s"), Features: []string{"freshness"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := &a.fresh
+		begin := func() chan struct{} { // a reader starts a read of the app
+			fl := make(chan struct{})
+			f.flight, f.began = fl, time.Now()
+			return fl
+		}
+		a.mu.Lock()
+		first := begin()
+		a.mu.Unlock()
+
+		joined := make(chan reply, 1)
+		go func() { joined <- a.freshSubjects(true) }()
+		synctest.Wait() // the joiner waits on the first read
+
+		a.mu.Lock()
+		f.flight, f.failed = nil, true // the first read fails
+		close(first)
+		second := begin() // another reader begins the next, before the joiner wakes
+		a.mu.Unlock()
+		synctest.Wait()
+
+		a.mu.Lock()
+		f.flight, f.failed = nil, false // the next read succeeds
+		a.keep([]subject{}, now(), f.gen)
+		close(second)
+		a.mu.Unlock()
+
+		rep := <-joined
+		var doc map[string]any
+		_ = json.Unmarshal(rep.body, &doc)
+		if rep.status != 503 || doc["code"] != "TARGET_UNREACHABLE" {
+			t.Errorf("a joiner of a failed read answered %d %v, want 503 TARGET_UNREACHABLE: the read it joined, not the next one", rep.status, doc)
+		}
+	})
 }
 
 // A write forgets a failure with everything else: a read joining one begun

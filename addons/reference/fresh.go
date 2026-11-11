@@ -93,10 +93,12 @@ func (a *Addon) freshSubjects(fresh bool) reply {
 			a.mu.Unlock()
 			<-fl
 			a.mu.Lock()
-			if f.failed && f.flight == nil {
+			if f.failed {
 				// The read joined failed: answered as it was, the mirror
 				// unreachable or the error, never "cached" and never a read of
-				// the app of its own (the TrueNAS add-on's fresher.fallback).
+				// the app of its own (the TrueNAS add-on's fresher.fallback),
+				// even if another reader has begun the next read meanwhile. A
+				// write since clears failed (forget), and is decided again.
 				return a.unreached()
 			}
 			if f.kept {

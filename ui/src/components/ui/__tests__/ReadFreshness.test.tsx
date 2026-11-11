@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api-client";
 import {
   blocksIrreversibleAction,
   classifyRead,
+  ReadAgainError,
   ReadFreshness,
 } from "@/components/ui/ReadFreshness";
 
@@ -126,14 +128,45 @@ describe("how a copy is drawn", () => {
     }
   });
 
-  it("a cooldown the reader caused stays amber, and so does a system that cannot be reached", () => {
-    const { unmount } = render(<ReadFreshness state={{ readAt: ago(0.2), current: true, stale: { reason: "cooldown", retry_after: 30 } }} subject="The list" />);
+  it("a cooldown the reader pressed into stays amber, and so does a system that cannot be reached", () => {
+    const { unmount } = render(<ReadFreshness state={{ readAt: ago(0.2), current: true, stale: { reason: "cooldown", retry_after: 30, pressed: true } }} subject="The list" />);
     expect(dot().className).toContain("bg-warn");
     expect(line(/you can read again in/).className).toContain("text-warn-text");
     unmount();
     render(<ReadFreshness state={{ readAt: ago(1), current: false, stale: { reason: "unreachable" } }} subject="The list" />);
     expect(dot().className).toContain("border-warn");
     expect(line(/can.t be reached/).className).toContain("text-warn-text");
+  });
+
+  // A page load inside somebody else's wait is not the reader's doing, so it is not a warning.
+  it("a cooldown the reader did not cause is neutral, like a copy", () => {
+    render(<ReadFreshness state={{ readAt: ago(0.2), current: true, stale: { reason: "cooldown", retry_after: 30 } }} subject="The list" />);
+    expect(dot().className).toContain("bg-faint");
+    expect(dot().className).not.toMatch(/warn/);
+    expect(line(/you can read again in/).className).toContain("text-faint");
+  });
+
+  describe("once the count is over", () => {
+    afterEach(() => vi.useRealTimers());
+    const over = (current: boolean) => {
+      vi.useFakeTimers();
+      render(<ReadFreshness state={{ readAt: ago(0.2), current, stale: { reason: "cooldown", retry_after: 2, pressed: true } }} subject="The list" onRefresh={() => {}} />);
+      expect(dot().className).toContain("bg-warn");
+      act(() => void vi.advanceTimersByTime(3000));
+      expect(screen.queryByText(/you can read again in/)).toBeNull();
+    };
+
+    it("the colour follows what the line now says: a copy that is not current is neutral", () => {
+      over(false);
+      expect(dot().className).toContain("bg-faint");
+      expect(line(/The list was read/).className).toContain("text-faint");
+    });
+
+    it("and a current read is drawn by its age, not amber", () => {
+      over(true);
+      expect(dot().className).toContain("bg-healthy");
+      expect(dot().className).not.toContain("warn");
+    });
   });
 
   it("counts a cooldown from when it arrived, not from when it was drawn", () => {
@@ -149,5 +182,16 @@ describe("how a copy is drawn", () => {
     expect(slot.className).toContain("h-[var(--tap)]");
     expect(slot.className).toContain("desktop:h-0");
     expect(slot.className.split(/\s+/)).not.toContain("h-0");
+  });
+});
+
+describe("a Read again that failed", () => {
+  it("says so in the outcome every refusal wears, and leaves the cooldown to the line", () => {
+    const { container, rerender } = render(<ReadAgainError error={new ApiError(503, { error: "TARGET_UNREACHABLE", message: "TrueNAS did not answer" })} />);
+    expect(screen.getByText("Not read")).toBeInTheDocument();
+    rerender(<ReadAgainError error={new ApiError(429, { error: "FRESH_READ_COOLDOWN", retry_after: 5 })} />);
+    expect(container).toBeEmptyDOMElement();
+    rerender(<ReadAgainError error={null} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

@@ -10,7 +10,7 @@ import { isStorage } from "@/lib/nav";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 import { useCrumb } from "@/lib/page-crumb";
 import { useMySystems } from "@/lib/queries/useMySystems";
-import { ReadAgainProvider } from "@/components/ui/ReadFreshness";
+import { ReadAgainError, ReadAgainProvider } from "@/components/ui/ReadFreshness";
 import { useMyStorage, useMyStorageAgain } from "@/lib/queries/useMyStorage";
 
 /**
@@ -58,7 +58,8 @@ export function MemberSystemPage({ target }: { target: string }) {
       >
         {/* The page's heading already names the system: the card does not again. */}
         {view && (
-          <ReadAgainProvider value={again.press}>
+          <ReadAgainProvider value={{ press: again.press, since: mine.dataUpdatedAt }}>
+            <ReadAgainError error={again.error} />
             <MemberTargetCard view={view} untitled />
           </ReadAgainProvider>
         )}

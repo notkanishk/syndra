@@ -25,7 +25,7 @@ import { sortNames } from "@/lib/sort";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
 import { useTargetActivity, useTargetActivityAgain } from "@/lib/queries/useTargetActivity";
-import { ReadFreshness, observed, type ReadState } from "@/components/ui/ReadFreshness";
+import { ReadAgainError, ReadFreshness, observed, type ReadState } from "@/components/ui/ReadFreshness";
 import { STALE } from "@/lib/queries/fresh";
 
 /**
@@ -198,7 +198,7 @@ function TargetActivityCard({
     data?.readable && data.taken_at
       ? observed({ taken_at: data.taken_at, current: data.current ?? true, stale: data.stale })
       : data?.reason === "cooldown" && data.retry_after
-        ? { stale: { reason: STALE.cooldown, retry_after: data.retry_after } }
+        ? { stale: { reason: STALE.cooldown, retry_after: data.retry_after, since: activity.dataUpdatedAt } }
         : null;
 
   return (
@@ -248,6 +248,7 @@ function TargetActivityCard({
           />
         </div>
       )}
+      <ReadAgainError error={again.error} />
       {data && !data.readable && data.reason === "no_account" ? (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
           {label} has no account for this person, so there is nothing to read

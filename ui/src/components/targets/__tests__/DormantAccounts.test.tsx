@@ -20,6 +20,9 @@ const state: {
   swept: Array<{ accounts: string[]; elevatedKey: OneShotSecret }>;
   answer?: SweepResult;
   error?: unknown;
+  errorAt?: number;
+  /** A refetch that failed with the list still on hand, as react-query keeps it. */
+  keepData?: boolean;
   sweepError?: unknown;
   refetch: ReturnType<typeof vi.fn>;
 } = {
@@ -35,10 +38,11 @@ vi.mock("@/lib/queries/useDormant", async () => {
   return {
     ...actual,
     useDormantAccounts: () => ({
-      data: state.error ? undefined : state.report,
+      data: state.error && !state.keepData ? undefined : state.report,
       isLoading: false,
       isFetching: false,
       error: state.error ?? null,
+      errorUpdatedAt: state.errorAt,
       refetch: state.refetch,
     }),
     useSweepDormant: () => ({
@@ -56,19 +60,21 @@ vi.mock("@/lib/queries/useDormant", async () => {
   };
 });
 
-function renderDormant() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <DormantAccounts target="truenas" />
-    </QueryClientProvider>,
-  );
-}
+const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+// A new element each time, so a rerender really draws again (an identical one is bailed out of).
+const tree = () => (
+  <QueryClientProvider client={client}>
+    <DormantAccounts target="truenas" />
+  </QueryClientProvider>
+);
+const renderDormant = () => render(tree());
 
 beforeEach(() => {
   state.swept = [];
   state.answer = undefined;
   state.error = undefined;
+  state.errorAt = undefined;
+  state.keepData = undefined;
   state.sweepError = undefined;
   state.refetch = vi.fn();
   state.report = {
@@ -267,5 +273,36 @@ describe("inside the add-on's cooldown", () => {
     fireEvent.click(button);
     expect(state.refetch).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
+  });
+
+  // Somebody else's wait is not the reader's doing, and only their own press into it is a warning.
+  it("draws a cooldown the load ran into neutral, and amber only once the reader's own press meets it", () => {
+    vi.useFakeTimers();
+    state.error = cooling(2);
+    state.errorAt = Date.now();
+    const view = renderDormant();
+    const dot = () => document.querySelector("[data-freshness-dot]") as HTMLElement;
+    expect(dot().className).toContain("bg-faint");
+    expect(dot().className).not.toContain("warn");
+    act(() => void vi.advanceTimersByTime(2000));
+    fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+    state.error = cooling(30);
+    state.errorAt = Date.now();
+    view.rerender(tree());
+        expect(dot().className).toContain("bg-warn");
+    vi.useRealTimers();
+  });
+
+  it("keeps the list and its selection when a refetch is refused while it is on hand", async () => {
+    const view = renderDormant();
+    fireEvent.click(screen.getByLabelText("Select former-member"));
+    expect(screen.getByLabelText("Select former-member")).toBeChecked();
+    state.keepData = true;
+    state.error = cooling(30);
+    state.errorAt = Date.now();
+    view.rerender(tree());
+    expect(await screen.findByText(/can read again in/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Select former-member")).toBeChecked();
+    expect(screen.queryByText("This list could not be read")).toBeNull();
   });
 });

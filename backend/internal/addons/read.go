@@ -145,9 +145,7 @@ const clockSkew = 2 * time.Minute
 var aheadLogged sync.Map
 
 // takenAt reads a target's reply's taken_at: present, RFC 3339, and not the
-// zero time. One later than now (beyond clockSkew) is read as now: no read
-// happened in the future, and a reply dated ahead would pass for newer than
-// the read that replaces it, and never age.
+// zero time, then held to this clock (ahead).
 func takenAt(target string, raw *string) (time.Time, bool) {
 	if raw == nil {
 		return time.Time{}, false
@@ -156,15 +154,24 @@ func takenAt(target string, raw *string) (time.Time, bool) {
 	if err != nil || ts.IsZero() {
 		return time.Time{}, false
 	}
+	return ahead(target, ts), true
+}
+
+// ahead holds a target's taken_at to this clock: one later than now (beyond
+// clockSkew) is read as now. No read happened in the future, and a reply dated
+// ahead would pass for newer than the read that replaces it, and never age.
+// Every taken_at a target sends is read through here: the typed readers'
+// through takenAt, every result shape's through ReadReply.decodeShape.
+func ahead(target string, ts time.Time) time.Time {
 	now := timeNow().UTC()
 	if ts.After(now.Add(clockSkew)) {
 		if _, logged := aheadLogged.LoadOrStore(target, true); !logged {
 			log.Printf("[ADDON] %s dates a read %s ahead of this clock; read as now (said once per target: check the add-on host's clock)",
 				target, ts.Sub(now).Round(time.Second))
 		}
-		return now, true
+		return now
 	}
-	return ts.UTC(), true
+	return ts.UTC()
 }
 
 // ErrNoSubjects refuses a plan for nobody.
@@ -1049,16 +1056,11 @@ func (r ReadReply) Storage() StorageStatus {
 		// status, plus the five keys the storage card decides on.
 		var p struct {
 			storageWire
-			QuotaRead bool    `json:"quota_read"`
-			TakenAt   *string `json:"taken_at"`
-			Current   *bool   `json:"current"`
-			Stale     *Stale  `json:"stale"`
+			QuotaRead bool `json:"quota_read"`
+			Observation
 		}
-		err = decodeShape(storageNeed, raw, &p)
-		w, quotaRead = p.storageWire, p.QuotaRead
-		if at, ok := takenAt(r.Target, p.TakenAt); ok && p.Current != nil {
-			seen = &Observation{TakenAt: at, Current: *p.Current, Stale: p.Stale}
-		}
+		err = r.decodeShape(storageNeed, raw, &p)
+		w, quotaRead, seen = p.storageWire, p.QuotaRead, &p.Observation
 	default:
 		// ponytail: the legacy pocket's name for quota_read, read until major 3.
 		var p struct {
@@ -1167,7 +1169,7 @@ func (r ReadReply) Activity() ActivityReport {
 	switch {
 	case err != nil:
 	case r.Results:
-		err = decodeActivity(raw, &out)
+		err = r.decodeShape(activityNeed, raw, &out)
 	default:
 		// ponytail: the legacy pocket's names, read until major 3.
 		var w struct {
@@ -1202,10 +1204,6 @@ func (r ReadReply) Activity() ActivityReport {
 	}
 	out.Outcome, out.Status = OutcomeSucceeded, r.Status
 	return out
-}
-
-func decodeActivity(raw json.RawMessage, into *ActivityReport) error {
-	return decodeShape(activityNeed, raw, into)
 }
 
 // SystemReport is the NAS's own account of itself: what it is, what is wrong

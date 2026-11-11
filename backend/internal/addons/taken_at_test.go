@@ -67,3 +67,62 @@ func TestEveryDatedReadIsClampedAlike(t *testing.T) {
 		t.Errorf("homes dated 2099 read %+v, want taken at now", h)
 	}
 }
+
+// Every result shape holds its taken_at to this clock in one place
+// (ReadReply.decodeShape): records, activity and status as much as storage.
+// One dated ahead is read as now, said once per target however many shapes
+// it answers; one dated the zero time is not a reading.
+func TestEveryResultShapeIsClampedAlike(t *testing.T) {
+	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
+	saved := timeNow
+	timeNow = func() time.Time { return now }
+	var logs bytes.Buffer
+	w := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { timeNow = saved; log.SetOutput(w); aheadLogged.Delete("shapes") })
+
+	standing := `"standing":{"usable":true,"waiting_on":"nobody"}`
+	shapes := map[string]string{
+		"common/records.json":  `"records":[]`,
+		"common/activity.json": `"events":[],"uncovered":[],"truncated":false`,
+		"common/status.json":   `"usable":true,"meters":[],` + standing,
+		storageProfile: `"usable":true,"meters":[],` + standing +
+			`,"places":[],"places_readable":true,"needs_password":false,"needs_new_password":false,"quota_read":true`,
+	}
+	// read is the reply's taken_at as this backend reads it, through the
+	// reader each shape is read by; ok false is "not a reading".
+	read := func(schema, body, takenAt string) (at time.Time, ok bool) {
+		r := ReadReply{Target: "shapes", Schema: schema, Results: true, Outcome: OutcomeSucceeded,
+			Body: []byte(`{"result":{` + body + `,"taken_at":"` + takenAt + `","current":true}}`)}
+		switch schema {
+		case "common/activity.json":
+			if a := r.Activity(); a.Outcome == OutcomeSucceeded {
+				return a.TakenAt, true
+			}
+		case storageProfile:
+			if s := r.Storage(); s.Outcome == OutcomeSucceeded {
+				return s.TakenAt, true
+			}
+		default:
+			if v := r.View(); v.Readable {
+				return v.Result.(observed).observation().TakenAt, true
+			}
+		}
+		return time.Time{}, false
+	}
+	past := time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC)
+	for schema, body := range shapes {
+		if at, ok := read(schema, body, "2026-11-10T10:00:00Z"); !ok || !at.Equal(now) {
+			t.Errorf("%s dated an hour ahead read %v (%t), want now", schema, at, ok)
+		}
+		if at, ok := read(schema, body, "2026-11-10T09:00:00+01:00"); !ok || !at.Equal(past) {
+			t.Errorf("%s dated an hour past read %v (%t), want as sent", schema, at, ok)
+		}
+		if at, ok := read(schema, body, "0001-01-01T00:00:00Z"); ok {
+			t.Errorf("%s dated the zero time read as %v, want not a reading", schema, at)
+		}
+	}
+	if n := strings.Count(logs.String(), "ahead of this clock"); n != 1 {
+		t.Errorf("logged %d times for one target ahead in %d shapes, want once:\n%s", n, len(shapes), logs.String())
+	}
+}

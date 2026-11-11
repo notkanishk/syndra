@@ -5,7 +5,7 @@ import { RecordsList } from "@/components/results/RecordsList";
 import { StatusMeters } from "@/components/results/StatusMeters";
 import { ALSO_SAYS, noMoreLines, notReadableBody, notReadableNext, notReadableTitle, type Reader } from "@/components/results/copy";
 import { Notice } from "@/components/ui/Notice";
-import { observed, ReadFreshness, useReadAgainPress, type ReadState } from "@/components/ui/ReadFreshness";
+import { observed, ReadFreshness, useReadAgainPress, useReadAgainSince, type ReadState } from "@/components/ui/ReadFreshness";
 import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
 import { STALE } from "@/lib/queries/fresh";
 import type { ActivityResult, ReadView, RecordsResult, StatusResult } from "@/lib/queries/useMyStorage";
@@ -53,8 +53,8 @@ export function ReadResult({ read, name, reader }: { read: ReadView } & ReadProp
 }
 
 /** What one read says about its own age: its answer's, or the cooldown it ran into with nothing to show. */
-function readStateOf(read: ReadView): ReadState | null {
-  if (read.retry_after) return { stale: { reason: STALE.cooldown, retry_after: read.retry_after } };
+function readStateOf(read: ReadView, since?: number): ReadState | null {
+  if (read.retry_after) return { stale: { reason: STALE.cooldown, retry_after: read.retry_after, since } };
   const { result } = read;
   return read.readable && result && typeof result !== "string" ? observed(result) : null;
 }
@@ -65,7 +65,7 @@ function readStateOf(read: ReadView): ReadState | null {
  */
 export function ReadLine({ read, name, reader }: { read: ReadView } & ReadProps) {
   const again = useReadAgainPress();
-  const state = readStateOf(read);
+  const state = readStateOf(read, useReadAgainSince());
   return state && <ReadFreshness state={state} subject={name} reader={reader} onRefresh={again} />;
 }
 

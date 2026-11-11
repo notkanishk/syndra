@@ -93,6 +93,8 @@ describe("what sends fresh", () => {
       await expect(result.current.press()).rejects.toBeInstanceOf(ApiError);
     });
     expect(cooldownOf(result.current.error)).toEqual({ reason: "cooldown", retry_after: 9 });
+    // The reader's own press ran into it, so the wait is theirs (amber), counted from when it arrived.
+    expect(result.current.cooldown).toEqual({ reason: "cooldown", retry_after: 9, since: result.current.errorAt, pressed: true });
     expect(result.current.pending).toBe(false);
     answer = () => json({ target: "truenas" });
     await act(async () => {
@@ -164,6 +166,8 @@ describe("a poll in flight when Read again is pressed", () => {
       urls.push(String(input));
       return String(input).includes("fresh=true") ? json({ v: "fresh" }) : new Promise<Response>((r) => (landPoll = r));
     }));
+    // A copy is on hand (a poll over it): only a copy is worth protecting from a late poll.
+    client.setQueryData(["card"], { v: "old" });
     void client.fetchQuery({ queryKey: ["card"], queryFn: () => request<{ v: string }>("/card") }).catch(() => {});
     await waitFor(() => expect(urls).toEqual(["/api/proxy/card"]));
     await act(async () => {

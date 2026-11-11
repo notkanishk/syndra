@@ -18,6 +18,8 @@ export interface Stale {
   note?: string;
   /** When this answer arrived (ms since the epoch): a cooldown counts from here, not from when it was drawn. */
   since?: number;
+  /** The reader asked for the read that was refused (a press), so the wait is theirs: only then is it drawn amber. */
+  pressed?: boolean;
 }
 
 /**
@@ -55,8 +57,10 @@ export function useReadAgain<T>(queryKey: QueryKey, path: string) {
     setError(null);
     setPending(true);
     try {
-      // A poll still in flight would land after this answer and put the copy back.
-      await client?.cancelQueries({ queryKey });
+      // A poll still in flight would land after this answer and put the copy back. Only a copy is
+      // worth protecting: cancelling a first load with nothing cached reverts it to idle, with no data
+      // and no error, which a list draws as empty.
+      if (client?.getQueryData(queryKey) !== undefined) await client.cancelQueries({ queryKey });
       client?.setQueryData(queryKey, await request<T>(withFresh(path)));
     } catch (e) {
       setError(e);
@@ -66,7 +70,9 @@ export function useReadAgain<T>(queryKey: QueryKey, path: string) {
       setPending(false);
     }
   }
-  return { press, pending, error, errorAt };
+  // A press the cooldown refused: the wait is the pressing reader's own.
+  const refused = cooldownOf(error, errorAt);
+  return { press, pending, error, errorAt, cooldown: refused && { ...refused, pressed: true } };
 }
 
 /**

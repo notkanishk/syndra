@@ -3,10 +3,12 @@
 import { createContext, useContext, useEffect, useId, useState } from "react";
 
 import { copyLine, cooldownLine, READ_AGAIN, READING, unreachableLine, type Reader } from "@/components/results/copy";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
 import { formatClock, formatRelative } from "@/lib/format";
-import { STALE, useCountdown, type Stale } from "@/lib/queries/fresh";
+import { outcomeFromError } from "@/lib/outcome";
+import { cooldownOf, STALE, useCountdown, type Stale } from "@/lib/queries/fresh";
 
 /**
  * How old the state on this screen is (design §31 A).
@@ -104,12 +106,13 @@ const TONE: Record<Freshness, string> = {
 
 /**
  * What colour the line and its dot are drawn in. A copy the add-on kept is the
- * normal state of a read, so it is neutral however old it is. A cooldown the
- * reader caused and a system that cannot be reached stay amber; every other
- * reading is drawn by its age.
+ * normal state of a read, so it is neutral however old it is, and so is a
+ * cooldown the reader did not cause (a page load inside someone else's). A
+ * cooldown the reader pressed into and a system that cannot be reached are
+ * amber; every other reading is drawn by its age.
  */
-export function toneOf(reading: Freshness, why: string | undefined): { text: string; dot: string } {
-  if (why === STALE.cached) return { text: "text-faint", dot: "bg-faint" };
+export function toneOf(reading: Freshness, why: string | undefined, pressed = false): { text: string; dot: string } {
+  if (why === STALE.cached || (why === STALE.cooldown && !pressed)) return { text: "text-faint", dot: "bg-faint" };
   if (why === STALE.cooldown) return { text: "text-warn-text", dot: "bg-warn" };
   return {
     text: TONE[reading],
@@ -175,9 +178,24 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
  * `fresh=true` (`useReadAgain`). The renderers of an add-on's reads take it
  * from here, so a card names no press of its own.
  */
-const ReadAgainContext = createContext<(() => unknown) | undefined>(undefined);
+const ReadAgainContext = createContext<{ press: () => unknown; since?: number } | undefined>(undefined);
+/** `since`: when the page's read last answered (its query's `dataUpdatedAt`), where a cooldown a reply carries counts from. */
 export const ReadAgainProvider = ReadAgainContext.Provider;
-export const useReadAgainPress = () => useContext(ReadAgainContext);
+export const useReadAgainPress = () => useContext(ReadAgainContext)?.press;
+export const useReadAgainSince = () => useContext(ReadAgainContext)?.since;
+
+/**
+ * Why the last "Read again" failed, when it was not the cooldown (the line says that one): in the
+ * outcome every refusal wears, under the line, so a press that did nothing is never silent.
+ */
+export function ReadAgainError({ error }: { error: unknown }) {
+  if (!error || cooldownOf(error)) return null;
+  return (
+    <div className="px-5 pb-2">
+      <ActionOutcome word="Not read" outcome={outcomeFromError(error)} />
+    </div>
+  );
+}
 
 /** Said by an operator unless the page says it is a member reading (the one place a reader is not known). */
 const UNNAMED_OPERATOR: Reader = { audience: "operator", person: "" };
@@ -236,8 +254,11 @@ export function ReadFreshness({
   // inside the cooldown it waits for the count. An unreachable one has no way out but time.
   const why = state.stale?.reason;
   const left = useCountdown(why === STALE.cooldown ? state.stale?.retry_after : undefined, state.stale?.since);
-  const tone = toneOf(reading, why);
   const cooling = why === STALE.cooldown && left > 0;
+  // Coloured by what the line says: the cooldown while it counts, then a copy is a copy (a copy of a
+  // read that failed is still neutral) and anything else is drawn by its age.
+  const said = cooling || why !== STALE.cooldown ? why : state.current === false ? STALE.cached : undefined;
+  const tone = toneOf(reading, said, state.stale?.pressed);
   const aCopy = why === STALE.cached || why === STALE.cooldown;
   const cannotReach = why === STALE.unreachable && Boolean(state.readAt);
   const lineId = useId();

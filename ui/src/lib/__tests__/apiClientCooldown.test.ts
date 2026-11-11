@@ -6,10 +6,10 @@ import { cooldownOf } from "@/lib/queries/fresh";
 import { COOLDOWN_REFUSED, cooldownNext, outcomeFromError } from "@/lib/outcome";
 
 /**
- * A read refused inside the add-on's cooldown is a 429 carrying its wait, three
- * ways: the envelope (dormant list and removal), the inventory's own result
- * body with no code, and a bare Retry-After header. All three are one refusal;
- * the rate limiter's 429 is another thing and stays one.
+ * A read refused inside the add-on's cooldown is a 429 carrying its wait, two
+ * ways: the standard error envelope (every read, the inventory's included) and
+ * a bare Retry-After header. Both are one refusal; the rate limiter's 429 is
+ * another thing and stays one.
  */
 const answer = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status, headers })));
@@ -19,16 +19,10 @@ const refused = (): Promise<ApiError> => request("/targets/truenas/inventory").t
 afterEach(() => vi.unstubAllGlobals());
 
 describe("a 429 with a wait", () => {
-  it("takes the envelope's own code and seconds", async () => {
+  it("takes the envelope's own code and seconds, the inventory's read included", async () => {
     answer(429, { error: "FRESH_READ_COOLDOWN", message: "That target was read moments ago", retry_after: 12 }, { "Retry-After": "12" });
     const e = await refused();
     expect([e.status, e.code, e.retryAfter]).toEqual([429, "FRESH_READ_COOLDOWN", 12]);
-  });
-
-  it("takes the inventory's result body, which carries the same code, as the same refusal", async () => {
-    answer(429, { error: "FRESH_READ_COOLDOWN", target: "truenas", halted: true, reason: "read_stale", retry_after: 9, unmanaged: null }, { "Retry-After": "9" });
-    const e = await refused();
-    expect([e.code, e.retryAfter]).toEqual(["FRESH_READ_COOLDOWN", 9]);
   });
 
   it("falls back to the Retry-After header when the body names no seconds", async () => {

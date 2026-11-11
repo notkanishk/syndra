@@ -5,7 +5,7 @@ import { EmptyState, ListStates } from "@/components/states";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { STORAGE_LABEL, isStorage } from "@/lib/nav";
 import { NOTHING_TO_DO } from "@/lib/outcome";
-import { ReadAgainProvider } from "@/components/ui/ReadFreshness";
+import { ReadAgainError, ReadAgainProvider } from "@/components/ui/ReadFreshness";
 import { useMyStorage, useMyStorageAgain } from "@/lib/queries/useMyStorage";
 
 /**
@@ -39,7 +39,8 @@ export function StoragePage() {
           />
         }
       >
-        <ReadAgainProvider value={again.press}>
+        <ReadAgainProvider value={{ press: again.press, since: targets.dataUpdatedAt }}>
+          <ReadAgainError error={again.error} />
           <div className="grid gap-4">
             {storage.map((view) => (
               <MemberTargetCard key={view.target} view={view} />

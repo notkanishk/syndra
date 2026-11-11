@@ -19,7 +19,7 @@ const status = (over: Record<string, unknown>): ReadView => ({
 });
 const show = (reads: ReadView[], press = vi.fn(), skip: string[] = []) =>
   render(
-    <ReadAgainProvider value={press}>
+    <ReadAgainProvider value={{ press }}>
       <Reads reads={reads} skip={skip} name={NAME} reader={MEMBER} />
     </ReadAgainProvider>,
   );
@@ -54,6 +54,16 @@ describe("a read refused inside the cooldown with nothing kept", () => {
     expect(screen.getByText(cooldownLine(NAME, 20))).toBeInTheDocument();
     expect(screen.queryByText(notReadableTitle(NAME))).toBeNull();
     expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+  });
+
+  // Leaving the page and coming back must not restart the full count: it runs from when the page's read answered.
+  it("counts from when the page's read answered, not from when it was drawn", () => {
+    render(
+      <ReadAgainProvider value={{ press: vi.fn(), since: Date.now() - 6000 }}>
+        <Reads reads={[nothing]} name={NAME} reader={MEMBER} />
+      </ReadAgainProvider>,
+    );
+    expect(screen.getByText(/read again in 1[345] s/)).toBeInTheDocument();
   });
 
   it("does the same for a read the kind draws itself", () => {

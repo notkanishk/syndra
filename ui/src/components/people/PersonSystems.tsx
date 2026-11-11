@@ -12,7 +12,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Card, CardRow } from "@/components/ui/Card";
 import { NextStep } from "@/components/ui/NextStep";
-import { ReadAgainProvider } from "@/components/ui/ReadFreshness";
+import { ReadAgainError, ReadAgainProvider } from "@/components/ui/ReadFreshness";
 import { Notice } from "@/components/ui/Notice";
 import { StandingLine } from "@/components/ui/StandingLine";
 import { Relative } from "@/components/ui/Time";
@@ -83,7 +83,10 @@ export function SystemsSection({
           Syndra didn&apos;t answer when this page asked. Nothing was changed.
         </Notice>
       ) : data ? (
-        <ReadAgainProvider value={again.press}>{data.map((view) => card(view))}</ReadAgainProvider>
+        <ReadAgainProvider value={{ press: again.press, since: views.dataUpdatedAt }}>
+          <ReadAgainError error={again.error} />
+          {data.map((view) => card(view))}
+        </ReadAgainProvider>
       ) : (
         systems.map((system) => (
           <Card key={system.target} id={`sys-${system.target}`}>
