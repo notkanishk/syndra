@@ -56,6 +56,10 @@ type SubjectOutcome struct {
 	Detail      string `json:"detail"`
 	Consequence string `json:"consequence,omitempty"`
 	Username    string `json:"username,omitempty"`
+	// AccountID and Standing name the account the outcome is about, and
+	// whether it can be used yet; both present only when an account exists.
+	AccountID string    `json:"account_id,omitempty"`
+	Standing  *Standing `json:"standing,omitempty"`
 	// Fingerprint is the state this outcome was computed against. The apply
 	// carries it back and the add-on refuses if the subject moved since.
 	Fingerprint string `json:"fingerprint,omitempty"`
@@ -68,8 +72,8 @@ type SubjectOutcome struct {
 
 // BindingConflict is an unbound target account holding a derived name.
 type BindingConflict struct {
-	Username string `json:"username"`
-	UID      int64  `json:"uid"`
+	Username  string `json:"username"`
+	AccountID string `json:"account_id"`
 	// Adoptable says no other subject already claims this account. A conflict
 	// that is not adoptable is a bug somewhere else and must not be offered as
 	// a one-click resolution.
@@ -103,17 +107,44 @@ type PlanResult struct {
 	LifecycleRefusal bool `json:"-"`
 }
 
-// planEnvelope is the wire body.
+// planEnvelope is the wire body. There is no acknowledgement on it: contract 2
+// gives the cohort guard to the backend, which plans in chunks below the
+// add-on's limits.subjects_per_plan (design §11).
 type planEnvelope struct {
-	ContractVersion  int               `json:"contract_version"`
-	Subjects         []planSubjectWire `json:"subjects"`
-	AcknowledgeScope bool              `json:"acknowledge_scope,omitempty"`
+	ContractVersion int               `json:"contract_version"`
+	Subjects        []planSubjectWire `json:"subjects"`
 }
 
 type planSubjectWire struct {
 	Subject string                     `json:"subject"`
 	Email   string                     `json:"email"`
 	Desired map[string]json.RawMessage `json:"desired"`
+}
+
+// planWire is the reply as it travels (plan_response.json). Pointers where
+// absence is never a value (design §2(b)): a plan that does not say it is
+// current is not current, one that does not say it is complete is truncated,
+// and an outcome that names no effect says nothing.
+type planWire struct {
+	Outcomes []struct {
+		SubjectOutcome
+		Effect *string `json:"effect"`
+	} `json:"outcomes"`
+	Current   *bool   `json:"current"`
+	TakenAt   *string `json:"taken_at"`
+	Truncated *bool   `json:"truncated"`
+}
+
+// takenAt reads a reply's taken_at: present, RFC 3339, and not the zero time.
+func takenAt(raw *string) (time.Time, bool) {
+	if raw == nil {
+		return time.Time{}, false
+	}
+	ts, err := time.Parse(time.RFC3339, *raw)
+	if err != nil || ts.IsZero() {
+		return time.Time{}, false
+	}
+	return ts.UTC(), true
 }
 
 // ErrNoSubjects refuses a plan for nobody.
@@ -125,11 +156,12 @@ var ErrNoSubjects = errors.New("addon: refusing to plan a change affecting no su
 
 // Plan asks what a proposed change would do, and mutates nothing.
 //
-// `acknowledgeScope` is the caller confirming an oversized cohort. It is passed
-// through rather than decided here: the add-on sees one request and cannot
-// observe a cohort spanning several, so the authoritative blast-radius guard is
-// the backend's, at the point the cohort exists.
-func Plan(ctx context.Context, target string, subjects []PlanSubject, acknowledgeScope bool) PlanResult {
+// A cohort larger than the add-on's limits.subjects_per_plan is asked in
+// chunks below it and answered as one plan: current only if every chunk was,
+// truncated if any was, dated by the oldest read. The blast-radius guard is the
+// backend's (the plan surfaces' acknowledgement), at the point the cohort
+// exists; the add-on only refuses a plan above its limit (PLAN_TOO_LARGE).
+func Plan(ctx context.Context, target string, subjects []PlanSubject) PlanResult {
 	if len(subjects) == 0 {
 		return PlanResult{Outcome: OutcomeUnreached, Err: ErrNoSubjects}
 	}
@@ -137,14 +169,36 @@ func Plan(ctx context.Context, target string, subjects []PlanSubject, acknowledg
 	if err != nil {
 		return PlanResult{Outcome: OutcomeUnreached, Err: err}
 	}
+	size := len(subjects)
+	if m, err := a.Manifest(); err == nil && m.Limits.SubjectsPerPlan > 0 {
+		size = m.Limits.SubjectsPerPlan
+	}
+	var out PlanResult
+	for start := 0; start < len(subjects); start += size {
+		part := planChunk(ctx, a, target, subjects[start:min(start+size, len(subjects))])
+		if part.Outcome != OutcomeSucceeded {
+			return part
+		}
+		if start == 0 {
+			out = part
+			continue
+		}
+		out.Outcomes = append(out.Outcomes, part.Outcomes...)
+		out.Current = out.Current && part.Current
+		out.Truncated = out.Truncated || part.Truncated
+		if part.TakenAt.Before(out.TakenAt) {
+			out.TakenAt = part.TakenAt
+		}
+	}
+	return out
+}
 
+func planChunk(ctx context.Context, a *Addon, target string, subjects []PlanSubject) PlanResult {
 	wire := make([]planSubjectWire, 0, len(subjects))
 	for _, s := range subjects {
 		wire = append(wire, planSubjectWire{Subject: s.Subject, Email: s.Email, Desired: s.Desired})
 	}
-	body, err := json.Marshal(planEnvelope{
-		ContractVersion: ContractVersion, Subjects: wire, AcknowledgeScope: acknowledgeScope,
-	})
+	body, err := json.Marshal(planEnvelope{ContractVersion: ContractVersion, Subjects: wire})
 	if err != nil {
 		return PlanResult{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: encode plan: %w", target, err)}
 	}
@@ -159,12 +213,7 @@ func Plan(ctx context.Context, target string, subjects []PlanSubject, acknowledg
 		LifecycleRefusal: resp.LifecycleRefusal,
 	}
 	if resp.Outcome == OutcomeSucceeded {
-		var decoded struct {
-			Outcomes  []SubjectOutcome `json:"outcomes"`
-			Current   bool             `json:"current"`
-			TakenAt   string           `json:"taken_at"`
-			Truncated bool             `json:"truncated"`
-		}
+		var decoded planWire
 		if err := json.Unmarshal(resp.Body, &decoded); err != nil {
 			// A 2xx whose body will not decode is not a plan. Reported as
 			// indeterminate rather than as an empty plan, which would be an
@@ -172,9 +221,22 @@ func Plan(ctx context.Context, target string, subjects []PlanSubject, acknowledg
 			out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode plan: %w", target, err)
 			return out
 		}
-		out.Outcomes, out.Current, out.Truncated = decoded.Outcomes, decoded.Current, decoded.Truncated
-		if ts, err := time.Parse(time.RFC3339, decoded.TakenAt); err == nil {
-			out.TakenAt = ts.UTC()
+		out.Current = decoded.Current != nil && *decoded.Current
+		out.Truncated = decoded.Truncated == nil || *decoded.Truncated
+		for _, o := range decoded.Outcomes {
+			if o.Effect == nil {
+				out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: a plan outcome for %s names no effect", target, o.Subject)
+				return out
+			}
+			o.SubjectOutcome.Effect = *o.Effect
+			out.Outcomes = append(out.Outcomes, o.SubjectOutcome)
+		}
+		// No readable taken_at is not current and not complete, and then
+		// (below) not a plan at all: a chunk merge can never meet a zero date.
+		if at, ok := takenAt(decoded.TakenAt); ok {
+			out.TakenAt = at
+		} else {
+			out.Current, out.Truncated = false, true
 		}
 		if !out.Current && out.TakenAt.IsZero() {
 			// A provisional plan whose age cannot be read is refused rather than
@@ -197,24 +259,23 @@ func Plan(ctx context.Context, target string, subjects []PlanSubject, acknowledg
 
 // TargetAccount is one account the target holds, as the backend understands it.
 //
-// Username and uid and nothing else. The backend does not know what any other
-// field on a target account means — that is the whole point of the entitlement
-// schema being declared rather than compiled in — and an inventory listing is
-// answering one question: what else lives here that Syndra did not put there.
+// Its name, its id and its standing, and nothing else of the target's. The
+// backend does not know what any other field on a target account means — that
+// is the whole point of the entitlement schema being declared rather than
+// compiled in — and an inventory listing is answering one question: what else
+// lives here that Syndra did not put there.
 type TargetAccount struct {
 	Username string `json:"username"`
-	// UID is the target's stable identity for the account, which survives a
-	// rename. It is what a binding is matched on, so that an account renamed out
-	// of band is recognised rather than reported as somebody else's.
-	UID int64 `json:"uid"`
-	// PasswordSet is whether the account has a usable credential yet.
-	//
-	// Not an entitlement: it is a fact about the target that decides whether one
-	// can be applied. An account Syndra created has no password until its member
-	// sets one, and TrueNAS refuses SMB on an account in that state — so a
-	// member entitled to a share sits in a legitimate pending state that looks,
-	// on every surface, exactly like nothing having happened.
-	PasswordSet bool `json:"password_set"`
+	// AccountID is the target's stable identity for the account (contract 2's
+	// account_id), which survives a rename. It is what a binding is matched
+	// on, so that an account renamed out of band is recognised rather than
+	// reported as somebody else's.
+	AccountID string `json:"account_id"`
+	// Standing is whether the account can be used yet and who is waited on
+	// (design §6): an account Syndra created has no password until its member
+	// sets one, which is a legitimate pending state, not nothing having
+	// happened. In the add-on's words, never a product word in the core.
+	Standing *Standing `json:"standing,omitempty"`
 	// Self marks the add-on's own service account on the target.
 	//
 	// It is a real, genuinely unmanaged account, and it is the one whose
@@ -231,10 +292,6 @@ type TargetAccount struct {
 	// `enabled` in this package would put what TrueNAS calls things inside the
 	// component that must not know, and the next add-on would need a second
 	// mapping beside it.
-	//
-	// Empty from an add-on that predates it, which reads as a subject whose
-	// current values are unknown — and an unknown current value is not compared,
-	// it converges as it did before.
 	State map[string]json.RawMessage `json:"state,omitempty"`
 }
 
@@ -268,13 +325,16 @@ func (r SubjectsResult) Usable() bool {
 	return r.Outcome == OutcomeSucceeded && r.Current && !r.Truncated
 }
 
-// subjectsEnvelope is the add-on's answer. Its `subjects` carry target-specific
-// state fields this backend deliberately does not decode.
-type subjectsEnvelope struct {
+// subjectsWire is the add-on's answer as it travels (subjects.json). Its
+// `subjects` carry target-specific fields this backend deliberately does not
+// decode. Pointers where absence is never a value (design §2(b)): a read that
+// does not say it is current is not, and one that does not say it is complete
+// is truncated, so neither can be concluded from.
+type subjectsWire struct {
 	Subjects  []TargetAccount `json:"subjects"`
-	Current   bool            `json:"current"`
-	TakenAt   string          `json:"taken_at"`
-	Truncated bool            `json:"truncated"`
+	Current   *bool           `json:"current"`
+	TakenAt   *string         `json:"taken_at"`
+	Truncated *bool           `json:"truncated"`
 }
 
 // Subjects reads every account the target holds.
@@ -299,25 +359,44 @@ func Subjects(ctx context.Context, target string) SubjectsResult {
 		return out
 	}
 
-	var decoded subjectsEnvelope
+	var decoded subjectsWire
 	if err := json.Unmarshal(resp.Body, &decoded); err != nil {
 		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode subjects: %w", target, err)
 		return out
 	}
-	out.Accounts, out.Current, out.Truncated = decoded.Subjects, decoded.Current, decoded.Truncated
-	if decoded.TakenAt != "" {
-		// A read whose timestamp will not parse is served without one rather
-		// than refused: the accounts are still what the target holds, and the
-		// staleness label is the thing that degrades. Consumers that need the
-		// age check `Current` first, which does not depend on this.
-		if ts, err := time.Parse(time.RFC3339, decoded.TakenAt); err == nil {
-			out.TakenAt = ts.UTC()
+	out.Accounts = decoded.Subjects
+	out.Current = decoded.Current != nil && *decoded.Current
+	out.Truncated = decoded.Truncated == nil || *decoded.Truncated
+	// Every subject is an account, so every one carries standing.usable; one
+	// that does not makes the read one nothing may be concluded from.
+	var standing struct {
+		Subjects []struct {
+			Standing *struct {
+				Usable *bool `json:"usable"`
+			} `json:"standing"`
+		} `json:"subjects"`
+	}
+	_ = json.Unmarshal(resp.Body, &standing)
+	for _, s := range standing.Subjects {
+		if s.Standing == nil || s.Standing.Usable == nil {
+			log.Printf("[ADDON] %s/subjects lists an account with no standing.usable; the read is not usable", target)
+			out.Current, out.Truncated = false, true
+			break
 		}
+	}
+	// A read that does not say, readably, when it happened is not one to
+	// conclude from (design §2(b)): the accounts are still served, labelled
+	// unusable, never dated by Go's zero time.
+	if at, ok := takenAt(decoded.TakenAt); ok {
+		out.TakenAt = at
+	} else {
+		out.Current, out.Truncated = false, true
 	}
 	return out
 }
 
-// TargetHealth is what an add-on says about itself and its target.
+// TargetHealth is what an add-on says about itself and its target: the view
+// the target page reads, built from healthWire, never decoded into.
 //
 // Decoded field by field rather than passed through as a blob, because two of
 // these are read by machinery and not only by people: `LogHead` and `LogRecords`
@@ -402,12 +481,48 @@ func readHealth(ctx context.Context, target string) TargetHealth {
 	if resp.Outcome != OutcomeSucceeded {
 		return out
 	}
-	if err := json.Unmarshal(resp.Body, &out); err != nil {
+	var wire healthWire
+	if err := json.Unmarshal(resp.Body, &wire); err != nil {
 		out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode health: %w", target, err)
 		return out
 	}
-	out.Outcome, out.Status = OutcomeSucceeded, resp.Status
-	return out
+	return wire.view(resp.Status)
+}
+
+// healthWire is health.json as it travels. Contract 2 names the credential's
+// expiry credential_expiry and credential_expires_at; the view keeps the
+// names the UI reads (key_expiry, key_expires_at).
+type healthWire struct {
+	Reachable           bool     `json:"reachable"`
+	Product             string   `json:"product"`
+	ProductVersion      string   `json:"product_version"`
+	VersionTested       bool     `json:"version_tested"`
+	VersionNote         string   `json:"version_note"`
+	CircuitOpen         bool     `json:"circuit_open"`
+	Lifecycle           string   `json:"lifecycle"`
+	LifecycleNote       string   `json:"lifecycle_note"`
+	InFlight            int64    `json:"in_flight"`
+	Drained             bool     `json:"drained"`
+	LogHead             string   `json:"log_head"`
+	LogRecords          int64    `json:"log_records"`
+	SnapshotTakenAt     string   `json:"snapshot_taken_at"`
+	LastReadAt          string   `json:"last_read_at"`
+	CredentialExpiresAt string   `json:"credential_expires_at"`
+	CredentialExpiry    string   `json:"credential_expiry"`
+	UnauditedShares     []string `json:"unaudited_shares"`
+	SharesReadable      bool     `json:"shares_readable"`
+}
+
+func (w healthWire) view(status int) TargetHealth {
+	return TargetHealth{
+		Reachable: w.Reachable, Product: w.Product, ProductVersion: w.ProductVersion,
+		VersionTested: w.VersionTested, VersionNote: w.VersionNote, CircuitOpen: w.CircuitOpen,
+		Lifecycle: w.Lifecycle, LifecycleNote: w.LifecycleNote, InFlight: w.InFlight, Drained: w.Drained,
+		LogHead: w.LogHead, LogRecords: w.LogRecords, SnapshotTakenAt: w.SnapshotTakenAt,
+		LastReadAt: w.LastReadAt, KeyExpiresAt: w.CredentialExpiresAt, KeyExpiry: w.CredentialExpiry,
+		UnauditedShares: w.UnauditedShares, SharesReadable: w.SharesReadable,
+		Outcome: OutcomeSucceeded, Status: status,
+	}
 }
 
 // SetLifecycle moves an add-on between active, draining and read-only at
@@ -638,16 +753,17 @@ func ReadSettings(ctx context.Context, target string) (settings []TargetSetting,
 // A write, so it leaves the same trace as every other add-on mutation: an
 // addon_operations row and its audit line committed before the call, claimed as
 // the request goes out, and settled with how it ended. The row's id is the
-// idempotency key, sent as the Idempotency-Key header (the add-on's setting
-// endpoint decodes its body strictly, so the key travels beside it): a replay
-// is answered from the first call and writes nothing.
+// call_id in the body: a replay is answered from the first call and writes
+// nothing.
 func PutSetting(ctx context.Context, target, name, value, actor string) (CallResponse, bool) {
 	a, err := Get(target)
 	if err != nil {
 		// Nothing to record against: the row's target is a foreign key.
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}, false
 	}
-	body, _ := json.Marshal(map[string]string{"value": value, "actor": actor})
+	// The row's id joins the body as call_id in operate (contract 2: in the
+	// body, inside the signature; contract 1 sent it as Idempotency-Key).
+	body, _ := json.Marshal(map[string]any{"contract_version": ContractVersion, "value": value, "actor": actor})
 	resp, _ := a.operate(ctx, db.AddonOperationParams{
 		Target: target, Operation: "setting.put", ActorID: actor, SubjectID: name,
 		// The value is not a secret: it is a dataset path, shown back on the
@@ -674,17 +790,29 @@ func settingsCall(ctx context.Context, target, method, path string, body []byte)
 // HomeUsage is one account's home folder on a target, as the target read it.
 type HomeUsage struct {
 	Username   string `json:"username"`
-	UID        int64  `json:"uid"`
+	AccountID  string `json:"account_id"`
 	Home       string `json:"home"`
 	UsedBytes  int64  `json:"used_bytes"`
 	QuotaBytes int64  `json:"quota_bytes,omitempty"`
 }
 
-// Homes is every home folder on a target. Read false is "couldn't ask".
+// Homes is every home folder on a target: a view built from homesWire. Read
+// is the backend's own "the add-on answered", never the add-on's to set (task
+// 1.0: contract 1 decoded the reply into this type, so an add-on could send
+// "read": true).
 type Homes struct {
-	Read      bool        `json:"read"`
+	Read bool `json:"read"`
+	// UsageRead is the add-on's quota_read: every quota table was read.
 	UsageRead bool        `json:"usage_read"`
 	Homes     []HomeUsage `json:"homes"`
+}
+
+// homesWire is profiles/storage/homes.json as it travels.
+type homesWire struct {
+	Homes     []HomeUsage `json:"homes"`
+	QuotaRead *bool       `json:"quota_read"`
+	TakenAt   *string     `json:"taken_at"`
+	Current   *bool       `json:"current"`
 }
 
 // ReadHomes asks a target for every home folder and its use.
@@ -693,18 +821,22 @@ func ReadHomes(ctx context.Context, target string) Homes {
 	if !ok || resp.Outcome != OutcomeSucceeded {
 		return Homes{}
 	}
-	var out Homes
-	if err := json.Unmarshal(resp.Body, &out); err != nil {
+	var wire homesWire
+	if err := json.Unmarshal(resp.Body, &wire); err != nil || wire.TakenAt == nil || wire.Current == nil {
+		// A reply that does not say when it read, or whether that read is
+		// current, is not one to show as a reading (design §2(b)).
 		return Homes{}
 	}
-	out.Read = true
-	return out
+	// A reply that does not say the usage was read whole did not read it.
+	return Homes{Read: true, UsageRead: wire.QuotaRead != nil && *wire.QuotaRead, Homes: wire.Homes}
 }
 
 // Reach is what each of a target's own groups opens, as the target last read
 // its folder permissions. Read false is "not read from the target yet": the
 // target hasn't managed a read since its add-on started, or the add-on can't be
 // reached, and there is no last read to show.
+//
+// A view built from reachWire: Read is the backend's own, never the add-on's.
 type Reach struct {
 	Read    bool      `json:"read"`
 	ReadAt  time.Time `json:"read_at,omitempty"`
@@ -729,11 +861,49 @@ func ReadReach(ctx context.Context, target string) Reach {
 	if resp.Outcome != OutcomeSucceeded {
 		return Reach{}
 	}
-	var out Reach
-	if err := json.Unmarshal(resp.Body, &out); err != nil || out.ReadAt.IsZero() {
+	var wire reachWire
+	if err := json.Unmarshal(resp.Body, &wire); err != nil || wire.TakenAt == nil || wire.TakenAt.IsZero() {
 		return Reach{}
 	}
-	out.Read = true
+	out := Reach{Read: true, ReadAt: *wire.TakenAt, Current: wire.Current != nil && *wire.Current,
+		Groups: map[string][]Place{}, Everyone: placesOf(wire.Everyone)}
+	for g, ps := range wire.Groups {
+		out.Groups[g] = placesOf(ps)
+	}
+	return out
+}
+
+// reachWire is profiles/storage/reach.json as it travels (contract 1's read_at
+// is taken_at). A reply that does not say it is current is not.
+type reachWire struct {
+	TakenAt  *time.Time             `json:"taken_at"`
+	Current  *bool                  `json:"current"`
+	Groups   map[string][]placeWire `json:"groups"`
+	Everyone []placeWire            `json:"everyone"`
+}
+
+// placeWire is a place as an add-on sends it (reach.json $defs/Place): no
+// addresses and no roles, which Syndra fills (Place.Address, the role
+// attribution) and an add-on must never be able to set (task 1.0).
+type placeWire struct {
+	Share   string `json:"share"`
+	Folder  string `json:"folder"`
+	Path    string `json:"path"`
+	Access  string `json:"access"`
+	Dataset string `json:"dataset"`
+	Home    bool   `json:"home"`
+	Usage   *struct {
+		UsedBytes  int64 `json:"used_bytes"`
+		QuotaBytes int64 `json:"quota_bytes,omitempty"`
+	} `json:"usage"`
+}
+
+func placesOf(ws []placeWire) []Place {
+	out := make([]Place, 0, len(ws))
+	for _, w := range ws {
+		out = append(out, Place{Share: w.Share, Folder: w.Folder, Path: w.Path, Access: w.Access,
+			Dataset: w.Dataset, Home: w.Home, Usage: w.Usage})
+	}
 	return out
 }
 
@@ -822,16 +992,35 @@ func MyStorage(ctx context.Context, target, subject, actor string) StorageStatus
 		return out
 	}
 	var envelope struct {
-		Storage *StorageStatus `json:"storage"`
+		Storage *storageWire `json:"storage"`
 	}
 	if err := json.Unmarshal(resp.Body, &envelope); err != nil || envelope.Storage == nil {
 		out.Outcome = OutcomeIndeterminate
 		out.Err = fmt.Errorf("addon %s: decode storage status: %w", target, err)
 		return out
 	}
-	status := *envelope.Storage
-	status.Outcome = OutcomeSucceeded
-	return status
+	w := envelope.Storage
+	return StorageStatus{Username: w.Username, Usable: w.Usable, NeedsPassword: w.NeedsPassword, SMBEnabled: w.SMBEnabled,
+		Shares: w.Shares, UsageReadable: w.UsageReadable, NeedsNewPassword: w.NeedsNewPassword,
+		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, Outcome: OutcomeSucceeded}
+}
+
+// storageWire is the storage.status pocket as it travels: StorageStatus with
+// its places as the add-on sends them, never the view's.
+type storageWire struct {
+	Username      string `json:"username"`
+	Usable        bool   `json:"usable"`
+	NeedsPassword bool   `json:"needs_password"`
+	SMBEnabled    bool   `json:"smb_enabled"`
+	Shares        []struct {
+		Share      string `json:"share"`
+		UsedBytes  int64  `json:"used_bytes"`
+		QuotaBytes int64  `json:"quota_bytes,omitempty"`
+	} `json:"shares"`
+	UsageReadable    bool        `json:"usage_readable"`
+	NeedsNewPassword bool        `json:"needs_new_password"`
+	Places           []placeWire `json:"places"`
+	PlacesReadable   bool        `json:"places_readable"`
 }
 
 // ActivityReport is what a target's own audit log says about one subject, and

@@ -2,10 +2,12 @@ package addons
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -100,7 +102,15 @@ func recorder(t *testing.T, status int) (events *[]string, calls *[]hit) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		ev = append(ev, "call")
-		hs = append(hs, hit{r.Method, r.URL.Path, r.Header.Get(idempotencyHeader)})
+		body, _ := io.ReadAll(r.Body)
+		var sent struct {
+			CallID string `json:"call_id"`
+		}
+		_ = json.Unmarshal(body, &sent)
+		if r.Header.Get("Idempotency-Key") != "" {
+			t.Errorf("%s %s carried an Idempotency-Key header; contract 2 carries the call_id in the body", r.Method, r.URL.Path)
+		}
+		hs = append(hs, hit{r.Method, r.URL.Path, sent.CallID})
 		mu.Unlock()
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(`{}`))
@@ -150,23 +160,23 @@ func TestTheTraceIsWrittenBeforeTheCallAndSettledAfter(t *testing.T) {
 	if strings.Join(*events, ",") != strings.Join(want, ",") {
 		t.Fatalf("events = %v, want %v", *events, want)
 	}
-	// The idempotency key is the row's id, so a retry is recognisable as one call.
+	// The body's call_id is the row's id, so a retry is recognisable as one call.
 	wantKeys := []string{"rec-pipe-setting.put", "rec-pipe-lifecycle.set"}
 	for i, c := range *calls {
 		if c.key != wantKeys[i] {
-			t.Errorf("%s %s carried key %q, want the row id %q", c.method, c.path, c.key, wantKeys[i])
+			t.Errorf("%s %s carried call_id %q, want the row id %q", c.method, c.path, c.key, wantKeys[i])
 		}
 	}
 }
 
-// One key, one send: the claim is the row's, and a row can be claimed once, so
-// replaying the same key through the pipe reaches the target at most once.
-func TestOneIdempotencyKeyReachesTheTargetOnce(t *testing.T) {
+// One call id, one send: the claim is the row's, and a row can be claimed once,
+// so replaying the same call through the pipe reaches the target at most once.
+func TestOneCallIDReachesTheTargetOnce(t *testing.T) {
 	_, calls := recorder(t, http.StatusOK)
 	a, _ := Get("truenas")
 	rec := OperationRecord("rec-once", "truenas", "setting.put", "home_root")
 	spec := sendSpec{Method: http.MethodPut, Path: "/settings/home_root", Write: true,
-		Claim: rec.consume, IdempotencyKey: "rec-once"}
+		Claim: rec.consume, Body: []byte(`{"call_id":"rec-once"}`)}
 
 	if _, err := a.send(context.Background(), spec); err != nil {
 		t.Fatalf("first send: %v", err)

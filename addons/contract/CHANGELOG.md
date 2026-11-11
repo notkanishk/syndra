@@ -3,11 +3,23 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Major 2 on the wire (slice 1)
+
+The TrueNAS add-on and the backend speak contract 2, deployed together in one
+deploy whose order is in `.github/workflows/deploy.yml` and `_staging.yml`
+(stop the backend, stop the add-on, copy its `state.db`, start both). `v1/` is
+deleted: the backend supports one major (decision 2). The add-on's store is
+written additively (bindings carry `account_id` beside `uid`; a recorded call
+carries its identity digest beside what contract 1 wrote), so rolling back both
+containers restores nothing. The backend still reads a contract-1 refusal's
+`error` key, for classification only, until the next major (design §11).
+
+No schema, fixture or registry file changed in slice 1.
+
 ## Major 2 (files in `v2/`, slice 1a, schemas only)
 
-Nothing here is on the wire yet: contract 1 (`v1/`) is what the code speaks and
-is tested against until slice 1 ships, when `v1/` is deleted. Migration: the
-add-on and the backend move together in one deploy (design §2, decision 1).
+Written before anything sent it; slice 1 put it on the wire (above). Migration:
+the add-on and the backend move together in one deploy (design §2, decision 1).
 
 What changes the meaning of something that exists (the reason this is a major):
 every write carries `contract_version` and `call_id` in the body and is
@@ -47,5 +59,5 @@ query string joins the MAC.
 | `v2/openapi.yaml` | fourteen routes, `x-feature` gates, problem+json errors, the query in the signature | n/a |
 | `transport_derivation.json` | gains `raw_query_signatures` (introduced by major 2): four vectors; the existing keys are untouched | n/a |
 
-Contract 1 files moved, unchanged, to `v1/`; the two modules' contract-1 tests
-read them there.
+Contract 1 files moved, unchanged, to `v1/` in slice 1a, and were deleted by
+slice 1.

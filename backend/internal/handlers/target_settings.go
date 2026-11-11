@@ -60,9 +60,12 @@ func handlePutTargetSetting(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[TARGETS] %s set %s on %s to %q", actor, name, target, req.Value)
 		jsonResponse(w, http.StatusOK, view)
-	case resp.Status == http.StatusNotFound:
+	// By the add-on's code, not its status alone: a 404 is also a route its
+	// manifest no longer declares, and a 422 is also a contract it does not
+	// speak, and neither is about the value.
+	case resp.Code == "NO_SUCH_SETTING":
 		jsonErrorResponse(w, http.StatusNotFound, "NO_SUCH_SETTING", "This system has no such setting.")
-	case resp.Status == http.StatusUnprocessableEntity:
+	case resp.Code == "NOT_A_HOME_PLACE":
 		jsonValidationErrorResponse(w, "That isn't a folder this system offers for home folders.",
 			map[string]string{"value": "not_offered"})
 	default:

@@ -21,34 +21,50 @@ import (
 // otherwise, so a `date-time` that is never asserted is a comment. Schemas load
 // from disk by `$id`; a test run fetches nothing.
 
-var contractDir = filepath.Join("..", "..", "..", "addons", "contract", "v1")
+// contractDir is the one major this backend speaks (contract 2). v1 was
+// deleted when slice 1 shipped (design §1: one supported major).
+var contractDir = v2Dir
 
-const schemaBase = "https://syndra.example.org/addon-contract/1/schema/"
+const schemaBase = "https://syndra.example.org/addon-contract/2/schema/"
 
 // contractMessages pairs every fixture with the schema it must satisfy. A
 // fixture on disk that is not listed fails TestEveryFixtureIsCovered.
 var contractMessages = []struct{ fixture, schema string }{
 	{"manifest.json", "manifest.json"},
+	{"manifest_truenas.json", "manifest.json"},
 	{"health.json", "health.json"},
 	{"subjects.json", "subjects.json"},
+	{"subjects_stale.json", "subjects.json"},
 	{"values.json", "values.json"},
-	{"reach.json", "profiles/storage/reach.json"},
-	{"settings.json", "settings.json"},
-	{"setting.json", "setting.json"},
-	{"setting_put_request.json", "setting_put_request.json"},
-	{"homes.json", "profiles/storage/homes.json"},
 	{"plan_request.json", "plan_request.json"},
 	{"plan_response.json", "plan_response.json"},
 	{"apply_request.json", "apply_request.json"},
-	{"apply_response.json", "apply_response.json"},
+	{"apply_response.json", "apply_ok.json"},
 	{"operation_request.json", "operation_request.json"},
 	{"operation_response.json", "operation_response.json"},
+	{"operation_response_result.json", "operation_response.json"},
 	{"operation_response_activity.json", "operation_response.json"},
 	{"operation_response_storage.json", "operation_response.json"},
 	{"operation_response_health.json", "operation_response.json"},
+	{"status.json", "common/status.json"},
+	{"records.json", "common/records.json"},
+	{"activity.json", "common/activity.json"},
 	{"lifecycle_request.json", "lifecycle_request.json"},
 	{"lifecycle_response.json", "lifecycle_response.json"},
+	{"settings.json", "settings.json"},
+	{"setting.json", "setting.json"},
+	{"setting_put_request.json", "setting_put_request.json"},
+	{"reach.json", "profiles/storage/reach.json"},
+	{"homes.json", "profiles/storage/homes.json"},
 	{"error.json", "error.json"},
+	{"error_apply_blocked.json", "error.json"},
+	{"error_binding_conflict.json", "error.json"},
+	{"call.json", "call.json"},
+	{"stats.json", "stats.json"},
+	{"identity_apply.json", "identity/vector.json"},
+	{"identity_operation.json", "identity/vector.json"},
+	{"identity_lifecycle.json", "identity/vector.json"},
+	{"identity_setting.json", "identity/vector.json"},
 }
 
 var (
@@ -143,6 +159,8 @@ func TestRequestsTheBackendBuildsSatisfyTheirSchemas(t *testing.T) {
 		value   any
 	}{
 		{"apply_request.json", applyEnvelope{ContractVersion: ContractVersion, CallID: "c", Subject: "s", Fingerprint: "f", Desired: map[string]json.RawMessage{}}},
+		{"apply_request.json", applyEnvelope{ContractVersion: ContractVersion, CallID: "c", Subject: "s", Email: "a@example.org", Fingerprint: "f", PlanID: "p", Actor: "op",
+			Desired: map[string]json.RawMessage{"group": json.RawMessage(`[]`), "enabled": json.RawMessage(`false`)}}},
 		{"plan_request.json", planEnvelope{ContractVersion: ContractVersion, Subjects: []planSubjectWire{{Subject: "s", Desired: map[string]json.RawMessage{}}}}},
 		{"operation_request.json", callEnvelope{ContractVersion: ContractVersion, CallID: "c", Operation: "health.get"}},
 	} {
@@ -172,10 +190,13 @@ func TestSchemasRefuseWhatTheyShould(t *testing.T) {
 		break_                func(map[string]any)
 	}{
 		{"request with an unknown field", "apply_request.json", "apply_request.json", set("surprise", true)},
-		{"wrong contract version", "plan_request.json", "plan_request.json", set("contract_version", 2)},
+		{"wrong contract version", "plan_request.json", "plan_request.json", set("contract_version", 1)},
 		{"negative log_records", "health.json", "health.json", set("log_records", -1)},
 		{"timestamp that is not RFC 3339", "subjects.json", "subjects.json", set("taken_at", "yesterday")},
-		{"effect outside the closed set", "apply_response.json", "apply_response.json", set("effect", "maybe")},
+		{"effect outside the closed set", "apply_ok.json", "apply_response.json", set("effect", "maybe")},
+		{"a 200 apply that is blocked", "apply_ok.json", "apply_response.json", set("effect", "blocked")},
+		{"account_id without standing", "apply_ok.json", "apply_response.json", set("standing", nil)},
+		{"an apply with the acknowledgement contract 1 had", "plan_request.json", "plan_request.json", set("acknowledge_scope", true)},
 		{"apply without a fingerprint", "apply_request.json", "apply_request.json", set("fingerprint", nil)},
 		{"apply with a blank fingerprint", "apply_request.json", "apply_request.json", set("fingerprint", "  ")},
 		{"apply with a blank call_id", "apply_request.json", "apply_request.json", set("call_id", " ")},
@@ -217,13 +238,10 @@ type operationRegistry struct {
 	} `json:"operations"`
 }
 
-// Both majors' registries must say what the policy says (id, scope, confirm,
-// params, secrets). Major 2's adds effect and result, which the policy does not
-// carry yet; slice 1 moves them in.
+// The registry must say what the policy says (id, scope, confirm, params,
+// secrets). It adds effect and result, which the policy does not carry yet.
 func TestEveryPolicyOperationIsInTheRegistry(t *testing.T) {
-	for name, dir := range map[string]string{"v1": contractDir, "v2": v2Dir} {
-		t.Run(name, func(t *testing.T) { checkPolicyAgainstRegistry(t, dir) })
-	}
+	checkPolicyAgainstRegistry(t, contractDir)
 }
 
 func checkPolicyAgainstRegistry(t *testing.T, dir string) {

@@ -1419,3 +1419,44 @@ func TestAMirroredBeforeRefusesBeforeAnyWrite(t *testing.T) {
 		}
 	}
 }
+
+// storageServing makes the reference declare the storage profile's reads and
+// answers them itself: /reach with taken, /homes always now.
+func storageServing(t *testing.T, reachTaken func() string) string {
+	t.Helper()
+	url, _ := wrapped(t, func(w http.ResponseWriter, r *http.Request, h http.Handler) bool {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		switch r.URL.Path {
+		case "/capabilities":
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, r)
+			var doc map[string]any
+			_ = json.Unmarshal(rec.Body.Bytes(), &doc)
+			doc["kind"] = "storage"
+			doc["features"] = append(doc["features"].([]any), "storage.reach", "storage.homes")
+			_ = json.NewEncoder(w).Encode(doc)
+		case "/reach":
+			_, _ = fmt.Fprintf(w, `{"taken_at":%q,"current":true,"groups":{},"everyone":[]}`, reachTaken())
+		case "/homes":
+			_, _ = fmt.Fprintf(w, `{"homes":[],"quota_read":true,"taken_at":%q,"current":true}`, now)
+		default:
+			return false
+		}
+		return true
+	})
+	return url
+}
+
+// A storage add-on's /reach and /homes are held to `current` like /subjects:
+// a five-minute cache served as current: true fails; a read that is one passes.
+func TestTheStorageProfilesReadsAreHeldToCurrent(t *testing.T) {
+	cachedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	r := run(t, config(storageServing(t, func() string { return cachedAt }), false))
+	if r.Status("current") != "fail" {
+		t.Errorf("a cached /reach answering current: true passed current: %s", r.Status("current"))
+	}
+	r = run(t, config(storageServing(t, func() string { return time.Now().UTC().Format(time.RFC3339Nano) }), false))
+	if r.Status("current") != "pass" {
+		t.Errorf("a live /reach failed current: %+v", failures(r))
+	}
+}

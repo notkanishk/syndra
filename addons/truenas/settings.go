@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
@@ -66,15 +65,17 @@ func (s *server) homeRootView() (SettingView, error) {
 func (s *server) handleSettings(w http.ResponseWriter, _ *http.Request, _ []byte) {
 	view, err := s.homeRootView()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeSettingsUnreadable})
+		writeError(w, http.StatusInternalServerError, CodeSettingsUnreadable, "The settings could not be read.", nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string][]SettingView{"settings": {view}})
 }
 
 type putSettingRequest struct {
-	Value string `json:"value"`
-	Actor string `json:"actor"`
+	ContractVersion int    `json:"contract_version"`
+	CallID          string `json:"call_id"`
+	Value           string `json:"value"`
+	Actor           string `json:"actor"`
 }
 
 // handlePutSetting sets one setting. The value must be one the NAS offers
@@ -82,65 +83,50 @@ type putSettingRequest struct {
 // read refuses the write rather than accepting a place nobody checked.
 func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body []byte) {
 	if r.PathValue("name") != settingHomeRoot {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": CodeNoSuchSetting})
+		writeError(w, http.StatusNotFound, CodeNoSuchSetting, "This add-on has no such setting.", nil)
 		return
 	}
 	var req putSettingRequest
-	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeInvalidBody})
+	if !decodeRequest(w, body, &req, CodeInvalidBody) || !writeContractRefusal(w, req.ContractVersion) {
 		return
 	}
-	// The same dedup the apply and the operations use, keyed by the backend's
-	// operation id. It travels as the Idempotency-Key header because this body
-	// is decoded strictly and has no call id. A replay answers what the first
-	// call answered and writes nothing; a call without a key (an older backend)
-	// is written as before.
-	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
-	if key != "" {
-		if cached, found, err := s.store.Recall(key, kindSetting+settingHomeRoot); err != nil {
-			writeRecallFailure(w, err)
-			return
-		} else if found {
-			var previous SettingView
-			if err := json.Unmarshal(cached, &previous); err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
-				return
-			}
-			writeJSON(w, http.StatusOK, previous)
-			return
-		}
+	if strings.TrimSpace(req.CallID) == "" {
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "A setting write needs a call_id.", nil)
+		return
 	}
+	// The same dedup the apply and the operations use, keyed by the call_id in
+	// the body (contract 1 carried it as the Idempotency-Key header, because
+	// this body had no field for it). A replay answers what the first call
+	// answered and writes nothing.
+	identity := map[string]any{"name": settingHomeRoot, "value": req.Value}
+	s.once(w, req.CallID, kindSetting+settingHomeRoot, identity, func(w http.ResponseWriter) { s.putHomeRoot(w, req) })
+}
+
+func (s *server) putHomeRoot(w http.ResponseWriter, req putSettingRequest) {
 	if req.Value != "" {
-		// A current read, not the last one: a place gone since must not pass.
-		if _, _, current, err := s.readACLs(); err != nil || !current {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": CodeTargetUnreadable})
-			return
-		}
-		places, _, err := s.homePlaces()
+		// A read of the NAS now, never the cache and never the last read: a
+		// place deleted a minute ago must not pass.
+		read, err := s.readACLsNow()
 		if err != nil {
-			writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
+			writeError(w, http.StatusServiceUnavailable, CodeTargetUnreadable,
+				"The NAS's folders could not be read just now, so the place could not be checked.", nil)
 			return
 		}
-		if !slices.Contains(places, req.Value) {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": CodeNotAHomePlace,
-				"detail": "That isn't a folder at the top of a file share that is a dataset of its own."})
+		if places, _ := homePlacesIn(read); !slices.Contains(places, req.Value) {
+			writeError(w, http.StatusUnprocessableEntity, CodeNotAHomePlace,
+				"That isn't a folder at the top of a file share that is a dataset of its own.", nil)
 			return
 		}
 	}
 	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: req.Value, SetBy: req.Actor, SetAt: time.Now().UTC()}); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeSettingNotSaved})
+		writeError(w, http.StatusInternalServerError, CodeSettingNotSaved, "The setting could not be stored.", nil)
 		return
 	}
-	s.record("settings."+settingHomeRoot, "", req.Actor, "", "succeeded")
+	s.record("settings."+settingHomeRoot, "", req.Actor, req.CallID, "succeeded")
 	view, err := s.homeRootView()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeSettingsUnreadable})
+		writeError(w, http.StatusInternalServerError, CodeSettingsUnreadable, "The settings could not be read back.", nil)
 		return
-	}
-	if key != "" {
-		if err := s.store.Remember(key, kindSetting+settingHomeRoot, view); err != nil {
-			logStoreFailure("idempotency", key, err)
-		}
 	}
 	writeJSON(w, http.StatusOK, view)
 }

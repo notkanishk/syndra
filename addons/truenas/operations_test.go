@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	bolt "go.etcd.io/bbolt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,6 +50,23 @@ func postOperation(t *testing.T, s *server, name, body string) *httptest.Respons
 // exactly what a caller from before the field existed looks like. A test about
 // anything else should not have to restate it, and a test about the version
 // itself supplies its own and this leaves it alone.
+// recordedEntry is the store's whole entry for a call id, as bytes, whatever
+// its kind or identity: what a secret would have to be absent from.
+func recordedEntry(t *testing.T, store *Store, callID string) []byte {
+	t.Helper()
+	var raw []byte
+	if err := store.db.View(func(tx *bolt.Tx) error {
+		raw = append([]byte(nil), tx.Bucket(bucketIdempotency).Get([]byte(callID))...)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	return raw
+}
+
 func withContractVersion(t *testing.T, body string) string {
 	t.Helper()
 	var fields map[string]any
@@ -103,8 +121,8 @@ func TestASubmittedCredentialReachesTheTargetAndIsKeptNowhere(t *testing.T) {
 	if strings.Contains(string(encoded), theSecret) {
 		t.Error("the snapshot carries the credential")
 	}
-	cached, found, _ := s.store.Recall("c1", kindOperation+"password.set")
-	if !found {
+	cached := recordedEntry(t, s.store, "c1")
+	if cached == nil {
 		t.Fatal("the outcome must be recorded for replay")
 	}
 	if strings.Contains(string(cached), theSecret) {
@@ -176,7 +194,7 @@ func TestRotationMintsAValueNobodyEverSees(t *testing.T) {
 	if strings.Contains(rr.Body.String(), minted) {
 		t.Fatal("the response carries the minted credential — rotation as a revocation depends on it not being handed out")
 	}
-	cached, _, _ := s.store.Recall("c1", kindOperation+"password.set")
+	cached := recordedEntry(t, s.store, "c1")
 	if strings.Contains(string(cached), minted) {
 		t.Fatal("the idempotency entry carries the minted credential")
 	}
@@ -251,7 +269,7 @@ func TestPurgeUsesTheInjectedCredentialAndKeepsItNowhere(t *testing.T) {
 	if strings.Contains(rr.Body.String(), elevated) {
 		t.Error("the response carries the elevated key")
 	}
-	cached, _, _ := s.store.Recall("c1", kindOperation+"password.set")
+	cached := recordedEntry(t, s.store, "c1")
 	if strings.Contains(string(cached), elevated) {
 		t.Error("the idempotency entry carries the elevated key")
 	}
@@ -577,8 +595,8 @@ func TestACallIdReplayedAtAnotherEndpointIsRefused(t *testing.T) {
 		t.Fatalf("setup: %s", rr.Body.String())
 	}
 	rr := postOperation(t, s, "password.rotate", `{"call_id":"shared","subject":"sub-1"}`)
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("want a conflict, got %d (%s)", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeCallIDReused {
+		t.Fatalf("want 422 CALL_ID_REUSED (contract 2: a call id reused for a different request), got %d (%s)", rr.Code, rr.Body.String())
 	}
 }
 

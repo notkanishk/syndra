@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -61,6 +63,9 @@ type server struct {
 
 	// reach is the last read of the shares' folder permissions (reach.go).
 	reach reachCache
+
+	// calls is every write executing now, by call_id (calls.go).
+	calls callLeases
 }
 
 func (s *server) routes() http.Handler {
@@ -91,6 +96,12 @@ func (s *server) routes() http.Handler {
 	// a debugging session, so nothing here lets one be passed where the other
 	// is meant.
 	mux.HandleFunc("POST /operations/{name}", s.auth.authenticated(s.handleOperation))
+	// Everything else, authenticated like the rest, is a registered refusal:
+	// every non-2xx is a problem with a code (design §11: an undeclared
+	// feature's route simply answers 404, and the backend reads that 404).
+	mux.HandleFunc("/", s.auth.authenticated(func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+		writeError(w, http.StatusNotFound, CodeUnknownRoute, "This add-on has no such route.", nil)
+	}))
 	return mux
 }
 
@@ -181,14 +192,16 @@ type Health struct {
 	VersionTested  bool    `json:"version_tested"`
 	VersionNote    string  `json:"version_note,omitempty"`
 	LastReadAt     *string `json:"last_read_at,omitempty"`
-	KeyExpiresAt   *string `json:"key_expires_at,omitempty"`
-	// KeyExpiry says which of three states the credential is in, so an absent
-	// date is never read as a probe that failed. `set` carries a date above;
-	// `none` is a key the operator deliberately issued without an expiry;
-	// `unrecorded` is a date nobody told this add-on, which is the one an
-	// operator should act on — a key CAN expire without Syndra knowing, and a
-	// silently expired key looks exactly like an outage.
-	KeyExpiry string `json:"key_expiry"`
+	// CredentialExpiresAt is the API key's expiry (contract 2's name for what
+	// was key_expires_at).
+	CredentialExpiresAt *string `json:"credential_expires_at,omitempty"`
+	// CredentialExpiry says which of three states the credential is in, so an
+	// absent date is never read as a probe that failed. `set` carries a date
+	// above; `none` is a key the operator deliberately issued without an
+	// expiry; `unrecorded` is a date nobody told this add-on, which is the one
+	// an operator should act on — a key CAN expire without Syndra knowing, and
+	// a silently expired key looks exactly like an outage.
+	CredentialExpiry string `json:"credential_expiry"`
 	// UnauditedShares names SMB shares with auditing switched off.
 	//
 	// On the health surface rather than only inside `activity.get`, because an
@@ -253,12 +266,12 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 	switch {
 	case !s.keyExpiry.IsZero():
 		formatted := s.keyExpiry.UTC().Format(time.RFC3339)
-		h.KeyExpiresAt = &formatted
-		h.KeyExpiry = "set"
+		h.CredentialExpiresAt = &formatted
+		h.CredentialExpiry = "set"
 	case s.keyNeverExpires:
-		h.KeyExpiry = "none"
+		h.CredentialExpiry = "none"
 	default:
-		h.KeyExpiry = "unrecorded"
+		h.CredentialExpiry = "unrecorded"
 	}
 	// Read on the health path so it is seen without anyone asking for it, and
 	// only when the target is answering — a share list that could not be read
@@ -278,20 +291,68 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 // SubjectsResponse carries the read AND how much to trust it.
 type SubjectsResponse struct {
 	Subjects []SubjectView `json:"subjects"`
-	// Current says this came from the target just now. The backend's drift
-	// sweep consumes only current reads: comparing desired state against an
-	// ageing mirror would report every intervening change as out-of-band, so an
-	// outage would manufacture findings rather than reporting itself.
+	// Current says this came from the target just now: a read that began after
+	// the request arrived (design §4). The backend's drift sweep consumes only
+	// current reads: comparing desired state against an ageing mirror would
+	// report every intervening change as out-of-band, so an outage would
+	// manufacture findings rather than reporting itself.
 	Current bool   `json:"current"`
 	TakenAt string `json:"taken_at"`
 	// Truncated says the read hit its cap. A capped read is current and still
 	// unusable for concluding an ABSENCE, which is what half the drift diff
 	// does — so the flag travels separately from `Current`.
 	Truncated bool `json:"truncated"`
+	// Stale says why a reply is not current, and is present exactly when
+	// Current is false.
+	Stale *Stale `json:"stale,omitempty"`
 }
 
-// SubjectView is one account as served: everything the Subject holds, plus the
-// same state expressed in ENTITLEMENT vocabulary.
+// Stale is why a read reply is not current (common/stale.json): `unreachable`
+// when the live read failed and the last one answers, `cached` when /reach
+// serves its five-minute cache on purpose (a deliberate mirror answer is never
+// current, design §4).
+type Stale struct {
+	Reason     string `json:"reason"`
+	RetryAfter int    `json:"retry_after,omitempty"`
+	Note       string `json:"note,omitempty"`
+}
+
+func unreachableSince(at time.Time) *Stale {
+	return &Stale{Reason: "unreachable",
+		Note: "The NAS could not be read just now; this is the last read, from " + at.UTC().Format(time.RFC3339) + "."}
+}
+
+// Standing is why a converged account can or cannot be used yet, and who is
+// waited on (design §6). Observed, never desired.
+type Standing struct {
+	Usable    bool   `json:"usable"`
+	WaitingOn string `json:"waiting_on"`
+	Note      string `json:"note,omitempty"`
+	Next      string `json:"next,omitempty"`
+}
+
+// standingOf is the account's standing, from what the NAS reported. The
+// sentence for a missing password is smbWaiting's, the one the outcome detail
+// already uses, so the member page and the apply never disagree.
+func standingOf(s *Subject) *Standing {
+	switch {
+	case s.Self:
+		// The add-on's own service account, used through its API key.
+		return &Standing{Usable: true, WaitingOn: "none"}
+	case !s.Enabled:
+		return &Standing{WaitingOn: "none", Note: "The account is switched off."}
+	case !s.PasswordSet:
+		return &Standing{WaitingOn: "member", Note: smbWaiting(s), Next: "Set a storage password on your storage page."}
+	}
+	return &Standing{Usable: true, WaitingOn: "none"}
+}
+
+// accountID is the target's stable id for an account, as contract 2 names it
+// (`account_id`, a string, decision 26): TrueNAS's is the unix uid.
+func accountID(uid int64) string { return strconv.FormatInt(uid, 10) }
+
+// SubjectView is one account as served: what the NAS reports, plus the same
+// state expressed in ENTITLEMENT vocabulary, plus its standing.
 //
 // `state` exists because reconciliation compares three values per field and had
 // only two — and the third comparison has to be against the target's current
@@ -300,18 +361,39 @@ type SubjectsResponse struct {
 // put "what TrueNAS calls things" in the component that must not know, which is
 // the translation `readSubjects` already refuses to leak.
 //
-// Derived at serving time rather than stored on the Subject. Two fields holding
-// one fact is the defect shape this branch keeps meeting, and the snapshot would
-// otherwise carry both.
+// Its own type rather than the stored Subject: the wire is contract 2's
+// (`account_id`, `standing`, no `uid` or `password_set`), and the snapshot in
+// the store keeps the shape an older binary reads.
 type SubjectView struct {
-	Subject
-	State map[string]any `json:"state"`
+	ID         apiID          `json:"id"`
+	Username   string         `json:"username"`
+	AccountID  string         `json:"account_id"`
+	Groups     []string       `json:"groups"`
+	Home       string         `json:"home,omitempty"`
+	Enabled    bool           `json:"enabled"`
+	SMBEnabled bool           `json:"smb_enabled"`
+	Self       bool           `json:"self,omitempty"`
+	State      map[string]any `json:"state"`
+	Standing   *Standing      `json:"standing"`
 }
 
-func subjectViews(subjects []Subject) []SubjectView {
+// subjectViews serves subjects; limits holds each account's effective home
+// folder limit where it was read (homeLimits), and an account absent from it
+// reports no home_quota, which is "not known", never "no limit".
+func subjectViews(subjects []Subject, limits map[int64]string) []SubjectView {
 	out := make([]SubjectView, 0, len(subjects))
 	for i := range subjects {
-		out = append(out, SubjectView{Subject: subjects[i], State: entitlementState(&subjects[i])})
+		s := &subjects[i]
+		state := entitlementState(s)
+		if limit, ok := limits[s.UID]; ok {
+			state[FieldHomeQuota] = []string{limit}
+		}
+		out = append(out, SubjectView{
+			ID: s.ID, Username: s.Username, AccountID: accountID(s.UID),
+			Groups: append([]string{}, s.Groups...), Home: s.Home,
+			Enabled: s.Enabled, SMBEnabled: s.SMBEnabled, Self: s.Self,
+			State: state, Standing: standingOf(s),
+		})
 	}
 	return out
 }
@@ -328,7 +410,7 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 			log.Printf("[STORE] could not persist snapshot: %v", putErr)
 		}
 		writeJSON(w, http.StatusOK, SubjectsResponse{
-			Subjects: subjectViews(snap.Subjects), Current: true,
+			Subjects: subjectViews(snap.Subjects, s.homeLimits(snap.Subjects)), Current: true,
 			TakenAt: snap.TakenAt.UTC().Format(time.RFC3339), Truncated: snap.Truncated,
 		})
 		return
@@ -340,12 +422,15 @@ func (s *server) handleSubjects(w http.ResponseWriter, r *http.Request, _ []byte
 		// list: an empty list is a statement that the target holds no accounts,
 		// and the drift sweep would act on it.
 		log.Printf("[SUBJECTS] live read failed (%v) and no snapshot is available", err)
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": CodeNoCurrentRead})
+		writeError(w, http.StatusServiceUnavailable, CodeNoCurrentRead,
+			"The NAS could not be read and there is no earlier read to answer from.", nil)
 		return
 	}
+	// The mirror holds no limits: they are read live or not reported.
 	writeJSON(w, http.StatusOK, SubjectsResponse{
-		Subjects: subjectViews(cached.Subjects), Current: false,
+		Subjects: subjectViews(cached.Subjects, nil), Current: false,
 		TakenAt: cached.TakenAt.UTC().Format(time.RFC3339), Truncated: cached.Truncated,
+		Stale: unreachableSince(cached.TakenAt),
 	})
 }
 
@@ -356,7 +441,15 @@ const (
 	kindApply     = "apply"
 	kindOperation = "operation:"
 	kindSetting   = "setting:"
+	kindLifecycle = "lifecycle"
 )
+
+// errUnknownRequestField is the strict decoder meeting a field it does not
+// know, which contract 2 answers with its own code (UNKNOWN_REQUEST_FIELD):
+// a shape refusal the backend reads as "not reached", never as the target's.
+type errUnknownRequestField struct{ field string }
+
+func (e errUnknownRequestField) Error() string { return "unknown request field " + e.field }
 
 // decodeStrict parses a request body and refuses what it does not understand.
 //
@@ -368,12 +461,34 @@ func decodeStrict(body []byte, into any) error {
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(into); err != nil {
+		// encoding/json has no typed error for this one; its text is stable.
+		if field, found := strings.CutPrefix(err.Error(), "json: unknown field "); found {
+			return errUnknownRequestField{field: field}
+		}
 		return err
 	}
 	if dec.More() {
 		return errors.New("the body carries more than one JSON document")
 	}
 	return nil
+}
+
+// decodeRequest is decodeStrict answering its own refusal: an unknown field is
+// 400 UNKNOWN_REQUEST_FIELD, and any other undecodable body is 400 under the
+// route's own code (BAD_REQUEST, or INVALID_BODY for a setting).
+func decodeRequest(w http.ResponseWriter, body []byte, into any, malformed string) bool {
+	err := decodeStrict(body, into)
+	var unknown errUnknownRequestField
+	switch {
+	case err == nil:
+		return true
+	case errors.As(err, &unknown):
+		writeError(w, http.StatusBadRequest, CodeUnknownRequestField,
+			"The request carries a field this add-on does not know: "+unknown.field+".", nil)
+	default:
+		writeError(w, http.StatusBadRequest, malformed, "The body is not the JSON this route takes.", nil)
+	}
+	return false
 }
 
 // writeContractRefusal enforces the wire version on every request that carries
@@ -393,23 +508,10 @@ func writeContractRefusal(w http.ResponseWriter, declared int) (ok bool) {
 	if declared == ContractVersion {
 		return true
 	}
-	writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-		"error":          CodeContractVersionMismatch,
-		"caller_version": declared,
-		"addon_version":  ContractVersion,
-	})
+	writeError(w, http.StatusUnprocessableEntity, CodeContractVersionMismatch,
+		fmt.Sprintf("This add-on speaks contract %d; the request declared %d.", ContractVersion, declared),
+		map[string]any{"caller_version": declared, "addon_version": ContractVersion})
 	return false
-}
-
-// writeRecallFailure separates "the store is broken" from "this call id was
-// minted for something else". The second is the caller's mistake and a retry
-// will not fix it, so it must not read as a transient failure.
-func writeRecallFailure(w http.ResponseWriter, err error) {
-	if errors.Is(err, errKindMismatch) {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": CodeCallIDReused})
-		return
-	}
-	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

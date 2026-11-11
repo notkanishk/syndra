@@ -174,9 +174,13 @@ func TestALifecycleRefusalIsAnsweredAsRetryable(t *testing.T) {
 		// as indeterminate rather than queued.
 		t.Fatal("a lifecycle refusal must carry Retry-After")
 	}
-	var body map[string]string
+	var body map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
+	}
+	// Contract 2 detects a lifecycle refusal by its code alone.
+	if body["code"] != CodeLifecycleRefusal {
+		t.Errorf("the refusal must carry code %s, got %v", CodeLifecycleRefusal, body["code"])
 	}
 	if body["lifecycle"] != LifecycleDraining {
 		t.Errorf("the refusal must say which state refused it, got %q", body["lifecycle"])

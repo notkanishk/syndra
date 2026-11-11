@@ -204,8 +204,8 @@ describe("one target's page", () => {
       // list renders unadoptable and this test would pass for the wrong reason.
       read_at: new Date().toISOString(),
       unmanaged: [
-        { username: "iyo", uid: 3000 },
-        { username: "syndra", uid: 3001, self: true },
+        { username: "iyo", account_id: "3000" },
+        { username: "syndra", account_id: "3001", self: true },
       ],
     };
     renderTarget();
@@ -267,7 +267,7 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
       target: "truenas", bound: 4, queued: 1, current: true,
-      stale: [{ subject_id: "s1", username: "becky", uid: 3999 }],
+      stale: [{ subject_id: "s1", username: "becky", account_id: "3999" }],
     };
     renderTarget();
 
@@ -288,7 +288,7 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
       target: "truenas", bound: 4, queued: 1, current: true,
-      stale: [{ subject_id: "s1", username: "becky", uid: 3999 }],
+      stale: [{ subject_id: "s1", username: "becky", account_id: "3999" }],
     };
     renderTarget();
 
@@ -319,7 +319,7 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
       target: "truenas", bound: 4, queued: 1, current: true,
-      stale: [{ subject_id: "s1", username: "becky", uid: 3999 }],
+      stale: [{ subject_id: "s1", username: "becky", account_id: "3999" }],
     };
     renderTarget();
 
@@ -346,7 +346,7 @@ describe("one target's page", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.reconcile = {
       target: "truenas", bound: 4, queued: 1, current: true,
-      stale: [{ subject_id: "s1", username: "becky", uid: 3999 }],
+      stale: [{ subject_id: "s1", username: "becky", account_id: "3999" }],
     };
     renderTarget();
 
@@ -526,7 +526,7 @@ describe("one target's page", () => {
     state.inventory = {
       target: "truenas",
       bound: 2,
-      unmanaged: [{ username: "root", uid: 0 }],
+      unmanaged: [{ username: "root", account_id: "0" }],
       current: false,
       read_at: "2026-08-01T00:00:00Z",
     };
@@ -551,7 +551,7 @@ describe("one target's page", () => {
     state.inventory = {
       target: "truenas",
       bound: 2,
-      unmanaged: [{ username: "root", uid: 0 }],
+      unmanaged: [{ username: "root", account_id: "0" }],
       current: true,
     };
     renderTarget();
@@ -785,7 +785,7 @@ describe("a disputed account", () => {
           id: "c1",
           target: "truenas",
           username: "charlotte",
-          account_uid: 3001,
+          account_id: "3001",
           converged_subject_id: "u-converged",
           bound_subject_id: "u-bound",
           outbox_id: "o1",
@@ -943,8 +943,8 @@ describe("adopting an account", () => {
       { target: "truenas", subject_id: "s-12", username: "alexa.r", bound_by: "op", bound_at: "", last_seen_at: "" },
     ],
     unmanaged: [
-      { username: "iyo", uid: 3000 },
-      { username: "alexa", uid: 3002 },
+      { username: "iyo", account_id: "3000" },
+      { username: "alexa", account_id: "3002" },
     ],
     current: true,
     // Adoption is blocked off anything but a live or ageing read (§31 A), so
@@ -1157,7 +1157,7 @@ describe("while TrueNAS isn't answering", () => {
       target: "truenas",
       bound: 1,
       accounts: [{ target: "truenas", subject_id: "s-99", username: "iyo", bound_by: "op", bound_at: "2026-10-01T00:00:00Z", last_seen_at: "2026-10-01T00:00:00Z" }],
-      unmanaged: [{ username: "kiosk", uid: 1001 }, { username: "lab", uid: 1002 }],
+      unmanaged: [{ username: "kiosk", account_id: "1001" }, { username: "lab", account_id: "1002" }],
       current: false,
       read_at: new Date().toISOString(),
     } as TargetInventory;
@@ -1208,7 +1208,7 @@ describe("while TrueNAS isn't answering", () => {
     state.inventory = {
       target: "truenas",
       bound: 0,
-      unmanaged: [{ username: "kiosk", uid: 1001 }],
+      unmanaged: [{ username: "kiosk", account_id: "1001" }],
       current: true,
       read_at: new Date().toISOString(),
     };

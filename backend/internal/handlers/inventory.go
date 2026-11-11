@@ -123,16 +123,15 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 	if err := dbRecordTargetBinding(r.Context(), db.TargetBinding{
 		Target: target, SubjectID: req.SubjectID,
 		Username: username, BoundBy: resolveActor(r, ""),
-		// The uid as the add-on read it off the target, not as this request
-		// described the account. A binding recorded by name alone stops
-		// recognising its account the moment somebody renames it on the
+		// The account id as the add-on read it off the target, not as this
+		// request described the account. A binding recorded by name alone
+		// stops recognising its account the moment somebody renames it on the
 		// NAS, and the account then reappears as unmanaged — offered for
 		// adoption to a second person while this binding still claims it.
 		//
-		// A pointer, and left nil when the add-on sent nothing: "the
-		// account has uid 0" is root, and writing a zero for "we were not
-		// told" would record the most dangerous account on the system.
-		AccountUID: optionalUID(res.AccountUID),
+		// A pointer, and left nil when the add-on sent nothing: writing an
+		// empty id for "we were not told" would record an account nobody has.
+		AccountID: optionalID(res.AccountID),
 	}); err != nil {
 		// The adoption happened. Reported as a partial rather than a failure,
 		// because retrying it would be a second adoption of an account that
@@ -347,11 +346,11 @@ func handleSetTargetLifecycle(w http.ResponseWriter, r *http.Request) {
 // root; a missing value is an add-on that did not send one, and storing the
 // first when the second is true would record a binding to the most privileged
 // account on the target.
-func optionalUID(uid int64) *int64 {
-	if uid == 0 {
+func optionalID(id string) *string {
+	if id == "" {
 		return nil
 	}
-	return &uid
+	return &id
 }
 
 // adoptionRefusal is what the target said, or a sentence when it said nothing.

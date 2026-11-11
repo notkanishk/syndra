@@ -43,9 +43,15 @@ func TestATargetSettingIsRelayedAndJudgedByTheTarget(t *testing.T) {
 		t.Fatalf("sent %v", sent)
 	}
 
-	answer = addons.CallResponse{Status: http.StatusUnprocessableEntity, Body: []byte(`{"error":"NOT_A_HOME_PLACE"}`)}
+	answer = addons.CallResponse{Status: http.StatusUnprocessableEntity, Code: "NOT_A_HOME_PLACE", Outcome: addons.OutcomeRejected}
 	if rr := putTargetSetting(t, `{"value":"/etc"}`); rr.Code != http.StatusBadRequest {
 		t.Fatalf("refused value: %d %s", rr.Code, rr.Body.String())
+	}
+	// A 422 that is a contract the add-on does not speak is not about the
+	// value: it says nothing was changed, never "not offered".
+	answer = addons.CallResponse{Status: http.StatusUnprocessableEntity, Code: "CONTRACT_VERSION_MISMATCH", Outcome: addons.OutcomeUnreached}
+	if rr := putTargetSetting(t, `{"value":"/etc"}`); rr.Code != http.StatusServiceUnavailable || strings.Contains(rr.Body.String(), "not_offered") {
+		t.Fatalf("a shape refusal relayed as a value refusal: %d %s", rr.Code, rr.Body.String())
 	}
 
 	reached = false

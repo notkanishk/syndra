@@ -75,9 +75,15 @@ func (s *Store) Close() error { return s.db.Close() }
 // operation result is a zero-valued success, so the kind is compared before the
 // bytes are handed back. Same id, different endpoint, is a refusal rather than
 // either a silent re-run or a fabricated 200.
+//
+// Digest is the request identity (calls.go) the reply answered. Written beside
+// the fields contract 1 wrote and never instead of them, so a contract-1 binary
+// rolled back onto this file reads every entry as it always did (it ignores
+// the digest); an entry contract 1 wrote has none and matches any identity.
 type idempotencyEntry struct {
 	StoredAt time.Time       `json:"stored_at"`
 	Kind     string          `json:"kind"`
+	Digest   string          `json:"digest,omitempty"`
 	Result   json.RawMessage `json:"result"`
 }
 
@@ -89,12 +95,12 @@ var errKindMismatch = errors.New("this call id was already used for a different 
 // Every mutating call, not a chosen few. §16 declines a nonce store because the
 // operation id already prevents replay, and that argument is only true if
 // nothing is exempt from this.
-func (s *Store) Remember(callID, kind string, result any) error {
+func (s *Store) Remember(callID, kind, digest string, result any) error {
 	encoded, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("encode idempotent result: %w", err)
 	}
-	entry, err := json.Marshal(idempotencyEntry{StoredAt: s.now().UTC(), Kind: kind, Result: encoded})
+	entry, err := json.Marshal(idempotencyEntry{StoredAt: s.now().UTC(), Kind: kind, Digest: digest, Result: encoded})
 	if err != nil {
 		return fmt.Errorf("encode idempotency entry: %w", err)
 	}
@@ -103,12 +109,13 @@ func (s *Store) Remember(callID, kind string, result any) error {
 	})
 }
 
-// Recall returns a previously recorded result, or found=false.
+// Recall returns a previously recorded entry for this call id, kind and
+// identity digest, or found=false.
 //
 // An expired entry is reported as absent rather than deleted here: a read path
 // that writes turns a replay storm into a write storm, and the sweep below is
 // where removal belongs.
-func (s *Store) Recall(callID, kind string) (result json.RawMessage, found bool, err error) {
+func (s *Store) Recall(callID, kind, digest string) (recorded idempotencyEntry, found bool, err error) {
 	err = s.db.View(func(tx *bolt.Tx) error {
 		raw := tx.Bucket(bucketIdempotency).Get([]byte(callID))
 		if raw == nil {
@@ -131,10 +138,16 @@ func (s *Store) Recall(callID, kind string) (result json.RawMessage, found bool,
 		if entry.Kind != "" && entry.Kind != kind {
 			return fmt.Errorf("%w: %s", errKindMismatch, callID)
 		}
-		result, found = entry.Result, true
+		// The same rule one level down: an entry contract 1 recorded carries
+		// no digest and matches, so an in-doubt row re-driven across the
+		// upgrade replays instead of being refused (design §5 rule 5).
+		if entry.Digest != "" && entry.Digest != digest {
+			return fmt.Errorf("%w: %s", errIdentityMismatch, callID)
+		}
+		recorded, found = entry, true
 		return nil
 	})
-	return result, found, err
+	return recorded, found, err
 }
 
 // SweepIdempotency removes entries past the retention window.
@@ -267,10 +280,17 @@ func (s *Store) GetSnapshot() (Snapshot, bool, error) {
 // The uid is recorded beside the name because the name can change out of band.
 // A stable uid whose username moved is a RENAME, and reporting it as a missing
 // account would create a replacement while the original kept the home data.
+//
+// AccountID is contract 2's name for the same number (account_id, a string). It
+// is written BESIDE uid, never instead of it, for one release (decision 10,
+// task 1.7): a contract-1 binary rolled back onto this file still finds every
+// binding by uid, so rollback restores nothing. Both are filled on every write
+// (putBinding) and either is read (GetBinding).
 type Binding struct {
 	SubjectID string    `json:"subject_id"`
 	Username  string    `json:"username"`
 	UID       int64     `json:"uid"`
+	AccountID string    `json:"account_id,omitempty"`
 	BoundAt   time.Time `json:"bound_at"`
 	// BoundBy records whether an operator adopted an existing account or the
 	// apply created one. Adoption hands somebody else's account to a subject if
@@ -285,11 +305,20 @@ type Binding struct {
 	WantsSMB *bool `json:"wants_smb,omitempty"`
 }
 
-func (s *Store) PutBinding(b Binding) error {
+// encodeBinding is the one place a binding is written, so both ids always are.
+func (s *Store) encodeBinding(b Binding) ([]byte, error) {
 	if b.BoundAt.IsZero() {
 		b.BoundAt = s.now().UTC()
 	}
-	encoded, err := json.Marshal(b)
+	b.AccountID = ""
+	if b.UID != 0 {
+		b.AccountID = accountID(b.UID)
+	}
+	return json.Marshal(b)
+}
+
+func (s *Store) PutBinding(b Binding) error {
+	encoded, err := s.encodeBinding(b)
 	if err != nil {
 		return fmt.Errorf("encode binding: %w", err)
 	}
@@ -310,10 +339,7 @@ func (e ErrUsernameBound) Error() string {
 // BoundUsernames and then called PutBinding could race another into binding
 // one account to two subjects.
 func (s *Store) BindIfFree(b Binding) error {
-	if b.BoundAt.IsZero() {
-		b.BoundAt = s.now().UTC()
-	}
-	encoded, err := json.Marshal(b)
+	encoded, err := s.encodeBinding(b)
 	if err != nil {
 		return fmt.Errorf("encode binding: %w", err)
 	}
@@ -357,6 +383,12 @@ func (s *Store) GetBinding(subjectID string) (Binding, bool, error) {
 		}
 		if err := json.Unmarshal(raw, &b); err != nil {
 			return fmt.Errorf("stored binding for %s is unreadable: %w", subjectID, err)
+		}
+		if b.UID == 0 && b.AccountID != "" {
+			// Written by a later binary that keeps account_id alone.
+			if uid, err := strconv.ParseInt(b.AccountID, 10, 64); err == nil {
+				b.UID = uid
+			}
 		}
 		found = true
 		return nil

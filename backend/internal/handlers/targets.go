@@ -58,6 +58,10 @@ type targetSummary struct {
 	// makes nothing callable, and the gap between the two is the state a fresh
 	// deployment sits in before its first refresh.
 	Callable bool `json:"callable"`
+	// AlsoSays is what the add-on's manifest carries that this backend does
+	// not know (an x- key, a newer feature's key, a typo), as `path: value`,
+	// quoted and capped: shown raw, never used for a decision (contract 2).
+	AlsoSays []string `json:"also_says,omitempty"`
 	// Operations is what the effective set offers — the manifest intersected
 	// with backend policy — so a surface renders from the deployment's actual
 	// capability rather than from a hardcoded list.
@@ -258,6 +262,7 @@ func describeTarget(reg addons.Registration, transport addons.TransportCredentia
 	if lastErr := a.LastError(); lastErr != nil {
 		s.LastError = lastErr.Error()
 	}
+	s.AlsoSays = a.AlsoSays()
 	for _, op := range a.Operations() {
 		s.Operations = append(s.Operations, operationSummary{
 			ID: op.ID, Scope: string(op.Scope), Confirm: op.Confirm,

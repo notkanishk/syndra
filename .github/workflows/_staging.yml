@@ -36,13 +36,24 @@ jobs:
       WORLD: /var/lib/syndra-staging/world/world.json
     steps:
       - name: Check out ${{ inputs.ref }} into /opt/syndra
+        env:
+          # Read from the environment, never spliced into the script.
+          DEPLOY_REF: ${{ inputs.ref }}
         run: |
           set -euo pipefail
           cd "$STAGE_DIR"
           git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
-          ref='${{ inputs.ref }}'
-          if git rev-parse -q --verify "origin/$ref^{commit}" >/dev/null; then ref="origin/$ref"; fi
-          git checkout --force --detach "$ref"
+          ref="$DEPLOY_REF"
+          # A full SHA (what deploy.yml's resolve job hands over) is checked out
+          # exactly, never re-resolved. A name (an experiment from
+          # deploy-staging.yml) prefers the remote branch over a stale local one.
+          if printf '%s' "$ref" | grep -Ex '[0-9a-f]{40}' >/dev/null; then
+            git checkout --force --detach "$ref"
+            [ "$(git rev-parse HEAD)" = "$ref" ] || { echo "checked out $(git rev-parse HEAD), not $ref"; exit 1; }
+          else
+            if git rev-parse -q --verify "origin/$ref^{commit}" >/dev/null; then ref="origin/$ref"; fi
+            git checkout --force --detach "$ref"
+          fi
           echo "staging now at $(git rev-parse --short HEAD): $(git log -1 --format=%s)"
           # Every later docker compose call layers the staging override, when the
           # checked-out ref has one (an experiment from an older branch may not).
@@ -90,6 +101,46 @@ jobs:
           mv "$WORLD.tmp" "$WORLD"
           echo "reset"
 
+      # Built before the stop below, so the stop is followed by a start from
+      # cached images, never by a build. (When the database was reset above,
+      # the backend is already stopped; the old containers serve otherwise.)
+      - name: Build the images
+        run: |
+          set -euo pipefail
+          cd "$STAGE_DIR"
+          docker compose build
+
+      # Contract 2, and every deploy after it (openspec/changes/addon-contract,
+      # task 1.10). The images are built first (the step above), so the window
+      # with nothing running is a stop and a start, never a build. The backend
+      # stops FIRST — and with it the propagation
+      # runner, which runs inside the backend process (cmd/api, periodic) — so
+      # no old backend ever talks to a new add-on: it would read a contract-2
+      # refusal with contract-1 rules, and only the new backend knows a shape
+      # refusal is not the target refusing. Then the add-on, and only once it
+      # has stopped is its store copied out, because a bbolt file is never
+      # copied while it is open. Never mutations.log: it only grows, and a
+      # restored one reads as a truncated log. The copy is a fallback only:
+      # the store is written additively, so a rollback (the previous production
+      # commit, dispatched through this workflow) restores nothing. This stops containers; never
+      # the GitHub self-hosted runner, which is running this job.
+      - name: Stop the backend, then the add-on, and keep the add-on's store
+        run: |
+          set -euo pipefail
+          cd "$STAGE_DIR"
+          docker compose stop backend
+          if docker compose ps -a --services | grep -x truenas-addon >/dev/null; then
+            docker compose stop truenas-addon
+            mkdir -p "$HOME/syndra-backups"
+            f="$HOME/syndra-backups/truenas-state-$(date +%Y%m%d-%H%M%S)-$(git -C "$STAGE_DIR" rev-parse --short=8 HEAD).db"
+            docker compose cp truenas-addon:/var/lib/syndra-truenas/state.db "$f"
+            [ -s "$f" ] || { echo "empty copy of the add-on's store"; exit 1; }
+            echo "add-on store: $f ($(du -h "$f" | cut -f1))"
+            ls -1t "$HOME"/syndra-backups/truenas-state-*.db | tail -n +15 | xargs -r rm -f
+          else
+            echo "no truenas-addon container here; nothing to copy"
+          fi
+
       - name: Build and start
         run: |
           set -euo pipefail
@@ -126,9 +177,20 @@ jobs:
           cd "$STAGE_DIR"
           want="$(ls backend/db/migrations | sed -n 's/^0*\([0-9][0-9]*\)_.*\.up\.sql$/\1/p' | sort -n | tail -1)"
           got="$(docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -c "select version, dirty from schema_migrations"' | tr -d '[:space:]')"
-          echo "expected ${want}|f, database says: $got"
-          [ "$got" = "${want}|f" ] || { echo "migration mismatch or dirty"; exit 1; }
-          echo "migrations clean at $want"
+          echo "expected at least ${want}|f, database says: $got"
+          # At least: a rollback deploys an older backend onto a newer, clean,
+          # additive schema, which it starts on as it is (db.migrateUp).
+          [ "${got#*|}" = f ] && [ "${got%%|*}" -ge "$want" ] || { echo "migration behind or dirty"; exit 1; }
+          echo "migrations clean at ${got%%|*} (this code knows $want)"
+
+      # Whatever failed, nothing is left down. Not gated on the build, unlike
+      # production: the reset steps above stop services BEFORE the build, so
+      # a failed build can already have left staging down.
+      - name: Start everything again on failure
+        if: failure()
+        run: |
+          cd "$STAGE_DIR"
+          docker compose up -d
 
       - name: Report container state on failure
         if: failure()

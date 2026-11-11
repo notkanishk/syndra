@@ -35,8 +35,8 @@ import (
 
 // UnmanagedAccount is one account on the target with no recorded binding.
 type UnmanagedAccount struct {
-	Username string `json:"username"`
-	UID      int64  `json:"uid,omitempty"`
+	Username  string `json:"username"`
+	AccountID string `json:"account_id,omitempty"`
 	// Self marks the add-on's own service account.
 	//
 	// It is genuinely unmanaged and genuinely on the target, so it belongs in
@@ -45,9 +45,9 @@ type UnmanagedAccount struct {
 	// it whatever any caller asks. Carried so a surface can say that before an
 	// operator meets the refusal, and so the row is never offered as an action.
 	Self bool `json:"self,omitempty"`
-	// PasswordSet is whether the account has a usable credential. An account
-	// with none cannot have SMB enabled, whatever entitlement it is given.
-	PasswordSet bool `json:"password_set"`
+	// Standing is whether the account can be used yet and who is waited on,
+	// in the add-on's words (contract 2, design §6).
+	Standing *addons.Standing `json:"standing,omitempty"`
 }
 
 // AddonReconcileResult is what one pass saw and did.
@@ -285,32 +285,32 @@ func halt(ctx context.Context, res AddonReconcileResult, reason, detail string) 
 
 // unmanaged is every account on the target that no binding claims.
 //
-// Matched on the uid first and the name second, in that order and for the reason
-// design §11 gives: a rename moves the name and leaves the uid, so matching by
-// name alone would report a renamed member's own account as unmanaged and invite
-// an operator to adopt it for somebody else.
+// Matched on the account id first and the name second, in that order and for
+// the reason design §11 gives: a rename moves the name and leaves the id, so
+// matching by name alone would report a renamed member's own account as
+// unmanaged and invite an operator to adopt it for somebody else.
 func unmanaged(accounts []addons.TargetAccount, bindings []db.TargetBinding) []UnmanagedAccount {
-	byUID := make(map[int64]struct{}, len(bindings))
+	byID := make(map[string]struct{}, len(bindings))
 	byName := make(map[string]struct{}, len(bindings))
 	for _, b := range bindings {
-		if b.AccountUID != nil {
-			byUID[*b.AccountUID] = struct{}{}
+		if b.AccountID != nil {
+			byID[*b.AccountID] = struct{}{}
 		}
 		byName[b.Username] = struct{}{}
 	}
 
 	out := make([]UnmanagedAccount, 0)
 	for _, a := range accounts {
-		if _, bound := byUID[a.UID]; bound && a.UID != 0 {
+		if _, bound := byID[a.AccountID]; bound && a.AccountID != "" {
 			continue
 		}
 		if _, bound := byName[a.Username]; bound {
 			continue
 		}
 		out = append(out, UnmanagedAccount{
-			Username: a.Username, UID: a.UID,
-			Self:        a.Self,
-			PasswordSet: a.PasswordSet,
+			Username: a.Username, AccountID: a.AccountID,
+			Self:     a.Self,
+			Standing: a.Standing,
 		})
 	}
 	return out
@@ -344,7 +344,14 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		log.Printf("[ADDON-RECONCILE] %s: merge bases unavailable, classifying without them: %v", target, err)
 		bases = map[string]db.MergeBase{}
 	}
-	current := stateByBinding(accounts)
+	// The fields' roles, as last accepted (targets.field_roles). Without them
+	// a limit could not be told from a membership, so the pass stops rather
+	// than compare one it must not (stateByBinding).
+	roles, err := fieldRoles(ctx, target)
+	if err != nil {
+		return 0, findings, fmt.Errorf("the target's field roles could not be read: %w", err)
+	}
+	current := stateByBinding(accounts, roles)
 
 	subjects := make([]addons.PlanSubject, 0, len(bindings))
 	desired := make(map[string]services.EntitlementSet, len(bindings))
@@ -402,10 +409,10 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		return 0, findings, nil
 	}
 
-	// Acknowledged, because this cohort is not an operator's selection — it is
-	// every subject the backend already manages on this target, and there is
-	// nobody to ask.
-	answer := addonPlan(ctx, target, subjects, true)
+	// Every subject the backend already manages on this target, which is no
+	// operator's selection and may be more than one plan holds: Plan asks in
+	// chunks below the add-on's limits.subjects_per_plan.
+	answer := addonPlan(ctx, target, subjects)
 	if answer.Outcome != addons.OutcomeSucceeded {
 		return 0, findings, fmt.Errorf("the target could not say what would change: %v", answer.Err)
 	}
@@ -539,30 +546,42 @@ func observeState(ctx context.Context, target, subjectID string,
 // in this file uses it: a rename moves the name and leaves the uid, and matching
 // by name alone would compare one member's binding against another account.
 type accountState struct {
-	byUID  map[int64]map[string]json.RawMessage
+	byID   map[string]map[string]json.RawMessage
 	byName map[string]map[string]json.RawMessage
 }
 
-func stateByBinding(accounts []addons.TargetAccount) accountState {
+// stateByBinding indexes each account's state, less the fields whose role is
+// limit (roles: the target's persisted role map). An add-on reports the
+// effective limit it holds (design §3), and the core compares limits only
+// once it combines them the same way, which is slice 2's: until then a limit
+// is compared exactly as before contract 2, which is not at all, so an
+// unreadable quota table can never surface as a finding.
+func stateByBinding(accounts []addons.TargetAccount, roles map[string]string) accountState {
 	out := accountState{
-		byUID:  make(map[int64]map[string]json.RawMessage, len(accounts)),
+		byID:   make(map[string]map[string]json.RawMessage, len(accounts)),
 		byName: make(map[string]map[string]json.RawMessage, len(accounts)),
 	}
 	for _, a := range accounts {
 		if a.State == nil {
 			continue
 		}
-		if a.UID != 0 {
-			out.byUID[a.UID] = a.State
+		state := make(map[string]json.RawMessage, len(a.State))
+		for field, v := range a.State {
+			if roles[field] != addons.RoleLimit {
+				state[field] = v
+			}
 		}
-		out.byName[a.Username] = a.State
+		if a.AccountID != "" {
+			out.byID[a.AccountID] = state
+		}
+		out.byName[a.Username] = state
 	}
 	return out
 }
 
 func (s accountState) of(b db.TargetBinding) map[string]json.RawMessage {
-	if b.AccountUID != nil {
-		if state, ok := s.byUID[*b.AccountUID]; ok {
+	if b.AccountID != nil {
+		if state, ok := s.byID[*b.AccountID]; ok {
 			return state
 		}
 	}
@@ -585,24 +604,24 @@ func baseOf(bases map[string]db.MergeBase, subjectID string) map[string]json.Raw
 // partitionByPresence splits bindings into those whose account is still on the
 // target and those whose is not.
 //
-// Matched on UID first and username second, in that order and for the same
-// reason the binding records both: a rename keeps the uid, and a recreated
-// account keeps the name. A binding that matches on neither names an account
-// that is not there.
+// Matched on the account id first and username second, in that order and for
+// the same reason the binding records both: a rename keeps the id, and a
+// recreated account keeps the name. A binding that matches on neither names an
+// account that is not there.
 //
-// A binding with no recorded uid is treated as present when the name matches,
+// A binding with no recorded id is treated as present when the name matches,
 // because the alternative — calling it stale — would report every
-// operator-adopted binding from before uids were recorded as broken.
+// operator-adopted binding from before ids were recorded as broken.
 func partitionByPresence(bindings []db.TargetBinding, accounts []addons.TargetAccount) (live []db.TargetBinding, stale []StaleBinding) {
-	byUID := make(map[int64]struct{}, len(accounts))
+	byID := make(map[string]struct{}, len(accounts))
 	byName := make(map[string]struct{}, len(accounts))
 	for _, a := range accounts {
-		byUID[a.UID] = struct{}{}
+		byID[a.AccountID] = struct{}{}
 		byName[a.Username] = struct{}{}
 	}
 	for _, b := range bindings {
-		if b.AccountUID != nil {
-			if _, ok := byUID[*b.AccountUID]; ok {
+		if b.AccountID != nil {
+			if _, ok := byID[*b.AccountID]; ok {
 				live = append(live, b)
 				continue
 			}
@@ -611,11 +630,7 @@ func partitionByPresence(bindings []db.TargetBinding, accounts []addons.TargetAc
 			live = append(live, b)
 			continue
 		}
-		uid := int64(0)
-		if b.AccountUID != nil {
-			uid = *b.AccountUID
-		}
-		stale = append(stale, StaleBinding{SubjectID: b.SubjectID, Username: b.Username, UID: uid})
+		stale = append(stale, StaleBinding{SubjectID: b.SubjectID, Username: b.Username, AccountID: b.AccountID})
 	}
 	return live, stale
 }
@@ -624,9 +639,9 @@ func partitionByPresence(bindings []db.TargetBinding, accounts []addons.TargetAc
 type StaleBinding struct {
 	SubjectID string `json:"subject_id"`
 	Username  string `json:"username"`
-	// UID is the account the binding recorded, or 0 for a binding made before
-	// uids were kept.
-	UID int64 `json:"uid,omitempty"`
+	// AccountID is the account the binding recorded, absent for a binding made
+	// before ids were kept.
+	AccountID *string `json:"account_id,omitempty"`
 }
 
 // reconcileActor is who a reconciliation-sourced convergence is attributed to.

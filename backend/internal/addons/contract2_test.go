@@ -15,12 +15,11 @@ import (
 	"time"
 )
 
-// The backend's half of contract 2 (addons/contract/v2, slice 1a). The checks
-// over the shared contract files (schemas, fixtures, registries, OpenAPI, JCS
-// vectors) live once, in addons/truenas beside the contract. What stays here is
-// what touches backend code: the raw-query vectors, recomputed with the
-// backend's own ComputeSignature, and the operations registry against
-// operationPolicy (contract_schema_test.go).
+// The raw-query vectors of contract 2 (addons/contract/transport_derivation.json),
+// recomputed with the backend's own ComputeSignature. The checks over the
+// shared contract files (schemas, registries, OpenAPI, JCS vectors) live once,
+// in addons/truenas; contract_test.go and contract_routes_test.go hold this
+// side's own messages to the fixtures, contract_schema_test.go to the schemas.
 
 var v2Dir = filepath.Join("..", "..", "..", "addons", "contract", "v2")
 

@@ -189,24 +189,48 @@ type reachCache struct {
 // no last-known answer to fall back on.
 var errNeverRead = errors.New("the folder permissions have not been read yet")
 
+// How a shareRead was come by, in common/stale.json's words: "" is a read of
+// the NAS that began after the request arrived (current), "cached" the last
+// read served on purpose while it is fresh enough, "unreachable" the last read
+// because this one failed. Design §4: only the first is `current`.
+const (
+	aclCached      = "cached"
+	aclUnreachable = "unreachable"
+)
+
 // readACLs serves the last read while it is fresh, and reads again when it
-// isn't. A failed read falls back to the last one, reported as not current.
-func (s *server) readACLs() (read shareRead, readAt time.Time, current bool, err error) {
+// isn't. A failed read falls back to the last one. stale says which.
+func (s *server) readACLs() (read shareRead, readAt time.Time, stale string, err error) {
 	c := &s.reach
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.readAt.IsZero() && time.Since(c.readAt) < reachMaxAge {
-		return c.last, c.readAt, true, nil
+		return c.last, c.readAt, aclCached, nil
 	}
 	fresh, err := s.readSharesACLs()
 	if err != nil {
 		if c.readAt.IsZero() {
-			return shareRead{}, time.Time{}, false, fmt.Errorf("%w: %w", errNeverRead, err)
+			return shareRead{}, time.Time{}, "", fmt.Errorf("%w: %w", errNeverRead, err)
 		}
-		return c.last, c.readAt, false, nil
+		return c.last, c.readAt, aclUnreachable, nil
 	}
 	c.last, c.readAt = fresh, time.Now().UTC()
-	return c.last, c.readAt, true, nil
+	return c.last, c.readAt, "", nil
+}
+
+// readACLsNow reads the NAS now, whatever the cache holds, and keeps the read:
+// for a write that must be judged against what is there (a place deleted a
+// minute ago must not pass). A failed read is an error, never the last read.
+func (s *server) readACLsNow() (shareRead, error) {
+	c := &s.reach
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	fresh, err := s.readSharesACLs()
+	if err != nil {
+		return shareRead{}, err
+	}
+	c.last, c.readAt = fresh, time.Now().UTC()
+	return fresh, nil
 }
 
 // readSharesACLs reads each enabled share's root and first-level folders.
@@ -377,10 +401,12 @@ func gidsOf(groups []nasGroup) map[string]int64 {
 
 // ReachResponse is what each of the makerspace's groups opens.
 type ReachResponse struct {
-	// ReadAt is when the folder permissions were read. Current is false when
-	// the NAS couldn't be read just now and this is the last read.
-	ReadAt  time.Time `json:"read_at"`
+	// TakenAt is when the folder permissions were read (contract 1's read_at).
+	// Current is false when the NAS couldn't be read just now and this is the
+	// last read, and Stale then says so.
+	TakenAt time.Time `json:"taken_at"`
 	Current bool      `json:"current"`
+	Stale   *Stale    `json:"stale,omitempty"`
 	// Groups is every group of the makerspace's own, with what holding it opens
 	// beyond what every account opens. An empty list is "opens nothing yet".
 	Groups map[string][]Place `json:"groups"`
@@ -394,21 +420,29 @@ type ReachResponse struct {
 func (s *server) handleReach(w http.ResponseWriter, _ *http.Request, _ []byte) {
 	groups, err := s.readGroups()
 	if err != nil {
-		writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
+		writeError(w, statusFor(err), CodeTargetUnreadable, "The NAS's groups could not be read.", nil)
 		return
 	}
-	read, at, current, err := s.readACLs()
+	read, at, stale, err := s.readACLs()
 	if errors.Is(err, errNeverRead) {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": CodeReachNeverRead})
+		writeError(w, http.StatusServiceUnavailable, CodeReachNeverRead,
+			"The folder permissions have not been read since the add-on started.", nil)
 		return
 	}
 	if err != nil {
-		writeJSON(w, statusFor(err), map[string]string{"error": CodeTargetUnreadable})
+		writeError(w, statusFor(err), CodeTargetUnreadable, "The folder permissions could not be read.", nil)
 		return
 	}
 	nobody := principals{} // an account in no group: what everyone@ alone opens
-	out := ReachResponse{ReadAt: at, Current: current, Groups: map[string][]Place{},
+	out := ReachResponse{TakenAt: at, Current: stale == "", Groups: map[string][]Place{},
 		Everyone: placesFor(read.places, nobody, nil)}
+	switch stale {
+	case aclCached:
+		out.Stale = &Stale{Reason: aclCached, RetryAfter: int(max(0, (reachMaxAge - time.Since(at)).Seconds())),
+			Note: "The folder permissions as read at " + at.UTC().Format(time.RFC3339) + "; they are read again after five minutes."}
+	case aclUnreachable:
+		out.Stale = unreachableSince(at)
+	}
 	for _, g := range groups {
 		if !g.Builtin {
 			out.Groups[g.Name] = placesFor(read.places, principals{g.GID: true}, nobody)

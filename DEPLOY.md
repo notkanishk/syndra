@@ -580,19 +580,36 @@ file, a copy of what production's Zitadel holds.
 branch to staging and never goes on to production. The next merge to `main`
 replaces it, and resets the database.
 
-**Rolling production back:**
-1. Merge a revert. That is the normal path, through staging.
-2. In an emergency, on the box as `runner`:
-   - check out the previous SHA in `/opt/syndra` and run `docker compose up -d --build`;
-   - if a migration must be undone, restore the matching
-     `~/syndra-backups/pre-deploy-*.dump` with `pg_restore --clean` into the
-     postgres container.
+**Rolling production back:** see [Rollback](#rollback) below. Dispatch
+`deploy.yml` from main with `ref=<previous production commit SHA>`, so the old
+code goes out through the current workflow and its stop order. Never merge a
+revert for a rollback (it can revert the stop order with the code) and never
+rebuild by hand while the runner works. The first rollback across migration
+000088 has two manual steps first; the Rollback section lists them.
 
-Deploying by hand on the box, when the runner is down:
+Deploying by hand on the box, **only when the runner is down**: keep the same
+stop order the workflow uses, so a backend and an add-on of different contract
+majors never run side by side (the backend would read the add-on's refusals as
+the target's, and hold departures for an operator):
 
 ```bash
-su - runner -c 'cd /opt/syndra && git fetch --prune origin && git checkout --force origin/main && docker compose up -d --build'
+su - runner -c 'cd /opt/syndra && git fetch --prune origin && git checkout --force <sha> \
+  && docker compose build \
+  && docker compose stop backend \
+  && docker compose stop truenas-addon \
+  && mkdir -p ~/syndra-backups \
+  && docker compose cp truenas-addon:/var/lib/syndra-truenas/state.db ~/syndra-backups/truenas-state-$(date +%Y%m%d-%H%M%S)-manual.db \
+  && docker compose up -d --remove-orphans'
 ```
+
+The copy is the same fallback the workflow keeps (never `mutations.log`); a
+contract-2 add-on writes its store additively, so a rollback normally needs no
+restore from it.
+
+If a migration must be undone, restore the matching
+`~/syndra-backups/pre-deploy-*.dump` with `pg_restore --clean` into the
+postgres container; a migration that only adds (as 000088 does) needs only the
+schema_migrations reset in [Rollback](#rollback).
 
 ### Hosts without a git checkout
 
@@ -636,16 +653,51 @@ asserting anything about its contents.
 
 ### Rollback
 
+A rollback is a dispatch of the **current** deploy workflow with the commit
+production ran before, never a revert commit (it would revert the workflow and
+its stop order with the code) and never the old commit's own workflow:
+
 ```bash
-su - runner
-cd /opt/syndra
-git log --oneline -10
-git checkout --force <good-sha>
-docker compose up -d --build
+# the previous production commit: Actions › deploy › the last good run's commit
+gh workflow run deploy.yml -f ref=<previous production commit SHA>
 ```
 
-Database migrations do not roll back. A rollback across a migration boundary
-needs the migration reverted deliberately first.
+Its `resolve` job deploys only a full SHA on `main` whose `ci-ok` passed, and
+both staging and production check out exactly that commit, with the stop order
+of add-on contract 2 (stop the backend, then the add-on, keep `state.db`).
+Nothing is restored: the add-on's store and migration 000088 are additive.
+
+Database migrations do not roll back, and nothing ever migrates down. A
+backend built from the add-on contract 2 commit onward starts on a database
+that is AHEAD of it when that schema is clean (`[STARTUP] the database is at
+migration N and this backend knows M at most`), because every migration since
+has been additive. A backend built **before** that commit refuses such a
+database, so the **first rollback across 000088 to a pre-088 backend** needs
+one manual step first, on the production host, before the dispatch:
+
+```bash
+cd /opt/syndra
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "UPDATE schema_migrations SET version = 87, dirty = false WHERE version = 88 AND dirty = false;"' </dev/null
+```
+
+Then, still on the production host and as root, push a fresh copy of that
+database to staging, because every `deploy.yml` run first deploys to staging
+and restores last night's copy there, which is still at 88, and a pre-088
+backend would refuse it and production would never be reached:
+
+```bash
+sudo /usr/local/bin/syndra-push-staging-dump
+```
+
+(the script `syndra-staging-dump.timer` runs nightly; it also sends the
+stand-in Zitadel's world file). Only then dispatch the rollback above.
+
+000088 only adds columns (`account_id` on both binding tables, `targets.field_roles`)
+and an index, which the older backend ignores; they stay, and the backfill at
+the next forward start fills what it wrote meanwhile. Rolling forward again
+re-runs 000088, which is written to be re-runnable (`IF NOT EXISTS`).
+Any other migration boundary: revert the migration deliberately first.
 
 ---
 

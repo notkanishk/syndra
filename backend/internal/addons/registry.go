@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -395,6 +398,20 @@ func Refresh(ctx context.Context, target string) error {
 		return err
 	}
 
+	// What the manifest means is checked before anything is accepted from it:
+	// a kind this backend does not know, a role outside the vocabulary, or
+	// anything but one account field is a refusal with its reason (design §3,
+	// §4). So is a manifest that re-purposes a field: a changed role on an
+	// existing name, or another account field, would silently change what
+	// withdraw-only and revocation do (design §2.6). The last good manifest
+	// and role map stay in place.
+	if err := m.validate(); err != nil {
+		return refuseManifest(a, target, err)
+	}
+	if err := acceptRoles(ctx, target, m); err != nil {
+		return refuseManifest(a, target, err)
+	}
+
 	ops, unknown := resolveOperations(m)
 	if len(unknown) > 0 {
 		// Logged once per refresh, not per call. An operation the backend has
@@ -406,12 +423,97 @@ func Refresh(ctx context.Context, target string) error {
 	}
 
 	registryMu.Lock()
+	if prev := a.manifest; len(m.Unknown) > 0 && (prev == nil || !slices.Equal(prev.Unknown, m.Unknown)) {
+		// Logged once per change, never per call (design §2(a)): a key this
+		// backend does not know is an add-on ahead of it, or a typo the kit
+		// would fail. Shown on the target page; never used for a decision.
+		log.Printf("[ADDON] %s's manifest also says (not used): %s", target, strings.Join(m.Unknown, "; "))
+	}
 	a.manifest = &m
 	a.ops = ops
 	a.fetchedAt = timeNow().UTC()
 	a.lastErr = nil
 	registryMu.Unlock()
 	return nil
+}
+
+// refuseManifest records why a manifest was not accepted and keeps the last
+// good one serving.
+func refuseManifest(a *Addon, target string, err error) error {
+	err = &ErrManifestRefused{Target: target, Reason: err.Error()}
+	registryMu.Lock()
+	a.lastErr = err
+	registryMu.Unlock()
+	log.Printf("[ADDON] %v — the last accepted manifest stays in use", err)
+	return err
+}
+
+// ErrManifestRefused is a manifest whose meaning this backend refuses, with
+// the reason the target page shows.
+type ErrManifestRefused struct {
+	Target, Reason string
+}
+
+func (e *ErrManifestRefused) Error() string {
+	return fmt.Sprintf("addon %s: manifest refused: %s", e.Target, e.Reason)
+}
+
+// acceptRoles holds the manifest's role map to the one persisted for the
+// target and persists the result (targets.field_roles, design §3). A field
+// keeps its role for ever: a manifest naming an existing field with another
+// role, or naming another field the account, is refused and the stored map
+// kept. A field the manifest no longer declares keeps its entry, so it cannot
+// come back meaning something else.
+func acceptRoles(ctx context.Context, target string, m Manifest) error {
+	stored, _, err := dbTargetFieldRoles(ctx, target)
+	if err != nil {
+		return fmt.Errorf("the stored field roles could not be read, so a change of meaning could not be ruled out: %w", err)
+	}
+	merged := maps.Clone(stored)
+	if merged == nil {
+		merged = map[string]string{}
+	}
+	account := ""
+	for name, role := range stored {
+		if role == RoleAccount {
+			account = name
+		}
+	}
+	for _, f := range m.EntitlementSchema {
+		if was, known := stored[f.Name]; known && was != f.Role {
+			return fmt.Errorf("field %q was declared with role %s and is now declared %s; a field is never re-purposed, a new meaning is a new name", f.Name, was, f.Role)
+		}
+		if f.Role == RoleAccount && account != "" && f.Name != account {
+			return fmt.Errorf("field %q is declared the account, and %q is; the account field never moves", f.Name, account)
+		}
+		merged[f.Name] = f.Role
+	}
+	if maps.Equal(merged, stored) {
+		return nil
+	}
+	return dbSaveTargetFieldRoles(ctx, target, merged)
+}
+
+// FieldRoles is a target's persisted role map, field name → role, which every
+// reader of a field's meaning reads instead of the live manifest: it holds
+// while the add-on is down and across a backend restart (design §3).
+func FieldRoles(ctx context.Context, target string) (map[string]string, error) {
+	roles, found, err := dbTargetFieldRoles(ctx, target)
+	if err == nil && !found {
+		return nil, fmt.Errorf("%w: %s has no accepted contract-2 manifest yet", ErrNoManifest, target)
+	}
+	return roles, err
+}
+
+// AlsoSays is what the target's accepted manifest carries that this backend
+// does not know, quoted and capped, for the target page.
+func (a *Addon) AlsoSays() []string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	if a.manifest == nil {
+		return nil
+	}
+	return slices.Clone(a.manifest.Unknown)
 }
 
 // RefreshAll refreshes every registered add-on and returns nil regardless of
@@ -663,6 +765,26 @@ func refreshForManifest(target string) bool {
 	return hasManifest(target)
 }
 
+// rereadManifest reads the manifest again after a shape refusal, single-flighted
+// and on manifestRetry's cooldown, so a burst of refused calls costs one read.
+// A manifest the backend refuses (a contract-1 add-on after a rollback) leaves
+// the last accepted one in place and the target refusing calls as unreached:
+// queued work waits, nothing becomes target_refused.
+func (a *Addon) rereadManifest() {
+	g := retryStateFor(a.Registration.Target)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.last.IsZero() && timeNow().Sub(g.last) < manifestRetryCooldown {
+		return
+	}
+	g.last = timeNow()
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	defer cancel()
+	if err := Refresh(ctx, a.Registration.Target); err != nil {
+		log.Printf("[ADDON] re-reading %s's manifest after a shape refusal: %v", a.Registration.Target, err)
+	}
+}
+
 // ResolveOperation is the callability gate: every invocation path goes through
 // it,
 // and it refuses anything the effective set does not offer or the add-on cannot
@@ -707,11 +829,11 @@ func ResolveOperation(target, id string) (EffectiveOperation, error) {
 // offered. The channel that carries the decision has to be as trustworthy as
 // the one that carries the mutation.
 //
-// Decoding is strict. An unknown field from the least trusted component means
-// the two sides disagree about the contract, and the contract version exists
-// precisely so that disagreement is a refusal rather than a guess — accepting
-// unknown fields would let a newer add-on introduce a field the backend ignores
-// while both believe they agree.
+// Decoding is TOLERANT (contract 2, design §2): the manifest is the one message
+// meant to describe change, so a key this backend does not know is kept aside
+// in Unknown, quoted and capped, and never refused — a strict decode made every
+// new manifest key a breaking change. What the manifest MEANS is held at
+// Refresh (validate, acceptRoles); the conformance kit holds its spelling.
 func httpFetchManifest(ctx context.Context, r Registration) (Manifest, error) {
 	cred, err := credentialFor(r)
 	if err != nil {
@@ -731,14 +853,75 @@ func httpFetchManifest(ctx context.Context, r Registration) (Manifest, error) {
 	// and reports an oversized one as a non-success, so a manifest too large to
 	// read whole has been refused above. A second limit here would look
 	// load-bearing while guarding nothing.
-	dec := json.NewDecoder(bytes.NewReader(resp.Body))
-	dec.DisallowUnknownFields()
-	var m Manifest
-	if err := dec.Decode(&m); err != nil {
+	return decodeManifest(resp.Body)
+}
+
+// decodeManifest reads a manifest tolerantly and lists what it carries beyond
+// what this backend knows.
+func decodeManifest(body []byte) (Manifest, error) {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	var raw map[string]any
+	if err := dec.Decode(&raw); err != nil {
 		return Manifest{}, fmt.Errorf("decode manifest: %w", err)
 	}
 	if err := dec.Decode(new(any)); err != io.EOF {
 		return Manifest{}, errors.New("decode manifest: multiple JSON values in body")
 	}
+	var m Manifest
+	if err := json.Unmarshal(body, &m); err != nil {
+		return Manifest{}, fmt.Errorf("decode manifest: %w", err)
+	}
+	m.Unknown = unknownKeys("", raw, manifestKeys)
 	return m, nil
+}
+
+// manifestKeys is every manifest key this backend knows, by object. A key
+// listed with nil is known and not looked inside: metrics are feature stats,
+// which this backend does not read yet.
+var manifestKeys = keySpec{
+	"contract_version": nil, "product": nil, "product_version": nil, "kind": nil, "features": nil,
+	"entitlement_schema": {"name": nil, "role": nil, "label": nil, "unit": nil, "combine": nil, "unlimited": nil, "per_person": nil},
+	"operations":         {"id": nil, "scope": nil, "confirm": nil, "secret_params": nil, "available": nil, "unavailable_reason": nil, "params": nil},
+	"connection":         {"protocol": nil, "host": nil},
+	"limits":             {"subjects_per_plan": nil, "fresh_read_cooldown": nil, "stats_buffer": nil},
+	"metrics":            nil,
+}
+
+type keySpec map[string]keySpec
+
+// alsoSaysCap bounds one shown value: the least trusted component chooses it.
+const alsoSaysCap = 200
+
+// unknownKeys walks v against spec and returns each key spec does not name, as
+// `path: value`, the value as JSON (quoted and escaped) and capped. An x- key
+// is vendor data and listed the same way: shown, never used.
+func unknownKeys(path string, v any, spec keySpec) []string {
+	var out []string
+	switch x := v.(type) {
+	case map[string]any:
+		for _, k := range slices.Sorted(maps.Keys(x)) {
+			p := k
+			if path != "" {
+				p = path + "." + k
+			}
+			inner, known := spec[k]
+			if !known {
+				raw, _ := json.Marshal(x[k])
+				shown := string(raw)
+				if len(shown) > alsoSaysCap {
+					shown = shown[:alsoSaysCap] + "…"
+				}
+				out = append(out, strconv.Quote(p)+": "+shown)
+				continue
+			}
+			if inner != nil {
+				out = append(out, unknownKeys(p, x[k], inner)...)
+			}
+		}
+	case []any:
+		for i, e := range x {
+			out = append(out, unknownKeys(fmt.Sprintf("%s[%d]", path, i), e, spec)...)
+		}
+	}
+	return out
 }

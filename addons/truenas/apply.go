@@ -72,11 +72,15 @@ type ApplyOutcome struct {
 	// Username is the derived or bound account name, reported so no separate
 	// creation call has to be sequenced before this one to learn it.
 	Username string `json:"username,omitempty"`
-	// UID is the target's stable identity for that account. Reported beside the
-	// name because the name can move out of band and this cannot: a backend
-	// recording only the name would lose track of the account the first time
-	// somebody renamed it in the web UI.
-	UID int64 `json:"uid,omitempty"`
+	// AccountID is the target's stable identity for that account (the uid,
+	// as contract 2's string account_id). Reported beside the name because the
+	// name can move out of band and this cannot: a backend recording only the
+	// name would lose track of the account the first time somebody renamed it
+	// in the web UI.
+	AccountID string `json:"account_id,omitempty"`
+	// Standing is whether that account can be used yet, and who is waited on
+	// (design §6). It travels with AccountID, and only when an account exists.
+	Standing *Standing `json:"standing,omitempty"`
 	// Fingerprint is the subject's state AFTER this call, so the next plan
 	// starts from something current.
 	Fingerprint string `json:"fingerprint,omitempty"`
@@ -151,7 +155,9 @@ func entitlementState(s *Subject) map[string]any {
 	if s == nil {
 		return nil
 	}
-	groups := append([]string(nil), s.Groups...)
+	// [], never null, for no groups (contract 2, task 1.0a): a list field is
+	// a list.
+	groups := append([]string{}, s.Groups...)
 	sort.Strings(groups)
 	// The home in the mapping's own vocabulary: whether the account has one,
 	// wherever it is, so a home made before the location changed still reads
@@ -184,8 +190,8 @@ const (
 // along with whatever is already in its home directory. So the operation stops
 // and an operator chooses — adopt, or create under a suffixed name.
 type BindingConflict struct {
-	Username string `json:"username"`
-	UID      int64  `json:"uid"`
+	Username  string `json:"username"`
+	AccountID string `json:"account_id"`
 	// Adoptable says the account exists and no other subject is bound to it,
 	// which is the only case the adoption action can act on.
 	Adoptable bool   `json:"adoptable"`
@@ -288,6 +294,13 @@ func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
 			return desiredState{}, fmt.Errorf("field %q is not in this add-on's entitlement schema", field)
 		}
 	}
+	// A channel is off whenever the account is (design §3, role channel), so
+	// an account switched off takes SMB with it whatever the request said of
+	// SMB. The backend sends that already; the add-on holds it too, so no
+	// caller can leave a disabled account reachable over SMB.
+	if d.managed[FieldEnabled] && !d.enabled {
+		d.managed[FieldSMBEnabled], d.smbEnabled = true, false
+	}
 	return d, nil
 }
 
@@ -321,15 +334,11 @@ func fingerprintSubject(s *Subject) string {
 // handleApply converges one subject.
 func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req ApplyRequest
-	if err := decodeStrict(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
-		return
-	}
-	if !writeContractRefusal(w, req.ContractVersion) {
+	if !decodeRequest(w, body, &req, CodeBadRequest) || !writeContractRefusal(w, req.ContractVersion) {
 		return
 	}
 	if strings.TrimSpace(req.CallID) == "" || strings.TrimSpace(req.Subject) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": CodeBadRequest})
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "An apply needs a call_id and a subject.", nil)
 		return
 	}
 	if strings.TrimSpace(req.Fingerprint) == "" {
@@ -337,34 +346,22 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 		// the diff an operator approved is the diff that lands, and a check that
 		// silently passes when the field is absent is a guarantee that holds
 		// only for callers who chose to be bound by it.
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error":  CodeFingerprintRequired,
-			"detail": "this call carries no fingerprint, so there is nothing to verify the plan against",
-		})
+		writeError(w, http.StatusBadRequest, CodeFingerprintRequired,
+			"This call carries no fingerprint, so there is nothing to verify the plan against.", nil)
 		return
 	}
 
-	// Deduplicated before the lifecycle gate, so a replay during a maintenance
-	// window returns what it returned rather than being refused — the call
-	// already happened, and refusing it now would report a completed mutation
-	// as queued.
-	if cached, found, err := s.store.Recall(req.CallID, kindApply); err != nil {
-		writeRecallFailure(w, err)
-		return
-	} else if found {
-		// Decoded and re-encoded rather than echoed. A replay must be
-		// byte-identical to the original response — a caller comparing the two
-		// to decide whether its retry duplicated anything would otherwise be
-		// told they differ because one went through a different encoder.
-		var previous ApplyOutcome
-		if err := json.Unmarshal(cached, &previous); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": CodeStoreUnreadable})
-			return
-		}
-		writeJSON(w, http.StatusOK, previous)
-		return
-	}
+	// Deduplicated before the lifecycle gate and the fingerprint, so a replay
+	// during a maintenance window returns what it returned rather than being
+	// refused — the call already happened, and refusing it now would report a
+	// completed mutation as queued — and a re-plan's new fingerprint does not
+	// turn a replay into PLAN_STALE (calls.go).
+	identity := map[string]any{"subject": req.Subject, "desired": plainJSON(req.Desired)}
+	s.once(w, req.CallID, kindApply, identity, func(w http.ResponseWriter) { s.applyNow(w, req) })
+}
 
+// applyNow is one apply that was not a replay.
+func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 	done, err := s.life.Begin()
 	if err != nil {
 		state, _ := s.life.State()
@@ -376,45 +373,31 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 	if supported, why := s.nas.MajorSupported(); !supported {
 		// A mutation against an untested major is refused, not attempted. Reads
 		// continue; this is the half that could break something.
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
-			"error": CodeTargetVersionUnsupported, "detail": why,
-		})
+		writeError(w, http.StatusUnprocessableEntity, CodeTargetVersionUnsupported, why, nil)
 		return
 	}
 
 	outcome, status, err := s.applyOne(req)
-	if err != nil {
-		if errors.Is(err, errStaleFingerprint) {
-			// Its own code, because it is its own operator action. Every other
-			// refusal here means "fix something and try again"; this one means
-			// the subject moved since the diff was approved, and what has to
-			// happen next is a re-plan somebody reads.
-			writeJSON(w, status, map[string]string{
-				"error":   CodePlanStale,
-				"subject": req.Subject,
-				"detail":  "the subject's state on the target has changed since the plan was computed",
-			})
-			return
-		}
-		writeJSON(w, status, map[string]string{"error": CodeApplyFailed, "detail": err.Error()})
-		return
+	switch {
+	case errors.Is(err, errStaleFingerprint):
+		// Its own code, because it is its own operator action. Every other
+		// refusal here means "fix something and try again"; this one means
+		// the subject moved since the diff was approved, and what has to
+		// happen next is a re-plan somebody reads.
+		writeError(w, status, CodePlanStale,
+			"The subject's state on the target has changed since the plan was computed.",
+			map[string]any{"subject": req.Subject})
+	case err != nil:
+		writeError(w, status, CodeApplyFailed, err.Error(), nil)
+	case outcome.Conflict != nil:
+		// A blocked apply is a problem whose extension members are the
+		// outcome (contract 2): the operator's adoption decision rides on it.
+		writeOutcomeRefusal(w, status, CodeBindingConflict, outcome)
+	case outcome.Effect == EffectBlocked:
+		writeOutcomeRefusal(w, http.StatusUnprocessableEntity, CodeApplyBlocked, outcome)
+	default:
+		writeJSON(w, status, outcome)
 	}
-
-	// The record is written BEFORE the result is returned, so a caller that
-	// retries after a lost response gets the original outcome rather than a
-	// second mutation. It is best-effort against the response, though: the
-	// mutation already happened, and refusing to report it because the cache
-	// write failed would lose the only account of it the caller gets.
-	//
-	// Only a 2xx is remembered. A blocked or refused outcome changed nothing, so
-	// a replay re-runs it (the target may have moved on) instead of returning a
-	// stale refusal as a 200 the caller would read as applied.
-	if status/100 == 2 {
-		if err := s.store.Remember(req.CallID, kindApply, outcome); err != nil {
-			logStoreFailure("idempotency", req.CallID, err)
-		}
-	}
-	writeJSON(w, status, outcome)
 }
 
 // applyOne is the convergence.
@@ -546,7 +529,7 @@ func boundAccount(binding Binding, floor, ceiling int64,
 			// A name some other account now holds (the original was deleted
 			// and the name reused). Converging it would hand this subject's
 			// entitlements to a stranger, so it halts like any foreign name.
-			return nil, binding, &BindingConflict{Username: found.Username, UID: found.UID}, nil
+			return nil, binding, &BindingConflict{Username: found.Username, AccountID: accountID(found.UID)}, nil
 		}
 		if !owned && found.UID >= floor && found.UID <= ceiling {
 			// A legacy binding holding a record key, not a uid: the real one,
@@ -651,7 +634,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 	if existing != nil {
 		owner := claimed[derived]
 		return nil, Binding{}, &BindingConflict{
-			Username: derived, UID: existing.UID,
+			Username: derived, AccountID: accountID(existing.UID),
 			Adoptable: owner == "", BoundTo: owner,
 		}, false, nil
 	}
@@ -797,7 +780,8 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 			}
 			return ApplyOutcome{
 				Subject: req.Subject, Effect: EffectApplied, Detail: detail,
-				Username: current.Username, UID: current.UID,
+				Consequence: describeHolding(*current),
+				Username:    current.Username, AccountID: accountID(current.UID), Standing: standingOf(current),
 				Fingerprint: fingerprintSubject(current),
 			}, http.StatusOK, nil
 		}
@@ -807,13 +791,15 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		// Nothing to write, and something still wanted. Reported as its own
 		// outcome rather than as no-change: "already in the requested state" is
 		// false, and reporting it would leave an operator believing SMB is on.
+		// The consequence is what the account holds, the plan's words for the
+		// same outcome (the plan and the apply never disagree, design §7).
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
-			Detail: notes(smbWait),
-			Consequence: "The account exists and is otherwise converged. TrueNAS switches SMB on " +
-				"only in the call that sets a password, so this completes itself when the member sets one.",
+			Detail:      notes(smbWait),
+			Consequence: describeHolding(*current),
 			Username:    current.Username,
-			UID:         current.UID,
+			AccountID:   accountID(current.UID),
+			Standing:    standingOf(current),
 			Fingerprint: fingerprintSubject(current),
 		}, http.StatusOK, nil
 	}
@@ -825,8 +811,10 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
 			Detail:      notes("Already in the requested state."),
+			Consequence: describeHolding(*current),
 			Username:    current.Username,
-			UID:         current.UID,
+			AccountID:   accountID(current.UID),
+			Standing:    standingOf(current),
 			Fingerprint: fingerprintSubject(current),
 		}, http.StatusOK, nil
 	}
@@ -878,7 +866,10 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 				" and the account could not be read back, so what the target now holds " +
 				"has not been confirmed. The next plan reads it fresh.",
 			Username: current.Username,
-			UID:      current.UID,
+			// Its standing as last read: the write landed and what it left
+			// could not be read back.
+			AccountID: accountID(current.UID),
+			Standing:  standingOf(current),
 		}, http.StatusOK, nil
 	}
 
@@ -905,7 +896,8 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		Detail:      detail,
 		Consequence: describeHolding(*applied),
 		Username:    applied.Username,
-		UID:         applied.UID,
+		AccountID:   accountID(applied.UID),
+		Standing:    standingOf(applied),
 		Fingerprint: fingerprintSubject(applied),
 		Observed:    observedFields(desired, applied),
 	}, http.StatusOK, nil
@@ -1056,7 +1048,8 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		Detail:      detail,
 		Consequence: describeHolding(*created),
 		Username:    binding.Username,
-		UID:         created.UID,
+		AccountID:   accountID(created.UID),
+		Standing:    standingOf(created),
 		Fingerprint: fingerprintSubject(created),
 		Observed:    observedFields(desired, created),
 	}, http.StatusOK, nil

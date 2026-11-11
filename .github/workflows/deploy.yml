@@ -31,22 +31,96 @@ name: deploy
 on:
   push:
     branches: [main]
+  # The rollback path, and the only one: dispatch THIS workflow (from main)
+  # with ref = the full SHA production ran before (from this workflow's run
+  # history). It runs the current file, with its stop order (contract 2, task
+  # 1.10), against the old code. Never roll back by a revert commit (it would
+  # revert this file and its stop order with the code), and never by
+  # dispatching from an old commit (that runs the old commit's own file). The
+  # `resolve` job deploys only a commit on main whose `ci-ok` passed.
+  # Across migration 000088 to a backend built before it, see DEPLOY.md
+  # (Rollback): schema_migrations is reset by hand first.
+  #   gh workflow run deploy.yml -f ref=<previous production commit SHA>
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA to deploy, on main and with ci-ok passed (a rollback is the previous production commit)
+        required: true
+        type: string
+
+# Read-only, everywhere: the one job that uses the token reads checks.
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-main
   cancel-in-progress: false
 
 jobs:
+  # What is deployed, decided once, on a GitHub-hosted runner, and handed to
+  # both deploys as a full SHA they check out exactly: the pushed commit, or
+  # the dispatched one (a rollback). Refused unless it is a commit on main
+  # and its `ci-ok` check concluded success (waiting for CI on a fresh push).
+  # The requested value is read from the environment, never spliced into a
+  # script.
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - id: sha
+        env:
+          REQUESTED: ${{ inputs.ref || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          case "$REQUESTED" in
+            *[!0-9a-f]* | "") echo "::error::deploy a commit SHA (hex), not a name: $REQUESTED"; exit 1 ;;
+          esac
+          [ "${#REQUESTED}" -ge 7 ] || { echo "::error::$REQUESTED is too short to name one commit"; exit 1; }
+          git fetch --prune origin '+refs/heads/main:refs/remotes/origin/main'
+          sha="$(git rev-parse --verify --quiet "${REQUESTED}^{commit}")" || { echo "::error::$REQUESTED is not a commit here"; exit 1; }
+          git merge-base --is-ancestor "$sha" origin/main || { echo "::error::$sha is not on main"; exit 1; }
+          head="$(git rev-parse origin/main)"
+          # ci-ok, the check branch protection requires, on this exact commit.
+          # A push to main runs CI beside this workflow, so main's head waits
+          # for it; an older commit with no ci-ok run never gets one, so it is
+          # refused at once rather than after the whole wait.
+          for i in $(seq 1 90); do
+            run="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?check_name=ci-ok&filter=latest" \
+              --jq '[.check_runs[] | select(.name == "ci-ok")] | if length == 0 then "none" else (sort_by(.id) | last | "\(.status) \(.conclusion)") end')" || run=""
+            case "$run" in
+              "completed success") echo "sha=$sha" >> "$GITHUB_OUTPUT"; echo "deploying $sha (ci-ok passed)"; exit 0 ;;
+              completed*) echo "::error::ci-ok on $sha concluded: $run"; exit 1 ;;
+              none) [ "$sha" = "$head" ] || { echo "::error::$sha has no ci-ok check run and is not main's head, so CI will never run for it"; exit 1; } ;;
+            esac
+            sleep 30
+          done
+          echo "::error::ci-ok on $sha did not complete in 45 minutes (last: ${run:-no check run})"
+          exit 1
+
   staging:
+    needs: resolve
     uses: ./.github/workflows/_staging.yml
     with:
-      ref: ${{ github.sha }}
+      ref: ${{ needs.resolve.outputs.sha }}
       restore_prod_data: true
 
   production:
-    needs: staging
+    needs: [resolve, staging]
     runs-on: [self-hosted, syndra-prod]
+    env:
+      # The one commit resolve decided, a full SHA, checked out exactly.
+      DEPLOY_SHA: ${{ needs.resolve.outputs.sha }}
     concurrency:
       group: production
       cancel-in-progress: false
@@ -58,18 +132,60 @@ jobs:
           set -euo pipefail
           cd /opt/syndra
           mkdir -p "$HOME/syndra-backups"
-          f="$HOME/syndra-backups/pre-deploy-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::8}.dump"
+          f="$HOME/syndra-backups/pre-deploy-$(date +%Y%m%d-%H%M%S)-${DEPLOY_SHA::8}.dump"
           docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > "$f"
           [ -s "$f" ] || { echo "empty dump"; exit 1; }
           echo "backup: $f ($(du -h "$f" | cut -f1))"
           ls -1t "$HOME"/syndra-backups/pre-deploy-*.dump | tail -n +15 | xargs -r rm -f
 
-      - name: Check out ${{ github.sha }} into /opt/syndra
+      - name: Check out the resolved commit into /opt/syndra
         run: |
           set -euo pipefail
           cd /opt/syndra
           git fetch --prune origin
-          git checkout --force "${{ github.sha }}"
+          git checkout --force --detach "$DEPLOY_SHA"
+          [ "$(git rev-parse HEAD)" = "$DEPLOY_SHA" ] || { echo "checked out $(git rev-parse HEAD), not $DEPLOY_SHA"; exit 1; }
+          echo "production now at $(git rev-parse --short HEAD): $(git log -1 --format=%s)"
+
+      # Built while the old containers still serve, so the stop below is
+      # followed by a start from cached images, never by a build.
+      - name: Build the images
+        id: build
+        run: |
+          set -euo pipefail
+          cd /opt/syndra
+          docker compose build
+
+      # Contract 2, and every deploy after it (openspec/changes/addon-contract,
+      # task 1.10). The images are built first (the step above), so the window
+      # with nothing running is a stop and a start, never a build. The backend
+      # stops FIRST — and with it the propagation
+      # runner, which runs inside the backend process (cmd/api, periodic) — so
+      # no old backend ever talks to a new add-on: it would read a contract-2
+      # refusal with contract-1 rules, and only the new backend knows a shape
+      # refusal is not the target refusing. Then the add-on, and only once it
+      # has stopped is its store copied out, because a bbolt file is never
+      # copied while it is open. Never mutations.log: it only grows, and a
+      # restored one reads as a truncated log. The copy is a fallback only:
+      # the store is written additively, so a rollback (the previous production
+      # commit, dispatched through this workflow) restores nothing. This stops containers; never
+      # the GitHub self-hosted runner, which is running this job.
+      - name: Stop the backend, then the add-on, and keep the add-on's store
+        run: |
+          set -euo pipefail
+          cd /opt/syndra
+          docker compose stop backend
+          if docker compose ps -a --services | grep -x truenas-addon >/dev/null; then
+            docker compose stop truenas-addon
+            mkdir -p "$HOME/syndra-backups"
+            f="$HOME/syndra-backups/truenas-state-$(date +%Y%m%d-%H%M%S)-$(git rev-parse --short=8 HEAD).db"
+            docker compose cp truenas-addon:/var/lib/syndra-truenas/state.db "$f"
+            [ -s "$f" ] || { echo "empty copy of the add-on's store"; exit 1; }
+            echo "add-on store: $f ($(du -h "$f" | cut -f1))"
+            ls -1t "$HOME"/syndra-backups/truenas-state-*.db | tail -n +15 | xargs -r rm -f
+          else
+            echo "no truenas-addon container here; nothing to copy"
+          fi
 
       - name: Build and start
         run: |
@@ -149,6 +265,15 @@ jobs:
             401|403) echo "reachable, and refuses an unsigned request" ;;
             *)   echo "expected 401 or 403 for an unsigned request; the backend may be in demo mode"; exit 1 ;;
           esac
+
+      # Whatever failed after the images were built, nothing is left down:
+      # start every service again from them. Not when the build itself
+      # failed: nothing was stopped then, and the old containers still serve.
+      - name: Start everything again on failure
+        if: failure() && steps.build.outcome == 'success'
+        run: |
+          cd /opt/syndra
+          docker compose up -d
 
       - name: Report container state on failure
         if: failure()

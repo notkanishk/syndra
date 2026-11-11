@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,15 +23,15 @@ func getSettings(t *testing.T, s *server) SettingView {
 	return out.Settings[0]
 }
 
+// putHomeRoot writes the setting under a fresh call_id, as the backend does
+// for each operator write.
 func putHomeRoot(t *testing.T, s *server, value string) *httptest.ResponseRecorder {
 	t.Helper()
-	body := []byte(`{"value":"` + value + `","actor":"op-1"}`)
-	r := httptest.NewRequest(http.MethodPut, "/settings/home_root", nil)
-	r.SetPathValue("name", "home_root")
-	rr := httptest.NewRecorder()
-	s.handlePutSetting(rr, r, body)
-	return rr
+	putSeq++
+	return putHomeRootKeyed(t, s, value, fmt.Sprintf("op-row-fresh-%d", putSeq))
 }
+
+var putSeq int
 
 // Where home folders go is chosen once, from the dataset folders at the top of
 // each share, offered the way people say them. The share root, a plain
@@ -104,6 +105,19 @@ func TestTheHomeLocationIsNotSetAgainstAStaleRead(t *testing.T) {
 	}
 }
 
+// The write reads the NAS now, never the cache: a place deleted a minute after
+// a good read must not pass while that read is still fresh.
+func TestTheHomeLocationIsNotSetAgainstACachedRead(t *testing.T) {
+	fake := reachFake()
+	s := testServer(t, fake)
+	getSettings(t, s) // a good read, cached and fresh
+	fake.answers["filesystem.listdir /mnt/tank/main"] = `[{"name":"waddle","path":"/mnt/tank/main/waddle"}]`
+	rr := putHomeRoot(t, s, "/mnt/tank/main/home_dir")
+	if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeNotAHomePlace {
+		t.Fatalf("a place gone since the cached read must be refused, got %d %s", rr.Code, rr.Body)
+	}
+}
+
 func TestAnUnknownSettingIsNotFound(t *testing.T) {
 	s := testServer(t, reachFake())
 	r := httptest.NewRequest(http.MethodPut, "/settings/colour", nil)
@@ -133,7 +147,7 @@ func TestHomesListsEachHomeWithItsUseAndLimit(t *testing.T) {
 		t.Fatalf("%d %s", rr.Code, rr.Body.String())
 	}
 	// bo has no home; cy's is in a disabled share, outside what Syndra reads.
-	if len(out.Homes) != 1 || out.Homes[0].Username != "charlotte" || !out.UsageRead {
+	if len(out.Homes) != 1 || out.Homes[0].Username != "charlotte" || !out.QuotaRead {
 		t.Fatalf("homes = %+v", out)
 	}
 	if h := out.Homes[0]; h.UsedBytes != 19756849561 || h.QuotaBytes != 21474836480 {
@@ -141,46 +155,49 @@ func TestHomesListsEachHomeWithItsUseAndLimit(t *testing.T) {
 	}
 }
 
-func putHomeRootKeyed(t *testing.T, s *server, value, key string) *httptest.ResponseRecorder {
+func putHomeRootKeyed(t *testing.T, s *server, value, callID string) *httptest.ResponseRecorder {
 	t.Helper()
-	body := []byte(`{"value":"` + value + `","actor":"op-1"}`)
+	body := []byte(fmt.Sprintf(`{"contract_version":%d,"call_id":%q,"value":%q,"actor":"op-1"}`, ContractVersion, callID, value))
 	r := httptest.NewRequest(http.MethodPut, "/settings/home_root", nil)
 	r.SetPathValue("name", "home_root")
-	r.Header.Set("Idempotency-Key", key)
 	rr := httptest.NewRecorder()
 	s.handlePutSetting(rr, r, body)
 	return rr
 }
 
-// The backend sends its operation id as Idempotency-Key. A replay of the same
-// key answers what the first call answered and writes nothing, whatever it
-// carries: it is the same call, retried after a lost answer. A call without a
-// key (an older backend) is written as before.
+// The backend sends its operation id as the body's call_id (contract 1 sent it
+// as the Idempotency-Key header). A replay of the same call answers what the
+// first call answered and writes nothing; the same call_id for another value
+// is a different request, 422 CALL_ID_REUSED; a call without one is refused.
 func TestASettingReplayIsAnsweredFromTheFirstCall(t *testing.T) {
 	s := testServer(t, reachFake())
 	first := putHomeRootKeyed(t, s, "/mnt/tank/main/home_dir", "op-row-1")
 	if first.Code != http.StatusOK {
 		t.Fatalf("first: %d %s", first.Code, first.Body.String())
 	}
-	replay := putHomeRootKeyed(t, s, "/mnt/tank/main/quack", "op-row-1")
+	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: "/mnt/tank/main/moved"}); err != nil {
+		t.Fatal(err)
+	}
+	replay := putHomeRootKeyed(t, s, "/mnt/tank/main/home_dir", "op-row-1")
 	if replay.Code != http.StatusOK || replay.Body.String() != first.Body.String() {
 		t.Fatalf("replay must answer as the first call did:\n first  %s\n replay %d %s", first.Body.String(), replay.Code, replay.Body.String())
 	}
-	if root, _ := s.homeRoot(); root != "/mnt/tank/main/home_dir" {
+	if root, _ := s.homeRoot(); root != "/mnt/tank/main/moved" {
 		t.Fatalf("a replay must write nothing; home root is now %q", root)
+	}
+	reused := putHomeRootKeyed(t, s, "/mnt/tank/main/quack", "op-row-1")
+	if reused.Code != http.StatusUnprocessableEntity || problemCode(t, reused) != CodeCallIDReused {
+		t.Fatalf("the same call_id for another value: want 422 CALL_ID_REUSED, got %d %s", reused.Code, reused.Body)
 	}
 
 	if rr := putHomeRootKeyed(t, s, "/mnt/tank/main/quack", "op-row-2"); rr.Code != http.StatusOK {
-		t.Fatalf("a new key is a new call: %d", rr.Code)
+		t.Fatalf("a new call_id is a new call: %d", rr.Code)
 	}
 	if root, _ := s.homeRoot(); root != "/mnt/tank/main/quack" {
-		t.Fatalf("a new key must write; home root is %q", root)
+		t.Fatalf("a new call_id must write; home root is %q", root)
 	}
-	if rr := putHomeRoot(t, s, "/mnt/tank/main/waddle"); rr.Code != http.StatusOK {
-		t.Fatalf("no key: %d", rr.Code)
-	}
-	if root, _ := s.homeRoot(); root != "/mnt/tank/main/waddle" {
-		t.Fatalf("a call without a key writes as before; home root is %q", root)
+	if rr := putHomeRootKeyed(t, s, "/mnt/tank/main/waddle", " "); rr.Code != http.StatusBadRequest || problemCode(t, rr) != CodeBadRequest {
+		t.Fatalf("no call_id: want 400 BAD_REQUEST, got %d %s", rr.Code, rr.Body)
 	}
 }
 

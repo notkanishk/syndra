@@ -157,8 +157,8 @@ func TestAGroupOpensWhatTheFolderACLsGiveIt(t *testing.T) {
 	if got := describe(out.Everyone); got != "open:read" {
 		t.Errorf("everyone opens %q", got)
 	}
-	if !out.Current || out.ReadAt.IsZero() {
-		t.Errorf("a fresh read must say so: current=%v read_at=%v", out.Current, out.ReadAt)
+	if !out.Current || out.TakenAt.IsZero() || out.Stale != nil {
+		t.Errorf("a fresh read must say so: current=%v taken_at=%v stale=%v", out.Current, out.TakenAt, out.Stale)
 	}
 	for _, p := range out.Groups["staff"] {
 		if p.Dataset == "" || !strings.HasSuffix(p.Dataset, p.Folder) {
@@ -276,17 +276,24 @@ func TestReachFallsBackToTheLastReadAndSaysSo(t *testing.T) {
 		t.Fatalf("first read: %d", rr.Code)
 	}
 	reads := strings.Count(strings.Join(fake.calls, " "), "filesystem.getacl")
-	getReach(t, s)
+	crr, cached := getReach(t, s)
+	assertSchema(t, "profiles/storage/reach.json", crr.Body.Bytes(), "a cached /reach")
 	if again := strings.Count(strings.Join(fake.calls, " "), "filesystem.getacl"); again != reads {
 		t.Fatalf("a fresh read was not reused: %d ACL reads became %d", reads, again)
+	}
+	// The cache served on purpose is not current (design §4: current is a
+	// read that began after the request arrived), and says it is cached.
+	if cached.Current || cached.Stale == nil || cached.Stale.Reason != "cached" {
+		t.Fatalf("a cached answer must be current false, stale cached: %+v", cached.Stale)
 	}
 
 	s.reach.readAt = time.Now().Add(-2 * reachMaxAge)
 	fake.refuse = map[string]string{"filesystem.getacl": "[EACCES] no"}
 	rr, out := getReach(t, s)
-	if rr.Code != http.StatusOK || out.Current {
-		t.Fatalf("want the last read, not current: %d current=%v", rr.Code, out.Current)
+	if rr.Code != http.StatusOK || out.Current || out.Stale == nil || out.Stale.Reason != "unreachable" {
+		t.Fatalf("want the last read, not current, stale unreachable: %d current=%v %+v", rr.Code, out.Current, out.Stale)
 	}
+	assertSchema(t, "profiles/storage/reach.json", rr.Body.Bytes(), "a /reach from the last read")
 	if describe(out.Groups["community"]) != "main/waddle:change" {
 		t.Errorf("the last read was not what was served: %q", describe(out.Groups["community"]))
 	}

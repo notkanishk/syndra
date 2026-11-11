@@ -125,7 +125,7 @@ func postMapping(body string) *httptest.ResponseRecorder {
 // does not declare is wrong whatever the target says, and spending a call to be
 // told so would make an outage look like a validation failure.
 func TestAnUndeclaredFieldIsRejectedWithoutCallingTheAddon(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 
 	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"path_grant","value":"/mnt/lab"}`)
 	if rr.Code != http.StatusBadRequest {
@@ -150,8 +150,8 @@ func TestAnUndeclaredFieldIsRejectedWithoutCallingTheAddon(t *testing.T) {
 // it on every resolution.
 func TestALifecycleFieldIsNotABindableMappingTarget(t *testing.T) {
 	h := stubMappingDeps(t, []addons.EntitlementField{
-		{Name: "group", Type: "string[]"},
-		{Name: "enabled", Type: "bool", Lifecycle: true},
+		{Name: "group", Role: "membership"},
+		{Name: "enabled", Role: "account"},
 	})
 
 	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"enabled","value":"true"}`)
@@ -167,8 +167,8 @@ func TestALifecycleFieldIsNotABindableMappingTarget(t *testing.T) {
 	// covers the ones a later add-on computes for itself, and only the manifest
 	// can say which those are.
 	future := stubMappingDeps(t, []addons.EntitlementField{
-		{Name: "group", Type: "string[]"},
-		{Name: "quota_locked", Type: "bool", Lifecycle: true},
+		{Name: "group", Role: "membership"},
+		{Name: "quota_locked", Role: "channel"},
 	})
 	rr = postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"quota_locked","value":"true"}`)
 	if rr.Code != http.StatusBadRequest {
@@ -183,12 +183,12 @@ func TestALifecycleFieldIsNotABindableMappingTarget(t *testing.T) {
 // derived from the request — the update body carries no target, so a value
 // checked against the wrong add-on's schema would be checked against nothing.
 func TestAnEditValidatesAgainstTheMappingsOwnTarget(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 
 	var asked []string
 	addonsEntitlementSchema = func(target string) ([]addons.EntitlementField, error) {
 		asked = append(asked, target)
-		return []addons.EntitlementField{{Name: "group", Type: "string[]"}}, nil
+		return []addons.EntitlementField{{Name: "group", Role: "membership"}}, nil
 	}
 	get, update := dbGetRoleMapping, dbUpdateRoleMappingValue
 	t.Cleanup(func() { dbGetRoleMapping, dbUpdateRoleMappingValue = get, update })
@@ -218,7 +218,7 @@ func TestAnEditValidatesAgainstTheMappingsOwnTarget(t *testing.T) {
 // came back 500 DB_ERROR, and the two agreed with each other rather than with
 // the system.
 func TestAnUnresolvableValueIsRejectedAfterTheAddonSaysSo(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	h.valueErr = fmt.Errorf("%w: truenas has no group named %q", addons.ErrValueNotResolvable, "no_such_group")
 
 	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"no_such_group"}`)
@@ -251,7 +251,7 @@ func TestAMappingAgainstASilentTargetIsUnavailableRatherThanInvalid(t *testing.T
 // A target the deployment does not run is a different refusal again, and the
 // foreign key would otherwise answer it with a message about a constraint.
 func TestAMappingToAnUnregisteredTargetIsRefusedByName(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 
 	rr := postMapping(`{"target":"unifi","project_id":"pLab","role_key":"maker","field":"group","value":"x"}`)
 	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "not a registered") {
@@ -263,7 +263,7 @@ func TestAMappingToAnUnregisteredTargetIsRefusedByName(t *testing.T) {
 // ordered first. Reported as a conflict rather than a validation error, because
 // the request is well formed and the state is what refuses it.
 func TestADuplicateBindingIsAConflict(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	create := dbCreateRoleMapping
 	t.Cleanup(func() { dbCreateRoleMapping = create })
 	dbCreateRoleMapping = func(context.Context, db.RoleMapping) (db.RoleMapping, error) {
@@ -279,7 +279,7 @@ func TestADuplicateBindingIsAConflict(t *testing.T) {
 // Publishing a set identical to the newest version adds a history row that says
 // nothing. It is a conflict with the world, the same as a bundle's publish.
 func TestPublishingUnchangedMappingsIsRefused(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	publish := dbPublishMappingVersion
 	t.Cleanup(func() { dbPublishMappingVersion = publish })
 	dbPublishMappingVersion = func(context.Context, string, string, string) (int, error) {
@@ -298,7 +298,7 @@ func TestPublishingUnchangedMappingsIsRefused(t *testing.T) {
 // allowance whose author is whoever the client said is one nobody can be asked
 // about, which is the whole thing this layer exists for.
 func TestAnAllowanceRecordsTheAuthenticatedOperator(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	create := dbCreateAllowance
 	t.Cleanup(func() { dbCreateAllowance = create })
 	var seen db.Allowance
@@ -335,7 +335,7 @@ func TestAnAllowanceRecordsTheAuthenticatedOperator(t *testing.T) {
 // An additive allowance is well formed and unimplemented. A 400 would send an
 // operator looking for their own mistake.
 func TestAnAdditiveAllowanceIsNotImplementedRatherThanInvalid(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	create := dbCreateAllowance
 	t.Cleanup(func() { dbCreateAllowance = create })
 	dbCreateAllowance = func(context.Context, db.Allowance) (db.Allowance, error) {
@@ -369,8 +369,8 @@ func TestTheAllowanceSurfaceOffersNoDelete(t *testing.T) {
 // one, because the operator has evidence they suspended somebody.
 func TestALifecycleDenialWrittenAsFalseIsRefused(t *testing.T) {
 	stubMappingDeps(t, []addons.EntitlementField{
-		{Name: "group", Type: "string[]"},
-		{Name: "enabled", Type: "bool", Lifecycle: true},
+		{Name: "group", Role: "membership"},
+		{Name: "enabled", Role: "account"},
 	})
 	create := dbCreateAllowance
 	t.Cleanup(func() { dbCreateAllowance = create })
@@ -405,7 +405,7 @@ func TestALifecycleDenialWrittenAsFalseIsRefused(t *testing.T) {
 
 // A misspelled field is the same failure with a different spelling.
 func TestAnAllowanceOnAFieldTheTargetLacksIsRefused(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	create := dbCreateAllowance
 	t.Cleanup(func() { dbCreateAllowance = create })
 	dbCreateAllowance = func(context.Context, db.Allowance) (db.Allowance, error) {
@@ -430,7 +430,7 @@ func TestAnAllowanceOnAFieldTheTargetLacksIsRefused(t *testing.T) {
 // An unregistered target reaches the foreign key otherwise, and returns 500
 // with raw constraint text — the failure the mapping surface refuses early.
 func TestAnAllowanceOnAnUnregisteredTargetIsRefusedBeforeTheForeignKey(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	create := dbCreateAllowance
 	t.Cleanup(func() { dbCreateAllowance = create })
 	dbCreateAllowance = func(context.Context, db.Allowance) (db.Allowance, error) {
@@ -474,7 +474,7 @@ func patchMapping(body string) *httptest.ResponseRecorder {
 // An edit reaching people needs the approval that showed who they are. Without
 // this the plan path is a screen an operator can skip.
 func TestAnEditThatReachesPeopleNeedsTheApprovalThatShowedThem(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	mappingWithHolders(t, h, "u1", "u2")
 
 	rr := patchMapping(`{"value":"lab_users"}`)
@@ -492,7 +492,7 @@ func TestAnEditThatReachesPeopleNeedsTheApprovalThatShowedThem(t *testing.T) {
 // A mapping nobody holds needs no citation: there is nothing to review, and
 // demanding one would make defining a new binding a two-step ceremony.
 func TestAnEditReachingNobodyNeedsNoApproval(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	mappingWithHolders(t, h)
 
 	rr := patchMapping(`{"value":"lab_users"}`)
@@ -510,7 +510,7 @@ func TestAnEditReachingNobodyNeedsNoApproval(t *testing.T) {
 // The cited approval reaches the claim with every dimension the predicate needs,
 // and the convergences are queued for the cohort read AFTER the edit.
 func TestAnApprovedEditConvergesEveryHolder(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	m := mappingWithHolders(t, h, "u1", "u2")
 	stubResolvedIntent(t)
 
@@ -543,7 +543,7 @@ func TestAnApprovedEditConvergesEveryHolder(t *testing.T) {
 // A plan issued to change a value must not be spendable to withdraw it. Two
 // surfaces, and the claim predicate is what separates them.
 func TestAnEditApprovalCannotBeSpentOnADelete(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	mappingWithHolders(t, h, "u1")
 	stubResolvedIntent(t)
 
@@ -563,7 +563,7 @@ func TestAnEditApprovalCannotBeSpentOnADelete(t *testing.T) {
 // The blast-radius guard, on the surface where the blast radius is largest.
 func TestAMappingEditAffectingManyNeedsTheAcknowledgement(t *testing.T) {
 	t.Setenv("PLAN_COHORT_LIMIT", "2")
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	mappingWithHolders(t, h, "u1", "u2", "u3")
 
 	created := 0
@@ -620,7 +620,7 @@ func stubResolvedIntent(t *testing.T) {
 // that would ever notice — a drift sweep sees the target holding exactly what
 // Syndra last told it to hold.
 func TestARollbackReResolvesEveryoneItReaches(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	stubResolvedIntent(t)
 	h.holders = []string{"u1", "u2"}
 
@@ -671,7 +671,7 @@ func TestARollbackReResolvesEveryoneItReaches(t *testing.T) {
 // and convergences queued against a set that was not restored would converge
 // everybody to the version the operator was trying to leave.
 func TestARollbackThatDidNotRestoreQueuesNothing(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	h.holders = []string{"u1"}
 
 	list, roll := dbListRoleMappings, dbRollbackMappingVersion
@@ -731,7 +731,7 @@ func TestTheMappingErrorsAreClassifiedOnTheAddonsOwnSentinels(t *testing.T) {
 // Losing an entitlement is as much a change as gaining one, and it is the half
 // an operator is less likely to check.
 func TestARollbackReconvergesTheHoldersOfWhatItDeletes(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	stubResolvedIntent(t)
 	h.holdersBy = map[string][]string{
 		"pLab\x00trained":  {"u1", "u2"},
@@ -797,7 +797,7 @@ func TestARollbackReconvergesTheHoldersOfWhatItDeletes(t *testing.T) {
 // up: two mappings on one role reach the same people, and somebody whose
 // mapping the rollback deletes appears in the current set and in no version.
 func TestARollbackRehearsesTheUnionOfBothSets(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	h.holdersBy = map[string][]string{
 		// Overlaps deliberately: u2 holds both, so the honest count is three.
 		"pLab\x00trained":  {"u1", "u2"},
@@ -865,7 +865,7 @@ func TestARollbackRehearsesTheUnionOfBothSets(t *testing.T) {
 // that skipped it would be the largest change on the screen asking for the
 // least.
 func TestARollbackTooLargeIsRefusedUntilAcknowledged(t *testing.T) {
-	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 
 	many := make([]string, 40)
 	for i := range many {
@@ -913,7 +913,7 @@ func TestARollbackTooLargeIsRefusedUntilAcknowledged(t *testing.T) {
 // again on, and no near misses: values come from the add-on's own list, so a
 // typo can't happen (4.3), and the list is the answer.
 func TestARefusedValueIsUnresolvableWithNoSuggestions(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	h.resolution = addons.Resolution{
 		Checked: true,
 		Known:   []string{"fabrication", "fabrication-leads", "archive", "lab_makers"},
@@ -939,7 +939,7 @@ func TestARefusedValueIsUnresolvableWithNoSuggestions(t *testing.T) {
 // has to be able to say so. "Checked and fine" and "nobody could be asked" both
 // arrived as success before this.
 func TestARehearsalSaysWhenTheValueCouldNotBeChecked(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	h.resolution = addons.Resolution{Checked: false}
 	stubResolvedIntent(t)
 
@@ -975,7 +975,7 @@ func TestARehearsalSaysWhenTheValueCouldNotBeChecked(t *testing.T) {
 // cited; a malformed one the same. Every other mutation in the product decodes
 // strictly, and this was not a deliberate exception.
 func TestDeletingAMappingRefusesABodyItCannotUnderstand(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	get := dbGetRoleMapping
 	t.Cleanup(func() { dbGetRoleMapping = get })
 	dbGetRoleMapping = func(context.Context, string) (db.RoleMapping, error) {
@@ -1007,7 +1007,7 @@ func TestDeletingAMappingRefusesABodyItCannotUnderstand(t *testing.T) {
 
 // And the tolerance it was actually written for still holds.
 func TestDeletingAMappingNobodyHoldsNeedsNoBody(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	stubResolvedIntent(t)
 	get := dbGetRoleMapping
 	t.Cleanup(func() { dbGetRoleMapping = get })
@@ -1040,7 +1040,7 @@ func TestDeletingAMappingNobodyHoldsNeedsNoBody(t *testing.T) {
 // the UI performs is a suggestion, and one the UI cannot complete is worse than
 // having none.
 func TestARollbackRehearsalIssuesAnApprovalItsApplyWillSpend(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	h.holders = []string{"u1", "u2"}
 
 	list, hist := dbListRoleMappings, dbListMappingHistory
@@ -1085,7 +1085,7 @@ func TestARollbackRehearsalIssuesAnApprovalItsApplyWillSpend(t *testing.T) {
 // none — the same rule edit and delete follow, because there is nothing to
 // review about a change to a definition that moves no one.
 func TestARollbackThatReachesSomebodyRefusesWithoutTheApproval(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	stubResolvedIntent(t)
 	h.holders = []string{"u1"}
 
@@ -1124,7 +1124,7 @@ func TestARollbackThatReachesSomebodyRefusesWithoutTheApproval(t *testing.T) {
 // arrived — on the screen whose whole argument is that every change here is
 // rehearsed before it lands.
 func TestCreatingAMappingQueuesEveryHolderItReaches(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	stubResolvedIntent(t)
 	h.holders = []string{"u1", "u2", "u3"}
 
@@ -1145,7 +1145,7 @@ func TestCreatingAMappingQueuesEveryHolderItReaches(t *testing.T) {
 // The same rule edit and delete follow: a change that reaches nobody needs no
 // approval, because there is nothing to review about a definition.
 func TestCreatingAMappingRefusesWithoutTheApprovalWhenItReachesSomebody(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	stubResolvedIntent(t)
 	h.holders = []string{"u1"}
 
@@ -1162,7 +1162,7 @@ func TestCreatingAMappingRefusesWithoutTheApprovalWhenItReachesSomebody(t *testi
 }
 
 func TestCreatingAMappingOnARoleNobodyHoldsNeedsNoApproval(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	h.holders = nil
 
 	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"lab_makers"}`)
@@ -1177,7 +1177,7 @@ func TestCreatingAMappingOnARoleNobodyHoldsNeedsNoApproval(t *testing.T) {
 // The rehearsal states who it reaches, before the row exists to rehearse
 // against — so the plan is keyed on what would be written rather than a row id.
 func TestTheCreateRehearsalNamesWhoTheNewMappingWouldReach(t *testing.T) {
-	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Role: "membership"}})
 	h.holders = []string{"u1", "u2"}
 
 	rr := httptest.NewRecorder()

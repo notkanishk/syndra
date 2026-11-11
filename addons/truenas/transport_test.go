@@ -2,9 +2,13 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -202,5 +206,63 @@ func TestASignatureIsBoundToTheMethodAndPath(t *testing.T) {
 	// And the request it was actually made for still verifies.
 	if _, err := a.verify(signedRequestTo(t, http.MethodGet, "/capabilities", "", now, testKey)); err != nil {
 		t.Fatalf("the signed request must still be accepted: %v", err)
+	}
+}
+
+// Contract 2 signs the path escaped as sent and the raw query (decision 24,
+// task 1.4a). The real authenticator, handed each vector's request as the
+// wire carries it, derives the vector's target and verifies its MAC; the same
+// request with its query reordered, altered or added after signing is 401.
+func TestTheRawQueryVectorsVerifyThroughTheAuthenticator(t *testing.T) {
+	var d struct {
+		Raw struct {
+			Vectors []struct {
+				Name, Method, Target, Unix string
+				Body                       string `json:"body_utf8"`
+				Key                        string `json:"hmac_key_hex"`
+				MAC                        string `json:"mac_hex"`
+			} `json:"vectors"`
+		} `json:"raw_query_signatures"`
+	}
+	raw, err := os.ReadFile(filepath.Join(v2Dir, "..", "transport_derivation.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &d); err != nil || len(d.Raw.Vectors) != 4 {
+		t.Fatalf("four vectors: %v", err)
+	}
+	for _, v := range d.Raw.Vectors {
+		unix, _ := strconv.ParseInt(v.Unix, 10, 64)
+		key, _ := hex.DecodeString(v.Key)
+		a := &authenticator{signingKey: key, now: func() time.Time { return time.Unix(unix, 0) }}
+		header := "t=" + v.Unix + ",v1=" + v.MAC
+		r := httptest.NewRequest(v.Method, "https://addon.example.org"+v.Target, strings.NewReader(v.Body))
+		r.Header.Set(SignatureHeader, header)
+		if got := signedTarget(r.URL); got != v.Target {
+			t.Errorf("%s: the add-on signs %q, the vector %q", v.Name, got, v.Target)
+		}
+		if _, err := a.verify(r); err != nil {
+			t.Errorf("%s: the vector's own request is refused: %v", v.Name, err)
+		}
+		// The path alone, escaped as sent: a query-less request to an escaped
+		// path verifies only over the escaped form.
+		if path, _, _ := strings.Cut(v.Target, "?"); path != url.PathEscape(path) || strings.Contains(path, "%") {
+			r := httptest.NewRequest(v.Method, "https://addon.example.org"+path, strings.NewReader(v.Body))
+			r.Header.Set(SignatureHeader, "t="+v.Unix+",v1="+hex.EncodeToString(computeMAC(unix, v.Method, path, []byte(v.Body), key)))
+			if _, err := a.verify(r); err != nil {
+				t.Errorf("%s: a query-less escaped path signed as sent is refused: %v", v.Name, err)
+			}
+		}
+		path, query, _ := strings.Cut(v.Target, "?")
+		for _, alt := range []string{path + "?" + query + "&x=1", path + "?z=1", path + "?" + reverseQuery(query)} {
+			if alt == v.Target || alt == path+"?" {
+				continue
+			}
+			bad := httptest.NewRequest(v.Method, "https://addon.example.org"+alt, strings.NewReader(v.Body))
+			bad.Header.Set(SignatureHeader, header)
+			if _, err := a.verify(bad); !errors.Is(err, errBadSignature) {
+				t.Errorf("%s: %s verified under the signature for %s", v.Name, alt, v.Target)
+			}
+		}
 	}
 }

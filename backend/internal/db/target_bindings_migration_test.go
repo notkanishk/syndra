@@ -50,7 +50,7 @@ func TestTheBindingWriteMatchesTheSchemaAndKeepsItsProvenance(t *testing.T) {
 	src := readSource(t, "target_bindings.go")
 	insert := between(t, src, "INSERT INTO target_account_bindings", "ON CONFLICT")
 
-	for _, col := range []string{"target", "subject_id", "username", "account_uid", "bound_by"} {
+	for _, col := range []string{"target", "subject_id", "username", "account_id", "account_uid", "bound_by"} {
 		if !strings.Contains(insert, col) {
 			t.Errorf("the insert does not name %s", col)
 		}
@@ -67,11 +67,14 @@ func TestTheBindingWriteMatchesTheSchemaAndKeepsItsProvenance(t *testing.T) {
 	if !strings.Contains(update, "last_seen_at = NOW()") {
 		t.Error("a convergence that confirmed the binding must move last_seen_at, or nothing distinguishes a binding confirmed this morning from one nothing has confirmed in a year")
 	}
-	if !strings.Contains(update, "COALESCE(EXCLUDED.account_uid, target_account_bindings.account_uid)") {
-		// An apply that reported no uid must not erase one recorded earlier: the
-		// uid is what recognises the account across a rename, and losing it
-		// silently downgrades the match to the name.
-		t.Error("an update carrying no uid must keep the one already recorded")
+	if !strings.Contains(update, "COALESCE(EXCLUDED.account_id, target_account_bindings.account_id)") ||
+		!strings.Contains(update, "CASE WHEN EXCLUDED.account_id IS NOT NULL THEN EXCLUDED.account_uid ELSE target_account_bindings.account_uid END") {
+		// An apply that reported no id must not erase one recorded earlier: the
+		// id is what recognises the account across a rename, and losing it
+		// silently downgrades the match to the name. And account_uid follows
+		// the id it carries (migration 000088), or the backfill would put an
+		// old number back.
+		t.Error("an update carrying no account id must keep the one recorded, and account_uid must follow the id")
 	}
 }
 

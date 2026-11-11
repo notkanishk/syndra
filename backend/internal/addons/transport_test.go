@@ -339,7 +339,8 @@ func TestFailureModesMapToTheirOutcome(t *testing.T) {
 	}{
 		{"applied", 200, OutcomeSucceeded, true, false, "the add-on acted and said so"},
 		{"validation refusal", 400, OutcomeRejected, true, false, "it refused and did not act"},
-		{"not found", 404, OutcomeRejected, true, false, "deterministic, retrying changes nothing"},
+		{"not found on a feature's route", 404, OutcomeUnreached, false, true,
+			"the add-on no longer serves the feature: nothing was done, and the manifest is read again (design §11)"},
 		{"forbidden", 403, OutcomeRejected, true, false, "deterministic"},
 		{"backpressure", 429, OutcomeUnreached, false, true, "explicitly did not act, expects to be asked again"},
 		{"request timeout", 408, OutcomeIndeterminate, false, false, "may have arrived"},
@@ -914,46 +915,70 @@ func TestARedirectIsRefusedAndNeverReplaysTheBody(t *testing.T) {
 // deliberate maintenance window converted every pending change into a failed
 // row — manufacturing exactly the false finality the queued accounting exists
 // to prevent, during the window when an operator is least able to notice.
+//
+// Contract 2 detects it by its code alone (design §11), and classifies the
+// refusals of the request's SHAPE as unreached: none of them is the target
+// refusing the change, so none may become target_refused.
 func TestALifecycleRefusalIsQueuedAndLeavesTheTargetHealthy(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		status     int
-		retryAfter string
-		want       Outcome
-		lifecycle  bool
-		why        string
+		name      string
+		status    int
+		code      string
+		want      Outcome
+		lifecycle bool
+		shape     bool
+		why       string
 	}{
-		{"draining", http.StatusServiceUnavailable, "30", OutcomeUnreached, true,
+		{"draining", http.StatusServiceUnavailable, "LIFECYCLE_REFUSAL", OutcomeUnreached, true, false,
 			"the add-on declined before doing anything, so the row stays queued and resumes"},
-		{"an add-on that fell over", http.StatusServiceUnavailable, "", OutcomeIndeterminate, false,
-			"a 5xx with no Retry-After is a service that may have got halfway"},
-		{"an ordinary refusal", http.StatusBadRequest, "", OutcomeRejected, false,
+		{"a target the add-on cannot reach", http.StatusServiceUnavailable, "TARGET_UNREACHABLE", OutcomeUnreached, false, false,
+			"nothing was done and it is asked again; it is not a maintenance window"},
+		{"an add-on that fell over", http.StatusServiceUnavailable, "APPLY_FAILED", OutcomeIndeterminate, false, false,
+			"a 5xx that is not a refusal by code is a service that may have got halfway"},
+		{"a 503 with no code", http.StatusServiceUnavailable, "", OutcomeIndeterminate, false, false,
+			"nothing names it a refusal, so it may have got halfway"},
+		{"another contract", http.StatusUnprocessableEntity, "CONTRACT_VERSION_MISMATCH", OutcomeUnreached, false, true,
+			"refused for its shape before anything was done: a rollback, never the target refusing"},
+		{"a field it does not know", http.StatusBadRequest, "UNKNOWN_REQUEST_FIELD", OutcomeUnreached, false, true,
+			"refused for its shape before anything was done"},
+		{"the same call running", http.StatusConflict, "CALL_IN_PROGRESS", OutcomeUnreached, false, false,
+			"this copy did nothing; the running one answers"},
+		{"a missing subject", http.StatusBadRequest, "BAD_REQUEST", OutcomeRejected, false, false,
+			"a malformed row stays rejected, or it would requeue for ever"},
+		{"an ordinary refusal", http.StatusUnprocessableEntity, "APPLY_BLOCKED", OutcomeRejected, false, false,
 			"a 4xx is a healthy add-on saying no, and it is terminal"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := classifyStatus(tc.status, tc.lifecycle); got != tc.want {
-				t.Errorf("classify(%d, retry-after=%q) = %q, want %q — %s", tc.status, tc.retryAfter, got, tc.want, tc.why)
+			got, lifecycle, shape := classifyStatus(tc.status, tc.code)
+			if got != tc.want || lifecycle != tc.lifecycle || shape != tc.shape {
+				t.Errorf("classify(%d, %s) = %s lifecycle=%t shape=%t, want %s %t %t — %s",
+					tc.status, tc.code, got, lifecycle, shape, tc.want, tc.lifecycle, tc.shape, tc.why)
 			}
 		})
 	}
 }
 
-// The header, not just the classifier. Asserted end to end because that is
-// where the distinction is actually made: a unit test on classifyStatus passes
-// a bool somebody chose, and the bug worth catching is the transport deciding
-// that bool from nothing.
-func TestOnlyA503ThatSaysRetryAfterIsALifecycleRefusal(t *testing.T) {
+// The body, not just the classifier. Asserted end to end because that is where
+// the distinction is actually made: a unit test on classifyStatus passes a code
+// somebody chose, and the bug worth catching is the transport deciding it from
+// nothing. A contract-2 add-on names it in its problem; a contract-1 add-on
+// (rolled back) in `error`, read for classification only; and a Retry-After
+// header no longer makes a 503 a maintenance window.
+func TestOnlyALifecycleRefusalByCodeIsALifecycleRefusal(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		retryAfter string
-		want       Outcome
-		lifecycle  bool
-		why        string
+		name, body, retryAfter string
+		want                   Outcome
+		lifecycle              bool
+		why                    string
 	}{
-		{"draining", "30", OutcomeUnreached, true,
+		{"draining", `{"type":"urn:syndra:addon:error:LIFECYCLE_REFUSAL","title":"Lifecycle refusal","status":503,"code":"LIFECYCLE_REFUSAL","retry":"retry_after","lifecycle":"draining"}`, "30", OutcomeUnreached, true,
 			"a deliberate refusal declines before doing anything, so the row stays queued"},
-		{"fell over", "", OutcomeIndeterminate, false,
-			"a 5xx with nothing to say is a service that may have got halfway"},
+		{"draining, said by a contract-1 add-on", `{"error":"LIFECYCLE_REFUSAL","lifecycle":"draining"}`, "30", OutcomeUnreached, true,
+			"a rolled-back add-on's refusal is still a refusal, never in doubt"},
+		{"unreachable, with Retry-After", `{"type":"urn:syndra:addon:error:TARGET_UNREACHABLE","title":"Target unreachable","status":503,"code":"TARGET_UNREACHABLE","retry":"retry_after"}`, "30", OutcomeUnreached, false,
+			"the target is down; the add-on is not in a maintenance window"},
+		{"fell over", ``, "30", OutcomeIndeterminate, false,
+			"a 5xx that names no refusal is a service that may have got halfway, Retry-After or not"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -961,6 +986,7 @@ func TestOnlyA503ThatSaysRetryAfterIsALifecycleRefusal(t *testing.T) {
 					w.Header().Set("Retry-After", tc.retryAfter)
 				}
 				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer srv.Close()
 			signedAddon(t, srv.URL, "a-test-secret")
@@ -973,8 +999,8 @@ func TestOnlyA503ThatSaysRetryAfterIsALifecycleRefusal(t *testing.T) {
 			if resp.LifecycleRefusal != tc.lifecycle {
 				t.Errorf("lifecycle = %t, want %t", resp.LifecycleRefusal, tc.lifecycle)
 			}
-			if resp.Outcome.Retryable() != tc.lifecycle {
-				t.Errorf("only a lifecycle refusal is safe to send again: retryable=%t", resp.Outcome.Retryable())
+			if resp.Outcome.Retryable() != (tc.want == OutcomeUnreached) {
+				t.Errorf("only what did nothing is safe to send again: retryable=%t", resp.Outcome.Retryable())
 			}
 		})
 	}

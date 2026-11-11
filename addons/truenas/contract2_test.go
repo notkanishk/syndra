@@ -24,12 +24,12 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// The contract-2 half of the schema suite (addons/contract/v2, slice 1a of
-// openspec/changes/addon-contract). Schemas only: no code that crosses the wire
-// reads these files yet, so this suite is what keeps them honest until slice 1
-// and the kit do. It holds exactly one major: it loads v2 and cannot validate a
-// v1 fixture against a v2 schema by accident. Every helper is prefixed v2 so
-// that the contract-1 suite beside it, which stays as it was, never collides.
+// The schema suite of contract 2 (addons/contract/v2, written by slice 1a of
+// openspec/changes/addon-contract): every schema compiles, every fixture
+// validates and is covered, the schemas say no where they should, and the
+// registries agree with them. contract_test.go holds this add-on's own
+// messages to the same files. It loads exactly one major (v1 was deleted when
+// slice 1 shipped, design §1).
 
 var v2Dir = filepath.Join("..", "contract", "v2")
 

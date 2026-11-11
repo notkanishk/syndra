@@ -364,7 +364,7 @@ func (res *DrainResult) fingerprintFor(ctx context.Context, intent db.Entitlemen
 		Subject: intent.SubjectID,
 		Email:   subjectEmail(ctx, intent.SubjectID),
 		Desired: intent.Desired(),
-	}}, false)
+	}})
 	if answer.Outcome != addons.OutcomeSucceeded || len(answer.Outcomes) != 1 {
 		// No fresh fingerprint and no licence to send the stale one: the apply
 		// would be verified against a moment nobody chose. Left claimable and
@@ -425,9 +425,9 @@ func recordBinding(ctx context.Context, intent db.EntitlementIntent, resp addons
 		Target: intent.Target, SubjectID: intent.SubjectID,
 		Username: resp.Username, BoundBy: actor,
 	}
-	if resp.UID != 0 {
-		uid := resp.UID
-		binding.AccountUID = &uid
+	if resp.AccountID != "" {
+		id := resp.AccountID
+		binding.AccountID = &id
 	}
 	if err := saveBinding(ctx, binding); err != nil {
 		log.Printf("[ADDON-DRAIN] converged %s on %s but could not record the binding: %v",
@@ -483,10 +483,10 @@ func recordMergeBase(ctx context.Context, intent db.EntitlementIntent, resp addo
 // The subject Syndra's binding attributes the account to is read back rather
 // than inferred: the conflict was raised by a unique index, and which of the
 // two indexes fired decides whether the existing binding matches on the name or
-// on the uid. Guessing from the reported username would name the wrong person
+// on the account id. Guessing from the reported username would name the wrong person
 // on the half of the cases where the account was renamed out of band.
 func recordConflict(ctx context.Context, intent db.EntitlementIntent, resp addons.ApplyResponse) error {
-	holder, found, err := bindingHolder(ctx, intent.Target, resp.Username, resp.UID)
+	holder, found, err := bindingHolder(ctx, intent.Target, resp.Username, resp.AccountID)
 	if err != nil {
 		return err
 	}
@@ -502,9 +502,9 @@ func recordConflict(ctx context.Context, intent db.EntitlementIntent, resp addon
 		ConvergedSubjectID: intent.SubjectID, BoundSubjectID: holder,
 		OutboxID: intent.OutboxID,
 	}
-	if resp.UID != 0 {
-		uid := resp.UID
-		conflict.AccountUID = &uid
+	if resp.AccountID != "" {
+		id := resp.AccountID
+		conflict.AccountID = &id
 	}
 	return saveConflict(ctx, conflict)
 }

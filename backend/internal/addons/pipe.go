@@ -2,9 +2,12 @@ package addons
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"syndra/internal/db"
 )
@@ -23,17 +26,15 @@ import (
 //     is recorded against it (SkipBreaker is the one declared exception);
 //   - a Write is refused unless it carries a trace made BEFORE the call: a
 //     claimable addon_operations row (Claim) or an outbox row's call id (TraceID);
-//   - every Write carries an idempotency key, sent as the Idempotency-Key header;
+//   - every Write's body carries its call_id (contract 2: inside the signature,
+//     where contract 1 sent an Idempotency-Key header the add-on mostly ignored);
 //   - the claim is taken after every other refusal and immediately before the
-//     request, so a call that never left never spends its record.
+//     request, so a call that never left never spends its record;
+//   - a shape refusal (a contract or field the add-on does not speak, or a 404
+//     on a feature's route) is unreached and makes the manifest be read again.
 //
 // operate adds the record itself (row and audit line, then settle) for the
 // mutations that have no row of their own: PutSetting and SetLifecycle.
-
-// idempotencyHeader names the key a Write carries. It is a header, not a body
-// field: the add-ons decode strictly, so a new body field would be refused by an
-// add-on that has not learned it, whereas an unknown header is ignored.
-const idempotencyHeader = "Idempotency-Key"
 
 type sendSpec struct {
 	Method, Path string
@@ -44,10 +45,8 @@ type sendSpec struct {
 	// Claim takes the one-shot claim on the operation record.
 	Claim func(context.Context) error
 	// TraceID is the call id of a durable row made elsewhere (the outbox row for
-	// an entitlement apply). A Write needs this or Claim.
+	// an entitlement apply), already in the body. A Write needs this or Claim.
 	TraceID string
-	// IdempotencyKey defaults to TraceID. Set it when the key is the record's id.
-	IdempotencyKey string
 	// SkipBreaker leaves the breaker neither consulted nor fed. Only lifecycle
 	// uses it: it is the call an operator makes to stop the add-on serving work,
 	// and a refusal there must not count as the add-on failing to answer.
@@ -59,6 +58,12 @@ type sendSpec struct {
 func (a *Addon) send(ctx context.Context, s sendSpec) (CallResponse, error) {
 	refuse := func(err error) (CallResponse, error) {
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}, err
+	}
+	// A feature's route is called only on an add-on whose manifest declares
+	// the feature (design §2 rule 2): an add-on that did not is never asked,
+	// and the breaker never hears of it.
+	if err := a.declares(featureOf(s.Path)); err != nil {
+		return refuse(err)
 	}
 	if s.Write && s.Claim == nil && s.TraceID == "" {
 		return refuse(ErrNoCallRecord)
@@ -75,23 +80,60 @@ func (a *Addon) send(ctx context.Context, s sendSpec) (CallResponse, error) {
 			return refuse(err)
 		}
 	}
-	var hdr http.Header
-	if key := firstNonEmpty(s.IdempotencyKey, s.TraceID); s.Write && key != "" {
-		hdr = http.Header{}
-		hdr.Set(idempotencyHeader, key)
+	resp := doAuthenticated(ctx, cred, s.Method, a.Registration.BaseURL+s.Path, s.Body, callTimeout)
+	if resp.Status == http.StatusNotFound && featureRoute(s.Path) && (resp.Code == "" || resp.Code == codeUnknownRoute) {
+		// A route the backend called because the manifest declared its
+		// feature, answered as no such route: the add-on no longer serves it
+		// (design §11 — there is no UNKNOWN_FEATURE code). Nothing was done.
+		// A 404 with any other code (no such setting, no adoptable account)
+		// is the add-on answering about the request, and stays a refusal.
+		resp.Outcome, resp.ShapeRefusal = OutcomeUnreached, true
 	}
-	resp := doAuthenticatedWith(ctx, cred, s.Method, a.Registration.BaseURL+s.Path, s.Body, callTimeout, hdr)
+	if resp.ShapeRefusal {
+		log.Printf("[ADDON] %s refused %s %s for its shape (%d %s); reading its manifest again",
+			a.Registration.Target, s.Method, s.Path, resp.Status, resp.Code)
+		rereadAfterShapeRefusal(a)
+	}
 	if !s.SkipBreaker {
 		a.br.record(timeNow(), resp)
 	}
 	return resp, nil
 }
 
-func firstNonEmpty(a, b string) string {
-	if a != "" {
-		return a
+// featureOf is the feature a path's route belongs to (registry/features.json),
+// "" for a core route.
+func featureOf(path string) string {
+	for _, f := range []struct{ prefix, feature string }{
+		{"/operations/", "operations"}, {"/settings", "settings"}, {"/reach", "storage.reach"},
+		{"/homes", "storage.homes"}, {"/calls/", "calls"}, {"/stats", "stats"},
+	} {
+		if strings.HasPrefix(path, f.prefix) {
+			return f.feature
+		}
 	}
-	return b
+	return ""
+}
+
+func featureRoute(path string) bool { return featureOf(path) != "" }
+
+// ErrFeatureNotDeclared is a call to a feature's route on an add-on whose
+// manifest does not declare the feature. Nothing was sent.
+var ErrFeatureNotDeclared = errors.New("addon: the add-on does not declare this feature")
+
+// declares refuses a feature the accepted manifest does not declare; "" (a
+// core route) is always allowed. No manifest yet is no feature yet.
+func (a *Addon) declares(feature string) error {
+	if feature == "" {
+		return nil
+	}
+	m, err := a.Manifest()
+	if err != nil {
+		return err
+	}
+	if !m.Declares(feature) {
+		return fmt.Errorf("%w: %s does not declare %s", ErrFeatureNotDeclared, a.Registration.Target, feature)
+	}
+	return nil
 }
 
 // operate is a Write that owns its record: begin the row and its audit line
@@ -99,6 +141,10 @@ func firstNonEmpty(a, b string) string {
 // row's id as claim and idempotency key, then settle how it ended. A refusal
 // settles as unreached, which is what an unclaimed row may settle as.
 func (a *Addon) operate(ctx context.Context, p db.AddonOperationParams, s sendSpec) (CallResponse, error) {
+	// Before the row: a call that will not be sent leaves no record of one.
+	if err := a.declares(featureOf(s.Path)); err != nil {
+		return CallResponse{Outcome: OutcomeUnreached, Err: err}, err
+	}
 	id, err := dbBeginAddonOperation(ctx, p)
 	if err != nil {
 		// No record, no call: the record is the precondition, not a log of it.
@@ -107,7 +153,14 @@ func (a *Addon) operate(ctx context.Context, p db.AddonOperationParams, s sendSp
 	}
 	s.Write = true
 	s.Claim = OperationRecord(id, p.Target, p.Operation, p.SubjectID).consume
-	s.IdempotencyKey = id
+	// The row's id is the call_id, in the body like every write's.
+	body, err := withCallID(s.Body, id)
+	if err != nil {
+		err = fmt.Errorf("addon %s: encode %s: %w", p.Target, p.Operation, err)
+		_ = dbSettleAddonOperation(ctx, id, db.AddonOpUnreached)
+		return CallResponse{Outcome: OutcomeUnreached, Err: err}, err
+	}
+	s.Body = body
 	resp, sendErr := a.send(ctx, s)
 	if err := dbSettleAddonOperation(ctx, id, StatusFor(resp.Outcome)); err != nil {
 		// The row stays `dispatching`, which is the honest state for "sent, and we
@@ -115,6 +168,17 @@ func (a *Addon) operate(ctx context.Context, p db.AddonOperationParams, s sendSp
 		log.Printf("[ADDON] %s/%s call_id=%s dispatched but its outcome was not recorded: %v", p.Target, p.Operation, id, err)
 	}
 	return resp, sendErr
+}
+
+// withCallID is a JSON object body with call_id set.
+func withCallID(body []byte, callID string) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, err
+	}
+	id, _ := json.Marshal(callID)
+	fields["call_id"] = id
+	return json.Marshal(fields)
 }
 
 // StatusFor maps an outcome onto the persisted addon_operations status. Total

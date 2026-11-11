@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -157,6 +158,16 @@ type CallResponse struct {
 	// that is answering as unreachable, hiding the state an operator set on
 	// purpose behind one they did not.
 	LifecycleRefusal bool
+	// Code is the add-on's own code for a refusal: the problem's `code`
+	// (contract 2), or a contract-1 add-on's `error`, read for classification
+	// only (design §11). Empty on a 2xx, or on a refusal that named none.
+	Code string
+	// ShapeRefusal is the add-on refusing the request's shape, not its
+	// content: CONTRACT_VERSION_MISMATCH, UNKNOWN_REQUEST_FIELD, or a 404 on a
+	// route the backend called under a feature. Nothing was done, so it is
+	// unreached, and the manifest is read again: the add-on is not the one the
+	// backend thinks it is (a rollback, an add-on that dropped a feature).
+	ShapeRefusal bool
 }
 
 // callEnvelope is the wire body. Everything that binds the call to an approval
@@ -235,7 +246,7 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 	// would say otherwise.
 	resp, err := a.send(ctx, sendSpec{
 		Method: http.MethodPost, Path: "/operations/" + req.Operation, Body: body,
-		Write: true, Claim: req.Record.consume, IdempotencyKey: req.Record.callID,
+		Write: true, Claim: req.Record.consume,
 	})
 	if err != nil {
 		return resp
@@ -272,13 +283,6 @@ func addonPolicy(timeout time.Duration) extcall.Policy {
 // — a manifest fetched over an unauthenticated channel is a capability set an
 // on-path attacker can edit, and capability is what the backend decides against.
 func doAuthenticated(ctx context.Context, cred *credential, method, url string, body []byte, timeout time.Duration) CallResponse {
-	return doAuthenticatedWith(ctx, cred, method, url, body, timeout, nil)
-}
-
-// doAuthenticatedWith is doAuthenticated plus extra request headers (the pipe's
-// idempotency key). The signature covers method, path and body only, so a
-// header cannot change what was signed.
-func doAuthenticatedWith(ctx context.Context, cred *credential, method, url string, body []byte, timeout time.Duration, hdr http.Header) CallResponse {
 	if err := ctx.Err(); err != nil {
 		// Already cancelled: nothing is sent, so nothing happened.
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}
@@ -308,13 +312,10 @@ func doAuthenticatedWith(ctx context.Context, cred *credential, method, url stri
 		// exists, so a conditional here would be a path on which the add-on is
 		// called anonymously.
 		//
-		// req.URL.Path rather than the string this was built from: it is what the
-		// add-on will see after its own parse, and signing anything else would be
-		// signing a value the two ends could disagree about.
-		for k, v := range hdr {
-			req.Header[k] = v
-		}
-		req.Header.Set(SignatureHeader, ComputeSignature(timeNow(), method, req.URL.Path, body, cred.signingKey))
+		// The target as it goes on the wire — the escaped path and the raw
+		// query (contract 2, decision 24) — from req.URL rather than the string
+		// this was built from: it is what the add-on reads off the request line.
+		req.Header.Set(SignatureHeader, ComputeSignature(timeNow(), method, signedTarget(req.URL), body, cred.signingKey))
 		return cred.client.Do(req)
 	})
 	if err != nil {
@@ -338,14 +339,11 @@ func doAuthenticatedWith(ctx context.Context, cred *credential, method, url stri
 		respBody = respBody[:maxResponseBytes]
 	}
 
-	lifecycle := httpResp.StatusCode == http.StatusServiceUnavailable &&
-		httpResp.Header.Get("Retry-After") != ""
-	out := CallResponse{
-		Status:           httpResp.StatusCode,
-		Body:             respBody,
-		Outcome:          classifyStatus(httpResp.StatusCode, lifecycle),
-		LifecycleRefusal: lifecycle,
+	out := CallResponse{Status: httpResp.StatusCode, Body: respBody}
+	if out.Status < 200 || out.Status >= 300 {
+		out.Code = refusalCode(respBody)
 	}
+	out.Outcome, out.LifecycleRefusal, out.ShapeRefusal = classifyStatus(out.Status, out.Code)
 	switch {
 	case readErr != nil && out.Outcome == OutcomeSucceeded:
 		// A 2xx whose body was cut off says the add-on acted but not what it
@@ -375,50 +373,89 @@ func doAuthenticatedWith(ctx context.Context, cred *credential, method, url stri
 	return out
 }
 
-// classifyStatus maps a status code to what the add-on may have done.
+// Codes the classification reads (registry/errors.json). Status stays primary;
+// a code refines it only where the status alone says the wrong thing.
+const (
+	codeLifecycleRefusal        = "LIFECYCLE_REFUSAL"
+	codeContractVersionMismatch = "CONTRACT_VERSION_MISMATCH"
+	codeUnknownRequestField     = "UNKNOWN_REQUEST_FIELD"
+	codeCallInProgress          = "CALL_IN_PROGRESS"
+	codeTargetUnreachable       = "TARGET_UNREACHABLE"
+	codeUnknownRoute            = "UNKNOWN_ROUTE"
+)
+
+// refusalCode is a refusal's code: the problem's `code` (contract 2), else a
+// contract-1 add-on's `error`. The fallback is for classification only and
+// only until the next major: a contract-1 add-on writes {"error": CODE}, and
+// without it, during a rollback, its 400 would fall to rejected and its 503
+// lifecycle refusal to indeterminate (design §11).
+func refusalCode(body []byte) string {
+	var p struct {
+		Code  any `json:"code"`
+		Error any `json:"error"`
+	}
+	if json.Unmarshal(body, &p) != nil {
+		return ""
+	}
+	if code, ok := p.Code.(string); ok && code != "" {
+		return code
+	}
+	code, _ := p.Error.(string)
+	return code
+}
+
+// classifyStatus maps a status and the add-on's code to what the add-on may
+// have done.
 //
 //   - 2xx: it acted and said so.
+//   - LIFECYCLE_REFUSAL: draining or read-only, declined before doing anything
+//     (design §18). Detected by the code alone: "503 with Retry-After" is also
+//     what a target the add-on cannot reach answers (TARGET_UNREACHABLE), and
+//     only one of the two is a maintenance window.
+//   - CONTRACT_VERSION_MISMATCH, UNKNOWN_REQUEST_FIELD: the request's shape
+//     was refused before anything was done, so unreached, and a shape
+//     refusal: never the target refusing the change, so never target_refused
+//     (design §11). A plain BAD_REQUEST — a missing call_id or subject — stays
+//     rejected, or a malformed row would requeue for ever.
+//   - CALL_IN_PROGRESS: the same call is executing now; this copy did nothing.
+//   - TARGET_UNREACHABLE, 429: it did not act and expects to be asked again.
 //   - 408, 5xx: it may have acted. A 500 raised after a partial mutation looks
-//     exactly like one raised before validation, and the backend cannot tell
-//     them apart from here.
-//   - 429: backpressure. It explicitly did not act and expects to be asked
-//     again, which makes this unreached rather than rejected.
-//   - 3xx: a contract violation, and it is surfaced rather than followed —
-//     see newAddonClient. The registered target did not act, and pointing the
-//     backend elsewhere will not make it act, so this is deterministic.
+//     exactly like one raised before validation.
+//   - 3xx: a contract violation, surfaced rather than followed (see
+//     newAddonClient). Deterministic.
 //   - other 4xx: it validated the call and refused. Deterministic.
-func classifyStatus(code int, retryAfter bool) Outcome {
+func classifyStatus(status int, code string) (outcome Outcome, lifecycle, shape bool) {
 	switch {
-	case code >= 200 && code < 300:
-		return OutcomeSucceeded
-	case code == http.StatusTooManyRequests:
-		return OutcomeUnreached
-	case code == http.StatusRequestTimeout:
-		return OutcomeIndeterminate
-	// A lifecycle refusal: the add-on is draining or read-only and declined to
-	// act (design §18). It is the standard way an HTTP service says "not now,
-	// come back", and it is exactly what the accounting needs — nothing was
-	// applied, the row stays queued, and it resumes when the state returns to
-	// active.
-	//
-	// Distinguished from an ordinary 503 by `Retry-After`, because the two mean
-	// opposite things about what may have happened: a deliberate refusal
-	// declines before doing anything, while an add-on that fell over mid-apply
-	// answers 5xx with no idea how far it got. Treating a maintenance window as
-	// indeterminate would manufacture exactly the false finality the queued
-	// accounting exists to prevent, and at the moment an operator is least able
-	// to notice.
-	case code == http.StatusServiceUnavailable && retryAfter:
-		return OutcomeUnreached
-	case code >= 500:
-		return OutcomeIndeterminate
+	case status >= 200 && status < 300:
+		return OutcomeSucceeded, false, false
+	case code == codeLifecycleRefusal:
+		return OutcomeUnreached, true, false
+	case code == codeContractVersionMismatch || code == codeUnknownRequestField:
+		return OutcomeUnreached, false, true
+	case code == codeCallInProgress || code == codeTargetUnreachable || status == http.StatusTooManyRequests:
+		return OutcomeUnreached, false, false
+	case status == http.StatusRequestTimeout || status >= 500:
+		return OutcomeIndeterminate, false, false
 	default:
-		return OutcomeRejected
+		return OutcomeRejected, false, false
 	}
 }
 
+// signedTarget is what the MAC covers of the URL (contract 2, decision 24):
+// the path escaped exactly as sent, plus "?" and the raw query when there is
+// one — RFC 9421's @query as sent, never sorted or re-encoded. An empty query
+// adds nothing, so a query-less MAC is contract 1's whenever the path needs no
+// escaping.
+func signedTarget(u *url.URL) string {
+	if u.RawQuery == "" {
+		return u.EscapedPath()
+	}
+	return u.EscapedPath() + "?" + u.RawQuery
+}
+
 // ComputeSignature returns the full SignatureHeader value: HMAC-SHA256 over
-// "<unix_seconds>.<method>.<path>.<body>" under key, formatted "t=<ts>,v1=<hex>".
+// "<unix_seconds>.<method>.<target>.<body>" under key, formatted
+// "t=<ts>,v1=<hex>", target being signedTarget.
 //
 // The timestamp is inside the MAC input, not merely beside it, so it cannot be
 // edited to extend a captured signature's life. The body is inside it, so the
@@ -430,21 +467,21 @@ func classifyStatus(code int, retryAfter bool) Outcome {
 // request inside the two-minute window — including a mutating one. Signing the
 // request line is what SigV4 does, for this reason.
 //
-// The path is the URL's path only, never the full URL: the host is already
-// pinned by the registration and by TLS, and including it would make a
+// The target is the path and query only, never the full URL: the host is
+// already pinned by the registration and by TLS, and including it would make a
 // deployment that reaches the same add-on by two names fail to authenticate
 // against itself.
 //
 // A bare shared secret in a header is deliberately not offered as an
 // alternative: it identifies the caller and binds nothing, so an intercepted
 // call replays verbatim, forever.
-func ComputeSignature(ts time.Time, method, path string, body, key []byte) string {
+func ComputeSignature(ts time.Time, method, target string, body, key []byte) string {
 	mac := hmac.New(sha256.New, key)
 	fmt.Fprintf(mac, "%d", ts.Unix())
 	mac.Write([]byte("."))
 	mac.Write([]byte(method))
 	mac.Write([]byte("."))
-	mac.Write([]byte(path))
+	mac.Write([]byte(target))
 	mac.Write([]byte("."))
 	mac.Write(body)
 	return fmt.Sprintf("t=%d,v1=%x", ts.Unix(), mac.Sum(nil))
@@ -489,8 +526,8 @@ func (b *breaker) record(now time.Time, resp CallResponse) {
 	// target offline for everybody — but it does not CLEAR the count either,
 	// and the difference is the whole difference between a breaker and a
 	// suggestion. `LifecycleRefusal` is derived entirely from add-on-controlled
-	// output (a 503 plus a Retry-After header), so a clearing one let a broken
-	// add-on alternate 5xx with 503+Retry-After and keep the breaker shut for
+	// output (the code LIFECYCLE_REFUSAL), so a clearing one let a broken
+	// add-on alternate 5xx with lifecycle refusals and keep the breaker shut for
 	// ever. Skipped, not reset: the window pauses the count, it does not
 	// forgive it.
 	if resp.LifecycleRefusal {
