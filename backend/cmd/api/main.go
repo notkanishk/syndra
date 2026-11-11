@@ -500,19 +500,15 @@ func main() {
 	// transaction, and the nightly retention. Runners beside the reconcile,
 	// never steps inside it: a slow /stats must not delay convergence, and a
 	// failed collection is not a failed reconcile. Collection starts once the
-	// manifests are in (a metric is collected only once accepted);
-	// STATS_COLLECTION_ENABLED=false stops both, for a kit run against a
-	// target this backend also reads.
-	var statsSched, statsPruneSched *periodic.Runner
-	if len(addons.Registered()) > 0 && statsCollectionEnabled() {
-		statsSched = periodic.New("ADDON-STATS", time.Hour, time.Hour, stats.CollectAll)
-		statsPruneSched = periodic.New("STATS-RETENTION", 24*time.Hour, 24*time.Hour, stats.Prune)
+	// manifests are in (a metric is collected only once accepted).
+	statsSched, statsPruneSched := statsRunners(len(addons.Registered()) > 0 && statsCollectionEnabled())
+	if statsSched != nil {
 		go func(r *periodic.Runner) {
 			awaitFirstManifests(ctx)
 			r.Start(ctx)
 		}(statsSched)
-		go statsPruneSched.Start(ctx)
 	}
+	go statsPruneSched.Start(ctx)
 
 	// Add-on manifest refresh: reads each registered add-on's /capabilities,
 	// checks the contract version, and resolves the effective operation set
@@ -841,8 +837,21 @@ func schedulerBatchSize() int {
 	return n
 }
 
+// statsRunners is the statistics runners main starts. Retention always: it
+// touches only Syndra's own rows, and per-person points must not outlive
+// their retention because collection was switched off or no add-on is
+// registered any more. Collection only when collect is true (an add-on is
+// registered and STATS_COLLECTION_ENABLED, which a kit run against a target
+// this backend also reads switches off); collector is then nil.
+func statsRunners(collect bool) (collector, retention *periodic.Runner) {
+	if collect {
+		collector = periodic.New("ADDON-STATS", time.Hour, time.Hour, stats.CollectAll)
+	}
+	return collector, periodic.New("STATS-RETENTION", 24*time.Hour, 24*time.Hour, stats.Prune)
+}
+
 // statsCollectionEnabled is STATS_COLLECTION_ENABLED, on unless it says
-// otherwise.
+// otherwise. It gates collection only, never retention (statsRunners).
 func statsCollectionEnabled() bool {
 	b, err := strconv.ParseBool(cmp.Or(os.Getenv("STATS_COLLECTION_ENABLED"), "true"))
 	if err != nil {

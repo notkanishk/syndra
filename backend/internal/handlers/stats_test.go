@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"syndra/internal/auth"
 	"syndra/internal/clock"
 	"syndra/internal/db"
+	"syndra/internal/services/addonop"
 )
 
 // Statistics, read (addon-contract 6.8): a member their own, an admin the
@@ -177,16 +179,57 @@ func TestUsageCarriesSumsLatestAndGaps(t *testing.T) {
 	if projects.Dimensions["share"] != "projects" || projects.Sum30d == nil || *projects.Sum30d != 0 || *projects.Sum12m != 3 || len(projects.Days) != 0 {
 		t.Errorf("a series with no day in 30 sums 0 there: %+v", projects)
 	}
-	if len(sessions.Gaps) != 1 || sessions.Gaps[0].Reason != "Auditing is off on this share" || sessions.Gaps[0].End != "2026-11-10" {
-		t.Errorf("gaps %+v", sessions.Gaps)
+	if len(sessions.Gaps) != 0 {
+		t.Errorf("a gap on a share u1 never used is on u1's page: %+v", sessions.Gaps)
 	}
 
 	totals, _ := statsUsageFor(context.Background(), "truenas", "", now)
+	if g := sessionsOf(t, totals).Gaps; len(g) != 1 || g[0].Reason != "Auditing is off on this share" || g[0].End != "2026-11-10" {
+		t.Errorf("gaps %+v", g)
+	}
 	if len(totals.Metrics) != 3 || sessionsOf(t, totals).Collected == nil || sessionsOf(t, totals).Collected.UnboundAccounts != 2 {
 		t.Errorf("the totals carry every metric and the collection line: %+v", totals)
 	}
 	if none, _ := statsUsageFor(context.Background(), "unifi", "u1", now); none.Reported || none.Metrics != nil {
 		t.Errorf("a target reporting nothing says so: %+v", none)
+	}
+}
+
+// A person's page carries a gap over the whole metric or over one of their own
+// series, never one on a share only somebody else used: edge never sees the
+// kiln, which only lita used; lita and the totals see every gap.
+func TestAPersonSeesOnlyGapsOnTheirOwnSeries(t *testing.T) {
+	stubStats(t, &statsStore{})
+	used := map[string][]string{"edge": {"makers"}, "lita": {"makers", "kiln"}, "": {"makers", "kiln"}}
+	dbStatsDays = func(_ context.Context, _, subject, _ string) ([]db.StatsValue, error) {
+		var out []db.StatsValue
+		for _, share := range used[subject] {
+			out = append(out, db.StatsValue{Metric: "storage.sessions", Dims: map[string]string{"share": share}, When: "2026-11-11", Value: 1})
+		}
+		return out, nil
+	}
+	dbStatsMonths = func(context.Context, string, string, string) ([]db.StatsValue, error) { return nil, nil }
+	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {
+		var out []db.StatsGapRow
+		for _, dims := range []map[string]string{{}, {"share": "makers"}, {"share": "kiln"}} {
+			out = append(out, db.StatsGapRow{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: dims, Start: "2026-11-08", End: "2026-11-10", Reason: "Auditing was off"}})
+		}
+		return out, nil
+	}
+	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
+	for subject, want := range map[string]string{"edge": `{"share":"makers"} {}`, "lita": `{"share":"kiln"} {"share":"makers"} {}`, "": `{"share":"kiln"} {"share":"makers"} {}`} {
+		usage, err := statsUsageFor(context.Background(), "truenas", subject, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, g := range sessionsOf(t, usage).Gaps {
+			got = append(got, dimsText(g.Dimensions))
+		}
+		slices.Sort(got)
+		if strings.Join(got, " ") != want {
+			t.Errorf("%q sees gaps on %v, want %s", subject, got, want)
+		}
 	}
 }
 
@@ -239,7 +282,9 @@ func TestInsightsStatsNameNobody(t *testing.T) {
 }
 
 // The one write of per-person retention: 1 to 400 days or cleared; anything
-// else 422 with the schema's sentence; strict JSON; a known target.
+// else 422 with the schema's sentence; strict JSON; a known target. Days is
+// required: {} is a 400 that writes nothing, never a silent clear; only
+// {"days": null} clears.
 func TestStatsRetentionIsSetOnlyWithinTheCeiling(t *testing.T) {
 	stubStats(t, &statsStore{})
 	prev, get := dbSetStatsRetention, addonsGet
@@ -258,16 +303,18 @@ func TestStatsRetentionIsSetOnlyWithinTheCeiling(t *testing.T) {
 		}
 		return nil
 	}
-	put := func(target, body string) int {
+	send := func(target, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPut, "/api/v1/targets/"+target+"/stats-retention", strings.NewReader(body))
 		req.SetPathValue("target", target)
 		rr := httptest.NewRecorder()
 		handleSetStatsRetention(rr, req)
-		return rr.Code
+		return rr
 	}
+	put := func(target, body string) int { return send(target, body).Code }
 	for body, want := range map[string]int{
 		`{"days":90}`: http.StatusOK, `{"days":null}`: http.StatusOK, `{"days":401}`: http.StatusUnprocessableEntity,
 		`{"days":0}`: http.StatusUnprocessableEntity, `{"days":90,"totals":1}`: http.StatusBadRequest, `{"days":"90"}`: http.StatusBadRequest,
+		`{}`: http.StatusBadRequest, `{"totals":1}`: http.StatusBadRequest,
 	} {
 		if got := put("truenas", body); got != want {
 			t.Errorf("%s: %d, want %d", body, got, want)
@@ -275,6 +322,14 @@ func TestStatsRetentionIsSetOnlyWithinTheCeiling(t *testing.T) {
 	}
 	if got := put("nowhere", `{"days":90}`); got != http.StatusNotFound {
 		t.Errorf("an unknown target: %d", got)
+	}
+	// 90, null, 401 and 0 reached the store; nothing else did.
+	if len(wrote) != 4 {
+		t.Errorf("%d writes, want 4: a refused body was written", len(wrote))
+	}
+	var problem ErrorResponse
+	if rr := send("truenas", `{}`); json.Unmarshal(rr.Body.Bytes(), &problem) != nil || problem.Error != "VALIDATION_FAILED" || problem.Details["days"] != "required" {
+		t.Errorf("{} answered %d %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -311,4 +366,27 @@ func TestStatsRoutesAreAdminOnly(t *testing.T) {
 			t.Errorf("%s is not behind withOperatorAuth: %s", r[1], r[2])
 		}
 	}
+}
+
+// Setting a password and a member action call describeMyTarget for its state
+// checks only: neither reads a statistic. That the views do is
+// TestMyUsageIsTheActorsOwn.
+func TestOnlyTheViewsReadUsage(t *testing.T) {
+	prev := dbStatsMetrics
+	t.Cleanup(func() { dbStatsMetrics = prev })
+	queried := 0
+	dbStatsMetrics = func(context.Context, string) ([]db.StatsMetric, error) { queried++; return nil, nil }
+
+	h := stubMemberAction(t)
+	h.result = addonop.Result{OperationID: "op_1", Outcome: addons.OutcomeSucceeded}
+	if rr, _ := setCredential(t, `{"password":"`+memberSecret+`"}`); rr.Code != http.StatusOK || len(h.confirms) != 1 {
+		t.Fatalf("the password was not set: %d %s", rr.Code, rr.Body.String())
+	}
+	if rr, out := act(t, "item.checkout", previewBody); rr.Code != http.StatusOK || out["state"] != "preview" {
+		t.Fatalf("the action was not previewed: %d %s", rr.Code, rr.Body.String())
+	}
+	if queried != 0 {
+		t.Errorf("the password and action paths made %d statistics queries", queried)
+	}
+
 }

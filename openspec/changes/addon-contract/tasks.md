@@ -1727,7 +1727,8 @@ per-person only) applied there.
     re-send another; a failed second page keeps the watermark and the
     provisional rows; the watermark never goes back, is floored to a
     midnight and never passes today's; each drop reason counted; 500 series
-    kept and the 501st dropped; a repeating cursor stops. Registration
+    kept and the 501st dropped; a repeating cursor stops, and so does a
+    cycle (A, B, A). Registration
     (`internal/addons/stats_test.go`): a changed unit or instrument refuses
     the manifest; each bad descriptor dropped alone and said once; another
     zone drops the feature; `/stats` never carries `fresh`.
@@ -1739,18 +1740,19 @@ per-person only) applied there.
       for day arithmetic), and `bucket_start` is that day as `$n::date`.
     - Decided while building: `ADDON-STATS` is its own runner (hourly,
       started after `awaitFirstManifests`), not a step in the reconcile;
-      `STATS_COLLECTION_ENABLED=false` stops it and the retention runner.
-      Each metric has its own five-minute context. `/stats` goes through the
-      pipe and the breaker like every read (an add-on's 503 before its first
-      collection counts as a failure there; health probes clear it).
+      `STATS_COLLECTION_ENABLED=false` stops collection only, never the
+      retention runner (fix round). Each metric has its own five-minute
+      context. `/stats` goes through the pipe and the breaker like every
+      read, but a coded answer there neither opens nor clears it (fix round).
     - Decided while building: the stored watermark is the reply's floored to
       its makerspace midnight and capped at the start of today (a watermark
       of tomorrow would freeze today's provisional points); `GREATEST` in SQL
       keeps it from going back. The series the cap counts are read before
       the provisional window is deleted, so a held series is not forgotten
-      because today is being replaced. A person in a dimension is a binding's
-      subject id, account name or account id (B7); directory display names
-      wait. Drops are counted by reason (`not_a_day`, `bad_value`,
+      because today is being replaced. A person in a dimension value or a
+      gap reason is any text containing a binding's subject id, account
+      name or account id, in any case (B7; fix round); directory display
+      names wait. Drops are counted by reason (`not_a_day`, `bad_value`,
       `not_per_subject`, `unbound_subject`, `undeclared_dimension`,
       `person_in_dimension`, `past_retention`, `series`) in
       `addon_metrics.dropped`, the last collection's, and logged as counts,
@@ -1798,8 +1800,8 @@ per-person only) applied there.
   suppression (decision 14). Tests: a member cannot read another's; a
   non-admin operator cannot read the target or insights series #ready-for-agent
   - Done (slice 6d-2, 12 Nov 2026), `backend/internal/handlers/stats.go`:
-    `myTargetView.usage` (filled in `describeTargetFor`, from Syndra's store
-    before any add-on call, so it shows while the target is down) carries
+    `myTargetView.usage` (filled by the two views, `/me/targets` and the
+    person page, from Syndra's store, so it shows while the target is down) carries
     the person's own per-person metrics; `GET /api/v1/targets/{target}/stats`
     (admin) every metric's totals with the collection line and the
     retention; `GET /api/v1/insights/stats` (admin) each per-person series
@@ -1830,7 +1832,32 @@ per-person only) applied there.
     - Decided while building: no `?window=` parameter: every page carries
       both windows. A person's page shows only `per_subject` metrics and
       never the collection line; the person page is the member's own path
-      (`describeTargetFor`), so the two cannot differ.
+      (`describeTargetFor`, then `personalUsage`), so the two cannot differ.
+    - Decided while building (6d-2 fix round, 12 Nov 2026), one line each:
+      - Retention always runs: `statsRunners` builds `STATS-RETENTION`
+        unconditionally and `ADDON-STATS` only with an add-on and
+        `STATS_COLLECTION_ENABLED`; `main` starts retention at top level
+        (`TestStatsRetentionRunsWithoutCollection`, with a source guard).
+      - A coded `/stats` answer neither opens nor clears the breaker, in the
+        pipe's one record call; transport failures, timeouts and uncoded
+        5xx still count, the breaker is still consulted first, and
+        `NO_CURRENT_READ` on `/subjects` still counts
+        (`TestACodedStatsAnswerIsNeverABreakerFailure`).
+      - A person's page keeps a gap only when its dimensions are `{}` or one
+        of that person's series; at ingestion one rule, `people.names`
+        (case-insensitive containment of a subject id, account name or
+        account id), drops a dimension value or a gap reason naming a bound
+        person, counted `person_in_dimension`
+        (`TestAPersonSeesOnlyGapsOnTheirOwnSeries`,
+        `TestNoValueOrReasonNamesABoundPerson`).
+      - Every cursor followed in a collection is remembered; any repeat
+        stops it (`TestLiveACursorCycleStopsTheCollection`).
+      - `PUT stats-retention` requires the `days` key: `{}` is 400
+        `VALIDATION_FAILED` (`days: required`) and writes nothing; only
+        `{"days": null}` clears.
+      - Usage is filled by the two views only, never in `describeTargetFor`,
+        so setting a password and a member action make no statistics query
+        (`TestOnlyTheViewsReadUsage`).
 - [ ] 6.9 UI, from descriptors only: the member card "What I have used"
   (counters summed with a sparkline, gauges latest with their day,
   `against` as a meter over the **observed** limit, gaps footnoted, every

@@ -14,6 +14,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
+	"strings"
 	"time"
 
 	"syndra/internal/addons"
@@ -34,7 +36,7 @@ const (
 	DropNotPerSubject       = "not_per_subject"      // a subject on a metric not reported per person
 	DropUnboundSubject      = "unbound_subject"      // a subject with no binding on this target
 	DropUndeclaredDimension = "undeclared_dimension" // a dimension the metric does not declare
-	DropPersonInDimension   = "person_in_dimension"  // a dimension value that names a bound person
+	DropPersonInDimension   = "person_in_dimension"  // a dimension value or gap reason that names a bound person
 	DropPastRetention       = "past_retention"       // older than retention keeps
 	DropSeries              = "series"               // a new series past constants.series_per_metric
 )
@@ -91,14 +93,7 @@ func Collect(ctx context.Context, target string, m addons.Metric, buffer time.Du
 	if err != nil {
 		return nil, err
 	}
-	who := people{bound: map[string]bool{}, named: map[string]bool{}}
-	for _, b := range bindings {
-		who.bound[b.SubjectID] = true
-		who.named[b.SubjectID], who.named[b.Username] = true, true
-		if b.AccountID != nil {
-			who.named[*b.AccountID] = true
-		}
-	}
+	who := peopleOn(bindings)
 	dropped := map[string]int{}
 	err = db.CollectStats(ctx, target, m.Name, func(c *db.StatsTx) error {
 		stored, err := c.Watermark(ctx)
@@ -125,6 +120,10 @@ func Collect(ctx context.Context, target string, m addons.Metric, buffer time.Du
 
 		var first *addons.StatsPage
 		unbound, cursor := 0, ""
+		// Every cursor this collection has followed: an add-on answering
+		// any of them again is paging in a cycle (A, B, A), not only one
+		// that repeats the last, and would page until metricTimeout.
+		followed := map[string]bool{}
 		for {
 			page, err := read(ctx, m.Name, since, cursor)
 			if err != nil {
@@ -148,9 +147,10 @@ func Collect(ctx context.Context, target string, m addons.Metric, buffer time.Du
 			if page.NextCursor == "" {
 				break
 			}
-			if page.NextCursor == cursor {
-				return errors.New("the add-on answered the same cursor twice")
+			if followed[page.NextCursor] {
+				return errors.New("the add-on answered a cursor it had already given")
 			}
+			followed[page.NextCursor] = true
 			cursor = page.NextCursor
 		}
 		for reason, n := range dropped {
@@ -190,8 +190,39 @@ func finalThrough(reported, now time.Time) (time.Time, error) {
 
 // people is who is bound on the target: the subjects a point may name, and
 // every word that names a bound person (subject id, account name and id),
-// which no dimension value may be (ruling B7).
-type people struct{ bound, named map[string]bool }
+// which no dimension value and no gap reason may contain (ruling B7).
+type people struct {
+	bound map[string]bool
+	named []string // lower-cased, none empty
+}
+
+func peopleOn(bindings []db.TargetBinding) people {
+	who := people{bound: map[string]bool{}}
+	add := func(name string) {
+		if name != "" {
+			who.named = append(who.named, strings.ToLower(name))
+		}
+	}
+	for _, b := range bindings {
+		who.bound[b.SubjectID] = true
+		add(b.SubjectID)
+		add(b.Username)
+		if b.AccountID != nil {
+			add(*b.AccountID)
+		}
+	}
+	return who
+}
+
+// names is the one rule for "this text names a bound person": it contains a
+// name, in any case. A dimension value equal to a username is the plain case;
+// "home-JOHN_CENA" or a gap reason "john_cena's share is offline" name him
+// too. Stricter than equality on purpose: a series dropped and counted is
+// recoverable, a name stored beside usage is not.
+func (p people) names(text string) bool {
+	text = strings.ToLower(text)
+	return slices.ContainsFunc(p.named, func(n string) bool { return strings.Contains(text, n) })
+}
 
 // keep is the points of a page worth storing, each checked (checkPoint), the
 // series cap applied, and one per key (an add-on that repeats a key in a page
@@ -244,7 +275,8 @@ func checkPoint(p addons.StatPoint, m addons.Metric, who people) (string, string
 }
 
 // keepGaps is the gaps of a page worth storing: whole makerspace days, only
-// declared dimensions naming nobody, a reason, capped at 200 characters.
+// declared dimensions naming nobody, a reason naming nobody, capped at 200
+// characters.
 func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[string]int) []db.StatsGap {
 	var out []db.StatsGap
 	for _, g := range gaps {
@@ -258,6 +290,8 @@ func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[st
 			dropped[DropBadValue]++
 		case why != "":
 			dropped[why]++
+		case who.names(g.Reason):
+			dropped[DropPersonInDimension]++
 		default:
 			reason := []rune(g.Reason)
 			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Reason: string(reason[:min(len(reason), 200)])})
@@ -275,7 +309,7 @@ func checkDims(dims map[string]string, m addons.Metric, who people) string {
 		if !declared {
 			return DropUndeclaredDimension
 		}
-		if who.named[value] {
+		if who.names(value) {
 			return DropPersonInDimension
 		}
 	}

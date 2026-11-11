@@ -218,6 +218,7 @@ func handleMyTargets(w http.ResponseWriter, r *http.Request) {
 			jsonErrorResponse(w, http.StatusInternalServerError, "VIEW_ERROR", err.Error())
 			return
 		}
+		view.Usage = personalUsage(r.Context(), reg.Target, subject)
 		views = append(views, view)
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"targets": views})
@@ -283,10 +284,6 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 			view.RecordedAt = &at
 		}
 	}
-
-	// Syndra's own store, never the add-on: read before anything that needs
-	// the target to answer, so a target that is down still shows its history.
-	view.Usage = personalUsage(r.Context(), target, subject)
 
 	// Non-fatal: the line is a courtesy over a form that works either way.
 	if _, at, open, err := dbUnconfirmedChangeAt(r.Context(), target, subject, "password.set", unresolvedGrace); err != nil {

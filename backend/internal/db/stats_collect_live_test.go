@@ -396,3 +396,27 @@ func TestLiveACursorThatRepeatsStopsTheCollection(t *testing.T) {
 		t.Errorf("a stopped collection kept %+v", h)
 	}
 }
+
+// A cursor cycle (A, B, A) is paging for ever as surely as a repeat of the
+// last cursor: the collection stops at the first cursor it has already
+// followed, after three pages, not at metricTimeout.
+func TestLiveACursorCycleStopsTheCollection(t *testing.T) {
+	ctx := collectLive(t)
+	next := map[string]string{"": "A", "A": "B", "B": "A"}
+	calls := 0
+	cycle := func(_ context.Context, _ string, _ time.Time, cursor string) (addons.StatsPage, error) {
+		calls++
+		if calls > 5 {
+			t.Fatal("still paging")
+		}
+		p := page(t, day(1), []addons.StatPoint{pt(t, day(2), "", share("makers"), 1)})
+		p.NextCursor = next[cursor]
+		return p, nil
+	}
+	if _, err := stats.Collect(ctx, collectTarget, sessions, buffer, cycle); err == nil || calls != 3 {
+		t.Fatalf("a cursor cycle: %v after %d pages, want an error after 3", err, calls)
+	}
+	if h := holding(t, ctx, sessions.Name); len(h.Points) != 0 || h.Watermark != nil {
+		t.Errorf("a stopped collection kept %+v", h)
+	}
+}

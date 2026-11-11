@@ -7,8 +7,11 @@ import (
 	"errors"
 	"log"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -269,5 +272,63 @@ func TestReadStatsAsksForOneMetricAndNeverFresh(t *testing.T) {
 	}
 	if _, err := ReadStats(context.Background(), "truenas", "storage.sessions", since, ""); !errors.Is(err, ErrStatsReply) {
 		t.Errorf("a reply about another metric read as %v", err)
+	}
+}
+
+// A coded /stats answer is the add-on answering on purpose about its own
+// data: five metrics answering 503 NO_CURRENT_READ leave the breaker shut.
+// /stats only — the same answer on /subjects still counts — and a transport
+// failure on /stats still counts, and the open breaker is still consulted
+// before the next /stats is sent.
+func TestACodedStatsAnswerIsNeverABreakerFailure(t *testing.T) {
+	withBreaker(t, 3, breakerCooldown)
+	var hits atomic.Int32
+	abort := atomic.Bool{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		if abort.Load() {
+			panic(http.ErrAbortHandler) // the connection drops: a transport failure
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"type":"about:blank","title":"Not read yet","status":503,"code":"NO_CURRENT_READ"}`))
+	}))
+	t.Cleanup(srv.Close)
+	signedAddon(t, srv.URL, "a-test-secret")
+	declare(t, "stats")
+	a, _ := Get("truenas")
+	since := time.Date(2026, 11, 6, 18, 30, 0, 0, time.UTC)
+
+	for _, metric := range []string{"a.one", "a.two", "a.three", "a.four", "a.five"} {
+		if _, err := ReadStats(context.Background(), "truenas", metric, since, ""); err == nil {
+			t.Fatalf("%s: a 503 read as a page", metric)
+		}
+	}
+	if a.CircuitOpen() {
+		t.Fatal("five metrics answering NO_CURRENT_READ opened the breaker")
+	}
+
+	for range breakerThreshold {
+		Subjects(context.Background(), "truenas", false)
+	}
+	if !a.CircuitOpen() {
+		t.Fatal("NO_CURRENT_READ on /subjects no longer counts")
+	}
+
+	signedAddon(t, srv.URL, "a-test-secret") // a fresh breaker
+	declare(t, "stats")
+	if a, _ = Get("truenas"); a.CircuitOpen() {
+		t.Fatal("the new registration kept the old breaker")
+	}
+	abort.Store(true)
+	for range breakerThreshold {
+		ReadStats(context.Background(), "truenas", "a.one", since, "")
+	}
+	if !a.CircuitOpen() {
+		t.Fatal("transport failures on /stats did not open the breaker")
+	}
+	before := hits.Load()
+	if _, err := ReadStats(context.Background(), "truenas", "a.one", since, ""); !errors.Is(err, ErrCircuitOpen) || hits.Load() != before {
+		t.Errorf("an open breaker let /stats through: %v, %d hits", err, hits.Load()-before)
 	}
 }

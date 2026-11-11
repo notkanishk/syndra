@@ -20,7 +20,7 @@ import (
 //   - a member, their own per-person points, on /me/targets (usage), the
 //     subject always the actor and never a parameter;
 //   - an admin, the same for one person on GET /users/{id}/targets (the same
-//     path, describeTargetFor), the target-wide series on GET
+//     view, personalUsage), the target-wide series on GET
 //     /targets/{target}/stats and distributions over members on GET
 //     /insights/stats; never a member.
 //
@@ -169,9 +169,13 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 		// Series by their dimension values as a person reads them.
 		textsort.ByName(view.Series, func(s statsSeries) string { return dimsText(s.Dimensions) }, func(s statsSeries) string { return "" })
 		for _, g := range gaps {
-			if g.Metric == m.Name {
-				view.Gaps = append(view.Gaps, statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Reason: g.Reason})
+			// A person's page carries a gap over the whole metric ({}) or over
+			// one of their own series, never the target's others: a gap on a
+			// share only someone else used would say that share exists here.
+			if g.Metric != m.Name || subject != "" && len(g.Dims) > 0 && bySeries[dimsText(g.Dims)] == nil {
+				continue
 			}
+			view.Gaps = append(view.Gaps, statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Reason: g.Reason})
 		}
 		out.Metrics = append(out.Metrics, view)
 	}
@@ -194,8 +198,12 @@ func dimsText(dims map[string]string) string {
 }
 
 // personalUsage is the usage block on a person's view of a target: the actor's
-// own on /me/targets, one person's on an admin's person page. Best-effort: a
-// page that cannot read it says less rather than failing.
+// own on /me/targets, one person's on an admin's person page. Filled by those
+// two views alone, never by describeTargetFor, which the password and
+// member-action paths also call for their state checks and which must not pay
+// four statistics queries for a page nobody renders. Syndra's own store,
+// never the add-on, so a target that is down still shows its history.
+// Best-effort: a page that cannot read it says less rather than failing.
 func personalUsage(ctx context.Context, target, subject string) *statsUsage {
 	usage, err := statsUsageFor(ctx, target, subject, clock.Now())
 	if err != nil {
@@ -230,10 +238,11 @@ func handleTargetStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// statsRetentionRequest is the one write of per-person retention. Days nil
-// clears it back to the ceiling.
+// statsRetentionRequest is the one write of per-person retention. Days is
+// required: a number sets it, null clears it back to the ceiling. Raw, because
+// a *int cannot tell {"days": null} from {}, and {} must not silently clear.
 type statsRetentionRequest struct {
-	Days *int `json:"days"`
+	Days json.RawMessage `json:"days"`
 }
 
 // handleSetStatsRetention is PUT /api/v1/targets/{target}/stats-retention
@@ -247,12 +256,21 @@ func handleSetStatsRetention(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
+	if len(req.Days) == 0 {
+		jsonValidationErrorResponse(w, "days is required: a number of days, or null to clear it", map[string]string{"days": "required"})
+		return
+	}
+	var days *int
+	if err := json.Unmarshal(req.Days, &days); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"days": err.Error()})
+		return
+	}
 	if _, err := addonsGet(target); err != nil {
 		jsonErrorResponse(w, http.StatusNotFound, "TARGET_NOT_FOUND", target+" is not a connected system.")
 		return
 	}
 	actor := resolveActor(r, "")
-	switch err := dbSetStatsRetention(r.Context(), target, req.Days, actor); {
+	switch err := dbSetStatsRetention(r.Context(), target, days, actor); {
 	case errors.Is(err, db.ErrStatsRetentionInvalid):
 		jsonResponse(w, http.StatusUnprocessableEntity, ErrorResponse{Error: "VALIDATION_FAILED", Message: err.Error(),
 			Details: map[string]string{"days": "out_of_range"}})
@@ -261,13 +279,13 @@ func handleSetStatsRetention(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	log.Printf("[TARGETS] %s set %s's per-person statistics retention to %s", actor, target, retentionText(req.Days))
-	days, set, err := dbStatsRetention(r.Context(), target)
+	log.Printf("[TARGETS] %s set %s's per-person statistics retention to %s", actor, target, retentionText(days))
+	kept, set, err := dbStatsRetention(r.Context(), target)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"target": target, "subject_days": days, "set": set})
+	jsonResponse(w, http.StatusOK, map[string]any{"target": target, "subject_days": kept, "set": set})
 }
 
 func retentionText(days *int) string {

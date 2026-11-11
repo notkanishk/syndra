@@ -1019,7 +1019,11 @@ declared metric** (≤ 50) per target on its own schedule (hourly, through
 the existing pipe and breaker, by its own runner `ADDON-STATS` beside the
 add-on reconcile, never a step inside it: a slow `/stats` must not delay
 convergence, and a failed collection is not a failed reconcile) and takes
-everything since. One call per metric, not one `since` for all: with a
+everything since. A coded `/stats` answer (`NO_CURRENT_READ` before the
+add-on's first read of its app) is the add-on answering on purpose: it
+neither opens nor clears the breaker; a transport failure, a timeout or an
+uncoded 5xx counts as on any route, and the open breaker is still consulted
+first (6d-2 fix round). One call per metric, not one `since` for all: with a
 single oldest mark, a laser PC off for a term would make every hourly
 collection re-send up to 90 days of every other metric (per-subject ×
 per-share `storage.used_bytes` is ~10⁴ points a day, hundreds of MiB an
@@ -1185,7 +1189,9 @@ Rules, MUST on the add-on:
   numbers).
 - Paged with a **keyset** cursor (`next_cursor` encodes the last
   `(start, subject, dimensions)` sent; no snapshot needed, because
-  ingestion is upsert-by-key and the watermark is written last);
+  ingestion is upsert-by-key and the watermark is written last); a cursor
+  the add-on already gave in the same collection (A, B, A) stops it,
+  keeping the watermark;
   `taken_at` and `watermark` from the first page. `taken_at` is when the
   add-on's collector last read the app, not when it answered Syndra. No
   `current`: the watermark says what is final.
@@ -1280,8 +1286,10 @@ in the totals". No local name crosses the wire for an unbound account.
   a `subject` that has **no binding on this target** is dropped and counted
   (an add-on cannot write usage onto an arbitrary member's page); a point
   with `subject` on a metric not `per_subject` is dropped; a dimension value
-  equal to a bound subject's id, account name or `account_id` is dropped and
-  logged (display names wait for a cheap source, ruling B7); so is a point
+  or a gap `reason` that contains a bound subject's id, account name or
+  `account_id`, compared case-insensitively, is dropped and counted
+  `person_in_dimension` (one rule for both; display names wait for a cheap
+  source, ruling B7); so is a point
   that is not one makerspace day, or has no value or a negative one. Each
   is counted by reason on the metric's row.
 - **A metric is never re-purposed**: a manifest that changes an existing
@@ -1294,7 +1302,9 @@ in the totals". No local name crosses the wire for an unbound account.
   total they would anonymise into is required to exist as its own point
   (§9.3). A point older than its retention arriving late is dropped at
   ingestion. Gaps follow the points they cover: kept with the totals, five
-  years. An operator may shorten the per-person retention of one target
+  years. The nightly retention runs whether or not anything is collected
+  (`STATS_COLLECTION_ENABLED` gates collection only, and a backend with no
+  add-on registered still prunes what it holds). An operator may shorten the per-person retention of one target
   (1 to 400 days, the column's CHECK the ceiling's one place) and never the
   totals' (ruling O4, 12 Nov 2026: 400 days is the privacy ceiling on
   personal data, five years the history of a resource that names nobody,
@@ -1358,8 +1368,11 @@ this contract carries.
   (ruling O4).
 - **Declared or refused** (§9.6 content validation): a `subject` with no
   binding on this target, a `subject` on a metric not `per_subject`, a
-  dimension value that names a person: dropped, counted, logged, and the
-  kit warns. Dimensions are resources, never people.
+  dimension value or gap reason that names a person: dropped, counted,
+  logged, and the kit warns. Dimensions are resources, never people. A
+  person's page carries only the gaps over the whole metric (`{}`) or over
+  one of that person's own series, never a gap on a resource only somebody
+  else used.
 - **Add-on text is quoted, never trusted**: `label`, `reason`, `note` and
   raw `x-` content are rendered as escaped, length-capped quoted text; the
   copy guard runs on Syndra's own sentences around them, not on what an
