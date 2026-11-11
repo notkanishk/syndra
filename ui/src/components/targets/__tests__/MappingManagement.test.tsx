@@ -382,7 +382,7 @@ describe("a mapping on a membership the system cannot list", () => {
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     await waitFor(() => expect(screen.getByText(/TrueNAS doesn't list its groups/)).toBeTruthy());
-    expect(screen.getByText(/ask whoever maintains the TrueNAS add-on/)).toBeTruthy();
+    expect(screen.getByText(/ask whoever maintains the TrueNAS add-on/i)).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/Change what it says above/);
     expect(document.body.textContent).not.toMatch(/addon:/);
   });
