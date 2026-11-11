@@ -78,6 +78,7 @@ type Addon struct {
 
 	manifest  *Manifest
 	ops       []EffectiveOperation
+	metrics   []Metric // the manifest's metrics acceptMetrics kept (feature stats)
 	fetchedAt time.Time
 	lastErr   error
 
@@ -409,8 +410,22 @@ func Refresh(ctx context.Context, target string) error {
 	if err := m.validate(); err != nil {
 		return refuseManifest(a, target, err)
 	}
+	// A metric is never re-purposed either (design §9.6): a changed
+	// instrument or unit refuses the manifest. Checked before the role map is
+	// written and the descriptors saved after it, so a refused manifest
+	// leaves no descriptor behind.
+	metrics, err := acceptMetrics(ctx, target, m)
+	if err != nil {
+		return refuseManifest(a, target, err)
+	}
 	if err := acceptRoles(ctx, target, m); err != nil {
 		return refuseManifest(a, target, err)
+	}
+	if err := saveMetrics(ctx, target, metrics); err != nil {
+		// Statistics wait for the next refresh; nothing else does. A metric
+		// is collected only once its meaning is stored.
+		log.Printf("[STATS] %s's metrics could not be stored, so none is collected yet: %v", target, err)
+		metrics = nil
 	}
 
 	ops, unknown := resolveOperations(m)
@@ -432,6 +447,7 @@ func Refresh(ctx context.Context, target string) error {
 	}
 	a.manifest = &m
 	a.ops = ops
+	a.metrics = metrics
 	a.fetchedAt = timeNow().UTC()
 	a.lastErr = nil
 	registryMu.Unlock()
@@ -922,16 +938,16 @@ func decodeManifest(body []byte) (Manifest, error) {
 }
 
 // manifestKeys is every manifest key this backend knows, by object. A key
-// listed with nil is known and not looked inside: metrics and stats_zone are
-// feature stats, which this backend does not read yet.
+// listed with nil is known and not looked inside.
 var manifestKeys = keySpec{
 	"contract_version": nil, "product": nil, "product_version": nil, "kind": nil, "features": nil,
 	"entitlement_schema": {"name": nil, "role": nil, "label": nil, "unit": nil, "combine": nil, "unlimited": nil, "per_person": nil},
 	"operations":         {"id": nil, "scope": nil, "confirm": nil, "secret_params": nil, "available": nil, "unavailable_reason": nil, "params": nil},
 	"connection":         {"protocol": nil, "host": nil},
 	"limits":             {"subjects_per_plan": nil, "fresh_read_cooldown": nil, "stats_buffer": nil},
-	"metrics":            nil,
-	"stats_zone":         nil,
+	"metrics": {"name": nil, "instrument": nil, "unit": nil, "label": nil, "per_subject": nil,
+		"dimensions": {"name": nil, "label": nil}, "against": nil},
+	"stats_zone": nil,
 }
 
 type keySpec map[string]keySpec

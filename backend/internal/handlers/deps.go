@@ -584,15 +584,23 @@ var (
 	dbReleaseMergeDecision    = db.ReleaseMergeDecision
 	// The roles a subject actually holds, for scoping a policy hint to the
 	// mappings that produce THEIR value rather than every mapping on the field.
-	svcHeldRoles             = services.HeldRoles
-	dbCountMergeFindings     = db.CountStandingMergeFindings
-	dbGetLogAnchor           = db.GetLogAnchor
-	dbTargetProject          = db.TargetProject
-	dbTargetProjects         = db.TargetProjects
-	dbRequireTargetProject   = db.RequireTargetProject
-	dbSetTargetProject       = db.SetTargetProject
-	dbTargetName             = db.TargetName
-	dbSetTargetName          = db.SetTargetName
+	svcHeldRoles           = services.HeldRoles
+	dbCountMergeFindings   = db.CountStandingMergeFindings
+	dbGetLogAnchor         = db.GetLogAnchor
+	dbTargetProject        = db.TargetProject
+	dbTargetProjects       = db.TargetProjects
+	dbRequireTargetProject = db.RequireTargetProject
+	dbSetTargetProject     = db.SetTargetProject
+	dbTargetName           = db.TargetName
+	dbSetTargetName        = db.SetTargetName
+	// Statistics (feature stats): stored meanings, points, gaps, retention.
+	dbStatsMetrics           = db.StatsMetrics
+	dbStatsDays              = db.StatsDays
+	dbStatsMonths            = db.StatsMonths
+	dbStatsGaps              = db.StatsGaps
+	dbStatsDistributions     = db.StatsDistributions
+	dbStatsRetention         = db.StatsRetention
+	dbSetStatsRetention      = db.SetStatsRetention
 	resolveMappingProject    = mappingProject
 	svcConvergeProjectChange = services.ConvergeProjectChange
 	svcConvergeSubjectOn     = services.ConvergeSubjectOn

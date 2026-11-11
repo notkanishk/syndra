@@ -32,8 +32,7 @@ the repository root. Code is cited by symbol (`decide` in
 `freshness` ([Fresh reads](#fresh-reads-feature-freshness)) and `calls`
 ([Physical operations](#physical-operations-and-get-callscall_id-feature-calls))
 included. `stats` ([Statistics](#statistics-get-stats-feature-stats)) is
-served by both add-ons and not yet collected by Syndra, which ignores it
-until its collector ships. Apps nobody has built an add-on for are in
+served by both add-ons and collected by Syndra hourly. Apps nobody has built an add-on for are in
 [the appendix](#appendix-designed-not-yet-served-by-syndra); what may be
 declared is in [chapter 3](#3-the-manifest-get-capabilities).
 
@@ -1278,9 +1277,8 @@ reply is `v2/fixtures/settings.json`.
 
 Schema: `v2/schema/stats.json`; the manifest's `metrics[]`, `stats_zone`
 and `limits.stats_buffer` are in `v2/fixtures/manifest.json`. The TrueNAS
-add-on and the reference serve it. Syndra does not collect it yet: until its
-collector ships it ignores `metrics` and never calls `/stats`, so declaring
-the feature changes nothing on Syndra's side today.
+add-on and the reference serve it, and Syndra collects it (`Collect` in
+`backend/internal/services/stats/collect.go`).
 
 Syndra keeps aggregates and never copies records. A number over time ("laser
 minutes per day") travels here and is kept; a list of things with ids (what
@@ -1516,15 +1514,28 @@ record everyone a gap rather than a zero:
 }
 ```
 
-**What Syndra will do with it.** Once its collector ships: collect hourly,
-per metric, since that metric's stored watermark, and write the watermark
-last, after the final page; upsert points by key and replace the
-provisional window; drop and count a point for a subject with no binding on
-your app, a `subject` on a metric that is not `per_subject`, and anything
-beyond `constants.series_per_metric` dimension sets; keep totals five years
-and per-person points 400 days. Admins see the totals and each person's
-numbers; a member sees their own. The kit's `stats.*` checks hold every MUST
-above that a black box can see.
+**What Syndra does with it.** At registration it keeps each metric's
+descriptor for good (`acceptMetrics` in `backend/internal/addons/stats.go`):
+a stored metric declared with another `instrument` or `unit` refuses your
+manifest, and a descriptor that breaks a rule (a unit outside the registry,
+more than four dimensions, an `against` that is not a same-unit limit of a
+per-person gauge with no dimensions, the 51st metric) is dropped alone and
+logged once. A `stats_zone` other than Syndra's own zone drops the feature:
+Syndra never rebuckets a day. Then, hourly, one metric at a time: it asks
+`/stats` since that metric's stored watermark (the first time, now minus
+your `limits.stats_buffer`), page by page, never with `fresh`; in one
+transaction it deletes what it held after the watermark, upserts every page
+by key, and writes the watermark last, floored to a midnight and never past
+the start of today. A page that fails rolls the whole collection back and
+the next run asks again from the same watermark. It drops and counts a point
+that is not one makerspace day, has no value or a negative one, names a
+subject with no binding on your app, carries a `subject` on a metric that is
+not `per_subject`, names an undeclared dimension or a bound person in a
+dimension value, is older than retention, or starts a series beyond
+`constants.series_per_metric`. Per-person points are kept 400 days (an
+operator may shorten that per system), totals and gaps five years. Admins
+see the totals and each person's numbers; a member sees their own. The
+kit's `stats.*` checks hold every MUST above that a black box can see.
 
 ## 5. Plan and apply agree
 

@@ -293,7 +293,7 @@ func TestLiveAnUnclaimedRowIsUnsettledOnThePageAndRefusesTheNext(t *testing.T) {
 
 // 000092 runs down and up on the real engine: down folds no_change into
 // succeeded and restores the narrower CHECK, up widens it again. Left where
-// it began.
+// it began (a later migration is taken down with it and brought back).
 func TestLiveMigration92RunsDownAndUp(t *testing.T) {
 	ctx := physicalLive(t)
 	var version int64
@@ -301,8 +301,8 @@ func TestLiveMigration92RunsDownAndUp(t *testing.T) {
 	if err := PG.QueryRow(ctx, `SELECT version, dirty FROM schema_migrations`).Scan(&version, &dirty); err != nil {
 		t.Fatal(err)
 	}
-	if version != 92 || dirty {
-		t.Skipf("the test database is at %d (dirty %t), not this branch's 92", version, dirty)
+	if version < 92 || dirty {
+		t.Skipf("the test database is at %d (dirty %t), before this branch's 92", version, dirty)
 	}
 	config, err := pgxpool.ParseConfig(os.Getenv("SYNDRA_TEST_DATABASE_URL"))
 	if err != nil {
@@ -317,13 +317,13 @@ func TestLiveMigration92RunsDownAndUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if v, _, _ := m.Version(); v != 92 {
-			_ = m.Migrate(92)
+		if v, _, _ := m.Version(); v != uint(version) {
+			_ = m.Migrate(uint(version))
 		}
 	})
 
 	id := sentRow(t, ctx, "item.checkout", "u-kofi", AddonOpNoChange, 0)
-	if err := m.Steps(-1); err != nil {
+	if err := m.Migrate(91); err != nil {
 		t.Fatalf("000092 down: %v", err)
 	}
 	var status string
@@ -333,7 +333,7 @@ func TestLiveMigration92RunsDownAndUp(t *testing.T) {
 	if _, err := PG.Exec(ctx, `UPDATE addon_operations SET status = 'no_change' WHERE id = $1`, id); err == nil {
 		t.Error("after down the CHECK still accepts no_change")
 	}
-	if err := m.Steps(1); err != nil {
+	if err := m.Migrate(92); err != nil {
 		t.Fatalf("000092 up: %v", err)
 	}
 	if _, err := PG.Exec(ctx, `UPDATE addon_operations SET status = 'no_change' WHERE id = $1`, id); err != nil {

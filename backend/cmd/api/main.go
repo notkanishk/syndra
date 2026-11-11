@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -32,6 +33,7 @@ import (
 	"syndra/internal/services/expiry"
 	"syndra/internal/services/periodic"
 	"syndra/internal/services/propagation"
+	"syndra/internal/services/stats"
 	"syndra/internal/zitadel"
 )
 
@@ -493,6 +495,25 @@ func main() {
 		}(reconcileSched)
 	}
 
+	// Statistics (addon-contract 6.6, 6.7): each add-on's declared metrics
+	// collected hourly, each from its own watermark and in its own
+	// transaction, and the nightly retention. Runners beside the reconcile,
+	// never steps inside it: a slow /stats must not delay convergence, and a
+	// failed collection is not a failed reconcile. Collection starts once the
+	// manifests are in (a metric is collected only once accepted);
+	// STATS_COLLECTION_ENABLED=false stops both, for a kit run against a
+	// target this backend also reads.
+	var statsSched, statsPruneSched *periodic.Runner
+	if len(addons.Registered()) > 0 && statsCollectionEnabled() {
+		statsSched = periodic.New("ADDON-STATS", time.Hour, time.Hour, stats.CollectAll)
+		statsPruneSched = periodic.New("STATS-RETENTION", 24*time.Hour, 24*time.Hour, stats.Prune)
+		go func(r *periodic.Runner) {
+			awaitFirstManifests(ctx)
+			r.Start(ctx)
+		}(statsSched)
+		go statsPruneSched.Start(ctx)
+	}
+
 	// Add-on manifest refresh: reads each registered add-on's /capabilities,
 	// checks the contract version, and resolves the effective operation set
 	// against backend policy. Registration alone makes nothing callable — this
@@ -705,6 +726,17 @@ func main() {
 		}
 	}
 
+	for _, r := range []*periodic.Runner{statsSched, statsPruneSched} {
+		if r == nil {
+			continue
+		}
+		select {
+		case <-r.Done():
+		case <-shutdownCtx.Done():
+			log.Println("[STATS] Shutdown deadline exceeded waiting for a collection; closing anyway")
+		}
+	}
+
 	if addonSched != nil {
 		select {
 		case <-addonSched.Done():
@@ -807,6 +839,17 @@ func schedulerBatchSize() int {
 		return 500
 	}
 	return n
+}
+
+// statsCollectionEnabled is STATS_COLLECTION_ENABLED, on unless it says
+// otherwise.
+func statsCollectionEnabled() bool {
+	b, err := strconv.ParseBool(cmp.Or(os.Getenv("STATS_COLLECTION_ENABLED"), "true"))
+	if err != nil {
+		log.Printf("[STATS] Invalid STATS_COLLECTION_ENABLED=%q, defaulting to enabled", os.Getenv("STATS_COLLECTION_ENABLED"))
+		return true
+	}
+	return b
 }
 
 func driftSchedulerEnabled() bool {

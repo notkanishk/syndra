@@ -2,6 +2,7 @@ package addons
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"os"
 	"slices"
@@ -18,6 +19,14 @@ var memRoles = struct {
 	byTarget map[string]db.FieldRoleMap
 }{byTarget: map[string]db.FieldRoleMap{}}
 
+// memMetrics stands in for addon_metrics: the stored descriptors by target,
+// and how many times they were written.
+var memMetrics = struct {
+	sync.Mutex
+	byTarget map[string]map[string]json.RawMessage
+	saves    int
+}{byTarget: map[string]map[string]json.RawMessage{}}
+
 func TestMain(m *testing.M) {
 	dbTargetFieldRoles = func(_ context.Context, target string) (db.FieldRoleMap, bool, error) {
 		memRoles.Lock()
@@ -29,6 +38,21 @@ func TestMain(m *testing.M) {
 		memRoles.Lock()
 		defer memRoles.Unlock()
 		memRoles.byTarget[target] = db.FieldRoleMap{Roles: maps.Clone(m.Roles), Retired: slices.Clone(m.Retired)}
+		return nil
+	}
+	dbStatsDescriptors = func(_ context.Context, target string) (map[string]json.RawMessage, error) {
+		memMetrics.Lock()
+		defer memMetrics.Unlock()
+		return maps.Clone(memMetrics.byTarget[target]), nil
+	}
+	dbSaveStatsDescriptors = func(_ context.Context, target string, d map[string]json.RawMessage) error {
+		memMetrics.Lock()
+		defer memMetrics.Unlock()
+		if memMetrics.byTarget[target] == nil {
+			memMetrics.byTarget[target] = map[string]json.RawMessage{}
+		}
+		maps.Copy(memMetrics.byTarget[target], d)
+		memMetrics.saves++
 		return nil
 	}
 	// No background manifest read races a test: the one test about the
