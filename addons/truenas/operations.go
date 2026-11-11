@@ -199,17 +199,22 @@ func opCaller(name string, req OperationRequest) caller {
 
 // failedWrite is what a failed write call reports: ErrNotSent when the call
 // never left this add-on, so the reply can say nothing happened, errNotLogged
-// when its intent never reached the disk, and otherwise
-// the sentence. Never the error's own text, which is the target's and may echo
-// what was sent.
-func failedWrite(err error, sentence string) error {
-	if errors.Is(err, ErrNotSent) {
+// when its intent never reached the disk, and otherwise a sentence about what,
+// a "credential change" or a "deletion". "Refused" only when the target
+// answered no (classifyNASError); any other failure came after the request
+// went out, so the sentence says it may have happened. Never the error's own
+// text, which is the target's and may echo what was sent.
+func failedWrite(err error, what string) error {
+	switch {
+	case errors.Is(err, ErrNotSent):
 		return ErrNotSent
-	}
-	if errors.Is(err, errNotLogged) {
+	case errors.Is(err, errNotLogged):
 		return errNotLogged
+	case errors.Is(err, ErrTargetRefused), errors.Is(err, ErrRateLimited):
+		return fmt.Errorf("the target refused the %s", what)
+	default:
+		return fmt.Errorf("no answer from the target could be read, so the %s may or may not have happened", what)
 	}
-	return errors.New(sentence)
 }
 
 // declaredOperation is an id this add-on's manifest declares (operationSet).
@@ -324,7 +329,7 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 		// never reaches here at all. That guarantee is pinned where it lives,
 		// on `NAS.call`; this is only the difference between a readable failure
 		// and "user.update: the target refused the call".
-		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the credential change")
+		return OperationResult{}, statusFor(err), failedWrite(err, "credential change")
 	}
 	return OperationResult{
 		Operation: "password.set", Subject: req.Subject, Outcome: "succeeded",
@@ -413,8 +418,10 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 	}
 	if err := s.mutate(opCaller("account.release", req), "store.unbind", func() error {
 		return s.store.DeleteBinding(req.Subject)
-	}); err != nil {
-		return OperationResult{}, http.StatusInternalServerError, failedWrite(err, "the binding could not be released")
+	}); errors.Is(err, errNotLogged) {
+		return OperationResult{}, http.StatusInternalServerError, errNotLogged
+	} else if err != nil {
+		return OperationResult{}, http.StatusInternalServerError, errors.New("the binding could not be released")
 	}
 	return OperationResult{
 		Operation: "account.release", Subject: req.Subject, Outcome: "succeeded",
@@ -448,7 +455,7 @@ func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, err
 	// during one would be the opposite of what it is for.
 	if err := s.send(opCaller("password.rotate", req), "user.update", []any{id,
 		map[string]any{"password": minted, "password_disabled": false}}, nil); err != nil {
-		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the rotation")
+		return OperationResult{}, statusFor(err), failedWrite(err, "rotation")
 	}
 	return OperationResult{
 		Operation: "password.rotate", Subject: req.Subject, Outcome: "succeeded", Rotated: true,
@@ -524,7 +531,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	if err := s.mutate(opCaller("account.purge", req), "user.delete", func() error {
 		return callOnce(client, "user.delete", []any{id}, nil)
 	}); err != nil {
-		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the deletion")
+		return OperationResult{}, statusFor(err), failedWrite(err, "deletion")
 	}
 	// The binding goes with the account. Leaving it would leave this add-on
 	// claiming an account that no longer exists, and the next apply takes the
@@ -532,7 +539,9 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// that path exists for an account deleted BEHIND our back. A purge is not
 	// that: we deleted it, on purpose, and it must not resurrect itself.
 	detail := "Deleted " + binding.Username + "."
-	if err := s.store.DeleteBinding(req.Subject); err != nil {
+	if err := s.mutate(opCaller("account.purge", req), "store.unbind", func() error {
+		return s.store.DeleteBinding(req.Subject)
+	}); err != nil {
 		logStoreFailure("binding", req.Subject, err)
 		// Still succeeded, the account is gone; but the leftover is said, so it
 		// is not discovered as an account that re-creates itself.

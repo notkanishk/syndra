@@ -37,7 +37,7 @@ const (
 // change it describes, as a database journals (5.3b): an intent record,
 // fsynced, before each write (server.mutate), and a result record after it. An
 // intent with no result is a write in doubt: the add-on stopped between the
-// two (InDoubt).
+// two (InDoubt), and the next start settles it unknown (Recover).
 //
 // The chain is worth a few lines because it buys real tamper evidence: an entry
 // cannot be altered, and no entry can be removed from the middle, without
@@ -132,6 +132,12 @@ type MutationLog struct {
 	// a record, and Append must say so rather than reporting a completion whose
 	// evidence never landed.
 	sync func() error
+	// syncDir makes the directory's entries durable (the package's syncDir),
+	// injectable for the same reason. dirDirty says a rotation renamed or
+	// created an entry that is not durable yet: the next Append syncs the
+	// directory before it writes, and fails if it cannot, until one holds.
+	syncDir  func() error
+	dirDirty bool
 }
 
 const (
@@ -158,7 +164,6 @@ func OpenMutationLog(dir string, maxBytes int64, keep int) (*MutationLog, error)
 	l := &MutationLog{dir: dir, maxBytes: maxBytes, keep: keep, now: time.Now}
 
 	path := filepath.Join(dir, logFileName)
-	_, statErr := os.Stat(path)
 	// 0600: the log names who did what to whom, and the volume it sits on is
 	// shared with whatever else the container mounts.
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
@@ -167,13 +172,13 @@ func OpenMutationLog(dir string, maxBytes int64, keep int) (*MutationLog, error)
 	}
 	l.file = f
 	l.sync = f.Sync
-	if os.IsNotExist(statErr) {
-		// A file's fsync makes its bytes durable, not its name: the directory
-		// entry of a file just created is durable only once the directory is.
-		if err := syncDir(dir); err != nil {
-			f.Close()
-			return nil, err
-		}
+	l.syncDir = func() error { return syncDir(dir) }
+	// A file's fsync makes its bytes durable, not its name. On every open, not
+	// only a create: the file may have been created, or a rotation renamed,
+	// by a run that stopped before its own directory sync held.
+	if err := l.syncDir(); err != nil {
+		f.Close()
+		return nil, err
 	}
 
 	// Before anything is appended: a crash mid-line leaves bytes that the next
@@ -324,6 +329,14 @@ func (l *MutationLog) Append(r Record) (Record, error) {
 	if err := l.rotateIfNeededLocked(); err != nil {
 		return Record{}, err
 	}
+	if l.dirDirty {
+		// The rotation's names first: a record is not written into a file
+		// whose name a crash could still lose.
+		if err := l.syncDir(); err != nil {
+			return Record{}, err
+		}
+		l.dirDirty = false
+	}
 
 	r.Seq, r.At, r.Prev = l.seq+1, l.now().UTC().Format(time.RFC3339Nano), l.head
 	r.Digest = r.digestOf()
@@ -426,11 +439,10 @@ func (l *MutationLog) rotateIfNeededLocked() error {
 		return fmt.Errorf("reopen mutation log: %w", err)
 	}
 	l.file, l.size, l.sync = f, 0, f.Sync
-	// The rename and the new file are directory entries: durable with the
-	// directory, or a crash could lose the rotated segment's name.
-	if err := syncDir(l.dir); err != nil {
-		return err
-	}
+	// The rename, the new file and the pruned segments are directory
+	// entries: durable only with the directory, which Append syncs next, and
+	// retries on every append after until it holds.
+	l.dirDirty = true
 	return l.pruneLocked()
 }
 
@@ -454,10 +466,7 @@ func (l *MutationLog) pruneLocked() error {
 }
 
 // InDoubt is every intent with no result, oldest first: a write the add-on
-// may or may not have made, because it stopped between the two records. Read
-// once at start and said loudly (main.go); the records stay as they are, for
-// a person. Syndra already holds the same call as unconfirmed, since its reply
-// never came, and re-plans before it re-sends.
+// may or may not have made, because it stopped between the two records.
 //
 // ponytail: reads every segment, up to keep × maxBytes (~192MB by default),
 // once per start; a checkpoint of open intents is the upgrade if that is slow.
@@ -489,9 +498,32 @@ func (l *MutationLog) InDoubt() ([]Record, error) {
 	return out, nil
 }
 
+// Recover settles every write in doubt, as a write-ahead log is recovered at
+// start: each intent with no result gets one, unknown, because whether it
+// landed is read on the NAS, not here. It returns the intents it settled, for
+// main to say once. Settled, they are not in doubt again, so a second start
+// appends nothing and the head and count only move forward. Syndra already
+// holds the same calls as unconfirmed, since their replies never came, and
+// re-plans before it re-sends.
+func (l *MutationLog) Recover() ([]Record, error) {
+	open, err := l.InDoubt()
+	if err != nil {
+		return nil, err
+	}
+	for i, intent := range open {
+		result := intent
+		result.Intent, result.Outcome = intent.Seq, outcomeUnknown
+		if _, err := l.Append(result); err != nil {
+			return open[:i], err
+		}
+	}
+	return open, nil
+}
+
 // syncDir makes a directory's entries durable: a created or renamed file's
-// name, which the file's own fsync does not cover.
-func syncDir(dir string) error {
+// name, which the file's own fsync does not cover. A variable so a test can
+// make it fail at open, before a log exists to inject into.
+var syncDir = func(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
 		return fmt.Errorf("open log dir: %w", err)

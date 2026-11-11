@@ -8,11 +8,15 @@ import (
 	"go/parser"
 	"go/token"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gorilla/websocket"
+	truenas "github.com/truenas/api_client_golang/truenas_api"
 )
 
 // The mutation log is written ahead of every write (5.3b): an intent, fsynced,
@@ -313,8 +317,9 @@ func TestNoSecretIsInAnyIntentOrResult(t *testing.T) {
 	postOperation(t, s, "account.purge", `{"call_id":"c3","subject":"sub-1","params":{"elevated_key":"`+elevated+`"}}`)
 
 	all := records(t, s)
-	if len(all) != 6 || minted == "" {
-		t.Fatalf("want an intent and a result for each of three writes, got %d records (minted %t)", len(all), minted != "")
+	// Four writes: the set, the rotation, the delete and the purge's unbind.
+	if len(all) != 8 || minted == "" {
+		t.Fatalf("want an intent and a result for each of four writes, got %d records (minted %t)", len(all), minted != "")
 	}
 	raw, _ := os.ReadFile(mutationLogPath(t, s))
 	for _, secret := range []string{theSecret, minted, elevated} {
@@ -341,8 +346,12 @@ func TestTheReadPathRefusesAWrite(t *testing.T) {
 // with the one function allowed to take it: a NAS write only from send, the
 // purge's own session only inside a mutate, and the raw client only from the
 // three places that already hold to the rule (invoke under call and sendWrite,
-// the ping, and callOnce).
+// the ping, and callOnce). And every change to the store's bindings or
+// settings is made only inside a mutate, whatever asked for it.
 func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
+	inMutateOnly := map[string]bool{
+		"callOnce": true, "PutBinding": true, "BindIfFree": true, "DeleteBinding": true, "PutSetting": true,
+	}
 	allowed := map[string][]string{
 		"sendWrite": {"send"},
 		"roundTrip": {"call", "sendWrite"},
@@ -369,7 +378,7 @@ func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
 				continue
 			}
 			// The function literals passed to mutate: the only place callOnce
-			// may run.
+			// and a store write may run.
 			inMutate := map[*ast.FuncLit]bool{}
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
 				if call, ok := n.(*ast.CallExpr); ok && calleeName(call) == "mutate" {
@@ -393,15 +402,11 @@ func TestEveryNASWriteGoesThroughTheSeam(t *testing.T) {
 					return true
 				}
 				callee := calleeName(call)
-				places, guarded := allowed[callee]
-				if !guarded {
-					return true
-				}
-				if !slices.Contains(places, fn.Name.Name) {
+				if places, guarded := allowed[callee]; guarded && !slices.Contains(places, fn.Name.Name) {
 					t.Errorf("%s: %s calls %s; only %v may", fset.Position(call.Pos()), fn.Name.Name, callee, places)
 				}
-				if callee == "callOnce" && !enclosedBy(stack, inMutate) {
-					t.Errorf("%s: callOnce outside a mutate sends a write with no intent", fset.Position(call.Pos()))
+				if inMutateOnly[callee] && !enclosedBy(stack, inMutate) {
+					t.Errorf("%s: %s outside a mutate is a write with no intent", fset.Position(call.Pos()), callee)
 				}
 				return true
 			})
@@ -429,30 +434,227 @@ func enclosedBy(stack []ast.Node, lits map[*ast.FuncLit]bool) bool {
 }
 
 // An intent with no result is in doubt; one with a result is not, wherever a
-// rotation put the two.
-func TestAnIntentWithNoResultIsInDoubt(t *testing.T) {
+// rotation put the two. A start settles each one with an unknown result, once:
+// a second start appends nothing, and the head and count only move forward.
+func TestAStartSettlesEveryWriteInDoubtOnce(t *testing.T) {
 	dir := t.TempDir()
 	l, err := OpenMutationLog(dir, 1, 4) // rotates before every append
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer l.Close()
 	settled, _ := l.Append(Record{Operation: "apply", Subject: "sub-rey", CallID: "c1", Write: "user.update", Outcome: outcomeIntent})
 	if _, err := l.Append(Record{Operation: "apply", Subject: "sub-rey", CallID: "c1", Write: "user.update", Intent: settled.Seq, Outcome: outcomeSucceeded}); err != nil {
 		t.Fatal(err)
 	}
-	open, _ := l.Append(Record{Operation: "apply", Subject: "sub-becky", CallID: "c2", Write: "user.create", Outcome: outcomeIntent})
+	open, _ := l.Append(Record{Operation: "apply", Subject: "sub-becky", Actor: "op_lita", CallID: "c2", Write: "user.create", Outcome: outcomeIntent})
+	l.Close()
 
-	reopened, err := OpenMutationLog(dir, 1, 4)
+	start := func() ([]Record, string, uint64) {
+		t.Helper()
+		l, err := OpenMutationLog(dir, 1, 4)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
+		recovered, err := l.Recover()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doubt, err := l.InDoubt(); err != nil || len(doubt) != 0 {
+			t.Fatalf("nothing may be in doubt after a start, got %+v %v", doubt, err)
+		}
+		head, count := l.Head()
+		return recovered, head, count
+	}
+
+	recovered, head, count := start()
+	if len(recovered) != 1 || recovered[0].Seq != open.Seq || recovered[0].Write != "user.create" {
+		t.Fatalf("want only the unsettled create recovered, got %+v", recovered)
+	}
+	if count != open.Seq+1 {
+		t.Fatalf("want one result appended, got %d records", count)
+	}
+	var last Record
+	if err := eachRecord(filepath.Join(dir, logFileName), func(r Record) { last = r }); err != nil {
+		t.Fatal(err)
+	}
+	if last.Intent != open.Seq || last.Outcome != outcomeUnknown || last.Write != "user.create" ||
+		last.CallID != "c2" || last.Actor != "op_lita" {
+		t.Fatalf("want an unknown result settling the create, got %+v", last)
+	}
+
+	again, head2, count2 := start()
+	if len(again) != 0 || head2 != head || count2 != count {
+		t.Fatalf("a second start must append nothing, got %+v %d (was %d)", again, count2, count)
+	}
+	if err := VerifyLog(dir); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Recovered before anything is served: the server is built, and listens, only
+// after. A source guard, because the ordering is the contract.
+func TestRecoveryPrecedesServing(t *testing.T) {
+	src, err := os.ReadFile("main.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reopened.Close()
-	doubt, err := reopened.InDoubt()
+	body := string(src)
+	run := strings.Index(body, "func run() error {")
+	recoverAt := strings.Index(body, "recoverInDoubt(mlog)")
+	serverAt := strings.Index(body, "srv := &server{")
+	if run < 0 || recoverAt < run || serverAt < 0 || recoverAt > serverAt {
+		t.Fatal("run must recover the mutation log before it builds the server")
+	}
+}
+
+// silentNAS is a WebSocket endpoint that takes every request and never
+// answers: the real client against it produces its own timeout, word for word.
+func silentNAS(t *testing.T) *truenas.Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c, err := truenas.NewClient("ws"+strings.TrimPrefix(srv.URL, "http"), false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(doubt) != 1 || doubt[0].Seq != open.Seq || doubt[0].Write != "user.create" {
-		t.Fatalf("want only the unsettled create in doubt, got %+v", doubt)
+	t.Cleanup(func() { _ = c.Close() })
+	return c
+}
+
+// oneSecond hands the client a one-second timeout, so its "call timed out"
+// arrives in a test's time rather than callTimeoutSeconds.
+type oneSecond struct{ *truenas.Client }
+
+func (c oneSecond) Call(method string, _ int64, params any) (json.RawMessage, error) {
+	return c.Client.Call(method, 1, params)
+}
+
+// writesToTheWire answers reads from the fake and sends writes down the wire.
+type writesToTheWire struct {
+	rpc
+	wire rpc
+}
+
+func (w writesToTheWire) Call(method string, timeout int64, params any) (json.RawMessage, error) {
+	if readMethods[method] {
+		return w.rpc.Call(method, timeout, params)
 	}
+	return w.wire.Call(method, timeout, params)
+}
+
+// A write the real client timed out on was sent and never answered: it may
+// have landed. Its result is unknown and its reply says "may have", never
+// failed and never "refused", on the shared session and the purge's own alike.
+func TestATimedOutWriteIsUnknownNeverRefused(t *testing.T) {
+	for _, tc := range []struct {
+		op, body string
+		rig      func(*server, *mutatingRPC, rpc)
+	}{
+		{"password.set", `{"call_id":"c1","subject":"sub-1","params":{"password":"` + theSecret + `"}}`,
+			func(s *server, m *mutatingRPC, wire rpc) {
+				watched(t, s, writesToTheWire{rpc: m, wire: wire})
+			}},
+		{"account.purge", `{"call_id":"c1","subject":"sub-1","params":{"elevated_key":"k"}}`,
+			func(s *server, _ *mutatingRPC, wire rpc) {
+				s.elevated = func(string) (rpc, error) { return wire, nil }
+			}},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			s, m := opServer(t)
+			tc.rig(s, m, oneSecond{silentNAS(t)})
+			rr := postOperation(t, s, tc.op, tc.body)
+			if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeOperationFailed {
+				t.Fatalf("want 503 OPERATION_FAILED, got %d %s", rr.Code, rr.Body.String())
+			}
+			if body := rr.Body.String(); strings.Contains(body, "refused") || !strings.Contains(body, "may or may not have happened") {
+				t.Errorf("the reply must say the write may have happened, not that it was refused: %s", body)
+			}
+			all := records(t, s)
+			if last := all[len(all)-1]; last.Outcome != outcomeUnknown {
+				t.Errorf("a timed-out write must be recorded unknown, got %+v", last)
+			}
+		})
+	}
+}
+
+// Every failure the client can hand back without an answer is unreachable,
+// in its own words; only an answer is a refusal.
+func TestOnlyAnAnswerIsARefusal(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want error
+	}{
+		{errors.New("call timed out"), ErrTargetUnreachable},
+		{errors.New("failed to send call: websocket: close sent"), ErrTargetUnreachable},
+		{errors.New("unexpected ping response format"), ErrTargetUnreachable},
+		{errors.New("login error: map[message:Rate Limit Exceeded]"), ErrRateLimited},
+		{&rpcError{Code: -32001, Message: "[EINVAL] nope"}, ErrTargetRefused},
+		{&rpcError{Code: -32001, Message: "Too many requests"}, ErrRateLimited},
+	} {
+		if got := classifyNASError(tc.err); got != tc.want {
+			t.Errorf("%v: want %v, got %v", tc.err, tc.want, got)
+		}
+	}
+}
+
+// intentWrites is the write each intent in the log names, in order.
+func intentWrites(t *testing.T, s *server) []string {
+	var out []string
+	for _, r := range records(t, s) {
+		if r.Outcome == outcomeIntent {
+			out = append(out, r.Write)
+		}
+	}
+	return out
+}
+
+// Every change to the bindings is in the log beside the NAS writes it goes
+// with: the create's bind, the purge's unbind, a wanted SMB state. A write
+// that would change nothing is not made, so it adds nothing.
+func TestEveryBindingChangeIsInTheLog(t *testing.T) {
+	t.Run("create", func(t *testing.T) {
+		s, _ := applyServer(t, `[]`)
+		if rr := postApply(t, s, `{"call_id":"c1","subject":"sub-9","email":"becky@example.org","desired":{"group":["lab_makers"],"enabled":true}}`); rr.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d %s", rr.Code, rr.Body.String())
+		}
+		if got := strings.Join(intentWrites(t, s), ","); got != "group.create,user.create,store.bind" {
+			t.Fatalf("want the bind logged after the create, got %s", got)
+		}
+	})
+	t.Run("purge", func(t *testing.T) {
+		s, _ := opServer(t)
+		s.elevated = func(string) (rpc, error) { return &recordingRPC{onCall: func(string) {}, onClose: func() {}}, nil }
+		if rr := postOperation(t, s, "account.purge", `{"call_id":"c1","subject":"sub-1","params":{"elevated_key":"k"}}`); rr.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d %s", rr.Code, rr.Body.String())
+		}
+		if got := strings.Join(intentWrites(t, s), ","); got != "user.delete,store.unbind" {
+			t.Fatalf("want the unbind logged after the delete, got %s", got)
+		}
+		if _, bound, _ := s.store.GetBinding("sub-1"); bound {
+			t.Fatal("the binding outlived the purge")
+		}
+	})
+	t.Run("wanted SMB, once", func(t *testing.T) {
+		s, _ := opServer(t)
+		for _, id := range []string{"c1", "c2"} {
+			if rr := postApply(t, s, `{"call_id":"`+id+`","subject":"sub-1","email":"charlotte@example.org","desired":{"enabled":true,"smb_enabled":true}}`); rr.Code != http.StatusOK {
+				t.Fatalf("%s: want 200, got %d %s", id, rr.Code, rr.Body.String())
+			}
+		}
+		if got := strings.Join(intentWrites(t, s), ","); got != "store.bind" {
+			t.Fatalf("want one bind for the wanted SMB state and none for the repeat, got %s", got)
+		}
+	})
 }

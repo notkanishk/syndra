@@ -367,3 +367,64 @@ func TestARotatedSegmentVerifiesOnItsOwn(t *testing.T) {
 		}
 	}
 }
+
+// A rotation's directory sync that fails is retried before the next record is
+// written, and an append fails for as long as it cannot hold.
+func TestAFailedDirectorySyncIsRetriedByTheNextAppend(t *testing.T) {
+	dir := t.TempDir()
+	l, err := OpenMutationLog(dir, 1, 4) // rotates before every append after the first
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	rec := Record{Operation: "apply", Subject: "sub-rey", Actor: "op_lita", CallID: "c1", Outcome: outcomeSucceeded}
+	if _, err := l.Append(rec); err != nil {
+		t.Fatal(err)
+	}
+
+	l.syncDir = func() error { return errors.New("disk gone") }
+	if _, err := l.Append(rec); err == nil {
+		t.Fatal("an append after a rotation whose directory could not be synced must fail")
+	}
+	if _, err := l.Append(rec); err == nil {
+		t.Fatal("and keep failing while the directory still cannot be synced")
+	}
+	if _, count := l.Head(); count != 1 {
+		t.Fatalf("nothing may be recorded meanwhile, got %d records", count)
+	}
+
+	synced := 0
+	l.syncDir = func() error { synced++; return nil }
+	l.maxBytes = 1 << 20 // no further rotation: what syncs now is the retry
+	if _, err := l.Append(rec); err != nil {
+		t.Fatal(err)
+	}
+	if synced != 1 {
+		t.Fatalf("want the directory synced once before the record, got %d", synced)
+	}
+	if _, err := l.Append(rec); err != nil || synced != 1 {
+		t.Fatalf("a clean directory is not synced again: %d syncs, %v", synced, err)
+	}
+	if err := VerifyLog(dir); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The directory is synced on every open, an existing log's included: a run
+// that stopped before its own directory sync held left a name a crash can
+// still lose, and the log does not open on top of it.
+func TestEveryOpenSyncsTheDirectory(t *testing.T) {
+	dir := t.TempDir()
+	l, err := OpenMutationLog(dir, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Close()
+	real := syncDir
+	t.Cleanup(func() { syncDir = real })
+	syncDir = func(string) error { return errors.New("disk gone") }
+	if l, err := OpenMutationLog(dir, 0, 0); err == nil {
+		l.Close()
+		t.Fatal("an existing log must not open while its directory cannot be synced")
+	}
+}

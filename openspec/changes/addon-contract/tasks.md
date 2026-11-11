@@ -1170,21 +1170,19 @@ settings with the full §5 rules.
     and the guide only ever required at least one; the guide now says the
     TrueNAS count grows by two, and that a write the NAS refuses still
     counts.
-  - In doubt (an intent with no result): said once at start, each one, in
-    the add-on's own log (`InDoubt`, `reportInDoubt` in `main.go`), and left
-    in the log for a person. No `/health` field: a count that nothing can
-    lower would stay raised for ever, and Syndra already holds the same call
-    as unconfirmed because its reply never came. Settling one is 5.3d.
-  - The directory is fsynced when the log file is created and after a
-    rotation, so the file's name is as durable as its bytes.
-- [ ] 5.3d Settling a TrueNAS write in doubt. Today an intent with no result
-  is reported at start and left. Decide: whether the next apply for the
-  subject settles it (writing a result `unknown` → observed after its
-  read), whether `/health` carries a count once something can lower it, and
-  whether the create path adopts an unbound account of the derived name
-  under a logged `user.create` intent for that subject (design §5 allows
-  exactly that adoption; today it is `BINDING_CONFLICT` for an operator).
-  #needs-triage
+  - In doubt: settled `unknown` at start, before the server is built, said once, a second start appends nothing (`MutationLog.Recover`, `recoverInDoubt`).
+  - Directory fsynced on every open; after a rotation by the next `Append`, which fails while `dirDirty` cannot be cleared.
+  - Only an answer is a refusal: `classifyNASError` is the one classifier; a transport error (the client's "call timed out" included) is `unknown`, 503 "may or may not have happened".
+  - `failedWrite` says "refused" only for an answer; purge, set and rotation no longer claim a refusal after a timeout.
+  - Every binding change is its own `mutate` beside its NAS write (create bind, rebind, wanted SMB, purge unbind); a no-op store write is skipped; the AST guard holds store writes to `mutate` closures.
+  - The fake NAS answers a missing method with an error member, as TrueNAS does, not a transport error.
+- [ ] 5.3d Adopting the account a crashed TrueNAS create left behind.
+  Settling a write in doubt is done (5.3b: each is settled `unknown` at
+  start, so `/health` needs no count). Left: whether the create path adopts
+  an unbound account of the derived name under a logged `user.create`
+  intent for that subject whose result is `unknown` (design §5 and the
+  guide's "Look up before you create" allow exactly that adoption; today it
+  is `BINDING_CONFLICT` for an operator). #needs-triage
 - [ ] 5.3c A membership field that is not enumerable: the add-on cannot
   tell its managed set, and the drift sweep compares the whole list. No
   add-on has one yet. **Before external authors:** refuse such a field at

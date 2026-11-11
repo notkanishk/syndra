@@ -480,9 +480,10 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, so nothing was sent to it.", nil)
 	case errors.Is(err, errNotLogged):
-		// 500, which Syndra reads as "may have acted": true of the call, since a
-		// write before this one (a personal group) may have landed, and the
-		// unconfirmed change reaches a person, which a failing disk needs.
+		// 500, which Syndra reads as "may have acted". Conservative, not a
+		// claim: the write that could not be recorded was not sent, and usually
+		// nothing was; it is the one answer that puts the change in front of a
+		// person, which a failing disk needs.
 		writeError(w, http.StatusInternalServerError, CodeApplyFailed, notLoggedDetail, nil)
 	case err != nil:
 		writeError(w, status, CodeApplyFailed, err.Error(), nil)
@@ -562,11 +563,11 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 			return noAccountToSwitchOffOutcome(req.Subject), http.StatusOK, nil
 		}
 		out, status, err := s.createAndConverge(req, desired, binding)
-		s.rememberWantedSMB(req.Subject, desired, err)
+		s.rememberWantedSMB(req, desired, err)
 		return out, status, err
 	}
 	out, status, err := s.converge(req, desired, current)
-	s.rememberWantedSMB(req.Subject, desired, err)
+	s.rememberWantedSMB(req, desired, err)
 	return out, status, err
 }
 
@@ -593,19 +594,20 @@ func noAccountToSwitchOffOutcome(subject string) ApplyOutcome {
 // rememberWantedSMB keeps what this apply asked for SMB on the subject's
 // binding, so the member's first password can turn it on (see Binding.WantsSMB).
 // Best-effort: the apply already happened, and failing it over this record
-// would report a mutation as not made.
-func (s *server) rememberWantedSMB(subject string, desired desiredState, applyErr error) {
+// would report a mutation as not made. Written only when it changes, so an
+// apply that asks what the binding already says adds nothing to the log.
+func (s *server) rememberWantedSMB(req ApplyRequest, desired desiredState, applyErr error) {
 	if applyErr != nil || !desired.managed[FieldSMBEnabled] {
 		return
 	}
-	b, found, err := s.store.GetBinding(subject)
-	if err != nil || !found {
+	b, found, err := s.store.GetBinding(req.Subject)
+	if err != nil || !found || (b.WantsSMB != nil && *b.WantsSMB == desired.smbEnabled) {
 		return
 	}
 	want := desired.smbEnabled
 	b.WantsSMB = &want
-	if err := s.store.PutBinding(b); err != nil {
-		logStoreFailure("binding", subject, err)
+	if err := s.mutate(applyCaller(req), "store.bind", func() error { return s.store.PutBinding(b) }); err != nil {
+		logStoreFailure("binding", req.Subject, err)
 	}
 }
 
@@ -694,7 +696,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		if resolved.Username != binding.Username || resolved.UID != binding.UID {
 			// A rename, or a legacy binding's real uid: recorded so the next
 			// pass finds the account by name and is guarded by its uid.
-			if err := s.store.PutBinding(resolved); err != nil {
+			if err := s.mutate(applyCaller(req), "store.bind", func() error { return s.store.PutBinding(resolved) }); err != nil {
 				logStoreFailure("binding", req.Subject, err)
 			}
 		}
@@ -1119,7 +1121,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		uid = created.UID
 	}
 	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, uid, "apply"
-	if err := s.store.BindIfFree(binding); err != nil {
+	if err := s.mutate(who, "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
 		// The account exists and the record of whose it is did not land. Not a
 		// silent success: the next apply would derive the same name, find it
 		// unbound, and halt as a binding conflict — which is recoverable but
@@ -1234,9 +1236,14 @@ const notLoggedDetail = "The add-on could not write this change to its mutation 
 // mutate is the one way this add-on changes anything, on the NAS or in its
 // own store: write-ahead, as a database journals (5.3b, design §8). The
 // intent is appended and fsynced, then do runs, then its result is appended.
+// The rule: every NAS write and every change to a binding or a setting is its
+// own mutate, logged under the call that caused it, whatever that call is (an
+// apply's create binds, a purge unbinds, each beside its NAS write); a store
+// write that would change nothing is not made, so it is not logged
+// (TestEveryNASWriteGoesThroughTheSeam, TestEveryBindingChangeIsInTheLog).
 // An intent that did not land is a write that does not happen: do is never
 // called and the answer is errNotLogged. A result that does not land leaves
-// the intent open, in doubt at the next start (InDoubt); the reply still
+// the intent open, settled unknown at the next start (Recover); the reply still
 // says what happened, because the write did.
 func (s *server) mutate(c caller, write string, do func() error) error {
 	if strings.TrimSpace(c.actor) == "" {

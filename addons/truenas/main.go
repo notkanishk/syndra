@@ -213,7 +213,7 @@ func run() error {
 		return fmt.Errorf("mutation log: %w", err)
 	}
 	defer mlog.Close()
-	reportInDoubt(mlog)
+	recoverInDoubt(mlog)
 
 	nas := newNAS(dialTrueNAS(cfg.nasURL, cfg.nasAPIKey, cfg.nasVerify), cfg.supported)
 	// Probed at startup so `/capabilities` can answer with a version straight
@@ -509,18 +509,18 @@ func shareConnection(host string) *Connection {
 	return &Connection{Protocol: "smb", Host: host}
 }
 
-// reportInDoubt says, once at start, every write the last run began and never
-// settled: its intent is in the log and its result is not. Said, not acted on:
-// whether it landed is read on the NAS, and Syndra already holds the call as
-// unconfirmed and re-plans before it re-sends.
-func reportInDoubt(mlog *MutationLog) {
-	open, err := mlog.InDoubt()
-	if err != nil {
-		log.Printf("[STARTUP] could not read the mutation log for writes in doubt: %v", err)
-		return
-	}
-	for _, r := range open {
-		log.Printf("[STARTUP] write in doubt: record %d, %s %s for subject %q (call %s) was begun and has no result; check it on the NAS",
+// recoverInDoubt settles, before anything is served, every write the last run
+// began and never settled (MutationLog.Recover), and says each one once: its
+// result is now recorded unknown, and whether it landed is read on the NAS.
+// Not fatal: a log that cannot be written refuses every mutation by itself
+// (errNotLogged), reads still serve, and the next start tries again.
+func recoverInDoubt(mlog *MutationLog) {
+	settled, err := mlog.Recover()
+	for _, r := range settled {
+		log.Printf("[STARTUP] write in doubt: record %d, %s %s for subject %q (call %s) was begun and never finished; recorded as unknown, check it on the NAS",
 			r.Seq, r.Operation, r.Write, r.Subject, r.CallID)
+	}
+	if err != nil {
+		log.Printf("[STARTUP] could not settle the writes in doubt in the mutation log: %v", err)
 	}
 }

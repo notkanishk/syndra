@@ -539,26 +539,32 @@ Schema: `v2/schema/health.json`.
     records with the same head.
   - `log_records` MUST advance on every write the add-on sends the app, a
     write the app then refuses included, and MUST stay put on a read, a
-    replay and a refusal by the add-on itself. One record per write sent is
-    the least; more MAY be added, since Syndra sees only the head and the
-    count. The TrueNAS add-on writes two per write, the intent and the
-    result, so its count grows by two.
+    replay and a refusal before a write is attempted. One record per write
+    sent is the least; more MAY be added, since Syndra sees only the head
+    and the count. The TrueNAS add-on writes two per write, the intent and
+    the result, so its count grows by two.
   - The log itself MUST be append-only, mode `0600`, and written ahead, as a
     database journals: the intent record synced to disk before the write it
-    describes (and the directory synced when the file is created), each
-    record carrying the digest of the one before. An intent whose sync
-    failed never happened: the add-on MUST NOT send that write, and answers
-    `APPLY_FAILED` or `OPERATION_FAILED` 500, which Syndra reads as "may
-    have acted" and a person sees, as a failing disk needs; never
-    `TARGET_UNREACHABLE`, since the app was reachable, and an earlier write
-    in the same call may have landed. The TrueNAS add-on routes every write,
-    to the app or to its own store, through one function (`mutate` in
-    `addons/truenas/apply.go`) and records the result after it:
-    `succeeded`, `failed` (the app answered no), `not_sent` or `unknown`
-    (it may have landed). An intent with no result is a write in doubt; the
-    add-on says each one at start (`InDoubt` in
-    `addons/truenas/mutationlog.go`) and leaves it for a person. Adding
-    fields to a record later, keep a record that lacks them digesting as it
+    describes (and the directory synced on every open and after every
+    rotation, before the next record), each record carrying the digest of
+    the one before. An intent whose sync failed never happened: the add-on
+    MUST NOT send that write, and answers `APPLY_FAILED` or
+    `OPERATION_FAILED` 500, which Syndra reads as "may have acted" and a
+    person sees, as a failing disk needs; never `TARGET_UNREACHABLE`, since
+    the app was reachable. The 500 is conservative, not a claim: that write
+    was not sent. The TrueNAS add-on makes every write to the app and every
+    change to a binding or a setting, whatever call asked for it (an
+    apply's create binds, a purge unbinds), through one function (`mutate`
+    in `addons/truenas/apply.go`), each its own intent and result; a store
+    write that would change nothing is not made. The result says
+    `succeeded`, `failed` (the app answered no: only an answer is a
+    refusal, `classifyNASError` in `addons/truenas/nas.go`), `not_sent` or
+    `unknown` (it may have landed, as after a timeout or a reset). An intent
+    with no result is a write in doubt: at start, before it serves, the
+    add-on settles each with an `unknown` result and says it once
+    (`Recover` in `addons/truenas/mutationlog.go`), so a second start adds
+    nothing and the head and count only move forward. Adding fields to a
+    record later, keep a record that lacks them digesting as it
     did, so the anchored chain verifies across the upgrade.
 - `lifecycle`, `lifecycle_note`, `in_flight` and `drained` are
   [chapter 9](#9-lifecycle-and-degradation); `version_tested` and
