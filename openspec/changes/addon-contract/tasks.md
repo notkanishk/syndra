@@ -936,17 +936,45 @@ settings with the full §5 rules.
 
 ## 5. The guide
 
-- [ ] 5.1 `addons/AUTHORING.md` to the outline in design §8, every rule
+- [x] 5.1 `addons/AUTHORING.md` to the outline in design §8, every rule
   BCP 14 (RFC 2119 + RFC 8174), every core route with its fixture inline, the reference add-on
   walked file by file; §1 opens with the boundary rule (the add-on alone
   holds the app's address and credential and alone talks to it; Syndra
   talks only to add-ons) and §4 carries the freshness contract and the
   `stale`-not-error rule #ready-for-agent
-- [ ] 5.2 Mapping sketches for UniFi Access, Ruby and the inventory system as
+  *Decided while writing (11 Nov 2026):* statistics is its own chapter 8,
+  between Operations and Security, so §8's fourteen chapters are fifteen
+  (§8's 8–14 are 9–15). `GET /capabilities`'s fixture is chapter 3's
+  (`manifest.json`, which shows every key); the settings routes, which §8
+  gives no home, are a feature section at the end of chapter 4. The
+  reference is ~860 lines, not ~400, and is walked as a file:line table.
+  The guard is `addons/contract/guide_test.go` (the module that already
+  embeds the files; it reads `../AUTHORING.md` from disk), run by the
+  existing `addon-conformance` CI step; mutation-checked (a changed byte in
+  an inline fixture, a route heading removed, `/settings` alone removed
+  while `/settings/{name}` stays, a marker at a missing file, a marker
+  parted from its block: each fails). `by_status` resolves as
+  `addons/truenas/errors.go` does (`backoff` on 429 and 5xx, else `never`):
+  the registry says only "the status says".
+- [ ] 5.1a (found writing 5.1) `v2/fixtures/subjects.json` and
+  `subjects_stale.json` carry `home_quota: ["0","5368709120"]` in `state`,
+  where the rule is the one effective value (design §3,
+  `apply_response.json`'s `observed`, the kit's `limit-combine`,
+  `addons/truenas/server.go:388`). The guide states the rule and flags the
+  fixture; correcting it is a contract-file change for both ends' suites.
+  Also not yet expressible: `common/outcome.json` has only `succeeded`, so
+  the `physical` rule 4 words (`no_change`, `conflict`) have no wire form
+  until 6.3 #needs-triage
+- [x] 5.2 Mapping sketches for UniFi Access, Ruby and the inventory system as
   the guide's §12, from the two research notes and design §10; each names
   its unverified items as such (the inventory one names its API as unknown
   and lists the four questions in design §10) #ready-for-agent
-- [ ] 5.2a The guide's statistics chapter: `metrics[]`, the collector is the
+  *Decided while writing:* chapter 13, with TrueNAS (shipped) first. Ruby's
+  `materials` flag is `MdbAdmin` + `CanModifyMdb`, and its `role`
+  membership lists only `User` and `Admin`, so two fields never contend for
+  one Ruby role. UniFi has no version endpoint, so its gate is per probed
+  endpoint.
+- [x] 5.2a The guide's statistics chapter: `metrics[]`, the collector is the
   add-on's (schedule, backoff, the app's rate limits), the buffer and its
   bounds, a point is the whole UTC day from the app's log (not a delta,
   never an explicit zero), the per-metric watermark and when not to move it,
@@ -954,12 +982,20 @@ settings with the full §5 rules.
   beside every per-subject point, `against`; and the
   operations chapter's `result`, `effect`, and the six `physical` rules
   with the inventory checkout as the worked case #ready-for-agent
+  *Decided while writing:* chapters 7 and 8. Every slice-6 part is marked
+  "Designed, not yet served by Syndra", including `effect` (the backend's
+  policy does not read it yet) and the ids, codes and `format: target_id`
+  the registry does not hold yet, which chapter 7 lists by name.
 - [ ] 5.3 A fresh agent with only `AUTHORING.md`, `addons/contract/` and the
   kit builds an add-on for a toy target and passes the kit; what it had to
   ask is written back into the guide #ready-for-agent
-- [ ] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
+- [x] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
   point here; `addon-platform/design.md` §5 and §16 gain a one-line pointer
   to this contract as the current statement #ready-for-agent
+  *Decided while writing:* `addons/README.md` and `addons/contract/README.md`
+  link the guide too, and `addons/README.md`'s route count now says twelve
+  served and fourteen in `openapi.yaml` (design §12 slice 5: route tables
+  corrected).
 
 ## 6. Four additive features: `results`, `freshness`, `calls`, `stats`
 

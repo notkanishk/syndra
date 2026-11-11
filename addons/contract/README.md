@@ -1,7 +1,9 @@
 # The add-on wire contract
 
 > The model these artifacts serve is in [`../README.md`](../README.md);
-> the add-on held to them is [`../truenas/`](../truenas/README.md). The change
+> the add-on held to them is [`../truenas/`](../truenas/README.md); the rules
+> an add-on author follows, with these fixtures inline, are in
+> [`../AUTHORING.md`](../AUTHORING.md), held to these files by `guide_test.go`. The change
 > that built this directory, and the contract 2 that follows it, is
 > `openspec/changes/addon-contract/`.
 
@@ -43,6 +45,7 @@ editing one, run `go test -count=1`, or a stale pass is reported.
 | [`fixtures/`](v2/fixtures/) | A golden document per message, every field populated. Ring names and `example.org` only; addresses from RFC 5737 |
 | [`registry/`](v2/registry/) | `errors.json` (every `code`: title, statuses, retry class), `operations.json` (every operation id in the backend's `operationPolicy`), `roles.json`, `kinds.json`, `features.json`, `units.json`, `constants.json` |
 | [`transport_derivation.json`](transport_derivation.json) | How both ends derive their keys and sign requests (below) |
+| [`guide_test.go`](guide_test.go) | Holds [`../AUTHORING.md`](../AUTHORING.md) to these files: every inlined fixture byte for byte, every marker naming a file that exists, every `openapi.yaml` path named by a heading |
 | [`embed.go`](embed.go) | Files only: `v2/` and the transport vector embedded, so the conformance kit carries the contract it was built from. No Go type lives here, ever (design §1); the two ends keep reading these files from their own suites |
 | [`truenas_observed.json`](truenas_observed.json) | What a real TrueNAS answered, recorded rather than written (below) |
 

@@ -8,8 +8,12 @@ its vocabulary, and its refusals. Nothing above it does, deliberately: the day
 `internal/services` learns what an SMB share is, the second target needs a
 second copy of everything.
 
+**Building an add-on? Read [`AUTHORING.md`](AUTHORING.md)**: the author's
+guide, every rule of the contract with each route's fixture beside it.
+
 | Path | Contents |
 |---|---|
+| [`AUTHORING.md`](AUTHORING.md) | The author's guide, written for an agent with no other context |
 | [`contract/`](contract/) | The wire contract, as artifacts both ends are tested against — plus what a real target answered, recorded rather than written |
 | [`truenas/`](truenas/) | The first and so far only add-on: TrueNAS SCALE, SMB storage |
 | [`reference/`](reference/) | A complete contract-2 add-on over an in-memory target: the conformance kit's self-test and the guide's worked example. Never deployed |
@@ -42,8 +46,11 @@ is survivable.
 
 ## The contract
 
-Twelve routes. Every one is authenticated — there is no unauthenticated health
-check, because a target's reachability is itself information.
+Twelve routes served today, every one authenticated — there is no
+unauthenticated health check, because a target's reachability is itself
+information. `contract/v2/openapi.yaml` names fourteen: `GET /calls/{call_id}`
+and `GET /stats` belong to the features `calls` and `stats`, designed and not
+yet served by Syndra.
 
 | Endpoint | What it is for |
 |---|---|
@@ -119,6 +126,8 @@ a supported major is not a promise that every method is present.
   is missing.
 
 ## Writing the second one
+
+[`AUTHORING.md`](AUTHORING.md) is the full statement; this is the outline.
 
 The platform half is target-neutral and is asserted to stay that way —
 `backend/internal/services/merge` fails its own tests if the word `truenas`
