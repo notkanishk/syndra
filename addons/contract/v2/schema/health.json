@@ -74,12 +74,14 @@
       "type": "boolean"
     },
     "log_head": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1,
+      "description": "The mutation log's head digest, never empty: the digest of the empty log until the first record. Each record changes it."
     },
     "log_records": {
       "type": "integer",
       "minimum": 0,
-      "description": "The mutation log's length."
+      "description": "The mutation log's length. It never decreases, across restart, rotation or compaction; while it stays the same, log_head stays the same. Syndra anchors both and flags any other movement as tampering."
     },
     "target_reads": {
       "type": "integer",

@@ -397,6 +397,13 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 		writeError(w, status, CodePlanStale,
 			"The subject's state on the target has changed since the plan was computed.",
 			map[string]any{"subject": req.Subject})
+	case errors.Is(err, ErrNotSent):
+		// Nothing reached the NAS, so nothing happened, and the backend keeps
+		// the change queued. Every failure after a write was sent stays
+		// APPLY_FAILED, a 5xx that says "may have acted": createAndConverge
+		// drops ErrNotSent from those (acted).
+		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
+			"The NAS could not be reached, so nothing was sent to it.", nil)
 	case err != nil:
 		writeError(w, status, CodeApplyFailed, err.Error(), nil)
 	case outcome.Conflict != nil:
@@ -994,7 +1001,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		if !adopted {
 			s.undoGroup(groupID)
 		}
-		return ApplyOutcome{}, statusFor(err), err
+		return ApplyOutcome{}, statusFor(err), acted(err)
 	}
 	if home.path != "" {
 		for k, v := range homeFields(home.path) {
@@ -1009,7 +1016,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		if !adopted {
 			s.undoGroup(groupID)
 		}
-		return ApplyOutcome{}, statusFor(err), err
+		return ApplyOutcome{}, statusFor(err), acted(err)
 	}
 	// `user.create` answers with the RECORD key, not the unix uid, and the
 	// binding recognises an account by its uid across a rename. Read back
@@ -1036,7 +1043,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	}
 	if readErr != nil {
 		return ApplyOutcome{}, statusFor(readErr),
-			fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr)
+			acted(fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr))
 	}
 
 	detail := fmt.Sprintf("Created %s.", binding.Username)
@@ -1203,6 +1210,18 @@ func describeHolding(s Subject) string {
 	default:
 		return "Reaches " + strings.Join(s.Groups, ", ") + "."
 	}
+}
+
+// acted is a failure after this apply had already written to the target (here,
+// the personal group). Whatever the cause, the target may have acted, so the
+// "nothing was sent" a later call's session failure carries is dropped: the
+// reply is APPLY_FAILED, never TARGET_UNREACHABLE. The text is kept; the status
+// was computed from the original before this is called.
+func acted(err error) error {
+	if errors.Is(err, ErrNotSent) {
+		return errors.New(err.Error())
+	}
+	return err
 }
 
 func statusFor(err error) int {

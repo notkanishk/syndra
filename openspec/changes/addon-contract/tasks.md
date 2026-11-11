@@ -927,6 +927,17 @@ settings with the full §5 rules.
   MUST failed) still reports `health` and `required-fields` as pass on their read
   halves; give it the reads-only "not judged: needs a write" marking too. Report
   wording only: such a run already exits 2 #ready-for-agent
+- [ ] 4.4b (found by the guide review, finding 4) The kit owns only an account
+  whose `username` begins `conformance-` (`owner` in `addons/conformance/owner.go`),
+  so an app that cannot hold that name (generated ids, display names only, a
+  length or charset the prefix breaks) can never pass `-mutate`. Not done now:
+  every fallback found (claim by `account_id` alone, by a label in another
+  field the kit cannot read generically, by the subject's email) weakens
+  `owner()`'s rule that a member's account answered as the create's is never
+  the kit's, which is the one thing the kit must not get wrong on a real
+  instance. Needs a design that names how an add-on proves an account is the
+  kit's without the prefix (a manifest-declared label field, say) before any
+  code. The guide states the rule meanwhile (The one create) #needs-triage
 - [ ] 4.5 Reads-only run against production TrueNAS from the app host;
   report attached to this change #ready-for-human
 - [ ] 4.6 `--mutate` run against staging TrueNAS with a throwaway subject,
@@ -956,7 +967,7 @@ settings with the full §5 rules.
   parted from its block: each fails). `by_status` resolves as
   `addons/truenas/errors.go` does (`backoff` on 429 and 5xx, else `never`):
   the registry says only "the status says".
-- [ ] 5.1a (found writing 5.1) `v2/fixtures/subjects.json` and
+- [x] 5.1a (found writing 5.1) `v2/fixtures/subjects.json` and
   `subjects_stale.json` carry `home_quota: ["0","5368709120"]` in `state`,
   where the rule is the one effective value (design §3,
   `apply_response.json`'s `observed`, the kit's `limit-combine`,
@@ -965,6 +976,14 @@ settings with the full §5 rules.
   Also not yet expressible: `common/outcome.json` has only `succeeded`, so
   the `physical` rule 4 words (`no_change`, `conflict`) have no wire form
   until 6.3 #needs-triage
+  *Resolved (Opus review ruling, 11 Nov 2026):* (a) the fixture was wrong.
+  `subjects.json` holds `home_quota: ["5368709120"]` (as `apply_response.json`'s
+  `observed`); `subjects_stale.json` drops it (the TrueNAS mirror holds no
+  limits: absent is unknown); `common/field.json` says desired is one value
+  per role and state/observed exactly one; the kit's shape check fails a
+  limit in state or observed that is not one value. (b) "conflict" is never
+  an outcome, it is a refusal (problem+json 409, like `BINDING_CONFLICT`);
+  "changed nothing" is a real slice-6 gap, now task 6.3a.
 - [x] 5.2 Mapping sketches for UniFi Access, Ruby and the inventory system as
   the guide's §12, from the two research notes and design §10; each names
   its unverified items as such (the inventory one names its API as unknown
@@ -986,6 +1005,47 @@ settings with the full §5 rules.
   "Designed, not yet served by Syndra", including `effect` (the backend's
   policy does not read it yet) and the ids, codes and `format: target_id`
   the registry does not hold yet, which chapter 7 lists by name.
+- [x] 5.1b The Opus review of the draft guide (findings 1-17 and its writing
+  notes) fixed in the guide and, where it found the contract or the code
+  wrong, there first #ready-for-agent
+  *Decided while writing (11 Nov 2026):*
+  - A write that sent the app nothing answers 503 `TARGET_UNREACHABLE` with
+    `Retry-After` (the registry meaning now covers writes); one that may
+    have reached it stays `APPLY_FAILED`/`OPERATION_FAILED` 5xx. "Sent
+    nothing" is decided by where the failure happened, not by sniffing
+    `net.OpError`/`syscall.ECONNREFUSED`: in TrueNAS, `ErrNotSent` is any
+    failure to get a session (dial, TLS, login, the breaker, the reconnect
+    cooldown) and nothing else, because every such error is certainly before
+    the call left, and any error on an established socket may be after. Only
+    before the first write of a request: `acted` drops it after
+    `group.create`. A read that timed out before any write still answers
+    `APPLY_FAILED` (conservative; a widening for later). Applied to apply,
+    `password.set`, `password.rotate` and `PUT /settings`; reads unchanged.
+  - The TrueNAS read/write split is now the registry's `effect`
+    (`readOperation`, tested equal to it): `account.release` was treated as
+    a read, so it was neither deduplicated nor refused while `read_only`.
+  - `log_head` is never empty (`health.json` `minLength: 1`, the digest of
+    the empty log until the first record); both add-ons reported `""` on a
+    fresh log, which Syndra refuses at first sight. The kit checks movement
+    across every `/health` of a run (`logAnchored`), Syndra's three rules.
+  - A `limit` given `[]` sets nothing. The reference cleared it; a new
+    reference account starts at the unlimited value so `state` always holds
+    one. Kit check `limit-empty` (sets 5 GiB, then `[]`, wants 5 GiB).
+  - Read operations ignore `call_id`. The reference gained `health.get` so
+    the kit's new `operations.reads` check (reads under the creating apply's
+    `call_id`) runs against it; three new reference defects watch
+    `limit-empty`, `health` and `operations.reads` fail.
+  - Fixtures: the plan/apply pair names one account (`rey_mysterio`,
+    `3051`) and the apply answers a new fingerprint; `group` values sorted;
+    `operation_request.json` is the `account.adopt` call
+    `operation_response.json` answers (no `plan_id`, `fingerprint`,
+    `preview` or `fresh`, which Syndra never sends), and that reply loses a
+    stray `rotated`.
+  - The guide: the designed features and the three unbuilt sketches moved
+    to an appendix; code cited by symbol; one place per rule, linked by
+    anchor; registration refusals listed once. Guard additions: every JSON
+    block marked, routes named as `METHOD /path`, every
+    `` `symbol` in `path` `` declared there, every section link landing.
 - [ ] 5.3 A fresh agent with only `AUTHORING.md`, `addons/contract/` and the
   kit builds an add-on for a toy target and passes the kit; what it had to
   ask is written back into the guide #ready-for-agent
@@ -1078,6 +1138,14 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   retry meanwhile is `CALL_UNSETTLED`, a preview leaves nothing behind
   (`/calls` on any never-used id → `unknown`, `log_records` unchanged) and
   the confirm with its fresh id executes #ready-for-agent
+
+- [ ] 6.3a (the guide review's ruling (b)) Add `no_change` to
+  `common/outcome.json`, listed under feature `calls`, mirroring
+  `common/effect.json`, so an operation can say it changed nothing (a
+  checkout of an item already held; `log_records` stays put); and have
+  Syndra read the wire `outcome` instead of classifying by status alone, so
+  a no-op is not recorded and audited as done. "Conflict" is not an outcome:
+  it is a refusal, problem+json 409 #ready-for-agent
 
 **`stats` (decisions 11–17)**
 

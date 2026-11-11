@@ -13,7 +13,7 @@ guide, every rule of the contract with each route's fixture beside it.
 
 | Path | Contents |
 |---|---|
-| [`AUTHORING.md`](AUTHORING.md) | The author's guide, written for an agent with no other context |
+| [`AUTHORING.md`](AUTHORING.md) | The author's guide, written for an agent whose context is the guide, the contract, the kit and the two add-ons here as read-only examples |
 | [`contract/`](contract/) | The wire contract, as artifacts both ends are tested against — plus what a real target answered, recorded rather than written |
 | [`truenas/`](truenas/) | The first and so far only add-on: TrueNAS SCALE, SMB storage |
 | [`reference/`](reference/) | A complete contract-2 add-on over an in-memory target: the conformance kit's self-test and the guide's worked example. Never deployed |

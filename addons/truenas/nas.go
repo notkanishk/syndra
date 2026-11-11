@@ -79,6 +79,14 @@ var (
 	// ErrRateLimited is the NAS pushing back. Its own error because the right
 	// response is to stop, not to retry harder into a lockout.
 	ErrRateLimited = errors.New("the target is rate-limiting")
+	// ErrNotSent is the one unreachable failure that proves nothing reached
+	// the target: no session could be had (the dial, the TLS handshake or the
+	// login failed, or this add-on's own breaker or reconnect cooldown held the
+	// call back), so the call was never written to any socket. A failure on a
+	// session that already exists (a timeout, a reset, a closed socket) is
+	// ErrTargetUnreachable alone, because by then the request may have been
+	// read and acted on. Only this one lets a write answer TARGET_UNREACHABLE.
+	ErrNotSent = fmt.Errorf("%w: nothing was sent", ErrTargetUnreachable)
 	// ErrNoSuchPath is a refusal whose errname is ENOENT: the path asked about
 	// does not exist. Still a refusal (errors.Is ErrTargetRefused), told apart
 	// because "this folder is free" is a decision a home folder rests on.
@@ -178,17 +186,17 @@ func (n *NAS) session() (rpc, error) {
 		// thing being protected is the login, and a breaker checked after the
 		// session is established protects nothing.
 		return nil, fmt.Errorf("%w: the circuit is open until %s",
-			ErrTargetUnreachable, n.openUntil.UTC().Format(time.RFC3339))
+			ErrNotSent, n.openUntil.UTC().Format(time.RFC3339))
 	}
 	if since := n.now().Sub(n.lastTry); since < reconnectCooldown {
-		return nil, fmt.Errorf("%w: waiting out the reconnect cooldown", ErrTargetUnreachable)
+		return nil, fmt.Errorf("%w: waiting out the reconnect cooldown", ErrNotSent)
 	}
 	n.lastTry = n.now()
 
 	c, err := n.dial()
 	if err != nil {
 		n.recordFailureLocked(err)
-		return nil, fmt.Errorf("%w: %v", ErrTargetUnreachable, err)
+		return nil, fmt.Errorf("%w: %v", ErrNotSent, err)
 	}
 	// A successful login clears the count outright rather than decrementing it.
 	// The failure this guards is a burst, so one working connection means the

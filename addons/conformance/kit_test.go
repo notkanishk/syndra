@@ -199,6 +199,9 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.RebindsQuietly:      "(TestNoWriteFollowsAPlanThatNamesNoAccount)",
 		reference.CreateOmitsAccount:  "(TestACreateNamingNoAccountIsListed)",
 		reference.IgnoresReadOnly:     "lifecycle",
+		reference.LimitEmptyClears:    "limit-empty",
+		reference.LogHeadEmpty:        "health",
+		reference.ReadsTakeCallID:     "operations.reads",
 	}
 	for _, d := range reference.Defects {
 		id, ok := catches[d]
@@ -1458,5 +1461,50 @@ func TestTheStorageProfilesReadsAreHeldToCurrent(t *testing.T) {
 	r = run(t, config(storageServing(t, func() string { return time.Now().UTC().Format(time.RFC3339Nano) }), false))
 	if r.Status("current") != "pass" {
 		t.Errorf("a live /reach failed current: %+v", failures(r))
+	}
+}
+
+// Every /health of a run is held to what Syndra anchors the log by: the count
+// never falls, the same count keeps the same head, a higher count moves it.
+func TestTheLogIsHeldToTheAnchorRules(t *testing.T) {
+	health := func(head string, records int) *exchange {
+		return &exchange{method: http.MethodGet, target: "/health", status: http.StatusOK,
+			body: []byte(fmt.Sprintf(`{"log_head":%q,"log_records":%d}`, head, records))}
+	}
+	for _, tc := range []struct {
+		name  string
+		reads []*exchange
+		fails bool
+	}{
+		{"extended", []*exchange{health("a", 1), health("a", 1), health("b", 2)}, false},
+		{"records fell", []*exchange{health("b", 2), health("a", 1)}, true},
+		{"rewritten in place", []*exchange{health("a", 1), health("b", 1)}, true},
+		{"a new record kept the head", []*exchange{health("a", 1), health("a", 2)}, true},
+	} {
+		k := &kit{log: tc.reads}
+		c := &check{}
+		k.logAnchored(c)
+		if failed := len(c.fails) > 0; failed != tc.fails {
+			t.Errorf("%s: failed %v (%v), want %v", tc.name, failed, c.fails, tc.fails)
+		}
+	}
+}
+
+// A limit in state is the effective limit, one value: two values read as a
+// drift finding in Syndra, so /subjects carrying them fails subjects.
+func TestALimitInStateHoldsOneValue(t *testing.T) {
+	url, _ := wrapped(t, func(w http.ResponseWriter, r *http.Request, h http.Handler) bool {
+		if r.URL.Path != "/subjects" {
+			return false
+		}
+		rewrite(w, r, h, func(doc map[string]any) {
+			doc["subjects"] = []any{map[string]any{"id": "1001", "username": "rey_mysterio", "account_id": "1001",
+				"state":    map[string]any{"enabled": true, "job_seconds": []any{"0", "5368709120"}},
+				"standing": map[string]any{"usable": true, "waiting_on": "none"}}}
+		})
+		return true
+	})
+	if r := run(t, config(url, false)); r.Status("subjects") != "fail" {
+		t.Errorf("a limit holding two values in state passed subjects: %s", r.Status("subjects"))
 	}
 }

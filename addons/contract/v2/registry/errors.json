@@ -212,7 +212,7 @@
         503
       ],
       "retry": "retry_after",
-      "meaning": "The target cannot be reached and the add-on has nothing to serve; Retry-After is present. Never a lifecycle refusal."
+      "meaning": "The target could not be reached and nothing was sent to it: a read has nothing to serve, and a write (apply, a write operation, PUT /settings) did nothing, so Syndra keeps it queued. Only a failure that certainly reached nothing qualifies; a write that may have reached the target is APPLY_FAILED or OPERATION_FAILED with a 5xx. Retry-After is present. Never a lifecycle refusal."
     },
     "TARGET_UNREADABLE": {
       "title": "Target unreadable",

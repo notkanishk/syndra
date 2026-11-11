@@ -1,17 +1,17 @@
 {
   "subject": "289471021834760193",
   "effect": "applied",
-  "detail": "Added fabrication. Unlocked the account.",
+  "detail": "Added fabrication.",
   "consequence": "In lab_makers, fabrication. Enabled, SMB on.",
-  "username": "bianca.belair",
-  "account_id": "3042",
+  "username": "rey_mysterio",
+  "account_id": "3051",
   "standing": {
     "usable": false,
     "waiting_on": "member",
     "note": "No password set yet",
     "next": "Set a storage password on your page"
   },
-  "fingerprint": "sha256:9d1c4f0b7e2a",
+  "fingerprint": "sha256:4be07a91c3d5",
   "observed": {
     "group": [
       "fabrication",

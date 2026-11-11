@@ -101,9 +101,10 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 			"The operation named in the body is not the one this route runs.", nil)
 		return
 	}
-	if !mutatingOperation(name) {
-		// A read is never recorded: a read that happens again is a read, and a
-		// 30-day copy of a health report is a copy nobody will ask for.
+	if readOperation(name) {
+		// A read is never recorded, held or reuse-checked: a read that happens
+		// again is a read, Syndra sends one call_id for every read it makes,
+		// and a 30-day copy of a health report is a copy nobody will ask for.
 		s.operateNow(w, name, req)
 		return
 	}
@@ -136,7 +137,14 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 // operateNow runs one operation and answers it.
 func (s *server) operateNow(w http.ResponseWriter, name string, req OperationRequest) {
 	result, status, err := s.runOperation(name, req)
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrNotSent) && !readOperation(name):
+		// A write that never left this add-on: nothing happened, the same
+		// answer an apply gives (handleApply).
+		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
+			"The NAS could not be reached, so nothing was sent to it.", nil)
+		return
+	case err != nil:
 		// The error's text is this add-on's own, never the target's response
 		// body: that body is where a submitted password comes back.
 		writeError(w, status, CodeOperationFailed, err.Error(), nil)
@@ -165,9 +173,24 @@ func publicParams(name string, params map[string]any) map[string]any {
 	return out
 }
 
-func mutatingOperation(name string) bool {
+// failedWrite is what a failed write call reports: ErrNotSent when the call
+// never left this add-on, so the reply can say nothing happened, and otherwise
+// the sentence. Never the error's own text, which is the target's and may echo
+// what was sent.
+func failedWrite(err error, sentence string) error {
+	if errors.Is(err, ErrNotSent) {
+		return ErrNotSent
+	}
+	return errors.New(sentence)
+}
+
+// readOperation is an operation whose registry effect is `read`
+// (registry/operations.json), held equal to it by
+// TestReadOperationsAreTheRegistrysReads. Every other id, an unknown one
+// included, is a write: recorded, leased and lifecycle-gated (once).
+func readOperation(name string) bool {
 	switch name {
-	case "password.set", "password.rotate", "account.purge", "account.adopt":
+	case "activity.get", "health.get", "storage.status":
 		return true
 	}
 	return false
@@ -261,7 +284,7 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 		// never reaches here at all. That guarantee is pinned where it lives,
 		// on `NAS.call`; this is only the difference between a readable failure
 		// and "user.update: the target refused the call".
-		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the credential change")
+		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the credential change")
 	}
 	// The event, never the value. There is no field on a Record for one.
 	s.record("password.set", req.Subject, req.Actor, req.CallID, "succeeded")
@@ -386,7 +409,7 @@ func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, err
 	// during one would be the opposite of what it is for.
 	if err := s.nas.call("user.update", []any{id,
 		map[string]any{"password": minted, "password_disabled": false}}, nil); err != nil {
-		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the rotation")
+		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the rotation")
 	}
 	s.record("password.rotate", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{

@@ -85,7 +85,9 @@ func (k *kit) mutate() error {
 		{"replay", []string{"replay"}, func() { k.replay(k.at("replay"), callID, created) }},
 		{"absent", []string{"absent-unmanaged", "plan-equals-apply"}, func() { k.absent(k.at("absent-unmanaged")) }},
 		{"unlisted", []string{"unlisted-preserved", "plan-equals-apply"}, func() { k.unlisted(k.at("unlisted-preserved")) }},
+		{"limit-empty", []string{"limit-empty", "plan-equals-apply"}, func() { k.limitEmpty(k.at("limit-empty")) }},
 		{"operations", []string{"operations", "operations.secret", "strict-requests", "health"}, func() { k.operations(k.at("operations")) }},
+		{"reads", []string{"operations.reads"}, func() { k.readOperations(k.at("operations.reads"), callID) }},
 		{"lifecycle", []string{"lifecycle", "replay.refusal", "strict-requests"}, func() { k.lifecycle(k.at("lifecycle"), k.at("replay.refusal")) }},
 		{"withdraw", []string{"withdraw-only.existing", "channel-follows-account", "plan-equals-apply"}, func() {
 			k.withdrawExisting(k.at("withdraw-only.existing"), k.at("channel-follows-account"))
@@ -348,6 +350,51 @@ func (k *kit) limits(c *check) {
 	}
 }
 
+// limitEmpty sends each limit as [] after setting it to 5 GiB: no role sets
+// it, so nothing is set, and the account keeps the limit it holds. Clearing
+// it would read as "no limit" on most apps, which nobody decided.
+func (k *kit) limitEmpty(c *check) {
+	for _, name := range k.m.withRole("limit") {
+		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{"5368709120"}}, false)
+		before := k.state(c)[name]
+		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{}}, false)
+		after := k.state(c)[name]
+		c.expect(same(after, before), "%s: an apply giving it [] changed it from %v to %v; [] sets nothing", name, before, after)
+	}
+	if !c.ran {
+		c.skip("the manifest declares no limit field")
+	}
+}
+
+// readOperations sends every available effect: read operation under one
+// call_id, the first of them twice, and that call_id is the one the creating
+// apply was recorded under. Syndra sends one call_id for every read, so a read
+// ignores it: never recorded, held or checked for reuse, and each answers 200
+// with its own reply, never CALL_ID_REUSED and never the apply's. Reads by
+// contract, sent only for the kit's own subject, after a plan naming its
+// account (viaOwned), like every other operation.
+func (k *kit) readOperations(c *check, callID string) {
+	var reads []string
+	for id, available := range k.m.ops {
+		if available && k.c.operations[id].Effect == "read" {
+			reads = append(reads, id)
+		}
+	}
+	if len(reads) == 0 {
+		c.skip("no effect: read operation is declared available")
+		return
+	}
+	slices.Sort(reads)
+	send := k.viaOwned(c)
+	for _, id := range append([]string{reads[0]}, reads...) {
+		ex := send(request{method: http.MethodPost, target: "/operations/" + id,
+			body: k.operationBody(id, callID, map[string]any{}), schema: "operation_request.json"})
+		if doc := k.ok(c, ex, "operation_response.json"); doc != nil {
+			c.expect(str(doc, "operation") == id, "%s under the creating apply's call_id answered for %q", id, str(doc, "operation"))
+		}
+	}
+}
+
 func (k *kit) replay(c *check, callID string, first *exchange) {
 	logBefore, logOK := k.logRecords(c)
 	body := k.applyBody(callID, "conformance-another-fingerprint", k.full())
@@ -587,6 +634,34 @@ func (k *kit) afterwards() {
 		} else {
 			k.required(fields, ex)
 		}
+	}
+	k.logAnchored(k.at("health"))
+}
+
+// logAnchored holds every /health the run read, in order, to what Syndra
+// anchors the mutation log by: a count that never falls; the same count, the
+// same head; a higher count, a new head. (Each reply was validated where it was
+// read; health.json holds the head non-empty.)
+func (k *kit) logAnchored(c *check) {
+	var prev map[string]any
+	for _, ex := range k.log {
+		if path, _, _ := strings.Cut(ex.target, "?"); ex.err != nil || ex.status != http.StatusOK || ex.method != http.MethodGet || path != "/health" {
+			continue
+		}
+		doc := ex.doc()
+		head, _ := doc["log_head"].(string)
+		n, isNum := num(doc["log_records"])
+		if !isNum {
+			continue
+		}
+		if prev != nil {
+			was, _ := num(prev["log_records"])
+			moved := head != prev["log_head"]
+			c.expect(n >= was, "log_records fell from %d to %d", was, n)
+			c.expect(n != was || !moved, "log_records stayed at %d and log_head changed: the log was rewritten", n)
+			c.expect(n <= was || moved, "log_records rose from %d to %d and log_head stayed %s", was, n, head)
+		}
+		prev = doc
 	}
 }
 

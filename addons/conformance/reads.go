@@ -205,9 +205,9 @@ func (k *kit) health(c *check) map[string]any {
 	if doc == nil {
 		return nil
 	}
-	_, isNum := num(doc["log_records"])
-	_, isStr := doc["log_head"].(string)
-	c.expect(isNum && isStr, "log_head %v and log_records %v must be a string and an integer", doc["log_head"], doc["log_records"])
+	// A second read, so even a run that writes nothing has two to compare
+	// (logAnchored, in afterwards). health.json holds log_head non-empty.
+	k.ok(c, k.send(request{method: http.MethodGet, target: "/health"}), "health.json")
 	if k.m.has("freshness") {
 		_, ok := num(doc["target_reads"])
 		c.expect(ok, "feature freshness is declared and health carries no target_reads")
@@ -257,6 +257,7 @@ func (k *kit) shape(c *check, where, name string, v any) {
 		c.expect(role != "flag" || s == "true", `%s: %s is a flag, ["true"] or [], not %q`, where, name, s)
 		c.expect(role != "limit" || err == nil, "%s: %s is a limit, %q is not a whole number", where, name, s)
 	}
+	c.expect(role != "limit" || len(list) == 1, "%s: %s is a limit, and state and observed hold exactly one value, the effective limit; it holds %v", where, name, list)
 	c.expect(role != "membership" || (sort.StringsAreSorted(list) && len(slices.Compact(slices.Clone(list))) == len(list)),
 		"%s: membership %s must be sorted and deduplicated, is %v", where, name, list)
 }

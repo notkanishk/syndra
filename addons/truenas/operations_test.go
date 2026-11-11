@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -781,5 +782,75 @@ func TestAnAmbiguousBindingIsItsOwnRefusal(t *testing.T) {
 	}
 	if status != http.StatusConflict {
 		t.Fatalf("want 409, got %d (%v)", status, err)
+	}
+}
+
+// Syndra sends one call_id for every read it makes (read-<target>-<subject>),
+// so an effect: read operation ignores it: two at once both answer, another
+// read under it answers, and so does a read under a recorded write's call_id.
+// Held or recorded, the second page load would be 409 CALL_IN_PROGRESS and the
+// next read 422 CALL_ID_REUSED.
+func TestAReadIgnoresItsCallID(t *testing.T) {
+	s, m := opServer(t)
+	m.fakeRPC.audit, m.fakeRPC.shares = `[]`, `[]`
+	m.fakeRPC.health = map[string]string{"system.info": `{"version":"25.04.2"}`}
+	const read = `{"call_id":"read-truenas-sub-1","subject":"sub-1"}`
+	var wg sync.WaitGroup
+	codes := make([]int, 2)
+	for i := range codes {
+		wg.Add(1)
+		go func() { defer wg.Done(); codes[i] = postOperation(t, s, "activity.get", read).Code }()
+	}
+	wg.Wait()
+	if codes[0] != http.StatusOK || codes[1] != http.StatusOK {
+		t.Fatalf("two reads under one call_id answered %v", codes)
+	}
+	if rr := postOperation(t, s, "health.get", read); rr.Code != http.StatusOK {
+		t.Fatalf("a read of another operation under the same call_id answered %d %s", rr.Code, problemCode(t, rr))
+	}
+	if rr := postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"correct horse battery staple"}}`); rr.Code != http.StatusOK {
+		t.Fatalf("password.set: %d %s", rr.Code, rr.Body.String())
+	}
+	rr := postOperation(t, s, "activity.get", `{"call_id":"p1","subject":"sub-1"}`)
+	var out OperationResult
+	if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &out) != nil || out.Activity == nil {
+		t.Fatalf("a read under a recorded write's call_id answered %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+// account.release changes what this add-on manages and is logged: a write,
+// refused while read_only like every other.
+func TestReleaseIsAWrite(t *testing.T) {
+	s, _ := opServer(t)
+	_ = s.life.Set(LifecycleReadOnly, "maintenance")
+	rr := postOperation(t, s, "account.release", `{"call_id":"r1","operation":"account.release","subject":"sub-1"}`)
+	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeLifecycleRefusal {
+		t.Fatalf("want 503 LIFECYCLE_REFUSAL, got %d %s", rr.Code, problemCode(t, rr))
+	}
+	if _, bound, _ := s.store.GetBinding("sub-1"); !bound {
+		t.Fatal("the binding was released while read_only")
+	}
+}
+
+// readOperation is the registry's effect: read, so the split between what is
+// recorded and gated and what is not is the contract's, not a list kept here.
+func TestReadOperationsAreTheRegistrysReads(t *testing.T) {
+	var reg struct {
+		Operations map[string]struct {
+			Effect string `json:"effect"`
+		} `json:"operations"`
+	}
+	if err := json.Unmarshal(v2Read(t, "registry", "operations.json"), &reg); err != nil || len(reg.Operations) == 0 {
+		t.Fatalf("registry/operations.json: %v", err)
+	}
+	for _, op := range operationSet(nil) {
+		e, registered := reg.Operations[op.ID]
+		if !registered {
+			t.Errorf("%s is declared and not registered", op.ID)
+			continue
+		}
+		if readOperation(op.ID) != (e.Effect == "read") {
+			t.Errorf("%s: readOperation says %t, the registry's effect is %q", op.ID, readOperation(op.ID), e.Effect)
+		}
 	}
 }

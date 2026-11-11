@@ -45,7 +45,7 @@ editing one, run `go test -count=1`, or a stale pass is reported.
 | [`fixtures/`](v2/fixtures/) | A golden document per message, every field populated. Ring names and `example.org` only; addresses from RFC 5737 |
 | [`registry/`](v2/registry/) | `errors.json` (every `code`: title, statuses, retry class), `operations.json` (every operation id in the backend's `operationPolicy`), `roles.json`, `kinds.json`, `features.json`, `units.json`, `constants.json` |
 | [`transport_derivation.json`](transport_derivation.json) | How both ends derive their keys and sign requests (below) |
-| [`guide_test.go`](guide_test.go) | Holds [`../AUTHORING.md`](../AUTHORING.md) to these files: every inlined fixture byte for byte, every marker naming a file that exists, every `openapi.yaml` path named by a heading |
+| [`guide_test.go`](guide_test.go) | Holds [`../AUTHORING.md`](../AUTHORING.md) to these files and to the code: every JSON block a marked fixture, byte for byte; every `openapi.yaml` route named by a heading as `METHOD /path`; every `` `symbol` in `path` `` citation declared there; every section link landing |
 | [`embed.go`](embed.go) | Files only: `v2/` and the transport vector embedded, so the conformance kit carries the contract it was built from. No Go type lives here, ever (design §1); the two ends keep reading these files from their own suites |
 | [`truenas_observed.json`](truenas_observed.json) | What a real TrueNAS answered, recorded rather than written (below) |
 

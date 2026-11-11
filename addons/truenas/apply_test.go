@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 5.1–5.14, 6.1–6.2, 6.7–6.12 — the entitlement plane.
@@ -48,6 +49,12 @@ type mutatingRPC struct {
 	// refuseGroupCreate answers group.create with the "already exists" refusal,
 	// and failReadAfterCreate makes the account unreadable once it is created.
 	refuseGroupCreate, failReadAfterCreate bool
+	// resetOn makes one method's call fail on the wire after it was sent, the
+	// way a reset or a timeout does: the target may have acted on it. after
+	// runs once a method has answered, so a test can take the session away
+	// between two calls.
+	resetOn string
+	after   map[string]func()
 }
 
 // remember adds a created account to the fixture the next read serves.
@@ -102,6 +109,12 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 	// write addressed has something to read.
 	m.fakeRPC.calls = append(m.fakeRPC.calls, method)
 	m.fakeRPC.params = append(m.fakeRPC.params, params)
+	if hook := m.after[method]; hook != nil {
+		defer hook()
+	}
+	if method == m.resetOn {
+		return nil, errors.New("websocket: read tcp 192.0.2.10:443: connection reset by peer")
+	}
 	switch method {
 	case "user.update":
 		args, _ := params.([]any)
@@ -1280,5 +1293,89 @@ func TestNoIdentityIsNeededToSwitchOffAnAccountThatIsNotThere(t *testing.T) {
 	}
 	if len(m.creates)+len(m.updates) != 0 {
 		t.Fatal("nothing may be written")
+	}
+}
+
+// sessionGone takes the NAS session away and holds the breaker open, as an
+// outage between two calls does: the next call is never sent.
+func sessionGone(n *NAS) func() {
+	return func() {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		n.client, n.openUntil = nil, n.now().Add(time.Hour)
+	}
+}
+
+// A NAS that cannot be reached at all was sent nothing, so the apply did
+// nothing: 503 TARGET_UNREACHABLE with Retry-After, which Syndra reads as
+// "keep it queued". Answered APPLY_FAILED it went to a person as "may have
+// acted", one item per change, for every outage.
+func TestAnApplyThatReachedNothingIsTargetUnreachable(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	s.nas = newNAS(func() (rpc, error) {
+		return nil, errors.New("dial tcp 192.0.2.10:443: connect: connection refused")
+	}, []string{"25.04"})
+	s.nas.version, s.nas.probed = "25.04.2", true
+
+	// A fingerprint of its own, so the dial this asserts on is the first one
+	// (withFingerprint would otherwise dial first, and the cooldown answer).
+	// The second is held back by the reconnect cooldown, never dialled.
+	for _, callID := range []string{"c1", "c2"} {
+		rr := postApply(t, s, `{"call_id":"`+callID+`","subject":"sub-1","email":"charlotte@example.edu","fingerprint":"any","desired":{"enabled":true}}`)
+		if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeTargetUnreachable || rr.Header().Get("Retry-After") == "" {
+			t.Fatalf("%s: want 503 TARGET_UNREACHABLE with Retry-After, got %d %s %v", callID, rr.Code, problemCode(t, rr), rr.Header())
+		}
+	}
+	if len(m.creates) != 0 || m.groupCreates != 0 {
+		t.Fatal("nothing may be written")
+	}
+}
+
+// A write that was sent and then lost (a reset, a timeout) may have landed:
+// APPLY_FAILED with a 5xx, never TARGET_UNREACHABLE, however unreachable the
+// NAS is afterwards.
+func TestAWriteLostOnTheWireIsApplyFailed(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+	m.resetOn = "user.update"
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"enabled":false}}`)
+	if rr.Code < 500 || problemCode(t, rr) != CodeApplyFailed {
+		t.Fatalf("want a 5xx APPLY_FAILED, got %d %s", rr.Code, problemCode(t, rr))
+	}
+}
+
+// Once this apply has written (the personal group), a call that is then never
+// sent does not make the whole apply "nothing was sent": APPLY_FAILED.
+func TestAFailureAfterTheFirstWriteIsApplyFailed(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	m.after = map[string]func(){"group.create": sessionGone(s.nas)}
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"enabled":true}}`)
+	if m.groupCreates != 1 || rr.Code < 500 || problemCode(t, rr) != CodeApplyFailed {
+		t.Fatalf("want a 5xx APPLY_FAILED after the group was made (%d made), got %d %s", m.groupCreates, rr.Code, problemCode(t, rr))
+	}
+}
+
+// The same for a write operation: a password.set whose update was never sent
+// did nothing (TARGET_UNREACHABLE); one lost on the wire may have (OPERATION_FAILED).
+func TestAWriteOperationSaysWhetherAnythingWasSent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rig  func(*server, *mutatingRPC)
+		code string
+	}{
+		{"no session at all", func(s *server, _ *mutatingRPC) { sessionGone(s.nas)() }, CodeTargetUnreachable},
+		{"gone before the update", func(s *server, m *mutatingRPC) {
+			m.after = map[string]func(){"user.query": sessionGone(s.nas)}
+		}, CodeTargetUnreachable},
+		{"lost on the wire", func(_ *server, m *mutatingRPC) { m.resetOn = "user.update" }, CodeOperationFailed},
+	} {
+		s, m := opServer(t)
+		tc.rig(s, m)
+		rr := postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"correct horse battery staple"}}`)
+		if rr.Code < 500 || problemCode(t, rr) != tc.code {
+			t.Errorf("%s: want a 5xx %s, got %d %s", tc.name, tc.code, rr.Code, problemCode(t, rr))
+		}
 	}
 }

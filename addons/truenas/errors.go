@@ -39,6 +39,7 @@ const (
 	CodeSettingNotSaved          = "SETTING_NOT_SAVED"
 	CodeSettingsUnreadable       = "SETTINGS_UNREADABLE"
 	CodeStoreUnreadable          = "STORE_UNREADABLE"
+	CodeTargetUnreachable        = "TARGET_UNREACHABLE"
 	CodeTargetUnreadable         = "TARGET_UNREADABLE"
 	CodeTargetVersionUnsupported = "TARGET_VERSION_UNSUPPORTED"
 	CodeUnauthenticated          = "UNAUTHENTICATED"
@@ -77,6 +78,7 @@ var problems = map[string]problemKind{
 	CodeSettingNotSaved:          {"Setting not saved", "backoff"},
 	CodeSettingsUnreadable:       {"Settings unreadable", "backoff"},
 	CodeStoreUnreadable:          {"Store unreadable", "backoff"},
+	CodeTargetUnreachable:        {"Target unreachable", "retry_after"},
 	CodeTargetUnreadable:         {"Target unreadable", "backoff"},
 	CodeTargetVersionUnsupported: {"Target version unsupported", "never"},
 	CodeUnauthenticated:          {"Unauthenticated", "never"},
@@ -87,8 +89,10 @@ var problems = map[string]problemKind{
 }
 
 // retryAfterSeconds is the Retry-After a `retry_after` code carries: a
-// lifecycle refusal (a maintenance window is minutes, and the backend polls)
-// and a call still in flight (the backend's next pass re-sends it).
+// lifecycle refusal (a maintenance window is minutes, and the backend polls),
+// a call still in flight (the backend's next pass re-sends it), and a write
+// that could not reach the NAS (the breaker's cooldown is longer; the backend
+// keeps the change queued either way).
 const retryAfterSeconds = "30"
 
 // writeError is the one refusal body (design §7, decision 25): `type`, `title`,

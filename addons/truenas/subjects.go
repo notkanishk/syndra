@@ -526,6 +526,9 @@ func statusForLookup(err error) int {
 // renamed before anything is safe to run.
 func lookupRefusal(err error) error {
 	switch {
+	case errors.Is(err, ErrNotSent):
+		// Nothing was asked, so nothing was done: kept, so the reply says so.
+		return ErrNotSent
 	case errors.Is(err, errNoSuchAccount):
 		return fmt.Errorf("the bound account no longer exists on the target")
 	case errors.Is(err, errAmbiguousAccount):

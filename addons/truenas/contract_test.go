@@ -91,20 +91,44 @@ func TestApplyRequestAcceptsContract(t *testing.T) {
 	}
 }
 
-// The operation fixture carries preview (feature calls) and fresh (feature
-// freshness). This add-on declares neither, so it refuses them with the strict
-// decoder's own code, and accepts the rest with every field landing.
+// The operation fixture is what Syndra sends: no plan_id or fingerprint (an
+// operation is approved by confirmation, not rehearsed against a plan) and no
+// feature key. The schema allows plan_id and fingerprint, so they are accepted
+// when present; a feature's key (preview, fresh) is refused with the strict
+// decoder's own code, because this add-on declares neither feature.
 func TestOperationRequestAcceptsContract(t *testing.T) {
-	err := decodeStrict(contractFixture(t, "operation_request.json"), &OperationRequest{})
-	var unknown errUnknownRequestField
-	if !errors.As(err, &unknown) {
-		t.Fatalf("a feature field this add-on did not declare must be refused as an unknown field, got %v", err)
-	}
 	var req OperationRequest
-	if err := decodeStrict(withoutFeatureKeys(t, "operation_request.json", "operation_request.json"), &req); err != nil {
+	if err := decodeStrict(contractFixture(t, "operation_request.json"), &req); err != nil {
 		t.Fatalf("the backend's operation body was refused: %v", err)
 	}
+	doc := v2JSON(t, "fixtures", "operation_request.json")
+	doc["plan_id"], doc["fingerprint"] = "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd", "sha256:9d1c4f0b7e2a"
+	raw, _ := json.Marshal(doc)
+	req = OperationRequest{}
+	if err := decodeStrict(raw, &req); err != nil {
+		t.Fatalf("an operation body with plan_id and fingerprint was refused: %v", err)
+	}
 	noZeroFields(t, req, "OperationRequest")
+	refused := 0
+	for _, f := range v2Features(t) {
+		for _, field := range f.RequestFields {
+			key, found := strings.CutPrefix(field, "operation_request.")
+			if !found {
+				continue
+			}
+			with := v2JSON(t, "fixtures", "operation_request.json")
+			with[key] = true
+			raw, _ := json.Marshal(with)
+			var unknown errUnknownRequestField
+			if err := decodeStrict(raw, &OperationRequest{}); !errors.As(err, &unknown) {
+				t.Errorf("feature key %s, undeclared here, must be refused as an unknown field, got %v", key, err)
+			}
+			refused++
+		}
+	}
+	if refused == 0 {
+		t.Fatal("no feature adds an operation_request key, so this proved nothing")
+	}
 }
 
 func TestPlanRequestAcceptsContract(t *testing.T) {
@@ -212,7 +236,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 		Degraded: []string{"alert.list"},
 	}
 	adopt := opOK("account.adopt", "289471021834760193")
-	adopt.Detail, adopt.Rotated, adopt.AccountID = "Bound the existing account rey_mysterio.", true, "3051"
+	adopt.Detail, adopt.AccountID = "Bound the existing account rey_mysterio.", "3051"
 
 	for _, tc := range []struct {
 		route, fixture, schema string
@@ -248,7 +272,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 				{ID: apiID{raw: json.RawMessage(`17`)}, Username: "rey_mysterio", AccountID: "3051", Groups: []string{"fabrication", "lab_makers"},
 					Home: "/mnt/tank/homes/rey_mysterio", Enabled: true, SMBEnabled: true,
 					State: map[string]any{FieldGroup: []string{"fabrication", "lab_makers"}, FieldHome: []string{"true"},
-						FieldHomeQuota: []string{"0", "5368709120"}, FieldEnabled: true, FieldSMBEnabled: true},
+						FieldHomeQuota: []string{"5368709120"}, FieldEnabled: true, FieldSMBEnabled: true},
 					Standing: member},
 				{ID: apiID{raw: json.RawMessage(`"4"`)}, Username: "syndra_service", AccountID: "3001", Groups: []string{},
 					Enabled: true, Self: true,
@@ -285,9 +309,9 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 			Current: true, TakenAt: "2026-11-10T09:30:00Z",
 		}},
 		{"POST /apply reply", "apply_response.json", "apply_ok.json", ApplyOutcome{
-			Subject: "289471021834760193", Effect: EffectApplied, Detail: "Added fabrication. Unlocked the account.",
-			Consequence: "In lab_makers, fabrication. Enabled, SMB on.", Username: "bianca.belair",
-			AccountID: "3042", Standing: member, Fingerprint: "sha256:9d1c4f0b7e2a",
+			Subject: "289471021834760193", Effect: EffectApplied, Detail: "Added fabrication.",
+			Consequence: "In lab_makers, fabrication. Enabled, SMB on.", Username: "rey_mysterio",
+			AccountID: "3051", Standing: member, Fingerprint: "sha256:4be07a91c3d5",
 			Observed: map[string]any{FieldGroup: []string{"fabrication", "lab_makers"}, FieldHome: []string{"true"},
 				FieldHomeQuota: []string{"5368709120"}, FieldEnabled: true, FieldSMBEnabled: true},
 		}},

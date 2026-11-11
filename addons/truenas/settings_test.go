@@ -215,3 +215,18 @@ func TestARefusedSettingIsNotRemembered(t *testing.T) {
 		t.Fatalf("a retry after a refusal must write; home root is %q", root)
 	}
 }
+
+// A NAS that cannot be reached leaves the setting as it was, and the reply says
+// nothing was changed (TARGET_UNREACHABLE), not "may have applied".
+func TestASettingWriteThatReachedNothingSaysSo(t *testing.T) {
+	fake := reachFake()
+	s := testServer(t, fake)
+	sessionGone(s.nas)()
+	rr := putHomeRoot(t, s, "/mnt/tank/main/home_dir")
+	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeTargetUnreachable || rr.Header().Get("Retry-After") == "" {
+		t.Fatalf("want 503 TARGET_UNREACHABLE with Retry-After, got %d %s", rr.Code, problemCode(t, rr))
+	}
+	if v, found, _ := s.store.GetSetting(settingHomeRoot); found && v.Value != "" {
+		t.Fatalf("the setting changed to %q", v.Value)
+	}
+}

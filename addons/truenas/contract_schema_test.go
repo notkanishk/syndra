@@ -42,7 +42,6 @@ func loadErrorRegistry(t *testing.T) errorRegistry {
 var notWritten = map[string]string{
 	"CALL_UNSETTLED":      "feature calls (physical operations), not declared",
 	"FRESH_READ_COOLDOWN": "feature freshness, not declared",
-	"TARGET_UNREACHABLE":  "a read with nothing to serve is NO_CURRENT_READ or TARGET_UNREADABLE here",
 	"UNKNOWN_METRIC":      "feature stats, not declared",
 }
 
