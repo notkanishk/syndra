@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -202,19 +203,40 @@ const (
 type BindingConflict struct {
 	Username  string `json:"username"`
 	AccountID string `json:"account_id"`
-	// Adoptable says the account exists and no other subject is bound to it,
-	// which is the only case the adoption action can act on.
+	// Adoptable says the account exists, no other subject is bound to it and
+	// it is not the add-on's own, which is the only case the adoption action
+	// can act on.
 	Adoptable bool   `json:"adoptable"`
 	BoundTo   string `json:"bound_to,omitempty"`
+	// serviceAccount is the add-on's own account holding the name, which
+	// account.adopt refuses (refuseSelfAccount). Not on the wire: adoptable
+	// false already says the one thing Syndra acts on, and words says why.
+	serviceAccount bool
+}
+
+// unboundConflict is an account already holding the name an unbound subject
+// derives, built here once for plan and apply. Adoptable is account.adopt's
+// own rule (adoptAccount): no other subject holds the account, and it is not
+// the add-on's own (refuseSelfAccount, the same check).
+func (s *server) unboundConflict(account *Subject, owner string) *BindingConflict {
+	self := s.refuseSelfAccount(account.Username) != nil
+	return &BindingConflict{
+		Username: account.Username, AccountID: accountID(account.UID),
+		Adoptable: owner == "" && !self, BoundTo: owner, serviceAccount: self,
+	}
 }
 
 // words says what a conflict is and what the operator does next, once for
 // plan and apply. adoptable is exactly when account.adopt would succeed
-// (adoptAccount): no other subject holds the account and this subject has no
-// binding. A subject whose bound name another account now holds has a
-// binding, so adopt refuses it: the operator releases first.
+// (adoptAccount): no other subject holds the account, it is not the add-on's
+// own, and this subject has no binding. A subject whose bound name another
+// account now holds has a binding, so adopt refuses it: the operator releases
+// first.
 func (c BindingConflict) words() (detail, next string) {
 	switch {
+	case c.serviceAccount:
+		return fmt.Sprintf("%s is the account this add-on signs in to the app with, so it is never adopted.", c.Username),
+			"Create this subject's account in the app under another name, then adopt that."
 	case c.Adoptable:
 		return fmt.Sprintf("An account named %s already exists and is not bound to anyone.", c.Username),
 			"Adopt it, or rename it in the app."
@@ -223,7 +245,7 @@ func (c BindingConflict) words() (detail, next string) {
 			"If it is not theirs, release it from that subject, then adopt it here."
 	default:
 		return fmt.Sprintf("The name %s this subject is bound to is now held by a different account.", c.Username),
-			"Release this subject's binding first, then adopt that account or rename it in the app."
+			"Release this subject's binding first, then adopt that account only if it is theirs, or rename it in the app."
 	}
 }
 
@@ -297,6 +319,14 @@ func (s *server) decodeDesired(raw map[string]json.RawMessage) (desiredState, er
 func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
 	d := desiredState{managed: map[string]bool{}}
 	for field, value := range raw {
+		// JSON null decodes into Go's zero value without error, which here is
+		// an instruction: `enabled: null` would lock the account and
+		// `group: null` remove every managed group. FieldValue
+		// (common/field.json) is an array or a boolean, never null, so it is
+		// refused for every field before any of them is read.
+		if string(bytes.TrimSpace(value)) == "null" {
+			return desiredState{}, cannotHold("field %q is null, which is not a value; leave a field out to leave it alone", field)
+		}
 		d.managed[field] = true
 		switch field {
 		case FieldGroup:
@@ -411,19 +441,12 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 	// completed mutation as queued — and a re-plan's new fingerprint does not
 	// turn a replay into PLAN_STALE (calls.go).
 	identity := map[string]any{"subject": req.Subject, "desired": plainJSON(req.Desired)}
-	s.once(w, req.CallID, kindApply, identity, func(w http.ResponseWriter) { s.applyNow(w, req) })
+	s.once(w, req.CallID, kindApply, req.Subject, identity, func(w http.ResponseWriter) { s.applyNow(w, req) })
 }
 
-// applyNow is one apply that was not a replay.
+// applyNow is one apply that was not a replay, admitted by the lifecycle gate
+// and alone for its subject (once).
 func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
-	done, err := s.life.Begin()
-	if err != nil {
-		state, _ := s.life.State()
-		writeLifecycleRefusal(w, state)
-		return
-	}
-	defer done()
-
 	if supported, why := s.nas.MajorSupported(); !supported {
 		// A mutation against an untested major is refused, not attempted. Reads
 		// continue; this is the half that could break something.
@@ -695,11 +718,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		return nil, Binding{}, nil, false, err
 	}
 	if existing != nil {
-		owner := claimed[derived]
-		return nil, Binding{}, &BindingConflict{
-			Username: derived, AccountID: accountID(existing.UID),
-			Adoptable: owner == "", BoundTo: owner,
-		}, false, nil
+		return nil, Binding{}, s.unboundConflict(existing, claimed[derived]), false, nil
 	}
 	return nil, Binding{SubjectID: req.Subject, Username: derived}, nil, cut, nil
 }
@@ -1049,7 +1068,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		if adopted {
 			return ApplyOutcome{}, statusFor(err), err
 		}
-		s.undoGroup(groupID)
+		s.undoGroup(binding.Username, groupID)
 		return acted(err)
 	}
 

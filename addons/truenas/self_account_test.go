@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -96,5 +98,39 @@ func TestAnOrdinaryAccountIsStillAdoptable(t *testing.T) {
 	s.nas.selfName, s.nas.selfUID = "syndra", 3001
 	if err := s.refuseSelfAccount("charlotte"); err != nil {
 		t.Fatalf("a member account was refused: %v", err)
+	}
+}
+
+// A subject whose derived name is the add-on's own account is a conflict that
+// is NOT adoptable: account.adopt refuses it, and `adoptable` is true exactly
+// when adopt would succeed. Plan and apply say so alike, and the next step is
+// not "adopt it".
+func TestTheServiceAccountIsNeverOfferedAsAdoptable(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"syndra","id":5,"uid":3001,"locked":false,"smb":false,"groups":[]}]`)
+	// Asked of the target, as every new session does.
+	m.fakeRPC.answers = map[string]string{"auth.me": `{"pw_name":"syndra","pw_uid":3001}`}
+	s.nas.selfName, s.nas.selfUID = "syndra", 3001
+	const subject = `"subject":"sub-1","email":"syndra@example.org","desired":{"enabled":true}`
+
+	rr := httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[{`+subject+`}]}`)
+	var plan PlanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+		t.Fatalf("want one planned outcome, got %d %s", rr.Code, rr.Body.String())
+	}
+	applied := postApply(t, s, `{"call_id":"c1",`+subject+`}`)
+	if applied.Code != http.StatusConflict || problemCode(t, applied) != CodeBindingConflict {
+		t.Fatalf("want 409 BINDING_CONFLICT, got %d %s", applied.Code, applied.Body.String())
+	}
+	for name, out := range map[string]ApplyOutcome{"plan": plan.Outcomes[0], "apply": decodeOutcome(t, applied)} {
+		if out.Conflict == nil || out.Conflict.Adoptable || out.Conflict.BoundTo != "" {
+			t.Fatalf("%s: want a conflict that is not adoptable, got %+v", name, out.Conflict)
+		}
+		if !strings.Contains(out.Detail, "signs in to the app with") || strings.Contains(out.Consequence, "Adopt it") {
+			t.Errorf("%s: the words must say whose account it is, not offer it: %q %q", name, out.Detail, out.Consequence)
+		}
+	}
+	if _, status, err := s.adoptAccount(OperationRequest{Subject: "sub-1", Params: map[string]any{"username": "syndra"}}); err == nil || status != http.StatusUnprocessableEntity {
+		t.Fatalf("adopt must refuse it, which is why it is not adoptable: %d %v", status, err)
 	}
 }

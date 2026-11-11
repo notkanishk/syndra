@@ -989,8 +989,9 @@ whole burden.
   Any other match, or two candidates, MUST be 409 `BINDING_CONFLICT` with
   `conflict` (`username`, `account_id`, `bound_to` when another subject
   holds it, and `adoptable`, `true` exactly when `account.adopt` for this
-  subject would succeed: no other subject holds the account and this
-  subject has no binding), and an operator decides through the confirmed
+  subject would succeed: no other subject holds the account, it is not the
+  add-on's own service account, and this subject has no binding), and an
+  operator decides through the confirmed
   `account.adopt` operation, which every add-on that creates accounts
   therefore serves ([The account operations](#the-account-operations)).
   Anyone with console access can type an external reference, and a wrong
@@ -1012,8 +1013,8 @@ whole burden.
   name reused) is a `BINDING_CONFLICT` with `adoptable: false`, never this
   subject's account: converging it hands the subject's access to a
   stranger. `account.adopt` refuses a subject that has a binding, so the
-  operator releases first (`account.release`), then adopts that account or
-  renames it in the app.
+  operator releases first (`account.release`), then adopts that account
+  only if it is theirs, or renames it in the app.
 
 #### The reply
 

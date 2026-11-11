@@ -64,3 +64,25 @@ func TestARefusedAccountTakesItsPersonalGroupWithIt(t *testing.T) {
 		t.Fatalf("the personal group must be undone, made %d removed %d", m.groupCreates, m.groupDeletes)
 	}
 }
+
+// The cleanup deletes only the group it made, and only while it is empty: an
+// account created in it since would otherwise lose its primary group.
+func TestAGroupIsUndoneOnlyWhileItIsStillEmptyAndStillOurs(t *testing.T) {
+	made := apiID{raw: []byte(`92`)}
+	for _, tc := range []struct {
+		name, groups string
+		deleted      bool
+	}{
+		{"empty", `[{"id":92,"gid":200000,"group":"zoe","builtin":false,"users":[]}]`, true},
+		{"an account in it since", `[{"id":92,"gid":200000,"group":"zoe","builtin":false,"users":[71]}]`, false},
+		{"the name now another group's", `[{"id":95,"gid":200001,"group":"zoe","builtin":false,"users":[]}]`, false},
+		{"gone already", `[]`, false},
+	} {
+		s, m := applyServer(t, `[]`)
+		m.fakeRPC.groups = tc.groups
+		s.undoGroup("zoe", made)
+		if got := m.groupDeletes == 1; got != tc.deleted {
+			t.Errorf("%s: deleted = %t, want %t", tc.name, got, tc.deleted)
+		}
+	}
+}

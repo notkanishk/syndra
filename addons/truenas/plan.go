@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path"
@@ -138,25 +139,47 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		out.Stale = unreachableSince(snap.TakenAt)
 	}
 	for _, subject := range req.Subjects {
-		out.Outcomes = append(out.Outcomes, s.planOne(subject, byName, byUID, claimed, snap))
+		outcome, err := s.planOne(subject, byName, byUID, claimed, snap)
+		switch {
+		case errors.Is(err, errStoreUnreadable):
+			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, "The add-on's own records could not be read, so nothing was planned.", nil)
+			return
+		case err != nil:
+			writeError(w, statusFor(err), CodeTargetUnreadable, err.Error(), nil)
+			return
+		}
+		out.Outcomes = append(out.Outcomes, outcome)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
+// errStoreUnreadable is the add-on's own records failing to read during a plan.
+var errStoreUnreadable = errors.New("the add-on's own records could not be read")
+
 // planOne says what would happen to one subject, and issues no mutating call.
-func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[int64]*Subject, claimed map[string]string, snap Snapshot) ApplyOutcome {
+//
+// `blocked` is only ever a state this app cannot hold (unholdable) or a
+// conflict an operator decides: Syndra records it as the target refusing,
+// which is terminal for that row (propagation fingerprintFor). A read that
+// failed is an error, and the whole plan is refused with it (handlePlan), so
+// the row is planned again rather than given up on.
+func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[int64]*Subject, claimed map[string]string, snap Snapshot) (ApplyOutcome, error) {
 	truncated := snap.Truncated
 	desired, err := s.decodeDesired(req.Desired)
-	if err != nil {
+	var u unholdable
+	switch {
+	case errors.As(err, &u):
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectBlocked,
 			Detail: err.Error(), Consequence: "Nothing would change.",
-		}
+		}, nil
+	case err != nil:
+		return ApplyOutcome{}, fmt.Errorf("%w: %w", errStoreUnreadable, err)
 	}
 
 	binding, bound, err := s.store.GetBinding(req.Subject)
 	if err != nil {
-		return ApplyOutcome{Subject: req.Subject, Effect: EffectBlocked, Detail: "The local binding store could not be read."}
+		return ApplyOutcome{}, fmt.Errorf("%w: %w", errStoreUnreadable, err)
 	}
 
 	var current *Subject
@@ -175,7 +198,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 				Username:    conflict.Username,
 				Fingerprint: fingerprintSubject(byName[conflict.Username]),
 				Conflict:    conflict,
-			}
+			}, nil
 		}
 		current, name = found, resolved.Username
 	} else {
@@ -189,18 +212,15 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 		if existing, ok := byName[name]; ok {
 			// Reported, not resolved. Adopting silently is the dangerous
 			// outcome — that account may belong to somebody else entirely.
-			conflict := BindingConflict{
-				Username: name, AccountID: accountID(existing.UID),
-				Adoptable: claimed[name] == "", BoundTo: claimed[name],
-			}
+			conflict := s.unboundConflict(existing, claimed[name])
 			detail, next := conflict.words()
 			return ApplyOutcome{
 				Subject: req.Subject, Effect: EffectBlocked,
 				Detail: detail, Consequence: "Nothing would change. " + next,
 				Username:    name,
 				Fingerprint: fingerprintSubject(existing),
-				Conflict:    &conflict,
-			}
+				Conflict:    conflict,
+			}, nil
 		}
 	}
 
@@ -221,13 +241,13 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 			Detail:      "The account list was longer than one read returns, so this subject's absence from it proves nothing.",
 			Consequence: "Nothing would change.",
 			Fingerprint: fingerprint,
-		}
+		}, nil
 	}
 
 	if noAccountToSwitchOff(current, desired) {
 		out := noAccountToSwitchOffOutcome(req.Subject)
 		out.Fingerprint = fingerprint
-		return out
+		return out, nil
 	}
 	// The groups the apply would write, checked where the apply checks them
 	// (groupIDsFor in converge and createAndConverge), so a group the NAS does
@@ -239,7 +259,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 			return ApplyOutcome{
 				Subject: req.Subject, Effect: EffectBlocked,
 				Detail: err.Error(), Consequence: "Nothing would change.",
-			}
+			}, nil
 		}
 	}
 	if current == nil {
@@ -248,20 +268,16 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 			Detail:      fmt.Sprintf("Creates %s.", name),
 			Consequence: describeHolding(projected(desired, name)),
 			Username:    name, Fingerprint: fingerprint,
-		}
+		}, nil
 	}
 
 	// The home and its limit, decided by the apply's own rules and reads, so
 	// the plan never promises a folder or a limit the apply would not make.
 	home, err := s.decideHome(desired, current.Username, current.Home, current.UID)
 	if err != nil {
-		return ApplyOutcome{
-			Subject: req.Subject, Effect: EffectBlocked,
-			Detail:      "Where the home folder would go could not be read: " + err.Error() + ".",
-			Consequence: "Nothing would change.",
-			Username:    current.Username, Fingerprint: fingerprint,
-			AccountID: accountID(current.UID), Standing: standingOf(current),
-		}
+		// The target's read failing, as the apply answers it (converge): a
+		// retry, never `blocked`, which Syndra takes as the target refusing.
+		return ApplyOutcome{}, err
 	}
 	// The one decision `apply` also executes (apply.go decide), so what is
 	// planned is what is written.
@@ -288,7 +304,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 			Consequence: describeHolding(*current),
 			Username:    current.Username, Fingerprint: fingerprint,
 			AccountID: accountID(current.UID), Standing: standingOf(current),
-		}
+		}, nil
 	}
 	detail := ""
 	if changes {
@@ -303,7 +319,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 		Consequence: describeHolding(after),
 		Username:    current.Username, Fingerprint: fingerprint,
 		AccountID: accountID(current.UID), Standing: standingOf(current),
-	}
+	}, nil
 }
 
 // projected is the state a NEW account would be left in: the shared decision

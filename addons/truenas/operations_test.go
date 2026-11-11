@@ -916,3 +916,29 @@ func TestAMissingMethodRefusesWhatTheManifestWithdraws(t *testing.T) {
 		t.Fatalf("want 422 OPERATION_FAILED %q, got %d %s", reason, rr.Code, rr.Body.String())
 	}
 }
+
+// An operator adopting the same account twice (two screens, two call_ids) is
+// told it is done both times, with the account's id both times: the repeat
+// is not a replay, so the call record does not answer it. And the id is the
+// account as read now: a binding kept by contract 1 holds a record key, not
+// the uid, and answering that would overwrite Syndra's correct one.
+func TestAdoptingTheSameAccountTwiceAnswersItsIDBothTimes(t *testing.T) {
+	s, _ := applyServer(t, `[{"username":"becky_lynch","id":11,"uid":200123,"locked":false,"smb":true,"groups":[42]}]`)
+	for _, callID := range []string{"adopt-1", "adopt-2"} {
+		rr := postOperation(t, s, "account.adopt", `{"call_id":"`+callID+`","operation":"account.adopt","subject":"sub-1","actor":"op1","params":{"username":"becky_lynch"}}`)
+		var got OperationResult
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || rr.Code != http.StatusOK || got.AccountID != "200123" {
+			t.Fatalf("%s: want 200 with account 200123, got %d %s", callID, rr.Code, rr.Body.String())
+		}
+	}
+
+	// A contract-1 binding: the record key where the uid belongs.
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "becky_lynch", UID: 11}); err != nil {
+		t.Fatal(err)
+	}
+	rr := postOperation(t, s, "account.adopt", `{"call_id":"adopt-3","operation":"account.adopt","subject":"sub-1","actor":"op1","params":{"username":"becky_lynch"}}`)
+	var got OperationResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || rr.Code != http.StatusOK || got.AccountID != "200123" {
+		t.Fatalf("a legacy binding: want the account's uid 200123, got %d %s", rr.Code, rr.Body.String())
+	}
+}

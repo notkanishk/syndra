@@ -100,7 +100,7 @@ func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body [
 	// this body had no field for it). A replay answers what the first call
 	// answered and writes nothing.
 	identity := map[string]any{"name": settingHomeRoot, "value": req.Value}
-	s.once(w, req.CallID, kindSetting+settingHomeRoot, identity, func(w http.ResponseWriter) { s.putHomeRoot(w, req) })
+	s.once(w, req.CallID, kindSetting+settingHomeRoot, "", identity, func(w http.ResponseWriter) { s.putHomeRoot(w, req) })
 }
 
 func (s *server) putHomeRoot(w http.ResponseWriter, req putSettingRequest) {

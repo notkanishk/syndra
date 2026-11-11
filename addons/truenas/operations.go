@@ -123,15 +123,8 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 	// of a member's password, and a re-send with another password is a replay
 	// of the first (design §5).
 	identity := map[string]any{"name": name, "subject": req.Subject, "params": publicParams(name, req.Params)}
-	s.once(w, req.CallID, kindOperation+name, identity, func(w http.ResponseWriter) {
-		// Mutations are gated by lifecycle state; reads never are.
-		done, err := s.life.Begin()
-		if err != nil {
-			state, _ := s.life.State()
-			writeLifecycleRefusal(w, state)
-			return
-		}
-		defer done()
+	// Mutations are gated by lifecycle state (once); reads never are.
+	s.once(w, req.CallID, kindOperation+name, req.Subject, identity, func(w http.ResponseWriter) {
 		// The manifest's own answer (availability): an operation that touches
 		// nothing on the NAS (account.release) is never refused for its
 		// version, the one that does is refused for it.
@@ -1106,7 +1099,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 				found, _, err := s.subjectWhere(field, value)
 				return found, err
 			}
-			_, _, conflict, err := boundAccount(existing, floor, ceiling,
+			_, resolved, conflict, err := boundAccount(existing, floor, ceiling,
 				func(name string) (*Subject, error) { return lookup("username", name) },
 				func(uid int64) (*Subject, error) { return lookup("uid", uid) })
 			if err != nil {
@@ -1122,7 +1115,9 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 				// adoption would hand the backend a zero and overwrite a
 				// binding that was correct with one that is not — the repeat
 				// path making the state worse than the first attempt left it.
-				AccountID: accountID(existing.UID),
+				// The account as resolved now, not as stored: a binding kept
+				// without its uid (contract 1) stores none.
+				AccountID: accountID(resolved.UID),
 				Detail:    fmt.Sprintf("%s was already bound to this subject.", username),
 			}, http.StatusOK, nil
 		}

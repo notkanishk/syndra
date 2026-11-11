@@ -63,8 +63,10 @@ type server struct {
 	// reach is the last read of the shares' folder permissions (reach.go).
 	reach reachCache
 
-	// calls is every write executing now, by call_id (calls.go).
-	calls callLeases
+	// calls is every write executing now, by call_id, and subjects the one
+	// write per subject allowed at a time (calls.go).
+	calls    callLeases
+	subjects subjectLocks
 }
 
 func (s *server) routes() http.Handler {

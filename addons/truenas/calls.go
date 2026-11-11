@@ -43,6 +43,15 @@ import (
 //     indeterminate row and the fingerprint will have moved.
 //  4. Only a 2xx is recorded. A refusal changed nothing, so a re-send is
 //     evaluated again rather than answered with an old refusal.
+//  5. Writes for one subject run one at a time, whatever their call_ids: an
+//     apply, and every operation on the subject's account. Two applies racing
+//     to create one account each read "no account", and the loser's cleanup
+//     (undoGroup) can delete the winner's primary group; the backend drains
+//     its queue concurrently, so this is held here, where the writes happen.
+//     Taken after rules 1-3, so a replay never waits behind a write and a
+//     re-send of a waiting call is 409 under its lease. The lease never
+//     blocks, so the subject lock is the only lock a write waits on and the
+//     two cannot deadlock.
 //
 // An entry contract 1 recorded carries no identity digest and is treated as
 // matching any identity, as an entry with no kind always was: outbox rows that
@@ -80,9 +89,27 @@ func (l *callLeases) take(callID, identity string) (release func(), held, other 
 	}, false, false
 }
 
-// once runs one write under the rules above. run writes its reply as any
-// handler does; once records it when it is a 2xx and passes it on.
-func (s *server) once(w http.ResponseWriter, callID, kind string, identity any, run func(http.ResponseWriter)) {
+// subjectLocks is rule 5: one mutex per subject.
+//
+// ponytail: a subject's mutex is never freed, so the map holds one per subject
+// ever written to, bounded by the membership; a reference-counted map is the
+// upgrade if that bound ever stops holding.
+type subjectLocks struct{ m sync.Map }
+
+// lock waits for subject's writes to be this caller's alone.
+func (l *subjectLocks) lock(subject string) (unlock func()) {
+	v, _ := l.m.LoadOrStore(subject, new(sync.Mutex))
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
+// once runs one write under the rules above. subject is whose account the
+// write touches (an apply, an operation), empty for a write that touches none
+// (lifecycle, a setting); a subject's write is also the one the lifecycle
+// gates. run writes its reply as any handler does; once records it when it is
+// a 2xx and passes it on.
+func (s *server) once(w http.ResponseWriter, callID, kind, subject string, identity any, run func(http.ResponseWriter)) {
 	digest := identityDigest(identity)
 	// The kind is part of what is leased: an apply and an operation under one
 	// call_id are different requests whatever their identities hash to.
@@ -124,6 +151,20 @@ func (s *server) once(w http.ResponseWriter, callID, kind string, identity any, 
 		return
 	}
 
+	if subject != "" {
+		// A mutation of a subject's account: refused while the add-on is not
+		// taking mutations, counted in flight once admitted so a drain waits
+		// for it, then run alone for its subject (rule 5). Gated before it
+		// waits, so a drain refuses a new write instead of queueing it.
+		done, err := s.life.Begin()
+		if err != nil {
+			state, _ := s.life.State()
+			writeLifecycleRefusal(w, state)
+			return
+		}
+		defer done()
+		defer s.subjects.lock(subject)()
+	}
 	rec := &capture{header: http.Header{}}
 	run(rec)
 	// Recorded BEFORE the reply is returned, so a caller retrying after a lost

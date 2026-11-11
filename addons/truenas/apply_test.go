@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	bolt "go.etcd.io/bbolt"
 )
 
 // 5.1–5.14, 6.1–6.2, 6.7–6.12 — the entitlement plane.
@@ -59,6 +61,21 @@ type mutatingRPC struct {
 	after   map[string]func()
 	// rateLimitOn makes one method's call answer as a rate-limited NAS does.
 	rateLimitOn string
+	// beforeUserCreate runs as an account create arrives, and refuses it when
+	// it answers true.
+	beforeUserCreate func() (refuse bool)
+}
+
+// editGroups changes the group table the next group.query reads, the way the
+// target's own does: a personal group made, deleted, or given its account.
+func (m *mutatingRPC) editGroups(edit func([]map[string]any) []map[string]any) {
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(orEmptyList(m.fakeRPC.groups)), &rows); err != nil {
+		return
+	}
+	if encoded, err := json.Marshal(edit(rows)); err == nil {
+		m.fakeRPC.groups = string(encoded)
+	}
 }
 
 // remember adds a created account to the fixture the next read serves.
@@ -133,22 +150,36 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		}
 		return envelope(`null`), nil
 	case "group.create":
-		// A personal group, as the create path makes one before the account.
+		// A personal group, as the create path makes one before the account,
+		// kept in the table so a later read finds it.
 		m.groupCreates++
-		if m.refuseGroupCreate {
+		args, _ := params.([]any)
+		g, _ := args[0].(map[string]any)
+		if m.refuseGroupCreate || strings.Contains(m.fakeRPC.groups, `"group":"`+fmt.Sprint(g["name"])+`"`) {
 			return errorEnvelope("group_create.name: A group with this name already exists"), nil
 		}
+		id := int64(92)
 		if m.refuseUserCreate {
-			return envelope(`93`), nil
+			id = 93
 		}
-		return envelope(`92`), nil
+		m.editGroups(func(rows []map[string]any) []map[string]any {
+			return append(rows, map[string]any{"id": id, "gid": g["gid"], "group": g["name"], "builtin": false, "users": []any{}})
+		})
+		return envelope(strconvI(id)), nil
 	case "group.delete":
 		m.groupDeletes++
+		args, _ := params.([]any)
+		m.editGroups(func(rows []map[string]any) []map[string]any {
+			return slices.DeleteFunc(rows, func(r map[string]any) bool { return fmt.Sprint(r["id"]) == fmt.Sprint(args[0]) })
+		})
 		return envelope(`null`), nil
 	case "pool.dataset.set_quota":
 		m.setQuota(params)
 		return envelope(`null`), nil
 	case "user.create":
+		if m.beforeUserCreate != nil && m.beforeUserCreate() {
+			return errorEnvelope("user_create.username: A user with this username already exists"), nil
+		}
 		if m.refuseUserCreate {
 			return errorEnvelope("user_create.username: refused"), nil
 		}
@@ -169,6 +200,19 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		// unix uid, which are different numbers. A fake that forgot the account
 		// it had just made would make that read-back untestable.
 		m.remember(params)
+		// The account is now in its primary group, as group.query's `users`
+		// reports it.
+		if c, ok := args[0].(map[string]any); ok && len(args) == 1 {
+			m.editGroups(func(rows []map[string]any) []map[string]any {
+				for _, r := range rows {
+					if fmt.Sprint(r["id"]) == fmt.Sprint(c["group"]) {
+						users, _ := r["users"].([]any)
+						r["users"] = append(users, m.nextID)
+					}
+				}
+				return rows
+			})
+		}
 		return envelope(strconvI(m.nextID)), nil
 	}
 	// Already recorded above; the embedded fake records the rest.
@@ -598,8 +642,11 @@ func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
 		Params: map[string]any{"username": "charlotte"}}); status != http.StatusConflict {
 		t.Fatalf("account.adopt must refuse a bound subject, got %d", status)
 	}
-	if !strings.Contains(out.Consequence, "Release this subject's binding first") {
-		t.Errorf("the next step is a release, got %q", out.Consequence)
+	// And the account after it may be a stranger's (the name was reused), so
+	// the step never reads as "adopt it": only if it is theirs.
+	if !strings.Contains(out.Consequence, "Release this subject's binding first") ||
+		!strings.Contains(out.Consequence, "adopt that account only if it is theirs") {
+		t.Errorf("the next step is a release, then an adoption only of their own account, got %q", out.Consequence)
 	}
 }
 
@@ -706,6 +753,9 @@ func TestAnUnholdableDesiredStateIsBlockedByPlanAndApplyAlike(t *testing.T) {
 		{"flag that is not a flag", `{"enabled":"yes"}`},
 		{"unknown group", `{"group":["the_shield"]}`},
 		{"built-in group", `{"group":["builtin_users"]}`},
+		// Null decodes to the zero value: a lock and an empty group set.
+		{"null flag", `{"enabled":null}`},
+		{"null groups", `{"group":null}`},
 	} {
 		for _, users := range []string{`[]`, existing} {
 			s, m := applyServer(t, users)
@@ -741,6 +791,48 @@ func TestAnUnholdableDesiredStateIsBlockedByPlanAndApplyAlike(t *testing.T) {
 				t.Errorf("%s: nothing may be written", name)
 			}
 		}
+	}
+}
+
+// A plan that could not read is not a `blocked` subject. Syndra records
+// blocked as the target refusing, which is terminal and holds the person's
+// next withdrawal; a failed read is refused whole, so the row is planned again.
+func TestAPlanThatCannotReadIsRefusedNotBlocked(t *testing.T) {
+	const existing = `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`
+	for _, tc := range []struct {
+		name    string
+		desired string
+		breaks  func(*server, *mutatingRPC)
+		status  int
+		code    string
+	}{
+		{"binding unreadable", `{"enabled":true}`, func(s *server, _ *mutatingRPC) {
+			corrupt(t, s, bucketBindings, "sub-1")
+		}, http.StatusInternalServerError, CodeStoreUnreadable},
+		{"home location unreadable", `{"home":["true"]}`, func(s *server, _ *mutatingRPC) {
+			corrupt(t, s, bucketSettings, settingHomeRoot)
+		}, http.StatusInternalServerError, CodeStoreUnreadable},
+		{"home folder unreadable on the NAS", `{"home":["true"]}`, func(_ *server, m *mutatingRPC) {
+			m.fakeRPC.refuse = map[string]string{"filesystem.stat": "[EACCES] no"}
+		}, http.StatusBadGateway, CodeTargetUnreadable},
+	} {
+		s, m := homeServer(t, existing, nil, nil)
+		tc.breaks(s, m)
+		rr := httptest.NewRecorder()
+		planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.org","desired":`+tc.desired+`}]}`)
+		if rr.Code != tc.status || problemCode(t, rr) != tc.code {
+			t.Errorf("%s: want %d %s, got %d %s", tc.name, tc.status, tc.code, rr.Code, rr.Body.String())
+		}
+	}
+}
+
+// corrupt makes one stored record unreadable.
+func corrupt(t *testing.T, s *server, bucket []byte, key string) {
+	t.Helper()
+	if err := s.store.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucket).Put([]byte(key), []byte("{not json"))
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

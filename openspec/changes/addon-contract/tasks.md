@@ -1080,6 +1080,13 @@ settings with the full §5 rules.
     `APPLY_FAILED`); the kit's `limit-empty` judges only from a 5 GiB it saw
     set and skips an unreported limit; kit texts cite `AUTHORING.md#…`
     anchors, guarded by `TestEveryCheckCitesAGuideSection`.
+  - Review of 64584cd0, one line each:
+    - A JSON `null` for any `desired` field is `unholdable` (422 `APPLY_BLOCKED`, plan `blocked`), refused in `decodeDesiredFields` before any field is read.
+    - `/plan` is `blocked` only for `unholdable`; an unreadable binding or home setting is 500 `STORE_UNREADABLE`, a home folder the NAS would not stat 5xx `TARGET_UNREADABLE` (as the apply).
+    - The bound-name-reused next step: "Release this subject's binding first, then adopt that account only if it is theirs, or rename it in the app."
+    - A repeat `account.adopt` answers the uid `boundAccount` resolves now, not the stored one (a contract-1 binding held a record key).
+    - Writes for one subject run one at a time (`once`, rule 5: lifecycle gate, then a per-subject mutex, after the lease and the replay); `undoGroup` deletes only its own group while still empty.
+    - `adoptable` is false for the add-on's own service account (`unboundConflict`, the one constructor, by `refuseSelfAccount`'s rule), with its own words.
 - [ ] 5.3a (found at 5.3) Where TrueNAS and the contract differ #needs-triage
   - Moved to 5.3b: the mutation log written after the write.
   - [x] An unknown key in `desired` was 400 `APPLY_FAILED`, the guide's

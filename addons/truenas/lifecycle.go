@@ -182,7 +182,7 @@ func (s *server) handleLifecycle(w http.ResponseWriter, r *http.Request, body []
 		return
 	}
 	identity := map[string]any{"state": req.State, "reason": req.Reason}
-	s.once(w, req.CallID, kindLifecycle, identity, func(w http.ResponseWriter) {
+	s.once(w, req.CallID, kindLifecycle, "", identity, func(w http.ResponseWriter) {
 		if err := s.life.Set(req.State, req.Reason); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, CodeUnknownLifecycleState, "The state is not one this add-on knows.", nil)
 			return
