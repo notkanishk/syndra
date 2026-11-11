@@ -611,7 +611,10 @@ type ActivityReport struct {
 // observed is a read result labelled with how fresh it is (fresh.go): a copy,
 // so a kept result is never changed.
 func (r ActivityReport) observed(o Observed) any { r.Observed = o; return &r }
-func (r StorageStatus) observed(o Observed) any  { r.Observed = o; return &r }
+func (r StorageStatus) observed(o Observed) any {
+	r.Observed = o.least(r.placesSeen)
+	return &r
+}
 
 // activityLimit is how many events one activity.get returns.
 const activityLimit = 200

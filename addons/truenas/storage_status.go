@@ -44,6 +44,9 @@ type StorageStatus struct {
 	// list that was read is "no folder is open to you yet".
 	Places         []Place `json:"places"`
 	PlacesReadable bool    `json:"places_readable"`
+	// placesSeen is how fresh the folder permissions behind Places are: the
+	// reply is no fresher than its least fresh part (observed).
+	placesSeen Observed
 	// NeedsPassword is the reason, when there is one an action fixes. Setting a
 	// password is what turns the account on, so this is an invitation rather
 	// than an error.
@@ -119,8 +122,8 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 		Enabled: !account.Locked, SMBEnabled: account.SMB, PasswordSet: !account.PasswordDisabled})
 
 	// Best-effort like usage: whether the account works is the urgent half.
-	if places, err := s.memberPlaces(account.UID, account.Groups, homeOf(account.Home)); err == nil {
-		status.Places, status.PlacesReadable = places, true
+	if places, seen, err := s.memberPlaces(req.Fresh, account.UID, account.Groups, homeOf(account.Home)); err == nil {
+		status.Places, status.PlacesReadable, status.placesSeen = places, true, seen
 	}
 
 	// Usage is best-effort: a member who cannot be told their usage can still

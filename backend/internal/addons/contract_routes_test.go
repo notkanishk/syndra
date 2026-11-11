@@ -512,6 +512,11 @@ func TestReadOperationsSendTheContractShapeAndReadTheirAnswer(t *testing.T) {
 			if st.Standing == nil || st.Standing.Usable || st.Standing.WaitingOn != "member" || st.Standing.Next == "" {
 				t.Errorf("the account's standing did not land: %+v", st.Standing)
 			}
+			// When the add-on read it lands with it; the legacy pocket does not say.
+			if want := time.Date(2026, 11, 10, 9, 30, 0, 0, time.UTC); tc.results != (st.Observation != nil) ||
+				tc.results && (!st.Observation.TakenAt.Equal(want) || !st.Observation.Current) {
+				t.Errorf("the read's observation did not land: %+v", st.Observation)
+			}
 
 			got = serve(tc.activity)
 			act := Activity(ctx, "truenas", "289471021834760193", "operator-1", "2026-11-01T00:00:00Z", false)

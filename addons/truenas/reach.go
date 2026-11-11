@@ -411,11 +411,13 @@ func (s *server) handleReach(w http.ResponseWriter, r *http.Request, _ []byte) {
 
 // memberPlaces is everywhere one account can connect: what its own groups
 // open, then its home folder first. Usage is filled in for the places it can
-// change, one quota read per dataset.
-func (s *server) memberPlaces(uid int64, groupIDs []apiID, home string) ([]Place, error) {
-	read, _, err := s.reach(false)
+// change, one quota read per dataset. The folder permissions come through the
+// fresher like /reach (fresh asks for a read of the NAS now), and the places
+// are as fresh as that read says.
+func (s *server) memberPlaces(fresh bool, uid int64, groupIDs []apiID, home string) ([]Place, Observed, error) {
+	read, seen, err := s.reach(fresh)
 	if err != nil {
-		return nil, err
+		return nil, Observed{}, err
 	}
 	byID := gidsOf(read.groups)
 	who := principals{}
@@ -447,7 +449,7 @@ func (s *server) memberPlaces(uid int64, groupIDs []apiID, home string) ([]Place
 		u := table[uid] // no row is nothing saved yet
 		places[i].Usage = &u
 	}
-	return places, nil
+	return places, seen, nil
 }
 
 // userQuotas reads one dataset's user quota table by uid, nil when it can't be

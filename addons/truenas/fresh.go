@@ -20,17 +20,23 @@ import (
 //     `cached` (RFC 9111 §4.2: served while fresh, never called current);
 //   - with `fresh` (RFC 9111 §5.2.1.4 `no-cache`: read the app now), the NAS
 //     is read, unless a read of the same thing began inside the cooldown:
-//     then the copy answers `cooldown` with `retry_after`, or, with no copy,
-//     429 FRESH_READ_COOLDOWN with Retry-After (RFC 6585 §4, RFC 9110 §10.2.3);
+//     then the copy answers `cooldown` with `retry_after`, or, with nothing
+//     at all to serve, 429 FRESH_READ_COOLDOWN with Retry-After (RFC 6585 §4,
+//     RFC 9110 §10.2.3);
 //   - concurrent reads of one thing make one read of the NAS (request
 //     collapsing, golang.org/x/sync/singleflight's shape, a few lines here
 //     rather than a dependency); a joiner arrived after the read began, so its
 //     answer is never current (B1);
 //   - a NAS that cannot be reached answers the copy, `unreachable` (RFC 5861
-//     stale-if-error), never an error while there is a copy;
-//   - every write forgets every copy (server.mutate), so the first read after
-//     a write is a read of the NAS: a member waiting on their own password
-//     sees it land on the next poll.
+//     stale-if-error), never an error while there is a copy; a fresh read
+//     inside the cooldown of a read that failed answers the same, never
+//     "read moments ago", and never 429 when there is a copy or a mirror;
+//   - a refusal (an operation's 4xx) drops the copy: what it said is no longer
+//     what the NAS holds;
+//   - every write forgets every copy, cooldown and read under way
+//     (server.mutate), so the first read after a write is a read of the NAS
+//     begun after it: a member waiting on their own password sees it land on
+//     the next poll.
 //
 // ponytail: the cooldown is per key (one route, or one route and subject);
 // add a target-wide token bucket if many members' "Read again" ever loads the
@@ -56,7 +62,22 @@ type Observed struct {
 	Stale *Stale `json:"stale,omitempty"`
 }
 
-// errCooldown is a fresh read inside the cooldown with nothing to serve.
+// least is the less fresh of o and p, a reply made of both: current only when
+// both are, else the one not current, the older when neither is. Each keeps
+// the invariant (stale exactly when not current), so the answer does. A p
+// never read (no taken_at) says nothing.
+// ponytail: taken_at compared as text, which orders while both are rfc3339's
+// UTC seconds.
+func (o Observed) least(p Observed) Observed {
+	if p.TakenAt == "" || p.Current || (!o.Current && o.TakenAt <= p.TakenAt) {
+		return o
+	}
+	return p
+}
+
+// errCooldown is a fresh read inside the cooldown with nothing at all to
+// serve: no copy and no failure. A finished read leaves one or the other, so
+// it answers only a read begun and gone without either, never an outage.
 type errCooldown struct{ retryAfter int }
 
 func (e errCooldown) Error() string {
@@ -99,6 +120,9 @@ type fresher struct {
 	kept    map[string]keptRead
 	began   map[string]time.Time
 	flights map[string]*flight
+	// failed is the last read's error, while it is the last read: what a
+	// fresh read inside its cooldown answers with.
+	failed map[string]error
 }
 
 func (f *fresher) cooldownOr() time.Duration {
@@ -125,7 +149,7 @@ func (f *fresher) clock() time.Time {
 func (f *fresher) read(key string, fresh bool, live func() (any, time.Time, error)) (any, Observed, error) {
 	f.mu.Lock()
 	if f.kept == nil {
-		f.kept, f.began, f.flights = map[string]keptRead{}, map[string]time.Time{}, map[string]*flight{}
+		f.kept, f.began, f.flights, f.failed = map[string]keptRead{}, map[string]time.Time{}, map[string]*flight{}, map[string]error{}
 	}
 	now := f.clock()
 	k, kept := f.kept[key]
@@ -146,7 +170,13 @@ func (f *fresher) read(key string, fresh bool, live func() (any, time.Time, erro
 		}
 		return f.fallback(key, fl.err)
 	case fresh && wait > 0:
+		failed := f.failed[key]
 		f.mu.Unlock()
+		if failed != nil {
+			// The last read failed: answered as it was, the copy unreachable or
+			// the error, not as a read moments ago. Still no second attempt.
+			return f.fallback(key, failed)
+		}
 		if kept {
 			return k.val, staleAt(k.at, "cooldown", wait), nil
 		}
@@ -160,9 +190,19 @@ func (f *fresher) read(key string, fresh bool, live func() (any, time.Time, erro
 	fl.val, fl.at, fl.err = live()
 
 	f.mu.Lock()
-	delete(f.flights, key)
-	if fl.err == nil && gen == f.gen {
-		f.kept[key] = keptRead{val: fl.val, at: fl.at}
+	if f.flights[key] == fl { // a write may have forgotten it already
+		delete(f.flights, key)
+	}
+	if gen == f.gen {
+		if fl.err == nil {
+			f.kept[key] = keptRead{val: fl.val, at: fl.at}
+			delete(f.failed, key)
+		} else {
+			f.failed[key] = fl.err
+			if refusal(fl.err) {
+				delete(f.kept, key)
+			}
+		}
 	}
 	close(fl.done)
 	f.mu.Unlock()
@@ -177,7 +217,7 @@ func (f *fresher) read(key string, fresh bool, live func() (any, time.Time, erro
 // about the request (an operation's 4xx: no bound account) rather than the NAS
 // failing to be read, or there is no copy to serve.
 func (f *fresher) fallback(key string, err error) (any, Observed, error) {
-	if of := (opFailure{}); errors.As(err, &of) && of.status < 500 && of.status != http.StatusTooManyRequests {
+	if refusal(err) {
 		return nil, Observed{}, err
 	}
 	f.mu.Lock()
@@ -189,14 +229,24 @@ func (f *fresher) fallback(key string, err error) (any, Observed, error) {
 	return k.val, Observed{TakenAt: rfc3339(k.at), Stale: unreachableSince(k.at)}, nil
 }
 
-// forget drops every copy and every cooldown: after a write, the next read of
-// anything is a read of the NAS.
+// refusal is a failure that is a decision about the request (an operation's
+// 4xx other than 429: no bound account), not the NAS failing to be read.
+func refusal(err error) bool {
+	of := opFailure{}
+	return errors.As(err, &of) && of.status < 500 && of.status != http.StatusTooManyRequests
+}
+
+// forget drops every copy, cooldown, failure and read under way: after a
+// write, the next read of anything is a read of the NAS that began after it,
+// never a join of one that began before (addons/reference/fresh.go's forget).
 func (f *fresher) forget() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.gen++
 	clear(f.kept)
 	clear(f.began)
+	clear(f.flights)
+	clear(f.failed)
 }
 
 func (f *fresher) wait(key string) int {

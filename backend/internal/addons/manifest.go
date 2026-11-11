@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ContractVersion is the backend-to-add-on contract this backend speaks.
@@ -84,8 +85,38 @@ type Manifest struct {
 
 // Limits are what the add-on refuses beyond. SubjectsPerPlan bounds one plan:
 // the backend plans in chunks below it (design §11). Zero is undeclared.
+// FreshReadCooldown is feature freshness's cooldown, ISO 8601 (FreshCooldown).
 type Limits struct {
-	SubjectsPerPlan int `json:"subjects_per_plan,omitempty"`
+	SubjectsPerPlan   int    `json:"subjects_per_plan,omitempty"`
+	FreshReadCooldown string `json:"fresh_read_cooldown,omitempty"`
+}
+
+// cooldownDefault is constants.cooldown_default (registry/constants.json):
+// fresh_read_cooldown when a manifest declares none.
+const cooldownDefault = 30 * time.Second
+
+// FreshCooldown is how long a target's add-on holds a fresh read back: its
+// declared limits.fresh_read_cooldown, else constants.cooldown_default.
+// ponytail: the time part of an ISO 8601 duration (PT30S, PT1M30S) through
+// time.ParseDuration; a cooldown in days reads as the default.
+func FreshCooldown(target string) time.Duration {
+	a, err := Get(target)
+	if err != nil {
+		return cooldownDefault
+	}
+	m, err := a.Manifest()
+	if err != nil {
+		return cooldownDefault
+	}
+	return isoCooldown(m.Limits.FreshReadCooldown)
+}
+
+func isoCooldown(iso string) time.Duration {
+	clock, ok := strings.CutPrefix(iso, "PT")
+	if d, err := time.ParseDuration(strings.ToLower(clock)); ok && err == nil && d > 0 {
+		return d
+	}
+	return cooldownDefault
 }
 
 // Connection is the member-facing address of a target, and nothing else. Never

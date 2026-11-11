@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -193,6 +196,36 @@ func TestPersonTargets_OfflineShowsTheLastReadWithItsTime(t *testing.T) {
 	h.failRead = true
 	if view = getPersonTargets(t); view.LastKnown != nil || view.Storage != nil {
 		t.Errorf("a failed read while online: last_known=%+v", view.LastKnown)
+	}
+}
+
+// The last read is dated by the add-on's read, not by when the backend heard
+// of it: a copy read four minutes ago is remembered as four minutes old.
+func TestPersonTargets_TheLastReadKeepsTheAddOnsDate(t *testing.T) {
+	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true}}
+	stubPersonStorage(t, h)
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "..", "addons", "contract", "v2", "fixtures", "operation_response_result.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := time.Now().Add(-4 * time.Minute).UTC().Truncate(time.Second)
+	body := strings.Replace(string(fixture), `"taken_at": "2026-11-10T09:30:00Z",
+    "current": true,`, `"taken_at": "`+read.Format(time.RFC3339)+`",
+    "current": false, "stale": {"reason": "cached"},`, 1)
+	addonsRead = func(context.Context, string, string, string, string, map[string]any, bool) addons.ReadReply {
+		if h.unreachable {
+			return addons.ReadReply{Operation: "storage.status", Outcome: addons.OutcomeUnreached}
+		}
+		return addons.ReadReply{Operation: "storage.status", Schema: "profiles/storage/status.json", Results: true,
+			Outcome: addons.OutcomeSucceeded, Status: 200, Body: []byte(body)}
+	}
+	if view := getPersonTargets(t); view.Storage == nil || view.Storage.Observation == nil || view.Storage.Current {
+		t.Fatalf("the cached read did not land with its date: %+v", view.Storage)
+	}
+
+	h.unreachable = true
+	if view := getPersonTargets(t); view.LastKnown == nil || !view.LastKnown.ReadAt.Equal(read) {
+		t.Errorf("last known = %+v, want dated %s, the add-on's read", view.LastKnown, read)
 	}
 }
 

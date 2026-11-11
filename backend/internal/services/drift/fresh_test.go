@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -42,6 +43,53 @@ func TestACooldownIsASkippedPassNeverAnOutage(t *testing.T) {
 		if len(h.converged) != 0 || h.reconciled {
 			t.Errorf("%s: a skipped pass concluded something", name)
 		}
+		// Skipped only after waiting the retry_after once and asking again.
+		if !slices.Equal(h.waited, []time.Duration{12 * time.Second}) || !slices.Equal(h.askedFresh, []bool{true, true}) {
+			t.Errorf("%s: waited %v, asked fresh %v, want one wait of 12 s and a second fresh read", name, h.waited, h.askedFresh)
+		}
+	}
+}
+
+// A cooldown answer is waited out once (RFC 9110 §10.2.3), and a current
+// second read is a normal pass: one skipped read never leaves the target
+// unreconciled until the next sweep.
+func TestTheSweepWaitsOutOneCooldownAndReadsAgain(t *testing.T) {
+	retry := 12
+	h := &addonReconcileHarness{read: currentRead(), reads: []addons.SubjectsResult{
+		{Outcome: addons.OutcomeSucceeded, TakenAt: currentRead().TakenAt, Stale: &addons.Stale{Reason: addons.StaleCooldown, RetryAfter: &retry}},
+	}}
+	stubAddonReconcile(t, h)
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Halted || !res.Current || !h.reconciled || len(h.marked) != 0 {
+		t.Errorf("a current second read is a pass: halted %t current %t reconciled %t marked %v", res.Halted, res.Current, h.reconciled, h.marked)
+	}
+	if !slices.Equal(h.waited, []time.Duration{12 * time.Second}) || !slices.Equal(h.askedFresh, []bool{true, true}) {
+		t.Errorf("waited %v, asked fresh %v, want one 12 s wait, then a fresh read", h.waited, h.askedFresh)
+	}
+}
+
+// The wait is the retry_after, never longer than the cooldown the target
+// declares; and an interrupted wait reads nothing more.
+func TestTheSweepsWaitIsBoundedByTheDeclaredCooldown(t *testing.T) {
+	retry := 3600
+	h := &addonReconcileHarness{read: addons.SubjectsResult{Outcome: addons.OutcomeUnreached, Status: 429, RetryAfter: retry}}
+	stubAddonReconcile(t, h)
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(h.waited, []time.Duration{30 * time.Second}) {
+		t.Errorf("waited %v, want the declared 30 s, not the hour asked", h.waited)
+	}
+
+	h = &addonReconcileHarness{read: addons.SubjectsResult{Outcome: addons.OutcomeUnreached, Status: 429, RetryAfter: 5}}
+	stubAddonReconcile(t, h)
+	waitOut = func(context.Context, time.Duration) bool { return false } // the sweep stopped
+	res, _ := ReconcileAddon(context.Background(), "truenas")
+	if !res.Halted || res.Reason != db.UnreconciledStaleRead || len(h.askedFresh) != 1 {
+		t.Errorf("an interrupted wait: halted %t reason %q reads %d, want a skipped pass and no second read", res.Halted, res.Reason, len(h.askedFresh))
 	}
 }
 

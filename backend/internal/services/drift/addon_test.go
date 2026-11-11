@@ -54,6 +54,10 @@ type addonReconcileHarness struct {
 	waitingFor map[string]string
 	// askedFresh is each subjects read's fresh, in order.
 	askedFresh []bool
+	// reads answers the subjects reads in order, then read; waited is each
+	// cooldown the pass waited out (never slept).
+	reads  []addons.SubjectsResult
+	waited []time.Duration
 }
 
 func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
@@ -106,7 +110,19 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 
 	addonSubjects = func(_ context.Context, _ string, fresh bool) addons.SubjectsResult {
 		h.askedFresh = append(h.askedFresh, fresh)
+		if len(h.reads) > 0 {
+			r := h.reads[0]
+			h.reads = h.reads[1:]
+			return r
+		}
 		return h.read
+	}
+	origCooldown, origWait := freshCooldown, waitOut
+	t.Cleanup(func() { freshCooldown, waitOut = origCooldown, origWait })
+	freshCooldown = func(string) time.Duration { return 30 * time.Second }
+	waitOut = func(_ context.Context, d time.Duration) bool {
+		h.waited = append(h.waited, d)
+		return true
 	}
 	listBindings = func(context.Context, string) ([]db.TargetBinding, error) { return h.bindings, nil }
 	origRoles := fieldRoles

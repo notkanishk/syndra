@@ -716,6 +716,9 @@ type StorageStatus struct {
 	// Standing is the account's standing as the add-on reports it in this
 	// reply (contract 2): nil when it did not say.
 	Standing *Standing `json:"standing,omitempty"`
+	// Observation is when the add-on read it, and whether this is that read or
+	// its copy (design §4); nil when the reply did not say (the legacy pocket).
+	*Observation
 
 	Outcome Outcome `json:"-"`
 	Err     error   `json:"-"`
@@ -1014,6 +1017,7 @@ func (r ReadReply) Storage() StorageStatus {
 	raw, err := r.answer()
 	var w storageWire
 	var quotaRead bool
+	var seen *Observation
 	switch {
 	case err != nil:
 	case r.Results:
@@ -1021,10 +1025,16 @@ func (r ReadReply) Storage() StorageStatus {
 		// status, plus the five keys the storage card decides on.
 		var p struct {
 			storageWire
-			QuotaRead bool `json:"quota_read"`
+			QuotaRead bool    `json:"quota_read"`
+			TakenAt   *string `json:"taken_at"`
+			Current   *bool   `json:"current"`
+			Stale     *Stale  `json:"stale"`
 		}
 		err = decodeShape(storageNeed, raw, &p)
 		w, quotaRead = p.storageWire, p.QuotaRead
+		if at, ok := takenAt(p.TakenAt); ok && p.Current != nil {
+			seen = &Observation{TakenAt: at, Current: *p.Current, Stale: p.Stale}
+		}
 	default:
 		// ponytail: the legacy pocket's name for quota_read, read until major 3.
 		var p struct {
@@ -1040,7 +1050,8 @@ func (r ReadReply) Storage() StorageStatus {
 		return out
 	}
 	return StorageStatus{Usable: w.Usable, NeedsPassword: w.NeedsPassword, NeedsNewPassword: w.NeedsNewPassword,
-		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, QuotaRead: quotaRead, Standing: w.Standing, Outcome: OutcomeSucceeded}
+		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, QuotaRead: quotaRead, Standing: w.Standing,
+		Observation: seen, Outcome: OutcomeSucceeded}
 }
 
 // storageWire is what Storage reads of either shape, the profile's result or

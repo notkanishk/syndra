@@ -103,3 +103,43 @@ func TestAConcurrentFreshReadJoinsTheReadInFlight(t *testing.T) {
 		t.Errorf("the first answered %v, the joiner %v: want current, then the same read as cooldown", docs[0], docs[1])
 	}
 }
+
+// A read arriving after a write while a read begun before it is still running
+// reads the app again: never that read's answer, never its cooldown. And the
+// earlier read, ending, leaves the new one in flight for the next to join.
+func TestAReadAfterAWriteNeverJoinsAReadBegunBeforeIt(t *testing.T) {
+	a, err := New(Config{Target: "reference", Secret: []byte("s"), Features: []string{"freshness"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func() (int, map[string]any) {
+		rep := a.freshSubjects(true)
+		var doc map[string]any
+		_ = json.Unmarshal(rep.body, &doc)
+		return rep.status, doc
+	}
+	before := make(chan struct{})
+	go func() { read(); close(before) }()
+	time.Sleep(readDwell / 3) // the first read is under way
+	a.mu.Lock()
+	a.record("write")
+	a.mu.Unlock()
+	type answer struct {
+		status int
+		doc    map[string]any
+	}
+	after := make(chan answer)
+	go func() { s, d := read(); after <- answer{s, d} }()
+	<-before // the read from before the write has ended; the one after runs
+	status, joined := read()
+	got := <-after
+	a.mu.Lock()
+	reads := a.fresh.reads
+	a.mu.Unlock()
+	if got.status != 200 || got.doc["current"] != true || reads != 2 {
+		t.Errorf("a read after the write answered %d %v after %d reads, want a read of its own, current", got.status, got.doc, reads)
+	}
+	if stale, _ := joined["stale"].(map[string]any); status != 200 || stale["reason"] != "cooldown" {
+		t.Errorf("a read joining the one after the write answered %d %v, want it as cooldown", status, joined)
+	}
+}

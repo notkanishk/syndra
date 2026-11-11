@@ -498,7 +498,11 @@ RFC 9111's request `Cache-Control: no-cache` would carry); never on
 `/plan`, `/apply` or `/stats`, and only to an add-on declaring the feature
 (`send` in `backend/internal/addons/pipe.go` refuses it anywhere else).
 Who sends it: the drift sweep's `/subjects` read, always (it is the one
-scheduled sender, and a `cooldown` answer is a skipped pass); the dormant
+scheduled sender). Answered inside the cooldown (429, or the last value as
+`cooldown`), the sweep waits the `retry_after` once, never longer than your
+declared cooldown, and asks again; only a second cooldown answer is a
+skipped pass (`ReconcileAddon` in
+`backend/internal/services/drift/addon.go`). The dormant
 accounts list and its removal, always (every row is a candidate for
 removal); and a person pressing "Read again" on a page. Every other read,
 a page load or a poll, accepts your copy and shows its `taken_at`. An
@@ -508,7 +512,9 @@ add-on that declares `freshness`:
   with `stale.reason: cached`;
 - MUST, given `fresh: true`, read the app now, or answer the last value it
   read with `stale.reason: cooldown` and `retry_after` (whole seconds,
-  rounded up, so a caller never arrives early);
+  rounded up, so a caller never arrives early). When the last read failed,
+  the cooldown still holds, and the answer is that failure's: the last
+  value as `unreachable`, or the error, never "read moments ago";
 - MUST coalesce concurrent fresh reads of the same thing into one read of
   the app (request collapsing), and hold a per-target and a per-subject
   cooldown of `limits.fresh_read_cooldown` (default
@@ -522,8 +528,14 @@ add-on that declares `freshness`:
   above;
 - MUST answer 429 `FRESH_READ_COOLDOWN` (`Retry-After` the seconds left) or
   503 `TARGET_UNREACHABLE`, only when it has nothing at all to serve;
-- SHOULD forget its copy on every write it makes, so a person waiting on
-  their own change sees it on the next read without asking for a fresh one.
+- SHOULD forget its copy, its cooldown and any read under way on every
+  write it makes, so a person waiting on their own change sees it on the
+  next read without asking for a fresh one: a read arriving after a write
+  never joins a read begun before it.
+- SHOULD drop its copy when a read is refused on its merits (a 4xx other
+  than 429): the copy no longer says what the app holds.
+- MUST NOT call a reply built from several reads `current` unless every one
+  of them is: it is as fresh as its least fresh part.
 
 `/plan` keeps its meaning: computed against a read of the app, never cooled
 down, `current: false` only when the mirror had to answer.
@@ -531,7 +543,13 @@ down, `current: false` only when the mirror had to answer.
 The TrueNAS add-on serves `/subjects`, `/reach`, `/homes`, `storage.status`
 and `activity.get` through one `fresher` (`addons/truenas/fresh.go`), keyed
 per route and per subject, with a five-minute copy and a 30-second
-cooldown; every write clears it (`mutate` in `addons/truenas/apply.go`).
+cooldown; every write clears it, reads under way included (`mutate` in
+`addons/truenas/apply.go`). It remembers each key's last failure for the
+cooldown, so a fresh read during an outage is the copy as `unreachable`
+(or, for `/subjects` after a restart, the mirror on disk), and 429 only
+when there is nothing at all. `storage.status` reads its folder
+permissions through the same `/reach` key, fresh when it is asked fresh,
+and is `current` only when they are.
 `health.get` declares its own result with no `current`, so it cannot say a
 copy is one, and is read live every time, like `/values`. Syndra never
 counts a cooldown against the add-on: a `FRESH_READ_COOLDOWN` neither opens

@@ -147,9 +147,13 @@ func (k *kit) cooledDown(c *check, ex *exchange) {
 		doc["current"], doc["stale"])
 }
 
-// currentSubjects is the read Syndra's drift sweep makes: fresh when the add-on
-// declares freshness, and, answered inside the cooldown, sent once more after
-// the retry_after it named (RFC 9110 §10.2.3), never sooner.
+// currentSubjects is the read Syndra's drift sweep makes (ReconcileAddon in
+// backend/internal/services/drift/addon.go): fresh when the add-on declares
+// freshness, and, answered inside the cooldown (429 or the last value as
+// cooldown), sent once more after the retry_after it named (RFC 9110
+// §10.2.3), never sooner. The sweep waits at most the declared cooldown, the
+// kit at most FreshWait; a second cooldown answer is the sweep's skipped pass,
+// recorded as a stale read.
 func (k *kit) currentSubjects() *exchange {
 	if !k.m.has("freshness") {
 		return k.subjectsRead(false)

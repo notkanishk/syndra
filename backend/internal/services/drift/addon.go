@@ -185,10 +185,18 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	}
 	res := AddonReconcileResult{Target: target}
 
-	// Always fresh: the sweep is the one scheduled sender (design §4), it
-	// needs a current read, and a cooldown answer is a skipped pass, recorded
-	// as a stale read (no new reason, no migration; B6), never as unreachable.
+	// Always fresh: the sweep is the one scheduled sender (design §4) and it
+	// needs a current read. Answered inside the cooldown, it waits the
+	// retry_after named (RFC 9110 §10.2.3), never longer than the cooldown the
+	// target declares, and asks once more; a second cooldown answer is a
+	// skipped pass, recorded as a stale read (no new reason, no migration; B6),
+	// never as unreachable. One wait, not a loop: someone else reading the
+	// target that often is not the sweep's to outlast.
 	read := addonSubjects(ctx, target, true)
+	if wait, cooled := read.CooledDown(); cooled &&
+		waitOut(ctx, min(time.Duration(wait)*time.Second, freshCooldown(target))) {
+		read = addonSubjects(ctx, target, true)
+	}
 	if wait, cooled := read.CooledDown(); cooled {
 		return halt(ctx, res, db.UnreconciledStaleRead,
 			fmt.Sprintf("skipped: the target was read moments ago and can be read again in %d s", wait))

@@ -1363,7 +1363,7 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   - A cooldown has one shape everywhere: `stale.reason: cooldown` when the add-on served its copy, `retry_after` on the view (reach, homes, read views, activity, inventory) when it refused with nothing to serve; `CallResponse.RetryAfter` is RFC 9110 delay-seconds only.
   - The invariant is held on read in one helper (`staleInvariant`): a reply whose `current` and `stale` disagree is not a reading (subjects unusable, reach/homes/results unreadable).
   - "Read again" is the card's own GET with `?fresh=true` (`wantsFresh`, literal `true` only), no new endpoint; a page load and the waiting poll never send it.
-  - The drift sweep always asks fresh; a cooldown halts as `read_stale` with "skipped" in the log (no new reason, no migration, B6).
+  - The drift sweep always asks fresh; a cooldown halts as `read_stale` with "skipped" in the log (no new reason, no migration, B6), after one wait and a second read (fix round (3)).
   - The dormant list and its removal always ask fresh; inside the cooldown both answer 429 with `Retry-After` and `retry_after` (owner Q1). `DormantAccounts` takes no flag: both callers would pass true.
   - The inventory takes "Read again"; a page load shows the copy dated, and Adopt stays blocked until read again (owner Q2).
   - `SystemHealth` takes no `fresh`: TrueNAS `health.get` carries no `current`, so it is read live every time, like `/values` (not in its fresher).
@@ -1372,6 +1372,13 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   - With nothing to serve, `/subjects` answers 503 `TARGET_UNREACHABLE` when nothing was sent and `NO_CURRENT_READ` otherwise (B3).
   - A joiner of a read in flight is `cooldown`, never `current` (B1); the kit accepts either for the joiner and wants one of two current.
   - Deploy and rollback: the backend and the TrueNAS add-on ship and roll back together (NEXT.md).
+  - Fix round (review, 11 Nov), one line each:
+  - (1) A write forgets reads under way too: TrueNAS `forget()` clears `flights` and a finishing read deletes its entry only while it is still the current one; the reference's `forget` clears its flight and cooldown the same way, so a read after a write never joins (nor waits out) a read begun before it.
+  - (2) TrueNAS remembers each key's last failure (cleared on success and by `forget`); a fresh read inside the cooldown of a failed read answers through `fallback` (the copy `unreachable`, `/subjects`' disk mirror, or the error), still one NAS attempt per 30 s; 429 is left only for nothing at all, a state a finished read never leaves. The reference keeps its 1 s cooldown's old answer (a cooldown copy) after a failed read: flagged, not changed.
+  - (3) The drift sweep waits out one cooldown answer (`retry_after`, capped at the target's declared `limits.fresh_read_cooldown`, else `constants.cooldown_default`, bounded by ctx; `addons.FreshCooldown`, seams `freshCooldown`/`waitOut`) and reads fresh once more; only a second cooldown answer halts as `read_stale`.
+  - (4) `addons.StorageStatus` carries the add-on's `Observation` (results only; the legacy pocket has none), and "last known" storage is dated by its `taken_at`, the backend's clock only when the reply did not say.
+  - (5) TrueNAS `storage.status` passes `fresh` through `memberPlaces` to `reach(fresh)`, and its reply is `Observed.least` of the account read and the folder read (current only when both are, else the not-current one, the older of two), so places from a copy never ride a `current: true`.
+  - (6) A refusal (an operation's 4xx other than 429) drops the key's copy, so a plain read inside the five minutes reads the NAS rather than serve the account as it was.
 
 **`calls` and `effect` (decision 18)**
 

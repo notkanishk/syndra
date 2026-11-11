@@ -54,10 +54,14 @@ func (a *Addon) readApp() ([]subject, string, error) {
 	return list, at, nil
 }
 
-// forget drops the mirror; every write calls it (record), under a.mu.
+// forget drops the mirror, the cooldown and the read in flight; every write
+// calls it (record), under a.mu. A read arriving after the write then reads
+// the app, never joins or waits out a read begun before it (the TrueNAS
+// add-on's fresher.forget does the same).
 func (a *Addon) forget() {
 	a.fresh.kept = false
 	a.fresh.list, a.fresh.at = nil, ""
+	a.fresh.began, a.fresh.flight = time.Time{}, nil
 	a.fresh.gen++
 }
 
@@ -107,7 +111,9 @@ func (a *Addon) freshSubjects(fresh bool) reply {
 		a.mu.Unlock()
 		list, at, err := a.readApp()
 		a.mu.Lock()
-		f.flight = nil
+		if f.flight == fl { // a write may have forgotten it already
+			f.flight = nil
+		}
 		close(fl)
 		if err != nil {
 			if f.kept {

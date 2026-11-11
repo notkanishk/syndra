@@ -104,8 +104,10 @@ func TestAFreshReadInsideTheCooldownIsTheCopySaidSo(t *testing.T) {
 	}
 }
 
-// With nothing to serve inside the cooldown, 429 with the seconds left.
-func TestAFreshReadInsideTheCooldownWithNothingToServeIs429(t *testing.T) {
+// A fresh read inside the cooldown of a read that failed, with nothing kept,
+// is that failure again, never 429 and never a second read of the NAS: the
+// add-on has something to say, that the NAS cannot be read.
+func TestAFreshReadInsideTheCooldownOfAFailureIsTheFailureNot429(t *testing.T) {
 	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups, err: errReadAfterWrite}
 	s := testServer(t, fake)
 	now := at(s, time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC))
@@ -114,11 +116,32 @@ func TestAFreshReadInsideTheCooldownWithNothingToServeIs429(t *testing.T) {
 		s.handleHomes(rr, httptest.NewRequest(http.MethodGet, "/homes?fresh=true", nil), nil)
 		return rr
 	}
-	if rr := get(); rr.Code == http.StatusOK {
-		t.Fatalf("a NAS that cannot be read with nothing kept is not a list: %s", rr.Body)
+	first := get()
+	if first.Code == http.StatusOK || first.Code == http.StatusTooManyRequests {
+		t.Fatalf("a NAS that cannot be read with nothing kept is its error: %d %s", first.Code, first.Body)
 	}
+	calls := len(fake.calls)
 	*now = now.Add(5 * time.Second)
-	rr := get()
+	if rr := get(); rr.Code != first.Code || rr.Body.String() != first.Body.String() {
+		t.Errorf("inside the cooldown: %d %s, want the failure again: %d %s", rr.Code, rr.Body, first.Code, first.Body)
+	}
+	if len(fake.calls) != calls {
+		t.Errorf("a fresh read inside the cooldown called the NAS %d times", len(fake.calls)-calls)
+	}
+}
+
+// 429 is the answer only with nothing at all to serve: a read begun inside the
+// cooldown that left neither a copy nor a failure. A finished read leaves one
+// or the other, so this is the wire shape held for a state the fresher does
+// not reach: the seconds left, Retry-After, the error schema.
+func TestNothingAtAllToServeInsideTheCooldownIs429(t *testing.T) {
+	s := testServer(t, &fakeRPC{users: fixtureUsers, groups: fixtureGroups})
+	now := at(s, time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC))
+	keepCopy(s, "other", "x", *now) // the fresher's maps, made
+	s.fresh.began["homes"] = *now
+	*now = now.Add(5 * time.Second)
+	rr := httptest.NewRecorder()
+	s.handleHomes(rr, httptest.NewRequest(http.MethodGet, "/homes?fresh=true", nil), nil)
 	if rr.Code != http.StatusTooManyRequests || !strings.Contains(rr.Body.String(), CodeFreshReadCooldown) {
 		t.Fatalf("want 429 %s, got %d %s", CodeFreshReadCooldown, rr.Code, rr.Body)
 	}
@@ -126,6 +149,69 @@ func TestAFreshReadInsideTheCooldownWithNothingToServeIs429(t *testing.T) {
 		t.Errorf("Retry-After = %q, want the 25 s left", got)
 	}
 	assertSchema(t, "error.json", rr.Body.Bytes(), "a cooldown refusal")
+}
+
+// During an outage a fresh read inside the cooldown is the copy as it is,
+// unreachable, never "read moments ago".
+func TestAFreshReadInsideTheCooldownOfAnOutageIsUnreachable(t *testing.T) {
+	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
+	s := testServer(t, fake)
+	now := at(s, time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC))
+	getSubjects(t, s, true)
+	*now = now.Add(time.Minute)
+	fake.err = errReadAfterWrite
+	for i, wait := range []time.Duration{0, 5 * time.Second} {
+		*now = now.Add(wait)
+		calls := len(fake.calls)
+		rr, out := getSubjects(t, s, true)
+		if rr.Code != http.StatusOK || out.Current || out.Stale == nil || out.Stale.Reason != "unreachable" {
+			t.Fatalf("fresh read #%d in the outage: %d %s, want the copy, unreachable", i, rr.Code, rr.Body)
+		}
+		if i == 1 && len(fake.calls) != calls {
+			t.Errorf("a fresh read inside the cooldown called the NAS %d times", len(fake.calls)-calls)
+		}
+	}
+}
+
+// A good read ends an outage: inside its cooldown a fresh read is the read
+// moments ago again, not unreachable.
+func TestAGoodReadEndsTheOutage(t *testing.T) {
+	var f fresher
+	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
+	f.now = func() time.Time { return now }
+	down := func() (any, time.Time, error) { return nil, time.Time{}, ErrNotSent }
+	up := func() (any, time.Time, error) { return "accounts", now, nil }
+	_, _, _ = f.read("subjects", true, down)
+	now = now.Add(time.Minute)
+	if _, obs, err := f.read("subjects", true, up); err != nil || !obs.Current {
+		t.Fatalf("the NAS back: %+v %v", obs, err)
+	}
+	now = now.Add(5 * time.Second)
+	if _, obs, _ := f.read("subjects", true, down); obs.Stale == nil || obs.Stale.Reason != "cooldown" {
+		t.Errorf("inside the cooldown of a good read: %+v, want cooldown", obs)
+	}
+}
+
+// Restarted while the NAS is down: nothing in memory, the mirror on disk.
+// Every fresh read inside the cooldown is the mirror, unreachable, never 429.
+func TestARestartDuringAnOutageAnswersTheMirrorNever429(t *testing.T) {
+	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
+	s := testServer(t, fake)
+	getSubjects(t, s, true) // the mirror on disk
+	s.fresh = fresher{}     // restarted
+	now := at(s, time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC))
+	fake.err = errReadAfterWrite
+	for i, wait := range []time.Duration{0, 5 * time.Second} {
+		*now = now.Add(wait)
+		calls := len(fake.calls)
+		rr, out := getSubjects(t, s, true)
+		if rr.Code != http.StatusOK || out.Current || out.Stale == nil || out.Stale.Reason != "unreachable" || len(out.Subjects) != 2 {
+			t.Fatalf("fresh read #%d after the restart: %d %s, want the mirror, unreachable", i, rr.Code, rr.Body)
+		}
+		if i == 1 && len(fake.calls) != calls {
+			t.Errorf("a fresh read inside the cooldown called the NAS %d times", len(fake.calls)-calls)
+		}
+	}
 }
 
 // Two concurrent fresh reads of one thing are one read of the NAS. The
@@ -185,8 +271,11 @@ func TestOneSubjectsCooldownIsNotAnothers(t *testing.T) {
 	}
 	status("sub-1")
 	before := userReads(&m.fakeRPC)
-	if got := status("sub-2"); !got.Current || userReads(&m.fakeRPC) == before {
-		t.Errorf("sub-2's fresh read was cooled by sub-1's: %+v", got)
+	// sub-2's account is read now; its places are the target-wide folder read
+	// sub-1's began moments ago, so the reply is that read's cooldown (storage
+	// status is no fresher than its least fresh part).
+	if got := status("sub-2"); userReads(&m.fakeRPC) == before || got.Stale == nil || got.Stale.Reason != "cooldown" {
+		t.Errorf("sub-2's account read was cooled by sub-1's, or its places claimed current: %+v", got)
 	}
 	if got := status("sub-1"); got.Current || got.Stale == nil || got.Stale.Reason != "cooldown" {
 		t.Errorf("sub-1's own second fresh read is in its cooldown: %+v", got)
@@ -275,6 +364,63 @@ func TestAReadThatBeganBeforeAWriteIsNotKept(t *testing.T) {
 	val, obs, _ := f.read("subjects", false, func() (any, time.Time, error) { return "after", time.Now(), nil })
 	if val != "after" || !obs.Current {
 		t.Errorf("the read from before the write was kept: %v %+v", val, obs)
+	}
+}
+
+// A read arriving after a write while a read begun before it still runs reads
+// the NAS itself: never that read's answer, labelled cached or cooldown with a
+// taken_at after the write. The earlier read, ending, leaves the new one in
+// flight for the next read to join (addons/reference agrees).
+func TestAReadAfterAWriteNeverJoinsAReadBegunBeforeIt(t *testing.T) {
+	var f fresher
+	running := func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.flights["subjects"] != nil }
+	releaseOld, oldDone := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(oldDone)
+		_, _, _ = f.read("subjects", false, func() (any, time.Time, error) { <-releaseOld; return "before", time.Now(), nil })
+	}()
+	for !running() {
+		time.Sleep(time.Millisecond)
+	}
+	f.forget()
+
+	startedNew, releaseNew := make(chan struct{}), make(chan struct{})
+	type answer struct {
+		val any
+		obs Observed
+	}
+	newDone := make(chan answer)
+	go func() {
+		val, obs, _ := f.read("subjects", true, func() (any, time.Time, error) {
+			close(startedNew)
+			<-releaseNew
+			return "after", time.Now(), nil
+		})
+		newDone <- answer{val, obs}
+	}()
+	select {
+	case <-startedNew:
+	case <-time.After(5 * time.Second):
+		close(releaseOld)
+		t.Fatal("a read after the write joined the read begun before it")
+	}
+	close(releaseOld)
+	<-oldDone
+
+	joined := make(chan any)
+	var thirdRead atomic.Bool
+	go func() {
+		val, _, _ := f.read("subjects", false, func() (any, time.Time, error) { thirdRead.Store(true); return "third", time.Now(), nil })
+		joined <- val
+	}()
+	time.Sleep(20 * time.Millisecond) // the third is waiting on the read after the write
+	close(releaseNew)
+	got := <-newDone
+	if got.val != "after" || !got.obs.Current {
+		t.Errorf("the read after the write answered %v %+v, want its own read, current", got.val, got.obs)
+	}
+	if val := <-joined; val != "after" || thirdRead.Load() {
+		t.Errorf("a read after both answered %v (read the NAS: %v), want the read after the write", val, thirdRead.Load())
 	}
 }
 
@@ -373,5 +519,79 @@ func TestARefusalIsNotCoveredByTheCopy(t *testing.T) {
 	*now = now.Add(time.Minute)
 	if rr := read(); rr.Code != http.StatusUnprocessableEntity {
 		t.Errorf("an account gone from the NAS answered %d %s, want the 422 refusal", rr.Code, rr.Body)
+	}
+	// The refusal dropped the copy: a plain read inside its five minutes reads
+	// the NAS and is refused too, never the account as it was.
+	*now = now.Add(time.Minute)
+	if rr := postOperation(t, s, "storage.status", `{"call_id":"read-2","operation":"storage.status","subject":"sub-1"}`); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("a plain read after the refusal answered %d %s, want the 422 refusal, not the copy", rr.Code, rr.Body)
+	}
+}
+
+// storage.status is no fresher than its places: a fresh one reads the folder
+// permissions fresh too, and when they come from a copy, it says so.
+func TestStorageStatusIsNoFresherThanItsPlaces(t *testing.T) {
+	fake := reachFake()
+	fake.users = `[{"username":"charlotte","id":11,"uid":200001,"locked":false,"smb":true,"password_disabled":false,
+		"groups":[41,50],"home":"/mnt/tank/main/home_dir/charlotte"}]`
+	fake.answers["pool.dataset.get_quota"] = `[]`
+	s := testServer(t, fake)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+		t.Fatal(err)
+	}
+	now := at(s, time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC))
+	aclReads := func() int { return strings.Count(strings.Join(fake.calls, " "), "filesystem.getacl") }
+	status := func() Observed {
+		t.Helper()
+		rr := postOperation(t, s, "storage.status", `{"call_id":"read-1","operation":"storage.status","subject":"sub-1","fresh":true}`)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("storage.status: %d %s", rr.Code, rr.Body)
+		}
+		assertSchema(t, "operation_response.json", rr.Body.Bytes(), "storage.status")
+		var out struct{ Result Observed }
+		_ = json.Unmarshal(rr.Body.Bytes(), &out)
+		return out.Result
+	}
+	rr := httptest.NewRecorder()
+	s.handleReach(rr, httptest.NewRequest(http.MethodGet, "/reach?fresh=true", nil), nil)
+	var folders Observed
+	_ = json.Unmarshal(rr.Body.Bytes(), &folders)
+
+	// The folders were read 10 s ago: the account is read now, its places are
+	// that read's, so the reply is the folders' cooldown, never current.
+	*now = now.Add(10 * time.Second)
+	if got := status(); got.Current || got.Stale == nil || got.Stale.Reason != "cooldown" || got.TakenAt != folders.TakenAt {
+		t.Errorf("places from a read moments ago: %+v %+v, want cooldown, dated by the folder read", got, got.Stale)
+	}
+
+	// Past both cooldowns, with the folders' copy still young: a fresh read
+	// reads them again rather than take the copy, and is current.
+	*now = now.Add(40 * time.Second)
+	before := aclReads()
+	if got := status(); !got.Current || aclReads() == before {
+		t.Errorf("a fresh storage.status took the folders' copy: %+v (ACL reads %d)", got, aclReads()-before)
+	}
+}
+
+// least is the less fresh of two reads, whole, so the invariant holds.
+func TestLeastIsTheLessFreshRead(t *testing.T) {
+	cur := Observed{TakenAt: "2026-11-10T09:05:00Z", Current: true}
+	old := staleAt(time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC), "cached", 0)
+	older := staleAt(time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC), "cooldown", 3)
+	for _, tc := range []struct {
+		name string
+		o, p Observed
+		want Observed
+	}{
+		{"both current", cur, cur, cur},
+		{"never read", cur, Observed{}, cur},
+		{"the part a copy", cur, old, old},
+		{"the whole a copy", old, cur, old},
+		{"both copies: the older", old, older, older},
+		{"both copies, the other way", older, old, older},
+	} {
+		if got := tc.o.least(tc.p); got != tc.want {
+			t.Errorf("%s: %+v, want %+v", tc.name, got, tc.want)
+		}
 	}
 }
