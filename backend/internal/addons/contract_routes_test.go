@@ -89,7 +89,7 @@ func TestTheTrueNASManifestIsFetchedAndEveryFieldLands(t *testing.T) {
 	if m.ContractVersion != ContractVersion || m.Product != "TrueNAS" || m.ProductVersion != "TrueNAS-25.10.5" || m.Kind != "storage" {
 		t.Errorf("identity did not land: %+v", m)
 	}
-	if !m.Declares("storage.homes") || !m.Declares("operations") || m.Declares("calls") || m.Limits.SubjectsPerPlan != 200 {
+	if !m.Declares("storage.homes") || !m.Declares("operations") || !m.Declares("calls") || m.Declares("stats") || m.Limits.SubjectsPerPlan != 200 {
 		t.Errorf("features and limits did not land: %v %+v", m.Features, m.Limits)
 	}
 	if m.Connection == nil || m.Connection.Protocol != "smb" || m.Connection.Host != "nas.example.org" {
@@ -592,13 +592,13 @@ func assertOperationRequest(t *testing.T, got *seen, operation string) {
 // The error body: what this side keeps of a refusal is its code, and only for
 // classification it also reads a contract-1 add-on's `error`.
 func TestErrorBodyLands(t *testing.T) {
-	if code := refusalCode(contractFixture(t, "error.json")); code != "CONTRACT_VERSION_MISMATCH" {
+	if code, _ := refusalOf(contractFixture(t, "error.json")); code != "CONTRACT_VERSION_MISMATCH" {
 		t.Errorf("the problem's code did not land: %q", code)
 	}
-	if code := refusalCode([]byte(`{"error":"LIFECYCLE_REFUSAL","lifecycle":"draining"}`)); code != "LIFECYCLE_REFUSAL" {
+	if code, _ := refusalOf([]byte(`{"error":"LIFECYCLE_REFUSAL","lifecycle":"draining"}`)); code != "LIFECYCLE_REFUSAL" {
 		t.Errorf("a contract-1 refusal's code did not land: %q", code)
 	}
-	if code := refusalCode([]byte(`{"code":"PLAN_STALE","error":"LIFECYCLE_REFUSAL"}`)); code != "PLAN_STALE" {
+	if code, _ := refusalOf([]byte(`{"code":"PLAN_STALE","error":"LIFECYCLE_REFUSAL"}`)); code != "PLAN_STALE" {
 		t.Errorf("the problem's code must win over a legacy key: %q", code)
 	}
 }

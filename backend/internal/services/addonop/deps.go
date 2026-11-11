@@ -14,9 +14,13 @@ var (
 	validateParams   = addons.ValidateParams
 	operationRecord  = addons.OperationRecord
 	callAddon        = addons.Call
+	previewAddon     = addons.Preview
 	beginOperation   = db.BeginAddonOperation
 	// The rate limit counts the record table itself, so the thing bounded and
 	// the thing counted cannot drift apart.
 	countRecentOperations = db.CountRecentAddonOperations
 	settleOperation       = db.SettleAddonOperation
+	// A physical operation is refused while the subject's earlier one is
+	// unsettled: the same read the member's page shows it from.
+	unconfirmedChangeAt = db.UnconfirmedChangeAt
 )

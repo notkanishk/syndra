@@ -105,14 +105,14 @@ func TestOperationRequestAcceptsContract(t *testing.T) {
 		t.Fatalf("the backend's operation body was refused: %v", err)
 	}
 	doc := v2JSON(t, "fixtures", "operation_request.json")
-	doc["plan_id"], doc["fingerprint"], doc["fresh"] = "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd", "sha256:9d1c4f0b7e2a", true
+	doc["plan_id"], doc["fingerprint"], doc["fresh"], doc["preview"] = "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd", "sha256:9d1c4f0b7e2a", true, true
 	raw, _ := json.Marshal(doc)
 	req = OperationRequest{}
 	if err := decodeStrict(raw, &req); err != nil {
 		t.Fatalf("an operation body with plan_id and fingerprint was refused: %v", err)
 	}
 	noZeroFields(t, req, "OperationRequest")
-	refused, accepted := 0, 0
+	refused, accepted, undeclared := 0, 0, 0
 	for name, f := range v2Features(t) {
 		for _, field := range f.RequestFields {
 			key, found := strings.CutPrefix(field, "operation_request.")
@@ -124,21 +124,25 @@ func TestOperationRequestAcceptsContract(t *testing.T) {
 			raw, _ := json.Marshal(with)
 			var unknown errUnknownRequestField
 			err := decodeStrict(raw, &OperationRequest{})
-			switch {
-			case slices.Contains(features, name):
+			if slices.Contains(features, name) {
 				if err != nil {
 					t.Errorf("feature key %s, declared here (%s), was refused: %v", key, name, err)
 				}
 				accepted++
-			case !errors.As(err, &unknown):
+				continue
+			}
+			undeclared++
+			if !errors.As(err, &unknown) {
 				t.Errorf("feature key %s, undeclared here, must be refused as an unknown field, got %v", key, err)
-			default:
+			} else {
 				refused++
 			}
 		}
 	}
-	if refused == 0 || accepted == 0 {
-		t.Fatalf("refused %d undeclared and accepted %d declared feature keys, so this proved too little", refused, accepted)
+	// Every operation key's feature is declared here now (fresh, preview),
+	// so what is left to prove is that each was accepted and none refused.
+	if accepted == 0 || refused != undeclared {
+		t.Fatalf("refused %d of %d undeclared and accepted %d declared feature keys, so this proved too little", refused, undeclared, accepted)
 	}
 }
 

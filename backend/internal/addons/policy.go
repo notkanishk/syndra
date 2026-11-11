@@ -32,7 +32,15 @@ type ParamSpec struct {
 	// and panic capture. Policy marking a parameter secret is authoritative:
 	// a manifest that forgets to declare it cannot make it loggable.
 	Secret bool
+	// Format is a hint for the form (registry params[].format): "target_id"
+	// is an id typed or scanned off the thing itself (an item's label), never
+	// a picker, since the target's ids are too many to list. Never a decision:
+	// the add-on answers UNKNOWN_RESOURCE for one that names nothing.
+	Format string
 }
+
+// FormatTargetID is params[].format for an id on the target, typed or scanned.
+const FormatTargetID = "target_id"
 
 // OperationPolicy is the ceiling for one operation id.
 type OperationPolicy struct {
@@ -55,6 +63,10 @@ type OperationPolicy struct {
 	//
 	// ponytail: deleted at major 3, with the pockets; then every read needs results.
 	Pocket string
+	// SecretResult marks an operation whose reply carries a secret (a
+	// generated PIN): the add-on records it redacted, and Syndra never keeps
+	// or shows a /calls reply for it. None has one yet.
+	SecretResult bool
 }
 
 // The effect vocabulary (registry/operations.json). A new class is a core
@@ -181,6 +193,21 @@ var operationPolicy = map[string]OperationPolicy{
 		Result:  "profiles/storage/status.json",
 		Pocket:  "storage",
 	},
+	// The member takes an item off a shelf (design §10): a physical effect,
+	// so confirmed after a preview that names the item, offered only by an
+	// add-on declaring calls (the preview field and the settling route), never
+	// resent by anyone, and refused while an earlier one is unsettled. Member
+	// scope binds the subject to the actor, as for password.set: the member
+	// checks out to themself, and item_id names the thing, never a person.
+	"item.checkout": {
+		Scope:   ScopeMember,
+		Confirm: true,
+		Params: []ParamSpec{
+			{Name: "item_id", Type: "string", Required: true, Format: FormatTargetID},
+		},
+		Effect: EffectPhysical,
+		Result: "common/records.json",
+	},
 	// What the member holds on the target (a borrowed item, a booked room),
 	// read live and never stored: the same read path and the same two routes
 	// as storage.status, so an admin looking at a person's page writes no
@@ -205,11 +232,13 @@ type EffectiveOperation struct {
 	Params            []ParamSpec
 	Available         bool
 	UnavailableReason string
-	// Effect, Result and Pocket are the policy's alone: a manifest cannot
-	// make a write a read, nor name another reply shape.
-	Effect string
-	Result string
-	Pocket string
+	// Effect, Result, Pocket and SecretResult are the policy's alone: a
+	// manifest cannot make a write a read, name another reply shape, or make
+	// a secret reply keepable.
+	Effect       string
+	Result       string
+	Pocket       string
+	SecretResult bool
 }
 
 // resolveOperations intersects a manifest's operation set with backend policy.
@@ -256,6 +285,7 @@ func resolveOperations(m Manifest) (ops []EffectiveOperation, unknown []string) 
 			Effect:            p.Effect,
 			Result:            p.Result,
 			Pocket:            p.Pocket,
+			SecretResult:      p.SecretResult,
 		}
 		if !eff.Available && eff.UnavailableReason == "" {
 			eff.UnavailableReason = "the add-on reported this operation unavailable without a reason"
@@ -265,6 +295,16 @@ func resolveOperations(m Manifest) (ops []EffectiveOperation, unknown []string) 
 			// add-on has no shape Syndra reads, so it is shown, not dropped.
 			eff.Available = false
 			eff.UnavailableReason = "the add-on does not declare feature results, which this read needs"
+		}
+		if eff.Available && p.Effect == EffectPhysical {
+			// A physical operation needs calls (the preview it is confirmed
+			// after, and GET /calls, how an in-doubt one settles) and, when
+			// it names a result, results (the record the preview shows).
+			// Without them it is shown, never dispatched: every path
+			// resolves the operation first.
+			if reason := physicalNeeds(m, p); reason != "" {
+				eff.Available, eff.UnavailableReason = false, reason
+			}
 		}
 		if previous, seen := byID[mo.ID]; seen {
 			eff = mostRestrictiveOperation(previous, eff)
@@ -282,16 +322,42 @@ func resolveOperations(m Manifest) (ops []EffectiveOperation, unknown []string) 
 	return ops, dedupeStrings(unknown)
 }
 
+// physicalNeeds is why a physical operation cannot be offered by this
+// manifest, "" when it can.
+func physicalNeeds(m Manifest, p OperationPolicy) string {
+	switch {
+	case !m.Declares("calls"):
+		return "the add-on does not declare feature calls, which a physical operation needs"
+	case p.Result != "" && !m.Declares("results"):
+		return "the add-on does not declare feature results, which this operation's record needs"
+	}
+	return ""
+}
+
+// PhysicalOperations is every policy id whose effect is physical, sorted:
+// what the unconfirmed list holds back until constants.in_doubt_bound.
+func PhysicalOperations() []string {
+	var ids []string
+	for id, p := range operationPolicy {
+		if p.Effect == EffectPhysical {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 // mostRestrictiveOperation resolves two declarations of one id.
 func mostRestrictiveOperation(a, b EffectiveOperation) EffectiveOperation {
 	out := EffectiveOperation{
-		ID:      a.ID,
-		Scope:   mostRestrictiveScope(a.Scope, b.Scope),
-		Confirm: a.Confirm || b.Confirm,
-		Params:  a.Params,
-		Effect:  a.Effect,
-		Result:  a.Result,
-		Pocket:  a.Pocket,
+		ID:           a.ID,
+		Scope:        mostRestrictiveScope(a.Scope, b.Scope),
+		Confirm:      a.Confirm || b.Confirm,
+		Params:       a.Params,
+		Effect:       a.Effect,
+		Result:       a.Result,
+		Pocket:       a.Pocket,
+		SecretResult: a.SecretResult,
 		// Union, for the reason the policy/manifest union exists: a second
 		// declaration that omits a secret parameter must not make the value
 		// loggable.

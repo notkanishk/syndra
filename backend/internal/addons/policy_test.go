@@ -191,3 +191,48 @@ func TestADuplicateOperationCannotWidenAnyDimension(t *testing.T) {
 		t.Errorf("a secret parameter must not be unmarked by a second declaration: %+v", got.SecretParams)
 	}
 }
+
+// A physical operation moves something in the world: it is confirmed, it is a
+// write (never the read path), and it names a parameter the member types or
+// scans, since that is what the preview shows back to them.
+func TestEveryPhysicalOperationIsConfirmedAndNeverARead(t *testing.T) {
+	ids := PhysicalOperations()
+	if len(ids) == 0 {
+		t.Fatal("the policy has no physical operation: this test reads nothing")
+	}
+	for _, id := range ids {
+		p := operationPolicy[id]
+		if !p.Confirm {
+			t.Errorf("%s is physical and not confirmed", id)
+		}
+		if p.Pocket != "" {
+			t.Errorf("%s is physical and has a legacy pocket", id)
+		}
+	}
+}
+
+// Without calls a physical operation has no preview to be confirmed after and
+// no way to settle when its answer is lost; without results its preview has no
+// record to show. Either way it is shown unavailable, with the reason, and so
+// resolves to ErrOperationUnavailable on every path that sends.
+func TestAPhysicalOperationWithoutCallsIsUnavailable(t *testing.T) {
+	op := Operation{ID: "item.checkout", Scope: ScopeMember, Confirm: true, Available: true}
+	for _, tc := range []struct {
+		features  []string
+		available bool
+	}{
+		{[]string{"operations"}, false},
+		{[]string{"operations", "calls"}, false},
+		{[]string{"operations", "results"}, false},
+		{[]string{"operations", "calls", "results"}, true},
+	} {
+		ops, _ := resolveOperations(Manifest{Features: tc.features, Operations: []Operation{op}})
+		if len(ops) != 1 || ops[0].Available != tc.available {
+			t.Errorf("features %v: %+v, want available %t", tc.features, ops, tc.available)
+			continue
+		}
+		if !tc.available && ops[0].UnavailableReason == "" {
+			t.Errorf("features %v: unavailable without a reason", tc.features)
+		}
+	}
+}

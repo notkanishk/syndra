@@ -1,0 +1,9 @@
+{
+  "type": "urn:syndra:addon:error:UNKNOWN_RESOURCE",
+  "title": "Unknown resource",
+  "status": 404,
+  "detail": "No item has that id.",
+  "code": "UNKNOWN_RESOURCE",
+  "retry": "never",
+  "param": "item_id"
+}

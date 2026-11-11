@@ -173,6 +173,25 @@ type CallResponse struct {
 	// delay-seconds only, as registry/errors.json has it): 0 when absent or
 	// not an integer. A cooldown's countdown (FRESH_READ_COOLDOWN, 429).
 	RetryAfter int
+	// Refusal is what a refusal says beyond its code, for the person who
+	// asked: which parameter, which limit. Zero on a 2xx.
+	Refusal Refusal
+	// NoChange is a 2xx whose outcome is no_change (feature calls): the
+	// add-on answered that the state was already as asked and wrote nothing.
+	// Outcome stays succeeded, the transport fact (it was answered, and the
+	// state is as asked); the record says no_change (StatusOf).
+	NoChange bool
+}
+
+// Refusal is a refusal's extension members (RFC 9457 §3.2) that name what was
+// refused, never a value: Param is the parameter (UNKNOWN_RESOURCE,
+// NOT_ENTITLED, RESOURCE_TAKEN), Limit, Unit and Count the limit reached
+// (LIMIT_REACHED).
+type Refusal struct {
+	Param string `json:"param,omitempty"`
+	Limit *int   `json:"limit,omitempty"`
+	Unit  string `json:"unit,omitempty"`
+	Count *int   `json:"count,omitempty"`
 }
 
 // callEnvelope is the wire body. Everything that binds the call to an approval
@@ -261,12 +280,39 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 		return resp
 	}
 
+	if resp.Outcome == OutcomeSucceeded {
+		resp = readOutcome(resp, a.declares("calls") == nil)
+	}
 	if resp.Outcome != OutcomeSucceeded {
 		// Neither the request body nor the response body is logged. The request
 		// carries the secret; the response carries whatever the least trusted
 		// component chose to echo back, which may be the same secret.
 		log.Printf("[ADDON] %s/%s call_id=%s outcome=%s status=%d err=%v secret_params=%d",
 			req.Target, req.Operation, req.Record.callID, resp.Outcome, resp.Status, resp.Err, len(op.SecretParams))
+	}
+	return resp
+}
+
+// ErrUnknownOutcome is a 2xx operation reply whose outcome is missing or not
+// one this add-on may say: answered, and saying nothing Syndra can stand
+// behind, so the call may have acted (absence is never a value).
+var ErrUnknownOutcome = errors.New("addon: the reply's outcome is missing or not one the add-on may say")
+
+// readOutcome reads a 2xx operation reply's own outcome (6.3a): succeeded as
+// it was; no_change, from an add-on declaring calls, as answered and nothing
+// done; anything else, or none, as indeterminate. Status alone said only that
+// it answered, and a no-op recorded as done is the lie this reading prevents.
+func readOutcome(resp CallResponse, calls bool) CallResponse {
+	var reply struct {
+		Outcome string `json:"outcome"`
+	}
+	_ = json.Unmarshal(resp.Body, &reply)
+	switch {
+	case reply.Outcome == string(OutcomeSucceeded):
+	case reply.Outcome == "no_change" && calls:
+		resp.NoChange = true
+	default:
+		resp.Outcome, resp.Err = OutcomeIndeterminate, fmt.Errorf("%w: %q", ErrUnknownOutcome, reply.Outcome)
 	}
 	return resp
 }
@@ -350,7 +396,7 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 
 	out := CallResponse{Status: httpResp.StatusCode, Body: respBody}
 	if out.Status < 200 || out.Status >= 300 {
-		out.Code = refusalCode(respBody)
+		out.Code, out.Refusal = refusalOf(respBody)
 	}
 	if secs, err := strconv.Atoi(httpResp.Header.Get("Retry-After")); err == nil && secs > 0 {
 		out.RetryAfter = secs
@@ -397,24 +443,41 @@ const (
 	codeUnknownRoute            = "UNKNOWN_ROUTE"
 )
 
-// refusalCode is a refusal's code: the problem's `code` (contract 2), else a
-// contract-1 add-on's `error`. The fallback is for classification only and
-// only until the next major: a contract-1 add-on writes {"error": CODE}, and
-// without it, during a rollback, its 400 would fall to rejected and its 503
-// lifecycle refusal to indeterminate (design §11).
-func refusalCode(body []byte) string {
+// refusalOf is a refusal's code and what it names, in one decode: the
+// problem's `code` (contract 2), else a contract-1 add-on's `error`. The
+// fallback is for classification only and only until the next major: a
+// contract-1 add-on writes {"error": CODE}, and without it, during a rollback,
+// its 400 would fall to rejected and its 503 lifecycle refusal to
+// indeterminate (design §11). An extension member of the wrong type is not
+// read (a refusal is still classified by its code).
+func refusalOf(body []byte) (string, Refusal) {
 	var p struct {
-		Code  any `json:"code"`
-		Error any `json:"error"`
+		Code  any             `json:"code"`
+		Error any             `json:"error"`
+		Param json.RawMessage `json:"param"`
+		Limit json.RawMessage `json:"limit"`
+		Unit  json.RawMessage `json:"unit"`
+		Count json.RawMessage `json:"count"`
 	}
 	if json.Unmarshal(body, &p) != nil {
-		return ""
+		return "", Refusal{}
+	}
+	var r Refusal
+	_ = json.Unmarshal(p.Param, &r.Param)
+	_ = json.Unmarshal(p.Unit, &r.Unit)
+	var n int
+	if json.Unmarshal(p.Limit, &n) == nil {
+		r.Limit = &n
+	}
+	var c int
+	if json.Unmarshal(p.Count, &c) == nil {
+		r.Count = &c
 	}
 	if code, ok := p.Code.(string); ok && code != "" {
-		return code
+		return code, r
 	}
 	code, _ := p.Error.(string)
-	return code
+	return code, r
 }
 
 // classifyStatus maps a status and the add-on's code to what the add-on may

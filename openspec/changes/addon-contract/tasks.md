@@ -1244,6 +1244,25 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     concurrent asks (a joiner is `cooldown`), the last value `unreachable`
     (`Config.Down`, test-only), every write forgets the mirror, `/plan` live;
     defects `cached-as-current`, `reads-per-request`, `cooldown-ignored`.
+  - [x] The `calls` half and the `physical` operation (slice 6c, 12 Nov
+    2026): `-features results,calls` declares `calls` and `item.checkout`
+    (`checkout.go`: item-0001..0004 on three printers, `loanLimit` 1), the
+    preview that writes nothing, every check and the loan in one section
+    under a per-subject lock, the intent before the loan, `CALL_UNSETTLED`
+    while one is open (the same call_id included), `no_change` for an item
+    already held, `RESOURCE_TAKEN` for one someone else holds, and
+    `GET /calls` for every write (`callState`); `Config.LoseReply`
+    (test-only) loses an answer before or after the loan. Defects
+    `preview-recorded`, `reexecutes-in-doubt`, `checkout-unserialised`,
+    `no-change-as-succeeded`, `calls-echo-params`. The `stats` half stays
+    open.
+    - Decided while building: an open intent is settled only on `/calls`
+      (`settle`), never by the next checkout, which would clear it and run,
+      so a retry would never be `CALL_UNSETTLED`; and never while `Down` or
+      while the call still runs. A preview answers `CALL_UNSETTLED` too: it
+      answers what the confirm would.
+    - Decided while building: `problem()` resolves the registry's
+      `by_status` class (`backoff` for 429 and every 5xx), as the guide says.
 
 **`results` (decision 20)**
 
@@ -1424,14 +1443,61 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   retry meanwhile is `CALL_UNSETTLED`, a preview leaves nothing behind
   (`/calls` on any never-used id → `unknown`, `log_records` unchanged) and
   the confirm with its fresh id executes #ready-for-agent
+  - [x] The Go half (slice 6c, 12 Nov 2026): the registry has `effect` and
+    `secret_result` for every id and `item.checkout`; `UNKNOWN_RESOURCE`,
+    `NOT_ENTITLED`, `LIMIT_REACHED` and `RESOURCE_TAKEN` are registered with
+    their extension members (`error.json`: `param`; `limit`, `unit`,
+    `count`). The backend offers a physical op only with `calls` (and
+    `results` for its record: `physicalNeeds`), previews it unrecorded with no
+    call_id (`addons.Preview`, `addonop.Preview`), refuses it without
+    confirm, refuses a resend (`ErrPhysicalNotResent`) and the next while one
+    is unsettled (`ErrCallUnsettled`, before any record), sends once
+    (`TestAnIndeterminatePhysicalCallIsSentOnce`), and settles any lost
+    answer through `/calls` (`CallAnswer`, `settleByCall`): the member's poll
+    `GET /me/targets/{t}/operations/{id}` and the operator's list take the
+    same path. A physical row is held off Waiting on you until
+    `in_doubt_bound` (`PhysicalHold`), then is the existing unconfirmed item.
+    Routes `POST /me/targets/{t}/operations/{name}` (`preview` or `confirm`)
+    and the poll; `/me/targets` gains `actions[]` and `unsettled`. TrueNAS
+    answers `/calls` from its call store, lease and mutation log and declares
+    `calls`; the reference and the kit as 6.0 and 6.11 say.
+    - Decided while building (B1): `GET /calls` keeps the shipped
+      `{call_id, state, reply}`, not `{outcome, result}`: `outcome` is the
+      reply's own field. (B2) A preview answers the outcome the confirm
+      would. (B3) The backend refuses `CALL_UNSETTLED` itself too, so "never
+      twice" does not rest on the add-on alone. (B4) No server-side "preview
+      before confirm" state. (B5) No redaction code in either add-on until an
+      id has `secret_result`; the backend drops such a reply unread. (B6) A
+      physical op needs `results` when it names a result.
+    - Decided while building (O1): someone else's item is `RESOURCE_TAKEN`
+      (409, `param`, RFC 9110 §15.5.10). (O2) `item.return` comes with the
+      inventory add-on. (O3) A non-physical op on a `calls` target keeps the
+      two-minute grace; only a physical one waits `in_doubt_bound`.
+    - Decided while building: `/calls` settles any lost write, not only a
+      physical one (the operator's list asks first, then the settings read),
+      so a TrueNAS adoption or release whose answer was lost settles itself;
+      the backend's own binding copy is not written by it (as an operator's
+      "happened" today; NEXT.md).
+  - [ ] The UI half (6.3u, a separate builder from the 6c UI handoff): the
+    member action with `format: target_id` as a typed-or-scanned input,
+    preview then confirm, the poll, and the desk's sentence on Waiting on you
+    #ready-for-agent
 
-- [ ] 6.3a (the guide review's ruling (b)) Add `no_change` to
+- [x] 6.3a (the guide review's ruling (b)) Add `no_change` to
   `common/outcome.json`, listed under feature `calls`, mirroring
   `common/effect.json`, so an operation can say it changed nothing (a
   checkout of an item already held; `log_records` stays put); and have
   Syndra read the wire `outcome` instead of classifying by status alone, so
   a no-op is not recorded and audited as done. "Conflict" is not an outcome:
   it is a refusal, problem+json 409 #ready-for-agent
+  - Done in slice 6c: `common/outcome.json` is a `oneOf` with `no_change`
+    under `x-feature: calls` (`features.json`: `outcome.no_change`; the
+    feature-marking test reads a `oneOf` member's `x-feature`). The backend
+    reads the 2xx reply's `outcome` (`readOutcome`): `no_change` only from a
+    `calls` add-on, missing or unknown as indeterminate; the record says
+    `no_change` (migration 000092 widens the status CHECK, expand-only), the
+    dispatch audit row stays, and no count or "last succeeded" read takes it
+    for done.
 
 **`stats` (decisions 11–17)**
 
@@ -1542,6 +1608,22 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     all three to pass. A mirroring add-on's `-mutate` "before" read asks
     fresh and waits a cooldown out once. The guide's A.1 moved into chapter
     4, so A.2–A.5 are A.1–A.4 and `operations.physical` cites `a1-…`.
+  - [x] The `calls` part (slice 6c, 12 Nov 2026): checks `calls.unknown`
+    (reads), `calls.recorded` and `operations.physical` (`-mutate`; the
+    physical check needs `-item`, and the report names the item left checked
+    out), `calls.unsettled` and `calls.serialised` (always skip: a black-box
+    kit cannot lose a reply or know the limit; the reference's own tests hold
+    them). Watched to fail against `preview-recorded` and
+    `no-change-as-succeeded` (`operations.physical`) and `calls-echo-params`
+    (`operations.secret`), to skip on the plain reference and pass with
+    `-features results,calls -item item-0001`; the TrueNAS kit test requires
+    `calls.unknown` and `calls.recorded` to pass. Every calls check cites the
+    guide's chapter 7 section (A.1 moved there; A.2–A.4 are A.1–A.3).
+    - Decided while building: a `/calls` reply is compared to the first
+      reply by JSON value (it is embedded in another body); the replay of a
+      confirm is compared byte for byte. A physical op declared without
+      `calls` fails `operations.physical` in the reads phase, a MUST, so
+      `-mutate` refuses to write.
 
 ## Out of scope, stated so nobody builds it here
 

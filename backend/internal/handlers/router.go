@@ -317,6 +317,11 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/me/systems", withCORS(withUserAuth(handleMySystems)))
 	mux.HandleFunc("GET /api/v1/me/changes", withCORS(withUserAuth(handleMyChanges)))
 	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(withSelfServiceLimit(handleSetMyCredential))))
+	// A member acting on the world (item.checkout): preview or confirm, and
+	// where a confirm stands. The poll is not self-service limited: it sends
+	// nothing but GET /calls, and only while the record is open.
+	mux.HandleFunc("POST /api/v1/me/targets/{target}/operations/{name}", withCORS(withUserAuth(withSelfServiceLimit(handleMemberAction))))
+	mux.HandleFunc("GET /api/v1/me/targets/{target}/operations/{id}", withCORS(withUserAuth(handleMemberActionStatus)))
 
 	// The add-on roster. Deployment configuration, not data: an operator on a
 	// deployment running a TrueNAS add-on sees the TrueNAS entry whether or not

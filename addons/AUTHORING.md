@@ -28,10 +28,11 @@ the repository root. Code is cited by symbol (`decide` in
 `addons/reference/reference.go`), never by line.
 
 **What is live.** Syndra and the TrueNAS add-on speak contract 2 today,
-`results` ([chapter 7](#read-operations-and-result-feature-results)) and
-`freshness` ([Fresh reads](#fresh-reads-feature-freshness)) included. Two
-features are in the schemas and not yet used by Syndra: `calls` and
-`stats`. Their rules are in the appendix,
+`results` ([chapter 7](#read-operations-and-result-feature-results)),
+`freshness` ([Fresh reads](#fresh-reads-feature-freshness)) and `calls`
+([Physical operations](#physical-operations-and-get-callscall_id-feature-calls))
+included. One feature is in the schemas and not yet used by Syndra:
+`stats`. Its rules are in the appendix,
 [Designed, not yet served by Syndra](#appendix-designed-not-yet-served-by-syndra).
 A good time to build one is once Syndra serves it; what may be declared is
 in [chapter 3](#3-the-manifest-get-capabilities).
@@ -180,7 +181,8 @@ key, the designed features' included.
     "storage.reach",
     "storage.homes",
     "results",
-    "freshness"
+    "freshness",
+    "calls"
   ],
   "entitlement_schema": [
     {
@@ -1299,7 +1301,9 @@ Schema: `v2/schema/error.json`; every code: `v2/registry/errors.json`.
 
 | Reply | Syndra concludes |
 |---|---|
-| 2xx | it acted, and said so |
+| 2xx, `outcome: succeeded` | it acted, and said so |
+| 2xx, `outcome: no_change`, from an add-on declaring `calls` | it checked, and nothing needed doing; recorded as such, never as done |
+| 2xx to an operation with no `outcome`, or one outside `common/outcome.json` (or `no_change` without `calls`) | **possibly acted**, as a 5xx: absence is never a value |
 | `LIFECYCLE_REFUSAL` (by code alone) | not reached: a maintenance window; it waits |
 | `CONTRACT_VERSION_MISMATCH`, `UNKNOWN_REQUEST_FIELD`, or 404 `UNKNOWN_ROUTE` (or no code) on a feature route | not reached, and the manifest is read again: the add-on is not the one Syndra thought |
 | `CALL_IN_PROGRESS`, `TARGET_UNREACHABLE`, any 429 | not reached; the change stays queued and is asked again later |
@@ -1447,9 +1451,11 @@ them a conflict sits refused until someone does that.
 **`effect`**, in the registry for every id, says what an operation touches.
 There is no destructive effect, because there is no destructive operation:
 removal disables, and `account.purge` is an admin act with a separately
-issued key. Syndra's own policy does not read `effect` yet: the rules by
-effect, `physical` included, are
-[designed, not yet served](#a1-physical-operations-and-get-callscall_id-feature-calls).
+issued key. Syndra's policy reads it: a `read` goes through the one read
+path ([below](#read-operations-and-result-feature-results)), and a
+`physical` one is previewed, confirmed and settled as
+[Physical operations](#physical-operations-and-get-callscall_id-feature-calls)
+says.
 
 ### Read operations and `result` (feature `results`)
 
@@ -1537,10 +1543,203 @@ Rules:
   operation whose `result` is `common/records.json`: a registry entry and a
   policy entry ([chapter 14](#14-evolving)), and the page that lists it
   exists.
-- `secret_result` will mark an id whose reply carries a secret (a generated
-  PIN). The add-on MUST record such a reply redacted: a replay and
-  `GET /calls` answer `recorded` without it. No registered operation has a
-  secret reply yet.
+- `secret_result`, in the registry for every id, marks one whose reply
+  carries a secret (a generated PIN). The add-on MUST record such a reply
+  redacted: a replay and `GET /calls` answer `recorded` without it. Syndra
+  drops the reply of such an id unread whatever the add-on sends
+  (`secretResult` in `backend/internal/addons/calls.go`). No registered
+  operation has a secret reply yet.
+
+### Physical operations and `GET /calls/{call_id}` (feature `calls`)
+
+An operation whose registry `effect` is `physical` moves something in the
+world: stock leaves a shelf. `item.checkout` is the one registered (scope
+`member`, `confirm: true`, one parameter `item_id` with
+`format: target_id`, result `common/records.json`); the reference add-on
+serves it over a catalogue of four items (`checkout` in
+`addons/reference/checkout.go`). Syndra offers one only from an add-on that
+declares `calls` (and `results`, for its record); declared without them it
+is shown unavailable, with the reason, and never sent
+(`physicalNeeds` in `backend/internal/addons/policy.go`).
+
+**1. Previewed, then confirmed, and the confirmation names the thing.**
+Syndra first sends the operation with `preview: true` and no `call_id`
+(`Preview` in `backend/internal/addons/results.go`), only to an add-on
+declaring `calls`:
+
+<!-- fixture: v2/fixtures/operation_request_preview.json -->
+```json
+{
+  "contract_version": 2,
+  "operation": "item.checkout",
+  "subject": "289471021834760193",
+  "actor": "289471021834760193",
+  "params": {
+    "item_id": "item-2207"
+  },
+  "preview": true
+}
+```
+
+The add-on MUST run every check the confirm would (lifecycle, reachability,
+the item, the subject's categories and limit) and answer what the confirm
+would answer, `outcome` and the record in `result`, writing nothing: no
+mutation-log record, no call record. The member confirms that, and the
+confirm is a new request with a fresh `call_id`, the id of Syndra's own
+record of it. A preview kept under an id the confirm reused would be
+replayed as "done" when nothing happened. A `preview` with a `call_id`, or
+to an add-on that has no physical operation, MUST be 400 `BAD_REQUEST`.
+
+**2. At most once.** An attempt whose answer was lost is executed again by
+no one:
+
+- Syndra never resends one: the transport sends a write once
+  (`addonAttempts` in `backend/internal/addons/transport.go`), and the
+  member page's one automatic resend is refused for a physical operation
+  (`ErrPhysicalNotResent` in `backend/internal/services/addonop/dispatch.go`).
+- While a subject's earlier call of the operation is sent and unsettled,
+  Syndra refuses the next before it has a record (`ErrCallUnsettled`
+  there), and the add-on MUST too: 409 `CALL_UNSETTLED`, under any
+  `call_id`, the same one included.
+- The add-on MUST write the mutation-log intent before it calls the app, and
+  MUST NOT execute a physical call whose intent has no recorded result.
+
+<!-- fixture: v2/fixtures/error_call_unsettled.json -->
+```json
+{
+  "type": "urn:syndra:addon:error:CALL_UNSETTLED",
+  "title": "Call unsettled",
+  "status": 409,
+  "detail": "An earlier checkout for this member is still being settled, so this one was not run.",
+  "code": "CALL_UNSETTLED",
+  "retry": "never"
+}
+```
+
+**3. Settled through `GET /calls/{call_id}`.** Syndra asks, by the call's
+id, what the add-on recorded (`CallAnswer` in
+`backend/internal/addons/calls.go`), for any write whose answer it lost, not
+only a physical one:
+
+<!-- fixture: v2/fixtures/call.json -->
+```json
+{
+  "call_id": "5a2d9e30-1b44-4f7c-9e08-6d3a2c1b0f95",
+  "state": "recorded",
+  "reply": {
+    "operation": "account.adopt",
+    "subject": "289471021834760193",
+    "outcome": "succeeded",
+    "detail": "Bound the existing account rey_mysterio.",
+    "account_id": "3051"
+  }
+}
+```
+
+- `recorded`, with the first call's reply (left out when redacted): it
+  happened. Syndra settles its record as happened.
+- `in_doubt`, no `reply`: the intent is in the log with no result, or a
+  request with the id is running now, or a write acted and its reply was not
+  recorded. The add-on is still finding out, and Syndra asks again.
+- `unknown`, no `reply`: no effect recorded. The request never arrived, was
+  refused before any write, or every write it made changed nothing. Syndra
+  settles its record as not happened, and the member may try again.
+
+<!-- fixture: v2/fixtures/call_in_doubt.json -->
+```json
+{
+  "call_id": "0b7d4c1e-6a5f-4e2b-9c3d-8f1a2e4b6c70",
+  "state": "in_doubt"
+}
+```
+
+An add-on MUST answer `unknown` only when it is sure nothing acted: when in
+doubt, `in_doubt`. It MUST answer in every lifecycle state (asking writes
+nothing) and for every kind of write, apply and lifecycle included, since
+Syndra settles any record whose answer it lost this way (`handleCall` in
+`addons/truenas/calls.go` reads its call store, then its lease, then its
+mutation log back to `constants.call_memory`; `callState` in
+`addons/reference/checkout.go` reads the target). The member sees "we are
+checking whether it went through" while Syndra asks; a call still
+`in_doubt` after `constants.in_doubt_bound` becomes an item for a person at
+the desk (`PhysicalHold` there), who answers it as they answer any change
+nobody could confirm.
+
+**4. Naturally idempotent.** Checking out an item this subject already
+holds MUST answer `outcome: no_change` with the record, and write nothing
+(`log_records` unchanged); `no_change` is in `common/outcome.json` under
+feature `calls`, so only an add-on declaring it may say it, and Syndra
+records the call as `no_change`, never as done:
+
+<!-- fixture: v2/fixtures/operation_response_no_change.json -->
+```json
+{
+  "operation": "item.checkout",
+  "subject": "289471021834760193",
+  "outcome": "no_change",
+  "detail": "You already have this item. Nothing changed.",
+  "result": {
+    "records": [
+      {
+        "id": "item-2207",
+        "label": "Soldering iron, Hakko FX-888D",
+        "category": "tools",
+        "since": "2026-11-03T16:10:00Z",
+        "due": "2026-11-17T17:00:00Z",
+        "standing": {
+          "usable": true,
+          "waiting_on": "none"
+        }
+      }
+    ],
+    "taken_at": "2026-11-10T09:30:00Z",
+    "current": true
+  }
+}
+```
+
+One someone else holds is a refusal, never an outcome. The refusals a
+physical operation answers, each with nothing done and each naming what it
+is about in an extension member (RFC 9457 §3.2), never a value typed:
+
+| Code | Status | Extension members | Meaning |
+|---|---|---|---|
+| `UNKNOWN_RESOURCE` | 404 | `param` | the parameter names nothing on the app |
+| `NOT_ENTITLED` | 403 | `param` | the subject's entitlements (categories) do not reach it |
+| `RESOURCE_TAKEN` | 409 | `param` | someone else holds it |
+| `LIMIT_REACHED` | 409 | `limit`, `unit`, `count` | the subject is at a limit |
+| `CALL_UNSETTLED` | 409 | | an earlier call for this subject is unsettled |
+
+<!-- fixture: v2/fixtures/error_limit_reached.json -->
+```json
+{
+  "type": "urn:syndra:addon:error:LIMIT_REACHED",
+  "title": "Limit reached",
+  "status": 409,
+  "detail": "This member already holds as many items as they may.",
+  "code": "LIMIT_REACHED",
+  "retry": "never",
+  "limit": 2,
+  "unit": "items",
+  "count": 2
+}
+```
+
+**5. Serialised per subject**, so two concurrent checkouts cannot both pass
+the limit, and the checks and the write in one section, so another subject
+cannot take the item between them.
+
+**6. Remembered** for at least `constants.call_memory`.
+
+Also, a physical operation MUST be refused unless the lifecycle is `active`
+and the app is reachable now (never queued: the member is at the shelf now
+or not), and the subject's limit and categories MUST be checked before the
+app is called, so that a refusal is in the add-on's words and no
+half-record exists on the app.
+
+`params[].format: target_id` in the registry marks a parameter that is an
+id on the thing itself, typed or scanned off its label: Syndra's form gives
+it a text input that a barcode scanner can type into, never a picker.
 
 ## 8. Security rules
 
@@ -1662,6 +1861,8 @@ says what to take from it.
 | `fingerprint`, `username` | A fingerprint with its own value for "no account"; a name derived once, at create |
 | `operation`, `healthGet` | Path and body agree; a write with the secret outside the identity and the lifecycle gate; a read that ignores `call_id` |
 | `holdingsList`, `serves` | A read answering `common/records.json` under `result`, declared only with feature `results` |
+| `checkout`, `decideLoan`, `reachableAndActive` (`checkout.go`) | A physical operation: the preview that writes nothing, every check before the write in one section, the intent before the loan, `CALL_UNSETTLED` while one is open, `no_change` for an item already held |
+| `callState`, `settle` (`checkout.go`) | `GET /calls`: recorded, in doubt or unknown, and an open intent settled by reading the target, never while it cannot be read |
 | `setLifecycle`, `putSetting` | Lifecycle and the one setting, both through the call record; `LIFECYCLE_REFUSAL` |
 | `once` | The call rules and the in-flight lease, only a 2xx recorded |
 | `identityDigest`, `plain` | Request identity: SHA-256 over canonical JSON of decoded values |
@@ -1697,11 +1898,15 @@ What the reference simplifies, and a real add-on MUST do in full:
 - It declares neither `account.adopt` nor `account.release`, though it can
   answer `BINDING_CONFLICT`; a real add-on MUST
   ([The account operations](#the-account-operations)).
-- It declares `results` and `freshness` only when asked (`Config.Features`,
-  `-features results,freshness`), so the kit's checks for each are watched
-  both ways. With `freshness`, `/subjects` is served from a mirror cleared by
-  every write, the cooldown is `PT1S`, and `Config.Down` (test-only) holds
-  the unreachable rule the kit cannot. It declares no `calls` or `stats`.
+- It declares `results`, `freshness` and `calls` only when asked
+  (`Config.Features`, `-features results,freshness,calls`), so the kit's
+  checks for each are watched both ways. With `freshness`, `/subjects` is
+  served from a mirror cleared by every write, the cooldown is `PT1S`, and
+  `Config.Down` (test-only) holds the unreachable rule the kit cannot. With
+  `calls` and `results` it declares `item.checkout` over four items, one at
+  a time per member; `Config.LoseReply` (test-only) loses an answer before or
+  after the loan, which the kit cannot. Its intents live in memory; a real
+  add-on writes them to its mutation log. It declares no `stats`.
 
 ## 12. The TrueNAS add-on
 
@@ -1717,8 +1922,11 @@ has the full map.
 | `smb_enabled` | `channel` | SMB on the account; TrueNAS turns it on only together with a password, so it waits for the member's next `password.set`, and `standing` says so |
 
 - Features `operations`, `settings`, `storage.reach`, `storage.homes`,
-  `results`, `freshness` (`features` and `operationSet` in
-  `addons/truenas/capabilities.go`). `account_id` is the
+  `results`, `freshness`, `calls` (`features` and `operationSet` in
+  `addons/truenas/capabilities.go`). It has no physical operation: `calls`
+  is declared for `GET /calls`, which answers every write from its call
+  store, its lease and its mutation log (`handleCall` in
+  `addons/truenas/calls.go`), and a `preview` is refused. `account_id` is the
   uid as a string; a new name is derived once from the email's local part
   (`DeriveUsername` in `addons/truenas/username.go`).
 - Plan and apply share `decide` (`addons/truenas/apply.go`). `/subjects`
@@ -1740,7 +1948,7 @@ has the full map.
   (`ErrNotSent` in `addons/truenas/nas.go`).
 
 Sketches for other apps (UniFi Access, a Trotec Ruby laser, an inventory
-system) are unverified and in [Appendix A.4](#a4-mapping-sketches).
+system) are unverified and in [Appendix A.3](#a3-mapping-sketches).
 
 ## 13. Validating before you ask to be connected
 
@@ -1890,80 +2098,17 @@ point.
 
 ## Appendix: Designed, not yet served by Syndra
 
-Everything here is in the contract's files and not yet used by Syndra. A
-feature is declared only once it is served in full
-([chapter 3](#3-the-manifest-get-capabilities)), and a good time to build
-one is once Syndra serves it.
+Two kinds of thing are here: a feature in the contract's files and not yet
+used by Syndra (statistics), and apps nobody has built an add-on for yet (the
+inventory worked case, whose operations Syndra does serve, and the mapping
+sketches). A feature is declared only once it is served in full
+([chapter 3](#3-the-manifest-get-capabilities)), and a good time to build one
+is once Syndra serves it.
 
-### A.1 Physical operations and `GET /calls/{call_id}` (feature `calls`)
-
-Schema: `v2/schema/call.json`.
-
-<!-- fixture: v2/fixtures/call.json -->
-```json
-{
-  "call_id": "5a2d9e30-1b44-4f7c-9e08-6d3a2c1b0f95",
-  "state": "recorded",
-  "reply": {
-    "operation": "account.adopt",
-    "subject": "289471021834760193",
-    "outcome": "succeeded",
-    "detail": "Bound the existing account rey_mysterio.",
-    "account_id": "3051"
-  }
-}
-```
-
-`GET /calls/{call_id}` answers what the add-on recorded for a write:
-`recorded` with the first call's reply (left out when redacted), `in_doubt`
-(the intent is in the mutation log with no result, and the add-on is still
-finding out), or `unknown` (no effect recorded: the request never arrived or
-was refused before any write, so it is safe to try again). An add-on with
-any `physical` operation MUST declare `calls`. The rules by effect, each a
-MUST on the add-on's part:
-
-1. **Confirmed, and the confirmation names the thing.** `confirm: true`
-   always. Syndra first sends the operation with `preview: true` and no
-   `call_id`; the add-on answers the would-be result (the item's name, the
-   due date) with no effect and records nothing. The member confirms that,
-   and the confirm carries a fresh `call_id`. A preview kept under an id the
-   confirm reused would be replayed as "done" when nothing happened.
-2. **At most once.** An `indeterminate` attempt is executed again by no
-   one: Syndra does not resend, a member's retry carries a new `call_id` and
-   is answered 409 `CALL_UNSETTLED` while an earlier call for that subject
-   is unsettled, and the add-on MUST NOT execute a physical call whose
-   mutation-log intent has no recorded result.
-3. **Settled through `/calls`.** Syndra polls `GET /calls/{call_id}`; the
-   member sees "we are checking whether it went through" and then the
-   outcome. A call `in_doubt` for longer than `constants.in_doubt_bound`
-   becomes an item for a person at the desk.
-4. **Naturally idempotent.** Checking out an item this subject already
-   holds changes nothing and answers with the record; one someone else
-   holds is a conflict; returning an item already returned changes nothing.
-5. **Serialised per subject**, so two concurrent checkouts cannot both pass
-   the limit.
-6. **Remembered** for at least `constants.call_memory`.
-
-Also, a physical operation MUST be refused unless the lifecycle is `active`
-and the app is reachable now (never queued: the member is at the shelf now
-or not), and the subject's limit and categories MUST be checked before the
-app is called, so that a refusal is Syndra's words and no half-record exists
-on the app.
-
-Not yet in the contract's files, so not yet usable:
-
-- The operation outcome vocabulary (`v2/schema/common/outcome.json`) has
-  only `succeeded`. "Changed nothing" is coming as `no_change`, listed under
-  `calls` as `common/effect.json` is. "Conflict" is never an outcome: it is
-  a refusal, problem+json 409, like `BINDING_CONFLICT`.
-- The codes `UNKNOWN_RESOURCE` (404), `NOT_ENTITLED` (403) and
-  `LIMIT_REACHED` (409), the `params[].format: target_id` hint and the
-  inventory ids below are not yet in the registry.
-
-### A.2 Worked case: an inventory checkout
+### A.1 Worked case: an inventory checkout
 
 An inventory system where a member borrows items through Syndra (the
-mapping is in [A.4](#a4-mapping-sketches)):
+mapping is in [A.3](#a3-mapping-sketches)):
 
 - Desired state says only who can borrow: `borrower` (`account`),
   `categories` (`membership`, "May borrow from"), `max_items` (`limit` in
@@ -2016,7 +2161,7 @@ mapping is in [A.4](#a4-mapping-sketches)):
 - Overdue is `standing`: `{usable: true, waiting_on: "member", note: "1
   item overdue", next: "Return it at the desk"}`.
 
-### A.3 Statistics: `GET /stats` (feature `stats`)
+### A.2 Statistics: `GET /stats` (feature `stats`)
 
 Schema: `v2/schema/stats.json`; the manifest's `metrics[]` and
 `limits.stats_buffer` are in `v2/fixtures/manifest.json`.
@@ -2166,7 +2311,7 @@ metric that is not `per_subject`, and anything beyond
 per-person points 400 days. Admins see the totals and each person's
 numbers; a member sees their own.
 
-### A.4 Mapping sketches
+### A.3 Mapping sketches
 
 Three apps mapped onto the contract, none built. Each names what nobody has
 verified; a good habit is to verify each before relying on it.
@@ -2260,7 +2405,7 @@ From read-only checks against a live install (5 Nov 2026).
 
 **Its API is unknown: nothing about it has been researched.** This sketch
 tests the contract, not the product, and uses the operations of
-[A.2](#a2-worked-case-an-inventory-checkout).
+[A.1](#a1-worked-case-an-inventory-checkout).
 
 | Need | Mechanism |
 |---|---|

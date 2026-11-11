@@ -150,6 +150,28 @@ func (s *Store) Recall(callID, kind, digest string) (recorded idempotencyEntry, 
 	return recorded, found, err
 }
 
+// Recorded is the entry recorded under callID whatever its kind or identity,
+// for GET /calls (which names a call by its id alone); found is false when
+// there is none or it is past the retention window.
+func (s *Store) Recorded(callID string) (recorded idempotencyEntry, found bool, err error) {
+	err = s.db.View(func(tx *bolt.Tx) error {
+		raw := tx.Bucket(bucketIdempotency).Get([]byte(callID))
+		if raw == nil {
+			return nil
+		}
+		var entry idempotencyEntry
+		if err := json.Unmarshal(raw, &entry); err != nil {
+			return fmt.Errorf("stored result for %s is unreadable: %w", callID, err)
+		}
+		if s.now().Sub(entry.StoredAt) > idempotencyTTL {
+			return nil
+		}
+		recorded, found = entry, true
+		return nil
+	})
+	return recorded, found, err
+}
+
 // SweepIdempotency removes entries past the retention window.
 func (s *Store) SweepIdempotency() (int, error) {
 	var removed int

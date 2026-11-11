@@ -114,7 +114,7 @@ func TestOneTokenDispatchesOnce(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -151,7 +151,7 @@ func TestConcurrentCallsUnderOneTokenDispatchOnce(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -194,7 +194,7 @@ func TestATokenCannotBeUsedForADifferentCall(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -237,7 +237,7 @@ func TestATokenCannotBeUsedForADifferentCall(t *testing.T) {
 // ineligible for the only outcome that describes it.
 func TestARefusedCallDoesNotConsumeTheRecord(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -269,7 +269,7 @@ func TestAZeroRecordCannotDispatch(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -294,7 +294,7 @@ func TestTheTransportRefusesParametersPolicyDoesNotDeclare(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -324,7 +324,7 @@ func TestATokenWithNoClaimCannotDispatch(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 

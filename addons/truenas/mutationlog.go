@@ -622,3 +622,61 @@ func verifySegment(path, prev string, expectSeq uint64) (string, uint64, error) 
 	}
 	return prev, expectSeq, sc.Err()
 }
+
+// CallState is what the log says became of the writes one call made, read
+// back to since (constants.call_memory): open while any intent of it has no
+// result or a result says unknown or succeeded (it acted, or may have);
+// absent when the log holds nothing for it, or only writes that changed
+// nothing (failed, not_sent). GET /calls answers in_doubt for open and
+// unknown for absent, so "safe to try again" is said only of a call the log
+// shows did nothing.
+//
+// ponytail: a linear scan of the segments back to since, newest first, run
+// only for a call /calls was asked about and the store does not hold; an
+// index by call_id is the upgrade if /calls gets hot.
+func (l *MutationLog) CallState(callID string, since time.Time) (open bool, err error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	segments, err := l.segmentsNewestFirst()
+	if err != nil {
+		return false, err
+	}
+	intents := map[uint64]bool{} // intent seq -> settled
+	acted := false
+	for _, seg := range segments {
+		older := false
+		err := eachRecord(seg, func(r Record) {
+			if at, err := time.Parse(time.RFC3339Nano, r.At); err == nil && at.Before(since) {
+				older = true
+			}
+			if r.CallID != callID {
+				return
+			}
+			switch {
+			case r.Outcome == outcomeIntent:
+				if _, seen := intents[r.Seq]; !seen {
+					intents[r.Seq] = false
+				}
+			case r.Intent != 0:
+				intents[r.Intent] = true
+				fallthrough
+			default:
+				if r.Outcome == outcomeSucceeded || r.Outcome == outcomeUnknown {
+					acted = true
+				}
+			}
+		})
+		if err != nil {
+			return false, err
+		}
+		if older {
+			break
+		}
+	}
+	for _, settled := range intents {
+		if !settled {
+			return true, nil
+		}
+	}
+	return acted, nil
+}

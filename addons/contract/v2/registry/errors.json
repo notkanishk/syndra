@@ -103,6 +103,14 @@
       "retry": "retry_after",
       "meaning": "The add-on is draining or read-only and declined a mutation; Retry-After is always present. Detected by this code alone."
     },
+    "LIMIT_REACHED": {
+      "title": "Limit reached",
+      "statuses": [
+        409
+      ],
+      "retry": "never",
+      "meaning": "The subject is at a limit (items at once); limit, unit and count ride as extension members."
+    },
     "NOT_A_HOME_PLACE": {
       "title": "Not a home place",
       "statuses": [
@@ -110,6 +118,14 @@
       ],
       "retry": "never",
       "meaning": "The value is not a folder the target offers for home folders."
+    },
+    "NOT_ENTITLED": {
+      "title": "Not entitled",
+      "statuses": [
+        403
+      ],
+      "retry": "never",
+      "meaning": "The subject's entitlements do not reach what a parameter names (an item in a category they may not borrow from); param names the parameter."
     },
     "NO_CURRENT_READ": {
       "title": "No current read",
@@ -181,6 +197,14 @@
       ],
       "retry": "never",
       "meaning": "A lifecycle change must carry a reason."
+    },
+    "RESOURCE_TAKEN": {
+      "title": "Resource taken",
+      "statuses": [
+        409
+      ],
+      "retry": "never",
+      "meaning": "What a parameter names is held by someone else (an item another member has); param names the parameter. Never an outcome: nothing was done."
     },
     "SETTINGS_UNREADABLE": {
       "title": "Settings unreadable",
@@ -271,6 +295,14 @@
       ],
       "retry": "never",
       "meaning": "The strict decoder met a field the route does not know."
+    },
+    "UNKNOWN_RESOURCE": {
+      "title": "Unknown resource",
+      "statuses": [
+        404
+      ],
+      "retry": "never",
+      "meaning": "A parameter names nothing on the target (an item id no item has); the param extension member names the parameter, never its value."
     },
     "UNKNOWN_ROUTE": {
       "title": "Unknown route",

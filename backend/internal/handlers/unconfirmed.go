@@ -23,7 +23,12 @@ import (
 //   - a record never claimed was never sent: Syndra settles it as `unreached`;
 //   - setting.put is read back from the target's own setting, and settled by
 //     Syndra when the read can tell;
-//   - password.set and password.rotate never appear (db.SelfSettledOperations).
+//   - password.set and password.rotate never appear (db.SelfSettledOperations);
+//   - on an add-on declaring calls, every row is first settled by asking it
+//     what it recorded (GET /calls, settleFromCalls), the same question the
+//     member's own page asks;
+//   - a physical row is the add-on's to settle for constants.in_doubt_bound
+//     and only then listed (addons.PhysicalHold), naming the desk.
 //
 // What is left in practice is deletes, and the adopt or release whose answer
 // was lost: those two write only the add-on's binding, which no read Syndra
@@ -43,6 +48,7 @@ var (
 	dbListUnresolvedAddonOperations  = db.ListUnresolvedAddonOperations
 	dbSettleUnclaimedAddonOperations = db.SettleUnclaimedAddonOperations
 	dbResolveAddonOperation          = db.ResolveAddonOperation
+	addonsCallAnswer                 = addons.CallAnswer
 )
 
 type unconfirmedView struct {
@@ -64,12 +70,12 @@ func handleListUnconfirmed(w http.ResponseWriter, r *http.Request) {
 	if _, err := dbSettleUnclaimedAddonOperations(ctx, target, unresolvedGrace); err != nil {
 		log.Printf("[ADDON] could not settle unsent records on %s: %v (non-fatal)", target, err)
 	}
-	ops, err := dbListUnresolvedAddonOperations(ctx, target, unresolvedGrace, unresolvedLimit)
+	ops, err := dbListUnresolvedAddonOperations(ctx, target, unresolvedGrace, unresolvedLimit, addons.PhysicalHold())
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "UNCONFIRMED_READ_FAILED", err.Error())
 		return
 	}
-	ops = settleFromRead(ctx, target, ops)
+	ops = settleFromRead(ctx, target, settleFromCalls(ctx, ops))
 
 	out := make([]unconfirmedView, 0, len(ops))
 	for _, o := range ops {
@@ -79,6 +85,46 @@ func handleListUnconfirmed(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"operations": out})
+}
+
+// settleFromCalls settles each row its add-on can answer for (GET /calls) and
+// returns the rows still open. The first error stops the asking: an add-on
+// without calls, or one not answering now, concludes nothing, and the rows
+// stay as they are.
+func settleFromCalls(ctx context.Context, ops []db.AddonOperation) []db.AddonOperation {
+	open := ops[:0:0]
+	for i, o := range ops {
+		settled, _, err := settleByCall(ctx, o)
+		if err != nil {
+			return append(open, ops[i:]...)
+		}
+		if !settled {
+			open = append(open, o)
+		}
+	}
+	return open
+}
+
+// settleByCall asks the add-on what it recorded for one open row, whose id is
+// the call_id it was sent with, and settles the row on a clear answer:
+// recorded happened, unknown did not (no effect was recorded, so trying again
+// is safe). in_doubt settles nothing: the add-on is still finding out. A row
+// settled meanwhile by someone else counts as settled. The answer is returned
+// for the page that asked (the recorded reply's view).
+func settleByCall(ctx context.Context, o db.AddonOperation) (settled bool, s addons.Settlement, err error) {
+	s, err = addonsCallAnswer(ctx, o.Target, o.Operation, o.ID)
+	if err != nil || s.State == addons.CallInDoubt {
+		return false, s, err
+	}
+	_, err = dbResolveAddonOperation(ctx, o.Target, o.ID, s.State == addons.CallRecorded, db.SyndraReader, unresolvedGrace)
+	if errors.Is(err, db.ErrAddonOperationNotUnresolved) {
+		return true, s, nil
+	}
+	if err != nil {
+		log.Printf("[ADDON] could not settle %s from its add-on's record on %s: %v (non-fatal)", o.ID, o.Target, err)
+		return false, s, nil
+	}
+	return true, s, nil
 }
 
 // settleFromRead settles the setting changes a read of the target can answer,

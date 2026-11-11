@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -60,6 +61,11 @@ const (
 	CachedAsCurrent           Defect = "cached-as-current"           // a mirror answer says current: true, no stale (with freshness)
 	ReadsPerRequest           Defect = "reads-per-request"           // no collapsing; the cooldown runs from a read's end (with freshness)
 	CooldownIgnored           Defect = "cooldown-ignored"            // every fresh read reads the app (with freshness)
+	PreviewRecorded           Defect = "preview-recorded"            // a checkout preview writes a log record (with results, calls)
+	ReexecutesInDoubt         Defect = "reexecutes-in-doubt"         // a checkout runs while an earlier one is in doubt (with results, calls)
+	CheckoutUnserialised      Defect = "checkout-unserialised"       // no per-subject lock, a pause between the checks and the loan (with results, calls)
+	NoChangeAsSucceeded       Defect = "no-change-as-succeeded"      // an item already held answers succeeded and logs (with results, calls)
+	CallsEchoParams           Defect = "calls-echo-params"           // a call keeps its params, and /calls answers them (with calls)
 )
 
 // Defects lists every defect, for the kit's self-tests and the binary's help.
@@ -69,7 +75,8 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	FailsAfterCreate, LogNeverMoves, CommitsLate, RebindsSubject, AdoptsExisting, BindsOnWithdraw, IgnoresReadOnly, OperationNamesOther,
 	RebindsOnOperation, PlanForgetsAccount, CreateAnswersMember, RebindsQuietly, CreateOmitsAccount,
 	LimitEmptyClears, LogHeadEmpty, ReadsTakeCallID, StateShowsUnlisted, ResultOffSchema, ResultInPocket,
-	CachedAsCurrent, ReadsPerRequest, CooldownIgnored}
+	CachedAsCurrent, ReadsPerRequest, CooldownIgnored, PreviewRecorded, ReexecutesInDoubt, CheckoutUnserialised,
+	NoChangeAsSucceeded, CallsEchoParams}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -92,6 +99,38 @@ type deviations struct {
 	late     int              // CommitsLate: applies waiting to commit, reported as in flight
 	rebound  bool             // RebindsOnOperation: done once
 	quiet    bool             // RebindsQuietly: rebound, and plans no longer name the account
+	params   map[string]any   // CallsEchoParams: each call's params, by call_id
+}
+
+// openIntent is the subject's checkout in doubt, nil when none. Under a.mu.
+// ReexecutesInDoubt never sees one, so a retry runs over an unsettled call.
+func (a *Addon) openIntent(subject string) *intent {
+	if a.cfg.Defects[ReexecutesInDoubt] {
+		return nil
+	}
+	return a.intents[subject]
+}
+
+// serialise holds the subject's checkouts to one at a time; it returns the
+// unlock. CheckoutUnserialised holds nothing.
+func (a *Addon) serialise(subject string) (unlock func()) {
+	if a.cfg.Defects[CheckoutUnserialised] {
+		return func() {}
+	}
+	v, _ := a.locks.LoadOrStore(subject, new(sync.Mutex))
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
+// gap is nothing, unless CheckoutUnserialised: then a.mu (held) is let go
+// between the checks and the loan, so two checkouts can both pass the limit.
+func (a *Addon) gap() {
+	if a.cfg.Defects[CheckoutUnserialised] {
+		a.mu.Unlock()
+		time.Sleep(2 * time.Millisecond)
+		a.mu.Lock()
+	}
 }
 
 // withDefects wraps the whole handler for the one defect that lives below the
@@ -126,11 +165,13 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		Fingerprint string                     `json:"fingerprint"`
 		Desired     map[string]json.RawMessage `json:"desired"`
 		Params      map[string]any             `json:"params"`
+		Preview     bool                       `json:"preview"`
 	}
 	_ = json.Unmarshal(body, &req)
 	apply := route == "POST /apply"
 	passwordSet := route == "POST /operations/{name}" && r.PathValue("name") == "password.set"
 	holdings := route == "POST /operations/{name}" && r.PathValue("name") == "holdings.list"
+	checkout := route == "POST /operations/{name}" && r.PathValue("name") == "item.checkout"
 	if route == "POST /operations/{name}" && r.PathValue("name") == "health.get" && d[ReadsTakeCallID] {
 		// A read deduplicated like a write: recorded, and refused when its
 		// call_id was used before for anything else.
@@ -211,6 +252,12 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if d[CallsEchoParams] && route == "POST /operations/{name}" && req.CallID != "" {
+		if a.dev.params == nil {
+			a.dev.params = map[string]any{}
+		}
+		a.dev.params[req.CallID] = req.Params
+	}
 	if code := codeOf(rep); req.CallID != "" && (d[RemembersRefusal] && rep.status >= 400 || d[RemembersPlanStale] && code == "PLAN_STALE") {
 		if a.dev.refused == nil {
 			a.dev.refused = map[string]reply{}
@@ -335,6 +382,17 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		})
 	case holdings && d[ResultInPocket] && rep.status == 200:
 		rewrite(func(doc map[string]any) { doc["holdings"] = doc["result"]; delete(doc, "result") })
+	case checkout && req.Preview && d[PreviewRecorded] && rep.status == 200:
+		a.record("preview item.checkout")
+	case checkout && !req.Preview && d[NoChangeAsSucceeded] && rep.status == 200 && bytes.Contains(rep.body, []byte(`"no_change"`)):
+		rewrite(func(doc map[string]any) { doc["outcome"] = "succeeded" })
+		a.record("item.checkout again")
+	case route == "GET /calls/{call_id}" && d[CallsEchoParams] && a.dev.params[r.PathValue("call_id")] != nil:
+		rewrite(func(doc map[string]any) {
+			if reply, ok := doc["reply"].(map[string]any); ok {
+				reply["params"] = a.dev.params[r.PathValue("call_id")]
+			}
+		})
 	case passwordSet && d[EchoesSecret] && rep.status == 200:
 		rewrite(func(doc map[string]any) { doc["detail"] = fmt.Sprintf("Password set to %v.", req.Params["password"]) })
 	}

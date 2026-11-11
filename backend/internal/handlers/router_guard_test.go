@@ -96,32 +96,34 @@ func TestEveryRouteCarriesAGate(t *testing.T) {
 // events — are deliberately absent: members never reach them through the proxy.
 func TestUserLevelRoutesAreClassified(t *testing.T) {
 	user := map[string]bool{
-		"GET /api/v1/system/mode":                          true,
-		"GET /api/v1/bundles":                              true,
-		"GET /api/v1/bundles/{id}":                         true,
-		"GET /api/v1/bundles/{id}/roles":                   true,
-		"GET /api/v1/bundles/{id}/versions":                true,
-		"GET /api/v1/catalog":                              true,
-		"GET /api/v1/applications":                         true,
-		"GET /api/v1/projects":                             true,
-		"GET /api/v1/topology":                             true,
-		"GET /api/v1/rules/mapping":                        true,
-		"GET /api/v1/rules/mapping/{id}":                   true,
-		"POST /api/v1/rules/mapping/validate":              true,
-		"GET /api/v1/terms":                                true,
-		"GET /api/v1/requests":                             true, // own only: the handler filters
-		"POST /api/v1/requests":                            true, // own only: the handler binds the requester
-		"POST /api/v1/requests/{id}/withdraw":              true, // the requester's own act
-		"GET /api/v1/roles":                                true,
-		"DELETE /api/v1/users/{uid}/shadow-credential":     true,
-		"GET /api/v1/users/{uid}/shadow-credential/status": true,
-		"GET /api/v1/users/{uid}/shadow-credential/audit":  true,
-		"GET /api/v1/me/profile":                           true,
-		"GET /api/v1/me/targets":                           true,
-		"GET /api/v1/me/systems":                           true,
-		"GET /api/v1/me/changes":                           true,
-		"POST /api/v1/me/targets/{target}/credential":      true,
-		"POST /api/v1/me/first-sign-in":                    true,
+		"GET /api/v1/system/mode":                            true,
+		"GET /api/v1/bundles":                                true,
+		"GET /api/v1/bundles/{id}":                           true,
+		"GET /api/v1/bundles/{id}/roles":                     true,
+		"GET /api/v1/bundles/{id}/versions":                  true,
+		"GET /api/v1/catalog":                                true,
+		"GET /api/v1/applications":                           true,
+		"GET /api/v1/projects":                               true,
+		"GET /api/v1/topology":                               true,
+		"GET /api/v1/rules/mapping":                          true,
+		"GET /api/v1/rules/mapping/{id}":                     true,
+		"POST /api/v1/rules/mapping/validate":                true,
+		"GET /api/v1/terms":                                  true,
+		"GET /api/v1/requests":                               true, // own only: the handler filters
+		"POST /api/v1/requests":                              true, // own only: the handler binds the requester
+		"POST /api/v1/requests/{id}/withdraw":                true, // the requester's own act
+		"GET /api/v1/roles":                                  true,
+		"DELETE /api/v1/users/{uid}/shadow-credential":       true,
+		"GET /api/v1/users/{uid}/shadow-credential/status":   true,
+		"GET /api/v1/users/{uid}/shadow-credential/audit":    true,
+		"GET /api/v1/me/profile":                             true,
+		"GET /api/v1/me/targets":                             true,
+		"GET /api/v1/me/systems":                             true,
+		"GET /api/v1/me/changes":                             true,
+		"POST /api/v1/me/targets/{target}/credential":        true,
+		"POST /api/v1/me/targets/{target}/operations/{name}": true, // own only: the subject is the actor
+		"GET /api/v1/me/targets/{target}/operations/{id}":    true, // own only: read by subject
+		"POST /api/v1/me/first-sign-in":                      true,
 	}
 	var offenders []string
 	seen := map[string]bool{}

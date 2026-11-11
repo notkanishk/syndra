@@ -48,6 +48,9 @@ type OperationRequest struct {
 	// Fresh asks a read operation for a read of the NAS now (feature
 	// freshness, readNow); a write ignores it.
 	Fresh bool `json:"fresh,omitempty"`
+	// Preview (feature calls) asks a physical operation what it would do.
+	// This add-on has none, so a preview is refused, never run.
+	Preview bool `json:"preview,omitempty"`
 }
 
 // OperationResult is what the caller learns.
@@ -88,6 +91,12 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 	name := r.PathValue("name")
 	var req OperationRequest
 	if !decodeRequest(w, body, &req, CodeBadRequest) || !writeContractRefusal(w, req.ContractVersion) {
+		return
+	}
+	if req.Preview {
+		// Only a physical operation is previewed, and this add-on has none:
+		// refused before anything, so a preview can never run a write.
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "No operation of this add-on is previewed.", nil)
 		return
 	}
 	if strings.TrimSpace(req.CallID) == "" {

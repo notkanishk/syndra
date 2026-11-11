@@ -147,6 +147,20 @@ export interface MyTargetView {
    * change, and by nothing else.
    */
   password_change?: { state: "unconfirmed"; at: string };
+  /**
+   * What the member can do to the world here (a physical operation such as
+   * item.checkout): previewed, then confirmed. Only with an account.
+   */
+  actions?: {
+    id: string;
+    confirm: boolean;
+    params: { name: string; type: string; required: boolean; format?: "target_id" }[];
+  }[];
+  /**
+   * Their latest confirm of an action still being settled, so a reload keeps
+   * saying where it stands: `checking`, or `ask_desk` past the bound.
+   */
+  unsettled?: { operation: string; id: string; sent_at: string; state: "checking" | "ask_desk" };
   /** A home folder no role they hold gives any more. It stays. */
   home_kept?: boolean;
   /**

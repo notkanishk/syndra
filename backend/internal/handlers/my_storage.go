@@ -153,6 +153,14 @@ type myTargetView struct {
 	// later confirmed change has settled it (A-13 §4 step 3). The page keeps
 	// one line up until their next confirmed change clears it.
 	PasswordChange *myPasswordChange `json:"password_change,omitempty"`
+	// Actions are what the member can do to the world here (a member-scoped
+	// physical operation the add-on can do now, item.checkout), each previewed
+	// then confirmed (member_operations.go). Only with an account; never on
+	// the operator's view of a person.
+	Actions []myAction `json:"actions,omitempty"`
+	// Unsettled is their latest confirm still being settled, so a reload keeps
+	// saying where it stands instead of offering the action again.
+	Unsettled *myUnsettled `json:"unsettled,omitempty"`
 }
 
 type myPasswordChange struct {
@@ -216,6 +224,9 @@ const storageStatusRead = "storage.status"
 
 func describeMyTarget(r *http.Request, target, subject string) (myTargetView, error) {
 	view, _, err := describeTargetFor(r, target, subject)
+	if err == nil && view.Account != nil {
+		view.Actions, view.Unsettled = memberActions(r, target, subject)
+	}
 	return view, err
 }
 
@@ -269,7 +280,7 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 	}
 
 	// Non-fatal: the line is a courtesy over a form that works either way.
-	if at, open, err := dbUnconfirmedChangeAt(r.Context(), target, subject, "password.set", unresolvedGrace); err != nil {
+	if _, at, open, err := dbUnconfirmedChangeAt(r.Context(), target, subject, "password.set", unresolvedGrace); err != nil {
 		log.Printf("[MY-STORAGE] could not read %s's last password change on %s: %v (non-fatal)", subject, target, err)
 	} else if open {
 		view.PasswordChange = &myPasswordChange{State: "unconfirmed", At: at}

@@ -122,6 +122,7 @@ var v2Messages = []struct{ fixture, schema string }{
 	{"apply_response.json", "apply_ok.json"},
 	{"operation_request.json", "operation_request.json"},
 	{"operation_request_fresh.json", "operation_request.json"},
+	{"operation_request_preview.json", "operation_request.json"},
 	{"operation_response.json", "operation_response.json"},
 	{"operation_response_result.json", "operation_response.json"},
 	{"operation_response_activity.json", "operation_response.json"},
@@ -130,6 +131,7 @@ var v2Messages = []struct{ fixture, schema string }{
 	{"operation_response_activity_result.json", "operation_response.json"},
 	{"operation_response_health_result.json", "operation_response.json"},
 	{"operation_response_records.json", "operation_response.json"},
+	{"operation_response_no_change.json", "operation_response.json"},
 	{"status.json", "common/status.json"},
 	{"records.json", "common/records.json"},
 	{"activity.json", "common/activity.json"},
@@ -145,7 +147,14 @@ var v2Messages = []struct{ fixture, schema string }{
 	{"error_binding_conflict.json", "error.json"},
 	{"error_fresh_read_cooldown.json", "error.json"},
 	{"error_target_unreachable.json", "error.json"},
+	{"error_call_unsettled.json", "error.json"},
+	{"error_unknown_resource.json", "error.json"},
+	{"error_not_entitled.json", "error.json"},
+	{"error_limit_reached.json", "error.json"},
+	{"error_resource_taken.json", "error.json"},
 	{"call.json", "call.json"},
+	{"call_in_doubt.json", "call.json"},
+	{"call_unknown.json", "call.json"},
 	{"stats.json", "stats.json"},
 	{"identity_apply.json", "identity/vector.json"},
 	{"identity_operation.json", "identity/vector.json"},
@@ -284,6 +293,17 @@ func TestV2SchemasRefuseWhatTheyShould(t *testing.T) {
 		{"apply without a call_id", "apply_request.json", "apply_request.json", v2Edit("call_id", nil)},
 		{"non-preview operation without a call_id", "operation_request.json", "operation_request.json", v2Edit("call_id", nil)},
 		{"preview carrying a call_id", "operation_request.json", "operation_request.json", v2Also(v2Edit("preview", true))},
+		{"the preview fixture given a call_id", "operation_request.json", "operation_request_preview.json", v2Edit("call_id", "c-1")},
+		{"an in_doubt call carrying a reply", "call.json", "call_in_doubt.json", v2Edit("reply", map[string]any{"outcome": "succeeded"})},
+		{"an unknown call carrying a reply", "call.json", "call_unknown.json", v2Edit("reply", map[string]any{"outcome": "succeeded"})},
+		{"a call state outside the three", "call.json", "call.json", v2Edit("state", "done")},
+		{"an outcome outside the vocabulary", "operation_response.json", "operation_response_no_change.json", v2Edit("outcome", "conflict")},
+		{"LIMIT_REACHED without its count", "error.json", "error_limit_reached.json", v2Edit("count", nil)},
+		{"LIMIT_REACHED without its unit", "error.json", "error_limit_reached.json", v2Edit("unit", nil)},
+		{"LIMIT_REACHED with a unit outside the registry", "error.json", "error_limit_reached.json", v2Edit("unit", "widgets")},
+		{"UNKNOWN_RESOURCE without the param it names", "error.json", "error_unknown_resource.json", v2Edit("param", nil)},
+		{"NOT_ENTITLED without the param it names", "error.json", "error_not_entitled.json", v2Edit("param", nil)},
+		{"RESOURCE_TAKEN without the param it names", "error.json", "error_resource_taken.json", v2Edit("param", nil)},
 		{"blocked apply problem without an effect", "error.json", "error_apply_blocked.json", v2Edit("effect", nil)},
 		{"blocked apply problem whose effect is applied", "error.json", "error_apply_blocked.json", v2Edit("effect", "applied")},
 		{"blocked apply problem without its subject", "error.json", "error_apply_blocked.json", v2Edit("subject", nil)},
@@ -489,6 +509,13 @@ func TestV2FeatureKeysAreListedAndMarkedBothWays(t *testing.T) {
 	walk = func(file string, v any) {
 		switch x := v.(type) {
 		case map[string]any:
+			// A closed word joining a vocabulary under a feature (outcome
+			// no_change): a oneOf member {const, x-feature}, listed file.word.
+			if c, ok := x["const"].(string); ok {
+				if f, ok := x["x-feature"].(string); ok {
+					marked[file+"."+c] = f
+				}
+			}
 			if props, ok := x["properties"].(map[string]any); ok {
 				for p, ps := range props {
 					if sm, ok := ps.(map[string]any); ok {
@@ -747,9 +774,14 @@ func TestV2OperationRegistry(t *testing.T) {
 		}
 		if o.Result != "" {
 			v2Schema(t, o.Result) // a result names a schema that exists
-			if o.Effect != "read" {
-				t.Errorf("%s declares a result and is not a read", id)
+			// A read answers its result; a physical operation answers the
+			// record it made (a preview, the one it would make).
+			if o.Effect != "read" && o.Effect != "physical" {
+				t.Errorf("%s declares a result and is neither a read nor physical", id)
 			}
+		}
+		if o.Effect == "physical" && !o.Confirm {
+			t.Errorf("%s is physical and not confirmed: a physical operation always is", id)
 		}
 		secrets = append(secrets, o.SecretParams...)
 	}

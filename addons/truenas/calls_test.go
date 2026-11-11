@@ -332,7 +332,7 @@ func TestAnUnknownRouteIsARegisteredRefusal(t *testing.T) {
 	s, _ := applyServer(t, fixtureUsers)
 	now := time.Now()
 	s.auth = signedAuth(now)
-	for _, target := range []string{"/stats?metric=x", "/calls/abc", "/capabilities/extra"} {
+	for _, target := range []string{"/stats?metric=x", "/calls", "/capabilities/extra"} {
 		r := httptest.NewRequest(http.MethodGet, target, nil)
 		r.Header.Set(SignatureHeader, fmt.Sprintf("t=%d,v1=%x", now.Unix(), computeMAC(now.Unix(), http.MethodGet, signedTarget(r.URL), nil, []byte(testKey))))
 		rr := httptest.NewRecorder()

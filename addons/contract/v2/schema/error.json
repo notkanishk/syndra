@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://syndra.example.org/addon-contract/2/schema/error.json",
   "title": "Error body",
-  "description": "The body of every non-2xx reply, application/problem+json (RFC 9457), with no exception. code is registry/errors.json; type is urn:syndra:addon:error:<code>. A blocked or conflicting apply carries its outcome fields as extension members.",
+  "description": "The body of every non-2xx reply, application/problem+json (RFC 9457), with no exception. code is registry/errors.json; type is urn:syndra:addon:error:<code>. A blocked or conflicting apply carries its outcome fields as extension members. A refusal about a parameter names it in param; LIMIT_REACHED carries limit, unit and count.",
   "type": "object",
   "properties": {
     "type": {
@@ -44,7 +44,21 @@
       "type": "integer"
     },
     "limit": {
-      "type": "integer"
+      "type": "integer",
+      "description": "PLAN_TOO_LARGE: limits.subjects_per_plan. LIMIT_REACHED: the subject's limit."
+    },
+    "unit": {
+      "$ref": "common/field.json#/$defs/Unit",
+      "description": "LIMIT_REACHED: what the limit counts."
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "LIMIT_REACHED: how many the subject holds now."
+    },
+    "param": {
+      "type": "string",
+      "description": "UNKNOWN_RESOURCE, NOT_ENTITLED, RESOURCE_TAKEN: the name of the parameter (item_id), never its value."
     },
     "caller_version": {
       "type": "integer"
@@ -139,6 +153,76 @@
             "const": "blocked"
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "UNKNOWN_RESOURCE"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "required": [
+          "param"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "NOT_ENTITLED"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "required": [
+          "param"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "RESOURCE_TAKEN"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "required": [
+          "param"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "code": {
+            "const": "LIMIT_REACHED"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "then": {
+        "required": [
+          "limit",
+          "unit",
+          "count"
+        ]
       }
     }
   ]

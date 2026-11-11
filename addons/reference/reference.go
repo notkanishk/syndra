@@ -2,9 +2,11 @@
 // the conformance kit's self-test and the author's guide's worked example
 // (openspec/changes/addon-contract, design §7 and §8). It implements the core
 // and the features operations and settings, and, when Config.Features names
-// them, results (holdings.list, and health.get answering under result) and
+// them, results (holdings.list, and health.get answering under result),
 // freshness (/subjects from a mirror, fresh reads with a cooldown and request
-// collapsing, health.target_reads).
+// collapsing, health.target_reads) and calls (GET /calls/{call_id}, and with
+// results the physical operation item.checkout over a lending shelf,
+// checkout.go).
 //
 // The target is a print queue: member accounts, the printers each may use, an
 // after-hours flag, a longest-job limit. Every behaviour below is derived from
@@ -116,10 +118,15 @@ type Config struct {
 	// add-on's own test can hold what a black-box kit cannot (freshness: the
 	// last value with stale unreachable, or 503 TARGET_UNREACHABLE).
 	Down func() bool
+	// LoseReply is test-only: answering true for a stage ("before" or
+	// "after" the loan is written), a checkout answers 500 and leaves its
+	// intent open, so the add-on's own test can hold what a black-box kit
+	// cannot: a call in doubt is never executed again.
+	LoseReply func(stage string) bool
 }
 
 // OptionalFeatures is every feature Config.Features may name.
-var OptionalFeatures = []string{"results", "freshness"}
+var OptionalFeatures = []string{"results", "freshness", "calls"}
 
 func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Features, feature) }
 
@@ -140,8 +147,11 @@ type Addon struct {
 	setting   map[string]string // the one setting: value, set_by, set_at
 	logHead   string
 	logCount  int
-	fresh     freshState // feature freshness: the mirror and the read in flight
-	dev       deviations // what the defects keep; empty in any real run
+	fresh     freshState         // feature freshness: the mirror and the read in flight
+	loans     map[string]*loan   // feature calls: by item id
+	intents   map[string]*intent // feature calls: an open checkout, by subject
+	locks     sync.Map           // feature calls: one mutex per subject (serialise)
+	dev       deviations         // what the defects keep; empty in any real run
 }
 
 // New derives the transport keys from the secret and starts with an empty
@@ -167,6 +177,7 @@ func New(cfg Config) (*Addon, error) {
 		cfg: cfg, cert: cert,
 		auth:     authenticator{key: key, now: time.Now},
 		accounts: map[string]*account{}, bindings: map[string]string{}, calls: map[string]*call{},
+		loans: map[string]*loan{}, intents: map[string]*intent{},
 		lifecycle: "active", reason: "Started.",
 		logHead: emptyLogDigest,
 		setting: map[string]string{"value": printers[0]},
@@ -195,6 +206,7 @@ func (a *Addon) Handler() http.Handler {
 	route("POST /lifecycle", a.setLifecycle)
 	route("GET /settings", a.settings)
 	route("PUT /settings/{name}", a.putSetting)
+	route("GET /calls/{call_id}", a.callState)
 	route("/", func(*http.Request, []byte) reply {
 		return problem(404, "UNKNOWN_ROUTE", "This add-on has no such route.", nil)
 	})
@@ -211,6 +223,14 @@ func (a *Addon) capabilities(*http.Request, []byte) reply {
 		// holdings.list has no pocket to answer under, so it is declared only
 		// with results.
 		ops = append(ops, map[string]any{"id": "holdings.list", "scope": "member", "confirm": false, "available": true})
+	}
+	if a.serves("results") && a.serves("calls") {
+		// A physical operation needs calls (its preview and its settling)
+		// and answers its record under result.
+		ops = append(ops, map[string]any{"id": "item.checkout", "scope": "member", "confirm": true, "available": true,
+			"params": map[string]any{"type": "object", "required": []string{"item_id"}, "properties": map[string]any{
+				"item_id": map[string]any{"type": "string", "format": "target_id", "title": "Item",
+					"description": "The id on the item's label, typed or scanned."}}}})
 	}
 	return ok(map[string]any{
 		"contract_version": ContractVersion, "product": "reference", "product_version": "1.0.0",
@@ -608,11 +628,15 @@ type operationRequest struct {
 	// Fresh is feature freshness's. The operations here read the in-memory
 	// target now, so every answer is already a fresh one.
 	Fresh *bool `json:"fresh"`
+	// Preview is feature calls's: a physical operation's would-be result,
+	// with no effect and no call_id.
+	Preview *bool `json:"preview"`
 }
 
 func (a *Addon) operation(r *http.Request, body []byte) reply {
 	name := r.PathValue("name")
-	if name != "password.set" && name != "health.get" && (name != "holdings.list" || !a.serves("results")) {
+	checkout := name == "item.checkout" && a.serves("results") && a.serves("calls")
+	if name != "password.set" && name != "health.get" && (name != "holdings.list" || !a.serves("results")) && !checkout {
 		return problem(404, "OPERATION_FAILED", "This add-on has no such operation.", nil)
 	}
 	var req operationRequest
@@ -626,7 +650,15 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 		// A request field exists only under its feature (design §2 rule 2).
 		return problem(400, "UNKNOWN_REQUEST_FIELD", `The request carries a field this add-on does not know: "fresh"`, nil)
 	}
+	if req.Preview != nil && !a.serves("calls") {
+		return problem(400, "UNKNOWN_REQUEST_FIELD", `The request carries a field this add-on does not know: "preview"`, nil)
+	}
+	if req.Preview != nil && !checkout {
+		return problem(400, "BAD_REQUEST", "Only a physical operation has a preview.", nil)
+	}
 	switch name {
+	case "item.checkout":
+		return a.checkout(req)
 	case "health.get":
 		return a.healthGet(req)
 	case "holdings.list":
@@ -687,12 +719,14 @@ type record struct {
 	ID       string `json:"id"`
 	Label    string `json:"label"`
 	Category string `json:"category,omitempty"`
+	Since    string `json:"since,omitempty"`
+	Due      string `json:"due,omitempty"`
 }
 
 // holdingsList is the subject's holdings (feature results): a read like
 // healthGet, so call_id is ignored and every lifecycle answers. Here what an
-// account holds is the printers it may use, read now from the target, so the
-// answer is current.
+// account holds is the printers it may use and, with calls, the items it has
+// borrowed, read now from the target, so the answer is current.
 func (a *Addon) holdingsList(req operationRequest) reply {
 	if len(req.Params) != 0 {
 		return problem(400, "OPERATION_FAILED", "holdings.list takes no parameters.", nil)
@@ -707,6 +741,7 @@ func (a *Addon) holdingsList(req operationRequest) reply {
 	for _, p := range acct.shown()["printers"].([]string) {
 		records = append(records, record{ID: p, Label: "Printer " + p, Category: "printer"})
 	}
+	records = append(records, a.loansOf(req.Subject)...)
 	return ok(map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded",
 		"result": map[string]any{"records": records, "taken_at": now(), "current": true}})
 }
@@ -944,6 +979,10 @@ func problem(status int, code, detail string, ext map[string]any) reply {
 		retry = "retry_after"
 	case "PLAN_STALE":
 		retry = "replan"
+	case "OPERATION_FAILED", "APPLY_FAILED":
+		if status == 429 || status >= 500 {
+			retry = "backoff" // by_status, resolved per reply
+		}
 	}
 	title := strings.ReplaceAll(strings.ToLower(code), "_", " ")
 	maps.Copy(p, map[string]any{"type": "urn:syndra:addon:error:" + code, "title": strings.ToUpper(title[:1]) + title[1:],

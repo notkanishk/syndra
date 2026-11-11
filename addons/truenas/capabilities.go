@@ -148,7 +148,7 @@ const kindStorage = "storage"
 // and only with the backend that sends `fresh`: a backend that never does
 // would read every /subjects as a copy, and its drift sweep would skip every
 // pass. The two roll back together.
-var features = []string{"operations", "settings", "storage.reach", "storage.homes", "results", "freshness"}
+var features = []string{"operations", "settings", "storage.reach", "storage.homes", "results", "freshness", "calls"}
 
 // operationSet is the one-shot, event-shaped half. Anything with a desired
 // state belongs in the schema above instead.

@@ -31,6 +31,7 @@ func main() {
 	flag.StringVar(&cfg.Subject, "subject", "", "the throwaway subject for -mutate, beginning conformance- (default conformance-<UTC time>)")
 	flag.StringVar(&cfg.Email, "email", "", "the subject's email, beginning conformance- (default <subject>@example.org)")
 	flag.BoolVar(&cfg.Mutate, "mutate", false, "send writes: create, converge and finally disable one throwaway account")
+	flag.StringVar(&cfg.Item, "item", "", "with -mutate and feature calls, an item the kit may check out to its subject with a physical operation, and leave checked out")
 	flag.BoolVar(&cfg.MutateSettings, "mutate-settings", false, "with -mutate, also write the first target-wide setting's current value back")
 	jsonOut := flag.String("json", "", "also write the report as JSON to this file; - writes JSON to stdout instead of text")
 	flag.Parse()

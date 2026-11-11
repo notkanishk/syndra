@@ -46,6 +46,10 @@ type Config struct {
 	// wait out (they wait it before each fresh read); a longer one is a skip.
 	// Default 35 s, above constants.cooldown_default.
 	FreshWait time.Duration
+	// Item is a thing on the target the kit may check out to its subject with
+	// a physical operation (feature calls), and leave checked out: it is
+	// named by the operator, never guessed. Empty skips operations.physical.
+	Item string
 }
 
 // spansTheRun are the checks judged across several steps or over every reply
@@ -179,9 +183,14 @@ type kit struct {
 	before   []string            // account ids before the first write; nil until then
 	appeared []string            // account ids that appeared during the run, not the kit's own
 	canaries []string            // secret values sent; none may come back
-	since    int                 // index into log of the first canary's request
-	readOnly bool                // the kit set read_only and has not yet set active
-	created  struct {
+	// passwordCall and passwordReply are the first password.set's call_id
+	// and reply, which /calls must answer recorded (calls.recorded).
+	passwordCall  string
+	passwordReply []byte
+	lent          string // Config.Item, once a physical operation checked it out
+	since         int    // index into log of the first canary's request
+	readOnly      bool   // the kit set read_only and has not yet set active
+	created       struct {
 		id, username string
 		off          bool // /subjects confirmed the account is off
 		none         bool // a plan confirmed there is no account for the subject
@@ -365,6 +374,9 @@ func (k *kit) left() string {
 	}
 	if k.readOnly {
 		s += "; and the add-on may still be read_only: set it active"
+	}
+	if k.lent != "" {
+		s += fmt.Sprintf("; item %q is checked out to subject %q: return it", k.lent, k.cfg.Subject)
 	}
 	return s
 }

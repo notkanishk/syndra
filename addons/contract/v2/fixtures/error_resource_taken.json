@@ -1,0 +1,9 @@
+{
+  "type": "urn:syndra:addon:error:RESOURCE_TAKEN",
+  "title": "Resource taken",
+  "status": 409,
+  "detail": "Another member has this item.",
+  "code": "RESOURCE_TAKEN",
+  "retry": "never",
+  "param": "item_id"
+}

@@ -1,0 +1,8 @@
+{
+  "type": "urn:syndra:addon:error:CALL_UNSETTLED",
+  "title": "Call unsettled",
+  "status": 409,
+  "detail": "An earlier checkout for this member is still being settled, so this one was not run.",
+  "code": "CALL_UNSETTLED",
+  "retry": "never"
+}

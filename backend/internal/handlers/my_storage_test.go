@@ -144,8 +144,8 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 	dbResendableAddonOperation = func(context.Context, string, string, string, time.Duration) (string, bool, error) {
 		return h.resendable, h.resendable != "", nil
 	}
-	dbUnconfirmedChangeAt = func(context.Context, string, string, string, time.Duration) (time.Time, bool, error) {
-		return h.unconfirmed, !h.unconfirmed.IsZero(), nil
+	dbUnconfirmedChangeAt = func(context.Context, string, string, string, time.Duration) (string, time.Time, bool, error) {
+		return "op-unconfirmed", h.unconfirmed, !h.unconfirmed.IsZero(), nil
 	}
 	dbSupersedeAddonOperations = func(_ context.Context, by string) (int64, error) {
 		h.superseded = append(h.superseded, by)

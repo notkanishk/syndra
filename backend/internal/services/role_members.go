@@ -480,7 +480,7 @@ func GovernanceIndicators(ctx context.Context, actor string) (Indicators, error)
 	}
 	out.HoldsDue = len(holds)
 
-	unconfirmed, err := svcCountUnresolvedAddonOperations(ctx, db.AddonUnresolvedGrace)
+	unconfirmed, err := svcCountUnresolvedAddonOperations(ctx, db.AddonUnresolvedGrace, addons.PhysicalHold())
 	if err != nil {
 		return Indicators{}, err
 	}

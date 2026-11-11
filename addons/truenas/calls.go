@@ -187,6 +187,69 @@ func (s *server) once(w http.ResponseWriter, callID, kind, subject string, ident
 	_, _ = w.Write(rec.body.Bytes())
 }
 
+// holding is whether a request with callID is executing in this process now.
+func (l *callLeases) holding(callID string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, busy := l.held[callID]
+	return busy
+}
+
+// handleCall is GET /calls/{call_id} (feature calls): what this add-on
+// recorded for a write, from the three places that know, in order:
+//
+//   - the call store: a recorded reply is recorded, replayed as once replays
+//     it (an entry contract 1 wrote, in contract 2's words);
+//   - the lease: a request with the id executing now is in_doubt;
+//   - the mutation log, back to constants.call_memory: an intent with no
+//     result, or a write that acted or may have with no recorded reply (the
+//     record failed), is in_doubt; anything else is unknown, no effect
+//     recorded, which is the one answer that says trying again is safe.
+//
+// Every write, apply and lifecycle included, is answered: Syndra settles any
+// record whose answer it lost through here. Never lifecycle-gated: a read of
+// the add-on's own records changes nothing. No operation of this add-on has a
+// secret reply (registry secret_result), so nothing is redacted.
+//
+// ponytail: a lifecycle change logs no intent; one whose reply was lost AND
+// whose record failed reads unknown, though it ran. /health says the
+// lifecycle as it is, and nobody re-sends one on this answer alone.
+func (s *server) handleCall(w http.ResponseWriter, r *http.Request, _ []byte) {
+	id := r.PathValue("call_id")
+	answer := map[string]any{"call_id": id}
+	entry, found, err := s.store.Recorded(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, CodeStoreUnreadable,
+			"The record of earlier calls could not be read.", nil)
+		return
+	}
+	switch {
+	case found:
+		reply := []byte(entry.Result)
+		if entry.Digest == "" {
+			if reply, err = s.legacyReply(entry.Kind, entry.Result); err != nil {
+				writeError(w, http.StatusInternalServerError, CodeStoreUnreadable,
+					"The recorded reply to this call could not be read.", nil)
+				return
+			}
+		}
+		answer["state"], answer["reply"] = "recorded", json.RawMessage(reply)
+	case s.calls.holding(id):
+		answer["state"] = "in_doubt"
+	default:
+		open, err := s.log.CallState(id, s.store.now().Add(-idempotencyTTL))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable,
+				"The mutation log could not be read.", nil)
+			return
+		}
+		answer["state"] = map[bool]string{true: "in_doubt", false: "unknown"}[open]
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(answer)
+}
+
 // capture holds a handler's reply until once has decided to record it.
 type capture struct {
 	header http.Header

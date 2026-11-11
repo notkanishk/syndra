@@ -137,11 +137,18 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 	// The run that writes judges what reads cannot: these must have run.
 	for _, id := range []string{"replay", "replay.refusal", "read-back", "limit-combine", "limit-empty", "operations.reads", "health", "channel-follows-account",
 		"withdraw-only.existing", "lifecycle", "operations", "plan-equals-apply", "create-is-new", "bound-to-created", "results",
-		"freshness.cached", "freshness.cooldown", "freshness.coalesce"} {
+		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "calls.unknown", "calls.recorded"} {
+		ran := false
 		for _, res := range mutate.Results {
-			if res.ID == id && res.Status != "pass" {
-				t.Errorf("-mutate: %s is %s, want pass: %v", id, res.Status, res.Detail)
+			if res.ID == id {
+				ran = true
+				if res.Status != "pass" {
+					t.Errorf("-mutate: %s is %s, want pass: %v", id, res.Status, res.Detail)
+				}
 			}
+		}
+		if !ran {
+			t.Errorf("-mutate: %s did not run", id)
 		}
 	}
 	if !strings.HasPrefix(mutate.Left, "one disabled account") {

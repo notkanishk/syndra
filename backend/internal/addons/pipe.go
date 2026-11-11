@@ -226,6 +226,15 @@ func withJSONField(body []byte, key string, v any) ([]byte, error) {
 	return json.Marshal(fields)
 }
 
+// StatusOf is the persisted status of an operation's reply: no_change when
+// the add-on answered that it changed nothing, else StatusFor its outcome.
+func StatusOf(resp CallResponse) string {
+	if resp.NoChange && resp.Outcome == OutcomeSucceeded {
+		return db.AddonOpNoChange
+	}
+	return StatusFor(resp.Outcome)
+}
+
 // StatusFor maps an outcome onto the persisted addon_operations status. Total
 // over AllOutcomes; an outcome nobody has heard of is indeterminate, never
 // success, so it lands on the surface a human already watches.

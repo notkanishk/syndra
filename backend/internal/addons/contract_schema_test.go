@@ -44,6 +44,7 @@ var contractMessages = []struct{ fixture, schema string }{
 	{"apply_response.json", "apply_ok.json"},
 	{"operation_request.json", "operation_request.json"},
 	{"operation_request_fresh.json", "operation_request.json"},
+	{"operation_request_preview.json", "operation_request.json"},
 	{"operation_response.json", "operation_response.json"},
 	{"operation_response_result.json", "operation_response.json"},
 	{"operation_response_activity.json", "operation_response.json"},
@@ -52,6 +53,7 @@ var contractMessages = []struct{ fixture, schema string }{
 	{"operation_response_activity_result.json", "operation_response.json"},
 	{"operation_response_health_result.json", "operation_response.json"},
 	{"operation_response_records.json", "operation_response.json"},
+	{"operation_response_no_change.json", "operation_response.json"},
 	{"status.json", "common/status.json"},
 	{"records.json", "common/records.json"},
 	{"activity.json", "common/activity.json"},
@@ -67,7 +69,14 @@ var contractMessages = []struct{ fixture, schema string }{
 	{"error_binding_conflict.json", "error.json"},
 	{"error_fresh_read_cooldown.json", "error.json"},
 	{"error_target_unreachable.json", "error.json"},
+	{"error_call_unsettled.json", "error.json"},
+	{"error_unknown_resource.json", "error.json"},
+	{"error_not_entitled.json", "error.json"},
+	{"error_limit_reached.json", "error.json"},
+	{"error_resource_taken.json", "error.json"},
 	{"call.json", "call.json"},
+	{"call_in_doubt.json", "call.json"},
+	{"call_unknown.json", "call.json"},
 	{"stats.json", "stats.json"},
 	{"identity_apply.json", "identity/vector.json"},
 	{"identity_operation.json", "identity/vector.json"},
@@ -239,12 +248,14 @@ type operationRegistry struct {
 		Effect       string   `json:"effect"`
 		Result       string   `json:"result"`
 		Pocket       string   `json:"pocket"`
+		SecretResult *bool    `json:"secret_result"`
 		SecretParams []string `json:"secret_params"`
 		Params       []struct {
 			Name     string `json:"name"`
 			Type     string `json:"type"`
 			Required bool   `json:"required"`
 			Secret   bool   `json:"secret"`
+			Format   string `json:"format"`
 		} `json:"params"`
 	} `json:"operations"`
 }
@@ -276,6 +287,10 @@ func checkPolicyAgainstRegistry(t *testing.T, dir string) {
 		if r.Effect != p.Effect || r.Result != p.Result || r.Pocket != p.Pocket {
 			t.Errorf("%s: registry says effect %q result %q pocket %q, policy says %q %q %q", id, r.Effect, r.Result, r.Pocket, p.Effect, p.Result, p.Pocket)
 		}
+		// Present for every id (absence is never a value), and the policy's.
+		if r.SecretResult == nil || *r.SecretResult != p.SecretResult {
+			t.Errorf("%s: registry secret_result %v, policy %v", id, r.SecretResult, p.SecretResult)
+		}
 		if p.Effect == EffectRead && p.Confirm {
 			t.Errorf("%s is a read and asks for confirmation: a read is never confirmed", id)
 		}
@@ -289,7 +304,7 @@ func checkPolicyAgainstRegistry(t *testing.T, dir string) {
 		var secrets []string
 		for i, ps := range p.Params {
 			rp := r.Params[i]
-			if rp.Name != ps.Name || rp.Type != ps.Type || rp.Required != ps.Required || rp.Secret != ps.Secret {
+			if rp.Name != ps.Name || rp.Type != ps.Type || rp.Required != ps.Required || rp.Secret != ps.Secret || rp.Format != ps.Format {
 				t.Errorf("%s param %d: registry %+v, policy %+v", id, i, rp, ps)
 			}
 			if ps.Secret {
@@ -371,8 +386,10 @@ func TestEveryResultFixtureMatchesItsRegistrySchema(t *testing.T) {
 			t.Errorf("fixtures/%s answers %q, which the registry lacks", m.fixture, doc.Operation)
 			continue
 		}
-		if op.Effect != EffectRead {
-			t.Errorf("fixtures/%s: %s answers a result and is not a read", m.fixture, doc.Operation)
+		// A read answers what it read; a physical operation the record it
+		// made, or with preview the one it would make.
+		if op.Effect != EffectRead && op.Effect != EffectPhysical {
+			t.Errorf("fixtures/%s: %s answers a result and is neither a read nor physical", m.fixture, doc.Operation)
 		}
 		if op.Result != "" {
 			assertSchema(t, op.Result, doc.Result, "fixtures/"+m.fixture+" result")
