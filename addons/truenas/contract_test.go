@@ -203,6 +203,14 @@ var notProduced = map[string]map[string]string{
 	},
 }
 
+// sethConflict is the fixtures' binding conflict, an account another subject
+// holds, worded by the code that words every conflict (BindingConflict.words),
+// so a fixture's text cannot drift from what the add-on says.
+var (
+	sethConflict         = BindingConflict{Username: "seth_rollins", AccountID: "3077", BoundTo: "289471021834760195"}
+	sethDetail, sethNext = sethConflict.words()
+)
+
 func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 	member := &Standing{WaitingOn: "member", Note: "No password set yet", Next: "Set a storage password on your page"}
 	placeHome := Place{Share: "homes", Folder: "rey_mysterio", Path: "/mnt/tank/homes/rey_mysterio", Access: accessChange,
@@ -302,9 +310,8 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 			Outcomes: []ApplyOutcome{
 				{Subject: "289471021834760193", Effect: EffectApply, Detail: "Would add fabrication.", Consequence: "In lab_makers, fabrication. Enabled, SMB on.",
 					Username: "rey_mysterio", AccountID: "3051", Standing: member, Fingerprint: "sha256:9d1c4f0b7e2a"},
-				{Subject: "289471021834760194", Effect: EffectBlocked, Detail: "An account named seth_rollins already exists and is not bound to anyone.",
-					Consequence: "Nothing would be changed.",
-					Conflict:    &BindingConflict{Username: "seth_rollins", AccountID: "3077", BoundTo: "289471021834760195"}},
+				{Subject: "289471021834760194", Effect: EffectBlocked, Detail: sethDetail,
+					Consequence: "Nothing would change. " + sethNext, Conflict: &sethConflict},
 			},
 			Current: true, TakenAt: "2026-11-10T09:30:00Z",
 		}},
@@ -352,9 +359,8 @@ func TestABlockedApplyIsAProblemCarryingItsOutcome(t *testing.T) {
 			Consequence: "Nothing was changed.", Username: "bianca.belair", AccountID: "3042", Fingerprint: "sha256:9d1c4f0b7e2a",
 			Standing: &Standing{WaitingOn: "member", Note: "No password set yet", Next: "Set a storage password on your page"}}},
 		{"error_binding_conflict.json", CodeBindingConflict, http.StatusConflict, ApplyOutcome{
-			Subject: "289471021834760194", Effect: EffectBlocked, Detail: "An account named seth_rollins already exists and is not bound to anyone.",
-			Consequence: "Nothing was changed.",
-			Conflict:    &BindingConflict{Username: "seth_rollins", AccountID: "3077", BoundTo: "289471021834760195"}}},
+			Subject: "289471021834760194", Effect: EffectBlocked, Detail: sethDetail,
+			Consequence: "Nothing was changed. " + sethNext, Conflict: &sethConflict}},
 	} {
 		rr := httptest.NewRecorder()
 		writeOutcomeRefusal(rr, tc.status, tc.code, tc.out)

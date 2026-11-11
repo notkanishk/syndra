@@ -1062,9 +1062,10 @@ settings with the full §5 rules.
     the add-on's own test (`TestAnUnlistedValueIsKeptAndNotShown`).
   - An add-on that creates accounts MUST serve `account.adopt` and
     `account.release` (B16): the backend reads a `BINDING_CONFLICT` apply as
-    an ordinary 4xx (`target_refused`), and its only resolutions are
-    `handleAdoptAccount` and `handleReleaseBinding`/`releaseOnTarget`, both
-    through the operations route.
+    an ordinary 4xx (`target_refused`), and its only resolutions inside
+    Syndra are `handleAdoptAccount` and
+    `handleReleaseBinding`/`releaseOnTarget`, both through the operations
+    route (renaming the account in the app is the other).
   - A log sync that fails before a write: the write is not sent, answered
     `APPLY_FAILED`/`OPERATION_FAILED` 500 (a person looks; the registry has
     no "add-on store" code for writes). `product_version` is `""` until read
@@ -1080,19 +1081,49 @@ settings with the full §5 rules.
     set and skips an unreported limit; kit texts cite `AUTHORING.md#…`
     anchors, guarded by `TestEveryCheckCitesAGuideSection`.
 - [ ] 5.3a (found at 5.3) Where TrueNAS and the contract differ #needs-triage
-  - The mutation log is appended after the write, best-effort (`record` in
-    `addons/truenas/apply.go`); design §8 and the guide say an intent,
-    synced, before the write.
-  - An unknown key in `desired` is 400 `APPLY_FAILED`; the guide's rule is
-    422 `APPLY_BLOCKED` (the reference). Syndra reads both as "dropped".
-  - `v2/fixtures/error_binding_conflict.json` says "not bound to anyone"
-    beside a `bound_to`; correcting it is a contract-file change for both
-    ends' suites.
+  - Moved to 5.3b: the mutation log written after the write.
+  - [x] An unknown key in `desired` was 400 `APPLY_FAILED`, the guide's
+    rule 422 `APPLY_BLOCKED`. *Done (11 Nov 2026):* one error type,
+    `unholdable` (`addons/truenas/apply.go`), for an unknown key, a value
+    that does not fit its role (a malformed or negative limit, a non-boolean
+    flag) and a group the NAS does not have or a built-in one
+    (`groupIDs` in `subjects.go`). `/plan` answers it `blocked` (groups
+    checked against the snapshot's own group table, so no extra read; a
+    plan from the mirror skips it and is `current: false`), `/apply` 422
+    `APPLY_BLOCKED` with the outcome (`blockedOr`); a group table that
+    cannot be read stays the target's failure (5xx), and a store failure
+    reading where homes go is 500, never a 4xx that drops the change. The
+    backend reads 422 `APPLY_BLOCKED` as rejected with `effect: blocked`
+    (`classifyStatus`, `Apply` in `internal/addons/entitlement.go`, tested
+    by `contract_test.go` on the fixture); no backend change.
+    `TestAnUnholdableDesiredStateIsBlockedByPlanAndApplyAlike` (six inputs,
+    new and existing account), `TestAGroupTableThatCannotBeReadIsNotABlockedApply`.
+  - [x] `v2/fixtures/error_binding_conflict.json` said "not bound to
+    anyone" beside a `bound_to`. *Done (11 Nov 2026):* `bound_to` is
+    possible by the schema, so it stays and the text says "bound to another
+    subject" with the next step; `plan_response.json` the same. Every
+    conflict's words come from `BindingConflict.words` (plan and apply),
+    and the contract test builds the fixtures' outcome from it, so the text
+    cannot drift. The words also corrected the case where the subject's
+    bound name is now held by another account: `adoptable: false`, release
+    first; `adoptAccount` now refuses that case instead of answering
+    "already bound" (it checked the name, not the account), so `adoptable`
+    is exactly "account.adopt would succeed".
   - The reference serves neither `account.adopt` nor `account.release` (the
     guide lists it as a simplification); once it does, the kit's `manifest`
     check can require both of an add-on that creates.
-  - A membership that is not enumerable: the add-on cannot tell its managed
-    set, and the drift sweep compares the whole list. No add-on has one yet.
+  - Moved to 5.3c: a membership that is not enumerable.
+- [ ] 5.3b The TrueNAS mutation log becomes an intent log: an intent
+  recorded and fsynced before each NAS write, a 500 refusal (nothing sent)
+  when the sync fails, and the result recorded after. Today `record` in
+  `addons/truenas/apply.go` appends after the write, best-effort; design §8
+  and the guide (`addons/AUTHORING.md#every-write-once-per-call_id`) say intent
+  first. **MUST before contract 2 reaches prod.** #ready-for-agent
+- [ ] 5.3c A membership field that is not enumerable: the add-on cannot
+  tell its managed set, and the drift sweep compares the whole list. No
+  add-on has one yet. **Before external authors:** refuse such a field at
+  registration, or define the managed set as the values a mapping names.
+  #needs-triage
 - [x] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
   point here; `addon-platform/design.md` §5 and §16 gain a one-line pointer
   to this contract as the current statement #ready-for-agent

@@ -159,7 +159,7 @@ func (s *server) readSubjectsWhere(filters []any) (Snapshot, error) {
 	// what came back costs one pass over a list that is already in memory.
 	users = withoutSystemAccounts(users)
 
-	names, _, builtin, err := s.groupIndex()
+	names, byName, builtin, err := s.groupIndex()
 	if err != nil {
 		// A read that cannot name groups is a read whose group sets are
 		// meaningless to the resolver. Reported as a failure rather than
@@ -206,7 +206,8 @@ func (s *server) readSubjectsWhere(filters []any) (Snapshot, error) {
 			builtinGroups: builtinIDs,
 		})
 	}
-	return Snapshot{TakenAt: time.Now().UTC(), Subjects: subjects, Truncated: truncated}, nil
+	return Snapshot{TakenAt: time.Now().UTC(), Subjects: subjects, Truncated: truncated,
+		groupsByName: byName, builtinGroups: builtin}, nil
 }
 
 // systemUIDCeiling is where the operating system's accounts stop.
@@ -380,17 +381,24 @@ func (s *server) groupIDsFor(names []string) ([]apiID, error) {
 	if err != nil {
 		return nil, err
 	}
+	return groupIDs(names, byName, builtin)
+}
+
+// groupIDs is the check itself, against one read of the group table. The plan
+// asks it of its snapshot's table, the apply of a fresh one, so a name one
+// refuses the other refuses too.
+func groupIDs(names []string, byName map[string]apiID, builtin map[string]bool) ([]apiID, error) {
 	ids := make([]apiID, 0, len(names))
 	for _, name := range names {
 		if builtin[name] {
 			// Loud rather than skipped: a mapping that names one predates the
 			// picker's filter, and an operator should see it, not have it
 			// quietly ignored.
-			return nil, fmt.Errorf("%q is a built-in group, which Syndra does not manage", name)
+			return nil, cannotHold("%q is a built-in group, which Syndra does not manage", name)
 		}
 		id, ok := byName[name]
 		if !ok {
-			return nil, fmt.Errorf("this target has no group named %q", name)
+			return nil, cannotHold("this target has no group named %q", name)
 		}
 		ids = append(ids, id)
 	}

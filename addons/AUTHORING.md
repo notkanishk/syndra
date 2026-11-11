@@ -649,7 +649,9 @@ mirror holds no limits: absent in `state` is "not known".
   `backend/internal/services/merge/classify.go`), and no mapping can name
   such a value, so it would be a difference for ever. The TrueNAS add-on
   leaves built-in groups out for this reason (`readSubjectsWhere` in
-  `addons/truenas/subjects.go`); the kit's `unlisted-hidden` checks it.
+  `addons/truenas/subjects.go`); the kit's `unlisted-hidden` checks it on
+  every `current: true` reply, and skips a stored copy, which may lag
+  `/values`.
 - `standing` MUST be on every subject, because every listed subject has an
   account. It is observed: why this account can or cannot be used yet, and
   who is waited on (`waiting_on`, from the schema).
@@ -761,8 +763,8 @@ Schemas: `v2/schema/plan_request.json`, `v2/schema/plan_response.json`.
     {
       "subject": "289471021834760194",
       "effect": "blocked",
-      "detail": "An account named seth_rollins already exists and is not bound to anyone.",
-      "consequence": "Nothing would be changed.",
+      "detail": "An account named seth_rollins already exists and is bound to another subject.",
+      "consequence": "Nothing would change. If it is not theirs, release it from that subject, then adopt it here.",
       "conflict": {
         "username": "seth_rollins",
         "account_id": "3077",
@@ -878,12 +880,12 @@ the state the write left.
   "type": "urn:syndra:addon:error:BINDING_CONFLICT",
   "title": "Binding conflict",
   "status": 409,
-  "detail": "An account named seth_rollins already exists and is not bound to anyone.",
+  "detail": "An account named seth_rollins already exists and is bound to another subject.",
   "code": "BINDING_CONFLICT",
   "retry": "never",
   "subject": "289471021834760194",
   "effect": "blocked",
-  "consequence": "Nothing was changed.",
+  "consequence": "Nothing was changed. If it is not theirs, release it from that subject, then adopt it here.",
   "conflict": {
     "username": "seth_rollins",
     "account_id": "3077",
@@ -959,7 +961,9 @@ The kit checks each of these with `-mutate`.
   a `limit` value a non-negative decimal integer, a `membership` value one
   the app has), and every key against your entitlement schema. A desired
   state the app cannot hold MUST be 422 `APPLY_BLOCKED`, its outcome as
-  extension members, `consequence` saying what was left as it was. Whether
+  extension members, `consequence` saying what was left as it was, and the
+  plan for the same input MUST be `blocked` (one error type, `unholdable`
+  in `addons/truenas/apply.go`, answers both). Whether
   a limit may carry leading zeros or a sign, and its largest value, are
   yours, decided once for plan and apply.
 
@@ -984,12 +988,16 @@ whole burden.
   subject with no recorded id: the crash between a create and its record.
   Any other match, or two candidates, MUST be 409 `BINDING_CONFLICT` with
   `conflict` (`username`, `account_id`, `bound_to` when another subject
-  holds it, and `adoptable`, `true` exactly when no other subject does), and
-  an operator decides through the confirmed `account.adopt` operation, which
-  every add-on that creates accounts therefore serves
-  ([The account operations](#the-account-operations)). Anyone with console access can type an
-  external reference, and a wrong adoption hands one person's data to
-  another.
+  holds it, and `adoptable`, `true` exactly when `account.adopt` for this
+  subject would succeed: no other subject holds the account and this
+  subject has no binding), and an operator decides through the confirmed
+  `account.adopt` operation, which every add-on that creates accounts
+  therefore serves ([The account operations](#the-account-operations)).
+  Anyone with console access can type an external reference, and a wrong
+  adoption hands one person's data to another. (`boundAccount` and `locate`
+  in `addons/truenas/apply.go`, `adoptAccount` in
+  `addons/truenas/operations.go`; the conflict's words, one source for plan
+  and apply, are `BindingConflict.words`.)
 - **Record it before you answer.** The add-on MUST write the mutation-log
   intent before the create, MUST record the binding and the reply under the
   `call_id` before it answers, and MUST answer a replay from that record.
@@ -1000,6 +1008,12 @@ whole burden.
   it, as `locate` in `addons/truenas/apply.go` does. Syndra's drift sweep
   shows it to an operator, who re-provisions it (that apply) or lets it go
   (`account.release`).
+- **A bound name another account now holds** (the original deleted, the
+  name reused) is a `BINDING_CONFLICT` with `adoptable: false`, never this
+  subject's account: converging it hands the subject's access to a
+  stranger. `account.adopt` refuses a subject that has a binding, so the
+  operator releases first (`account.release`), then adopts that account or
+  renames it in the app.
 
 #### The reply
 
@@ -1190,8 +1204,9 @@ yours; Syndra reads them alike.
   failure after an earlier write in the same request, never
   `TARGET_UNREACHABLE` or a 429, which Syndra re-queues by itself.
 - A read that fails before any write sent the app no write, and MAY be
-  answered `TARGET_UNREACHABLE`; the TrueNAS add-on answers `APPLY_FAILED`,
-  the conservative choice.
+  answered `TARGET_UNREACHABLE`. The TrueNAS add-on answers `APPLY_FAILED`
+  when the read failed on an open session, the conservative choice, and
+  503 `TARGET_UNREACHABLE` when there was no session at all.
 - A good way to know: tell "no session could be had" apart from "a call on
   a session failed" (`ErrNotSent` in `addons/truenas/nas.go`), answer
   `TARGET_UNREACHABLE` only from the first, before any write, and send every
@@ -1290,16 +1305,17 @@ Every add-on that creates accounts can answer `BINDING_CONFLICT`
 feature and serve both:
 
 - `account.adopt` binds the account named in `params.username` to the
-  subject, after reading it, and answers its `account_id`. It is the only
-  way an operator resolves a conflict (`handleAdoptAccount` in
-  `backend/internal/handlers/inventory.go`).
+  subject, after reading it, and answers its `account_id`
+  (`handleAdoptAccount` in `backend/internal/handlers/inventory.go`).
 - `account.release` forgets the subject's binding and touches nothing on the
   app. It is how an operator lets go of an account (`handleReleaseBinding`
   there, and `releaseOnTarget` in
   `backend/internal/handlers/merge_findings.go` for one the app no longer
   holds), so it MUST answer while the app is unreachable.
 
-Without them a conflict sits refused for ever.
+`account.adopt` and `account.release` are the only way inside Syndra to
+resolve a conflict (renaming the account in the app is the other); without
+them a conflict sits refused until someone does that.
 
 **`effect`**, in the registry for every id, says what an operation touches.
 There is no destructive effect, because there is no destructive operation:

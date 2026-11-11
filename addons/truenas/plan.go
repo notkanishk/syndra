@@ -138,18 +138,19 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		out.Stale = unreachableSince(snap.TakenAt)
 	}
 	for _, subject := range req.Subjects {
-		out.Outcomes = append(out.Outcomes, s.planOne(subject, byName, byUID, claimed, snap.Truncated))
+		out.Outcomes = append(out.Outcomes, s.planOne(subject, byName, byUID, claimed, snap))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
 // planOne says what would happen to one subject, and issues no mutating call.
-func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[int64]*Subject, claimed map[string]string, truncated bool) ApplyOutcome {
+func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[int64]*Subject, claimed map[string]string, snap Snapshot) ApplyOutcome {
+	truncated := snap.Truncated
 	desired, err := s.decodeDesired(req.Desired)
 	if err != nil {
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectBlocked,
-			Detail: err.Error(),
+			Detail: err.Error(), Consequence: "Nothing would change.",
 		}
 	}
 
@@ -167,10 +168,10 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 			func(n string) (*Subject, error) { return byName[n], nil },
 			func(u int64) (*Subject, error) { return byUID[u], nil })
 		if conflict != nil {
+			detail, next := conflict.words()
 			return ApplyOutcome{
 				Subject: req.Subject, Effect: EffectBlocked,
-				Detail:      fmt.Sprintf("An account named %s already exists and is not bound to anyone.", conflict.Username),
-				Consequence: "Nothing would change. Adopt it, or create under a suffixed name.",
+				Detail: detail, Consequence: "Nothing would change. " + next,
 				Username:    conflict.Username,
 				Fingerprint: fingerprintSubject(byName[conflict.Username]),
 				Conflict:    conflict,
@@ -188,16 +189,17 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 		if existing, ok := byName[name]; ok {
 			// Reported, not resolved. Adopting silently is the dangerous
 			// outcome — that account may belong to somebody else entirely.
+			conflict := BindingConflict{
+				Username: name, AccountID: accountID(existing.UID),
+				Adoptable: claimed[name] == "", BoundTo: claimed[name],
+			}
+			detail, next := conflict.words()
 			return ApplyOutcome{
 				Subject: req.Subject, Effect: EffectBlocked,
-				Detail:      fmt.Sprintf("An account named %s already exists and is not bound to anyone.", name),
-				Consequence: "Nothing would change. Adopt it, or create under a suffixed name.",
+				Detail: detail, Consequence: "Nothing would change. " + next,
 				Username:    name,
 				Fingerprint: fingerprintSubject(existing),
-				Conflict: &BindingConflict{
-					Username: name, AccountID: accountID(existing.UID),
-					Adoptable: claimed[name] == "", BoundTo: claimed[name],
-				},
+				Conflict:    &conflict,
 			}
 		}
 	}
@@ -226,6 +228,19 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 		out := noAccountToSwitchOffOutcome(req.Subject)
 		out.Fingerprint = fingerprint
 		return out
+	}
+	// The groups the apply would write, checked where the apply checks them
+	// (groupIDsFor in converge and createAndConverge), so a group the NAS does
+	// not have, or a built-in one, is blocked by both.
+	// ponytail: a plan from the mirror has no group table and skips this; it
+	// is current: false, which Syndra never applies, and the apply checks.
+	if g := decide(current, desired, homeDecision{}).groups; g != nil && snap.groupsByName != nil {
+		if _, err := groupIDs(*g, snap.groupsByName, snap.builtinGroups); err != nil {
+			return ApplyOutcome{
+				Subject: req.Subject, Effect: EffectBlocked,
+				Detail: err.Error(), Consequence: "Nothing would change.",
+			}
+		}
 	}
 	if current == nil {
 		return ApplyOutcome{

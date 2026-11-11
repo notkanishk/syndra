@@ -65,11 +65,12 @@ func (k *kit) reads() {
 	k.at("subjects.paged").skip("feature subjects.paged is deferred; no add-on declares it yet")
 	k.current(k.at("current"))
 	k.valuesCheck(k.at("values"))
+	current, _ := subjects["current"].(bool)
 	for _, s := range objects(subjects["subjects"]) {
 		state, _ := s["state"].(map[string]any)
-		k.unlistedHidden("subject "+display(s), state)
+		k.unlistedHidden("subject "+display(s), state, current)
 	}
-	if c := k.at("unlisted-hidden"); !c.ran {
+	if c := k.at("unlisted-hidden"); !c.ran && len(c.skips) == 0 {
 		c.skip("no subject listed holds an enumerable membership field")
 	}
 	if c := k.at("settings"); !k.m.has("settings") {
@@ -247,9 +248,17 @@ func (k *kit) subjects(c *check) map[string]any {
 // unlistedHidden: a membership in state or observed holds only the managed
 // set. Syndra compares state with desired over the whole list, so a value
 // /values leaves out, which no mapping can name, would be a difference it can
-// never close.
-func (k *kit) unlistedHidden(where string, state map[string]any) {
+// never close. Judged only from a current reply: a stored copy may predate a
+// change to /values, so a value it holds proves nothing.
+func (k *kit) unlistedHidden(where string, state map[string]any, current bool) {
 	c := k.at("unlisted-hidden")
+	if !current {
+		const why = "a /subjects reply was current: false; a stored copy may lag /values, so it is not judged"
+		if !slices.Contains(c.skips, why) {
+			c.skip(why)
+		}
+		return
+	}
 	for name, v := range state {
 		managed, enumerable := k.values[name]
 		if !enumerable || k.m.role(name) != "membership" {

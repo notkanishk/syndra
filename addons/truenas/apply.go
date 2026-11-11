@@ -198,7 +198,7 @@ const (
 // Silently adopting it is the dangerous outcome: that account may belong to
 // somebody else entirely, and adopting it hands them a subject's entitlements
 // along with whatever is already in its home directory. So the operation stops
-// and an operator chooses — adopt, or create under a suffixed name.
+// and an operator chooses (BindingConflict.words).
 type BindingConflict struct {
 	Username  string `json:"username"`
 	AccountID string `json:"account_id"`
@@ -206,6 +206,25 @@ type BindingConflict struct {
 	// which is the only case the adoption action can act on.
 	Adoptable bool   `json:"adoptable"`
 	BoundTo   string `json:"bound_to,omitempty"`
+}
+
+// words says what a conflict is and what the operator does next, once for
+// plan and apply. adoptable is exactly when account.adopt would succeed
+// (adoptAccount): no other subject holds the account and this subject has no
+// binding. A subject whose bound name another account now holds has a
+// binding, so adopt refuses it: the operator releases first.
+func (c BindingConflict) words() (detail, next string) {
+	switch {
+	case c.Adoptable:
+		return fmt.Sprintf("An account named %s already exists and is not bound to anyone.", c.Username),
+			"Adopt it, or rename it in the app."
+	case c.BoundTo != "":
+		return fmt.Sprintf("An account named %s already exists and is bound to another subject.", c.Username),
+			"If it is not theirs, release it from that subject, then adopt it here."
+	default:
+		return fmt.Sprintf("The name %s this subject is bound to is now held by a different account.", c.Username),
+			"Release this subject's binding first, then adopt that account or rename it in the app."
+	}
 }
 
 var errStaleFingerprint = errors.New("the subject's state on the target has changed since the plan")
@@ -239,6 +258,31 @@ type desiredState struct {
 	managed map[string]bool
 }
 
+// unholdable is a desired state this app cannot hold: a key outside the
+// entitlement schema, a value that does not fit its role, a group the NAS does
+// not have or a built-in one. One error type, so /plan answers it `blocked`
+// and /apply 422 APPLY_BLOCKED, and the two cannot disagree about which inputs
+// those are (AUTHORING.md, "Every value is checked against its role").
+type unholdable string
+
+func (e unholdable) Error() string { return string(e) }
+
+func cannotHold(format string, a ...any) error { return unholdable(fmt.Sprintf(format, a...)) }
+
+// blockedOr answers an apply's failure before any write. One the app cannot
+// hold is the blocked outcome (422 APPLY_BLOCKED, as the plan said); anything
+// else keeps status.
+func blockedOr(subject string, err error, status int) (ApplyOutcome, int, error) {
+	var u unholdable
+	if errors.As(err, &u) {
+		return ApplyOutcome{
+			Subject: subject, Effect: EffectBlocked,
+			Detail: err.Error(), Consequence: "Nothing was changed.",
+		}, http.StatusUnprocessableEntity, nil
+	}
+	return ApplyOutcome{}, status, err
+}
+
 // decodeDesired is decodeDesiredFields with the system's home location filled
 // in, so the plan and the apply decide homes from the same place.
 func (s *server) decodeDesired(raw map[string]json.RawMessage) (desiredState, error) {
@@ -257,37 +301,37 @@ func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
 		switch field {
 		case FieldGroup:
 			if err := json.Unmarshal(value, &d.groups); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a list of group names", field)
+				return desiredState{}, cannotHold("field %q must be a list of group names", field)
 			}
 			sort.Strings(d.groups)
 		case FieldEnabled:
 			if err := json.Unmarshal(value, &d.enabled); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a boolean", field)
+				return desiredState{}, cannotHold("field %q must be a boolean", field)
 			}
 		case FieldSMBEnabled:
 			if err := json.Unmarshal(value, &d.smbEnabled); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a boolean", field)
+				return desiredState{}, cannotHold("field %q must be a boolean", field)
 			}
 		case FieldHome:
 			var gives []string
 			if err := json.Unmarshal(value, &gives); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a list of \"true\"", field)
+				return desiredState{}, cannotHold("field %q must be a list of \"true\"", field)
 			}
 			for _, g := range gives {
 				if g != "true" {
-					return desiredState{}, fmt.Errorf("field %q: a role either gives a home folder (\"true\") or names nothing, not %q", field, g)
+					return desiredState{}, cannotHold("field %q: a role either gives a home folder (\"true\") or names nothing, not %q", field, g)
 				}
 			}
 			d.wantsHome = len(gives) > 0
 		case FieldHomeQuota:
 			var limits []string
 			if err := json.Unmarshal(value, &limits); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a list of byte counts", field)
+				return desiredState{}, cannotHold("field %q must be a list of byte counts", field)
 			}
 			for _, l := range limits {
 				n, err := strconv.ParseInt(strings.TrimSpace(l), 10, 64)
 				if err != nil || n < 0 {
-					return desiredState{}, fmt.Errorf("field %q: %q is not a byte count", field, l)
+					return desiredState{}, cannotHold("field %q: %q is not a byte count", field, l)
 				}
 				if n == 0 {
 					d.homeUnlimited = true
@@ -301,7 +345,7 @@ func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
 			// ignored. Ignoring it would let the backend believe it had
 			// converged something nothing acted on — the same class of silence
 			// as dropping an unknown parameter.
-			return desiredState{}, fmt.Errorf("field %q is not in this add-on's entitlement schema", field)
+			return desiredState{}, cannotHold("field %q is not in this add-on's entitlement schema", field)
 		}
 	}
 	// A channel is off whenever the account is (design §3, role channel), so
@@ -421,7 +465,9 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	desired, err := s.decodeDesired(req.Desired)
 	if err != nil {
-		return ApplyOutcome{}, http.StatusBadRequest, err
+		// Not unholdable: where home folders go could not be read from the
+		// add-on's own store.
+		return blockedOr(req.Subject, err, http.StatusInternalServerError)
 	}
 
 	current, binding, conflict, truncated, err := s.locate(req)
@@ -446,11 +492,11 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// Halted, and surfacing THE SAME adoption action the unmanaged
 		// inventory offers. One decision with two entry points, never a second
 		// code path that fires mid-convergence.
+		detail, next := conflict.words()
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectBlocked,
-			Detail:      fmt.Sprintf("An account named %s already exists and is not bound to anyone.", conflict.Username),
-			Consequence: "Nothing was changed. Adopt it, or create under a suffixed name.",
-			Username:    conflict.Username, Conflict: conflict,
+			Detail: detail, Consequence: "Nothing was changed. " + next,
+			Username: conflict.Username, Conflict: conflict,
 		}, http.StatusConflict, nil
 	}
 
@@ -739,7 +785,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		// converged.
 		ids, err := s.groupIDsFor(*c.groups)
 		if err != nil {
-			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
+			return blockedOr(req.Subject, err, statusFor(err))
 		}
 		// Plus the built-in memberships, which current.Groups never listed:
 		// the replace is of the groups Syndra manages, not of the account's.
@@ -931,7 +977,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	if want.groups != nil {
 		ids, err := s.groupIDsFor(*want.groups)
 		if err != nil {
-			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
+			return blockedOr(req.Subject, err, statusFor(err))
 		}
 		groupIDs = ids
 	}
@@ -993,15 +1039,25 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	create["uid"] = id
 	create["group"] = groupID
 	create["group_create"] = false
+	// failed answers a failure before the account exists. A group made here
+	// was a write, so it is undone and the failure is acted's. An adopted
+	// group predates this attempt (or a timed-out create of ours made it, and
+	// the next attempt takes it over the same way): nothing has been written,
+	// it is not ours to delete, and the failure keeps its own status (a 429
+	// stays a 429).
+	failed := func(err error) (ApplyOutcome, int, error) {
+		if adopted {
+			return ApplyOutcome{}, statusFor(err), err
+		}
+		s.undoGroup(groupID)
+		return acted(err)
+	}
 
 	// The home, when one role gives one and its folder is free. Decided before
 	// the account exists, so a folder that is there at all is someone else's.
 	home, err := s.decideHome(desired, binding.Username, "", -1)
 	if err != nil {
-		if !adopted {
-			s.undoGroup(groupID)
-		}
-		return acted(err)
+		return failed(err)
 	}
 	if home.path != "" {
 		for k, v := range homeFields(home.path) {
@@ -1011,12 +1067,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 
 	var recordID apiID
 	if err := s.nas.call("user.create", []any{create}, &recordID); err != nil {
-		// An adopted group was there before this attempt: not ours to delete,
-		// however the account fares.
-		if !adopted {
-			s.undoGroup(groupID)
-		}
-		return acted(err)
+		return failed(err)
 	}
 	// `user.create` answers with the RECORD key, not the unix uid, and the
 	// binding recognises an account by its uid across a rename. Read back

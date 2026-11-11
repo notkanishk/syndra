@@ -484,12 +484,20 @@ func TestACollidingUnboundAccountHaltsAndSurfacesTheDecision(t *testing.T) {
 	if !out.Conflict.Adoptable || out.Conflict.AccountID != "9001" {
 		t.Errorf("the conflict must carry what an operator needs to decide: %+v", out.Conflict)
 	}
+	if !strings.HasPrefix(out.Consequence, "Nothing was changed. Adopt it") {
+		t.Errorf("an adoptable conflict's next step is adopt, got %q", out.Consequence)
+	}
 	// No create, no adopt, no modify.
 	if len(m.creates) != 0 || len(m.updates) != 0 {
 		t.Fatalf("nothing may be written: %d creates %d updates", len(m.creates), len(m.updates))
 	}
 	if _, bound, _ := s.store.GetBinding("sub-1"); bound {
 		t.Fatal("and nothing may be bound")
+	}
+	// adoptable is a promise about account.adopt: it succeeds.
+	if _, status, err := s.adoptAccount(OperationRequest{Operation: "account.adopt", Subject: "sub-1", Actor: "op1", CallID: "a1",
+		Params: map[string]any{"username": "charlotte"}}); status != http.StatusOK {
+		t.Fatalf("adoptable, so account.adopt must succeed, got %d %v", status, err)
 	}
 }
 
@@ -584,6 +592,15 @@ func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
 	if len(m.creates) != 0 || len(m.updates) != 0 {
 		t.Fatal("nothing may be written to someone else's account")
 	}
+	// Not adoptable because this subject has a binding: account.adopt refuses
+	// it, so the next step the outcome names is a release first.
+	if _, status, _ := s.adoptAccount(OperationRequest{Operation: "account.adopt", Subject: "sub-1", Actor: "op1", CallID: "a1",
+		Params: map[string]any{"username": "charlotte"}}); status != http.StatusConflict {
+		t.Fatalf("account.adopt must refuse a bound subject, got %d", status)
+	}
+	if !strings.Contains(out.Consequence, "Release this subject's binding first") {
+		t.Errorf("the next step is a release, got %q", out.Consequence)
+	}
 }
 
 // A legacy record key in the binding is replaced by the real uid on the first
@@ -675,18 +692,70 @@ func TestAnApplyDuringAMaintenanceWindowIsRefusedAsRetryable(t *testing.T) {
 	}
 }
 
-// A field this add-on does not understand is refused rather than ignored.
-// Ignoring it would let the backend believe it had converged something nothing
-// acted on.
-func TestAnUnknownDesiredFieldIsRefused(t *testing.T) {
-	s, m := applyServer(t, `[]`)
+// A desired state the app cannot hold is refused rather than ignored or
+// shrunk: ignoring a field lets the backend believe it converged something
+// nothing acted on, dropping a group under-grants. /plan says `blocked` and
+// /apply 422 APPLY_BLOCKED with the same outcome, for a new account and an
+// existing one alike, and nothing is written.
+func TestAnUnholdableDesiredStateIsBlockedByPlanAndApplyAlike(t *testing.T) {
+	const existing = `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`
+	for _, tc := range []struct{ name, desired string }{
+		{"unknown key", `{"quota_bytes":5}`},
+		{"malformed limit", `{"home_quota":["5 GiB"]}`},
+		{"negative limit", `{"home_quota":["-1"]}`},
+		{"flag that is not a flag", `{"enabled":"yes"}`},
+		{"unknown group", `{"group":["the_shield"]}`},
+		{"built-in group", `{"group":["builtin_users"]}`},
+	} {
+		for _, users := range []string{`[]`, existing} {
+			s, m := applyServer(t, users)
+			if users == existing {
+				if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			name := tc.name
+			if users == existing {
+				name += " (existing account)"
+			}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"quota_bytes":5}}`)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
+			rr := httptest.NewRecorder()
+			planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.org","desired":`+tc.desired+`}]}`)
+			var plan PlanResponse
+			if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+				t.Fatalf("%s: want one planned outcome, got %d %s", name, rr.Code, rr.Body.String())
+			}
+			planned := plan.Outcomes[0]
+
+			rr = postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":`+tc.desired+`}`)
+			applied := decodeOutcome(t, rr)
+			if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeApplyBlocked {
+				t.Errorf("%s: want 422 APPLY_BLOCKED, got %d %s", name, rr.Code, rr.Body.String())
+			}
+			if planned.Effect != EffectBlocked || applied.Effect != EffectBlocked || planned.Detail != applied.Detail ||
+				applied.Subject != "sub-1" || applied.Consequence == "" {
+				t.Errorf("%s: plan and apply must block alike, plan %s %q, apply %s %q (%q)",
+					name, planned.Effect, planned.Detail, applied.Effect, applied.Detail, applied.Consequence)
+			}
+			if len(m.creates) != 0 || len(m.updates) != 0 || m.groupCreates != 0 {
+				t.Errorf("%s: nothing may be written", name)
+			}
+		}
 	}
-	if len(m.creates) != 0 || len(m.updates) != 0 {
-		t.Fatal("nothing may be written")
+}
+
+// A group that cannot be checked because the NAS did not answer is the
+// target's failure, not a blocked state: never a 4xx that drops the change.
+func TestAGroupTableThatCannotBeReadIsNotABlockedApply(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	// The first group read is locate's; the session goes after it, so the
+	// one that fails is groupIDsFor's.
+	m.after = map[string]func(){"group.query": sessionGone(s.nas)}
+	// The fingerprint is given, so the test's own read does not use the hook.
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","fingerprint":"`+
+		fingerprintSubject(nil)+`","desired":{"group":["lab_makers"]}}`)
+	if rr.Code < 500 || problemCode(t, rr) == CodeApplyBlocked {
+		t.Fatalf("want a 5xx, not a blocked apply, got %d %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -697,7 +766,7 @@ func TestPlanningMutatesNothingAndFingerprintsWhatItRead(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
-	const body = `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu","desired":{"group":["builtin_users"]}}]}`
+	const body = `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu","desired":{"group":[]}}]}`
 
 	rr := httptest.NewRecorder()
 	planInto(t, s, rr, body)
@@ -1436,5 +1505,18 @@ func TestARateLimitIsNotReachedOnlyBeforeTheFirstWrite(t *testing.T) {
 		if m.groupCreates < tc.groups || rr.Code != tc.status || problemCode(t, rr) != CodeApplyFailed {
 			t.Errorf("rate-limited %s (%d groups made): want %d APPLY_FAILED, got %d %s", tc.method, m.groupCreates, tc.status, rr.Code, problemCode(t, rr))
 		}
+	}
+}
+
+// An adopted orphan group is not a write of this attempt, so a rate-limited
+// account create after it is still "not reached": 429, never acted's 503.
+func TestARateLimitAfterAnAdoptedGroupIsStillNotReached(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	m.refuseGroupCreate = true
+	m.fakeRPC.groups = `[{"id":93,"gid":250000,"group":"charlotte","builtin":false,"users":[]}]`
+	m.rateLimitOn = "user.create"
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"enabled":true}}`)
+	if rr.Code != http.StatusTooManyRequests || m.groupDeletes != 0 {
+		t.Fatalf("want 429 and the adopted group kept, got %d deletes=%d %s", rr.Code, m.groupDeletes, rr.Body.String())
 	}
 }

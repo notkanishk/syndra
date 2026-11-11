@@ -1097,6 +1097,25 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		return OperationResult{}, http.StatusInternalServerError, err
 	} else if bound {
 		if existing.Username == username {
+			// A repeat only while the name still names the bound account. When
+			// another account now holds it (boundAccount's conflict), "already
+			// bound" would answer done and leave the apply blocked for ever:
+			// refused, and the operator releases first.
+			floor, ceiling := s.idRange()
+			lookup := func(field string, value any) (*Subject, error) {
+				found, _, err := s.subjectWhere(field, value)
+				return found, err
+			}
+			_, _, conflict, err := boundAccount(existing, floor, ceiling,
+				func(name string) (*Subject, error) { return lookup("username", name) },
+				func(uid int64) (*Subject, error) { return lookup("uid", uid) })
+			if err != nil {
+				return OperationResult{}, statusFor(err), err
+			}
+			if conflict != nil {
+				return OperationResult{}, http.StatusConflict,
+					fmt.Errorf("this subject is bound to %s, which another account now holds; release the binding first", username)
+			}
 			return OperationResult{
 				Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
 				// The uid travels on the repeat too. Without it the second

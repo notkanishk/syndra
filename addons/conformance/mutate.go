@@ -273,7 +273,8 @@ func (k *kit) state(c *check) map[string]any {
 	for _, s := range objects(doc["subjects"]) {
 		if k.owner(s, false) == ours {
 			st, _ := s["state"].(map[string]any)
-			k.unlistedHidden("the kit's account", st)
+			current, _ := doc["current"].(bool)
+			k.unlistedHidden("the kit's account", st, current)
 			return st
 		}
 	}

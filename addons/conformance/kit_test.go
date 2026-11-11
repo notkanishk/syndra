@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
@@ -34,6 +35,14 @@ const testSecret = "conformance-self-test-secret-not-a-credential"
 // false, and after, answered true.
 func serve(t *testing.T, secret string, hook func(r *http.Request, body []byte, answered bool), defects ...reference.Defect) (string, func() []string) {
 	t.Helper()
+	return serveRewriting(t, secret, hook, nil, defects...)
+}
+
+// serveRewriting is serve with each reply body passed through rewrite, for an
+// answer the reference never gives.
+func serveRewriting(t *testing.T, secret string, hook func(r *http.Request, body []byte, answered bool),
+	rewrite func(r *http.Request, reply []byte) []byte, defects ...reference.Defect) (string, func() []string) {
+	t.Helper()
 	set := map[reference.Defect]bool{}
 	for _, d := range defects {
 		set[d] = true
@@ -54,7 +63,16 @@ func serve(t *testing.T, secret string, hook func(r *http.Request, body []byte, 
 		if hook != nil {
 			hook(r, body, false)
 		}
-		h.ServeHTTP(w, r)
+		if rewrite == nil {
+			h.ServeHTTP(w, r)
+		} else {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, r)
+			maps.Copy(w.Header(), rec.Header())
+			w.Header().Del("Content-Length")
+			w.WriteHeader(rec.Code)
+			_, _ = w.Write(rewrite(r, rec.Body.Bytes()))
+		}
 		if hook != nil {
 			hook(r, body, true)
 		}
@@ -1508,4 +1526,38 @@ func TestALimitInStateHoldsOneValue(t *testing.T) {
 	if r := run(t, config(url, false)); r.Status("subjects") != "fail" {
 		t.Errorf("a limit holding two values in state passed subjects: %s", r.Status("subjects"))
 	}
+}
+
+// A /subjects reply that is not current may come from a copy older than
+// /values, so the value it shows outside the managed set proves nothing:
+// unlisted-hidden is skipped with the reason, never failed on it. The first run
+// leaves an account holding lobby; the second reads it from a stale reply.
+func TestUnlistedHiddenIsNotJudgedFromAStaleReply(t *testing.T) {
+	var stale atomic.Bool
+	url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+		if !stale.Load() || r.URL.Path != "/subjects" {
+			return reply
+		}
+		return bytes.Replace(reply, []byte(`"current":true`), []byte(`"current":false,"stale":{"reason":"cached"}`), 1)
+	}, reference.StateShowsUnlisted)
+	if r, err := Run(context.Background(), config(url, true)); err != nil && !errors.Is(err, ErrReadsFailed) {
+		t.Fatal(err)
+	} else if r.Status("unlisted-hidden") != "fail" {
+		t.Fatalf("the current run must catch lobby, got %s", r.Status("unlisted-hidden"))
+	}
+
+	stale.Store(true)
+	r, err := Run(context.Background(), config(url, false))
+	if err != nil && !errors.Is(err, ErrReadsFailed) {
+		t.Fatal(err)
+	}
+	for _, res := range r.Results {
+		if res.ID == "unlisted-hidden" {
+			if res.Status != "skip" || !strings.Contains(strings.Join(res.Detail, " "), "current: false") {
+				t.Fatalf("want unlisted-hidden skipped for the stale reply, got %s %v", res.Status, res.Detail)
+			}
+			return
+		}
+	}
+	t.Fatal("no unlisted-hidden result")
 }
