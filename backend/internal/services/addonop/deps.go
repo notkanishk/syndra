@@ -20,7 +20,4 @@ var (
 	// the thing counted cannot drift apart.
 	countRecentOperations = db.CountRecentAddonOperations
 	settleOperation       = db.SettleAddonOperation
-	// A physical operation is refused while the subject's earlier one is
-	// unsettled: the same read the member's page shows it from.
-	unconfirmedChangeAt = db.UnconfirmedChangeAt
 )

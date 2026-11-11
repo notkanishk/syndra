@@ -1473,11 +1473,37 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       (409, `param`, RFC 9110 §15.5.10). (O2) `item.return` comes with the
       inventory add-on. (O3) A non-physical op on a `calls` target keeps the
       two-minute grace; only a physical one waits `in_doubt_bound`.
-    - Decided while building: `/calls` settles any lost write, not only a
-      physical one (the operator's list asks first, then the settings read),
-      so a TrueNAS adoption or release whose answer was lost settles itself;
-      the backend's own binding copy is not written by it (as an operator's
-      "happened" today; NEXT.md).
+    - Decided while building: `/calls` is asked about any lost write, not
+      only a physical one (the operator's list asks first, then the settings
+      read); what it may settle is narrowed by the fix round below.
+    - Decided while building (6c fix round, 1): `recorded` settles any row;
+      `unknown` settles only a physical row sent within `constants.call_memory`
+      (`addons.CallMemory`, held to the registry), less a minute for the
+      clocks. Any other `unknown` stays for a person: the TrueNAS add-on in
+      production keeps no write-ahead intent, and past call_memory an add-on
+      may have forgotten (`settleByCall`, AUTHORING "What settles a record").
+    - Decided while building (6c fix round, 2): the backend's
+      `CALL_UNSETTLED` is one check inside the record's insert: a
+      `pg_advisory_xact_lock` on (target, subject, operation), then
+      `INSERT … WHERE NOT EXISTS` an open row (unclaimed `dispatching`
+      included, any row not only the newest), `db.OpenCallError` mapped to
+      `UnsettledError`; the separate pre-read is gone. A failed insert of a
+      physical record stays `CALL_UNSETTLED_UNKNOWN` (fail closed).
+    - Decided while building (6c fix round, 3): `account.adopt` and
+      `account.release` are never asked `/calls`; a person repeats the action,
+      which writes or forgets the backend's binding as well as the add-on's.
+    - Decided while building (6c fix round, 4): the member poll is limited per
+      person (`withPollLimit`, `ratelimit.DefaultPoll` 60/min, one a second
+      sustained): the UI's 5-second poll spends a fifth of it.
+    - Decided while building (6c fix round, 5): the kit's
+      `operations.physical` counts the item as lent unless the confirm was a
+      4xx refusal, so a lost or unreadable confirm's report says the item
+      may be checked out.
+  - [ ] 6.3r (follow-up from the 6c fix round) A recorded `/calls` answer for
+    an adoption or release could settle itself by running the same binding
+    half as the adopt and release handlers (`handlers/inventory.go`), so the
+    backend's copy is written with it; until then those two stay with a
+    person. #needs-triage
   - [ ] The UI half (6.3u, a separate builder from the 6c UI handoff): the
     member action with `format: target_id` as a typed-or-scanned input,
     preview then confirm, the poll, and the desk's sentence on Waiting on you

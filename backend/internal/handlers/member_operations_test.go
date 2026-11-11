@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -296,8 +297,8 @@ func poll(t *testing.T, id string) (*httptest.ResponseRecorder, map[string]any) 
 }
 
 // The poll asks the add-on what it recorded for an open confirm and settles
-// the row on a clear answer (recorded happened, unknown did not); in_doubt
-// settles nothing, and past constants.in_doubt_bound the member is told the
+// the row on a clear answer (recorded happened, unknown within call_memory
+// did not, an older unknown is the add-on forgetting); in_doubt settles nothing, and past constants.in_doubt_bound the member is told the
 // desk has it. A settled row is answered from the record alone.
 func TestTheMemberPollSettlesFromTheAddonsRecord(t *testing.T) {
 	recent := time.Now().Add(-time.Minute)
@@ -322,6 +323,7 @@ func TestTheMemberPollSettlesFromTheAddonsRecord(t *testing.T) {
 		{"unknown", row(db.AddonOpIndeterminate, recent), addons.Settlement{State: addons.CallUnknown}, "not_done", true, map[string]bool{opID: false}, false},
 		{"in doubt", row(db.AddonOpIndeterminate, recent), addons.Settlement{State: addons.CallInDoubt}, "checking", true, map[string]bool{}, false},
 		{"in doubt past the bound", row(db.AddonOpIndeterminate, old), addons.Settlement{State: addons.CallInDoubt}, "ask_desk", true, map[string]bool{}, false},
+		{"unknown past call_memory", row(db.AddonOpIndeterminate, time.Now().Add(-addons.CallMemory-time.Hour)), addons.Settlement{State: addons.CallUnknown}, "ask_desk", true, map[string]bool{}, false},
 		{"done", row(db.AddonOpSucceeded, recent), addons.Settlement{}, "done", false, map[string]bool{}, false},
 		{"no change", row(db.AddonOpNoChange, recent), addons.Settlement{}, "no_change", false, map[string]bool{}, false},
 		{"refused", row(db.AddonOpRejected, recent), addons.Settlement{}, "not_done", false, map[string]bool{}, false},
@@ -364,30 +366,52 @@ func TestTheMemberPollSettlesFromTheAddonsRecord(t *testing.T) {
 	}
 }
 
-// The operator's list takes the same path first: recorded happened, unknown
-// did not, in_doubt stays for a person; an add-on that cannot answer settles
-// nothing.
-func TestCallsRecordedSettlesTheRowAsHappened(t *testing.T) {
+// The operator's list takes the same path first. recorded settles any row as
+// happened. unknown settles only a physical row sent within
+// constants.call_memory as not happened: a non-physical row's add-on may keep
+// no write-ahead record (TrueNAS in production), and an older row's add-on
+// may have forgotten it; both stay for a person, as in_doubt does. An
+// adoption or release is never asked, so it stays with a person whose repeat
+// writes the backend's binding. An add-on that cannot answer settles nothing.
+func TestCallsSettleOnlyWhatTheAddonCanVouchFor(t *testing.T) {
 	p := stubPoll(t)
 	answers := map[string]addons.Settlement{
 		"rec": {State: addons.CallRecorded}, "unk": {State: addons.CallUnknown}, "doubt": {State: addons.CallInDoubt},
+		"phys-new": {State: addons.CallUnknown}, "phys-old": {State: addons.CallUnknown}, "phys-edge": {State: addons.CallUnknown},
+		"adopt": {State: addons.CallRecorded}, "release": {State: addons.CallUnknown},
 	}
 	addonsCallAnswer = func(_ context.Context, _, _, id string) (addons.Settlement, error) {
 		p.asked = append(p.asked, id)
 		return answers[id], nil
 	}
-	ops := []db.AddonOperation{{ID: "rec", Target: "truenas"}, {ID: "unk", Target: "truenas"}, {ID: "doubt", Target: "truenas"}}
-	open := settleFromCalls(context.Background(), ops)
-	if len(open) != 1 || open[0].ID != "doubt" {
-		t.Fatalf("open %v", open)
+	sent := func(ago time.Duration) *time.Time { at := time.Now().Add(-ago); return &at }
+	ops := []db.AddonOperation{
+		{ID: "rec", Target: "truenas", Operation: "account.delete", ClaimedAt: sent(time.Hour)},
+		{ID: "unk", Target: "truenas", Operation: "account.delete", ClaimedAt: sent(time.Hour)},
+		{ID: "doubt", Target: "truenas", Operation: "account.delete", ClaimedAt: sent(time.Hour)},
+		{ID: "phys-new", Target: "inventory", Operation: "item.checkout", ClaimedAt: sent(2 * addons.InDoubtBound)},
+		{ID: "phys-old", Target: "inventory", Operation: "item.checkout", ClaimedAt: sent(addons.CallMemory + time.Hour)},
+		{ID: "phys-edge", Target: "inventory", Operation: "item.checkout", ClaimedAt: sent(addons.CallMemory - time.Second)},
+		{ID: "adopt", Target: "truenas", Operation: "account.adopt", ClaimedAt: sent(time.Hour)},
+		{ID: "release", Target: "truenas", Operation: "account.release", ClaimedAt: sent(time.Hour)},
 	}
-	if len(p.resolved) != 2 || !p.resolved["rec"] || p.resolved["unk"] {
-		t.Errorf("settled %v, want rec happened and unk not", p.resolved)
+	var ids []string
+	for _, o := range settleFromCalls(context.Background(), ops) {
+		ids = append(ids, o.ID)
+	}
+	if got := strings.Join(ids, ","); got != "unk,doubt,phys-old,phys-edge,adopt,release" {
+		t.Fatalf("open %s", got)
+	}
+	if len(p.resolved) != 2 || !p.resolved["rec"] || p.resolved["phys-new"] {
+		t.Errorf("settled %v, want rec happened and phys-new not", p.resolved)
+	}
+	if slices.Contains(p.asked, "adopt") || slices.Contains(p.asked, "release") {
+		t.Errorf("asked about an adoption or release: %v", p.asked)
 	}
 
 	p = stubPoll(t)
 	p.answerEr = addons.ErrFeatureNotDeclared
-	if open := settleFromCalls(context.Background(), ops); len(open) != 3 || len(p.asked) != 1 || len(p.resolved) != 0 {
+	if open := settleFromCalls(context.Background(), ops[:3]); len(open) != 3 || len(p.asked) != 1 || len(p.resolved) != 0 {
 		t.Errorf("an add-on without calls: open %d, asked %v, settled %v", len(open), p.asked, p.resolved)
 	}
 }

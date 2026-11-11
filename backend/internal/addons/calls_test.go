@@ -58,8 +58,10 @@ func checkout(id string) CallRequest {
 	}
 }
 
-// constants.in_doubt_bound is the backend's InDoubtBound: the registry is the
-// one statement of how long a physical call is the add-on's to settle.
+// constants.in_doubt_bound is the backend's InDoubtBound and
+// constants.call_memory its CallMemory: the registry is the one statement of
+// how long a physical call is the add-on's to settle, and how long its
+// unknown can be believed.
 func TestInDoubtBoundIsTheContracts(t *testing.T) {
 	var reg struct {
 		Constants map[string]struct {
@@ -71,6 +73,9 @@ func TestInDoubtBoundIsTheContracts(t *testing.T) {
 	}
 	if got := reg.Constants["in_doubt_bound"].Value; isoCooldown(got.(string)) != InDoubtBound {
 		t.Errorf("constants.in_doubt_bound is %q and InDoubtBound %v; one of them moved", got, InDoubtBound)
+	}
+	if got := reg.Constants["call_memory"].Value; isoCooldown(got.(string)) != CallMemory {
+		t.Errorf("constants.call_memory is %q and CallMemory %v; one of them moved", got, CallMemory)
 	}
 	if h := PhysicalHold(); h.For != InDoubtBound || strings.Join(h.Operations, ",") != "item.checkout" {
 		t.Errorf("PhysicalHold is %+v", h)

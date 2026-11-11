@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -157,6 +158,99 @@ func TestLiveTheUnsettledCallIsNamedAndReadBackByItsSubjectOnly(t *testing.T) {
 	}
 	if _, _, open, _ := UnconfirmedChangeAt(ctx, physTarget, "u-kofi", "item.checkout", 0); open {
 		t.Error("a settled call is still unsettled")
+	}
+}
+
+// CALL_UNSETTLED in the insert: confirms of one physical call on one subject,
+// sent together, leave exactly one record; the rest are refused naming it.
+// Rounds, because a race lost once is luck.
+func TestLiveConcurrentPhysicalConfirmsLeaveOneRecord(t *testing.T) {
+	ctx := physicalLive(t)
+	const n = 12
+	for round := range 5 {
+		if _, err := PG.Exec(ctx, `DELETE FROM addon_operations WHERE target = $1`, physTarget); err != nil {
+			t.Fatal(err)
+		}
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		ids, refused := make(chan string, n), make(chan string, n)
+		for range n {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				id, err := BeginAddonOperation(ctx, AddonOperationParams{Target: physTarget, Operation: "item.checkout",
+					ActorID: "u-kofi", SubjectID: "u-kofi", Physical: true})
+				var open *OpenCallError
+				switch {
+				case err == nil:
+					ids <- id
+				case errors.As(err, &open):
+					refused <- open.OperationID
+				default:
+					t.Error(err)
+				}
+			}()
+		}
+		close(start)
+		wg.Wait()
+		close(ids)
+		close(refused)
+		var rows int
+		if err := PG.QueryRow(ctx, `SELECT count(*) FROM addon_operations WHERE target = $1`, physTarget).Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+		winner := <-ids
+		if rows != 1 || len(ids) != 0 || len(refused) != n-1 {
+			t.Fatalf("round %d: %d records, %d more ids, %d refused; want exactly one record", round, rows, len(ids)+1, len(refused))
+		}
+		for id := range refused {
+			if id != winner {
+				t.Fatalf("round %d: a refusal named %s, not the open %s", round, id, winner)
+			}
+		}
+	}
+}
+
+// Every open row refuses, not the newest alone: one in doubt behind a later
+// refused one, and one never claimed. A settled or answered one does not, and
+// another subject, operation or a non-physical record is never asked.
+func TestLiveAnyOpenPhysicalRowRefusesTheNext(t *testing.T) {
+	ctx := physicalLive(t)
+	begin := func(op, subject string, physical bool) (string, error) {
+		return BeginAddonOperation(ctx, AddonOperationParams{Target: physTarget, Operation: op,
+			ActorID: subject, SubjectID: subject, Physical: physical})
+	}
+	doubt := sentRow(t, ctx, "item.checkout", "u-kofi", AddonOpIndeterminate, time.Hour)
+	if _, err := PG.Exec(ctx, `INSERT INTO addon_operations (target, operation, actor_id, subject_id, status, claimed_at, settled_at)
+		VALUES ($1, 'item.checkout', 'u-kofi', 'u-kofi', 'rejected', NOW(), NOW())`, physTarget); err != nil {
+		t.Fatal(err)
+	}
+	var open *OpenCallError
+	if _, err := begin("item.checkout", "u-kofi", true); !errors.As(err, &open) || open.OperationID != doubt || open.SentAt.IsZero() {
+		t.Fatalf("behind a rejected row: %v, want %s named", err, doubt)
+	}
+	for _, other := range [][2]string{{"item.checkout", "u-xavier"}, {"item.return", "u-kofi"}} {
+		if _, err := begin(other[0], other[1], true); err != nil {
+			t.Errorf("%v: %v", other, err)
+		}
+	}
+	if _, err := begin("item.checkout", "u-kofi", false); err != nil {
+		t.Errorf("a non-physical record was asked: %v", err)
+	}
+
+	if _, err := ResolveAddonOperation(ctx, physTarget, doubt, false, SyndraReader, AddonUnresolvedGrace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PG.Exec(ctx, `DELETE FROM addon_operations WHERE target = $1 AND subject_id = 'u-kofi' AND id <> $2`, physTarget, doubt); err != nil {
+		t.Fatal(err)
+	}
+	unclaimed, err := begin("item.checkout", "u-kofi", true)
+	if err != nil {
+		t.Fatalf("an answered row still refused: %v", err)
+	}
+	if _, err := begin("item.checkout", "u-kofi", true); !errors.As(err, &open) || open.OperationID != unclaimed {
+		t.Errorf("an unclaimed row (about to be sent) did not refuse: %v", err)
 	}
 }
 

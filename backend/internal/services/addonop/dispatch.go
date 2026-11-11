@@ -53,7 +53,8 @@ var ErrReadNotDispatched = errors.New("addonop: a read is never dispatched; it g
 var ErrPhysicalNotResent = errors.New("addonop: a physical operation is never sent again")
 
 // ErrCallUnsettled refuses a physical operation while this subject's earlier
-// one is sent and unsettled (CALL_UNSETTLED). The add-on refuses it too; this
+// one is open, sent or about to be, and unsettled (CALL_UNSETTLED), checked
+// in the record's insert (db.OpenCallError). The add-on refuses it too; this
 // is the backend not leaving "never twice" to the least trusted component.
 var ErrCallUnsettled = errors.New("addonop: an earlier call of this operation for this subject is still unsettled")
 
@@ -324,19 +325,6 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 			return Result{}, err
 		}
 	}
-	if op.Effect == addons.EffectPhysical {
-		// Before the record, so a refused retry leaves none. Grace 0: a
-		// claimed call still awaiting its answer is unsettled too.
-		earlier, at, open, err := unconfirmedChangeAt(ctx, req.Target, req.SubjectID, req.Operation, 0)
-		if err != nil {
-			// Fail closed: not knowing whether one is in doubt is not
-			// knowing that sending again cannot act twice.
-			return Result{}, fmt.Errorf("%w: it could not be read: %v", ErrCallUnsettled, err)
-		}
-		if open {
-			return Result{}, &UnsettledError{OperationID: earlier, SentAt: at}
-		}
-	}
 	about := req.About
 	if !aboutOperations[req.Operation] {
 		about = ""
@@ -349,8 +337,21 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 		SubjectID: req.SubjectID,
 		About:     about,
 		RetryOf:   req.RetryOf,
+		// The backend's half of CALL_UNSETTLED: one check, in the insert, so
+		// a refused confirm leaves no record and sends nothing. The add-on
+		// refuses it too; this is not leaving "never twice" to the least
+		// trusted component.
+		Physical: op.Effect == addons.EffectPhysical,
 	})
-	if err != nil {
+	var open *db.OpenCallError
+	switch {
+	case errors.As(err, &open):
+		return Result{}, &UnsettledError{OperationID: open.OperationID, SentAt: open.SentAt}
+	case err != nil && op.Effect == addons.EffectPhysical:
+		// Fail closed: not knowing whether one is open is not knowing that
+		// sending again cannot act twice.
+		return Result{}, fmt.Errorf("%w: it could not be checked, nothing dispatched: %v", ErrCallUnsettled, err)
+	case err != nil:
 		// Nothing was sent. The record is the precondition for the call, not a
 		// log of it, so failing to write it means the call does not happen.
 		return Result{}, fmt.Errorf("addonop: no record committed, nothing dispatched: %w", err)

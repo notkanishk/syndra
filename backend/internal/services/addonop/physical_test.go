@@ -17,35 +17,18 @@ import (
 const member = "289471021834760193"
 
 // physicalHarness is the harness with item.checkout resolved (the policy's
-// entry) and the subject's earlier calls readable.
-func physicalHarness(t *testing.T) (*harness, *unsettledStub) {
+// entry). passwordOp is the harness's own password.set, for the tests that
+// need a non-physical operation.
+func physicalHarness(t *testing.T) (h *harness, passwordOp addons.EffectiveOperation) {
 	t.Helper()
-	h := newHarness(t)
-	u := &unsettledStub{passwordOp: h.op}
+	h = newHarness(t)
+	passwordOp = h.op
 	h.op = addons.EffectiveOperation{
 		ID: "item.checkout", Scope: addons.ScopeMember, Confirm: true, Available: true,
 		Params: []addons.ParamSpec{{Name: "item_id", Type: "string", Required: true, Format: addons.FormatTargetID}},
 		Effect: addons.EffectPhysical, Result: "common/records.json",
 	}
-	saved := unconfirmedChangeAt
-	unconfirmedChangeAt = func(_ context.Context, target, subject, operation string, grace time.Duration) (string, time.Time, bool, error) {
-		h.record("unsettled?")
-		u.asked = append(u.asked, strings.Join([]string{target, subject, operation, grace.String()}, "|"))
-		return u.id, u.at, u.open, u.err
-	}
-	t.Cleanup(func() { unconfirmedChangeAt = saved })
-	return h, u
-}
-
-type unsettledStub struct {
-	// passwordOp is the harness's own password.set, for the tests that
-	// need a non-physical operation.
-	passwordOp addons.EffectiveOperation
-	id         string
-	at         time.Time
-	open       bool
-	err        error
-	asked      []string
+	return h, passwordOp
 }
 
 func checkout() Request {
@@ -68,53 +51,49 @@ func TestAPhysicalOperationIsNeverResent(t *testing.T) {
 	}
 }
 
-// Physical rule 2, the backend's half of CALL_UNSETTLED: while the subject's
-// earlier call of this operation is sent and unsettled (grace 0: a claimed
-// call still awaiting its answer counts), a new one is refused before it has
-// a record, naming the earlier one. Not knowing is refusing.
+// Physical rule 2, the backend's half of CALL_UNSETTLED: the record is
+// asked for as physical, so the insert itself refuses it while an earlier
+// call is open (db.OpenCallError, one check under one lock); the refusal names
+// the earlier call and nothing is sent. Not knowing is refusing.
 func TestAnUnsettledPhysicalCallRefusesTheNext(t *testing.T) {
-	h, u := physicalHarness(t)
+	h, _ := physicalHarness(t)
 	sent := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
-	u.id, u.at, u.open = "rec-earlier", sent, true
+	h.beginErr = &db.OpenCallError{OperationID: "rec-earlier", SentAt: sent}
 	_, err := Dispatch(context.Background(), checkout())
 	var unsettled *UnsettledError
 	if !errors.As(err, &unsettled) || !errors.Is(err, ErrCallUnsettled) || unsettled.OperationID != "rec-earlier" || !unsettled.SentAt.Equal(sent) {
 		t.Fatalf("err %v, want the earlier call named", err)
 	}
-	if len(h.begun) != 0 || len(h.calls) != 0 {
-		t.Fatalf("a refused retry left a record or a call: %s", h.order())
-	}
-	if want := "inventory|" + member + "|item.checkout|0s"; len(u.asked) != 1 || u.asked[0] != want {
-		t.Errorf("asked %v, want %q", u.asked, want)
+	if len(h.begun) != 1 || !h.begun[0].Physical || len(h.calls) != 0 {
+		t.Fatalf("not asked as physical, or a refused confirm was sent: %+v, %s", h.begun, h.order())
 	}
 
-	u.open, u.err = false, errors.New("db down")
+	h.beginErr = errors.New("db down")
 	h.begun, h.calls = nil, nil
 	if _, err := Dispatch(context.Background(), checkout()); !errors.Is(err, ErrCallUnsettled) || len(h.calls) != 0 {
-		t.Fatalf("an unreadable record let a call through: %v, %d calls", err, len(h.calls))
+		t.Fatalf("an unwritable record let a call through: %v, %d calls", err, len(h.calls))
 	}
 
-	// A settled earlier call is no obstacle, and the check comes after
-	// confirmation and before the record.
-	u.err = nil
-	h.steps = nil
-	if _, err := Dispatch(context.Background(), checkout()); err != nil {
-		t.Fatal(err)
-	}
-	if got := h.order(); !strings.Contains(got, "unsettled? -> begin -> mint -> call") {
-		t.Errorf("order %s", got)
+	h.beginErr = nil
+	if _, err := Dispatch(context.Background(), checkout()); err != nil || len(h.calls) != 1 {
+		t.Fatalf("an open-free confirm: %v, %d calls", err, len(h.calls))
 	}
 }
 
-// A non-physical operation never asks: password.set has its own settling.
+// A non-physical operation is never asked as physical: password.set has its
+// own settling and its own resend, and a failed record is no CALL_UNSETTLED.
 func TestOnlyAPhysicalCallAsksWhetherOneIsUnsettled(t *testing.T) {
-	h, u := physicalHarness(t)
-	h.op = u.passwordOp
+	h, passwordOp := physicalHarness(t)
+	h.op = passwordOp
 	if _, err := Dispatch(context.Background(), passwordSet()); err != nil {
 		t.Fatal(err)
 	}
-	if len(u.asked) != 0 {
-		t.Errorf("password.set asked %v", u.asked)
+	if h.begun[0].Physical {
+		t.Errorf("password.set asked as physical: %+v", h.begun[0])
+	}
+	h.beginErr = errors.New("db down")
+	if _, err := Dispatch(context.Background(), passwordSet()); errors.Is(err, ErrCallUnsettled) {
+		t.Errorf("a password's failed record read as CALL_UNSETTLED: %v", err)
 	}
 }
 
@@ -172,7 +151,7 @@ func TestTwoConfirmsCarryTwoFreshCallIDs(t *testing.T) {
 // rate count, no question about earlier calls, nothing claimed; a member
 // operation previews only for the member acting.
 func TestAPreviewRecordsAndCountsNothing(t *testing.T) {
-	h, u := physicalHarness(t)
+	h, passwordOp := physicalHarness(t)
 	var previewed []string
 	saved := previewAddon
 	previewAddon = func(_ context.Context, target, op, subject, actor string, params map[string]any) addons.ReadReply {
@@ -186,7 +165,7 @@ func TestAPreviewRecordsAndCountsNothing(t *testing.T) {
 	if r, err := Preview(context.Background(), req); err != nil || r.Outcome != addons.OutcomeSucceeded {
 		t.Fatalf("%+v %v", r, err)
 	}
-	if len(h.begun) != 0 || len(h.calls) != 0 || len(u.asked) != 0 || len(h.rateQueries) != 0 || len(previewed) != 1 {
+	if len(h.begun) != 0 || len(h.calls) != 0 || len(h.rateQueries) != 0 || len(previewed) != 1 {
 		t.Fatalf("a preview wrote or counted: %s", h.order())
 	}
 
@@ -198,7 +177,7 @@ func TestAPreviewRecordsAndCountsNothing(t *testing.T) {
 	if _, err := Preview(context.Background(), req); !errors.Is(err, addons.ErrInvalidParams) {
 		t.Errorf("a preview with a bad param: %v", err)
 	}
-	h.op = u.passwordOp
+	h.op = passwordOp
 	if _, err := Preview(context.Background(), passwordSet()); !errors.Is(err, addons.ErrNotPhysical) {
 		t.Errorf("a password previewed: %v", err)
 	}

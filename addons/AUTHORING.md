@@ -1597,10 +1597,13 @@ no one:
   (`addonAttempts` in `backend/internal/addons/transport.go`), and the
   member page's one automatic resend is refused for a physical operation
   (`ErrPhysicalNotResent` in `backend/internal/services/addonop/dispatch.go`).
-- While a subject's earlier call of the operation is sent and unsettled,
-  Syndra refuses the next before it has a record (`ErrCallUnsettled`
-  there), and the add-on MUST too: 409 `CALL_UNSETTLED`, under any
-  `call_id`, the same one included.
+- While a subject's earlier call of the operation is open (sent or about to
+  be, and neither settled nor answered since), Syndra refuses the next in
+  the insert of its record, one check under one advisory lock per subject
+  and operation, so two confirms at once cannot both pass
+  (`OpenCallError` in `backend/internal/db/addon_operations.go`); nothing
+  is recorded or sent. The add-on MUST refuse it too: 409
+  `CALL_UNSETTLED`, under any `call_id`, the same one included.
 - The add-on MUST write the mutation-log intent before it calls the app, and
   MUST NOT execute a physical call whose intent has no recorded result.
 
@@ -1643,7 +1646,8 @@ only a physical one:
   recorded. The add-on is still finding out, and Syndra asks again.
 - `unknown`, no `reply`: no effect recorded. The request never arrived, was
   refused before any write, or every write it made changed nothing. Syndra
-  settles its record as not happened, and the member may try again.
+  settles a physical call's record as not happened, and the member may try
+  again; any other `unknown` it leaves to a person (below).
 
 <!-- fixture: v2/fixtures/call_in_doubt.json -->
 ```json
@@ -1664,6 +1668,18 @@ checking whether it went through" while Syndra asks; a call still
 `in_doubt` after `constants.in_doubt_bound` becomes an item for a person at
 the desk (`PhysicalHold` there), who answers it as they answer any change
 nobody could confirm.
+
+What settles a record (`settleByCall` in
+`backend/internal/handlers/unconfirmed.go`): `recorded` always, as
+happened. `unknown` only for a physical operation sent within
+`constants.call_memory`, as not happened, because rule 2 has its add-on log
+every call before acting, so there no record is no effect. Any other
+`unknown` settles nothing and the record stays for a person: an add-on may
+keep no intent for a non-physical write (an older build, a write sent
+before its log was written ahead), and past `call_memory` it may have
+forgotten. An `account.adopt` or `account.release` is never asked, since
+settling it would leave Syndra's own copy of the binding unwritten; the
+person repeats it, which writes both.
 
 **4. Naturally idempotent.** Checking out an item this subject already
 holds MUST answer `outcome: no_change` with the record, and write nothing

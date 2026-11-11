@@ -84,6 +84,30 @@ func TestPersonHasBothWindows(t *testing.T) {
 	}
 }
 
+// A 5-second poll runs past the in-doubt hour unlimited; sixty at once pass
+// and the sixty-first does not.
+func TestPollAllowsTheUIsPollAndStopsALoop(t *testing.T) {
+	l, now := clocked(nil, nil)
+	r := req("203.0.113.2:1")
+	for i := 0; i < 2*720; i++ {
+		if w := l.Poll(r, "u1"); w != 0 {
+			t.Fatalf("poll %d at 5s limited", i+1)
+		}
+		*now = now.Add(5 * time.Second)
+	}
+	for i := 0; i < 60; i++ {
+		if w := l.Poll(r, "u2"); w != 0 {
+			t.Fatalf("burst poll %d limited", i+1)
+		}
+	}
+	if l.Poll(r, "u2") == 0 {
+		t.Fatal("the 61st poll in a second passed")
+	}
+	if l.Poll(r, "") != 0 || (*Limiter)(nil).Poll(r, "u3") != 0 {
+		t.Fatal("no subject, or no limiter, was counted")
+	}
+}
+
 func TestFailsOpen(t *testing.T) {
 	down := New(func(context.Context, []string, []Rule, time.Time) (time.Duration, error) {
 		return 0, errors.New("connection refused")

@@ -462,8 +462,10 @@ and nothing becomes a major 3 later (owner decisions 18, 20):
      still finding out), or `unknown` (**no effect recorded**: the request
      never arrived or was refused before any write, so it is safe to
      retry). The member's page polls it through the backend, which settles
-     its record on `recorded` or `unknown` (the operator's list asks the same
-     question first, for any write whose answer was lost: decided while
+     its record on `recorded`, or on `unknown` for a physical call sent
+     within `constants.call_memory` (the operator's list asks the same
+     question first, for any write whose answer was lost but an adoption or
+     release, and leaves any other `unknown` to a person: decided while
      building 6c), and the member sees "we are checking whether it went
      through", then the outcome;
      `in_doubt` for longer than `constants.in_doubt_bound` (`PT1H`) becomes

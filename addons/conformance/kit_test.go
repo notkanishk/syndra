@@ -1866,6 +1866,42 @@ func TestTheCallsChecksJudgeOnlyWhatIsDeclared(t *testing.T) {
 	}
 }
 
+// A confirm whose answer is lost or unreadable may have checked the item out,
+// so the last line names it to check; a refusal did nothing, and names none.
+func TestALostConfirmStillNamesTheItemLeft(t *testing.T) {
+	var mu sync.Mutex
+	n := 0
+	url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+		if r.URL.Path != "/operations/item.checkout" {
+			return reply
+		}
+		mu.Lock()
+		n++
+		i := n
+		mu.Unlock()
+		if i == 2 { // preview, then the confirm
+			return []byte("<html>bad gateway</html>")
+		}
+		return reply
+	}, []string{"results", "calls"})
+	cfg := config(url, true)
+	cfg.Item = "item-0001"
+	r, err := Run(context.Background(), cfg)
+	if err != nil && !errors.Is(err, ErrReadsFailed) {
+		t.Fatal(err)
+	}
+	if r.Status("operations.physical") != "fail" || !strings.Contains(r.Left, `item "item-0001" may be checked out`) {
+		t.Errorf("a lost confirm: operations.physical %s, left %q", r.Status("operations.physical"), r.Left)
+	}
+
+	url, _ = serveRewriting(t, testSecret, nil, nil, []string{"results", "calls"})
+	cfg = config(url, true)
+	cfg.Item = "item-none-such"
+	if r, _ = Run(context.Background(), cfg); strings.Contains(r.Left, "item-none-such") {
+		t.Errorf("a refused confirm named its item: %q", r.Left)
+	}
+}
+
 // A physical operation is declared only with feature calls and confirm: true.
 func TestAPhysicalOperationDeclaredWithoutCallsOrConfirmFails(t *testing.T) {
 	for what, edit := range map[string][2]string{

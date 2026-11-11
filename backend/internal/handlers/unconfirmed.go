@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,16 +25,17 @@ import (
 //   - setting.put is read back from the target's own setting, and settled by
 //     Syndra when the read can tell;
 //   - password.set and password.rotate never appear (db.SelfSettledOperations);
-//   - on an add-on declaring calls, every row is first settled by asking it
-//     what it recorded (GET /calls, settleFromCalls), the same question the
-//     member's own page asks;
+//   - on an add-on declaring calls, every row but an adopt or release is first
+//     settled by asking it what it recorded (GET /calls, settleFromCalls), the
+//     same question the member's own page asks;
 //   - a physical row is the add-on's to settle for constants.in_doubt_bound
 //     and only then listed (addons.PhysicalHold), naming the desk.
 //
-// What is left in practice is deletes, and the adopt or release whose answer
-// was lost: those two write only the add-on's binding, which no read Syndra
-// makes can see, so a person looks (the inventory and the binding conflict
-// are where it shows).
+// What is left in practice is deletes, a write whose add-on answered unknown
+// (it may keep no write-ahead record, or have forgotten), and the adopt or
+// release whose answer was lost: those two write the add-on's binding and the
+// backend's copy of it, and only the handler's repeat writes both, so a person
+// looks (the inventory and the binding conflict are where it shows).
 
 // unresolvedGrace is how long a claimed call may go unanswered before it is a
 // question rather than a call in flight; one value for the read, the answer
@@ -106,17 +108,38 @@ func settleFromCalls(ctx context.Context, ops []db.AddonOperation) []db.AddonOpe
 }
 
 // settleByCall asks the add-on what it recorded for one open row, whose id is
-// the call_id it was sent with, and settles the row on a clear answer:
-// recorded happened, unknown did not (no effect was recorded, so trying again
-// is safe). in_doubt settles nothing: the add-on is still finding out. A row
-// settled meanwhile by someone else counts as settled. The answer is returned
-// for the page that asked (the recorded reply's view).
+// the call_id it was sent with, and settles the row on an answer it can
+// vouch for:
+//
+//   - recorded happened, always;
+//   - unknown did not, for a physical row sent within constants.call_memory
+//     only: a physical add-on logs every call before acting (AUTHORING, the
+//     calls rules), so no record there is no effect. Any other row's unknown
+//     may be an add-on that keeps no write-ahead record, and an older row's
+//     is forgetting; either stays for a person;
+//   - in_doubt settles nothing: the add-on is still finding out.
+//
+// An adoption or a release is never asked: settling it here would leave the
+// backend's binding copy unwritten, so a person repeats it, which writes or
+// forgets the binding (tasks 6.3r, #needs-triage). A row settled meanwhile by
+// someone else counts as settled. The answer is returned for the page that
+// asked (the recorded reply's view).
 func settleByCall(ctx context.Context, o db.AddonOperation) (settled bool, s addons.Settlement, err error) {
+	if o.Operation == "account.adopt" || o.Operation == "account.release" {
+		return false, s, nil
+	}
 	s, err = addonsCallAnswer(ctx, o.Target, o.Operation, o.ID)
-	if err != nil || s.State == addons.CallInDoubt {
+	if err != nil {
 		return false, s, err
 	}
-	_, err = dbResolveAddonOperation(ctx, o.Target, o.ID, s.State == addons.CallRecorded, db.SyndraReader, unresolvedGrace)
+	happened := s.State == addons.CallRecorded
+	// A minute's leeway for the two clocks, as settleFromRead.
+	remembered := time.Since(o.SentAt()) < addons.CallMemory-time.Minute
+	vouched := happened || (s.State == addons.CallUnknown && remembered && slices.Contains(addons.PhysicalOperations(), o.Operation))
+	if !vouched {
+		return false, s, nil
+	}
+	_, err = dbResolveAddonOperation(ctx, o.Target, o.ID, happened, db.SyndraReader, unresolvedGrace)
 	if errors.Is(err, db.ErrAddonOperationNotUnresolved) {
 		return true, s, nil
 	}

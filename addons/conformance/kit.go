@@ -187,7 +187,8 @@ type kit struct {
 	// and reply, which /calls must answer recorded (calls.recorded).
 	passwordCall  string
 	passwordReply []byte
-	lent          string // Config.Item, once a physical operation checked it out
+	lent          string // Config.Item, once a physical operation checked it out or may have
+	lentUnsure    bool   // the confirm's answer was lost or unreadable
 	since         int    // index into log of the first canary's request
 	readOnly      bool   // the kit set read_only and has not yet set active
 	created       struct {
@@ -375,7 +376,10 @@ func (k *kit) left() string {
 	if k.readOnly {
 		s += "; and the add-on may still be read_only: set it active"
 	}
-	if k.lent != "" {
+	switch {
+	case k.lentUnsure:
+		s += fmt.Sprintf("; item %q may be checked out to subject %q (the confirm's answer was lost): check it and return it", k.lent, k.cfg.Subject)
+	case k.lent != "":
 		s += fmt.Sprintf("; item %q is checked out to subject %q: return it", k.lent, k.cfg.Subject)
 	}
 	return s

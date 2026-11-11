@@ -152,10 +152,15 @@ func (k *kit) physical(c *check) {
 	callID := k.callID()
 	before, okBefore = k.logRecords(c)
 	confirm := send(request{method: http.MethodPost, target: route, body: k.operationBody(op, callID, params), schema: "operation_request.json"})
+	// Only a refusal says nothing was done: a lost or unreadable answer may
+	// have checked it out, and the report names it either way.
+	if confirm.status/100 != 4 {
+		k.lent = k.cfg.Item
+	}
 	if result(confirm, "succeeded", "the confirm") == nil {
+		k.lentUnsure = k.lent != ""
 		return
 	}
-	k.lent = k.cfg.Item
 	k.advanced(c, before, okBefore, "the confirm")
 	k.callAnswers(c, callID, confirm.body)
 

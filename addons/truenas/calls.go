@@ -203,11 +203,14 @@ func (l *callLeases) holding(callID string) bool {
 //   - the lease: a request with the id executing now is in_doubt;
 //   - the mutation log, back to constants.call_memory: an intent with no
 //     result, or a write that acted or may have with no recorded reply (the
-//     record failed), is in_doubt; anything else is unknown, no effect
-//     recorded, which is the one answer that says trying again is safe.
+//     record failed), is in_doubt; anything else is unknown: no effect
+//     recorded here, which is not "no effect" for a write older than
+//     call_memory or sent before this log was written ahead (5.3b).
 //
-// Every write, apply and lifecycle included, is answered: Syndra settles any
-// record whose answer it lost through here. Never lifecycle-gated: a read of
+// Every write, apply and lifecycle included, is answered. Syndra settles a
+// record whose answer it lost on recorded; this add-on has no physical
+// operation, so its unknown settles nothing and the record stays for a
+// person (AUTHORING, calls: what unknown settles). Never lifecycle-gated: a read of
 // the add-on's own records changes nothing. No operation of this add-on has a
 // secret reply (registry secret_result), so nothing is redacted.
 //

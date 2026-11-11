@@ -24,6 +24,11 @@ import (
 // Held to the registry by TestInDoubtBoundIsTheContracts.
 const InDoubtBound = time.Hour
 
+// CallMemory is constants.call_memory: how long an add-on remembers a call,
+// at least. Past it, its unknown is forgetting, not "no effect". Held to the
+// registry by TestInDoubtBoundIsTheContracts.
+const CallMemory = 30 * 24 * time.Hour
+
 // The three answers of schema/call.json.
 const (
 	CallRecorded = "recorded"

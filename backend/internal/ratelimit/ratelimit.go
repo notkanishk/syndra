@@ -48,6 +48,10 @@ var (
 	// DefaultSelfService is one person's own password or storage writes per
 	// endpoint: ten a minute and fifty an hour.
 	DefaultSelfService = []Rule{{10, time.Minute}, {50, time.Hour}}
+	// DefaultPoll is one person's reads of a page that polls, per endpoint:
+	// sixty at once, then one a second. The UI's 5-second poll spends a fifth
+	// of it, for as long as it runs; a stuck client in a loop meets it.
+	DefaultPoll = []Rule{{60, time.Minute}}
 )
 
 // Env names.
@@ -75,6 +79,7 @@ type Limiter struct {
 	store       Store
 	failures    []Rule
 	selfService []Rule
+	poll        []Rule
 	now         func() time.Time
 
 	limited  sync.Map // endpoint -> *atomic.Int64
@@ -82,9 +87,9 @@ type Limiter struct {
 	down     atomic.Bool
 }
 
-// New is a limiter over store with the given rules.
+// New is a limiter over store with the given rules, and DefaultPoll.
 func New(store Store, failures, selfService []Rule) *Limiter {
-	return &Limiter{store: store, failures: failures, selfService: selfService, now: time.Now}
+	return &Limiter{store: store, failures: failures, selfService: selfService, poll: DefaultPoll, now: time.Now}
 }
 
 // FromEnv is the limiter a process runs: Redis-backed, the defaults unless
@@ -154,6 +159,14 @@ func (l *Limiter) Person(r *http.Request, who string) time.Duration {
 		return 0
 	}
 	return l.take(r, "person:"+who, l.selfService)
+}
+
+// Poll counts one polled read by who (DefaultPoll), as Person counts a write.
+func (l *Limiter) Poll(r *http.Request, who string) time.Duration {
+	if l == nil || who == "" {
+		return 0
+	}
+	return l.take(r, "person:"+who, l.poll)
 }
 
 func (l *Limiter) take(r *http.Request, who string, rules []Rule) time.Duration {

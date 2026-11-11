@@ -65,6 +65,11 @@ type AddonOperationParams struct {
 	// RetryOf names the first send when this is the page's one automatic
 	// resend of the same value. The insert checks it describes the same call.
 	RetryOf string
+	// Physical refuses the record while an earlier one of this operation on
+	// this subject is open (CALL_UNSETTLED, design §4 physical rule 2): the
+	// check and the insert are one statement under one advisory lock, so two
+	// concurrent confirms cannot both pass it.
+	Physical bool
 }
 
 // AddonOperation is one record as an operator surface reads it.
@@ -138,13 +143,41 @@ func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams
 	var id string
 	var details []byte
 	if p.RetryOf == "" {
+		if p.Physical {
+			// Serialises every confirm of this call on this subject, so the
+			// statement below reads the one before it committed (READ
+			// COMMITTED takes its snapshot after the lock). Separated by
+			// chr(31), the unit separator: Postgres text cannot hold NUL.
+			const lock = `SELECT pg_advisory_xact_lock(hashtextextended(concat_ws(chr(31), 'addon_operation', $1::text, $2::text, $3::text), 0))`
+			if _, err := tx.Exec(ctx, lock, p.Target, p.SubjectID, p.Operation); err != nil {
+				return "", fmt.Errorf("lock addon operation: %w", err)
+			}
+		}
+		// An open row is any not settled and not answered since: in flight
+		// (claimed or not yet), or in doubt. Asked only for a physical call.
 		const insertOp = `
-			INSERT INTO addon_operations (target, operation, actor_id, subject_id, status, about)
-			VALUES ($1, $2, $3, $4, 'dispatching', NULLIF($5, ''))
-			RETURNING id`
-		if err := tx.QueryRow(ctx, insertOp, p.Target, p.Operation, p.ActorID, p.SubjectID, p.About).Scan(&id); err != nil {
+			WITH open AS (
+				SELECT id, COALESCE(claimed_at, created_at) AS at FROM addon_operations
+				 WHERE $6 AND target = $1 AND operation = $2 AND subject_id = $4
+				   AND resolution IS NULL AND status IN ('dispatching', 'indeterminate')
+				 ORDER BY created_at DESC LIMIT 1
+			), ins AS (
+				INSERT INTO addon_operations (target, operation, actor_id, subject_id, status, about)
+				SELECT $1, $2, $3, $4, 'dispatching', NULLIF($5, '')
+				 WHERE NOT EXISTS (SELECT 1 FROM open)
+				RETURNING id
+			)
+			SELECT (SELECT id::text FROM ins), (SELECT id::text FROM open), (SELECT at FROM open)`
+		var inserted, earlier *string
+		var at *time.Time
+		if err := tx.QueryRow(ctx, insertOp, p.Target, p.Operation, p.ActorID, p.SubjectID, p.About, p.Physical).
+			Scan(&inserted, &earlier, &at); err != nil {
 			return "", fmt.Errorf("insert addon operation: %w", err)
 		}
+		if inserted == nil {
+			return "", &OpenCallError{OperationID: *earlier, SentAt: *at}
+		}
+		id = *inserted
 	} else {
 		// The resend inherits nothing from the request but the link, and the
 		// link is checked here: it must name a FIRST send of this same call.
@@ -177,6 +210,17 @@ func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams
 		return "", fmt.Errorf("insert addon operation audit: %w", err)
 	}
 	return id, nil
+}
+
+// OpenCallError refuses a physical record while an earlier one of the same
+// call on the same subject is open, naming it. Nothing was written.
+type OpenCallError struct {
+	OperationID string
+	SentAt      time.Time
+}
+
+func (e *OpenCallError) Error() string {
+	return "db: an earlier call is still open: " + e.OperationID
 }
 
 // ErrNotResendable means a resend named a send that is not a first send of the
