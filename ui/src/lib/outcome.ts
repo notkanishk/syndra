@@ -268,7 +268,11 @@ export function outcomeFromError(error: unknown): ActionOutcome {
         ? "Ask someone who runs Syndra to do it, or to give you access."
         : error instanceof ApiError && error.status === 404
           ? "Reload the page to see what is there now."
-          : undefined,
+          : // A membership the add-on cannot list: the server words the step, because
+            // nothing the operator types can fix it ("Change what it says" would be false).
+            error instanceof ApiError && error.details?.field === "unlistable"
+            ? error.details.next
+            : undefined,
   };
 }
 

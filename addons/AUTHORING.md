@@ -1733,12 +1733,13 @@ accepted, on:
 - a field whose role changed since an earlier manifest;
 - a different field declared as the `account` field.
 
-A mapping on a field that answers `enumerable: false` is refused when it is
-made, not at registration: the manifest does not say it, `/values` does.
-
 It drops, logs and otherwise accepts an operation id the registry lacks. The
 kit is stricter on two counts: it fails an operation id missing from the
 registry, and an `operations` list without the `operations` feature.
+
+A mapping on a `membership` field that answers `enumerable: false` is refused
+when it is made, not at registration: the manifest does not say it, `/values`
+does.
 
 ## 14. Evolving
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddMappingButton } from "@/components/targets/AddMappingDialog";
 import { MappingManagement } from "@/components/targets/MappingManagement";
+import { ApiError } from "@/lib/api-client";
 import type { MappingHistory, RoleMapping } from "@/lib/queries/useMappings";
 import type { TargetReach } from "@/lib/queries/useTargets";
 
@@ -48,6 +49,8 @@ const state: {
   rehearsals: Array<{ acknowledgeScope: boolean }>;
   /** Whatever the rehearsal should carry beyond the plan — `value_checked`. */
   rehearsalExtras: Record<string, unknown>;
+  /** What the rehearsal should refuse with, if anything. */
+  rehearseError?: unknown;
 } = {
   mappings: [mapping],
   holders: [],
@@ -102,6 +105,7 @@ vi.mock("@/lib/queries/useMappings", async () => {
     useRollbackMappingVersion: () => ({ mutate: vi.fn(), isPending: false }),
     rehearseMappingEdit: vi.fn(async (_id: string, _value: string, acknowledgeScope: boolean) => {
       state.rehearsals.push({ acknowledgeScope });
+      if (state.rehearseError) throw state.rehearseError;
       return {
         op: "edit_mapping",
         plan_id: "plan_1",
@@ -141,6 +145,7 @@ function renderMappings() {
 }
 
 beforeEach(() => {
+  state.rehearseError = undefined;
   state.mappings = [mapping];
   state.holders = [];
   state.history = { target: "truenas", current_version: 0, unpublished_changes: [],
@@ -352,6 +357,34 @@ describe("a value the target could not be asked about", () => {
 
     await waitFor(() => expect(screen.getByText(/owns stays with it/)).toBeTruthy());
     expect(screen.queryByText(/could not be reached, so/)).toBeNull();
+  });
+});
+
+/**
+ * A mapping made earlier on a membership the add-on cannot list. Editing it is
+ * refused, and the step is the server's: "change what it says above" is false,
+ * because nothing typed in the dialog can fix it.
+ */
+describe("a mapping on a membership the system cannot list", () => {
+  it("shows the server's sentence and step, not the default refused step", async () => {
+    state.rehearseError = new ApiError(400, {
+      error: "VALIDATION_FAILED",
+      message: "TrueNAS doesn't list its groups, so Syndra can't check or manage one. Nothing was changed.",
+      details: {
+        field: "unlistable",
+        next: "Remove this mapping, or ask whoever maintains the TrueNAS add-on to make them listable.",
+      },
+    });
+    renderMappings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.change(screen.getByLabelText("Group on TrueNAS"), { target: { value: "lab_x" } });
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+
+    await waitFor(() => expect(screen.getByText(/TrueNAS doesn't list its groups/)).toBeTruthy());
+    expect(screen.getByText(/ask whoever maintains the TrueNAS add-on/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/Change what it says above/);
+    expect(document.body.textContent).not.toMatch(/addon:/);
   });
 });
 

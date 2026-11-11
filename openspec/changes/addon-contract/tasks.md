@@ -1192,7 +1192,14 @@ settings with the full §5 rules.
   mapping-union managed set; the kit's `values` check requires it; a mapping
   on a non-enumerable membership is refused at `ResolvesValue`, not at
   registration (the manifest does not say it; `/values` does, once). Not a
-  rollout gate. #ready-for-agent
+  rollout gate. (owner to confirm the resolution)
+  *Review fixes (11 Nov 2026):* the refusal is `ErrFieldNotListable`
+  (inside the `ErrValueNotResolvable` family), answered 400 with
+  `details.field = "unlistable"`, the system's name and the field's label, and
+  its own next step in `details.next`; the Edit dialog shows both, never the
+  default "change what it says". The Add dialog says the same plain sentence
+  when `MappableValues.enumerable` is false (it used to show the built-in-groups
+  sentence and never read the flag).
 - [ ] 5.3e Pre-existing: allowances (`validateAllowanceAgainstTarget`,
   `backend/internal/handlers/allowances.go`) check structure only and never
   call `ResolvesValue`, so an allowance can name a value no `/values` lists,

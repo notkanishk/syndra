@@ -238,6 +238,15 @@ describe("the group list", () => {
     expect(state.refetched).toBe(1);
   });
 
+  it("says a field the system cannot list is not a list of built-in groups", () => {
+    state.values = values({ values: [], enumerable: false });
+    render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
+    expect(screen.getByText("TrueNAS doesn't list its groups.")).toBeTruthy();
+    expect(screen.getByText(/Ask whoever maintains the TrueNAS add-on to make them listable/)).toBeTruthy();
+    expect(screen.queryByText(/all of them built in/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Read again" })).toBeNull();
+  });
+
   it("says when the list was never read, with no count", () => {
     state.values = null;
     state.valuesError = new ApiError(409, { error: "VALUES_NEVER_READ", message: "never" });
