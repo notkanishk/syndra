@@ -1,5 +1,7 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApproveButton, HoldingNote } from "@/components/requests/Holding";
 
@@ -874,8 +876,11 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
  * Zitadel"): a TrueNAS change is never called Zitadel's (re-audit R11). An
  * older server sends no split; its retries were all counted as Zitadel's.
  */
-export function systemsOf(by: Record<string, number> | undefined): string {
-  const names = sortNames(Object.keys(by ?? {}).filter((t) => (by?.[t] ?? 0) > 0).map(targetLabel));
+export function systemsOf(
+  by: Record<string, number> | undefined,
+  nameOf: (target: string) => string = targetLabel,
+): string {
+  const names = sortNames(Object.keys(by ?? {}).filter((t) => (by?.[t] ?? 0) > 0).map(nameOf));
   if (names.length === 0) return "Zitadel";
   return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
@@ -894,6 +899,7 @@ export function Retries({
   /** False when this server sends nothing again on its own (REVOCATION_DRAIN_ENABLED=false); null while unknown (N3). */
   auto?: AutoRetry;
 }) {
+  const nameOf = useSystemNames();
   const seen = useMarkGaveUpSeen();
   const stopped = useGaveUpPropagations();
   // What each refusal was, once per cause with how many: the same words as
@@ -912,7 +918,7 @@ export function Retries({
           <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
             <StatusDot tone="warn" />
             <span className="text-warn-text">
-              {systemsOf(retryingBy)} didn&apos;t take {one(retrying)}.{" "}
+              {systemsOf(retryingBy, nameOf)} didn&apos;t take {one(retrying)}.{" "}
               {auto === null
                 ? `Each change on Pending changes says whether Syndra sends it again on its own or it waits for you.`
                 : auto
@@ -931,7 +937,7 @@ export function Retries({
             <StatusDot tone="danger" />
             <span className="text-danger-text">
               Syndra stopped sending {one(gaveUp)}, so {gaveUp === 1 ? "it isn't" : "they aren't"} in{" "}
-              {systemsOf(gaveUpBy)}. Pending changes lists {gaveUp === 1 ? "it" : "them"} and what to do: give a role
+              {systemsOf(gaveUpBy, nameOf)}. Pending changes lists {gaveUp === 1 ? "it" : "them"} and what to do: give a role
               again from the person&apos;s page; a revocation shows in Drift after Syndra&apos;s next check, to revoke
               there. Then mark this seen. It marks it for you only; each person marks their own.
               {[...causes].map(([reason, n]) => (
@@ -973,6 +979,7 @@ export function Retries({
 function PendingChanges({ count, reachable }: { count: number; reachable: boolean }) {
   const drain = useDrainPropagations();
   const auto = useAutoRetry();
+  const nameOf = useSystemNames();
   const [outcome, setOutcome] = useState<(Outcome & { word?: string }) | null>(null);
 
   return (
@@ -995,7 +1002,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           onClick={async () => {
             setOutcome(null);
             try {
-              setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto, count));
+              setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto, count, nameOf));
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -1106,14 +1113,15 @@ function sentTo(opType: string, roles: number): string {
  * and refused the read" send them to different machines.
  */
 function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
+  const nameOf = useSystemNames();
   return (
     <Card>
       <CardHeader title="Systems Syndra could not check" count={targets.length} tone="danger" />
-      <Capped items={sortByName(targets, (t) => targetLabel(t.target), (t) => t.target)} href="/system/targets">
+      <Capped items={sortByName(targets, (t) => nameOf(t.target), (t) => t.target)} href="/system/targets">
         {(t) => (
           <CardRow key={t.target} className="flex-wrap">
             <div className="flex-1 text-[14.5px]">
-              <strong className="font-semibold">{targetLabel(t.target)}</strong> hasn&rsquo;t been
+              <strong className="font-semibold">{nameOf(t.target)}</strong> hasn&rsquo;t been
               read since <Relative iso={t.since} />.
               <span className="text-faint">
                 {" "}
@@ -1123,7 +1131,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
                 <div className="mt-1 text-[13px] text-faint">{whyNotChecked(t.reason)}</div>
               )}
             </div>
-            <ArrowLink href={`/system/targets/${t.target}`}>{`Open ${targetLabel(t.target)}`}</ArrowLink>
+            <ArrowLink href={`/system/targets/${t.target}`}>{`Open ${nameOf(t.target)}`}</ArrowLink>
           </CardRow>
         )}
       </Capped>
@@ -1145,6 +1153,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
  * this deployment that is one row.
  */
 function MergeFindingsWaiting({ count }: { count: number }) {
+  const nameOf = useSystemNames();
   const targets = useTargets();
   const rows = targets.data ?? [];
 
@@ -1161,7 +1170,7 @@ function MergeFindingsWaiting({ count }: { count: number }) {
         </div>
         {rows.map((row) => (
           <ArrowLink key={row.target} href={`/system/targets/${row.target}`}>
-            {`Open ${targetLabel(row.target)}`}
+            {`Open ${nameOf(row.target)}`}
           </ArrowLink>
         ))}
       </CardRow>
@@ -1176,9 +1185,10 @@ function MergeFindingsWaiting({ count }: { count: number }) {
  * themselves (A-13 §5).
  */
 function NotConfirmed({ count, bySystem }: { count: number; bySystem: Record<string, number> }) {
+  const nameOf = useSystemNames();
   const systems = Object.entries(bySystem)
     .filter(([, n]) => n > 0)
-    .sort(([a], [b]) => compareNames(targetLabel(a), targetLabel(b)));
+    .sort(([a], [b]) => compareNames(nameOf(a), nameOf(b)));
   return (
     <Card>
       <CardHeader
@@ -1190,9 +1200,9 @@ function NotConfirmed({ count, bySystem }: { count: number; bySystem: Record<str
       {systems.map(([target, n]) => (
         <CardRow key={target} className="flex-wrap">
           <span className="flex-1 text-[14.5px]">
-            {targetLabel(target)} <span className="text-faint">· {n === 1 ? "1 change" : `${n} changes`}</span>
+            {nameOf(target)} <span className="text-faint">· {n === 1 ? "1 change" : `${n} changes`}</span>
           </span>
-          <ArrowLink href={`/system/targets/${target}#waiting`}>{`Open ${targetLabel(target)}`}</ArrowLink>
+          <ArrowLink href={`/system/targets/${target}#waiting`}>{`Open ${nameOf(target)}`}</ArrowLink>
         </CardRow>
       ))}
     </Card>

@@ -1,7 +1,11 @@
 import type { StatusTone } from "@/components/ui/Badge";
 import { daysUntil, formatShortDate } from "@/lib/format";
 import { ABOUT } from "@/lib/greeting";
+import { MEMBER_NAV, navLeaves } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
+
+/** The storage page's link, labelled as the nav labels it: one source for the name. */
+const STORAGE_LEAF = navLeaves(MEMBER_NAV).find((l) => l.href === "/storage")!;
 
 /**
  * My access's one line (A-18 §2 A): the single thing worth knowing, chosen
@@ -120,7 +124,7 @@ export function headerLine(facts: HeaderFacts): HeaderLine {
     return {
       tone: "neutral",
       text: `Your ${facts.storage.name} account is ready. Set its password to connect.`,
-      link: { label: "Network storage", href: "/storage" },
+      link: { label: STORAGE_LEAF.label, href: STORAGE_LEAF.href },
     };
   }
 

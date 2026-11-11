@@ -12,7 +12,7 @@ import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDeta
 import { RoleRef } from "@/components/names/RoleRef";
 import { fieldNoun, limitWordsFor, membershipNoun, type EntitlementField } from "@/lib/fields";
 import { schemaReason } from "@/components/states/SchemaState";
-import { useFieldSchemaState } from "@/lib/queries/useFieldSchema";
+import { useFieldSchemaState, useSystemNames } from "@/lib/queries/useFieldSchema";
 import { UntilChoice, untilWords, type Until } from "@/components/targets/UntilChoice";
 import { endOfDayISO, } from "@/lib/time";
 import { fieldWords } from "@/lib/role-mapping-plan";
@@ -23,7 +23,6 @@ import { Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
 import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { Relative } from "@/components/ui/Time";
-import { targetLabel } from "@/lib/nav";
 import {
   useMergeFindings,
   useResolveMergeFinding,
@@ -46,6 +45,7 @@ import {
  * it is the entire reason the merge base exists.
  */
 export function MergeFindings({ target }: { target: string }) {
+  const nameOf = useSystemNames();
   const findings = useMergeFindings(target);
   const resolve = useResolveMergeFinding(target);
   const schemaState = useFieldSchemaState(target);
@@ -60,7 +60,7 @@ export function MergeFindings({ target }: { target: string }) {
   const [finishing, setFinishing] = useState<Set<string>>(new Set());
 
   const rows = findings.data ?? [];
-  const name = targetLabel(target);
+  const name = nameOf(target);
 
   return (
     <Card>
@@ -83,7 +83,8 @@ export function MergeFindings({ target }: { target: string }) {
           if (findings.error) void findings.refetch();
           if (schemaState.error) schemaState.refetch();
         }}
-        errorTitle="The findings could not be read"
+        // Says which read failed: the findings, or the system's fields they are worded from.
+        errorTitle={findings.error ? "The findings could not be read" : `${name}'s fields could not be read`}
         empty={
           <EmptyState
             title="Nothing disputed."

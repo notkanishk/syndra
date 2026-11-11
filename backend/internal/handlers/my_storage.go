@@ -40,6 +40,9 @@ import (
 
 type myTargetView struct {
 	Target string `json:"target"`
+	// Name is what the system is called (systemName), the same name the
+	// operator's roster carries.
+	Name string `json:"name"`
 	// Entitled says at least one mapped role reaches this target for this
 	// person. Derived from the resolver, never from the target's own state — a
 	// member whose account exists and whose entitlement has lapsed is not
@@ -207,6 +210,7 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 // the operator's person page, which reads more from the same set.
 func describeTargetFor(r *http.Request, target, subject string) (myTargetView, services.EntitlementSet, error) {
 	view := myTargetView{Target: target}
+	view.Name, _ = systemName(r.Context(), target)
 	view.Kind, view.EntitlementSchema = acceptedShape(target)
 
 	set, err := svcResolveEntitlementSet(r.Context(), subject, target)

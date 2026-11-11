@@ -36,7 +36,7 @@ vi.mock("@/components/names", () => ({
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveUser: () => ({ value: { display_name: "Charlotte Flair" }, resolved: true }) }),
 }));
-vi.mock("@/components/targets/HomeLimit", () => ({
+vi.mock("@/components/kinds/storage/HomeLimit", () => ({
   HomeLine: () => null,
   LimitDialog: () => null,
   limitVerb: () => "Set a limit",

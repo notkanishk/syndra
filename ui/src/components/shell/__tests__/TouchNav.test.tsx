@@ -12,7 +12,8 @@ const indicators = vi.hoisted(() => ({
   data: undefined as Indicators | undefined,
   isPlaceholderData: false,
 }));
-const targets = vi.hoisted(() => ({ data: [] as Array<{ target: string }> }));
+const targets = vi.hoisted(() => ({ data: [] as Array<{ target: string; name: string }> }));
+const mine = vi.hoisted(() => ({ data: [] as Array<{ target: string; name: string; kind?: string }> }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
 vi.mock("@/lib/ui-view", () => ({
@@ -28,6 +29,7 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => targets }));
 vi.mock("@/lib/queries/useIndicators", () => ({ useIndicatorsRead: () => indicators }));
+vi.mock("@/lib/queries/useMyStorage", () => ({ useMyStorage: () => mine }));
 
 function renderNav() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -51,6 +53,7 @@ beforeEach(() => {
   indicators.data = undefined;
   indicators.isPlaceholderData = false;
   targets.data = [];
+  mine.data = [];
 });
 
 describe("the tab bar carries the rail's own tree", () => {
@@ -61,6 +64,20 @@ describe("the tab bar carries the rail's own tree", () => {
 
     expect(tabLabels()).toEqual(["My access", "Requests", "Network storage"]);
     expect(screen.queryByRole("button", { name: /go to|advanced/i })).toBeNull();
+  });
+
+  // The existing count rule, unchanged (owner, 11 Nov): four tabs fit, a fifth
+  // destination turns the bar into the sheet.
+  it("gives a member a fourth tab for one connected system, and the sheet past four", () => {
+    view.audience = "member";
+    view.isOperator = false;
+    mine.data = [{ target: "lathe", name: "Big laser", kind: "machine" }];
+    const { unmount } = renderNav();
+    expect(tabLabels()).toEqual(["My access", "Requests", "Network storage", "Big laser"]);
+    unmount();
+    mine.data = [...mine.data, { target: "door", name: "Door", kind: "access" }];
+    renderNav();
+    expect(screen.queryByRole("link", { name: "Door" })).toBeNull();
   });
 
   // Basic has four entries and six leaves. Six tabs would be the rail again.

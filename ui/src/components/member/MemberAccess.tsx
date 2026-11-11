@@ -30,7 +30,6 @@ import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import { ShellNotices } from "@/components/shell/ShellNotices";
 import { greeting, lastHere, WELCOME } from "@/lib/greeting";
 import { Crossfade, glideTo } from "@/lib/motion";
-import { targetLabel } from "@/lib/nav";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { sortByName } from "@/lib/sort";
@@ -47,10 +46,14 @@ import { roleName } from "@/lib/names";
  * — no "derived", no effective_role_keys, no role keys.
  */
 export function MemberAccess({ session }: { session: SessionUser }) {
-  const schemaOf = useSchemaSource(false);
   // The member's home is a screen's first paint (S11): the greeting tints in, then the cards arrive.
   const head = usePageHead();
   const access = useUserAccess(session.id);
+  // Only the holds in force are drawn, and only they need their system's
+  // fields to be worded: no hold, no read of /me/targets on this card's behalf
+  // (review finding 6; the rail reads it for its own rows).
+  const inForce = (access.data?.allowances ?? []).filter((allowance) => allowance.in_force);
+  const schemaOf = useSchemaSource(false, inForce.length > 0);
   const grants = useUserGrants(session.id);
   const changes = useMyChanges();
   const catalog = useCatalogProjects();
@@ -139,7 +142,6 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   // Only what still applies — a lifted or lapsed hold is history, not
   // something they need to read about on the page that answers "what can I
   // use right now". Same object PersonAccess shows an operator, member voice.
-  const inForce = (access.data?.allowances ?? []).filter((allowance) => allowance.in_force);
   const unread = !observation?.read_at;
 
   // A project's name for the line: the read's own when it resolved, else the
@@ -196,7 +198,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
           const target = (storage.data ?? []).find(
             (t) => t.entitled && (!t.credential.set || t.credential.needs_re_enrolment),
           );
-          return target ? { name: targetLabel(target.target) } : undefined;
+          return target ? { name: target.name } : undefined;
         })(),
         requests: (myRequests.data ?? [])
           .filter((r) => r.status === "pending")

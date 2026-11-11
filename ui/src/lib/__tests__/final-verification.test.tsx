@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { Retries } from "@/components/home/Home";
 import { removalOutcome } from "@/components/people/RemovalDialog";
-import { offlineNext } from "@/components/people/PersonStorage";
+import { offlineNext } from "@/components/people/PersonSystems";
 import { decidedByBulk } from "@/components/requests/RequestsScreen";
 import { revokeOutcome } from "@/components/review/UnexplainedAccess";
 import { waitsBeforeLine } from "@/components/states/useWaitsBeforeLine";

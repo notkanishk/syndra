@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import type { EntitlementField } from "@/lib/fields";
-import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
 
@@ -56,6 +55,12 @@ export type TargetStatus = "cannot_connect" | "offline" | "waiting_to_retry" | "
 
 export interface TargetSummary {
   target: string;
+  /** What it is called (backend `systemName`): the operator's name, else the
+   * accepted manifest's product, else the id title-cased. Every surface draws
+   * the system by this. */
+  name: string;
+  /** An operator named it; the Name setting can go back to the default. */
+  name_set?: boolean;
   registered: boolean;
   auth_mode: string;
   /** Whether that secret still loads — read now, not at start-up. */
@@ -94,7 +99,7 @@ export function useTargets(enabled = true) {
     // as often as the rail's indicators are, and never cached longer than that.
     staleTime: 30_000,
     refetchInterval: 30_000,
-    select: (data) => sortByName(data.targets ?? [], (t) => targetLabel(t.target), (t) => t.target),
+    select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
   });
 }
 
@@ -567,6 +572,23 @@ export function useSetTargetProject(target: string) {
       }),
     // The roster carries the project, so it is the whole list that is read again.
     onSuccess: () => invalidateAfter(client, "target"),
+  });
+}
+
+/**
+ * Naming a system: what members and every page call it. Blank goes back to
+ * the default (the add-on's product, else the id). Changes nobody's access;
+ * both rosters carry the name, so both are read again.
+ */
+export function useSetTargetName(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      request<{ target: string; name: string; name_set: boolean }>(`/targets/${target}/name`, {
+        method: "PUT",
+        body: { name },
+      }),
+    onSuccess: () => invalidateAfter(client, "target", { extra: [["me", "targets"]] }),
   });
 }
 

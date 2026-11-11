@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 
 import { GoTo } from "@/components/ui/GoTo";
 import { otherDialogOpen, typingIn } from "@/lib/keys";
-import { navFor, targetNav } from "@/lib/nav";
+import { memberNav, navFor, targetNav } from "@/lib/nav";
+import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useTargets } from "@/lib/queries/useTargets";
 import { useUiView } from "@/lib/ui-view";
 
@@ -20,7 +21,13 @@ export function GoToHost() {
   const [open, setOpen] = useState(false);
   const { audience, isOperator } = useUiView();
   const { data: targets } = useTargets(isOperator);
-  const nav = audience === "advanced" ? targetNav((targets ?? []).map((t) => t.target)) : navFor(audience);
+  const { data: mine } = useMyStorage(audience === "member");
+  const nav =
+    audience === "advanced"
+      ? targetNav(targets ?? [])
+      : audience === "member"
+        ? memberNav(mine ?? [])
+        : navFor(audience);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

@@ -1,29 +1,31 @@
 "use client";
 
-import { roleOf } from "@/lib/fields";
-import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
-import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import type { ReactNode } from "react";
 
 import { UserName } from "@/components/names/UserName";
-import { RowSkeleton } from "@/components/states";
+import {
+  CardTop,
+  Dotted,
+  Faint,
+  HoldRow,
+  isStorage,
+  OfflineNotice,
+  reachWords,
+  Row,
+  Status,
+  SystemsSection,
+  useRoleNames,
+} from "@/components/people/PersonSystems";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { StatusDot } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
 import { NextStep } from "@/components/ui/NextStep";
-import { Card, CardRow } from "@/components/ui/Card";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
-import { Notice } from "@/components/ui/Notice";
-import { Relative } from "@/components/ui/Time";
-import { Tinted } from "@/lib/motion";
 import { formatClock, formatList, formatRelative, formatShortDate } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
-import { usePersonTargets, type PersonTargetView, type RoleSource, type StoragePlace } from "@/lib/queries/useMyStorage";
-
-import { useAutoRetry } from "@/lib/queries/useIndicators";
-import { useTargets } from "@/lib/queries/useTargets";
-import { sortByName, sortNames } from "@/lib/sort";
+import { Tinted } from "@/lib/motion";
+import type { PersonTargetView, RoleSource, StoragePlace } from "@/lib/queries/useMyStorage";
+import { sortByName } from "@/lib/sort";
 import { useIsAdvanced } from "@/lib/ui-view";
-import { useShownNames } from "@/components/names/shownNames";
 
 /**
  * A person's network storage, for operators (A-10 Part 1): one read-only card
@@ -46,131 +48,23 @@ function gbWords(bytes: number | undefined): string {
   return bytes ? size(bytes) : "no limit";
 }
 
-function useRoleNames() {
-  const shown = useShownNames();
-  return (roles: RoleSource[] | undefined) => sortNames((roles ?? []).map((r) => shown.role(r.project_id, r.role_key)));
-}
-
-/** The person's storage section: a label, then one card per system. */
+/** The person's storage section: a label, then one card per storage system. */
 export function PersonStorage({ userId, name }: { userId: string; name: string }) {
-  const views = usePersonTargets(userId);
-  // The systems are known before their reads are: the card's name and caption
-  // show while loading (A-10 §4).
-  const roster = useTargets();
-  const systems = views.data?.map((v) => v.target) ?? roster.data?.map((t) => t.target) ?? [];
-
   return (
-    <section aria-label="Network storage" className="flex flex-col gap-3.5">
-      <span className="type-label px-5 text-label">Network storage</span>
-      {views.error ? (
-        <Notice
-          tone="danger"
-          title={`Couldn't load ${name}'s storage${systems.length === 1 ? ` on ${targetLabel(systems[0])}` : ""}.`}
-          action={{ label: "Try again", onClick: () => views.refetch() }}
-          next="Press Try again. If it keeps failing, ask whoever runs the Syndra server."
-        >
-          Syndra didn&apos;t answer when this page asked. Nothing was changed.
-        </Notice>
-      ) : views.data ? (
-        views.data.map((view) => <SystemCard key={view.target} view={view} userId={userId} name={name} />)
-      ) : (
-        systems.map((target) => (
-          <Card key={target} id={`sys-${target}`}>
-            <CardTop target={target} />
-            <RowSkeleton rows={4} avatar={false} label={`Loading ${name}'s storage on ${targetLabel(target)}`} />
-          </Card>
-        ))
-      )}
-    </section>
+    <SystemsSection
+      label="Network storage"
+      noun="storage"
+      userId={userId}
+      name={name}
+      pick={isStorage}
+      card={(view) => <SystemCard key={view.target} view={view} userId={userId} name={name} />}
+    />
   );
-}
-
-function CardTop({ target, status }: { target: string; status?: ReactNode }) {
-  return (
-    <div className="px-5 pb-3 pt-4">
-      <span className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
-        <AdvancedLink href={`/system/targets/${target}`} className="type-card-title text-ink link-hover">
-          {targetLabel(target)}
-        </AdvancedLink>
-        {status}
-      </span>
-    </div>
-  );
-}
-
-/** Label 170 · value · a 200 seat that holds a link or nothing (the setup card's row). */
-function Row({ label, seat, first = false, children }: { label: string; seat?: ReactNode; first?: boolean; children: ReactNode }) {
-  return (
-    <CardRow first={first}>
-      <span className="w-full text-[13.5px] font-semibold text-muted tablet:w-[170px] tablet:shrink-0">{label}</span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-[15px] [overflow-wrap:anywhere]">{children}</span>
-      <span className="ml-auto flex tablet:w-[200px] tablet:shrink-0 tablet:justify-end">{seat}</span>
-    </CardRow>
-  );
-}
-
-function Faint({ children, tone }: { children: ReactNode; tone?: "warn" }) {
-  return (
-    <span className={`text-[13px] leading-[1.5] [text-wrap:pretty] ${tone === "warn" ? "text-warn-text" : "text-faint"}`}>
-      {children}
-    </span>
-  );
-}
-
-function Dotted({ tone, children }: { tone: StatusTone; children: ReactNode }) {
-  return (
-    <span className="inline-flex items-baseline gap-2 font-semibold">
-      <StatusDot tone={tone} />
-      {children}
-    </span>
-  );
-}
-
-function Status({ view }: { view: PersonTargetView }) {
-  if (!view.health || view.health === "unknown") return null;
-  const offline = view.health === "offline";
-  const held = view.holds.some((h) => roleOf(view.entitlement_schema, h.field) === "account");
-  return (
-    <span role="status" className={`inline-flex items-center gap-2 text-[13px] ${offline ? "text-warn-text" : "text-muted"}`}>
-      <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
-      {offline ? (
-        <>
-          {SYSTEM_WORDS.offline}{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}
-          {view.last_known ? ` · last read ${formatClock(view.last_known.read_at)}` : ""}
-        </>
-      ) : held ? (
-        <>{SYSTEM_WORDS.answering} · their account is on hold</>
-      ) : (
-        <>
-          {SYSTEM_WORDS.answering}{view.checked_at ? <> · read <Relative iso={view.checked_at} /></> : null}
-        </>
-      )}
-    </span>
-  );
-}
-
-/**
- * The step while a system is offline. Syndra changes nothing there while it is
- * unreachable (the drain halts, propagation/addon.go:81 and revocations.go:92)
- * and every change for it stays queued. Once it answers, revocations go on
- * their own, unless the background drain is off (`auto` false); every other
- * change goes when someone presses Send. Only a person who changed their access
- * meanwhile has anything to do, so it says so rather than promising nothing.
- */
-export function offlineNext(label: string, auto: boolean | null): string {
-  // Not known yet whether revocations go on their own (N3): no promise either way.
-  if (auto === null) {
-    return `If you change their access while ${label} is offline, the change stays in Pending changes until it reaches ${label}. Otherwise there is nothing for you to do.`;
-  }
-  return auto
-    ? `If you change their access while ${label} is offline, the change waits until it answers: a revocation then sends on its own, anything else when you press Send on Pending changes. Otherwise there is nothing for you to do.`
-    : `If you change their access while ${label} is offline, the change waits in Pending changes; press Send there once it answers. Otherwise there is nothing for you to do.`;
 }
 
 function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: string; name: string }) {
-  const label = targetLabel(view.target);
+  const label = view.name;
   const roleNames = useRoleNames();
-  const auto = useAutoRetry();
   const offline = view.health === "offline";
   const storage = view.storage ?? view.last_known?.storage;
   // Stale (A-13 d): a card drawn from the last read recedes to the page; its
@@ -180,7 +74,6 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
   const onPage = <ArrowLink href={page}>Set on {label}&apos;s page</ArrowLink>;
   const onMappings = <ArrowLink href={`/system/targets/${view.target}/mappings`}>Set in {label}&apos;s mappings</ArrowLink>;
   const roles = roleNames(view.roles);
-  const rolesWord = (n: number) => (n === 1 ? "role reaches" : "roles reach");
 
   let body: ReactNode;
   if (view.setup) {
@@ -218,12 +111,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
       <>
         <Row label="Account" first>
           <NextStep person={userId} />
-          <Faint>
-            {roles.length
-              ? `Their ${formatList(roles)} ${rolesWord(roles.length)} ${label}.`
-              : `Their access reaches ${label}.`}{" "}
-            Syndra makes the account once you send it.
-          </Faint>
+          <Faint>{reachWords(roles, label)} Syndra makes the account once you send it.</Faint>
         </Row>
         <div className="row-divider px-5 py-4">
           <NotOpenYet
@@ -292,7 +180,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
                 <span>None yet</span>
                 <Faint>
                   {roles.length
-                    ? `Their ${formatList(roles)} ${rolesWord(roles.length)} ${label}, but no folder there is open to ${roles.length === 1 ? "it" : "them"}.`
+                    ? `Their ${formatList(roles)} ${roles.length === 1 ? "role reaches" : "roles reach"} ${label}, but no folder there is open to ${roles.length === 1 ? "it" : "them"}.`
                     : `Their access reaches ${label}, but no folder there is open to it.`}{" "}
                   Folders open to a group on {label} itself; this fills in when one does.
                 </Faint>
@@ -312,25 +200,20 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
 
   return (
     <Card id={`sys-${view.target}`} className={`scroll-mt-4 ${stale ? "!border-line-strong !bg-canvas !shadow-none motion-tint" : ""}`}>
-      <CardTop target={view.target} status={<Status view={view} />} />
-      {offline && (
-        <div className="px-5 pb-3">
-          <Notice tone="warn" live title={`${label} is offline`} next={offlineNext(label, auto)}>
-            {view.reachable_since ? `It stopped answering at ${formatClock(view.reachable_since)}. ` : ""}
-            {view.last_known
-              ? `Home folder and Folders below are what it said at ${formatClock(view.last_known.read_at)}, ${formatRelative(view.last_known.read_at)}. `
-              : ""}
-            {name}&apos;s access hasn&apos;t changed, and their folders open again when it&apos;s back.
-          </Notice>
-        </div>
-      )}
+      <CardTop target={view.target} name={label} status={<Status view={view} />} />
+      <OfflineNotice view={view}>
+        {view.last_known
+          ? `Home folder and Folders below are what it said at ${formatClock(view.last_known.read_at)}, ${formatRelative(view.last_known.read_at)}. `
+          : ""}
+        {name}&apos;s access hasn&apos;t changed, and their folders open again when it&apos;s back.
+      </OfflineNotice>
       {body}
     </Card>
   );
 }
 
 function PasswordRow({ view, name, storage }: { view: PersonTargetView; name: string; storage: PersonTargetView["storage"] }) {
-  const label = targetLabel(view.target);
+  const label = view.name;
   const own = `on their Network storage page`;
   if (storage?.needs_new_password) {
     return (
@@ -441,7 +324,7 @@ function LimitLines({ view }: { view: PersonTargetView }) {
 
 function HomeUse({ view }: { view: PersonTargetView }) {
   const home = view.home;
-  const label = targetLabel(view.target);
+  const label = view.name;
   const used = home?.used_bytes;
   const quota = home?.quota_bytes ?? 0;
   const hasHome = Boolean(home?.home);
@@ -507,43 +390,5 @@ function FolderList({ places, roleNames }: { places: StoragePlace[]; roleNames: 
         );
       })}
     </ul>
-  );
-}
-
-function HoldRow({ view, seat, page }: { view: PersonTargetView; seat: ReactNode; page: string }) {
-  const isAccount = (h: { field: string }) => roleOf(view.entitlement_schema, h.field) === "account";
-  const hold = view.holds.find(isAccount) ?? view.holds[0];
-  return (
-    <Row label="Hold" seat={seat}>
-      {!hold ? (
-        <>
-          <span className="text-muted">None</span>
-          {view.restored_at && <Faint>The last one ended on {formatShortDate(view.restored_at)}</Faint>}
-        </>
-      ) : (
-        <>
-          <Dotted tone="neutral">
-            {isAccount(hold) ? "Their whole account" : hold.value}, since {formatShortDate(hold.since)}
-          </Dotted>
-          <Faint>
-            “{hold.reason}” · put on hold by{" "}
-            <UserName id={hold.actor_id} className="text-ink" />
-            {hold.expires_at
-              ? ` · ends ${formatShortDate(hold.expires_at)}`
-              : hold.review_date
-                ? ` · review on ${formatShortDate(hold.review_date)}`
-                : ""}
-            {view.holds.length > 1 && (
-              <>
-                {" · "}
-                <AdvancedLink href={page} className="font-semibold text-accent-text link-hover">
-                  and {view.holds.length - 1} more
-                </AdvancedLink>
-              </>
-            )}
-          </Faint>
-        </>
-      )}
-    </Row>
   );
 }

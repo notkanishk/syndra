@@ -78,7 +78,7 @@ export const GLOSSARY = {
   entitlement: {
     title: "Entitlement",
     definition:
-      "What a role entitles somebody to on a connected system: the TrueNAS groups it maps to, and therefore the shares and datasets it opens. Roles live in Zitadel; entitlements are what Syndra resolves them into.",
+      "What a role entitles somebody to on a connected system: the groups it maps to there, and therefore everything those groups open. Roles live in Zitadel; entitlements are what Syndra resolves them into.",
     kind: "standard",
   },
   provision: {
@@ -179,7 +179,7 @@ export const GLOSSARY = {
   mapping: {
     title: "Mapping",
     definition:
-      "Which group on a connected system a role turns into. On TrueNAS the group is what decides which shares and datasets an account can open.",
+      "Which group on a connected system a role turns into. On the system, the group is what decides what an account can open.",
     kind: "syndra",
   },
   mergeFinding: {

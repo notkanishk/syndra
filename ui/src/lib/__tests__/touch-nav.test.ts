@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ADVANCED_NAV, BASIC_NAV, MEMBER_NAV, targetNav } from "@/lib/nav";
+import { ADVANCED_NAV, BASIC_NAV, memberNav, targetNav } from "@/lib/nav";
 import {
   destinationMatches,
   destinationsWantingAttention,
@@ -12,7 +12,7 @@ import { loudestTone } from "@/components/shell/navTones";
 
 describe("the rail becomes destinations without gaining or losing one", () => {
   it("keeps a member's three", () => {
-    const destinations = touchDestinations(MEMBER_NAV);
+    const destinations = touchDestinations(memberNav([]));
     expect(destinations.map((d) => d.label)).toEqual(["My access", "Requests", "Network storage"]);
     expect(navShape(destinations)).toBe("tabs");
   });
@@ -38,7 +38,7 @@ describe("the rail becomes destinations without gaining or losing one", () => {
 
   // A deployment registering add-ons must not be able to grow the tab bar.
   it("cannot be pushed past the tab-bar limit by a deployment's add-ons", () => {
-    const withTargets = touchDestinations(targetNav(["truenas", "unifi"]));
+    const withTargets = touchDestinations(targetNav([{ target: "truenas", name: "TrueNAS" }, { target: "unifi", name: "UniFi Access" }]));
     expect(navShape(withTargets)).toBe("sheet");
   });
 });

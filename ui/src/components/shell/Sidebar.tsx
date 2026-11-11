@@ -4,8 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useTargets } from "@/lib/queries/useTargets";
+import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useIndicators, type Indicators } from "@/lib/queries/useIndicators";
-import { leafMatches, navFor, operatorNav, type NavLeaf } from "@/lib/nav";
+import { leafMatches, memberNav, operatorNav, type NavLeaf } from "@/lib/nav";
 // Shared with the tab bar, because the rail and the tab bar are two renderings
 // of one tree and a count that is danger in one cannot be accent in the other.
 import { BADGE_TONE } from "@/components/shell/navTones";
@@ -39,12 +40,15 @@ export default function Sidebar() {
   // The rail renders without it and gains the rows when it arrives: a structure
   // that waited for a fetch would be a rail that moves in response to a poll.
   const { data: targets } = useTargets(isOperator);
+  // A member's rows come from their own list the same way: one per connected
+  // system Syndra has read that is not storage (memberNav), drawn when it lands.
+  const member = audience === "member";
+  const { data: mine } = useMyStorage(member);
   // An operator's rail is Advanced's whole tree in both views; what Basic
   // lacks is folded shut, so a row both share is the same row in each and
   // switching moves only the parts that come and go (A-08 §3).
   const advanced = audience === "advanced";
-  const entries =
-    audience === "member" ? navFor(audience) : operatorNav((targets ?? []).map((t) => t.target));
+  const entries = member ? memberNav(mine ?? []) : operatorNav(targets ?? []);
   const followsView = (advancedOnly: boolean | undefined, key: string, part: React.ReactNode) =>
     advancedOnly ? (
       <Unfold key={key} open={advanced}>

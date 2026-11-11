@@ -404,7 +404,7 @@ describe("MemberAccess header line and cards", () => {
 
   it("sends a storage step to Network storage", () => {
     reset();
-    mine.targets = [{ target: "truenas", entitled: true, credential: { set: false } }];
+    mine.targets = [{ target: "truenas", name: "TrueNAS", entitled: true, credential: { set: false } }];
     access.value = view(COMPLETE, ["laser", "mill"]);
     render(<MemberAccess session={session} />);
     expect(screen.getByText("Your TrueNAS account is ready. Set its password to connect.")).toBeTruthy();

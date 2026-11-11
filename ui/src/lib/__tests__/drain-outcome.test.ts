@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { outcomeFromDrain, describeDrain } from "@/lib/drain-outcome";
 import { waitsForSend } from "@/lib/outcome";
 import type { DrainResult } from "@/lib/queries/usePropagation";
+import { truenasName } from "@/lib/__fixtures__/field-schema-mock";
+
+/** A send names each system by the roster's name (useSystemNames). */
+const named = (r: DrainResult | undefined, auto: boolean | null = true) => describeDrain(r, auto, truenasName);
 
 function result(overrides: Partial<DrainResult> = {}): DrainResult {
   return { applied: 0, failed: 0, requeued: 0, errored: 0, halted: false, ...overrides };
@@ -92,7 +96,7 @@ describe("describeDrain", () => {
  */
 describe("a send with more than one connected system", () => {
   it("names which system was skipped, by its name, rather than calling the whole pass a failure", () => {
-    const out = describeDrain(
+    const out = named(
       result({
         applied: 9,
         halted: true,
@@ -125,9 +129,9 @@ describe("a send with more than one connected system", () => {
         { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: false },
       ],
     });
-    const out = describeDrain(res);
+    const out = named(res);
     expect(out).toEqual({ tone: "success", message: "3 sent." });
-    expect(outcomeFromDrain(res).kind).toBe("applied");
+    expect(outcomeFromDrain(res, true, undefined, truenasName).kind).toBe("applied");
   });
 
   it("a skipped system with changes of its own says how many it left waiting", () => {
@@ -143,16 +147,16 @@ describe("a send with more than one connected system", () => {
           { ...pass, waiting },
         ],
       });
-    expect(describeDrain(res(2))).toEqual({
+    expect(named(res(2))).toEqual({
       tone: "warning",
       message: "3 reached Zitadel. TrueNAS didn't answer, so its 2 are still here.",
       detail: "TrueNAS is not answering. Its 2 changes are still waiting for you to send, and nothing counts against the retry limit.",
     });
-    expect(describeDrain(res(1)).detail).toMatch(/^TrueNAS is not answering\. Its 1 change is still waiting/);
+    expect(named(res(1)).detail).toMatch(/^TrueNAS is not answering\. Its 1 change is still waiting/);
   });
 
   it("says nothing was sent when the only pass that could run did not", () => {
-    const out = describeDrain(
+    const out = named(
       result({
         halted: true,
         reason: "target_unreachable",

@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ConnectedSystemsPage from "@/app/system/targets/page";
+import { targetLabel } from "@/lib/nav";
 import type { TargetSummary } from "@/lib/queries/useTargets";
 
 /**
@@ -56,6 +57,8 @@ function target(over: Partial<TargetSummary> = {}): TargetSummary {
     health: { status: "online", recent: ["answered", "answered", "answered"], checked_at: "2026-10-14T09:41:00Z" },
     project: { id: "p1", name: "Makerspace" },
     ...over,
+    // The backend's name: the fixtures' operator named TrueNAS; any other is its id title-cased.
+    name: over.name ?? ((over.target ?? "truenas") === "truenas" ? "TrueNAS" : targetLabel(over.target ?? "")),
   };
 }
 

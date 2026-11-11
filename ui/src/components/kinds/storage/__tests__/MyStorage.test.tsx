@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
-import { MySystems } from "@/components/member/MySystems";
+import { StoragePage as MySystems } from "@/components/kinds/storage/StoragePage";
 import { deviceFrom } from "@/components/kinds/storage/device";
 import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
@@ -74,6 +74,7 @@ const QUACK = place({ path: "main/quack_share", access: "read", usage: { used_by
 function view(over: Partial<MyTargetView> = {}): MyTargetView {
   return {
     target: "truenas",
+    name: "TrueNAS",
     kind: "storage",
     entitlement_schema: TRUENAS_SCHEMA,
     entitled: true,

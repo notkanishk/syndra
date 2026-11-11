@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   auto: true, retryingBy: undefined as Record<string, number> | undefined, gaveUpBy: undefined as Record<string, number> | undefined,
 }));
 
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/lib/queries/useIndicators", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useIndicators")>("@/lib/queries/useIndicators");
   return {

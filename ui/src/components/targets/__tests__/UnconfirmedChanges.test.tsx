@@ -9,6 +9,7 @@ import type { UnconfirmedOperation } from "@/lib/queries/useTargets";
 // A-09 §3–4: a change the system never answered, settled by Say what happened.
 
 const NAMES: Record<string, string> = { u9: "Sami Zayn", op1: "Kanishk Singh" };
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{NAMES[id] ?? id}</span>,
 }));

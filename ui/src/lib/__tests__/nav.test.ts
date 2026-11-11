@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -9,6 +9,7 @@ import {
   MEMBER_NAV,
   MEMBER_ROUTES,
   crumbsFor,
+  memberNav,
   leafMatches,
   navFor,
   navLeaves,
@@ -16,6 +17,9 @@ import {
   targetLabel,
   memberMayVisit,
 } from "@/lib/nav";
+
+/** The roster's name for each system, as the shell passes it to `crumbsFor`. */
+const rosterName = (t: string) => (t === "truenas" ? "TrueNAS" : targetLabel(t));
 
 describe("navigation contract", () => {
   // The prohibition this whole file exists to enforce: the old rail injected a
@@ -34,9 +38,9 @@ describe("navigation contract", () => {
     expect(navLeaves(ADVANCED_NAV)[0].label).toBe("Home");
   });
 
-  it("gives members three destinations and no Home", () => {
+  it("gives members three destinations, the family seat, and no Home", () => {
     const labels = navLeaves(MEMBER_NAV).map((leaf) => leaf.label);
-    expect(labels).toEqual(["My access", "Requests", "Network storage"]);
+    expect(labels).toEqual(["My access", "Requests", "Network storage", "Connected systems"]);
     expect(navFor("member")).toBe(MEMBER_NAV);
   });
 
@@ -193,7 +197,7 @@ describe("member reachability", () => {
   // prevent, and a literal list here would drift the same way the middleware's
   // did.
   it("allows every destination the member rail offers", () => {
-    for (const leaf of navLeaves(MEMBER_NAV)) {
+    for (const leaf of navLeaves(MEMBER_NAV).filter((l) => !l.family)) {
       expect(memberMayVisit(leaf.href), `${leaf.label} is offered and must be reachable`).toBe(
         true,
       );
@@ -229,11 +233,59 @@ describe("member reachability", () => {
   });
 });
 
+// addon-contract 3.10 — the member's family seat: one row per connected system
+// Syndra has read that is not storage. A registration, never an entitlement.
+describe("the member's connected systems", () => {
+  const fixture = [
+    { target: "lathe", name: "big laser", kind: "machine" },
+    { target: "nas", name: "TrueNAS", kind: "storage" },
+    { target: "etage", name: "Étage", kind: "access" },
+    { target: "door", name: "Door" },
+    { target: "anvil", name: "Anvil", kind: "inventory" },
+  ];
+  const labels = (entries: ReturnType<typeof memberNav>) => navLeaves(entries).map((l) => l.label);
+
+  it("draws one row per read system that is not storage, alphabetical (case and accents aside), last", () => {
+    expect(labels(memberNav(fixture))).toEqual(["My access", "Requests", "Network storage", "Anvil", "big laser", "Étage"]);
+    // Order is the names', never the input's.
+    expect(labels(memberNav([...fixture].reverse()))).toEqual(labels(memberNav(fixture)));
+  });
+
+  it("folds storage into Network storage and gives a system not read yet no row", () => {
+    const hrefs = navLeaves(memberNav(fixture)).map((l) => l.href);
+    expect(hrefs).not.toContain("/systems/nas");
+    expect(hrefs).not.toContain("/systems/door");
+  });
+
+  it("draws nothing in the seat when nothing qualifies: no placeholder, and the seat itself is never drawn", () => {
+    expect(labels(memberNav([]))).toEqual(["My access", "Requests", "Network storage"]);
+    expect(navLeaves(memberNav(fixture)).some((l) => l.family)).toBe(false);
+  });
+
+  it("gives a family row no count", () => {
+    for (const row of navLeaves(memberNav(fixture)).slice(3)) expect(row.indicator, row.label).toBeUndefined();
+  });
+
+  it("makes every drawn row reachable, from the static tree, and the seat's own href not", () => {
+    for (const { href } of navLeaves(memberNav(fixture))) expect(memberMayVisit(href), href).toBe(true);
+    expect(memberMayVisit("/systems")).toBe(false);
+    expect(memberMayVisit("/systems/lathe/settings")).toBe(false);
+    // Widening reach is a decision: the family admits exactly /systems/{one segment}.
+    expect(MEMBER_NAV.find((e) => e.kind === "leaf" && e.family)).toMatchObject({ href: "/systems", family: "systems" });
+  });
+
+  it("names a family row's crumb by its system, and never names the seat", () => {
+    const names = (t: string) => (t === "lathe" ? "Big laser" : t);
+    expect(crumbsFor("/systems/lathe", "member", names)).toEqual([{ label: "Big laser" }]);
+    expect(crumbsFor("/systems", "member")).toEqual([]);
+  });
+});
+
 // 9.13/9.14 — the per-target System rows come from the deployment, not from what
 // the operator can see.
 describe("the target rows", () => {
   it("renders one row per registered add-on, whatever the data says", () => {
-    const entries = targetNav(["truenas", "unifi"]);
+    const entries = targetNav([{ target: "truenas", name: "TrueNAS" }, { target: "unifi", name: "UniFi Access" }]);
     const system = entries.find((e) => e.kind === "group" && e.label === "System");
     expect(system?.kind).toBe("group");
     const labels = system?.kind === "group" ? system.children.map((c) => c.label) : [];
@@ -248,7 +300,7 @@ describe("the target rows", () => {
   });
 
   it("has no row for the bridge that no longer exists", () => {
-    for (const entries of [ADVANCED_NAV, targetNav(["truenas"])]) {
+    for (const entries of [ADVANCED_NAV, targetNav([{ target: "truenas", name: "TrueNAS" }])]) {
       const labels = navLeaves(entries).map((leaf) => leaf.label);
       expect(labels, "a nav row for a deleted subsystem is worse than a missing one")
         .not.toContain("Hardware sync");
@@ -275,11 +327,11 @@ describe("the target rows", () => {
   // is in the path and `targetLabel` needs no lookup, so the chain is derivable
   // without the roster.
   it("names a target from its own path, and keeps it a link on a sub-route", () => {
-    expect(crumbsFor("/system/targets/truenas", "advanced")).toEqual([
+    expect(crumbsFor("/system/targets/truenas", "advanced", rosterName)).toEqual([
       { label: "System" },
       { label: "TrueNAS" },
     ]);
-    expect(crumbsFor("/system/targets/truenas/mappings", "advanced")).toEqual([
+    expect(crumbsFor("/system/targets/truenas/mappings", "advanced", rosterName)).toEqual([
       { label: "System" },
       { label: "TrueNAS", href: "/system/targets/truenas" },
     ]);
@@ -292,7 +344,7 @@ describe("the target rows", () => {
   // visited from Basic: the view toggle governs the rail, not the page's own
   // name.
   it("still names a target's path for a basic operator, from the full operator nav", () => {
-    expect(crumbsFor("/system/targets/truenas", "basic")).toEqual([
+    expect(crumbsFor("/system/targets/truenas", "basic", rosterName)).toEqual([
       { label: "System" },
       { label: "TrueNAS" },
     ]);
@@ -310,7 +362,7 @@ describe("the target rows", () => {
   // The index and a target are different destinations, and the index must not
   // claim a target's detail route — the rail would highlight two rows at once.
   it("does not let the index swallow a target's own route", () => {
-    const system = targetNav(["truenas"]).find(
+    const system = targetNav([{ target: "truenas", name: "TrueNAS" }]).find(
       (e) => e.kind === "group" && e.label === "System",
     );
     const children = system?.kind === "group" ? system.children : [];
@@ -325,7 +377,7 @@ describe("the target rows", () => {
   // A-07 §26: Service accounts is how systems reach Zitadel, so it sits with
   // them: after the targets, before Incoming events. Advanced only.
   it("puts Service accounts after the targets and before Incoming events, Advanced only", () => {
-    const system = targetNav(["truenas"]).find((e) => e.kind === "group" && e.label === "System");
+    const system = targetNav([{ target: "truenas", name: "TrueNAS" }]).find((e) => e.kind === "group" && e.label === "System");
     const labels = system?.kind === "group" ? system.children.map((c) => c.label) : [];
     expect(labels).toEqual(["Zitadel", "Connected systems", "TrueNAS", "Service accounts", "Incoming events"]);
     expect(navLeaves(BASIC_NAV).map((l) => l.href)).not.toContain("/system/service-accounts");
@@ -340,11 +392,29 @@ describe("the target rows", () => {
     ]);
   });
 
-  it("names a target once, from one place", () => {
-    expect(targetLabel("truenas")).toBe("TrueNAS");
-    // An unknown target still gets a name rather than an id, so shipping an
-    // add-on does not require editing the navigation to make it readable.
+  // The name is the backend's (addon-contract 3.10): targetLabel is only the
+  // id title-cased, for a row drawn before any roster lands. Never a map.
+  it("falls back to the id title-cased, and knows no product", () => {
+    expect(targetLabel("truenas")).toBe("Truenas");
     expect(targetLabel("proxmox")).toBe("Proxmox");
+  });
+
+  it("can never grow a map of product names back", () => {
+    const source = readFileSync(resolve(__dirname, "../nav.ts"), "utf8");
+    const body = source.slice(source.indexOf("export function targetLabel"));
+    const fn = body.slice(0, body.indexOf("\n}\n") + 2);
+    expect(fn, "targetLabel must hold no object literal").not.toMatch(/[{]\s*["'\w-]+\s*:/);
+    expect(fn).not.toMatch(/Record<|new Map|\bknown\b/);
+  });
+
+  // The crumb names a system by the roster's name when the shell has it.
+  it("names a target's crumb by the roster's name when given one", () => {
+    const names = (t: string) => (t === "laser" ? "Big laser" : t);
+    expect(crumbsFor("/system/targets/laser", "advanced", names)).toEqual([{ label: "System" }, { label: "Big laser" }]);
+    expect(crumbsFor("/system/targets/laser/mappings", "advanced", names)).toEqual([
+      { label: "System" },
+      { label: "Big laser", href: "/system/targets/laser" },
+    ]);
   });
 });
 

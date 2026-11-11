@@ -16,7 +16,6 @@ import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
-import { targetLabel } from "@/lib/nav";
 import { FORECAST, NOTHING_CHANGED, outcomeFromError, partialSentence, sentence, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useHoldsDueForReview, useLiftHold, type Hold } from "@/lib/queries/useHolds";
 
@@ -110,11 +109,11 @@ function Subject({ id }: { id: string }) {
  * sent verbatim — "true" for a whole account — and is the wrong thing to put
  * in a sentence (see `HoldDialog`).
  */
-function holdLabel(hold: Hold, schema: EntitlementField[] | undefined): string {
+function holdLabel(hold: Hold, schema: EntitlementField[] | undefined, system: string): string {
   const field = schema?.find((f) => f.name === hold.field);
   // No accepted description of the system: say so rather than word the hold from a guess.
-  if (!schema) return `something on ${targetLabel(hold.target)}, whose fields Syndra has not read yet`;
-  if (field?.role === "account") return `their ${targetLabel(hold.target)} account`;
+  if (!schema) return `something on ${system}, whose fields Syndra has not read yet`;
+  if (field?.role === "account") return `their ${system} account`;
   if (field?.role === "membership") return `the ${hold.value} ${fieldNoun(field)}`;
   if (field?.role === "flag") return `their ${fieldNoun(field)}`;
   if (field?.role === "limit") return `their ${fieldNoun(field)}, ${limitWordsFor(field, hold.value)}`;
@@ -127,7 +126,7 @@ function holdLabel(hold: Hold, schema: EntitlementField[] | undefined): string {
  * its one write place (A-03 §3).
  */
 function OwnValueRow({ hold, first, schemaOf }: { hold: Hold; first: boolean; schemaOf: SchemaSource }) {
-  const system = targetLabel(hold.target);
+  const system = schemaOf.nameOf(hold.target);
   const schema = schemaOf(hold.target);
   const field = schema?.find((f) => f.name === hold.field && f.role === "limit");
   // The value's words are the field's: its unit, its "no limit". Not read, Syndra says so rather than guess.
@@ -157,14 +156,14 @@ function OwnValueRow({ hold, first, schemaOf }: { hold: Hold; first: boolean; sc
 function HoldRow({ hold, first, schemaOf }: { hold: Hold; first: boolean; schemaOf: SchemaSource }) {
   const lift = useLiftHold();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const label = holdLabel(hold, schemaOf(hold.target));
+  const label = holdLabel(hold, schemaOf(hold.target), schemaOf.nameOf(hold.target));
 
   return (
     <CardRow first={first} className="flex-wrap">
       <Subject id={hold.subject_id} />
       <span className="text-[13.5px]">{label}</span>
       <span className="text-[13px] text-faint">
-        on {targetLabel(hold.target)} · placed by <UserName id={hold.actor_id} />{" "}
+        on {schemaOf.nameOf(hold.target)} · placed by <UserName id={hold.actor_id} />{" "}
         <Relative iso={hold.created_at} />
       </span>
       <span className="flex-1" />

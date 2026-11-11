@@ -4,7 +4,7 @@ import React from "react";
 
 import { UserName } from "@/components/names/UserName";
 import { targetLabel } from "@/lib/nav";
-import { SchemaNotReady } from "@/components/states/SchemaState";
+import { SchemaNotReady, schemaReason } from "@/components/states/SchemaState";
 import { roleOf } from "@/lib/fields";
 import type { SchemaLookup, SchemaRead } from "@/lib/queries/useFieldSchema";
 import { sortByName } from "@/lib/sort";
@@ -55,15 +55,19 @@ export interface WithheldItem {
  * system whose schema has not been read says nothing is on the account, and
  * the value is then shown as the code it is.
  */
-type SchemaOf = SchemaLookup & Partial<SchemaRead>;
+type SchemaOf = SchemaLookup & Partial<SchemaRead> & { nameOf?: (system: string) => string };
 const accountHold = (schemaOf: SchemaOf | undefined, item: WithheldItem) =>
   roleOf(schemaOf?.(item.target), item.field) === "account";
+/** The system's name from the rows the lookup reads, else its id title-cased. */
+const systemName = (schemaOf: SchemaOf | undefined, target: string) => schemaOf?.nameOf?.(target) ?? targetLabel(target);
+/** Still reading, or the read failed: the hold is not worded from a guess. */
+const notReady = (schemaOf: SchemaOf | undefined) => Boolean(schemaOf && (schemaOf.loading || schemaOf.error));
 
 function Held({ item, voice, schemaOf, className = "" }: { item: WithheldItem; voice: string; schemaOf?: SchemaOf; className?: string }) {
   if (!accountHold(schemaOf, item)) return <span className={`font-mono ${className}`}>{item.value}</span>;
   return (
     <span className="text-ink">
-      {voice} {item.target ? `${targetLabel(item.target)} account` : "account"}
+      {voice} {item.target ? `${systemName(schemaOf, item.target)} account` : "account"}
     </span>
   );
 }
@@ -101,7 +105,7 @@ export function Withheld({
 }) {
   if (items.length === 0) return null;
   // Not worded from a guess: until the fields are read the hold shows as neither "true" nor a code.
-  if (schemaOf && (schemaOf.loading || schemaOf.error)) {
+  if (schemaOf && notReady(schemaOf)) {
     return (
       <SchemaNotReady
         state={{ schema: undefined, loading: Boolean(schemaOf.loading), error: schemaOf.error, refetch: schemaOf.refetch ?? (() => {}) }}
@@ -127,7 +131,7 @@ export function Withheld({
           <li key={`${item.target ?? ""}:${item.field}:${item.value}`} className="text-[13.5px]">
             <Held item={item} voice={audience === "member" ? "Your" : "Their"} schemaOf={schemaOf} className="text-[13px] text-ink" />
             {audience === "operator" && item.target && !accountHold(schemaOf, item) && (
-              <span className="text-muted"> on {targetLabel(item.target)}</span>
+              <span className="text-muted"> on {systemName(schemaOf, item.target)}</span>
             )}
             {audience === "operator" && item.actorId && (
               // Who decided it, first. An operator looking at a hold is
@@ -188,6 +192,20 @@ const byValue = (items: WithheldItem[]) =>
 
 export function WithheldInline({ items, schemaOf }: { items: WithheldItem[]; schemaOf?: SchemaOf }) {
   if (items.length === 0) return null;
+  // The banner's three facts in a line: still reading, or the read failed, is
+  // said as such, never as the raw value ("true on truenas") from a guess.
+  if (schemaOf && notReady(schemaOf)) {
+    const why = schemaReason(
+      { schema: undefined, loading: Boolean(schemaOf.loading), error: schemaOf.error, refetch: schemaOf.refetch ?? (() => {}) },
+      "the connected system",
+    );
+    return (
+      <p role="status" className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-[13px]">
+        <WithheldPill />
+        <span className="text-muted">{why}</span>
+      </p>
+    );
+  }
   return (
     <ul className="mt-1 grid gap-0.5">
       {byValue(items).map((item) => (
@@ -197,7 +215,7 @@ export function WithheldInline({ items, schemaOf }: { items: WithheldItem[]; sch
         >
           <WithheldPill />
           <Held item={item} voice="Their" schemaOf={schemaOf} className="text-[12.5px] text-ink" />
-          {item.target && !accountHold(schemaOf, item) && <span className="text-faint">on {targetLabel(item.target)}</span>}
+          {item.target && !accountHold(schemaOf, item) && <span className="text-faint">on {systemName(schemaOf, item.target)}</span>}
           {item.reason && <span className="text-muted">{item.reason}</span>}
           {item.reviewDue && (
             <span className="text-warn-text">· review date passed, needs a decision</span>

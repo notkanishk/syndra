@@ -1,20 +1,20 @@
 "use client";
 
 import { roleName } from "@/lib/names";
-import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 
+import { HomeChoice, HomesMade } from "@/components/kinds/storage/HomeMapping";
+import { OpensLine } from "@/components/kinds/storage/MappingReach";
 import { Button } from "@/components/ui/Button";
-import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
-import { Segmented, Select } from "@/components/ui/Select";
+import { Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
 import { ApiError } from "@/lib/api-client";
 import { fieldsByRole, mappingFields, membershipNoun } from "@/lib/fields";
 import { schemaReason } from "@/components/states/SchemaState";
-import { useFieldSchema, useFieldSchemaState } from "@/lib/queries/useFieldSchema";
+import { useFieldSchema, useFieldSchemaState, useSystemNames } from "@/lib/queries/useFieldSchema";
 import { formatClock, formatList } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import { useCreateMapping, useMappings } from "@/lib/queries/useMappings";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
@@ -38,7 +38,6 @@ import {
   useTargetSettings,
   useTargets,
   type MappableValues,
-  type ReachPlace,
 } from "@/lib/queries/useTargets";
 import dynamic from "next/dynamic";
 import { sortByName } from "@/lib/sort";
@@ -79,7 +78,8 @@ export function RoleMappingDialog({
   role?: { projectId: string; roleKey: string };
   onClose: () => void;
 }) {
-  const name = targetLabel(target);
+  const nameOf = useSystemNames();
+  const name = nameOf(target);
   const roster = useTargets();
   const row = (roster.data ?? []).find((t) => t.target === target);
   const project = row?.project ?? undefined;
@@ -230,73 +230,18 @@ export function RoleMappingDialog({
           </div>
 
           {settings.data?.read && (
-            <div className="grid gap-1.5">
-              <span className="type-label text-label" id="m-home">
-                Home folder
-              </span>
-              {!homeRoot && !current.home ? (
-                // One control that can't act now: a sentence and the step.
-                <span className="text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
-                  No mapping can give one until you choose where home folders go on {name}. This one works without
-                  it; give it a home folder later by changing it.{" "}
-                  <ArrowLink href={`/system/targets/${target}`}>Choose where home folders go</ArrowLink>
-                </span>
-              ) : (
-                <>
-                  <span aria-labelledby="m-home">
-                    <Segmented
-                      label="Home folder"
-                      value={home ? "gives" : "none"}
-                      onChange={(v) => setHome(v === "gives")}
-                      options={[
-                        { value: "none", label: "No home folder" },
-                        { value: "gives", label: "Gives a home folder" },
-                      ]}
-                    />
-                  </span>
-                  <FieldHint>
-                    {home
-                      ? `Each person who holds the role gets a folder of their own in ${homeRoot}, named after their account and private to them. Syndra never moves or deletes one, even when the role is revoked.`
-                      : `Home folders go in ${homeRoot}, set on ${name}'s page for every role.`}
-                  </FieldHint>
-                  {home && (
-                    <div className="mt-1 grid gap-1.5">
-                      <span className="type-label text-label">Home folder limit</span>
-                      <span className="flex flex-wrap items-center gap-3">
-                        <Segmented
-                          label="Home folder limit"
-                          value={limit}
-                          onChange={setLimit}
-                          options={[
-                            { value: "size", label: "Up to a size" },
-                            { value: "none", label: "No limit" },
-                          ]}
-                        />
-                        {limit === "size" && (
-                          <span className="flex items-center gap-2">
-                            <span className="w-[110px]">
-                              <Input
-                                aria-label="Limit in GB"
-                                type="number"
-                                min={1}
-                                inputMode="decimal"
-                                value={gb}
-                                onChange={(e) => setGb(e.target.value)}
-                              />
-                            </span>
-                            <span className="text-[14px] text-muted">GB</span>
-                          </span>
-                        )}
-                      </span>
-                      <FieldHint>
-                        Someone holding two roles that each carry a home folder gets the larger limit. One person can be given
-                        their own, on {name}&apos;s page under Accounts.
-                      </FieldHint>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            <HomeChoice
+              target={target}
+              name={name}
+              homeRoot={homeRoot}
+              hadHome={Boolean(current.home)}
+              home={home}
+              onHome={setHome}
+              limit={limit}
+              onLimit={setLimit}
+              gb={gb}
+              onGb={setGb}
+            />
           )}
         </div>
       }
@@ -312,13 +257,7 @@ export function RoleMappingDialog({
                 owner on {name}.{" "}
               </>
             )}
-            {homes && homes.makes > 0 && (
-              <>
-                Makes {homes.makes} home folder{homes.makes === 1 ? "" : "s"} in{" "}
-                <span className="type-mono">{homeRoot}</span>
-                {homes.already > 0 ? `; ${homes.already} ${homes.already === 1 ? "person already has" : "people already have"} one there.` : "."}{" "}
-              </>
-            )}
+            {homes && homes.makes > 0 && <HomesMade homes={homes} homeRoot={homeRoot} />}
             {!checked && (
               <>
                 <span className="font-semibold">
@@ -370,35 +309,6 @@ function builtinSentence(name: string, list: MappableValues | undefined, noun: s
 }
 
 /**
- * What a group opens, under the picker, so the operator sees what a mapping
- * gives before the preview (A-02 §3).
- */
-export function OpensLine({ name, places }: { name: string; places: ReachPlace[] | undefined }) {
-  if (!places) return null;
-  if (places.length === 0) {
-    return <span className="text-[13.5px] text-warn-text">Opens nothing on {name} yet.</span>;
-  }
-  return (
-    <span className="text-[13.5px] leading-[1.5] text-ink [text-wrap:pretty]">
-      Opens{" "}
-      {places.map((p, i) => (
-        <Fragment key={p.path}>
-          {i > 0 && (i === places.length - 1 ? ", and " : ", ")}
-          <span className="type-mono text-[12.5px]">{placeName(p)}</span>,{" "}
-          {p.access === "change" ? "can change files" : "read only"}
-        </Fragment>
-      ))}
-      .
-    </span>
-  );
-}
-
-/** `main › waddle_share`. */
-export function placeName(p: ReachPlace): string {
-  return [p.share, ...(p.folder ? p.folder.split("/") : [])].join(" › ");
-}
-
-/**
  * The settings Syndra will not map, named rather than left out (design M1): the
  * account itself and each of its channels, found by role. They follow from
  * whether somebody is entitled to the add-on at all. Mapping them would let a
@@ -410,6 +320,7 @@ export function placeName(p: ReachPlace): string {
  * than a validation error. The words are the add-on's own labels.
  */
 export function RefusedFields({ target }: { target: string }) {
+  const nameOf = useSystemNames();
   const by = fieldsByRole(useFieldSchema(target));
   const names = [by.account.length ? "the account" : null, ...by.channel.map((c) => `its ${c.label ?? "other way in"}`)].filter(
     (n): n is string => n !== null,
@@ -419,7 +330,7 @@ export function RefusedFields({ target }: { target: string }) {
   return (
     <p className="px-1 text-[13.5px] leading-[1.55] text-muted">
       {many ? "Some settings cannot" : "One setting cannot"} be mapped, on purpose: {formatList(names)}.{" "}
-      {many ? "They follow" : "It follows"} from whether the person has any access to {targetLabel(target)} at all. If a role
+      {many ? "They follow" : "It follows"} from whether the person has any access to {nameOf(target)} at all. If a role
       could set {many ? "them" : "it"}, one role could switch an account off while another still gave that person access.
     </p>
   );
@@ -427,9 +338,10 @@ export function RefusedFields({ target }: { target: string }) {
 
 /** Outline: the one violet fill on this screen is Publish, in the version band. */
 export function AddMappingButton({ target, first }: { target: string; first: boolean }) {
+  const nameOf = useSystemNames();
   const [open, setOpen] = useState(false);
   const state = useFieldSchemaState(target);
-  const why = schemaReason(state, targetLabel(target));
+  const why = schemaReason(state, nameOf(target));
   const readable = !why && Boolean(mappingFields(state.schema).membership);
   return (
     <>

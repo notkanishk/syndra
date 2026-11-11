@@ -45,6 +45,7 @@ export function validateTerms(terms: Term[]): Record<string, string> {
       const b = terms[j];
       if (a.start <= b.end && b.start <= a.end && !errors[`terms[${j}].start`]) {
         errors[`terms[${j}].start`] =
+          // eslint-disable-next-line no-restricted-syntax -- "share" is a verb here (two terms on one day), not the storage kind's word
           `Overlaps ${a.name.trim() || "another term"}, which runs ${shortDay(a.start)} to ${shortDay(a.end)}. Terms can't share a day.`;
       }
     }

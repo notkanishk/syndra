@@ -10,8 +10,18 @@ import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
 import { Unfold } from "@/lib/motion";
 import { GoToPanel } from "@/components/ui/GoTo";
-import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavEntry, type NavLeaf } from "@/lib/nav";
+import {
+  leafMatches,
+  memberNav,
+  navFor,
+  operatorNav,
+  targetNav,
+  type IndicatorKey,
+  type NavEntry,
+  type NavLeaf,
+} from "@/lib/nav";
 import { useIndicatorsRead } from "@/lib/queries/useIndicators";
+import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useTargets } from "@/lib/queries/useTargets";
 import {
   destinationMatches,
@@ -48,16 +58,19 @@ export function TouchNav() {
   const { audience, isOperator } = useUiView();
   const { data: indicators, isPlaceholderData } = useIndicatorsRead(isOperator);
   const { data: targets } = useTargets(isOperator);
+  const { data: mine } = useMyStorage(audience === "member");
 
   const entries =
     audience === "advanced"
-      ? targetNav((targets ?? []).map((t) => t.target))
-      : navFor(audience);
+      ? targetNav(targets ?? [])
+      : audience === "member"
+        ? memberNav(mine ?? [])
+        : navFor(audience);
   const destinations = touchDestinations(entries);
   const counts = isPlaceholderData ? undefined : indicators;
   // The sheet draws Advanced's whole tree in either view and folds what Basic
   // lacks (A-08 §3). `touchDestinations` is one destination per entry, in order.
-  const operatorEntries = audience === "member" ? entries : operatorNav((targets ?? []).map((t) => t.target));
+  const operatorEntries = audience === "member" ? entries : operatorNav(targets ?? []);
   const sheetDestinations: SheetDestination[] = touchDestinations(operatorEntries).map((destination, index) => ({
     ...destination,
     advancedOnly: operatorEntries[index].advancedOnly,

@@ -377,6 +377,9 @@ describe("adopting before the fields are known", () => {
     expect(screen.queryByText("Decide")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(schemaRead.refetch).toHaveBeenCalled();
+    // It was the system's fields that failed, not the findings, and it says so.
+    expect(screen.getByText("TrueNAS's fields could not be read")).toBeTruthy();
+    expect(screen.queryByText("The findings could not be read")).toBeNull();
   });
 });
 

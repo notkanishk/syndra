@@ -1,83 +1,82 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useFieldSchema, useFieldSchemaState, useSchemaSource } from "@/lib/queries/useFieldSchema";
+import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
+import { useFieldSchemaState, useSchemaSource, useSystemNames } from "@/lib/queries/useFieldSchema";
 
-const asked: string[] = [];
-const fail = { targets: false };
-const schema = [{ name: "active", role: "account" }, { name: "policy", role: "membership", label: "Access policy" }];
-
-vi.mock("@/lib/api-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api-client")>()),
-  request: async (path: string) => {
-    asked.push(path);
-    if (fail.targets) throw new Error("roster down");
-    if (path === "/targets") {
-      return { targets: [{ target: "doors", kind: "access", entitlement_schema: schema }, { target: "fresh" }, { target: "empty", entitlement_schema: [] }] };
-    }
-    return { targets: [{ target: "doors", kind: "access", entitlement_schema: schema }] };
-  },
+/**
+ * The one place a page learns how the read its fields come from went, and
+ * what each system is called. Review finding 3: the roster refetches every
+ * 30s, and a failed refresh keeps the rows it had. Counting that as a failed
+ * read blanked whatever a page drew from the rows (MergeFindings unmounted
+ * the decision form, with the reason the operator had typed).
+ */
+const roster = vi.hoisted(() => ({
+  data: undefined as unknown[] | undefined,
+  isLoading: false,
+  error: null as unknown,
+  refetch: vi.fn(),
 }));
+vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => roster }));
+vi.mock("@/lib/queries/useMyStorage", () => ({ useMyStorage: () => roster }));
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-}
+const ROW = { target: "truenas", name: "Big NAS", entitlement_schema: TRUENAS_SCHEMA };
 
 beforeEach(() => {
-  asked.length = 0;
-  fail.targets = false;
+  roster.data = undefined;
+  roster.isLoading = false;
+  roster.error = null;
 });
 
-describe("a system's fields come from the response the page loaded", () => {
-  it("reads the accepted schema from the roster", async () => {
-    const { result } = renderHook(() => useFieldSchema("doors"), { wrapper });
-    await waitFor(() => expect(result.current).toEqual(schema));
+describe("a failed read is failed only when there are no rows", () => {
+  it("keeps the schema and reports no error when a background refresh fails", () => {
+    roster.data = [ROW];
+    roster.error = new Error("refresh failed");
+    const { result } = renderHook(() => useFieldSchemaState("truenas"));
+    expect(result.current.schema).toBe(TRUENAS_SCHEMA);
+    expect(result.current.error).toBeNull();
   });
 
-  it("is undefined, not a guess, for a system whose manifest has not been accepted", async () => {
-    const { result } = renderHook(() => ({ fresh: useFieldSchema("fresh"), empty: useFieldSchema("empty"), unknown: useFieldSchema("nope") }), { wrapper });
-    await waitFor(() => expect(asked).toContain("/targets"));
-    await new Promise((r) => setTimeout(r, 10));
-    expect(result.current).toEqual({ fresh: undefined, empty: undefined, unknown: undefined });
+  it("reports the error when the first read failed", () => {
+    roster.error = new Error("down");
+    const { result } = renderHook(() => useFieldSchemaState("truenas"));
+    expect(result.current.schema).toBeUndefined();
+    expect(result.current.error).toBe(roster.error);
   });
 
-  it("asks a member's own list and never the roster their proxy refuses", async () => {
-    const { result } = renderHook(() => useSchemaSource(false), { wrapper });
-    await waitFor(() => expect(result.current("doors")).toEqual(schema));
-    expect(asked).toEqual(["/me/targets"]);
-  });
-
-  it("asks the roster and not the member list for an operator", async () => {
-    const { result } = renderHook(() => useSchemaSource(true), { wrapper });
-    await waitFor(() => expect(result.current("doors")).toEqual(schema));
-    expect(asked).toEqual(["/targets"]);
+  it("does the same for a many-systems source", () => {
+    roster.data = [ROW];
+    roster.error = new Error("refresh failed");
+    const { result } = renderHook(() => useSchemaSource(true));
+    expect(result.current.error).toBeNull();
+    expect(result.current("truenas")).toBe(TRUENAS_SCHEMA);
   });
 });
 
-// Three facts, one shape: loading, failed, and read-without-a-schema are never the same answer.
-describe("the state of the read a schema comes from", () => {
-  it("is loading first, then the schema, with no error", async () => {
-    const { result } = renderHook(() => useFieldSchemaState("doors"), { wrapper });
-    expect(result.current).toMatchObject({ schema: undefined, loading: true, error: null });
-    await waitFor(() => expect(result.current.schema).toEqual(schema));
-    expect(result.current).toMatchObject({ loading: false, error: null });
+describe("what a system is called", () => {
+  it("is the roster's name, one source, and the id title-cased before the rows land", () => {
+    roster.data = [ROW];
+    expect(renderHook(() => useSystemNames()).result.current("truenas")).toBe("Big NAS");
+    expect(renderHook(() => useSystemNames()).result.current("door")).toBe("Door");
+    roster.data = undefined;
+    expect(renderHook(() => useSystemNames()).result.current("truenas")).toBe("Truenas");
   });
+});
 
-  it("is read-without-a-schema (not loading, no error) for a system with no accepted manifest", async () => {
-    const { result } = renderHook(() => useFieldSchemaState("fresh"), { wrapper });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current).toMatchObject({ schema: undefined, error: null });
-  });
-
-  it("carries the failure, not an empty schema, when the roster read failed", async () => {
-    fail.targets = true;
-    const { result } = renderHook(() => ({ one: useFieldSchemaState("doors"), many: useSchemaSource(true) }), { wrapper });
-    await waitFor(() => expect(result.current.one.error).toBeTruthy());
-    expect(result.current.one).toMatchObject({ schema: undefined, loading: false });
-    expect(result.current.many.error).toBeTruthy();
-    expect(typeof result.current.many.refetch).toBe("function");
+// Review finding 6: a member page with no hold to word does not ask for
+// /me/targets on the hold card's behalf (that read calls each add-on live).
+describe("a source that is not needed asks nothing", () => {
+  it("passes enabled through to the one read it would make", async () => {
+    const storage = await import("@/lib/queries/useMyStorage");
+    const targets = await import("@/lib/queries/useTargets");
+    const mine = vi.spyOn(storage, "useMyStorage");
+    const ops = vi.spyOn(targets, "useTargets");
+    renderHook(() => useSchemaSource(false, false));
+    expect(mine).toHaveBeenLastCalledWith(false);
+    expect(ops).toHaveBeenLastCalledWith(false);
+    renderHook(() => useSchemaSource(false, true));
+    expect(mine).toHaveBeenLastCalledWith(true);
+    expect(ops).toHaveBeenLastCalledWith(false);
   });
 });

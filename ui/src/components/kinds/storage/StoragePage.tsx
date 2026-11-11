@@ -3,16 +3,19 @@
 import { MemberTargetCard } from "@/components/kinds/MemberTargetCard";
 import { EmptyState, ListStates } from "@/components/states";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { STORAGE_KIND } from "@/lib/nav";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
 
 /**
- * A member's page of systems: one card per system, each drawn by the module of
- * its kind (`MemberTargetCard`). Present for every member whatever they can
- * reach, because the page answers "can I get access?", which a missing nav row
- * does not.
+ * Network storage, the storage kind's page (route `/storage`): one card per
+ * system of kind storage, each drawn by `MemberTargetCard`. Every other
+ * system Syndra has read has its own row and page, `/systems/{target}`. Present
+ * for every member whatever they can reach, because the page answers "can I
+ * get access?", which a missing nav row does not.
  */
-export function MySystems() {
+export function StoragePage() {
   const targets = useMyStorage();
+  const storage = targets.data?.filter((t) => t.kind === STORAGE_KIND) ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -23,7 +26,7 @@ export function MySystems() {
       <ListStates
         isLoading={targets.isLoading}
         error={targets.error}
-        isEmpty={(targets.data ?? []).length === 0}
+        isEmpty={storage.length === 0}
         onRetry={() => targets.refetch()}
         errorTitle="Couldn't read your storage access."
         empty={
@@ -34,7 +37,7 @@ export function MySystems() {
         }
       >
         <div className="grid gap-4">
-          {(targets.data ?? []).map((view) => (
+          {storage.map((view) => (
             <MemberTargetCard key={view.target} view={view} />
           ))}
         </div>

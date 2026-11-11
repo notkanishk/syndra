@@ -96,6 +96,7 @@ function ready(health: Partial<TargetHealth> = {}) {
   state.roster = [
     {
       target: "truenas",
+      name: "TrueNAS",
       registered: true,
       auth_mode: "derived",
       callable: true,

@@ -9,6 +9,7 @@ import { Modal, ModalHeader } from "@/components/ui/Modal";
 import { SyndraMark, WELCOMED } from "@/components/shell/SyndraMark";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Segmented } from "@/components/ui/Select";
+import { STORAGE_NOTE } from "@/components/kinds/storage/captions";
 import { firstName } from "@/lib/greeting";
 import { Unfold } from "@/lib/motion";
 import { ACCOUNT_NAV } from "@/lib/nav";
@@ -19,7 +20,7 @@ import { useInstallPrompt } from "@/lib/useInstallPrompt";
 /** What each of an operator's own pages is for, under its link. */
 const OWN_NOTES: Record<string, string> = {
   "/me": "What you can use, and asking for more",
-  "/storage": "Your password and folders",
+  "/storage": STORAGE_NOTE,
 };
 
 /**

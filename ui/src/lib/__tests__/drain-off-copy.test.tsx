@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 
-import { offlineNext } from "@/components/people/PersonStorage";
+import { offlineNext } from "@/components/people/PersonSystems";
 import { removalOutcome } from "@/components/people/RemovalDialog";
 import { revokeOutcome } from "@/components/review/UnexplainedAccess";
 import { queuedNote, queuedStep } from "@/components/ui/RehearsalDialog";

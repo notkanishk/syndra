@@ -1,5 +1,7 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -13,7 +15,6 @@ import {
   type EntitlementPlan,
 } from "@/lib/queries/useEntitlements";
 import { TINT_MS, useExitPhase } from "@/lib/motion";
-import { targetLabel } from "@/lib/nav";
 import dynamic from "next/dynamic";
 
 // Opened on demand, so it stays out of the page's first load.
@@ -62,6 +63,7 @@ export function ConvergeEntitlements({
   onClose: () => void;
   open?: boolean;
 }) {
+  const nameOf = useSystemNames();
   const rehearse = useRehearseEntitlements(target);
   const apply = useApplyEntitlements(target);
   const [plan, setPlan] = useState<EntitlementPlan | null>(null);
@@ -79,10 +81,10 @@ export function ConvergeEntitlements({
     <>
       {open && (
       <RehearsalDialog
-        title={`Check for differences on ${targetLabel(target)}`}
-        lede={`Compares what ${label} should have on ${targetLabel(target)} with what they have, and records the differences as changes. Pending changes lists each one until it reaches ${targetLabel(target)}.`}
+        title={`Check for differences on ${nameOf(target)}`}
+        lede={`Compares what ${label} should have on ${nameOf(target)} with what they have, and records the differences as changes. Pending changes lists each one until it reaches ${nameOf(target)}.`}
         noun={["account", "accounts"]}
-        system={targetLabel(target)}
+        system={nameOf(target)}
         onRehearse={async (acknowledgeScope) => {
           const result = await rehearse.mutateAsync({ subjectIds, acknowledgeScope });
           setPlan(result);

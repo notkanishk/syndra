@@ -11,6 +11,7 @@ import type { TargetSummary } from "@/lib/queries/useTargets";
 
 const base: TargetSummary = {
   target: "truenas",
+  name: "TrueNAS",
   registered: true,
   auth_mode: "derived",
   callable: true,
@@ -60,6 +61,7 @@ describe("what the add-on says about itself (3.6)", () => {
 describe("a kind with no module of its own gets the core member card", () => {
   const view: MyTargetView = {
     target: "doors",
+    name: "Doors",
     kind: "access",
     entitlement_schema: [{ name: "active", role: "account" }],
     entitled: true,
@@ -86,11 +88,23 @@ describe("a kind with no module of its own gets the core member card", () => {
     expect(screen.queryByText("Enrol a card at the front desk")).toBeNull();
   });
 
-  it("says not read yet, with its next step, when no manifest has been accepted: never a guess at a kind", () => {
-    render(<MemberTargetCard view={{ ...view, kind: undefined, entitlement_schema: undefined }} />);
-    expect(screen.getByText(/Syndra has not read Doors yet|has not read doors yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/Nothing for you to do\./)).toBeInTheDocument();
-    expect(screen.queryByText("Enrol a card at the front desk")).toBeNull();
+  // Owner, 11 Nov: a system Syndra has not read is the operators' alone. A
+  // member gets no card for it, never a guess at a kind.
+  it("draws no member card for a system not read yet", () => {
+    const { container } = render(<MemberTargetCard view={{ ...view, kind: undefined, entitlement_schema: undefined }} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("words each state with its next step, by the system's name", () => {
+    const { rerender } = render(<CoreMemberCard view={{ ...view, account: undefined, entitled: false, standing: undefined }} />);
+    expect(screen.getByText("None of your roles reaches Doors.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ask for access in Requests" })).toHaveAttribute("href", "/requests?ask");
+    rerender(<CoreMemberCard view={{ ...view, account: undefined, entitled: true, standing: undefined }} />);
+    expect(screen.getByText("Your account on Doors is not made yet.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing for you to do. Syndra makes it.")).toBeInTheDocument();
+    rerender(<CoreMemberCard view={{ ...view, health: "offline" }} />);
+    expect(screen.getByText("Doors is offline")).toBeInTheDocument();
+    expect(screen.getByText(/This page updates on its own when Doors returns\./)).toBeInTheDocument();
   });
 });
 

@@ -40,6 +40,7 @@ const failed = vi.hoisted(() => ({
 }));
 const err = (on: boolean) => (on ? new Error("read failed") : null);
 
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/lib/queries/useUsers", () => ({
   useUsers: () => ({
     data: loading.users || failed.users ? undefined : state.users,

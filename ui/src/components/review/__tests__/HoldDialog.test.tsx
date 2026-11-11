@@ -6,6 +6,7 @@ import { HoldDialog } from "@/components/review/HoldDialog";
 
 const createHold = vi.hoisted(() => vi.fn());
 
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);
 vi.mock("@/lib/queries/useHolds", () => ({
   useCreateHold: () => ({ mutateAsync: createHold, isPending: false }),
 }));

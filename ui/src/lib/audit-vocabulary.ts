@@ -91,6 +91,8 @@ export const AUDIT_ACTIONS: Record<
   "role.waits_unmarked": { verb: "Stopped a role waiting for you" },
   // Term dates (A-06 §7): one makerspace-wide setting.
   "terms.updated": { verb: "Changed the term dates" },
+  // Its old and new name are in the row's details (addon-contract 3.10a).
+  "target.named": { verb: "Changed what a connected system is called" },
   // Welcome roles at a first sign-in (owner, 3 Nov): Makerspace settings' switch.
   "welcome_claims.turned_on": { verb: "Turned on welcome roles at a first sign-in" },
   "welcome_claims.turned_off": { verb: "Turned off welcome roles at a first sign-in" },
@@ -201,6 +203,8 @@ export const OPERATION_NOUN: Record<string, string> = {
 
 export function describeAction(
   action: string,
+  /** The roster's name for a system (useSystemNames); the id title-cased without one. */
+  nameOf: (target: string) => string = targetLabel,
 ): { verb: string; template?: string; passive?: string; destructive: boolean } {
   const known = AUDIT_ACTIONS[action];
   if (known) {
@@ -214,21 +218,21 @@ export function describeAction(
   const account = action.match(ACCOUNT_CHANGE);
   if (account) {
     return {
-      verb: `Recorded a change to their ${targetLabel(account[1])} account, waiting for makerspace staff to send it`,
+      verb: `Recorded a change to their ${nameOf(account[1])} account, waiting for makerspace staff to send it`,
       destructive: false,
     };
   }
   const superseded = action.match(CHANGE_SUPERSEDED);
   if (superseded) {
     return {
-      verb: `Dropped a queued change to their ${targetLabel(superseded[1])} account: a newer change replaced it, or ${targetLabel(superseded[1])} no longer uses the setting it named`,
+      verb: `Dropped a queued change to their ${nameOf(superseded[1])} account: a newer change replaced it, or ${nameOf(superseded[1])} no longer uses the setting it named`,
       destructive: false,
     };
   }
   const abandoned = action.match(CHANGE_ABANDONED);
   if (abandoned) {
     return {
-      verb: `Cancelled a queued change to their ${targetLabel(abandoned[1])} account, because ${targetLabel(abandoned[1])} was disconnected from Syndra before it was sent`,
+      verb: `Cancelled a queued change to their ${nameOf(abandoned[1])} account, because ${nameOf(abandoned[1])} was disconnected from Syndra before it was sent`,
       destructive: false,
     };
   }
@@ -236,14 +240,14 @@ export function describeAction(
   if (addon) {
     const [, system, operation, how] = addon;
     const noun = OPERATION_NOUN[operation] ?? "a change";
-    const label = targetLabel(system);
+    const label = nameOf(system);
     if (how === "answered") return { verb: `Said what happened to ${noun} ${label} never answered`, destructive: false };
     if (how === "read") return { verb: `Settled by Syndra from a read of ${label}: ${noun} it never answered`, destructive: false };
     return { verb: `Sent ${noun} to ${label}`, destructive: operation === "account.purge" };
   }
   const lapsed = action.match(HOLD_LAPSED);
   if (lapsed) {
-    return { verb: `A hold on ${targetLabel(lapsed[1])} lifted itself on its date`, destructive: false };
+    return { verb: `A hold on ${nameOf(lapsed[1])} lifted itself on its date`, destructive: false };
   }
   return { verb: action, destructive: /revoke|delete|remove/i.test(action) };
 }

@@ -26,7 +26,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveUser: () => ({ value: undefined, resolved: false }) }),
 }));
-vi.mock("@/components/targets/HomeLimit", () => ({
+vi.mock("@/components/kinds/storage/HomeLimit", () => ({
   HomeLine: () => null,
   LimitDialog: () => null,
   limitVerb: () => null,

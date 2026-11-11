@@ -1,5 +1,7 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import { describeFailure, sentence } from "@/lib/outcome";
 import { useState } from "react";
 
@@ -8,7 +10,6 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { targetLabel } from "@/lib/nav";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { useRevokeTargetAccess, type RevocationResult } from "@/lib/queries/useHolds";
 import { useIsTouch } from "@/lib/useViewport";
@@ -56,6 +57,7 @@ export function RevokeDialog({
   subjectName: string;
   onClose: () => void;
 }) {
+  const nameOf = useSystemNames();
   const revoke = useRevokeTargetAccess(target, subjectId);
   const auto = useAutoRetry();
   const touch = useIsTouch();
@@ -65,7 +67,7 @@ export function RevokeDialog({
   const [result, setResult] = useState<RevocationResult | null>(null);
 
   const armed = confirm.armed && reason.trim() !== "" && !revoke.isPending;
-  const name = targetLabel(target);
+  const name = nameOf(target);
 
   return (
     <Modal open onClose={revoke.isPending ? () => {} : onClose} busy={revoke.isPending} size="md" labelledBy="revoke-title">

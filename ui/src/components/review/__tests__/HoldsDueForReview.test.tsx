@@ -132,7 +132,7 @@ vi.mock("@/lib/queries/useFieldSchema", async () => {
     useSchemaSource: () => {
       const read = { loading: fields.mode === "loading", error: fields.mode === "failed" ? new Error("roster down") : null, refetch: fields.refetch };
       const schema = fields.mode === "laser" ? laser : fields.mode === "truenas" ? m.useFieldSchema() : undefined;
-      return Object.assign(() => schema, read);
+      return Object.assign(() => schema, read, { nameOf: m.useSystemNames() });
     },
   };
 });

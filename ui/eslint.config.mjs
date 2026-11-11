@@ -87,23 +87,54 @@ const eslintConfig = [
       selector,
       ...message("Read fields by role through lib/fields.ts (fieldsByRole, useFieldSchema); field names live only in lib/fields.ts and components/kinds/storage/."),
     }));
+    /**
+     * The UI core does not speak a product's words (addon-contract 3.10g).
+     * The storage kind's words (folder, share, SMB, mount, "Network storage")
+     * are written only in components/kinds/storage/, app/storage/ and
+     * lib/nav.ts. Matched as a string literal, any template element (a
+     * sentence is a template with expressions) and JSX text.
+     */
+    const kindWords = "/\\b([Ff]olders?|[Ss]hares?|SMB|[Mm]ount(ed|s|ing)?|Network storage)\\b/";
+    const kindWord = [`Literal[value=${kindWords}]`, `TemplateElement[value.cooked=${kindWords}]`, `JSXText[value=${kindWords}]`].map((selector) => ({
+      selector,
+      ...message("The storage kind's words live only in components/kinds/storage/ (and app/storage/, lib/nav.ts); say it by role or move it there."),
+    }));
     const tests = ["src/**/__tests__/**", "src/**/__fixtures__/**", "src/**/*.test.{ts,tsx}"];
-    const storage = ["src/lib/fields.ts", "src/components/kinds/storage/**"];
+    const fieldHome = ["src/lib/fields.ts", "src/components/kinds/storage/**"];
+    const wordHome = ["src/components/kinds/storage/**", "src/app/storage/**", "src/lib/nav.ts"];
+    const kindDir = "src/components/kinds/storage/**/*.{ts,tsx}";
+    // Flat config: for a file, the LAST matching block that sets the rule wins whole. So each
+    // block below lists every selector set its files owe, and the blocks partition the files.
     return [
       {
+        // Everywhere: all three guards, minus where each is allowed.
         files: ["src/**/*.{ts,tsx}"],
-        ignores: ["src/lib/queries/invalidation.ts", ...storage, ...tests],
+        ignores: ["src/lib/queries/invalidation.ts", ...fieldHome, ...wordHome, ...tests],
+        rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles, ...kindWord] },
+      },
+      {
+        // invalidation.ts owns the invalidation map: fields + words only.
+        files: ["src/lib/queries/invalidation.ts"],
+        ignores: tests,
+        rules: { "no-restricted-syntax": ["error", ...roles, ...kindWord] },
+      },
+      {
+        // The storage kind: may say fields and words, still may not invalidate by hand.
+        files: [kindDir],
+        ignores: tests,
+        rules: { "no-restricted-syntax": ["error", ...invalidation] },
+      },
+      {
+        // app/storage and nav.ts: words allowed; fields and invalidation still refused.
+        files: ["src/app/storage/**/*.{ts,tsx}", "src/lib/nav.ts"],
+        ignores: tests,
         rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles] },
       },
       {
-        files: ["src/lib/queries/invalidation.ts"],
+        // fields.ts: may say fields; words and invalidation refused.
+        files: ["src/lib/fields.ts"],
         ignores: tests,
-        rules: { "no-restricted-syntax": ["error", ...roles] },
-      },
-      {
-        files: storage.map((f) => (f.endsWith("**") ? `${f}/*.{ts,tsx}` : f)),
-        ignores: tests,
-        rules: { "no-restricted-syntax": ["error", ...invalidation] },
+        rules: { "no-restricted-syntax": ["error", ...invalidation, ...kindWord] },
       },
     ];
   })(),

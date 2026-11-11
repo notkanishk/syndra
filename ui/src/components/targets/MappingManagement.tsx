@@ -13,12 +13,12 @@ import { useLeavingRows } from "@/lib/motion";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { fieldNoun, mappingFields, membershipNoun, type EntitlementField } from "@/lib/fields";
 import { SchemaNotReady } from "@/components/states/SchemaState";
-import { useFieldSchema, useFieldSchemaState } from "@/lib/queries/useFieldSchema";
-import { AddMappingButton, RefusedFields, RoleMappingDialog, placeName } from "@/components/targets/AddMappingDialog";
+import { useFieldSchema, useFieldSchemaState, useSystemNames } from "@/lib/queries/useFieldSchema";
+import { HOMES_STAY, MappingHomeLine, OpensNote, OpensRows } from "@/components/kinds/storage/MappingReach";
+import { AddMappingButton, RefusedFields, RoleMappingDialog } from "@/components/targets/AddMappingDialog";
 import {
   applyParts,
   asQueued,
-  limitWords,
   mergePlans,
   opsFor,
   rehearseOps,
@@ -26,8 +26,7 @@ import {
   type RehearsedPart,
   type RoleRows,
 } from "@/lib/role-mapping-plan";
-import { StatusDot } from "@/components/ui/Badge";
-import { HOME_ROOT, useTargetReach, useTargetSettings, type ReachPlace, type TargetReach } from "@/lib/queries/useTargets";
+import { HOME_ROOT, useTargetReach, useTargetSettings, type ReachPlace } from "@/lib/queries/useTargets";
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
@@ -46,9 +45,8 @@ import {
   type MappingVersion,
   type RoleMapping,
 } from "@/lib/queries/useMappings";
-import { formatClock, roleLabel } from "@/lib/format";
+import { roleLabel } from "@/lib/format";
 import { roleName as nameOfRole } from "@/lib/names";
-import { targetLabel } from "@/lib/nav";
 import { useIsTouch } from "@/lib/useViewport";
 import dynamic from "next/dynamic";
 import { sortByName } from "@/lib/sort";
@@ -79,6 +77,7 @@ const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").
  * and rung 3 stays reserved for taking access from a named person.
  */
 export function MappingManagement({ target }: { target: string }) {
+  const nameOf = useSystemNames();
   const mappings = useMappings(target);
   const reach = useTargetReach(target);
   const settings = useTargetSettings(target);
@@ -96,7 +95,7 @@ export function MappingManagement({ target }: { target: string }) {
   );
   const [editing, setEditing] = useState<RoleMapping | null>(null);
   const [deleting, setDeleting] = useState<RoleMapping | null>(null);
-  const name = targetLabel(target);
+  const name = nameOf(target);
   // Form parts: a mapping added while you are here opens to its height; one removed fades where
   // it was, then its gap settles. What the page opens with is simply there.
   const read = !mappings.isLoading && !mappings.error;
@@ -201,29 +200,6 @@ function useRoleName(projectId: string, roleKey: string): string {
   return roleLabel(project, roleKey, role);
 }
 
-/**
- * The freshness of what each group opens, said once in the card header
- * (A-02 §3). The mappings themselves are Syndra's own record and need none, so
- * the card never recedes; when the read is the last one, only this note turns
- * amber with a ring (A-13 §2).
- */
-function OpensNote({ name, reach }: { name: string; reach: TargetReach | undefined }) {
-  if (!reach) return null;
-  if (!reach.read) return <>What each group opens: not read from {name} yet</>;
-  return reach.current ? (
-    <>
-      What each group opens, read from {name}&apos;s folder permissions <Relative iso={reach.read_at} />
-    </>
-  ) : (
-    <span className="inline-flex items-baseline gap-1.5 text-warn-text">
-      <StatusDot tone="warn" ring className="self-center" />
-      <span>
-        What each group opens, as last read from {name}&apos;s folder permissions at {formatClock(reach.read_at)}
-      </span>
-    </span>
-  );
-}
-
 /** What a mapping gives, in words: the group's name, never `field = value`. */
 function gives(mapping: RoleMapping, schema: EntitlementField[] | undefined): string {
   const field = schema?.find((f) => f.name === mapping.field);
@@ -253,6 +229,7 @@ function MappingRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const nameOf = useSystemNames();
   const schema = useFieldSchema(mapping.target);
   const holders = useMappingHolders(mapping.id);
   const cohort = holders.data?.holders ?? [];
@@ -260,7 +237,7 @@ function MappingRow({
   const resolver = useNameResolver();
   // The project is the system's one, named in the strip; the row names the role.
   const label = nameOfRole(resolver.resolveRole(mapping.project_id, mapping.role_key).value?.display_name, mapping.role_key);
-  const name = targetLabel(mapping.target);
+  const name = nameOf(mapping.target);
 
   return (
     <CardRow first={first} className="flex-wrap items-start">
@@ -275,39 +252,15 @@ function MappingRow({
       <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-[3px]">
         <span className="text-[14px]">Gives {gives(mapping, schema)}</span>
         {opens && (
-          <span className="flex flex-col gap-0.5">
-            {opens.length === 0 ? (
-              <span className="flex items-baseline gap-2 text-[13px] leading-[1.5] text-warn-text [text-wrap:pretty]">
-                <StatusDot tone="warn" ring={lastKnown} />
-                <span>
-                  Opens nothing yet. No folder on {name} gives {mapping.value} anything, so its{" "}
-                  {holders.isLoading ? "" : `${cohort.length} `}
-                  {cohort.length === 1 ? "person gets" : "people get"} an account and nowhere to connect.{" "}
-                  <span className="text-ink">Look at the folder&apos;s permissions on {name}.</span>
-                </span>
-              </span>
-            ) : (
-              opens.map((place, i) => (
-                <span key={place.path} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[13px] leading-[1.5] text-muted">
-                  <span className="text-faint">{i === 0 ? "Opens" : "and"}</span>
-                  <span className="type-mono text-[12.5px] text-ink">{placeName(place)}</span>
-                  <span>{place.access === "change" ? "can change files" : "read only"}</span>
-                </span>
-              ))
-            )}
-          </span>
+          <OpensRows
+            name={name}
+            group={mapping.value}
+            places={opens}
+            lastKnown={lastKnown}
+            holders={holders.isLoading ? undefined : cohort.length}
+          />
         )}
-        {home?.home && (
-          // Read only: set in the dialog, its one write place (A-03 §2).
-          <span className="text-[13px] leading-[1.5] text-muted">
-            Home folder, {limitWords(home.quota?.value)}
-            {homeRoot && (
-              <>
-                , in <span className="type-mono text-[12.5px] text-ink">{homeRoot}</span>
-              </>
-            )}
-          </span>
-        )}
+        {home?.home && <MappingHomeLine quota={home.quota?.value} homeRoot={homeRoot} />}
       </span>
       <span className="basis-full">
         <TechnicalDetail placeKey={`mapping:${mapping.id}`}>
@@ -364,6 +317,7 @@ function asPlan(op: string, previous: BulkPlan, result: MappingApplyResult): Bul
 }
 
 function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose: () => void }) {
+  const nameOf = useSystemNames();
   const [value, setValue] = useState(mapping.value);
   const [rehearsed, setRehearsed] = useState<MappingRehearsal | null>(null);
   const touch = useIsTouch();
@@ -374,9 +328,9 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
     <RehearsalDialog
       title="Change what this role gives"
       definitionLabel="Save the change"
-      lede={`${roleName} currently gives ${gives(mapping, schema)} on ${targetLabel(mapping.target)}. Change it and everybody holding the role is moved too.`}
+      lede={`${roleName} currently gives ${gives(mapping, schema)} on ${nameOf(mapping.target)}. Change it and everybody holding the role is moved too.`}
       noun={["person", "people"]}
-      system={targetLabel(mapping.target)}
+      system={nameOf(mapping.target)}
       ready={value.trim() !== "" && value !== mapping.value}
       compose={
         <div>
@@ -391,7 +345,7 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
             autoFocus={!touch}
           />
           <FieldHint>
-            Checked against {targetLabel(mapping.target)} before you go further. A {membershipNoun(schema)}
+            Checked against {nameOf(mapping.target)} before you go further. A {membershipNoun(schema)}
             that does not exist there is refused now, not later.
           </FieldHint>
         </div>
@@ -408,17 +362,17 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
         <>
           What the {membershipNoun(schema)} <span className="type-mono">{mapping.value}</span> owns stays with
           it. People moved to the new {membershipNoun(schema)} lose access to that unless somebody
-          changes its owner on {targetLabel(mapping.target)}.
+          changes its owner on {nameOf(mapping.target)}.
           {rehearsed?.value_checked === false && (
             <>
               {" "}
               <span className="font-semibold">
-                {targetLabel(mapping.target)} could not be reached, so{" "}
+                {nameOf(mapping.target)} could not be reached, so{" "}
                 <span className="type-mono">{value}</span> was not checked.
               </span>{" "}
               The change is allowed through so an outage does not look like your mistake. If{" "}
               <span className="type-mono">{value}</span> does not exist, the change fails when
-              it reaches {targetLabel(mapping.target)} and waits in Pending changes until
+              it reaches {nameOf(mapping.target)} and waits in Pending changes until
               somebody fixes it.
             </>
           )}
@@ -448,6 +402,7 @@ function DeleteMappingDialog({
   rows: RoleRows;
   onClose: () => void;
 }) {
+  const nameOf = useSystemNames();
   const [parts, setParts] = useState<RehearsedPart[]>([]);
   const schema = useFieldSchema(mapping.target);
   const roleName = useRoleName(mapping.project_id, mapping.role_key);
@@ -457,11 +412,11 @@ function DeleteMappingDialog({
     <RehearsalDialog
       title="Remove this mapping"
       definitionLabel="Remove the mapping"
-      lede={`${roleName} will no longer give ${gives(mapping, schema)} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that ${membershipNoun(schema)}.${
-        rows.home ? " New home folders stop; the ones already made stay, with their files." : ""
+      lede={`${roleName} will no longer give ${gives(mapping, schema)} on ${nameOf(mapping.target)}. Everybody holding the role keeps the role and loses that ${membershipNoun(schema)}.${
+        rows.home ? HOMES_STAY : ""
       }`}
       noun={["person", "people"]}
-      system={targetLabel(mapping.target)}
+      system={nameOf(mapping.target)}
       // Destructive, because it takes access away — but still rung 2: the
       // cohort is a role's holders rather than a person somebody named, and the
       // dialog's own scope step is the ceremony.
@@ -555,6 +510,7 @@ function VersionRow({
   current: boolean;
   unpublished: boolean;
 }) {
+  const nameOf = useSystemNames();
   const rollback = useRollbackMappingVersion(target);
   const [rehearsing, setRehearsing] = useState(false);
   const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
@@ -606,11 +562,11 @@ function VersionRow({
       {rehearsing && (
         <RehearsalDialog
           title={`Roll back to version ${version.version}`}
-          lede={`This replaces the mappings on ${targetLabel(target)} with the ${
+          lede={`This replaces the mappings on ${nameOf(target)} with the ${
             version.entries.length
           } mapping${version.entries.length === 1 ? "" : "s"} in version ${version.version}.`}
           noun={["person", "people"]}
-          system={targetLabel(target)}
+          system={nameOf(target)}
           definitionLabel={`Roll back to version ${version.version}`}
           consequence={
             <>

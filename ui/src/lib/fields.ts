@@ -115,6 +115,16 @@ export function mappedTo(system: string, schema: EntitlementField[] | undefined)
   return schema ? `${system} ${membershipNoun(schema)}s` : `what ${system} gives`;
 }
 
+/**
+ * One of what roles are mapped to, singular: "one group on TrueNAS"; before
+ * the fields are read, "something on TrueNAS". The noun as the add-on labels
+ * it, never a plural with its "s" cut off ("to TrueNAS group"), with no
+ * article to guess and no plural to build ("policys").
+ */
+export function oneMappedTo(system: string, schema: EntitlementField[] | undefined): string {
+  return schema ? `one ${membershipNoun(schema)} on ${system}` : `something on ${system}`;
+}
+
 /** The names a role mapping works with: its membership, its flag, its limit. */
 export interface MappingFields {
   membership?: string;

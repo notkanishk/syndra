@@ -392,6 +392,9 @@ func NewRouter() http.Handler {
 	// wrapped in withTargetProject GIVE access and wait for it; taking access
 	// away never does.
 	mux.HandleFunc("PUT /api/v1/targets/{target}/project", withCORS(withOperatorAuth(handleSetTargetProject)))
+	// What members see it called (addon-contract 3.10a). One write place: the
+	// system's own page. Changes nobody's access.
+	mux.HandleFunc("PUT /api/v1/targets/{target}/name", withCORS(withOperatorAuth(handleSetTargetName)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/lifecycle", withCORS(withOperatorAuth(handleSetTargetLifecycle)))
 
 	// Revocation as a composition (design §10). This target cannot end a

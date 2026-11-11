@@ -6,6 +6,7 @@ import { EventSentence } from "@/components/audit/EventLine";
 import type { AuditEntry } from "@/lib/queries/useAudit";
 
 const NAMES: Record<string, string> = { u1: "Bobby Roode", op1: "Kanishk Singh", op2: "Candice Michelle" };
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);
 vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{NAMES[id] ?? id}</span>,
   BundleName: ({ id }: { id: string }) => <span>{id === "b1" ? "Community · Basic" : id}</span>,

@@ -33,7 +33,7 @@ const resolver = {
   resolveBundle: () => ({ value: undefined, resolved: true }),
 };
 vi.mock("@/lib/queries/useNameResolver", () => ({ useNameResolver: () => resolver }));
-vi.mock("@/components/targets/HomeLimit", () => ({ HomeLine: () => null, LimitDialog: () => null, limitVerb: () => null }));
+vi.mock("@/components/kinds/storage/HomeLimit", () => ({ HomeLine: () => null, LimitDialog: () => null, limitVerb: () => null }));
 
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { Withheld } from "@/components/ui/Withheld";

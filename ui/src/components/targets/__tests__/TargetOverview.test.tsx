@@ -165,6 +165,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
 function summary(operations: TargetSummary["operations"]): TargetSummary {
   return {
     target: "truenas",
+    name: "TrueNAS",
     registered: true,
     auth_mode: "derived",
     callable: true,

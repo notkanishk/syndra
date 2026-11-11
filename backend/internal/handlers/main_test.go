@@ -36,6 +36,8 @@ func TestMain(m *testing.M) {
 	svcConvergeProjectChange = func(context.Context, string, string, string) error { return nil }
 	svcConvergeSubjectOn = func(context.Context, string, string, string) error { return nil }
 	dbTargetProjects = func(context.Context) (map[string]string, error) { return map[string]string{}, nil }
+	// No system is named by an operator unless a test says so (it reads Postgres).
+	dbTargetName = func(context.Context, string) (string, error) { return "", nil }
 	checkRoleOffered = func(context.Context, string, string) error { return nil }
 	// No bundle includes another unless a test says so (B8).
 	dbBundleIncludesAnything = func(context.Context, string) (bool, error) { return false, nil }

@@ -21,7 +21,6 @@ import { deviceFrom, type Device } from "@/components/kinds/storage/device";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import {
   useSetStorageCredential,
@@ -41,7 +40,7 @@ const ConnectionGuide = dynamic(() => import("@/components/kinds/storage/Connect
 /**
  * The storage kind's card for a member (route-storage; A-01, A-02): the module
  * `components/kinds/MemberTargetCard.tsx` picks for a system of kind `storage`.
- * The page that lists the cards is `components/member/MySystems.tsx`.
+ * The page that lists the cards is `components/kinds/storage/StoragePage.tsx`.
  *
  * One card per system. A three-step line opens every state, so a member can
  * always see where they are: a role gives you access, your account is
@@ -108,7 +107,7 @@ function joinNames(names: string[]): string {
 }
 
 export function StorageMemberCard({ view }: { view: MyTargetView }) {
-  const label = targetLabel(view.target);
+  const label = view.name;
   const state = stateOf(view);
   const roleName = useRoleName();
   const offline = view.health === "offline";

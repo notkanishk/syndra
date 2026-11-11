@@ -2,6 +2,7 @@
 
 import type { EntitlementField, MappingFields } from "@/lib/fields";
 import { mappingFields } from "@/lib/fields";
+import { targetLabel } from "@/lib/nav";
 import { useMyStorage } from "./useMyStorage";
 import { useTargets } from "./useTargets";
 
@@ -28,10 +29,15 @@ export interface SchemaRead {
   refetch: () => void;
 }
 
-/** A lookup that also says how the read it came from went. */
-export type SchemaSource = SchemaLookup & SchemaRead;
+/**
+ * A lookup that also says how the read it came from went, and what each
+ * system is called: the same rows carry the backend's `name` (one source:
+ * the operator's name, else the manifest's product, else the id), and before
+ * they arrive the id title-cased (`targetLabel`).
+ */
+export type SchemaSource = SchemaLookup & SchemaRead & { nameOf: (system: string) => string };
 
-type Row = { target: string; entitlement_schema?: EntitlementField[] };
+type Row = { target: string; name?: string; entitlement_schema?: EntitlementField[] };
 
 /** A schema with entries, or undefined: an empty one says nothing was read. */
 const read = (rows: Row[] | undefined): SchemaLookup => (system) => {
@@ -41,13 +47,29 @@ const read = (rows: Row[] | undefined): SchemaLookup => (system) => {
 
 type Query = { data: Row[] | undefined; isLoading: boolean; error: unknown; refetch: () => unknown };
 
+/**
+ * A failed background refresh keeps the rows it had: it is "failed" only when
+ * there are none. The roster refetches every 30s, and treating one failed
+ * refresh as a failed read blanked whatever a page had drawn from the rows
+ * (a form being filled in, with its reason) until the next one landed.
+ */
 const sourceOf = (q: Query): SchemaSource =>
-  Object.assign(read(q.data), { loading: q.isLoading, error: q.error, refetch: () => void q.refetch() });
+  Object.assign(read(q.data), {
+    loading: q.isLoading,
+    error: q.data ? null : q.error,
+    refetch: () => void q.refetch(),
+    nameOf: (system: string) => q.data?.find((t) => t.target === system)?.name ?? targetLabel(system),
+  });
 
 /** The operator's: from the roster the page loads, for one system. */
 export function useFieldSchemaState(system: string | undefined): { schema: EntitlementField[] | undefined } & SchemaRead {
   const source = sourceOf(useTargets());
   return { schema: source(system), loading: source.loading, error: source.error, refetch: source.refetch };
+}
+
+/** What an operator's page calls each system: the roster's name for it. */
+export function useSystemNames(): (system: string) => string {
+  return sourceOf(useTargets()).nameOf;
 }
 
 export function useFieldSchema(system: string | undefined): EntitlementField[] | undefined {
@@ -63,8 +85,10 @@ export function useMappingFields(system: string | undefined): MappingFields {
  * an operator, `/me/targets` for anyone else (their proxy refuses the roster,
  * so it is not asked). Only the one that is needed is fetched.
  */
-export function useSchemaSource(isOperator: boolean): SchemaSource {
-  const roster = useTargets(isOperator);
-  const mine = useMyStorage(!isOperator);
+export function useSchemaSource(isOperator: boolean, enabled = true): SchemaSource {
+  // `enabled` false asks nothing: a page with no hold to word does not wait on
+  // a read that calls each add-on (a member's /me/targets).
+  const roster = useTargets(isOperator && enabled);
+  const mine = useMyStorage(!isOperator && enabled);
   return sourceOf(isOperator ? roster : mine);
 }

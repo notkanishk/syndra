@@ -20,7 +20,8 @@ import { GIVE_ROLE_LABEL, GrantDirectAccess } from "@/components/people/GrantDir
 import { ManageBundles } from "@/components/people/ManageBundles";
 import { PersonActivity } from "@/components/people/PersonActivity";
 import { PersonRequests } from "@/components/people/PersonRequests";
-import { PersonStorage } from "@/components/people/PersonStorage";
+import { PersonStorage } from "@/components/kinds/storage/PersonStorage";
+import { isStorage, PersonSystems } from "@/components/people/PersonSystems";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ErrorState, RowSkeleton, SkeletonAfterDelay } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
@@ -283,15 +284,16 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
     count: project.effective_role_keys.length || unexplainedIn(project).length,
     tone: unexplainedIn(project).length > 0 ? ("warn" as const) : undefined,
   }));
-  // Then one per connected system, named and with no count: a system is one
-  // card, not a list (A-10 §1).
+  // Then one per connected system, named by its name and with no count: a
+  // system is one card, not a list (A-10 §1). In the cards' order: the
+  // storage section's, then Connected systems' (each alphabetical, the roster's).
+  const roster = isOperator ? (systems.data ?? []) : [];
   const sections = [
     ...projectSections,
-    ...(isOperator ? (systems.data ?? []) : []).map((t) => ({
+    ...[...roster.filter(isStorage), ...roster.filter((t) => !isStorage(t))].map((t) => ({
       id: `sys-${t.target}`,
       projectId: "",
-      // The section heading below reads "Network storage"; the chip says the same.
-      label: "Network storage",
+      label: t.name,
       count: undefined,
       tone: undefined,
     })),
@@ -584,9 +586,11 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
             );
           })}
 
-          {/* Something they use, under the projects whose roles reach it (A-10 §1).
-              Operators only: a member's own storage is on Network storage. */}
+          {/* Something they use, under the projects whose roles reach it (A-10 §1):
+              storage, then every other connected system, in that fixed order.
+              Operators only: a member's own are on their own pages. */}
           {isOperator && <PersonStorage userId={userId} name={user.name} />}
+          {isOperator && <PersonSystems userId={userId} name={user.name} />}
 
           {/* Advisory notes. Never an error — cleanup_hints are opinions. */}
           {access.data.cleanup_hints.map((hint) => (

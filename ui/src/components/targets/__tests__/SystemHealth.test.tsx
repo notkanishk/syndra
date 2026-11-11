@@ -28,6 +28,7 @@ const state: { health: TargetSystemHealth | undefined; loading: boolean; reachab
 // The report was last read at 09:41, local time.
 const READ_AT = new Date(2026, 10, 3, 9, 41).getTime();
 
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
   useTargetSystemHealth: () => ({
     data: state.health,

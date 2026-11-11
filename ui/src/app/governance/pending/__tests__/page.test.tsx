@@ -18,6 +18,7 @@ const rules = vi.hoisted(() => ({ data: [] as MappingRuleRow[] }));
 const load = vi.hoisted(() => ({ loading: false }));
 const names = vi.hoisted(() => ({ users: {} as Record<string, string> }));
 
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => {
     const miss = { value: undefined, resolved: true } as const;

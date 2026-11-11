@@ -19,7 +19,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
   }),
   useTargetHomes: () => ({ data: { accounts: [] }, isLoading: false, error: null }),
 }));
-vi.mock("@/components/targets/HomeLimit", () => ({
+vi.mock("@/components/kinds/storage/HomeLimit", () => ({
   HomeLine: () => null,
   LimitDialog: () => null,
   limitVerb: () => null,

@@ -4,6 +4,7 @@ import { UserName, BundleName, ProjectName } from "@/components/names";
 import { ADDON_EVENT, OPERATION_NOUN, describeAction, targetKind } from "@/lib/audit-vocabulary";
 import { formatAt, formatClock, formatClockSeconds, formatList, formatRelative } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import type { AuditEntry, CancelledUnsentDetails } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { roleName } from "@/lib/names";
@@ -143,10 +144,13 @@ export function isPasswordSend(entry: AuditEntry): boolean {
  * left, which one the system confirmed, and what settled it if neither did.
  * Seconds only here, where the gap between two sends is the point.
  */
-export function describeSends(entry: AuditEntry): { headline: string; sends: string } {
+export function describeSends(
+  entry: AuditEntry,
+  nameOf: (target: string) => string = targetLabel,
+): { headline: string; sends: string } {
   const op = entry.operation!;
   const system = entry.action.match(ADDON_EVENT)?.[1] ?? "";
-  const label = targetLabel(system);
+  const label = nameOf(system);
   const rotate = op.operation === "password.rotate";
   const [done, open] = rotate
     ? [`Storage password replaced on ${label}`, `Storage password replacement on ${label}`]
@@ -189,7 +193,7 @@ export function describeSends(entry: AuditEntry): { headline: string; sends: str
 }
 
 function SendSentence({ entry }: { entry: AuditEntry }) {
-  const { headline, sends } = describeSends(entry);
+  const { headline, sends } = describeSends(entry, useSystemNames());
   return (
     <span className="flex flex-col gap-0.5">
       <span>{headline}</span>
@@ -204,7 +208,7 @@ function AnswerSentence({ entry }: { entry: AuditEntry }) {
   const happened = (entry.details as { happened?: boolean } | undefined)?.happened;
   const said = happened === undefined ? "said what happened" : happened ? "said it happened" : "said it didn't happen";
   const noun = OPERATION_NOUN[operation] ?? "a change";
-  const label = targetLabel(system);
+  const label = useSystemNames()(system);
   if (how === "read") {
     return (
       <span>
@@ -252,7 +256,7 @@ export function EventSentence({ entry }: { entry: AuditEntry }) {
 }
 
 function Sentence({ entry }: { entry: AuditEntry }) {
-  const { verb, template, destructive } = describeAction(entry.action);
+  const { verb, template, destructive } = describeAction(entry.action, useSystemNames());
   const tone = destructive ? "font-semibold text-danger-text" : undefined;
 
   if (isPasswordSend(entry)) return <SendSentence entry={entry} />;

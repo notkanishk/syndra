@@ -54,7 +54,7 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
     }),
   }),
 }));
-vi.mock("@/components/targets/HomeLimit", () => ({
+vi.mock("@/components/kinds/storage/HomeLimit", () => ({
   HomeLine: () => null,
   LimitDialog: () => null,
   limitVerb: () => null,

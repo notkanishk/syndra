@@ -6,7 +6,6 @@ import { ApiError, request } from "@/lib/api-client";
 import type { EntitlementField } from "@/lib/fields";
 import type { AccountHome, Standing } from "@/lib/queries/useTargets";
 import type { OneShotSecret } from "@/lib/secret";
-import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
 import type { RetryState } from "@/lib/retry";
@@ -46,6 +45,8 @@ export interface StoragePlace {
 
 export interface MyTargetView {
   target: string;
+  /** What the system is called, the same name the operator's roster carries. */
+  name: string;
   /** At least one mapped role reaches this target for this person. */
   entitled: boolean;
   /** The add-on-reported name they connect with, or absent. */
@@ -190,7 +191,7 @@ export function usePersonTargets(userId: string, enabled = true) {
     queryKey: ["users", userId, "targets"],
     enabled,
     queryFn: () => request<{ targets: PersonTargetView[] }>(`/users/${encodeURIComponent(userId)}/targets`),
-    select: (data) => sortByName(data.targets ?? [], (t) => targetLabel(t.target), (t) => t.target),
+    select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
   });
 }
 
@@ -199,7 +200,7 @@ export function useMyStorage(enabled = true) {
     queryKey: ["me", "targets"],
     enabled,
     queryFn: () => request<{ targets: MyTargetView[] }>("/me/targets"),
-    select: (data) => sortByName(data.targets ?? [], (t) => targetLabel(t.target), (t) => t.target),
+    select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
     refetchInterval: (query) =>
       (query.state.data?.targets ?? []).some(waitingOn) ? 30_000 : false,
   });

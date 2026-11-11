@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { flatItems, fold, goTo, type GoToSource } from "@/lib/go-to";
-import { ADVANCED_NAV, BASIC_NAV, MEMBER_NAV } from "@/lib/nav";
+import { ADVANCED_NAV, BASIC_NAV, memberNav } from "@/lib/nav";
 
 const user = (id: string, name: string, extra: object = {}) =>
   ({ id, name, email: `${id}@example.edu`, title: "", team: "Fabrication", status: "active", avatar: "", ...extra }) as never;
@@ -63,7 +63,7 @@ describe("Go to", () => {
   });
 
   it("gives a member their own pages and no names", () => {
-    const groups = goTo(source({ nav: MEMBER_NAV, names: false }), "a");
+    const groups = goTo(source({ nav: memberNav([]), names: false }), "a");
     expect(groups.map((g) => g.group)).toEqual(["Pages"]);
     expect(flatItems(groups).map((i) => i.name)).toEqual(["My access", "Network storage"]);
   });

@@ -1,4 +1,6 @@
 "use client";
+
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import { personOr } from "@/lib/names";
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,8 +19,8 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { formatAt, formatRelative } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { homeSettingWording } from "@/components/kinds/storage/unconfirmed";
 import { useAnswerUnconfirmed, type UnconfirmedOperation } from "@/lib/queries/useTargets";
 
 /**
@@ -128,15 +130,7 @@ function wording(op: UnconfirmedOperation, who: string, name: string) {
       };
     }
     case "setting.put":
-      return {
-        asked: [`Change where home folders go to ${op.about ?? "a new place"}`, null],
-        question: `Did ${name} change where home folders go?`,
-        tell: `Home folders, in the setup card above, shows what ${name} holds now.`,
-        yes: `New home folders go to ${op.about ?? "the new place"}.`,
-        no: `Home folders still go where they did.`,
-        done: `New home folders on ${name} go to ${op.about ?? "the new place"}.`,
-        notDone: `You recorded that ${name} didn't change where home folders go.`,
-      };
+      return homeSettingWording(op, name);
     default:
       return {
         asked: [`A change for `, ` on ${name}`],
@@ -161,7 +155,8 @@ function UnconfirmedRow({
   first: boolean;
   onSay: () => void;
 }) {
-  const name = targetLabel(target);
+  const nameOf = useSystemNames();
+  const name = nameOf(target);
   const who = usePersonName(op.subject_id);
   const w = wording(op, who, name);
   const [pre, post] = w.asked;
@@ -216,7 +211,8 @@ function SayWhatHappened({
   op: UnconfirmedOperation;
   onClose: (answered: boolean) => void;
 }) {
-  const name = targetLabel(target);
+  const nameOf = useSystemNames();
+  const name = nameOf(target);
   const who = usePersonName(op.subject_id);
   const asker = usePersonName(op.actor_id);
   const w = wording(op, who, name);

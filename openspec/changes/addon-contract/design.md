@@ -740,6 +740,41 @@ target adds one, and the core would be learning each product, which §0 of
 `addons/README.md` forbids. The add-on knows the word; the core knows who is
 waited on.
 
+### 6.1 What a system is called, and where a member meets it (3.10)
+
+**The name is a registration attribute, shaped once by the backend.**
+`targets.name` (migration 000091, nullable, `targets_name_check`: never blank,
+at most 60 characters) is set on the system's own page under System, its one
+write place (`PUT /api/v1/targets/{target}/name`, strict JSON, audited as
+`target.named` with the old and new name in the same transaction). Every
+roster carries `name = coalesce(targets.name, manifest.product, the id
+title-cased)`, computed by `handlers.systemName` alone: `GET /targets` (with
+`name_set`), `GET /me/targets` and a person's targets. Every surface draws a
+system by that `name`; the UI's `targetLabel` is only the id title-cased for a
+row drawn before a roster lands, and its product map is gone. Two laser
+cutters from one image share a manifest, so both default to its `product`
+until an operator names one. **Rejected:** a manifest field (wrong owner: two
+deployments of one image share it), a name per kind (cannot tell two apart),
+and the UI map (product names in core code). Note: the TrueNAS add-on reports
+`product: "truenas_scale"`, so a deployment shows that until the operator
+names it (or the add-on reports a display name).
+
+**Where a member meets a system.** By kind, decided by the accepted manifest
+(owner, 11 Nov 2026): kind `storage` folds into Network storage (`/storage`
+lists kind `storage` only); any other kind gets its own row in the member rail
+and its own page, `/systems/{target}` (a storage system there is sent to
+`/storage`, one address per page). A registration with **no accepted manifest
+is operators-only**: no member row, no member card. Rows are registrations,
+never entitlements: a member none of whose roles reaches the system has the
+row, and the page says so with a next step. The rail's seat is a static
+*family* leaf in `MEMBER_NAV` (`basic-advanced-ia` §1), so reachability stays
+derived from the static tree and the Edge middleware needs no data.
+
+**The person page** (operators): Network storage (the storage kind's module,
+`components/kinds/storage/PersonStorage`), then **Connected systems**, one
+kind-agnostic card per other system, not read included: the account, the
+add-on's `standing`, the roles that reach it and any hold.
+
 ## 7. The conformance kit
 
 `addons/conformance`: a Go module, one binary.

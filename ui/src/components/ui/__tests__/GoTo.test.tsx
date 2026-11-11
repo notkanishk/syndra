@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GoTo, GoToPanel } from "@/components/ui/GoTo";
 import { NAME_CATALOG_KEY } from "@/lib/queries/useNameCatalog";
-import { ADVANCED_NAV, BASIC_NAV, MEMBER_NAV } from "@/lib/nav";
+import { ADVANCED_NAV, BASIC_NAV, memberNav } from "@/lib/nav";
 
 const view = vi.hoisted(() => ({ audience: "advanced" as "basic" | "advanced" | "member" }));
 vi.mock("@/lib/ui-view", () => ({
@@ -38,7 +38,7 @@ beforeEach(() => {
 
 describe("Go to's placeholder says what this session can reach (A-20 P17)", () => {
   it.each([
-    ["member", MEMBER_NAV, "A page"],
+    ["member", memberNav([]), "A page"],
     ["basic", BASIC_NAV, "A person, a project, an app, or a page"],
     ["advanced", ADVANCED_NAV, "A person, a project, an app, a bundle, or a page"],
   ] as const)("%s", (audience, nav, words) => {
@@ -91,7 +91,7 @@ describe("Go to", () => {
 
   it("gives a member their pages and nothing else", () => {
     view.audience = "member";
-    renderIn(<GoTo open onClose={() => {}} nav={MEMBER_NAV} />);
+    renderIn(<GoTo open onClose={() => {}} nav={memberNav([])} />);
     type("pri");
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
     expect(screen.getByText("Nothing by that name.")).toBeInTheDocument();

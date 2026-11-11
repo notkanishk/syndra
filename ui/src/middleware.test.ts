@@ -6,7 +6,7 @@ import { NextRequest } from "next/server";
 
 import { middleware } from "@/middleware";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
-import { MEMBER_ROUTES } from "@/lib/nav";
+import { MEMBER_ROUTES, memberNav, navLeaves } from "@/lib/nav";
 
 // Mirrors ADMIN_ONLY_PATHS in middleware.ts (not exported). Iterated so every
 // gated route is covered by a single assertion loop.
@@ -165,6 +165,34 @@ describe("middleware admin/member boundary", () => {
       const res = await middleware(req(path, c));
       expect(res.headers.get("location"), `${path} is offered and must not redirect`).toBeNull();
       expect(res.status).toBe(200);
+    }
+  });
+
+  // addon-contract 3.10: the rows the member rail draws from the registry are
+  // reachable through the family seat's pattern, with no data at the Edge.
+  // Every href the rail renders, not a hand-written subset.
+  it("lets a member through every row memberNav renders from the registry", async () => {
+    const c = cookie({ type: "oidc", userId: "u1", role: "user", expiresAt: future() });
+    const rows = navLeaves(
+      memberNav([
+        { target: "lathe", name: "Big laser", kind: "machine" },
+        { target: "door-2", name: "Door", kind: "access" },
+        { target: "nas", name: "TrueNAS", kind: "storage" },
+      ]),
+    );
+    expect(rows.map((r) => r.href)).toContain("/systems/lathe");
+    for (const { href } of rows) {
+      const res = await middleware(req(href, c));
+      expect(res.headers.get("location"), `${href} is drawn and must not redirect`).toBeNull();
+    }
+  });
+
+  it("still redirects a member off an operator's system page, and off the family seat itself", async () => {
+    const c = cookie({ type: "oidc", userId: "u1", role: "user", expiresAt: future() });
+    for (const path of ["/system/targets/lathe", "/systems", "/systems/lathe/mappings"]) {
+      const res = await middleware(req(path, c));
+      expect(res.status, path).toBe(307);
+      expect(locationPath(res)).toBe("/");
     }
   });
 

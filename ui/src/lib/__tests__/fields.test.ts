@@ -10,6 +10,8 @@ import {
   limitFields,
   limitWordsFor,
   mappingFields,
+  mappedTo,
+  oneMappedTo,
   roleOf,
   type EntitlementField,
 } from "@/lib/fields";
@@ -86,5 +88,14 @@ describe("formatLimit", () => {
     expect(limitWordsFor(quota, "21474836480")).toBe("20 GB");
     expect(limitWordsFor(ACCESS[3], "-1")).toBe("no limit");
     expect(limitWordsFor(ACCESS[3], "0")).toBe("0");
+  });
+});
+
+describe("what roles are mapped to, in a sentence", () => {
+  it("says one of them in the singular without cutting a plural, and something on the system before it is read", () => {
+    expect(mappedTo("TrueNAS", TRUENAS_SCHEMA)).toBe("TrueNAS groups");
+    expect(oneMappedTo("TrueNAS", TRUENAS_SCHEMA)).toBe("one group on TrueNAS");
+    expect(oneMappedTo("Front door", ACCESS)).toBe("one access policy on Front door");
+    expect(oneMappedTo("TrueNAS", undefined)).toBe("something on TrueNAS");
   });
 });

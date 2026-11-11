@@ -1,5 +1,7 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
@@ -80,7 +82,6 @@ import { KEPT, PushedStep, useCancelStep, useForetell } from "@/components/ui/Ca
 import { isStale, usePlanConsent } from "@/lib/usePlanConsent";
 import { isRefused, waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
-import { targetLabel } from "@/lib/nav";
 import {
   FORECAST,
   forecastFor,
@@ -148,6 +149,7 @@ const isSafety = (item: DriftTriageItem) => (item.role_group ?? "").toLowerCase(
  * rearrange their own shape is a queue nobody can scan.
  */
 export function UnexplainedAccess() {
+  const nameOf = useSystemNames();
   const params = useSearchParams();
   const router = useRouter();
 
@@ -398,7 +400,7 @@ export function UnexplainedAccess() {
   // the comparison and the system list to settle, and says what was not read instead of
   // vouching for it.
   const notRead = [
-    ...unread.map((target) => `${targetLabel(target.target)} wasn’t read`),
+    ...unread.map((target) => `${nameOf(target.target)} wasn’t read`),
     ...(summary.error ? ["Which systems were read isn’t known"] : []),
     ...(diff.error ? ["The comparison didn’t load"] : []),
     ...(diff.data?.truncated ? ["The comparison stopped early"] : []),
@@ -693,7 +695,7 @@ export function UnexplainedAccess() {
       {/* A system nobody could read says what is missing from the list and why;
           the rows below are still current for the ones that were read. */}
       {unread.map((target) => (
-        <Notice key={target.target} tone="warn" live title={`${targetLabel(target.target)} hasn’t been read since ${formatWhen(target.since)}.`} next={`Check that ${targetLabel(target.target)} is running, then open this page again.`}>
+        <Notice key={target.target} tone="warn" live title={`${nameOf(target.target)} hasn’t been read since ${formatWhen(target.since)}.`} next={`Check that ${nameOf(target.target)} is running, then open this page again.`}>
           Anything that drifted on it is not in this list.{" "}
           {target.reason ? `${whyNotChecked(target.reason)} ` : ""}The rows below are current for
           the systems that were read.
@@ -927,6 +929,7 @@ function TriageRow({
   /** Zitadel is not answering: the decisions wait. */
   paused: boolean;
 }) {
+  const systemName = useSystemNames();
   const role = item.role_keys[0] ?? "";
   const resolver = useNameResolver();
   // A name where Syndra can give one; where it cannot the sentence drops "by" rather than show an id.
@@ -976,7 +979,7 @@ function TriageRow({
 
         <WhatSeat projectId={item.project_id} roleKeys={role ? [role] : []} className="order-2 tablet:w-[200px] tablet:shrink-0">
           {item.target !== "zitadel" && (
-            <span className="text-[12.5px] text-muted">On {targetLabel(item.target)}</span>
+            <span className="text-[12.5px] text-muted">On {systemName(item.target)}</span>
           )}
           <RiskPill item={item} />
         </WhatSeat>

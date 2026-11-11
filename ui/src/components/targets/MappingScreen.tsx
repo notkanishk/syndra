@@ -10,9 +10,8 @@ import { ApiError } from "@/lib/api-client";
 import { MappingManagement } from "@/components/targets/MappingManagement";
 import { VersionBand } from "@/components/targets/VersionBand";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
-import { mappedTo } from "@/lib/fields";
-import { useFieldSchema } from "@/lib/queries/useFieldSchema";
-import { targetLabel } from "@/lib/nav";
+import { mappedTo, oneMappedTo } from "@/lib/fields";
+import { useFieldSchema, useSystemNames } from "@/lib/queries/useFieldSchema";
 import { useCrumb } from "@/lib/page-crumb";
 import { useMappingHistory, useMappings } from "@/lib/queries/useMappings";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -33,6 +32,7 @@ import { useTargets } from "@/lib/queries/useTargets";
  * somebody to look.
  */
 export function MappingScreen({ target }: { target: string }) {
+  const nameOf = useSystemNames();
   const mappings = useMappings(target);
   const history = useMappingHistory(target);
   const roster = useTargets();
@@ -40,7 +40,7 @@ export function MappingScreen({ target }: { target: string }) {
   useCrumb("Mappings");
 
   const reach = mappings.data ? roleCount(mappings.data) : undefined;
-  const name = targetLabel(target);
+  const name = nameOf(target);
   const project = (roster.data ?? []).find((t) => t.target === target)?.project;
   const version = history.data?.current_version;
   // A project Syndra could not name has an empty name, and interpolating it
@@ -75,7 +75,7 @@ export function MappingScreen({ target }: { target: string }) {
         <Card>
           <EmptyState
             title={`${name} has no Zitadel project yet.`}
-            guidance={`A mapping ties one of that project's roles to ${mappedTo(name, schema).replace(/s$/, "")}, so the project comes first. It is chosen on ${name}'s own page.`}
+            guidance={`A mapping ties one of that project's roles to ${oneMappedTo(name, schema)}, so the project comes first. It is chosen on ${name}'s own page.`}
             action={{ label: `Choose it on ${name}'s page`, href: `/system/targets/${target}` }}
           />
         </Card>
