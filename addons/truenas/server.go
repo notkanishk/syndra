@@ -63,8 +63,10 @@ type server struct {
 	// reach is the last read of the shares' folder permissions (reach.go).
 	reach reachCache
 
-	// calls is every write executing now, by call_id (calls.go).
-	calls callLeases
+	// calls is every write executing now, by call_id, and subjects the one
+	// write per subject allowed at a time (calls.go).
+	calls    callLeases
+	subjects subjectLocks
 }
 
 func (s *server) routes() http.Handler {
@@ -127,21 +129,30 @@ func (s *server) handleCapabilities(w http.ResponseWriter, r *http.Request, _ []
 // The reasons read differently to an operator and are kept apart for that:
 // an untested major is "we will not", a missing method is "it cannot".
 func (s *server) availability(operationID string) (bool, string) {
+	code, why := s.unavailable(operationID)
+	return code == "", why
+}
+
+// unavailable is why an operation cannot run against this target now, as the
+// code a call to it is refused with and the reason; "" when it can. The one
+// source for the manifest's `available` and for handleOperation's gate, so the
+// manifest never offers what the route then refuses.
+func (s *server) unavailable(operationID string) (code, why string) {
 	methods := methodsFor(operationID)
 	if len(methods) == 0 {
 		// Local only (account.release): nothing on the target is involved, so
 		// nothing about the target's version or reachability can withdraw it.
-		return true, ""
+		return "", ""
 	}
 	if supported, why := s.nas.MajorSupported(); !supported {
-		return false, why
+		return CodeTargetVersionUnsupported, why
 	}
 	for _, method := range methods {
 		if !s.nas.MethodPresent(method) {
-			return false, fmt.Sprintf("this target does not expose %s", method)
+			return CodeOperationFailed, fmt.Sprintf("this target does not expose %s", method)
 		}
 	}
-	return true, ""
+	return "", ""
 }
 
 // methodsFor names the target methods an operation depends on.

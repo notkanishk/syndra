@@ -196,6 +196,11 @@ type Snapshot struct {
 	// current and NOT usable for concluding an absence, which is what half the
 	// drift diff does.
 	Truncated bool `json:"truncated"`
+	// The group table the read named groups from, so a plan checks desired
+	// groups against the same vocabulary (groupIDs). Not kept in the mirror:
+	// nil on a stored snapshot.
+	groupsByName  map[string]apiID
+	builtinGroups map[string]bool
 }
 
 // Subject is one account on the target, as the drift sweep sees it.

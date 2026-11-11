@@ -299,7 +299,7 @@ func (k *kit) report() *Report {
 		}
 	}
 	for _, e := range catalogue {
-		res := Result{ID: e.id, Must: e.must, Level: "MUST"}
+		res := Result{ID: e.id, Must: e.must + " (AUTHORING.md#" + e.guide + ")", Level: "MUST"}
 		if e.advisory {
 			res.Level = "ADVISORY"
 		}
@@ -329,9 +329,9 @@ func (k *kit) report() *Report {
 			case f == "operations" || f == "settings" || f == "freshness" || f == "calls":
 				continue // a row of its own above
 			case known:
-				add(Result{ID: id, Status: "skip", Level: "MUST", Must: "feature " + f, Detail: []string{"declared; this kit checks the core, and the feature's checks are slice 6"}})
+				add(Result{ID: id, Status: "skip", Level: "MUST", Must: "feature " + f, Detail: []string{"declared; this kit checks the core and does not check this feature yet"}})
 			default:
-				detail := []string{"unknown feature: newer than this kit's contract, so skip, never fail (§2)"}
+				detail := []string{"unknown feature: newer than this kit's contract, so skip, never fail (AUTHORING.md#14-evolving)"}
 				if len(k.skipped) > 0 {
 					detail = append(detail, fmt.Sprintf("manifest keys not judged: %v", k.skipped))
 				}

@@ -328,11 +328,22 @@ func (l *MutationLog) rollbackLocked() {
 // The count is the half that detects truncation. A chain alone cannot — delete
 // the last N records and the remainder verifies perfectly — so the anchor
 // compares a count that must only ever grow.
+//
+// An empty log reports the digest of the empty log, never "": Syndra refuses
+// an empty head at first sight, because recorded as the baseline it would
+// compare equal to the next empty one and read as healthy for ever. The chain
+// itself is unchanged: the first record's Prev is still "".
 func (l *MutationLog) Head() (digest string, count uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.seq == 0 {
+		return emptyLogDigest, 0
+	}
 	return l.head, l.seq
 }
+
+// emptyLogDigest is SHA-256 of no bytes: the head of a log with no record.
+const emptyLogDigest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 // rotateIfNeededLocked rolls the file over and prunes the oldest.
 //

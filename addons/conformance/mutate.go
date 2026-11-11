@@ -84,8 +84,9 @@ func (k *kit) mutate() error {
 		{"limits", []string{"limit-combine"}, func() { k.limits(k.at("limit-combine")) }},
 		{"replay", []string{"replay"}, func() { k.replay(k.at("replay"), callID, created) }},
 		{"absent", []string{"absent-unmanaged", "plan-equals-apply"}, func() { k.absent(k.at("absent-unmanaged")) }},
-		{"unlisted", []string{"unlisted-preserved", "plan-equals-apply"}, func() { k.unlisted(k.at("unlisted-preserved")) }},
+		{"limit-empty", []string{"limit-empty", "plan-equals-apply"}, func() { k.limitEmpty(k.at("limit-empty")) }},
 		{"operations", []string{"operations", "operations.secret", "strict-requests", "health"}, func() { k.operations(k.at("operations")) }},
+		{"reads", []string{"operations.reads"}, func() { k.readOperations(k.at("operations.reads"), callID) }},
 		{"lifecycle", []string{"lifecycle", "replay.refusal", "strict-requests"}, func() { k.lifecycle(k.at("lifecycle"), k.at("replay.refusal")) }},
 		{"withdraw", []string{"withdraw-only.existing", "channel-follows-account", "plan-equals-apply"}, func() {
 			k.withdrawExisting(k.at("withdraw-only.existing"), k.at("channel-follows-account"))
@@ -272,6 +273,8 @@ func (k *kit) state(c *check) map[string]any {
 	for _, s := range objects(doc["subjects"]) {
 		if k.owner(s, false) == ours {
 			st, _ := s["state"].(map[string]any)
+			current, _ := doc["current"].(bool)
+			k.unlistedHidden("the kit's account", st, current)
 			return st
 		}
 	}
@@ -348,6 +351,65 @@ func (k *kit) limits(c *check) {
 	}
 }
 
+// limitEmpty sends each limit as [] after setting it to 5 GiB: no role sets
+// it, so nothing is set, and the account keeps the limit it holds. Clearing
+// it would read as "no limit" on most apps, which nobody decided. It judges
+// only from a 5 GiB the add-on was seen to hold: from an unreported limit, or
+// one the first apply did not set, [] keeping it proves nothing.
+func (k *kit) limitEmpty(c *check) {
+	const fiveGiB = "5368709120"
+	limits := k.m.withRole("limit")
+	if len(limits) == 0 {
+		c.skip("the manifest declares no limit field")
+	}
+	for _, name := range limits {
+		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{fiveGiB}}, false)
+		state := k.state(c)
+		before, reported := state[name]
+		switch {
+		case state == nil: // state failed c already
+			continue
+		case !reported:
+			c.skip("%s is not in the kit's account's state (not read), so what [] does to it cannot be seen", name)
+			continue
+		case !c.expect(same(before, []string{fiveGiB}), "%s: an apply giving it [%q] left it %v", name, fiveGiB, before):
+			continue
+		}
+		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{}}, false)
+		after := k.state(c)[name]
+		c.expect(same(after, before), "%s: an apply giving it [] changed it from %v to %v; [] sets nothing", name, before, after)
+	}
+}
+
+// readOperations sends every available effect: read operation under one
+// call_id, the first of them twice, and that call_id is the one the creating
+// apply was recorded under. Syndra sends one call_id for every read, so a read
+// ignores it: never recorded, held or checked for reuse, and each answers 200
+// with its own reply, never CALL_ID_REUSED and never the apply's. Reads by
+// contract, sent only for the kit's own subject, after a plan naming its
+// account (viaOwned), like every other operation.
+func (k *kit) readOperations(c *check, callID string) {
+	var reads []string
+	for id, available := range k.m.ops {
+		if available && k.c.operations[id].Effect == "read" {
+			reads = append(reads, id)
+		}
+	}
+	if len(reads) == 0 {
+		c.skip("no effect: read operation is declared available")
+		return
+	}
+	slices.Sort(reads)
+	send := k.viaOwned(c)
+	for _, id := range append([]string{reads[0]}, reads...) {
+		ex := send(request{method: http.MethodPost, target: "/operations/" + id,
+			body: k.operationBody(id, callID, map[string]any{}), schema: "operation_request.json"})
+		if doc := k.ok(c, ex, "operation_response.json"); doc != nil {
+			c.expect(str(doc, "operation") == id, "%s under the creating apply's call_id answered for %q", id, str(doc, "operation"))
+		}
+	}
+}
+
 func (k *kit) replay(c *check, callID string, first *exchange) {
 	logBefore, logOK := k.logRecords(c)
 	body := k.applyBody(callID, "conformance-another-fingerprint", k.full())
@@ -378,27 +440,6 @@ func (k *kit) absent(c *check) {
 	before := k.state(c)
 	k.converge(c, k.callID(), map[string]any{k.m.account: true}, false)
 	k.untouched(c, before, k.state(c), "an apply naming the account alone")
-}
-
-func (k *kit) unlisted(c *check) {
-	for _, name := range k.m.withRole("membership") {
-		managed, enumerable := k.values[name]
-		if !enumerable {
-			c.skip("%s is not enumerable, so the kit cannot know its managed set", name)
-			continue
-		}
-		held, _ := stringList(k.state(c)[name])
-		kept := slices.DeleteFunc(held, func(v string) bool { return slices.Contains(managed, v) })
-		if len(kept) == 0 {
-			c.skip("%s: the kit's account holds no value outside the managed set", name)
-			continue
-		}
-		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{}}, false)
-		c.expect(same(k.state(c)[name], kept), "%s: an apply emptying it left %v, want the unlisted %v and nothing else", name, k.state(c)[name], kept)
-	}
-	if !c.ran && len(c.skips) == 0 {
-		c.skip("the manifest declares no membership field")
-	}
 }
 
 func (k *kit) operationBody(name, callID string, params map[string]any) map[string]any {
@@ -587,6 +628,34 @@ func (k *kit) afterwards() {
 		} else {
 			k.required(fields, ex)
 		}
+	}
+	k.logAnchored(k.at("health"))
+}
+
+// logAnchored holds every /health the run read, in order, to what Syndra
+// anchors the mutation log by: a count that never falls; the same count, the
+// same head; a higher count, a new head. (Each reply was validated where it was
+// read; health.json holds the head non-empty.)
+func (k *kit) logAnchored(c *check) {
+	var prev map[string]any
+	for _, ex := range k.log {
+		if path, _, _ := strings.Cut(ex.target, "?"); ex.err != nil || ex.status != http.StatusOK || ex.method != http.MethodGet || path != "/health" {
+			continue
+		}
+		doc := ex.doc()
+		head, _ := doc["log_head"].(string)
+		n, isNum := num(doc["log_records"])
+		if !isNum {
+			continue
+		}
+		if prev != nil {
+			was, _ := num(prev["log_records"])
+			moved := head != prev["log_head"]
+			c.expect(n >= was, "log_records fell from %d to %d", was, n)
+			c.expect(n != was || !moved, "log_records stayed at %d and log_head changed: the log was rewritten", n)
+			c.expect(n <= was || moved, "log_records rose from %d to %d and log_head stayed %s", was, n, head)
+		}
+		prev = doc
 	}
 }
 

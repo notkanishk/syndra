@@ -51,8 +51,9 @@ var fields = []field{
 }
 
 // printers is the managed set of the membership field. lobby is the target's
-// own: every account is in it, /values does not list it, and Syndra never
-// removes it (unlisted values are preserved, design §3).
+// own: every account is in it, /values does not list it, Syndra never removes
+// it (unlisted values are preserved, converge), and state never shows it
+// (shown).
 var printers = []string{"mk4-a", "mk4-b", "xl-1"}
 
 const lobby = "lobby"
@@ -76,6 +77,16 @@ type standing struct {
 	WaitingOn string `json:"waiting_on"`
 	Note      string `json:"note,omitempty"`
 	Next      string `json:"next,omitempty"`
+}
+
+// shown is the account's state as Syndra sees it: a membership holds only the
+// managed set. Syndra compares state with desired over the whole list, so a
+// value it can never remove (lobby) would be a difference for ever.
+func (acct *account) shown() map[string]any {
+	out := maps.Clone(acct.state)
+	out["printers"] = slices.DeleteFunc(slices.Clone(acct.state["printers"].([]string)),
+		func(p string) bool { return !slices.Contains(printers, p) })
+	return out
 }
 
 // standing is observed, never desired: why a converged account cannot be used
@@ -136,6 +147,7 @@ func New(cfg Config) (*Addon, error) {
 		auth:     authenticator{key: key, now: time.Now},
 		accounts: map[string]*account{}, bindings: map[string]string{}, calls: map[string]*call{},
 		lifecycle: "active", reason: "Started.",
+		logHead: emptyLogDigest,
 		setting: map[string]string{"value": printers[0]},
 	}, nil
 }
@@ -175,8 +187,9 @@ func (a *Addon) capabilities(*http.Request, []byte) reply {
 		"contract_version": ContractVersion, "product": "reference", "product_version": "1.0.0",
 		"kind": "machine", "features": []string{"operations", "settings"},
 		"entitlement_schema": fields,
-		"operations": []map[string]any{{"id": "password.set", "scope": "member", "confirm": false,
-			"secret_params": []string{"password"}, "available": true}},
+		"operations": []map[string]any{
+			{"id": "health.get", "scope": "admin", "confirm": false, "available": true},
+			{"id": "password.set", "scope": "member", "confirm": false, "secret_params": []string{"password"}, "available": true}},
 		"limits": map[string]any{"subjects_per_plan": subjectsPerPlan},
 	})
 }
@@ -209,7 +222,7 @@ func (a *Addon) subjects(*http.Request, []byte) reply {
 	list := []subject{}
 	for _, id := range slices.Sorted(maps.Keys(a.accounts)) {
 		acct := a.accounts[id]
-		list = append(list, subject{acct.id, acct.username, acct.id, acct.state, acct.standing()})
+		list = append(list, subject{acct.id, acct.username, acct.id, acct.shown(), acct.standing()})
 	}
 	return ok(map[string]any{"subjects": list, "current": true, "taken_at": now(), "truncated": false})
 }
@@ -363,7 +376,7 @@ func (a *Addon) decide(subj, email string, raw map[string]json.RawMessage) (outc
 			}
 		}
 		acct = &account{username: name, state: map[string]any{
-			"enabled": false, "remote": false, "printers": []string{lobby}, "after_hours": []string{}, "job_seconds": []string{}}}
+			"enabled": false, "remote": false, "printers": []string{lobby}, "after_hours": []string{}, "job_seconds": []string{"0"}}}
 		out.Effect, out.Detail, out.Consequence = "apply", "Creates the account.", "Creates "+name+"."
 		out.Username = name
 		return out, acct, converge(acct.state, desired)
@@ -385,13 +398,16 @@ func (a *Addon) decide(subj, email string, raw map[string]json.RawMessage) (outc
 
 // converge applies desired to a state by role (design §3). A field absent from
 // desired is not touched; a channel is off whenever the account is off; a
-// membership keeps the values Syndra does not manage; a limit is combined.
+// membership keeps the values Syndra does not manage; a limit is combined, and
+// a limit given no value (no role sets it) is not touched either: clearing it
+// would mean "no limit", which nobody decided.
 func converge(cur, desired map[string]any) map[string]any {
 	next := maps.Clone(cur)
 	for _, f := range fields {
 		v, present := desired[f.Name]
 		switch {
 		case !present:
+		case f.Role == "limit" && len(v.([]string)) == 0:
 		case f.Role == "membership":
 			kept := slices.DeleteFunc(slices.Clone(cur[f.Name].([]string)), func(s string) bool { return slices.Contains(printers, s) })
 			next[f.Name] = sorted(append(kept, v.([]string)...))
@@ -412,11 +428,9 @@ func converge(cur, desired map[string]any) map[string]any {
 }
 
 // combine is max, with unlimited dominant: max("0", 5 GiB) is no limit at all.
-// It happens here, once; observed state carries the effective limit.
+// It happens here, once; observed state carries the effective limit, always
+// one value. vals is never empty (converge).
 func combine(f field, vals []string) []string {
-	if len(vals) == 0 {
-		return []string{}
-	}
 	best := uint64(0)
 	for _, v := range vals {
 		if v == f.Unlimited {
@@ -447,7 +461,7 @@ func (a *Addon) commit(out outcome, acct *account, next map[string]any) reply {
 	}
 	describe(&out, acct)
 	if acct != nil {
-		out.Observed, out.Fingerprint = acct.state, fingerprint(acct)
+		out.Observed, out.Fingerprint = acct.shown(), fingerprint(acct)
 	}
 	return ok(out)
 }
@@ -543,16 +557,21 @@ type operationRequest struct {
 }
 
 func (a *Addon) operation(r *http.Request, body []byte) reply {
-	if r.PathValue("name") != "password.set" {
+	name := r.PathValue("name")
+	if name != "password.set" && name != "health.get" {
 		return problem(404, "OPERATION_FAILED", "This add-on has no such operation.", nil)
 	}
 	var req operationRequest
 	if refused := parse(body, &req); refused != nil {
 		return *refused
 	}
-	switch password, _ := req.Params["password"].(string); {
-	case req.Operation != "password.set":
+	if req.Operation != name {
 		return problem(400, "OPERATION_MISMATCH", "The body names another operation.", nil)
+	}
+	if name == "health.get" {
+		return a.healthGet(req)
+	}
+	switch password, _ := req.Params["password"].(string); {
 	case blank(req.CallID) || blank(req.Subject):
 		return problem(400, "BAD_REQUEST", "call_id and subject are required.", nil)
 	case password == "" || len(req.Params) != 1:
@@ -583,6 +602,17 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 		a.record("password.set " + acct.id)
 		return ok(map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded", "detail": "Password set."})
 	})
+}
+
+// healthGet is an effect: read operation. Its call_id is ignored: never
+// recorded, held or checked for reuse, because Syndra sends one call_id for
+// every read. Not lifecycle-gated either: reads answer in every state.
+func (a *Addon) healthGet(req operationRequest) reply {
+	if len(req.Params) != 0 {
+		return problem(400, "OPERATION_FAILED", "health.get takes no parameters.", nil)
+	}
+	return ok(map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded",
+		"detail": "The print queue is up.", "health": map[string]any{"system": map[string]any{"hostname": "reference", "version": "1.0.0"}}})
 }
 
 type lifecycleRequest struct {
@@ -657,6 +687,10 @@ func (a *Addon) refuseUnlessActive() *reply {
 	r := problem(503, "LIFECYCLE_REFUSAL", "The add-on is "+a.lifecycle+": "+a.reason, map[string]any{"lifecycle": a.lifecycle})
 	return &r
 }
+
+// emptyLogDigest is SHA-256 of no bytes: the head of a log with no record,
+// reported from the first /health. Syndra refuses an empty head at first sight.
+const emptyLogDigest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 // record appends to the mutation log: a count and a hash chain.
 func (a *Addon) record(entry string) {

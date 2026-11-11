@@ -67,8 +67,9 @@ jobs:
       - run: go test -count=1 ./...
 
   # The conformance kit (addons/conformance) against the reference add-on
-  # (addons/reference), with the contract embedded from addons/contract. The
-  # self-tests serve the reference in-process and watch
+  # (addons/reference), with the contract embedded from addons/contract, whose
+  # tests also hold addons/AUTHORING.md's inline fixtures and route sections to
+  # the contract files. The self-tests serve the reference in-process and watch
   # every check fail against a deliberately broken one; then both binaries run
   # end to end on localhost over the real derived-key transport, -mutate
   # included, since the reference's target is in memory. The secret is a fixed
@@ -82,7 +83,7 @@ jobs:
         with:
           go-version-file: addons/conformance/go.mod
           cache-dependency-path: addons/conformance/go.sum
-      - name: the contract's embed module
+      - name: the contract's embed module, and AUTHORING.md held to it
         working-directory: addons/contract
         run: go vet ./... && go test -count=1 ./...
       - name: reference add-on

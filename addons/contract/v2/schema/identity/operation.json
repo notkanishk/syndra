@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://syndra.example.org/addon-contract/2/schema/identity/operation.json",
   "title": "Operation identity",
-  "description": "Identity of an operation call. params has every secret parameter removed, so the store never holds even a hash of a member's password; params and subject are always present (an empty object, an empty string).",
+  "description": "Identity of a write operation call; an effect: read operation has none, because it ignores call_id. params has every secret parameter removed, so the store never holds even a hash of a member's password; params and subject are always present (an empty object, an empty string).",
   "type": "object",
   "properties": {
     "name": {

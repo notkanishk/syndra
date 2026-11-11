@@ -310,7 +310,9 @@ needs a word in the core.
   unlisted *members* as well as unlisted values; two applies for two
   subjects must not lose each other's update. This is one rule instead of a
   `replace|merge` knob: Syndra owns what it can enumerate or has named, and
-  nothing else, which is also what the drift sweep already assumes.
+  nothing else, which is also what the drift sweep already assumes: it
+  compares the whole list, so `state` and `observed` show only the managed
+  set (decided at 5.3).
 
 **Rejected: keeping `type` and adding semantics beside it.** `type` was already
 false on the wire: `home` is declared `bool` and travels as `["true"]`,
@@ -605,9 +607,9 @@ user `id`) and a `display` name (`username`). Rules, MUST for every add-on:
   create) or by derived name is adopted **only** when the add-on's mutation
   log holds a create intent for that subject with no recorded id (the crash
   window below); otherwise it is a `conflict` for an operator, who adopts
-  through the confirmed `admin.adopt` operation. Anyone with console access
+  through the confirmed `account.adopt` operation. Anyone with console access
   can type an `employee_number`, and a wrong adoption hands over someone
-  else's data, which is exactly why `admin.adopt` is confirmed. Name is
+  else's data, which is exactly why `account.adopt` is confirmed. Name is
   display, never identity: a rename on the target is recognised by id,
   reported, never treated as a missing account.
 - Derivation of a new name is the add-on's (the storage derivation in
@@ -842,7 +844,7 @@ keep, and it does not pretend to.
 | withdraw-only | `desired = {account: false}` for a subject with no account → `no_change`, no account created; for an **existing** account → the account off and every membership unchanged |
 | channel follows account | `desired = {account: false, channel: true}` → observed channel false |
 | absent is unmanaged | apply with the account field alone leaves every membership as read before |
-| unlisted preserved | a membership value the target holds and the managed set does not include survives an apply (skipped unless the target has such a value for the kit subject) |
+| unlisted hidden | a membership in `state` or `observed` holds only the managed set (no value `/values` leaves out); that such a value survives an apply is invisible from outside, so it is the add-on's own test (5.3) |
 | limit combine | two mappings, `"0"` and `"5368709120"` → observed limit is `unlimited` (unlimited dominates, §3) |
 | lifecycle | `read_only` → apply answers `LIFECYCLE_REFUSAL` (503, `Retry-After`), reads still answer; no reason → `REASON_REQUIRED`; unknown → `UNKNOWN_LIFECYCLE_STATE`; back to `active` |
 | operations | unknown → 404; missing required param → 400; a canary secret value never appears in any later byte of any reply, health, error, replay or `/calls` answer (`secret_result` redaction included); a `physical` operation refuses without `confirm`, answers `preview: true` with no effect and no record (`log_records` unchanged; a preview sends nothing to `/calls`, and `/calls` on a never-used id → `unknown`), and `GET /calls/{call_id}` answers `recorded` after the confirm; a second call while the first is `in_doubt` → 409 `CALL_UNSETTLED` |

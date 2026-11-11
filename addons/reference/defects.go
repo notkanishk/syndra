@@ -51,6 +51,10 @@ const (
 	CreateAnswersMember       Defect = "create-answers-member"       // a create answers with a new member's account, not one of its own
 	RebindsQuietly            Defect = "rebinds-quietly"             // an apply to an existing account rebinds its subject, and plans then name no account
 	CreateOmitsAccount        Defect = "create-omits-account"        // the create makes the account and answers 200 naming none
+	LimitEmptyClears          Defect = "limit-empty-clears"          // a limit given [] is cleared
+	LogHeadEmpty              Defect = "log-head-empty"              // health.log_head is "" until the first record
+	ReadsTakeCallID           Defect = "reads-take-call-id"          // health.get is deduplicated on call_id like a write
+	StateShowsUnlisted        Defect = "state-shows-unlisted"        // /subjects lists lobby, which /values leaves out
 )
 
 // Defects lists every defect, for the kit's self-tests and the binary's help.
@@ -58,7 +62,8 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	RemembersRefusal, RemembersPlanStale, OmitsTruncated, CurrentFromMirror, AcceptsAlteredQuery,
 	LimitIgnoresUnlimited, WithdrawTouchesMembership, WithdrawStripsManaged, NumericAccountID,
 	FailsAfterCreate, LogNeverMoves, CommitsLate, RebindsSubject, AdoptsExisting, BindsOnWithdraw, IgnoresReadOnly, OperationNamesOther,
-	RebindsOnOperation, PlanForgetsAccount, CreateAnswersMember, RebindsQuietly, CreateOmitsAccount}
+	RebindsOnOperation, PlanForgetsAccount, CreateAnswersMember, RebindsQuietly, CreateOmitsAccount,
+	LimitEmptyClears, LogHeadEmpty, ReadsTakeCallID, StateShowsUnlisted}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -118,13 +123,20 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 	}
 	_ = json.Unmarshal(body, &req)
 	apply := route == "POST /apply"
+	passwordSet := route == "POST /operations/{name}" && r.PathValue("name") == "password.set"
+	if route == "POST /operations/{name}" && r.PathValue("name") == "health.get" && d[ReadsTakeCallID] {
+		// A read deduplicated like a write: recorded, and refused when its
+		// call_id was used before for anything else.
+		identity := map[string]any{"name": "health.get", "subject": req.Subject, "params": map[string]any{}}
+		return a.once(req.CallID, "operation", identity, func() reply { return h(r, body) })
+	}
 
 	a.mu.Lock()
 	acct := a.accounts[a.bindings[req.Subject]]
 	remembered, isRemembered := a.dev.refused[req.CallID]
 	if apply && d[CreatesOnWithdraw] && acct == nil && string(req.Desired["enabled"]) == "false" {
 		acct = &account{id: strconv.Itoa(1001 + len(a.accounts)), username: username(req.Subject, ""), state: map[string]any{
-			"enabled": false, "remote": false, "printers": []string{lobby}, "after_hours": []string{}, "job_seconds": []string{}}}
+			"enabled": false, "remote": false, "printers": []string{lobby}, "after_hours": []string{}, "job_seconds": []string{"0"}}}
 		a.accounts[acct.id], a.bindings[req.Subject] = acct, acct.id
 		a.record("apply " + acct.id)
 		body = withField(body, "fingerprint", fingerprint(acct))
@@ -143,7 +155,7 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		// A member's account, made at that moment, answered as the create's,
 		// with no username in the reply.
 		member := &account{id: strconv.Itoa(1001 + len(a.accounts)), username: "kofi-kingston", state: map[string]any{
-			"enabled": true, "remote": false, "printers": []string{lobby}, "after_hours": []string{}, "job_seconds": []string{}}}
+			"enabled": true, "remote": false, "printers": []string{lobby}, "after_hours": []string{}, "job_seconds": []string{"0"}}}
 		a.accounts[member.id], a.bindings[req.Subject] = member, member.id
 		out := outcome{Subject: req.Subject, Effect: "applied", Detail: "Done.", AccountID: member.id, Standing: member.standing(),
 			Observed: member.state, Fingerprint: fingerprint(member)}
@@ -196,6 +208,9 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 	if acct = a.accounts[a.bindings[req.Subject]]; apply && rep.status == 200 && acct != nil {
 		if d[FailsAfterCreate] && len(a.accounts) > accounts {
 			return problem(500, "APPLY_FAILED", "The target failed after the account was made.", nil)
+		}
+		if limit := req.Desired["job_seconds"]; d[LimitEmptyClears] && string(limit) == "[]" {
+			acct.state["job_seconds"] = []string{"0"} // "no limit": what clearing means on most apps
 		}
 		if limit := req.Desired["job_seconds"]; d[LimitIgnoresUnlimited] && bytes.Contains(limit, []byte(`"0"`)) {
 			var vals []string
@@ -257,15 +272,24 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 			a.dev.mirror, a.dev.mirrorAt = rep.body, a.logCount
 		}
 		rep.body = a.dev.mirror
+	case route == "GET /subjects" && d[StateShowsUnlisted]:
+		rewrite(func(doc map[string]any) {
+			for _, s := range doc["subjects"].([]any) {
+				m := s.(map[string]any)
+				m["state"].(map[string]any)["printers"] = a.accounts[m["account_id"].(string)].state["printers"]
+			}
+		})
 	case route == "GET /subjects" && d[NumericAccountID]:
 		rewrite(func(doc map[string]any) { numeric(doc["subjects"]) })
 	case route == "POST /plan" && d[NumericAccountID] && rep.status == 200:
 		rewrite(func(doc map[string]any) { numeric(doc["outcomes"]) })
 	case route == "GET /health" && d[LogNeverMoves]:
 		rewrite(func(doc map[string]any) { doc["log_records"] = 0 })
+	case route == "GET /health" && d[LogHeadEmpty] && a.logCount == 0:
+		rewrite(func(doc map[string]any) { doc["log_head"] = "" })
 	case route == "GET /health" && a.dev.late > 0:
 		rewrite(func(doc map[string]any) { doc["in_flight"], doc["drained"] = a.dev.late, false })
-	case route == "POST /operations/{name}" && d[RebindsOnOperation] && rep.status == 200 && !a.dev.rebound:
+	case passwordSet && d[RebindsOnOperation] && rep.status == 200 && !a.dev.rebound:
 		for _, id := range slices.Sorted(maps.Keys(a.accounts)) {
 			if id != a.bindings[req.Subject] {
 				a.bindings[req.Subject], a.dev.rebound = id, true
@@ -279,14 +303,14 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 				delete(o.(map[string]any), "standing")
 			}
 		})
-	case route == "POST /operations/{name}" && d[OperationNamesOther] && rep.status == 200:
+	case passwordSet && d[OperationNamesOther] && rep.status == 200:
 		for _, id := range slices.Sorted(maps.Keys(a.accounts)) {
 			if id != a.bindings[req.Subject] {
 				rewrite(func(doc map[string]any) { doc["account_id"] = id })
 				break
 			}
 		}
-	case route == "POST /operations/{name}" && d[EchoesSecret] && rep.status == 200:
+	case passwordSet && d[EchoesSecret] && rep.status == 200:
 		rewrite(func(doc map[string]any) { doc["detail"] = fmt.Sprintf("Password set to %v.", req.Params["password"]) })
 	}
 	return rep

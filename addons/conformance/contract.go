@@ -36,6 +36,7 @@ type contract struct {
 			Required bool   `json:"required"`
 		} `json:"params"`
 		SecretParams []string `json:"secret_params"`
+		Effect       string   `json:"effect"`
 	}
 	features map[string]struct {
 		RequiresKind string `json:"requires_kind"`

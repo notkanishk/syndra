@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -99,7 +100,7 @@ func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body [
 	// this body had no field for it). A replay answers what the first call
 	// answered and writes nothing.
 	identity := map[string]any{"name": settingHomeRoot, "value": req.Value}
-	s.once(w, req.CallID, kindSetting+settingHomeRoot, identity, func(w http.ResponseWriter) { s.putHomeRoot(w, req) })
+	s.once(w, req.CallID, kindSetting+settingHomeRoot, "", identity, func(w http.ResponseWriter) { s.putHomeRoot(w, req) })
 }
 
 func (s *server) putHomeRoot(w http.ResponseWriter, req putSettingRequest) {
@@ -107,6 +108,13 @@ func (s *server) putHomeRoot(w http.ResponseWriter, req putSettingRequest) {
 		// A read of the NAS now, never the cache and never the last read: a
 		// place deleted a minute ago must not pass.
 		read, err := s.readACLsNow()
+		if errors.Is(err, ErrNotSent) {
+			// Nothing was sent, and nothing is stored until the place is
+			// checked: the one code Syndra reads as "nothing happened".
+			writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
+				"The NAS could not be reached, so the place could not be checked and nothing was changed.", nil)
+			return
+		}
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, CodeTargetUnreadable,
 				"The NAS's folders could not be read just now, so the place could not be checked.", nil)

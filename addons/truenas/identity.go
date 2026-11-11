@@ -74,8 +74,17 @@ func (s *server) nextIdentity() (int64, error) {
 // undoGroup removes a personal group whose account was never created, so a
 // refused create leaves nothing behind. Best-effort: a group left over is an
 // empty group with a number nobody will be given again.
-func (s *server) undoGroup(id apiID) {
+//
+// Read again first, by emptyGroupNamed's rule: only the group this attempt
+// made, and only while nobody is in it. An account created in it since (a
+// second apply that took it over as an orphan) would otherwise lose its
+// primary group. Writes for one subject run one at a time (calls.go, rule 5);
+// this holds even if that ever stops being so. A failed read keeps the group.
+func (s *server) undoGroup(name string, id apiID) {
 	if !id.known() {
+		return
+	}
+	if still, _, empty := s.emptyGroupNamed(name); !empty || still.String() != id.String() {
 		return
 	}
 	if err := s.nas.call("group.delete", []any{id}, nil); err != nil {

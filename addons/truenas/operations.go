@@ -101,10 +101,26 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 			"The operation named in the body is not the one this route runs.", nil)
 		return
 	}
-	if !mutatingOperation(name) {
-		// A read is never recorded: a read that happens again is a read, and a
-		// 30-day copy of a health report is a copy nobody will ask for.
+	if !declaredOperation(name) {
+		// Before the call record and the gates: an id this add-on does not
+		// declare is not a write it refused, it is no operation at all.
+		writeError(w, http.StatusNotFound, CodeOperationFailed, "This add-on has no such operation.", nil)
+		return
+	}
+	if readOperation(name) {
+		// A read is never recorded, held or reuse-checked: a read that happens
+		// again is a read, Syndra sends one call_id for every read it makes,
+		// and a 30-day copy of a health report is a copy nobody will ask for.
 		s.operateNow(w, name, req)
+		return
+	}
+	if strings.TrimSpace(req.Subject) == "" {
+		// Every write acts on a subject's account, and once gates a write by
+		// its subject: refused here, so no write, today's or a later one, can
+		// reach once without the lifecycle gate and the subject lock.
+		// BAD_REQUEST is the registry's "a required field is missing
+		// (call_id, subject)", as the reference answers it.
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "A write operation needs a subject.", nil)
 		return
 	}
 	// The same dedup the apply uses, and universal for the same reason: §16
@@ -116,17 +132,17 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 	// of a member's password, and a re-send with another password is a replay
 	// of the first (design §5).
 	identity := map[string]any{"name": name, "subject": req.Subject, "params": publicParams(name, req.Params)}
-	s.once(w, req.CallID, kindOperation+name, identity, func(w http.ResponseWriter) {
-		// Mutations are gated by lifecycle state; reads never are.
-		done, err := s.life.Begin()
-		if err != nil {
-			state, _ := s.life.State()
-			writeLifecycleRefusal(w, state)
-			return
-		}
-		defer done()
-		if supported, why := s.nas.MajorSupported(); !supported {
+	// Mutations are gated by lifecycle state (once); reads never are.
+	s.once(w, req.CallID, kindOperation+name, req.Subject, identity, func(w http.ResponseWriter) {
+		// The manifest's own answer (availability): an operation that touches
+		// nothing on the NAS (account.release) is never refused for its
+		// version, the one that does is refused for it.
+		switch code, why := s.unavailable(name); code {
+		case CodeTargetVersionUnsupported:
 			writeError(w, http.StatusUnprocessableEntity, CodeTargetVersionUnsupported, why, nil)
+			return
+		case CodeOperationFailed:
+			writeError(w, http.StatusUnprocessableEntity, CodeOperationFailed, why, nil)
 			return
 		}
 		s.operateNow(w, name, req)
@@ -136,7 +152,14 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 // operateNow runs one operation and answers it.
 func (s *server) operateNow(w http.ResponseWriter, name string, req OperationRequest) {
 	result, status, err := s.runOperation(name, req)
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrNotSent) && !readOperation(name):
+		// A write that never left this add-on: nothing happened, the same
+		// answer an apply gives (handleApply).
+		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
+			"The NAS could not be reached, so nothing was sent to it.", nil)
+		return
+	case err != nil:
 		// The error's text is this add-on's own, never the target's response
 		// body: that body is where a submitted password comes back.
 		writeError(w, status, CodeOperationFailed, err.Error(), nil)
@@ -165,9 +188,34 @@ func publicParams(name string, params map[string]any) map[string]any {
 	return out
 }
 
-func mutatingOperation(name string) bool {
+// failedWrite is what a failed write call reports: ErrNotSent when the call
+// never left this add-on, so the reply can say nothing happened, and otherwise
+// the sentence. Never the error's own text, which is the target's and may echo
+// what was sent.
+func failedWrite(err error, sentence string) error {
+	if errors.Is(err, ErrNotSent) {
+		return ErrNotSent
+	}
+	return errors.New(sentence)
+}
+
+// declaredOperation is an id this add-on's manifest declares (operationSet).
+func declaredOperation(name string) bool {
+	for _, op := range operationSet(nil) {
+		if op.ID == name {
+			return true
+		}
+	}
+	return false
+}
+
+// readOperation is an operation whose registry effect is `read`
+// (registry/operations.json), held equal to it by
+// TestReadOperationsAreTheRegistrysReads. Every other declared id is a write:
+// recorded, leased and lifecycle-gated (once).
+func readOperation(name string) bool {
 	switch name {
-	case "password.set", "password.rotate", "account.purge", "account.adopt":
+	case "activity.get", "health.get", "storage.status":
 		return true
 	}
 	return false
@@ -261,7 +309,7 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 		// never reaches here at all. That guarantee is pinned where it lives,
 		// on `NAS.call`; this is only the difference between a readable failure
 		// and "user.update: the target refused the call".
-		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the credential change")
+		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the credential change")
 	}
 	// The event, never the value. There is no field on a Record for one.
 	s.record("password.set", req.Subject, req.Actor, req.CallID, "succeeded")
@@ -386,7 +434,7 @@ func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, err
 	// during one would be the opposite of what it is for.
 	if err := s.nas.call("user.update", []any{id,
 		map[string]any{"password": minted, "password_disabled": false}}, nil); err != nil {
-		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the rotation")
+		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the rotation")
 	}
 	s.record("password.rotate", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
@@ -435,11 +483,8 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// guard, or predate a key reissued against a different account, and this is
 	// the one operation that cannot be undone.
 	//
-	// Unlike adoption, an unknown identity refuses here: a purge that cannot
-	// tell whether it is deleting Syndra's own credential is not one to attempt.
-	if _, _, known := s.nas.Self(); !known {
-		return OperationResult{}, http.StatusUnprocessableEntity,
-			errors.New("this add-on could not confirm which target account it authenticates as, so it will not delete one; try again shortly")
+	if err := s.requireSelfKnown(); err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 	if err := s.refuseSelfAccount(binding.Username); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
@@ -1015,6 +1060,28 @@ func requireSecret(params map[string]any, name string) (string, error) {
 	return value, nil
 }
 
+// errSelfUnknown refuses adopt and purge while the add-on does not yet know its
+// own account (readSelf): either could otherwise bind or delete the account
+// Syndra itself signs in with. Nothing was done, so it is a 4xx
+// (OPERATION_FAILED, 422): certain, and its sentence reaches the operator.
+var errSelfUnknown = errors.New("this add-on can't check yet whether that account is its own on the NAS, so nothing was done; try again shortly")
+
+// requireSelfKnown is the one guard for the operations that bind or delete an
+// existing account: until auth.me has named the add-on's own account, any
+// account might be it, so they fail closed.
+func (s *server) requireSelfKnown() error {
+	if _, _, known := s.nas.Self(); !known {
+		return errSelfUnknown
+	}
+	return nil
+}
+
+// noAdoptableAccount is adopt's miss, said once for the first adoption and a
+// repeat whose account has gone.
+func noAdoptableAccount(username string) error {
+	return fmt.Errorf("the target has no adoptable account named %s (system accounts are never adoptable)", username)
+}
+
 // adoptAccount binds an account the target already holds to a subject.
 //
 // The one entry point for it, reached from two places: the unmanaged inventory
@@ -1033,12 +1100,13 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	if username == "" {
 		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("no account named")
 	}
-	if strings.TrimSpace(req.Subject) == "" {
-		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("no subject to bind it to")
-	}
 	// Before the lookup, not after. The account exists and would resolve
 	// perfectly well; the reason it is not on offer has nothing to do with
-	// whether it can be found.
+	// whether it can be found. And fail closed: until auth.me has named the
+	// add-on's own account, any account might be it.
+	if err := s.requireSelfKnown(); err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
+	}
 	if err := s.refuseSelfAccount(username); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
@@ -1051,13 +1119,40 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		return OperationResult{}, http.StatusInternalServerError, err
 	} else if bound {
 		if existing.Username == username {
+			// A repeat only while the name still names the bound account. When
+			// another account now holds it (boundAccount's conflict), "already
+			// bound" would answer done and leave the apply blocked for ever:
+			// refused, and the operator releases first.
+			floor, ceiling := s.idRange()
+			lookup := func(field string, value any) (*Subject, error) {
+				found, _, err := s.subjectWhere(field, value)
+				return found, err
+			}
+			found, _, conflict, err := boundAccount(existing, floor, ceiling,
+				func(name string) (*Subject, error) { return lookup("username", name) },
+				func(uid int64) (*Subject, error) { return lookup("uid", uid) })
+			if err != nil {
+				return OperationResult{}, statusFor(err), err
+			}
+			if conflict != nil {
+				return OperationResult{}, http.StatusConflict,
+					fmt.Errorf("this subject is bound to %s, which another account now holds; release the binding first", username)
+			}
+			if found == nil {
+				// Bound, and the account is gone: not "already bound", which
+				// would answer done for nothing, but the miss any adopt is.
+				return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
+			}
 			return OperationResult{
 				Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
 				// The uid travels on the repeat too. Without it the second
 				// adoption would hand the backend a zero and overwrite a
 				// binding that was correct with one that is not — the repeat
 				// path making the state worse than the first attempt left it.
-				AccountID: accountID(existing.UID),
+				// The account found, as apply answers it: a binding kept
+				// without its uid (contract 1) stores a record key, and one
+				// outside the add-on's range is never rewritten.
+				AccountID: accountID(found.UID),
 				Detail:    fmt.Sprintf("%s was already bound to this subject.", username),
 			}, http.StatusOK, nil
 		}
@@ -1101,8 +1196,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		// operating system's own accounts, so `root` reaches here exactly as a
 		// misspelling does — and an operator who typed `root` deliberately is
 		// owed the reason rather than a puzzle.
-		return OperationResult{}, http.StatusNotFound,
-			fmt.Errorf("the target has no adoptable account named %s (system accounts are never adoptable)", username)
+		return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
 	}
 
 	if err := s.store.BindIfFree(Binding{

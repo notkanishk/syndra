@@ -61,10 +61,18 @@ func (k *kit) reads() {
 	}
 	k.transport(k.at("transport.refusals"), k.at("transport.query"))
 	health := k.health(k.at("health"))
-	k.subjects(k.at("subjects"))
-	k.at("subjects.paged").skip("feature subjects.paged is deferred (decision 27); no add-on declares it yet")
+	subjects := k.subjects(k.at("subjects"))
+	k.at("subjects.paged").skip("feature subjects.paged is deferred; no add-on declares it yet")
 	k.current(k.at("current"))
 	k.valuesCheck(k.at("values"))
+	current, _ := subjects["current"].(bool)
+	for _, s := range objects(subjects["subjects"]) {
+		state, _ := s["state"].(map[string]any)
+		k.unlistedHidden("subject "+display(s), state, current)
+	}
+	if c := k.at("unlisted-hidden"); !c.ran && len(c.skips) == 0 {
+		c.skip("no subject listed holds an enumerable membership field")
+	}
 	if c := k.at("settings"); !k.m.has("settings") {
 		c.skip("feature settings not declared")
 	} else {
@@ -75,9 +83,9 @@ func (k *kit) reads() {
 	ex := k.send(request{method: http.MethodGet, target: "/conformance/no-such-route"})
 	k.refused(k.at("error-envelope"), ex, 404, "UNKNOWN_ROUTE", "an unknown route")
 
-	k.at("operations.physical").skip("feature calls: its checks are slice 6")
+	k.at("operations.physical").skip("feature calls: this kit does not check it yet")
 	if k.m.has("freshness") {
-		k.at("freshness").skip("declared; its checks are slice 6")
+		k.at("freshness").skip("declared; this kit does not check it yet")
 	} else {
 		k.at("freshness").skip("feature freshness not declared")
 	}
@@ -205,9 +213,9 @@ func (k *kit) health(c *check) map[string]any {
 	if doc == nil {
 		return nil
 	}
-	_, isNum := num(doc["log_records"])
-	_, isStr := doc["log_head"].(string)
-	c.expect(isNum && isStr, "log_head %v and log_records %v must be a string and an integer", doc["log_head"], doc["log_records"])
+	// A second read, so even a run that writes nothing has two to compare
+	// (logAnchored, in afterwards). health.json holds log_head non-empty.
+	k.ok(c, k.send(request{method: http.MethodGet, target: "/health"}), "health.json")
 	if k.m.has("freshness") {
 		_, ok := num(doc["target_reads"])
 		c.expect(ok, "feature freshness is declared and health carries no target_reads")
@@ -237,6 +245,31 @@ func (k *kit) subjects(c *check) map[string]any {
 	return doc
 }
 
+// unlistedHidden: a membership in state or observed holds only the managed
+// set. Syndra compares state with desired over the whole list, so a value
+// /values leaves out, which no mapping can name, would be a difference it can
+// never close. Judged only from a current reply: a stored copy may predate a
+// change to /values, so a value it holds proves nothing.
+func (k *kit) unlistedHidden(where string, state map[string]any, current bool) {
+	c := k.at("unlisted-hidden")
+	if !current {
+		const why = "a /subjects reply was current: false; a stored copy may lag /values, so it is not judged"
+		if !slices.Contains(c.skips, why) {
+			c.skip(why)
+		}
+		return
+	}
+	for name, v := range state {
+		managed, enumerable := k.values[name]
+		if !enumerable || k.m.role(name) != "membership" {
+			continue
+		}
+		held, _ := stringList(v)
+		extra := slices.DeleteFunc(held, func(s string) bool { return slices.Contains(managed, s) })
+		c.expect(len(extra) == 0, "%s: %s holds %v, which /values/%s does not list", where, name, extra, name)
+	}
+}
+
 // shape checks one field value against its role's wire shape (design §3).
 func (k *kit) shape(c *check, where, name string, v any) {
 	role := k.m.role(name)
@@ -257,6 +290,7 @@ func (k *kit) shape(c *check, where, name string, v any) {
 		c.expect(role != "flag" || s == "true", `%s: %s is a flag, ["true"] or [], not %q`, where, name, s)
 		c.expect(role != "limit" || err == nil, "%s: %s is a limit, %q is not a whole number", where, name, s)
 	}
+	c.expect(role != "limit" || len(list) == 1, "%s: %s is a limit, and state and observed hold exactly one value, the effective limit; it holds %v", where, name, list)
 	c.expect(role != "membership" || (sort.StringsAreSorted(list) && len(slices.Compact(slices.Clone(list))) == len(list)),
 		"%s: membership %s must be sorted and deduplicated, is %v", where, name, list)
 }

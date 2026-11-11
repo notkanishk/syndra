@@ -7,8 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	bolt "go.etcd.io/bbolt"
 )
 
 // 5.1–5.14, 6.1–6.2, 6.7–6.12 — the entitlement plane.
@@ -48,6 +53,29 @@ type mutatingRPC struct {
 	// refuseGroupCreate answers group.create with the "already exists" refusal,
 	// and failReadAfterCreate makes the account unreadable once it is created.
 	refuseGroupCreate, failReadAfterCreate bool
+	// resetOn makes one method's call fail on the wire after it was sent, the
+	// way a reset or a timeout does: the target may have acted on it. after
+	// runs once a method has answered, so a test can take the session away
+	// between two calls.
+	resetOn string
+	after   map[string]func()
+	// rateLimitOn makes one method's call answer as a rate-limited NAS does.
+	rateLimitOn string
+	// beforeUserCreate runs as an account create arrives, and refuses it when
+	// it answers true.
+	beforeUserCreate func() (refuse bool)
+}
+
+// editGroups changes the group table the next group.query reads, the way the
+// target's own does: a personal group made, deleted, or given its account.
+func (m *mutatingRPC) editGroups(edit func([]map[string]any) []map[string]any) {
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(orEmptyList(m.fakeRPC.groups)), &rows); err != nil {
+		return
+	}
+	if encoded, err := json.Marshal(edit(rows)); err == nil {
+		m.fakeRPC.groups = string(encoded)
+	}
 }
 
 // remember adds a created account to the fixture the next read serves.
@@ -102,6 +130,15 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 	// write addressed has something to read.
 	m.fakeRPC.calls = append(m.fakeRPC.calls, method)
 	m.fakeRPC.params = append(m.fakeRPC.params, params)
+	if hook := m.after[method]; hook != nil {
+		defer hook()
+	}
+	if method == m.resetOn {
+		return nil, errors.New("websocket: read tcp 192.0.2.10:443: connection reset by peer")
+	}
+	if method == m.rateLimitOn {
+		return nil, errors.New("too many requests")
+	}
 	switch method {
 	case "user.update":
 		args, _ := params.([]any)
@@ -113,19 +150,36 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		}
 		return envelope(`null`), nil
 	case "group.create":
-		// A personal group, as the create path makes one before the account.
+		// A personal group, as the create path makes one before the account,
+		// kept in the table so a later read finds it.
 		m.groupCreates++
-		if m.refuseGroupCreate {
+		args, _ := params.([]any)
+		g, _ := args[0].(map[string]any)
+		if m.refuseGroupCreate || strings.Contains(m.fakeRPC.groups, `"group":"`+fmt.Sprint(g["name"])+`"`) {
 			return errorEnvelope("group_create.name: A group with this name already exists"), nil
 		}
+		id := int64(92)
 		if m.refuseUserCreate {
-			return envelope(`93`), nil
+			id = 93
 		}
-		return envelope(`92`), nil
+		m.editGroups(func(rows []map[string]any) []map[string]any {
+			return append(rows, map[string]any{"id": id, "gid": g["gid"], "group": g["name"], "builtin": false, "users": []any{}})
+		})
+		return envelope(strconvI(id)), nil
 	case "group.delete":
 		m.groupDeletes++
+		args, _ := params.([]any)
+		m.editGroups(func(rows []map[string]any) []map[string]any {
+			return slices.DeleteFunc(rows, func(r map[string]any) bool { return fmt.Sprint(r["id"]) == fmt.Sprint(args[0]) })
+		})
+		return envelope(`null`), nil
+	case "pool.dataset.set_quota":
+		m.setQuota(params)
 		return envelope(`null`), nil
 	case "user.create":
+		if m.beforeUserCreate != nil && m.beforeUserCreate() {
+			return errorEnvelope("user_create.username: A user with this username already exists"), nil
+		}
 		if m.refuseUserCreate {
 			return errorEnvelope("user_create.username: refused"), nil
 		}
@@ -146,12 +200,52 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		// unix uid, which are different numbers. A fake that forgot the account
 		// it had just made would make that read-back untestable.
 		m.remember(params)
+		// The account is now in its primary group, as group.query's `users`
+		// reports it.
+		if c, ok := args[0].(map[string]any); ok && len(args) == 1 {
+			m.editGroups(func(rows []map[string]any) []map[string]any {
+				for _, r := range rows {
+					if fmt.Sprint(r["id"]) == fmt.Sprint(c["group"]) {
+						users, _ := r["users"].([]any)
+						r["users"] = append(users, m.nextID)
+					}
+				}
+				return rows
+			})
+		}
 		return envelope(strconvI(m.nextID)), nil
 	}
 	// Already recorded above; the embedded fake records the rest.
 	m.fakeRPC.calls = m.fakeRPC.calls[:len(m.fakeRPC.calls)-1]
 	m.fakeRPC.params = m.fakeRPC.params[:len(m.fakeRPC.params)-1]
 	return m.fakeRPC.Call(method, timeout, params)
+}
+
+// setQuota keeps a limit the way a NAS does, so the next get_quota of that
+// dataset reads what was set: a limit of 0 is no row, which is no limit.
+func (m *mutatingRPC) setQuota(params any) {
+	args, _ := params.([]any)
+	if len(args) != 2 {
+		return
+	}
+	dataset, _ := args[0].(string)
+	entries, _ := args[1].([]any)
+	key := "pool.dataset.get_quota " + dataset
+	if m.fakeRPC.answers == nil {
+		m.fakeRPC.answers = map[string]string{}
+	}
+	var rows []map[string]any
+	_ = json.Unmarshal([]byte(orEmptyList(m.fakeRPC.answers[key])), &rows)
+	for _, e := range entries {
+		q, _ := e.(map[string]any)
+		id, _ := strconv.ParseInt(fmt.Sprint(q["id"]), 10, 64)
+		rows = slices.DeleteFunc(rows, func(r map[string]any) bool { return fmt.Sprint(r["id"]) == fmt.Sprint(id) })
+		if v, _ := q["quota_value"].(int64); v != 0 {
+			rows = append(rows, map[string]any{"id": id, "quota": v, "quota_type": "USER", "used_bytes": 0})
+		}
+	}
+	out, _ := json.Marshal(rows)
+	m.fakeRPC.answers[key] = string(out)
 }
 
 // applyUpdate makes the fixture agree with the write, the way a target does.
@@ -207,6 +301,7 @@ func applyServer(t *testing.T, users string) (*server, *mutatingRPC) {
 	// The NAS must route through the recording wrapper, not the bare fake.
 	s.nas = newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
 	s.nas.version, s.nas.probed = "25.04.2", true
+	s.nas.selfName, s.nas.selfUID = "syndra", 3001 // as testServer
 	return s, m
 }
 
@@ -434,12 +529,20 @@ func TestACollidingUnboundAccountHaltsAndSurfacesTheDecision(t *testing.T) {
 	if !out.Conflict.Adoptable || out.Conflict.AccountID != "9001" {
 		t.Errorf("the conflict must carry what an operator needs to decide: %+v", out.Conflict)
 	}
+	if !strings.HasPrefix(out.Consequence, "Nothing was changed. Adopt it") {
+		t.Errorf("an adoptable conflict's next step is adopt, got %q", out.Consequence)
+	}
 	// No create, no adopt, no modify.
 	if len(m.creates) != 0 || len(m.updates) != 0 {
 		t.Fatalf("nothing may be written: %d creates %d updates", len(m.creates), len(m.updates))
 	}
 	if _, bound, _ := s.store.GetBinding("sub-1"); bound {
 		t.Fatal("and nothing may be bound")
+	}
+	// adoptable is a promise about account.adopt: it succeeds.
+	if _, status, err := s.adoptAccount(OperationRequest{Operation: "account.adopt", Subject: "sub-1", Actor: "op1", CallID: "a1",
+		Params: map[string]any{"username": "charlotte"}}); status != http.StatusOK {
+		t.Fatalf("adoptable, so account.adopt must succeed, got %d %v", status, err)
 	}
 }
 
@@ -534,6 +637,18 @@ func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
 	if len(m.creates) != 0 || len(m.updates) != 0 {
 		t.Fatal("nothing may be written to someone else's account")
 	}
+	// Not adoptable because this subject has a binding: account.adopt refuses
+	// it, so the next step the outcome names is a release first.
+	if _, status, _ := s.adoptAccount(OperationRequest{Operation: "account.adopt", Subject: "sub-1", Actor: "op1", CallID: "a1",
+		Params: map[string]any{"username": "charlotte"}}); status != http.StatusConflict {
+		t.Fatalf("account.adopt must refuse a bound subject, got %d", status)
+	}
+	// And the account after it may be a stranger's (the name was reused), so
+	// the step never reads as "adopt it": only if it is theirs.
+	if !strings.Contains(out.Consequence, "Release this subject's binding first") ||
+		!strings.Contains(out.Consequence, "adopt that account only if it is theirs") {
+		t.Errorf("the next step is a release, then an adoption only of their own account, got %q", out.Consequence)
+	}
 }
 
 // A legacy record key in the binding is replaced by the real uid on the first
@@ -625,18 +740,146 @@ func TestAnApplyDuringAMaintenanceWindowIsRefusedAsRetryable(t *testing.T) {
 	}
 }
 
-// A field this add-on does not understand is refused rather than ignored.
-// Ignoring it would let the backend believe it had converged something nothing
-// acted on.
-func TestAnUnknownDesiredFieldIsRefused(t *testing.T) {
-	s, m := applyServer(t, `[]`)
+// A desired state the app cannot hold is refused rather than ignored or
+// shrunk: ignoring a field lets the backend believe it converged something
+// nothing acted on, dropping a group under-grants. /plan says `blocked` and
+// /apply 422 APPLY_BLOCKED with the same outcome, for a new account and an
+// existing one alike, and nothing is written.
+func TestAnUnholdableDesiredStateIsBlockedByPlanAndApplyAlike(t *testing.T) {
+	const existing = `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`
+	for _, tc := range []struct{ name, desired string }{
+		{"unknown key", `{"quota_bytes":5}`},
+		{"malformed limit", `{"home_quota":["5 GiB"]}`},
+		{"negative limit", `{"home_quota":["-1"]}`},
+		{"flag that is not a flag", `{"enabled":"yes"}`},
+		{"unknown group", `{"group":["the_shield"]}`},
+		{"built-in group", `{"group":["builtin_users"]}`},
+		// Null decodes to the zero value: a lock and an empty group set.
+		{"null flag", `{"enabled":null}`},
+		{"null groups", `{"group":null}`},
+	} {
+		for _, users := range []string{`[]`, existing} {
+			s, m := applyServer(t, users)
+			if users == existing {
+				if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			name := tc.name
+			if users == existing {
+				name += " (existing account)"
+			}
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"quota_bytes":5}}`)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
+			rr := httptest.NewRecorder()
+			planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.org","desired":`+tc.desired+`}]}`)
+			var plan PlanResponse
+			if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+				t.Fatalf("%s: want one planned outcome, got %d %s", name, rr.Code, rr.Body.String())
+			}
+			planned := plan.Outcomes[0]
+
+			rr = postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":`+tc.desired+`}`)
+			applied := decodeOutcome(t, rr)
+			if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeApplyBlocked {
+				t.Errorf("%s: want 422 APPLY_BLOCKED, got %d %s", name, rr.Code, rr.Body.String())
+			}
+			if planned.Effect != EffectBlocked || applied.Effect != EffectBlocked || planned.Detail != applied.Detail ||
+				applied.Subject != "sub-1" || applied.Consequence == "" {
+				t.Errorf("%s: plan and apply must block alike, plan %s %q, apply %s %q (%q)",
+					name, planned.Effect, planned.Detail, applied.Effect, applied.Detail, applied.Consequence)
+			}
+			if len(m.creates) != 0 || len(m.updates) != 0 || m.groupCreates != 0 {
+				t.Errorf("%s: nothing may be written", name)
+			}
+		}
 	}
-	if len(m.creates) != 0 || len(m.updates) != 0 {
-		t.Fatal("nothing may be written")
+}
+
+// A plan that could not read is not a `blocked` subject. Syndra records
+// blocked as the target refusing, which is terminal and holds the person's
+// next withdrawal; a failed read is refused whole, so the row is planned again.
+func TestAPlanThatCannotReadIsRefusedNotBlocked(t *testing.T) {
+	const existing = `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`
+	for _, tc := range []struct {
+		name    string
+		desired string
+		breaks  func(*server, *mutatingRPC)
+		status  int
+		code    string
+	}{
+		{"binding unreadable", `{"enabled":true}`, func(s *server, _ *mutatingRPC) {
+			corrupt(t, s, bucketBindings, "sub-1")
+		}, http.StatusInternalServerError, CodeStoreUnreadable},
+		{"home location unreadable", `{"home":["true"]}`, func(s *server, _ *mutatingRPC) {
+			corrupt(t, s, bucketSettings, settingHomeRoot)
+		}, http.StatusInternalServerError, CodeStoreUnreadable},
+		{"home folder unreadable on the NAS", `{"home":["true"]}`, func(_ *server, m *mutatingRPC) {
+			m.fakeRPC.refuse = map[string]string{"filesystem.stat": "[EACCES] no"}
+		}, http.StatusBadGateway, CodeTargetUnreadable},
+	} {
+		s, m := homeServer(t, existing, nil, nil)
+		tc.breaks(s, m)
+		rr := httptest.NewRecorder()
+		planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"charlotte@example.org","desired":`+tc.desired+`}]}`)
+		if rr.Code != tc.status || problemCode(t, rr) != tc.code {
+			t.Errorf("%s: want %d %s, got %d %s", tc.name, tc.status, tc.code, rr.Code, rr.Body.String())
+		}
+	}
+
+	// From the stored copy, with the NAS down, the home folder is not read:
+	// the plan answers 200 for every subject and leaves the stat to the apply,
+	// as it leaves the group check. A 5xx here aborts the whole target's drift.
+	s, m := homeServer(t, existing, nil, nil)
+	snap, err := s.readSubjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.PutSnapshot(snap); err != nil {
+		t.Fatal(err)
+	}
+	m.fakeRPC.err = errors.New("websocket: connection closed")
+	s.nas.drop()
+	s.nas.lastTry = time.Now().Add(-time.Hour)
+	rr := httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[`+
+		`{"subject":"sub-1","email":"charlotte@example.org","desired":{"home":["true"]}},`+
+		`{"subject":"sub-2","email":"asuka@example.org","desired":{"enabled":true}}]}`)
+	var plan PlanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || rr.Code != http.StatusOK || plan.Current || len(plan.Outcomes) != 2 {
+		t.Fatalf("stored copy: want 200, current false, two outcomes, got %d %s", rr.Code, rr.Body.String())
+	}
+	for _, out := range plan.Outcomes {
+		if out.Effect != EffectApply {
+			t.Errorf("stored copy: %s must be planned, got %s %q", out.Subject, out.Effect, out.Detail)
+		}
+	}
+	if !strings.Contains(plan.Outcomes[0].Detail, homePlace+"/charlotte") {
+		t.Errorf("stored copy: the home is planned where the apply would make it, got %q", plan.Outcomes[0].Detail)
+	}
+}
+
+// corrupt makes one stored record unreadable.
+func corrupt(t *testing.T, s *server, bucket []byte, key string) {
+	t.Helper()
+	if err := s.store.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucket).Put([]byte(key), []byte("{not json"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A group that cannot be checked because the NAS did not answer is the
+// target's failure, not a blocked state: never a 4xx that drops the change.
+func TestAGroupTableThatCannotBeReadIsNotABlockedApply(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	// The first group read is locate's; the session goes after it, so the
+	// one that fails is groupIDsFor's.
+	m.after = map[string]func(){"group.query": sessionGone(s.nas)}
+	// The fingerprint is given, so the test's own read does not use the hook.
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","fingerprint":"`+
+		fingerprintSubject(nil)+`","desired":{"group":["lab_makers"]}}`)
+	if rr.Code < 500 || problemCode(t, rr) == CodeApplyBlocked {
+		t.Fatalf("want a 5xx, not a blocked apply, got %d %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -647,7 +890,7 @@ func TestPlanningMutatesNothingAndFingerprintsWhatItRead(t *testing.T) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
-	const body = `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu","desired":{"group":["builtin_users"]}}]}`
+	const body = `{"subjects":[{"subject":"sub-1","email":"charlotte@example.edu","desired":{"group":[]}}]}`
 
 	rr := httptest.NewRecorder()
 	planInto(t, s, rr, body)
@@ -1280,5 +1523,124 @@ func TestNoIdentityIsNeededToSwitchOffAnAccountThatIsNotThere(t *testing.T) {
 	}
 	if len(m.creates)+len(m.updates) != 0 {
 		t.Fatal("nothing may be written")
+	}
+}
+
+// sessionGone takes the NAS session away and holds the breaker open, as an
+// outage between two calls does: the next call is never sent.
+func sessionGone(n *NAS) func() {
+	return func() {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		n.client, n.openUntil = nil, n.now().Add(time.Hour)
+	}
+}
+
+// A NAS that cannot be reached at all was sent nothing, so the apply did
+// nothing: 503 TARGET_UNREACHABLE with Retry-After, which Syndra reads as
+// "keep it queued". Answered APPLY_FAILED it went to a person as "may have
+// acted", one item per change, for every outage.
+func TestAnApplyThatReachedNothingIsTargetUnreachable(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	s.nas = newNAS(func() (rpc, error) {
+		return nil, errors.New("dial tcp 192.0.2.10:443: connect: connection refused")
+	}, []string{"25.04"})
+	s.nas.version, s.nas.probed = "25.04.2", true
+
+	// A fingerprint of its own, so the dial this asserts on is the first one
+	// (withFingerprint would otherwise dial first, and the cooldown answer).
+	// The second is held back by the reconnect cooldown, never dialled.
+	for _, callID := range []string{"c1", "c2"} {
+		rr := postApply(t, s, `{"call_id":"`+callID+`","subject":"sub-1","email":"charlotte@example.edu","fingerprint":"any","desired":{"enabled":true}}`)
+		if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeTargetUnreachable || rr.Header().Get("Retry-After") == "" {
+			t.Fatalf("%s: want 503 TARGET_UNREACHABLE with Retry-After, got %d %s %v", callID, rr.Code, problemCode(t, rr), rr.Header())
+		}
+	}
+	if len(m.creates) != 0 || m.groupCreates != 0 {
+		t.Fatal("nothing may be written")
+	}
+}
+
+// A write that was sent and then lost (a reset, a timeout) may have landed:
+// APPLY_FAILED with a 5xx, never TARGET_UNREACHABLE, however unreachable the
+// NAS is afterwards.
+func TestAWriteLostOnTheWireIsApplyFailed(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+	m.resetOn = "user.update"
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"enabled":false}}`)
+	if rr.Code < 500 || problemCode(t, rr) != CodeApplyFailed {
+		t.Fatalf("want a 5xx APPLY_FAILED, got %d %s", rr.Code, problemCode(t, rr))
+	}
+}
+
+// Once this apply has written (the personal group), a call that is then never
+// sent does not make the whole apply "nothing was sent": APPLY_FAILED.
+func TestAFailureAfterTheFirstWriteIsApplyFailed(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	m.after = map[string]func(){"group.create": sessionGone(s.nas)}
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"enabled":true}}`)
+	if m.groupCreates != 1 || rr.Code < 500 || problemCode(t, rr) != CodeApplyFailed {
+		t.Fatalf("want a 5xx APPLY_FAILED after the group was made (%d made), got %d %s", m.groupCreates, rr.Code, problemCode(t, rr))
+	}
+}
+
+// The same for a write operation: a password.set whose update was never sent
+// did nothing (TARGET_UNREACHABLE); one lost on the wire may have (OPERATION_FAILED).
+func TestAWriteOperationSaysWhetherAnythingWasSent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rig  func(*server, *mutatingRPC)
+		code string
+	}{
+		{"no session at all", func(s *server, _ *mutatingRPC) { sessionGone(s.nas)() }, CodeTargetUnreachable},
+		{"gone before the update", func(s *server, m *mutatingRPC) {
+			m.after = map[string]func(){"user.query": sessionGone(s.nas)}
+		}, CodeTargetUnreachable},
+		{"lost on the wire", func(_ *server, m *mutatingRPC) { m.resetOn = "user.update" }, CodeOperationFailed},
+	} {
+		s, m := opServer(t)
+		tc.rig(s, m)
+		rr := postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"correct horse battery staple"}}`)
+		if rr.Code < 500 || problemCode(t, rr) != tc.code {
+			t.Errorf("%s: want a 5xx %s, got %d %s", tc.name, tc.code, rr.Code, problemCode(t, rr))
+		}
+	}
+}
+
+// A 429 is "not reached": Syndra re-queues it by itself. Before any write
+// that is true, and the apply says 429. After the first write (the personal
+// group) it is not, and the apply says 503 APPLY_FAILED, a person looks: the
+// one rule acted holds.
+func TestARateLimitIsNotReachedOnlyBeforeTheFirstWrite(t *testing.T) {
+	for _, tc := range []struct {
+		method string
+		groups int
+		status int
+	}{
+		{"group.create", 0, http.StatusTooManyRequests},
+		{"user.create", 1, http.StatusServiceUnavailable},
+	} {
+		s, m := applyServer(t, `[]`)
+		m.rateLimitOn = tc.method
+		rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"enabled":true}}`)
+		if m.groupCreates < tc.groups || rr.Code != tc.status || problemCode(t, rr) != CodeApplyFailed {
+			t.Errorf("rate-limited %s (%d groups made): want %d APPLY_FAILED, got %d %s", tc.method, m.groupCreates, tc.status, rr.Code, problemCode(t, rr))
+		}
+	}
+}
+
+// An adopted orphan group is not a write of this attempt, so a rate-limited
+// account create after it is still "not reached": 429, never acted's 503.
+func TestARateLimitAfterAnAdoptedGroupIsStillNotReached(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	m.refuseGroupCreate = true
+	m.fakeRPC.groups = `[{"id":93,"gid":250000,"group":"charlotte","builtin":false,"users":[]}]`
+	m.rateLimitOn = "user.create"
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"enabled":true}}`)
+	if rr.Code != http.StatusTooManyRequests || m.groupDeletes != 0 {
+		t.Fatalf("want 429 and the adopted group kept, got %d deletes=%d %s", rr.Code, m.groupDeletes, rr.Body.String())
 	}
 }

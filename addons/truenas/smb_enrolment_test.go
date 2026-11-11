@@ -87,7 +87,8 @@ func TestSMBIsNeverSwitchedOnAloneAndTheGroupsStillLand(t *testing.T) {
 // convergence for every account still waiting on a password, each one drained
 // to "no change", and Pending changes never emptied.
 func TestThePlanDoesNotPromiseTheSMBOnlyAPasswordCanSwitchOn(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
+	s, m := applyServer(t, `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
+	m.fakeRPC.groups = `[{"id":42,"gid":900,"group":"lab_makers"},{"id":44,"gid":901,"group":"staff"}]`
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}

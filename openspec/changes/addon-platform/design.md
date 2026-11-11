@@ -101,6 +101,8 @@ Level-triggering is available almost everywhere in both targets: `user.update({g
 
 ### 5. The manifest declares an entitlement schema and an operation set
 
+> **Current statement:** the add-on contract 2 in `addons/contract/` (`changes/addon-contract`), for authors [`addons/AUTHORING.md`](../../../addons/AUTHORING.md); this section is the history (routes, `type`/`lifecycle` fields and `POST /op/{name}` here are contract 1).
+
 ```
 GET  /capabilities   → entitlement_schema, operations, target product + version
 GET  /subjects       → full state read, feeds the existing drift sweep
@@ -278,6 +280,8 @@ Application is serialized per `(subject, target)`, and an apply carrying a versi
 **A version-rejected row terminates as `superseded`, not `failed`.** Revocation-first ordering makes this ordinary rather than exceptional: a grant at v5 queued behind a revoke at v6 is dispatched second and correctly refused. That is the system working, and labelling it `failed` shows the operator a phantom failure for a row deliberately discarded — on the row class where real failures matter most. Otherwise a queued grant can land after a newer revoke and silently restore access. This hazard is not hypothetical here: the sync service carried `internal/worker/ordering.go` for exactly it, and deleting that service should not delete the lesson.
 
 ### 16. Add-on transport is mutually authenticated; the operation id is the replay token
+
+> **Current statement:** `addons/contract/transport_derivation.json` and the `call_id` rules of `changes/addon-contract` design §5 (the query is signed since contract 2; the dedup token is the body's `call_id`), for authors [`addons/AUTHORING.md`](../../../addons/AUTHORING.md) chapter 4.
 
 *(Naming: the path segment is the operation **name** — `POST /operations/password.set`, alongside `GET /capabilities` and `GET /health`. "Operation id" throughout this document means the per-call dedup token, never the operation's name. They were briefly the same word and that would have cost a debugging session, so the code refuses to reuse it: `CallRequest.Operation` is the name, `CallRequest.CallID` is the dedup token and the `addon_operations` row id, and neither field can be passed where the other is meant.)*
 

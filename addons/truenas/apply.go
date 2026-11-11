@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -198,14 +199,62 @@ const (
 // Silently adopting it is the dangerous outcome: that account may belong to
 // somebody else entirely, and adopting it hands them a subject's entitlements
 // along with whatever is already in its home directory. So the operation stops
-// and an operator chooses — adopt, or create under a suffixed name.
+// and an operator chooses (BindingConflict.words).
 type BindingConflict struct {
 	Username  string `json:"username"`
 	AccountID string `json:"account_id"`
-	// Adoptable says the account exists and no other subject is bound to it,
-	// which is the only case the adoption action can act on.
+	// Adoptable says the account exists, no other subject is bound to it and
+	// it is known not to be the add-on's own, which is the only case the
+	// adoption action can act on.
 	Adoptable bool   `json:"adoptable"`
 	BoundTo   string `json:"bound_to,omitempty"`
+	// serviceAccount is the add-on's own account holding the name, which
+	// account.adopt refuses (refuseSelfAccount). Not on the wire: adoptable
+	// false already says the one thing Syndra acts on, and words says why.
+	serviceAccount bool
+	// selfUnknown is the add-on not yet knowing its own account (auth.me),
+	// while account.adopt refuses everything; not on the wire either.
+	selfUnknown bool
+}
+
+// unboundConflict is an account already holding the name an unbound subject
+// derives, built here once for plan and apply. Adoptable is account.adopt's
+// own rule (adoptAccount): no other subject holds the account, the add-on
+// knows its own account, and this is not it (refuseSelfAccount, the same check).
+func (s *server) unboundConflict(account *Subject, owner string) *BindingConflict {
+	_, _, known := s.nas.Self()
+	self := s.refuseSelfAccount(account.Username) != nil
+	return &BindingConflict{
+		Username: account.Username, AccountID: accountID(account.UID),
+		Adoptable: owner == "" && known && !self, BoundTo: owner,
+		serviceAccount: self, selfUnknown: !known,
+	}
+}
+
+// words says what a conflict is and what the operator does next, once for
+// plan and apply. adoptable is exactly when account.adopt would succeed
+// (adoptAccount): no other subject holds the account, it is known not to be
+// the add-on's own, and this subject has no binding. A subject whose bound
+// name another account now holds has a binding, so adopt refuses it: the
+// operator releases first.
+func (c BindingConflict) words() (detail, next string) {
+	switch {
+	case c.serviceAccount:
+		return fmt.Sprintf("%s is the account this add-on signs in to the app with, so it is never adopted.", c.Username),
+			"Create this subject's account in the app under another name, then adopt that."
+	case c.Adoptable:
+		return fmt.Sprintf("An account named %s already exists and is not bound to anyone.", c.Username),
+			"Adopt it, or rename it in the app."
+	case c.BoundTo != "":
+		return fmt.Sprintf("An account named %s already exists and is bound to another subject.", c.Username),
+			"If it is not theirs, release it from that subject, then adopt it here."
+	case c.selfUnknown:
+		return fmt.Sprintf("An account named %s already exists, and Syndra can't check yet whether it is the account this add-on signs in to the app with.", c.Username),
+			"Try again shortly."
+	default:
+		return fmt.Sprintf("The name %s this subject is bound to is now held by a different account.", c.Username),
+			"Release this subject's binding first, then adopt that account only if it is theirs, or rename it in the app."
+	}
 }
 
 var errStaleFingerprint = errors.New("the subject's state on the target has changed since the plan")
@@ -239,6 +288,31 @@ type desiredState struct {
 	managed map[string]bool
 }
 
+// unholdable is a desired state this app cannot hold: a key outside the
+// entitlement schema, a value that does not fit its role, a group the NAS does
+// not have or a built-in one. One error type, so /plan answers it `blocked`
+// and /apply 422 APPLY_BLOCKED, and the two cannot disagree about which inputs
+// those are (AUTHORING.md, "Every value is checked against its role").
+type unholdable string
+
+func (e unholdable) Error() string { return string(e) }
+
+func cannotHold(format string, a ...any) error { return unholdable(fmt.Sprintf(format, a...)) }
+
+// blockedOr answers an apply's failure before any write. One the app cannot
+// hold is the blocked outcome (422 APPLY_BLOCKED, as the plan said); anything
+// else keeps status.
+func blockedOr(subject string, err error, status int) (ApplyOutcome, int, error) {
+	var u unholdable
+	if errors.As(err, &u) {
+		return ApplyOutcome{
+			Subject: subject, Effect: EffectBlocked,
+			Detail: err.Error(), Consequence: "Nothing was changed.",
+		}, http.StatusUnprocessableEntity, nil
+	}
+	return ApplyOutcome{}, status, err
+}
+
 // decodeDesired is decodeDesiredFields with the system's home location filled
 // in, so the plan and the apply decide homes from the same place.
 func (s *server) decodeDesired(raw map[string]json.RawMessage) (desiredState, error) {
@@ -253,41 +327,49 @@ func (s *server) decodeDesired(raw map[string]json.RawMessage) (desiredState, er
 func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
 	d := desiredState{managed: map[string]bool{}}
 	for field, value := range raw {
+		// JSON null decodes into Go's zero value without error, which here is
+		// an instruction: `enabled: null` would lock the account and
+		// `group: null` remove every managed group. FieldValue
+		// (common/field.json) is an array or a boolean, never null, so it is
+		// refused for every field before any of them is read.
+		if string(bytes.TrimSpace(value)) == "null" {
+			return desiredState{}, cannotHold("field %q is null, which is not a value; leave a field out to leave it alone", field)
+		}
 		d.managed[field] = true
 		switch field {
 		case FieldGroup:
 			if err := json.Unmarshal(value, &d.groups); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a list of group names", field)
+				return desiredState{}, cannotHold("field %q must be a list of group names", field)
 			}
 			sort.Strings(d.groups)
 		case FieldEnabled:
 			if err := json.Unmarshal(value, &d.enabled); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a boolean", field)
+				return desiredState{}, cannotHold("field %q must be a boolean", field)
 			}
 		case FieldSMBEnabled:
 			if err := json.Unmarshal(value, &d.smbEnabled); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a boolean", field)
+				return desiredState{}, cannotHold("field %q must be a boolean", field)
 			}
 		case FieldHome:
 			var gives []string
 			if err := json.Unmarshal(value, &gives); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a list of \"true\"", field)
+				return desiredState{}, cannotHold("field %q must be a list of \"true\"", field)
 			}
 			for _, g := range gives {
 				if g != "true" {
-					return desiredState{}, fmt.Errorf("field %q: a role either gives a home folder (\"true\") or names nothing, not %q", field, g)
+					return desiredState{}, cannotHold("field %q: a role either gives a home folder (\"true\") or names nothing, not %q", field, g)
 				}
 			}
 			d.wantsHome = len(gives) > 0
 		case FieldHomeQuota:
 			var limits []string
 			if err := json.Unmarshal(value, &limits); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a list of byte counts", field)
+				return desiredState{}, cannotHold("field %q must be a list of byte counts", field)
 			}
 			for _, l := range limits {
 				n, err := strconv.ParseInt(strings.TrimSpace(l), 10, 64)
 				if err != nil || n < 0 {
-					return desiredState{}, fmt.Errorf("field %q: %q is not a byte count", field, l)
+					return desiredState{}, cannotHold("field %q: %q is not a byte count", field, l)
 				}
 				if n == 0 {
 					d.homeUnlimited = true
@@ -301,7 +383,7 @@ func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
 			// ignored. Ignoring it would let the backend believe it had
 			// converged something nothing acted on — the same class of silence
 			// as dropping an unknown parameter.
-			return desiredState{}, fmt.Errorf("field %q is not in this add-on's entitlement schema", field)
+			return desiredState{}, cannotHold("field %q is not in this add-on's entitlement schema", field)
 		}
 	}
 	// A channel is off whenever the account is (design §3, role channel), so
@@ -367,19 +449,12 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 	// completed mutation as queued — and a re-plan's new fingerprint does not
 	// turn a replay into PLAN_STALE (calls.go).
 	identity := map[string]any{"subject": req.Subject, "desired": plainJSON(req.Desired)}
-	s.once(w, req.CallID, kindApply, identity, func(w http.ResponseWriter) { s.applyNow(w, req) })
+	s.once(w, req.CallID, kindApply, req.Subject, identity, func(w http.ResponseWriter) { s.applyNow(w, req) })
 }
 
-// applyNow is one apply that was not a replay.
+// applyNow is one apply that was not a replay, admitted by the lifecycle gate
+// and alone for its subject (once).
 func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
-	done, err := s.life.Begin()
-	if err != nil {
-		state, _ := s.life.State()
-		writeLifecycleRefusal(w, state)
-		return
-	}
-	defer done()
-
 	if supported, why := s.nas.MajorSupported(); !supported {
 		// A mutation against an untested major is refused, not attempted. Reads
 		// continue; this is the half that could break something.
@@ -397,6 +472,13 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 		writeError(w, status, CodePlanStale,
 			"The subject's state on the target has changed since the plan was computed.",
 			map[string]any{"subject": req.Subject})
+	case errors.Is(err, ErrNotSent):
+		// Nothing reached the NAS, so nothing happened, and the backend keeps
+		// the change queued. Every failure after a write was sent stays
+		// APPLY_FAILED, a 5xx that says "may have acted": createAndConverge
+		// drops ErrNotSent from those (acted).
+		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
+			"The NAS could not be reached, so nothing was sent to it.", nil)
 	case err != nil:
 		writeError(w, status, CodeApplyFailed, err.Error(), nil)
 	case outcome.Conflict != nil:
@@ -414,7 +496,9 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	desired, err := s.decodeDesired(req.Desired)
 	if err != nil {
-		return ApplyOutcome{}, http.StatusBadRequest, err
+		// Not unholdable: where home folders go could not be read from the
+		// add-on's own store.
+		return blockedOr(req.Subject, err, http.StatusInternalServerError)
 	}
 
 	current, binding, conflict, truncated, err := s.locate(req)
@@ -439,11 +523,11 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// Halted, and surfacing THE SAME adoption action the unmanaged
 		// inventory offers. One decision with two entry points, never a second
 		// code path that fires mid-convergence.
+		detail, next := conflict.words()
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectBlocked,
-			Detail:      fmt.Sprintf("An account named %s already exists and is not bound to anyone.", conflict.Username),
-			Consequence: "Nothing was changed. Adopt it, or create under a suffixed name.",
-			Username:    conflict.Username, Conflict: conflict,
+			Detail: detail, Consequence: "Nothing was changed. " + next,
+			Username: conflict.Username, Conflict: conflict,
 		}, http.StatusConflict, nil
 	}
 
@@ -642,11 +726,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		return nil, Binding{}, nil, false, err
 	}
 	if existing != nil {
-		owner := claimed[derived]
-		return nil, Binding{}, &BindingConflict{
-			Username: derived, AccountID: accountID(existing.UID),
-			Adoptable: owner == "", BoundTo: owner,
-		}, false, nil
+		return nil, Binding{}, s.unboundConflict(existing, claimed[derived]), false, nil
 	}
 	return nil, Binding{SubjectID: req.Subject, Username: derived}, nil, cut, nil
 }
@@ -732,7 +812,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		// converged.
 		ids, err := s.groupIDsFor(*c.groups)
 		if err != nil {
-			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
+			return blockedOr(req.Subject, err, statusFor(err))
 		}
 		// Plus the built-in memberships, which current.Groups never listed:
 		// the replace is of the groups Syndra manages, not of the account's.
@@ -750,7 +830,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	// The home folder rides in the same update, so one write and one read-back
 	// verify it. The rules (never moved, never removed, never someone else's)
 	// are home.go's; what is not done is said in the outcome.
-	home, err := s.decideHome(desired, current.Username, current.Home, current.UID)
+	home, err := s.decideHome(desired, current.Username, current.Home, current.UID, true)
 	if err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
@@ -924,7 +1004,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	if want.groups != nil {
 		ids, err := s.groupIDsFor(*want.groups)
 		if err != nil {
-			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
+			return blockedOr(req.Subject, err, statusFor(err))
 		}
 		groupIDs = ids
 	}
@@ -986,15 +1066,25 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	create["uid"] = id
 	create["group"] = groupID
 	create["group_create"] = false
+	// failed answers a failure before the account exists. A group made here
+	// was a write, so it is undone and the failure is acted's. An adopted
+	// group predates this attempt (or a timed-out create of ours made it, and
+	// the next attempt takes it over the same way): nothing has been written,
+	// it is not ours to delete, and the failure keeps its own status (a 429
+	// stays a 429).
+	failed := func(err error) (ApplyOutcome, int, error) {
+		if adopted {
+			return ApplyOutcome{}, statusFor(err), err
+		}
+		s.undoGroup(binding.Username, groupID)
+		return acted(err)
+	}
 
 	// The home, when one role gives one and its folder is free. Decided before
 	// the account exists, so a folder that is there at all is someone else's.
-	home, err := s.decideHome(desired, binding.Username, "", -1)
+	home, err := s.decideHome(desired, binding.Username, "", -1, true)
 	if err != nil {
-		if !adopted {
-			s.undoGroup(groupID)
-		}
-		return ApplyOutcome{}, statusFor(err), err
+		return failed(err)
 	}
 	if home.path != "" {
 		for k, v := range homeFields(home.path) {
@@ -1004,12 +1094,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 
 	var recordID apiID
 	if err := s.nas.call("user.create", []any{create}, &recordID); err != nil {
-		// An adopted group was there before this attempt: not ours to delete,
-		// however the account fares.
-		if !adopted {
-			s.undoGroup(groupID)
-		}
-		return ApplyOutcome{}, statusFor(err), err
+		return failed(err)
 	}
 	// `user.create` answers with the RECORD key, not the unix uid, and the
 	// binding recognises an account by its uid across a rename. Read back
@@ -1035,8 +1120,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 			fmt.Errorf("account %s was created and its binding could not be recorded: %w", binding.Username, err)
 	}
 	if readErr != nil {
-		return ApplyOutcome{}, statusFor(readErr),
-			fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr)
+		return acted(fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr))
 	}
 
 	detail := fmt.Sprintf("Created %s.", binding.Username)
@@ -1203,6 +1287,23 @@ func describeHolding(s Subject) string {
 	default:
 		return "Reaches " + strings.Join(s.Groups, ", ") + "."
 	}
+}
+
+// acted answers a failure after this apply had already written to the target
+// (here, the personal group). The one rule: after the first write, every
+// failure is "may have acted", a 5xx APPLY_FAILED a person looks at, never an
+// answer Syndra reads as not reached and re-queues by itself. So a later
+// call's "nothing was sent" is dropped (never TARGET_UNREACHABLE), and a 429
+// from a rate-limited NAS becomes 503. The text is kept.
+func acted(err error) (ApplyOutcome, int, error) {
+	status := statusFor(err)
+	if status == http.StatusTooManyRequests {
+		status = http.StatusServiceUnavailable
+	}
+	if errors.Is(err, ErrNotSent) {
+		err = errors.New(err.Error())
+	}
+	return ApplyOutcome{}, status, err
 }
 
 func statusFor(err error) int {

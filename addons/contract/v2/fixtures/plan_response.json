@@ -18,8 +18,8 @@
     {
       "subject": "289471021834760194",
       "effect": "blocked",
-      "detail": "An account named seth_rollins already exists and is not bound to anyone.",
-      "consequence": "Nothing would be changed.",
+      "detail": "An account named seth_rollins already exists and is bound to another subject.",
+      "consequence": "Nothing would change. If it is not theirs, release it from that subject, then adopt it here.",
       "conflict": {
         "username": "seth_rollins",
         "account_id": "3077",

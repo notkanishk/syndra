@@ -23,14 +23,14 @@
       "items": {
         "type": "string"
       },
-      "description": "One field's value: a boolean (roles account, channel) or a list of strings (every other role). A limit is a list of decimal strings such as [\"0\",\"5368709120\"]."
+      "description": "One field's value: a boolean (roles account, channel) or a list of strings (every other role). A limit is a list of decimal strings: in desired, one value per role that sets it (such as [\"0\",\"5368709120\"]), combined by the add-on; in state and observed, exactly one, the effective limit."
     },
     "FieldValues": {
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/FieldValue"
       },
-      "description": "Field values keyed by field name, in desired, observed and state alike. Absent and empty differ: an absent key is unmanaged, an empty list is 'make it empty'."
+      "description": "Field values keyed by field name, in desired, observed and state alike. Absent and empty differ: an absent key is unmanaged, an empty list is 'make it empty', except for a limit, where an empty list sets nothing and the app's limit stays as it is. In state and observed an absent key is unknown."
     },
     "Unit": {
       "type": "string",

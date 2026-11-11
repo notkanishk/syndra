@@ -70,7 +70,7 @@ func sameJSON(t *testing.T, got, want []byte, what string) {
 }
 
 var fixtureDesired = map[string]json.RawMessage{
-	"group":       json.RawMessage(`["lab_makers","fabrication"]`),
+	"group":       json.RawMessage(`["fabrication","lab_makers"]`),
 	"home":        json.RawMessage(`["true"]`),
 	"home_quota":  json.RawMessage(`["5368709120"]`),
 	"enabled":     json.RawMessage(`true`),
@@ -86,7 +86,7 @@ func TestApplyEnvelopeMatchesContract(t *testing.T) {
 		ContractVersion: ContractVersion,
 		CallID:          "0f8b7a1c-6d2e-4c53-9a10-2b7c9d4e5f60",
 		Subject:         "289471021834760193",
-		Email:           "bianca.belair@example.org",
+		Email:           "rey_mysterio@example.org",
 		Fingerprint:     "sha256:9d1c4f0b7e2a",
 		PlanID:          "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd",
 		Actor:           "operator-289471021834760199",
@@ -98,25 +98,23 @@ func TestApplyEnvelopeMatchesContract(t *testing.T) {
 	sameJSON(t, body, contractFixture(t, "apply_request.json"), "apply")
 }
 
-// The operation fixture carries preview (feature calls) and fresh (feature
-// freshness), which this backend never sends: it knows neither feature yet,
-// and a strict add-on that did not declare one refuses the key. Everything
-// else is the fixture, byte for byte.
+// The operation fixture is what this backend sends for an operation: no
+// plan_id or fingerprint (an operation is approved by confirmation, not
+// rehearsed against a plan) and no feature key (preview, fresh), which a
+// strict add-on that did not declare the feature refuses.
 func TestCallEnvelopeMatchesContract(t *testing.T) {
 	body, err := json.Marshal(callEnvelope{
 		ContractVersion: ContractVersion,
 		CallID:          "5a2d9e30-1b44-4f7c-9e08-6d3a2c1b0f95",
-		Operation:       "storage.status",
+		Operation:       "account.adopt",
 		Subject:         "289471021834760193",
-		Actor:           "289471021834760193",
-		PlanID:          "3c9e2f81-44ab-4d0e-8f21-77aa10bb33cd",
-		Fingerprint:     "sha256:9d1c4f0b7e2a",
-		Params:          map[string]any{"since": "2026-11-01T00:00:00Z"},
+		Actor:           "operator-289471021834760199",
+		Params:          map[string]any{"username": "rey_mysterio"},
 	})
 	if err != nil {
 		t.Fatalf("encode call envelope: %v", err)
 	}
-	sameJSON(t, body, fixtureWithout(t, "operation_request.json", "preview", "fresh"), "operation")
+	sameJSON(t, body, contractFixture(t, "operation_request.json"), "operation")
 	for _, key := range []string{`"preview"`, `"fresh"`} {
 		if bytes.Contains(body, []byte(key)) {
 			t.Errorf("the backend sends %s, a feature key it does not know", key)
@@ -129,7 +127,7 @@ func TestPlanEnvelopeMatchesContract(t *testing.T) {
 		ContractVersion: ContractVersion,
 		Subjects: []planSubjectWire{{
 			Subject: "289471021834760193",
-			Email:   "bianca.belair@example.org",
+			Email:   "rey_mysterio@example.org",
 			Desired: fixtureDesired,
 		}},
 	})
@@ -182,7 +180,7 @@ func TestTheAddOnsApplyOutcomeLandsHere(t *testing.T) {
 	if out.Outcome != OutcomeSucceeded || out.Effect != "applied" || out.Detail == "" {
 		t.Fatalf("the outcome did not land: %+v", out)
 	}
-	if out.Username != "bianca.belair" || out.AccountID != "3042" {
+	if out.Username != "rey_mysterio" || out.AccountID != "3051" {
 		t.Errorf("the account identity did not land: %q/%q", out.Username, out.AccountID)
 	}
 	if out.Standing == nil || out.Standing.WaitingOn != "member" || out.Standing.Usable || out.Standing.Note == "" || out.Standing.Next == "" {

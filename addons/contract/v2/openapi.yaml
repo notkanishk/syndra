@@ -303,7 +303,7 @@ paths:
       operationId: runOperation
       summary: Run one named operation
       description: >-
-        The path names the operation; the body repeats it. Deduplicated on call_id and identity/operation.json. An unknown operation id answers 404 OPERATION_FAILED.
+        The path names the operation; the body repeats it. A write operation (registry effect other than read) is deduplicated on call_id and identity/operation.json. An effect: read operation ignores call_id: it is never recorded, held in flight or checked for reuse, because Syndra sends one call_id for every read. An unknown operation id answers 404 OPERATION_FAILED.
       x-feature: operations
       security:
         - addonSignature: []

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -781,5 +782,205 @@ func TestAnAmbiguousBindingIsItsOwnRefusal(t *testing.T) {
 	}
 	if status != http.StatusConflict {
 		t.Fatalf("want 409, got %d (%v)", status, err)
+	}
+}
+
+// Syndra sends one call_id for every read it makes (read-<target>-<subject>),
+// so an effect: read operation ignores it: two at once both answer, another
+// read under it answers, and so does a read under a recorded write's call_id.
+// Held or recorded, the second page load would be 409 CALL_IN_PROGRESS and the
+// next read 422 CALL_ID_REUSED.
+func TestAReadIgnoresItsCallID(t *testing.T) {
+	s, m := opServer(t)
+	m.fakeRPC.audit, m.fakeRPC.shares = `[]`, `[]`
+	m.fakeRPC.health = map[string]string{"system.info": `{"version":"25.04.2"}`}
+	const read = `{"call_id":"read-truenas-sub-1","subject":"sub-1"}`
+	var wg sync.WaitGroup
+	codes := make([]int, 2)
+	for i := range codes {
+		wg.Add(1)
+		go func() { defer wg.Done(); codes[i] = postOperation(t, s, "activity.get", read).Code }()
+	}
+	wg.Wait()
+	if codes[0] != http.StatusOK || codes[1] != http.StatusOK {
+		t.Fatalf("two reads under one call_id answered %v", codes)
+	}
+	if rr := postOperation(t, s, "health.get", read); rr.Code != http.StatusOK {
+		t.Fatalf("a read of another operation under the same call_id answered %d %s", rr.Code, problemCode(t, rr))
+	}
+	if rr := postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"correct horse battery staple"}}`); rr.Code != http.StatusOK {
+		t.Fatalf("password.set: %d %s", rr.Code, rr.Body.String())
+	}
+	rr := postOperation(t, s, "activity.get", `{"call_id":"p1","subject":"sub-1"}`)
+	var out OperationResult
+	if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &out) != nil || out.Activity == nil {
+		t.Fatalf("a read under a recorded write's call_id answered %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+// account.release changes what this add-on manages and is logged: a write,
+// refused while read_only like every other.
+func TestReleaseIsAWrite(t *testing.T) {
+	s, _ := opServer(t)
+	_ = s.life.Set(LifecycleReadOnly, "maintenance")
+	rr := postOperation(t, s, "account.release", `{"call_id":"r1","operation":"account.release","subject":"sub-1"}`)
+	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeLifecycleRefusal {
+		t.Fatalf("want 503 LIFECYCLE_REFUSAL, got %d %s", rr.Code, problemCode(t, rr))
+	}
+	if _, bound, _ := s.store.GetBinding("sub-1"); !bound {
+		t.Fatal("the binding was released while read_only")
+	}
+}
+
+// readOperation is the registry's effect: read, so the split between what is
+// recorded and gated and what is not is the contract's, not a list kept here.
+func TestReadOperationsAreTheRegistrysReads(t *testing.T) {
+	var reg struct {
+		Operations map[string]struct {
+			Effect string `json:"effect"`
+		} `json:"operations"`
+	}
+	if err := json.Unmarshal(v2Read(t, "registry", "operations.json"), &reg); err != nil || len(reg.Operations) == 0 {
+		t.Fatalf("registry/operations.json: %v", err)
+	}
+	for _, op := range operationSet(nil) {
+		e, registered := reg.Operations[op.ID]
+		if !registered {
+			t.Errorf("%s is declared and not registered", op.ID)
+			continue
+		}
+		if readOperation(op.ID) != (e.Effect == "read") {
+			t.Errorf("%s: readOperation says %t, the registry's effect is %q", op.ID, readOperation(op.ID), e.Effect)
+		}
+	}
+}
+
+// The manifest and the route answer from one source (unavailable): release
+// touches nothing on the NAS, so the manifest offers it on a version never
+// read or untested, and the route must then do it, not refuse it for the
+// version. password.set touches the NAS and is refused for it, as offered.
+func TestTheRouteRefusesExactlyWhatTheManifestWithdraws(t *testing.T) {
+	for _, version := range []string{"", "27.10.0"} {
+		t.Run("version "+version, func(t *testing.T) {
+			s, _ := opServer(t)
+			s.nas.version = version
+			offered := map[string]bool{}
+			for _, op := range operationSet(s) {
+				offered[op.ID] = op.Available
+			}
+			if !offered["account.release"] || offered["password.set"] {
+				t.Fatalf("the manifest offers release %t, password.set %t", offered["account.release"], offered["password.set"])
+			}
+			rr := postOperation(t, s, "account.release", `{"call_id":"r1","operation":"account.release","subject":"sub-1"}`)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("release, offered, answered %d %s", rr.Code, rr.Body.String())
+			}
+			if _, bound, _ := s.store.GetBinding("sub-1"); bound {
+				t.Error("release answered 200 and left the binding")
+			}
+			rr = postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+			if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeTargetVersionUnsupported {
+				t.Fatalf("password.set, withdrawn, answered %d %s", rr.Code, problemCode(t, rr))
+			}
+		})
+	}
+}
+
+// An id this add-on does not declare is no operation at all: 404
+// OPERATION_FAILED in every lifecycle state and on any version, never a write
+// refused for the lifecycle or the version, and nothing recorded.
+func TestAnUnknownOperationIsNotFoundBeforeAnyGate(t *testing.T) {
+	s, _ := opServer(t)
+	s.nas.version = ""
+	_ = s.life.Set(LifecycleReadOnly, "maintenance")
+	rr := postOperation(t, s, "door.open", `{"call_id":"u1","operation":"door.open","subject":"sub-1"}`)
+	if rr.Code != http.StatusNotFound || problemCode(t, rr) != CodeOperationFailed {
+		t.Fatalf("an unknown operation answered %d %s, want 404 OPERATION_FAILED", rr.Code, problemCode(t, rr))
+	}
+	if recordedEntry(t, s.store, "u1") != nil {
+		t.Error("an unknown operation was recorded under its call_id")
+	}
+}
+
+// A tested release that lacks the method an operation needs: the manifest says
+// "it cannot", and the route refuses it the same way, with the same reason.
+func TestAMissingMethodRefusesWhatTheManifestWithdraws(t *testing.T) {
+	s, _ := opServer(t)
+	s.nas.methods = map[string]bool{"user.query": true}
+	ok, reason := s.availability("password.set")
+	if ok {
+		t.Fatal("password.set is offered on a NAS without user.update")
+	}
+	rr := postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+	if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeOperationFailed || !strings.Contains(rr.Body.String(), reason) {
+		t.Fatalf("want 422 OPERATION_FAILED %q, got %d %s", reason, rr.Code, rr.Body.String())
+	}
+}
+
+// An operator adopting the same account twice (two screens, two call_ids) is
+// told it is done both times, with the account's id both times: the repeat
+// is not a replay, so the call record does not answer it. And the id is the
+// account as read now: a binding kept by contract 1 holds a record key, not
+// the uid, and answering that would overwrite Syndra's correct one.
+func TestAdoptingTheSameAccountTwiceAnswersItsIDBothTimes(t *testing.T) {
+	s, _ := applyServer(t, `[{"username":"becky_lynch","id":11,"uid":200123,"locked":false,"smb":true,"groups":[42]}]`)
+	for _, callID := range []string{"adopt-1", "adopt-2"} {
+		rr := postOperation(t, s, "account.adopt", `{"call_id":"`+callID+`","operation":"account.adopt","subject":"sub-1","actor":"op1","params":{"username":"becky_lynch"}}`)
+		var got OperationResult
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || rr.Code != http.StatusOK || got.AccountID != "200123" {
+			t.Fatalf("%s: want 200 with account 200123, got %d %s", callID, rr.Code, rr.Body.String())
+		}
+	}
+
+	// A contract-1 binding: the record key where the uid belongs.
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "becky_lynch", UID: 11}); err != nil {
+		t.Fatal(err)
+	}
+	rr := postOperation(t, s, "account.adopt", `{"call_id":"adopt-3","operation":"account.adopt","subject":"sub-1","actor":"op1","params":{"username":"becky_lynch"}}`)
+	var got OperationResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || rr.Code != http.StatusOK || got.AccountID != "200123" {
+		t.Fatalf("a legacy binding: want the account's uid 200123, got %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Out of the add-on's range (adopted, not made here): boundAccount never
+	// rewrites the record key, so the answer is the account found, as apply's.
+	s, _ = applyServer(t, `[{"username":"becky_lynch","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "becky_lynch", UID: 11}); err != nil {
+		t.Fatal(err)
+	}
+	rr = postOperation(t, s, "account.adopt", `{"call_id":"adopt-4","operation":"account.adopt","subject":"sub-1","actor":"op1","params":{"username":"becky_lynch"}}`)
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || rr.Code != http.StatusOK || got.AccountID != "3001" {
+		t.Fatalf("an adopted legacy binding: want the account's uid 3001, got %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Bound, and the account is gone: the miss any adopt is, never "already bound".
+	s, _ = applyServer(t, `[]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "becky_lynch", UID: 11}); err != nil {
+		t.Fatal(err)
+	}
+	rr = postOperation(t, s, "account.adopt", `{"call_id":"adopt-5","operation":"account.adopt","subject":"sub-1","actor":"op1","params":{"username":"becky_lynch"}}`)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("a bound account that is gone: want 404, got %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+// A write operation with no subject is 400 BAD_REQUEST before once, for every
+// declared write: a subject is what once gates a write by (lifecycle, subject
+// lock), so none can reach it ungated.
+func TestAWriteOperationWithoutASubjectIsABadRequest(t *testing.T) {
+	s, m := opServer(t)
+	for _, op := range operationSet(nil) {
+		if readOperation(op.ID) {
+			continue
+		}
+		for _, subject := range []string{``, `"subject":"  ",`} {
+			rr := postOperation(t, s, op.ID, `{"call_id":"blank-`+op.ID+`","operation":"`+op.ID+`",`+subject+`"params":{}}`)
+			if rr.Code != http.StatusBadRequest || problemCode(t, rr) != CodeBadRequest {
+				t.Errorf("%s %q: want 400 BAD_REQUEST, got %d %s", op.ID, subject, rr.Code, rr.Body.String())
+			}
+		}
+	}
+	if len(m.updates) != 0 || len(m.creates) != 0 {
+		t.Fatal("a write with no subject touched the NAS")
 	}
 }

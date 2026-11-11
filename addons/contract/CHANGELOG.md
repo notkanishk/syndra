@@ -3,6 +3,29 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Major 2, rules the author's guide review found (slice 5, 11 Nov 2026)
+
+Backward compatible within major 2 (owner decision, as above): each rule was
+already what Syndra did, and is now written down and checked.
+
+- `TARGET_UNREACHABLE` covers writes (`registry/errors.json`): a write that
+  sent the app nothing answers 503 `TARGET_UNREACHABLE` with `Retry-After`, and
+  Syndra keeps the change queued; a write that may have reached the app stays
+  `APPLY_FAILED`/`OPERATION_FAILED` with a 5xx. The TrueNAS add-on answered
+  every outage `APPLY_FAILED` 503, which sent each queued change to a person.
+- A `limit` sent as `[]` sets nothing; `state` and `observed` hold exactly one
+  value for a limit (`common/field.json`). The reference add-on cleared it.
+- An `effect: read` operation ignores `call_id` (`openapi.yaml`,
+  `identity/operation.json`): Syndra sends one `call_id` for every read.
+- `health.log_head` is never empty (`health.json`, `minLength: 1`): the digest
+  of the empty log until the first record. Syndra refuses an empty head at
+  first sight; both add-ons reported `""` on a fresh log.
+- Fixtures: `subjects.json` holds one `home_quota` value; `subjects_stale.json`
+  drops it (absent is unknown); the plan and apply pair name one account;
+  `group` values are sorted as Syndra sends them; `operation_request.json` is
+  the `account.adopt` call `operation_response.json` answers, with nothing
+  Syndra does not send.
+
 ## Major 2: `product` is a display name (slice 3, 11 Nov 2026)
 
 Backward compatible within major 2: the shape is unchanged, and no end keys

@@ -927,6 +927,17 @@ settings with the full §5 rules.
   MUST failed) still reports `health` and `required-fields` as pass on their read
   halves; give it the reads-only "not judged: needs a write" marking too. Report
   wording only: such a run already exits 2 #ready-for-agent
+- [ ] 4.4b (found by the guide review, finding 4) The kit owns only an account
+  whose `username` begins `conformance-` (`owner` in `addons/conformance/owner.go`),
+  so an app that cannot hold that name (generated ids, display names only, a
+  length or charset the prefix breaks) can never pass `-mutate`. Not done now:
+  every fallback found (claim by `account_id` alone, by a label in another
+  field the kit cannot read generically, by the subject's email) weakens
+  `owner()`'s rule that a member's account answered as the create's is never
+  the kit's, which is the one thing the kit must not get wrong on a real
+  instance. Needs a design that names how an add-on proves an account is the
+  kit's without the prefix (a manifest-declared label field, say) before any
+  code. The guide states the rule meanwhile (The one create) #needs-triage
 - [ ] 4.5 Reads-only run against production TrueNAS from the app host;
   report attached to this change #ready-for-human
 - [ ] 4.6 `--mutate` run against staging TrueNAS with a throwaway subject,
@@ -936,17 +947,53 @@ settings with the full §5 rules.
 
 ## 5. The guide
 
-- [ ] 5.1 `addons/AUTHORING.md` to the outline in design §8, every rule
+- [x] 5.1 `addons/AUTHORING.md` to the outline in design §8, every rule
   BCP 14 (RFC 2119 + RFC 8174), every core route with its fixture inline, the reference add-on
   walked file by file; §1 opens with the boundary rule (the add-on alone
   holds the app's address and credential and alone talks to it; Syndra
   talks only to add-ons) and §4 carries the freshness contract and the
   `stale`-not-error rule #ready-for-agent
-- [ ] 5.2 Mapping sketches for UniFi Access, Ruby and the inventory system as
+  *Decided while writing (11 Nov 2026):* statistics is its own chapter 8,
+  between Operations and Security, so §8's fourteen chapters are fifteen
+  (§8's 8–14 are 9–15). `GET /capabilities`'s fixture is chapter 3's
+  (`manifest.json`, which shows every key); the settings routes, which §8
+  gives no home, are a feature section at the end of chapter 4. The
+  reference is ~860 lines, not ~400, and is walked as a file:line table.
+  The guard is `addons/contract/guide_test.go` (the module that already
+  embeds the files; it reads `../AUTHORING.md` from disk), run by the
+  existing `addon-conformance` CI step; mutation-checked (a changed byte in
+  an inline fixture, a route heading removed, `/settings` alone removed
+  while `/settings/{name}` stays, a marker at a missing file, a marker
+  parted from its block: each fails). `by_status` resolves as
+  `addons/truenas/errors.go` does (`backoff` on 429 and 5xx, else `never`):
+  the registry says only "the status says".
+- [x] 5.1a (found writing 5.1) `v2/fixtures/subjects.json` and
+  `subjects_stale.json` carry `home_quota: ["0","5368709120"]` in `state`,
+  where the rule is the one effective value (design §3,
+  `apply_response.json`'s `observed`, the kit's `limit-combine`,
+  `addons/truenas/server.go:388`). The guide states the rule and flags the
+  fixture; correcting it is a contract-file change for both ends' suites.
+  Also not yet expressible: `common/outcome.json` has only `succeeded`, so
+  the `physical` rule 4 words (`no_change`, `conflict`) have no wire form
+  until 6.3 #needs-triage
+  *Resolved (Opus review ruling, 11 Nov 2026):* (a) the fixture was wrong.
+  `subjects.json` holds `home_quota: ["5368709120"]` (as `apply_response.json`'s
+  `observed`); `subjects_stale.json` drops it (the TrueNAS mirror holds no
+  limits: absent is unknown); `common/field.json` says desired is one value
+  per role and state/observed exactly one; the kit's shape check fails a
+  limit in state or observed that is not one value. (b) "conflict" is never
+  an outcome, it is a refusal (problem+json 409, like `BINDING_CONFLICT`);
+  "changed nothing" is a real slice-6 gap, now task 6.3a.
+- [x] 5.2 Mapping sketches for UniFi Access, Ruby and the inventory system as
   the guide's §12, from the two research notes and design §10; each names
   its unverified items as such (the inventory one names its API as unknown
   and lists the four questions in design §10) #ready-for-agent
-- [ ] 5.2a The guide's statistics chapter: `metrics[]`, the collector is the
+  *Decided while writing:* chapter 13, with TrueNAS (shipped) first. Ruby's
+  `materials` flag is `MdbAdmin` + `CanModifyMdb`, and its `role`
+  membership lists only `User` and `Admin`, so two fields never contend for
+  one Ruby role. UniFi has no version endpoint, so its gate is per probed
+  endpoint.
+- [x] 5.2a The guide's statistics chapter: `metrics[]`, the collector is the
   add-on's (schedule, backoff, the app's rate limits), the buffer and its
   bounds, a point is the whole UTC day from the app's log (not a delta,
   never an explicit zero), the per-metric watermark and when not to move it,
@@ -954,12 +1001,149 @@ settings with the full §5 rules.
   beside every per-subject point, `against`; and the
   operations chapter's `result`, `effect`, and the six `physical` rules
   with the inventory checkout as the worked case #ready-for-agent
-- [ ] 5.3 A fresh agent with only `AUTHORING.md`, `addons/contract/` and the
+  *Decided while writing:* chapters 7 and 8. Every slice-6 part is marked
+  "Designed, not yet served by Syndra", including `effect` (the backend's
+  policy does not read it yet) and the ids, codes and `format: target_id`
+  the registry does not hold yet, which chapter 7 lists by name.
+- [x] 5.1b The Opus review of the draft guide (findings 1-17 and its writing
+  notes) fixed in the guide and, where it found the contract or the code
+  wrong, there first #ready-for-agent
+  *Decided while writing (11 Nov 2026):*
+  - A write that sent the app nothing answers 503 `TARGET_UNREACHABLE` with
+    `Retry-After` (the registry meaning now covers writes); one that may
+    have reached it stays `APPLY_FAILED`/`OPERATION_FAILED` 5xx. "Sent
+    nothing" is decided by where the failure happened, not by sniffing
+    `net.OpError`/`syscall.ECONNREFUSED`: in TrueNAS, `ErrNotSent` is any
+    failure to get a session (dial, TLS, login, the breaker, the reconnect
+    cooldown) and nothing else, because every such error is certainly before
+    the call left, and any error on an established socket may be after. Only
+    before the first write of a request: `acted` drops it after
+    `group.create`. A read that timed out before any write still answers
+    `APPLY_FAILED` (conservative; a widening for later). Applied to apply,
+    `password.set`, `password.rotate` and `PUT /settings`; reads unchanged.
+  - The TrueNAS read/write split is now the registry's `effect`
+    (`readOperation`, tested equal to it): `account.release` was treated as
+    a read, so it was neither deduplicated nor refused while `read_only`.
+  - `log_head` is never empty (`health.json` `minLength: 1`, the digest of
+    the empty log until the first record); both add-ons reported `""` on a
+    fresh log, which Syndra refuses at first sight. The kit checks movement
+    across every `/health` of a run (`logAnchored`), Syndra's three rules.
+  - A `limit` given `[]` sets nothing. The reference cleared it; a new
+    reference account starts at the unlimited value so `state` always holds
+    one. Kit check `limit-empty` (sets 5 GiB, then `[]`, wants 5 GiB).
+  - Read operations ignore `call_id`. The reference gained `health.get` so
+    the kit's new `operations.reads` check (reads under the creating apply's
+    `call_id`) runs against it; three new reference defects watch
+    `limit-empty`, `health` and `operations.reads` fail.
+  - Fixtures: the plan/apply pair names one account (`rey_mysterio`,
+    `3051`) and the apply answers a new fingerprint; `group` values sorted;
+    `operation_request.json` is the `account.adopt` call
+    `operation_response.json` answers (no `plan_id`, `fingerprint`,
+    `preview` or `fresh`, which Syndra never sends), and that reply loses a
+    stray `rotated`.
+  - The guide: the designed features and the three unbuilt sketches moved
+    to an appendix; code cited by symbol; one place per rule, linked by
+    anchor; registration refusals listed once. Guard additions: every JSON
+    block marked, routes named as `METHOD /path`, every
+    `` `symbol` in `path` `` declared there, every section link landing.
+- [x] 5.3 A fresh agent with only `AUTHORING.md`, `addons/contract/` and the
   kit builds an add-on for a toy target and passes the kit; what it had to
   ask is written back into the guide #ready-for-agent
-- [ ] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
+  *Outcome (11 Nov 2026):* a fresh agent passed the kit first run (Doorman,
+  `kind: access`, reads-only and `-mutate`); 31 gaps written back.
+  *Decided while writing:*
+  - `state` and `observed` show a membership's managed set only (A5). The
+    drift sweep compares the whole list (`merge.Classify`), so a value no
+    mapping can name is a finding for ever; TrueNAS already hid built-in
+    groups, the reference showed `lobby`. The reference now hides it
+    (`shown`), the kit's `unlisted-preserved` (which needed it visible) is
+    replaced by `unlisted-hidden` (read-only, every `state` it reads;
+    reference defect `state-shows-unlisted`), and preservation itself is
+    the add-on's own test (`TestAnUnlistedValueIsKeptAndNotShown`).
+  - An add-on that creates accounts MUST serve `account.adopt` and
+    `account.release` (B16): the backend reads a `BINDING_CONFLICT` apply as
+    an ordinary 4xx (`target_refused`), and its only resolutions inside
+    Syndra are `handleAdoptAccount` and
+    `handleReleaseBinding`/`releaseOnTarget`, both through the operations
+    route (renaming the account in the app is the other).
+  - A log sync that fails before a write: the write is not sent, answered
+    `APPLY_FAILED`/`OPERATION_FAILED` 500 (a person looks; the registry has
+    no "add-on store" code for writes). `product_version` is `""` until read
+    (cold start, schema allows it). A pre-write read failure MAY be
+    `TARGET_UNREACHABLE`. Which 5xx, which of blocked/`PLAN_STALE` first,
+    `drained` in `active`, the log head's format, the username rules and a
+    limit's leading zeros are the add-on's, said once each.
+  - Review of fc3cfd14: TrueNAS `unavailable` is the one source for the
+    manifest's `available` and the operation gate (release answers on an
+    unread or untested version); an undeclared operation id is 404 before
+    any gate; `acted` is the one after-write rule (a 429 there becomes 503
+    `APPLY_FAILED`); the kit's `limit-empty` judges only from a 5 GiB it saw
+    set and skips an unreported limit; kit texts cite `AUTHORING.md#…`
+    anchors, guarded by `TestEveryCheckCitesAGuideSection`.
+  - Review of 64584cd0, one line each:
+    - A JSON `null` for any `desired` field is `unholdable` (422 `APPLY_BLOCKED`, plan `blocked`), refused in `decodeDesiredFields` before any field is read.
+    - `/plan` is `blocked` only for `unholdable`, a binding conflict, or an absence a truncated read cannot prove; an unreadable binding or home setting is 500 `STORE_UNREADABLE`, a home folder the NAS would not stat 5xx `TARGET_UNREADABLE` (as the apply).
+    - The bound-name-reused next step: "Release this subject's binding first, then adopt that account only if it is theirs, or rename it in the app."
+    - A repeat `account.adopt` answers the uid `boundAccount` resolves now, not the stored one (a contract-1 binding held a record key).
+    - Writes for one subject run one at a time (`once`, rule 5: lifecycle gate, then a per-subject mutex, after the lease and the replay); `undoGroup` deletes only its own group while still empty.
+    - `adoptable` is false for the add-on's own service account (`unboundConflict`, the one constructor, by `refuseSelfAccount`'s rule), with its own words.
+  - Review of 246c4d26, one line each:
+    - A plan from the stored copy (`current: false`) skips the home folder's `filesystem.stat` as it skips the group check (`planOne` `live`, `decideHome` `live`): 200 with the home planned, never a 5xx that aborts the target's drift; only a live plan's stat error is a 5xx.
+    - A repeat `account.adopt` answers the found account's uid (`boundAccount`'s `found`, as apply), so an adopted out-of-range account with a contract-1 key answers its uid; bound with the account gone is 404, the ordinary miss.
+    - `auth.me` with a blank name is a failed read (last known name kept, asked again); while the own account is unknown `account.adopt` and `account.purge` refuse through one guard, `requireSelfKnown`, with 422 `OPERATION_FAILED` (nothing done; the sentence reaches the operator; an operation is not re-queued, so 503 would have shown "unconfirmed") and a conflict is `adoptable: false`, "can't check yet … Try again shortly."; other operations unaffected.
+    - `once` takes the subject lock, then `life.Begin()`: a write whose turn comes in a drain or `read_only` is 503 `LIFECYCLE_REFUSAL` with nothing done, so a drain waits only for writes running.
+    - A write operation with a blank `subject` is 400 `BAD_REQUEST` in `handleOperation` before `once` (registry: "a required field is missing (call_id, subject)"; the reference agrees); adopt's own check went.
+- [ ] 5.3a (found at 5.3) Where TrueNAS and the contract differ #needs-triage
+  - Moved to 5.3b: the mutation log written after the write.
+  - [x] An unknown key in `desired` was 400 `APPLY_FAILED`, the guide's
+    rule 422 `APPLY_BLOCKED`. *Done (11 Nov 2026):* one error type,
+    `unholdable` (`addons/truenas/apply.go`), for an unknown key, a value
+    that does not fit its role (a malformed or negative limit, a non-boolean
+    flag) and a group the NAS does not have or a built-in one
+    (`groupIDs` in `subjects.go`). `/plan` answers it `blocked` (groups
+    checked against the snapshot's own group table, so no extra read; a
+    plan from the mirror skips it and is `current: false`), `/apply` 422
+    `APPLY_BLOCKED` with the outcome (`blockedOr`); a group table that
+    cannot be read stays the target's failure (5xx), and a store failure
+    reading where homes go is 500, never a 4xx that drops the change. The
+    backend reads 422 `APPLY_BLOCKED` as rejected with `effect: blocked`
+    (`classifyStatus`, `Apply` in `internal/addons/entitlement.go`, tested
+    by `contract_test.go` on the fixture); no backend change.
+    `TestAnUnholdableDesiredStateIsBlockedByPlanAndApplyAlike` (six inputs,
+    new and existing account), `TestAGroupTableThatCannotBeReadIsNotABlockedApply`.
+  - [x] `v2/fixtures/error_binding_conflict.json` said "not bound to
+    anyone" beside a `bound_to`. *Done (11 Nov 2026):* `bound_to` is
+    possible by the schema, so it stays and the text says "bound to another
+    subject" with the next step; `plan_response.json` the same. Every
+    conflict's words come from `BindingConflict.words` (plan and apply),
+    and the contract test builds the fixtures' outcome from it, so the text
+    cannot drift. The words also corrected the case where the subject's
+    bound name is now held by another account: `adoptable: false`, release
+    first; `adoptAccount` now refuses that case instead of answering
+    "already bound" (it checked the name, not the account), so `adoptable`
+    is exactly "account.adopt would succeed".
+  - The reference serves neither `account.adopt` nor `account.release` (the
+    guide lists it as a simplification); once it does, the kit's `manifest`
+    check can require both of an add-on that creates.
+  - Moved to 5.3c: a membership that is not enumerable.
+- [ ] 5.3b The TrueNAS mutation log becomes an intent log: an intent
+  recorded and fsynced before each NAS write, a 500 refusal (nothing sent)
+  when the sync fails, and the result recorded after. Today `record` in
+  `addons/truenas/apply.go` appends after the write, best-effort; design §8
+  and the guide (`addons/AUTHORING.md#every-write-once-per-call_id`) say intent
+  first. **MUST before contract 2 reaches prod.** #ready-for-agent
+- [ ] 5.3c A membership field that is not enumerable: the add-on cannot
+  tell its managed set, and the drift sweep compares the whole list. No
+  add-on has one yet. **Before external authors:** refuse such a field at
+  registration, or define the managed set as the values a mapping names.
+  #needs-triage
+- [x] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
   point here; `addon-platform/design.md` §5 and §16 gain a one-line pointer
   to this contract as the current statement #ready-for-agent
+  *Decided while writing:* `addons/README.md` and `addons/contract/README.md`
+  link the guide too, and `addons/README.md`'s route count now says twelve
+  served and fourteen in `openapi.yaml` (design §12 slice 5: route tables
+  corrected).
 
 ## 6. Four additive features: `results`, `freshness`, `calls`, `stats`
 
@@ -1042,6 +1226,14 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   retry meanwhile is `CALL_UNSETTLED`, a preview leaves nothing behind
   (`/calls` on any never-used id → `unknown`, `log_records` unchanged) and
   the confirm with its fresh id executes #ready-for-agent
+
+- [ ] 6.3a (the guide review's ruling (b)) Add `no_change` to
+  `common/outcome.json`, listed under feature `calls`, mirroring
+  `common/effect.json`, so an operation can say it changed nothing (a
+  checkout of an item already held; `log_records` stays put); and have
+  Syndra read the wire `outcome` instead of classifying by status alone, so
+  a no-op is not recorded and audited as done. "Conflict" is not an outcome:
+  it is a refusal, problem+json 409 #ready-for-agent
 
 **`stats` (decisions 11–17)**
 

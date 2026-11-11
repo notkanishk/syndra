@@ -3,11 +3,11 @@
   "subjects": [
     {
       "subject": "289471021834760193",
-      "email": "bianca.belair@example.org",
+      "email": "rey_mysterio@example.org",
       "desired": {
         "group": [
-          "lab_makers",
-          "fabrication"
+          "fabrication",
+          "lab_makers"
         ],
         "home": [
           "true"

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -350,5 +351,126 @@ func TestAnAccountInNoGroupReportsAnEmptyList(t *testing.T) {
 	s.handleSubjects(rr, httptest.NewRequest(http.MethodGet, "/subjects", nil), nil)
 	if !strings.Contains(rr.Body.String(), `"group":[]`) || strings.Contains(rr.Body.String(), "null") {
 		t.Fatalf("an account in no group must report \"group\":[]: %s", rr.Body)
+	}
+}
+
+// Two applies for one subject under different call_ids run one at a time
+// (rule 5). Interleaved, A makes the personal group, B finds it as an empty
+// orphan and creates the account in it, A's create is refused, and A's cleanup
+// deletes the primary group of B's account. The fake stalls A's create with
+// the socket free (as if A paused between its two calls) and refuses it, so
+// that interleaving happens whenever the two are allowed to overlap.
+func TestTwoAppliesForOneSubjectRunOneAtATime(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	body := func(callID string) string {
+		return withContractVersion(t, `{"call_id":"`+callID+`","subject":"sub-1","email":"charlotte@example.org",`+
+			`"fingerprint":"`+fingerprintSubject(nil)+`","desired":{"group":["lab_makers"]}}`)
+	}
+	aStalled, bCreating := make(chan struct{}), make(chan struct{}, 1)
+	creates, overlapped := 0, false
+	m.beforeUserCreate = func() bool {
+		if creates++; creates > 1 {
+			bCreating <- struct{}{}
+			return false
+		}
+		s.nas.callMu.Unlock()
+		close(aStalled)
+		select {
+		case <-bCreating:
+			overlapped = true
+		case <-time.After(300 * time.Millisecond):
+		}
+		s.nas.callMu.Lock()
+		return true
+	}
+
+	var wg sync.WaitGroup
+	replies := make([]*httptest.ResponseRecorder, 2)
+	apply := func(i int, callID string) {
+		defer wg.Done()
+		rr := httptest.NewRecorder()
+		b := body(callID)
+		s.handleApply(rr, httptest.NewRequest(http.MethodPost, "/apply", strings.NewReader(b)), []byte(b))
+		replies[i] = rr
+	}
+	wg.Add(2)
+	go apply(0, "apply-a")
+	<-aStalled
+	go apply(1, "apply-b")
+	wg.Wait()
+
+	if overlapped {
+		t.Error("two applies for one subject ran at the same time")
+	}
+	if replies[0].Code < 500 || replies[1].Code != http.StatusOK {
+		t.Fatalf("want A failed and B applied, got %d %s / %d %s",
+			replies[0].Code, replies[0].Body.String(), replies[1].Code, replies[1].Body.String())
+	}
+	// B's account and the primary group it was created in are both there.
+	var rows []struct {
+		ID    int64   `json:"id"`
+		Group string  `json:"group"`
+		Users []int64 `json:"users"`
+	}
+	if err := json.Unmarshal([]byte(m.fakeRPC.groups), &rows); err != nil {
+		t.Fatal(err)
+	}
+	primary := fmt.Sprint(m.creates[len(m.creates)-1]["group"])
+	for _, g := range rows {
+		if fmt.Sprint(g.ID) == primary && g.Group == "charlotte" && len(g.Users) == 1 {
+			return
+		}
+	}
+	t.Fatalf("B's primary group %s is gone: %s", primary, m.fakeRPC.groups)
+}
+
+// Rule 5 holds for every write to a subject's account, not only apply: an
+// operation waits while another write for the same subject runs.
+func TestAnOperationWaitsForTheSubjectsWriteInProgress(t *testing.T) {
+	for _, op := range []string{"password.set", "account.release"} {
+		s, _ := opServer(t)
+		unlock := s.subjects.lock("sub-1")
+		done := make(chan int, 1)
+		go func() {
+			done <- postOperation(t, s, op, `{"call_id":"c1","operation":"`+op+`","subject":"sub-1","params":{"password":"x"}}`).Code
+		}()
+		select {
+		case code := <-done:
+			t.Fatalf("%s ran beside another write for its subject (%d)", op, code)
+		case <-time.After(100 * time.Millisecond):
+		}
+		unlock()
+		if code := <-done; code != http.StatusOK {
+			t.Errorf("%s: want 200 once its turn came, got %d", op, code)
+		}
+	}
+}
+
+// The lifecycle gate comes after the subject lock: a write waiting its turn
+// behind another for the same subject, whose turn comes after read_only was
+// set, is 503 LIFECYCLE_REFUSAL and touches nothing, so what a drain waits for
+// is only the write already running, never a queue behind it.
+func TestAWriteWhoseTurnComesInReadOnlyIsRefused(t *testing.T) {
+	s, m := opServer(t)
+	unlock := s.subjects.lock("sub-1") // the first write, running
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		done <- postOperation(t, s, "password.set", `{"call_id":"c2","operation":"password.set","subject":"sub-1","params":{"password":"x"}}`)
+	}()
+	time.Sleep(100 * time.Millisecond) // the second is waiting its turn
+	if err := s.life.Set(LifecycleReadOnly, "maintenance"); err != nil {
+		t.Fatal(err)
+	}
+	calls := len(m.fakeRPC.calls)
+	unlock()
+	rr := <-done
+	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeLifecycleRefusal {
+		t.Fatalf("want 503 LIFECYCLE_REFUSAL, got %d %s", rr.Code, rr.Body.String())
+	}
+	if len(m.updates) != 0 || len(m.fakeRPC.calls) != calls {
+		t.Fatalf("a refused write touched the NAS: %v", m.fakeRPC.calls[calls:])
+	}
+	if s.life.InFlight() != 0 {
+		t.Errorf("a refused write must not count in flight, got %d", s.life.InFlight())
 	}
 }
