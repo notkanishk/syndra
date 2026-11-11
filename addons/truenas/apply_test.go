@@ -301,6 +301,7 @@ func applyServer(t *testing.T, users string) (*server, *mutatingRPC) {
 	// The NAS must route through the recording wrapper, not the bare fake.
 	s.nas = newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
 	s.nas.version, s.nas.probed = "25.04.2", true
+	s.nas.selfName, s.nas.selfUID = "syndra", 3001 // as testServer
 	return s, m
 }
 
@@ -823,6 +824,37 @@ func TestAPlanThatCannotReadIsRefusedNotBlocked(t *testing.T) {
 		if rr.Code != tc.status || problemCode(t, rr) != tc.code {
 			t.Errorf("%s: want %d %s, got %d %s", tc.name, tc.status, tc.code, rr.Code, rr.Body.String())
 		}
+	}
+
+	// From the stored copy, with the NAS down, the home folder is not read:
+	// the plan answers 200 for every subject and leaves the stat to the apply,
+	// as it leaves the group check. A 5xx here aborts the whole target's drift.
+	s, m := homeServer(t, existing, nil, nil)
+	snap, err := s.readSubjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.PutSnapshot(snap); err != nil {
+		t.Fatal(err)
+	}
+	m.fakeRPC.err = errors.New("websocket: connection closed")
+	s.nas.drop()
+	s.nas.lastTry = time.Now().Add(-time.Hour)
+	rr := httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[`+
+		`{"subject":"sub-1","email":"charlotte@example.org","desired":{"home":["true"]}},`+
+		`{"subject":"sub-2","email":"asuka@example.org","desired":{"enabled":true}}]}`)
+	var plan PlanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || rr.Code != http.StatusOK || plan.Current || len(plan.Outcomes) != 2 {
+		t.Fatalf("stored copy: want 200, current false, two outcomes, got %d %s", rr.Code, rr.Body.String())
+	}
+	for _, out := range plan.Outcomes {
+		if out.Effect != EffectApply {
+			t.Errorf("stored copy: %s must be planned, got %s %q", out.Subject, out.Effect, out.Detail)
+		}
+	}
+	if !strings.Contains(plan.Outcomes[0].Detail, homePlace+"/charlotte") {
+		t.Errorf("stored copy: the home is planned where the apply would make it, got %q", plan.Outcomes[0].Detail)
 	}
 }
 

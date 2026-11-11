@@ -85,7 +85,7 @@ func TestAMutationInFlightSettlesRatherThanBeingAbandoned(t *testing.T) {
 	body := withContractVersion(t, withFingerprint(t, s, `{"call_id":"c1","subject":"sub-1",
 		"email":"charlotte@example.edu","desired":{"group":["lab_makers"],"enabled":true}}`))
 	second := withContractVersion(t, withFingerprint(t, s,
-		`{"call_id":"c2","subject":"sub-1","email":"charlotte@example.edu","desired":{"enabled":false}}`))
+		`{"call_id":"c2","subject":"sub-2","email":"asuka@example.edu","desired":{"enabled":false}}`))
 
 	applied := make(chan int, 1)
 	go func() {
@@ -118,6 +118,8 @@ func TestAMutationInFlightSettlesRatherThanBeingAbandoned(t *testing.T) {
 	}
 	// A second mutation arriving mid-drain is refused rather than queued behind
 	// the first — the half of `draining` that keeps the window from reopening.
+	// Another subject's: one for sub-1 waits its turn behind the first and is
+	// refused when it comes (TestAWriteWhoseTurnComesInReadOnlyIsRefused).
 	refused, err := http.DefaultClient.Do(liveSigned(t, base, http.MethodPost, "/apply", second))
 	if err != nil {
 		t.Fatal(err)

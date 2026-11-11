@@ -51,7 +51,8 @@ import (
 //     Taken after rules 1-3, so a replay never waits behind a write and a
 //     re-send of a waiting call is 409 under its lease. The lease never
 //     blocks, so the subject lock is the only lock a write waits on and the
-//     two cannot deadlock.
+//     two cannot deadlock. The lifecycle gate comes after the lock: a write
+//     whose turn comes in a drain or read_only is 503 LIFECYCLE_REFUSAL.
 //
 // An entry contract 1 recorded carries no identity digest and is treated as
 // matching any identity, as an entry with no kind always was: outbox rows that
@@ -152,10 +153,13 @@ func (s *server) once(w http.ResponseWriter, callID, kind, subject string, ident
 	}
 
 	if subject != "" {
-		// A mutation of a subject's account: refused while the add-on is not
-		// taking mutations, counted in flight once admitted so a drain waits
-		// for it, then run alone for its subject (rule 5). Gated before it
-		// waits, so a drain refuses a new write instead of queueing it.
+		// A mutation of a subject's account: run alone for its subject (rule
+		// 5), then refused if the add-on is no longer taking mutations, and
+		// counted in flight once admitted so a drain waits for it. Gated after
+		// it waits, so a write whose turn comes in a drain or read_only is
+		// refused with nothing done, and what a drain waits for is only ever
+		// writes already running, never a queue behind them.
+		defer s.subjects.lock(subject)()
 		done, err := s.life.Begin()
 		if err != nil {
 			state, _ := s.life.State()
@@ -163,7 +167,6 @@ func (s *server) once(w http.ResponseWriter, callID, kind, subject string, ident
 			return
 		}
 		defer done()
-		defer s.subjects.lock(subject)()
 	}
 	rec := &capture{header: http.Header{}}
 	run(rec)

@@ -74,8 +74,10 @@ func (s *server) statOwner(p string) (int64, error) {
 }
 
 // decideHome applies the rules above. uid is the account's, or -1 for one that
-// does not exist yet.
-func (s *server) decideHome(desired desiredState, username, current string, uid int64) (homeDecision, error) {
+// does not exist yet. live false is a plan from the stored copy, with no NAS to
+// ask: the folder is taken as free, as projected takes it for a create, and the
+// apply, which only ever runs live, makes the read.
+func (s *server) decideHome(desired desiredState, username, current string, uid int64, live bool) (homeDecision, error) {
 	if !desired.managed[FieldHome] || !desired.wantsHome {
 		return homeDecision{}, nil
 	}
@@ -97,6 +99,9 @@ func (s *server) decideHome(desired desiredState, username, current string, uid 
 		// Already has one, made before the location changed or by hand. It
 		// stays where it is: Syndra never moves a home folder.
 		return homeDecision{}, nil
+	}
+	if !live {
+		return homeDecision{path: want}, nil
 	}
 	owner, err := s.statOwner(want)
 	switch {

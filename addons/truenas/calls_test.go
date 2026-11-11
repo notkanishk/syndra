@@ -445,3 +445,32 @@ func TestAnOperationWaitsForTheSubjectsWriteInProgress(t *testing.T) {
 		}
 	}
 }
+
+// The lifecycle gate comes after the subject lock: a write waiting its turn
+// behind another for the same subject, whose turn comes after read_only was
+// set, is 503 LIFECYCLE_REFUSAL and touches nothing, so what a drain waits for
+// is only the write already running, never a queue behind it.
+func TestAWriteWhoseTurnComesInReadOnlyIsRefused(t *testing.T) {
+	s, m := opServer(t)
+	unlock := s.subjects.lock("sub-1") // the first write, running
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		done <- postOperation(t, s, "password.set", `{"call_id":"c2","operation":"password.set","subject":"sub-1","params":{"password":"x"}}`)
+	}()
+	time.Sleep(100 * time.Millisecond) // the second is waiting its turn
+	if err := s.life.Set(LifecycleReadOnly, "maintenance"); err != nil {
+		t.Fatal(err)
+	}
+	calls := len(m.fakeRPC.calls)
+	unlock()
+	rr := <-done
+	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeLifecycleRefusal {
+		t.Fatalf("want 503 LIFECYCLE_REFUSAL, got %d %s", rr.Code, rr.Body.String())
+	}
+	if len(m.updates) != 0 || len(m.fakeRPC.calls) != calls {
+		t.Fatalf("a refused write touched the NAS: %v", m.fakeRPC.calls[calls:])
+	}
+	if s.life.InFlight() != 0 {
+		t.Errorf("a refused write must not count in flight, got %d", s.life.InFlight())
+	}
+}

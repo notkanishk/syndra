@@ -259,6 +259,9 @@ func testServer(t *testing.T, fake *fakeRPC) *server {
 	// nothing about versions gets a supported target. A test that wants the
 	// probe itself clears `probed`.
 	nas.version, nas.probed = "25.04.2", true
+	// And its own account known, as auth.me answers it on a probe: adopt
+	// refuses while it is not. A test about not knowing clears it.
+	nas.selfName, nas.selfUID = "syndra", 3001
 	return &server{
 		auth: &authenticator{now: time.Now},
 		nas:  nas, store: store, log: mlog,

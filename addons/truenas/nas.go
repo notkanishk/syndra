@@ -304,6 +304,14 @@ func (n *NAS) readSelf() {
 			"its TrueNAS account will appear as an ordinary unmanaged one", err)
 		return
 	}
+	if strings.TrimSpace(me.Name) == "" {
+		// No name is no answer, never a name to store: that would forget the
+		// last known one. While none is known, ensureProbed asks again and
+		// account.adopt refuses (adoptAccount).
+		last, _, _ := n.Self()
+		log.Printf("[NAS] auth.me named no account; keeping the last known one (%q)", last)
+		return
+	}
 	n.mu.Lock()
 	n.selfName, n.selfUID = me.Name, me.UID
 	n.mu.Unlock()

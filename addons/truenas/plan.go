@@ -139,7 +139,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 		out.Stale = unreachableSince(snap.TakenAt)
 	}
 	for _, subject := range req.Subjects {
-		outcome, err := s.planOne(subject, byName, byUID, claimed, snap)
+		outcome, err := s.planOne(subject, byName, byUID, claimed, snap, current)
 		switch {
 		case errors.Is(err, errStoreUnreadable):
 			writeError(w, http.StatusInternalServerError, CodeStoreUnreadable, "The add-on's own records could not be read, so nothing was planned.", nil)
@@ -158,12 +158,18 @@ var errStoreUnreadable = errors.New("the add-on's own records could not be read"
 
 // planOne says what would happen to one subject, and issues no mutating call.
 //
-// `blocked` is only ever a state this app cannot hold (unholdable) or a
-// conflict an operator decides: Syndra records it as the target refusing,
-// which is terminal for that row (propagation fingerprintFor). A read that
-// failed is an error, and the whole plan is refused with it (handlePlan), so
-// the row is planned again rather than given up on.
-func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[int64]*Subject, claimed map[string]string, snap Snapshot) (ApplyOutcome, error) {
+// `blocked` is only ever a state this app cannot hold (unholdable), a conflict
+// an operator decides, or an absence a truncated read cannot prove: Syndra
+// records it as the target refusing, which is terminal for that row
+// (propagation fingerprintFor). A read that failed is an error, and the whole
+// plan is refused with it (handlePlan), so the row is planned again rather than
+// given up on.
+//
+// live is handlePlan's `current`. A plan from the stored copy skips the home
+// folder's stat, as it skips the group check, and leaves both to the apply:
+// with the NAS down, one subject's home would otherwise turn the whole
+// stored-copy answer into a 5xx.
+func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[int64]*Subject, claimed map[string]string, snap Snapshot, live bool) (ApplyOutcome, error) {
 	truncated := snap.Truncated
 	desired, err := s.decodeDesired(req.Desired)
 	var u unholdable
@@ -273,10 +279,11 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 
 	// The home and its limit, decided by the apply's own rules and reads, so
 	// the plan never promises a folder or a limit the apply would not make.
-	home, err := s.decideHome(desired, current.Username, current.Home, current.UID)
+	home, err := s.decideHome(desired, current.Username, current.Home, current.UID, live)
 	if err != nil {
 		// The target's read failing, as the apply answers it (converge): a
 		// retry, never `blocked`, which Syndra takes as the target refusing.
+		// Only a live plan reads, so only a live plan gets here.
 		return ApplyOutcome{}, err
 	}
 	// The one decision `apply` also executes (apply.go decide), so what is

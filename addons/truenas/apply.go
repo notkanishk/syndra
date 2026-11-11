@@ -204,34 +204,39 @@ type BindingConflict struct {
 	Username  string `json:"username"`
 	AccountID string `json:"account_id"`
 	// Adoptable says the account exists, no other subject is bound to it and
-	// it is not the add-on's own, which is the only case the adoption action
-	// can act on.
+	// it is known not to be the add-on's own, which is the only case the
+	// adoption action can act on.
 	Adoptable bool   `json:"adoptable"`
 	BoundTo   string `json:"bound_to,omitempty"`
 	// serviceAccount is the add-on's own account holding the name, which
 	// account.adopt refuses (refuseSelfAccount). Not on the wire: adoptable
 	// false already says the one thing Syndra acts on, and words says why.
 	serviceAccount bool
+	// selfUnknown is the add-on not yet knowing its own account (auth.me),
+	// while account.adopt refuses everything; not on the wire either.
+	selfUnknown bool
 }
 
 // unboundConflict is an account already holding the name an unbound subject
 // derives, built here once for plan and apply. Adoptable is account.adopt's
-// own rule (adoptAccount): no other subject holds the account, and it is not
-// the add-on's own (refuseSelfAccount, the same check).
+// own rule (adoptAccount): no other subject holds the account, the add-on
+// knows its own account, and this is not it (refuseSelfAccount, the same check).
 func (s *server) unboundConflict(account *Subject, owner string) *BindingConflict {
+	_, _, known := s.nas.Self()
 	self := s.refuseSelfAccount(account.Username) != nil
 	return &BindingConflict{
 		Username: account.Username, AccountID: accountID(account.UID),
-		Adoptable: owner == "" && !self, BoundTo: owner, serviceAccount: self,
+		Adoptable: owner == "" && known && !self, BoundTo: owner,
+		serviceAccount: self, selfUnknown: !known,
 	}
 }
 
 // words says what a conflict is and what the operator does next, once for
 // plan and apply. adoptable is exactly when account.adopt would succeed
-// (adoptAccount): no other subject holds the account, it is not the add-on's
-// own, and this subject has no binding. A subject whose bound name another
-// account now holds has a binding, so adopt refuses it: the operator releases
-// first.
+// (adoptAccount): no other subject holds the account, it is known not to be
+// the add-on's own, and this subject has no binding. A subject whose bound
+// name another account now holds has a binding, so adopt refuses it: the
+// operator releases first.
 func (c BindingConflict) words() (detail, next string) {
 	switch {
 	case c.serviceAccount:
@@ -243,6 +248,9 @@ func (c BindingConflict) words() (detail, next string) {
 	case c.BoundTo != "":
 		return fmt.Sprintf("An account named %s already exists and is bound to another subject.", c.Username),
 			"If it is not theirs, release it from that subject, then adopt it here."
+	case c.selfUnknown:
+		return fmt.Sprintf("An account named %s already exists, and Syndra can't check yet whether it is the account this add-on signs in to the app with.", c.Username),
+			"Try again shortly."
 	default:
 		return fmt.Sprintf("The name %s this subject is bound to is now held by a different account.", c.Username),
 			"Release this subject's binding first, then adopt that account only if it is theirs, or rename it in the app."
@@ -822,7 +830,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	// The home folder rides in the same update, so one write and one read-back
 	// verify it. The rules (never moved, never removed, never someone else's)
 	// are home.go's; what is not done is said in the outcome.
-	home, err := s.decideHome(desired, current.Username, current.Home, current.UID)
+	home, err := s.decideHome(desired, current.Username, current.Home, current.UID, true)
 	if err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
@@ -1074,7 +1082,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 
 	// The home, when one role gives one and its folder is free. Decided before
 	// the account exists, so a folder that is there at all is someone else's.
-	home, err := s.decideHome(desired, binding.Username, "", -1)
+	home, err := s.decideHome(desired, binding.Username, "", -1, true)
 	if err != nil {
 		return failed(err)
 	}

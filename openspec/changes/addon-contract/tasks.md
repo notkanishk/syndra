@@ -1082,11 +1082,17 @@ settings with the full §5 rules.
     anchors, guarded by `TestEveryCheckCitesAGuideSection`.
   - Review of 64584cd0, one line each:
     - A JSON `null` for any `desired` field is `unholdable` (422 `APPLY_BLOCKED`, plan `blocked`), refused in `decodeDesiredFields` before any field is read.
-    - `/plan` is `blocked` only for `unholdable`; an unreadable binding or home setting is 500 `STORE_UNREADABLE`, a home folder the NAS would not stat 5xx `TARGET_UNREADABLE` (as the apply).
+    - `/plan` is `blocked` only for `unholdable`, a binding conflict, or an absence a truncated read cannot prove; an unreadable binding or home setting is 500 `STORE_UNREADABLE`, a home folder the NAS would not stat 5xx `TARGET_UNREADABLE` (as the apply).
     - The bound-name-reused next step: "Release this subject's binding first, then adopt that account only if it is theirs, or rename it in the app."
     - A repeat `account.adopt` answers the uid `boundAccount` resolves now, not the stored one (a contract-1 binding held a record key).
     - Writes for one subject run one at a time (`once`, rule 5: lifecycle gate, then a per-subject mutex, after the lease and the replay); `undoGroup` deletes only its own group while still empty.
     - `adoptable` is false for the add-on's own service account (`unboundConflict`, the one constructor, by `refuseSelfAccount`'s rule), with its own words.
+  - Review of 246c4d26, one line each:
+    - A plan from the stored copy (`current: false`) skips the home folder's `filesystem.stat` as it skips the group check (`planOne` `live`, `decideHome` `live`): 200 with the home planned, never a 5xx that aborts the target's drift; only a live plan's stat error is a 5xx.
+    - A repeat `account.adopt` answers the found account's uid (`boundAccount`'s `found`, as apply), so an adopted out-of-range account with a contract-1 key answers its uid; bound with the account gone is 404, the ordinary miss.
+    - `auth.me` with a blank name is a failed read (last known name kept, asked again); while the own account is unknown `account.adopt` is 503 `TARGET_UNREACHABLE` (nothing done, Syndra keeps it; any other 5xx reads as "possibly acted") and a conflict is `adoptable: false`, "can't check yet … Try again shortly."; other operations unaffected (purge keeps its own 422).
+    - `once` takes the subject lock, then `life.Begin()`: a write whose turn comes in a drain or `read_only` is 503 `LIFECYCLE_REFUSAL` with nothing done, so a drain waits only for writes running.
+    - A write operation with a blank `subject` is 400 `BAD_REQUEST` in `handleOperation` before `once` (registry: "a required field is missing (call_id, subject)"; the reference agrees); adopt's own check went.
 - [ ] 5.3a (found at 5.3) Where TrueNAS and the contract differ #needs-triage
   - Moved to 5.3b: the mutation log written after the write.
   - [x] An unknown key in `desired` was 400 `APPLY_FAILED`, the guide's

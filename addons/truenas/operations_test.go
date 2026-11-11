@@ -941,4 +941,46 @@ func TestAdoptingTheSameAccountTwiceAnswersItsIDBothTimes(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || rr.Code != http.StatusOK || got.AccountID != "200123" {
 		t.Fatalf("a legacy binding: want the account's uid 200123, got %d %s", rr.Code, rr.Body.String())
 	}
+
+	// Out of the add-on's range (adopted, not made here): boundAccount never
+	// rewrites the record key, so the answer is the account found, as apply's.
+	s, _ = applyServer(t, `[{"username":"becky_lynch","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "becky_lynch", UID: 11}); err != nil {
+		t.Fatal(err)
+	}
+	rr = postOperation(t, s, "account.adopt", `{"call_id":"adopt-4","operation":"account.adopt","subject":"sub-1","actor":"op1","params":{"username":"becky_lynch"}}`)
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || rr.Code != http.StatusOK || got.AccountID != "3001" {
+		t.Fatalf("an adopted legacy binding: want the account's uid 3001, got %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Bound, and the account is gone: the miss any adopt is, never "already bound".
+	s, _ = applyServer(t, `[]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "becky_lynch", UID: 11}); err != nil {
+		t.Fatal(err)
+	}
+	rr = postOperation(t, s, "account.adopt", `{"call_id":"adopt-5","operation":"account.adopt","subject":"sub-1","actor":"op1","params":{"username":"becky_lynch"}}`)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("a bound account that is gone: want 404, got %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+// A write operation with no subject is 400 BAD_REQUEST before once, for every
+// declared write: a subject is what once gates a write by (lifecycle, subject
+// lock), so none can reach it ungated.
+func TestAWriteOperationWithoutASubjectIsABadRequest(t *testing.T) {
+	s, m := opServer(t)
+	for _, op := range operationSet(nil) {
+		if readOperation(op.ID) {
+			continue
+		}
+		for _, subject := range []string{``, `"subject":"  ",`} {
+			rr := postOperation(t, s, op.ID, `{"call_id":"blank-`+op.ID+`","operation":"`+op.ID+`",`+subject+`"params":{}}`)
+			if rr.Code != http.StatusBadRequest || problemCode(t, rr) != CodeBadRequest {
+				t.Errorf("%s %q: want 400 BAD_REQUEST, got %d %s", op.ID, subject, rr.Code, rr.Body.String())
+			}
+		}
+	}
+	if len(m.updates) != 0 || len(m.creates) != 0 {
+		t.Fatal("a write with no subject touched the NAS")
+	}
 }

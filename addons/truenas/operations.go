@@ -114,6 +114,15 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 		s.operateNow(w, name, req)
 		return
 	}
+	if strings.TrimSpace(req.Subject) == "" {
+		// Every write acts on a subject's account, and once gates a write by
+		// its subject: refused here, so no write, today's or a later one, can
+		// reach once without the lifecycle gate and the subject lock.
+		// BAD_REQUEST is the registry's "a required field is missing
+		// (call_id, subject)", as the reference answers it.
+		writeError(w, http.StatusBadRequest, CodeBadRequest, "A write operation needs a subject.", nil)
+		return
+	}
 	// The same dedup the apply uses, and universal for the same reason: §16
 	// declines a separate nonce store on the grounds that the call id already
 	// prevents replay, and that argument only holds if nothing is exempt. The
@@ -149,6 +158,9 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 		// answer an apply gives (handleApply).
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, so nothing was sent to it.", nil)
+		return
+	case errors.Is(err, errSelfUnknown):
+		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable, err.Error(), nil)
 		return
 	case err != nil:
 		// The error's text is this add-on's own, never the target's response
@@ -1054,6 +1066,18 @@ func requireSecret(params map[string]any, name string) (string, error) {
 	return value, nil
 }
 
+// errSelfUnknown is account.adopt while the add-on does not yet know its own
+// account (readSelf). Nothing was done, so it is 503 TARGET_UNREACHABLE
+// (operateNow): Syndra keeps it for later (classifyStatus), where any other 5xx
+// would read as "possibly acted" and go to a person for nothing.
+var errSelfUnknown = errors.New("this add-on can't check yet whether that account is its own on the NAS, so nothing was done; try again shortly")
+
+// noAdoptableAccount is adopt's miss, said once for the first adoption and a
+// repeat whose account has gone.
+func noAdoptableAccount(username string) error {
+	return fmt.Errorf("the target has no adoptable account named %s (system accounts are never adoptable)", username)
+}
+
 // adoptAccount binds an account the target already holds to a subject.
 //
 // The one entry point for it, reached from two places: the unmanaged inventory
@@ -1072,12 +1096,13 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	if username == "" {
 		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("no account named")
 	}
-	if strings.TrimSpace(req.Subject) == "" {
-		return OperationResult{}, http.StatusBadRequest, fmt.Errorf("no subject to bind it to")
-	}
 	// Before the lookup, not after. The account exists and would resolve
 	// perfectly well; the reason it is not on offer has nothing to do with
-	// whether it can be found.
+	// whether it can be found. And fail closed: until auth.me has named the
+	// add-on's own account, any account might be it.
+	if _, _, known := s.nas.Self(); !known {
+		return OperationResult{}, http.StatusServiceUnavailable, errSelfUnknown
+	}
 	if err := s.refuseSelfAccount(username); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
@@ -1099,7 +1124,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 				found, _, err := s.subjectWhere(field, value)
 				return found, err
 			}
-			_, resolved, conflict, err := boundAccount(existing, floor, ceiling,
+			found, _, conflict, err := boundAccount(existing, floor, ceiling,
 				func(name string) (*Subject, error) { return lookup("username", name) },
 				func(uid int64) (*Subject, error) { return lookup("uid", uid) })
 			if err != nil {
@@ -1109,15 +1134,21 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 				return OperationResult{}, http.StatusConflict,
 					fmt.Errorf("this subject is bound to %s, which another account now holds; release the binding first", username)
 			}
+			if found == nil {
+				// Bound, and the account is gone: not "already bound", which
+				// would answer done for nothing, but the miss any adopt is.
+				return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
+			}
 			return OperationResult{
 				Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
 				// The uid travels on the repeat too. Without it the second
 				// adoption would hand the backend a zero and overwrite a
 				// binding that was correct with one that is not — the repeat
 				// path making the state worse than the first attempt left it.
-				// The account as resolved now, not as stored: a binding kept
-				// without its uid (contract 1) stores none.
-				AccountID: accountID(resolved.UID),
+				// The account found, as apply answers it: a binding kept
+				// without its uid (contract 1) stores a record key, and one
+				// outside the add-on's range is never rewritten.
+				AccountID: accountID(found.UID),
 				Detail:    fmt.Sprintf("%s was already bound to this subject.", username),
 			}, http.StatusOK, nil
 		}
@@ -1161,8 +1192,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		// operating system's own accounts, so `root` reaches here exactly as a
 		// misspelling does — and an operator who typed `root` deliberately is
 		// owed the reason rather than a puzzle.
-		return OperationResult{}, http.StatusNotFound,
-			fmt.Errorf("the target has no adoptable account named %s (system accounts are never adoptable)", username)
+		return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
 	}
 
 	if err := s.store.BindIfFree(Binding{

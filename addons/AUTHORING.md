@@ -989,8 +989,9 @@ whole burden.
   Any other match, or two candidates, MUST be 409 `BINDING_CONFLICT` with
   `conflict` (`username`, `account_id`, `bound_to` when another subject
   holds it, and `adoptable`, `true` exactly when `account.adopt` for this
-  subject would succeed: no other subject holds the account, it is not the
-  add-on's own service account, and this subject has no binding), and an
+  subject would succeed: no other subject holds the account, the add-on
+  knows its own service account and this is not it, and this subject has no
+  binding), and an
   operator decides through the confirmed
   `account.adopt` operation, which every add-on that creates accounts
   therefore serves ([The account operations](#the-account-operations)).
@@ -1272,7 +1273,9 @@ Rules for the route:
 - The path and the body name the operation; a disagreement MUST be 400
   `OPERATION_MISMATCH`, resolved in neither direction. An unknown name MUST
   be 404 `OPERATION_FAILED`, before any gate and with nothing recorded; a
-  missing parameter 400 `OPERATION_FAILED`.
+  missing parameter 400 `OPERATION_FAILED`. A write operation with a blank
+  `subject` MUST be 400 `BAD_REQUEST` (the registry's "a required field is
+  missing"), before the call record and the lifecycle gate.
 - **A member scope binds the subject.** For a member operation Syndra sets
   `subject` to the member acting. The add-on MUST act on the body's
   `subject` and on no subject a parameter names.
@@ -1307,7 +1310,11 @@ feature and serve both:
 
 - `account.adopt` binds the account named in `params.username` to the
   subject, after reading it, and answers its `account_id`
-  (`handleAdoptAccount` in `backend/internal/handlers/inventory.go`).
+  (`handleAdoptAccount` in `backend/internal/handlers/inventory.go`). While
+  the add-on cannot yet tell which account is its own service account, it
+  MUST refuse with 503 `TARGET_UNREACHABLE` (nothing was done; Syndra keeps
+  it for later) rather than risk binding that account (`adoptAccount` in
+  `addons/truenas/operations.go`).
 - `account.release` forgets the subject's binding and touches nothing on the
   app. It is how an operator lets go of an account (`handleReleaseBinding`
   there, and `releaseOnTarget` in
