@@ -202,3 +202,87 @@ func TestAFreshReadInsideTheCooldownOfAFailedReadSaysUnreachable(t *testing.T) {
 		t.Errorf("after a successful read the cooldown answered %v, want cooldown", doc["stale"])
 	}
 }
+
+// A read that joins a read of the app that FAILS is answered as that failure
+// was: the mirror unreachable, or the error when nothing is kept. Never
+// "cooldown" (that read did not succeed moments ago), and never a read of the
+// app of its own: a plain read joining a failed one with nothing kept does
+// not read the app again. The TrueNAS add-on's fresher answers a joiner the
+// same (fresher.fallback), so the kit sees one add-on behave one way.
+func TestAReadJoiningAFailedReadIsAnsweredAsItWas(t *testing.T) {
+	var down atomic.Bool
+	a, err := New(Config{Target: "reference", Secret: []byte("s"), Features: []string{"freshness"}, Down: down.Load})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reads := func() int { a.mu.Lock(); defer a.mu.Unlock(); return a.fresh.reads }
+	lapse := func() { a.mu.Lock(); a.fresh.began = time.Now().Add(-time.Hour); a.mu.Unlock() }
+	// together sends a fresh read, then, while it reads the app, the joiner.
+	together := func(joinerFresh bool) (reply, map[string]any) {
+		lead := make(chan struct{})
+		go func() { a.freshSubjects(true); close(lead) }()
+		time.Sleep(readDwell / 3)
+		rep := a.freshSubjects(joinerFresh)
+		<-lead
+		var doc map[string]any
+		_ = json.Unmarshal(rep.body, &doc)
+		return rep, doc
+	}
+
+	down.Store(true)
+	for _, fresh := range []bool{false, true} {
+		lapse()
+		before := reads()
+		if rep, doc := together(fresh); rep.status != 503 || doc["code"] != "TARGET_UNREACHABLE" {
+			t.Errorf("fresh=%v joining a failed read, nothing kept: %d %v, want 503 TARGET_UNREACHABLE", fresh, rep.status, doc)
+		}
+		if got := reads() - before; got != 1 {
+			t.Errorf("fresh=%v joining a failed read, nothing kept, read the app %d times, want 1", fresh, got)
+		}
+	}
+
+	down.Store(false)
+	lapse()
+	a.freshSubjects(true) // a mirror kept
+	down.Store(true)
+	lapse()
+	before := reads()
+	rep, doc := together(true)
+	stale, _ := doc["stale"].(map[string]any)
+	if rep.status != 200 || doc["current"] != false || stale["reason"] != "unreachable" || stale["retry_after"] != nil {
+		t.Errorf("a fresh read joining a failed read, a mirror kept: %d %v, want the mirror, unreachable", rep.status, doc)
+	}
+	if got := reads() - before; got != 1 {
+		t.Errorf("joining a failed read read the app %d times, want 1", got)
+	}
+}
+
+// A write forgets a failure with everything else: a read joining one begun
+// after a failure, which a second write then forgets, decides again and reads
+// the app, never answers the forgotten failure.
+func TestAWriteForgetsTheFailureToo(t *testing.T) {
+	var down atomic.Bool
+	a, err := New(Config{Target: "reference", Secret: []byte("s"), Features: []string{"freshness"}, Down: down.Load})
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func() { a.mu.Lock(); a.record("write"); a.mu.Unlock() }
+	down.Store(true)
+	a.freshSubjects(true) // failed
+	down.Store(false)
+	write()
+	lead := make(chan struct{})
+	go func() { a.freshSubjects(true); close(lead) }()
+	time.Sleep(readDwell / 3)
+	joined := make(chan reply)
+	go func() { joined <- a.freshSubjects(true) }()
+	time.Sleep(readDwell / 3)
+	write() // forgets the read both are in
+	rep := <-joined
+	<-lead
+	var doc map[string]any
+	_ = json.Unmarshal(rep.body, &doc)
+	if rep.status != 200 || doc["current"] != true {
+		t.Errorf("a read whose join a write forgot: %d %v, want a read of its own, current", rep.status, doc)
+	}
+}

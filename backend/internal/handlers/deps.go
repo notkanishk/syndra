@@ -474,7 +474,7 @@ var (
 	// was written; an operator had no way to ask. [Reconcile now] existed for
 	// Zitadel and for nothing else, so the answer to "is this target in step?"
 	// was "wait up to six hours and read a log line".
-	svcReconcileAddon = drift.ReconcileAddon
+	svcReconcileAddon = drift.ReconcileAddonNow
 	// The one read path for every effect: read operation (storage.status,
 	// holdings.list): never dispatched, so a page view writes no row.
 	addonsRead           = addons.Read

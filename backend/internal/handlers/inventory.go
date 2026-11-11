@@ -38,9 +38,10 @@ func handleTargetInventory(w http.ResponseWriter, r *http.Request) {
 	}
 	if inv.RetryAfter > 0 {
 		// "Read again" inside the add-on's cooldown, nothing kept to show:
-		// a countdown, not an outage (RFC 6585 §4).
-		w.Header().Set("Retry-After", strconv.Itoa(inv.RetryAfter))
-		jsonResponse(w, http.StatusTooManyRequests, inv)
+		// a countdown, not an outage (RFC 6585 §4), said as every cooldown
+		// refusal is (FRESH_READ_COOLDOWN).
+		writeCooledDown(w, inv.RetryAfter, "That target was read moments ago, so its accounts can be listed again in "+
+			strconv.Itoa(inv.RetryAfter)+" seconds.")
 		return
 	}
 	if inv.Halted {

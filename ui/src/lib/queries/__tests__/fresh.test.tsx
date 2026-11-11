@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "@/lib/api-client";
+import { ApiError, request } from "@/lib/api-client";
 import { cooldownOf, useCountdown, useReadAgain, withFresh } from "@/lib/queries/fresh";
 import { useMyStorage, useMyStorageAgain } from "@/lib/queries/useMyStorage";
 
@@ -88,7 +88,7 @@ describe("what sends fresh", () => {
   it("keeps what the backend refused until the next press, and says it is pending meanwhile", async () => {
     const { Wrap } = wrapper();
     const { result } = renderHook(() => useReadAgain(["inventory"], "/targets/truenas/inventory"), { wrapper: Wrap });
-    answer = () => json({ target: "truenas", halted: true, retry_after: 9 }, { status: 429, headers: { "Retry-After": "9" } });
+    answer = () => json({ error: "FRESH_READ_COOLDOWN", target: "truenas", halted: true, retry_after: 9 }, { status: 429, headers: { "Retry-After": "9" } });
     await act(async () => {
       await expect(result.current.press()).rejects.toBeInstanceOf(ApiError);
     });
@@ -152,5 +152,53 @@ describe("the app's retry", () => {
     expect(retry(0, new Error("blip"))).toBe(true);
     expect(retry(1, new Error("blip"))).toBe(false);
     expect(retry(0, new ApiError(429, { error: "FRESH_READ_COOLDOWN", retry_after: 5 }))).toBe(false);
+  });
+});
+
+describe("a poll in flight when Read again is pressed", () => {
+  it("cannot land after the press and put the copy back", async () => {
+    const { client, Wrap } = wrapper();
+    const again = renderHook(() => useReadAgain<{ v: string }>(["card"], "/card"), { wrapper: Wrap });
+    let landPoll!: (r: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return String(input).includes("fresh=true") ? json({ v: "fresh" }) : new Promise<Response>((r) => (landPoll = r));
+    }));
+    void client.fetchQuery({ queryKey: ["card"], queryFn: () => request<{ v: string }>("/card") }).catch(() => {});
+    await waitFor(() => expect(urls).toEqual(["/api/proxy/card"]));
+    await act(async () => {
+      await again.result.current.press();
+    });
+    landPoll(json({ v: "copy" }));
+    await act(async () => void (await new Promise((r) => setTimeout(r, 10))));
+    expect(client.getQueryData(["card"])).toEqual({ v: "fresh" });
+  });
+});
+
+describe("the countdown counts from when the answer arrived", () => {
+  it("starts over for a second answer with the same wait, and does not start over on coming back", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(100_000);
+    const { result, rerender, unmount } = renderHook(({ since }: { since: number }) => useCountdown(10, since), { initialProps: { since: 100_000 } });
+    act(() => void vi.advanceTimersByTime(6000));
+    expect(result.current).toBe(4);
+    rerender({ since: 106_000 });
+    expect(result.current).toBe(10);
+    act(() => void vi.advanceTimersByTime(3000));
+    unmount();
+    // Back on the page: the same answer, three seconds old, is not drawn as ten.
+    expect(renderHook(() => useCountdown(10, 106_000)).result.current).toBe(7);
+  });
+
+  it("is held by useReadAgain from the press the refusal came back on", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(50_000);
+    const { Wrap } = wrapper();
+    const { result } = renderHook(() => useReadAgain(["inv"], "/inv"), { wrapper: Wrap });
+    answer = () => json({ error: "FRESH_READ_COOLDOWN", retry_after: 9 }, { status: 429 });
+    await act(async () => {
+      await expect(result.current.press()).rejects.toBeInstanceOf(ApiError);
+    });
+    expect(result.current.errorAt).toBe(50_000);
   });
 });

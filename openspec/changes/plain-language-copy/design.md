@@ -704,11 +704,11 @@ Every read of a system carries when it was read, and an add-on may answer from i
 | When | Says |
 |---|---|
 | A copy the add-on kept (the control is the next step) | {name} was read {age} |
-| Read again inside the cooldown, with a copy or without (the control waits, then the line above) | {name} was read moments ago; you can read again in {n} s |
+| Read again, or a page load, refused inside the cooldown, with a copy or without (the control waits, then the line above; this is the whole message, there is no refusal block and no "nothing was changed", because nothing was read) | {name} was read moments ago; you can read again in {n} s |
 | The system cannot be reached, to a member (no control) | {name} can't be reached right now; this is what it said at {time}. Try again in a minute. If it keeps failing, ask makerspace staff. |
 | The system cannot be reached, to an operator (no control) | {name} can't be reached right now; this is what it said at {time}. Try again in a minute. If it keeps failing, check the add-on's health on its system page. |
-| A press refused inside the cooldown (the dormant list, a removal, the inventory with nothing to show): the refusal | That system was read moments ago, so nothing was changed |
+| A removal refused inside the cooldown (a write; the one place a refusal block is shown): the refusal | That system was read moments ago, so nothing was changed |
 | The same refusal: its next step, counting down | You can try again in {n} s. |
 | The same refusal: its next step once the count is over | Press the same button once more. |
 
-The count starts from the add-on's `retry_after` (or the Retry-After header) and is a deadline, never a tally of ticks. The control is off, with the line beside it as its reason, until the count ends. A read that is only a copy keeps every binding action blocked (Adopt stays off until Read again returns a current read); the unreachable line has no control because only time helps. The words are never "Refresh".
+A 429 is a cooldown only when it carries the code `FRESH_READ_COOLDOWN` (a proxy's own 429 is an ordinary failure). The count starts from the add-on's `retry_after` (or the Retry-After header), from when the answer arrived, and is a deadline, never a tally of ticks: leaving the page and coming back does not restart it, and a second refusal does. A copy the add-on kept is drawn neutral (grey dot, faint text) at any age, because it is the normal state; a cooldown and an unreachable system stay amber. The control is off, with the line beside it as its reason, until the count ends. A read that is only a copy keeps every binding action blocked (Adopt stays off until Read again returns a current read); the unreachable line has no control because only time helps. The words are never "Refresh".

@@ -567,7 +567,17 @@ the rate-limited one, and the drift sweep's `fresh` read (every
 `DRIFT_RECONCILIATION_INTERVAL_HOURS`, 6 h by default) is far outside any
 sane cooldown. A fresh read that joins one already under way arrived after
 it began, so it is answered as `cooldown`, never `current` (decided while
-building 6b, B1). For the kit to prove any of this black-box, an add-on
+building 6b, B1); one that joins a read that fails is answered as that
+failure is, and never reads the app again. A reply made of several reads,
+answered later from the add-on's copy, carries the copy's own reason,
+dated by its oldest part, never a part's label from when the copy was made:
+a copy says `cooldown` only to a fresh read the cooldown refused. Answered
+`cooldown`, the sweep waits once, `min(retry_after or the declared
+cooldown, the declared cooldown, 60 s)`, the ceiling twice
+`constants.cooldown_default`; "Check now" runs the same pass inside a
+person's request and never waits (`ReconcileAddonNow`). An add-on's
+`taken_at` more than two minutes ahead of the backend's clock is read as
+now, logged once per target (decided while building 6b, review round 2). For the kit to prove any of this black-box, an add-on
 declaring `freshness` MUST carry `health.target_reads`, every read it has
 made of its app since it started, never decreasing while it runs and free to
 start again at 0, like an OpenMetrics counter (`log_records` counts

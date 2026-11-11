@@ -11,6 +11,8 @@ package addons
 import (
 	"errors"
 	"fmt"
+	"math"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -97,8 +99,6 @@ const cooldownDefault = 30 * time.Second
 
 // FreshCooldown is how long a target's add-on holds a fresh read back: its
 // declared limits.fresh_read_cooldown, else constants.cooldown_default.
-// ponytail: the time part of an ISO 8601 duration (PT30S, PT1M30S) through
-// time.ParseDuration; a cooldown in days reads as the default.
 func FreshCooldown(target string) time.Duration {
 	a, err := Get(target)
 	if err != nil {
@@ -111,12 +111,31 @@ func FreshCooldown(target string) time.Duration {
 	return isoCooldown(m.Limits.FreshReadCooldown)
 }
 
+// isoDuration is an ISO 8601 duration of days and clock time, RFC 3339
+// Appendix A's dur-day and dur-time (P1D, PT24H, PT1M30S), each part at most
+// once and in order, plus the decimal fraction ISO 8601 allows on the last
+// part, here the seconds (PT0.5S). Years, months and weeks have no fixed
+// length, so are never a cooldown.
+var isoDuration = regexp.MustCompile(`^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$`)
+
+// isoCooldown reads a declared cooldown; anything not a positive ISO 8601
+// duration (PT30MS, PT+30S, PT30S5M, P, PT) is constants.cooldown_default.
 func isoCooldown(iso string) time.Duration {
-	clock, ok := strings.CutPrefix(iso, "PT")
-	if d, err := time.ParseDuration(strings.ToLower(clock)); ok && err == nil && d > 0 {
-		return d
+	parts := isoDuration.FindStringSubmatch(iso)
+	if parts == nil || iso == "P" || strings.HasSuffix(iso, "T") {
+		return cooldownDefault
 	}
-	return cooldownDefault
+	seconds := 0.0
+	for i, unit := range []float64{86400, 3600, 60, 1} {
+		if n := parts[i+1]; n != "" {
+			v, _ := strconv.ParseFloat(n, 64) // the pattern admits only numbers
+			seconds += v * unit
+		}
+	}
+	if seconds <= 0 || seconds > float64(math.MaxInt64/int64(time.Second)) {
+		return cooldownDefault
+	}
+	return time.Duration(seconds * float64(time.Second))
 }
 
 // Connection is the member-facing address of a target, and nothing else. Never

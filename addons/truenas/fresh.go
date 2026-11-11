@@ -75,6 +75,23 @@ func (o Observed) least(p Observed) Observed {
 	return p
 }
 
+// with is the freshness of a reply o made with a part p read for it
+// (storage.status and the folder permissions behind its places). Read just
+// now, the reply is no fresher than its part (least). Answered from a copy,
+// it says what the copy is, its own reason, never the part's: the part's
+// label was true when the copy was made, and a copy replaying it would say
+// "cooldown, read moments ago" to every poll for five minutes, or during an
+// outage. It is only dated no later than its oldest part.
+func (o Observed) with(p Observed) Observed {
+	if o.Current {
+		return o.least(p)
+	}
+	if p.TakenAt != "" && p.TakenAt < o.TakenAt {
+		o.TakenAt = p.TakenAt
+	}
+	return o
+}
+
 // errCooldown is a fresh read inside the cooldown with nothing at all to
 // serve: no copy and no failure. A finished read leaves one or the other, so
 // it answers only a read begun and gone without either, never an outage.

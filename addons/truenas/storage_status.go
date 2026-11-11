@@ -44,8 +44,9 @@ type StorageStatus struct {
 	// list that was read is "no folder is open to you yet".
 	Places         []Place `json:"places"`
 	PlacesReadable bool    `json:"places_readable"`
-	// placesSeen is how fresh the folder permissions behind Places are: the
-	// reply is no fresher than its least fresh part (observed).
+	// placesSeen is how fresh the folder permissions behind Places were when
+	// this account was read: a read just now is no fresher than it, and a copy
+	// is dated no later than it (Observed.with).
 	placesSeen Observed
 	// NeedsPassword is the reason, when there is one an action fixes. Setting a
 	// password is what turns the account on, so this is an invitation rather

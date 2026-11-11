@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -45,8 +46,10 @@ func TestTheInventoryPassesReadAgainThroughAndCountsDown(t *testing.T) {
 		t.Errorf("a page load: %d", rr.Code)
 	}
 	rr := get("/api/v1/targets/truenas/inventory?fresh=true")
-	if rr.Code != http.StatusTooManyRequests || rr.Header().Get("Retry-After") != "9" {
-		t.Errorf("read again inside the cooldown: %d Retry-After %q", rr.Code, rr.Header().Get("Retry-After"))
+	var body ErrorResponse
+	_ = json.Unmarshal(rr.Body.Bytes(), &body)
+	if rr.Code != http.StatusTooManyRequests || rr.Header().Get("Retry-After") != "9" || body.RetryAfter != 9 || body.Error != "FRESH_READ_COOLDOWN" {
+		t.Errorf("read again inside the cooldown: %d Retry-After %q %s, want 429 FRESH_READ_COOLDOWN, retry_after 9", rr.Code, rr.Header().Get("Retry-After"), rr.Body)
 	}
 	if len(asked) != 2 || asked[0] || !asked[1] {
 		t.Errorf("asked fresh %v, want [false true]", asked)
@@ -167,5 +170,14 @@ func TestTheHomesSayHowFreshTheirReadIs(t *testing.T) {
 	}
 	if len(asked) != 2 || asked[0] || !asked[1] {
 		t.Errorf("asked fresh %v", asked)
+	}
+}
+
+// "Check now" runs the pass inside the person's request, so it is the pass
+// that never waits out a cooldown (drift.ReconcileAddonNow), not the
+// scheduled sweep's, which may wait up to a minute.
+func TestCheckNowIsThePassThatNeverWaits(t *testing.T) {
+	if reflect.ValueOf(svcReconcileAddon).Pointer() != reflect.ValueOf(drift.ReconcileAddonNow).Pointer() {
+		t.Error("handleReconcileTarget runs a pass that may wait out a cooldown inside the request")
 	}
 }

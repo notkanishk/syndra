@@ -103,6 +103,21 @@ const TONE: Record<Freshness, string> = {
 };
 
 /**
+ * What colour the line and its dot are drawn in. A copy the add-on kept is the
+ * normal state of a read, so it is neutral however old it is. A cooldown the
+ * reader caused and a system that cannot be reached stay amber; every other
+ * reading is drawn by its age.
+ */
+export function toneOf(reading: Freshness, why: string | undefined): { text: string; dot: string } {
+  if (why === STALE.cached) return { text: "text-faint", dot: "bg-faint" };
+  if (why === STALE.cooldown) return { text: "text-warn-text", dot: "bg-warn" };
+  return {
+    text: TONE[reading],
+    dot: reading === "live" || reading === "ageing" ? "bg-healthy" : reading === "stale" ? "bg-warn" : "border border-warn",
+  };
+}
+
+/**
  * Read again's pill: the line plus a few px (the `!`s beat the Button's 44px
  * floor), with the 44px target on touch moved to an unpainted `before` box.
  */
@@ -220,7 +235,8 @@ export function ReadFreshness({
   // A copy the add-on kept, or a read pressed inside its cooldown: Read again is the way out, and
   // inside the cooldown it waits for the count. An unreachable one has no way out but time.
   const why = state.stale?.reason;
-  const left = useCountdown(why === STALE.cooldown ? state.stale?.retry_after : undefined);
+  const left = useCountdown(why === STALE.cooldown ? state.stale?.retry_after : undefined, state.stale?.since);
+  const tone = toneOf(reading, why);
   const cooling = why === STALE.cooldown && left > 0;
   const aCopy = why === STALE.cached || why === STALE.cooldown;
   const cannotReach = why === STALE.unreachable && Boolean(state.readAt);
@@ -241,17 +257,11 @@ export function ReadFreshness({
       <span
         aria-hidden
         data-freshness-dot
-        className={`mt-[0.5em] size-1.5 flex-none rounded-pill motion-tint ${blooming ? "bloom " : ""}${
-          reading === "live" || reading === "ageing"
-            ? "bg-healthy"
-            : reading === "stale"
-              ? "bg-warn"
-              : "border border-warn"
-        }`}
+        className={`mt-[0.5em] size-1.5 flex-none rounded-pill motion-tint ${blooming ? "bloom " : ""}${tone.dot}`}
       />
       {/* The new line crossfades in over the old one when a read the reader asked for lands (S17). */}
       <Crossfade id={blooming ? `landed:${landed}` : "read"}>
-        <span id={lineId} className={TONE[reading]}>
+        <span id={lineId} className={tone.text}>
           {cooling
             ? cooldownLine(subject, left)
             : cannotReach
@@ -272,11 +282,13 @@ export function ReadFreshness({
       {onRefresh && (reading === "stale" || aCopy) && (
         // It tints in where the line ends. Its slot is zero tall, so the button
         // overflows the line's own height instead of making the line taller: the
-        // sentence beside it stays where it was. The pill drawn is the line and
+        // sentence beside it stays where it was (on desktop only: on touch the slot
+        // is a thumb tall, because when the sentence wraps a zero-tall slot let the
+        // button's edge cut the line above it). The pill drawn is the line and
         // a hair, never the 44px a thumb needs: on touch that comes from the
         // `before` box, a hit area with nothing painted, so no visible edge
         // reaches the cards below (A-08 §5).
-        <span className="tint-in flex h-0 items-center">
+        <span className="tint-in flex h-[var(--tap)] items-center desktop:h-0">
           <Button
             variant="outline"
             size="sm"

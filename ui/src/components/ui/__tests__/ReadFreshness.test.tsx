@@ -102,11 +102,52 @@ describe("the strip", () => {
   it("draws a short pill in a zero-height slot, with the touch target unpainted", () => {
     render(<ReadFreshness state={{ readAt: ago(20), current: true }} onRefresh={() => {}} />);
     const button = screen.getByRole("button", { name: /read again/i });
-    expect(button.parentElement?.parentElement).toHaveClass("h-0");
+    expect(button.parentElement?.parentElement).toHaveClass("desktop:h-0");
     // Beats the Button's 44px floor and its desktop padding.
     expect(button).toHaveClass("min-h-0!", "py-px!");
     // The target: a 44px `before` box, centred on the line, gone on desktop.
     expect(button).toHaveClass("before:h-[var(--tap)]", "before:top-1/2", "desktop:before:hidden");
     expect(button.className).not.toMatch(/before:(bg|border)/);
+  });
+});
+
+describe("how a copy is drawn", () => {
+  const dot = () => document.querySelector("[data-freshness-dot]") as HTMLElement;
+  const line = (text: RegExp) => screen.getByText(text);
+
+  it("a copy the add-on kept is neutral, at any age and even when it is not current", () => {
+    for (const readAt of [ago(0.2), ago(30)]) {
+      const { unmount } = render(<ReadFreshness state={{ readAt, current: false, stale: { reason: "cached" } }} subject="The list" />);
+      expect(dot().className).toContain("bg-faint");
+      expect(dot().className).not.toMatch(/warn|healthy/);
+      expect(line(/The list was read/).className).toContain("text-faint");
+      expect(line(/The list was read/).className).not.toContain("warn");
+      unmount();
+    }
+  });
+
+  it("a cooldown the reader caused stays amber, and so does a system that cannot be reached", () => {
+    const { unmount } = render(<ReadFreshness state={{ readAt: ago(0.2), current: true, stale: { reason: "cooldown", retry_after: 30 } }} subject="The list" />);
+    expect(dot().className).toContain("bg-warn");
+    expect(line(/you can read again in/).className).toContain("text-warn-text");
+    unmount();
+    render(<ReadFreshness state={{ readAt: ago(1), current: false, stale: { reason: "unreachable" } }} subject="The list" />);
+    expect(dot().className).toContain("border-warn");
+    expect(line(/can.t be reached/).className).toContain("text-warn-text");
+  });
+
+  it("counts a cooldown from when it arrived, not from when it was drawn", () => {
+    render(<ReadFreshness state={{ readAt: ago(0.2), stale: { reason: "cooldown", retry_after: 10, since: Date.now() - 4000 } }} subject="The list" onRefresh={() => {}} />);
+    expect(screen.getByText(/you can read again in [56] s/)).toBeInTheDocument();
+  });
+
+  // At 390px the sentence wraps and the button drops to its own row: a zero-tall slot let its edge
+  // cut the line above. The slot is a thumb tall on touch and zero only where it sits beside the line.
+  it("gives Read again a real-height slot on touch, and a zero-tall one only on desktop", () => {
+    render(<ReadFreshness state={{ readAt: ago(0.2), stale: { reason: "cached" } }} subject="The list" onRefresh={() => {}} />);
+    const slot = screen.getByRole("button", { name: "Read again" }).parentElement?.parentElement as HTMLElement;
+    expect(slot.className).toContain("h-[var(--tap)]");
+    expect(slot.className).toContain("desktop:h-0");
+    expect(slot.className.split(/\s+/)).not.toContain("h-0");
   });
 });

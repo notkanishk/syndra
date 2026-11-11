@@ -22,7 +22,15 @@ func TestFreshCooldownIsTheDeclaredOneElseTheDefault(t *testing.T) {
 	}
 	for iso, want := range map[string]time.Duration{
 		"PT10S": 10 * time.Second, "PT1M30S": 90 * time.Second, "PT0.5S": 500 * time.Millisecond,
-		"": cooldownDefault, "P1D": cooldownDefault, "PT0S": cooldownDefault, "10s": cooldownDefault,
+		// A day is a day however it is written: the sweep caps both alike.
+		"P1D": 24 * time.Hour, "PT24H": 24 * time.Hour, "P1DT1M": 24*time.Hour + time.Minute,
+		"": cooldownDefault, "PT0S": cooldownDefault, "10s": cooldownDefault, "pt30s": cooldownDefault,
+		// Not ISO 8601: a unit without a number, a sign, parts out of order,
+		// a designator with nothing after it, a fraction not on the seconds.
+		"PT30MS": cooldownDefault, "PT+30S": cooldownDefault, "PT-30S": cooldownDefault, "PT30S5M": cooldownDefault,
+		"P": cooldownDefault, "PT": cooldownDefault, "ePT10S": cooldownDefault, "P1DT": cooldownDefault, "PT1.5M": cooldownDefault,
+		// No fixed length; and past what a time.Duration holds.
+		"P1W": cooldownDefault, "P1M": cooldownDefault, "P1Y": cooldownDefault, "P999999999D": cooldownDefault,
 	} {
 		if got := isoCooldown(iso); got != want {
 			t.Errorf("%q reads %v, want %v", iso, got, want)

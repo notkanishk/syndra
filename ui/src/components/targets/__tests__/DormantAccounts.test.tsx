@@ -250,13 +250,14 @@ describe("inside the add-on's cooldown", () => {
     vi.useRealTimers();
   });
 
-  it("a list load says so and counts down, instead of an error or an empty list", () => {
+  it("a list load says so once, in the freshness line with its waiting button: no refusal block, no claim that nothing was changed", () => {
     vi.useFakeTimers();
     state.error = cooling(2);
     renderDormant();
-    expect(screen.getByText("That system was read moments ago, so nothing was changed.")).toBeInTheDocument();
-    expect(screen.getByText("You can try again in 2 s.")).toBeInTheDocument();
     expect(screen.getByText(/can read again in 2 s/)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing was changed/)).toBeNull();
+    expect(screen.queryByText(/You can try again in/)).toBeNull();
+    expect(screen.queryByText("Not read")).toBeNull();
     expect(screen.queryByText("This list could not be read")).toBeNull();
     expect(screen.queryByText("Nothing to tidy.")).toBeNull();
     const button = screen.getByRole("button", { name: "Read again" });

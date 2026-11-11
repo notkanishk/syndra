@@ -174,9 +174,41 @@ func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileRe
 	return res, nil
 }
 
-// ReconcileAddon reads a target, converges the subjects it manages, and reports
-// the accounts it does not.
+// sweepWaitCeiling is the longest the sweep waits out a cooldown, whatever a
+// target declares or asks: twice constants.cooldown_default (PT30S,
+// registry/constants.json), so a target declaring a day (P1D or PT24H alike)
+// holds a pass back a minute, not a day.
+const sweepWaitCeiling = 60 * time.Second
+
+// sweepWait is how long the sweep waits out a cooldown answer: the
+// retry_after it was given (RFC 9110 §10.2.3), the declared cooldown when it
+// was given none, never longer than the declared cooldown or the ceiling.
+func sweepWait(target string, retryAfter int) time.Duration {
+	wait := freshCooldown(target)
+	if retryAfter > 0 {
+		wait = min(wait, time.Duration(retryAfter)*time.Second)
+	}
+	return min(wait, sweepWaitCeiling)
+}
+
+// ReconcileAddon is the scheduled sweep of a target: it reads it, converges
+// the subjects it manages, and reports the accounts it does not.
 func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, error) {
+	return reconcileAddon(ctx, target, true)
+}
+
+// ReconcileAddonNow is the same pass for a person waiting on it ("Check
+// now"): it never waits out a cooldown inside their request, and answers it as
+// a skipped pass that says when the target can be read again. Two entry
+// points rather than a flag: who calls decides, and neither call site carries
+// a bare true or false.
+func ReconcileAddonNow(ctx context.Context, target string) (AddonReconcileResult, error) {
+	return reconcileAddon(ctx, target, false)
+}
+
+// reconcileAddon is the pass; patient is whether a cooldown answer is waited
+// out once (the scheduled sweep) or answered at once (a person).
+func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReconcileResult, error) {
 	if target == db.TargetZitadel {
 		// Zitadel has its own sweep, which pages the Management API and
 		// concludes differently. Refused rather than ignored: a caller here with
@@ -186,15 +218,13 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	res := AddonReconcileResult{Target: target}
 
 	// Always fresh: the sweep is the one scheduled sender (design §4) and it
-	// needs a current read. Answered inside the cooldown, it waits the
-	// retry_after named (RFC 9110 §10.2.3), never longer than the cooldown the
-	// target declares, and asks once more; a second cooldown answer is a
-	// skipped pass, recorded as a stale read (no new reason, no migration; B6),
-	// never as unreachable. One wait, not a loop: someone else reading the
-	// target that often is not the sweep's to outlast.
+	// needs a current read. Answered inside the cooldown, the scheduled sweep
+	// waits sweepWait and asks once more; a second cooldown answer is a
+	// skipped pass, recorded as a stale read (no new reason, no migration;
+	// B6), never as unreachable. One wait, not a loop: someone else reading
+	// the target that often is not the sweep's to outlast.
 	read := addonSubjects(ctx, target, true)
-	if wait, cooled := read.CooledDown(); cooled &&
-		waitOut(ctx, min(time.Duration(wait)*time.Second, freshCooldown(target))) {
+	if retry, cooled := read.CooledDown(); cooled && patient && waitOut(ctx, sweepWait(target, retry)) {
 		read = addonSubjects(ctx, target, true)
 	}
 	if wait, cooled := read.CooledDown(); cooled {

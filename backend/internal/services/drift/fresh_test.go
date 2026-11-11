@@ -91,6 +91,57 @@ func TestTheSweepsWaitIsBoundedByTheDeclaredCooldown(t *testing.T) {
 	if !res.Halted || res.Reason != db.UnreconciledStaleRead || len(h.askedFresh) != 1 {
 		t.Errorf("an interrupted wait: halted %t reason %q reads %d, want a skipped pass and no second read", res.Halted, res.Reason, len(h.askedFresh))
 	}
+
+	// A target declaring a day waits the ceiling, however the day is written:
+	// twice constants.cooldown_default, the default an undeclared target reads.
+	if sweepWaitCeiling != 2*addons.FreshCooldown("no-such-target") {
+		t.Errorf("the ceiling is %v, want twice constants.cooldown_default (%v)", sweepWaitCeiling, addons.FreshCooldown("no-such-target"))
+	}
+	h = &addonReconcileHarness{read: addons.SubjectsResult{Outcome: addons.OutcomeUnreached, Status: 429, RetryAfter: 3600}}
+	stubAddonReconcile(t, h)
+	freshCooldown = func(string) time.Duration { return 24 * time.Hour }
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(h.waited, []time.Duration{sweepWaitCeiling}) {
+		t.Errorf("a day declared, an hour asked: waited %v, want the ceiling %v", h.waited, sweepWaitCeiling)
+	}
+}
+
+// A cooldown answer with no retry_after (or 0) is waited the declared
+// cooldown, never no time at all: asking again at once would only be told
+// the same.
+func TestASweepToldNoRetryAfterWaitsTheDeclaredCooldown(t *testing.T) {
+	h := &addonReconcileHarness{read: addons.SubjectsResult{Outcome: addons.OutcomeSucceeded, TakenAt: currentRead().TakenAt,
+		Stale: &addons.Stale{Reason: addons.StaleCooldown}}}
+	stubAddonReconcile(t, h)
+	freshCooldown = func(string) time.Duration { return 20 * time.Second }
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(h.waited, []time.Duration{20 * time.Second}) {
+		t.Errorf("waited %v, want the declared 20 s", h.waited)
+	}
+}
+
+// "Check now" runs the pass inside a person's request: a cooldown answer is
+// a skipped pass at once, saying when to ask again, never a wait.
+func TestCheckNowNeverWaitsOutACooldown(t *testing.T) {
+	retry := 12
+	h := &addonReconcileHarness{read: currentRead(), reads: []addons.SubjectsResult{
+		{Outcome: addons.OutcomeSucceeded, TakenAt: currentRead().TakenAt, Stale: &addons.Stale{Reason: addons.StaleCooldown, RetryAfter: &retry}},
+	}}
+	stubAddonReconcile(t, h)
+	res, err := ReconcileAddonNow(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.waited) != 0 || !slices.Equal(h.askedFresh, []bool{true}) {
+		t.Errorf("check now waited %v and asked fresh %v, want no wait and one fresh read", h.waited, h.askedFresh)
+	}
+	if !res.Halted || res.Reason != db.UnreconciledStaleRead {
+		t.Errorf("check now inside the cooldown: halted %t reason %q, want a skipped pass", res.Halted, res.Reason)
+	}
 }
 
 // A page load accepts the copy; "Read again" asks for a fresh read.

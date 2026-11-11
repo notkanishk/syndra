@@ -58,7 +58,8 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
 
   const accounts = dormant.data?.accounts ?? [];
   // The list always reads the target itself, so a load inside the cooldown is refused (429, nothing was read).
-  const refused = cooldownOf(dormant.error);
+  // That is said once, by the freshness line and its waiting button: no other block, and no "nothing was changed".
+  const refused = cooldownOf(dormant.error, dormant.errorUpdatedAt);
   const name = nameOf(target);
   const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);
   const safe = byName(accounts.filter((a) => !a.subject_still_member));
@@ -99,12 +100,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         </div>
       )}
 
-      {refused ? (
-        // Read moments ago, so the list is not read again yet: the same refusal a removal gets, counting down.
-        <div className="px-5 pb-4">
-          <ActionOutcome word="Not read" outcome={outcomeFromError(dormant.error)} />
-        </div>
-      ) : (
+      {refused ? null : (
       <ListStates
         isLoading={dormant.isLoading}
         error={dormant.error}

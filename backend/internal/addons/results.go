@@ -39,6 +39,8 @@ var ErrReadNotCalled = errors.New("addon: a read is never called with a record; 
 // ReadReply is one answer to an effect: read operation, as it travelled.
 type ReadReply struct {
 	Operation string
+	// Target is who answered, for what is said about its reply (takenAt).
+	Target string
 	// Schema is the registry's result schema for the id, "" when it declares
 	// its own; Pocket the key it was answered under before results.
 	Schema string
@@ -61,7 +63,7 @@ type ReadReply struct {
 // fresh asks for a read of the app now (feature freshness): a person pressing
 // "Read again", never a page load or a poll.
 func Read(ctx context.Context, target, op, subject, actor string, params map[string]any, fresh bool) ReadReply {
-	out := ReadReply{Operation: op, Outcome: OutcomeUnreached}
+	out := ReadReply{Operation: op, Target: target, Outcome: OutcomeUnreached}
 	eff, err := ResolveOperation(target, op)
 	if err != nil {
 		out.Err = err

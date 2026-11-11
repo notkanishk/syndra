@@ -1457,13 +1457,17 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
   >(null);
 
   // Refused inside the cooldown (a 429, nothing to show): the page's own load, or a press.
-  const refused = inventory.data ? again.error : (inventory.error ?? again.error);
+  const refused = inventory.data
+    ? cooldownOf(again.error, again.errorAt)
+    : inventory.error
+      ? cooldownOf(inventory.error, inventory.errorUpdatedAt)
+      : cooldownOf(again.error, again.errorAt);
   const read = {
     readAt: inventory.data?.read_at,
     current: inventory.data?.current,
     truncated: inventory.data?.truncated,
     // A press the cooldown refused is newer than the copy it leaves on show.
-    stale: cooldownOf(refused) ?? inventory.data?.read_stale,
+    stale: refused ?? inventory.data?.read_stale,
   };
   const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
   const name = nameOf(target);
@@ -1487,11 +1491,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
           refreshing={again.pending}
         />
       </div>
-      {!inventory.data && cooldownOf(refused) ? (
-        <div className="px-5 pb-4">
-          <ActionOutcome word="Not read" outcome={outcomeFromError(refused)} />
-        </div>
-      ) : (
+      {!inventory.data && refused ? null : (
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}

@@ -17,7 +17,7 @@ import { formatRelative } from "@/lib/format";
 const READ = new Date(Date.now() - 3 * 60_000).toISOString();
 const cooling = (wait: number) => new ApiError(429, { error: "FRESH_READ_COOLDOWN", retry_after: wait });
 
-const state: { inventory: Record<string, unknown>; again: { error: unknown }; press: ReturnType<typeof vi.fn> } = {
+const state: { inventory: Record<string, unknown>; again: { error: unknown; errorAt?: number }; press: ReturnType<typeof vi.fn> } = {
   inventory: {},
   again: { error: null },
   press: vi.fn(),
@@ -35,7 +35,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useMergeFindings: () => ({ ...idle(), data: [] }),
     useTargetHealth: () => ({ ...idle(), data: { reachable: true, lifecycle: "active" } }),
     useTargetInventory: () => ({ ...idle(), refetch: vi.fn(), ...state.inventory }),
-    useTargetInventoryAgain: () => ({ press: state.press, pending: false, error: state.again.error }),
+    useTargetInventoryAgain: () => ({ press: state.press, pending: false, error: state.again.error, errorAt: state.again.errorAt }),
     useResolveLogFinding: inert,
     useResolveBindingConflict: inert,
     useReconcileTarget: inert,
@@ -102,12 +102,13 @@ describe("a Read again the add-on refused inside its cooldown", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("with nothing to show, says so through the one outcome, never as a read that failed", () => {
+  it("with nothing to show, says so once, in the freshness line, never as a read that failed or a second countdown", () => {
     vi.useFakeTimers();
     state.inventory = { error: cooling(9) };
     renderTarget();
-    expect(screen.getByText("That system was read moments ago, so nothing was changed.")).toBeInTheDocument();
-    expect(screen.getByText("You can try again in 9 s.")).toBeInTheDocument();
+    expect(screen.getByText(cooldownLine("The account list", 9))).toBeInTheDocument();
+    expect(screen.queryByText(/nothing was changed/)).toBeNull();
+    expect(screen.queryByText(/You can try again in/)).toBeNull();
     expect(screen.queryByText("The account list could not be read")).toBeNull();
     expect(screen.queryByText("Nothing outside Syndra.")).toBeNull();
     expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();

@@ -221,11 +221,11 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
     // more was queued meanwhile the backend refuses again with the longer list.
     const refusal = parsed as ApiErrorBody;
     // A read refused inside the add-on's cooldown (429). The inventory's body is its read result,
-    // not an envelope, so the code is the one the backend gives the envelope that does carry one.
+    // not an envelope, but it carries the same code. Without it (a proxy's own 429) it is not a cooldown.
     if (res.status === 429) {
       const header = Number.parseInt(res.headers.get("Retry-After") ?? "", 10);
       const wait = typeof refusal?.retry_after === "number" ? refusal.retry_after : header;
-      if (wait > 0 && (refusal?.error ?? FRESH_READ_COOLDOWN) === FRESH_READ_COOLDOWN) {
+      if (wait > 0 && refusal?.error === FRESH_READ_COOLDOWN) {
         const { message } = typeof parsed === "object" && parsed !== null ? refusal : ({} as ApiErrorBody);
         throw new ApiError(429, { error: FRESH_READ_COOLDOWN, message, retry_after: wait }, method);
       }

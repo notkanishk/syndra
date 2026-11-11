@@ -543,7 +543,9 @@ func handleResolveBindingConflict(w http.ResponseWriter, r *http.Request) {
 //
 // It queues; it does not apply. Every convergence it records waits for the
 // drain like any other add-on row, which is what makes an operator-triggered
-// sweep safe to press twice.
+// sweep safe to press twice. It never waits out the add-on's cooldown inside
+// the request (drift.ReconcileAddonNow): a cooldown answer is a skipped pass
+// that says when to ask again.
 func handleReconcileTarget(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("target")
 	if _, err := addonsGet(target); err != nil {

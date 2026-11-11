@@ -16,6 +16,8 @@ export interface Stale {
   reason: string;
   retry_after?: number;
   note?: string;
+  /** When this answer arrived (ms since the epoch): a cooldown counts from here, not from when it was drawn. */
+  since?: number;
 }
 
 /**
@@ -31,9 +33,9 @@ export function withFresh(path: string): string {
 }
 
 /** A read refused inside the cooldown, as the copy it leaves; undefined for any other error. */
-export function cooldownOf(error: unknown): Stale | undefined {
+export function cooldownOf(error: unknown, since?: number): Stale | undefined {
   return error instanceof ApiError && error.code === FRESH_READ_COOLDOWN
-    ? { reason: STALE.cooldown, retry_after: error.retryAfter }
+    ? { reason: STALE.cooldown, retry_after: error.retryAfter, since }
     : undefined;
 }
 
@@ -47,32 +49,38 @@ export function useReadAgain<T>(queryKey: QueryKey, path: string) {
   // Not `useQueryClient`, which throws without a provider: a page that never presses needs none.
   const client = useContext(QueryClientContext);
   const [error, setError] = useState<unknown>(null);
+  const [errorAt, setErrorAt] = useState<number>();
   const [pending, setPending] = useState(false);
   async function press() {
     setError(null);
     setPending(true);
     try {
+      // A poll still in flight would land after this answer and put the copy back.
+      await client?.cancelQueries({ queryKey });
       client?.setQueryData(queryKey, await request<T>(withFresh(path)));
     } catch (e) {
       setError(e);
+      setErrorAt(Date.now());
       throw e;
     } finally {
       setPending(false);
     }
   }
-  return { press, pending, error };
+  return { press, pending, error, errorAt };
 }
 
 /**
- * Whole seconds left of `seconds` from the moment it arrives, 0 once it is
- * over. A deadline, not a count of ticks, so a busy or backgrounded tab
- * catches up instead of running slow.
+ * Whole seconds left of `seconds` counted from `since` (when the answer
+ * arrived; the moment of drawing if not given), 0 once it is over. A deadline,
+ * not a count of ticks, so a busy or backgrounded tab catches up instead of
+ * running slow, and a page that is left and come back to does not start over.
  */
-export function useCountdown(seconds: number | undefined): number {
-  const [left, setLeft] = useState(seconds ?? 0);
+export function useCountdown(seconds: number | undefined, since?: number): number {
+  const secondsLeft = (end: number) => Math.max(0, Math.ceil((end - Date.now()) / 1000));
+  const [left, setLeft] = useState(() => secondsLeft((since ?? Date.now()) + (seconds ?? 0) * 1000));
   useEffect(() => {
-    const end = Date.now() + (seconds ?? 0) * 1000;
-    const sync = () => setLeft(Math.max(0, Math.ceil((end - Date.now()) / 1000)));
+    const end = (since ?? Date.now()) + (seconds ?? 0) * 1000;
+    const sync = () => setLeft(secondsLeft(end));
     sync();
     if (!seconds) return;
     const id = setInterval(() => {
@@ -80,6 +88,6 @@ export function useCountdown(seconds: number | undefined): number {
       if (Date.now() >= end) clearInterval(id);
     }, 1000);
     return () => clearInterval(id);
-  }, [seconds]);
+  }, [seconds, since]);
   return left;
 }

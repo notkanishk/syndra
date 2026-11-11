@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, request } from "@/lib/api-client";
+import { cooldownOf } from "@/lib/queries/fresh";
 import { COOLDOWN_REFUSED, cooldownNext, outcomeFromError } from "@/lib/outcome";
 
 /**
@@ -24,15 +25,24 @@ describe("a 429 with a wait", () => {
     expect([e.status, e.code, e.retryAfter]).toEqual([429, "FRESH_READ_COOLDOWN", 12]);
   });
 
-  it("takes the inventory's result body, which has no code, as the same refusal", async () => {
-    answer(429, { target: "truenas", halted: true, reason: "read_stale", retry_after: 9, unmanaged: null }, { "Retry-After": "9" });
+  it("takes the inventory's result body, which carries the same code, as the same refusal", async () => {
+    answer(429, { error: "FRESH_READ_COOLDOWN", target: "truenas", halted: true, reason: "read_stale", retry_after: 9, unmanaged: null }, { "Retry-After": "9" });
     const e = await refused();
     expect([e.code, e.retryAfter]).toEqual(["FRESH_READ_COOLDOWN", 9]);
   });
 
   it("falls back to the Retry-After header when the body names no seconds", async () => {
-    answer(429, {}, { "Retry-After": "7" });
+    answer(429, { error: "FRESH_READ_COOLDOWN" }, { "Retry-After": "7" });
     expect((await refused()).retryAfter).toBe(7);
+  });
+
+  it("is not a cooldown without the code, whatever wait it carries (a proxy's own 429)", async () => {
+    answer(429, { retry_after: 9 }, { "Retry-After": "9" });
+    const e = await refused();
+    expect(e.code).not.toBe("FRESH_READ_COOLDOWN");
+    expect(cooldownOf(e)).toBeUndefined();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>429</html>", { status: 429, headers: { "Retry-After": "9" } })));
+    expect(cooldownOf(await refused())).toBeUndefined();
   });
 
   it("leaves the rate limiter's 429 and a 429 with no wait as they were", async () => {

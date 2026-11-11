@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -531,45 +532,111 @@ func TestARefusalIsNotCoveredByTheCopy(t *testing.T) {
 // storage.status is no fresher than its places: a fresh one reads the folder
 // permissions fresh too, and when they come from a copy, it says so.
 func TestStorageStatusIsNoFresherThanItsPlaces(t *testing.T) {
-	fake := reachFake()
-	fake.users = `[{"username":"charlotte","id":11,"uid":200001,"locked":false,"smb":true,"password_disabled":false,
-		"groups":[41,50],"home":"/mnt/tank/main/home_dir/charlotte"}]`
-	fake.answers["pool.dataset.get_quota"] = `[]`
-	s := testServer(t, fake)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
-		t.Fatal(err)
-	}
-	now := at(s, time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC))
-	aclReads := func() int { return strings.Count(strings.Join(fake.calls, " "), "filesystem.getacl") }
-	status := func() Observed {
-		t.Helper()
-		rr := postOperation(t, s, "storage.status", `{"call_id":"read-1","operation":"storage.status","subject":"sub-1","fresh":true}`)
-		if rr.Code != http.StatusOK {
-			t.Fatalf("storage.status: %d %s", rr.Code, rr.Body)
+	// The folders read fresh at start (/reach), then storage.status as each
+	// case says. From the wall clock: the reads themselves are dated by it
+	// (readNow), so the copies' ages are the moves below whatever the date.
+	scenario := func(t *testing.T) (fake *fakeRPC, move func(time.Duration), status func(bool) Observed, folders Observed) {
+		fake = reachFake()
+		fake.users = `[{"username":"charlotte","id":11,"uid":200001,"locked":false,"smb":true,"password_disabled":false,
+			"groups":[41,50],"home":"/mnt/tank/main/home_dir/charlotte"}]`
+		fake.answers["pool.dataset.get_quota"] = `[]`
+		s := testServer(t, fake)
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+			t.Fatal(err)
 		}
-		assertSchema(t, "operation_response.json", rr.Body.Bytes(), "storage.status")
-		var out struct{ Result Observed }
-		_ = json.Unmarshal(rr.Body.Bytes(), &out)
-		return out.Result
+		start := time.Now().UTC().Truncate(time.Second)
+		now := at(s, start)
+		move = func(d time.Duration) { *now = start.Add(d) }
+		status = func(fresh bool) Observed {
+			t.Helper()
+			rr := postOperation(t, s, "storage.status", fmt.Sprintf(`{"call_id":"read-1","operation":"storage.status","subject":"sub-1","fresh":%t}`, fresh))
+			if rr.Code != http.StatusOK {
+				t.Fatalf("storage.status: %d %s", rr.Code, rr.Body)
+			}
+			assertSchema(t, "operation_response.json", rr.Body.Bytes(), "storage.status")
+			var out struct{ Result Observed }
+			_ = json.Unmarshal(rr.Body.Bytes(), &out)
+			return out.Result
+		}
+		rr := httptest.NewRecorder()
+		s.handleReach(rr, httptest.NewRequest(http.MethodGet, "/reach?fresh=true", nil), nil)
+		// The folder read a minute before the account's: both are dated by the
+		// wall clock, inside one second, and a part as old as the whole cannot
+		// tell whose label a reply carries.
+		s.fresh.mu.Lock()
+		k := s.fresh.kept["reach"]
+		k.at = k.at.Add(-time.Minute)
+		s.fresh.kept["reach"] = k
+		s.fresh.mu.Unlock()
+		folders = Observed{TakenAt: rfc3339(k.at)}
+		return fake, move, status, folders
 	}
-	rr := httptest.NewRecorder()
-	s.handleReach(rr, httptest.NewRequest(http.MethodGet, "/reach?fresh=true", nil), nil)
-	var folders Observed
-	_ = json.Unmarshal(rr.Body.Bytes(), &folders)
-
-	// The folders were read 10 s ago: the account is read now, its places are
-	// that read's, so the reply is the folders' cooldown, never current.
-	*now = now.Add(10 * time.Second)
-	if got := status(); got.Current || got.Stale == nil || got.Stale.Reason != "cooldown" || got.TakenAt != folders.TakenAt {
-		t.Errorf("places from a read moments ago: %+v %+v, want cooldown, dated by the folder read", got, got.Stale)
+	reason := func(o Observed) string {
+		if o.Stale == nil {
+			return ""
+		}
+		return o.Stale.Reason
 	}
 
-	// Past both cooldowns, with the folders' copy still young: a fresh read
-	// reads them again rather than take the copy, and is current.
-	*now = now.Add(40 * time.Second)
-	before := aclReads()
-	if got := status(); !got.Current || aclReads() == before {
-		t.Errorf("a fresh storage.status took the folders' copy: %+v (ACL reads %d)", got, aclReads()-before)
+	t.Run("a copy never replays its places' label", func(t *testing.T) {
+		fake, move, status, folders := scenario(t)
+		// The folders were read 10 s ago: the account is read now, its places
+		// are that read's, so the reply is the folders' cooldown, never current.
+		move(10 * time.Second)
+		if got := status(true); got.Current || reason(got) != "cooldown" || got.TakenAt != folders.TakenAt {
+			t.Errorf("places from a read moments ago: %+v %+v, want cooldown, dated by the folder read", got, got.Stale)
+		}
+		// Plain polls answered from that copy: the copy's own reason, dated by
+		// its oldest part. Never the folders' cooldown of then, replayed:
+		// nobody asked for a fresh read, and nothing is cooling down any more.
+		for _, poll := range []time.Duration{90 * time.Second, 210 * time.Second} {
+			move(poll)
+			calls := len(fake.calls)
+			if got := status(false); got.Current || reason(got) != "cached" || got.Stale.RetryAfter != 0 || got.TakenAt != folders.TakenAt {
+				t.Errorf("a plain poll at +%v: %+v %+v, want the copy, cached, dated by the folder read", poll, got, got.Stale)
+			}
+			if len(fake.calls) != calls {
+				t.Errorf("a plain poll at +%v read the NAS", poll)
+			}
+		}
+		// The NAS down, a fresh read past every cooldown: the copy, unreachable.
+		move(220 * time.Second)
+		fake.err = errReadAfterWrite
+		if got := status(true); got.Current || reason(got) != "unreachable" || got.Stale.RetryAfter != 0 || got.TakenAt != folders.TakenAt {
+			t.Errorf("a fresh read in an outage: %+v %+v, want the copy, unreachable", got, got.Stale)
+		}
+	})
+
+	t.Run("past both cooldowns a fresh read reads the folders again", func(t *testing.T) {
+		fake, move, status, _ := scenario(t)
+		aclReads := func() int { return strings.Count(strings.Join(fake.calls, " "), "filesystem.getacl") }
+		move(10 * time.Second)
+		status(true)
+		// The folders' copy still young: a fresh read reads them again rather
+		// than take the copy, and is current.
+		move(50 * time.Second)
+		before := aclReads()
+		if got := status(true); !got.Current || aclReads() == before {
+			t.Errorf("a fresh storage.status took the folders' copy: %+v %+v (ACL reads %d)", got, got.Stale, aclReads()-before)
+		}
+	})
+}
+
+// with: a reply read just now is no fresher than its part; a copy keeps its
+// own reason, dated no later than its part.
+func TestAReplyWithAPartKeepsItsOwnReasonWhenACopy(t *testing.T) {
+	cur := Observed{TakenAt: "2026-11-10T09:05:00Z", Current: true}
+	part := staleAt(time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC), "cooldown", 20)
+	copied := staleAt(time.Date(2026, 11, 10, 9, 0, 10, 0, time.UTC), "cached", 0)
+	if got := cur.with(part); got != part {
+		t.Errorf("read now: %+v, want the part's %+v", got, part)
+	}
+	got := copied.with(part)
+	if got.Current || got.Stale != copied.Stale || got.TakenAt != part.TakenAt {
+		t.Errorf("a copy: %+v %+v, want its own reason, dated %s", got, got.Stale, part.TakenAt)
+	}
+	if got := copied.with(Observed{}); got != copied {
+		t.Errorf("a part never read changes nothing: %+v", got)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"syndra/internal/db"
@@ -134,14 +135,34 @@ type planWire struct {
 	Truncated *bool   `json:"truncated"`
 }
 
-// takenAt reads a reply's taken_at: present, RFC 3339, and not the zero time.
-func takenAt(raw *string) (time.Time, bool) {
+// clockSkew is how far ahead of this backend's clock an add-on's taken_at may
+// be and still be believed as sent: two NTP-synchronised hosts disagree by
+// milliseconds; minutes is a clock that is wrong.
+const clockSkew = 2 * time.Minute
+
+// aheadLogged is every target whose taken_at has been read as now: logged
+// once per target, never once per read.
+var aheadLogged sync.Map
+
+// takenAt reads a target's reply's taken_at: present, RFC 3339, and not the
+// zero time. One later than now (beyond clockSkew) is read as now: no read
+// happened in the future, and a reply dated ahead would pass for newer than
+// the read that replaces it, and never age.
+func takenAt(target string, raw *string) (time.Time, bool) {
 	if raw == nil {
 		return time.Time{}, false
 	}
 	ts, err := time.Parse(time.RFC3339, *raw)
 	if err != nil || ts.IsZero() {
 		return time.Time{}, false
+	}
+	now := timeNow().UTC()
+	if ts.After(now.Add(clockSkew)) {
+		if _, logged := aheadLogged.LoadOrStore(target, true); !logged {
+			log.Printf("[ADDON] %s dates a read %s ahead of this clock; read as now (said once per target: check the add-on host's clock)",
+				target, ts.Sub(now).Round(time.Second))
+		}
+		return now, true
 	}
 	return ts.UTC(), true
 }
@@ -232,7 +253,7 @@ func planChunk(ctx context.Context, a *Addon, target string, subjects []PlanSubj
 		}
 		// No readable taken_at is not current and not complete, and then
 		// (below) not a plan at all: a chunk merge can never meet a zero date.
-		if at, ok := takenAt(decoded.TakenAt); ok {
+		if at, ok := takenAt(target, decoded.TakenAt); ok {
 			out.TakenAt = at
 		} else {
 			out.Current, out.Truncated = false, true
@@ -418,7 +439,7 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 	// A read that does not say, readably, when it happened is not one to
 	// conclude from (design §2(b)): the accounts are still served, labelled
 	// unusable, never dated by Go's zero time.
-	if at, ok := takenAt(decoded.TakenAt); ok {
+	if at, ok := takenAt(target, decoded.TakenAt); ok {
 		out.TakenAt = at
 	} else {
 		out.Current, out.Truncated = false, true
@@ -888,7 +909,7 @@ func ReadHomes(ctx context.Context, target string, fresh bool) Homes {
 		// two ways, is not one to show as a reading (design §2(b), §4).
 		return Homes{}
 	}
-	at, ok := takenAt(wire.TakenAt)
+	at, ok := takenAt(target, wire.TakenAt)
 	if !ok {
 		return Homes{}
 	}
@@ -934,11 +955,14 @@ func ReadReach(ctx context.Context, target string, fresh bool) Reach {
 		return Reach{RetryAfter: cooldownOf(resp)}
 	}
 	var wire reachWire
-	if err := json.Unmarshal(resp.Body, &wire); err != nil || wire.TakenAt == nil || wire.TakenAt.IsZero() ||
-		staleInvariant(resp.Body) != nil {
+	if err := json.Unmarshal(resp.Body, &wire); err != nil || staleInvariant(resp.Body) != nil {
 		return Reach{}
 	}
-	out := Reach{Read: true, ReadAt: *wire.TakenAt, Current: wire.Current != nil && *wire.Current, Stale: wire.Stale,
+	at, ok := takenAt(target, wire.TakenAt)
+	if !ok {
+		return Reach{}
+	}
+	out := Reach{Read: true, ReadAt: at, Current: wire.Current != nil && *wire.Current, Stale: wire.Stale,
 		Groups: map[string][]Place{}, Everyone: placesOf(wire.Everyone)}
 	for g, ps := range wire.Groups {
 		out.Groups[g] = placesOf(ps)
@@ -949,7 +973,7 @@ func ReadReach(ctx context.Context, target string, fresh bool) Reach {
 // reachWire is profiles/storage/reach.json as it travels (contract 1's read_at
 // is taken_at). A reply that does not say it is current is not.
 type reachWire struct {
-	TakenAt  *time.Time             `json:"taken_at"`
+	TakenAt  *string                `json:"taken_at"`
 	Current  *bool                  `json:"current"`
 	Stale    *Stale                 `json:"stale"`
 	Groups   map[string][]placeWire `json:"groups"`
@@ -1032,7 +1056,7 @@ func (r ReadReply) Storage() StorageStatus {
 		}
 		err = decodeShape(storageNeed, raw, &p)
 		w, quotaRead = p.storageWire, p.QuotaRead
-		if at, ok := takenAt(p.TakenAt); ok && p.Current != nil {
+		if at, ok := takenAt(r.Target, p.TakenAt); ok && p.Current != nil {
 			seen = &Observation{TakenAt: at, Current: *p.Current, Stale: p.Stale}
 		}
 	default:
