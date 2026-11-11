@@ -316,28 +316,10 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 		return "", "", addons.Resolution{}, fmt.Errorf("%w: %s has not published a capability manifest yet, so its entitlement schema is unknown", errMappingTargetSilent, target)
 	}
 
-	declared := make([]string, 0, len(schema))
-	for _, f := range schema {
-		// A lifecycle field the add-on declares is still not bindable. Both
-		// sides say so — the manifest flag and the backend's own list — because
-		// the manifest is the least trusted input in the system and this is a
-		// rule about Syndra's resolver, not about the target.
-		if f.IsLifecycle() || services.IsLifecycleField(f.Name) {
-			continue
-		}
-		declared = append(declared, f.Name)
-	}
-	if err := services.ValidateMappingField(declared, field); err != nil {
+	// By role (design §3): `account` and `channel` are computed, never bound;
+	// a `limit` is a non-negative whole number; a `flag` is "true".
+	if err := services.ValidateMappingField(schema, field, value); err != nil {
 		return "", "", addons.Resolution{}, err
-	}
-	// A whole-number field (a home folder limit, in bytes) is checked here: the
-	// add-on cannot enumerate it, so nothing downstream would.
-	for _, f := range schema {
-		if f.Name == field && f.IsLimit() {
-			if n, err := strconv.ParseInt(value, 10, 64); err != nil || n < 0 {
-				return "", "", addons.Resolution{}, fmt.Errorf("%w: %s takes a whole number, and %q is not one", db.ErrMappingInvalid, fieldLabel(f), value)
-			}
-		}
 	}
 
 	// Reference, last, and only once structure holds. This is the network call,

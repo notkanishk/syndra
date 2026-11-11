@@ -12,6 +12,7 @@ import (
 	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/extcall"
+	"syndra/internal/handlers/kinds"
 	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
@@ -122,6 +123,17 @@ type myTargetView struct {
 	// waits for a new password after it (storage.needs_new_password): the
 	// latest end of a deny hold on this target.
 	RestoredAt *time.Time `json:"restored_at,omitempty"`
+	// Kind and EntitlementSchema are the target's accepted manifest's, as
+	// GET /targets carries them, because a member cannot read that list: the
+	// page renders this target's fields by role. Absent until a manifest is
+	// accepted ("not read"). Target metadata only, nothing about anyone else.
+	Kind              string                    `json:"kind,omitempty"`
+	EntitlementSchema []addons.EntitlementField `json:"entitlement_schema,omitempty"`
+	// Standing is the member's own account's standing, from the add-on's
+	// storage.status reply about their account alone (contract 2, design §6):
+	// usable or not, and who is waited on. Absent when there is no account or
+	// the add-on did not answer.
+	Standing *addons.Standing `json:"standing,omitempty"`
 	// HomeKept is a home folder that no role the member holds gives any more.
 	// It stays, with their files, and only they can open it.
 	HomeKept bool `json:"home_kept,omitempty"`
@@ -195,12 +207,20 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 // the operator's person page, which reads more from the same set.
 func describeTargetFor(r *http.Request, target, subject string) (myTargetView, services.EntitlementSet, error) {
 	view := myTargetView{Target: target}
+	view.Kind, view.EntitlementSchema = acceptedShape(target)
 
 	set, err := svcResolveEntitlementSet(r.Context(), subject, target)
-	if err != nil {
+	switch {
+	case errors.Is(err, addons.ErrNoManifest):
+		// The target has never had a manifest accepted, so nothing says which
+		// field is its account: what this person holds there is not read, and
+		// says so by saying nothing (not entitled, no resources) rather than
+		// failing the page for every other target.
+		set = services.EntitlementSet{}
+	case err != nil:
 		return myTargetView{}, services.EntitlementSet{}, err
 	}
-	view.Entitled = set.Lifecycle.Enabled
+	view.Entitled = set.Lifecycle.Account
 	view.Suspended = set.Suppressed
 	view.Roles = rolesReaching(set)
 	if view.Entitled {
@@ -306,11 +326,10 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 		// The actor is whoever asked: the member on their own page, the
 		// operator on the person's page (each route decides who may ask).
 		if status := addonsMyStorage(r.Context(), target, subject, resolveActor(r, "")); status.Outcome == addons.OutcomeSucceeded {
-			if view.Connection != nil {
-				for i := range status.Places {
-					status.Places[i].Address(view.Connection.Host)
-				}
+			for i := range status.Places {
+				kinds.Address(view.Connection, &status.Places[i])
 			}
+			view.Standing = status.Standing
 			attributePlaces(r.Context(), target, set, status.Places)
 			view.HomeKept = homeKept(set, status.Places)
 			view.Storage = &status
@@ -327,7 +346,8 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 // that put them in a group that opens it. Best-effort, from the target's last
 // read of its folder permissions; a place with no attribution just says less.
 func attributePlaces(ctx context.Context, target string, set services.EntitlementSet, places []addons.Place) {
-	groups := set.Fields["group"]
+	membership := kinds.Storage(set.Roles).Membership
+	groups := set.Fields[membership]
 	if len(places) == 0 || len(groups) == 0 {
 		return
 	}
@@ -345,7 +365,7 @@ func attributePlaces(ctx context.Context, target string, set services.Entitlemen
 				if opened.Path != places[i].Path {
 					continue
 				}
-				for _, role := range set.Given["group\x00"+g] {
+				for _, role := range set.Given[membership+"\x00"+g] {
 					if !seen[role] {
 						seen[role] = true
 						places[i].Roles = append(places[i].Roles, addons.PlaceRole{ProjectID: role.ProjectID, RoleKey: role.RoleKey})
@@ -379,11 +399,12 @@ func rolesReaching(set services.EntitlementSet) []services.RoleSource {
 }
 
 // homeKept is a home folder on the account that none of the member's roles
-// gives any more.
+// gives any more. A target with no one flag to give a home cannot say.
 func homeKept(set services.EntitlementSet, places []addons.Place) bool {
+	home := kinds.Storage(set.Roles).Home
 	for _, p := range places {
-		if p.Home {
-			return len(set.Fields["home"]) == 0
+		if p.Home && home != "" {
+			return len(set.Fields[home]) == 0
 		}
 	}
 	return false

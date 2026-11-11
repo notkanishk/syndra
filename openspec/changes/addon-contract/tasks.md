@@ -386,7 +386,103 @@ After the two Opus reviews (11 Nov 2026), decided by the owner and built:
 
 ## 2. The core forgets the names (backend only)
 
-- [ ] 2.1 `services/entitlement.go`: `LifecycleState{Account, Channels map[string]bool, NotAMember, Reason}`;
+Built 11 Nov 2026 (branch feat/addon-contract-2), all but 2.6 (the staging
+run, the owner's). Behaviour for TrueNAS is unchanged except 2.7. Decided
+while building, where the design and tasks were silent:
+
+- *The set carries its role map.* `EntitlementSet.Roles` (`addons.Roles`,
+  read by `ResolveEntitlements` from `targets.field_roles` through
+  `addons.FieldRoles`) is what `Desired` and `WithdrawsOnly` name the account
+  and channels from; a target with no persisted role map, or none with one
+  `account`, does not resolve (an error, never a guess). `Desired` writes every
+  channel the role map declares, off unless the set says on.
+  `LifecycleState` is `{Account, Channels, NotAMember, Reason}` (JSON
+  `account`, `channels`; no UI read the old keys).
+- *Validation reads the accepted manifest's roles*, as it already read the
+  schema: the add-on must answer to validate a mapping at all, and the role
+  map cannot disagree with the accepted manifest for a declared field
+  (`acceptRoles` refuses a changed role). `ValidateMappingField` and
+  `ValidateAllowanceTerm` take the schema. The resolver's defence in depth
+  reads the persisted map.
+- *A revocation with no role map* answers 409 `ACCOUNT_FIELD_UNKNOWN` and
+  writes nothing ("connect its add-on once"): there is no field to hold.
+- *The storage kind's view* is `handlers/kinds` (`storage.go`): its
+  membership and home flag are the target's one field of each role (none when
+  zero or two: the page says less), its home limit the one `limit` whose
+  `unit` is `bytes`, read from the accepted manifest (the role map carries no
+  unit) with `unlimited` from the field, compared numerically. The address is
+  built only for `connection.protocol == "smb"` with a host.
+- *Mapping sentences* (`mappedTo`): a `membership` with a label is "the
+  <value> <label, lowercased>" ("the Staff group"); anything else is
+  "<label or name> <value>"; an unknown schema falls back to the name.
+- *2.7, the comparison*: `drift.comparable` puts the intent in the target's
+  terms: a `limit` field becomes the one combined limit
+  (`EntitlementField.CombineLimit`), and is left out (not compared, never
+  `theirs_only`) when no value sets it, when the target did not report it, or
+  when no accepted schema says how it combines. The wire map is still what is
+  planned and queued; the merge base and findings carry the combined value.
+  An apply's `observed` now carries the managed limit as the add-on read it
+  back (`homeLimits`, the rule `/subjects` state uses; left out when the quota
+  table could not be read), so the base has the limit straight after an apply
+  (review gap, closed 11 Nov; contract v2 amended, CHANGELOG).
+- *Take theirs on a limit* (owner decision, 11 Nov): a finding on a `limit`
+  the add-on lets an operator set per person is adoptable; adopting saves the
+  target's observed value (one whole number) as the person's own limit, a
+  `set` allowance with the operator, the required reason and an end or review
+  date (the store refuses one without, and writes its audit row), decided now
+  and settled when a pass agrees; nothing is written to the target. The UI's
+  reason/date input on that action is 3.8.
+- *Retired fields* (Opus review, 11 Nov): a field the manifest drops keeps
+  its role (never re-purposed) and is recorded in `targets.retired_fields`
+  (migration 000090, additive); `addons.FieldRoles` returns only declared
+  fields, so `Desired`, `resolveLifecycle`, `WithdrawsOnly` and the resolver
+  never send a retired field (the add-on refuses an undeclared one, which made
+  every apply, departure locks included, `target_refused`); a mapping or own
+  value on a retired field confers nothing. Declared again, it returns. The
+  account can never be retired (exactly one per manifest, and only the stored
+  one). Mapping validation and the UI's schema read the accepted manifest,
+  which never holds a retired field. Rows queued before the retirement still
+  name the field (a desired state is frozen when queued, and sent as planned),
+  so `db.SaveTargetFieldRoles`, in the transaction that records a newly
+  retired field, supersedes the target's `pending` rows whose snapshot names
+  it, with the reason and an audit row; a claimed (`in_flight`) row is never
+  touched, and a superseded row holds no one (the `target_refused` hold reads
+  `failed` rows only). The next drift sweep queues the person again from the
+  current roles (Opus re-review, 11 Nov).
+- *No role map yet* (Opus review): a target with no persisted role map is
+  "not read" on the member's and the operator's pages (not entitled, no
+  resources), never a 500 for the page; a role change skips such a target with
+  a logged reason (`convergeOn`) instead of rolling back, and the drift sweep
+  converges it once its manifest is accepted. Any other read failure still
+  fails.
+- *2.5 guards*: (a) stricter than lookup sites: every string literal outside
+  a struct tag under `services/`, `handlers/`, `addons/` (drift included) is
+  checked, with a per-file allowlist (`handlers/kinds/storage.go` "smb",
+  Zitadel's "group" in `services/roles.go`, the insights lens's "group" in
+  `services/insights_lens.go` and `handlers/insights.go`, the claim probe's
+  "enabled"), and an allowlist entry no longer used fails too; `truenas` in
+  any literal outside `addons/registry.go`. (b) resolves each package
+  identifier through the file's imports (alias, else the path's last element)
+  and watches `net/http` (`Client`, `Transport`, `NewRequest*`,
+  `DefaultClient`, the package-level helpers, naming `*http.Client` as a
+  type), `net` and `crypto/tls` (`Dial*`), so a renamed import is caught; a
+  stale entry fails.
+- *Migration 000089* swaps the CHECK (validated on the way up); its down
+  restores the 000087 form `NOT VALID`, so a withdraw-only row written for a
+  non-TrueNAS account cannot strand a rollback.
+
+Added to slice 2 by the coordinator (11 Nov, found by the slice-3 agent),
+built: `GET /targets` carries `kind` and the accepted `entitlement_schema`
+(name, role, label, unit, combine, unlimited, per_person) and nothing before a
+manifest is accepted; the member's own `/me/targets` (and the operator's
+person view, which shares it) carries the same two and the member's own
+account `standing`, from the `storage.status` reply about that account
+(owner decision, 11 Nov: `standing` added to the storage pocket in contract
+v2, sent by the TrueNAS add-on; no `/subjects` read per page); the
+inventory's bound rows carry `standing` beside the binding (unmanaged rows
+already did). See 3.7.
+
+- [x] 2.1 `services/entitlement.go`: `LifecycleState{Account, Channels map[string]bool, NotAMember, Reason}`;
   `resolveLifecycle` and `applyDirectoryStanding` over the `account`/`channel`
   fields read from **`targets.field_roles`** (1.3), never the live manifest;
   `Desired()` writes every lifecycle field, a withdraw-only set is those
@@ -398,7 +494,7 @@ After the two Opus reviews (11 Nov 2026), decided by the owner and built:
   the §37 suite pass against a manifest with a different lifecycle name
   (`active`), and a revocation plans with the add-on unreachable and the
   registry empty (the role map is the column), mutation-checked #ready-for-agent
-- [ ] 2.2 Migration: the `000087` CHECK on `desired_state_snapshots.withdraws_only`
+- [x] 2.2 Migration: the `000087` CHECK on `desired_state_snapshots.withdraws_only`
   becomes the target-agnostic form, verified on Postgres 16:
   `CHECK (NOT withdraws_only OR (state_json <> '{}'::jsonb AND NOT jsonb_path_exists(state_json, 'strict $.* ? (@.type() != "boolean" || @ == true)')))`
   (only `account`/`channel` are JSON booleans on the wire; no column, no
@@ -409,15 +505,15 @@ After the two Opus reviews (11 Nov 2026), decided by the owner and built:
   accepted; `{"enabled":false,"smb_enabled":false,"group":["admins"]}`
   refused; `{"enabled":true}` refused; `{"enabled":"false"}` refused; `{}`
   refused; plus every existing row re-validates #ready-for-agent
-- [ ] 2.3 Mapping validation by role (`mappings.go`): `account`/`channel`
+- [x] 2.3 Mapping validation by role (`mappings.go`): `account`/`channel`
   not bindable; `limit` parses as a non-negative integer; `flag` accepts only
   `"true"`; `mapping_plan.go:174` wording from `label` #ready-for-agent
-- [ ] 2.4 `handlers/target_homes.go`, `my_storage.go`, `person_storage.go`,
+- [x] 2.4 `handlers/target_homes.go`, `my_storage.go`, `person_storage.go`,
   `services/role_members.go:306`, `drift/addon.go:723`: read the field by
   role (`limit` with `unit: bytes`, the `flag`, the `membership`); the
   storage kind's view (`handlers/kinds/storage.go`) owns `smb://`/UNC from
   `connection.protocol`; `read.go:755-781` deleted #ready-for-agent
-- [ ] 2.5 Two guard tests. (a) `backend/internal/addons/no_target_words_test.go`:
+- [x] 2.5 Two guard tests. (a) `backend/internal/addons/no_target_words_test.go`:
   the literals `"group"`, `"home"`, `"home_quota"`, `"enabled"`,
   `"smb_enabled"`, `"smb"` appear at no manifest-lookup site
   (`Fields[...]`, `FieldsByRole`, `state[...]`, `desired[...]`) in a non-test
@@ -440,7 +536,7 @@ After the two Opus reviews (11 Nov 2026), decided by the owner and built:
 - [ ] 2.6 Staging run: a mapping edit, a departure (withdraw-only), a
   suspension and a home limit each plan and apply as before; Pending changes,
   the person's page and the holds review read the same words #ready-for-human
-- [ ] 2.7 (from slice 1) The drift sweep compares a `limit` field: the
+- [x] 2.7 (from slice 1) The drift sweep compares a `limit` field: the
   desired limit combined the way the add-on combines (`combine: max`,
   `unlimited` dominant) against the observed effective limit an add-on now
   reports in `/subjects` `state`, and a limit absent from `state` (a quota
@@ -468,6 +564,18 @@ After the two Opus reviews (11 Nov 2026), decided by the owner and built:
   under `components/kinds/storage/`, `lib/fields.ts` and tests #ready-for-agent
 - [x] 3.5 Copy guard run (`plain-language-copy`): every new sentence passes;
   `standing.next` always ends in a next step or "nothing for you to do" #ready-for-agent
+- [ ] 3.7 The UI reads field roles and kind from the backend, never a
+  fallback. Backend half built in slice 2 (11 Nov 2026): `GET /targets`
+  carries `kind` and the accepted `entitlement_schema` per target (absent
+  before a manifest is accepted: "not read"), `/me/targets` carries the same
+  two plus the member's own `standing`, and the inventory's bound and unmanaged
+  rows carry `standing`. **Once that lands, the UI's `STORAGE_SCHEMA` and its
+  "no kind = storage" fallback must be removed** (UI half, open) #ready-for-agent
+- [ ] 3.8 (from slice 2) "Take theirs" on a limit finding: the action now
+  answers `adoptable: true` and needs a reason and an end or review date in
+  the request (as adopting a switched-off account does); the dialog asks for
+  both and says it saves the target's value as this person's own limit
+  #ready-for-agent
 - [x] 3.6 (from slice 1) The target page renders what the backend now
   carries: `also_says` (the manifest's keys Syndra does not use, shown raw
   under "What the add-on also says") and `last_error` when a manifest was
@@ -475,15 +583,12 @@ After the two Opus reviews (11 Nov 2026), decided by the owner and built:
   `standing` where an unmanaged account's `password_set` used to be read
   #ready-for-agent
 
-- [ ] 3.7 (found by slice 3) What the UI now reads and the backend does not
-  yet send, each optional in the UI so nothing breaks meanwhile (backend, the
-  other agent's slice): `entitlement_schema` and `kind` on each row of
-  `GET /targets` (3.1 says "unchanged", but `targetSummary` carries neither);
-  `standing` on `GET /my-storage` and on `GET /targets/{t}/inventory`
-  `unmanaged[]`. Until then `lib/fields.ts` supplies the storage kind's schema
-  to a row that carries none (`STORAGE_SCHEMA`) and a row with no `kind` is
-  `storage`; both fallbacks are deleted when the backend sends them
-  #ready-for-agent
+- [ ] 3.9 (found by the slice-2 review, older than this change) The audit actions
+  `entitlement.<target>.superseded` and `entitlement.<target>.abandoned` have no
+  wording in `ui/src/lib/audit-vocabulary.ts` (only `.enqueued` does), so Audit and
+  a person's Activity show the raw key; the coverage guard cannot see actions built
+  by joining strings. Add a pattern with a plain-language sentence for each, and
+  extend the guard to cover joined `entitlement.<target>.*` actions #ready-for-agent
 
 Decided while building (slice 3, 11 Nov 2026), for the owner:
 

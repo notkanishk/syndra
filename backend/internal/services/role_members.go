@@ -9,6 +9,7 @@ import (
 	"syndra/internal/textsort"
 	"time"
 
+	"syndra/internal/addons"
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
@@ -301,9 +302,11 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 // find them, and they are matched on the target alone.
 //
 // The justification differs between the two, and the difference will matter.
-// `enabled = true` denied means the ACCOUNT is off — nothing the role confers
-// there is reachable, unconditionally, whatever fields exist now or later.
-// `smb_enabled` is narrower: it withholds only what SMB carries. Today `group`
+// The `account` field denied (TrueNAS `enabled = true`) means the ACCOUNT is
+// off — nothing the role confers there is reachable, unconditionally, whatever
+// fields exist now or later. A `channel` (TrueNAS `smb_enabled`) is narrower:
+// it withholds only what SMB carries. Which is which is the target's persisted
+// role map (targets.field_roles), never a field name. Today `group`
 // is the sole entitlement field and it is SMB-mediated, so the two coincide and
 // showing an SMB denial against any role is exactly true. It stops being true
 // the moment a non-SMB field lands — quotas and path grants are in phase 2 —
@@ -325,7 +328,13 @@ func withheldOnRole(ctx context.Context, projectID, key string) (map[string][]Wi
 
 	// What this role binds, per target: the set an allowance has to match.
 	conferred := map[string]map[string]bool{} // target -> "field\x00value"
+	roles := map[string]addons.Roles{}        // which fields are the account and its channels
 	for _, target := range targets {
+		r, err := svcFieldRoles(ctx, target)
+		if err != nil {
+			return nil, fmt.Errorf("read the field roles of %s: %w", target, err)
+		}
+		roles[target] = r
 		mappings, err := dbMappingsForRoles(ctx, target, []db.RoleRef{{ProjectID: projectID, RoleKey: key}})
 		if err != nil {
 			return nil, fmt.Errorf("read mappings for %s/%s on %s: %w", projectID, key, target, err)
@@ -355,7 +364,7 @@ func withheldOnRole(ctx context.Context, projectID, key string) (map[string][]Wi
 		if !ok {
 			continue
 		}
-		if !IsLifecycleField(a.Field) && !bound[a.Field+"\x00"+a.Value] {
+		if !roles[a.Target].IsLifecycle(a.Field) && !bound[a.Field+"\x00"+a.Value] {
 			continue
 		}
 		out[a.SubjectID] = append(out[a.SubjectID], WithheldOnRole{

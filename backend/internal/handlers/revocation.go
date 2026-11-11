@@ -8,7 +8,6 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
-	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
 
@@ -81,6 +80,15 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The account field, by role, from the role map persisted at registration
+	// (design §3): a revocation never waits on the add-on being reachable.
+	roles, err := addonsFieldRoles(r.Context(), target)
+	if err != nil || roles.Account() == "" {
+		jsonErrorResponse(w, http.StatusConflict, "ACCOUNT_FIELD_UNKNOWN",
+			"This system has not said which of its fields switches an account off, so nothing could be held. Connect its add-on once, then try again.")
+		return
+	}
+
 	actor := resolveActor(r, "")
 	reviewDate := req.ReviewDate
 	if reviewDate == nil {
@@ -94,9 +102,9 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 
 	allowance, err := dbCreateAllowance(r.Context(), db.Allowance{
 		SubjectID: subject, Target: target,
-		// The lifecycle field, denied. `value` is the state being refused, which
+		// The account field, denied. `value` is the state being refused, which
 		// is what the resolver reads it as.
-		Field: services.FieldEnabled, Value: "true",
+		Field: roles.Account(), Value: "true",
 		Direction: db.AllowanceDeny, ActorID: actor, Reason: req.Reason,
 		ReviewDate: reviewDate,
 	})

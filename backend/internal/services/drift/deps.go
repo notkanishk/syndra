@@ -106,6 +106,9 @@ var (
 	addonPlan     = addons.Plan
 	listBindings  = db.ListTargetBindings
 	fieldRoles    = addons.FieldRoles
+	// How a limit combines (unit, combine, unlimited): the accepted manifest's
+	// schema, which the persisted role map does not carry.
+	entitlementSchema = addons.EntitlementSchema
 
 	recordConvergence = db.RecordSystemConvergence
 

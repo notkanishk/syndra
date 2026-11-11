@@ -88,6 +88,24 @@ type targetSummary struct {
 	// Project is the Zitadel project this system serves, nil until chosen.
 	// Shown read-only on Connected systems; a nil one is that row's Needs you.
 	Project *targetProjectRef `json:"project"`
+	// Kind and EntitlementSchema are the accepted manifest's (contract 2): what
+	// kind of system this is and each field's name, role, label, unit,
+	// combine, unlimited and per_person, so a page renders fields by role
+	// (design §3) and never from a list of its own. Both absent until a
+	// manifest is accepted: the page then says "not read" rather than guess.
+	Kind              string                    `json:"kind,omitempty"`
+	EntitlementSchema []addons.EntitlementField `json:"entitlement_schema,omitempty"`
+}
+
+// acceptedShape is a target's kind and entitlement schema from its accepted
+// manifest, the one source every page reads them from; both empty when no
+// manifest has been accepted.
+func acceptedShape(target string) (string, []addons.EntitlementField) {
+	m, err := addonsAcceptedManifest(target)
+	if err != nil {
+		return "", nil
+	}
+	return m.Kind, m.EntitlementSchema
 }
 
 type targetProjectRef struct {
@@ -263,6 +281,7 @@ func describeTarget(reg addons.Registration, transport addons.TransportCredentia
 		s.LastError = lastErr.Error()
 	}
 	s.AlsoSays = a.AlsoSays()
+	s.Kind, s.EntitlementSchema = acceptedShape(reg.Target)
 	for _, op := range a.Operations() {
 		s.Operations = append(s.Operations, operationSummary{
 			ID: op.ID, Scope: string(op.Scope), Confirm: op.Confirm,

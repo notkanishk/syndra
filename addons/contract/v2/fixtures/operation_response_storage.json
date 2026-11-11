@@ -30,6 +30,12 @@
         }
       }
     ],
-    "places_readable": true
+    "places_readable": true,
+    "standing": {
+      "usable": false,
+      "waiting_on": "member",
+      "note": "No password set yet",
+      "next": "Set a storage password on your page"
+    }
   }
 }

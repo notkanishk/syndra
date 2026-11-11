@@ -609,7 +609,7 @@ func stubResolvedIntent(t *testing.T) {
 	orig := svcResolveEntitlementSet
 	t.Cleanup(func() { svcResolveEntitlementSet = orig })
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true}}, nil
+		return services.EntitlementSet{Roles: truenasRoles, Lifecycle: services.LifecycleState{Account: true, Channels: map[string]bool{"smb_enabled": true}}}, nil
 	}
 }
 
@@ -1201,5 +1201,34 @@ func TestTheCreateRehearsalNamesWhoTheNewMappingWouldReach(t *testing.T) {
 	// And nothing was written by rehearsing it.
 	if len(h.created) != 0 || len(h.converged) != 0 {
 		t.Errorf("a rehearsal writes nothing: %+v / %+v", h.created, h.converged)
+	}
+}
+
+// A mapping plan's sentence is worded from the field's role and label, never
+// its name (addon-contract 2.3): a membership labelled "Access policy" reads
+// "the Lab access policy"; anything else is its label and value; a target
+// whose schema is unknown falls back to the field's own name.
+func TestAMappingIsWordedFromItsRoleAndLabel(t *testing.T) {
+	orig := addonsEntitlementSchema
+	t.Cleanup(func() { addonsEntitlementSchema = orig })
+	addonsEntitlementSchema = func(target string) ([]addons.EntitlementField, error) {
+		if target == "unifi" {
+			return []addons.EntitlementField{{Name: "policy", Role: addons.RoleMembership, Label: "Access policy"},
+				{Name: "pin", Role: addons.RoleFlag, Label: "Door PIN"}}, nil
+		}
+		if target == "truenas" {
+			return truenasSchema, nil
+		}
+		return nil, addons.ErrNoManifest
+	}
+	for _, tc := range []struct{ target, field, value, want string }{
+		{"truenas", "group", "Staff", "the Staff group"},
+		{"unifi", "policy", "Lab", "the Lab access policy"},
+		{"unifi", "pin", "true", "Door PIN true"},
+		{"silent", "group", "Staff", "group Staff"},
+	} {
+		if got := mappedTo(tc.target, tc.field, tc.value); got != tc.want {
+			t.Errorf("mappedTo(%s, %s, %s) = %q, want %q", tc.target, tc.field, tc.value, got, tc.want)
+		}
 	}
 }

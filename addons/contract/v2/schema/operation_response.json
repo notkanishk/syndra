@@ -146,6 +146,10 @@
         },
         "places_readable": {
           "type": "boolean"
+        },
+        "standing": {
+          "$ref": "common/standing.json",
+          "description": "The subject's own account's standing, as the subjects read would report it: what the member's page says about their account without a full subjects read."
         }
       },
       "required": [
@@ -157,7 +161,8 @@
         "usage_readable",
         "needs_new_password",
         "places",
-        "places_readable"
+        "places_readable",
+        "standing"
       ]
     },
     "TargetHealth": {

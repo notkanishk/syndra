@@ -201,7 +201,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 	storage.Storage = &StorageStatus{
 		Username: "rey_mysterio", Usable: true, NeedsPassword: true, SMBEnabled: true,
 		Shares:        []ShareUsage{{Share: "makers", UsedBytes: 19756849561, QuotaBytes: 53687091200}},
-		UsageReadable: true, NeedsNewPassword: true, Places: []Place{placeHome}, PlacesReadable: true,
+		UsageReadable: true, NeedsNewPassword: true, Places: []Place{placeHome}, PlacesReadable: true, Standing: member,
 	}
 	health := opOK("health.get", "")
 	health.Health = &TargetHealth{

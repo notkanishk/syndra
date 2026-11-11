@@ -191,6 +191,10 @@ var (
 	dbMappingsForRoles    = db.MappingsForRoles
 	dbAllowancesInForce   = db.AllowancesInForce
 	dbAllowancesOnTargets = db.AllowancesInForceOnTargets
+	// Which field is the account, its channels, what a mapping binds: the
+	// role map persisted at registration (targets.field_roles), never the
+	// live manifest (design §3).
+	svcFieldRoles = addons.FieldRoles
 	// The lineage band reads the WHOLE history, not only what is in force: a
 	// suspension that ended is part of the answer to what has been decided.
 	svcAllowancesForSubject = db.AllowancesForSubject

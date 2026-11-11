@@ -8,6 +8,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/handlers/kinds"
 	"syndra/internal/services"
 )
 
@@ -137,10 +138,13 @@ func describePersonTarget(r *http.Request, target, subject string, hasProject bo
 		}
 	}
 
+	// The home folder's limit field, by role and unit (kinds.HomeLimit).
+	schema, _ := addonsEntitlementSchema(target)
+	limit, _ := kinds.HomeLimit(schema)
 	if view.Account != nil {
 		home := accountHome{SubjectID: subject, Username: view.Account.Username}
-		roleLimits(&home, set)
-		home.Own = ownHomeLimit(r, subject, target, now)
+		roleLimits(&home, set, limit)
+		home.Own = ownHomeLimit(r, subject, target, limit.Name, now)
 		storage := view.Storage
 		if storage == nil && view.Health == addons.HealthOffline {
 			view.LastKnown = recalledStorage(target, subject)
@@ -156,14 +160,14 @@ func describePersonTarget(r *http.Request, target, subject string, hasProject bo
 				}
 			}
 		}
-		ownEndedIfOver(r, &home, target, now)
+		ownEndedIfOver(r, &home, target, limit.Name, now)
 		view.Home = &home
 		view.Adopted = adoptionOf(r, target, subject, view.Account.BoundAt)
 	} else if view.Entitled {
 		// What they'll get, for the preview: the limit their roles give and
 		// the folders their groups open. No use: there is no folder yet.
 		home := accountHome{SubjectID: subject}
-		roleLimits(&home, set)
+		roleLimits(&home, set, limit)
 		view.Home = &home
 		view.Preview = previewPlaces(r, target, set)
 	}
@@ -223,9 +227,10 @@ func previewPlaces(r *http.Request, target string, set services.EntitlementSet) 
 	for _, p := range reach.Everyone {
 		add(p, nil)
 	}
-	for _, g := range set.Fields["group"] {
+	membership := kinds.Storage(set.Roles).Membership
+	for _, g := range set.Fields[membership] {
 		for _, p := range reach.Groups[g] {
-			add(p, set.Given["group\x00"+g])
+			add(p, set.Given[membership+"\x00"+g])
 		}
 	}
 	// The home folder is the Home folder row's, never a folder here.

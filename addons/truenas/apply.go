@@ -123,7 +123,12 @@ func smbWaiting(current *Subject) string {
 // Managed fields only, matching what the merge compares: an unmanaged field is
 // not "unchanged", it is out of scope, and carrying it would invite a base that
 // claims authority over something Syndra never set.
-func observedFields(desired desiredState, s *Subject) map[string]any {
+//
+// A managed limit is the effective limit the target now holds, read back from
+// its quota table exactly as /subjects state reports it (homeLimits), so the
+// backend's merge base has the limit straight after an apply; left out when
+// the table could not be read (unknown, never "no limit").
+func (srv *server) observedFields(desired desiredState, s *Subject) map[string]any {
 	state := entitlementState(s)
 	if state == nil {
 		return nil
@@ -132,6 +137,11 @@ func observedFields(desired desiredState, s *Subject) map[string]any {
 	for field, value := range state {
 		if desired.managed[field] {
 			out[field] = value
+		}
+	}
+	if desired.managed[FieldHomeQuota] {
+		if limit, read := srv.homeLimits([]Subject{*s})[s.UID]; read {
+			out[FieldHomeQuota] = []string{limit}
 		}
 	}
 	if len(out) == 0 {
@@ -899,7 +909,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		AccountID:   accountID(applied.UID),
 		Standing:    standingOf(applied),
 		Fingerprint: fingerprintSubject(applied),
-		Observed:    observedFields(desired, applied),
+		Observed:    s.observedFields(desired, applied),
 	}, http.StatusOK, nil
 }
 
@@ -1051,7 +1061,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		AccountID:   accountID(created.UID),
 		Standing:    standingOf(created),
 		Fingerprint: fingerprintSubject(created),
-		Observed:    observedFields(desired, created),
+		Observed:    s.observedFields(desired, created),
 	}, http.StatusOK, nil
 }
 

@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -45,6 +47,10 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 		addonsConnection = prev[8].(func(string) (*addons.Connection, error))
 	})
 
+	schema := addonsEntitlementSchema
+	t.Cleanup(func() { addonsEntitlementSchema = schema })
+	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) { return truenasSchema, nil }
+
 	bound := time.Date(2026, 9, 12, 10, 0, 0, 0, time.UTC)
 	dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) {
 		if !h.bound {
@@ -54,10 +60,10 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 	}
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
 		lead := services.RoleSource{ProjectID: "fab", RoleKey: "lead"}
-		return services.EntitlementSet{
+		return services.EntitlementSet{Roles: truenasRoles,
 			Fields:    map[string][]string{"group": {"fab_leads"}, "home": {"yes"}},
 			Given:     map[string][]services.RoleSource{"home_quota\x0021474836480": {lead}, "group\x00fab_leads": {lead}},
-			Lifecycle: services.LifecycleState{Enabled: h.entitled},
+			Lifecycle: services.LifecycleState{Account: h.entitled},
 		}, nil
 	}
 	addonsMyStorage = func(_ context.Context, _, subject, actor string) addons.StorageStatus {
@@ -244,5 +250,63 @@ func TestPersonTargets_CarryNoPasswordChange(t *testing.T) {
 	stubPersonStorage(t, h)
 	if view := getPersonTargets(t); view.PasswordChange != nil {
 		t.Fatalf("passwords never reach an operator: %+v", view.PasswordChange)
+	}
+}
+
+// A target with no stored role map (its add-on has never had a manifest
+// accepted) is "not read": not entitled, no resources, beside a target that
+// has one, on both the member's own page and the operator's person page.
+// Never a 500 for the whole page (addon-contract 2.1).
+func TestATargetWithNoRoleMapIsNotReadAndTheOthersStillShow(t *testing.T) {
+	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true}}
+	stubPersonStorage(t, h)
+	addonsRegistered = func() []addons.Registration { return []addons.Registration{{Target: "truenas"}, {Target: "unifi"}} }
+	svcResolveEntitlementSet = func(_ context.Context, _, target string) (services.EntitlementSet, error) {
+		if target == "unifi" {
+			return services.EntitlementSet{}, fmt.Errorf("resolve entitlements for u1: %w: unifi has no accepted contract-2 manifest yet", addons.ErrNoManifest)
+		}
+		return services.EntitlementSet{Roles: truenasRoles, Fields: map[string][]string{"group": {"staff"}},
+			Lifecycle: services.LifecycleState{Account: true}}, nil
+	}
+	check := func(name string, rr *httptest.ResponseRecorder) {
+		t.Helper()
+		var body struct {
+			Targets []myTargetView `json:"targets"`
+		}
+		if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &body) != nil || len(body.Targets) != 2 {
+			t.Fatalf("%s: %d %s", name, rr.Code, rr.Body.String())
+		}
+		for _, v := range body.Targets {
+			if v.Target == "unifi" && (v.Entitled || len(v.Resources) != 0) {
+				t.Errorf("%s: a target with no role map is not read: %+v", name, v)
+			}
+			if v.Target == "truenas" && !v.Entitled {
+				t.Errorf("%s: the target with a role map must still show: %+v", name, v)
+			}
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/users/u1/targets", nil)
+	req.SetPathValue("id", "u1")
+	req = req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "op-1"}))
+	rr := httptest.NewRecorder()
+	handleUserTargets(rr, req)
+	check("the operator's page", rr)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
+	req = req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "u1"}))
+	rr = httptest.NewRecorder()
+	handleMyTargets(rr, req)
+	check("the member's page", rr)
+
+	// Any other failure still fails the page: an unreadable store is not a
+	// target that has not spoken.
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{}, errors.New("db down")
+	}
+	rr = httptest.NewRecorder()
+	handleMyTargets(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500 for a failed read, got %d", rr.Code)
 	}
 }

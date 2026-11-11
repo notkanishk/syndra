@@ -881,3 +881,20 @@ func TestAShapeRefusalIsRequeuedNeverTargetRefused(t *testing.T) {
 		t.Fatalf("a spent shape refusal must fail as out of retries, never target_refused: %v %v", h.refused, h.failed)
 	}
 }
+
+// The add-on's observed carries the managed limit it read back (addon-contract
+// 2.7), and the base records it, so the next drift pass can tell a hand edit
+// of the limit from Syndra's own write straight after an apply.
+func TestAnAppliedLimitIsInTheBase(t *testing.T) {
+	h := stubAddonDrain(t, addonRow("o1"))
+	h.resp = addons.ApplyResponse{
+		Outcome: addons.OutcomeSucceeded, Username: "charlotte", AccountID: "3001",
+		Observed: map[string]json.RawMessage{"enabled": json.RawMessage(`true`), "home_quota": json.RawMessage(`["5368709120"]`)},
+	}
+	if _, err := DrainAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.bases) != 1 || string(h.bases[0].Base["home_quota"]) != `["5368709120"]` {
+		t.Fatalf("the base must hold the limit the target reported: %+v", h.bases)
+	}
+}

@@ -5,13 +5,28 @@ import (
 	"os"
 	"testing"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
 
+// The TrueNAS field names and role map, which most tests resolve against: the
+// core itself names no field (design §3). A test that needs another target's
+// shape (an account called `active`) says so.
+const (
+	FieldEnabled    = "enabled"
+	FieldSMBEnabled = "smb_enabled"
+)
+
+var truenasRoles = addons.Roles{
+	"group": addons.RoleMembership, "home": addons.RoleFlag, "home_quota": addons.RoleLimit,
+	FieldEnabled: addons.RoleAccount, FieldSMBEnabled: addons.RoleChannel,
+}
+
 // TestMain: no role waits, and nothing is recorded on a row after a send;
 // delivery_test.go stubs its own.
 func TestMain(m *testing.M) {
+	svcFieldRoles = func(context.Context, string) (addons.Roles, error) { return truenasRoles, nil }
 	svcSetWaitReason = func(context.Context, []string, string) error { return nil }
 	// A halted send's rows are scheduled for a retry (db.ScheduleRetry), and
 	// nothing is pending unless a test says so.

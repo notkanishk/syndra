@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -361,7 +363,7 @@ func TestConvergeSubjectOn_ADepartureIsWithdrawOnly(t *testing.T) {
 	origResolve, origRecord := svcResolveEntitlements, dbRecordSystemConvergence
 	t.Cleanup(func() { svcResolveEntitlements, dbRecordSystemConvergence = origResolve, origRecord })
 	svcResolveEntitlements = func(context.Context, string, string) (EntitlementSet, error) {
-		return EntitlementSet{Lifecycle: LifecycleState{NotAMember: true}}, nil
+		return EntitlementSet{Roles: truenasRoles, Lifecycle: LifecycleState{NotAMember: true}}, nil
 	}
 	var got db.SystemConvergence
 	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
@@ -371,7 +373,41 @@ func TestConvergeSubjectOn_ADepartureIsWithdrawOnly(t *testing.T) {
 	if err := convergeOn(context.Background(), "zitadel:user_deactivated", "u1", "truenas"); err != nil {
 		t.Fatal(err)
 	}
-	if !got.WithdrawsOnly || got.Target != "truenas" || got.SubjectID != "u1" {
-		t.Fatalf("queued %+v, want truenas/u1 withdraw-only", got)
+	if !got.WithdrawsOnly || got.Target != "truenas" || got.SubjectID != "u1" || string(got.Desired[FieldEnabled]) != "false" {
+		t.Fatalf("queued %+v, want truenas/u1 withdraw-only, the account switched off", got)
+	}
+}
+
+// A role change reaching two targets, one of which has no role map yet (its
+// add-on has never had a manifest accepted), queues the other and does not
+// fail: nothing says which field is that target's account, and rolling back
+// the role change over it would block every grant until it speaks. The drift
+// sweep converges it once its manifest is accepted (addon-contract 2.1).
+func TestATargetWithNoRoleMapIsSkippedNotFatal(t *testing.T) {
+	f := &resolverFixture{
+		roles:    []db.RoleRef{{ProjectID: "pLab", RoleKey: "trained"}},
+		mappings: []db.RoleMapping{mapping("trained", "group", "lab_makers")},
+	}
+	h := stubTrigger(t, f, map[string][]string{"pLab/trained": {"truenas", "unifi"}})
+	orig := svcFieldRoles
+	t.Cleanup(func() { svcFieldRoles = orig })
+	svcFieldRoles = func(_ context.Context, target string) (addons.Roles, error) {
+		if target == "unifi" {
+			return nil, fmt.Errorf("%w: unifi has no accepted contract-2 manifest yet", addons.ErrNoManifest)
+		}
+		return truenasRoles, nil
+	}
+
+	if err := triggerTargetConvergence(context.Background(), "op_1", "u1", []roleKey{{projectID: "pLab", roleKey: "trained"}}); err != nil {
+		t.Fatalf("a target with no role map must not fail the role change: %v", err)
+	}
+	if len(h.queued) != 1 || h.queued[0].Target != "truenas" {
+		t.Fatalf("want truenas queued and unifi skipped, got %+v", h.queued)
+	}
+
+	// Any other failure to resolve still fails the change.
+	svcFieldRoles = func(context.Context, string) (addons.Roles, error) { return nil, errors.New("db down") }
+	if err := triggerTargetConvergence(context.Background(), "op_1", "u1", []roleKey{{projectID: "pLab", roleKey: "trained"}}); err == nil {
+		t.Fatal("an unreadable role map is not a target that has not spoken")
 	}
 }

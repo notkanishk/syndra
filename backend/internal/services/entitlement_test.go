@@ -13,6 +13,7 @@ import (
 
 	"syndra/internal/models"
 
+	"syndra/internal/addons"
 	"syndra/internal/db"
 )
 
@@ -87,13 +88,13 @@ func TestRoleDerivationComesOnlyFromMappings(t *testing.T) {
 		roles: []db.RoleRef{{ProjectID: "pLab", RoleKey: "maker"}, {ProjectID: "pLab", RoleKey: "unmapped"}},
 		mappings: []db.RoleMapping{
 			mapping("maker", "group", "lab_makers"),
-			mapping("maker", "quota_bytes", "50000000000"),
+			mapping("maker", "home_quota", "50000000000"),
 		},
 	})
-	if want := map[string][]string{"group": {"lab_makers"}, "quota_bytes": {"50000000000"}}; !reflect.DeepEqual(set.Fields, want) {
+	if want := map[string][]string{"group": {"lab_makers"}, "home_quota": {"50000000000"}}; !reflect.DeepEqual(set.Fields, want) {
 		t.Fatalf("two mappings on one role must contribute both fields, got %v", set.Fields)
 	}
-	if !set.Lifecycle.Enabled || !set.Lifecycle.SMBEnabled {
+	if !set.Lifecycle.Account || !set.Lifecycle.Channels[FieldSMBEnabled] {
 		t.Error("holding a mapped role must resolve the account to enabled")
 	}
 }
@@ -146,7 +147,7 @@ func TestASubtractiveAllowanceRemovesAccessAndSaysWho(t *testing.T) {
 	}
 	// Still enabled: they hold a mapped role, and one value being suspended is
 	// not the same as reaching nothing.
-	if !set.Lifecycle.Enabled {
+	if !set.Lifecycle.Account {
 		t.Error("suspending one value must not disable the account")
 	}
 }
@@ -174,14 +175,14 @@ func TestAFullySuppressedFieldResolvesToEmptyRatherThanAbsent(t *testing.T) {
 // suspension.
 func TestLifecycleFollowsWhetherAnyMappedRoleIsHeld(t *testing.T) {
 	none := resolve(t, &resolverFixture{roles: []db.RoleRef{{ProjectID: "pLab", RoleKey: "unmapped"}}})
-	if none.Lifecycle.Enabled || none.Lifecycle.SMBEnabled {
+	if none.Lifecycle.Account || none.Lifecycle.Channels[FieldSMBEnabled] {
 		t.Fatal("no mapped role must resolve to disabled")
 	}
 	back := resolve(t, &resolverFixture{
 		roles:    []db.RoleRef{{ProjectID: "pLab", RoleKey: "maker"}},
 		mappings: []db.RoleMapping{mapping("maker", "group", "lab_makers")},
 	})
-	if !back.Lifecycle.Enabled {
+	if !back.Lifecycle.Account {
 		t.Fatal("regaining a mapped role must resolve it back through the same path")
 	}
 }
@@ -195,12 +196,12 @@ func TestAnOperatorSuspensionSurvivesHoldingTheRole(t *testing.T) {
 		mappings:   []db.RoleMapping{mapping("maker", "group", "lab_makers")},
 		allowances: []db.Allowance{deny(FieldEnabled, "true")},
 	})
-	if set.Lifecycle.Enabled {
+	if set.Lifecycle.Account {
 		t.Fatal("a role grant must not undo a deliberate suspension")
 	}
 	// An account that cannot be used cannot be used over SMB either; reporting
 	// otherwise would describe a state the target cannot hold.
-	if set.Lifecycle.SMBEnabled {
+	if set.Lifecycle.Channels[FieldSMBEnabled] {
 		t.Error("disabling the account must take SMB with it")
 	}
 	var found bool
@@ -222,7 +223,7 @@ func TestSMBCanBeSuspendedWithoutDisablingTheAccount(t *testing.T) {
 		mappings:   []db.RoleMapping{mapping("maker", "group", "lab_makers")},
 		allowances: []db.Allowance{deny(FieldSMBEnabled, "true")},
 	})
-	if !set.Lifecycle.Enabled || set.Lifecycle.SMBEnabled {
+	if !set.Lifecycle.Account || set.Lifecycle.Channels[FieldSMBEnabled] {
 		t.Fatalf("want enabled without SMB, got %+v", set.Lifecycle)
 	}
 }
@@ -240,7 +241,7 @@ func TestALifecycleMappingIsIgnoredByTheResolver(t *testing.T) {
 	if _, present := set.Fields[FieldEnabled]; present {
 		t.Fatal("a lifecycle field must never be resolved from a mapping")
 	}
-	if !set.Lifecycle.Enabled {
+	if !set.Lifecycle.Account {
 		t.Fatal("and must not be able to disable an account by being present")
 	}
 
@@ -252,7 +253,7 @@ func TestALifecycleMappingIsIgnoredByTheResolver(t *testing.T) {
 		roles:    []db.RoleRef{{ProjectID: "pLab", RoleKey: "maker"}},
 		mappings: []db.RoleMapping{mapping("maker", FieldEnabled, "true")},
 	})
-	if lifecycleOnly.Lifecycle.Enabled {
+	if lifecycleOnly.Lifecycle.Account {
 		t.Fatal("a lifecycle-only mapping is not a mapped entitlement")
 	}
 }
@@ -281,29 +282,42 @@ func TestAnAdditiveAllowanceConfersNothing(t *testing.T) {
 	}
 }
 
-// 7.4 — structural validation, before the add-on is asked anything.
+// 7.4 — structural validation, before the add-on is asked anything, by role
+// (addon-contract 2.3): no field name is known to the core, so a target whose
+// account is called `active` is held to the same rules.
 func TestMappingFieldValidation(t *testing.T) {
-	declared := []string{"group", "quota_bytes"}
-
-	if err := ValidateMappingField(declared, "group"); err != nil {
-		t.Fatalf("a declared field must be accepted: %v", err)
+	schema := []addons.EntitlementField{
+		{Name: "group", Role: addons.RoleMembership},
+		{Name: "quota_bytes", Role: addons.RoleLimit, Label: "Quota", Unit: "bytes", Combine: "max", Unlimited: "0"},
+		{Name: "materials", Role: addons.RoleFlag, Label: "Materials"},
+		{Name: "active", Role: addons.RoleAccount},
+		{Name: "web", Role: addons.RoleChannel},
 	}
-	for _, field := range []string{FieldEnabled, FieldSMBEnabled} {
-		err := ValidateMappingField(append(declared, field), field)
-		if !errors.Is(err, db.ErrMappingInvalid) {
-			t.Errorf("%s must be refused as a mapping target even when the add-on declares it: %v", field, err)
+
+	for _, ok := range [][2]string{{"group", "lab_makers"}, {"quota_bytes", "5368709120"}, {"quota_bytes", "0"}, {"materials", "true"}} {
+		if err := ValidateMappingField(schema, ok[0], ok[1]); err != nil {
+			t.Errorf("%s=%s must be accepted: %v", ok[0], ok[1], err)
 		}
 	}
-	err := ValidateMappingField(declared, "path_grant")
+	for _, bad := range [][2]string{
+		{"active", "true"}, {"web", "true"}, // account and channel are computed
+		{"quota_bytes", "-1"}, {"quota_bytes", "5 GiB"}, {"quota_bytes", ""}, // a limit is a non-negative whole number
+		{"materials", "false"}, {"materials", "yes"}, // a flag is given with "true" or not at all
+	} {
+		if err := ValidateMappingField(schema, bad[0], bad[1]); !errors.Is(err, db.ErrMappingInvalid) {
+			t.Errorf("%s=%q must be refused: %v", bad[0], bad[1], err)
+		}
+	}
+	err := ValidateMappingField(schema, "path_grant", "x")
 	if !errors.Is(err, db.ErrMappingInvalid) {
 		t.Fatalf("an undeclared field must be refused: %v", err)
 	}
-	// The declared set is named: an operator whose field is not in the schema
-	// needs to know what is.
-	if got := err.Error(); !strings.Contains(got, "group") || !strings.Contains(got, "quota_bytes") {
-		t.Errorf("the refusal must name the declared fields, got %q", got)
+	// The bindable set is named: an operator whose field is not in the schema
+	// needs to know what is, and the computed ones are not offered.
+	if got := err.Error(); !strings.Contains(got, "group") || !strings.Contains(got, "quota_bytes") || strings.Contains(got, "active") {
+		t.Errorf("the refusal must name the bindable fields, got %q", got)
 	}
-	if err := ValidateMappingField(declared, "  "); !errors.Is(err, db.ErrMappingInvalid) {
+	if err := ValidateMappingField(schema, "  ", "x"); !errors.Is(err, db.ErrMappingInvalid) {
 		t.Errorf("a blank field must be refused: %v", err)
 	}
 }
@@ -404,7 +418,7 @@ func TestAnUnreadableBandSaysSoRatherThanLookingEmpty(t *testing.T) {
 // inert and invisible at once: 201 to the operator, full access to the member,
 // nothing on any surface disagreeing. Same shape as the `enabled=false` bug.
 func TestAnAllowanceTermIsNormalisedBeforeItIsWrittenDown(t *testing.T) {
-	field, value, err := ValidateAllowanceTerm([]string{"group"}, " group ", " lab_makers ")
+	field, value, err := ValidateAllowanceTerm([]addons.EntitlementField{{Name: "group", Role: addons.RoleMembership}}, " group ", " lab_makers ")
 	if err != nil {
 		t.Fatalf("a term with surrounding whitespace is valid, merely untidy: %v", err)
 	}
@@ -442,10 +456,10 @@ func TestNormalisingDoesNotFoldCase(t *testing.T) {
 // form must not sneak past that check either — `" true "` denies nothing, and
 // accepting it would be the original bug with a space in it.
 func TestALifecycleTermIsCheckedAfterTrimming(t *testing.T) {
-	if _, _, err := ValidateAllowanceTerm([]string{"enabled"}, "enabled", " true "); err != nil {
+	if _, _, err := ValidateAllowanceTerm([]addons.EntitlementField{{Name: "active", Role: addons.RoleAccount}}, "active", " true "); err != nil {
 		t.Fatalf("a trimmed lifecycle value is the right one: %v", err)
 	}
-	if _, _, err := ValidateAllowanceTerm([]string{"enabled"}, "enabled", "false"); err == nil {
+	if _, _, err := ValidateAllowanceTerm([]addons.EntitlementField{{Name: "active", Role: addons.RoleAccount}}, "active", "false"); err == nil {
 		t.Fatal("enabled=false denies nothing and must still be refused")
 	}
 }
@@ -521,7 +535,7 @@ func TestADeactivatedPersonLosesTheAccountsSyndraManages(t *testing.T) {
 				mappings: []db.RoleMapping{mapping("member", "group", "lab")},
 				status:   state,
 			})
-			if set.Lifecycle.Enabled || set.Lifecycle.SMBEnabled {
+			if set.Lifecycle.Account || set.Lifecycle.Channels[FieldSMBEnabled] {
 				t.Fatalf("%s: still enabled for somebody the directory has ended", state)
 			}
 			if !set.Lifecycle.NotAMember || set.Lifecycle.Reason == "" {
@@ -561,7 +575,7 @@ func TestAnUnreadableDirectoryDisablesNobody(t *testing.T) {
 	for name, f := range cases {
 		t.Run(name, func(t *testing.T) {
 			set := resolve(t, f)
-			if !set.Lifecycle.Enabled {
+			if !set.Lifecycle.Account {
 				t.Fatal("an account was disabled on something short of a positive report")
 			}
 			if set.Lifecycle.NotAMember {

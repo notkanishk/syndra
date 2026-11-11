@@ -1255,7 +1255,9 @@ too. Production showed every `system:reconcile` row to the NAS sent by hand.
   `queuedNote`). Its lede (a prop the dialog never renders, having no compose
   step) no longer claims every change waits.
   A snapshot marked withdraw-only is held to its meaning by a CHECK (the switch
-  alone, off; 000087). A stale plan (PLAN_STALE) is a plain failure, not a
+  alone, off; 000087; target-agnostic since addon-contract 2.2, 000089: a
+  non-empty object whose every value is JSON false, the account and channels
+  named by role, never by `enabled`/`smb_enabled`). A stale plan (PLAN_STALE) is a plain failure, not a
   target refusal, so it holds nobody. The runner-licence guard also requires
   every constant spliced into the claim to be one bracketed group (an
   unbracketed OR in `notBeforeDue` would split the WHERE). Tests:

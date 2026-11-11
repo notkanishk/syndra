@@ -27,11 +27,11 @@ func TestThePassCreatesAccountsForUnboundHolders(t *testing.T) {
 	stubAddonReconcile(t, h)
 	resolveIntent = func(_ context.Context, subject, _ string) (services.EntitlementSet, error) {
 		if subject == "u_held" {
-			return services.EntitlementSet{}, nil
+			return services.EntitlementSet{Roles: truenasRoles}, nil
 		}
-		return services.EntitlementSet{
+		return services.EntitlementSet{Roles: truenasRoles,
 			Fields:    map[string][]string{"group": {"Community"}},
-			Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true},
+			Lifecycle: services.LifecycleState{Account: true, Channels: map[string]bool{"smb_enabled": true}},
 		}, nil
 	}
 
