@@ -28,6 +28,7 @@ const KINDS: Record<WriteKind, { rail: boolean }> = {
   signingKey: { rail: false },
   target: { rail: true },
   storageCredential: { rail: false },
+  memberAction: { rail: false },
   terms: { rail: false },
   welcomeClaims: { rail: false },
   retriesSeen: { rail: true },

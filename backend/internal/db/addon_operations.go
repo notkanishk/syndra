@@ -153,24 +153,19 @@ func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams
 				return "", fmt.Errorf("lock addon operation: %w", err)
 			}
 		}
-		// An open row is any not settled and not answered since: in flight
-		// (claimed or not yet), or in doubt. Asked only for a physical call.
-		const insertOp = `
-			WITH open AS (
-				SELECT id, COALESCE(claimed_at, created_at) AS at FROM addon_operations
-				 WHERE $6 AND target = $1 AND operation = $2 AND subject_id = $4
-				   AND resolution IS NULL AND status IN ('dispatching', 'indeterminate')
-				 ORDER BY created_at DESC LIMIT 1
-			), ins AS (
+		// The open row is the member page's own read (newestOpenCall), so the
+		// refusal names the call their page shows. Asked only for a physical call.
+		insertOp := `
+			WITH open AS (SELECT * FROM (` + newestOpenCall + `) n WHERE $6), ins AS (
 				INSERT INTO addon_operations (target, operation, actor_id, subject_id, status, about)
-				SELECT $1, $2, $3, $4, 'dispatching', NULLIF($5, '')
+				SELECT $1, $2, $4, $3, 'dispatching', NULLIF($5, '')
 				 WHERE NOT EXISTS (SELECT 1 FROM open)
 				RETURNING id
 			)
 			SELECT (SELECT id::text FROM ins), (SELECT id::text FROM open), (SELECT at FROM open)`
 		var inserted, earlier *string
 		var at *time.Time
-		if err := tx.QueryRow(ctx, insertOp, p.Target, p.Operation, p.ActorID, p.SubjectID, p.About, p.Physical).
+		if err := tx.QueryRow(ctx, insertOp, p.Target, p.Operation, p.SubjectID, p.ActorID, p.About, p.Physical).
 			Scan(&inserted, &earlier, &at); err != nil {
 			return "", fmt.Errorf("insert addon operation: %w", err)
 		}
@@ -210,6 +205,39 @@ func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams
 		return "", fmt.Errorf("insert addon operation audit: %w", err)
 	}
 	return id, nil
+}
+
+// openCall is the one spelling of an open call, on the row aliased row: not
+// settled, and not answered since. In flight, claimed or not yet, or in doubt.
+// A record a crash left unclaimed was never sent; it stays open until the
+// operator's list or the member's poll settles it as unreached
+// (SettleUnclaimedAddonOperations). The insert's CALL_UNSETTLED check, the
+// member's page and the supersede all read it from here, so none of them can
+// call open what another calls settled.
+func openCall(row string) string {
+	return row + ".resolution IS NULL AND " + row + ".status IN ('dispatching', 'indeterminate')"
+}
+
+// newestOpenCall is a subject's newest open call of one operation on one
+// target ($1 target, $2 operation, $3 subject): its id, and when it was sent.
+var newestOpenCall = `
+	SELECT o.id, COALESCE(o.claimed_at, o.created_at) AS at FROM addon_operations o
+	 WHERE o.target = $1 AND o.operation = $2 AND o.subject_id = $3 AND ` + openCall("o") + `
+	 ORDER BY o.created_at DESC LIMIT 1`
+
+// OpenCall is a subject's newest open call of one operation on one target,
+// and when it was sent: the row the insert's CALL_UNSETTLED check names, read
+// by the same statement, so the member's page shows exactly what refuses
+// their next confirm. found is false when there is none.
+func OpenCall(ctx context.Context, target, subject, operation string) (id string, at time.Time, found bool, err error) {
+	err = querier(ctx).QueryRow(ctx, newestOpenCall, target, operation, subject).Scan(&id, &at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", time.Time{}, false, nil
+	}
+	if err != nil {
+		return "", time.Time{}, false, fmt.Errorf("read open call: %w", err)
+	}
+	return id, at, true, nil
 }
 
 // OpenCallError refuses a physical record while an earlier one of the same
@@ -505,7 +533,7 @@ func ResolveAddonOperation(ctx context.Context, target, id string, happened bool
 // unconfirmed one). Their own status is untouched: each still says its answer
 // was lost.
 func SupersedeAddonOperations(ctx context.Context, by string) (int64, error) {
-	const q = `
+	q := `
 		UPDATE addon_operations o
 		   SET resolution = 'superseded', superseded_by = b.id,
 		       resolved_by = b.subject_id, resolved_at = NOW()
@@ -513,8 +541,7 @@ func SupersedeAddonOperations(ctx context.Context, by string) (int64, error) {
 		 WHERE b.id = $1::uuid AND b.status = 'succeeded'
 		   AND o.target = b.target AND o.subject_id = b.subject_id AND o.operation = b.operation
 		   AND o.id <> b.id AND o.created_at <= b.created_at
-		   AND o.resolution IS NULL AND o.claimed_at IS NOT NULL
-		   AND o.status IN ('dispatching', 'indeterminate')`
+		   AND o.claimed_at IS NOT NULL AND ` + openCall("o")
 	tag, err := querier(ctx).Exec(ctx, q, by)
 	if err != nil {
 		return 0, fmt.Errorf("supersede addon operations: %w", err)
@@ -554,6 +581,8 @@ func ResendableAddonOperation(ctx context.Context, target, subject, operation st
 //
 // The latest FIRST send stands for the change, with its resend folded in. A
 // resend TrueNAS confirmed supersedes the first, so the change reads as settled.
+// A physical call is never resent and is read by OpenCall instead, the
+// insert's own read.
 func UnconfirmedChangeAt(ctx context.Context, target, subject, operation string, grace time.Duration) (id string, at time.Time, found bool, err error) {
 	const q = `
 		SELECT o.id, COALESCE(o.claimed_at, o.created_at),

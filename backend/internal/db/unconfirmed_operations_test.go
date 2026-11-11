@@ -2,6 +2,8 @@ package db
 
 import (
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -77,5 +79,49 @@ func TestAResendIsBoundToItsFirstSendAndUncounted(t *testing.T) {
 	count := funcBody(t, string(src), "CountRecentAddonOperations")
 	if !strings.Contains(count, "AND retry_of IS NULL") {
 		t.Error("the automatic resend must not count against the rate limit")
+	}
+}
+
+// An open call has one spelling, openCall, which the insert's CALL_UNSETTLED
+// check, the member's page and the supersede all read. A query listing the
+// open statuses by hand is a second definition that can drift from it.
+// CountAddonOperations is the one exception: a status bucket that counts
+// answered rows too, not open calls.
+func TestAnOpenCallIsSpelledOnce(t *testing.T) {
+	list := regexp.MustCompile(`'dispatching',\s*'indeterminate'|'indeterminate',\s*'dispatching'`)
+	decl := regexp.MustCompile(`(?m)^(?:func|const|var|type) (?:\([^)]*\) )?(\w+)`)
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]int{}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		src := string(b)
+		decls := decl.FindAllStringSubmatchIndex(src, -1)
+		for _, m := range list.FindAllStringIndex(src, -1) {
+			in := "?"
+			for _, d := range decls {
+				if d[0] < m[0] {
+					in = src[d[2]:d[3]]
+				}
+			}
+			found[f+":"+in]++
+		}
+	}
+	want := map[string]int{"addon_operations.go:openCall": 1, "addon_operations.go:CountAddonOperations": 1}
+	if len(found) != len(want) {
+		t.Fatalf("the open statuses are listed in %v, want only %v", found, want)
+	}
+	for k, n := range want {
+		if found[k] != n {
+			t.Errorf("the open statuses are listed in %v, want only %v", found, want)
+		}
 	}
 }

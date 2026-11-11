@@ -85,6 +85,21 @@ describe("Waiting on you: changes nobody confirmed", () => {
     expect(document.body.textContent).not.toMatch(/a change for/i);
   });
 
+  // addon-contract 6c: a physical act is settled at the desk, so the row says to ask there.
+  it("words a checkout whose answer was lost: ask at the desk, the item and the person", () => {
+    const checkout = { ...PURGE, operation: "item.checkout", about: "item-0003" };
+    renderIt([checkout]);
+    expect(document.body.textContent).toContain("Check out item-0003 to Sami Zayn");
+    expect(document.body.textContent).not.toMatch(/a change for|account and files/i);
+    fireEvent.click(screen.getByRole("button", { name: /^Say what happened/ }));
+    expect(screen.getByRole("heading", { name: "Did item-0003 go out to Sami Zayn?" })).toBeTruthy();
+    expect(screen.getByText("Ask at the desk whether item-0003 went out to Sami Zayn. If it did, it happened.")).toBeTruthy();
+    // The same two answers as every other row.
+    fireEvent.click(screen.getByText("It happened"));
+    fireEvent.click(screen.getByRole("button", { name: "Record it as done" }));
+    expect(answer.sent).toEqual([{ id: checkout.id, happened: true }]);
+  });
+
   it("names Syndra when Syndra asked by itself", () => {
     renderIt([{ ...PURGE, actor_id: "system:reconcile" }]);
     expect(screen.getByText("Asked by Syndra, bringing accounts in line")).toBeTruthy();

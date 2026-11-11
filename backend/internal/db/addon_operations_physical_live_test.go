@@ -135,9 +135,9 @@ func TestLiveAPhysicalRowWaitsOutTheBoundBeforeTheDesk(t *testing.T) {
 func TestLiveTheUnsettledCallIsNamedAndReadBackByItsSubjectOnly(t *testing.T) {
 	ctx := physicalLive(t)
 	id := sentRow(t, ctx, "item.checkout", "u-kofi", AddonOpDispatching, time.Second)
-	got, at, open, err := UnconfirmedChangeAt(ctx, physTarget, "u-kofi", "item.checkout", 0)
+	got, at, open, err := OpenCall(ctx, physTarget, "u-kofi", "item.checkout")
 	if err != nil || !open || got != id || at.IsZero() {
-		t.Fatalf("UnconfirmedChangeAt %q %v %t %v, want %s open", got, at, open, err, id)
+		t.Fatalf("OpenCall %q %v %t %v, want %s open", got, at, open, err, id)
 	}
 	if _, _, open, _ := UnconfirmedChangeAt(ctx, physTarget, "u-kofi", "item.checkout", AddonUnresolvedGrace); open {
 		t.Error("a call a second old is still in flight under the grace")
@@ -156,7 +156,7 @@ func TestLiveTheUnsettledCallIsNamedAndReadBackByItsSubjectOnly(t *testing.T) {
 	if err != nil || o.Resolution != AddonResolutionHappened || o.About != "item-0001" {
 		t.Fatalf("%+v %v", o, err)
 	}
-	if _, _, open, _ := UnconfirmedChangeAt(ctx, physTarget, "u-kofi", "item.checkout", 0); open {
+	if _, _, open, _ := OpenCall(ctx, physTarget, "u-kofi", "item.checkout"); open {
 		t.Error("a settled call is still unsettled")
 	}
 }
@@ -251,6 +251,43 @@ func TestLiveAnyOpenPhysicalRowRefusesTheNext(t *testing.T) {
 	}
 	if _, err := begin("item.checkout", "u-kofi", true); !errors.As(err, &open) || open.OperationID != unclaimed {
 		t.Errorf("an unclaimed row (about to be sent) did not refuse: %v", err)
+	}
+}
+
+// A crash between record and claim leaves a row never sent. The member's page
+// shows it as unsettled and the next confirm is refused, naming the same row;
+// once the unsent settle closes it as unreached, neither does.
+func TestLiveAnUnclaimedRowIsUnsettledOnThePageAndRefusesTheNext(t *testing.T) {
+	ctx := physicalLive(t)
+	begin := func() (string, error) {
+		return BeginAddonOperation(ctx, AddonOperationParams{Target: physTarget, Operation: "item.checkout",
+			ActorID: "u-kofi", SubjectID: "u-kofi", Physical: true})
+	}
+	unclaimed, err := begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	shown, at, found, err := OpenCall(ctx, physTarget, "u-kofi", "item.checkout")
+	if err != nil || !found || shown != unclaimed {
+		t.Fatalf("the page shows %q %t %v, want the unclaimed %s", shown, found, err, unclaimed)
+	}
+	var open *OpenCallError
+	if _, err := begin(); !errors.As(err, &open) || open.OperationID != shown || !open.SentAt.Equal(at) {
+		t.Fatalf("the next confirm: %v, want refused naming %s sent %v", err, shown, at)
+	}
+
+	if _, err := PG.Exec(ctx, `UPDATE addon_operations SET created_at = NOW() - $2::interval WHERE id = $1`,
+		unclaimed, (2 * AddonUnresolvedGrace).String()); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := SettleUnclaimedAddonOperations(ctx, physTarget, AddonUnresolvedGrace); err != nil || n != 1 {
+		t.Fatalf("settled %d %v", n, err)
+	}
+	if _, _, found, _ := OpenCall(ctx, physTarget, "u-kofi", "item.checkout"); found {
+		t.Error("an unreached row is still unsettled on the page")
+	}
+	if _, err := begin(); err != nil {
+		t.Errorf("an unreached row still refused: %v", err)
 	}
 }
 

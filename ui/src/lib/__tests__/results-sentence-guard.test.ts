@@ -53,4 +53,13 @@ describe("a sentence in a results renderer is refused", () => {
   it("names where the sentence goes", async () => {
     expect((await rule(SENTENCES["single-quoted sentence"]))[0].message).toContain("results/copy.ts");
   });
+
+  // addon-contract 6c: the same guard holds the member's actions (copy guide section 14).
+  it("refuses a sentence in an actions renderer, and allows it in actions/copy.ts", async () => {
+    const code = SENTENCES["single-quoted sentence"];
+    expect((await rule(code, "src/components/actions/Mutant.tsx")).length).toBeGreaterThan(0);
+    expect((await rule(SENTENCES["aria-label text"], "src/components/actions/Mutant.tsx")).length).toBeGreaterThan(0);
+    expect(await rule(code, "src/components/actions/copy.ts")).toEqual([]);
+    expect((await rule(code, "src/components/actions/Mutant.tsx"))[0].message).toContain("actions/copy.ts");
+  });
 });

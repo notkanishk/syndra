@@ -39,6 +39,7 @@ type actionHarness struct {
 	confirms  []addonop.Request
 	result    addonop.Result
 	resultErr error
+	open      time.Time // when the subject's open call was sent; zero for none
 }
 
 func stubMemberAction(t *testing.T) *actionHarness {
@@ -47,10 +48,13 @@ func stubMemberAction(t *testing.T) *actionHarness {
 		preview: addons.ReadReply{Operation: "item.checkout", Schema: "common/records.json", Results: true,
 			Outcome: addons.OutcomeSucceeded, Body: []byte(recordsReply)}}
 	stubMyStorage(t, h.storageHarness)
-	resolve, ops, preview, dispatch := addonsResolveOperation, addonsOperations, addonopPreview, svcDispatchOperation
+	resolve, ops, preview, dispatch, open := addonsResolveOperation, addonsOperations, addonopPreview, svcDispatchOperation, dbOpenCall
 	t.Cleanup(func() {
-		addonsResolveOperation, addonsOperations, addonopPreview, svcDispatchOperation = resolve, ops, preview, dispatch
+		addonsResolveOperation, addonsOperations, addonopPreview, svcDispatchOperation, dbOpenCall = resolve, ops, preview, dispatch, open
 	})
+	dbOpenCall = func(context.Context, string, string, string) (string, time.Time, bool, error) {
+		return "op-open", h.open, !h.open.IsZero(), nil
+	}
 	addonsResolveOperation = func(string, string) (addons.EffectiveOperation, error) { return h.op, h.opErr }
 	addonsOperations = func(string) []addons.EffectiveOperation { return []addons.EffectiveOperation{h.op} }
 	addonopPreview = func(_ context.Context, req addonop.Request) (addons.ReadReply, error) {
@@ -250,13 +254,29 @@ type pollHarness struct {
 	answerEr error
 	asked    []string
 	resolved map[string]bool
+	unsent   int // SettleUnclaimedAddonOperations calls
 }
 
 func stubPoll(t *testing.T) *pollHarness {
 	t.Helper()
 	p := &pollHarness{rows: map[string]db.AddonOperation{}, resolved: map[string]bool{}}
-	byID, ask, resolve := dbAddonOperationByID, addonsCallAnswer, dbResolveAddonOperation
-	t.Cleanup(func() { dbAddonOperationByID, addonsCallAnswer, dbResolveAddonOperation = byID, ask, resolve })
+	byID, ask, resolve, unsent := dbAddonOperationByID, addonsCallAnswer, dbResolveAddonOperation, dbSettleUnclaimedAddonOperations
+	t.Cleanup(func() {
+		dbAddonOperationByID, addonsCallAnswer, dbResolveAddonOperation, dbSettleUnclaimedAddonOperations = byID, ask, resolve, unsent
+	})
+	// The table's own rule: an unclaimed dispatching row past the grace is unreached.
+	dbSettleUnclaimedAddonOperations = func(_ context.Context, target string, grace time.Duration) (int64, error) {
+		p.unsent++
+		var n int64
+		for id, o := range p.rows {
+			if o.Target == target && o.ClaimedAt == nil && o.Status == db.AddonOpDispatching && time.Since(o.CreatedAt) > grace {
+				o.Status = db.AddonOpUnreached
+				p.rows[id] = o
+				n++
+			}
+		}
+		return n, nil
+	}
 	dbAddonOperationByID = func(_ context.Context, target, subject, id string) (db.AddonOperation, error) {
 		o, ok := p.rows[id]
 		if !ok || o.SubjectID != subject || o.Target != target {
@@ -366,6 +386,43 @@ func TestTheMemberPollSettlesFromTheAddonsRecord(t *testing.T) {
 	}
 }
 
+// A record a crash left unclaimed was never sent. The member's page shows it
+// as checking (it may be about to go), and the poll settles it as the
+// operator's list does: unreached once past the grace, so not done. /calls is
+// never asked about a call that never left.
+func TestTheMemberPollSettlesAnUnsentCallAsUnreached(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		ago   time.Duration
+		state string
+	}{
+		{"young", time.Second, "checking"},
+		{"past the grace", unresolvedGrace + time.Minute, "not_done"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := stubPoll(t)
+			p.rows[opID] = db.AddonOperation{ID: opID, Target: "truenas", Operation: "item.checkout", SubjectID: "u1",
+				Status: db.AddonOpDispatching, CreatedAt: time.Now().Add(-tc.ago)}
+			rr, out := poll(t, opID)
+			if rr.Code != 200 || out["state"] != tc.state {
+				t.Fatalf("%d %s, want %s", rr.Code, rr.Body.String(), tc.state)
+			}
+			if p.unsent != 1 || len(p.asked) != 0 || len(p.resolved) != 0 {
+				t.Errorf("unsent settles %d, asked %v, resolved %v", p.unsent, p.asked, p.resolved)
+			}
+		})
+	}
+	// A sent row is the add-on's to settle, never Syndra's unreached.
+	p := stubPoll(t)
+	sent := time.Now().Add(-time.Hour)
+	p.rows[opID] = db.AddonOperation{ID: opID, Target: "truenas", Operation: "item.checkout", SubjectID: "u1",
+		Status: db.AddonOpIndeterminate, CreatedAt: sent, ClaimedAt: &sent}
+	p.answer = addons.Settlement{State: addons.CallInDoubt}
+	if poll(t, opID); p.unsent != 0 {
+		t.Errorf("a sent row went to the unsent settle")
+	}
+}
+
 // The operator's list takes the same path first. recorded settles any row as
 // happened. unknown settles only a physical row sent within
 // constants.call_memory as not happened: a non-physical row's add-on may keep
@@ -431,9 +488,9 @@ func TestTheMemberViewOffersTheActionAndItsUnsettledCall(t *testing.T) {
 		t.Fatalf("actions %+v unsettled %+v", view.Actions, view.Unsettled)
 	}
 
-	h.unconfirmed = time.Now().Add(-addons.InDoubtBound - time.Minute)
+	h.open = time.Now().Add(-addons.InDoubtBound - time.Minute)
 	view, _ = describeMyTarget(r, "truenas", "u1")
-	if view.Unsettled == nil || view.Unsettled.ID != "op-unconfirmed" || view.Unsettled.State != "ask_desk" {
+	if view.Unsettled == nil || view.Unsettled.ID != "op-open" || view.Unsettled.State != "ask_desk" {
 		t.Errorf("unsettled %+v", view.Unsettled)
 	}
 

@@ -54,6 +54,7 @@ const (
 var (
 	addonopPreview         = addonop.Preview
 	dbAddonOperationByID   = db.AddonOperationByID
+	dbOpenCall             = db.OpenCall
 	addonsResolveOperation = addons.ResolveOperation
 	addonsViewOf           = addons.ViewOf
 	// addonsOperations is a target's effective operations, none when it is
@@ -290,6 +291,18 @@ func handleMemberActionStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := map[string]any{"operation": o.ID, "sent_at": o.SentAt()}
+	if !o.Dispatched() && o.Unresolved() && o.Resolution == "" {
+		// Never sent: settled as the operator's list settles it, unreached
+		// once past the grace, so a crash between record and claim does not
+		// leave the member checking a call that never left.
+		if n, err := dbSettleUnclaimedAddonOperations(r.Context(), target, unresolvedGrace); err != nil {
+			log.Printf("[MY-ACTION] could not settle unsent records on %s: %v (non-fatal)", target, err)
+		} else if n > 0 {
+			if again, err := dbAddonOperationByID(r.Context(), target, subject, id); err == nil {
+				o = again
+			}
+		}
+	}
 	if o.Dispatched() && o.Unresolved() && o.Resolution == "" {
 		settled, s, _ := settleByCall(r.Context(), o)
 		if settled {
@@ -374,7 +387,7 @@ func memberActions(r *http.Request, target, subject string) ([]myAction, *myUnse
 			a.Params = append(a.Params, myParamSpec{Name: p.Name, Type: p.Type, Required: p.Required, Format: p.Format})
 		}
 		actions = append(actions, a)
-		id, at, open, err := dbUnconfirmedChangeAt(r.Context(), target, subject, op.ID, 0)
+		id, at, open, err := dbOpenCall(r.Context(), target, subject, op.ID)
 		if err != nil {
 			log.Printf("[MY-ACTION] could not read %s's last %s on %s: %v (non-fatal)", subject, op.ID, target, err)
 			continue

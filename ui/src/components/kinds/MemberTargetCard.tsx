@@ -1,5 +1,6 @@
 "use client";
 
+import { MemberActions } from "@/components/actions/MemberAction";
 import { MEMBER } from "@/components/results/copy";
 import { Reads } from "@/components/results/ReadResult";
 import { StorageMemberCard } from "@/components/kinds/storage/MyStorage";
@@ -78,6 +79,7 @@ export function CoreMemberCard({ view, untitled = false }: CardProps) {
         )}
       </CardRow>
       <Reads reads={view.reads} name={name} reader={MEMBER} />
+      <MemberActions view={view} />
     </Card>
   );
 }
