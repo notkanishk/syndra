@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -194,12 +195,21 @@ func loadConfig() (config, error) {
 	return c, nil
 }
 
+// statsZonePattern is the manifest schema's stats_zone pattern (an IANA
+// Area/Location, or UTC), held equal to it by TestTheZonePatternIsTheSchemas:
+// a TZ the manifest could not carry is refused at startup, not served.
+var statsZonePattern = regexp.MustCompile(`^(UTC|[A-Z][A-Za-z_]*(/[A-Za-z0-9_+-]+)+)$`)
+
 // loadZone is TZ as a zone (POSIX allows a leading colon); unset is UTC, which
-// is what the process's clock then reads.
+// is what the process's clock then reads. A legacy name tzdb still links
+// (Singapore, EST5EDT) is refused: the manifest's stats_zone cannot carry it.
 func loadZone(tz string) (*time.Location, error) {
 	tz = strings.TrimPrefix(strings.TrimSpace(tz), ":")
 	if tz == "" {
 		return time.UTC, nil
+	}
+	if !statsZonePattern.MatchString(tz) {
+		return nil, fmt.Errorf("TZ=%q is not an IANA Area/Location zone or UTC (stats_zone in the manifest)", tz)
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {

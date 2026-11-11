@@ -5,7 +5,10 @@ fixture that changed. This file lives above both majors because it spans them.
 
 ## Feature `stats` served by the add-ons, in makerspace days (slice 6d-1, 12 Nov 2026)
 
-Additive within major 2. The TrueNAS add-on and the reference declare
+Additive within major 2, but for two tightenings of the schema: `against`
+is allowed only on a `per_subject` gauge with no dimensions, and
+`stats_zone` is required with the feature. Both are harmless, because no
+add-on served `stats` before. The TrueNAS add-on and the reference declare
 `stats` and answer `GET /stats`; Syndra does not collect it yet (6d-2): a
 backend before then ignores `metrics` and `stats_zone` and never calls
 `/stats`, so the add-on may deploy first. Every bucket is a calendar day in
@@ -15,7 +18,8 @@ the manifest's `stats_zone` (owner ruling O1), not a UTC day.
   `x-feature: stats`, required with the feature) and allows `against` only
   on a `per_subject` gauge with no dimensions (ruling O3); `stats.json`'s
   descriptions say a bucket starts at a midnight in `stats_zone` and ends at
-  the next.
+  the next, a day's midnight being its first instant (where a DST change
+  skips 00:00, the instant the clocks resume).
 - Registries: `features.json` lists `stats_zone` under `stats`.
 - Fixtures: `stats.json` in `+05:30` midnights, points in keyset order,
   `next_cursor` the last key; new `stats_storage.json` (TrueNAS

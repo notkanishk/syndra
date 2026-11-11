@@ -26,57 +26,58 @@ import (
 type Defect string
 
 const (
-	IgnoresFingerprint        Defect = "ignores-fingerprint"         // applies over a wrong fingerprint
-	CreatesOnWithdraw         Defect = "creates-on-withdraw"         // a withdraw-only apply creates an account
-	EchoesSecret              Defect = "echoes-secret"               // password.set repeats the password
-	ReplaysAfterFingerprint   Defect = "replays-after-fingerprint"   // checks the fingerprint before the replay
-	RemembersRefusal          Defect = "remembers-refusal"           // records every non-2xx reply
-	RemembersPlanStale        Defect = "remembers-plan-stale"        // records a 409 PLAN_STALE only
-	OmitsTruncated            Defect = "omits-truncated"             // /subjects carries no truncated
-	CurrentFromMirror         Defect = "current-from-mirror"         // says current: true from a mirror
-	AcceptsAlteredQuery       Defect = "accepts-altered-query"       // also accepts a MAC over the path alone
-	LimitIgnoresUnlimited     Defect = "limit-ignores-unlimited"     // max("0", 5 GiB) is 5 GiB
-	WithdrawTouchesMembership Defect = "withdraw-touches-membership" // turning the account off empties memberships
-	WithdrawStripsManaged     Defect = "withdraw-strips-managed"     // turning it off drops the values Syndra gave
-	NumericAccountID          Defect = "numeric-account-id"          // account_id as a JSON number
-	FailsAfterCreate          Defect = "fails-after-create"          // creates the account, then answers 500
-	LogNeverMoves             Defect = "log-never-moves"             // health.log_records stays 0
-	CommitsLate               Defect = "commits-late"                // a creating apply commits 300 ms after it arrives
-	RebindsSubject            Defect = "rebinds-subject"             // an apply to an existing account rebinds its subject to another
-	AdoptsExisting            Defect = "adopts-existing"             // a create answers with an account that was already there
-	BindsOnWithdraw           Defect = "binds-on-withdraw"           // a withdraw for an unbound subject binds and disables an existing account
-	IgnoresReadOnly           Defect = "ignores-read-only"           // accepts read_only and stays active
-	OperationNamesOther       Defect = "operation-names-other"       // password.set answers with another account's id
-	RebindsOnOperation        Defect = "rebinds-on-operation"        // a password.set rebinds its subject to another account
-	PlanForgetsAccount        Defect = "plan-forgets-account"        // a plan for an existing account names none
-	CreateAnswersMember       Defect = "create-answers-member"       // a create answers with a new member's account, not one of its own
-	RebindsQuietly            Defect = "rebinds-quietly"             // an apply to an existing account rebinds its subject, and plans then name no account
-	CreateOmitsAccount        Defect = "create-omits-account"        // the create makes the account and answers 200 naming none
-	LimitEmptyClears          Defect = "limit-empty-clears"          // a limit given [] is cleared
-	LogHeadEmpty              Defect = "log-head-empty"              // health.log_head is "" until the first record
-	ReadsTakeCallID           Defect = "reads-take-call-id"          // health.get is deduplicated on call_id like a write
-	StateShowsUnlisted        Defect = "state-shows-unlisted"        // /subjects lists lobby, which /values leaves out
-	ResultOffSchema           Defect = "result-off-schema"           // holdings.list answers a record with no label (with results)
-	ResultInPocket            Defect = "result-in-pocket"            // holdings.list answers under a pocket of its own, no result (with results)
-	CachedAsCurrent           Defect = "cached-as-current"           // a mirror answer says current: true, no stale (with freshness)
-	ReadsPerRequest           Defect = "reads-per-request"           // no collapsing; the cooldown runs from a read's end (with freshness)
-	CooldownIgnored           Defect = "cooldown-ignored"            // every fresh read reads the app (with freshness)
-	PreviewRecorded           Defect = "preview-recorded"            // a checkout preview writes a log record (with results, calls)
-	ReexecutesInDoubt         Defect = "reexecutes-in-doubt"         // a checkout runs while an earlier one is in doubt (with results, calls)
-	CheckoutUnserialised      Defect = "checkout-unserialised"       // no per-subject lock, a pause between the checks and the loan (with results, calls)
-	NoChangeAsSucceeded       Defect = "no-change-as-succeeded"      // an item already held answers succeeded and logs (with results, calls)
-	CallsEchoParams           Defect = "calls-echo-params"           // a call keeps its params, and /calls answers them (with calls)
-	StatsUndeclaredDimension  Defect = "stats-undeclared-dimension"  // every point carries a dimension the manifest does not declare (with stats)
-	StatsLocalNameSubject     Defect = "stats-local-name-subject"    // a per-person point names the account id, not the subject (with stats)
-	StatsZeroForGap           Defect = "stats-zero-for-gap"          // a zero point inside each window it could not observe (with stats)
-	StatsWatermarkAhead       Defect = "stats-watermark-ahead"       // the watermark is tomorrow, past a day still running (with stats)
-	StatsSubjectsAboveTotal   Defect = "stats-subjects-above-total"  // a total below its people: the sum less one, the largest less one (with stats)
-	StatsSinceIgnored         Defect = "stats-since-ignored"         // answers from the start of the buffer whatever since says (with stats)
-	StatsFinalMoves           Defect = "stats-final-moves"           // a final point's value changes with every read (with stats)
-	StatsUnknownMetricOK      Defect = "stats-unknown-metric-ok"     // an undeclared metric is 200 with nothing in it (with stats)
-	StatsPageOverlap          Defect = "stats-page-overlap"          // next_cursor names the second-last point, so a page repeats one (with stats)
-	StatsNoBufferGap          Defect = "stats-no-buffer-gap"         // the window the buffer no longer holds has no gap (with stats)
-	StatsTotalMissing         Defect = "stats-total-missing"         // a day with per-person points has no total (with stats)
+	IgnoresFingerprint        Defect = "ignores-fingerprint"          // applies over a wrong fingerprint
+	CreatesOnWithdraw         Defect = "creates-on-withdraw"          // a withdraw-only apply creates an account
+	EchoesSecret              Defect = "echoes-secret"                // password.set repeats the password
+	ReplaysAfterFingerprint   Defect = "replays-after-fingerprint"    // checks the fingerprint before the replay
+	RemembersRefusal          Defect = "remembers-refusal"            // records every non-2xx reply
+	RemembersPlanStale        Defect = "remembers-plan-stale"         // records a 409 PLAN_STALE only
+	OmitsTruncated            Defect = "omits-truncated"              // /subjects carries no truncated
+	CurrentFromMirror         Defect = "current-from-mirror"          // says current: true from a mirror
+	AcceptsAlteredQuery       Defect = "accepts-altered-query"        // also accepts a MAC over the path alone
+	LimitIgnoresUnlimited     Defect = "limit-ignores-unlimited"      // max("0", 5 GiB) is 5 GiB
+	WithdrawTouchesMembership Defect = "withdraw-touches-membership"  // turning the account off empties memberships
+	WithdrawStripsManaged     Defect = "withdraw-strips-managed"      // turning it off drops the values Syndra gave
+	NumericAccountID          Defect = "numeric-account-id"           // account_id as a JSON number
+	FailsAfterCreate          Defect = "fails-after-create"           // creates the account, then answers 500
+	LogNeverMoves             Defect = "log-never-moves"              // health.log_records stays 0
+	CommitsLate               Defect = "commits-late"                 // a creating apply commits 300 ms after it arrives
+	RebindsSubject            Defect = "rebinds-subject"              // an apply to an existing account rebinds its subject to another
+	AdoptsExisting            Defect = "adopts-existing"              // a create answers with an account that was already there
+	BindsOnWithdraw           Defect = "binds-on-withdraw"            // a withdraw for an unbound subject binds and disables an existing account
+	IgnoresReadOnly           Defect = "ignores-read-only"            // accepts read_only and stays active
+	OperationNamesOther       Defect = "operation-names-other"        // password.set answers with another account's id
+	RebindsOnOperation        Defect = "rebinds-on-operation"         // a password.set rebinds its subject to another account
+	PlanForgetsAccount        Defect = "plan-forgets-account"         // a plan for an existing account names none
+	CreateAnswersMember       Defect = "create-answers-member"        // a create answers with a new member's account, not one of its own
+	RebindsQuietly            Defect = "rebinds-quietly"              // an apply to an existing account rebinds its subject, and plans then name no account
+	CreateOmitsAccount        Defect = "create-omits-account"         // the create makes the account and answers 200 naming none
+	LimitEmptyClears          Defect = "limit-empty-clears"           // a limit given [] is cleared
+	LogHeadEmpty              Defect = "log-head-empty"               // health.log_head is "" until the first record
+	ReadsTakeCallID           Defect = "reads-take-call-id"           // health.get is deduplicated on call_id like a write
+	StateShowsUnlisted        Defect = "state-shows-unlisted"         // /subjects lists lobby, which /values leaves out
+	ResultOffSchema           Defect = "result-off-schema"            // holdings.list answers a record with no label (with results)
+	ResultInPocket            Defect = "result-in-pocket"             // holdings.list answers under a pocket of its own, no result (with results)
+	CachedAsCurrent           Defect = "cached-as-current"            // a mirror answer says current: true, no stale (with freshness)
+	ReadsPerRequest           Defect = "reads-per-request"            // no collapsing; the cooldown runs from a read's end (with freshness)
+	CooldownIgnored           Defect = "cooldown-ignored"             // every fresh read reads the app (with freshness)
+	PreviewRecorded           Defect = "preview-recorded"             // a checkout preview writes a log record (with results, calls)
+	ReexecutesInDoubt         Defect = "reexecutes-in-doubt"          // a checkout runs while an earlier one is in doubt (with results, calls)
+	CheckoutUnserialised      Defect = "checkout-unserialised"        // no per-subject lock, a pause between the checks and the loan (with results, calls)
+	NoChangeAsSucceeded       Defect = "no-change-as-succeeded"       // an item already held answers succeeded and logs (with results, calls)
+	CallsEchoParams           Defect = "calls-echo-params"            // a call keeps its params, and /calls answers them (with calls)
+	StatsUndeclaredDimension  Defect = "stats-undeclared-dimension"   // every point carries a dimension the manifest does not declare (with stats)
+	StatsLocalNameSubject     Defect = "stats-local-name-subject"     // a per-person point names the account id, not the subject (with stats)
+	StatsZeroForGap           Defect = "stats-zero-for-gap"           // a zero point inside each window it could not observe (with stats)
+	StatsWatermarkAhead       Defect = "stats-watermark-ahead"        // the watermark is tomorrow, past a day still running (with stats)
+	StatsSubjectsAboveTotal   Defect = "stats-subjects-above-total"   // a total below its people: the sum less one, the largest less one (with stats)
+	StatsSinceIgnored         Defect = "stats-since-ignored"          // answers from the start of the buffer whatever since says (with stats)
+	StatsFinalMoves           Defect = "stats-final-moves"            // a final point's value changes with every read (with stats)
+	StatsUnknownMetricOK      Defect = "stats-unknown-metric-ok"      // an undeclared metric is 200 with nothing in it (with stats)
+	StatsPageOverlap          Defect = "stats-page-overlap"           // next_cursor names the second-last point, so a page repeats one (with stats)
+	StatsNoBufferGap          Defect = "stats-no-buffer-gap"          // the window the buffer no longer holds has no gap (with stats)
+	StatsTotalMissing         Defect = "stats-total-missing"          // a day with per-person points has no total (with stats)
+	StatsDimensionNamesPerson Defect = "stats-dimension-names-person" // the mk4-a printer is named for the first account's username (with stats)
 )
 
 // Defects lists every defect, for the kit's self-tests and the binary's help.
@@ -89,7 +90,7 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	CachedAsCurrent, ReadsPerRequest, CooldownIgnored, PreviewRecorded, ReexecutesInDoubt, CheckoutUnserialised,
 	NoChangeAsSucceeded, CallsEchoParams, StatsUndeclaredDimension, StatsLocalNameSubject, StatsZeroForGap,
 	StatsWatermarkAhead, StatsSubjectsAboveTotal, StatsSinceIgnored, StatsFinalMoves, StatsUnknownMetricOK,
-	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing}
+	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing, StatsDimensionNamesPerson}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -502,6 +503,9 @@ func (a *Addon) statsDeviate(metric string, doc map[string]any) {
 			p["value"] = whole - 1
 		case p["subject"] != nil && d[StatsLocalNameSubject]:
 			p["subject"] = a.bindings[p["subject"].(string)]
+		}
+		if dims, _ := p["dimensions"].(map[string]any); d[StatsDimensionNamesPerson] && dims["printer"] == "mk4-a" && len(a.accounts) > 0 {
+			dims["printer"] = a.accounts[slices.Min(slices.Collect(maps.Keys(a.accounts)))].username
 		}
 		if d[StatsUndeclaredDimension] {
 			dims, _ := p["dimensions"].(map[string]any)

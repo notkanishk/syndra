@@ -96,7 +96,7 @@ func TestTheStatsChecksCatchWhatTheDefectsCannotServe(t *testing.T) {
 		{"usage by nobody it names", "stats.unbound", false, "/stats", func(doc map[string]any) {
 			doc["unbound"] = map[string]any{"accounts": 0}
 		}},
-		{"a dimension naming a person", "stats.no-people", true, "/stats", eachPoint(func(p map[string]any) {
+		{"a dimension naming an account id", "stats.no-people.ids", true, "/stats", eachPoint(func(p map[string]any) {
 			if dims, ok := p["dimensions"].(map[string]any); ok && dims["printer"] == "mk4-a" {
 				dims["printer"] = "1001" // the kit's own account, once it exists
 			}
@@ -158,6 +158,52 @@ func TestTheTotalsRuleIsTheInstruments(t *testing.T) {
 			statsSetup{zone: zone, since: r.watermark.Add(-time.Hour), locals: map[string]bool{}})
 		if failed := len(k.at("stats.totals").fails) > 0; failed != tc.fails {
 			t.Errorf("%s: stats.totals failed %v (%v), want %v", tc.name, failed, k.at("stats.totals").fails, tc.fails)
+		}
+	}
+}
+
+// A day starts at its first instant: 01:00 on a day whose 00:00 a
+// daylight-saving change skips (America/Santiago, 6 Sep 2026), and the kit
+// accepts it as the day's midnight, as it does a 25-hour day; the previous
+// day's 23:00, what Go makes of the missing 00:00, it refuses.
+func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
+	zone, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pt := func(start, end string) map[string]any {
+		return map[string]any{"start": start, "end": end, "value": json.Number("2")}
+	}
+	for _, tc := range []struct {
+		name  string
+		point map[string]any
+		fails bool
+	}{
+		{"the day before the change", pt("2026-09-05T00:00:00-04:00", "2026-09-06T01:00:00-03:00"), false},
+		{"the day that starts at 01:00", pt("2026-09-06T01:00:00-03:00", "2026-09-07T00:00:00-03:00"), false},
+		{"a 25-hour day", pt("2026-04-04T00:00:00-03:00", "2026-04-05T00:00:00-04:00"), false},
+		{"the previous day's 23:00", pt("2026-09-05T23:00:00-04:00", "2026-09-07T00:00:00-03:00"), true},
+	} {
+		k, err := newKit(context.Background(), config("https://addon.example.org", false))
+		if err != nil {
+			t.Fatal(err)
+		}
+		k.m = &manifest{statsZone: "America/Santiago"}
+		r := statsRead{first: map[string]any{"unbound": map[string]any{"accounts": json.Number("0")}, "watermark": "2026-09-06T01:00:00-03:00",
+			"taken_at": "2026-09-06T15:00:00Z", "gaps": []any{map[string]any{"start": "2026-09-06T01:00:00-03:00", "end": "2026-09-07T00:00:00-03:00",
+				"dimensions": map[string]any{"printer": "xl-1"}, "reason": "The xl-1 printer's job log could not be read"}}}}
+		r.watermark, _ = time.Parse(time.RFC3339, "2026-09-06T01:00:00-03:00")
+		r.takeAt, _ = time.Parse(time.RFC3339, "2026-09-06T15:00:00Z")
+		r.points = []map[string]any{tc.point}
+		k.judgeStats(map[string]any{"name": "machine.thing", "instrument": "counter", "dimensions": []any{map[string]any{"name": "printer"}}}, r,
+			statsSetup{zone: zone, since: time.Date(2026, 4, 1, 0, 0, 0, 0, zone), locals: map[string]bool{}})
+		for _, id := range []string{"stats.gaps", "stats.since"} {
+			if fails := k.at(id).fails; len(fails) > 0 {
+				t.Errorf("%s: %s failed: %v", tc.name, id, fails)
+			}
+		}
+		if failed := len(k.at("stats.points").fails) > 0; failed != tc.fails {
+			t.Errorf("%s: stats.points failed %v (%v), want %v", tc.name, failed, k.at("stats.points").fails, tc.fails)
 		}
 	}
 }

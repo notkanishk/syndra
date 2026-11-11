@@ -573,8 +573,7 @@ func TestEveryReadAnswersTheSchemaItsRegistryNames(t *testing.T) {
 	}
 
 	ops, m := opServer(t)
-	m.fakeRPC.audit = `[{"message_timestamp":1700000000,"event":"CONNECT","success":true,"address":"192.0.2.17",` +
-		`"event_data":{"service":"smb","share":"lab","result":{"type":"NTSTATUS","value_parsed":"NT_STATUS_OK"}}}]`
+	m.fakeRPC.audit = recordedConnect
 	m.fakeRPC.health = map[string]string{"system.info": `{"version":"25.04.2"}`, "pool.query": `[{"name":"tank"}]`}
 	for _, tc := range []struct{ id, shares string }{
 		{"activity.get", `[{"name":"lab","audit":{"enable":false}}]`},

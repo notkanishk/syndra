@@ -108,15 +108,25 @@ type statsState struct {
 	failing   bool                             // the last attempt could not read the app
 }
 
+// dayOf is the first instant of the day t falls in: 00:00, or, on a day
+// whose 00:00 a daylight-saving change skips (America/Santiago, 6 Sep 2026),
+// the instant the clocks resume. Go resolves a skipped 00:00 to the previous
+// day's 23:00, so that one case takes the end of the zone period it fell in.
 func dayOf(t time.Time) time.Time {
 	l := t.In(statsZone)
-	return time.Date(l.Year(), l.Month(), l.Day(), 0, 0, 0, 0, statsZone)
+	d := time.Date(l.Year(), l.Month(), l.Day(), 0, 0, 0, 0, statsZone)
+	if d.Day() != l.Day() {
+		_, d = d.ZoneBounds()
+	}
+	return d
 }
 
-// next is the next midnight: a calendar day, never 24 h (a zone with DST has
-// days of 23 and 25 hours).
+// next is the next day's first instant: a calendar day, never 24 h (a zone
+// with DST has days of 23 and 25 hours). Noon is inside the next day
+// whatever the zone does at midnight.
 func next(day time.Time) time.Time {
-	return time.Date(day.Year(), day.Month(), day.Day()+1, 0, 0, 0, 0, statsZone)
+	l := day.In(statsZone)
+	return dayOf(time.Date(l.Year(), l.Month(), l.Day()+1, 12, 0, 0, 0, statsZone))
 }
 
 func stamp3339(t time.Time) string { return t.In(statsZone).Format(time.RFC3339) }

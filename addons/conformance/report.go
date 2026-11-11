@@ -69,7 +69,8 @@ var catalogue = []struct {
 	{id: "stats.unbound", guide: "statistics-get-stats-feature-stats", must: "a per-person point never names a target account by its id or name; a counter total above its people's sum comes with unbound.accounts (feature stats)"},
 	{id: "stats.buffer", guide: "statistics-get-stats-feature-stats", must: "a since older than limits.stats_buffer is answered with a gap with a reason covering that day, and the points still held (feature stats)"},
 	{id: "stats.page-size", guide: "statistics-get-stats-feature-stats", must: "every page fits constants.max_reply_bytes; points come in (start, subject, dimensions) order across pages, none twice and none skipped, and a cursor read again gives the same page (feature stats)"},
-	{id: "stats.no-people", guide: "statistics-get-stats-feature-stats", must: "no dimension value is a target account's id or name: dimensions name resources, never people (advisory: an id may look like a name) (feature stats)", advisory: true},
+	{id: "stats.no-people", guide: "statistics-get-stats-feature-stats", must: "no dimension value is the username of an account /subjects lists: dimensions name resources, never people (feature stats)"},
+	{id: "stats.no-people.ids", guide: "statistics-get-stats-feature-stats", must: "no dimension value is the account_id of an account /subjects lists (advisory: an id may also be a resource's name) (feature stats)", advisory: true},
 	{id: "dangerous-scopes", guide: "2-before-you-write-a-line", must: "the credential holds no scope the kind's denylist names (advisory: the list is self-reported)", advisory: true},
 }
 

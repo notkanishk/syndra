@@ -187,3 +187,54 @@ func TestTheBufferDropsTheOldestAndSaysSo(t *testing.T) {
 		}
 	}
 }
+
+// A day starts at its first instant: 00:00, or 01:00 on a day whose 00:00 a
+// daylight-saving change skips (America/Santiago, 6 Sep 2026); the next day
+// is a calendar day, 23 or 25 hours. A read across both changes finishes,
+// every point one such day.
+func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
+	kolkata := statsZone
+	statsZone, _ = time.LoadLocation("America/Santiago")
+	t.Cleanup(func() { statsZone = kolkata })
+	sep6 := dayOf(time.Date(2026, 9, 6, 12, 0, 0, 0, statsZone))
+	if got := stamp3339(sep6); got != "2026-09-06T01:00:00-03:00" {
+		t.Errorf("6 Sep starts at %s, want 2026-09-06T01:00:00-03:00", got)
+	}
+	if got := next(sep6.AddDate(0, 0, -1)); !got.Equal(sep6) {
+		t.Errorf("the day after 5 Sep starts at %s, want %s", stamp3339(got), stamp3339(sep6))
+	}
+	if h := next(sep6).Sub(sep6); h != 23*time.Hour {
+		t.Errorf("6 Sep is %v long, want 23h", h)
+	}
+	apr4 := dayOf(time.Date(2026, 4, 4, 12, 0, 0, 0, statsZone))
+	if h := next(apr4).Sub(apr4); h != 25*time.Hour {
+		t.Errorf("4 Apr is %v long, want 25h", h)
+	}
+
+	for _, now := range []time.Time{time.Date(2026, 9, 8, 10, 0, 0, 0, statsZone), time.Date(2026, 4, 6, 10, 0, 0, 0, statsZone)} {
+		at := now
+		a := statsAddon(t, nil, &at)
+		since := now.AddDate(0, 0, -10)
+		done := make(chan struct{})
+		go func() { // the first read collects every day through now
+			a.statsRead(httptest.NewRequest(http.MethodGet, "/stats?"+url.Values{"metric": {"machine.jobs"},
+				"since": {since.UTC().Format(time.RFC3339)}}.Encode(), nil), nil)
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("a read at %v never finished", now)
+		}
+		_, points := readAll(t, a, "machine.jobs", since)
+		for _, p := range points {
+			start, _ := time.Parse(time.RFC3339, p.Start)
+			if !start.Equal(dayOf(start)) || p.End != stamp3339(next(start)) {
+				t.Errorf("point %s..%s is not one day", p.Start, p.End)
+			}
+		}
+		if len(points) == 0 {
+			t.Errorf("%v: no points", now)
+		}
+	}
+}

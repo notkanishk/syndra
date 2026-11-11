@@ -58,7 +58,8 @@ func (n *statsNAS) Call(method string, timeout int64, params any) (json.RawMessa
 	slices.SortStableFunc(kept, func(a, b map[string]any) int {
 		return int(a["message_timestamp"].(int64) - b["message_timestamp"].(int64))
 	})
-	off, limit := opts["offset"].(int), opts["limit"].(int)
+	off, _ := opts["offset"].(int)
+	limit := opts["limit"].(int)
 	kept = kept[min(off, len(kept)):min(off+limit, len(kept))]
 	b, _ := json.Marshal(kept)
 	return envelope(string(b)), nil
@@ -92,6 +93,10 @@ func statsServer(t *testing.T) (*server, *statsNAS, *time.Time) {
 		"pool.dataset.get_quota tank/main/home_dir": `[{"id":3051,"used_bytes":900,"quota":5000},{"id":3077,"used_bytes":400}]`,
 	}}
 	nas := &statsNAS{fakeRPC: fake}
+	// The log has kept rows since long before: no day the tests count is
+	// one the NAS has purged.
+	nas.rows = []map[string]any{{"message_timestamp": time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC).Unix(), "event": "AUTHENTICATION",
+		"success": true, "username": "rey_mysterio", "audit_id": "old", "service_data": map[string]any{}}}
 	s := testServer(t, fake)
 	s.nas = newNAS(func() (rpc, error) { return nas, nil }, []string{"25.04"})
 	s.nas.version, s.nas.probed, s.nas.selfName = "25.04.2", true, "syndra"
@@ -323,7 +328,7 @@ func TestAFinalDayNeverChangesAndSinceIsHonoured(t *testing.T) {
 func TestGapsJoinNeverAcrossTheWatermarkOrAShare(t *testing.T) {
 	c := statsClock{zone: kolkata}
 	g := func(day, share string) StatGap {
-		return StatGap{Start: c.stamp(day), End: c.stamp(c.next(day)), Dimensions: map[string]string{"share": share}, Reason: reasonAudited}
+		return StatGap{Start: c.stamp(day), End: c.stamp(nextDayKey(day)), Dimensions: map[string]string{"share": share}, Reason: reasonAudited}
 	}
 	got := mergeGaps([]StatGap{g("2026-11-08", "open"), g("2026-11-11", "scratch"), g("2026-11-09", "open"), g("2026-11-10", "open")}, c.stamp("2026-11-10"))
 	want := []StatGap{
@@ -444,8 +449,8 @@ func TestTheAuditReadIsBoundedAndCatchesUp(t *testing.T) {
 	nas.reads = 0
 	s.collectStatsOnce()
 	first, _, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
-	if nas.reads != 2 {
-		t.Errorf("one run asked the audit log %d times, want at most %d", nas.reads, statsAuditPages)
+	if nas.reads != 1+statsAuditPages { // the oldest row the log keeps, then the pages
+		t.Errorf("one run asked the audit log %d times, want at most 1+%d", nas.reads, statsAuditPages)
 	}
 	if first.Watermark != "2026-11-10T00:00:00+05:30" ||
 		!slices.ContainsFunc(first.Gaps, func(g StatGap) bool { return g.Reason == reasonBehind && g.Start == "2026-11-10T00:00:00+05:30" }) {
@@ -567,5 +572,188 @@ func TestTheCollectorsScheduleAndZoneAreRead(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Error("STATS_COLLECT_EVERY=0 still ran the collector")
+	}
+}
+
+// santiago skips 00:00 on 6 Sep 2026 (the clocks go from 23:59:59 -04 to
+// 01:00 -03) and has a 25-hour 4 Apr 2026.
+var santiago = func() *time.Location { l, _ := time.LoadLocation("America/Santiago"); return l }()
+
+// A day's start is its first instant: 00:00, or 01:00 on a day whose 00:00
+// does not exist; the next day is a calendar day, 23 or 25 hours across a
+// change. The collector's runs across both changes finish and count the
+// day where it is.
+func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
+	c := statsClock{zone: santiago}
+	for day, want := range map[string]string{
+		"2026-09-05": "2026-09-05T00:00:00-04:00",
+		"2026-09-06": "2026-09-06T01:00:00-03:00",
+		"2026-09-07": "2026-09-07T00:00:00-03:00",
+		"2026-04-04": "2026-04-04T00:00:00-03:00",
+		"2026-04-05": "2026-04-05T00:00:00-04:00",
+	} {
+		if got := c.stamp(day); got != want {
+			t.Errorf("%s starts at %s, want %s", day, got, want)
+		}
+	}
+	if h := c.midnight("2026-04-05").Sub(c.midnight("2026-04-04")); h != 25*time.Hour {
+		t.Errorf("4 Apr 2026 in Santiago is %v long, want 25h", h)
+	}
+	if h := c.midnight("2026-09-07").Sub(c.midnight("2026-09-06")); h != 23*time.Hour {
+		t.Errorf("6 Sep 2026 in Santiago is %v long, want 23h", h)
+	}
+
+	for _, tc := range []struct {
+		name            string
+		first, session  time.Time
+		day, end, water string
+	}{
+		{"a skipped midnight", time.Date(2026, 9, 5, 10, 0, 0, 0, santiago), time.Date(2026, 9, 6, 1, 30, 0, 0, santiago),
+			"2026-09-06T01:00:00-03:00", "2026-09-07T00:00:00-03:00", "2026-09-08T00:00:00-03:00"},
+		{"a 25-hour day", time.Date(2026, 4, 3, 10, 0, 0, 0, santiago), time.Date(2026, 4, 5, 3, 30, 0, 0, time.UTC), // 23:30 -04 on 4 Apr, the second time round
+			"2026-04-04T00:00:00-03:00", "2026-04-05T00:00:00-04:00", "2026-04-06T00:00:00-04:00"},
+	} {
+		s, nas, at := statsServer(t)
+		s.stats.zone = santiago
+		run := func(now time.Time) {
+			*at = now
+			done := make(chan struct{})
+			go func() { s.collectStatsOnce(); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("%s: a run at %v never finished", tc.name, now)
+			}
+		}
+		run(tc.first)
+		nas.connect(tc.session, "rey_mysterio", "main", "dst")
+		run(tc.first.AddDate(0, 0, 3))
+		for _, m := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
+			if first, _, _ := allStats(t, s, m, tc.first.Add(-time.Hour)); first.Watermark != tc.water {
+				t.Errorf("%s: %s's watermark %s, want %s", tc.name, m, first.Watermark, tc.water)
+			}
+		}
+		_, points, _ := allStats(t, s, metricSessions, tc.first.Add(-time.Hour))
+		if !slices.ContainsFunc(points, func(p StatPoint) bool {
+			return p.Start == tc.day && p.End == tc.end && p.Subject == "sub-rey" && p.Value == 1
+		}) {
+			t.Errorf("%s: the session is not one day %s..%s: %+v", tc.name, tc.day, tc.end, points)
+		}
+	}
+}
+
+// An outage longer than the NAS keeps its audit log: the days it purged,
+// and the day of the oldest row it kept (part-purged, perhaps), are a final
+// gap, never zeros; counting goes on from the day after.
+func TestAnOutageLongerThanTheLogIsKeptIsAGapNotZeros(t *testing.T) {
+	s, nas, at := statsServer(t)
+	nas.connect(day0.Add(time.Hour), "rey_mysterio", "main", "before")
+	s.collectStatsOnce() // 9 Nov
+	setDown := func(down bool) {
+		nas.mu.Lock()
+		nas.down = down
+		nas.mu.Unlock()
+	}
+	setDown(true)
+	for _, d := range []int{3, 6, 7, 9} { // 12, 15, 16 and 18 Nov
+		nas.connect(day0.AddDate(0, 0, d), "rey_mysterio", "main", fmt.Sprint("s", d))
+	}
+	*at = day0.AddDate(0, 0, 5)
+	s.collectStatsOnce()
+
+	nas.mu.Lock() // the NAS purges its log before 15 Nov 09:00
+	nas.rows = slices.DeleteFunc(nas.rows, func(r map[string]any) bool {
+		return r["message_timestamp"].(int64) < time.Date(2026, 11, 15, 9, 0, 0, 0, kolkata).Unix()
+	})
+	nas.mu.Unlock()
+	setDown(false)
+	s.nas.mu.Lock()
+	s.nas.failures, s.nas.openUntil, s.nas.lastTry = 0, time.Time{}, time.Time{}
+	s.nas.mu.Unlock()
+	*at = day0.AddDate(0, 0, 10) // 19 Nov
+	s.collectStatsOnce()
+
+	first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
+	want := StatGap{Start: "2026-11-09T00:00:00+05:30", End: "2026-11-16T00:00:00+05:30", Reason: reasonPurged}
+	if !slices.ContainsFunc(first.Gaps, func(g StatGap) bool { return sameGap(g, want) }) {
+		t.Errorf("gaps %+v, want the purged days as %+v", first.Gaps, want)
+	}
+	if first.Watermark != "2026-11-19T00:00:00+05:30" {
+		t.Errorf("watermark %s, want the start of today", first.Watermark)
+	}
+	for _, p := range points {
+		if p.Start < want.End {
+			t.Errorf("a point inside the purged window: %+v", p)
+		}
+	}
+	for _, day := range []string{"2026-11-16", "2026-11-18"} {
+		if v, _ := onDay(points, day, "sub-rey", "main"); v != 1 {
+			t.Errorf("%s counted %d after the boundary, want 1: %+v", day, v, points)
+		}
+	}
+}
+
+// A day with more rows than one run may read is a final gap, and the
+// watermark moves past it; it never holds the metric there for ever.
+func TestADayTooBusyToCountIsAGapAndTheWatermarkMoves(t *testing.T) {
+	page, pages := statsAuditPage, statsAuditPages
+	statsAuditPage, statsAuditPages = 2, 1
+	t.Cleanup(func() { statsAuditPage, statsAuditPages = page, pages })
+	s, nas, at := statsServer(t)
+	s.collectStatsOnce() // 9 Nov
+	for i := range 3 {
+		nas.connect(day0.AddDate(0, 0, 1).Add(time.Duration(i)*time.Minute), "rey_mysterio", "main", fmt.Sprint("busy", i))
+	}
+	nas.connect(day0.AddDate(0, 0, 2), "rey_mysterio", "main", "quiet")
+	*at = day0.AddDate(0, 0, 2) // 11 Nov
+	for range 3 {
+		s.collectStatsOnce()
+	}
+	first, points, _ := allStats(t, s, metricSessions, day0.Add(-time.Hour))
+	want := StatGap{Start: "2026-11-10T00:00:00+05:30", End: "2026-11-11T00:00:00+05:30", Reason: reasonOverfull}
+	if first.Watermark != "2026-11-11T00:00:00+05:30" || !slices.ContainsFunc(first.Gaps, func(g StatGap) bool { return sameGap(g, want) }) {
+		t.Errorf("watermark %s, gaps %+v; want 11 Nov and %+v", first.Watermark, first.Gaps, want)
+	}
+	if v, _ := onDay(points, "2026-11-11", "sub-rey", "main"); v != 1 {
+		t.Errorf("the day after the busy one counted %d, want 1: %+v", v, points)
+	}
+}
+
+// A level's unbound accounts are the last run's: an account whose usage is
+// gone by the day's last sample is not unbound that day.
+func TestALevelsUnboundIsTheLastSamples(t *testing.T) {
+	s, nas, _ := statsServer(t)
+	s.collectStatsOnce()
+	for _, m := range []string{metricHomeBytes, metricUsedBytes} {
+		if first, _, _ := allStats(t, s, m, day0.Add(-time.Hour)); first.Unbound.Accounts != 1 {
+			t.Fatalf("%s: unbound.accounts %d, want 1 (Seth)", m, first.Unbound.Accounts)
+		}
+	}
+	nas.fakeRPC.answers["pool.dataset.get_quota tank/main"] = `[{"id":0,"used_bytes":7000},{"id":3051,"used_bytes":1200}]`
+	nas.fakeRPC.answers["pool.dataset.get_quota tank/open"] = `[]`
+	nas.fakeRPC.answers["pool.dataset.get_quota tank/main/home_dir"] = `[{"id":3051,"used_bytes":900,"quota":5000}]`
+	s.collectStatsOnce()
+	for _, m := range []string{metricHomeBytes, metricUsedBytes} {
+		if first, _, _ := allStats(t, s, m, day0.Add(-time.Hour)); first.Unbound.Accounts != 0 {
+			t.Errorf("%s: unbound.accounts %d after Seth's usage went, want 0", m, first.Unbound.Accounts)
+		}
+	}
+}
+
+// The TZ refused at startup is what the manifest's stats_zone refuses.
+func TestTheZonePatternIsTheSchemas(t *testing.T) {
+	schema := v2JSON(t, "schema", "manifest.json")["properties"].(map[string]any)["stats_zone"].(map[string]any)["pattern"]
+	if schema != statsZonePattern.String() {
+		t.Errorf("statsZonePattern %s, the schema's stats_zone pattern %v", statsZonePattern, schema)
+	}
+	for _, legacy := range []string{"Singapore", "EST5EDT", "Local"} {
+		if _, err := loadZone(legacy); err == nil {
+			t.Errorf("TZ=%s, which tzdb links but stats_zone refuses, was accepted", legacy)
+		}
+	}
+	for _, ok := range []string{"UTC", "Etc/GMT+5", "America/Argentina/Buenos_Aires"} {
+		if _, err := loadZone(ok); err != nil {
+			t.Errorf("TZ=%s refused: %v", ok, err)
+		}
 	}
 }

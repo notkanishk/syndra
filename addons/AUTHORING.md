@@ -1304,7 +1304,9 @@ rules the schema cannot express:
   as the quantity means.
 - Each dimension MUST name a **resource, never a person** (a machine, a
   share, a category). Syndra will drop and log a dimension value equal to a
-  subject's `account_id` or name.
+  subject's `account_id` or name. The kit fails a dimension value equal to
+  the username of an account `/subjects` lists, and warns on one equal to
+  an `account_id` (an id may also be a resource's name).
 - `against` names a `limit` field of the same unit, and Syndra then draws the
   gauge as a meter against that person's observed limit. The schema allows
   it only on a `per_subject` gauge with no dimensions: a meter is one series
@@ -1341,8 +1343,11 @@ longer holds these days"), and go on from what it has.
 **A point is the whole day.** A point's `start` MUST be a midnight in
 `stats_zone` and its `end` the next one, both RFC 3339 with the zone's
 offset (`2026-11-07T00:00:00+05:30`); a calendar day, which across a
-daylight-saving change is 23 or 25 hours. A counter point MUST be the
-complete total for that day; a gauge point the day's level. Points are not
+daylight-saving change is 23 or 25 hours. A day's midnight is its first
+instant: 00:00, or, on a day whose 00:00 a change skips, the instant the
+clocks resume (`2026-09-06T01:00:00-03:00` in `America/Santiago`). A
+counter point MUST be the complete total for that day; a gauge point the
+day's level. Points are not
 OpenTelemetry deltas, which add up: a point with the same `(metric,
 dimensions, subject, start)` replaces the one before, so sending partials
 undercounts. They are not cumulative counters either: a good way is to

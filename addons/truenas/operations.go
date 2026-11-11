@@ -716,14 +716,14 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 		rows = rows[:activityLimit]
 	}
 	for _, r := range rows {
-		event := ActivityEvent{
-			At:      time.Unix(r.Timestamp, 0).UTC().Format(time.RFC3339),
-			Event:   r.Event,
-			Success: r.Success,
-			Address: r.Address,
-		}
-		event.Resource, event.Detail = eventDetail(r.EventData)
-		report.Events = append(report.Events, event)
+		report.Events = append(report.Events, ActivityEvent{
+			At:       time.Unix(r.Timestamp, 0).UTC().Format(time.RFC3339),
+			Event:    r.Event,
+			Success:  r.Success,
+			Address:  r.Address,
+			Resource: r.ServiceData.Service,
+			Detail:   eventDetail(r.EventData),
+		})
 	}
 	// Reported whether or not there were events, because the case that matters
 	// is the empty one.
@@ -773,26 +773,25 @@ func decodeAnswer(raw json.RawMessage, into any) error {
 	return json.Unmarshal(trimmed, into)
 }
 
-// eventDetail pulls the two useful things out of a payload whose shape changes
-// with the event type.
+// eventDetail pulls the result out of a payload whose shape changes with the
+// event type. The share is not in it: it is the row's service_data.service
+// (auditRow.ServiceData), for activity.get and the collector alike.
 //
 // Decoded separately from the row so a surprise in here costs one field rather
-// than the whole read. An SMB AUTHENTICATION row carries no share and a CONNECT
-// row does; both are ordinary, and neither may make the other fail.
-func eventDetail(raw json.RawMessage) (share, detail string) {
+// than the whole read.
+func eventDetail(raw json.RawMessage) string {
 	if len(raw) == 0 {
-		return "", ""
+		return ""
 	}
 	var data struct {
-		Share  string `json:"share"`
 		Result struct {
 			Parsed string `json:"value_parsed"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(raw, &data); err != nil {
-		return "", ""
+		return ""
 	}
-	return data.Share, statusToken(data.Result.Parsed)
+	return statusToken(data.Result.Parsed)
 }
 
 // shareAudit is one share's audit settings.

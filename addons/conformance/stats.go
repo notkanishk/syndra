@@ -25,7 +25,7 @@ import (
 // its writes, when its own account may have usage.
 
 var statsChecks = []string{"stats.descriptors", "stats.points", "stats.totals", "stats.since", "stats.idempotent",
-	"stats.gaps", "stats.unbound", "stats.buffer", "stats.page-size", "stats.no-people"}
+	"stats.gaps", "stats.unbound", "stats.buffer", "stats.page-size", "stats.no-people", "stats.no-people.ids"}
 
 // statsMaxPages bounds one read: a cursor that never ends is a failure, not a
 // kit that never ends.
@@ -45,6 +45,7 @@ type statsSetup struct {
 	zone   *time.Location
 	since  time.Time
 	locals map[string]bool // every target account id and name /subjects lists, but the kit's own subject
+	names  map[string]bool // every username /subjects lists, the kit's own account's included
 }
 
 func (k *kit) stats() {
@@ -159,12 +160,16 @@ func (k *kit) statsSetup(c *check) (statsSetup, string) {
 		}
 	}
 	set.zone, set.since = zone, time.Now().In(zone).AddDate(0, 0, -days)
-	set.locals = map[string]bool{}
+	set.locals, set.names = map[string]bool{}, map[string]bool{}
 	for _, s := range objects(k.send(request{method: http.MethodGet, target: "/subjects"}).doc()["subjects"]) {
-		set.locals[str(s, "account_id")], set.locals[str(s, "username")] = true, true
+		set.locals[str(s, "account_id")], set.locals[str(s, "username")], set.names[str(s, "username")] = true, true, true
 	}
 	delete(set.locals, "")
-	delete(set.locals, k.cfg.Subject) // a subject id the kit knows is Syndra's: its own
+	delete(set.names, "")
+	// A subject id the kit knows is Syndra's: its own, so a point may carry
+	// it. A dimension may not, even where the add-on named the account after
+	// it (the reference does).
+	delete(set.locals, k.cfg.Subject)
 	return set, ""
 }
 
@@ -255,14 +260,25 @@ func canonical(dims any) string {
 	return "{}"
 }
 
+// midnight is the first instant of the day t falls in: 00:00, or, on a day
+// whose 00:00 a daylight-saving change skips (America/Santiago, 6 Sep 2026),
+// the instant the clocks resume. Go resolves a skipped 00:00 to the previous
+// day's 23:00, so that one case takes the end of the zone period it fell in.
 func midnight(t time.Time, zone *time.Location) time.Time {
 	l := t.In(zone)
-	return time.Date(l.Year(), l.Month(), l.Day(), 0, 0, 0, 0, zone)
+	d := time.Date(l.Year(), l.Month(), l.Day(), 0, 0, 0, 0, zone)
+	if d.Day() != l.Day() {
+		_, d = d.ZoneBounds()
+	}
+	return d
 }
 
+// nextMidnight is the next day's first instant: a calendar day, 23 or 25
+// hours across a change. Noon is inside the next day whatever the zone does
+// at midnight.
 func nextMidnight(t time.Time, zone *time.Location) time.Time {
 	l := t.In(zone)
-	return time.Date(l.Year(), l.Month(), l.Day()+1, 0, 0, 0, 0, zone)
+	return midnight(time.Date(l.Year(), l.Month(), l.Day()+1, 12, 0, 0, 0, zone), zone)
 }
 
 func value(v any) float64 { n, _ := v.(json.Number); f, _ := n.Float64(); return f }
@@ -275,7 +291,7 @@ func (k *kit) judgeStats(m map[string]any, r statsRead, set statsSetup) {
 		declared[str(d, "name")] = true
 	}
 	pts, totals, gaps := k.at("stats.points"), k.at("stats.totals"), k.at("stats.gaps")
-	unbound, people := k.at("stats.unbound"), k.at("stats.no-people")
+	unbound, people, ids := k.at("stats.unbound"), k.at("stats.no-people"), k.at("stats.no-people.ids")
 	day := func(c *check, what string, o map[string]any) (time.Time, time.Time, bool) {
 		start, err1 := time.Parse(time.RFC3339, str(o, "start"))
 		end, err2 := time.Parse(time.RFC3339, str(o, "end"))
@@ -287,7 +303,9 @@ func (k *kit) judgeStats(m map[string]any, r statsRead, set statsSetup) {
 		for key, v := range d {
 			c.expect(declared[key], "%s: %s names dimension %q, which the metric does not declare", name, what, key)
 			s, _ := v.(string)
-			people.expect(!set.locals[s], "%s: dimension %s is %q, the id or name of an account on the target", name, key, s)
+			if people.expect(!set.names[s], "%s: dimension %s is %q, the username of an account on the target", name, key, s) {
+				ids.expect(!set.locals[s], "%s: dimension %s is %q, the account_id of an account on the target", name, key, s)
+			}
 		}
 		return d
 	}

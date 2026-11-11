@@ -26,7 +26,9 @@ import (
 //     session is a distinct `session` per account, share and day. Only a
 //     share whose auditing records everyone is counted; any other is a gap.
 //     The days are re-read from the log until they are final, so a day the
-//     NAS was unreachable is filled once it answers.
+//     NAS was unreachable is filled once it answers. A run catching up
+//     first reads the oldest row the log keeps: a day it no longer keeps
+//     is a final gap, and so is a day with more rows than one run may read.
 //   - storage.used_bytes and storage.home_bytes from the user quota tables
 //     (one pool.dataset.get_quota per dataset): today's level, rewritten by
 //     every run, so the day keeps its last sample. A level cannot be read
@@ -133,6 +135,18 @@ func (s *server) auditConnects(from time.Time) (rows []auditRow, capped bool, er
 	return rows, true, nil
 }
 
+// auditOldest is the day of the oldest SMB row the NAS still keeps, "" when
+// it keeps none.
+func (s *server) auditOldest() (string, error) {
+	var rows []auditRow
+	query := []any{map[string]any{"services": []string{"SMB"}, "query-filters": []any{},
+		"query-options": map[string]any{"order_by": []string{"message_timestamp"}, "limit": 1}}}
+	if err := s.nas.call("audit.query", query, &rows); err != nil || len(rows) == 0 {
+		return "", err
+	}
+	return s.stats.day(time.Unix(rows[0].Timestamp, 0)), nil
+}
+
 // collectSessions recounts every day from the watermark through today.
 func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare, bound map[int64]string, failed error) {
 	c := s.stats
@@ -146,14 +160,28 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	if first {
 		from = today // the buffer begins with the first run: before it, a gap
 	}
+	// count is the first day counted from the log. A day gone from it is a
+	// final gap, never a count of what is left: one the NAS no longer keeps
+	// (it purges its log past its own retention, so the day of the oldest
+	// row it keeps may be part-purged), or one with more rows than a run may
+	// read.
+	count, gone := from, map[string]string{}
 	var audits []shareAudit
 	var rows []auditRow
 	var capped bool
 	if failed == nil {
 		audits, failed = s.readShareAudit()
 	}
+	if failed == nil && from < today { // catching up: is the log still there?
+		var oldest string
+		if oldest, failed = s.auditOldest(); oldest >= from {
+			for ; count <= oldest && count < today; count = nextDayKey(count) {
+				gone[count] = reasonPurged
+			}
+		}
+	}
 	if failed == nil {
-		rows, capped, failed = s.auditConnects(c.midnight(from))
+		rows, capped, failed = s.auditConnects(c.midnight(count))
 	}
 	if failed != nil {
 		s.failedRun(metricSessions, meta, now, failed)
@@ -167,16 +195,24 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	// until is the first day not counted: past the page bound, the last
 	// day read may be part-read, so it and every later day wait for the
 	// next run, as one gap.
-	until := c.next(today)
+	until := nextDayKey(today)
 	if capped && len(rows) > 0 {
 		until = c.day(time.Unix(rows[len(rows)-1].Timestamp, 0))
+		if until == count { // the bound read one day and not all of it: it would never move
+			gone[count] = reasonOverfull
+			count = nextDayKey(count)
+			until = count
+		}
 	}
 	days := map[string]statDay{}
-	for d := from; d <= today; d = c.next(d) {
+	for d := from; d <= today; d = nextDayKey(d) {
 		rec := statDay{}
+		if why, ok := gone[d]; ok {
+			rec.Gaps = []StatGap{{Start: c.stamp(d), End: c.stamp(nextDayKey(d)), Reason: why}}
+		}
 		for _, sh := range shares {
-			if !counted[sh.Name] && d < until {
-				rec.Gaps = append(rec.Gaps, StatGap{Start: c.stamp(d), End: c.stamp(c.next(d)),
+			if _, ok := gone[d]; !ok && !counted[sh.Name] && d < until {
+				rec.Gaps = append(rec.Gaps, StatGap{Start: c.stamp(d), End: c.stamp(nextDayKey(d)),
 					Dimensions: map[string]string{"share": sh.Name}, Reason: reasonAudited})
 			}
 		}
@@ -197,7 +233,7 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	unbound := map[string][]string{} // day → account keys
 	for _, r := range rows {
 		share, day := r.ServiceData.Service, c.day(time.Unix(r.Timestamp, 0))
-		if r.Event != "CONNECT" || !r.Success || day < from || day >= until || !enabled[share] || !counted[share] {
+		if r.Event != "CONNECT" || !r.Success || day < count || day >= until || !enabled[share] || !counted[share] {
 			continue
 		}
 		uid, known := uidOf[r.Username]
@@ -219,12 +255,12 @@ func (s *server) collectSessions(now time.Time, snap Snapshot, shares []smbShare
 	}
 	for k, n := range totals {
 		rec := days[k[0]]
-		rec.Points = append(rec.Points, StatPoint{Start: c.stamp(k[0]), End: c.stamp(c.next(k[0])), Dimensions: map[string]string{"share": k[1]}, Value: n})
+		rec.Points = append(rec.Points, StatPoint{Start: c.stamp(k[0]), End: c.stamp(nextDayKey(k[0])), Dimensions: map[string]string{"share": k[1]}, Value: n})
 		days[k[0]] = rec
 	}
 	for k, n := range people {
 		rec := days[k[0]]
-		rec.Points = append(rec.Points, StatPoint{Start: c.stamp(k[0]), End: c.stamp(c.next(k[0])), Subject: k[2],
+		rec.Points = append(rec.Points, StatPoint{Start: c.stamp(k[0]), End: c.stamp(nextDayKey(k[0])), Subject: k[2],
 			Dimensions: map[string]string{"share": k[1]}, Value: n})
 		days[k[0]] = rec
 	}
@@ -282,7 +318,7 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, b
 		return t
 	}
 	point := func(subject string, dims map[string]string, v int64) StatPoint {
-		return StatPoint{Start: c.stamp(today), End: c.stamp(c.next(today)), Subject: subject, Dimensions: dims, Value: v}
+		return StatPoint{Start: c.stamp(today), End: c.stamp(nextDayKey(today)), Subject: subject, Dimensions: dims, Value: v}
 	}
 	unboundOf := func(uid int64, into map[string]bool) {
 		if uid >= systemUIDCeiling { // the machine's own accounts are not people
@@ -346,7 +382,7 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, b
 	}
 	home = append(home, point("", nil, homeTotal))
 
-	s.putLevels(metricUsedBytes, metas[metricUsedBytes], now, usedDims, func(rec statDay) statDay {
+	s.putLevels(metricUsedBytes, metas[metricUsedBytes], now, usedDims, func(rec statDay) (statDay, bool) {
 		kept := rec.Points[:0]
 		for _, p := range rec.Points {
 			if _, replaced := used[p.Dimensions["share"]]; !replaced {
@@ -356,21 +392,23 @@ func (s *server) collectUsage(now time.Time, snap Snapshot, shares []smbShare, b
 		for _, ps := range used {
 			kept = append(kept, ps...)
 		}
-		return statDay{Points: kept}
+		return statDay{Points: kept}, len(used) == len(shares)
 	}, usedUnbound)
-	s.putLevels(metricHomeBytes, metas[metricHomeBytes], now, []map[string]string{nil}, func(rec statDay) statDay {
+	s.putLevels(metricHomeBytes, metas[metricHomeBytes], now, []map[string]string{nil}, func(rec statDay) (statDay, bool) {
 		if !homeRead {
-			return rec
+			return rec, false
 		}
-		return statDay{Points: home}
+		return statDay{Points: home}, true
 	}, homeUnbound)
 }
 
 // putLevels writes a gauge's run: today's record as sample makes it from
-// what it held, and the days since the watermark closed. A closed day with
+// what it held (and whether it replaced it whole), and the days since the
+// watermark closed. Today's unbound accounts are this run's when it replaced
+// the record, a level being the last sample; otherwise they add to it. A closed day with
 // no total for a dimension it reports was never sampled: a final gap, since
 // a level cannot be read after the fact.
-func (s *server) putLevels(metric string, meta statsMeta, now time.Time, dims []map[string]string, sample func(statDay) statDay, unbound map[string]bool) {
+func (s *server) putLevels(metric string, meta statsMeta, now time.Time, dims []map[string]string, sample func(statDay) (statDay, bool), unbound map[string]bool) {
 	c := s.stats
 	today := c.day(now)
 	stored := map[string]statDay{}
@@ -386,7 +424,7 @@ func (s *server) putLevels(metric string, meta statsMeta, now time.Time, dims []
 		return
 	}
 	days := map[string]statDay{}
-	for d := from; d < today; d = c.next(d) {
+	for d := from; d < today; d = nextDayKey(d) {
 		rec := stored[d]
 		for _, want := range dims {
 			sampled := false
@@ -394,16 +432,19 @@ func (s *server) putLevels(metric string, meta statsMeta, now time.Time, dims []
 				sampled = sampled || p.Subject == "" && sameDims(p.Dimensions, want)
 			}
 			if !sampled {
-				rec.Gaps = append(rec.Gaps, StatGap{Start: c.stamp(d), End: c.stamp(c.next(d)), Dimensions: want, Reason: reasonDark})
+				rec.Gaps = append(rec.Gaps, StatGap{Start: c.stamp(d), End: c.stamp(nextDayKey(d)), Dimensions: want, Reason: reasonDark})
 			}
 		}
 		days[d] = rec
 	}
-	rec := sample(stored[today])
+	rec, replaced := sample(stored[today])
 	sortPoints(today, rec.Points)
 	days[today] = rec
 	if meta.Unbound == nil {
 		meta.Unbound = map[string][]string{}
+	}
+	if replaced {
+		delete(meta.Unbound, today)
 	}
 	for key := range unbound {
 		if !slices.Contains(meta.Unbound[today], key) {

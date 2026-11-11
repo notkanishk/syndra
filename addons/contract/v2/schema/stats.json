@@ -30,7 +30,7 @@
           "start": {
             "type": "string",
             "format": "date-time",
-            "description": "A midnight in the manifest's stats_zone (RFC 3339 with its offset)."
+            "description": "A midnight in the manifest's stats_zone (RFC 3339 with its offset): the day's first instant, 00:00 or, where a DST change skips 00:00, the instant the clocks resume."
           },
           "end": {
             "type": "string",

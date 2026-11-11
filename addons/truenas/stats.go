@@ -63,11 +63,13 @@ const (
 	// Syndra reads (TestStatsPagesFitTheContractsCeiling holds the two equal).
 	statsMaxReplyBytes = 1 << 20
 
-	reasonBuffer  = "The add-on no longer holds these days"
-	reasonNAS     = "The NAS could not be read"
-	reasonDark    = "The NAS could not be read that day"
-	reasonBehind  = "Too much activity to count yet"
-	reasonAudited = "Auditing does not record everyone on this share"
+	reasonBuffer   = "The add-on no longer holds these days"
+	reasonNAS      = "The NAS could not be read"
+	reasonDark     = "The NAS could not be read that day"
+	reasonBehind   = "Too much activity to count yet"
+	reasonAudited  = "Auditing does not record everyone on this share"
+	reasonPurged   = "The NAS no longer keeps its log of these days"
+	reasonOverfull = "Too much activity to count"
 )
 
 func declaredMetric(name string) (Metric, bool) {
@@ -120,17 +122,17 @@ func (c statsClock) clock() time.Time {
 // day is the calendar day an instant falls in, as stored ("2006-01-02").
 func (c statsClock) day(t time.Time) string { return t.In(c.loc()).Format(time.DateOnly) }
 
-// midnight is a stored day's first instant in the zone.
+// midnight is a stored day's first instant in the zone: 00:00, or, on a day
+// whose 00:00 a daylight-saving change skips (America/Santiago, 6 Sep 2026),
+// the instant the clocks resume. Go resolves a skipped 00:00 to the previous
+// day's 23:00, so that one case takes the end of the zone period it fell in.
+// The day after a stored day is nextDayKey: a calendar day, never 24 h.
 func (c statsClock) midnight(day string) time.Time {
 	t, _ := time.ParseInLocation(time.DateOnly, day, c.loc())
+	if t.Format(time.DateOnly) != day {
+		_, t = t.ZoneBounds()
+	}
 	return t
-}
-
-// next is the day after: a calendar day, never 24 h (a zone with DST has days
-// of 23 and 25 hours).
-func (c statsClock) next(day string) string {
-	t := c.midnight(day)
-	return time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, c.loc()).Format(time.DateOnly)
 }
 
 func (c statsClock) stamp(day string) string { return c.midnight(day).Format(time.RFC3339) }
@@ -348,10 +350,10 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request, _ []byte) {
 		}
 		out.Gaps = append(out.Gaps, mergeGaps(dayGaps, c.stamp(meta.Watermark))...)
 		if meta.Behind != "" {
-			out.Gaps = append(out.Gaps, StatGap{Start: c.stamp(meta.Behind), End: c.stamp(c.next(today)), Reason: reasonBehind})
+			out.Gaps = append(out.Gaps, StatGap{Start: c.stamp(meta.Behind), End: c.stamp(nextDayKey(today)), Reason: reasonBehind})
 		}
-		if lost := c.next(c.day(meta.TakenAt)); meta.Failing && lost <= today {
-			out.Gaps = append(out.Gaps, StatGap{Start: c.stamp(lost), End: c.stamp(c.next(today)), Reason: reasonNAS})
+		if lost := nextDayKey(c.day(meta.TakenAt)); meta.Failing && lost <= today {
+			out.Gaps = append(out.Gaps, StatGap{Start: c.stamp(lost), End: c.stamp(nextDayKey(today)), Reason: reasonNAS})
 		}
 		out.Gaps = slices.DeleteFunc(out.Gaps, func(g StatGap) bool {
 			end, _ := time.Parse(time.RFC3339, g.End)

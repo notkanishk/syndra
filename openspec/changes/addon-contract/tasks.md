@@ -1599,11 +1599,13 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       and both test suites already validate with; the backend's tolerant
       decode will check them again in 6d-2.
 - [x] 6.5 TrueNAS add-on collector: on its own timer, `audit.query` for SMB
-  sessions per bound account per share into `storage.sessions` (a UTC day,
-  the whole day's total, a `gap` per `share` value auditing does not
-  cover, from `sharesNotWatching`) and the per-share and home usage it
-  already reads for `storage.status` and `/homes` into `storage.used_bytes`
-  (gauge, last sample of the day, `against: home_quota`); a subject-less
+  sessions per bound account per share into `storage.sessions` (a calendar
+  day in `stats_zone`, the whole day's total, a `gap` per `share` value
+  auditing does not record for everyone, from each share's own audit
+  settings) and the per-share and home usage it already reads for
+  `storage.status` and `/homes` into `storage.used_bytes` (gauge per share,
+  last sample of the day) and `storage.home_bytes` (gauge, `against:
+  home_quota`); a subject-less
   total for every bucket that has a per-subject point; unbound local
   accounts fold into the total and `unbound.accounts`, never a per-subject
   point; a bounded durable buffer (`limits.stats_buffer`, default `P90D`,
@@ -1648,14 +1650,41 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       row's day are cleared into one provisional gap ("Too much activity to
       count yet") and the watermark stops there; the next run goes on.
     - Decided while building: a CONNECT row's share is
-      `service_data.service` (the observed key, Samba's word for a share).
-      `activity.get` reads `event_data.share`, which observed CONNECT rows
-      lack: an open question, not changed here.
+      `service_data.service` (the observed key, Samba's word for a share),
+      for the collector and `activity.get` alike (`auditRow.ServiceData`).
+      `activity.get` read `event_data.share`, which no observed row has, so
+      it never named the share (a live bug, also on main); fixed in the
+      review round below.
     - Decided while building: `home_bytes` is a level for every bound member
       with a home, 0 included (the meter needs one); `used_bytes` per person
-      only above 0; a uid under 1000 counts in totals, never in `unbound`.
+      only above 0; for both levels a uid under 1000 counts in totals,
+      never in `unbound`. Sessions are keyed by account, so a system
+      account or a name the NAS no longer resolves (neither is a subject)
+      is in `unbound` as a digest of its name.
       Before the first collection `/stats` is 503 `NO_CURRENT_READ`; an
       unreadable store 500 `STORE_UNREADABLE` (the registry's status).
+    - Review round (12 Nov 2026), each with a test watched to fail:
+      - A day's start is its first instant: where a DST change skips 00:00
+        (America/Santiago, 6 Sep 2026) Go resolves it to the previous day's
+        23:00, which made the next-day step return the same day and the
+        collector's loops spin. The day after is now `nextDayKey`
+        (calendar only) and a skipped 00:00 takes the zone period's end
+        (`time.Time.ZoneBounds`), in the add-on, the reference and the kit
+        alike (`TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume`
+        in each, with a 25-hour day).
+      - A run catching up first reads the oldest SMB row the NAS keeps
+        (`audit.query`, ascending, `limit: 1`, no event filter): every day
+        through that row's day is a final gap "The NAS no longer keeps its
+        log of these days", and counting goes on from the day after, so an
+        outage longer than the NAS's retention is never final zeros.
+      - A day with more rows than one run may read is a final gap "Too
+        much activity to count" and the watermark moves past it, rather
+        than holding there for ever.
+      - A gauge's `unbound` for today is the run's that replaced the
+        record (`putLevels`), not a union over the day's runs.
+      - `TZ` is refused at startup unless it matches the manifest schema's
+        `stats_zone` pattern (`statsZonePattern`, held equal to the schema
+        by `TestTheZonePatternIsTheSchemas`): `Singapore`, `EST5EDT`.
 Items 6.6, 6.7 and 6.8 are slice 6d-2 (backend collection, migration and
 retention, access); 6d-1 changed no backend behaviour (a backend before 6d-2
 ignores `metrics` and `stats_zone` and never calls `/stats`). With rulings
@@ -1768,18 +1797,21 @@ per-person only) applied there.
       `-mutate` refuses to write.
   - [x] The `stats` part (slice 6d-1, 12 Nov 2026): checks
     `stats.descriptors`, `.points`, `.totals`, `.since`, `.idempotent`,
-    `.gaps`, `.unbound`, `.buffer`, `.page-size` and `.no-people`
-    (advisory), each citing the guide's chapter 4 section "Statistics". In
+    `.gaps`, `.unbound`, `.buffer`, `.page-size`, `.no-people` (a MUST: no
+    dimension value is a username `/subjects` lists, the kit's own account's
+    included) and `.no-people.ids` (advisory: an `account_id`, which may
+    also be a resource's name), each citing the guide's chapter 4 section "Statistics". In
     the reads step every metric is read from now minus `stats_buffer`, all
     pages, twice; from a later since; from ten days before the buffer; and
     an undeclared metric; with `-mutate`, a `stats` step after the writes
     reads again, when the kit's own account has usage. Midnights are judged
     in `stats_zone` (tzdata embedded). The totals rule is the instrument's
     (O2: `TestTheTotalsRuleIsTheInstruments`). Watched to fail against all
-    eleven stats defects and against rewrites the reference cannot serve
+    twelve stats defects (`stats-dimension-names-person` fails
+    `.no-people`, and only it, so the run fails) and against rewrites the reference cannot serve
     (a meter against a non-limit, an unknown zone, P401D, UTC days, a 23-hour
     day, a negative value, an off-midnight watermark, a gap with no reason,
-    usage by nobody it names, a dimension naming a person); skip without the
+    usage by nobody it names, a dimension naming an account id); skip without the
     feature and pass with `-features stats`, `-mutate` included.
     - Decided while building: the explicit-counter-zero warning is not
       built (no defect asks for it; an open question), and the `-mutate`
