@@ -3,6 +3,39 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Feature `stats` served by the add-ons, in makerspace days (slice 6d-1, 12 Nov 2026)
+
+Additive within major 2, but for two tightenings of the schema: `against`
+is allowed only on a `per_subject` gauge with no dimensions, and
+`stats_zone` is required with the feature. Both are harmless, because no
+add-on served `stats` before. The TrueNAS add-on and the reference declare
+`stats` and answer `GET /stats`; Syndra does not collect it yet (6d-2): a
+backend before then ignores `metrics` and `stats_zone` and never calls
+`/stats`, so the add-on may deploy first. Every bucket is a calendar day in
+the manifest's `stats_zone` (owner ruling O1), not a UTC day.
+
+- Schema files: `manifest.json` gains `stats_zone` (an IANA zone,
+  `x-feature: stats`, required with the feature) and allows `against` only
+  on a `per_subject` gauge with no dimensions (ruling O3); `stats.json`'s
+  descriptions say a bucket starts at a midnight in `stats_zone` and ends at
+  the next, a day's midnight being its first instant (where a DST change
+  skips 00:00, the instant the clocks resume).
+- Registries: `features.json` lists `stats_zone` under `stats`.
+- Fixtures: `stats.json` in `+05:30` midnights, points in keyset order,
+  `next_cursor` the last key; new `stats_storage.json` (TrueNAS
+  `storage.sessions`); `manifest.json` splits the storage gauge into
+  `storage.home_bytes` (against `home_quota`) and `storage.used_bytes` (per
+  share) and carries `stats_zone`; `manifest_truenas.json` declares `stats`,
+  three metrics, `stats_zone` and `limits.stats_buffer: P90D`.
+- The guide's statistics section moved from the appendix into chapter 4 as
+  "Statistics: `GET /stats` (feature `stats`)"; the mapping sketches are
+  A.2. Its totals rule is per instrument (ruling O2): a counter's people sum
+  to no more than the total, each of a gauge's is no more than it.
+- Deploy and rollback: the TrueNAS add-on's buffer is a new bbolt bucket a
+  previous binary never opens; rolling the add-on back loses nothing but
+  the collection it would have made. Set `STATS_COLLECT_EVERY=0` for a kit
+  run.
+
 ## Feature `calls` served, `effect: physical`, outcome `no_change` (slice 6c, 12 Nov 2026)
 
 Additive within major 2. Syndra now offers a `physical` operation only from

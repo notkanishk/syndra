@@ -39,6 +39,10 @@ type Manifest struct {
 	// page, and the next thing they distrust is the part that was right.
 	Connection *Connection `json:"connection,omitempty"`
 	Limits     Limits      `json:"limits"`
+	// Metrics and StatsZone are feature stats (stats.go): the descriptors,
+	// and the zone whose calendar days the buckets are.
+	Metrics   []Metric `json:"metrics,omitempty"`
+	StatsZone string   `json:"stats_zone,omitempty"`
 }
 
 // Limits are what this add-on refuses beyond: a plan above SubjectsPerPlan is
@@ -48,6 +52,8 @@ type Limits struct {
 	// FreshReadCooldown is how soon a fresh read of one thing may read the NAS
 	// again (feature freshness, fresh.go), so the UI can say when.
 	FreshReadCooldown string `json:"fresh_read_cooldown,omitempty"`
+	// StatsBuffer is how long a day stays in the statistics buffer.
+	StatsBuffer string `json:"stats_buffer,omitempty"`
 }
 
 // Connection is the member-facing address of the target, and nothing else.
@@ -148,7 +154,7 @@ const kindStorage = "storage"
 // and only with the backend that sends `fresh`: a backend that never does
 // would read every /subjects as a copy, and its drift sweep would skip every
 // pass. The two roll back together.
-var features = []string{"operations", "settings", "storage.reach", "storage.homes", "results", "freshness", "calls"}
+var features = []string{"operations", "settings", "storage.reach", "storage.homes", "results", "freshness", "calls", "stats"}
 
 // operationSet is the one-shot, event-shaped half. Anything with a desired
 // state belongs in the schema above instead.
@@ -225,7 +231,7 @@ type capabilityProbe interface {
 const productName = "TrueNAS"
 
 // manifest composes the whole answer.
-func manifest(product, productVersion string, probe capabilityProbe, connection *Connection, freshCooldown string) Manifest {
+func manifest(product, productVersion string, probe capabilityProbe, connection *Connection, freshCooldown, statsZone string) Manifest {
 	return Manifest{
 		ContractVersion:   ContractVersion,
 		Product:           product,
@@ -235,7 +241,9 @@ func manifest(product, productVersion string, probe capabilityProbe, connection 
 		EntitlementSchema: entitlementSchema(),
 		Operations:        operationSet(probe),
 		Connection:        connection,
-		Limits:            Limits{SubjectsPerPlan: perRequestSubjectCap, FreshReadCooldown: freshCooldown},
+		Limits:            Limits{SubjectsPerPlan: perRequestSubjectCap, FreshReadCooldown: freshCooldown, StatsBuffer: statsBuffer},
+		Metrics:           statsMetrics,
+		StatsZone:         statsZone,
 	}
 }
 

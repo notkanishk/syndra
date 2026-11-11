@@ -89,7 +89,7 @@ func TestTheTrueNASManifestIsFetchedAndEveryFieldLands(t *testing.T) {
 	if m.ContractVersion != ContractVersion || m.Product != "TrueNAS" || m.ProductVersion != "TrueNAS-25.10.5" || m.Kind != "storage" {
 		t.Errorf("identity did not land: %+v", m)
 	}
-	if !m.Declares("storage.homes") || !m.Declares("operations") || !m.Declares("calls") || m.Declares("stats") || m.Limits.SubjectsPerPlan != 200 {
+	if !m.Declares("storage.homes") || !m.Declares("operations") || !m.Declares("calls") || !m.Declares("stats") || m.Limits.SubjectsPerPlan != 200 {
 		t.Errorf("features and limits did not land: %v %+v", m.Features, m.Limits)
 	}
 	if m.Connection == nil || m.Connection.Protocol != "smb" || m.Connection.Host != "nas.example.org" {

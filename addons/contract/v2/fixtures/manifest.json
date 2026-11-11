@@ -116,6 +116,14 @@
   },
   "metrics": [
     {
+      "name": "storage.home_bytes",
+      "instrument": "gauge",
+      "unit": "bytes",
+      "label": "Home folder used",
+      "per_subject": true,
+      "against": "home_quota"
+    },
+    {
       "name": "storage.used_bytes",
       "instrument": "gauge",
       "unit": "bytes",
@@ -126,8 +134,7 @@
           "name": "share",
           "label": "Share"
         }
-      ],
-      "against": "home_quota"
+      ]
     },
     {
       "name": "storage.sessions",
@@ -144,6 +151,7 @@
       "x-truenas-source": "audit.query"
     }
   ],
+  "stats_zone": "Asia/Kolkata",
   "limits": {
     "subjects_per_plan": 200,
     "fresh_read_cooldown": "PT30S",

@@ -1219,7 +1219,7 @@ is behind a feature the TrueNAS add-on declares only when its half is built;
 nothing here is a wire break and nothing in slices 0–5 depends on it. Depends on
 1a (the feature schemas are there) and slice 1; the UI items on 3.1.
 
-- [ ] 6.0 The reference add-on's feature halves, each behind its feature
+- [x] 6.0 The reference add-on's feature halves, each behind its feature
   flag so the kit's feature checks (6.11) can be written against it:
   `stats` (one counter and one gauge with one dimension collected on a
   timer into a bounded buffer with a per-metric watermark the reference
@@ -1254,8 +1254,7 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     `GET /calls` for every write (`callState`); `Config.LoseReply`
     (test-only) loses an answer before or after the loan. Defects
     `preview-recorded`, `reexecutes-in-doubt`, `checkout-unserialised`,
-    `no-change-as-succeeded`, `calls-echo-params`. The `stats` half stays
-    open.
+    `no-change-as-succeeded`, `calls-echo-params`.
     - Decided while building: an open intent is settled only on `/calls`
       (`settle`), never by the next checkout, which would clear it and run,
       so a retry would never be `CALL_UNSETTLED`; and never while `Down` or
@@ -1263,6 +1262,32 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       answers what the confirm would.
     - Decided while building: `problem()` resolves the registry's
       `by_status` class (`backoff` for 429 and every 5xx), as the guide says.
+  - [x] The `stats` half (slice 6d-1, 12 Nov 2026): `-features stats`
+    declares `machine.jobs` (counter, `count`, per person, dimension
+    `printer`) and `machine.longest_job_seconds` (gauge, `seconds`, per
+    person, no dimension, `against: job_seconds`), `stats_zone:
+    Asia/Kolkata`, `limits.stats_buffer: P30D`; a deterministic job log
+    (`jobsOn`) for every account from the day the log first has it, plus a
+    `guest` login no binding names (totals and `unbound` only); `xl-1`'s log
+    lost the week before it started (a final gap); a buffer of P30D under
+    2,000 points, oldest day first, the dropped window a gap; the watermark
+    the start of today, held while `Config.Down` (its own test); keyset
+    pages of 4 KiB. Defects `stats-undeclared-dimension`,
+    `stats-local-name-subject`, `stats-zero-for-gap`, `stats-watermark-ahead`,
+    `stats-subjects-above-total` (a counter's total the sum less one, a
+    gauge's the largest less one), `stats-since-ignored`, `stats-final-moves`,
+    `stats-unknown-metric-ok`, `stats-page-overlap`, `stats-no-buffer-gap`,
+    `stats-total-missing`.
+    - Decided while building: the reference reads its in-memory app on
+      every `/stats`, before answering, not on an hourly tick: that costs an
+      in-memory app nothing, and it is what lets the kit's `-mutate` step see
+      the kit's own account's usage. The guide says a real add-on reads on
+      its own timer.
+    - Decided while building: the gauge is `machine.longest_job_seconds`
+      with no dimension, not the plan's `machine.queued_seconds` per
+      printer: ruling O3 allows `against` only on an undimensioned
+      per-person gauge, and a longest job is the maximum O2's gauge rule is
+      written for.
 
 **`results` (decision 20)**
 
@@ -1548,15 +1573,39 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
 
 **`stats` (decisions 11–17)**
 
-- [ ] 6.4 Fixtures for `stats.json` and `manifest.metrics[]` (the schemas
+- [x] 6.4 Fixtures for `stats.json` and `manifest.metrics[]` (the schemas
   are 1a.2): one per-metric reply with points, a dimensioned gap, `unbound`
   and a keyset `next_cursor` #ready-for-agent
-- [ ] 6.5 TrueNAS add-on collector: on its own timer, `audit.query` for SMB
-  sessions per bound account per share into `storage.sessions` (a UTC day,
-  the whole day's total, a `gap` per `share` value auditing does not
-  cover, from `sharesNotWatching`) and the per-share and home usage it
-  already reads for `storage.status` and `/homes` into `storage.used_bytes`
-  (gauge, last sample of the day, `against: home_quota`); a subject-less
+  - Done (slice 6d-1, 12 Nov 2026): `stats.json` in makerspace days
+    (`+05:30`), points in keyset order (total first) and `next_cursor` the
+    base64url key of the last one; new `stats_storage.json` (TrueNAS
+    `storage.sessions`: two shares, a person and the total each, a gap for
+    `scratch`, `unbound.accounts: 1`, `next_cursor: null`), registered in
+    both fixture tables and inlined in the guide; `manifest.json` splits
+    the storage gauge (`storage.home_bytes` against `home_quota`,
+    `storage.used_bytes` per share) and carries `stats_zone`;
+    `manifest_truenas.json` declares `stats`. Schema: `stats_zone` (IANA
+    pattern, `x-feature: stats`, required with the feature by `if`/`then`),
+    `against` only on a `per_subject` gauge with no dimensions (`if`/`then`
+    on `Metric`); `stats.json` descriptions say midnights in `stats_zone`.
+    Refusal rows: `per_subject: "yes"`, a dimension without a label, a point
+    value as text, `unbound.accounts: -1`, no `next_cursor`, `stats` without
+    `stats_zone`, `stats_zone` an offset or an abbreviation, `against` on a
+    counter, on a dimensioned metric, on a metric not per person or without
+    `per_subject`. `TestV2StatsFixturesAreMakerspaceDays` holds both replies
+    to midnights in the manifest's zone, keyset order and the cursor.
+    - Decided while building: `stats_zone`'s requiredness and O3's
+      `against` rule live in the schema (`if`/`then`), one source the kit
+      and both test suites already validate with; the backend's tolerant
+      decode will check them again in 6d-2.
+- [x] 6.5 TrueNAS add-on collector: on its own timer, `audit.query` for SMB
+  sessions per bound account per share into `storage.sessions` (a calendar
+  day in `stats_zone`, the whole day's total, a `gap` per `share` value
+  auditing does not record for everyone, from each share's own audit
+  settings) and the per-share and home usage it already reads for
+  `storage.status` and `/homes` into `storage.used_bytes` (gauge per share,
+  last sample of the day) and `storage.home_bytes` (gauge, `against:
+  home_quota`); a subject-less
   total for every bucket that has a per-subject point; unbound local
   accounts fold into the total and `unbound.accounts`, never a per-subject
   point; a bounded durable buffer (`limits.stats_buffer`, default `P90D`,
@@ -1569,6 +1618,82 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   honoured, a second collection that changes a final point, a watermark
   moved past a day the NAS was off, a local name on the wire, a zero where
   the audit was off, two shares' gaps colliding #ready-for-agent
+  - Done (slice 6d-1, 12 Nov 2026), with ruling O3's split: three
+    metrics, `storage.sessions` (counter, per share), `storage.home_bytes`
+    (gauge, against `home_quota`, no dimension) and `storage.used_bytes`
+    (gauge, per share, no `against`), in `stats_zone` the container's `TZ`
+    (`loadZone`, tzdata embedded). `stats.go` (`statsMetrics`, the one list
+    for manifest and handler; `handleStats`), `stats_collect.go`
+    (`collectStats`, `STATS_COLLECT_EVERY`, default `PT1H`, `0` off, joined
+    before the NAS session is dropped), `stats_store.go` (bucket `stats`, one
+    record per metric and day, one transaction per collection,
+    `BoundUIDs`). One bounded `audit.query` per run (successful `CONNECT`
+    since the watermark, ascending, 50 pages of 1000); a session is a
+    distinct `session` per uid, share and day; only a share audited for
+    everyone (B1: on, both lists empty) is counted, any other a gap per day.
+    Usage owned by uid through the binding; unbound accounts in totals and
+    `unbound` only. The collector calls reads only: no `mutate`, no
+    mutation log, no read cache (`TestTheCollectorOnlyReads`). Tests in
+    `stats_test.go` watch each of the six mutations above fail, and
+    `TestTheConformanceKitPassesThisAddOn` requires every `stats.*` check to
+    pass after one seeded collection.
+    - Decided while building: the buffer is one record per metric and day
+      (replaced whole, so a provisional 3 that is now 0 is gone) and the
+      whole run is one bbolt transaction, rather than composite point keys;
+      the size ceiling is bytes (64 MiB per metric), which needs no decode.
+    - Decided while building: the first collection begins its own day: the
+      NAS keeps its audit log for its own retention, often under P90D, and a
+      day before it would read as zeros. Before it, the reply's buffer gap.
+    - Decided while building: the failure gap starts the day after the last
+      successful read; that day keeps its provisional points, and no gap
+      lies over a point. Past the audit page bound, the days from the last
+      row's day are cleared into one provisional gap ("Too much activity to
+      count yet") and the watermark stops there; the next run goes on.
+    - Decided while building: a CONNECT row's share is
+      `service_data.service` (the observed key, Samba's word for a share),
+      for the collector and `activity.get` alike (`auditRow.share`).
+      `activity.get` read `event_data.share`, which no observed row has, so
+      it never named the share (a live bug, also on main); fixed in the
+      review round below.
+    - Decided while building: `home_bytes` is a level for every bound member
+      with a home, 0 included (the meter needs one); `used_bytes` per person
+      only above 0; for both levels a uid under 1000 counts in totals,
+      never in `unbound`. Sessions are keyed by account, so a system
+      account or a name the NAS no longer resolves (neither is a subject)
+      is in `unbound` as a digest of its name.
+      Before the first collection `/stats` is 503 `NO_CURRENT_READ`; an
+      unreadable store 500 `STORE_UNREADABLE` (the registry's status).
+    - Review round (12 Nov 2026), each with a test watched to fail:
+      - A day's start is its first instant: where a DST change skips 00:00
+        (America/Santiago, 6 Sep 2026) Go resolves it to the previous day's
+        23:00, which made the next-day step return the same day and the
+        collector's loops spin. The day after is now `nextDayKey`
+        (calendar only) and a skipped 00:00 takes the zone period's end
+        (`time.Time.ZoneBounds`), in the add-on, the reference and the kit
+        alike (`TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume`
+        in each, with a 25-hour day).
+      - A run catching up first reads the oldest SMB row the NAS keeps
+        (`audit.query`, ascending, `limit: 1`, no event filter): every day
+        through that row's day is a final gap "The NAS no longer keeps its
+        log of these days", and counting goes on from the day after, so an
+        outage longer than the NAS's retention is never final zeros.
+      - A day with more rows than one run may read is a final gap "Too
+        much activity to count" and the watermark moves past it, rather
+        than holding there for ever.
+      - A gauge's `unbound` for today is the run's that replaced the
+        record (`putLevels`), not a union over the day's runs.
+      - `TZ` is refused at startup unless it matches the manifest schema's
+        `stats_zone` pattern (`statsZonePattern`, held equal to the schema
+        by `TestTheZonePatternIsTheSchemas`): `Singapore`, `EST5EDT`.
+    - Decided while building (6d-1 fix round): an `activity.get` event's `resource` is its service only when that is a known enabled share (`auditRow.share`, the one rule the collector also counts by), else empty, never a name: a `[homes]`-style share's service is the username (`TestAnActivityEventNamesOnlyAKnownShare`); backend and UI already took an absent resource.
+Items 6.6, 6.7 and 6.8 are slice 6d-2 (backend collection, migration and
+retention, access); 6d-1 changed no backend behaviour (a backend before 6d-2
+ignores `metrics` and `stats_zone` and never calls `/stats`). With rulings
+O1 (`acceptMetrics` drops the feature when `stats_zone != clock.Name`;
+`bucket_start = clock.Day(start)`), O3 (drop a metric whose `against`
+breaks the three conditions) and O4 (`stats_subject_retention_days`,
+per-person only) applied there.
+
 - [ ] 6.6 Backend collection: hourly per target declaring `stats`, **one
   call per declared metric** with that metric's stored watermark as
   `since` (first run `now − limits.stats_buffer`), keyset-paged, never
@@ -1608,14 +1733,14 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   suppression (decision 14). Tests: a member cannot read another's; a
   non-admin operator cannot read the target or insights series #ready-for-agent
 - [ ] 6.9 UI, from descriptors only: the member card "What I have used"
-  (counters summed with a sparkline, gauges latest with their UTC day,
+  (counters summed with a sparkline, gauges latest with their day,
   `against` as a meter over the **observed** limit, gaps footnoted, every
   card ending in a next step or "nothing for you to do"), the same card on
   the person page, the target overview's target-wide series by dimension
   with gaps hatched and the unbound-accounts line, "This
   add-on does not report statistics" when the feature is absent; the
   Insights page (Advanced view) grouped by unit with distributions and no
-  names; "UTC day" wherever a date is shown; add-on text quoted and capped;
+  names; dates are makerspace days, as everywhere (ruling O1, no "UTC day"); add-on text quoted and capped;
   the `dataviz` skill's rules for gap-vs-zero and both themes; copy guard
   for the new sentences and for the absence of ranking words #ready-for-agent
 - [ ] 6.10 Staging: 48 hours of collection against staging TrueNAS, then an
@@ -1624,7 +1749,7 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   shows a gap and not zero, that a day with the NAS stopped shows a gap and
   then fills after it returns, and that "Refresh" advances `taken_at` once
   and reports the cooldown the second time #ready-for-human
-- [ ] 6.11 Kit checks per feature (design §7 `freshness` row, the
+- [x] 6.11 Kit checks per feature (design §7 `freshness` row, the
   `operations` row's `physical`/`preview`/`calls`/`secret_result` part, and
   the §9.9 table: descriptors, points, totals, since, idempotent, gaps, no
   people in dimensions, unbound, buffer, page size), each `skip` with the
@@ -1671,6 +1796,33 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       confirm is compared byte for byte. A physical op declared without
       `calls` fails `operations.physical` in the reads phase, a MUST, so
       `-mutate` refuses to write.
+  - [x] The `stats` part (slice 6d-1, 12 Nov 2026): checks
+    `stats.descriptors`, `.points`, `.totals`, `.since`, `.idempotent`,
+    `.gaps`, `.unbound`, `.buffer`, `.page-size`, `.no-people` (a MUST: no
+    dimension value is the username or `account_id` of the account the kit
+    created) and `.no-people.ids` (advisory: those of any other account
+    `/subjects` lists, which may be a service account a resource is named
+    after), each citing the guide's chapter 4 section "Statistics". In
+    the reads step every metric is read from now minus `stats_buffer`, all
+    pages, twice; from a later since; from ten days before the buffer; and
+    an undeclared metric; with `-mutate`, a `stats` step after the writes
+    reads again, when the kit's own account has usage. Midnights are judged
+    in `stats_zone` (tzdata embedded). The totals rule is the instrument's
+    (O2: `TestTheTotalsRuleIsTheInstruments`). Watched to fail against all
+    twelve stats defects (`stats-dimension-names-person` fails
+    `.no-people`, and only it, so the run fails) and against rewrites the reference cannot serve
+    (a meter against a non-limit, an unknown zone, P401D, UTC days, a 23-hour
+    day, a negative value, an off-midnight watermark, a gap with no reason,
+    usage by nobody it names, a dimension naming the kit's own account id); skip without the
+    feature and pass with `-features stats`, `-mutate` included.
+    - Decided while building: the explicit-counter-zero warning is not
+      built (no defect asks for it; an open question), and the `-mutate`
+      half of `stats.unbound` is not either: a black-box kit cannot make an
+      account outside a binding. The guide's "What the kit cannot check"
+      names both halves the add-on's own tests carry. A 503
+      `NO_CURRENT_READ` (nothing collected yet) skips the stats checks with
+      the reason.
+    - Decided while building (6d-1 fix round): the `.no-people` MUST is the kit's own account only (username and `account_id`, which it makes unique); any other listed account is advisory (`.no-people.ids`), since TrueNAS lists service accounts and a `scanner` share by a `scanner` user is no leak (`TestAResourceNamedLikeAServiceAccountIsAdvisory`; `stats-dimension-names-person` still fails the MUST).
 
 ## Out of scope, stated so nobody builds it here
 

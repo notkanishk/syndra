@@ -91,6 +91,7 @@ func (k *kit) mutate() error {
 			k.readOperations(k.at("operations.reads"), callID)
 			k.results(k.at("results"))
 		}},
+		{"stats", []string{"stats.points", "stats.totals", "stats.since", "stats.gaps", "stats.unbound", "stats.no-people", "stats.no-people.ids"}, func() { k.statsAfterWrites() }},
 		{"lifecycle", []string{"lifecycle", "replay.refusal", "strict-requests"}, func() { k.lifecycle(k.at("lifecycle"), k.at("replay.refusal")) }},
 		{"withdraw", []string{"withdraw-only.existing", "channel-follows-account", "plan-equals-apply"}, func() {
 			k.withdrawExisting(k.at("withdraw-only.existing"), k.at("channel-follows-account"))

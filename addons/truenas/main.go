@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -105,6 +106,12 @@ type config struct {
 	logMaxSize      int64
 	logKeep         int
 	lifecycle       string
+	// statsZone is the zone statistics count days in: the container's TZ,
+	// the deployment's one zone (stats_zone in the manifest).
+	statsZone *time.Location
+	// statsEvery is how often the statistics collector reads the NAS
+	// (STATS_COLLECT_EVERY, ISO 8601, PT1H); 0 switches it off.
+	statsEvery time.Duration
 }
 
 func loadConfig() (config, error) {
@@ -179,7 +186,60 @@ func loadConfig() (config, error) {
 	for i := range c.supported {
 		c.supported[i] = strings.TrimSpace(c.supported[i])
 	}
+	if c.statsZone, err = loadZone(os.Getenv("TZ")); err != nil {
+		return config{}, err
+	}
+	if c.statsEvery, err = collectEvery(envOr("STATS_COLLECT_EVERY", "PT1H")); err != nil {
+		return config{}, err
+	}
 	return c, nil
+}
+
+// statsZonePattern is the manifest schema's stats_zone pattern (an IANA
+// Area/Location, or UTC), held equal to it by TestTheZonePatternIsTheSchemas:
+// a TZ the manifest could not carry is refused at startup, not served.
+var statsZonePattern = regexp.MustCompile(`^(UTC|[A-Z][A-Za-z_]*(/[A-Za-z0-9_+-]+)+)$`)
+
+// loadZone is TZ as a zone (POSIX allows a leading colon); unset is UTC, which
+// is what the process's clock then reads. A legacy name tzdb still links
+// (Singapore, EST5EDT) is refused: the manifest's stats_zone cannot carry it.
+func loadZone(tz string) (*time.Location, error) {
+	tz = strings.TrimPrefix(strings.TrimSpace(tz), ":")
+	if tz == "" {
+		return time.UTC, nil
+	}
+	if !statsZonePattern.MatchString(tz) {
+		return nil, fmt.Errorf("TZ=%q is not an IANA Area/Location zone or UTC (stats_zone in the manifest)", tz)
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return nil, fmt.Errorf("TZ=%q is not an IANA zone: %w", tz, err)
+	}
+	return loc, nil
+}
+
+// collectEvery reads STATS_COLLECT_EVERY: "0", or an ISO 8601 duration of
+// hours, minutes or seconds (PT1H, PT30M). ponytail: those three forms; a
+// longer interval is not a collector's.
+func collectEvery(raw string) (time.Duration, error) {
+	if raw == "0" {
+		return 0, nil
+	}
+	n, unit := strings.TrimPrefix(raw, "PT"), time.Duration(0)
+	switch {
+	case !strings.HasPrefix(raw, "PT") || len(n) < 2:
+	case strings.HasSuffix(n, "H"):
+		unit = time.Hour
+	case strings.HasSuffix(n, "M"):
+		unit = time.Minute
+	case strings.HasSuffix(n, "S"):
+		unit = time.Second
+	}
+	v, err := strconv.Atoi(strings.TrimRight(n, "HMS"))
+	if unit == 0 || err != nil || v <= 0 {
+		return 0, fmt.Errorf("STATS_COLLECT_EVERY=%q must be 0 or PT<n>H, PT<n>M or PT<n>S", raw)
+	}
+	return time.Duration(v) * unit, nil
 }
 
 // main does nothing but exit codes. Everything else is in `run`, because
@@ -256,6 +316,7 @@ func run() error {
 		elevated: func(apiKey string) (rpc, error) {
 			return dialTrueNAS(cfg.nasURL, apiKey, cfg.nasVerify)()
 		},
+		stats: statsClock{zone: cfg.statsZone},
 	}
 
 	tlsConf, err := serverTLS(cfg)
@@ -297,6 +358,10 @@ func run() error {
 	// sweep outside a test, so the idempotency bucket grew for the life of the
 	// deployment — a 30-day window that never ended is a bucket, not a window.
 	go sweepIdempotency(ctx, store)
+	// The statistics collector: reads only, joined before the NAS session is
+	// dropped below.
+	collected := make(chan struct{})
+	go func() { defer close(collected); collectStats(ctx, srv, cfg.statsEvery) }()
 
 	go func() {
 		// The public key, logged at startup. An operator diagnosing a pin
@@ -326,6 +391,10 @@ func run() error {
 	// finish; the NAS session is dropped only once nothing is using it.
 	if !waitDrained(shutdownCtx, life) {
 		log.Printf("[SHUTDOWN] %d mutation(s) still in flight at the deadline", life.InFlight())
+	}
+	select { // a collection reading the NAS finishes its run first
+	case <-collected:
+	case <-shutdownCtx.Done():
 	}
 	nas.drop()
 	log.Println("[SHUTDOWN] stopped")

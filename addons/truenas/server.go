@@ -68,6 +68,10 @@ type server struct {
 	// write per subject allowed at a time (calls.go).
 	calls    callLeases
 	subjects subjectLocks
+
+	// stats is the zone statistics count days in and the clock
+	// (stats.go); the collector itself is stats_collect.go.
+	stats statsClock
 }
 
 func (s *server) routes() http.Handler {
@@ -100,6 +104,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("POST /operations/{name}", s.auth.authenticated(s.handleOperation))
 	// What was recorded for a write, by its call id (feature calls).
 	mux.HandleFunc("GET /calls/{call_id}", s.auth.authenticated(s.handleCall))
+	// One metric's daily points from the buffer (feature stats).
+	mux.HandleFunc("GET /stats", s.auth.authenticated(s.handleStats))
 	// Everything else, authenticated like the rest, is a registered refusal:
 	// every non-2xx is a problem with a code (design §11: an undeclared
 	// feature's route simply answers 404, and the backend reads that 404).
@@ -116,7 +122,7 @@ func (s *server) routes() http.Handler {
 // that are merely unobservable — the same mistake as concluding an absence from
 // a read that could not happen.
 func (s *server) handleCapabilities(w http.ResponseWriter, r *http.Request, _ []byte) {
-	writeJSON(w, http.StatusOK, manifest(productName, s.nas.Version(), s, s.connection, s.fresh.cooldownISO()))
+	writeJSON(w, http.StatusOK, manifest(productName, s.nas.Version(), s, s.connection, s.fresh.cooldownISO(), s.stats.loc().String()))
 }
 
 // availability answers the capability probe for one operation (4.7).

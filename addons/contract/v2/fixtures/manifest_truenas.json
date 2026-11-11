@@ -10,7 +10,8 @@
     "storage.homes",
     "results",
     "freshness",
-    "calls"
+    "calls",
+    "stats"
   ],
   "entitlement_schema": [
     {
@@ -99,12 +100,50 @@
       "available": true
     }
   ],
+  "metrics": [
+    {
+      "name": "storage.sessions",
+      "instrument": "counter",
+      "unit": "count",
+      "label": "Storage sessions",
+      "per_subject": true,
+      "dimensions": [
+        {
+          "name": "share",
+          "label": "Share"
+        }
+      ]
+    },
+    {
+      "name": "storage.home_bytes",
+      "instrument": "gauge",
+      "unit": "bytes",
+      "label": "Home folder used",
+      "per_subject": true,
+      "against": "home_quota"
+    },
+    {
+      "name": "storage.used_bytes",
+      "instrument": "gauge",
+      "unit": "bytes",
+      "label": "Storage used",
+      "per_subject": true,
+      "dimensions": [
+        {
+          "name": "share",
+          "label": "Share"
+        }
+      ]
+    }
+  ],
+  "stats_zone": "Asia/Kolkata",
   "connection": {
     "protocol": "smb",
     "host": "nas.example.org"
   },
   "limits": {
     "subjects_per_plan": 200,
-    "fresh_read_cooldown": "PT30S"
+    "fresh_read_cooldown": "PT30S",
+    "stats_buffer": "P90D"
   }
 }

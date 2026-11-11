@@ -1,0 +1,56 @@
+{
+  "contract_version": 2,
+  "metric": "storage.sessions",
+  "taken_at": "2026-11-10T07:40:00Z",
+  "watermark": "2026-11-10T00:00:00+05:30",
+  "points": [
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "dimensions": {
+        "share": "makers"
+      },
+      "value": 9
+    },
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "dimensions": {
+        "share": "projects"
+      },
+      "value": 4
+    },
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "subject": "289471021834760193",
+      "dimensions": {
+        "share": "makers"
+      },
+      "value": 3
+    },
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "subject": "289471021834760193",
+      "dimensions": {
+        "share": "projects"
+      },
+      "value": 1
+    }
+  ],
+  "unbound": {
+    "accounts": 1
+  },
+  "gaps": [
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "dimensions": {
+        "share": "scratch"
+      },
+      "reason": "Auditing does not record everyone on this share"
+    }
+  ],
+  "next_cursor": null
+}

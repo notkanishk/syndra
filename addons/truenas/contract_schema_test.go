@@ -45,7 +45,6 @@ var notWritten = map[string]string{
 	"NOT_ENTITLED":     "physical operations only, and this add-on has none",
 	"RESOURCE_TAKEN":   "physical operations only, and this add-on has none",
 	"LIMIT_REACHED":    "physical operations only, and this add-on has none",
-	"UNKNOWN_METRIC":   "feature stats, not declared",
 }
 
 // codesInSource reads this package's own non-test source and returns the codes

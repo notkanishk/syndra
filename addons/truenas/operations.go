@@ -683,13 +683,7 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	// unexpected type anywhere inside it fails the WHOLE decode — which is
 	// exactly how the timestamp took the operation down. What varies is decoded
 	// separately and defensively; what does not is decoded here.
-	var rows []struct {
-		Timestamp int64           `json:"message_timestamp"`
-		Event     string          `json:"event"`
-		Success   bool            `json:"success"`
-		Address   string          `json:"address"`
-		EventData json.RawMessage `json:"event_data"`
-	}
+	var rows []auditRow
 	filters := [][]any{{"username", "=", binding.Username}}
 	// The lower bound, in the target's own units. The backend hands this over
 	// as RFC3339 because that is what an HTTP caller writes; the column is an
@@ -721,15 +715,18 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	if report.Truncated {
 		rows = rows[:activityLimit]
 	}
+	// With the shares unread, no service is a known share, so no event names
+	// one: an empty resource, never a name the add-on cannot place.
+	shares, _ := s.enabledShares()
 	for _, r := range rows {
-		event := ActivityEvent{
-			At:      time.Unix(r.Timestamp, 0).UTC().Format(time.RFC3339),
-			Event:   r.Event,
-			Success: r.Success,
-			Address: r.Address,
-		}
-		event.Resource, event.Detail = eventDetail(r.EventData)
-		report.Events = append(report.Events, event)
+		report.Events = append(report.Events, ActivityEvent{
+			At:       time.Unix(r.Timestamp, 0).UTC().Format(time.RFC3339),
+			Event:    r.Event,
+			Success:  r.Success,
+			Address:  r.Address,
+			Resource: r.share(shares),
+			Detail:   eventDetail(r.EventData),
+		})
 	}
 	// Reported whether or not there were events, because the case that matters
 	// is the empty one.
@@ -743,6 +740,39 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 		Operation: "activity.get", Subject: req.Subject, Outcome: "succeeded",
 		Result: &report,
 	}, http.StatusOK, nil
+}
+
+// auditRow is one `audit.query` row as this add-on reads it (the keys in
+// addons/contract/truenas_observed.json): activity.get reads its event, and
+// the statistics collector its sessions.
+type auditRow struct {
+	Timestamp int64           `json:"message_timestamp"`
+	Event     string          `json:"event"`
+	Success   bool            `json:"success"`
+	Address   string          `json:"address"`
+	Username  string          `json:"username"`
+	Session   string          `json:"session"`
+	AuditID   string          `json:"audit_id"`
+	EventData json.RawMessage `json:"event_data"`
+	// ServiceData says what an SMB event connected to (`service`, Samba's
+	// word for a share; share says whether it is one).
+	ServiceData struct {
+		Service string `json:"service"`
+	} `json:"service_data"`
+}
+
+// share is the share a row's event is on: its service, only when that is a
+// known enabled share (enabledShares), else "". Samba's service is what the
+// client connected to, and on a [homes]-style share that is the member's own
+// username, which is never passed on as a share. The one rule, for
+// activity.get and the collector alike.
+func (r auditRow) share(shares []smbShare) string {
+	for _, sh := range shares {
+		if sh.Name == r.ServiceData.Service {
+			return sh.Name
+		}
+	}
+	return ""
 }
 
 // decodeAnswer refuses an answer that is absent as well as one that is wrong.
@@ -760,26 +790,25 @@ func decodeAnswer(raw json.RawMessage, into any) error {
 	return json.Unmarshal(trimmed, into)
 }
 
-// eventDetail pulls the two useful things out of a payload whose shape changes
-// with the event type.
+// eventDetail pulls the result out of a payload whose shape changes with the
+// event type. The share is not in it: it is the row's service_data.service,
+// read by auditRow.share for activity.get and the collector alike.
 //
 // Decoded separately from the row so a surprise in here costs one field rather
-// than the whole read. An SMB AUTHENTICATION row carries no share and a CONNECT
-// row does; both are ordinary, and neither may make the other fail.
-func eventDetail(raw json.RawMessage) (share, detail string) {
+// than the whole read.
+func eventDetail(raw json.RawMessage) string {
 	if len(raw) == 0 {
-		return "", ""
+		return ""
 	}
 	var data struct {
-		Share  string `json:"share"`
 		Result struct {
 			Parsed string `json:"value_parsed"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(raw, &data); err != nil {
-		return "", ""
+		return ""
 	}
-	return data.Share, statusToken(data.Result.Parsed)
+	return statusToken(data.Result.Parsed)
 }
 
 // shareAudit is one share's audit settings.

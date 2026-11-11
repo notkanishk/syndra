@@ -143,7 +143,8 @@ func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
 		}
 	}
 	want := []string{"subjects.paged", "replay.29d", "results", "calls.unknown", "calls.recorded", "operations.physical", "calls.unsettled", "calls.serialised",
-		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable", "dangerous-scopes"}
+		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable"}
+	want = append(append(want, statsChecks...), "dangerous-scopes")
 	if !slices.Equal(skipped, want) {
 		t.Errorf("skipped %v, want exactly %v", skipped, want)
 	}
@@ -208,29 +209,41 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.FailsAfterCreate:          "plan-equals-apply",
 		reference.LogNeverMoves:             "health",
 		// Not a check's to catch: what a run leaves. Each has its own test.
-		reference.CommitsLate:         "(TestAnUnansweredCreateIsNeverReportedAsNothing)",
-		reference.RebindsSubject:      "(TestTheEndTouchesOnlyTheKitsOwnAccount)",
-		reference.AdoptsExisting:      "(TestACreateThatAdoptsAnExistingAccountStopsTheRun)",
-		reference.BindsOnWithdraw:     "(TestABindingBeforeTheCreateStopsEveryWrite)",
-		reference.OperationNamesOther: "(TestAPasswordSetNamingAnotherAccountFreezesTheSubject)",
-		reference.RebindsOnOperation:  "(TestAPasswordSetBeforeARebindIsListed)",
-		reference.PlanForgetsAccount:  "bound-to-created",
-		reference.CreateAnswersMember: "(TestACreateAnsweredWithAMembersAccountIsNotClaimed)",
-		reference.RebindsQuietly:      "(TestNoWriteFollowsAPlanThatNamesNoAccount)",
-		reference.CreateOmitsAccount:  "(TestACreateNamingNoAccountIsListed)",
-		reference.IgnoresReadOnly:     "lifecycle",
-		reference.LimitEmptyClears:    "limit-empty",
-		reference.LogHeadEmpty:        "health",
-		reference.ReadsTakeCallID:     "operations.reads",
-		reference.StateShowsUnlisted:  "unlisted-hidden",
-		reference.ResultOffSchema:     "results",
-		reference.ResultInPocket:      "results",
-		reference.CachedAsCurrent:     "freshness.cached",
-		reference.ReadsPerRequest:     "freshness.coalesce",
-		reference.CooldownIgnored:     "freshness.cooldown",
-		reference.PreviewRecorded:     "operations.physical",
-		reference.NoChangeAsSucceeded: "operations.physical",
-		reference.CallsEchoParams:     "operations.secret",
+		reference.CommitsLate:               "(TestAnUnansweredCreateIsNeverReportedAsNothing)",
+		reference.RebindsSubject:            "(TestTheEndTouchesOnlyTheKitsOwnAccount)",
+		reference.AdoptsExisting:            "(TestACreateThatAdoptsAnExistingAccountStopsTheRun)",
+		reference.BindsOnWithdraw:           "(TestABindingBeforeTheCreateStopsEveryWrite)",
+		reference.OperationNamesOther:       "(TestAPasswordSetNamingAnotherAccountFreezesTheSubject)",
+		reference.RebindsOnOperation:        "(TestAPasswordSetBeforeARebindIsListed)",
+		reference.PlanForgetsAccount:        "bound-to-created",
+		reference.CreateAnswersMember:       "(TestACreateAnsweredWithAMembersAccountIsNotClaimed)",
+		reference.RebindsQuietly:            "(TestNoWriteFollowsAPlanThatNamesNoAccount)",
+		reference.CreateOmitsAccount:        "(TestACreateNamingNoAccountIsListed)",
+		reference.IgnoresReadOnly:           "lifecycle",
+		reference.LimitEmptyClears:          "limit-empty",
+		reference.LogHeadEmpty:              "health",
+		reference.ReadsTakeCallID:           "operations.reads",
+		reference.StateShowsUnlisted:        "unlisted-hidden",
+		reference.ResultOffSchema:           "results",
+		reference.ResultInPocket:            "results",
+		reference.CachedAsCurrent:           "freshness.cached",
+		reference.ReadsPerRequest:           "freshness.coalesce",
+		reference.CooldownIgnored:           "freshness.cooldown",
+		reference.PreviewRecorded:           "operations.physical",
+		reference.NoChangeAsSucceeded:       "operations.physical",
+		reference.CallsEchoParams:           "operations.secret",
+		reference.StatsUndeclaredDimension:  "stats.points",
+		reference.StatsLocalNameSubject:     "stats.unbound",
+		reference.StatsZeroForGap:           "stats.gaps",
+		reference.StatsWatermarkAhead:       "stats.since",
+		reference.StatsSubjectsAboveTotal:   "stats.totals",
+		reference.StatsSinceIgnored:         "stats.since",
+		reference.StatsFinalMoves:           "stats.idempotent",
+		reference.StatsUnknownMetricOK:      "stats.since",
+		reference.StatsPageOverlap:          "stats.page-size",
+		reference.StatsNoBufferGap:          "stats.buffer",
+		reference.StatsTotalMissing:         "stats.totals",
+		reference.StatsDimensionNamesPerson: "stats.no-people",
 		// A reply lost mid-call and two calls racing a limit are beyond a
 		// black-box kit (calls.unsettled, calls.serialised skip); the
 		// reference's own tests watch these two fail.
@@ -241,6 +254,11 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 	features := map[reference.Defect][]string{reference.ResultOffSchema: {"results"}, reference.ResultInPocket: {"results"},
 		reference.CachedAsCurrent: {"freshness"}, reference.ReadsPerRequest: {"freshness"}, reference.CooldownIgnored: {"freshness"},
 		reference.PreviewRecorded: {"results", "calls"}, reference.NoChangeAsSucceeded: {"results", "calls"}, reference.CallsEchoParams: {"calls"}}
+	for _, d := range reference.Defects {
+		if strings.HasPrefix(string(d), "stats-") {
+			features[d] = []string{"stats"}
+		}
+	}
 	for _, d := range reference.Defects {
 		id, ok := catches[d]
 		if !ok {

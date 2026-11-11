@@ -457,6 +457,9 @@ services:
       # the named volume can be sized against them rather than the reverse.
       - MUTATION_LOG_MAX_BYTES=${TRUENAS_MUTATION_LOG_MAX_BYTES:-}
       - MUTATION_LOG_KEEP=${TRUENAS_MUTATION_LOG_KEEP:-}
+      # How often the statistics collector reads the NAS (ISO 8601). 0 turns
+      # it off, for a conformance kit run: its reads move target_reads.
+      - STATS_COLLECT_EVERY=${TRUENAS_STATS_COLLECT_EVERY:-PT1H}
     volumes:
       - truenas_addon_state:/var/lib/syndra-truenas
       # The NAS API key and anything else specific to this add-on.

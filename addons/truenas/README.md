@@ -51,6 +51,8 @@ Eight operations: `password.set` (the only one a member drives),
 | `TRUENAS_VERIFY_TLS` | Defaults to on. Turning it off hands the API key to whatever answers for the NAS's address |
 | `ADDON_TARGET` | This add-on's name in the deployment **and** the HKDF salt. It must equal the backend's `ADDON_TARGETS` entry: a disagreement derives different keys from the same secret, and the symptom is a pin failure indistinguishable from a wrong secret |
 | `ADDON_SECRET_FILE` | The one transport secret. Minted by the deployment's own `truenas-addon-secret` service into a volume mounted into both ends |
+| `STATS_COLLECT_EVERY` | How often the statistics collector reads the NAS (ISO 8601, default `PT1H`; `0` off). Set `0` for a conformance kit run: its reads move `target_reads` under the freshness checks |
+| `TZ` | The zone statistics count days in (`stats_zone` in the manifest); it must be the deployment's one zone, or Syndra will not collect them |
 
 Profile-gated in Compose (`--profile truenas`). The container holds the NAS API
 key, so a deployment with no NAS must not be running it.
@@ -69,6 +71,7 @@ key, so a deployment with no NAS must not be running it.
 | `storage_status.go` | The member's own view: is my account usable, how much room is left |
 | `mutationlog.go` | Append-only, `0600`, hash-chained; written ahead: an intent fsynced before each write, its result after (`mutate` in `apply.go`) |
 | `store.go` | bbolt. A result cache and a state mirror — never a queue |
+| `stats.go` · `stats_collect.go` · `stats_store.go` | Feature `stats`: the metric descriptors and `GET /stats`; the read-only collector on its own timer; its buffer of days in bbolt |
 | `lifecycle.go` | `active` · `draining` · `read_only`, at runtime |
 | `username.go` | Deriving the account name. TrueNAS generates none and `user.create` demands one, so it comes from the Zitadel identity's email localpart — the one handle the IdP guarantees stable and unique |
 

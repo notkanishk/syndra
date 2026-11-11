@@ -490,7 +490,7 @@ func TestReachAndHomesSayHowFreshTheyAre(t *testing.T) {
 // count the kit proves it with.
 func TestFreshnessIsDeclaredWithItsCooldownAndItsCount(t *testing.T) {
 	s := testServer(t, &fakeRPC{users: fixtureUsers, groups: fixtureGroups})
-	m := manifest(productName, "25.04.2", s, nil, s.fresh.cooldownISO())
+	m := manifest(productName, "25.04.2", s, nil, s.fresh.cooldownISO(), "UTC")
 	if !slices.Contains(m.Features, "freshness") || m.Limits.FreshReadCooldown != "PT30S" {
 		t.Errorf("features %v, cooldown %q", m.Features, m.Limits.FreshReadCooldown)
 	}

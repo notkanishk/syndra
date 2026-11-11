@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -50,6 +51,16 @@ func kitAddOn(t *testing.T) string {
 	fake := reachFake()
 	fake.users = `[{"username":"rey_mysterio","id":11,"uid":3051,"locked":false,"smb":true,"groups":[51],"home":"/var/empty"}]`
 	fake.refuse = map[string]string{"filesystem.stat": "[ENOENT] No such file or directory"}
+	// What the statistics collector reads: an account no binding names
+	// connecting to main, audited for everyone, and using it; nothing in
+	// open, whose auditing is off.
+	fake.shares = `[{"name":"main","path":"/mnt/tank/main","enabled":true,"audit":{"enable":true,"watch_list":[],"ignore_list":[]}},
+	                {"name":"old","path":"/mnt/tank/old","enabled":false},
+	                {"name":"open","path":"/mnt/tank/open","enabled":true}]`
+	fake.audit = fmt.Sprintf(`[{"message_timestamp":%d,"event":"CONNECT","success":true,"username":"rey_mysterio","session":"s1",
+		"service_data":{"service":"main"}}]`, time.Now().Unix())
+	fake.answers["pool.dataset.get_quota tank/main"] = `[{"id":3051,"used_bytes":1234}]`
+	fake.answers["pool.dataset.get_quota tank/open"] = `[]`
 	m := &mutatingRPC{fakeRPC: *fake}
 	s := testServer(t, &m.fakeRPC)
 	s.nas = newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
@@ -61,6 +72,11 @@ func kitAddOn(t *testing.T) string {
 	s.auth = &authenticator{signingKey: key, now: time.Now}
 	// The kit waits the cooldown out before each freshness check.
 	s.fresh.cooldown = time.Second
+	// One collection before the kit runs, and no collector after it
+	// (STATS_COLLECT_EVERY=0): its reads would move target_reads under the
+	// freshness checks.
+	s.stats = statsClock{zone: kolkata}
+	s.collectStatsOnce()
 	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: "/mnt/tank/main/home_dir", SetBy: "operator", SetAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +153,9 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 	// The run that writes judges what reads cannot: these must have run.
 	for _, id := range []string{"replay", "replay.refusal", "read-back", "limit-combine", "limit-empty", "operations.reads", "health", "channel-follows-account",
 		"withdraw-only.existing", "lifecycle", "operations", "plan-equals-apply", "create-is-new", "bound-to-created", "results",
-		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "calls.unknown", "calls.recorded"} {
+		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "calls.unknown", "calls.recorded",
+		"stats.descriptors", "stats.points", "stats.totals", "stats.since", "stats.idempotent", "stats.gaps",
+		"stats.unbound", "stats.buffer", "stats.page-size", "stats.no-people", "stats.no-people.ids"} {
 		ran := false
 		for _, res := range mutate.Results {
 			if res.ID == id {
