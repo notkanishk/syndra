@@ -1192,7 +1192,7 @@ settings with the full §5 rules.
   mapping-union managed set; the kit's `values` check requires it; a mapping
   on a non-enumerable membership is refused at `ResolvesValue`, not at
   registration (the manifest does not say it; `/values` does, once). Not a
-  rollout gate. (owner to confirm the resolution)
+  rollout gate. #needs-info: owner confirms the resolution
   *Review fixes (11 Nov 2026):* the refusal is `ErrFieldNotListable`
   (inside the `ErrValueNotResolvable` family), answered 400 with
   `details.field = "unlistable"`, the system's name and the field's label, and

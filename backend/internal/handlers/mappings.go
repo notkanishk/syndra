@@ -345,11 +345,13 @@ var errMappingTargetSilent = errors.New("the target has not published its capabi
 // notListable is the refusal of a mapping on a membership the add-on cannot
 // list, worded for the operator: the system's name and the field's label, never
 // the ids. next is the step, and it is not "change what it says": nothing typed
-// in the dialog can fix this. It is still addons.ErrFieldNotListable to errors.Is.
+// in the dialog can fix this. It is one step for create and edit alike, true on
+// both (the edit dialog has its own Remove). It unwraps to
+// addons.ErrFieldNotListable, and through it to the ErrValueNotResolvable family.
 type notListable struct{ sentence, next string }
 
 func (e notListable) Error() string { return e.sentence }
-func (notListable) Is(t error) bool { return t == addons.ErrFieldNotListable }
+func (notListable) Unwrap() error   { return addons.ErrFieldNotListable }
 
 func newNotListable(ctx context.Context, target, field string, schema []addons.EntitlementField) error {
 	system, _ := systemName(ctx, target)
@@ -361,7 +363,7 @@ func newNotListable(ctx context.Context, target, field string, schema []addons.E
 	}
 	return notListable{
 		sentence: system + " doesn't list its " + label + "s, so Syndra can't check or manage one. Nothing was changed.",
-		next:     "Remove this mapping, or ask whoever maintains the " + system + " add-on to make them listable.",
+		next:     "Ask whoever maintains the " + system + " add-on to make them listable.",
 	}
 }
 
@@ -384,7 +386,9 @@ func writeMappingError(w http.ResponseWriter, err error) {
 		// Before the family sentinel it wraps. A distinct detail key, because the
 		// dialog's step for "unresolvable" (read again, pick another) is false here.
 		var nl notListable
-		_ = errors.As(err, &nl)
+		if !errors.As(err, &nl) {
+			nl = notListable{sentence: err.Error(), next: "Ask whoever maintains the add-on to make these values listable."}
+		}
 		jsonValidationErrorResponse(w, nl.sentence, map[string]string{"field": "unlistable", "next": nl.next})
 	case errors.Is(err, addons.ErrValueNotResolvable):
 		// The add-on's OWN sentinel, not a local restatement of it. This branch

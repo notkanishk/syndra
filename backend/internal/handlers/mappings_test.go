@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -1258,7 +1259,7 @@ func TestAMappingOnAnUnlistableMembershipIsRefusedInPlainWords(t *testing.T) {
 	if want := "Shop NAS doesn't list its groups, so Syndra can't check or manage one. Nothing was changed."; got.Message != want {
 		t.Errorf("message = %q, want %q", got.Message, want)
 	}
-	if want := "Remove this mapping, or ask whoever maintains the Shop NAS add-on to make them listable."; got.Details["next"] != want {
+	if want := "Ask whoever maintains the Shop NAS add-on to make them listable."; got.Details["next"] != want {
 		t.Errorf("next = %q, want %q", got.Details["next"], want)
 	}
 	if strings.Contains(rr.Body.String(), "addon:") || strings.Contains(rr.Body.String(), "truenas") {
@@ -1266,5 +1267,15 @@ func TestAMappingOnAnUnlistableMembershipIsRefusedInPlainWords(t *testing.T) {
 	}
 	if len(h.created) != 0 {
 		t.Error("nothing may be written")
+	}
+}
+
+// The refusal of an unlistable membership belongs to both families, so a check
+// against either sentinel, now or later, finds it.
+func TestAnUnlistableRefusalIsInBothSentinelFamilies(t *testing.T) {
+	var err error = notListable{sentence: "s", next: "n"}
+	if !errors.Is(err, addons.ErrFieldNotListable) || !errors.Is(err, addons.ErrValueNotResolvable) {
+		t.Fatalf("errors.Is: field-not-listable %v, value-not-resolvable %v",
+			errors.Is(err, addons.ErrFieldNotListable), errors.Is(err, addons.ErrValueNotResolvable))
 	}
 }

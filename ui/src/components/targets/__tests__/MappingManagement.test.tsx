@@ -372,7 +372,7 @@ describe("a mapping on a membership the system cannot list", () => {
       message: "TrueNAS doesn't list its groups, so Syndra can't check or manage one. Nothing was changed.",
       details: {
         field: "unlistable",
-        next: "Remove this mapping, or ask whoever maintains the TrueNAS add-on to make them listable.",
+        next: "Ask whoever maintains the TrueNAS add-on to make them listable.",
       },
     });
     renderMappings();
