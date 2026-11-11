@@ -413,6 +413,9 @@ var (
 	dbPublishMappingVersion  = db.PublishMappingVersion
 	dbRollbackMappingVersion = db.RollbackMappingVersion
 	addonsEntitlementSchema  = addons.EntitlementSchema
+	// A target's persisted role map (targets.field_roles): which field is the
+	// account and which are its channels, readable with the add-on down.
+	addonsFieldRoles = addons.FieldRoles
 
 	// addonsResolvesValue is the add-on's half of mapping validation: whether
 	// `lab_makers` names anything on its target. Syndra cannot answer it — it
@@ -514,6 +517,9 @@ var (
 	addonsHealthOf             = addons.HealthOf
 	// How a member reaches a target, for the instructions on their own page.
 	addonsConnection = addons.ConnectionFor
+	// A target's accepted manifest: its kind and entitlement schema, for the
+	// pages that render fields by role.
+	addonsAcceptedManifest = addons.AcceptedManifest
 	// The backend's memory of an add-on's mutation log, read beside that add-on's
 	// own account of itself. Two authorities on purpose.
 	svcDormantAccounts = services.DormantAccounts

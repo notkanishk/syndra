@@ -79,3 +79,18 @@ func TestTheStartupBackfillIsTheMigrations(t *testing.T) {
 		t.Errorf("BackfillAccountIDs and 000088 must both backfill %q", where)
 	}
 }
+
+// Guard: 000090 adds retired_fields beside field_roles, additive (an older
+// backend ignores it), and the down migration drops exactly that.
+func TestMigration90_AddsRetiredFields(t *testing.T) {
+	up, down := readMigrationPair(t, "000090_field_roles_retired")
+	if !strings.Contains(up, "ALTER TABLE targets ADD COLUMN IF NOT EXISTS retired_fields TEXT[] NOT NULL DEFAULT '{}'") {
+		t.Error("000090 up must add retired_fields TEXT[] NOT NULL DEFAULT '{}' to targets")
+	}
+	if strings.Contains(up, "DROP") || strings.Contains(up, "UPDATE") {
+		t.Error("000090 up must be additive")
+	}
+	if !strings.Contains(down, "DROP COLUMN IF EXISTS retired_fields") {
+		t.Error("000090 down must drop retired_fields")
+	}
+}

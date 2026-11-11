@@ -69,7 +69,7 @@ func stubRevocation(t *testing.T) *revokeHarness {
 	}
 	// Resolved with `enabled` denied, as the revocation's allowance makes it.
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{Suppressed: []services.SuppressedEntitlement{{Field: services.FieldEnabled, Value: "true"}}}, nil
+		return services.EntitlementSet{Roles: truenasRoles, Suppressed: []services.SuppressedEntitlement{{Field: "enabled", Value: "true"}}}, nil
 	}
 	return h
 }
@@ -375,5 +375,42 @@ func TestTheQueuedLockDeclaresItselfAWithdrawal(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "drains on its own") {
 		t.Error("the disclosure is the promise the declaration keeps; one without the other is the bug")
+	}
+}
+
+// A revocation denies the account field by ROLE, from the role map persisted at
+// registration (addon-contract 2.1): with the add-on unreachable and the
+// registry empty, a target whose account is `active` is held on `active`, and
+// the lock queued is withdraw-only, the switch alone. With no role map nothing
+// is written: there is no field to hold.
+func TestARevocationDeniesTheAccountFieldByRole(t *testing.T) {
+	ruby := addons.Roles{"groups": addons.RoleMembership, "active": addons.RoleAccount, "web": addons.RoleChannel}
+	h := stubRevocation(t)
+	roles := addonsFieldRoles
+	t.Cleanup(func() { addonsFieldRoles = roles })
+	addonsFieldRoles = func(context.Context, string) (addons.Roles, error) { return ruby, nil }
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Roles: ruby, Fields: map[string][]string{"groups": {"staff"}},
+			Suppressed: []services.SuppressedEntitlement{{Field: "active", Value: "true"}}}, nil
+	}
+	if _, err := addons.Get("truenas"); !errors.Is(err, addons.ErrNotRegistered) {
+		t.Fatalf("the registry must be empty: %v", err)
+	}
+
+	if rr := revoke(`{"reason":"under investigation","confirmed":true}`); rr.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.allowances) != 1 || h.allowances[0].Field != "active" || h.allowances[0].Value != "true" {
+		t.Fatalf("want a denial of active=true, got %+v", h.allowances)
+	}
+	if len(h.converged) != 1 || !h.converged[0].WithdrawsOnly || len(h.converged[0].Desired) != 2 ||
+		string(h.converged[0].Desired["active"]) != "false" || string(h.converged[0].Desired["web"]) != "false" {
+		t.Fatalf("want a withdraw-only lock, the switch alone: %+v", h.converged)
+	}
+
+	h = stubRevocation(t)
+	addonsFieldRoles = func(context.Context, string) (addons.Roles, error) { return nil, addons.ErrNoManifest }
+	if rr := revoke(`{"reason":"under investigation","confirmed":true}`); rr.Code != http.StatusConflict || len(h.allowances) != 0 {
+		t.Fatalf("no role map, no hold: %d %+v", rr.Code, h.allowances)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"syndra/internal/addons"
 	"syndra/internal/claimserve"
 	"syndra/internal/db"
 	"syndra/internal/services"
@@ -14,7 +15,22 @@ import (
 // TestMain opens the project gate for the package by default. Almost every
 // handler test is about something else and names whatever project it likes;
 // the tests ABOUT the gate (target_project_test.go) put the real rules back.
+// truenasRoles is the TrueNAS add-on's persisted role map, which the handlers'
+// tests resolve against unless one says otherwise: the core names no field.
+var truenasRoles = addons.Roles{"group": addons.RoleMembership, "home": addons.RoleFlag,
+	"home_quota": addons.RoleLimit, "enabled": addons.RoleAccount, "smb_enabled": addons.RoleChannel}
+
+// truenasSchema is its accepted manifest's entitlement schema.
+var truenasSchema = []addons.EntitlementField{
+	{Name: "group", Role: addons.RoleMembership, Label: "Group"},
+	{Name: "home", Role: addons.RoleFlag, Label: "Gives a home folder"},
+	{Name: "home_quota", Role: addons.RoleLimit, Label: "Home folder limit", Unit: "bytes", Combine: "max", Unlimited: "0", PerPerson: true},
+	{Name: "enabled", Role: addons.RoleAccount},
+	{Name: "smb_enabled", Role: addons.RoleChannel, Label: "SMB"},
+}
+
 func TestMain(m *testing.M) {
+	addonsFieldRoles = func(context.Context, string) (addons.Roles, error) { return truenasRoles, nil }
 	dbRequireTargetProject = func(context.Context, string) error { return nil }
 	resolveMappingProject = func(_ context.Context, _ string, requested string) (string, error) { return requested, nil }
 	svcConvergeProjectChange = func(context.Context, string, string, string) error { return nil }

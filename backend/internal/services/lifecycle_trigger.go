@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
+
+	"syndra/internal/addons"
 )
 
 // The lifecycle trigger (design §4, §12; change `addon-platform` 7.9).
@@ -150,6 +153,14 @@ func convergeOn(ctx context.Context, actor, userID, target string) error {
 	// level-triggered, so a set built from the delta would remove everything
 	// that did not move.
 	set, err := svcResolveEntitlements(ctx, userID, target)
+	if errors.Is(err, addons.ErrNoManifest) {
+		// No role map yet: nothing says which field is the account, so there is
+		// nothing to queue, and failing would roll back a role change over a
+		// target that has not spoken. The drift sweep converges this person once
+		// the target's manifest is accepted.
+		log.Printf("[CASCADE] %s on %s skipped: %v; the drift sweep converges it once the manifest is accepted", userID, target, err)
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("resolve %s on %s: %w", userID, target, err)
 	}

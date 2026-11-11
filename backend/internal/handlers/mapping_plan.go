@@ -160,19 +160,29 @@ func rehearseMapping(ctx context.Context, m db.RoleMapping, surface, newValue st
 
 func mappingChangeWording(m db.RoleMapping, surface, newValue string) (detail, consequence string) {
 	if surface == planSurfaceMappingDelete {
-		return fmt.Sprintf("Leaves %s.", mappedTo(m.Field, m.Value)),
+		return fmt.Sprintf("Leaves %s.", mappedTo(m.Target, m.Field, m.Value)),
 			"They keep the role. It just no longer puts them there."
 	}
-	return fmt.Sprintf("Moves from %s to %s.", mappedTo(m.Field, m.Value), mappedTo(m.Field, newValue)),
+	return fmt.Sprintf("Moves from %s to %s.", mappedTo(m.Target, m.Field, m.Value), mappedTo(m.Target, m.Field, newValue)),
 		fmt.Sprintf("They gain what %s opens and lose what %s opened.", newValue, m.Value)
 }
 
 // mappedTo says what a mapping puts someone in, in words a person reads: "the
 // Staff group", not "group = Staff". The dialog's title already names the
 // system, and the person's name heads the row, so neither is repeated here.
-func mappedTo(field, value string) string {
-	if field == "group" {
-		return "the " + value + " group"
+// Worded from the field's role and the add-on's label (design §3), never its
+// name: a membership is "the <value> <label>"; anything else, or a field whose
+// label is not known, is "<label or name> <value>".
+func mappedTo(target, field, value string) string {
+	schema, _ := addonsEntitlementSchema(target)
+	for _, f := range schema {
+		if f.Name != field {
+			continue
+		}
+		if f.Role == addons.RoleMembership && f.Label != "" {
+			return "the " + value + " " + strings.ToLower(f.Label)
+		}
+		return fieldLabel(f) + " " + value
 	}
 	return field + " " + value
 }
@@ -645,7 +655,7 @@ func handleRehearseMappingCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	plan := services.BulkPlan{Op: "create_mapping"}
-	detail := fmt.Sprintf("Joins %s.", mappedTo(field, value))
+	detail := fmt.Sprintf("Joins %s.", mappedTo(req.Target, field, value))
 	for _, id := range holders {
 		plan.Outcomes = append(plan.Outcomes, services.BulkOutcome{
 			UserID: id, Effect: services.EffectApply, Detail: detail,

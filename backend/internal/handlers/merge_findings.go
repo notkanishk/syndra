@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
-	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 	"syndra/internal/services/merge"
 )
@@ -96,13 +96,26 @@ func decorate(ctx context.Context, target string, findings []db.MergeFinding) []
 	out := make([]findingView, 0, len(findings))
 	mappings := mappingsByField(ctx, target)
 	held := heldRolesFor(ctx, findings)
+	// Which fields are lifecycle ones, by role. Unreadable, none is: nothing
+	// is offered for adoption that might not be one.
+	roles, _ := addonsFieldRoles(ctx, target)
+	schema, _ := addonsEntitlementSchema(target)
+	limits := map[string]bool{}
+	for _, f := range schema {
+		limits[f.Name] = adoptableLimit(f)
+	}
 	for _, f := range findings {
 		view := findingView{MergeFinding: f}
 		switch {
 		case f.Outcome == string(merge.DeletedUpstream):
 			// Neither adoptable nor a policy question: the account is gone, and
 			// the two answers are re-provision or stop managing it.
-		case !services.IsLifecycleField(f.Field):
+		case limits[f.Field]:
+			// A limit an operator may set for one person (compared since
+			// addon-contract 2.7): the target's value is adopted as their own
+			// limit, an allowance with a reason and a bound, like a hold.
+			view.Adoptable = true
+		case !roles.IsLifecycle(f.Field):
 			view.WhyNot = f.Field + " comes from this target's role mappings, which have no per-person form. " +
 				"Editing one changes it for every holder of that role."
 			view.Policy = governing(mappings[f.Field], held[f.SubjectID])
@@ -552,6 +565,40 @@ func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeF
 	}
 }
 
+// adoptableLimit is a field whose target value can be adopted for one person:
+// a `limit` the add-on lets an operator set per person (design §3), whose
+// one-person form is an allowance with direction "set".
+func adoptableLimit(f addons.EntitlementField) bool {
+	return f.Role == addons.RoleLimit && f.PerPerson
+}
+
+// adoptOwnLimit keeps the limit the target holds for this person by making it
+// their own limit: a `set` allowance with the target's observed value, an
+// author, a reason and an end or a review date (the store refuses one without),
+// written with its audit row. The resolver then wants what the target holds,
+// so the next pass agrees and settles the finding; nothing is written to the
+// target.
+func adoptOwnLimit(ctx context.Context, f db.MergeFinding, req resolveMergeFindingRequest, actor string) error {
+	var held []string
+	if err := json.Unmarshal(f.Theirs, &held); err != nil || len(held) != 1 {
+		return fmt.Errorf("%w: the target's value for %s is not one limit", ErrResolutionNotExpressible, f.Field)
+	}
+	field, value, err := validateAllowanceAgainstTarget(ctx, f.Target, f.Field, held[0])
+	if err != nil {
+		return err
+	}
+	if n, err := strconv.ParseInt(value, 10, 64); err != nil || n < 0 {
+		return fmt.Errorf("%w: the target's value for %s, %q, is not a whole number", ErrResolutionNotExpressible, f.Field, value)
+	}
+	_, err = dbCreateAllowance(ctx, db.Allowance{
+		SubjectID: f.SubjectID, Target: f.Target,
+		Field: field, Value: value, Direction: db.AllowanceSet,
+		ActorID: actor, Reason: req.Reason,
+		ExpiresAt: req.ExpiresAt, ReviewDate: req.ReviewDate,
+	})
+	return err
+}
+
 // adoptTargetValue writes the target's value into the desired state, where
 // something can hold it for one subject.
 //
@@ -571,7 +618,17 @@ func adoptTargetValue(ctx context.Context, f db.MergeFinding, req resolveMergeFi
 		return fmt.Errorf("%w: adopting a value makes it policy for that person, which needs a reason",
 			db.ErrAllowanceInvalid)
 	}
-	if !services.IsLifecycleField(f.Field) {
+	schema, _ := addonsEntitlementSchema(f.Target)
+	for _, field := range schema {
+		if field.Name == f.Field && adoptableLimit(field) {
+			return adoptOwnLimit(ctx, f, req, actor)
+		}
+	}
+	roles, err := addonsFieldRoles(ctx, f.Target)
+	if err != nil {
+		return fmt.Errorf("read the field roles of %s: %w", f.Target, err)
+	}
+	if !roles.IsLifecycle(f.Field) {
 		return fmt.Errorf("%w: %s comes from this target's role mappings, which have no per-person form — "+
 			"changing one changes it for every holder of that role. Edit the mapping, or change what roles this person holds",
 			ErrResolutionNotExpressible, f.Field)
@@ -589,7 +646,7 @@ func adoptTargetValue(ctx context.Context, f db.MergeFinding, req resolveMergeFi
 
 	// The denial names the value it removes — the `true` the resolver would
 	// otherwise compute — which is the shape `resolveLifecycle` matches on.
-	_, err := dbCreateAllowance(ctx, db.Allowance{
+	_, err = dbCreateAllowance(ctx, db.Allowance{
 		SubjectID: f.SubjectID, Target: f.Target,
 		Field: f.Field, Value: "true", Direction: db.AllowanceDeny,
 		ActorID: actor, Reason: req.Reason,

@@ -124,7 +124,7 @@ func DormantAccounts(ctx context.Context, target string) (DormantReport, error) 
 		// appears here. Lifecycle first, because a subject whose account is
 		// deliberately disabled by a hold is still entitled — holding access is
 		// not the same as having no reason to hold it.
-		if set.Lifecycle.Enabled || len(set.Fields) > 0 && anyValues(set.Fields) {
+		if set.Lifecycle.Account || len(set.Fields) > 0 && anyValues(set.Fields) {
 			continue
 		}
 

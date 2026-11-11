@@ -50,6 +50,14 @@ type UnmanagedAccount struct {
 	Standing *addons.Standing `json:"standing,omitempty"`
 }
 
+// BoundAccount is a managed account on the inventory: its binding, and the
+// standing the add-on reports for it in the same read (contract 2, design §6),
+// absent when the read does not list it.
+type BoundAccount struct {
+	db.TargetBinding
+	Standing *addons.Standing `json:"standing,omitempty"`
+}
+
 // AddonReconcileResult is what one pass saw and did.
 type AddonReconcileResult struct {
 	Target string `json:"target"`
@@ -63,7 +71,7 @@ type AddonReconcileResult struct {
 	// manage, so the ones it does had no surface at all — and they are the ones
 	// an operator acts on. Read on the INVENTORY path only, because a reconcile
 	// pass is a background sweep whose result nobody reads as a list.
-	Accounts []db.TargetBinding `json:"accounts,omitempty"`
+	Accounts []BoundAccount `json:"accounts,omitempty"`
 	// Queued counts the convergences this pass enqueued. Never "fixed": they
 	// wait for the drain like every other add-on row.
 	Queued int `json:"queued"`
@@ -119,7 +127,25 @@ func Inventory(ctx context.Context, target string) (AddonReconcileResult, error)
 		return res, fmt.Errorf("read bindings for %s: %w", target, err)
 	}
 	res.Bound = len(bindings)
-	res.Accounts = bindings
+	standing := map[string]*addons.Standing{}
+	byName := map[string]*addons.Standing{}
+	for _, a := range read.Accounts {
+		if a.AccountID != "" {
+			standing[a.AccountID] = a.Standing
+		}
+		byName[a.Username] = a.Standing
+	}
+	for _, b := range bindings {
+		// Matched as every binding is: the account id first, then the name.
+		s, found := (*addons.Standing)(nil), false
+		if b.AccountID != nil {
+			s, found = standing[*b.AccountID]
+		}
+		if !found {
+			s = byName[b.Username]
+		}
+		res.Accounts = append(res.Accounts, BoundAccount{TargetBinding: b, Standing: s})
+	}
 	res.Unmanaged = unmanaged(read.Accounts, bindings)
 	res.ReadAt, res.Current, res.Truncated = read.TakenAt, read.Current, read.Truncated
 	if !read.Current {
@@ -346,12 +372,14 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 	}
 	// The fields' roles, as last accepted (targets.field_roles). Without them
 	// a limit could not be told from a membership, so the pass stops rather
-	// than compare one it must not (stateByBinding).
+	// than compare one it must not (comparable). The schema says how a limit
+	// combines; without it no limit is compared.
 	roles, err := fieldRoles(ctx, target)
 	if err != nil {
 		return 0, findings, fmt.Errorf("the target's field roles could not be read: %w", err)
 	}
-	current := stateByBinding(accounts, roles)
+	schema, _ := entitlementSchema(target)
+	current := stateByBinding(accounts)
 
 	subjects := make([]addons.PlanSubject, 0, len(bindings))
 	desired := make(map[string]services.EntitlementSet, len(bindings))
@@ -381,7 +409,11 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 			// version skew nobody chose.
 			base = nil
 		}
-		state := merge.Classify(b.SubjectID, intent, theirs, base)
+		// What is compared: the intent with each limit combined as the add-on
+		// combines it (task 2.7), so a hand-edited limit is a finding, not a
+		// silent revert. The wire map (intent) is still what is planned.
+		compared := comparable(intent, theirs, roles, schema)
+		state := merge.Classify(b.SubjectID, compared, theirs, base)
 		found := state.Findings()
 		findings = append(findings, found...)
 		*unrecorded += persistFindings(ctx, target, state, found)
@@ -399,7 +431,7 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		// target's current state as the last agreed one — the silent revert,
 		// through the bookkeeping.
 		if len(found) == 0 && theirs != nil {
-			observeState(ctx, target, b.SubjectID, intent, theirs, set.WithdrawsOnly())
+			observeState(ctx, target, b.SubjectID, compared, theirs, set.WithdrawsOnly())
 		}
 
 		desired[b.SubjectID] = set
@@ -550,13 +582,10 @@ type accountState struct {
 	byName map[string]map[string]json.RawMessage
 }
 
-// stateByBinding indexes each account's state, less the fields whose role is
-// limit (roles: the target's persisted role map). An add-on reports the
-// effective limit it holds (design §3), and the core compares limits only
-// once it combines them the same way, which is slice 2's: until then a limit
-// is compared exactly as before contract 2, which is not at all, so an
-// unreadable quota table can never surface as a finding.
-func stateByBinding(accounts []addons.TargetAccount, roles map[string]string) accountState {
+// stateByBinding indexes each account's state, as the add-on reported it. A
+// limit is the effective one the add-on holds (design §3); comparable puts
+// the intent in the same terms.
+func stateByBinding(accounts []addons.TargetAccount) accountState {
 	out := accountState{
 		byID:   make(map[string]map[string]json.RawMessage, len(accounts)),
 		byName: make(map[string]map[string]json.RawMessage, len(accounts)),
@@ -565,16 +594,44 @@ func stateByBinding(accounts []addons.TargetAccount, roles map[string]string) ac
 		if a.State == nil {
 			continue
 		}
-		state := make(map[string]json.RawMessage, len(a.State))
-		for field, v := range a.State {
-			if roles[field] != addons.RoleLimit {
-				state[field] = v
-			}
-		}
+		state := a.State
 		if a.AccountID != "" {
 			out.byID[a.AccountID] = state
 		}
 		out.byName[a.Username] = state
+	}
+	return out
+}
+
+// comparable is the intent in the terms the target reports its state in (task
+// 2.7): each `limit` field the one effective limit, combined the way the
+// add-on combines (EntitlementField.CombineLimit: max, unlimited dominant).
+// A limit is left out, unknown and not compared (never theirs_only), when no
+// value sets it (the add-on sets nothing), when the target did not report it
+// (a quota table it could not read), or when its rule is not known (no
+// accepted schema). Every other field is the intent's own value.
+func comparable(intent, theirs map[string]json.RawMessage, roles addons.Roles, schema []addons.EntitlementField) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(intent))
+	for field, value := range intent {
+		if roles[field] != addons.RoleLimit {
+			out[field] = value
+			continue
+		}
+		if _, reported := theirs[field]; !reported {
+			continue
+		}
+		var values []string
+		if json.Unmarshal(value, &values) != nil {
+			continue
+		}
+		for _, f := range schema {
+			if f.Name != field {
+				continue
+			}
+			if limit, ok := f.CombineLimit(values); ok {
+				out[field], _ = json.Marshal([]string{limit})
+			}
+		}
 	}
 	return out
 }
@@ -735,7 +792,7 @@ func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBin
 		if err != nil {
 			return queued, fmt.Errorf("resolve %s: %w", id, err)
 		}
-		if !set.Lifecycle.Enabled {
+		if !set.Lifecycle.Account {
 			continue
 		}
 		waiting, err := pendingApply(ctx, target, id, set.Desired())

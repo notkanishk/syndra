@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/services/periodic"
 )
 
@@ -463,46 +464,62 @@ func (e *ErrManifestRefused) Error() string {
 // keeps its role for ever: a manifest naming an existing field with another
 // role, or naming another field the account, is refused and the stored map
 // kept. A field the manifest no longer declares keeps its entry, so it cannot
-// come back meaning something else.
+// come back meaning something else, and is recorded retired: the target no
+// longer accepts it, so nothing reads or sends it until a manifest declares it
+// again. The account field can never be retired: validate requires exactly
+// one account and this refuses any but the stored one.
 func acceptRoles(ctx context.Context, target string, m Manifest) error {
 	stored, _, err := dbTargetFieldRoles(ctx, target)
 	if err != nil {
 		return fmt.Errorf("the stored field roles could not be read, so a change of meaning could not be ruled out: %w", err)
 	}
-	merged := maps.Clone(stored)
+	merged := maps.Clone(stored.Roles)
 	if merged == nil {
 		merged = map[string]string{}
 	}
-	account := ""
-	for name, role := range stored {
-		if role == RoleAccount {
-			account = name
-		}
-	}
+	account := Roles(stored.Roles).Account()
+	declared := map[string]bool{}
 	for _, f := range m.EntitlementSchema {
-		if was, known := stored[f.Name]; known && was != f.Role {
+		if was, known := stored.Roles[f.Name]; known && was != f.Role {
 			return fmt.Errorf("field %q was declared with role %s and is now declared %s; a field is never re-purposed, a new meaning is a new name", f.Name, was, f.Role)
 		}
 		if f.Role == RoleAccount && account != "" && f.Name != account {
 			return fmt.Errorf("field %q is declared the account, and %q is; the account field never moves", f.Name, account)
 		}
 		merged[f.Name] = f.Role
+		declared[f.Name] = true
 	}
-	if maps.Equal(merged, stored) {
+	retired := []string{}
+	for name := range merged {
+		if !declared[name] {
+			retired = append(retired, name)
+		}
+	}
+	slices.Sort(retired)
+	if maps.Equal(merged, stored.Roles) && slices.Equal(retired, stored.Retired) {
 		return nil
 	}
-	return dbSaveTargetFieldRoles(ctx, target, merged)
+	return dbSaveTargetFieldRoles(ctx, target, db.FieldRoleMap{Roles: merged, Retired: retired})
 }
 
-// FieldRoles is a target's persisted role map, field name → role, which every
-// reader of a field's meaning reads instead of the live manifest: it holds
-// while the add-on is down and across a backend restart (design §3).
-func FieldRoles(ctx context.Context, target string) (map[string]string, error) {
-	roles, found, err := dbTargetFieldRoles(ctx, target)
-	if err == nil && !found {
+// FieldRoles is a target's role map of the fields its accepted manifest
+// declares, field name → role, which every reader of a field's meaning reads
+// instead of the live manifest: it holds while the add-on is down and across
+// a backend restart (design §3). A retired field is not in it: kept in the
+// store so its name keeps its meaning, never sent, since the target refuses it.
+func FieldRoles(ctx context.Context, target string) (Roles, error) {
+	stored, found, err := dbTargetFieldRoles(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
 		return nil, fmt.Errorf("%w: %s has no accepted contract-2 manifest yet", ErrNoManifest, target)
 	}
-	return roles, err
+	roles := maps.Clone(Roles(stored.Roles))
+	for _, name := range stored.Retired {
+		delete(roles, name)
+	}
+	return roles, nil
 }
 
 // AlsoSays is what the target's accepted manifest carries that this backend
@@ -628,6 +645,16 @@ func EntitlementSchema(target string) ([]EntitlementField, error) {
 		return nil, err
 	}
 	return m.EntitlementSchema, nil
+}
+
+// AcceptedManifest is a target's accepted manifest, for the pages that show
+// its kind and fields; ErrNotRegistered or ErrNoManifest otherwise.
+func AcceptedManifest(target string) (Manifest, error) {
+	a, err := Get(target)
+	if err != nil {
+		return Manifest{}, err
+	}
+	return a.Manifest()
 }
 
 // ConnectionFor is how a member reaches a target, or nil.

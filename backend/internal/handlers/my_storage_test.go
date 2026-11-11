@@ -66,9 +66,9 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 	})
 
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{
+		return services.EntitlementSet{Roles: truenasRoles,
 			Fields:    map[string][]string{"group": {"lab_makers"}},
-			Lifecycle: services.LifecycleState{Enabled: h.entitled, SMBEnabled: h.entitled},
+			Lifecycle: services.LifecycleState{Account: h.entitled, Channels: map[string]bool{"smb_enabled": h.entitled}},
 		}, nil
 	}
 	dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) {
@@ -473,9 +473,9 @@ func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
 	}
 	stubMyStorage(t, &storageHarness{entitled: true, bound: true})
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{
+		return services.EntitlementSet{Roles: truenasRoles,
 			Fields:    map[string][]string{"group": {"community"}},
-			Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true},
+			Lifecycle: services.LifecycleState{Account: true, Channels: map[string]bool{"smb_enabled": true}},
 			Given:     map[string][]services.RoleSource{"group\x00community": {{ProjectID: "p1", RoleKey: "fab_lead"}}},
 		}, nil
 	}
@@ -494,5 +494,44 @@ func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
 	}
 	if !view.HomeKept {
 		t.Error("a home no role gives any more must be said to be kept")
+	}
+}
+
+// The member's own page carries what GET /targets would (a member cannot read
+// that list): the target's kind and accepted schema, and their own account's
+// standing from the add-on's storage.status reply about that account alone
+// (addon-contract slice 2, for task 3.7). Nothing when no manifest has been
+// accepted, or when the add-on does not answer.
+func TestTheMembersViewCarriesKindSchemaAndTheirOwnStanding(t *testing.T) {
+	storage, manifest := addonsMyStorage, addonsAcceptedManifest
+	t.Cleanup(func() { addonsMyStorage, addonsAcceptedManifest = storage, manifest })
+	answer := addons.StorageStatus{Outcome: addons.OutcomeSucceeded,
+		Standing: &addons.Standing{WaitingOn: "member", Note: "Waiting for a password."}}
+	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus { return answer }
+	addonsAcceptedManifest = func(string) (addons.Manifest, error) {
+		return addons.Manifest{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	}
+	stubMyStorage(t, &storageHarness{entitled: true, bound: true})
+
+	view, err := describeMyTarget(httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil), "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Kind != "storage" || len(view.EntitlementSchema) != 5 {
+		t.Fatalf("kind %q, schema %v", view.Kind, view.EntitlementSchema)
+	}
+	if view.Standing == nil || view.Standing.WaitingOn != "member" || view.Standing.Usable {
+		t.Fatalf("the member's own standing from storage.status: %+v", view.Standing)
+	}
+
+	addonsAcceptedManifest = func(string) (addons.Manifest, error) { return addons.Manifest{}, addons.ErrNoManifest }
+	answer = addons.StorageStatus{Outcome: addons.OutcomeUnreached}
+	view, err = describeMyTarget(httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil), "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(view)
+	if view.Standing != nil || strings.Contains(string(raw), `"kind"`) || strings.Contains(string(raw), "entitlement_schema") {
+		t.Fatalf("not read is said by saying nothing: %s", raw)
 	}
 }

@@ -1,0 +1,11 @@
+-- 000090_field_roles_retired (addon-contract 2.1)
+--
+-- A field the add-on stops declaring keeps its role in targets.field_roles
+-- for ever, so it can never come back meaning something else. But the target
+-- no longer accepts it: an add-on refuses a field outside its schema, so a
+-- channel kept in the map and sent as false would make every apply, the
+-- departure locks included, a target refusal. retired_fields names the
+-- stored fields the accepted manifest no longer declares; every reader of the
+-- role map reads the declared ones only. Additive: an older backend ignores
+-- it. Empty until a manifest drops a field.
+ALTER TABLE targets ADD COLUMN IF NOT EXISTS retired_fields TEXT[] NOT NULL DEFAULT '{}';

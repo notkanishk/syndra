@@ -107,7 +107,7 @@ func TestResolvingABindingConflict(t *testing.T) {
 		}, nil
 	}
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true}}, nil
+		return services.EntitlementSet{Roles: truenasRoles, Lifecycle: services.LifecycleState{Account: true, Channels: map[string]bool{"smb_enabled": true}}}, nil
 	}
 	dbRecordSystemConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
 		converged = append(converged, c.SubjectID)
@@ -188,7 +188,7 @@ func TestAResolutionThatCannotQueueIsRolledBack(t *testing.T) {
 			ConvergedSubjectID: "subject-b", BoundSubjectID: "subject-a"}, nil
 	}
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{}, nil
+		return services.EntitlementSet{Roles: truenasRoles}, nil
 	}
 	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, error) {
 		return "", "", errors.New("the outbox is unavailable")
@@ -366,5 +366,45 @@ func TestReconcilingAnUnregisteredTargetIsRefused(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+// GET /targets carries each target's kind and its accepted entitlement schema,
+// every field with its role, label, unit, combine, unlimited and per_person,
+// so the UI renders fields by role and never from a list of its own; and
+// nothing at all before a manifest is accepted (addon-contract slice 2, for
+// task 3.7).
+func TestATargetSaysItsKindAndFieldsOnlyOnceAManifestIsAccepted(t *testing.T) {
+	origGet, origManifest := addonsGet, addonsAcceptedManifest
+	t.Cleanup(func() { addonsGet, addonsAcceptedManifest = origGet, origManifest })
+	addonsGet = func(string) (*addons.Addon, error) { return &addons.Addon{}, nil }
+	addonsAcceptedManifest = func(target string) (addons.Manifest, error) {
+		if target != "truenas" {
+			return addons.Manifest{}, addons.ErrNoManifest
+		}
+		return addons.Manifest{Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	}
+
+	raw, _ := json.Marshal(describeTarget(addons.Registration{Target: "truenas"}, addons.TransportCredential{}))
+	var got struct {
+		Kind   string           `json:"kind"`
+		Schema []map[string]any `json:"entitlement_schema"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Kind != "storage" || len(got.Schema) != 5 {
+		t.Fatalf("kind %q, schema %v", got.Kind, got.Schema)
+	}
+	quota := got.Schema[2]
+	for k, want := range map[string]any{"name": "home_quota", "role": "limit", "label": "Home folder limit", "unit": "bytes", "combine": "max", "unlimited": "0", "per_person": true} {
+		if quota[k] != want {
+			t.Errorf("home_quota %s = %v, want %v", k, quota[k], want)
+		}
+	}
+
+	silent, _ := json.Marshal(describeTarget(addons.Registration{Target: "unifi"}, addons.TransportCredential{}))
+	if strings.Contains(string(silent), `"kind"`) || strings.Contains(string(silent), "entitlement_schema") {
+		t.Fatalf("no accepted manifest must say nothing, not guess: %s", silent)
 	}
 }

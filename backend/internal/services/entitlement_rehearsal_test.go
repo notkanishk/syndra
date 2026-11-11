@@ -216,7 +216,7 @@ func TestDesiredEncodesTheInstructionAndNotAnApproximationOfIt(t *testing.T) {
 	})
 
 	t.Run("lifecycle is always present", func(t *testing.T) {
-		none := EntitlementSet{Fields: map[string][]string{}}
+		none := EntitlementSet{Roles: truenasRoles, Fields: map[string][]string{}}
 		got := none.Desired()
 		for _, field := range []string{FieldEnabled, FieldSMBEnabled} {
 			if _, present := got[field]; !present {
@@ -230,8 +230,9 @@ func TestDesiredEncodesTheInstructionAndNotAnApproximationOfIt(t *testing.T) {
 
 	t.Run("a lifecycle field arriving through Fields does not race the resolver's", func(t *testing.T) {
 		set := EntitlementSet{
+			Roles:     truenasRoles,
 			Fields:    map[string][]string{FieldEnabled: {"true"}},
-			Lifecycle: LifecycleState{Enabled: false},
+			Lifecycle: LifecycleState{Account: false},
 		}
 		if string(set.Desired()[FieldEnabled]) != "false" {
 			t.Error("the resolver's lifecycle value must win over anything in Fields")

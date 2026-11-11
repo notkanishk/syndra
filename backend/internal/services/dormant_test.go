@@ -41,7 +41,7 @@ func stubDormant(t *testing.T) {
 			// Still entitled: a role reaches this target for them.
 			return EntitlementSet{
 				Fields:    map[string][]string{"group": {"lab_makers"}},
-				Lifecycle: LifecycleState{Enabled: true},
+				Lifecycle: LifecycleState{Account: true},
 			}, nil
 		}
 		return EntitlementSet{Fields: map[string][]string{}}, nil

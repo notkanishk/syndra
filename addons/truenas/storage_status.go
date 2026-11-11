@@ -54,6 +54,10 @@ type StorageStatus struct {
 	// list that was read is "no folder is open to you yet".
 	Places         []Place `json:"places"`
 	PlacesReadable bool    `json:"places_readable"`
+	// Standing is the account's standing, the one a subjects read reports for
+	// it (standingOf, same rule), so the member's page says it without a full
+	// subjects read.
+	Standing *Standing `json:"standing"`
 }
 
 // ShareUsage is one share and what this member is holding in it.
@@ -106,6 +110,8 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	status.NeedsNewPassword = !account.PasswordDisabled && !account.SMB &&
 		binding.WantsSMB != nil && *binding.WantsSMB
 	status.Usable = !account.PasswordDisabled && !account.Locked && !status.NeedsNewPassword
+	status.Standing = standingOf(&Subject{Username: binding.Username, UID: account.UID,
+		Enabled: !account.Locked, SMBEnabled: account.SMB, PasswordSet: !account.PasswordDisabled})
 
 	// Best-effort like usage: whether the account works is the urgent half.
 	if places, err := s.memberPlaces(account.UID, account.Groups, homeOf(account.Home)); err == nil {

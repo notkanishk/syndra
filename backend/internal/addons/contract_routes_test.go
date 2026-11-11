@@ -471,6 +471,9 @@ func TestReadOperationsSendTheContractShapeAndReadTheirPocket(t *testing.T) {
 	if len(st.Places) != 1 || !st.Places[0].Home || st.Places[0].Usage == nil || st.Places[0].Usage.UsedBytes != 19756849561 {
 		t.Errorf("storage places did not land: %+v", st.Places)
 	}
+	if st.Standing == nil || st.Standing.Usable || st.Standing.WaitingOn != "member" || st.Standing.Next == "" {
+		t.Errorf("the account's standing did not land: %+v", st.Standing)
+	}
 
 	got = addonAnswering(t, "operation_response_activity.json")
 	act := Activity(ctx, "truenas", "289471021834760193", "2026-11-01T00:00:00Z")
