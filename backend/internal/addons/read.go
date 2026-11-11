@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"syndra/internal/db"
@@ -673,6 +672,9 @@ type StorageStatus struct {
 	// home folder first. PlacesReadable false is "not read", never "none".
 	Places         []Place `json:"places"`
 	PlacesReadable bool    `json:"places_readable"`
+	// Standing is the account's standing as the add-on reports it in this
+	// reply (contract 2): nil when it did not say.
+	Standing *Standing `json:"standing,omitempty"`
 
 	Outcome Outcome `json:"-"`
 	Err     error   `json:"-"`
@@ -922,9 +924,9 @@ type Place struct {
 		UsedBytes  int64 `json:"used_bytes"`
 		QuotaBytes int64 `json:"quota_bytes,omitempty"`
 	} `json:"usage,omitempty"`
-	// SMBAddress and UNCAddress are filled by Syndra from the connection host,
-	// the one place an address is built: smb://host/share/folder for macOS and
-	// Linux, \\host\share\folder for Windows.
+	// SMBAddress and UNCAddress are filled by Syndra, never by an add-on:
+	// the storage kind's view builds them from the connection
+	// (handlers/kinds.Address), the one place an address is built.
 	SMBAddress string `json:"smb_address,omitempty"`
 	UNCAddress string `json:"unc_address,omitempty"`
 	// Roles are the member's own roles whose groups open this place, filled
@@ -936,20 +938,6 @@ type Place struct {
 type PlaceRole struct {
 	ProjectID string `json:"project_id"`
 	RoleKey   string `json:"role_key"`
-}
-
-// Address fills both addresses for a host.
-func (p *Place) Address(host string) {
-	segments := []string{p.Share}
-	if p.Folder != "" {
-		segments = append(segments, strings.Split(p.Folder, "/")...)
-	}
-	escaped := make([]string, len(segments))
-	for i, s := range segments {
-		escaped[i] = url.PathEscape(s)
-	}
-	p.SMBAddress = "smb://" + host + "/" + strings.Join(escaped, "/")
-	p.UNCAddress = `\\` + host + `\` + strings.Join(segments, `\`)
 }
 
 // MyStorage reads one member's own account state and usage.
@@ -1002,7 +990,7 @@ func MyStorage(ctx context.Context, target, subject, actor string) StorageStatus
 	w := envelope.Storage
 	return StorageStatus{Username: w.Username, Usable: w.Usable, NeedsPassword: w.NeedsPassword, SMBEnabled: w.SMBEnabled,
 		Shares: w.Shares, UsageReadable: w.UsageReadable, NeedsNewPassword: w.NeedsNewPassword,
-		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, Outcome: OutcomeSucceeded}
+		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, Standing: w.Standing, Outcome: OutcomeSucceeded}
 }
 
 // storageWire is the storage.status pocket as it travels: StorageStatus with
@@ -1021,6 +1009,7 @@ type storageWire struct {
 	NeedsNewPassword bool        `json:"needs_new_password"`
 	Places           []placeWire `json:"places"`
 	PlacesReadable   bool        `json:"places_readable"`
+	Standing         *Standing   `json:"standing"`
 }
 
 // ActivityReport is what a target's own audit log says about one subject, and

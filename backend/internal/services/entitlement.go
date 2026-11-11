@@ -1,14 +1,17 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"syndra/internal/access"
+	"syndra/internal/addons"
 	"syndra/internal/db"
 )
 
@@ -45,6 +48,11 @@ type EntitlementSet struct {
 	// field+"\x00"+value, so a member's page can say "from your Fabrication
 	// lead role". Never sent to a target: a target converges values, not why.
 	Given map[string][]RoleSource `json:"-"`
+	// Roles is the target's role map the set was resolved with, as
+	// targets.field_roles holds it (design §3): what names the account and its
+	// channels for Desired and WithdrawsOnly. Never the live manifest, so a
+	// revocation resolves with the add-on down and the backend restarted.
+	Roles addons.Roles `json:"-"`
 }
 
 // RoleSource is one held role behind a value.
@@ -78,14 +86,16 @@ type SuppressedEntitlement struct {
 // and does nothing. The account would stay dark while Syndra believed access
 // was restored.
 type LifecycleState struct {
-	// Enabled is false exactly when the subject holds no mapped role for this
-	// target, or an allowance denies it. The two are deliberately different
+	// Account is the value of the target's `account` field: false exactly
+	// when the subject holds no mapped role for this target, or an allowance
+	// denies it. The two are deliberately different
 	// things — a derived lock clears itself when a role returns, and an
 	// operator suspension survives re-resolution until it lapses or is lifted —
 	// and Suppressed is what tells them apart.
-	Enabled bool `json:"enabled"`
-	// SMBEnabled follows Enabled unless something denies it separately.
-	SMBEnabled bool `json:"smb_enabled"`
+	Account bool `json:"account"`
+	// Channels is each `channel` field's value: it follows Account unless an
+	// allowance denies that channel, and is false whenever Account is.
+	Channels map[string]bool `json:"channels,omitempty"`
 	// NotAMember is set when the DIRECTORY says this person is inactive,
 	// locked or deleted — a third cause of a disabled account, and the one
 	// neither of the other two can express.
@@ -102,21 +112,6 @@ type LifecycleState struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// Lifecycle field names. Reserved: structural mapping validation refuses them
-// as mapping targets (task 7.4), because a mapping binding `role_key=X →
-// enabled=false` would mean holding a role disables the account, colliding
-// head-on with the derived lifecycle lock and fighting it on every resolution.
-const (
-	FieldEnabled    = "enabled"
-	FieldSMBEnabled = "smb_enabled"
-)
-
-// IsLifecycleField reports whether a field is resolver-computed rather than
-// mapping-bindable.
-func IsLifecycleField(field string) bool {
-	return field == FieldEnabled || field == FieldSMBEnabled
-}
-
 // ResolveEntitlements computes a subject's desired state on one target.
 //
 // The order is the model: derive from roles, then subtract denials, then
@@ -126,6 +121,19 @@ func IsLifecycleField(field string) bool {
 // nothing to reach.
 func ResolveEntitlements(ctx context.Context, subjectID, target string) (EntitlementSet, error) {
 	set := EntitlementSet{SubjectID: subjectID, Target: target, Fields: map[string][]string{}}
+
+	// Which field is the account, and which are its channels: the role map
+	// persisted at registration (design §3), never the live manifest, so this
+	// resolves with the add-on unreachable. A target with no account field
+	// cannot be resolved: there would be nothing to switch off.
+	roles, err := svcFieldRoles(ctx, target)
+	if err != nil {
+		return EntitlementSet{}, fmt.Errorf("resolve entitlements for %s: %w", subjectID, err)
+	}
+	if roles.Account() == "" {
+		return EntitlementSet{}, fmt.Errorf("resolve entitlements for %s: %s has no account field", subjectID, target)
+	}
+	set.Roles = roles
 
 	held, err := svcEffectiveRoleRefs(ctx, subjectID)
 	if err != nil {
@@ -168,10 +176,13 @@ func ResolveEntitlements(ctx context.Context, subjectID, target string) (Entitle
 	mappedAny := false
 	values := map[string]map[string]struct{}{}
 	for _, m := range mappings {
-		if IsLifecycleField(m.Field) {
+		if roles.IsLifecycle(m.Field) || !roles.Declares(m.Field) {
 			// Defence in depth. Mapping validation refuses these at the write,
 			// and honouring one here would let a row that got in another way
-			// fight the derived lifecycle on every resolution.
+			// fight the derived lifecycle on every resolution. A field the
+			// target no longer declares (retired) confers nothing: the add-on
+			// refuses a field outside its schema, so sending it would make
+			// every apply for this person a target refusal.
 			continue
 		}
 		mappedAny = true
@@ -198,7 +209,7 @@ func ResolveEntitlements(ctx context.Context, subjectID, target string) (Entitle
 	// apply: one says "do not manage this", the other says "make it empty", and
 	// a fully suspended subject means the second.
 	for _, m := range mappings {
-		if IsLifecycleField(m.Field) {
+		if roles.IsLifecycle(m.Field) || !roles.Declares(m.Field) {
 			continue
 		}
 		if _, seen := set.Fields[m.Field]; seen {
@@ -212,7 +223,7 @@ func ResolveEntitlements(ctx context.Context, subjectID, target string) (Entitle
 	// a setting for an account that should not exist.
 	if mappedAny {
 		for field, a := range overrides {
-			if IsLifecycleField(field) {
+			if roles.IsLifecycle(field) || !roles.Declares(field) {
 				continue
 			}
 			set.Fields[field] = []string{a.Value}
@@ -256,8 +267,10 @@ func applyDirectoryStanding(ctx context.Context, subjectID string, set *Entitlem
 		return
 	}
 	if access.Left(profile.Status) {
-		set.Lifecycle.Enabled = false
-		set.Lifecycle.SMBEnabled = false
+		set.Lifecycle.Account = false
+		for ch := range set.Lifecycle.Channels {
+			set.Lifecycle.Channels[ch] = false
+		}
 		set.Lifecycle.NotAMember = true
 		set.Lifecycle.Reason = "the directory reports this person as " + strings.ToLower(strings.TrimSpace(profile.Status))
 	}
@@ -268,31 +281,37 @@ func applyDirectoryStanding(ctx context.Context, subjectID string, set *Entitlem
 //
 // This is what disambiguates two locks a target has no field to tell apart. A
 // lifecycle lock is derived — the subject holds no mapped role — and clears
-// itself when they do. An operator suspension is an allowance on `enabled`,
+// itself when they do. An operator suspension is an allowance on the account,
 // carries a bound like every subtractive allowance, and survives re-resolution
 // until it lapses or is lifted. So a deliberate suspension cannot be undone by
 // a role grant, and a lifecycle lock cannot outlive the condition that caused
 // it.
 func resolveLifecycle(mappedAny bool, denied map[string]db.Allowance, set *EntitlementSet) LifecycleState {
-	state := LifecycleState{Enabled: mappedAny, SMBEnabled: mappedAny}
+	account, channels := set.Roles.Account(), set.Roles.Of(addons.RoleChannel)
+	state := LifecycleState{Account: mappedAny, Channels: make(map[string]bool, len(channels))}
+	for _, ch := range channels {
+		state.Channels[ch] = mappedAny
+	}
 
 	// A lifecycle denial names the field; its value is the state being refused,
-	// and "true" is the only one that means anything — denying `enabled=false`
-	// would be a double negative nobody should have to read.
-	for _, field := range []string{FieldEnabled, FieldSMBEnabled} {
+	// and "true" is the only one that means anything — denying the account
+	// "false" would be a double negative nobody should have to read.
+	for _, field := range append([]string{account}, channels...) {
 		a, isDenied := denied[field+"\x00"+"true"]
 		if !isDenied {
 			continue
 		}
-		switch field {
-		case FieldEnabled:
-			// Disabling the account takes SMB with it: an account that cannot
-			// be used cannot be used over SMB either, and reporting otherwise
-			// would leave the two fields describing a state the target cannot
-			// hold.
-			state.Enabled, state.SMBEnabled = false, false
-		case FieldSMBEnabled:
-			state.SMBEnabled = false
+		if field == account {
+			// Disabling the account takes every channel with it: an account
+			// that cannot be used cannot be used over any channel either, and
+			// reporting otherwise would leave the fields describing a state the
+			// target cannot hold.
+			state.Account = false
+			for _, ch := range channels {
+				state.Channels[ch] = false
+			}
+		} else {
+			state.Channels[field] = false
 		}
 		set.Suppressed = append(set.Suppressed, SuppressedEntitlement{
 			Field: field, Value: "true",
@@ -323,25 +342,23 @@ func sortedKeys(m map[string]struct{}) []string {
 //
 // An allowance the resolver cannot act on is worse than a rejected one, because
 // the operator has evidence they suspended somebody.
-func ValidateAllowanceTerm(declared []string, field, value string) (string, string, error) {
+func ValidateAllowanceTerm(schema []addons.EntitlementField, field, value string) (string, string, error) {
 	field, value = NormaliseTerm(field, value)
 	if field == "" || value == "" {
 		return "", "", fmt.Errorf("%w: an allowance needs a field and a value", db.ErrAllowanceInvalid)
 	}
-	declares := false
-	for _, d := range declared {
-		if d == field {
-			declares = true
-			break
-		}
-	}
+	f, declares := fieldOf(schema, field)
 	if !declares {
 		// The declared set is named, not the rejected field: an operator whose
 		// field is not in the schema needs to know what is.
+		declared := make([]string, 0, len(schema))
+		for _, d := range schema {
+			declared = append(declared, d.Name)
+		}
 		return "", "", fmt.Errorf("%w: this target has no %s to deny — it declares %s",
 			db.ErrAllowanceInvalid, field, strings.Join(declared, ", "))
 	}
-	if IsLifecycleField(field) && value != "true" {
+	if f.IsLifecycle() && value != "true" {
 		// The rejected value IS echoed here, unlike the mapping refusals a few
 		// lines down and unlike anything on the operation path. The never-echo
 		// rule is scoped to values that can be SECRETS — an operation's declared
@@ -389,28 +406,53 @@ func NormaliseValue(value string) string {
 }
 
 // ValidateMappingField refuses a mapping the backend can judge structurally,
-// before the add-on is asked anything.
+// before the add-on is asked anything, by the field's role (design §3).
 //
 // Two of the three checks the design splits out live here: the field must be
-// one the add-on's manifest declares, and it must not be a lifecycle field. The
-// third — that the value resolves on the target — is the add-on's, because
-// Syndra does not know what `lab_makers` means.
-func ValidateMappingField(declared []string, field string) error {
+// one the add-on's manifest declares as bindable (not `account` or `channel`),
+// and the value must be one its role can hold (a `limit` a non-negative whole
+// number, a `flag` "true"). The third — that the value resolves on the target
+// — is the add-on's, because Syndra does not know what `lab_makers` means.
+func ValidateMappingField(schema []addons.EntitlementField, field, value string) error {
 	field = strings.TrimSpace(field)
 	if field == "" {
 		return fmt.Errorf("%w: a mapping needs a field", db.ErrMappingInvalid)
 	}
-	if IsLifecycleField(field) {
+	f, declared := fieldOf(schema, field)
+	switch {
+	case declared && f.IsLifecycle():
 		return fmt.Errorf("%w: %s is computed from whether the subject holds any mapped role, so binding a role to it would make holding that role disable the account", db.ErrMappingInvalid, field)
+	case !declared:
+		// The declared set is named, not the rejected field: an operator whose
+		// field is not in the schema needs to know what is.
+		bindable := make([]string, 0, len(schema))
+		for _, d := range schema {
+			if !d.IsLifecycle() {
+				bindable = append(bindable, d.Name)
+			}
+		}
+		return fmt.Errorf("%w: the add-on declares %s", db.ErrMappingInvalid, strings.Join(bindable, ", "))
+	case f.Role == addons.RoleLimit:
+		// The add-on cannot enumerate a number, so nothing downstream would
+		// check it.
+		if n, err := strconv.ParseInt(value, 10, 64); err != nil || n < 0 {
+			return fmt.Errorf("%w: %s takes a whole number, and %q is not one", db.ErrMappingInvalid, cmp.Or(f.Label, f.Name), value)
+		}
+	case f.Role == addons.RoleFlag && value != "true":
+		// A flag is given or not: ["true"] or []. Any other value would travel
+		// to the add-on and be refused there, after the plan was approved.
+		return fmt.Errorf("%w: %s is given or not, so a role gives it with the value \"true\", and %q is not that", db.ErrMappingInvalid, cmp.Or(f.Label, f.Name), value)
 	}
-	for _, d := range declared {
-		if d == field {
-			return nil
+	return nil
+}
+
+func fieldOf(schema []addons.EntitlementField, name string) (addons.EntitlementField, bool) {
+	for _, f := range schema {
+		if f.Name == name {
+			return f, true
 		}
 	}
-	// The declared set is named, not the rejected field: an operator whose
-	// field is not in the schema needs to know what is.
-	return fmt.Errorf("%w: the add-on declares %s", db.ErrMappingInvalid, strings.Join(declared, ", "))
+	return addons.EntitlementField{}, false
 }
 
 // effectiveRoleRefs lists every role a subject holds, from every source.
@@ -456,20 +498,27 @@ func effectiveRoleRefs(ctx context.Context, subjectID string) ([]db.RoleRef, err
 // away, which is what lets the background runner send it without an operator,
 // as it sends a revoke. True exactly when the account ends switched off for a
 // reason no policy change confers back by itself: the directory reports the
-// person as gone (NotAMember), or an operator's allowance denies `enabled`.
+// person as gone (NotAMember), or an operator's allowance denies the account
+// field (by role, from Roles).
 // A disabled account confers nothing, so such a row disables and cannot
 // confer. A lock because no mapped role reaches the target is not one: that
 // is whatever policy now says, and the same path confers for the next person,
 // so it waits for an operator like every other convergence.
 func (s EntitlementSet) WithdrawsOnly() bool {
-	if s.Lifecycle.Enabled || s.Lifecycle.SMBEnabled {
+	if s.Lifecycle.Account {
 		return false
+	}
+	for _, on := range s.Lifecycle.Channels {
+		if on {
+			return false
+		}
 	}
 	if s.Lifecycle.NotAMember {
 		return true
 	}
+	account := s.Roles.Account()
 	for _, x := range s.Suppressed {
-		if x.Field == FieldEnabled {
+		if account != "" && x.Field == account {
 			return true
 		}
 	}
@@ -495,7 +544,8 @@ func (s EntitlementSet) Convergence(target, subjectID, actor, reason string) db.
 //     "make it empty". A fully suspended subject is the second, and collapsing
 //     it into the first would leave their groups exactly as they were while the
 //     surface reported the suspension as applied.
-//   - The lifecycle fields are always present. They are resolver-computed rather
+//   - The lifecycle fields (the `account` field and every `channel`, named by
+//     Roles) are always present. They are resolver-computed rather
 //     than mapping-derived, so there is no mapping whose absence could excuse
 //     omitting them — and omitting them is how a deprovisioned account stays
 //     usable while Syndra believes it is locked.
@@ -508,18 +558,23 @@ func (s EntitlementSet) Convergence(target, subjectID, actor, reason string) db.
 // `null` and the drain reads back as "no approved desired state".
 func (s EntitlementSet) Desired() map[string]json.RawMessage {
 	out := make(map[string]json.RawMessage, len(s.Fields)+2)
-	out[FieldEnabled] = boolJSON(s.Lifecycle.Enabled)
-	out[FieldSMBEnabled] = boolJSON(s.Lifecycle.SMBEnabled)
+	if account := s.Roles.Account(); account != "" {
+		out[account] = boolJSON(s.Lifecycle.Account)
+	}
+	for _, ch := range s.Roles.Of(addons.RoleChannel) {
+		// A channel the set does not name is off: never on by omission.
+		out[ch] = boolJSON(s.Lifecycle.Channels[ch])
+	}
 	if s.WithdrawsOnly() {
 		// Only the switch. This instruction may be sent with nobody reviewing
 		// it, so it must not be able to give anything: a full replacement of
-		// groups, home or quota could add what the target does not have yet.
+		// a membership, flag or limit could add what the target does not have yet.
 		// The add-on leaves an absent field alone, and on a locked account the
 		// groups it keeps reach nothing.
 		return out
 	}
 	for field, values := range s.Fields {
-		if IsLifecycleField(field) {
+		if s.Roles.IsLifecycle(field) {
 			// Cannot be reached through mappings — validation refuses those, and
 			// the resolver skips them — so a value here came from somewhere that
 			// should not exist. Dropped rather than encoded, because it would

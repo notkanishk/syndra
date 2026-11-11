@@ -10,6 +10,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/handlers/kinds"
 	"syndra/internal/services"
 )
 
@@ -17,16 +18,17 @@ import (
 // which role gives it, its own limit when one is in force, what is saved there,
 // and an own limit that ended with the folder still over the roles' limit.
 func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
-	bindings, resolve, inForce, all, homes := dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes
+	bindings, resolve, inForce, all, homes, schema := dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsEntitlementSchema
 	t.Cleanup(func() {
-		dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes = bindings, resolve, inForce, all, homes
+		dbListTargetBindings, svcResolveEntitlementSet, dbAllowancesInForce, dbAllowancesForSubject, addonsReadHomes, addonsEntitlementSchema = bindings, resolve, inForce, all, homes, schema
 	})
+	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) { return truenasSchema, nil }
 	const gb = int64(1 << 30)
 	dbListTargetBindings = func(context.Context, string) ([]db.TargetBinding, error) {
 		return []db.TargetBinding{{SubjectID: "u-charlotte", Username: "charlotte"}, {SubjectID: "u-booker", Username: "booker"}}, nil
 	}
 	svcResolveEntitlementSet = func(_ context.Context, subject, _ string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{
+		return services.EntitlementSet{Roles: truenasRoles,
 			Fields: map[string][]string{"home": {"true"}, "home_quota": {"21474836480"}},
 			Given: map[string][]services.RoleSource{
 				"home\x00true":              {{ProjectID: "p", RoleKey: "fab_lead"}},
@@ -83,12 +85,35 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 // "No limit" is the largest limit, as the add-on applies it: beside a 20 GB
 // role it wins, and it never reads as a 0-byte limit the folder is "over".
 func TestNoLimitIsTheLargestRolesLimit(t *testing.T) {
-	set := services.EntitlementSet{Given: map[string][]services.RoleSource{
+	set := services.EntitlementSet{Roles: truenasRoles, Given: map[string][]services.RoleSource{
 		"home_quota\x0021474836480": {{ProjectID: "p", RoleKey: "member"}},
 		"home_quota\x000":           {{ProjectID: "p", RoleKey: "staff"}},
 	}}
-	limit, from := largestGiven(set, fieldHomeQuota)
+	limit, from := largestGiven(set, truenasSchema[2])
 	if limit != nil || from == nil || from.RoleKey != "staff" {
 		t.Fatalf("want no limit, from staff; got %v from %+v", limit, from)
+	}
+}
+
+// The storage kind reads its home folder and limit by role and unit, never by
+// name (addon-contract 2.4): a target calling them `folder` and `space` reads
+// the same; a limit counted in something other than bytes is no home limit.
+func TestTheHomeLimitIsReadByRoleAndUnit(t *testing.T) {
+	roles := addons.Roles{"folder": addons.RoleFlag, "space": addons.RoleLimit, "active": addons.RoleAccount}
+	space := addons.EntitlementField{Name: "space", Role: addons.RoleLimit, Unit: "bytes", Combine: "max", Unlimited: "0"}
+	set := services.EntitlementSet{Roles: roles, Fields: map[string][]string{"folder": {"true"}},
+		Given: map[string][]services.RoleSource{"space\x005368709120": {{ProjectID: "p", RoleKey: "member"}}}}
+
+	var row accountHome
+	limit, ok := kinds.HomeLimit([]addons.EntitlementField{{Name: "folder", Role: addons.RoleFlag}, space})
+	roleLimits(&row, set, limit)
+	if !ok || !row.GivesHome || row.RolesLimit == nil || *row.RolesLimit != 5368709120 {
+		t.Fatalf("read by role: gives %v, limit %v", row.GivesHome, row.RolesLimit)
+	}
+
+	counted := space
+	counted.Unit = "count"
+	if _, ok := kinds.HomeLimit([]addons.EntitlementField{counted}); ok {
+		t.Fatal("a limit not in bytes is not a home folder's limit")
 	}
 }

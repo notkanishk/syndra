@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -150,6 +151,30 @@ func (f EntitlementField) IsSingle() bool { return f.Role == RoleFlag || f.Role 
 // non-negative whole number.
 func (f EntitlementField) IsLimit() bool { return f.Role == RoleLimit }
 
+// CombineLimit is a limit field's values combined the way the add-on
+// combines them (design §3: `combine: max`, and `unlimited` dominates, so
+// max("0", 5 GiB) is unlimited where "0" is the unlimited value): the one
+// effective limit, as the add-on reports it in observed state. False when no
+// value is given (the add-on sets nothing) or one does not parse.
+func (f EntitlementField) CombineLimit(values []string) (string, bool) {
+	unlimited, err := strconv.ParseInt(f.Unlimited, 10, 64)
+	if f.Role != RoleLimit || err != nil || len(values) == 0 {
+		return "", false
+	}
+	var most int64 = -1
+	for _, v := range values {
+		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		if err != nil || n < 0 {
+			return "", false
+		}
+		if n == unlimited {
+			return strconv.FormatInt(unlimited, 10), true
+		}
+		most = max(most, n)
+	}
+	return strconv.FormatInt(most, 10), true
+}
+
 // FieldsByRole is the role map, role → field names in declaration order.
 func (m Manifest) FieldsByRole() map[string][]string {
 	out := map[string][]string{}
@@ -157,6 +182,41 @@ func (m Manifest) FieldsByRole() map[string][]string {
 		out[f.Role] = append(out[f.Role], f.Name)
 	}
 	return out
+}
+
+// Roles is a target's role map, field name → role, as targets.field_roles
+// holds it: what the core reads to know which field is the account, which are
+// its channels, and which a mapping may bind, without naming any of them.
+type Roles map[string]string
+
+// Of is the fields with a role, sorted.
+func (r Roles) Of(role string) []string {
+	var out []string
+	for name, has := range r {
+		if has == role {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// Account is the account field's name, "" when the map has none.
+func (r Roles) Account() string {
+	if a := r.Of(RoleAccount); len(a) == 1 {
+		return a[0]
+	}
+	return ""
+}
+
+// Declares reports a field the target's accepted manifest declares: one the
+// add-on accepts in a desired state.
+func (r Roles) Declares(field string) bool { return r[field] != "" }
+
+// IsLifecycle reports a field the resolver computes (account, channel): never
+// mapping-bindable, and denied only as "true".
+func (r Roles) IsLifecycle(field string) bool {
+	return r[field] == RoleAccount || r[field] == RoleChannel
 }
 
 // RoleMap is field name → role, the shape persisted in targets.field_roles.

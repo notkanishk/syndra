@@ -31,7 +31,7 @@
     },
     "observed": {
       "$ref": "common/field.json#/$defs/FieldValues",
-      "description": "The managed fields as the TARGET reported them after the write; absent when unverified."
+      "description": "The managed fields as the TARGET reported them after the write; absent when unverified. A limit field is the effective limit the target now holds (one value, as subjects state reports it), left out when it could not be read."
     },
     "unverified": {
       "type": "boolean"

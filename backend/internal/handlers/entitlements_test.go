@@ -68,7 +68,7 @@ func onePersonPlan(effect string) services.EntitlementPlan {
 		},
 		StateReadAt: time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC),
 		Desired: map[string]services.EntitlementSet{
-			"u1": {SubjectID: "u1", Target: "truenas", Fields: map[string][]string{"group": {"lab_makers"}}},
+			"u1": {SubjectID: "u1", Target: "truenas", Roles: truenasRoles, Fields: map[string][]string{"group": {"lab_makers"}}},
 		},
 	}
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
@@ -204,7 +204,7 @@ func TestTheBlastRadiusGuardCountsChangesAndNotSelections(t *testing.T) {
 		plan.Outcomes = append(plan.Outcomes, services.BulkOutcome{
 			UserID: id, Effect: services.EffectApply, Fingerprint: "fp-" + id,
 		})
-		plan.Desired[id] = services.EntitlementSet{SubjectID: id, Target: "truenas"}
+		plan.Desired[id] = services.EntitlementSet{SubjectID: id, Target: "truenas", Roles: truenasRoles}
 	}
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
 	rec := stubEntitlementPlan(t, plan, nil)
@@ -237,7 +237,7 @@ func TestUnchangedAndBlockedRowsAreStillPartOfTheApproval(t *testing.T) {
 		BulkPlan:    services.BulkPlan{Op: services.EntitlementOp},
 		StateReadAt: time.Now().UTC(),
 		Desired: map[string]services.EntitlementSet{
-			"u1": {SubjectID: "u1"}, "u2": {SubjectID: "u2"},
+			"u1": {SubjectID: "u1", Roles: truenasRoles}, "u2": {SubjectID: "u2", Roles: truenasRoles},
 		},
 	}
 	plan.Outcomes = []services.BulkOutcome{

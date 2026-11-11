@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,13 +106,16 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 	listBindings = func(context.Context, string) ([]db.TargetBinding, error) { return h.bindings, nil }
 	origRoles := fieldRoles
 	t.Cleanup(func() { fieldRoles = origRoles })
-	fieldRoles = func(context.Context, string) (map[string]string, error) { return truenasRoles, nil }
+	fieldRoles = func(context.Context, string) (addons.Roles, error) { return truenasRoles, nil }
+	origSchema := entitlementSchema
+	t.Cleanup(func() { entitlementSchema = origSchema })
+	entitlementSchema = func(string) ([]addons.EntitlementField, error) { return truenasSchema, nil }
 	addonPlan = func(_ context.Context, _ string, subjects []addons.PlanSubject) addons.PlanResult {
 		h.planAsked = subjects
 		return h.plan
 	}
 	resolveIntent = func(_ context.Context, subjectID, _ string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true}}, nil
+		return services.EntitlementSet{Roles: truenasRoles, Lifecycle: services.LifecycleState{Account: true, Channels: map[string]bool{"smb_enabled": true}}}, nil
 	}
 	recordConvergence = func(_ context.Context, c db.SystemConvergence) (string, string, error) {
 		h.converged = append(h.converged, c)
@@ -134,7 +139,14 @@ func currentRead(accounts ...addons.TargetAccount) addons.SubjectsResult {
 }
 
 // truenasRoles is the TrueNAS add-on's role map, as targets.field_roles holds it.
-var truenasRoles = map[string]string{"group": "membership", "home": "flag", "home_quota": "limit", "enabled": "account", "smb_enabled": "channel"}
+var truenasRoles = addons.Roles{"group": "membership", "home": "flag", "home_quota": "limit", "enabled": "account", "smb_enabled": "channel"}
+
+// truenasSchema is how its limit combines: max, "0" unlimited.
+var truenasSchema = []addons.EntitlementField{
+	{Name: "group", Role: addons.RoleMembership}, {Name: "home", Role: addons.RoleFlag},
+	{Name: "home_quota", Role: addons.RoleLimit, Unit: "bytes", Combine: "max", Unlimited: "0"},
+	{Name: "enabled", Role: addons.RoleAccount}, {Name: "smb_enabled", Role: addons.RoleChannel},
+}
 
 func uid(n int64) *string { s := strconv.FormatInt(n, 10); return &s }
 
@@ -788,7 +800,7 @@ func TestADepartedPersonsObservationKeepsTheRestOfTheBase(t *testing.T) {
 	}
 	stubAddonReconcile(t, h)
 	resolveIntent = func(context.Context, string, string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{
+		return services.EntitlementSet{Roles: truenasRoles,
 			Fields:    map[string][]string{"group": {"lab_makers"}},
 			Lifecycle: services.LifecycleState{NotAMember: true},
 		}, nil
@@ -870,59 +882,237 @@ func TestAFindingThatCouldNotBeWrittenLeavesTheTargetUnreconciled(t *testing.T) 
 // withdraw-only, so the background runner sends it instead of leaving it for
 // an operator. A lock because no mapped role reaches them is not: it waits.
 func TestADepartedPersonsDisableDrainsOnItsOwn(t *testing.T) {
+	// Twice: TrueNAS, and a target whose account is `active` (addon-contract
+	// 2.1): the rule is by role, so the drain cannot depend on a name.
+	ruby := addons.Roles{"group": addons.RoleMembership, "active": addons.RoleAccount}
+	for _, shape := range []struct {
+		roles   addons.Roles
+		account string
+	}{{truenasRoles, "enabled"}, {ruby, "active"}} {
+		for _, tc := range []struct {
+			name string
+			set  services.EntitlementSet
+			want bool
+		}{
+			{"the directory reports them gone", services.EntitlementSet{Roles: shape.roles,
+				Fields: map[string][]string{"group": {"lab_makers"}}, Lifecycle: services.LifecycleState{NotAMember: true}}, true},
+			{"no mapped role reaches them", services.EntitlementSet{Roles: shape.roles, Fields: map[string][]string{"group": nil}}, false},
+		} {
+			t.Run(shape.account+"/"+tc.name, func(t *testing.T) {
+				h := &addonReconcileHarness{
+					read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"}),
+					bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
+					plan: addons.PlanResult{
+						Outcome: addons.OutcomeSucceeded, Current: true,
+						Outcomes: []addons.SubjectOutcome{{Subject: "u1", Effect: db.PlanEffectApply}},
+					},
+				}
+				stubAddonReconcile(t, h)
+				fieldRoles = func(context.Context, string) (addons.Roles, error) { return shape.roles, nil }
+				resolveIntent = func(context.Context, string, string) (services.EntitlementSet, error) { return tc.set, nil }
+
+				if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+					t.Fatal(err)
+				}
+				if len(h.converged) != 1 {
+					t.Fatalf("want one convergence, got %+v", h.converged)
+				}
+				c := h.converged[0]
+				if c.WithdrawsOnly != tc.want || string(c.Desired[shape.account]) != "false" {
+					t.Fatalf("queued WithdrawsOnly=%v %s=%s, want %v and false", c.WithdrawsOnly, shape.account, c.Desired[shape.account], tc.want)
+				}
+				// A withdrawal goes unreviewed, so it carries the switch alone; an
+				// ordinary lock still says what to do with the groups.
+				if _, carriesGroups := c.Desired["group"]; carriesGroups == tc.want {
+					t.Fatalf("withdraw-only=%v but the row carries group=%v: %v", tc.want, carriesGroups, c.Desired)
+				}
+				// And what the target was asked to plan is the row it will run.
+				if len(h.planAsked) != 1 || len(h.planAsked[0].Desired) != len(c.Desired) {
+					t.Fatalf("planned %v, queued %v: the plan must be of the instruction queued", h.planAsked, c.Desired)
+				}
+			})
+		}
+	}
+}
+
+// A limit is compared the way the add-on combines it (task 2.7): the intent's
+// values become one effective limit (max, "0" unlimited and dominant) beside
+// the effective limit the target reports. A limit nothing sets, one the target
+// did not report (a quota table it could not read) and one whose rule is not
+// known are not compared at all: unknown, never theirs_only.
+func TestALimitIsComparedAsTheAddOnCombinesIt(t *testing.T) {
+	raw := func(v any) json.RawMessage { b, _ := json.Marshal(v); return b }
+	intent := map[string]json.RawMessage{"enabled": raw(true), "group": raw([]string{"staff"})}
+	reported := map[string]json.RawMessage{"home_quota": raw([]string{"0"})}
 	for _, tc := range []struct {
-		name string
-		set  services.EntitlementSet
-		want bool
+		name   string
+		values []string
+		theirs map[string]json.RawMessage
+		schema []addons.EntitlementField
+		want   string // "" is not compared
 	}{
-		{"the directory reports them gone", services.EntitlementSet{
-			Fields: map[string][]string{"group": {"lab_makers"}}, Lifecycle: services.LifecycleState{NotAMember: true}}, true},
-		{"no mapped role reaches them", services.EntitlementSet{Fields: map[string][]string{"group": nil}}, false},
+		{"the largest of two limits", []string{"1073741824", "5368709120"}, reported, truenasSchema, `["5368709120"]`},
+		{"unlimited dominates", []string{"5368709120", "0"}, reported, truenasSchema, `["0"]`},
+		{"one person's own limit", []string{"10737418240"}, reported, truenasSchema, `["10737418240"]`},
+		{"nothing sets a limit", []string{}, reported, truenasSchema, ""},
+		{"the target could not read it", []string{"5368709120"}, map[string]json.RawMessage{}, truenasSchema, ""},
+		{"no accepted schema says how it combines", []string{"5368709120"}, reported, nil, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			h := &addonReconcileHarness{
-				read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"}),
-				bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
-				plan: addons.PlanResult{
-					Outcome: addons.OutcomeSucceeded, Current: true,
-					Outcomes: []addons.SubjectOutcome{{Subject: "u1", Effect: db.PlanEffectApply}},
-				},
+			in := maps.Clone(intent)
+			in["home_quota"] = raw(tc.values)
+			got := comparable(in, tc.theirs, truenasRoles, tc.schema)
+			if string(got["enabled"]) != "true" || string(got["group"]) != `["staff"]` {
+				t.Fatalf("every other field is the intent's own: %v", got)
 			}
-			stubAddonReconcile(t, h)
-			resolveIntent = func(context.Context, string, string) (services.EntitlementSet, error) { return tc.set, nil }
-
-			if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
-				t.Fatal(err)
-			}
-			if len(h.converged) != 1 {
-				t.Fatalf("want one convergence, got %+v", h.converged)
-			}
-			c := h.converged[0]
-			if c.WithdrawsOnly != tc.want || string(c.Desired["enabled"]) != "false" {
-				t.Fatalf("queued WithdrawsOnly=%v enabled=%s, want %v and false", c.WithdrawsOnly, c.Desired["enabled"], tc.want)
-			}
-			// A withdrawal goes unreviewed, so it carries the switch alone; an
-			// ordinary lock still says what to do with the groups.
-			if _, carriesGroups := c.Desired["group"]; carriesGroups == tc.want {
-				t.Fatalf("withdraw-only=%v but the row carries group=%v: %v", tc.want, carriesGroups, c.Desired)
-			}
-			// And what the target was asked to plan is the row it will run.
-			if len(h.planAsked) != 1 || len(h.planAsked[0].Desired) != len(c.Desired) {
-				t.Fatalf("planned %v, queued %v: the plan must be of the instruction queued", h.planAsked, c.Desired)
+			if limit, compared := got["home_quota"]; string(limit) != tc.want || compared != (tc.want != "") {
+				t.Fatalf("home_quota compared as %s (compared=%v), want %q", limit, compared, tc.want)
 			}
 		})
 	}
 }
 
-// An add-on reports the effective limit it holds (contract 2, design §3), and
-// the core compares a limit only once it combines limits the same way (slice
-// 2). Until then a limit is not compared at all, as before contract 2: a quota
-// table the add-on could not read must never surface as a finding.
-func TestALimitInTheTargetsStateIsNotCompared(t *testing.T) {
-	accounts := []addons.TargetAccount{{Username: "charlotte", AccountID: "3001",
-		State: state(map[string]any{"enabled": true, "group": []string{"staff"}, "home_quota": []string{"0"}})}}
-	got := stateByBinding(accounts, truenasRoles).of(db.TargetBinding{Username: "charlotte", AccountID: uid(3001)})
-	if _, compared := got["home_quota"]; compared || len(got) != 2 {
-		t.Fatalf("a limit field reached the comparison: %v", got)
+// A quota edited by hand on the target is a finding, never a silent revert
+// (task 2.7): the base saw the roles' 5 GiB, the target now holds 10 GiB.
+// And a quota the add-on could not read raises nothing, whatever the base.
+func TestAHandEditedLimitIsAFinding(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		theirs  map[string]any
+		finding bool
+	}{
+		{"edited by hand", map[string]any{"enabled": true, "home_quota": []string{"10737418240"}}, true},
+		{"unchanged", map[string]any{"enabled": true, "home_quota": []string{"5368709120"}}, false},
+		{"the quota table could not be read", map[string]any{"enabled": true}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &addonReconcileHarness{
+				read: currentRead(addons.TargetAccount{
+					Username: "charlotte", AccountID: "3001", State: state(tc.theirs),
+				}),
+				bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
+				bases:    baseFor("sub-1", map[string]any{"enabled": true, "home_quota": []string{"5368709120"}}),
+				plan:     addons.PlanResult{Outcome: addons.OutcomeSucceeded, Current: true},
+			}
+			stubAddonReconcile(t, h)
+			resolveIntent = func(context.Context, string, string) (services.EntitlementSet, error) {
+				return services.EntitlementSet{Roles: truenasRoles,
+					Fields:    map[string][]string{"home_quota": {"1073741824", "5368709120"}},
+					Lifecycle: services.LifecycleState{Account: true, Channels: map[string]bool{"smb_enabled": true}}}, nil
+			}
+			res, err := ReconcileAddon(context.Background(), "truenas")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !tc.finding {
+				if len(res.Findings) != 0 {
+					t.Fatalf("want no finding, got %+v", res.Findings)
+				}
+				return
+			}
+			if len(res.Findings) != 1 || res.Findings[0].Field != "home_quota" || res.Findings[0].Outcome != merge.TheirsOnly {
+				t.Fatalf("want one theirs_only finding on home_quota, got %+v", res.Findings)
+			}
+			if f := res.Findings[0]; string(f.Ours) != `["5368709120"]` || string(f.Theirs) != `["10737418240"]` {
+				t.Fatalf("the finding must carry the combined limit and the target's: ours %s theirs %s", f.Ours, f.Theirs)
+			}
+			if len(h.converged) != 0 || len(h.planAsked) != 0 {
+				t.Fatalf("a hand edit is not reverted: planned %v, queued %v", h.planAsked, h.converged)
+			}
+		})
+	}
+}
+
+// What is planned is still the wire map: the roles' limits as they are, for
+// the add-on to combine; only the comparison combines them.
+func TestTheLimitIsPlannedUncombined(t *testing.T) {
+	h := &addonReconcileHarness{
+		read: currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001",
+			State: state(map[string]any{"enabled": true, "home_quota": []string{"0"}})}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}},
+		plan:     addons.PlanResult{Outcome: addons.OutcomeSucceeded, Current: true},
+	}
+	stubAddonReconcile(t, h)
+	resolveIntent = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Roles: truenasRoles, Fields: map[string][]string{"home_quota": {"1073741824", "5368709120"}},
+			Lifecycle: services.LifecycleState{Account: true}}, nil
+	}
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.planAsked) != 1 || string(h.planAsked[0].Desired["home_quota"]) != `["1073741824","5368709120"]` {
+		t.Fatalf("the plan must carry the roles' limits uncombined: %v", h.planAsked)
+	}
+	// The observation recorded the target's limit, so the next pass can tell
+	// who moved it.
+	if len(h.basesWritten) != 1 || string(h.basesWritten[0].Base["home_quota"]) != `["0"]` {
+		t.Fatalf("the base must record the observed limit: %+v", h.basesWritten)
+	}
+}
+
+// The inventory's managed rows carry the standing the add-on reports for each
+// account in the same read, matched as a binding is (account id first, so a
+// renamed account keeps its own standing), and none when the read does not list
+// it (addon-contract slice 2, for task 3.7). Unmanaged rows already do.
+func TestTheInventorysBoundAccountsCarryTheirStanding(t *testing.T) {
+	waiting := &addons.Standing{WaitingOn: "member", Note: "Waiting for a password."}
+	usable := &addons.Standing{Usable: true, WaitingOn: "none"}
+	h := &addonReconcileHarness{
+		read: currentRead(
+			addons.TargetAccount{Username: "charlotte.flair", AccountID: "3001", Standing: waiting},
+			addons.TargetAccount{Username: "charlotte", AccountID: "3009", Standing: usable},
+			addons.TargetAccount{Username: "stray", AccountID: "4000", Standing: usable},
+		),
+		bindings: []db.TargetBinding{
+			{Target: "truenas", SubjectID: "sub-1", Username: "charlotte", AccountID: uid(3001)}, // renamed on the target
+			{Target: "truenas", SubjectID: "sub-2", Username: "gone", AccountID: uid(5000)},
+		},
+	}
+	stubAddonReconcile(t, h)
+
+	res, err := Inventory(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Accounts) != 2 || res.Accounts[0].Standing != waiting || res.Accounts[1].Standing != nil {
+		t.Fatalf("standing by account id, none for an account not listed: %+v", res.Accounts)
+	}
+	raw, _ := json.Marshal(res.Accounts[0])
+	if !strings.Contains(string(raw), `"subject_id":"sub-1"`) || !strings.Contains(string(raw), `"standing":{`) {
+		t.Fatalf("the row is the binding plus its standing: %s", raw)
+	}
+	if len(res.Unmanaged) != 1 || res.Unmanaged[0].Standing != usable {
+		t.Fatalf("unmanaged rows keep theirs: %+v", res.Unmanaged)
+	}
+}
+
+// After a channel is retired (its queued rows superseded, db.SaveTargetFieldRoles),
+// the next sweep queues the departure lock again from the current roles: the
+// account switch and the channels still declared, nothing retired, and
+// withdraw-only, so it sends on its own (addon-contract 2.1).
+func TestTheSweepRequeuesALockWithoutARetiredChannel(t *testing.T) {
+	current := addons.Roles{"group": addons.RoleMembership, "enabled": addons.RoleAccount, "web": addons.RoleChannel} // smb_enabled retired
+	h := &addonReconcileHarness{
+		read:     currentRead(addons.TargetAccount{Username: "charlotte", AccountID: "3001"}),
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "u1", Username: "charlotte", AccountID: uid(3001)}},
+		plan: addons.PlanResult{Outcome: addons.OutcomeSucceeded, Current: true,
+			Outcomes: []addons.SubjectOutcome{{Subject: "u1", Effect: db.PlanEffectApply}}},
+	}
+	stubAddonReconcile(t, h)
+	fieldRoles = func(context.Context, string) (addons.Roles, error) { return current, nil }
+	resolveIntent = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{Roles: current, Fields: map[string][]string{"group": {"lab_makers"}},
+			Lifecycle: services.LifecycleState{NotAMember: true}}, nil
+	}
+	if _, err := ReconcileAddon(context.Background(), "truenas"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.converged) != 1 {
+		t.Fatalf("want the lock queued again, got %+v", h.converged)
+	}
+	c := h.converged[0]
+	got, _ := json.Marshal(c.Desired)
+	if !c.WithdrawsOnly || string(got) != `{"enabled":false,"web":false}` {
+		t.Fatalf("want a withdraw-only {enabled:false, web:false}, got %v %s", c.WithdrawsOnly, got)
 	}
 }

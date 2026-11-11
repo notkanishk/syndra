@@ -3,6 +3,20 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Major 2, amended before release (slice 2, 11 Nov 2026)
+
+v2 has not been released to anything but the TrueNAS add-on, which moves with
+it, so these amend major 2 rather than add a feature (owner decision):
+
+- `storage.status`'s `storage` pocket requires `standing` (`common/standing.json`):
+  the subject's own account standing, so a member's page says it without a full
+  `/subjects` read. `v2/schema/operation_response.json` (`StorageStatus`);
+  fixture `operation_response_storage.json`.
+- An apply's `observed` carries a managed `limit` field as the effective limit
+  the target holds after the write, as `/subjects` `state` reports it, and
+  leaves it out when it could not be read. Shape unchanged (`FieldValues`);
+  `v2/schema/apply_response.json` says so.
+
 ## Major 2 on the wire (slice 1)
 
 The TrueNAS add-on and the backend speak contract 2, deployed together in one

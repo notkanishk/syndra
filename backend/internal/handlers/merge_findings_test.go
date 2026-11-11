@@ -115,7 +115,7 @@ func stubFindings(t *testing.T, h *findingHarness) {
 		return a, nil
 	}
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
-		return services.EntitlementSet{Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true}}, nil
+		return services.EntitlementSet{Roles: truenasRoles, Lifecycle: services.LifecycleState{Account: true, Channels: map[string]bool{"smb_enabled": true}}}, nil
 	}
 	getBinding := dbGetTargetBinding
 	t.Cleanup(func() { dbGetTargetBinding = getBinding })
@@ -802,5 +802,84 @@ func TestARefusedDecisionCarriesWhatWasChosenAndWhy(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("the refusal must carry %q so the second reader can argue with it: %s", want, body)
 		}
+	}
+}
+
+// Which findings are lifecycle ones is the target's role map, never a name
+// (addon-contract 2.1): on a target whose account is `active`, a switched-off
+// `active` is adoptable and is adopted as a denial of `active`, and a field
+// called `enabled` there is just a membership.
+func TestAdoptionReadsTheLifecycleByRole(t *testing.T) {
+	orig := addonsFieldRoles
+	t.Cleanup(func() { addonsFieldRoles = orig })
+	addonsFieldRoles = func(context.Context, string) (addons.Roles, error) {
+		return addons.Roles{"active": addons.RoleAccount, "enabled": addons.RoleMembership}, nil
+	}
+
+	stubFindingsList(t, []db.MergeFinding{theirsOnly("active", `false`)}, nil, nil)
+	if row := firstFinding(t, listFindings(t)); row["adoptable"] != true {
+		t.Fatalf("a switched-off account field is adoptable, by role: %v", row)
+	}
+	stubFindingsList(t, []db.MergeFinding{theirsOnly("enabled", `["x"]`)}, nil, nil)
+	if row := firstFinding(t, listFindings(t)); row["adoptable"] == true {
+		t.Fatalf("a membership is not adoptable, whatever it is called: %v", row)
+	}
+
+	h := &findingHarness{finding: theirsOnly("active", `false`)}
+	stubFindings(t, h)
+	if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"switched off on the console"}`); rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.allowances) != 1 || h.allowances[0].Field != "active" || h.allowances[0].Value != "true" {
+		t.Fatalf("want a denial of active=true: %+v", h.allowances)
+	}
+}
+
+// A hand-edited limit (compared since addon-contract 2.7) is adoptable for the
+// one person: "take theirs" saves the target's value as their own limit, a
+// `set` allowance with the operator, the reason and the bound the request
+// carries (the store refuses one without a bound and writes its audit row),
+// decided now and settled when a pass agrees. Nothing is written to the
+// target. A value that is not one whole number is refused.
+func TestAHandEditedLimitIsAdoptedAsTheirOwnLimit(t *testing.T) {
+	orig := addonsEntitlementSchema
+	t.Cleanup(func() { addonsEntitlementSchema = orig })
+	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) { return truenasSchema, nil }
+
+	stubFindingsList(t, []db.MergeFinding{theirsOnly("home_quota", `["10737418240"]`)}, nil, nil)
+	if row := firstFinding(t, listFindings(t)); row["adoptable"] != true || row["why_not"] != nil {
+		t.Fatalf("a per-person limit is adoptable: %v", row)
+	}
+
+	h := &findingHarness{finding: theirsOnly("home_quota", `["10737418240"]`)}
+	stubFindings(t, h)
+	rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"thesis data","review_date":"2027-01-15T00:00:00Z"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(h.allowances) != 1 {
+		t.Fatalf("want one allowance: %+v", h.allowances)
+	}
+	a := h.allowances[0]
+	if a.Direction != db.AllowanceSet || a.Field != "home_quota" || a.Value != "10737418240" ||
+		a.Reason != "thesis data" || a.ActorID == "" || a.ReviewDate == nil {
+		t.Fatalf("want their own limit at the target's value, with who, why and when to review: %+v", a)
+	}
+	if len(h.converged) != 0 || len(h.decided) != 1 || len(h.resolved) != 0 {
+		t.Fatalf("adopting writes nothing to the target and settles when a pass agrees: converged=%v decided=%v resolved=%v",
+			h.converged, h.decided, h.resolved)
+	}
+
+	for _, theirs := range []string{`["5 GiB"]`, `["1","2"]`, `"10737418240"`} {
+		h := &findingHarness{finding: theirsOnly("home_quota", theirs)}
+		stubFindings(t, h)
+		if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"x","review_date":"2027-01-15T00:00:00Z"}`); rr.Code == http.StatusOK || len(h.allowances) != 0 {
+			t.Errorf("theirs %s must be refused: %d %+v", theirs, rr.Code, h.allowances)
+		}
+	}
+	h = &findingHarness{finding: theirsOnly("home_quota", `["10737418240"]`)}
+	stubFindings(t, h)
+	if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"  "}`); rr.Code == http.StatusOK || len(h.allowances) != 0 {
+		t.Fatalf("no reason, no limit: %d", rr.Code)
 	}
 }

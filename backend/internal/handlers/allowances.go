@@ -169,11 +169,7 @@ func validateAllowanceAgainstTarget(ctx context.Context, target, field, value st
 	}
 	// Lifecycle fields are included rather than skipped: they are not bindable
 	// by a mapping and they are exactly what an operator suspension names.
-	declared := make([]string, 0, len(schema))
-	for _, f := range schema {
-		declared = append(declared, f.Name)
-	}
-	return services.ValidateAllowanceTerm(declared, field, value)
+	return services.ValidateAllowanceTerm(schema, field, value)
 }
 
 func writeAllowanceError(w http.ResponseWriter, err error) {

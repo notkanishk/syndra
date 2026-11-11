@@ -16,7 +16,7 @@ func seedAddonTarget(t *testing.T, ctx context.Context) {
 	clean := func() {
 		_, _ = PG.Exec(context.Background(), `DELETE FROM target_binding_conflicts WHERE target = 'truenas'`)
 		_, _ = PG.Exec(context.Background(), `DELETE FROM target_account_bindings WHERE target = 'truenas'`)
-		_, _ = PG.Exec(context.Background(), `UPDATE targets SET field_roles = NULL WHERE target = 'truenas'`)
+		_, _ = PG.Exec(context.Background(), `UPDATE targets SET field_roles = NULL, retired_fields = '{}' WHERE target = 'truenas'`)
 	}
 	clean()
 	t.Cleanup(clean)
@@ -141,13 +141,21 @@ func TestTargetFieldRolesArePersisted(t *testing.T) {
 	if _, found, err := TargetFieldRoles(ctx, "truenas"); err != nil || found {
 		t.Fatalf("no roles before a manifest is accepted: %v %v", found, err)
 	}
-	want := map[string]string{"enabled": "account", "smb_enabled": "channel", "group": "membership"}
+	want := FieldRoleMap{Roles: map[string]string{"enabled": "account", "smb_enabled": "channel", "group": "membership"}}
 	if err := SaveTargetFieldRoles(ctx, "truenas", want); err != nil {
 		t.Fatal(err)
 	}
 	got, found, err := TargetFieldRoles(ctx, "truenas")
-	if err != nil || !found || len(got) != 3 || got["enabled"] != "account" {
+	if err != nil || !found || len(got.Roles) != 3 || got.Roles["enabled"] != "account" || len(got.Retired) != 0 {
 		t.Fatalf("roles did not round-trip: %v %v %v", got, found, err)
+	}
+	// A field the manifest dropped keeps its role and is marked retired.
+	want.Retired = []string{"smb_enabled"}
+	if err := SaveTargetFieldRoles(ctx, "truenas", want); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, err := TargetFieldRoles(ctx, "truenas"); err != nil || len(got.Retired) != 1 || got.Retired[0] != "smb_enabled" || got.Roles["smb_enabled"] != "channel" {
+		t.Fatalf("a retired field must keep its role and be marked: %v %v", got, err)
 	}
 	if err := SaveTargetFieldRoles(ctx, "no-such-target", want); err == nil {
 		t.Error("saving roles for a target that does not exist must fail")

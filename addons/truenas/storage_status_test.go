@@ -35,6 +35,11 @@ func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 	if got.Username != "charlotte" {
 		t.Errorf("username = %q", got.Username)
 	}
+	// The standing a subjects read reports, carried here (contract 2): the
+	// member is waited on, with the storage page's next step.
+	if st := got.Standing; st == nil || st.Usable || st.WaitingOn != "member" || st.Next == "" {
+		t.Errorf("standing = %+v, want waiting on the member with a next step", st)
+	}
 }
 
 // A locked account is not usable either, and locking is an operator's decision
@@ -55,6 +60,9 @@ func TestALockedAccountIsNotUsableAndNotTheMembersToFix(t *testing.T) {
 	}
 	if res.Storage.NeedsPassword {
 		t.Error("a locked account told the member to set a password, which would not help")
+	}
+	if st := res.Storage.Standing; st == nil || st.Usable || st.WaitingOn != "none" {
+		t.Errorf("a switched-off account waits on nobody the member can name: %+v", st)
 	}
 }
 

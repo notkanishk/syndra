@@ -50,7 +50,7 @@ func TestAPerPersonValueNeedsAReason(t *testing.T) {
 	if _, set := set.Fields["home_quota"]; set {
 		t.Fatal("a person the target does not reach gets no per-person value")
 	}
-	if set.Lifecycle.Enabled {
+	if set.Lifecycle.Account {
 		t.Fatal("and is not enabled by it")
 	}
 }

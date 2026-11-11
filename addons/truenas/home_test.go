@@ -218,3 +218,35 @@ func TestAnAccountBeingSwitchedOffGetsNoHome(t *testing.T) {
 		t.Fatalf("no home for an account being switched off: %v", m.updates[0])
 	}
 }
+
+// An apply's observed carries the managed limit as the target now holds it,
+// read back from the quota table the way /subjects state reports it, so the
+// backend has a merge base for the limit straight after an apply
+// (addon-contract 2.7); a quota table that cannot be read leaves it out.
+func TestTheAppliedLimitIsObserved(t *testing.T) {
+	users := `[{"username":"charlotte","id":11,"uid":3001,"locked":false,"smb":true,"groups":[],"home":"` + homePlace + `/charlotte"}]`
+	shares := `[{"name":"main","path":"/mnt/pool/main","enabled":true}]`
+	s, _ := homeServer(t, users, map[string]string{
+		"sharing.smb.query":      shares,
+		"pool.dataset.get_quota": `[{"id":3001,"quota":53687091200,"used_bytes":10}]`,
+	}, nil)
+	out := applyHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["53687091200"]}`)
+	if out.Effect != EffectApplied {
+		t.Fatalf("want applied, got %s %q", out.Effect, out.Detail)
+	}
+	if got, _ := json.Marshal(out.Observed[FieldHomeQuota]); string(got) != `["53687091200"]` {
+		t.Fatalf("observed home_quota = %s, want the limit read back: %v", got, out.Observed)
+	}
+
+	s, _ = homeServer(t, users, map[string]string{"sharing.smb.query": shares},
+		map[string]string{"pool.dataset.get_quota": "[EFAULT] the quota table is unavailable"})
+	out = applyHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["53687091200"]}`)
+	if _, observed := out.Observed[FieldHomeQuota]; observed || out.Observed == nil {
+		t.Fatalf("an unreadable limit is unknown, never observed: %v", out.Observed)
+	}
+	s, _ = homeServer(t, users, map[string]string{"sharing.smb.query": shares}, nil)
+	out = applyHome(t, s, `{"group":["lab_makers"]}`)
+	if _, observed := out.Observed[FieldHomeQuota]; observed {
+		t.Fatalf("an unmanaged limit is not observed: %v", out.Observed)
+	}
+}
