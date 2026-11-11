@@ -623,7 +623,14 @@ func ResolvesValue(ctx context.Context, target, field, value string) (Resolution
 		return Resolution{}, nil
 	}
 	if !decoded.Enumerable {
-		// The add-on can serve the field and cannot bound it — a path, a quota.
+		// A membership is a set Syndra manages, so it must be listable (guide,
+		// GET /values; SCIM, RFC 7644 §3.4.2): a mapping cannot name a value
+		// the add-on cannot list. The role is read from the persisted role
+		// map, since /values does not carry it.
+		if roles, err := FieldRoles(ctx, target); err == nil && roles[field] == RoleMembership {
+			return Resolution{}, fmt.Errorf("%w: %s can't list the values of %s, so a mapping can't name one", ErrValueNotResolvable, target, field)
+		}
+		// A limit the add-on can serve and cannot bound — a path, a quota.
 		// Structure only, and never "no value is valid".
 		return Resolution{}, nil
 	}

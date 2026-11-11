@@ -3,6 +3,7 @@ package addons
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"syndra/internal/db"
 )
 
 // The rest of the routes, held from the backend's end (see
@@ -324,6 +327,24 @@ func TestValuesReplyLands(t *testing.T) {
 	}
 	if _, err := ResolvesValue(context.Background(), "truenas", "group", "no_such_group"); err == nil {
 		t.Error("an unlisted value must be refused")
+	}
+}
+
+// A membership the add-on cannot list is refused at the mapping; a limit it
+// cannot list is not (structure only).
+func TestResolvesValueRefusesUnlistableMembership(t *testing.T) {
+	forgetRoles(t)
+	memRoles.Lock()
+	memRoles.byTarget["truenas"] = db.FieldRoleMap{Roles: map[string]string{"group": RoleMembership, "quota": RoleLimit}}
+	memRoles.Unlock()
+	addonServing(t, []byte(`{"field":"group","enumerable":false,"values":[]}`))
+	_, err := ResolvesValue(context.Background(), "truenas", "group", "Hulk Hogan")
+	if !errors.Is(err, ErrValueNotResolvable) || !strings.Contains(err.Error(), "can't list the values of group") {
+		t.Errorf("a non-enumerable membership must be refused, got %v", err)
+	}
+	addonServing(t, []byte(`{"field":"quota","enumerable":false,"values":[]}`))
+	if res, err := ResolvesValue(context.Background(), "truenas", "quota", "1"); err != nil || res.Checked {
+		t.Errorf("a non-enumerable limit stays structure-only: %+v %v", res, err)
 	}
 }
 

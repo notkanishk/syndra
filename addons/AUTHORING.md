@@ -95,7 +95,7 @@ restored (`addons/README.md`).
 | desired state | What Syndra wants true for one subject, keyed by entitlement field. Level-triggered: sent again, it changes nothing |
 | observed | What the app reports after a write, read back |
 | role | What a field is, from `v2/registry/roles.json` ([chapter 3](#3-the-manifest-get-capabilities)) |
-| managed set | The values of a `membership` field Syndra can remove: what `GET /values/{field}` lists, or, for a field that is not enumerable, the values Syndra's mappings name |
+| managed set | The values of a `membership` field Syndra can remove: what `GET /values/{field}` lists |
 | withdraw-only | A desired state carrying only the `account` and `channel` fields, all `false` |
 | standing | Whether an existing account can be used yet, and who is waited on (`v2/schema/common/standing.json`). Observed, never desired |
 | fingerprint | A digest of the subject's state on the app that a plan was computed against, checked again immediately before the write |
@@ -725,9 +725,11 @@ Schema: `v2/schema/values.json`.
   for people. Values the app owns that Syndra never manages (built-in
   groups) MUST be left out, counted in `builtin_count` and sampled in
   `builtin_examples`.
-- A field whose values cannot be listed (thousands of items) MUST answer
-  `enumerable: false`; its managed set is then the values Syndra's mappings
-  name.
+- A `membership` field MUST answer `enumerable: true`: a set Syndra cannot
+  list it cannot manage, because `/values` is what defines the managed set
+  that `state` shows and a mapping names. A target object too numerous to
+  list is an operation parameter (`format: target_id`), never a membership.
+  `enumerable: false` is for a `limit`.
 - The add-on MUST read it live: values are the app's runtime state.
 
 ### `POST /plan`
@@ -1730,6 +1732,9 @@ accepted, on:
 - not exactly one field with role `account`;
 - a field whose role changed since an earlier manifest;
 - a different field declared as the `account` field.
+
+A mapping on a field that answers `enumerable: false` is refused when it is
+made, not at registration: the manifest does not say it, `/values` does.
 
 It drops, logs and otherwise accepts an operation id the registry lacks. The
 kit is stricter on two counts: it fails an operation id missing from the

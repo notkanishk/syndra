@@ -1184,11 +1184,19 @@ settings with the full §5 rules.
   intent for that subject whose result is `unknown` (design §5 and the
   guide's "Look up before you create" allow exactly that adoption; today it
   is `BINDING_CONFLICT` for an operator). #needs-triage
-- [ ] 5.3c A membership field that is not enumerable: the add-on cannot
+- [x] 5.3c A membership field that is not enumerable: the add-on cannot
   tell its managed set, and the drift sweep compares the whole list. No
-  add-on has one yet. **Before external authors:** refuse such a field at
-  registration, or define the managed set as the values a mapping names.
-  #needs-triage
+  add-on has one yet.
+  *Decided (11 Nov 2026):* a membership MUST be enumerable (SCIM: a
+  provisioner lists what it manages). Guide, design §3 and glossary drop the
+  mapping-union managed set; the kit's `values` check requires it; a mapping
+  on a non-enumerable membership is refused at `ResolvesValue`, not at
+  registration (the manifest does not say it; `/values` does, once). Not a
+  rollout gate. #ready-for-agent
+- [ ] 5.3e Pre-existing: allowances (`validateAllowanceAgainstTarget`,
+  `backend/internal/handlers/allowances.go`) check structure only and never
+  call `ResolvesValue`, so an allowance can name a value no `/values` lists,
+  for any field. #needs-triage
 - [x] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
   point here; `addon-platform/design.md` §5 and §16 gain a one-line pointer
   to this contract as the current statement #ready-for-agent
