@@ -71,7 +71,7 @@ func (k *kit) reads() {
 		k.unlistedHidden("subject "+display(s), state, current)
 	}
 	if c := k.at("unlisted-hidden"); !c.ran && len(c.skips) == 0 {
-		c.skip("no subject listed holds an enumerable membership field")
+		c.skip("no subject listed holds a membership field")
 	}
 	if c := k.at("settings"); !k.m.has("settings") {
 		c.skip("feature settings not declared")
@@ -357,6 +357,10 @@ func (k *kit) valuesCheck(c *check) {
 		if f.Role == "account" || f.Role == "channel" {
 			c.expect(doc["enumerable"] == true && slices.Equal(vals, []string{"false", "true"}),
 				"/values/%s (role %s) must answer enumerable [false true], answers %v", f.Name, f.Role, vals)
+		}
+		if f.Role == "membership" {
+			c.expect(doc["enumerable"] == true,
+				"/values/%s (membership) must answer enumerable: true; a set that cannot be listed cannot be managed", f.Name)
 		}
 		if doc["enumerable"] == true {
 			k.values[f.Name] = vals

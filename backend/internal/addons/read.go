@@ -572,14 +572,21 @@ func SetLifecycle(ctx context.Context, target, state, reason, actor string) (map
 // waiting changes it.
 var ErrValueNotResolvable = errors.New("addon: the target does not recognise that value")
 
+// ErrFieldNotListable is the second refusal, and a member of the same family:
+// the field is a membership the add-on cannot list, so no value can be named.
+// It is told apart because the operator's step is not a correction of the
+// value — nothing they type can fix it.
+var ErrFieldNotListable = fmt.Errorf("%w: the target cannot list that field", ErrValueNotResolvable)
+
 // ResolvesValue checks that a mapping value names something on the target.
 //
 // It FAILS OPEN on everything except a definite "no". A target that could not be
-// read, a field the add-on cannot enumerate, an add-on that is not registered —
+// read, a limit the add-on cannot enumerate, an add-on that is not registered —
 // all of those are the absence of an answer, and refusing a mapping edit because
-// a NAS was rebooting would make an outage look like a validation failure. The
-// only refusal is the one case where the add-on answered and the value was not
-// in the set it returned.
+// a NAS was rebooting would make an outage look like a validation failure. There
+// are two refusals, both the add-on's own answer: the value was not in the set
+// it returned (ErrValueNotResolvable), or the field is a membership it answered
+// is not enumerable (ErrFieldNotListable).
 //
 // That asymmetry is the whole design of this check: it is a reference check, not
 // an authorisation one. Structure — is this a field the schema declares, is it a
@@ -623,7 +630,14 @@ func ResolvesValue(ctx context.Context, target, field, value string) (Resolution
 		return Resolution{}, nil
 	}
 	if !decoded.Enumerable {
-		// The add-on can serve the field and cannot bound it — a path, a quota.
+		// A membership is a set Syndra manages, so it must be listable (guide,
+		// GET /values; SCIM, RFC 7644 §3.4.2): a mapping cannot name a value
+		// the add-on cannot list. The role is read from the persisted role
+		// map, since /values does not carry it.
+		if roles, err := FieldRoles(ctx, target); err == nil && roles[field] == RoleMembership {
+			return Resolution{}, fmt.Errorf("%w: %s can't list the values of %s, so a mapping can't name one", ErrFieldNotListable, target, field)
+		}
+		// A limit the add-on can serve and cannot bound — a path, a quota.
 		// Structure only, and never "no value is valid".
 		return Resolution{}, nil
 	}

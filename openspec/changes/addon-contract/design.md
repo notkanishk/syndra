@@ -297,10 +297,13 @@ needs a word in the core.
   therefore cannot give (§37.6) on any target.
 - **Unlisted values are preserved.** On a `membership` field, a value the
   target holds that is not in the *managed set* is never removed by
-  convergence. The managed set is what `GET /values/{field}` lists; for a
-  field that answers `enumerable: false` it is the union of the values named
-  in that field's mappings and allowances, so Syndra can still remove what
-  it gave and nothing else. Where the target's API replaces a *subject's*
+  convergence. The managed set is what `GET /values/{field}` lists, and a
+  `membership` field MUST be enumerable (SCIM 2.0, RFC 7644 §3.4.2: a
+  provisioner manages only what it can list). A non-enumerable membership is
+  refused at the mapping (`ResolvesValue`), not at registration: the manifest
+  does not say it, `/values` does, and a managed set that lived only in
+  Syndra's mappings would be a second place for one fact, orphaned when a
+  mapping is deleted. Where the target's API replaces a *subject's*
   whole set (UniFi `PUT /users/:id/access_policies`), the add-on reads,
   merges, then writes; the race with a console edit between the read and
   the write (no ETag) is accepted and documented, and the next drift sweep

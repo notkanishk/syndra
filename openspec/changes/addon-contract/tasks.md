@@ -1184,11 +1184,26 @@ settings with the full §5 rules.
   intent for that subject whose result is `unknown` (design §5 and the
   guide's "Look up before you create" allow exactly that adoption; today it
   is `BINDING_CONFLICT` for an operator). #needs-triage
-- [ ] 5.3c A membership field that is not enumerable: the add-on cannot
+- [x] 5.3c A membership field that is not enumerable: the add-on cannot
   tell its managed set, and the drift sweep compares the whole list. No
-  add-on has one yet. **Before external authors:** refuse such a field at
-  registration, or define the managed set as the values a mapping names.
-  #needs-triage
+  add-on has one yet.
+  *Decided (11 Nov 2026):* a membership MUST be enumerable (SCIM: a
+  provisioner lists what it manages). Guide, design §3 and glossary drop the
+  mapping-union managed set; the kit's `values` check requires it; a mapping
+  on a non-enumerable membership is refused at `ResolvesValue`, not at
+  registration (the manifest does not say it; `/values` does, once). Not a
+  rollout gate. #needs-info: owner confirms the resolution
+  *Review fixes (11 Nov 2026):* the refusal is `ErrFieldNotListable`
+  (inside the `ErrValueNotResolvable` family), answered 400 with
+  `details.field = "unlistable"`, the system's name and the field's label, and
+  its own next step in `details.next`; the Edit dialog shows both, never the
+  default "change what it says". The Add dialog says the same plain sentence
+  when `MappableValues.enumerable` is false (it used to show the built-in-groups
+  sentence and never read the flag).
+- [ ] 5.3e Pre-existing: allowances (`validateAllowanceAgainstTarget`,
+  `backend/internal/handlers/allowances.go`) check structure only and never
+  call `ResolvesValue`, so an allowance can name a value no `/values` lists,
+  for any field. #needs-triage
 - [x] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
   point here; `addon-platform/design.md` §5 and §16 gain a one-line pointer
   to this contract as the current statement #ready-for-agent

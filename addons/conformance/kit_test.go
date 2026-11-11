@@ -1566,6 +1566,24 @@ func TestUnlistedHiddenIsNotJudgedFromAStaleReply(t *testing.T) {
 	t.Fatal("no unlisted-hidden result")
 }
 
+// A membership that answers enumerable: false cannot be listed, so Syndra
+// could not manage it: the values check fails it (guide, GET /values).
+func TestANonEnumerableMembershipFailsTheValuesCheck(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+		if r.URL.Path != "/values/printers" {
+			return reply
+		}
+		return bytes.Replace(reply, []byte(`"enumerable":true`), []byte(`"enumerable":false`), 1)
+	}, nil)
+	r, err := Run(context.Background(), config(url, false))
+	if err != nil && !errors.Is(err, ErrReadsFailed) {
+		t.Fatal(err)
+	}
+	if r.Status("values") != "fail" {
+		t.Fatalf("values says %s for a membership that is not enumerable", r.Status("values"))
+	}
+}
+
 // The results check (feature results) is a skip, with the reason, when the
 // feature is not declared, and a pass against the reference serving it, every
 // read's result held to its registry schema. A read with no pocket declared

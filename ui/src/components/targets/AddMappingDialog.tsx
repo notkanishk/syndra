@@ -122,13 +122,18 @@ export function RoleMappingDialog({
   const list = values.data;
   const neverRead = values.error instanceof ApiError && values.error.code === "VALUES_NEVER_READ";
   const noGroups = Boolean(list && list.values.length === 0);
+  // A membership the system cannot list at all: Syndra can't check or manage a
+  // value it can't see, so it is not the "only built-in groups" case.
+  const unlistable = Boolean(list && !list.enumerable);
   const fieldName = list ? `${list.label} on ${name}` : `${noun[0].toUpperCase()}${noun.slice(1)} on ${name}`;
   const ready = Boolean(
     project && roleKey && value && list && !noGroups && ops.length > 0 && (choice.quota !== "" || !home),
   );
   const notReadyReason = neverRead
     ? `Nothing to preview until ${name} lists its ${noun}s.`
-    : noGroups
+    : unlistable
+      ? `Nothing to preview: ${name} doesn't list its ${noun}s.`
+      : noGroups
       ? `Nothing to preview until ${name} has a ${noun} of its own.`
       : role && ops.length === 0
         ? "Nothing has changed yet."
@@ -186,15 +191,29 @@ export function RoleMappingDialog({
                 {(neverRead || noGroups) && (
                   <Notice
                     tone="neutral"
-                    title={neverRead ? `${name} hasn't listed its ${noun}s yet.` : `${name} has no ${noun}s of its own yet.`}
-                    action={{ label: "Read again", onClick: () => void values.refetch() }}
-                    next={neverRead ? "Press Read again in a minute." : `Press Read again once ${name} has ${noun}s of its own.`}
+                    title={
+                      neverRead
+                        ? `${name} hasn't listed its ${noun}s yet.`
+                        : unlistable
+                          ? `${name} doesn't list its ${noun}s.`
+                          : `${name} has no ${noun}s of its own yet.`
+                    }
+                    action={unlistable ? undefined : { label: "Read again", onClick: () => void values.refetch() }}
+                    next={
+                      neverRead
+                        ? "Press Read again in a minute."
+                        : unlistable
+                          ? `Ask whoever maintains the ${name} add-on to make them listable.`
+                          : `Press Read again once ${name} has ${noun}s of its own.`
+                    }
                   >
                     {neverRead
                       ? `Syndra asks for the list when this opens, and ${name} hasn't answered${
                           row?.health?.started_at ? ` since Syndra restarted at ${formatClock(row.health.started_at)}` : " yet"
                         }. This usually clears within a minute and a half.`
-                      : builtinSentence(name, list, noun)}
+                      : unlistable
+                        ? `Syndra can't check or manage a ${noun} it can't see, so it offers none.`
+                        : builtinSentence(name, list, noun)}
                   </Notice>
                 )}
               </>

@@ -329,6 +329,9 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 	// fine" and "nobody could be asked" are different answers and a surface has
 	// to be able to say which one it is showing.
 	resolution, err := addonsResolvesValue(ctx, target, field, value)
+	if errors.Is(err, addons.ErrFieldNotListable) {
+		return "", "", resolution, newNotListable(ctx, target, field, schema)
+	}
 	if err != nil {
 		return "", "", resolution, err
 	}
@@ -338,6 +341,31 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 // errMappingTargetSilent separates "the add-on is wrong" from "the add-on has
 // not spoken". An operator whose mapping is refused needs to know which.
 var errMappingTargetSilent = errors.New("the target has not published its capabilities")
+
+// notListable is the refusal of a mapping on a membership the add-on cannot
+// list, worded for the operator: the system's name and the field's label, never
+// the ids. next is the step, and it is not "change what it says": nothing typed
+// in the dialog can fix this. It is one step for create and edit alike, true on
+// both (the edit dialog has its own Remove). It unwraps to
+// addons.ErrFieldNotListable, and through it to the ErrValueNotResolvable family.
+type notListable struct{ sentence, next string }
+
+func (e notListable) Error() string { return e.sentence }
+func (notListable) Unwrap() error   { return addons.ErrFieldNotListable }
+
+func newNotListable(ctx context.Context, target, field string, schema []addons.EntitlementField) error {
+	system, _ := systemName(ctx, target)
+	label := field
+	for _, f := range schema {
+		if f.Name == field {
+			label = strings.ToLower(fieldLabel(f))
+		}
+	}
+	return notListable{
+		sentence: system + " doesn't list its " + label + "s, so Syndra can't check or manage one. Nothing was changed.",
+		next:     "Ask whoever maintains the " + system + " add-on to make them listable.",
+	}
+}
 
 func writeMappingError(w http.ResponseWriter, err error) {
 	switch {
@@ -354,6 +382,14 @@ func writeMappingError(w http.ResponseWriter, err error) {
 		// 503, not 400: the request may be perfectly correct and the backend
 		// cannot tell yet. Retrying once the add-on answers is the right move.
 		writeUpstreamStatus(w, http.StatusServiceUnavailable, err, "TARGET_CAPABILITIES_UNKNOWN")
+	case errors.Is(err, addons.ErrFieldNotListable):
+		// Before the family sentinel it wraps. A distinct detail key, because the
+		// dialog's step for "unresolvable" (read again, pick another) is false here.
+		var nl notListable
+		if !errors.As(err, &nl) {
+			nl = notListable{sentence: err.Error(), next: "Ask whoever maintains the add-on to make these values listable."}
+		}
+		jsonValidationErrorResponse(w, nl.sentence, map[string]string{"field": "unlistable", "next": nl.next})
 	case errors.Is(err, addons.ErrValueNotResolvable):
 		// The add-on's OWN sentinel, not a local restatement of it. This branch
 		// used to test a sentinel declared in this file that nothing ever

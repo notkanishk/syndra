@@ -422,10 +422,11 @@ var (
 	// does not know what the value means — so the add-on is asked, through the
 	// `/values/{field}` read it now serves.
 	//
-	// It fails open on everything except a definite "no". A target that could
-	// not be read is the absence of an answer, and refusing a mapping edit
-	// because a NAS was rebooting would make an outage look like a validation
-	// failure. Structure is Syndra's own and is enforced regardless.
+	// It fails open on everything except a definite "no": the value is not in
+	// the list, or the field is a membership the add-on cannot list. A target
+	// that could not be read is the absence of an answer, and refusing a mapping
+	// edit because a NAS was rebooting would make an outage look like a
+	// validation failure. Structure is Syndra's own and is enforced regardless.
 	addonsResolvesValue = addons.ResolvesValue
 
 	// Allowances (group 8).
