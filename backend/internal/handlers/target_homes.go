@@ -66,7 +66,7 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 	// The home folder's limit field, by role: none known, no limit is shown.
 	schema, _ := addonsEntitlementSchema(target)
 	limit, _ := kinds.HomeLimit(schema)
-	homes := addonsReadHomes(r.Context(), target)
+	homes := addonsReadHomes(r.Context(), target, wantsFresh(r))
 	byName := map[string]addons.HomeUsage{}
 	for _, h := range homes.Homes {
 		byName[h.Username] = h
@@ -91,7 +91,19 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 		out = append(out, row)
 	}
 	textsort.ByName(out, func(r accountHome) string { return r.Username }, nil)
-	jsonResponse(w, http.StatusOK, map[string]any{"read": homes.Read, "usage_read": homes.UsageRead, "accounts": out})
+	body := map[string]any{"read": homes.Read, "usage_read": homes.UsageRead, "accounts": out}
+	// When the add-on read them, and whether this is that read or its copy;
+	// or, inside its cooldown with nothing kept, when it may read again.
+	if o := homes.Observation; o != nil {
+		body["taken_at"], body["current"] = o.TakenAt, o.Current
+		if o.Stale != nil {
+			body["stale"] = o.Stale
+		}
+	}
+	if homes.RetryAfter > 0 {
+		body["retry_after"] = homes.RetryAfter
+	}
+	jsonResponse(w, http.StatusOK, body)
 }
 
 // roleLimits is what a person's roles give: a home folder at all, and the

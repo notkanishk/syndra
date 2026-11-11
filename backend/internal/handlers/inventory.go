@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"syndra/internal/addons"
@@ -30,9 +31,17 @@ import (
 // handleTargetInventory lists what lives on the target that Syndra does not
 // manage.
 func handleTargetInventory(w http.ResponseWriter, r *http.Request) {
-	inv, err := svcTargetInventory(r.Context(), r.PathValue("target"))
+	inv, err := svcTargetInventory(r.Context(), r.PathValue("target"), wantsFresh(r))
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "INVENTORY_ERROR", err.Error())
+		return
+	}
+	if inv.RetryAfter > 0 {
+		// "Read again" inside the add-on's cooldown, nothing kept to show:
+		// a countdown, not an outage (RFC 6585 §4), said as every cooldown
+		// refusal is (FRESH_READ_COOLDOWN).
+		writeCooledDown(w, inv.RetryAfter, "That target was read moments ago, so its accounts can be listed again in "+
+			strconv.Itoa(inv.RetryAfter)+" seconds.")
 		return
 	}
 	if inv.Halted {
@@ -373,6 +382,11 @@ func adoptionRefusal(err error) string {
 func handleDormantAccounts(w http.ResponseWriter, r *http.Request) {
 	report, err := svcDormantAccounts(r.Context(), r.PathValue("target"))
 	if err != nil {
+		if cooled := (services.ReadCooledDown{}); errors.As(err, &cooled) {
+			writeCooledDown(w, cooled.RetryAfter, "That target was read moments ago, so its accounts can be listed again in "+
+				strconv.Itoa(cooled.RetryAfter)+" seconds.")
+			return
+		}
 		if errors.Is(err, services.ErrTargetUnplannable) {
 			// 503, not an empty list. Every row here is a candidate for
 			// removal, and an empty list is a statement that there are none —
@@ -436,6 +450,14 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 	// Re-read, and re-resolve. The list the operator ticked was true when they
 	// read it; this is the only thing that makes it true when it runs.
 	report, err := svcDormantAccounts(r.Context(), target)
+	if cooled := (services.ReadCooledDown{}); errors.As(err, &cooled) {
+		// The list was read moments ago, inside the add-on's cooldown: the
+		// re-check cannot read the target yet, and nothing is removed on the
+		// strength of a copy (owner Q1). A countdown, then the same request.
+		writeCooledDown(w, cooled.RetryAfter, "That target was read moments ago, so nothing was removed. You can remove them in "+
+			strconv.Itoa(cooled.RetryAfter)+" seconds.")
+		return
+	}
 	if err != nil {
 		jsonErrorResponse(w, http.StatusServiceUnavailable, "TARGET_UNREADABLE",
 			"That target could not be read, so nothing was removed.")

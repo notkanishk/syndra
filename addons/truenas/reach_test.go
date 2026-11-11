@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 // What a group opens is what the NAS's folder ACLs give it, read in NFS4's own
@@ -157,7 +156,7 @@ func TestAGroupOpensWhatTheFolderACLsGiveIt(t *testing.T) {
 	if got := describe(out.Everyone); got != "open:read" {
 		t.Errorf("everyone opens %q", got)
 	}
-	if !out.Current || out.TakenAt.IsZero() || out.Stale != nil {
+	if !out.Current || out.TakenAt == "" || out.Stale != nil {
 		t.Errorf("a fresh read must say so: current=%v taken_at=%v stale=%v", out.Current, out.TakenAt, out.Stale)
 	}
 	for _, p := range out.Groups["staff"] {
@@ -288,7 +287,7 @@ func TestReachFallsBackToTheLastReadAndSaysSo(t *testing.T) {
 		t.Fatalf("a cached answer must be current false, stale cached: %+v", cached.Stale)
 	}
 
-	s.reach.readAt = time.Now().Add(-2 * reachMaxAge)
+	ageCopies(s, 2*freshMaxAge)
 	fake.refuse = map[string]string{"filesystem.getacl": "[EACCES] no"}
 	rr, out := getReach(t, s)
 	if rr.Code != http.StatusOK || out.Current || out.Stale == nil || out.Stale.Reason != "unreachable" {

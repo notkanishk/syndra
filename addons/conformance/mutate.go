@@ -33,7 +33,7 @@ func (k *kit) mutate() error {
 	// tell its own account from someone else's, so it writes nothing: not when
 	// the read fails, and not when it is truncated and so proves nothing.
 	before := &check{}
-	doc := k.ok(before, k.send(request{method: http.MethodGet, target: "/subjects"}), "subjects.json")
+	doc := k.ok(before, k.currentSubjects(), "subjects.json")
 	switch {
 	case k.ctx.Err() != nil:
 		k.halted = "not reached: the run was interrupted"

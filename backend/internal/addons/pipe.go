@@ -51,6 +51,11 @@ type sendSpec struct {
 	// uses it: it is the call an operator makes to stop the add-on serving work,
 	// and a refusal there must not count as the add-on failing to answer.
 	SkipBreaker bool
+	// Fresh asks for a read of the app now (feature freshness, design §4): the
+	// `fresh=true` query on a GET, `"fresh": true` in an operation's body. Sent
+	// only to an add-on declaring the feature, and refused outside the reads in
+	// scope (freshScope): never /plan, /apply or /stats.
+	Fresh bool
 }
 
 // send is the one request path. A non-nil error means nothing left the process;
@@ -67,6 +72,24 @@ func (a *Addon) send(ctx context.Context, s sendSpec) (CallResponse, error) {
 	}
 	if s.Write && s.Claim == nil && s.TraceID == "" {
 		return refuse(ErrNoCallRecord)
+	}
+	if s.Fresh {
+		if !freshScope(s) {
+			return refuse(fmt.Errorf("%w: %s %s", ErrFreshOutOfScope, s.Method, s.Path))
+		}
+		// An add-on without the feature is never sent its key (design §2 rule
+		// 2): it reads the app as it always does.
+		if a.declares("freshness") == nil {
+			if s.Method == http.MethodGet {
+				s.Path += "?fresh=true"
+			} else {
+				body, err := withJSONField(s.Body, "fresh", true)
+				if err != nil {
+					return refuse(err)
+				}
+				s.Body = body
+			}
+		}
 	}
 	if !s.SkipBreaker && !a.br.allow(timeNow()) {
 		return refuse(fmt.Errorf("%w: %s", ErrCircuitOpen, a.Registration.Target))
@@ -116,6 +139,25 @@ func featureOf(path string) string {
 
 func featureRoute(path string) bool { return featureOf(path) != "" }
 
+// ErrFreshOutOfScope is fresh asked of a request it may not ride on.
+var ErrFreshOutOfScope = errors.New("addon: fresh is only for the reads in scope")
+
+// freshScope is a request fresh may ride on (design §4): GET /subjects,
+// /values/{field}, /reach, /homes, and an effect: read operation. Never a
+// write, so never /apply or a write operation, and never /plan or /stats:
+// /plan keeps its meaning, computed against a live read and never cooled
+// down, and when the app is read for statistics is the add-on's (§9.1).
+func freshScope(s sendSpec) bool {
+	switch {
+	case s.Write:
+		return false
+	case s.Method == http.MethodGet:
+		return s.Path == "/subjects" || s.Path == "/reach" || s.Path == "/homes" || strings.HasPrefix(s.Path, "/values/")
+	default:
+		return s.Method == http.MethodPost && strings.HasPrefix(s.Path, "/operations/")
+	}
+}
+
 // ErrFeatureNotDeclared is a call to a feature's route on an add-on whose
 // manifest does not declare the feature. Nothing was sent.
 var ErrFeatureNotDeclared = errors.New("addon: the add-on does not declare this feature")
@@ -154,7 +196,7 @@ func (a *Addon) operate(ctx context.Context, p db.AddonOperationParams, s sendSp
 	s.Write = true
 	s.Claim = OperationRecord(id, p.Target, p.Operation, p.SubjectID).consume
 	// The row's id is the call_id, in the body like every write's.
-	body, err := withCallID(s.Body, id)
+	body, err := withJSONField(s.Body, "call_id", id)
 	if err != nil {
 		err = fmt.Errorf("addon %s: encode %s: %w", p.Target, p.Operation, err)
 		_ = dbSettleAddonOperation(ctx, id, db.AddonOpUnreached)
@@ -170,14 +212,17 @@ func (a *Addon) operate(ctx context.Context, p db.AddonOperationParams, s sendSp
 	return resp, sendErr
 }
 
-// withCallID is a JSON object body with call_id set.
-func withCallID(body []byte, callID string) ([]byte, error) {
+// withJSONField is a JSON object body with key set to v.
+func withJSONField(body []byte, key string, v any) ([]byte, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil {
 		return nil, err
 	}
-	id, _ := json.Marshal(callID)
-	fields["call_id"] = id
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	fields[key] = raw
 	return json.Marshal(fields)
 }
 

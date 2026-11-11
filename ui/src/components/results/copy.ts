@@ -3,8 +3,8 @@ import { NOTHING_TO_DO } from "@/lib/outcome";
 
 /**
  * Every sentence the generic read renderers say, in one place, so the copy
- * guide (`plain-language-copy/design.md` section 12) and a test can hold them
- * to the same words. Each outcome ends on a next step or "Nothing for you to do."
+ * guide (`plain-language-copy/design.md` sections 12 and 13) and a test can hold
+ * them to the same words. Each outcome ends on a next step or "Nothing for you to do."
  * A sentence that differs by who is reading takes the reader.
  */
 
@@ -52,3 +52,16 @@ export const uncoveredNote = (places: string[], who: Reader) => {
 
 /** Under an empty activity list: an empty list that is not the same as nothing having happened. */
 export const UNCOVERED_GUIDANCE = "Some places were not recording this account, so this is not the same as nothing having happened. See below.";
+
+/**
+ * How fresh a read is (copy guide section 13). The first is a copy the add-on
+ * kept, the next a "Read again" pressed inside its cooldown, the last a system
+ * that cannot be reached; each draws beside the control that is its next step,
+ * and the last one says its own. The words on the control are fixed.
+ */
+export const READ_AGAIN = "Read again";
+export const READING = "Reading";
+export const copyLine = (name: string, age: string) => `${name} was read ${age}`;
+export const cooldownLine = (name: string, seconds: number) => `${name} was read moments ago; you can read again in ${seconds} s`;
+export const unreachableLine = (name: string, time: string, who: Reader) =>
+  `${name} can't be reached right now; this is what it said at ${time}. ${notReadableNext(who)}`;

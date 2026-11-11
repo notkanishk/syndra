@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	truenas "github.com/truenas/api_client_golang/truenas_api"
@@ -113,6 +114,13 @@ type dialer func() (rpc, error)
 
 // NAS holds the session and everything that decides whether to use it.
 type NAS struct {
+	// reads is health.target_reads (feature freshness): every read of the NAS
+	// this add-on has made since it started, counted in call, the one door
+	// every read goes through. Writes (sendWrite) and the session's own ping
+	// are not reads of the app's data. In memory: it never decreases while the
+	// add-on runs, and starts again at 0 (an OpenMetrics counter's reset).
+	reads atomic.Uint64
+
 	mu      sync.Mutex
 	dial    dialer
 	client  rpc
@@ -391,6 +399,7 @@ func (n *NAS) call(method string, params any, out any) error {
 	if !readMethods[method] {
 		return fmt.Errorf("%s is not a read this add-on makes; a write goes through the mutation log", method)
 	}
+	n.reads.Add(1)
 	return n.roundTrip(method, params, out)
 }
 

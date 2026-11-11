@@ -1,4 +1,5 @@
 import { ApiError, LostReply } from "@/lib/api-client";
+import { cooldownOf } from "@/lib/queries/fresh";
 
 /**
  * What happened, in six words, everywhere in the product.
@@ -62,10 +63,19 @@ export interface ActionOutcome {
    * is not the step (lib/retry.ts refusedOutcome says the step).
    */
   recorded?: boolean;
+  /**
+   * Whole seconds until the same press may be sent again: a read refused inside
+   * the add-on's cooldown. ActionOutcome counts it down; `next` is its first line.
+   */
+  retryAfter?: number;
 }
 
 /** The explicit "no step left" (copy guide §2): said, never implied by silence. */
 export const NOTHING_TO_DO = "Nothing for you to do.";
+
+/** A press refused inside the add-on's cooldown (copy guide section 13): the system was read moments ago, and nothing was sent. */
+export const COOLDOWN_REFUSED = "That system was read moments ago, so nothing was changed";
+export const cooldownNext = (seconds: number) => (seconds > 0 ? `You can try again in ${seconds} s.` : "Press the same button once more.");
 
 /** The step a change waiting for its send leaves; ActionOutcome draws it as the NextStep link. */
 export const SEND_IT = "Press Send on Pending changes.";
@@ -239,10 +249,13 @@ export function outcomeFromError(error: unknown): ActionOutcome {
     sessionEnded ||
     (error instanceof ApiError && error.status >= 400 && error.status < 500);
   const where = mayHaveGoneThrough(error);
+  const wait = cooldownOf(error)?.retry_after;
   return {
     kind: refused ? "refused" : "failed",
     partial: where,
-    message: failureMessage(error),
+    // A cooldown is the one refusal worded here: the server's own sentence names a count that does not tick.
+    message: wait === undefined ? failureMessage(error) : COOLDOWN_REFUSED,
+    retryAfter: wait,
     // Not "it will send when you're back". There is no client-side queue by
     // design, so nothing sends itself, and saying otherwise would be the
     // product promising something it has deliberately refused to build.
@@ -262,7 +275,9 @@ export function outcomeFromError(error: unknown): ActionOutcome {
     requestId: typeof requestId === "string" ? requestId : undefined,
     sessionEnded: sessionEnded || undefined,
     // The step, by what refused it; the rest fall to nextStepOf's kind default.
-    next: offline
+    next: wait !== undefined
+      ? cooldownNext(wait)
+      : offline
       ? "Try again once you are back online."
       : error instanceof ApiError && error.status === 403
         ? "Ask someone who runs Syndra to do it, or to give you access."

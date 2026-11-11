@@ -6,6 +6,7 @@ package drift
 
 import (
 	"context"
+	"time"
 
 	"syndra/internal/addons"
 
@@ -103,9 +104,23 @@ var (
 // entered into triage, a convergence queued for a blocked row.
 var (
 	addonSubjects = addons.Subjects
-	addonPlan     = addons.Plan
-	listBindings  = db.ListTargetBindings
-	fieldRoles    = addons.FieldRoles
+	// The sweep waits out a target's fresh-read cooldown once (ReconcileAddon):
+	// how long the target declares it, and the wait, a seam so a test never
+	// sleeps.
+	freshCooldown = addons.FreshCooldown
+	waitOut       = func(ctx context.Context, d time.Duration) bool {
+		t := time.NewTimer(d)
+		defer t.Stop()
+		select {
+		case <-t.C:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+	addonPlan    = addons.Plan
+	listBindings = db.ListTargetBindings
+	fieldRoles   = addons.FieldRoles
 	// How a limit combines (unit, combine, unlimited): the accepted manifest's
 	// schema, which the persisted role map does not carry.
 	entitlementSchema = addons.EntitlementSchema

@@ -232,9 +232,9 @@ func TestBreakerIsConsultedByThePipeAndLifecycleIsExempt(t *testing.T) {
 	events := []string{}
 	traceEvents(t, &events)
 
-	Subjects(context.Background(), "truenas") // opens the circuit (threshold 1)
+	Subjects(context.Background(), "truenas", false) // opens the circuit (threshold 1)
 	before := atomic.LoadInt32(&hits)
-	if res := Subjects(context.Background(), "truenas"); !errors.Is(res.Err, ErrCircuitOpen) || atomic.LoadInt32(&hits) != before {
+	if res := Subjects(context.Background(), "truenas", false); !errors.Is(res.Err, ErrCircuitOpen) || atomic.LoadInt32(&hits) != before {
 		t.Fatalf("res %+v hits %d->%d: an open circuit must refuse without sending", res, before, hits)
 	}
 	if _, err := SetLifecycle(context.Background(), "truenas", "draining", "maintenance", "op-1"); err != nil {

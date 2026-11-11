@@ -86,7 +86,7 @@
     "target_reads": {
       "type": "integer",
       "minimum": 0,
-      "description": "Feature freshness. A monotonic count of reads the add-on has made of its app, so a kit can prove a fresh read happened.",
+      "description": "Feature freshness. Every read the add-on has made of its app since it started; never decreases while it runs (it may start again at 0, like an OpenMetrics counter), so a kit can prove a fresh read happened.",
       "x-feature": "freshness"
     },
     "snapshot_taken_at": {

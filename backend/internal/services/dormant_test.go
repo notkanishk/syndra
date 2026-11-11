@@ -22,7 +22,7 @@ func stubDormant(t *testing.T) {
 		dormantSubjectStatus, dormantSubjectRoles, dormantTargetMapped = status, roles, mapped
 	})
 
-	dormantSubjects = func(context.Context, string) addons.SubjectsResult {
+	dormantSubjects = func(context.Context, string, bool) addons.SubjectsResult {
 		return addons.SubjectsResult{
 			Outcome:  addons.OutcomeSucceeded,
 			Current:  true,
@@ -123,7 +123,7 @@ func TestAnUnusableReadIsRefusedRatherThanAnsweredEmpty(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stubDormant(t)
-			dormantSubjects = func(context.Context, string) addons.SubjectsResult { return tc.read }
+			dormantSubjects = func(context.Context, string, bool) addons.SubjectsResult { return tc.read }
 
 			if _, err := DormantAccounts(context.Background(), "truenas"); err == nil {
 				t.Fatal("want a refusal — an empty list here is a statement nobody may make")
@@ -136,7 +136,7 @@ func TestAnUnusableReadIsRefusedRatherThanAnsweredEmpty(t *testing.T) {
 // is nothing to remove, and the reconcile pass is what repairs the binding.
 func TestABindingToAnAbsentAccountIsNotDormant(t *testing.T) {
 	stubDormant(t)
-	dormantSubjects = func(context.Context, string) addons.SubjectsResult {
+	dormantSubjects = func(context.Context, string, bool) addons.SubjectsResult {
 		return addons.SubjectsResult{
 			Outcome: addons.OutcomeSucceeded, Current: true, TakenAt: time.Now(),
 			Accounts: []addons.TargetAccount{{Username: "charlotte", AccountID: "3001"}},

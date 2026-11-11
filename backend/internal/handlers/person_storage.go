@@ -74,8 +74,16 @@ const adoptionWindow = 10 * time.Minute
 // last-known has to survive restarts.
 var lastStorage sync.Map // target + "\x00" + subject -> lastKnownStorage
 
+// rememberStorage keeps a read dated by the add-on's taken_at: a copy it read
+// four minutes ago is remembered as four minutes old. A reply that does not
+// date itself (the legacy pocket) is dated by when the backend received it,
+// the closest the backend can say.
 func rememberStorage(target, subject string, status addons.StorageStatus) {
-	lastStorage.Store(target+"\x00"+subject, lastKnownStorage{Storage: status, ReadAt: time.Now()})
+	readAt := time.Now()
+	if status.Observation != nil {
+		readAt = status.Observation.TakenAt
+	}
+	lastStorage.Store(target+"\x00"+subject, lastKnownStorage{Storage: status, ReadAt: readAt})
 }
 
 func recalledStorage(target, subject string) *lastKnownStorage {
@@ -197,7 +205,7 @@ func adoptionOf(r *http.Request, target, subject string, boundAt *time.Time) *pe
 // with the roles behind each, as the target last read its folders. Nil when
 // that hasn't been read.
 func previewPlaces(r *http.Request, target string, set services.EntitlementSet) []addons.Place {
-	reach := addonsReadReach(r.Context(), target)
+	reach := addonsReadReach(r.Context(), target, wantsFresh(r))
 	if !reach.Read {
 		return nil
 	}

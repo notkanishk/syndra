@@ -1,6 +1,8 @@
 import { MutationCache, QueryClient, isServer } from "@tanstack/react-query";
 import { cache } from "react";
 
+import { cooldownOf } from "@/lib/queries/fresh";
+
 /**
  * Default options for every QueryClient instance.
  *
@@ -8,7 +10,7 @@ import { cache } from "react";
  *   and it avoids refetch storms when navigating between pages.
  * - gcTime: 5min — unused query data is dropped after this window so memory
  *   doesn't grow unbounded across long sessions.
- * - retry: 1 — one retry on transient network blips, then surface the error.
+ * - retry: once — one retry on transient network blips (never a cooldown refusal), then surface the error.
  * - refetchOnWindowFocus: false — admin tools are workbench surfaces; tab
  *   focus shouldn't trigger background work.
  */
@@ -30,7 +32,8 @@ export function makeQueryClient(): QueryClient {
       queries: {
         staleTime: 30_000,
         gcTime: 5 * 60_000,
-        retry: 1,
+        // One retry on a blip; a read refused inside the cooldown is not retried, it would only be refused again.
+        retry: (count, error) => count < 1 && !cooldownOf(error),
         refetchOnWindowFocus: false,
       },
     },

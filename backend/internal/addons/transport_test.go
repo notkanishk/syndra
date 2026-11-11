@@ -1123,7 +1123,7 @@ func TestActivityCarriesTheTruncatedFlag(t *testing.T) {
 	signedAddon(t, srv.URL, "a-test-secret")
 	withBreaker(t, 1000, time.Minute)
 
-	report := Activity(context.Background(), "truenas", "sub-1", "sub-1", "")
+	report := Activity(context.Background(), "truenas", "sub-1", "sub-1", "", false)
 	if report.Outcome != OutcomeSucceeded || !report.Truncated {
 		t.Fatalf("want a succeeded, truncated report, got %s / %v / truncated=%t", report.Outcome, report.Err, report.Truncated)
 	}

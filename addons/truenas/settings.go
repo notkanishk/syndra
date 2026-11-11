@@ -105,9 +105,10 @@ func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body [
 
 func (s *server) putHomeRoot(w http.ResponseWriter, req putSettingRequest) {
 	if req.Value != "" {
-		// A read of the NAS now, never the cache and never the last read: a
-		// place deleted a minute ago must not pass.
-		read, err := s.readACLsNow()
+		// A read of the NAS now, never the copy and never the last read: a
+		// place deleted a minute ago must not pass. Not kept: the write that
+		// follows forgets every copy anyway (server.mutate).
+		read, err := s.readSharesACLs()
 		if errors.Is(err, ErrNotSent) {
 			// Nothing was sent, and nothing is stored until the place is
 			// checked: the one code Syndra reads as "nothing happened".

@@ -114,12 +114,14 @@ var v2Messages = []struct{ fixture, schema string }{
 	{"health.json", "health.json"},
 	{"subjects.json", "subjects.json"},
 	{"subjects_stale.json", "subjects.json"},
+	{"subjects_cooldown.json", "subjects.json"},
 	{"values.json", "values.json"},
 	{"plan_request.json", "plan_request.json"},
 	{"plan_response.json", "plan_response.json"},
 	{"apply_request.json", "apply_request.json"},
 	{"apply_response.json", "apply_ok.json"},
 	{"operation_request.json", "operation_request.json"},
+	{"operation_request_fresh.json", "operation_request.json"},
 	{"operation_response.json", "operation_response.json"},
 	{"operation_response_result.json", "operation_response.json"},
 	{"operation_response_activity.json", "operation_response.json"},
@@ -141,6 +143,8 @@ var v2Messages = []struct{ fixture, schema string }{
 	{"error.json", "error.json"},
 	{"error_apply_blocked.json", "error.json"},
 	{"error_binding_conflict.json", "error.json"},
+	{"error_fresh_read_cooldown.json", "error.json"},
+	{"error_target_unreachable.json", "error.json"},
 	{"call.json", "call.json"},
 	{"stats.json", "stats.json"},
 	{"identity_apply.json", "identity/vector.json"},
@@ -1213,4 +1217,87 @@ func v2ProductionMAC(unix, method, target string, body, key []byte) string {
 	var u int64
 	fmt.Sscan(unix, &u)
 	return hex.EncodeToString(computeMAC(u, method, target, body, key))
+}
+
+// ---- freshness (6.2) -------------------------------------------------------
+
+// fresh rides on the reads in scope and on nothing else (design §4): never
+// /plan, /apply or /stats. The listing is exact; TestV2FeatureKeysAreListed-
+// AndMarkedBothWays holds openapi's Fresh parameter to it, and the closed
+// request schemas refuse the key outright.
+func TestV2FreshIsNeverOnPlanApplyStats(t *testing.T) {
+	want := []string{"GET /homes?fresh", "GET /reach?fresh", "GET /subjects?fresh", "GET /values/{field}?fresh", "operation_request.fresh"}
+	got := slices.Sorted(slices.Values(v2Features(t)["freshness"].RequestFields))
+	if !slices.Equal(got, want) {
+		t.Errorf("freshness request fields %v, want exactly %v", got, want)
+	}
+	for _, f := range got {
+		for _, never := range []string{"/plan", "/apply", "/stats", "plan_request", "apply_request"} {
+			if strings.Contains(f, never) {
+				t.Errorf("fresh is listed on %s", f)
+			}
+		}
+	}
+	for _, schema := range []string{"plan_request.json", "apply_request.json"} {
+		doc := v2JSON(t, "fixtures", schema)
+		doc["fresh"] = true
+		if v2Validate(t, schema, doc) == nil {
+			t.Errorf("schema/%s accepts fresh", schema)
+		}
+	}
+}
+
+// current == false ⇔ stale present, failed both ways on every reply whose
+// schema holds the invariant, against a fixture that passes untouched.
+func TestV2StaleInvariantFailsBothWays(t *testing.T) {
+	var holders []string
+	err := filepath.WalkDir(filepath.Join(v2Dir, "schema"), func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		raw, _ := os.ReadFile(p)
+		rel, _ := filepath.Rel(filepath.Join(v2Dir, "schema"), p)
+		if rel != filepath.Join("common", "stale.json") && bytes.Contains(raw, []byte("stale.json#/$defs/Invariant")) {
+			holders = append(holders, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	if err != nil || len(holders) == 0 {
+		t.Fatalf("no schema holds the invariant (%v)", err)
+	}
+	for _, schema := range holders {
+		fixtures := 0
+		for _, m := range v2Messages {
+			if m.schema != schema {
+				continue
+			}
+			fixtures++
+			doc := v2JSON(t, "fixtures", m.fixture)
+			if err := v2Validate(t, schema, doc); err != nil {
+				t.Fatalf("fixtures/%s does not pass untouched: %v", m.fixture, err)
+			}
+			notCurrent := v2JSON(t, "fixtures", m.fixture)
+			notCurrent["current"] = false
+			delete(notCurrent, "stale")
+			stale := v2JSON(t, "fixtures", m.fixture)
+			stale["current"] = true
+			stale["stale"] = map[string]any{"reason": "cached"}
+			for name, bad := range map[string]v2m{"current false without stale": notCurrent, "current true with stale": stale} {
+				if v2Validate(t, schema, bad) == nil {
+					t.Errorf("schema/%s accepts %s (fixtures/%s)", schema, name, m.fixture)
+				}
+			}
+		}
+		if fixtures == 0 {
+			t.Errorf("schema/%s holds the invariant and no fixture exercises it", schema)
+		}
+	}
+}
+
+// The fixtures the freshness half added are what each end produces and reads.
+func TestV2FreshOperationRequestIsAccepted(t *testing.T) {
+	var req OperationRequest
+	if err := decodeStrict(contractFixture(t, "operation_request_fresh.json"), &req); err != nil || !req.Fresh {
+		t.Fatalf("a read asking for a fresh read was refused or lost it: %v %+v", err, req)
+	}
 }

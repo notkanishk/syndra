@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { act } from "@testing-library/react";
+import { ApiError } from "@/lib/api-client";
 import { DormantAccounts, sweepResult } from "@/components/targets/DormantAccounts";
 import type { DormantReport, SweepResult } from "@/lib/queries/useDormant";
 import type { OneShotSecret } from "@/lib/secret";
@@ -17,7 +19,14 @@ const state: {
   report: DormantReport;
   swept: Array<{ accounts: string[]; elevatedKey: OneShotSecret }>;
   answer?: SweepResult;
+  error?: unknown;
+  errorAt?: number;
+  /** A refetch that failed with the list still on hand, as react-query keeps it. */
+  keepData?: boolean;
+  sweepError?: unknown;
+  refetch: ReturnType<typeof vi.fn>;
 } = {
+  refetch: vi.fn(),
   report: { target: "truenas", state_read_at: new Date().toISOString(), truncated: false, accounts: [] },
   swept: [],
 };
@@ -29,18 +38,20 @@ vi.mock("@/lib/queries/useDormant", async () => {
   return {
     ...actual,
     useDormantAccounts: () => ({
-      data: state.report,
+      data: state.error && !state.keepData ? undefined : state.report,
       isLoading: false,
       isFetching: false,
-      error: null,
-      refetch: vi.fn(),
+      error: state.error ?? null,
+      errorUpdatedAt: state.errorAt,
+      refetch: state.refetch,
     }),
     useSweepDormant: () => ({
       mutate: (
         input: { accounts: string[]; elevatedKey: OneShotSecret },
-        opts?: { onSuccess?: (r: SweepResult) => void },
+        opts?: { onSuccess?: (r: SweepResult) => void; onError?: (e: unknown) => void },
       ) => {
         state.swept.push(input);
+        if (state.sweepError) opts?.onError?.(state.sweepError);
         if (state.answer) opts?.onSuccess?.(state.answer);
       },
       isPending: false,
@@ -49,18 +60,23 @@ vi.mock("@/lib/queries/useDormant", async () => {
   };
 });
 
-function renderDormant() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <DormantAccounts target="truenas" />
-    </QueryClientProvider>,
-  );
-}
+const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+// A new element each time, so a rerender really draws again (an identical one is bailed out of).
+const tree = () => (
+  <QueryClientProvider client={client}>
+    <DormantAccounts target="truenas" />
+  </QueryClientProvider>
+);
+const renderDormant = () => render(tree());
 
 beforeEach(() => {
   state.swept = [];
   state.answer = undefined;
+  state.error = undefined;
+  state.errorAt = undefined;
+  state.keepData = undefined;
+  state.sweepError = undefined;
+  state.refetch = vi.fn();
   state.report = {
     target: "truenas",
     state_read_at: new Date().toISOString(),
@@ -213,5 +229,90 @@ describe("the sweep result", () => {
     const unsure = sweepResult({ target: "truenas", removed: 1, outcomes: [{ account: "a", outcome: "removed" }, { account: "b", outcome: "indeterminate" }] }, "TrueNAS");
     expect(unsure.word).toBe("Removed 1 of 2");
     expect(unsure.outcome.next).toBe("Check TrueNAS before you try again.");
+  });
+});
+
+// Both the list and the removal always read the target itself, so inside the
+// add-on's cooldown the backend refuses them (429, nothing read, nothing removed).
+describe("inside the add-on's cooldown", () => {
+  const cooling = (wait: number) => new ApiError(429, { error: "FRESH_READ_COOLDOWN", message: "the server's words", retry_after: wait });
+
+  it("a removal says Not removed with the countdown, keeps the selection and the key, and is pressed again the same way", () => {
+    vi.useFakeTimers();
+    state.sweepError = cooling(2);
+    renderDormant();
+    fireEvent.click(screen.getByLabelText("Select former-member"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand/i }));
+    fireEvent.change(screen.getByLabelText(/API key that is allowed to delete/i), { target: { value: "k" } });
+    fireEvent.click(screen.getByRole("button", { name: /remove 1 account/i }));
+    expect(screen.getByText("Not removed")).toBeInTheDocument();
+    expect(screen.getByText("That system was read moments ago, so nothing was changed.")).toBeInTheDocument();
+    expect(screen.getByText("You can try again in 2 s.")).toBeInTheDocument();
+    act(() => void vi.advanceTimersByTime(2000));
+    expect(screen.getByText("Press the same button once more.")).toBeInTheDocument();
+    // Still armed: the same press, with the same key, is the next step.
+    expect(screen.getByLabelText(/API key that is allowed to delete/i)).toHaveValue("k");
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeEnabled();
+    vi.useRealTimers();
+  });
+
+  it("a list load says so once, in the freshness line with its waiting button: no refusal block, no claim that nothing was changed", () => {
+    vi.useFakeTimers();
+    state.error = cooling(2);
+    renderDormant();
+    expect(screen.getByText(/can read again in 2 s/)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing was changed/)).toBeNull();
+    expect(screen.queryByText(/You can try again in/)).toBeNull();
+    expect(screen.queryByText("Not read")).toBeNull();
+    expect(screen.queryByText("This list could not be read")).toBeNull();
+    expect(screen.queryByText("Nothing to tidy.")).toBeNull();
+    const button = screen.getByRole("button", { name: "Read again" });
+    expect(button).toBeDisabled();
+    act(() => void vi.advanceTimersByTime(2000));
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(state.refetch).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  // Somebody else's wait is not the reader's doing, and only their own press into it is a warning.
+  it("draws a cooldown the load ran into neutral, and amber only once the reader's own press meets it", () => {
+    vi.useFakeTimers();
+    state.error = cooling(2);
+    state.errorAt = Date.now();
+    const view = renderDormant();
+    const dot = () => document.querySelector("[data-freshness-dot]") as HTMLElement;
+    expect(dot().className).toContain("bg-faint");
+    expect(dot().className).not.toContain("warn");
+    act(() => void vi.advanceTimersByTime(2000));
+    fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+    state.error = cooling(30);
+    state.errorAt = Date.now();
+    view.rerender(tree());
+        expect(dot().className).toContain("bg-warn");
+    vi.useRealTimers();
+  });
+
+  it("a Read again that fails for another reason says Not read beside the press and keeps the list", () => {
+    state.keepData = true;
+    state.error = new ApiError(500, { error: "INTERNAL", message: "the add-on fell over" });
+    state.errorAt = Date.now();
+    renderDormant();
+    expect(screen.getByText("Not read")).toBeInTheDocument();
+    expect(screen.getByLabelText("Select former-member")).toBeInTheDocument();
+    expect(screen.queryByText("This list could not be read")).toBeNull();
+  });
+
+  it("keeps the list and its selection when a refetch is refused while it is on hand", async () => {
+    const view = renderDormant();
+    fireEvent.click(screen.getByLabelText("Select former-member"));
+    expect(screen.getByLabelText("Select former-member")).toBeChecked();
+    state.keepData = true;
+    state.error = cooling(30);
+    state.errorAt = Date.now();
+    view.rerender(tree());
+    expect(await screen.findByText(/can read again in/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Select former-member")).toBeChecked();
+    expect(screen.queryByText("This list could not be read")).toBeNull();
   });
 });

@@ -24,7 +24,9 @@ import { isStorage } from "@/lib/nav";
 import { sortNames } from "@/lib/sort";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
-import { useTargetActivity } from "@/lib/queries/useTargetActivity";
+import { useTargetActivity, useTargetActivityAgain } from "@/lib/queries/useTargetActivity";
+import { ReadAgainError, ReadFreshness, observed, type ReadState } from "@/components/ui/ReadFreshness";
+import { STALE } from "@/lib/queries/fresh";
 
 /**
  * One person's history — what they did, and what was done to them.
@@ -178,6 +180,7 @@ function TargetActivityCard({
 }) {
   const nameOf = useSystemNames();
   const activity = useTargetActivity(target, userId);
+  const again = useTargetActivityAgain(target, userId);
   const data = activity.data;
   const label = nameOf(target);
 
@@ -190,6 +193,13 @@ function TargetActivityCard({
   const uncovered = sortNames(data?.uncovered ?? []);
   // Shares are a storage word: the storage kind says them, any other kind says "places".
   const storage = isStorage({ kind });
+  // How old the log is: its own read, or the cooldown it ran into with nothing kept to show.
+  const age: ReadState | null =
+    data?.readable && data.taken_at
+      ? observed({ taken_at: data.taken_at, current: data.current ?? true, stale: data.stale }, activity.dataUpdatedAt)
+      : data?.reason === "cooldown" && data.retry_after
+        ? { stale: { reason: STALE.cooldown, retry_after: data.retry_after, since: activity.dataUpdatedAt } }
+        : null;
 
   return (
     <Card>
@@ -228,12 +238,23 @@ function TargetActivityCard({
           read, just nothing there to read — neutral tone, no warning colour,
           and never a raw status code (the backend already keeps those out of
           `detail`). */}
+      {age && (
+        <div className="border-t border-line px-5 py-3">
+          <ReadFreshness
+            state={age}
+            subject={label}
+            reader={{ audience: "operator", person: name }}
+            onRefresh={again.press}
+          />
+        </div>
+      )}
+      <ReadAgainError error={again.error} />
       {data && !data.readable && data.reason === "no_account" ? (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
           {label} has no account for this person, so there is nothing to read
           there.
         </div>
-      ) : data && !data.readable ? (
+      ) : data && !data.readable && !age ? (
         <div className="border-t border-line p-5">
           <Notice tone="warn" title={`${label}\u2019s audit log could not be read.`} next="Reload the page in a minute. If it keeps failing, ask whoever runs the Syndra server.">
             This is not a claim that nothing happened.{data.detail ? ` ${data.detail}` : ""}

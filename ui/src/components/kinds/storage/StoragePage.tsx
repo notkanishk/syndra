@@ -5,7 +5,8 @@ import { EmptyState, ListStates } from "@/components/states";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { STORAGE_LABEL, isStorage } from "@/lib/nav";
 import { NOTHING_TO_DO } from "@/lib/outcome";
-import { useMyStorage } from "@/lib/queries/useMyStorage";
+import { ReadAgainError, ReadAgainProvider } from "@/components/ui/ReadFreshness";
+import { useMyStorage, useMyStorageAgain } from "@/lib/queries/useMyStorage";
 
 /**
  * Network storage, the storage kind's page (route `/storage`): one card per
@@ -16,6 +17,7 @@ import { useMyStorage } from "@/lib/queries/useMyStorage";
  */
 export function StoragePage() {
   const targets = useMyStorage();
+  const again = useMyStorageAgain();
   const storage = targets.data?.filter(isStorage) ?? [];
 
   return (
@@ -37,11 +39,14 @@ export function StoragePage() {
           />
         }
       >
-        <div className="grid gap-4">
-          {storage.map((view) => (
-            <MemberTargetCard key={view.target} view={view} />
-          ))}
-        </div>
+        <ReadAgainProvider value={{ press: again.press, since: targets.dataUpdatedAt }}>
+          <ReadAgainError error={again.error} />
+          <div className="grid gap-4">
+            {storage.map((view) => (
+              <MemberTargetCard key={view.target} view={view} />
+            ))}
+          </div>
+        </ReadAgainProvider>
       </ListStates>
     </div>
   );

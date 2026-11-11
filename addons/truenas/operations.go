@@ -45,6 +45,9 @@ type OperationRequest struct {
 	PlanID      string         `json:"plan_id,omitempty"`
 	Fingerprint string         `json:"fingerprint,omitempty"`
 	Params      map[string]any `json:"params,omitempty"`
+	// Fresh asks a read operation for a read of the NAS now (feature
+	// freshness, readNow); a write ignores it.
+	Fresh bool `json:"fresh,omitempty"`
 }
 
 // OperationResult is what the caller learns.
@@ -111,7 +114,7 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 		// A read is never recorded, held or reuse-checked: a read that happens
 		// again is a read, Syndra sends one call_id for every read it makes,
 		// and a 30-day copy of a health report is a copy nobody will ask for.
-		s.operateNow(w, name, req)
+		s.readNow(w, name, req)
 		return
 	}
 	if strings.TrimSpace(req.Subject) == "" {
@@ -170,6 +173,36 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 		return
 	}
 	writeJSON(w, status, result)
+}
+
+// readNow answers a read operation through the fresher (fresh.go): the copy,
+// or a read of the NAS now when fresh asks or the copy is old, one per subject
+// and parameters. health.get's own result carries no `current`, so a copy of
+// it could never say it is one: it is read live every time, like /values.
+func (s *server) readNow(w http.ResponseWriter, name string, req OperationRequest) {
+	if name == "health.get" {
+		s.operateNow(w, name, req)
+		return
+	}
+	params, _ := json.Marshal(publicParams(name, req.Params))
+	val, obs, err := s.fresh.read(name+":"+req.Subject+":"+string(params), req.Fresh, func() (any, time.Time, error) {
+		res, status, err := s.runOperation(name, req)
+		if err != nil {
+			return nil, time.Time{}, opFailure{status, err}
+		}
+		return res, time.Now(), nil
+	})
+	if writeCooldown(w, err) {
+		return
+	}
+	if of := (opFailure{}); errors.As(err, &of) {
+		// The error's text is this add-on's own (operateNow).
+		writeError(w, of.status, CodeOperationFailed, of.err.Error(), nil)
+		return
+	}
+	res := val.(OperationResult)
+	res.Result = res.Result.(interface{ observed(Observed) any }).observed(obs)
+	writeJSON(w, http.StatusOK, res)
 }
 
 // publicParams is params without the ones this add-on declares secret for the
@@ -571,9 +604,16 @@ type ActivityReport struct {
 	Uncovered []string `json:"uncovered"`
 	// Truncated says older events exist than the newest activityLimit returned.
 	Truncated bool `json:"truncated"`
-	// TakenAt is when the audit log was read: always now, never a mirror.
-	TakenAt string `json:"taken_at"`
-	Current bool   `json:"current"`
+	// Observed is when the audit log was read, set by readNow (fresh.go).
+	Observed
+}
+
+// observed is a read result labelled with how fresh it is (fresh.go): a copy,
+// so a kept result is never changed.
+func (r ActivityReport) observed(o Observed) any { r.Observed = o; return &r }
+func (r StorageStatus) observed(o Observed) any {
+	r.Observed = o.with(r.placesSeen)
+	return &r
 }
 
 // activityLimit is how many events one activity.get returns.
@@ -662,15 +702,13 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 			"query-options": map[string]any{"limit": activityLimit + 1, "order_by": []string{"-message_timestamp"}},
 		},
 	}
-	takenAt := time.Now()
 	if err := s.nas.call("audit.query", query, &rows); err != nil {
 		return OperationResult{}, statusFor(err), fmt.Errorf("the audit log could not be read")
 	}
 
 	// One more than is returned asked for, so "exactly the limit" and "more
 	// than the limit" can be told apart; the newest rows are the ones kept.
-	report := ActivityReport{Events: make([]ActivityEvent, 0, len(rows)), Truncated: len(rows) > activityLimit,
-		TakenAt: takenAt.UTC().Format(time.RFC3339), Current: true}
+	report := ActivityReport{Events: make([]ActivityEvent, 0, len(rows)), Truncated: len(rows) > activityLimit}
 	if report.Truncated {
 		rows = rows[:activityLimit]
 	}

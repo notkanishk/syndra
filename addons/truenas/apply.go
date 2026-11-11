@@ -1269,6 +1269,10 @@ func (s *server) mutate(c caller, write string, do func() error) error {
 		logStoreFailure("mutation log intent", c.callID, err)
 		return errNotLogged
 	}
+	// Every write, whatever became of it, makes every copy a read of the past:
+	// the next read of anything reads the NAS (fresh.go). After the write, and
+	// a read that began before it is never kept (the fresher's generation).
+	defer s.fresh.forget()
 	err = do()
 	r.Intent, r.Outcome = logged.Seq, resultOf(write, err)
 	if _, logErr := s.log.Append(r); logErr != nil {

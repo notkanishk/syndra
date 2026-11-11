@@ -12,7 +12,7 @@ import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { RowCheckbox } from "@/components/ui/SelectionBar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
@@ -22,6 +22,7 @@ import {
   type DormantAccount,
   type SweepResult,
 } from "@/lib/queries/useDormant";
+import { cooldownOf, pageLoad } from "@/lib/queries/fresh";
 import { sortByName } from "@/lib/sort";
 import { oneShot } from "@/lib/secret";
 
@@ -56,6 +57,12 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
 
   const accounts = dormant.data?.accounts ?? [];
+  // The list always reads the target itself, so a load inside the cooldown is refused (429, nothing was read).
+  // That is said once, by the freshness line and its waiting button: no other block, and no "nothing was changed".
+  // Amber only when the reader's own press ran into it, not a page load inside someone else's wait.
+  const [pressedAt, setPressedAt] = useState(0);
+  const cooldown = cooldownOf(dormant.error, dormant.errorUpdatedAt);
+  const refused = pressedAt > 0 && dormant.errorUpdatedAt >= pressedAt ? cooldown : pageLoad(cooldown);
   const name = nameOf(target);
   const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);
   const safe = byName(accounts.filter((a) => !a.subject_still_member));
@@ -80,24 +87,33 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         note="Accounts Syndra created that no active role needs any more"
       />
 
-      {dormant.data && (
+      {(dormant.data || refused) && (
         <div className="px-5 pb-2">
           <ReadFreshness
             subject="This list"
             state={{
-              readAt: dormant.data.state_read_at,
-              current: true,
-              truncated: dormant.data.truncated,
+              readAt: dormant.data?.state_read_at,
+              current: dormant.data ? true : undefined,
+              truncated: dormant.data?.truncated,
+              stale: refused,
             }}
-            onRefresh={() => dormant.refetch()}
+            onRefresh={() => {
+              setPressedAt(Date.now());
+              return dormant.refetch();
+            }}
             refreshing={dormant.isFetching}
           />
         </div>
       )}
 
+      {/* A press that failed for any other reason says so beside the press and keeps the list on hand. */}
+      {dormant.data && <ReadAgainError error={dormant.error} />}
+
+      {!dormant.data && refused ? null : (
       <ListStates
         isLoading={dormant.isLoading}
-        error={dormant.error}
+        // A refusal is the line's to say, never a reason to take the list away while it is on hand.
+        error={refused || dormant.data ? null : dormant.error}
         isEmpty={accounts.length === 0}
         onRetry={() => dormant.refetch()}
         errorTitle="This list could not be read"
@@ -150,6 +166,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
           )}
         </>
       </ListStates>
+      )}
 
       {result && (
         <div className="border-t border-line px-5 py-4">

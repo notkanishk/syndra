@@ -57,6 +57,9 @@ const (
 	StateShowsUnlisted        Defect = "state-shows-unlisted"        // /subjects lists lobby, which /values leaves out
 	ResultOffSchema           Defect = "result-off-schema"           // holdings.list answers a record with no label (with results)
 	ResultInPocket            Defect = "result-in-pocket"            // holdings.list answers under a pocket of its own, no result (with results)
+	CachedAsCurrent           Defect = "cached-as-current"           // a mirror answer says current: true, no stale (with freshness)
+	ReadsPerRequest           Defect = "reads-per-request"           // no collapsing; the cooldown runs from a read's end (with freshness)
+	CooldownIgnored           Defect = "cooldown-ignored"            // every fresh read reads the app (with freshness)
 )
 
 // Defects lists every defect, for the kit's self-tests and the binary's help.
@@ -65,7 +68,8 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	LimitIgnoresUnlimited, WithdrawTouchesMembership, WithdrawStripsManaged, NumericAccountID,
 	FailsAfterCreate, LogNeverMoves, CommitsLate, RebindsSubject, AdoptsExisting, BindsOnWithdraw, IgnoresReadOnly, OperationNamesOther,
 	RebindsOnOperation, PlanForgetsAccount, CreateAnswersMember, RebindsQuietly, CreateOmitsAccount,
-	LimitEmptyClears, LogHeadEmpty, ReadsTakeCallID, StateShowsUnlisted, ResultOffSchema, ResultInPocket}
+	LimitEmptyClears, LogHeadEmpty, ReadsTakeCallID, StateShowsUnlisted, ResultOffSchema, ResultInPocket,
+	CachedAsCurrent, ReadsPerRequest, CooldownIgnored}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -198,7 +202,12 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		defer func() { a.mu.Lock(); a.dev.late--; a.mu.Unlock() }()
 	}
 
-	rep := h(r, body)
+	var rep reply
+	if fresh := route == "GET /subjects" && r.URL.Query().Get("fresh") == "true"; fresh && (d[ReadsPerRequest] || d[CooldownIgnored]) {
+		rep = a.readsAlone(d[ReadsPerRequest])
+	} else {
+		rep = h(r, body)
+	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -267,6 +276,13 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		}
 	}
 	switch {
+	case route == "GET /subjects" && d[CachedAsCurrent]:
+		rewrite(func(doc map[string]any) {
+			if s, _ := doc["stale"].(map[string]any); s["reason"] == "cached" {
+				delete(doc, "stale")
+				doc["current"] = true
+			}
+		})
 	case route == "GET /subjects" && d[OmitsTruncated]:
 		rewrite(func(doc map[string]any) { delete(doc, "truncated") })
 	case route == "GET /subjects" && d[CurrentFromMirror]:
@@ -323,6 +339,25 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		rewrite(func(doc map[string]any) { doc["detail"] = fmt.Sprintf("Password set to %v.", req.Params["password"]) })
 	}
 	return rep
+}
+
+// readsAlone is a fresh /subjects as a broken add-on serves it: every request
+// reads the app (no collapsing), with no cooldown at all, or with one stamped
+// when a read ends instead of when it begins (cooled).
+func (a *Addon) readsAlone(cooled bool) reply {
+	a.mu.Lock()
+	if cooled && a.fresh.kept && time.Since(a.fresh.began) < freshCooldown {
+		defer a.mu.Unlock()
+		return a.mirrored("cooldown")
+	}
+	gen := a.fresh.gen
+	a.mu.Unlock()
+	list, at, _ := a.readApp()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.fresh.began = time.Now()
+	a.keep(list, at, gen)
+	return ok(map[string]any{"subjects": list, "current": true, "taken_at": at, "truncated": false})
 }
 
 func withField(body []byte, key string, value any) []byte {

@@ -78,18 +78,34 @@ type DormantReport struct {
 	Accounts    []DormantAccount `json:"accounts"`
 }
 
+// ReadCooledDown is a fresh read the target's add-on would not make yet,
+// inside its cooldown (feature freshness): RetryAfter seconds until it may.
+type ReadCooledDown struct{ RetryAfter int }
+
+func (e ReadCooledDown) Error() string {
+	return fmt.Sprintf("the target was read moments ago; it can be read again in %d s", e.RetryAfter)
+}
+
 // DormantAccounts lists the accounts on a target that nothing explains.
 //
 // It reads the target rather than only the bindings, because an account Syndra
 // created and somebody deleted by hand is not dormant — it is gone, and
 // offering to remove it would be offering to remove nothing.
+//
+// Always a fresh read (feature freshness): every row is a candidate for
+// removal, so only a read of the target now may list one, and the removal
+// re-reads the same way. Inside the add-on's cooldown it is refused with the
+// wait (ReadCooledDown), never answered from a copy (owner Q1).
 func DormantAccounts(ctx context.Context, target string) (DormantReport, error) {
 	if target == db.TargetZitadel {
 		return DormantReport{}, fmt.Errorf("dormant accounts: %s holds no accounts of its own", target)
 	}
 	report := DormantReport{Target: target, Accounts: []DormantAccount{}}
 
-	read := dormantSubjects(ctx, target)
+	read := dormantSubjects(ctx, target, true)
+	if wait, cooled := read.CooledDown(); cooled {
+		return DormantReport{}, fmt.Errorf("dormant accounts for %s: %w", target, ReadCooledDown{RetryAfter: max(1, wait)})
+	}
 	if !read.Usable() {
 		// Refused rather than answered with an empty list. Every row here is a
 		// candidate for removal, and concluding "this account has no reason to

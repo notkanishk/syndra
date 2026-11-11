@@ -28,9 +28,10 @@ the repository root. Code is cited by symbol (`decide` in
 `addons/reference/reference.go`), never by line.
 
 **What is live.** Syndra and the TrueNAS add-on speak contract 2 today,
-`results` included ([chapter 7](#read-operations-and-result-feature-results)).
-Three features are in the schemas and not yet used by Syndra: `freshness`,
-`calls` and `stats`. Their rules are in the appendix,
+`results` ([chapter 7](#read-operations-and-result-feature-results)) and
+`freshness` ([Fresh reads](#fresh-reads-feature-freshness)) included. Two
+features are in the schemas and not yet used by Syndra: `calls` and
+`stats`. Their rules are in the appendix,
 [Designed, not yet served by Syndra](#appendix-designed-not-yet-served-by-syndra).
 A good time to build one is once Syndra serves it; what may be declared is
 in [chapter 3](#3-the-manifest-get-capabilities).
@@ -178,7 +179,8 @@ key, the designed features' included.
     "settings",
     "storage.reach",
     "storage.homes",
-    "results"
+    "results",
+    "freshness"
   ],
   "entitlement_schema": [
     {
@@ -272,7 +274,8 @@ key, the designed features' included.
     "host": "nas.example.org"
   },
   "limits": {
-    "subjects_per_plan": 200
+    "subjects_per_plan": 200,
+    "fresh_read_cooldown": "PT30S"
   }
 }
 ```
@@ -463,7 +466,10 @@ not an observation. The rules the schemas cannot express:
   alike, as "not current". `retry_after` is in integer seconds, like
   `Retry-After`; `note` is a sentence for a person, in your words.
 - `taken_at` (RFC 3339) MUST be an instant during the read of the app (the
-  TrueNAS add-on takes its end), not when you answered.
+  TrueNAS add-on takes its end), not when you answered. Syndra reads one
+  more than two minutes ahead of its own clock as now, and logs it once per
+  target (`takenAt` in `backend/internal/addons/read.go`): keep the add-on
+  host's clock synchronised.
 - `truncated: true` MUST be set whenever a read stopped short of everything
   (a cap, a page limit). A truncated read cannot support a conclusion about
   absence, and Syndra draws none from it.
@@ -475,14 +481,105 @@ not an observation. The rules the schemas cannot express:
   `backend/internal/addons/deps.go`; a Syndra setting, not a contract
   constant), so the answer arrives.
 - **Nothing to serve is an error, not an empty list.** With no earlier read
-  to answer from, the read MUST answer 503 `NO_CURRENT_READ`, as
-  `handleSubjects` in `addons/truenas/server.go` does; an empty list says
-  the app holds none. `/values` has no `current`, so when it cannot read it
+  to answer from, the read MUST answer an error, as `handleSubjects` in
+  `addons/truenas/server.go` does: 503 `TARGET_UNREACHABLE` with
+  `Retry-After` when no request reached the app (nothing was sent), 503
+  `NO_CURRENT_READ` when the app was asked and the read failed. An empty
+  list says the app holds none. `/values` has no `current`, so when it cannot read it
   MUST answer `TARGET_UNREADABLE`: 503 when the app could not be reached,
   429 when it is rate-limiting, 502 when it answered with a failure.
 - An add-on answering from its mirror on purpose MUST say `cached`, as the
-  TrueNAS add-on's `/reach` does. Syndra asking for a read of the app now is
-  the `freshness` feature ([Appendix A.1](#a1-fresh-reads-feature-freshness)).
+  TrueNAS add-on does. Syndra asking for a read of the app now is the
+  `freshness` feature ([Fresh reads](#fresh-reads-feature-freshness)).
+
+### Fresh reads (feature `freshness`)
+
+Syndra sends `fresh=true` on `GET /subjects`, `GET /values/{field}`,
+`GET /reach` and `GET /homes`, and `fresh: true` in the body of an
+`effect: read` operation, to ask for a read of the app now (the one value
+RFC 9111's request `Cache-Control: no-cache` would carry); never on
+`/plan`, `/apply` or `/stats`, and only to an add-on declaring the feature
+(`send` in `backend/internal/addons/pipe.go` refuses it anywhere else).
+Who sends it: the drift sweep's `/subjects` read, always (it is the one
+scheduled sender). Answered inside the cooldown (429, or the last value as
+`cooldown`), the sweep waits once and asks again: the `retry_after`, or your
+declared cooldown when it names none, never longer than your declared
+cooldown and never longer than a minute (twice
+`constants.cooldown_default`, so `P1D` and `PT24H` alike hold a pass back a
+minute); only a second cooldown answer is a skipped pass (`sweepWait` and
+`ReconcileAddon` in `backend/internal/services/drift/addon.go`). "Check
+now" on a target's page runs the same pass inside the person's request and
+never waits: a cooldown answer is a skipped pass at once, saying when to
+ask again (`ReconcileAddonNow`). A `fresh_read_cooldown` that is not an ISO
+8601 duration of days and clock time (`PT30MS`, `PT+30S`, `PT30S5M`; or
+weeks, months, years, which have no fixed length) is read as the default.
+The dormant
+accounts list and its removal, always (every row is a candidate for
+removal); and a person pressing "Read again" on a page. Every other read,
+a page load or a poll, accepts your copy and shows its `taken_at`. An
+add-on that declares `freshness`:
+
+- MAY answer a read without `fresh` from its mirror, as `current: false`
+  with `stale.reason: cached`;
+- MUST, given `fresh: true`, read the app now, or answer the last value it
+  read with `stale.reason: cooldown` and `retry_after` (whole seconds,
+  rounded up, so a caller never arrives early). When the last read failed,
+  the cooldown still holds, and the answer is that failure's: the last
+  value as `unreachable`, or the error, never "read moments ago";
+- MUST coalesce concurrent fresh reads of the same thing into one read of
+  the app (request collapsing), and hold a per-target and a per-subject
+  cooldown of `limits.fresh_read_cooldown` (default
+  `constants.cooldown_default`). A request that joins a read already under
+  way arrived after it began, so its answer is that read as `cooldown`,
+  never `current`; a request that joins a read that fails is answered as
+  that failure is (the last value as `unreachable`, or the error), and does
+  not read the app again. Run the cooldown from when a read *begins*:
+  concurrent fresh reads then collapse into one even before a join;
+- MUST report `health.target_reads`, every read it has made of its app
+  since it started, never decreasing while it runs (it may start again at
+  0, like an OpenMetrics counter), so that the kit can prove the rules
+  above;
+- MUST answer 429 `FRESH_READ_COOLDOWN` (`Retry-After` the seconds left) or
+  503 `TARGET_UNREACHABLE`, only when it has nothing at all to serve;
+- SHOULD forget its copy, its cooldown and any read under way on every
+  write it makes, so a person waiting on their own change sees it on the
+  next read without asking for a fresh one: a read arriving after a write
+  never joins a read begun before it.
+- SHOULD drop its copy when a read is refused on its merits (a 4xx other
+  than 429): the copy no longer says what the app holds.
+- MUST NOT call a reply built from several reads `current` unless every one
+  of them is: read now, it is as fresh as its least fresh part. Answered
+  later from your copy of it, it is that copy (`cached`, `cooldown` or
+  `unreachable`, as the copy's own answer is), dated no later than its
+  oldest part: never the label a part had when the copy was made. A copy
+  answers `cooldown` only to a fresh read the cooldown refused.
+
+`/plan` keeps its meaning: computed against a read of the app, never cooled
+down, `current: false` only when the mirror had to answer.
+
+The TrueNAS add-on serves `/subjects`, `/reach`, `/homes`, `storage.status`
+and `activity.get` through one `fresher` (`addons/truenas/fresh.go`), keyed
+per route and per subject, with a five-minute copy and a 30-second
+cooldown; every write clears it, reads under way included (`mutate` in
+`addons/truenas/apply.go`). It remembers each key's last failure for the
+cooldown, so a fresh read during an outage is the copy as `unreachable`
+(or, for `/subjects` after a restart, the mirror on disk), and 429 only
+when there is nothing at all. `storage.status` reads its folder
+permissions through the same `/reach` key, fresh when it is asked fresh,
+and is `current` only when they are.
+Answered from its copy, `storage.status` keeps the copy's own reason,
+dated by the folder read when that is older (`Observed.with`).
+`health.get` declares its own result with no `current`, so it cannot say a
+copy is one, and is read live every time, like `/values`. Syndra never
+counts a cooldown against the add-on: a `FRESH_READ_COOLDOWN` neither opens
+nor clears its breaker.
+
+The kit measures reads by `target_reads` against a baseline of two
+back-to-back `/health` reads, in units of what one fresh read costs (one
+read of your app may be several of its calls: the TrueNAS add-on's is three
+or more). Anything else reading your app during a run
+(a running Syndra's 30-second health probe) moves the count, so quiet it, or
+expect a false `fail`.
 
 ### `GET /health`
 
@@ -1352,7 +1449,7 @@ There is no destructive effect, because there is no destructive operation:
 removal disables, and `account.purge` is an admin act with a separately
 issued key. Syndra's own policy does not read `effect` yet: the rules by
 effect, `physical` included, are
-[designed, not yet served](#a2-physical-operations-and-get-callscall_id-feature-calls).
+[designed, not yet served](#a1-physical-operations-and-get-callscall_id-feature-calls).
 
 ### Read operations and `result` (feature `results`)
 
@@ -1600,9 +1697,11 @@ What the reference simplifies, and a real add-on MUST do in full:
 - It declares neither `account.adopt` nor `account.release`, though it can
   answer `BINDING_CONFLICT`; a real add-on MUST
   ([The account operations](#the-account-operations)).
-- It declares `results` only when asked (`Config.Features`, `-features
-  results`), so the kit's `results` check is watched both ways; it declares
-  no `freshness`, `calls` or `stats`.
+- It declares `results` and `freshness` only when asked (`Config.Features`,
+  `-features results,freshness`), so the kit's checks for each are watched
+  both ways. With `freshness`, `/subjects` is served from a mirror cleared by
+  every write, the cooldown is `PT1S`, and `Config.Down` (test-only) holds
+  the unreachable rule the kit cannot. It declares no `calls` or `stats`.
 
 ## 12. The TrueNAS add-on
 
@@ -1617,13 +1716,16 @@ has the full map.
 | `enabled` | `account` | `locked`, inverted |
 | `smb_enabled` | `channel` | SMB on the account; TrueNAS turns it on only together with a password, so it waits for the member's next `password.set`, and `standing` says so |
 
-- Features `operations`, `settings`, `storage.reach`, `storage.homes`
-  (`operationSet` in `addons/truenas/capabilities.go`). `account_id` is the
+- Features `operations`, `settings`, `storage.reach`, `storage.homes`,
+  `results`, `freshness` (`features` and `operationSet` in
+  `addons/truenas/capabilities.go`). `account_id` is the
   uid as a string; a new name is derived once from the email's local part
   (`DeriveUsername` in `addons/truenas/username.go`).
 - Plan and apply share `decide` (`addons/truenas/apply.go`). `/subjects`
-  answers the last read with `stale.reason: unreachable` when the NAS cannot
-  be read, and 503 `NO_CURRENT_READ` with nothing to serve.
+  answers its copy (`cached`, `cooldown`) or a read of the NAS now, the last
+  read with `stale.reason: unreachable` when the NAS cannot be read, and with
+  nothing to serve 503 `TARGET_UNREACHABLE` (nothing was sent) or
+  `NO_CURRENT_READ` ([Fresh reads](#fresh-reads-feature-freshness)).
 - Version gate on `TRUENAS_SUPPORTED_MAJORS`, recorded in
   `addons/contract/truenas_observed.json`. Credential: a dedicated user with
   `ACCOUNT_WRITE`, `READONLY_ADMIN`, `SYSTEM_AUDIT_READ`, never `FULL_ADMIN`.
@@ -1638,7 +1740,7 @@ has the full map.
   (`ErrNotSent` in `addons/truenas/nas.go`).
 
 Sketches for other apps (UniFi Access, a Trotec Ruby laser, an inventory
-system) are unverified and in [Appendix A.5](#a5-mapping-sketches).
+system) are unverified and in [Appendix A.4](#a4-mapping-sketches).
 
 ## 13. Validating before you ask to be connected
 
@@ -1707,8 +1809,9 @@ own tests carry them:
 - the binding table for the life of the account, and call records for
   `constants.call_memory`, both surviving a restart (`replay.29d` skips);
 - concurrency: `CALL_IN_PROGRESS`, and serialised writes to a shared set;
-- an outage: `stale` and `NO_CURRENT_READ` on reads, `TARGET_UNREACHABLE`
-  against `APPLY_FAILED` on writes, and `unverified` on a failed read-back
+- an outage: on reads the last value as `stale.reason: unreachable`, or
+  `TARGET_UNREACHABLE` or `NO_CURRENT_READ` with nothing to serve; on writes
+  `TARGET_UNREACHABLE` against `APPLY_FAILED`, and `unverified` on a failed read-back
   (the kit cannot take your app down);
 - lookup before create after a crash between the create and its record;
 - that a value outside the managed set survives an apply (`state` never
@@ -1792,29 +1895,7 @@ feature is declared only once it is served in full
 ([chapter 3](#3-the-manifest-get-capabilities)), and a good time to build
 one is once Syndra serves it.
 
-### A.1 Fresh reads (feature `freshness`)
-
-Syndra will send `fresh=true` on `GET /subjects`, `GET /values/{field}`,
-`GET /reach` and `GET /homes`, and `fresh: true` in the body of an
-`effect: read` operation, to ask for a read of the app now; never on
-`/plan`, `/apply` or `/stats`. Its drift sweep's `/subjects` read will
-always send it and treat a `cooldown` answer as a skipped pass; display
-reads will send it only when a person presses Refresh. An add-on that
-declares `freshness`:
-
-- MAY answer a read without `fresh` from its mirror, as `current: false`
-  with `stale.reason: cached`;
-- MUST, given `fresh: true`, read the app now, or answer the last value it
-  read with `stale.reason: cooldown` and `retry_after`;
-- MUST coalesce concurrent fresh reads of the same thing into one read of
-  the app, and hold a per-target and a per-subject cooldown of
-  `limits.fresh_read_cooldown` (default `constants.cooldown_default`);
-- MUST report `health.target_reads`, a count of its reads of the app that
-  only ever goes up, so that the kit can prove the three rules above;
-- MUST answer 429 `FRESH_READ_COOLDOWN` or 503 `TARGET_UNREACHABLE`, each
-  with `Retry-After`, only when it has nothing at all to serve.
-
-### A.2 Physical operations and `GET /calls/{call_id}` (feature `calls`)
+### A.1 Physical operations and `GET /calls/{call_id}` (feature `calls`)
 
 Schema: `v2/schema/call.json`.
 
@@ -1879,10 +1960,10 @@ Not yet in the contract's files, so not yet usable:
   `LIMIT_REACHED` (409), the `params[].format: target_id` hint and the
   inventory ids below are not yet in the registry.
 
-### A.3 Worked case: an inventory checkout
+### A.2 Worked case: an inventory checkout
 
 An inventory system where a member borrows items through Syndra (the
-mapping is in [A.5](#a5-mapping-sketches)):
+mapping is in [A.4](#a4-mapping-sketches)):
 
 - Desired state says only who can borrow: `borrower` (`account`),
   `categories` (`membership`, "May borrow from"), `max_items` (`limit` in
@@ -1935,7 +2016,7 @@ mapping is in [A.5](#a5-mapping-sketches)):
 - Overdue is `standing`: `{usable: true, waiting_on: "member", note: "1
   item overdue", next: "Return it at the desk"}`.
 
-### A.4 Statistics: `GET /stats` (feature `stats`)
+### A.3 Statistics: `GET /stats` (feature `stats`)
 
 Schema: `v2/schema/stats.json`; the manifest's `metrics[]` and
 `limits.stats_buffer` are in `v2/fixtures/manifest.json`.
@@ -2085,7 +2166,7 @@ metric that is not `per_subject`, and anything beyond
 per-person points 400 days. Admins see the totals and each person's
 numbers; a member sees their own.
 
-### A.5 Mapping sketches
+### A.4 Mapping sketches
 
 Three apps mapped onto the contract, none built. Each names what nobody has
 verified; a good habit is to verify each before relying on it.
@@ -2179,7 +2260,7 @@ From read-only checks against a live install (5 Nov 2026).
 
 **Its API is unknown: nothing about it has been researched.** This sketch
 tests the contract, not the product, and uses the operations of
-[A.3](#a3-worked-case-an-inventory-checkout).
+[A.2](#a2-worked-case-an-inventory-checkout).
 
 | Need | Mechanism |
 |---|---|

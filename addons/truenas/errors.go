@@ -25,6 +25,7 @@ const (
 	CodeCallInProgress           = "CALL_IN_PROGRESS"
 	CodeContractVersionMismatch  = "CONTRACT_VERSION_MISMATCH"
 	CodeFingerprintRequired      = "FINGERPRINT_REQUIRED"
+	CodeFreshReadCooldown        = "FRESH_READ_COOLDOWN"
 	CodeInvalidBody              = "INVALID_BODY"
 	CodeLifecycleRefusal         = "LIFECYCLE_REFUSAL"
 	CodeNoCurrentRead            = "NO_CURRENT_READ"
@@ -64,6 +65,7 @@ var problems = map[string]problemKind{
 	CodeCallInProgress:           {"Call in progress", "retry_after"},
 	CodeContractVersionMismatch:  {"Contract version mismatch", "never"},
 	CodeFingerprintRequired:      {"Fingerprint required", "never"},
+	CodeFreshReadCooldown:        {"Fresh read cooldown", "retry_after"},
 	CodeInvalidBody:              {"Invalid body", "never"},
 	CodeLifecycleRefusal:         {"Lifecycle refusal", "retry_after"},
 	CodeNoCurrentRead:            {"No current read", "backoff"},
@@ -130,7 +132,8 @@ func writeError(w http.ResponseWriter, status int, code, detail string, ext map[
 		delete(body, "detail")
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
-	if retry == "retry_after" {
+	// A caller that knows the wait (a cooldown's seconds left) has set it.
+	if retry == "retry_after" && w.Header().Get("Retry-After") == "" {
 		w.Header().Set("Retry-After", retryAfterSeconds)
 	}
 	w.WriteHeader(status)

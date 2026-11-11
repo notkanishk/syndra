@@ -4,8 +4,10 @@ import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { ARROW_LINK } from "@/components/ui/ArrowLink";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { NextStep } from "@/components/ui/NextStep";
+import { useCountdown } from "@/lib/queries/fresh";
 import {
   NOTHING_CHANGED,
+  cooldownNext,
   nextStepOf,
   sentence,
   statesNothingChanged,
@@ -80,7 +82,7 @@ function nextLine(outcome: Outcome, shown: (string | undefined)[]): string | nul
 }
 
 export function ActionOutcome({
-  outcome,
+  outcome: given,
   placement = "block",
   word,
   person,
@@ -98,6 +100,9 @@ export function ActionOutcome({
   person?: string;
   className?: string;
 }) {
+  // A refusal inside the add-on's cooldown counts down in its own next step.
+  const left = useCountdown(given.retryAfter);
+  const outcome = given.retryAfter === undefined ? given : { ...given, next: cooldownNext(left) };
   const grave = outcome.kind === "failed" || outcome.kind === "refused";
 
   if (placement === "seat") {

@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useId, useState } from "react";
 
+import { copyLine, cooldownLine, READ_AGAIN, READING, unreachableLine, type Reader } from "@/components/results/copy";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
-import { formatRelative } from "@/lib/format";
+import { formatClock, formatRelative } from "@/lib/format";
+import { outcomeFromError } from "@/lib/outcome";
+import { cooldownOf, STALE, stamped, useCountdown, type Stale } from "@/lib/queries/fresh";
 
 /**
  * How old the state on this screen is (design §31 A).
@@ -43,6 +47,8 @@ export interface ReadState {
   current?: boolean;
   /** The read hit the add-on's cap. Says nothing about age. */
   truncated?: boolean;
+  /** Why it is a copy, when the add-on said (feature freshness). Decides the sentence and the control, never `classifyRead`. */
+  stale?: Stale;
 }
 
 /**
@@ -52,6 +58,11 @@ export interface ReadState {
  */
 export function readStateOfQuery(q: { dataUpdatedAt: number; isError: boolean }): ReadState {
   return { readAt: q.dataUpdatedAt ? new Date(q.dataUpdatedAt).toISOString() : null, current: !q.isError };
+}
+
+/** The read state of an add-on's answer that carries its own (`taken_at`, `current`, `stale`). */
+export function observed(o: { taken_at: string; current: boolean; stale?: Stale; truncated?: boolean }, since?: number): ReadState {
+  return { readAt: o.taken_at, current: o.current, stale: stamped(o.stale, since), truncated: o.truncated };
 }
 
 /**
@@ -92,6 +103,22 @@ const TONE: Record<Freshness, string> = {
   stale: "text-warn-text",
   provisional: "text-warn-text",
 };
+
+/**
+ * What colour the line and its dot are drawn in. A copy the add-on kept is the
+ * normal state of a read, so it is neutral however old it is, and so is a
+ * cooldown the reader did not cause (a page load inside someone else's, marked
+ * `pressed: false`). A cooldown carried in the data is the reader's own press, so it is amber, and a system that cannot be reached are
+ * amber; every other reading is drawn by its age.
+ */
+export function toneOf(reading: Freshness, why: string | undefined, pressed: boolean): { text: string; dot: string } {
+  if (why === STALE.cached || (why === STALE.cooldown && !pressed)) return { text: "text-faint", dot: "bg-faint" };
+  if (why === STALE.cooldown) return { text: "text-warn-text", dot: "bg-warn" };
+  return {
+    text: TONE[reading],
+    dot: reading === "live" || reading === "ageing" ? "bg-healthy" : reading === "stale" ? "bg-warn" : "border border-warn",
+  };
+}
 
 /**
  * Read again's pill: the line plus a few px (the `!`s beat the Button's 44px
@@ -147,6 +174,33 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
 }
 
 /**
+ * The "Read again" of the page a card sits on: the card's own GET with
+ * `fresh=true` (`useReadAgain`). The renderers of an add-on's reads take it
+ * from here, so a card names no press of its own.
+ */
+const ReadAgainContext = createContext<{ press: () => unknown; since?: number } | undefined>(undefined);
+/** `since`: when the page's read last answered (its query's `dataUpdatedAt`), where a cooldown a reply carries counts from. */
+export const ReadAgainProvider = ReadAgainContext.Provider;
+export const useReadAgainPress = () => useContext(ReadAgainContext)?.press;
+export const useReadAgainSince = () => useContext(ReadAgainContext)?.since;
+
+/**
+ * Why the last "Read again" failed, when it was not the cooldown (the line says that one): in the
+ * outcome every refusal wears, under the line, so a press that did nothing is never silent.
+ */
+export function ReadAgainError({ error }: { error: unknown }) {
+  if (!error || cooldownOf(error)) return null;
+  return (
+    <div className="px-5 pb-2">
+      <ActionOutcome word="Not read" outcome={outcomeFromError(error)} />
+    </div>
+  );
+}
+
+/** Said by an operator unless the page says it is a member reading (the one place a reader is not known). */
+const UNNAMED_OPERATOR: Reader = { audience: "operator", person: "" };
+
+/**
  * The strip itself.
  *
  * `subject` names what was read, so the sentence works on a page with more than
@@ -160,10 +214,13 @@ export function ReadFreshness({
   onRefresh,
   refreshing = false,
   refresh,
+  reader = UNNAMED_OPERATOR,
   className = "",
 }: {
   state: ReadState;
   subject?: string;
+  /** Who is reading: it words the step beside a system that cannot be reached. */
+  reader?: Reader;
   onRefresh?: () => unknown;
   refreshing?: boolean;
   /** When the press is somewhere else on the page (a header button), its `useRefreshPress`. */
@@ -193,6 +250,19 @@ export function ReadFreshness({
   const reading = freshness ?? classifyRead(state, new Date(state.readAt ?? 0).getTime());
   const age = state.readAt ? formatRelative(state.readAt) : null;
 
+  // A copy the add-on kept, or a read pressed inside its cooldown: Read again is the way out, and
+  // inside the cooldown it waits for the count. An unreachable one has no way out but time.
+  const why = state.stale?.reason;
+  const left = useCountdown(why === STALE.cooldown ? state.stale?.retry_after : undefined, state.stale?.since);
+  const cooling = why === STALE.cooldown && left > 0;
+  // Coloured by what the line says: the cooldown while it counts, then a copy is a copy (a copy of a
+  // read that failed is still neutral) and anything else is drawn by its age.
+  const said = cooling || why !== STALE.cooldown ? why : state.current === false ? STALE.cached : undefined;
+  const tone = toneOf(reading, said, state.stale?.pressed !== false);
+  const aCopy = why === STALE.cached || why === STALE.cooldown;
+  const cannotReach = why === STALE.unreachable && Boolean(state.readAt);
+  const lineId = useId();
+
   const blooming = landed !== null && landed === (state.readAt ?? null) && (reading === "live" || reading === "ageing");
 
   return (
@@ -203,21 +273,26 @@ export function ReadFreshness({
           `provisional` is a ring rather than a fill, because it is the one
           reading that is neither healthy nor broken: the read answered, and
           the target could not confirm it. */}
+      {/* The dot and the sentence wrap as one, so a long sentence never leaves the dot alone on its line. */}
+      <span className="flex min-w-0 items-start gap-2">
       <span
         aria-hidden
         data-freshness-dot
-        className={`size-1.5 flex-none rounded-pill motion-tint ${blooming ? "bloom " : ""}${
-          reading === "live" || reading === "ageing"
-            ? "bg-healthy"
-            : reading === "stale"
-              ? "bg-warn"
-              : "border border-warn"
-        }`}
+        className={`mt-[0.5em] size-1.5 flex-none rounded-pill motion-tint ${blooming ? "bloom " : ""}${tone.dot}`}
       />
       {/* The new line crossfades in over the old one when a read the reader asked for lands (S17). */}
       <Crossfade id={blooming ? `landed:${landed}` : "read"}>
-        <span className={TONE[reading]}>{sentence(reading, subject, age, Boolean(onRefresh))}</span>
+        <span id={lineId} className={tone.text}>
+          {cooling
+            ? cooldownLine(subject, left)
+            : cannotReach
+              ? unreachableLine(subject, formatClock(state.readAt), reader)
+              : aCopy && age
+                ? copyLine(subject, age)
+                : sentence(reading, subject, age, Boolean(onRefresh))}
+        </span>
       </Crossfade>
+      </span>
       {state.truncated && (
         // Its own clause, never folded into the age. A capped read is complete
         // about what it saw and silent about the rest, and an operator who
@@ -225,22 +300,27 @@ export function ReadFreshness({
         // that was cut off.
         <span className="text-faint">· not the whole list, only the first part was read</span>
       )}
-      {onRefresh && reading === "stale" && (
+      {onRefresh && (reading === "stale" || aCopy) && (
         // It tints in where the line ends. Its slot is zero tall, so the button
         // overflows the line's own height instead of making the line taller: the
-        // sentence beside it stays where it was. The pill drawn is the line and
+        // sentence beside it stays where it was (on desktop only: on touch the slot
+        // is a thumb tall, because when the sentence wraps a zero-tall slot let the
+        // button's edge cut the line above it). The pill drawn is the line and
         // a hair, never the 44px a thumb needs: on touch that comes from the
         // `before` box, a hit area with nothing painted, so no visible edge
         // reaches the cards below (A-08 §5).
-        <span className="tint-in flex h-0 items-center">
+        <span className="tint-in flex h-[var(--tap)] items-center desktop:h-0">
           <Button
             variant="outline"
             size="sm"
             className={READ_AGAIN_PILL}
             onClick={() => void press(onRefresh)}
             isPending={refreshing || pressing}
+            disabled={cooling}
+            // The line beside it is the reason it waits.
+            aria-describedby={cooling ? lineId : undefined}
           >
-            {refreshing || pressing ? "Reading" : "Read again"}
+            {refreshing || pressing ? READING : READ_AGAIN}
           </Button>
         </span>
       )}

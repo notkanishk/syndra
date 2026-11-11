@@ -12,6 +12,9 @@
 import type { QueuedChange } from "@/lib/cancel-confirm";
 import { SESSION_ENDED } from "@/lib/login-error";
 
+/** The backend's code for a read refused inside the add-on's cooldown (429). */
+export const FRESH_READ_COOLDOWN = "FRESH_READ_COOLDOWN";
+
 const API_BASE = "/api/proxy";
 
 export interface ApiErrorBody {
@@ -20,6 +23,8 @@ export interface ApiErrorBody {
   details?: Record<string, string>;
   /** WOULD_CANCEL_QUEUED: what the action would have cancelled. */
   cancels?: QueuedChange[];
+  /** FRESH_READ_COOLDOWN: whole seconds until the target may be read again. */
+  retry_after?: number;
 }
 
 /** What a response with no envelope message says, by status, in the copy guide's words. */
@@ -51,6 +56,8 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: Record<string, string>;
+  /** A 429's wait in whole seconds (its body's `retry_after`, else the Retry-After header). */
+  readonly retryAfter?: number;
   /** The request's method, so a failed write is told apart from a failed read. */
   readonly method?: string;
 
@@ -64,6 +71,7 @@ export class ApiError extends Error {
     this.status = status;
     this.code = parsed.error ?? "UNKNOWN_ERROR";
     this.details = parsed.details;
+    this.retryAfter = parsed.retry_after;
     this.method = method;
   }
 }
@@ -212,6 +220,16 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
     // shows them; its retry names exactly the ids it showed (`cancel_ids`), and if
     // more was queued meanwhile the backend refuses again with the longer list.
     const refusal = parsed as ApiErrorBody;
+    // A read refused inside the add-on's cooldown (429). The body is the standard error envelope
+    // for every read, the inventory's included. Without its code (a proxy's own 429) it is not a cooldown.
+    if (res.status === 429) {
+      const header = Number.parseInt(res.headers.get("Retry-After") ?? "", 10);
+      const wait = typeof refusal?.retry_after === "number" ? refusal.retry_after : header;
+      if (wait > 0 && refusal?.error === FRESH_READ_COOLDOWN) {
+        const { message } = typeof parsed === "object" && parsed !== null ? refusal : ({} as ApiErrorBody);
+        throw new ApiError(429, { error: FRESH_READ_COOLDOWN, message, retry_after: wait }, method);
+      }
+    }
     if (res.status === 409 && refusal?.error === "WOULD_CANCEL_QUEUED" && refusal.cancels?.length) {
       throw new WouldCancelQueued(refusal.cancels, method, path);
     }

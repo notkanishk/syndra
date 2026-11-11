@@ -59,6 +59,8 @@ func kitAddOn(t *testing.T) string {
 		t.Fatal(err)
 	}
 	s.auth = &authenticator{signingKey: key, now: time.Now}
+	// The kit waits the cooldown out before each freshness check.
+	s.fresh.cooldown = time.Second
 	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: "/mnt/tank/main/home_dir", SetBy: "operator", SetAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +136,8 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 	}
 	// The run that writes judges what reads cannot: these must have run.
 	for _, id := range []string{"replay", "replay.refusal", "read-back", "limit-combine", "limit-empty", "operations.reads", "health", "channel-follows-account",
-		"withdraw-only.existing", "lifecycle", "operations", "plan-equals-apply", "create-is-new", "bound-to-created", "results"} {
+		"withdraw-only.existing", "lifecycle", "operations", "plan-equals-apply", "create-is-new", "bound-to-created", "results",
+		"freshness.cached", "freshness.cooldown", "freshness.coalesce"} {
 		for _, res := range mutate.Results {
 			if res.ID == id && res.Status != "pass" {
 				t.Errorf("-mutate: %s is %s, want pass: %v", id, res.Status, res.Detail)

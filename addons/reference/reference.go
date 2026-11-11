@@ -2,7 +2,9 @@
 // the conformance kit's self-test and the author's guide's worked example
 // (openspec/changes/addon-contract, design §7 and §8). It implements the core
 // and the features operations and settings, and, when Config.Features names
-// it, results: holdings.list, and health.get answering under result.
+// them, results (holdings.list, and health.get answering under result) and
+// freshness (/subjects from a mirror, fresh reads with a cooldown and request
+// collapsing, health.target_reads).
 //
 // The target is a print queue: member accounts, the printers each may use, an
 // after-hours flag, a longest-job limit. Every behaviour below is derived from
@@ -110,10 +112,14 @@ type Config struct {
 	Secret   []byte
 	Features []string
 	Defects  map[Defect]bool
+	// Down is test-only: while it answers true the app cannot be read, so the
+	// add-on's own test can hold what a black-box kit cannot (freshness: the
+	// last value with stale unreachable, or 503 TARGET_UNREACHABLE).
+	Down func() bool
 }
 
 // OptionalFeatures is every feature Config.Features may name.
-var OptionalFeatures = []string{"results"}
+var OptionalFeatures = []string{"results", "freshness"}
 
 func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Features, feature) }
 
@@ -134,6 +140,7 @@ type Addon struct {
 	setting   map[string]string // the one setting: value, set_by, set_at
 	logHead   string
 	logCount  int
+	fresh     freshState // feature freshness: the mirror and the read in flight
 	dev       deviations // what the defects keep; empty in any real run
 }
 
@@ -210,20 +217,32 @@ func (a *Addon) capabilities(*http.Request, []byte) reply {
 		"kind": "machine", "features": append([]string{"operations", "settings"}, a.cfg.Features...),
 		"entitlement_schema": fields,
 		"operations":         ops,
-		"limits":             map[string]any{"subjects_per_plan": subjectsPerPlan},
+		"limits":             a.limits(),
 	})
+}
+
+func (a *Addon) limits() map[string]any {
+	l := map[string]any{"subjects_per_plan": subjectsPerPlan}
+	if a.serves("freshness") {
+		l["fresh_read_cooldown"] = "PT1S" // freshCooldown, short so the kit's waits are short
+	}
+	return l
 }
 
 func (a *Addon) health(*http.Request, []byte) reply {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	busy := a.busy()
-	return ok(map[string]any{
+	h := map[string]any{
 		"reachable": true, "product": "reference", "product_version": "1.0.0", "version_tested": true,
 		"credential_expiry": "none", "circuit_open": false,
 		"lifecycle": a.lifecycle, "lifecycle_note": a.reason, "in_flight": busy, "drained": busy == 0,
 		"log_head": a.logHead, "log_records": a.logCount, "checked_at": now(),
-	})
+	}
+	if a.serves("freshness") {
+		h["target_reads"] = a.fresh.reads
+	}
+	return ok(h)
 }
 
 type subject struct {
@@ -236,15 +255,24 @@ type subject struct {
 
 // subjects reads the target now, so the answer is current (design §4: a read
 // that began after the request arrived) and complete, so never truncated.
-func (a *Addon) subjects(*http.Request, []byte) reply {
+// With freshness it is served through the mirror (fresh.go).
+func (a *Addon) subjects(r *http.Request, _ []byte) reply {
+	if a.serves("freshness") {
+		return a.freshSubjects(r.URL.Query().Get("fresh") == "true")
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return ok(map[string]any{"subjects": a.list(), "current": true, "taken_at": now(), "truncated": false})
+}
+
+// list is every account as /subjects shows it; the caller holds a.mu.
+func (a *Addon) list() []subject {
 	list := []subject{}
 	for _, id := range slices.Sorted(maps.Keys(a.accounts)) {
 		acct := a.accounts[id]
 		list = append(list, subject{acct.id, acct.username, acct.id, acct.shown(), acct.standing()})
 	}
-	return ok(map[string]any{"subjects": list, "current": true, "taken_at": now(), "truncated": false})
+	return list
 }
 
 func (a *Addon) values(r *http.Request, _ []byte) reply {
@@ -317,6 +345,9 @@ func (a *Addon) plan(_ *http.Request, body []byte) reply {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	// A live read of the app, counted like every other; never through the
+	// mirror and never cooled down (design §4: /plan is outside freshness).
+	a.fresh.reads++
 	outcomes := []outcome{}
 	for _, s := range req.Subjects {
 		if strings.TrimSpace(s.Subject) == "" {
@@ -574,6 +605,9 @@ type operationRequest struct {
 	PlanID      string         `json:"plan_id"`
 	Fingerprint string         `json:"fingerprint"`
 	Params      map[string]any `json:"params"`
+	// Fresh is feature freshness's. The operations here read the in-memory
+	// target now, so every answer is already a fresh one.
+	Fresh *bool `json:"fresh"`
 }
 
 func (a *Addon) operation(r *http.Request, body []byte) reply {
@@ -587,6 +621,10 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 	}
 	if req.Operation != name {
 		return problem(400, "OPERATION_MISMATCH", "The body names another operation.", nil)
+	}
+	if req.Fresh != nil && !a.serves("freshness") {
+		// A request field exists only under its feature (design §2 rule 2).
+		return problem(400, "UNKNOWN_REQUEST_FIELD", `The request carries a field this add-on does not know: "fresh"`, nil)
 	}
 	switch name {
 	case "health.get":
@@ -754,6 +792,7 @@ const emptyLogDigest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b
 func (a *Addon) record(entry string) {
 	sum := sha256.Sum256([]byte(a.logHead + "\n" + entry))
 	a.logHead, a.logCount = hex.EncodeToString(sum[:]), a.logCount+1
+	a.forget() // every write passes here, so the first read after one is live
 }
 
 // ---- idempotency (design §5) ------------------------------------------------
@@ -884,7 +923,7 @@ func parse(body []byte, into interface{ version() *int }) *reply {
 type reply struct {
 	status     int
 	body       []byte
-	retryAfter bool // send Retry-After: the code's retry class is retry_after
+	retryAfter int // seconds for Retry-After (RFC 9110 §10.2.3); 0 sends none
 }
 
 func ok(v any) reply {
@@ -901,7 +940,7 @@ func problem(status int, code, detail string, ext map[string]any) reply {
 	}
 	retry := "never"
 	switch code {
-	case "LIFECYCLE_REFUSAL", "CALL_IN_PROGRESS":
+	case "LIFECYCLE_REFUSAL", "CALL_IN_PROGRESS", "FRESH_READ_COOLDOWN", "TARGET_UNREACHABLE":
 		retry = "retry_after"
 	case "PLAN_STALE":
 		retry = "replan"
@@ -910,7 +949,10 @@ func problem(status int, code, detail string, ext map[string]any) reply {
 	maps.Copy(p, map[string]any{"type": "urn:syndra:addon:error:" + code, "title": strings.ToUpper(title[:1]) + title[1:],
 		"status": status, "detail": detail, "code": code, "retry": retry})
 	r := ok(p)
-	r.status, r.retryAfter = status, retry == "retry_after"
+	r.status = status
+	if retry == "retry_after" {
+		r.retryAfter = 30 // ponytail: a constant; a real add-on sends what its app's state says
+	}
 	return r
 }
 
@@ -919,8 +961,8 @@ func (r reply) write(w http.ResponseWriter) {
 	if r.status >= 400 {
 		w.Header().Set("Content-Type", "application/problem+json")
 	}
-	if r.retryAfter {
-		w.Header().Set("Retry-After", "30")
+	if r.retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(r.retryAfter))
 	}
 	w.WriteHeader(r.status)
 	_, _ = w.Write(r.body)

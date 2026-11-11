@@ -1237,6 +1237,13 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     ignored, every lifecycle, 422 for an unbound subject), and `health.get`
     answers under `result`; defects `result-off-schema` and
     `result-in-pocket`. The other four halves stay open.
+  - [x] The `freshness` half (slice 6b, 11 Nov 2026): `-features freshness`
+    declares it with `limits.fresh_read_cooldown: PT1S` and `target_reads`;
+    `/subjects` from a mirror (`cached`), `fresh` within the cooldown
+    `cooldown` + `retry_after` (429 with nothing kept), one app read for
+    concurrent asks (a joiner is `cooldown`), the last value `unreachable`
+    (`Config.Down`, test-only), every write forgets the mirror, `/plan` live;
+    defects `cached-as-current`, `reads-per-request`, `cooldown-ignored`.
 
 **`results` (decision 20)**
 
@@ -1324,11 +1331,11 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   - Records, meters and uncovered places are alphabetical through `sortByName`/`sortNames`.
   - Every results sentence, including the "Since", "Due", "of" fragments, lives in `copy.ts` and the copy guide's section 12; the guard is an ESLint `no-restricted-syntax` block on `src/components/results/*.tsx` (JSX text, string literals, template elements; `className`/`key`/`data-*`, the directive and imports exempt, `aria-label`/`title`/`alt` not), proved by mutation in `results-sentence-guard.test.ts`; `resultsCopyGuide.test.ts` keeps only copy.ts against the guide table.
   - `OWN_READS` is held to the registry by a test (`ownReads.test.ts`); `needSpec` is held to the result schemas by `TestNeedSpecMatchesTheSchemas`, and now requires a `stale`'s `reason`.
-  - `Observation.stale` is left out of the UI type until freshness (6.2): its reason literals tripped `TestEveryFixedReasonIsNeverQuoted`.
+  - `Observation.stale` is in the UI type since 6b; its reasons are named once (`STALE` in `lib/queries/fresh.ts`), never written as `reason: "..."`, which `TestEveryFixedReasonIsNeverQuoted` reads.
 
 **`freshness` (decision 21)**
 
-- [ ] 6.2 `fresh: true` (query on `GET /subjects`, `GET /values/{field}`,
+- [x] 6.2 `fresh: true` (query on `GET /subjects`, `GET /values/{field}`,
   the storage profile reads; body on `effect: read` operations; **never**
   on `/plan`, `/apply`, `/stats`); `current` means "read after this request
   arrived" and nothing else; the invariant `current == false` ⇔ `stale`
@@ -1345,8 +1352,55 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   NAS is unreachable (mutation-checked: a cooldown that does not bite, a
   coalescing that makes two reads, a `stale` that is an error, a mirror
   answer marked `current`, a drift sweep that omits `fresh`, a `/plan` that
-  is cooled down). The UI shows `taken_at` on every card and a "Refresh"
-  that sends `fresh: true` #ready-for-agent
+  is cooled down). The UI shows `taken_at` on every card and a "Read again"
+  (the product's words, not "Refresh") that sends `?fresh=true` #ready-for-agent
+  - [x] Go side (slice 6b, 11 Nov 2026): contract fixtures and tests, the
+    backend, the TrueNAS add-on (declares `freshness`), the reference and
+    the kit.
+  - [x] UI half (slice 6b, 11 Nov 2026): "Read again" is the card's own GET with `?fresh=true` through one hook (`lib/queries/fresh.ts` `useReadAgain`, the queryFn and the polls never send it; held by test), one strip (`ReadFreshness`: copy, cooldown countdown, unreachable) on every card that shows `taken_at` (member and person cards, activity, inventory, what each group opens), a 429 `FRESH_READ_COOLDOWN` through `outcomeFromError` (dormant list and removal, inventory) with a live countdown, copy guide section 13 with a guard. Homes show no `taken_at` and carry no strip.
+  - Decided while building, one line each:
+  - One sender of `fresh`: `sendSpec.Fresh` in the pipe adds the query on a GET and the body key on an operation, only for an add-on declaring the feature, and refuses it outside `GET /subjects|/values/|/reach|/homes` and read operations (`ErrFreshOutOfScope`), so never `/plan`, `/apply`, `/stats` is code, not a comment.
+  - A `FRESH_READ_COOLDOWN` neither opens nor clears the backend's breaker (five "Read again" presses used to open it for the whole target).
+  - A cooldown has one shape everywhere: `stale.reason: cooldown` when the add-on served its copy, `retry_after` on the view (reach, homes, read views, activity, inventory) when it refused with nothing to serve; `CallResponse.RetryAfter` is RFC 9110 delay-seconds only.
+  - The invariant is held on read in one helper (`staleInvariant`): a reply whose `current` and `stale` disagree is not a reading (subjects unusable, reach/homes/results unreadable).
+  - "Read again" is the card's own GET with `?fresh=true` (`wantsFresh`, literal `true` only), no new endpoint; a page load and the waiting poll never send it.
+  - The drift sweep always asks fresh; a cooldown halts as `read_stale` with "skipped" in the log (no new reason, no migration, B6), after one wait and a second read (fix round (3)).
+  - The dormant list and its removal always ask fresh; inside the cooldown both answer 429 with `Retry-After` and `retry_after` (owner Q1). `DormantAccounts` takes no flag: both callers would pass true.
+  - The inventory takes "Read again"; a page load shows the copy dated, and Adopt stays blocked until read again (owner Q2).
+  - `SystemHealth` takes no `fresh`: TrueNAS `health.get` carries no `current`, so it is read live every time, like `/values` (not in its fresher).
+  - TrueNAS: one `fresher` (`fresh.go`) keyed per route and per subject (+ public params), 5-minute copy, 30 s cooldown begun at the read's start, request collapsing with a channel (no `x/sync`), a generation so a read begun before a write is never kept; `forget()` in `mutate`; a copy covers a NAS that cannot be read, never an operation's 4xx refusal; `target_reads` counted in `NAS.call` (probes included, writes not), in memory (B2).
+  - TrueNAS `/reach` keeps groups and ACLs as one copy (a cached `/reach` reads nothing), and the home-place check before a setting write reads the NAS directly, unkept.
+  - With nothing to serve, `/subjects` answers 503 `TARGET_UNREACHABLE` when nothing was sent and `NO_CURRENT_READ` otherwise (B3).
+  - A joiner of a read in flight is `cooldown`, never `current` (B1); the kit accepts either for the joiner and wants one of two current.
+  - Deploy and rollback: the backend and the TrueNAS add-on ship and roll back together (NEXT.md).
+  - Fix round (review, 11 Nov), one line each:
+  - (1) A write forgets reads under way too: TrueNAS `forget()` clears `flights` and a finishing read deletes its entry only while it is still the current one; the reference's `forget` clears its flight and cooldown the same way, so a read after a write never joins (nor waits out) a read begun before it.
+  - (2) TrueNAS remembers each key's last failure (cleared on success and by `forget`); a fresh read inside the cooldown of a failed read answers through `fallback` (the copy `unreachable`, `/subjects`' disk mirror, or the error), still one NAS attempt per 30 s; 429 is left only for nothing at all, a state a finished read never leaves. The reference does the same (`failed` in `reference/fresh.go`, held by `TestAFreshReadInsideTheCooldownOfAFailedReadSaysUnreachable`).
+  - (3) The drift sweep waits out one cooldown answer (`retry_after`, capped at the target's declared `limits.fresh_read_cooldown`, else `constants.cooldown_default`, bounded by ctx; `addons.FreshCooldown`, seams `freshCooldown`/`waitOut`) and reads fresh once more; only a second cooldown answer halts as `read_stale`.
+  - (4) `addons.StorageStatus` carries the add-on's `Observation` (results only; the legacy pocket has none), and "last known" storage is dated by its `taken_at`, the backend's clock only when the reply did not say.
+  - (5) TrueNAS `storage.status` passes `fresh` through `memberPlaces` to `reach(fresh)`, and its reply is `Observed.least` of the account read and the folder read (current only when both are, else the not-current one, the older of two), so places from a copy never ride a `current: true`.
+  - (6) A refusal (an operation's 4xx other than 429) drops the key's copy, so a plain read inside the five minutes reads the NAS rather than serve the account as it was.
+  - Decided while building 6b (Go review round 2): a reply made of several reads (storage.status and its folder read) is no fresher than its least fresh part only when read now; answered from the copy it keeps the copy's own reason (`cached`/`cooldown`/`unreachable`), dated by its oldest part (`Observed.with`, addons/truenas/fresh.go). A copy never replays a part's `cooldown`: plain polls at +90 s/+210 s say `cached`, a fresh read in an outage says `unreachable` (TestStorageStatusIsNoFresherThanItsPlaces).
+  - Decided while building 6b: the drift sweep waits a cooldown answer once, `min(retry_after, declared, sweepWaitCeiling)` with `sweepWaitCeiling = 60 s` (2 x constants.cooldown_default); `retry_after` 0 or absent waits the declared cooldown (`sweepWait`, drift/addon.go). "Check now" calls `drift.ReconcileAddonNow`, the same pass that never waits: two entry points over one `reconcileAddon(ctx, target, patient)`, so neither call site carries a bare bool and no option rides a context value.
+  - Decided while building 6b: `limits.fresh_read_cooldown` is parsed strictly as an ISO 8601 duration of days and clock time (RFC 3339 App. A dur-day/dur-time, plus a fraction on seconds); `P1D` and `PT24H` both read as 24 h and are capped alike by the sweep ceiling; `PT30MS`, `PT+30S`, `PT30S5M`, `P`, `PT`, weeks/months/years and overflow read as the 30 s default (`isoCooldown`, backend/internal/addons/manifest.go).
+  - Decided while building 6b: the reference add-on answers a read that joins a failed read as that failure (mirror `unreachable`, or 503), never `cooldown`/`cached` and never a second read of the app, agreeing with TrueNAS's `fresher.fallback`; `forget` now clears the failure too, so a join a write forgot decides again (TestAReadJoiningAFailedReadIsAnsweredAsItWas, TestAWriteForgetsTheFailureToo).
+  - Decided while building 6b: the inventory's 429 is the one cooldown envelope (`writeCooledDown`): `"error":"FRESH_READ_COOLDOWN"`, `retry_after`, `Retry-After`; the dormant list and sweep already were. UI may now require the code.
+  - Decided while building 6b: an add-on `taken_at` more than `clockSkew` (2 min) ahead of the backend's clock is read as now and logged once per target (`takenAt(target, raw)`, addons/read.go); /reach now reads its taken_at through `takenAt` too (was a bare `*time.Time`). [needs-triage] Results decoded generically into `Observation` (records, activity, status views) still take `taken_at` as sent.
+  Decided while building (6b UI fix round 2):
+  - A refused READ (dormant list, inventory with nothing to show) is said once, by the freshness line and its waiting button; no ActionOutcome block, no "nothing was changed". The refusal block stays for removals (writes). Copy guide section 13 updated.
+  - A 429 is a cooldown only with the code FRESH_READ_COOLDOWN (body or envelope); a code-less 429 is an ordinary failure.
+  - Read again slot: a thumb tall on touch (h-[var(--tap)]), zero tall only at desktop (desktop:h-0), so a wrapped sentence is never cut by the button.
+  - Stale gained `since` (ms, when the answer arrived); cooldownOf(error, since), useCountdown(seconds, since), useReadAgain exposes errorAt. Countdown deadline = since + seconds; remount does not restart it, a second refusal does.
+  - useReadAgain.press cancels in-flight queries on its key before the fresh fetch.
+  - toneOf(reading, why) is the one place that draws the line and dot: cached = neutral (bg-faint, text-faint) at any age; cooldown and unreachable stay amber; the rest by age.
+  - Decided while building 6b (Go review round 3): every `taken_at` is held to this clock in one place. `takenAt` parses (present, RFC 3339, not the zero time) and `ahead(target, ts)` reads one more than `clockSkew` (2 min) ahead as now, logged once per target. `decodeShape` is now `ReadReply.decodeShape`, so it knows `r.Target`; after the unmarshal it clamps through `observed` (`observation() *Observation`, defined on `*Observation` and promoted to `*Records`, `*Status`, `*StorageResult` and `*ActivityReport`; a nil embedded pointer answers nil) and refuses the zero time. Records, activity and status were kept exactly as sent before this. `Storage()` decodes an embedded `Observation` and drops its own clamp, and `decodeActivity` is gone. A storage reply with a zero or unparseable `taken_at` is now unreadable (indeterminate), like reach and homes, where before it was read with no Observation (TestEveryResultShapeIsClampedAlike).
+  - Decided while building 6b (round 3): the reference add-on's joiner answers the failure whenever `failed` is set (`if f.failed`, addons/reference/fresh.go). `forget` clears `failed`, so the old `&& f.flight == nil` only misreported one race: another reader begins the next read before the joiner wakes, and the joiner took that read's answer as its own. The test is deterministic: `testing/synctest` parks the joiner, and both reads are played by hand under `a.mu` (TestAJoinerOfAFailedReadNeverJoinsTheNextRead).
+  - [ ] 6b.f1 (follow-up from 6b round 3) Date a kept copy by its age, not by the add-on's clock, as RFC 9111 §4.2.3 does: age = the add-on's `Date` header − `taken_at`, both read off the add-on's own clock, so a skew between the clocks cancels out; the copy is then dated this backend's receive time − age. Today a copy is re-clamped to now on every serve, so with the NAS clock S ahead it reads "just now" for about S − 2 min. This needs response headers (`Date`) on `CallResponse`, carried through `ReadReply` to the clamp. Not built. #needs-triage
+  - Decided while building (6b UI round 3): `useReadAgain` cancels in-flight queries only when a copy is cached (`getQueryData !== undefined`); cancelling a first load reverts it to idle and the list drew "Nothing outside Syndra.". A press that fails for any reason but the cooldown is shown as `ReadAgainError` ("Not read" + failure sentence) under the line, on every page that owns a press (inventory, reach, person activity, my/person storage via the provider).
+  - Decided while building (flipped in the 6b UI fix round 4): a cooldown carried in the data only ever comes from a press (page loads and polls never send `fresh`, and both add-ons label a cooldown only on fresh reads), so the reader caused it unless it is marked otherwise. `Stale.pressed` is `false` or absent, and `pageLoad()` (`lib/queries/fresh.ts`) is its one marker, set at the one load site that can meet a cooldown, the dormant list (it reads fresh on every load), when `errorUpdatedAt < pressedAt` or there was no press. `toneOf` draws a cooldown amber unless `pressed === false`. Tone follows the line: cooldown while counting, then cached (neutral) if `current === false`, else by reading.
+  - Decided while building: every cooldown counts from its answer: `since` = query `dataUpdatedAt` (reach, person activity, and my/person storage through `ReadAgainProvider value={{ press, since }}`); round 4 stamps it on a cooldown that comes with a copy too (`observed(o, since)`, `stamped()`), at every `stale` site, so a remount does not restart the count; `useCountdown` reads a `since` of 0 as absent. The dormant list keeps its rows when a refetch is refused with data on hand (the refusal is the line's to say, not ListStates').
+  - 6b.f2 (found in round 4, fixed there): the dormant list's own Read again, failing for a reason other than the cooldown, went through `ListStates` and hid the list; it now shows `ReadAgainError` ("Not read") and keeps the data, as the other sites do.
+  - Fixed: stale comment and test name for the inventory 429 body in api-client.ts / apiClientCooldown.test.ts (it is the standard error envelope). Copy guide §13 gained the "Not read" row and the pressed/neutral/since rules.
 
 **`calls` and `effect` (decision 18)**
 
@@ -1477,6 +1531,17 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     (`TestTheResultsCheckJudgesOnlyWhatIsDeclared`). The appendix lost A.2
     to chapter 7, so A.3–A.6 are A.2–A.5 and `operations.physical` cites
     `a2-…`.
+  - [x] The `freshness` part (slice 6b, 11 Nov 2026): checks
+    `freshness.cached`, `.cooldown`, `.coalesce`, `.unreachable` (always
+    skips; held by the reference's own test, B4), counted by `target_reads`
+    against a baseline of two `/health` reads, in units of one fresh read's
+    cost (a TrueNAS read is several NAS calls). Watched to fail against
+    `cached-as-current`, `cooldown-ignored` and `reads-per-request` and
+    against rewritten replies; skip without the feature, pass with
+    `-features freshness`, `-mutate` included; the TrueNAS kit test requires
+    all three to pass. A mirroring add-on's `-mutate` "before" read asks
+    fresh and waits a cooldown out once. The guide's A.1 moved into chapter
+    4, so A.2–A.5 are A.1–A.4 and `operations.physical` cites `a1-…`.
 
 ## Out of scope, stated so nobody builds it here
 

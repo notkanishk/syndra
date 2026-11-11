@@ -1,0 +1,8 @@
+{
+  "type": "urn:syndra:addon:error:TARGET_UNREACHABLE",
+  "title": "Target unreachable",
+  "status": 503,
+  "detail": "The NAS could not be reached and there is no earlier read to answer from.",
+  "code": "TARGET_UNREACHABLE",
+  "retry": "retry_after"
+}

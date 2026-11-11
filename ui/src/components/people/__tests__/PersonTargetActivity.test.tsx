@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonActivity } from "@/components/people/PersonActivity";
 import type { TargetActivity } from "@/lib/queries/useTargetActivity";
 
 const state = vi.hoisted(() => ({
+  press: undefined as unknown as (() => Promise<void>) & { mock?: unknown },
   activity: null as TargetActivity | null,
   kind: "storage" as string | undefined,
+  arrived: 0,
 }));
 
 vi.mock("@/lib/queries/useAudit", () => ({
@@ -20,7 +22,8 @@ vi.mock("@/lib/queries/useTargets", () => ({
 }));
 
 vi.mock("@/lib/queries/useTargetActivity", () => ({
-  useTargetActivity: () => ({ data: state.activity, isLoading: false, isError: false }),
+  useTargetActivity: () => ({ data: state.activity, isLoading: false, isError: false, dataUpdatedAt: state.arrived }),
+  useTargetActivityAgain: () => ({ press: state.press, pending: false, error: null }),
 }));
 
 vi.mock("@/components/names", () => ({ UserName: () => null }));
@@ -28,7 +31,7 @@ vi.mock("@/components/audit/TraceCell", () => ({ TraceCell: () => null }));
 
 function renderTab() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  return render(
     <QueryClientProvider client={client}>
       <PersonActivity userId="u1" name="Charlotte" />
     </QueryClientProvider>,
@@ -36,9 +39,12 @@ function renderTab() {
 }
 
 beforeEach(() => {
+  state.press = vi.fn(async () => {});
   state.activity = null;
   state.kind = "storage";
+  state.arrived = 0;
 });
+afterEach(() => vi.useRealTimers());
 
 /**
  * Syndra's ledger and the target's audit log are two claims, and the surface
@@ -226,5 +232,36 @@ describe("a refusal an operator can act on", () => {
     await waitFor(() => expect(screen.getByText("CONNECT")).toBeInTheDocument());
     expect(screen.getByText(/main/)).toBeInTheDocument();
     expect(screen.queryByText("Refused")).toBeNull();
+  });
+});
+
+// Feature freshness: the log says how old it is, and a copy has its Read again.
+describe("how old the target's log is", () => {
+  const took = new Date(Date.now() - 4 * 60_000).toISOString();
+
+  it("dates a copy of it and reads it again from the log itself", async () => {
+    state.activity = { target: "truenas", subject: "u1", readable: true, events: [], taken_at: took, current: false, stale: { reason: "cached" } };
+    renderTab();
+    await waitFor(() => expect(screen.getByText(/was read 4 min ago/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+    expect(state.press).toHaveBeenCalledTimes(1);
+  });
+
+  it("says a log read moments ago with nothing kept is that, with the countdown, not a read that failed", async () => {
+    state.activity = { target: "truenas", subject: "u1", readable: false, reason: "cooldown", retry_after: 20, detail: "" };
+    renderTab();
+    await waitFor(() => expect(screen.getByText(/read moments ago; you can read again in 20 s/)).toBeTruthy());
+    expect(screen.queryByText(/could not be read/)).toBeNull();
+  });
+
+  it("draws a cooldown carried with the copy amber, and counts it from when the copy arrived across a remount", () => {
+    vi.useFakeTimers();
+    state.arrived = Date.now();
+    state.activity = { target: "truenas", subject: "u1", readable: true, events: [], taken_at: took, current: false, stale: { reason: "cooldown", retry_after: 30 } };
+    renderTab().unmount();
+    act(() => void vi.advanceTimersByTime(12_000));
+    renderTab();
+    expect(screen.getByText(/you can read again in 18 s/)).toBeTruthy();
+    expect((document.querySelector("[data-freshness-dot]") as HTMLElement).className).toContain("bg-warn");
   });
 });

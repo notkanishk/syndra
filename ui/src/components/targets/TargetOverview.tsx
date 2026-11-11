@@ -28,7 +28,7 @@ import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
-import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
+import { blocksIrreversibleAction, ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
@@ -37,6 +37,7 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
+import { stamped } from "@/lib/queries/fresh";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
@@ -49,6 +50,7 @@ import {
   useResolveBindingConflict,
   useResolveLogFinding,
   useTargetInventory,
+  useTargetInventoryAgain,
   useTargets,
   useUnconfirmedOperations,
   type AdoptionResult,
@@ -1444,6 +1446,7 @@ function Reading({
 function Inventory({ target, stale }: { target: string; stale: boolean }) {
   const nameOf = useSystemNames();
   const inventory = useTargetInventory(target);
+  const again = useTargetInventoryAgain(target);
   const adopt = useAdoptAccount(target);
   const [adopting, setAdopting] = useState<string | null>(null);
   // The outcome is kept WITH the account it happened to. It used to be one
@@ -1453,10 +1456,14 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     { username: string; person: string; result: AdoptionResult } | null
   >(null);
 
+  // Refused inside the cooldown: only ever a press, since a load never sends fresh.
+  const refused = again.cooldown;
   const read = {
     readAt: inventory.data?.read_at,
     current: inventory.data?.current,
     truncated: inventory.data?.truncated,
+    // A press the cooldown refused is newer than the copy it leaves on show.
+    stale: refused ?? stamped(inventory.data?.read_stale, inventory.dataUpdatedAt),
   };
   const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
   const name = nameOf(target);
@@ -1475,11 +1482,13 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
           state={read}
           onRefresh={() => {
             setResult(null);
-            inventory.refetch();
+            return again.press();
           }}
-          refreshing={inventory.isFetching}
+          refreshing={again.pending}
         />
       </div>
+      <ReadAgainError error={again.error} />
+      {!inventory.data && refused ? null : (
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}
@@ -1566,6 +1575,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
           )}
         </>
       </ListStates>
+      )}
     </Card>
   );
 }

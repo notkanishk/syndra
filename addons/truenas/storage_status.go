@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // storage.status answers the two questions a member actually has: can I use
@@ -37,15 +36,18 @@ type StorageStatus struct {
 	// Meters is what they hold in each share they can see, against its quota.
 	// Empty is a real answer when QuotaRead is true.
 	Meters []Meter `json:"meters"`
-	// TakenAt is when the account was read: always now, never the mirror.
-	TakenAt string `json:"taken_at"`
-	Current bool   `json:"current"`
+	// Observed is when the account was read, set by readNow (fresh.go).
+	Observed
 	// Places is everywhere this account can connect, read from the folder
 	// ACLs for the groups it is actually in, home folder first (reach.go).
 	// PlacesReadable is false when the ACLs have never been read; an empty
 	// list that was read is "no folder is open to you yet".
 	Places         []Place `json:"places"`
 	PlacesReadable bool    `json:"places_readable"`
+	// placesSeen is how fresh the folder permissions behind Places were when
+	// this account was read: a read just now is no fresher than it, and a copy
+	// is dated no later than it (Observed.with).
+	placesSeen Observed
 	// NeedsPassword is the reason, when there is one an action fixes. Setting a
 	// password is what turns the account on, so this is an invitation rather
 	// than an error.
@@ -85,11 +87,13 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 
-	status := StorageStatus{Meters: []Meter{}, Places: []Place{}, TakenAt: time.Now().UTC().Format(time.RFC3339), Current: true}
+	status := StorageStatus{Meters: []Meter{}, Places: []Place{}}
 
-	// Account state from a live read, not the mirror. This is the field a
-	// member is about to act on, and a mirror could be six hours old — telling
-	// somebody to set a password they set this morning.
+	// Account state from a read of the NAS, not the subjects mirror. This is
+	// the field a member is about to act on, and that mirror could be six hours
+	// old — telling somebody to set a password they set this morning. Its own
+	// copy (fresh.go) is forgotten by every write, so a password set through
+	// this add-on shows on the next read.
 	var accounts []struct {
 		UID              int64   `json:"uid"`
 		SMB              bool    `json:"smb"`
@@ -119,8 +123,8 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 		Enabled: !account.Locked, SMBEnabled: account.SMB, PasswordSet: !account.PasswordDisabled})
 
 	// Best-effort like usage: whether the account works is the urgent half.
-	if places, err := s.memberPlaces(account.UID, account.Groups, homeOf(account.Home)); err == nil {
-		status.Places, status.PlacesReadable = places, true
+	if places, seen, err := s.memberPlaces(req.Fresh, account.UID, account.Groups, homeOf(account.Home)); err == nil {
+		status.Places, status.PlacesReadable, status.placesSeen = places, true, seen
 	}
 
 	// Usage is best-effort: a member who cannot be told their usage can still

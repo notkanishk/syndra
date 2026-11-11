@@ -93,6 +93,12 @@ type AddonReconcileResult struct {
 	// Truncated says the read hit the add-on's cap, so the inventory is what was
 	// seen rather than everything there is.
 	Truncated bool `json:"truncated,omitempty"`
+	// ReadStale is why the read is not current, as the add-on said it
+	// (cached, cooldown, unreachable, ...): the inventory's "Read again" line.
+	ReadStale *addons.Stale `json:"read_stale,omitempty"`
+	// RetryAfter is a fresh read the add-on refused inside its cooldown with
+	// nothing to serve: halted, readable again in this many seconds.
+	RetryAfter int `json:"retry_after,omitempty"`
 	// LogVerdict is what the add-on's mutation-log head said when compared
 	// against the anchor. Carried on the reconcile result because this is the
 	// pass that reads it, and because a finding that lives only in a log line is
@@ -111,15 +117,23 @@ type AddonReconcileResult struct {
 // convergences by looking at it — and because the inventory is the one thing
 // here that is still worth showing when the read is stale or capped, labelled
 // with which it was.
-func Inventory(ctx context.Context, target string) (AddonReconcileResult, error) {
+//
+// fresh is a person pressing "Read again" (feature freshness); a page load
+// accepts the add-on's copy, which is shown dated and, not being current,
+// adopted from by nobody until it is read again (owner Q2).
+func Inventory(ctx context.Context, target string, fresh bool) (AddonReconcileResult, error) {
 	if target == db.TargetZitadel {
 		return AddonReconcileResult{}, fmt.Errorf("inventory: %s holds no accounts of its own", target)
 	}
 	res := AddonReconcileResult{Target: target}
 
-	read := addonSubjects(ctx, target)
+	read := addonSubjects(ctx, target, fresh)
 	if read.Outcome != addons.OutcomeSucceeded {
-		res.Halted, res.Reason = true, db.UnreconciledUnreachable
+		res.Halted, res.Reason, res.RetryAfter = true, db.UnreconciledUnreachable, read.RetryAfter
+		if read.RetryAfter > 0 {
+			// Inside the cooldown with nothing to serve: not an outage.
+			res.Reason = db.UnreconciledStaleRead
+		}
 		return res, nil
 	}
 	bindings, err := listBindings(ctx, target)
@@ -147,7 +161,7 @@ func Inventory(ctx context.Context, target string) (AddonReconcileResult, error)
 		res.Accounts = append(res.Accounts, BoundAccount{TargetBinding: b, Standing: s})
 	}
 	res.Unmanaged = unmanaged(read.Accounts, bindings)
-	res.ReadAt, res.Current, res.Truncated = read.TakenAt, read.Current, read.Truncated
+	res.ReadAt, res.Current, res.Truncated, res.ReadStale = read.TakenAt, read.Current, read.Truncated, read.Stale
 	if !read.Current {
 		// Shown, and labelled. An operator asking what else lives on the target
 		// during an outage is better served by a dated answer than by nothing —
@@ -160,9 +174,41 @@ func Inventory(ctx context.Context, target string) (AddonReconcileResult, error)
 	return res, nil
 }
 
-// ReconcileAddon reads a target, converges the subjects it manages, and reports
-// the accounts it does not.
+// sweepWaitCeiling is the longest the sweep waits out a cooldown, whatever a
+// target declares or asks: twice constants.cooldown_default (PT30S,
+// registry/constants.json), so a target declaring a day (P1D or PT24H alike)
+// holds a pass back a minute, not a day.
+const sweepWaitCeiling = 60 * time.Second
+
+// sweepWait is how long the sweep waits out a cooldown answer: the
+// retry_after it was given (RFC 9110 §10.2.3), the declared cooldown when it
+// was given none, never longer than the declared cooldown or the ceiling.
+func sweepWait(target string, retryAfter int) time.Duration {
+	wait := freshCooldown(target)
+	if retryAfter > 0 {
+		wait = min(wait, time.Duration(retryAfter)*time.Second)
+	}
+	return min(wait, sweepWaitCeiling)
+}
+
+// ReconcileAddon is the scheduled sweep of a target: it reads it, converges
+// the subjects it manages, and reports the accounts it does not.
 func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, error) {
+	return reconcileAddon(ctx, target, true)
+}
+
+// ReconcileAddonNow is the same pass for a person waiting on it ("Check
+// now"): it never waits out a cooldown inside their request, and answers it as
+// a skipped pass that says when the target can be read again. Two entry
+// points rather than a flag: who calls decides, and neither call site carries
+// a bare true or false.
+func ReconcileAddonNow(ctx context.Context, target string) (AddonReconcileResult, error) {
+	return reconcileAddon(ctx, target, false)
+}
+
+// reconcileAddon is the pass; patient is whether a cooldown answer is waited
+// out once (the scheduled sweep) or answered at once (a person).
+func reconcileAddon(ctx context.Context, target string, patient bool) (AddonReconcileResult, error) {
 	if target == db.TargetZitadel {
 		// Zitadel has its own sweep, which pages the Management API and
 		// concludes differently. Refused rather than ignored: a caller here with
@@ -171,7 +217,20 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	}
 	res := AddonReconcileResult{Target: target}
 
-	read := addonSubjects(ctx, target)
+	// Always fresh: the sweep is the one scheduled sender (design §4) and it
+	// needs a current read. Answered inside the cooldown, the scheduled sweep
+	// waits sweepWait and asks once more; a second cooldown answer is a
+	// skipped pass, recorded as a stale read (no new reason, no migration;
+	// B6), never as unreachable. One wait, not a loop: someone else reading
+	// the target that often is not the sweep's to outlast.
+	read := addonSubjects(ctx, target, true)
+	if retry, cooled := read.CooledDown(); cooled && patient && waitOut(ctx, sweepWait(target, retry)) {
+		read = addonSubjects(ctx, target, true)
+	}
+	if wait, cooled := read.CooledDown(); cooled {
+		return halt(ctx, res, db.UnreconciledStaleRead,
+			fmt.Sprintf("skipped: the target was read moments ago and can be read again in %d s", wait))
+	}
 	switch {
 	case read.Outcome != addons.OutcomeSucceeded:
 		return halt(ctx, res, db.UnreconciledUnreachable,

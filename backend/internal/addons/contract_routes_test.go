@@ -178,7 +178,7 @@ func TestHealthReplyLands(t *testing.T) {
 
 func TestSubjectsReplyLands(t *testing.T) {
 	got := addonAnswering(t, "subjects.json")
-	r := Subjects(context.Background(), "truenas")
+	r := Subjects(context.Background(), "truenas", false)
 	if got.method != http.MethodGet || got.path != "/subjects" {
 		t.Fatalf("sent %s %s", got.method, got.path)
 	}
@@ -201,7 +201,7 @@ func TestSubjectsReplyLands(t *testing.T) {
 	}
 
 	addonAnswering(t, "subjects_stale.json")
-	if r := Subjects(context.Background(), "truenas"); r.Outcome != OutcomeSucceeded || r.Current || r.Usable() {
+	if r := Subjects(context.Background(), "truenas", false); r.Outcome != OutcomeSucceeded || r.Current || r.Usable() {
 		t.Errorf("a mirror answer must land not current: %+v", r)
 	}
 }
@@ -222,7 +222,7 @@ func TestAnAbsentReplyFieldMakesTheReadUnusable(t *testing.T) {
 	drop := func(key string) func(map[string]any) { return func(d map[string]any) { delete(d, key) } }
 	for _, change := range []func(map[string]any){drop("taken_at"), func(d map[string]any) { d["taken_at"] = "yesterday" }} {
 		addonServing(t, edit("subjects.json", change))
-		if r := Subjects(context.Background(), "truenas"); r.Usable() || !r.TakenAt.IsZero() {
+		if r := Subjects(context.Background(), "truenas", false); r.Usable() || !r.TakenAt.IsZero() {
 			t.Errorf("subjects with no readable taken_at is usable or dated: %+v", r)
 		}
 		addonServing(t, edit("plan_response.json", change))
@@ -232,14 +232,14 @@ func TestAnAbsentReplyFieldMakesTheReadUnusable(t *testing.T) {
 	}
 	for _, key := range []string{"current", "truncated"} {
 		addonServing(t, edit("subjects.json", drop(key)))
-		if r := Subjects(context.Background(), "truenas"); r.Usable() {
+		if r := Subjects(context.Background(), "truenas", false); r.Usable() {
 			t.Errorf("subjects without %s is usable: %+v", key, r)
 		}
 	}
 	addonServing(t, edit("subjects.json", func(d map[string]any) {
 		delete(d["subjects"].([]any)[0].(map[string]any)["standing"].(map[string]any), "usable")
 	}))
-	if r := Subjects(context.Background(), "truenas"); r.Usable() {
+	if r := Subjects(context.Background(), "truenas", false); r.Usable() {
 		t.Errorf("subjects with an account lacking standing.usable is usable: %+v", r)
 	}
 
@@ -265,16 +265,16 @@ func TestAnAbsentReplyFieldMakesTheReadUnusable(t *testing.T) {
 
 	for _, key := range []string{"taken_at", "current"} {
 		addonServing(t, edit("reach.json", drop(key)))
-		if r := ReadReach(context.Background(), "truenas"); r.Read && r.Current {
+		if r := ReadReach(context.Background(), "truenas", false); r.Read && r.Current {
 			t.Errorf("reach without %s reads as current: %+v", key, r)
 		}
 		addonServing(t, edit("homes.json", drop(key)))
-		if h := ReadHomes(context.Background(), "truenas"); h.Read {
+		if h := ReadHomes(context.Background(), "truenas", false); h.Read {
 			t.Errorf("homes without %s reads as a reading: %+v", key, h)
 		}
 	}
 	addonServing(t, edit("homes.json", drop("quota_read")))
-	if h := ReadHomes(context.Background(), "truenas"); h.UsageRead {
+	if h := ReadHomes(context.Background(), "truenas", false); h.UsageRead {
 		t.Errorf("homes without quota_read reads as complete: %+v", h)
 	}
 }
@@ -284,29 +284,29 @@ func TestAnAbsentReplyFieldMakesTheReadUnusable(t *testing.T) {
 // an add-on could send "read": true; the views are now built from wire types.
 func TestAnAddOnCannotSetTheBackendsOwnReadFlags(t *testing.T) {
 	addonServing(t, []byte(`{"read":true,"usage_read":true,"homes":[],"quota_read":false,"taken_at":"2026-11-10T09:30:00Z","current":true}`))
-	if h := ReadHomes(context.Background(), "truenas"); h.UsageRead {
+	if h := ReadHomes(context.Background(), "truenas", false); h.UsageRead {
 		t.Errorf("the add-on set usage_read through the view's own key: %+v", h)
 	}
 	addonServingStatus(t, http.StatusServiceUnavailable, []byte(`{"read":true,"read_at":"2026-11-10T09:30:00Z","current":true}`))
-	if r := ReadReach(context.Background(), "truenas"); r.Read {
+	if r := ReadReach(context.Background(), "truenas", false); r.Read {
 		t.Errorf("a refusal claiming read reads as read: %+v", r)
 	}
 	addonServing(t, []byte(`{"read":true,"read_at":"2026-11-10T09:30:00Z","current":true}`))
-	if r := ReadReach(context.Background(), "truenas"); r.Read {
+	if r := ReadReach(context.Background(), "truenas", false); r.Read {
 		t.Errorf("a reply with contract 1's read_at and the view's read reads as read: %+v", r)
 	}
 	// A place's addresses and roles are Syndra's to fill, from the connection
 	// host and the member's own roles: an add-on sending them sets nothing.
 	planted := `{"share":"makers","path":"/mnt/tank/makers","access":"read","smb_address":"smb://evil.example.org/x","unc_address":"\\\\evil\\x","roles":[{"project_id":"p","role_key":"r"}]}`
 	addonServing(t, []byte(`{"taken_at":"2026-11-10T09:30:00Z","current":true,"groups":{"g":[`+planted+`]},"everyone":[`+planted+`]}`))
-	r := ReadReach(context.Background(), "truenas")
+	r := ReadReach(context.Background(), "truenas", false)
 	for _, p := range append(r.Groups["g"], r.Everyone...) {
 		if p.SMBAddress != "" || p.UNCAddress != "" || len(p.Roles) != 0 || p.Share != "makers" {
 			t.Errorf("a place in /reach carries what the add-on planted: %+v", p)
 		}
 	}
 	addonServing(t, []byte(`{"operation":"storage.status","subject":"s","outcome":"succeeded","storage":{"username":"rey_mysterio","places":[`+planted+`]}}`))
-	st := Read(context.Background(), "truenas", "storage.status", "s", "s", nil).Storage()
+	st := Read(context.Background(), "truenas", "storage.status", "s", "s", nil, false).Storage()
 	if len(st.Places) != 1 || st.Places[0].SMBAddress != "" || st.Places[0].UNCAddress != "" || len(st.Places[0].Roles) != 0 {
 		t.Errorf("a storage place carries what the add-on planted: %+v", st.Places)
 	}
@@ -350,7 +350,7 @@ func TestResolvesValueRefusesUnlistableMembership(t *testing.T) {
 
 func TestReachReplyLands(t *testing.T) {
 	got := addonAnswering(t, "reach.json")
-	r := ReadReach(context.Background(), "truenas")
+	r := ReadReach(context.Background(), "truenas", false)
 	if got.method != http.MethodGet || got.path != "/reach" {
 		t.Fatalf("sent %s %s", got.method, got.path)
 	}
@@ -383,7 +383,7 @@ func TestSettingsAndHomesRepliesLand(t *testing.T) {
 	}
 
 	got = addonAnswering(t, "homes.json")
-	h := ReadHomes(context.Background(), "truenas")
+	h := ReadHomes(context.Background(), "truenas", false)
 	if got.method != http.MethodGet || got.path != "/homes" || !h.Read || !h.UsageRead || len(h.Homes) != 1 {
 		t.Fatalf("homes: sent %s %s, %+v", got.method, got.path, h)
 	}
@@ -501,7 +501,7 @@ func TestReadOperationsSendTheContractShapeAndReadTheirAnswer(t *testing.T) {
 			}
 
 			got := serve(tc.storage)
-			st := Read(ctx, "truenas", "storage.status", "289471021834760193", "289471021834760193", nil).Storage()
+			st := Read(ctx, "truenas", "storage.status", "289471021834760193", "289471021834760193", nil, false).Storage()
 			assertOperationRequest(t, got, "storage.status")
 			if st.Outcome != OutcomeSucceeded || !st.NeedsPassword || !st.PlacesReadable || st.NeedsNewPassword == tc.results {
 				t.Errorf("storage status did not land: %+v", st)
@@ -512,9 +512,14 @@ func TestReadOperationsSendTheContractShapeAndReadTheirAnswer(t *testing.T) {
 			if st.Standing == nil || st.Standing.Usable || st.Standing.WaitingOn != "member" || st.Standing.Next == "" {
 				t.Errorf("the account's standing did not land: %+v", st.Standing)
 			}
+			// When the add-on read it lands with it; the legacy pocket does not say.
+			if want := time.Date(2026, 11, 10, 9, 30, 0, 0, time.UTC); tc.results != (st.Observation != nil) ||
+				tc.results && (!st.Observation.TakenAt.Equal(want) || !st.Observation.Current) {
+				t.Errorf("the read's observation did not land: %+v", st.Observation)
+			}
 
 			got = serve(tc.activity)
-			act := Activity(ctx, "truenas", "289471021834760193", "operator-1", "2026-11-01T00:00:00Z")
+			act := Activity(ctx, "truenas", "289471021834760193", "operator-1", "2026-11-01T00:00:00Z", false)
 			assertOperationRequest(t, got, "activity.get")
 			if subject, actor := sentAs(got); subject != "289471021834760193" || actor != "operator-1" {
 				t.Errorf("activity.get sent subject %q actor %q: the person is the subject, the operator the actor", subject, actor)

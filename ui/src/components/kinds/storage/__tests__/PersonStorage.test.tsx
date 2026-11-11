@@ -11,7 +11,7 @@ const state = vi.hoisted(() => ({
   advanced: false,
 }));
 
-vi.mock("@/lib/queries/useMyStorage", () => ({ usePersonTargets: () => state.views }));
+vi.mock("@/lib/queries/useMyStorage", () => ({ usePersonTargets: () => state.views, usePersonTargetsAgain: () => ({ press: async () => {}, pending: false, error: null }) }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => ({ data: [{ target: "truenas", name: "TrueNAS", kind: "storage" }] }) }));
 vi.mock("@/lib/ui-view", () => ({
   useIsAdvanced: () => state.advanced,

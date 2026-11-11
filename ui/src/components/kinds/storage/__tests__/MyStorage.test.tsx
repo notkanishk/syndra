@@ -556,3 +556,54 @@ describe("reads beside the storage card", () => {
     expect(screen.getByText("From holdings.list")).toBeTruthy();
   });
 });
+
+// Feature freshness: the card's storage.status is its own read, drawn by this
+// kind, and its age (with Read again, from the page's one hook) stays in the core.
+describe("how old the storage read is", () => {
+  const copy = (stale: unknown, retry_after?: number): Partial<MyTargetView> => ({
+    reads: [
+      retry_after
+        ? { operation: "storage.status", shape: "status", readable: false, retry_after }
+        : {
+            operation: "storage.status",
+            shape: "status",
+            readable: true,
+            result: { usable: true, standing: { usable: true, waiting_on: "none" }, meters: [], taken_at: new Date(Date.now() - 2 * 60_000).toISOString(), current: false, stale: stale as never },
+          },
+    ],
+  });
+  const stubFetch = () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ targets: [] }), { status: 200 });
+    }));
+    return urls;
+  };
+
+  it("dates a copy, and Read again asks /me/targets for a fresh read exactly once", async () => {
+    state.targets = [view(copy({ reason: "cached" }))];
+    const urls = stubFetch();
+    renderStorage();
+    expect(screen.getByText(/TrueNAS was read 2 min ago/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+    });
+    expect(urls).toEqual(["/api/proxy/me/targets?fresh=true"]);
+    vi.unstubAllGlobals();
+  });
+
+  it("says a read moments ago with nothing kept is that, and the button waits", () => {
+    state.targets = [view(copy(undefined, 20))];
+    renderStorage();
+    expect(screen.getByText(/TrueNAS was read moments ago; you can read again in 20 s/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+  });
+
+  it("tells a member the system cannot be reached, with the step, and no button", () => {
+    state.targets = [view(copy({ reason: "unreachable" }))];
+    renderStorage();
+    expect(screen.getByText(/TrueNAS can't be reached right now; this is what it said at .*ask makerspace staff\./)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Read again" })).toBeNull();
+  });
+});
