@@ -101,7 +101,8 @@ const eslintConfig = [
     }));
     /**
      * No sentence lives in a results renderer. Every sentence of results/*.tsx
-     * is written in results/copy.ts, where copy-guide section 12 holds it.
+     * is written in results/copy.ts, where copy-guide section 12 holds it; the
+     * same for actions/*.tsx and actions/copy.ts (section 14).
      * "A sentence" is two words with whitespace between them (any letters), so
      * a multi-line JSX text, one with {values} in it, a template that starts
      * with a value, a lower-case fragment and a single-quoted string are all
@@ -122,7 +123,7 @@ const eslintConfig = [
       `TemplateElement[value.cooked=${besideValue}]${skip}`,
     ].map((selector) => ({
       selector,
-      ...message("Write the sentence in components/results/copy.ts and in copy-guide section 12 (openspec/changes/plain-language-copy/design.md); a renderer only calls it."),
+      ...message("Write the sentence in components/results/copy.ts (copy-guide section 12) or components/actions/copy.ts (section 14), in openspec/changes/plain-language-copy/design.md; a renderer only calls it."),
     }));
     const tests = ["src/**/__tests__/**", "src/**/__fixtures__/**", "src/**/*.test.{ts,tsx}"];
     const fieldHome = ["src/lib/fields.ts", "src/components/kinds/storage/**"];
@@ -134,12 +135,12 @@ const eslintConfig = [
       {
         // Everywhere: all three guards, minus where each is allowed.
         files: ["src/**/*.{ts,tsx}"],
-        ignores: ["src/lib/queries/invalidation.ts", "src/components/results/*.tsx", ...fieldHome, ...wordHome, ...tests],
+        ignores: ["src/lib/queries/invalidation.ts", "src/components/results/*.tsx", "src/components/actions/*.tsx", ...fieldHome, ...wordHome, ...tests],
         rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles, ...kindWord] },
       },
       {
-        // The results renderers: the everywhere set, and no inline sentence.
-        files: ["src/components/results/*.tsx"],
+        // The results and actions renderers: the everywhere set, and no inline sentence.
+        files: ["src/components/results/*.tsx", "src/components/actions/*.tsx"],
         ignores: tests,
         rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles, ...kindWord, ...sentence] },
       },

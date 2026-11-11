@@ -1244,6 +1244,25 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     concurrent asks (a joiner is `cooldown`), the last value `unreachable`
     (`Config.Down`, test-only), every write forgets the mirror, `/plan` live;
     defects `cached-as-current`, `reads-per-request`, `cooldown-ignored`.
+  - [x] The `calls` half and the `physical` operation (slice 6c, 12 Nov
+    2026): `-features results,calls` declares `calls` and `item.checkout`
+    (`checkout.go`: item-0001..0004 on three printers, `loanLimit` 1), the
+    preview that writes nothing, every check and the loan in one section
+    under a per-subject lock, the intent before the loan, `CALL_UNSETTLED`
+    while one is open (the same call_id included), `no_change` for an item
+    already held, `RESOURCE_TAKEN` for one someone else holds, and
+    `GET /calls` for every write (`callState`); `Config.LoseReply`
+    (test-only) loses an answer before or after the loan. Defects
+    `preview-recorded`, `reexecutes-in-doubt`, `checkout-unserialised`,
+    `no-change-as-succeeded`, `calls-echo-params`. The `stats` half stays
+    open.
+    - Decided while building: an open intent is settled only on `/calls`
+      (`settle`), never by the next checkout, which would clear it and run,
+      so a retry would never be `CALL_UNSETTLED`; and never while `Down` or
+      while the call still runs. A preview answers `CALL_UNSETTLED` too: it
+      answers what the confirm would.
+    - Decided while building: `problem()` resolves the registry's
+      `by_status` class (`backoff` for 429 and every 5xx), as the guide says.
 
 **`results` (decision 20)**
 
@@ -1424,14 +1443,108 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   retry meanwhile is `CALL_UNSETTLED`, a preview leaves nothing behind
   (`/calls` on any never-used id → `unknown`, `log_records` unchanged) and
   the confirm with its fresh id executes #ready-for-agent
+  - [x] The Go half (slice 6c, 12 Nov 2026): the registry has `effect` and
+    `secret_result` for every id and `item.checkout`; `UNKNOWN_RESOURCE`,
+    `NOT_ENTITLED`, `LIMIT_REACHED` and `RESOURCE_TAKEN` are registered with
+    their extension members (`error.json`: `param`; `limit`, `unit`,
+    `count`). The backend offers a physical op only with `calls` (and
+    `results` for its record: `physicalNeeds`), previews it unrecorded with no
+    call_id (`addons.Preview`, `addonop.Preview`), refuses it without
+    confirm, refuses a resend (`ErrPhysicalNotResent`) and the next while one
+    is unsettled (`ErrCallUnsettled`, before any record), sends once
+    (`TestAnIndeterminatePhysicalCallIsSentOnce`), and settles any lost
+    answer through `/calls` (`CallAnswer`, `settleByCall`): the member's poll
+    `GET /me/targets/{t}/operations/{id}` and the operator's list take the
+    same path. A physical row is held off Waiting on you until
+    `in_doubt_bound` (`PhysicalHold`), then is the existing unconfirmed item.
+    Routes `POST /me/targets/{t}/operations/{name}` (`preview` or `confirm`)
+    and the poll; `/me/targets` gains `actions[]` and `unsettled`. TrueNAS
+    answers `/calls` from its call store, lease and mutation log and declares
+    `calls`; the reference and the kit as 6.0 and 6.11 say.
+    - Decided while building (B1): `GET /calls` keeps the shipped
+      `{call_id, state, reply}`, not `{outcome, result}`: `outcome` is the
+      reply's own field. (B2) A preview answers the outcome the confirm
+      would. (B3) The backend refuses `CALL_UNSETTLED` itself too, so "never
+      twice" does not rest on the add-on alone. (B4) No server-side "preview
+      before confirm" state. (B5) No redaction code in either add-on until an
+      id has `secret_result`; the backend drops such a reply unread. (B6) A
+      physical op needs `results` when it names a result.
+    - Decided while building (O1): someone else's item is `RESOURCE_TAKEN`
+      (409, `param`, RFC 9110 §15.5.10). (O2) `item.return` comes with the
+      inventory add-on. (O3) A non-physical op on a `calls` target keeps the
+      two-minute grace; only a physical one waits `in_doubt_bound`.
+    - Decided while building: `/calls` is asked about any lost write, not
+      only a physical one (the operator's list asks first, then the settings
+      read); what it may settle is narrowed by the fix round below.
+    - Decided while building (6c fix round, 1): `recorded` settles any row;
+      `unknown` settles only a physical row sent within `constants.call_memory`
+      (`addons.CallMemory`, held to the registry), less a minute for the
+      clocks. Any other `unknown` stays for a person: the TrueNAS add-on in
+      production keeps no write-ahead intent, and past call_memory an add-on
+      may have forgotten (`settleByCall`, AUTHORING "What settles a record").
+    - Decided while building (6c fix round, 2): the backend's
+      `CALL_UNSETTLED` is one check inside the record's insert: a
+      `pg_advisory_xact_lock` on (target, subject, operation), then
+      `INSERT … WHERE NOT EXISTS` an open row (unclaimed `dispatching`
+      included, any row not only the newest), `db.OpenCallError` mapped to
+      `UnsettledError`; the separate pre-read is gone. A failed insert of a
+      physical record stays `CALL_UNSETTLED_UNKNOWN` (fail closed).
+    - Decided while building (6c fix round, 3): `account.adopt` and
+      `account.release` are never asked `/calls`; a person repeats the action,
+      which writes or forgets the backend's binding as well as the add-on's.
+    - Decided while building (6c fix round, 4): the member poll is limited per
+      person (`withPollLimit`, `ratelimit.DefaultPoll` 60/min, one a second
+      sustained): the UI's 5-second poll spends a fifth of it.
+    - Decided while building (6c fix round, 5): the kit's
+      `operations.physical` counts the item as lent unless the confirm was a
+      4xx refusal, so a lost or unreadable confirm's report says the item
+      may be checked out.
+  - [ ] 6.3r (follow-up from the 6c fix round) A recorded `/calls` answer for
+    an adoption or release could settle itself by running the same binding
+    half as the adopt and release handlers (`handlers/inventory.go`), so the
+    backend's copy is written with it; until then those two stay with a
+    person. #needs-triage
+  - [ ] The UI half (6.3u, a separate builder from the 6c UI handoff): the
+    member action with `format: target_id` as a typed-or-scanned input,
+    preview then confirm, the poll, and the desk's sentence on Waiting on you
+    #ready-for-agent
 
-- [ ] 6.3a (the guide review's ruling (b)) Add `no_change` to
+- [x] 6.3a (the guide review's ruling (b)) Add `no_change` to
   `common/outcome.json`, listed under feature `calls`, mirroring
   `common/effect.json`, so an operation can say it changed nothing (a
   checkout of an item already held; `log_records` stays put); and have
   Syndra read the wire `outcome` instead of classifying by status alone, so
   a no-op is not recorded and audited as done. "Conflict" is not an outcome:
   it is a refusal, problem+json 409 #ready-for-agent
+  - Done in slice 6c: `common/outcome.json` is a `oneOf` with `no_change`
+    under `x-feature: calls` (`features.json`: `outcome.no_change`; the
+    feature-marking test reads a `oneOf` member's `x-feature`). The backend
+    reads the 2xx reply's `outcome` (`readOutcome`): `no_change` only from a
+    `calls` add-on, missing or unknown as indeterminate; the record says
+    `no_change` (migration 000092 widens the status CHECK, expand-only), the
+    dispatch audit row stays, and no count or "last succeeded" read takes it
+    for done.
+  - Decided while building (6c, open call): "an open call" has one spelling, `openCall` in db/addon_operations.go (`resolution IS NULL AND status IN ('dispatching','indeterminate')`), and one read, `newestOpenCall`: the insert's CALL_UNSETTLED check and the member page's `unsettled` (`db.OpenCall`, replacing `UnconfirmedChangeAt(…, 0)`, now the password page's read only) run the same statement, so the refusal and the page name the same row; `SupersedeAddonOperations` uses the fragment too. An unclaimed open row (a crash between record and claim) shows on the member's page as `checking` like any other; the poll (GET /me/targets/{t}/operations/{id}) settles it exactly as the operator's list does, via `SettleUnclaimedAddonOperations` (unreached once past the 2-minute grace, target-wide, certain because nothing was sent) and then reads `not_done`; /calls is never asked about it. Guard `TestAnOpenCallIsSpelledOnce`: the open-status list appears only in `openCall` and in `CountAddonOperations`' status bucket.
+  # 6c UI: decided while building
+  - Copy guide: the handoff and plan say "§13", but §13 is already "How fresh a read is" (6b). The 6c sentences are **§14 "Acting on things in the world"**; guard is `ui/src/lib/__tests__/actionsCopyGuide.test.ts`. The ESLint sentence guard now covers `components/actions/*.tsx` too (its message names both copy.ts files).
+  - One dialog, steps inside it (form, camera, preview, result, checking), never a second sheet: Modal's push-never-stack rule. The camera is a step of the action dialog, not its own Modal.
+  - Files: `components/actions/{MemberAction.tsx,TargetIdInput.tsx,copy.ts,outcomes.ts}`, `lib/queries/useMemberAction.ts` (preview/confirm mutation + the poll), new write kind `memberAction` in `invalidation.ts` (reads `["me","targets"]`, not the rail).
+  - The poll query key is `["me","operations",id]` with `staleTime: Infinity`: the settling poll alone carries `view`, a later poll answers `state` alone, so a settled record is never asked again (a remount would otherwise lose the record). `refetchInterval` 5000 until settled; stops on a 4xx except 429.
+  - The row keeps its watched id (`kept`) after the server stops listing it as `unsettled`, so a settled result stays on the row until the next press; the action is off while the server lists one OR this page's own poll says `checking` (covers the gap before the list refetch).
+  - `CALL_UNSETTLED` on a confirm with `details.operation`: the dialog shows that earlier record and polls it (nothing was sent); without `details` it is an ordinary refusal.
+  - Refusal words come from the error code (`copy.refusal`), never the server `message`; an unknown code falls to `outcomeFromError` (shared words). 5xx coded refusals are `failed` (request id quoted), 4xx are `refused`. All wear the word "Not done".
+  - `ask_desk` is drawn amber (`kind: "queued"` with its own `next`, so it never reads "Press Send"); `not_done` is `refused` with "You can try again."
+  - `ActionOutcome` no longer appends "Nothing was changed." after a message that says "Nothing went out" (regex widened); needed for the unreachable and unanswered-preview sentences.
+  - Operator row: `UnconfirmedChanges` words `item.checkout` through `checkoutWording` (copy.ts): "Ask at the desk whether {item} went out to {person}. If it did, it happened." Other physical operation ids fall to the generic row; add a case when a second physical operation ships.
+  - `components/actions/copy.ts` labels `item.checkout` as "Check out an item"; any other action id is shown as its id in words ("Item return"). A real label belongs in the manifest (a future `label` on the operation), noted, not built.
+  - Camera: `BarcodeDetector` + `getUserMedia({facingMode:"environment"})`, feature-detected after mount (no hydration mismatch); asked for only on the press; the stream stops on unmount however the step ends (read, Close, dialog closed, a stream that arrives after close). First label read fills the field; nothing is auto-submitted.
+  - Dev-only learning: the plain-language scan flags the identifier `target` as a parameter name in `lib/queries` code ("say the system's name"); the hook's parameter is `system`.
+  - 6c UI round 2: a lost-reply confirm (`mayHaveGoneThrough`) never says "Not done". It shows Checking at once (step `asking`), refetches `["me","targets"]`, and goes to checking on that target's `unsettled.id` for the same action. With no id it says "Not sure yet" (`UNSURE*` in copy.ts) with the step "Reload this page in a minute... Do not try again before then." The row has no outcome in that case because there is no id to watch. This is the one place dialog and row cannot show the same thing.
+  - RATE_LIMITED worded in `refusal`/`REFUSAL_CODES` (now 16) and the section 14 table: "Syndra is getting too many requests from you right now" / "Wait a minute, then try again." Its wording is deliberately different from TOO_MANY_ATTEMPTS, which is the per-action limit.
+  - One shared `inFlight` ref in ActionDialog guards both preview and confirm (`go`), set before `mutate` and cleared in `onSettled`. Confirm and "Show what will happen" have distinct `key`s so the footer button is a new node and focus is not carried onto it.
+  - Scan button: `aria-label` and `SCAN_ARIA` dropped; the visible text is the name. `useCanScan` is now async: it needs a camera and `BarcodeDetector.getSupportedFormats()` containing one of code_128, code_39, qr_code, ean_13, data_matrix. A detector with no `getSupportedFormats` is not offered.
+  - ask_desk: `UNSETTLED_DESK_REASON` "We still can't tell whether your last one went through. Ask at the desk." The row uses the polled state first, then `unsettled.state`.
+  - Guide section 14 gained 5 rows: the desk reason, 3 for the unsure outcome, and RATE_LIMITED.
 
 **`stats` (decisions 11–17)**
 
@@ -1542,6 +1655,22 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     all three to pass. A mirroring add-on's `-mutate` "before" read asks
     fresh and waits a cooldown out once. The guide's A.1 moved into chapter
     4, so A.2–A.5 are A.1–A.4 and `operations.physical` cites `a1-…`.
+  - [x] The `calls` part (slice 6c, 12 Nov 2026): checks `calls.unknown`
+    (reads), `calls.recorded` and `operations.physical` (`-mutate`; the
+    physical check needs `-item`, and the report names the item left checked
+    out), `calls.unsettled` and `calls.serialised` (always skip: a black-box
+    kit cannot lose a reply or know the limit; the reference's own tests hold
+    them). Watched to fail against `preview-recorded` and
+    `no-change-as-succeeded` (`operations.physical`) and `calls-echo-params`
+    (`operations.secret`), to skip on the plain reference and pass with
+    `-features results,calls -item item-0001`; the TrueNAS kit test requires
+    `calls.unknown` and `calls.recorded` to pass. Every calls check cites the
+    guide's chapter 7 section (A.1 moved there; A.2–A.4 are A.1–A.3).
+    - Decided while building: a `/calls` reply is compared to the first
+      reply by JSON value (it is embedded in another body); the replay of a
+      confirm is compared byte for byte. A physical op declared without
+      `calls` fails `operations.physical` in the reads phase, a MUST, so
+      `-mutate` refuses to write.
 
 ## Out of scope, stated so nobody builds it here
 

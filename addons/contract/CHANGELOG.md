@@ -3,6 +3,49 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Feature `calls` served, `effect: physical`, outcome `no_change` (slice 6c, 12 Nov 2026)
+
+Additive within major 2. Syndra now offers a `physical` operation only from
+an add-on declaring `calls` (and `results`, for its record), previews it
+(`preview: true`, no `call_id`, nothing recorded), dispatches the confirm
+once with a fresh `call_id`, never resends it, refuses the next while one is
+unsettled (`CALL_UNSETTLED`), and settles a lost answer, any write's, through
+`GET /calls/{call_id}`; a physical call in doubt past
+`constants.in_doubt_bound` becomes Waiting on you. Syndra reads a 2xx
+operation reply's own `outcome`: `succeeded`, `no_change` (from a `calls`
+add-on only, recorded as `no_change`), and anything else or nothing as
+possibly acted. The TrueNAS add-on declares `calls` (it has no physical
+operation; it answers `GET /calls` and refuses a preview).
+
+- Schema files: `common/outcome.json` (`oneOf`, `no_change` under
+  `x-feature: calls`, listed in `features.json` as `outcome.no_change`),
+  `error.json` (extension members `param`, `unit`, `count`; which codes
+  require them), `operation_response.json` (what a preview answers).
+- Registries: `operations.json` gives every id `secret_result` (all false)
+  and registers `item.checkout` (member, confirmed, `item_id` with
+  `format: target_id`, `effect: physical`, result `common/records.json`);
+  `errors.json` registers `UNKNOWN_RESOURCE` (404), `NOT_ENTITLED` (403),
+  `LIMIT_REACHED` (409) and `RESOURCE_TAKEN` (409), each `retry: never`.
+- Fixtures: new `operation_request_preview.json`,
+  `operation_response_no_change.json`, `call_in_doubt.json`,
+  `call_unknown.json`, `error_call_unsettled.json`,
+  `error_unknown_resource.json`, `error_not_entitled.json`,
+  `error_limit_reached.json`, `error_resource_taken.json`;
+  `manifest_inventory.json` declares `calls` and `item.checkout`;
+  `manifest_truenas.json` declares `calls`.
+- Decided while building: "held by someone else" is `RESOURCE_TAKEN` (409,
+  `param`; RFC 9110 §15.5.10), a refusal, never an outcome (O1);
+  `item.return` waits for the inventory add-on (O2); `GET /calls` keeps the
+  shipped `{call_id, state, reply}` (B1); a preview answers the outcome the
+  confirm would (B2).
+- The guide's appendix A.1 moved into chapter 7 as "Physical operations and
+  `GET /calls/{call_id}`"; A.2-A.4 are A.1-A.3.
+- Deploy and rollback: the backend and both add-ons ship together. An add-on
+  declaring `calls` beside a backend before 6c has its `no_change` read as
+  succeeded (that backend reads status alone), and its `GET /calls` unused;
+  migration 000092 only widens the record's status CHECK, and its down folds
+  `no_change` into `succeeded`, which is what that backend called it.
+
 ## Feature `freshness` served (slice 6b, 11 Nov 2026)
 
 Additive within major 2; no schema shape changed. Syndra now sends `fresh`

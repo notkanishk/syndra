@@ -47,6 +47,30 @@ var ErrSubjectNotActor = errors.New("addonop: a member-scoped operation may only
 // caller can log one (design §4: one read path, no log).
 var ErrReadNotDispatched = errors.New("addonop: a read is never dispatched; it goes through the one read path")
 
+// ErrPhysicalNotResent refuses a resend of a physical operation. Nobody sends
+// one again, ever (design §4 physical rule 2): a lost answer is settled by
+// asking the add-on (GET /calls), never by acting a second time.
+var ErrPhysicalNotResent = errors.New("addonop: a physical operation is never sent again")
+
+// ErrCallUnsettled refuses a physical operation while this subject's earlier
+// one is open, sent or about to be, and unsettled (CALL_UNSETTLED), checked
+// in the record's insert (db.OpenCallError). The add-on refuses it too; this
+// is the backend not leaving "never twice" to the least trusted component.
+var ErrCallUnsettled = errors.New("addonop: an earlier call of this operation for this subject is still unsettled")
+
+// UnsettledError is ErrCallUnsettled naming the earlier call, so the page can
+// show that one as still being checked.
+type UnsettledError struct {
+	OperationID string
+	SentAt      time.Time
+}
+
+func (e *UnsettledError) Error() string {
+	return fmt.Sprintf("%v: %s", ErrCallUnsettled, e.OperationID)
+}
+
+func (e *UnsettledError) Unwrap() error { return ErrCallUnsettled }
+
 // Request is one operation invocation.
 //
 // Params carries the secret and nothing else does. It reaches the add-on and is
@@ -71,9 +95,11 @@ type Request struct {
 	RetryOf string
 }
 
-// aboutOperations are the only operations whose record may carry `about`.
+// aboutOperations are the only operations whose record may carry `about`:
+// the item a checkout names is what the log says it was about (design §10).
 var aboutOperations = map[string]bool{
 	"account.adopt": true, "account.release": true, "account.purge": true, "setting.put": true,
+	"item.checkout": true,
 }
 
 // String, GoString and MarshalJSON all redact, because this type carries a
@@ -136,6 +162,16 @@ type Result struct {
 	// answer lacked an optional field, and the caller decides what an empty
 	// one means for the record it is about to write.
 	AccountID string
+	// NoChange is the add-on answering that nothing needed doing (Status
+	// no_change): Outcome is still succeeded, the state is as asked.
+	NoChange bool
+	// Code and Refusal are a refusal's code and what it names, for the page's
+	// words (UNKNOWN_RESOURCE and its param, LIMIT_REACHED and its limit).
+	Code    string
+	Refusal addons.Refusal
+	// View is a physical operation's reply for the generic renderer (the
+	// record made), through the read path's decoder; empty for a secret one.
+	View *addons.ReadView
 }
 
 // operationAnswer is the add-on's response envelope, narrowed to what this
@@ -263,6 +299,9 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	if op.Confirm && !req.Confirmed {
 		return Result{}, fmt.Errorf("%w: %s/%s", ErrConfirmationRequired, req.Target, req.Operation)
 	}
+	if op.Effect == addons.EffectPhysical && req.RetryOf != "" {
+		return Result{}, fmt.Errorf("%w: %s/%s", ErrPhysicalNotResent, req.Target, req.Operation)
+	}
 	if err := bindSubjectToActor(op.Scope, req.ActorID, req.SubjectID); err != nil {
 		return Result{}, fmt.Errorf("%w (%s/%s)", err, req.Target, req.Operation)
 	}
@@ -298,8 +337,21 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 		SubjectID: req.SubjectID,
 		About:     about,
 		RetryOf:   req.RetryOf,
+		// The backend's half of CALL_UNSETTLED: one check, in the insert, so
+		// a refused confirm leaves no record and sends nothing. The add-on
+		// refuses it too; this is not leaving "never twice" to the least
+		// trusted component.
+		Physical: op.Effect == addons.EffectPhysical,
 	})
-	if err != nil {
+	var open *db.OpenCallError
+	switch {
+	case errors.As(err, &open):
+		return Result{}, &UnsettledError{OperationID: open.OperationID, SentAt: open.SentAt}
+	case err != nil && op.Effect == addons.EffectPhysical:
+		// Fail closed: not knowing whether one is open is not knowing that
+		// sending again cannot act twice.
+		return Result{}, fmt.Errorf("%w: it could not be checked, nothing dispatched: %v", ErrCallUnsettled, err)
+	case err != nil:
 		// Nothing was sent. The record is the precondition for the call, not a
 		// log of it, so failing to write it means the call does not happen.
 		return Result{}, fmt.Errorf("addonop: no record committed, nothing dispatched: %w", err)
@@ -324,10 +376,16 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 		Params: req.Params,
 	})
 
-	// An outcome nobody has heard of is indeterminate, never success.
-	status := addons.StatusFor(resp.Outcome)
+	// An outcome nobody has heard of is indeterminate, never success; a
+	// no_change reply is recorded as no_change, never as done.
+	status := addons.StatusOf(resp)
 
-	result := Result{OperationID: id, Status: status, Outcome: resp.Outcome, Err: resp.Err}
+	result := Result{OperationID: id, Status: status, Outcome: resp.Outcome, Err: resp.Err,
+		NoChange: status == db.AddonOpNoChange, Code: resp.Code, Refusal: resp.Refusal}
+	if op.Effect == addons.EffectPhysical && resp.Outcome == addons.OutcomeSucceeded {
+		v := addons.ViewOf(req.Target, req.Operation, resp.Body)
+		result.View = &v
+	}
 	// Only on success, and never fatally. A body that will not parse is not a
 	// reason to un-succeed a call the target confirmed; it is a reason for the
 	// caller to see a zero and decide.
@@ -347,4 +405,27 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 		return result, fmt.Errorf("addonop: operation %s was dispatched but its outcome was not recorded: %w", id, err)
 	}
 	return result, nil
+}
+
+// Preview asks the add-on what a physical operation would do (design §4
+// physical rule 1), under the same checks as the confirm that may follow:
+// resolvable, physical, its subject bound to its actor, its parameters
+// valid. Nothing is recorded, counted or claimed, and nothing carries a
+// call_id: a preview is not an attempt at anything, so it spends no rate
+// limit and leaves no row (addons.Preview).
+func Preview(ctx context.Context, req Request) (addons.ReadReply, error) {
+	op, err := resolveOperation(req.Target, req.Operation)
+	if err != nil {
+		return addons.ReadReply{}, err
+	}
+	if op.Effect != addons.EffectPhysical {
+		return addons.ReadReply{}, fmt.Errorf("%w: %s/%s", addons.ErrNotPhysical, req.Target, req.Operation)
+	}
+	if err := bindSubjectToActor(op.Scope, req.ActorID, req.SubjectID); err != nil {
+		return addons.ReadReply{}, fmt.Errorf("%w (%s/%s)", err, req.Target, req.Operation)
+	}
+	if err := validateParams(op, req.Params); err != nil {
+		return addons.ReadReply{}, err
+	}
+	return previewAddon(ctx, req.Target, req.Operation, req.SubjectID, req.ActorID, req.Params), nil
 }

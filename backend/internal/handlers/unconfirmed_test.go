@@ -100,7 +100,7 @@ func TestTheListSettlesUnsentRecordsAndNamesTheChange(t *testing.T) {
 		return 1, nil
 	}
 	sent := time.Date(2026, 11, 2, 18, 5, 0, 0, time.UTC)
-	dbListUnresolvedAddonOperations = func(_ context.Context, target string, _ time.Duration, _ int) ([]db.AddonOperation, error) {
+	dbListUnresolvedAddonOperations = func(_ context.Context, target string, _ time.Duration, _ int, _ db.Hold) ([]db.AddonOperation, error) {
 		order = append(order, "list")
 		return []db.AddonOperation{{ID: "op_p", Target: target, Operation: "account.purge", ActorID: "op-1",
 			SubjectID: "u-sami", About: "sami.zayn", CreatedAt: sent.Add(-time.Second), ClaimedAt: &sent}}, nil

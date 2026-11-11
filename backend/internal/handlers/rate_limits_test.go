@@ -58,6 +58,35 @@ func TestRateLimit_SelfServiceWritesPerPerson(t *testing.T) {
 	}
 }
 
+// A member's poll of where their action stands, through the real router:
+// sixty at once pass to the handler (a malformed id is its own 404, read
+// nothing), the sixty-first is 429, and another person is untouched.
+func TestRateLimit_MemberPollPerPerson(t *testing.T) {
+	t.Setenv("ZITADEL_DOMAIN", "")
+	t.Setenv("SYNDRA_API_KEY", "test-key")
+	withLimiter(t, ratelimit.New(ratelimit.Memory(), nil, nil))
+	h := NewRouter()
+	poll := func(who string) int {
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets/inventory/operations/not-an-id", nil)
+		r.Header.Set("Authorization", "Bearer test-key")
+		r.Header.Set(demoSubjectHeader, who)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, r)
+		return rr.Code
+	}
+	for i := 0; i < 60; i++ {
+		if code := poll("u1"); code != http.StatusNotFound {
+			t.Fatalf("poll %d answered %d, want the handler's 404", i+1, code)
+		}
+	}
+	if code := poll("u1"); code != http.StatusTooManyRequests {
+		t.Fatalf("the 61st poll answered %d", code)
+	}
+	if code := poll("u2"); code != http.StatusNotFound {
+		t.Fatalf("another person answered %d", code)
+	}
+}
+
 // The event webhook shares the claims door's check: failures from one source
 // are 429 past the limit, and the kill switch puts them back to 401.
 func TestRateLimit_WebhookFailures(t *testing.T) {

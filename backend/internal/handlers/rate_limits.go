@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"syndra/internal/ratelimit"
 )
@@ -22,8 +23,19 @@ func limiter() *ratelimit.Limiter { return rateLimiter }
 // it stops a stuck client, never a person. Behind withUserAuth, so the bucket
 // is the authenticated subject's and nobody can spend somebody else's.
 func withSelfServiceLimit(next http.HandlerFunc) http.HandlerFunc {
+	return withPersonLimit((*ratelimit.Limiter).Person, next)
+}
+
+// withPollLimit counts a member's polled read against their own bucket
+// (ratelimit.DefaultPoll): the UI's 5-second poll never meets it, a client
+// polling in a loop does, before it costs an add-on call.
+func withPollLimit(next http.HandlerFunc) http.HandlerFunc {
+	return withPersonLimit((*ratelimit.Limiter).Poll, next)
+}
+
+func withPersonLimit(take func(*ratelimit.Limiter, *http.Request, string) time.Duration, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if wait := rateLimiter.Person(r, getAdminUserID(r.Context())); wait > 0 {
+		if wait := take(rateLimiter, r, getAdminUserID(r.Context())); wait > 0 {
 			ratelimit.Refuse(w, wait)
 			return
 		}

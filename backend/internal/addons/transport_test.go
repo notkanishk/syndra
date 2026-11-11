@@ -160,7 +160,7 @@ func TestCallCarriesPlanFingerprintAndOperationIdUnderSignature(t *testing.T) {
 		seen = true
 		sigE = verifySignature(r.Header.Get(SignatureHeader), r.Method, r.URL.Path, body, key, time.Minute, time.Now())
 		_ = json.Unmarshal(body, &env)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -210,7 +210,7 @@ func TestSignatureBindsBodyAndTimestamp(t *testing.T) {
 		mu.Lock()
 		header, body = r.Header.Get(SignatureHeader), b
 		mu.Unlock()
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -270,7 +270,7 @@ func TestThePinAdmitsTheRealAddOnAndRefusesEveryoneElse(t *testing.T) {
 	var handled atomic.Int32
 	count := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handled.Add(1)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	})
 
 	t.Run("the add-on derived from the same secret is admitted", func(t *testing.T) {
@@ -352,6 +352,10 @@ func TestFailureModesMapToTheirOutcome(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.status == http.StatusOK {
+					answered(w)
+					return
+				}
 				w.WriteHeader(tc.status)
 			}))
 			defer srv.Close()
@@ -401,7 +405,7 @@ func TestTimeoutIsIndeterminateNotFailed(t *testing.T) {
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-release
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer func() { close(release); srv.Close() }()
 
@@ -512,7 +516,7 @@ func TestSuccessClosesTheCircuit(t *testing.T) {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -555,7 +559,7 @@ func TestDispatchWithoutAnOperationRecordIsRefused(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -581,7 +585,7 @@ func TestUncallableOperationNeverReachesTheNetwork(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer srv.Close()
 
@@ -637,7 +641,7 @@ func TestNoFailureModeIsSilentSuccess(t *testing.T) {
 		var hits atomic.Int32
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			hits.Add(1)
-			w.WriteHeader(http.StatusOK)
+			answered(w)
 		}))
 		defer srv.Close()
 		signedAddon(t, srv.URL, "a-test-secret")
@@ -849,7 +853,7 @@ func TestARedirectIsRefusedAndNeverReplaysTheBody(t *testing.T) {
 		secondHits.Add(1)
 		b, _ := io.ReadAll(r.Body)
 		secondBody.Store(string(b))
-		w.WriteHeader(http.StatusOK)
+		answered(w)
 	}))
 	defer second.Close()
 
@@ -1298,4 +1302,11 @@ func TestALifecycleRefusalDoesNotClearTheBreaker(t *testing.T) {
 	if !b.allow(now) {
 		t.Fatal("a 4xx is a healthy add-on saying no, and must close the breaker")
 	}
+}
+
+// answered is an add-on's 200 to an operation, saying what it did: a 2xx with
+// no outcome is not an answer Syndra can stand behind (readOutcome).
+func answered(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"outcome":"succeeded"}`))
 }

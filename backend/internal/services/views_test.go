@@ -39,7 +39,7 @@ func resetGovernanceDeps(t *testing.T) {
 	// And the unconfirmed add-on changes, the seventh read.
 	origUnconfirmed := svcCountUnresolvedAddonOperations
 	t.Cleanup(func() { svcCountUnresolvedAddonOperations = origUnconfirmed })
-	svcCountUnresolvedAddonOperations = func(context.Context, time.Duration) (map[string]int, error) {
+	svcCountUnresolvedAddonOperations = func(context.Context, time.Duration, db.Hold) (map[string]int, error) {
 		return map[string]int{}, nil
 	}
 	// And the automatic retries, the eighth.

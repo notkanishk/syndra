@@ -82,11 +82,16 @@ function isOwnMemberRoute(method: "GET" | "POST" | "PUT" | "DELETE", path: strin
   if (method === "GET") {
     // Their own name and team, their own view of every target, the systems
     // they meet (their rail's rows), and what changed in their own access lately.
+    // And where one of their own actions stands (the poll after a confirm).
+    if (rest.length === 4 && rest[0] === "targets" && rest[2] === "operations") return true;
     return rest.length === 1 && ["profile", "targets", "systems", "changes"].includes(rest[0]);
   }
   if (method === "POST") {
     // POST /me/first-sign-in (the sign-in route's own call, idempotent and self-scoped).
     if (rest.length === 1 && rest[0] === "first-sign-in") return true;
+    // POST /me/targets/{target}/operations/{name}: a member's own action,
+    // previewed or confirmed (the backend binds the subject to them).
+    if (rest.length === 4 && rest[0] === "targets" && rest[2] === "operations") return true;
     // POST /me/targets/{target}/credential, and nothing else under the prefix.
     return rest.length === 3 && rest[0] === "targets" && rest[2] === "credential";
   }

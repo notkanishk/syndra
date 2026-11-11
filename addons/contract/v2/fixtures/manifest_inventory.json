@@ -5,7 +5,8 @@
   "kind": "inventory",
   "features": [
     "operations",
-    "results"
+    "results",
+    "calls"
   ],
   "entitlement_schema": [
     {
@@ -33,6 +34,26 @@
       "scope": "member",
       "confirm": false,
       "available": true
+    },
+    {
+      "id": "item.checkout",
+      "scope": "member",
+      "confirm": true,
+      "available": true,
+      "params": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "format": "target_id",
+            "title": "Item",
+            "description": "The id on the item's label, typed or scanned."
+          }
+        },
+        "required": [
+          "item_id"
+        ]
+      }
     }
   ],
   "limits": {

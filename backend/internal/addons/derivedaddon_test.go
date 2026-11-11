@@ -45,7 +45,7 @@ type derivedAddon struct {
 func serveDerived(t *testing.T, secret, target string, h http.Handler) *derivedAddon {
 	t.Helper()
 	if h == nil {
-		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { answered(w) })
 	}
 	srv := httptest.NewUnstartedServer(h)
 	srv.TLS = &tls.Config{

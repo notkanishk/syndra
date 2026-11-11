@@ -98,6 +98,8 @@ func (s *server) routes() http.Handler {
 	// a debugging session, so nothing here lets one be passed where the other
 	// is meant.
 	mux.HandleFunc("POST /operations/{name}", s.auth.authenticated(s.handleOperation))
+	// What was recorded for a write, by its call id (feature calls).
+	mux.HandleFunc("GET /calls/{call_id}", s.auth.authenticated(s.handleCall))
 	// Everything else, authenticated like the rest, is a registered refusal:
 	// every non-2xx is a problem with a code (design §11: an undeclared
 	// feature's route simply answers 404, and the backend reads that 404).

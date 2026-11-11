@@ -461,8 +461,13 @@ and nothing becomes a major 3 later (owner decisions 18, 20):
      original reply, `in_doubt` (intent logged, no result, the add-on is
      still finding out), or `unknown` (**no effect recorded**: the request
      never arrived or was refused before any write, so it is safe to
-     retry). The backend polls it on the operations page and the member
-     sees "we are checking whether it went through", then the outcome;
+     retry). The member's page polls it through the backend, which settles
+     its record on `recorded`, or on `unknown` for a physical call sent
+     within `constants.call_memory` (the operator's list asks the same
+     question first, for any write whose answer was lost but an adoption or
+     release, and leaves any other `unknown` to a person: decided while
+     building 6c), and the member sees "we are checking whether it went
+     through", then the outcome;
      `in_doubt` for longer than `constants.in_doubt_bound` (`PT1H`) becomes
      a `ready-for-human` item naming the desk.
   4. Natural idempotency, MUST on the add-on: checking out an item this
@@ -877,6 +882,7 @@ keep, and it does not pretend to.
 | lifecycle | `read_only` → apply answers `LIFECYCLE_REFUSAL` (503, `Retry-After`), reads still answer; no reason → `REASON_REQUIRED`; unknown → `UNKNOWN_LIFECYCLE_STATE`; back to `active` |
 | results (feature `results`) | every available `effect: read` operation answers one `result` valid against the schema `registry/operations.json` names for it (which holds `current: false` ⇔ `stale`), or an object for an id that declares its own; without the feature, a read with no registry `pocket` (`holdings.list`) declared available is a `fail`, and otherwise `skip` |
 | operations | unknown → 404; missing required param → 400; a canary secret value never appears in any later byte of any reply, health, error, replay or `/calls` answer (`secret_result` redaction included); a `physical` operation refuses without `confirm`, answers `preview: true` with no effect and no record (`log_records` unchanged; a preview sends nothing to `/calls`, and `/calls` on a never-used id → `unknown`), and `GET /calls/{call_id}` answers `recorded` after the confirm; a second call while the first is `in_doubt` → 409 `CALL_UNSETTLED` |
+| calls (feature `calls`, built in slice 6c) | `calls.unknown` (a never-used id → `unknown`, valid against `call.json`); `calls.recorded` (the `password.set` call's id → `recorded`, its reply equal by JSON value to the first; the canary scan covers it); `operations.physical`, with `-item` naming an item the run checks out to its subject and leaves so: a physical op declared without `calls` or without `confirm` fails, the preview's `result` validates and writes nothing, the confirm with a fresh id → `succeeded`, `log_records` +1, `/calls` → `recorded`, the same item under a new id → `no_change` with `log_records` unchanged, and the replay byte for byte. `calls.unsettled` and `calls.serialised` always skip: a black-box kit cannot lose a reply or know the limit, and the reference add-on's own tests hold both (decided while building 6c, as `freshness.unreachable`) |
 | transport | unsigned → 401; stale timestamp → 401; wrong key → 401 without saying which half; a signed request with its query reordered or altered → 401; the served key equals the derived one; the three query vectors in `transport_derivation.json` reproduce |
 | freshness (feature `freshness`) | four checks, each `skip` without the feature, measured by `health.target_reads` against a baseline of two back-to-back `/health` reads: `freshness.cached` (a read without `fresh` answered from the mirror says `stale.reason: cached` and does not advance the count); `freshness.cooldown` (`fresh: true` advances it, by what one read of the app costs, and a second at once answers `stale.reason: cooldown` with `retry_after` or 429 `FRESH_READ_COOLDOWN` with `Retry-After`, advancing it by nothing; `/plan` straight after is `current`); `freshness.coalesce` (two concurrent `fresh: true` reads advance it by what **one** fresh read alone does, and one of them is current); `freshness.unreachable` always skips (a black-box kit cannot take the app down; the add-on's own test holds the last known value answered as `stale.reason: unreachable`, not an error). The cooldown is read from `limits.fresh_read_cooldown`; one longer than the kit's `FreshWait` (35 s) is a skip with the reason. Every reply in scope holds `current == false` ⇔ `stale` present |
 | dangerous scopes | warn when `health.credential_scopes` intersects the declared kind's denylist (advisory: self-reported) |

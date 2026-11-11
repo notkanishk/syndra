@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://syndra.example.org/addon-contract/2/schema/operation_response.json",
   "title": "Operation response",
-  "description": "POST /operations/{name} reply. Thin by design: there is no field for the target's error payload. A feature-results add-on answers result; the typed pockets (activity, storage, health) are read only from an add-on without it and go at the next major.",
+  "description": "POST /operations/{name} reply. Thin by design: there is no field for the target's error payload. A feature-results add-on answers result; the typed pockets (activity, storage, health) are read only from an add-on without it and go at the next major. A preview (feature calls) answers what the confirm would: outcome succeeded or no_change, and result the would-be record; nothing is recorded.",
   "type": "object",
   "properties": {
     "operation": {

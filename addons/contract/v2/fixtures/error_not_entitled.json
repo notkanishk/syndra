@@ -1,0 +1,9 @@
+{
+  "type": "urn:syndra:addon:error:NOT_ENTITLED",
+  "title": "Not entitled",
+  "status": 403,
+  "detail": "This member may not borrow from that item's category.",
+  "code": "NOT_ENTITLED",
+  "retry": "never",
+  "param": "item_id"
+}

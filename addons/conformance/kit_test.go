@@ -142,7 +142,7 @@ func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
 			skipped = append(skipped, res.ID)
 		}
 	}
-	want := []string{"subjects.paged", "replay.29d", "results", "operations.physical",
+	want := []string{"subjects.paged", "replay.29d", "results", "calls.unknown", "calls.recorded", "operations.physical", "calls.unsettled", "calls.serialised",
 		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable", "dangerous-scopes"}
 	if !slices.Equal(skipped, want) {
 		t.Errorf("skipped %v, want exactly %v", skipped, want)
@@ -228,10 +228,19 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.CachedAsCurrent:     "freshness.cached",
 		reference.ReadsPerRequest:     "freshness.coalesce",
 		reference.CooldownIgnored:     "freshness.cooldown",
+		reference.PreviewRecorded:     "operations.physical",
+		reference.NoChangeAsSucceeded: "operations.physical",
+		reference.CallsEchoParams:     "operations.secret",
+		// A reply lost mid-call and two calls racing a limit are beyond a
+		// black-box kit (calls.unsettled, calls.serialised skip); the
+		// reference's own tests watch these two fail.
+		reference.ReexecutesInDoubt:    "(reference TestACallInDoubtIsNeverExecutedAgain)",
+		reference.CheckoutUnserialised: "(reference TestAConcurrentPairPassesTheLimitOnce)",
 	}
 	// A defect in a feature's half is served with that feature declared.
 	features := map[reference.Defect][]string{reference.ResultOffSchema: {"results"}, reference.ResultInPocket: {"results"},
-		reference.CachedAsCurrent: {"freshness"}, reference.ReadsPerRequest: {"freshness"}, reference.CooldownIgnored: {"freshness"}}
+		reference.CachedAsCurrent: {"freshness"}, reference.ReadsPerRequest: {"freshness"}, reference.CooldownIgnored: {"freshness"},
+		reference.PreviewRecorded: {"results", "calls"}, reference.NoChangeAsSucceeded: {"results", "calls"}, reference.CallsEchoParams: {"calls"}}
 	for _, d := range reference.Defects {
 		id, ok := catches[d]
 		if !ok {
@@ -244,7 +253,11 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		t.Run(string(d), func(t *testing.T) {
 			t.Parallel()
 			url, _ := serveRewriting(t, testSecret, nil, nil, features[d], d)
-			r, err := Run(context.Background(), config(url, true))
+			cfg := config(url, true)
+			if slices.Contains(features[d], "calls") {
+				cfg.Item = "item-0001"
+			}
+			r, err := Run(context.Background(), cfg)
 			if err != nil && !errors.Is(err, ErrReadsFailed) {
 				t.Fatal(err)
 			}
@@ -1799,6 +1812,202 @@ func TestACooldownMayBeA429WithRetryAfter(t *testing.T) {
 			r := run(t, config(srv.URL, false))
 			if got := r.Status("freshness.cooldown"); got != want {
 				t.Errorf("freshness.cooldown says %s, want %s: %v", got, want, failures(r))
+			}
+		})
+	}
+}
+
+// The calls checks skip without the feature, reads-only or not, and pass
+// against the reference serving it with an item named; operations.physical
+// waits for -item, and the last line names the item the run checked out.
+func TestTheCallsChecksJudgeOnlyWhatIsDeclared(t *testing.T) {
+	url, _ := serve(t, testSecret, nil)
+	for _, mutate := range []bool{false, true} {
+		r := run(t, config(url, mutate))
+		for _, id := range callChecks {
+			if res := result(r, id); res.Status != "skip" || !slices.Equal(res.Detail, []string{notDeclared}) {
+				t.Errorf("mutate %v: %s says %s %v without the feature, want skip: %s", mutate, id, res.Status, res.Detail, notDeclared)
+			}
+		}
+	}
+
+	features := []string{"results", "calls"}
+	url, seen := serveRewriting(t, testSecret, nil, nil, features)
+	if r := run(t, config(url, false)); r.Status("calls.unknown") != "pass" || r.Failed() {
+		t.Errorf("reads-only: calls.unknown says %s (failed %v): %v", r.Status("calls.unknown"), r.Failed(), failures(r))
+	}
+	r := run(t, config(url, true))
+	if got := r.Status("operations.physical"); got != "skip" || r.Failed() {
+		t.Errorf("without -item operations.physical says %s (failed %v): %v", got, r.Failed(), failures(r))
+	}
+
+	url, seen = serveRewriting(t, testSecret, nil, nil, features)
+	cfg := config(url, true)
+	cfg.Item = "item-0001"
+	r = run(t, cfg)
+	for _, f := range failures(r) {
+		t.Errorf("%s failed against the reference serving calls: %v", f.ID, f.Detail)
+	}
+	for _, id := range []string{"calls.unknown", "calls.recorded", "operations.physical"} {
+		if got := r.Status(id); got != "pass" {
+			t.Errorf("%s says %s against the reference serving calls, want pass", id, got)
+		}
+	}
+	for _, id := range []string{"calls.unsettled", "calls.serialised"} {
+		if got := r.Status(id); got != "skip" {
+			t.Errorf("%s says %s, want skip: a black-box kit cannot judge it", id, got)
+		}
+	}
+	if !strings.Contains(r.Left, `item "item-0001" is checked out`) {
+		t.Errorf("left %q does not name the item the run checked out", r.Left)
+	}
+	if n := slices.Index(seen(), "POST /operations/item.checkout"); n < 0 {
+		t.Error("item.checkout was never sent")
+	}
+}
+
+// A confirm whose answer is lost or unreadable may have checked the item out,
+// so the last line names it to check; a refusal did nothing, and names none.
+func TestALostConfirmStillNamesTheItemLeft(t *testing.T) {
+	var mu sync.Mutex
+	n := 0
+	url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+		if r.URL.Path != "/operations/item.checkout" {
+			return reply
+		}
+		mu.Lock()
+		n++
+		i := n
+		mu.Unlock()
+		if i == 2 { // preview, then the confirm
+			return []byte("<html>bad gateway</html>")
+		}
+		return reply
+	}, []string{"results", "calls"})
+	cfg := config(url, true)
+	cfg.Item = "item-0001"
+	r, err := Run(context.Background(), cfg)
+	if err != nil && !errors.Is(err, ErrReadsFailed) {
+		t.Fatal(err)
+	}
+	if r.Status("operations.physical") != "fail" || !strings.Contains(r.Left, `item "item-0001" may be checked out`) {
+		t.Errorf("a lost confirm: operations.physical %s, left %q", r.Status("operations.physical"), r.Left)
+	}
+
+	url, _ = serveRewriting(t, testSecret, nil, nil, []string{"results", "calls"})
+	cfg = config(url, true)
+	cfg.Item = "item-none-such"
+	if r, _ = Run(context.Background(), cfg); strings.Contains(r.Left, "item-none-such") {
+		t.Errorf("a refused confirm named its item: %q", r.Left)
+	}
+}
+
+// A physical operation is declared only with feature calls and confirm: true.
+func TestAPhysicalOperationDeclaredWithoutCallsOrConfirmFails(t *testing.T) {
+	for what, edit := range map[string][2]string{
+		"without calls":   {`,"calls"]`, `]`},
+		"without confirm": {`"confirm":true,"id":"item.checkout"`, `"confirm":false,"id":"item.checkout"`},
+	} {
+		t.Run(what, func(t *testing.T) {
+			url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+				if r.URL.Path != "/capabilities" {
+					return reply
+				}
+				out := bytes.Replace(reply, []byte(edit[0]), []byte(edit[1]), 1)
+				if bytes.Equal(out, reply) && bytes.Contains(reply, []byte(`"features"`)) {
+					t.Errorf("the rewrite %q found nothing in %s", edit[0], reply)
+				}
+				return out
+			}, []string{"results", "calls"})
+			cfg := config(url, true)
+			cfg.Item = "item-0001"
+			r, err := Run(context.Background(), cfg)
+			if err != nil && !errors.Is(err, ErrReadsFailed) {
+				t.Fatal(err)
+			}
+			if got := r.Status("operations.physical"); got != "fail" {
+				t.Errorf("a physical operation %s: operations.physical says %s, want fail", what, got)
+			}
+		})
+	}
+}
+
+func result(r *Report, id string) Result {
+	for _, res := range r.Results {
+		if res.ID == id {
+			return res
+		}
+	}
+	return Result{}
+}
+
+// /calls is judged on what it says, not on answering: a never-used id said
+// to be in doubt, and a recorded reply that is not the first one, each fail.
+func TestCallsAnswersAreHeldToWhatWasSent(t *testing.T) {
+	for id, edit := range map[string][2]string{
+		"calls.unknown":  {`"state":"unknown"`, `"state":"in_doubt"`},
+		"calls.recorded": {`"detail":"Password set."`, `"detail":"Password set, twice."`},
+	} {
+		t.Run(id, func(t *testing.T) {
+			url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+				if !strings.HasPrefix(r.URL.Path, "/calls/") {
+					return reply
+				}
+				return bytes.Replace(reply, []byte(edit[0]), []byte(edit[1]), 1)
+			}, []string{"results", "calls"})
+			r, err := Run(context.Background(), config(url, true))
+			if err != nil && !errors.Is(err, ErrReadsFailed) {
+				t.Fatal(err)
+			}
+			if got := r.Status(id); got != "fail" {
+				t.Errorf("%s says %s against a /calls rewritten %q to %q, want fail", id, got, edit[0], edit[1])
+			}
+		})
+	}
+}
+
+// operations.physical holds each half on its own: a no_change that wrote (the
+// reply put back to no_change, the log record left), and a replay of the
+// confirm that is not its reply byte for byte, each fail.
+func TestThePhysicalCheckHoldsTheLogAndTheReplay(t *testing.T) {
+	for what, tc := range map[string]struct {
+		defects []reference.Defect
+		rewrite func(n int, reply []byte) []byte
+	}{
+		"no_change that wrote": {[]reference.Defect{reference.NoChangeAsSucceeded}, func(_ int, reply []byte) []byte {
+			if !bytes.Contains(reply, []byte("Nothing changed.")) {
+				return reply
+			}
+			return bytes.Replace(reply, []byte(`"outcome":"succeeded"`), []byte(`"outcome":"no_change"`), 1)
+		}},
+		"a replay that is another reply": {nil, func(n int, reply []byte) []byte {
+			if n != 4 { // preview, confirm, the same item again, the replay
+				return reply
+			}
+			return bytes.Replace(reply, []byte(`"detail":"Checked out."`), []byte(`"detail":"Checked out again."`), 1)
+		}},
+	} {
+		t.Run(what, func(t *testing.T) {
+			var mu sync.Mutex
+			n := 0
+			url, _ := serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+				if r.URL.Path != "/operations/item.checkout" {
+					return reply
+				}
+				mu.Lock()
+				n++
+				i := n
+				mu.Unlock()
+				return tc.rewrite(i, reply)
+			}, []string{"results", "calls"}, tc.defects...)
+			cfg := config(url, true)
+			cfg.Item = "item-0001"
+			r, err := Run(context.Background(), cfg)
+			if err != nil && !errors.Is(err, ErrReadsFailed) {
+				t.Fatal(err)
+			}
+			if got := r.Status("operations.physical"); got != "fail" {
+				t.Errorf("%s: operations.physical says %s, want fail", what, got)
 			}
 		})
 	}

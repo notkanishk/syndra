@@ -2,9 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://syndra.example.org/addon-contract/2/schema/common/outcome.json",
   "title": "Operation outcome",
-  "description": "The outcome the add-on reports for an operation it ran. The backend's own transport outcomes (rejected, unreached, indeterminate) are derived from what happens to the call and never appear on the wire.",
+  "description": "The outcome the add-on reports for an operation it ran. succeeded: it acted. no_change (feature calls): the state was already as asked, so nothing was written and log_records is unchanged (an item the subject already holds). A refusal (someone else holds it) is never an outcome: it is a problem+json 4xx. The backend's own transport outcomes (rejected, unreached, indeterminate) are derived from what happens to the call and never appear on the wire.",
   "type": "string",
-  "enum": [
-    "succeeded"
+  "oneOf": [
+    {
+      "const": "succeeded"
+    },
+    {
+      "const": "no_change",
+      "x-feature": "calls"
+    }
   ]
 }

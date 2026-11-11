@@ -20,6 +20,7 @@ type manifest struct {
 	fields   []struct{ Name, Role, Unlimited string }
 	account  string
 	ops      map[string]bool // id → available
+	confirm  map[string]bool // id → confirm
 	perPlan  int64           // limits.subjects_per_plan, 0 when undeclared
 	cooldown string          // limits.fresh_read_cooldown as declared, "" when undeclared
 }
@@ -84,7 +85,7 @@ func (k *kit) reads() {
 	ex := k.send(request{method: http.MethodGet, target: "/conformance/no-such-route"})
 	k.refused(k.at("error-envelope"), ex, 404, "UNKNOWN_ROUTE", "an unknown route")
 
-	k.at("operations.physical").skip("feature calls: this kit does not check it yet")
+	k.callsRead(k.at("calls.unknown"))
 	k.freshness()
 	k.scopes(k.at("dangerous-scopes"), health)
 }
@@ -139,7 +140,7 @@ func (k *kit) manifest(c *check, ex *exchange) *manifest {
 	if doc == nil {
 		return nil
 	}
-	m := &manifest{kind: str(doc, "kind"), ops: map[string]bool{}}
+	m := &manifest{kind: str(doc, "kind"), ops: map[string]bool{}, confirm: map[string]bool{}}
 	m.features, _ = stringList(doc["features"])
 	n, _ := num(doc["contract_version"])
 	c.expect(n == Major, "contract_version %v, the kit speaks %d", doc["contract_version"], Major)
@@ -161,6 +162,7 @@ func (k *kit) manifest(c *check, ex *exchange) *manifest {
 		_, registered := k.c.operations[str(op, "id")]
 		c.expect(registered, "operation %q is not in registry/operations.json", str(op, "id"))
 		m.ops[str(op, "id")], _ = op["available"].(bool)
+		m.confirm[str(op, "id")], _ = op["confirm"].(bool)
 	}
 	c.expect(len(m.ops) == 0 || m.has("operations"), "operations are declared without feature operations")
 	for _, f := range m.features {

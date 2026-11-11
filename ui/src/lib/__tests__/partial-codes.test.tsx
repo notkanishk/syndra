@@ -97,6 +97,10 @@ const NOTHING_WRITTEN = new Set([
   "ZITADEL_NOT_CONFIGURED", "PLAN_NOT_RECORDED", "PLAN_CLAIM_ERROR", "ROLE_MEMBERS_ERROR", "INDICATORS_ERROR",
   "SERVER_ERROR", "NOT_AUDITED", "APPS_UNREADABLE", "DIRECTORY_UNAVAILABLE", "DIRECTORY_UNREACHABLE",
   "UNCONFIRMED_READ_FAILED", "PLAN_ERROR", "DB_ERROR", "LOOKUP_ERROR", "PROCESSING_FAULT",
+  // A member's action (handlers/member_operations.go): a preview has no effect
+  // by contract; the poll is a read; an unreadable earlier call refuses before
+  // any record. A confirm whose answer was lost is a 202 "checking", never a 5xx.
+  "PREVIEW_UNANSWERED", "ACTION_READ_FAILED", "CALL_UNSETTLED_UNKNOWN",
 ]);
 
 describe("every 5xx code in the handlers is decided", () => {

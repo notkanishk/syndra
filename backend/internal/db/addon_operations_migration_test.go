@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -124,6 +125,7 @@ func TestAddonOperationsHasNoColumnThatCouldHoldASecret(t *testing.T) {
 // list. A mismatch surfaces as a constraint violation on a dispatch that has
 // already happened, which is the worst moment to discover a typo.
 func TestAddonOperationStatusesMatchTheCheck(t *testing.T) {
+	addonOpsStatusMigrationsOnDisk(t)
 	up, _ := addonOpsMigrationSQL(t)
 	body := stripSQLComments(up)
 
@@ -136,8 +138,21 @@ func TestAddonOperationStatusesMatchTheCheck(t *testing.T) {
 		t.Errorf("the column defaults to %q; a record must be born non-terminal, as %q", m[1], AddonOpDispatching)
 	}
 
+	// The vocabulary is the newest CHECK that defines it: 000092 widened
+	// 000027's (no_change), and a later one may again.
+	list := m[2]
+	newest := regexp.MustCompile(`(?is)ADD\s+CONSTRAINT\s+addon_operations_status_check\s+CHECK\s*\(\s*status\s+IN\s*\(([^)]*)\)`)
+	for _, name := range addonOpsStatusMigrations {
+		up, _ := readMigrationPair(t, name)
+		mm := newest.FindStringSubmatch(stripSQLComments(up))
+		if mm == nil {
+			t.Fatalf("%s names no addon_operations_status_check; the guard cannot verify what it cannot read", name)
+		}
+		list = mm[1]
+	}
+
 	var inCheck []string
-	for _, part := range strings.Split(m[2], ",") {
+	for _, part := range strings.Split(list, ",") {
 		inCheck = append(inCheck, strings.Trim(strings.TrimSpace(part), "'"))
 	}
 	sort.Strings(inCheck)
@@ -345,7 +360,13 @@ func TestNoLaterMigrationAltersTheRecordTable(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if re.MatchString(stripSQLComments(string(raw))) {
+		sql := stripSQLComments(string(raw))
+		if slices.Contains(addonOpsStatusMigrations, strings.TrimSuffix(filepath.Base(p), ".up.sql")) {
+			// Redefines the status CHECK and nothing else: every statement
+			// touching the table is one of the two that do that.
+			sql = statusCheckOnly.ReplaceAllString(sql, "")
+		}
+		if re.MatchString(sql) {
 			t.Fatalf("%s alters addon_operations. Every column on this table lives beside a subject's "+
 				"identity forever and the table is written on the path that carries a password: a column "+
 				"is a decision, made in the closed list in TestUnconfirmedMigrationAddsOnlyItsColumns, "+
@@ -414,5 +435,55 @@ func TestAnUnclaimedRowMaySettleOnlyAsUnreached(t *testing.T) {
 	if !strings.Contains(sql, "claimed_at IS NOT NULL OR status IN ('dispatching', 'unreached')") {
 		t.Error("the same invariant must hold as a CHECK, or a future writer that does not go through " +
 			"SettleAddonOperation can record an answer from a target that was never asked")
+	}
+}
+
+// statusCheckOnly is the one alteration of addon_operations a later migration
+// may make outside the closed column list: dropping and re-adding the status
+// CHECK (a vocabulary, never a column).
+var statusCheckOnly = regexp.MustCompile(`(?is)ALTER\s+TABLE\s+addon_operations\s+(DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+addon_operations_status_check|ADD\s+CONSTRAINT\s+addon_operations_status_check\s+CHECK\s*\(\s*status\s+IN\s*\([^)]*\)\s*\))\s*;`)
+
+// addonOpsStatusMigrations are the migrations after 000027 that redefine the
+// status CHECK, oldest first; the last one's list is the vocabulary.
+var addonOpsStatusMigrations = []string{"000092_addon_operation_no_change"}
+
+// addonOpsStatusMigrationsOnDisk fails when a migration redefines the status
+// CHECK and is not in the list above, so the guard cannot read a stale one.
+func addonOpsStatusMigrationsOnDisk(t *testing.T) {
+	t.Helper()
+	entries, err := os.ReadDir(findMigrationsDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found []string
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".up.sql") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(findMigrationsDir(t), e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(stripSQLComments(string(raw)), "addon_operations_status_check") {
+			found = append(found, strings.TrimSuffix(e.Name(), ".up.sql"))
+		}
+	}
+	if strings.Join(found, ",") != strings.Join(addonOpsStatusMigrations, ",") {
+		t.Errorf("migrations redefining addon_operations_status_check: %v; the guard reads %v", found, addonOpsStatusMigrations)
+	}
+}
+
+// 6.3a: 000092 only widens the status CHECK by no_change (expand-only), and
+// its down folds no_change into succeeded, which is what a backend before it
+// read every 2xx as, so the narrower CHECK can be restored.
+func TestMigration92_WidensTheStatusCheckByNoChange(t *testing.T) {
+	up, down := readMigrationPair(t, "000092_addon_operation_no_change")
+	up, down = stripSQLComments(up), stripSQLComments(down)
+	if !strings.Contains(up, "'indeterminate', 'no_change'") || strings.Contains(up, "UPDATE") {
+		t.Error("000092 up must add no_change to the status CHECK and write no row")
+	}
+	if !strings.Contains(down, "UPDATE addon_operations SET status = 'succeeded' WHERE status = 'no_change'") ||
+		strings.Contains(down, "no_change'))") {
+		t.Error("000092 down must fold no_change into succeeded and restore the CHECK without it")
 	}
 }

@@ -1,0 +1,11 @@
+{
+  "type": "urn:syndra:addon:error:LIMIT_REACHED",
+  "title": "Limit reached",
+  "status": 409,
+  "detail": "This member already holds as many items as they may.",
+  "code": "LIMIT_REACHED",
+  "retry": "never",
+  "limit": 2,
+  "unit": "items",
+  "count": 2
+}

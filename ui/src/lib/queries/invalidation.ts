@@ -41,6 +41,8 @@ export type WriteKind =
   | "target"
   /** A member's own storage credential. */
   | "storageCredential"
+  /** A member confirmed a physical action: what they hold and what is unsettled changed. */
+  | "memberAction"
   /** Term dates. */
   | "terms"
   /** The welcome-claims switch. */
@@ -113,6 +115,7 @@ export function keysFor(kind: WriteKind, scope: WriteScope = {}): QueryKey[] {
       case "target":
         return [target ? ["targets", target] : ["targets"], ["audit"], GOVERNANCE];
       case "storageCredential":
+      case "memberAction":
         return [["me", "targets"]];
       case "terms":
         return [["terms"], ["insights"]];

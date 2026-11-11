@@ -713,3 +713,73 @@ Every read of a system carries when it was read, and an add-on may answer from i
 | The same refusal: its next step once the count is over | Press the same button once more. |
 
 A 429 is a cooldown only when it carries the code `FRESH_READ_COOLDOWN` (a proxy's own 429 is an ordinary failure). The count starts from the add-on's `retry_after` (or the Retry-After header), from when the answer arrived, and is a deadline, never a tally of ticks: leaving the page and coming back does not restart it, and a second refusal does. A copy the add-on kept is drawn neutral (grey dot, faint text) at any age, because it is the normal state. A cooldown is amber when the reader caused it, and a cooldown carried in the data always is (only a press reads fresh); a page load inside somebody else's wait is marked as such at the load site and is neutral, like a copy. The colour is chosen by what the line says: the cooldown while it counts, then a copy is neutral when it is not current and anything else is drawn by its age. An unreachable system stays amber. Every cooldown counts from when its answer arrived (the query's `dataUpdatedAt`, or the time of the refusal), wherever it is drawn. The control is off, with the line beside it as its reason, until the count ends. A read that is only a copy keeps every binding action blocked (Adopt stays off until Read again returns a current read); the unreachable line has no control because only time helps. The words are never "Refresh".
+
+## 14. Acting on things in the world (addon-contract slice 6c)
+
+A member can do something to a thing on a system that an add-on declares `physical` (today, `item.checkout`): press the action, see what will happen, press **Confirm**. The page knows nothing about items; it draws the add-on's declared actions and parameters. `components/actions/copy.ts` holds every sentence; `actionsCopyGuide.test.ts` fails when this table and that file disagree, and the lint guard refuses an inline sentence in `components/actions/*.tsx` (as in section 12). `{param}` is the parameter's name in words ("item id"), `{n}`, `{limit}` and `{unit}` come from the refusal's details; the value a member typed is never in a sentence or a message the server sends. Every outcome ends on a next step or "Nothing for you to do."
+
+**Nothing here may suggest the member caused what is not theirs.** A system that does not answer, a record still being settled, an item someone else has: each says what is true about the system or the item, never "you failed", "you forgot" or "you chose wrong". The words are **Done**, **Nothing changed**, **Not done**, **Checking** and **Not sure yet**; a refusal's word is always **Not done**, and the page words it from the error code (`refusal` in `copy.ts`), never from the server's message.
+
+| When | Says |
+|---|---|
+| The form | Say which one. Nothing is sent until you confirm. |
+| The id field's hint | Type the id on its label, or scan it. |
+| The camera button (only where the browser can read labels) | Scan with camera |
+| The camera dialog: title | Scan the label |
+| The camera dialog: body | Hold the label in front of the camera. The id is filled in when it reads it. |
+| The camera is starting | Starting the camera |
+| The camera cannot be used | The camera could not be used. Type the id instead. |
+| The preview's button | Show what will happen |
+| The preview: lede | This is what will happen. Nothing has been sent yet. |
+| The preview: under the buttons | Nothing is sent to {name} until you press Confirm. |
+| The preview: they already have it (no Confirm) | You already have this, so there is nothing to confirm. Nothing for you to do. |
+| The preview could not be read: title | The preview could not be shown |
+| The preview could not be read: body | {name} answered, but Syndra could not read what it said. Nothing was sent. |
+| The preview could not be read: next step | Go back and try again. |
+| The confirm's button | Confirm |
+| The action while their last one is still being settled (the button is off, this is its reason) | Your last one is still being checked. Wait for it before trying again. |
+| The same, once it is still in doubt after an hour | We still can't tell whether your last one went through. Ask at the desk. |
+| It went through | It went through |
+| It was already theirs | You already have this |
+| The system did not do it | It did not happen. Nothing was changed |
+| The system did not do it: next step | You can try again. |
+| The answer was lost: the sentence | We're checking whether it went through |
+| The answer was lost: the detail | It was sent, and the answer did not come back. |
+| The answer was lost: next step | Nothing for you to do. This page checks again on its own, and Syndra will not send it again. |
+| The answer was lost and the last ask did not get through | We could not check just now. This page tries again on its own. |
+| The answer was lost and no record of it can be found: the sentence | We can't tell yet whether it went through |
+| The answer was lost and no record of it can be found: the detail | It was sent, and the answer did not come back. |
+| The answer was lost and no record of it can be found: next step | Reload this page in a minute to see where it stands. Do not try again before then. |
+| Still in doubt after an hour: the sentence | We still can't tell whether it went through |
+| Still in doubt after an hour: the detail | Staff have been told. |
+| Still in doubt after an hour: next step | Ask at the desk. |
+| Unknown id | Nothing matches that {param}. Nothing was changed. Check the label and type it again. |
+| Their roles do not allow it | Your roles do not allow this for that {param}. Nothing was changed. Ask makerspace staff, or ask for access in Requests. |
+| Someone else has it | Someone else has that one. Nothing was changed. Pick another, or ask at the desk. |
+| At their limit | You are at your limit: {n} of {limit} {unit}. Nothing was changed. Return one first, then try again. |
+| Their last one is still open | Your last one is still being checked. Nothing was changed. Wait for it before trying again. |
+| Refused for a reason it did not give | That system refused this and gave no reason. Nothing was changed. Ask makerspace staff. |
+| No role reaches the system | None of your roles reaches this system. Nothing was changed. Ask for access in Requests. |
+| Their account is not made | Your account here is not made yet. Nothing was changed. Nothing for you to do. Syndra makes it. |
+| The system is paused | Changes on that system are paused. Nothing was changed. Try again later. If it stays paused, ask makerspace staff. |
+| The system cannot do it now | That system cannot do this right now. Nothing was changed. Try again in a minute. If it keeps failing, ask makerspace staff. |
+| The system does not offer it | This system does not offer that. Nothing was changed. Reload the page to see what it offers now. |
+| The system is not answering | That system is not answering. Nothing went out. Try again in a minute. If it keeps failing, ask makerspace staff. |
+| The preview got no answer | That system did not answer the preview. Nothing went out. Try again in a minute. If it keeps failing, ask makerspace staff. |
+| Syndra could not check their last one | We could not check on your last one. Nothing went out. Try again in a minute. |
+| Too many tries | That was tried too many times in a short while. Nothing was changed. Wait a few minutes, then try again. |
+| Too many requests (the shared per-member limit) | Syndra is getting too many requests from you right now. Nothing was changed. Wait a minute, then try again. |
+
+The dialog is one dialog: the form, the preview, the camera and the result are its steps, never a second sheet on top. A confirm is sent once. When its answer is lost the page asks `GET .../operations/{id}` every 5 s (the server limits a member to 60 a minute) until it settles; it never sends again, and the action stays off while any confirm of theirs is open, on a reload too. A refusal that leaves something to fix (unknown id, taken, a limit) keeps a **Back** to the form.
+
+**On the operator's list (Waiting on you).** A checkout whose answer was lost, once it has been in doubt for an hour, is a row like every other unconfirmed change: it says what was asked, **Ask at the desk whether {item} went out to {person}. If it did, it happened.**, and takes the same two answers. `checkoutWording` in `copy.ts` holds those words.
+
+| Row | Says |
+|---|---|
+| What was asked | Check out {item} to {person} |
+| The question | Did {item} go out to {person}? |
+| How to tell | Ask at the desk whether {item} went out to {person}. If it did, it happened. |
+| It happened | {item} went out to {person}. |
+| It didn't happen | {item} did not go out to {person}. |
+| After "It happened" | {item} went out to {person} on {name}. |
+| After "It didn't happen" | You recorded that {item} did not go out to {person}. |

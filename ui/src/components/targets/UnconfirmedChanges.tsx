@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAfter } from "@/lib/queries/invalidation";
 import { useState } from "react";
 
+import { checkoutWording } from "@/components/actions/copy";
 import { UserName } from "@/components/names";
 import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -129,6 +130,9 @@ function wording(op: UnconfirmedOperation, who: string, name: string) {
         notDone: `You recorded that ${name} didn't change to ${state}.`,
       };
     }
+    // A physical act is settled at the desk, so the row says to ask there (addon-contract 6c).
+    case "item.checkout":
+      return checkoutWording(op.about, who, name);
     case "setting.put":
       return homeSettingWording(op, name);
     default:

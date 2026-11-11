@@ -57,6 +57,13 @@ type ReadReply struct {
 	// RetryAfter is the add-on refusing a fresh read inside its cooldown with
 	// nothing to serve (cooldownOf): the seconds until it may read the app.
 	RetryAfter int
+	// Code and Refusal are a refusal's code and what it names (a preview
+	// refused for an unknown item, a limit reached).
+	Code    string
+	Refusal Refusal
+	// NoChange is a preview answered no_change: the confirm would change
+	// nothing (the subject already holds it).
+	NoChange bool
 }
 
 // Read sends one effect: read operation about subject, on behalf of actor.
@@ -91,29 +98,105 @@ func Read(ctx context.Context, target, op, subject, actor string, params map[str
 		return out
 	}
 	out.Schema, out.Pocket, out.Results = eff.Result, eff.Pocket, m.Declares("results")
-	body, err := json.Marshal(map[string]any{
+	body := operationBody(op, subject, actor, params)
+	// Ignored by the add-on (a read is never deduplicated), and still sent:
+	// the request schema requires one.
+	body["call_id"] = "read-" + target + "-" + subject
+	raw, err := json.Marshal(body)
+	if err != nil {
+		out.Err = err
+		return out
+	}
+	return out.sent(a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/" + url.PathEscape(op), Body: raw, Fresh: fresh}))
+}
+
+// operationBody is an operation request's body as every unrecorded send
+// carries it: a read, and a physical operation's preview.
+func operationBody(op, subject, actor string, params map[string]any) map[string]any {
+	return map[string]any{
 		"contract_version": ContractVersion,
-		// Ignored by the add-on (a read is never deduplicated), and still sent:
-		// the request schema requires one.
-		"call_id":   "read-" + target + "-" + subject,
-		"operation": op,
+		"operation":        op,
 		// Empty for a read about the target itself (health.get): it travels
 		// empty rather than omitted, the same shape every operation sends.
 		"subject": subject,
 		"actor":   actor,
 		"params":  params,
-	})
+	}
+}
+
+// sent fills r from what send answered.
+func (r ReadReply) sent(resp CallResponse, err error) ReadReply {
+	if err != nil {
+		r.Err = err
+		return r
+	}
+	r.Body, r.Outcome, r.Status, r.Err, r.RetryAfter = resp.Body, resp.Outcome, resp.Status, resp.Err, cooldownOf(resp)
+	r.Code, r.Refusal, r.NoChange = resp.Code, resp.Refusal, resp.NoChange
+	return r
+}
+
+// ErrNotPhysical is Preview asked for an operation whose effect is not
+// physical: only a physical operation is confirmed after a preview.
+var ErrNotPhysical = errors.New("addon: only a physical operation is previewed")
+
+// Preview sends a physical operation with `preview: true` (design §4 physical
+// rule 1): the add-on answers the record the confirm would make (or no_change)
+// and does nothing. Never recorded, never claimed, and never with a call_id,
+// so nothing the add-on keeps can be replayed as the confirm's answer; the
+// confirm is a separate send, recorded, with its own fresh id (Dispatch).
+// Only to an add-on declaring calls, the feature the request field is under.
+// The caller binds subject and actor (addonop.Preview).
+func Preview(ctx context.Context, target, op, subject, actor string, params map[string]any) ReadReply {
+	out := ReadReply{Operation: op, Target: target, Outcome: OutcomeUnreached}
+	eff, err := ResolveOperation(target, op)
 	if err != nil {
 		out.Err = err
 		return out
 	}
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/" + url.PathEscape(op), Body: body, Fresh: fresh})
+	if eff.Effect != EffectPhysical {
+		out.Err = fmt.Errorf("%w: %s/%s", ErrNotPhysical, target, op)
+		return out
+	}
+	if err := ValidateParams(eff, params); err != nil {
+		out.Err = err
+		return out
+	}
+	a, err := Get(target)
 	if err != nil {
 		out.Err = err
 		return out
 	}
-	out.Body, out.Outcome, out.Status, out.Err, out.RetryAfter = resp.Body, resp.Outcome, resp.Status, resp.Err, cooldownOf(resp)
+	// Resolved available means calls is declared (physicalNeeds); asked
+	// again here because the field must never reach an add-on without it.
+	if err := a.declares("calls"); err != nil {
+		out.Err = err
+		return out
+	}
+	out.Schema, out.Results = eff.Result, true
+	body := operationBody(op, subject, actor, params)
+	body["preview"] = true
+	raw, err := json.Marshal(body)
+	if err != nil {
+		out.Err = err
+		return out
+	}
+	out = out.sent(a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/" + url.PathEscape(op), Body: raw}))
+	if out.Outcome == OutcomeSucceeded {
+		resp := readOutcome(CallResponse{Outcome: out.Outcome, Body: out.Body}, true)
+		out.Outcome, out.Err, out.NoChange = resp.Outcome, resp.Err, resp.NoChange
+	}
 	return out
+}
+
+// ViewOf is a physical operation's reply (the confirm's, or the one GET /calls
+// recorded) for the generic renderer, through the same decoder as a read's:
+// one shape, one reader. Empty for a secret reply, which is never shown.
+func ViewOf(target, op string, body []byte) ReadView {
+	p := operationPolicy[op]
+	if secretResult(op) {
+		return ReadView{Operation: op, Shape: shapes[p.Result].shape}
+	}
+	return ReadReply{Operation: op, Target: target, Schema: p.Result, Results: true, Body: body, Outcome: OutcomeSucceeded}.View()
 }
 
 // answer is the reply's payload: `result` from an add-on declaring results,

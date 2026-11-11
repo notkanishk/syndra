@@ -9,7 +9,8 @@
     "storage.reach",
     "storage.homes",
     "results",
-    "freshness"
+    "freshness",
+    "calls"
   ],
   "entitlement_schema": [
     {

@@ -86,6 +86,7 @@ func (k *kit) mutate() error {
 		{"absent", []string{"absent-unmanaged", "plan-equals-apply"}, func() { k.absent(k.at("absent-unmanaged")) }},
 		{"limit-empty", []string{"limit-empty", "plan-equals-apply"}, func() { k.limitEmpty(k.at("limit-empty")) }},
 		{"operations", []string{"operations", "operations.secret", "strict-requests", "health"}, func() { k.operations(k.at("operations")) }},
+		{"calls", []string{"calls.recorded", "operations.physical", "health"}, func() { k.callsWrite() }},
 		{"reads", []string{"operations.reads", "results"}, func() {
 			k.readOperations(k.at("operations.reads"), callID)
 			k.results(k.at("results"))
@@ -533,6 +534,7 @@ func (k *kit) operations(c *check) {
 	sent := send(request{method: http.MethodPost, target: route, body: k.operationBody("password.set", callID, map[string]any{"password": first}), schema: "operation_request.json"})
 	if doc := k.ok(c, sent, "operation_response.json"); doc != nil {
 		c.expect(str(doc, "outcome") == "succeeded", "password.set answered outcome %q", str(doc, "outcome"))
+		k.passwordCall, k.passwordReply = callID, sent.body
 	}
 	k.advanced(k.at("health"), logFirst, firstOK, "the first password.set")
 	logBefore, logOK := k.logRecords(c)

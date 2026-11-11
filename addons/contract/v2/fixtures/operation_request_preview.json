@@ -1,0 +1,10 @@
+{
+  "contract_version": 2,
+  "operation": "item.checkout",
+  "subject": "289471021834760193",
+  "actor": "289471021834760193",
+  "params": {
+    "item_id": "item-2207"
+  },
+  "preview": true
+}
