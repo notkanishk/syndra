@@ -311,7 +311,7 @@ export function PersonSystemCard({ view, userId, name }: { view: PersonTargetVie
       <CardTop target={view.target} name={system} status={<Status view={view} />} />
       <OfflineNotice view={view}>{name}&apos;s access hasn&apos;t changed.</OfflineNotice>
       {body}
-      <Reads reads={view.reads} name={system} audience="operator" />
+      <Reads reads={view.reads} name={system} reader={{ audience: "operator", person: name }} />
     </Card>
   );
 }

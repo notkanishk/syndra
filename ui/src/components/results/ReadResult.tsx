@@ -3,7 +3,7 @@
 import { ActivityList } from "@/components/results/ActivityList";
 import { RecordsList } from "@/components/results/RecordsList";
 import { StatusMeters } from "@/components/results/StatusMeters";
-import { ALSO_SAYS, NOT_READABLE_NEXT, noMoreLines, notReadableBody, notReadableTitle } from "@/components/results/copy";
+import { ALSO_SAYS, noMoreLines, notReadableBody, notReadableNext, notReadableTitle, type Reader } from "@/components/results/copy";
 import { Notice } from "@/components/ui/Notice";
 import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
 import type { ActivityResult, ReadView, RecordsResult, StatusResult } from "@/lib/queries/useMyStorage";
@@ -15,7 +15,7 @@ const LINES_CAP = 50;
 export interface ReadProps {
   /** The system's name, as the page calls it. */
   name: string;
-  audience: "member" | "operator";
+  reader: Reader;
 }
 
 /**
@@ -23,20 +23,20 @@ export interface ReadProps {
  * what the operation is called: records, status, activity, or raw. A shape the
  * core does not know is shown exactly as it came, behind Technical detail.
  */
-export function ReadResult({ read, name, audience }: { read: ReadView } & ReadProps) {
+export function ReadResult({ read, name, reader }: { read: ReadView } & ReadProps) {
   const { result } = read;
   return (
-    <div className="flex flex-col gap-3" data-read={read.operation}>
+    <div className="flex flex-col gap-3 [overflow-wrap:anywhere]" data-read={read.operation}>
       {!read.readable || result === undefined ? (
-        <Notice tone="warn" title={notReadableTitle(name)} next={NOT_READABLE_NEXT}>
+        <Notice tone="warn" title={notReadableTitle(name)} next={notReadableNext(reader)}>
           {notReadableBody(name)}
         </Notice>
       ) : read.shape === "records" ? (
-        <RecordsList result={result as RecordsResult} name={name} audience={audience} />
+        <RecordsList result={result as RecordsResult} name={name} reader={reader} />
       ) : read.shape === "status" ? (
-        <StatusMeters result={result as StatusResult} name={name} />
+        <StatusMeters result={result as StatusResult} name={name} reader={reader} />
       ) : read.shape === "activity" ? (
-        <ActivityList result={result as ActivityResult} name={name} />
+        <ActivityList result={result as ActivityResult} name={name} reader={reader} />
       ) : (
         <TechnicalDetail>
           <TechnicalPayload>{typeof result === "string" ? result : JSON.stringify(result)}</TechnicalPayload>

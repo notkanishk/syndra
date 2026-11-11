@@ -1,28 +1,54 @@
+import { formatList } from "@/lib/format";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 
 /**
  * Every sentence the generic read renderers say, in one place, so the copy
  * guide (`plain-language-copy/design.md` section 12) and a test can hold them
  * to the same words. Each outcome ends on a next step or "Nothing for you to do."
+ * A sentence that differs by who is reading takes the reader.
  */
 
-/** A readable list with nothing in it. */
-export const emptyRecords = (name: string) => `You hold nothing from ${name}. ${NOTHING_TO_DO}`;
+/** Who is reading: a member about themselves, or an operator about `person`. */
+export type Reader = { audience: "member" } | { audience: "operator"; person: string };
+export const MEMBER: Reader = { audience: "member" };
+
+/** A readable list with nothing in it. "Records" means things held or done, so the sentence fits any shape. */
+export const emptyRecords = (name: string, who: Reader) =>
+  `${name} lists nothing for ${who.audience === "member" ? "you" : who.person}. ${NOTHING_TO_DO}`;
 export const emptyMeters = (name: string) => `${name} reports no usage. ${NOTHING_TO_DO}`;
 export const emptyEvents = (name: string) => `No recorded activity on ${name}. ${NOTHING_TO_DO}`;
 
-/** The read did not come back: not a claim that the answer is "none". */
-export const NOT_READABLE_NEXT = "Try again in a minute. If it keeps failing, ask makerspace staff.";
-export const notReadableTitle = (name: string) => `${name} could not be read`;
+/** The read did not come back: not a claim that the answer is "none". The title is per read, so it never contradicts the system's own "read just now". */
+export const notReadableTitle = (name: string) => `One read from ${name} did not come back`;
 export const notReadableBody = (name: string) => `Syndra asked ${name} and did not get a usable answer. This is not a claim that nothing is there.`;
+export const notReadableNext = (who: Reader) =>
+  who.audience === "member"
+    ? "Try again in a minute. If it keeps failing, ask makerspace staff."
+    : "Try again in a minute. If it keeps failing, check the add-on's health on its system page.";
 
 /** Usage the add-on could not read, whole or in part. */
 export const usageUnread = (name: string, some: boolean) => (some ? `Some usage could not be read from ${name}.` : `Usage could not be read from ${name}.`);
+export const usageUnreadBody = (some: boolean) => (some ? "The usage above is what was read." : "This is not a claim that nothing is used.");
 
 export const NO_LIMIT = "no limit";
+export const ofLimit = (limit: string) => `of ${limit}`;
+export const sinceDate = (date: string) => `Since ${date}`;
+export const dueDate = (date: string) => `Due ${date}`;
 export const ALSO_SAYS = "What the add-on also says";
 export const noMoreLines = (n: number) => `…and ${n} more`;
 
-/** Places that were not recording this person: a quiet list is not proof. */
-export const uncoveredNote = (places: string, name: string) =>
-  `${places} were not recording ${name}, so nothing from them appears here, whether or not it happened. Switch recording on there to see them.`;
+/**
+ * Places that were not recording the person: a quiet list is not proof. The
+ * person is named ("you" for a member), one place or many; an operator is told
+ * what to do, a member that there is nothing for them to do.
+ */
+export const uncoveredNote = (places: string[], who: Reader) => {
+  const whom = who.audience === "member" ? "you" : who.person;
+  const them = places.length === 1 ? "that place" : "those places";
+  return `${formatList(places)} did not record ${whom}, so nothing from ${them} appears here, whether or not it happened. ${
+    who.audience === "member" ? NOTHING_TO_DO : "Switch recording on there."
+  }`;
+};
+
+/** Under an empty activity list: an empty list that is not the same as nothing having happened. */
+export const UNCOVERED_GUIDANCE = "Some places were not recording this account, so this is not the same as nothing having happened. See below.";

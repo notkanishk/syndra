@@ -10,7 +10,7 @@ import type { Standing } from "@/lib/queries/useTargets";
 export function StandingLine({ standing, system, audience }: { standing: Standing; system: string; audience: "member" | "operator" }) {
   const w = standingWords(standing, system, audience);
   return (
-    <span className="flex min-w-0 flex-col gap-1" data-standing>
+    <span className="flex min-w-0 flex-col gap-1 [overflow-wrap:anywhere]" data-standing>
       <StatusSeat tone={w.tone} word={w.state} note={w.note} />
       <span className="pl-4 text-[13px] leading-[1.5] text-muted [text-wrap:pretty]">{w.next}</span>
     </span>

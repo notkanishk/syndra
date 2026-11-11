@@ -8,6 +8,7 @@ import type { TargetActivity } from "@/lib/queries/useTargetActivity";
 
 const state = vi.hoisted(() => ({
   activity: null as TargetActivity | null,
+  kind: "storage" as string | undefined,
 }));
 
 vi.mock("@/lib/queries/useAudit", () => ({
@@ -15,7 +16,7 @@ vi.mock("@/lib/queries/useAudit", () => ({
 }));
 
 vi.mock("@/lib/queries/useTargets", () => ({
-  useTargets: () => ({ data: [{ target: "truenas" }], isLoading: false, error: null }),
+  useTargets: () => ({ data: [{ target: "truenas", kind: state.kind }], isLoading: false, error: null }),
 }));
 
 vi.mock("@/lib/queries/useTargetActivity", () => ({
@@ -36,6 +37,7 @@ function renderTab() {
 
 beforeEach(() => {
   state.activity = null;
+  state.kind = "storage";
 });
 
 /**
@@ -127,6 +129,21 @@ describe("the target's own log, beside Syndra's", () => {
     await waitFor(() =>
       expect(screen.getByText(/Auditing on scratch does not cover/)).toBeTruthy(),
     );
+  });
+
+  // Shares are a storage word. A door or a printer has places, not shares.
+  it("says places, not shares, for a kind that is not storage, naming the person and what to do", async () => {
+    state.kind = "access";
+    state.activity = { target: "truenas", subject: "u1", readable: true, events: [], uncovered: ["side door", "Front door"] };
+    renderTab();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Front door and side door did not record Charlotte, so nothing from those places appears here, whether or not it happened. Switch recording on there."),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByText(/share/i)).toBeNull();
+    expect(screen.getByText(/Some places were not recording this account/)).toBeTruthy();
   });
 
   it("marks a refused access apart from one that succeeded", async () => {

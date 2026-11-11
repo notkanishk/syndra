@@ -5,12 +5,15 @@ import { describe, expect, it } from "vitest";
 import { Reads, ReadResult } from "@/components/results/ReadResult";
 import { ActivityList } from "@/components/results/ActivityList";
 import {
-  NOT_READABLE_NEXT,
+  MEMBER,
   emptyEvents,
   emptyMeters,
   emptyRecords,
+  notReadableNext,
   notReadableTitle,
+  uncoveredNote,
   usageUnread,
+  type Reader,
 } from "@/components/results/copy";
 import type { ActivityResult, ReadView, RecordsResult, StatusResult } from "@/lib/queries/useMyStorage";
 
@@ -20,7 +23,9 @@ import type { ActivityResult, ReadView, RecordsResult, StatusResult } from "@/li
 
 const NAME = "Parts shelf";
 const taken = { taken_at: "2026-11-10T09:30:00Z", current: true };
-const show = (read: ReadView, audience: "member" | "operator" = "member") => render(<ReadResult read={read} name={NAME} audience={audience} />);
+const PERSON = "Bobby Roode";
+const OPERATOR: Reader = { audience: "operator", person: PERSON };
+const show = (read: ReadView, reader: Reader = MEMBER) => render(<ReadResult read={read} name={NAME} reader={reader} />);
 
 const records = (r: RecordsResult["records"]): ReadView => ({ operation: "holdings.list", shape: "records", readable: true, result: { records: r, ...taken } });
 const status = (over: Partial<StatusResult>): ReadView => ({
@@ -41,12 +46,29 @@ describe("not readable", () => {
     it(`says so, with the next step, for shape "${shape}", and draws no empty result`, () => {
       show({ operation: "x.get", shape, readable: false });
       expect(screen.getByText(notReadableTitle(NAME))).toBeInTheDocument();
-      expect(screen.getByText(NOT_READABLE_NEXT)).toBeInTheDocument();
-      expect(screen.queryByText(emptyRecords(NAME))).toBeNull();
+      expect(screen.getByText(notReadableNext(MEMBER))).toBeInTheDocument();
+      expect(screen.queryByText(emptyRecords(NAME, MEMBER))).toBeNull();
       expect(screen.queryByText(emptyMeters(NAME))).toBeNull();
       expect(screen.queryByText(emptyEvents(NAME))).toBeNull();
     });
   }
+});
+
+describe("a read that did not come back, by reader", () => {
+  it("names the one read, so it never contradicts the system's own read-just-now line", () => {
+    show({ operation: "x.get", shape: "records", readable: false });
+    expect(screen.getByText("One read from Parts shelf did not come back")).toBeInTheDocument();
+  });
+
+  it("sends a member to staff and an operator to the add-on's health, never the other way", () => {
+    const { container, unmount } = show({ operation: "x.get", shape: "status", readable: false });
+    expect(container.textContent).toContain("ask makerspace staff");
+    expect(container.textContent).not.toContain("health");
+    unmount();
+    const op = show({ operation: "x.get", shape: "status", readable: false }, OPERATOR);
+    expect(op.container.textContent).toContain("check the add-on's health on its system page");
+    expect(op.container.textContent).not.toContain("makerspace staff");
+  });
 });
 
 describe("readable is the add-on's word", () => {
@@ -58,9 +80,24 @@ describe("readable is the add-on's word", () => {
 });
 
 describe("records", () => {
-  it("says an empty list in the guide's words, ending on nothing to do", () => {
-    show(records([]));
-    expect(screen.getByText("You hold nothing from Parts shelf. Nothing for you to do.")).toBeInTheDocument();
+  it("says an empty list in the guide's words, for the reader, ending on nothing to do", () => {
+    const { unmount } = show(records([]));
+    expect(screen.getByText("Parts shelf lists nothing for you. Nothing for you to do.")).toBeInTheDocument();
+    unmount();
+    show(records([]), OPERATOR);
+    expect(screen.getByText("Parts shelf lists nothing for Bobby Roode. Nothing for you to do.")).toBeInTheDocument();
+  });
+
+  it("lists records alphabetically by label, case aside", () => {
+    const { container } = show(
+      records([
+        { id: "1", label: "zip ties" },
+        { id: "2", label: "Caliper" },
+        { id: "3", label: "bandsaw" },
+      ]),
+    );
+    const labels = [...container.querySelectorAll("li > span > span:first-child")].map((n) => n.textContent);
+    expect(labels).toEqual(["bandsaw", "Caliper", "zip ties"]);
   });
 
   it("shows label, category and both dates, and a standing's note and next step", () => {
@@ -135,7 +172,7 @@ describe("status meters", () => {
   it("quota_read false with no meters says it could not be read, with a next step, and never empty meters or 'nothing used'", () => {
     show(status({ meters: [], quota_read: false }));
     expect(screen.getByText(usageUnread(NAME, false))).toBeInTheDocument();
-    expect(screen.getByText(NOT_READABLE_NEXT)).toBeInTheDocument();
+    expect(screen.getByText(notReadableNext(MEMBER))).toBeInTheDocument();
     expect(screen.queryByText(emptyMeters(NAME))).toBeNull();
     expect(screen.queryByRole("meter")).toBeNull();
   });
@@ -144,7 +181,26 @@ describe("status meters", () => {
     show(status({ meters: [{ label: "makers", used: 5, limit: 10, unit: "items" }], quota_read: false }));
     expect(screen.getByRole("meter", { name: "makers" })).toBeInTheDocument();
     expect(screen.getByText(usageUnread(NAME, true))).toBeInTheDocument();
-    expect(screen.getByText(NOT_READABLE_NEXT)).toBeInTheDocument();
+    expect(screen.getByText(notReadableNext(MEMBER))).toBeInTheDocument();
+  });
+
+  it("lists meters alphabetically by label, case aside", () => {
+    show(
+      status({
+        meters: [
+          { label: "scratch", used: 1, limit: 2, unit: "items" },
+          { label: "Archive", used: 1, limit: 2, unit: "items" },
+          { label: "makers", used: 1, limit: 2, unit: "items" },
+        ],
+      }),
+    );
+    expect(screen.getAllByRole("meter").map((m) => m.getAttribute("aria-label"))).toEqual(["Archive", "makers", "scratch"]);
+  });
+
+  it("says the unread usage to an operator with an operator's next step", () => {
+    show(status({ meters: [], quota_read: false }), OPERATOR);
+    expect(screen.getByText(notReadableNext(OPERATOR))).toBeInTheDocument();
+    expect(screen.queryByText(notReadableNext(MEMBER))).toBeNull();
   });
 });
 
@@ -164,13 +220,27 @@ describe("activity", () => {
     expect(screen.getByText("Refused")).toBeInTheDocument();
   });
 
-  it("names the places that were not recording, and says a quiet list is not proof", () => {
-    show(activity({ events: [event], uncovered: ["scratch", "archive"] }));
-    expect(screen.getByText(/archive and scratch were not recording Parts shelf|scratch and archive were not recording Parts shelf/)).toBeInTheDocument();
+  it("names the places that were not recording, alphabetically, and says a quiet list is not proof", () => {
+    show(activity({ events: [event], uncovered: ["scratch", "Archive"] }));
+    expect(screen.getByText(/^Archive and scratch did not record you, so nothing from those places appears here, whether or not it happened\. Nothing for you to do\.$/)).toBeInTheDocument();
+  });
+
+  it("names the person to an operator, one place or many, and says to switch recording on", () => {
+    const one = show(activity({ uncovered: ["scratch"] }), OPERATOR);
+    expect(one.container.textContent).toContain("scratch did not record Bobby Roode, so nothing from that place appears here");
+    expect(one.container.textContent).toContain("Switch recording on there.");
+    expect(one.container.textContent).not.toContain("Nothing for you to do. ");
+    one.unmount();
+    const many = show(activity({ uncovered: ["b", "a"] }), OPERATOR);
+    expect(many.container.textContent).toContain("a and b did not record Bobby Roode, so nothing from those places appears here");
+  });
+
+  it("is worded by the same sentence the guide holds", () => {
+    expect(uncoveredNote(["scratch"], MEMBER)).toContain("did not record you");
   });
 
   it("lets a kind say the places in its own words", () => {
-    render(<ActivityList result={{ events: [], uncovered: ["scratch"], truncated: false, ...taken }} name={NAME} coverage={<>Kind words here.</>} />);
+    render(<ActivityList result={{ events: [], uncovered: ["scratch"], truncated: false, ...taken }} name={NAME} reader={MEMBER} coverage={<>Kind words here.</>} />);
     expect(screen.getByText("Kind words here.")).toBeInTheDocument();
   });
 
@@ -220,12 +290,42 @@ describe("Reads", () => {
   it("draws every read in the order given, skips the ones a kind draws itself, and nothing for none", () => {
     const a = records([{ id: "a", label: "First thing" }]);
     const b = { ...status({ meters: [{ label: "Second meter", used: 1, unit: "items" }] }) };
-    const { container, rerender } = render(<Reads reads={[a, b]} name={NAME} audience="member" />);
+    const { container, rerender } = render(<Reads reads={[a, b]} name={NAME} reader={MEMBER} />);
     const order = [...container.querySelectorAll("[data-read]")].map((n) => n.getAttribute("data-read"));
     expect(order).toEqual(["holdings.list", "usage.get"]);
-    rerender(<Reads reads={[a, b]} skip={["holdings.list"]} name={NAME} audience="member" />);
+    rerender(<Reads reads={[a, b]} skip={["holdings.list"]} name={NAME} reader={MEMBER} />);
     expect([...container.querySelectorAll("[data-read]")].map((n) => n.getAttribute("data-read"))).toEqual(["usage.get"]);
-    rerender(<Reads reads={undefined} name={NAME} audience="member" />);
+    rerender(<Reads reads={undefined} name={NAME} reader={MEMBER} />);
     expect(container.innerHTML).toBe("");
+  });
+});
+
+describe("long text", () => {
+  // jsdom has no layout, so the guard is the wrapping rule itself; the
+  // 390px screenshots (design handoff, 6a) are the proof it does its work.
+  const LABEL = "Soldering station ".repeat(17).trim(); // 300 characters
+  const TOKEN = "x".repeat(120);
+  const MAPPED = "::ffff:192.0.2.17";
+  const wraps = (n: Element | null) => expect(n?.className).toContain("[overflow-wrap:anywhere]");
+
+  it("lets the whole read break anywhere, so a long label, token or URL cannot widen the card", () => {
+    const { container } = show({
+      ...records([{ id: "a", label: LABEL, standing: { usable: false, waiting_on: "member", note: TOKEN, next: `Return it at https://example.org/${TOKEN}` } }]),
+    });
+    expect(container.textContent).toContain(LABEL);
+    wraps(container.querySelector("[data-read]"));
+    wraps(container.querySelector("[data-standing]"));
+  });
+
+  it("lets an activity row break anywhere and its columns shrink to a minimum rather than fix a width", () => {
+    const { container } = show(activity({ events: [{ at: "2026-11-10T08:12:30Z", event: LABEL, success: true, resource: TOKEN, address: MAPPED, detail: TOKEN }] }));
+    const row = container.querySelector("[data-resource]")!.parentElement;
+    wraps(row);
+    for (const col of [container.querySelector("[data-resource]"), screen.getByText(MAPPED)]) {
+      const tokens = col!.className.split(/\s+/);
+      expect(tokens).toContain("min-w-[120px]");
+      expect(tokens).not.toContain("w-[120px]");
+      expect(tokens).not.toContain("shrink-0");
+    }
   });
 });

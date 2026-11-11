@@ -1300,6 +1300,17 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   (a separate builder, from the backend shape 6.1 left)
   - Done: `ui/src/components/results/` (`ReadResult` picks by shape, raw fallback; `copy.ts` is the sentences, pinned to the guide's section 12), wired into the core member card, the person page's system card and the storage cards (which skip `storage.status`); `MemberTargetCard.inventory.test.tsx` renders `manifest_inventory.json` + `operation_response_records.json` with no inventory code; storage type lost `username`, `smb_enabled`, `shares`; both lint guards cover `components/results/`.
 
+  - Decided while building (6.1u fix round, 11 Nov 2026), one line each:
+  - Copy that differs by reader takes a `Reader` (member, or operator with the person's name), passed from the page down through `Reads` to every renderer; an operator's next step is the add-on's health on its system page, a member's is makerspace staff.
+  - The "not recording" note names the person ("you" to a member), says one place or many, and tells an operator to switch recording on; storage keeps its own "shares" words and `PersonActivity` uses them only for kind storage (`isStorage`).
+  - A failed read's title is per read ("One read from {name} did not come back") so it never contradicts the system's own "read just now" line.
+  - `quota_read: false` on a storage card shows the shared `UsageUnread` notice (some or all, by whether any place carries usage) instead of silently omitting usage lines.
+  - Long text: `[overflow-wrap:anywhere]` on the read root, the activity row and `StandingLine`; the address columns are `min-w`, not a fixed width; the activity detail is `inline-block` so a short reason moves whole rather than breaking mid-token.
+  - Records, meters and uncovered places are alphabetical through `sortByName`/`sortNames`.
+  - Every results sentence, including the "Since", "Due", "of" fragments, lives in `copy.ts` and the copy guide's section 12; a guard fails on any sentence-like literal in `results/*.tsx`.
+  - `OWN_READS` is held to the registry by a test (`ownReads.test.ts`); `needSpec` is held to the result schemas by `TestNeedSpecMatchesTheSchemas`, and now requires a `stale`'s `reason`.
+  - `Observation.stale` is left out of the UI type until freshness (6.2): its reason literals tripped `TestEveryFixedReasonIsNeverQuoted`.
+
 **`freshness` (decision 21)**
 
 - [ ] 6.2 `fresh: true` (query on `GET /subjects`, `GET /values/{field}`,

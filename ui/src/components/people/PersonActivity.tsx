@@ -17,8 +17,11 @@ import { TraceCell } from "@/components/audit/TraceCell";
 import { actedOn, describeAction, machineName } from "@/lib/audit-vocabulary";
 import { EventSentence, describeSends, isPasswordSend } from "@/components/audit/EventLine";
 import { ActivityRows } from "@/components/results/ActivityList";
-import { UNCOVERED_GUIDANCE, UncoveredNote } from "@/components/kinds/storage/ActivityCoverage";
+import { UNCOVERED_GUIDANCE as STORAGE_GUIDANCE, UncoveredNote } from "@/components/kinds/storage/ActivityCoverage";
+import { UNCOVERED_GUIDANCE, uncoveredNote } from "@/components/results/copy";
 import { formatClock, formatShortDate } from "@/lib/format";
+import { isStorage } from "@/lib/nav";
+import { sortNames } from "@/lib/sort";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
 import { useTargetActivity } from "@/lib/queries/useTargetActivity";
@@ -156,7 +159,7 @@ function OnTheTargets({ userId, name }: { userId: string; name: string }) {
   return (
     <>
       {rows.map((entry) => (
-        <TargetActivityCard key={entry.target} target={entry.target} userId={userId} name={name} />
+        <TargetActivityCard key={entry.target} target={entry.target} kind={entry.kind} userId={userId} name={name} />
       ))}
     </>
   );
@@ -164,10 +167,12 @@ function OnTheTargets({ userId, name }: { userId: string; name: string }) {
 
 function TargetActivityCard({
   target,
+  kind,
   userId,
   name,
 }: {
   target: string;
+  kind?: string;
   userId: string;
   name: string;
 }) {
@@ -182,7 +187,9 @@ function TargetActivityCard({
   if (activity.isError) return null;
 
   const events = data?.readable ? (data.events ?? []) : [];
-  const uncovered = data?.uncovered ?? [];
+  const uncovered = sortNames(data?.uncovered ?? []);
+  // Shares are a storage word: the storage kind says them, any other kind says "places".
+  const storage = isStorage({ kind });
 
   return (
     <Card>
@@ -204,7 +211,9 @@ function TargetActivityCard({
             title={`No recorded activity for ${name} on ${label}.`}
             guidance={
               uncovered.length > 0
-                ? UNCOVERED_GUIDANCE
+                ? storage
+                  ? STORAGE_GUIDANCE
+                  : UNCOVERED_GUIDANCE
                 : `${label} has no activity for this account.`
             }
           />
@@ -234,7 +243,11 @@ function TargetActivityCard({
 
       {uncovered.length > 0 && (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
-          <UncoveredNote shares={uncovered} name={name} />
+          {storage ? (
+            <UncoveredNote shares={uncovered} name={name} />
+          ) : (
+            uncoveredNote(uncovered, { audience: "operator", person: name })
+          )}
         </div>
       )}
     </Card>

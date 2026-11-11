@@ -253,16 +253,19 @@ type needSpec struct {
 var (
 	standingNeed = needSpec{keys: []string{"usable", "waiting_on"}}
 	metersNeed   = needSpec{keys: []string{"label", "used", "unit"}}
+	staleNeed    = needSpec{keys: []string{"reason"}}
 	recordsNeed  = needSpec{keys: []string{"records", "taken_at", "current"}, nested: map[string]needSpec{
+		"stale":   staleNeed,
 		"records": {keys: []string{"id", "label"}, nested: map[string]needSpec{"standing": standingNeed}}}}
 	activityNeed = needSpec{keys: []string{"events", "uncovered", "truncated", "taken_at", "current"}, nested: map[string]needSpec{
+		"stale":  staleNeed,
 		"events": {keys: []string{"at", "event", "success"}}}}
 	statusNeed = needSpec{keys: []string{"usable", "standing", "meters", "taken_at", "current"}, nested: map[string]needSpec{
-		"standing": standingNeed, "meters": metersNeed}}
+		"standing": standingNeed, "meters": metersNeed, "stale": staleNeed}}
 	// storageNeed is the status's, the storage card's five keys, and each
 	// place's own (profiles/storage/reach.json, Place).
 	storageNeed = needSpec{keys: slices.Concat(statusNeed.keys, storageExtra), nested: map[string]needSpec{
-		"standing": standingNeed, "meters": metersNeed,
+		"standing": standingNeed, "meters": metersNeed, "stale": staleNeed,
 		"places": {keys: []string{"share", "path", "access"}, nested: map[string]needSpec{"usage": {keys: []string{"used_bytes"}}}}}}
 )
 

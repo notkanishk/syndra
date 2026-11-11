@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { Reads } from "@/components/results/ReadResult";
+import { UsageUnread } from "@/components/results/StatusMeters";
 import { OWN_READS } from "@/components/kinds/storage/state";
 import { STORAGE_LABEL, isStorage } from "@/lib/nav";
 import { UserName } from "@/components/names/UserName";
@@ -210,7 +211,12 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
         {name}&apos;s access hasn&apos;t changed, and their folders open again when it&apos;s back.
       </OfflineNotice>
       {body}
-      <Reads reads={view.reads} skip={OWN_READS} name={label} audience="operator" />
+      {view.storage?.quota_read === false && (
+        <div className="row-divider px-5 py-4">
+          <UsageUnread name={label} some={(view.storage.places ?? []).some((p) => p.usage)} reader={{ audience: "operator", person: name }} />
+        </div>
+      )}
+      <Reads reads={view.reads} skip={OWN_READS} name={label} reader={{ audience: "operator", person: name }} />
     </Card>
   );
 }

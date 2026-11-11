@@ -52,7 +52,6 @@ export interface StoragePlace {
 export interface Observation {
   taken_at: string;
   current: boolean;
-  stale?: { reason: "cached" | "cooldown" | "unreachable" | "draining" | "never_read"; retry_after?: number; note?: string };
 }
 
 export interface RecordsResult extends Observation {

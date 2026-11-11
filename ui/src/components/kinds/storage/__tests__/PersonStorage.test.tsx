@@ -193,6 +193,18 @@ describe("a person's network storage (A-10 Part 1)", () => {
     expect(within(rowOf("Home folder")).getByText(/didn't answer when this page asked/)).toBeInTheDocument();
   });
 
+  it("usage the target could not read is said, in an operator's words, and absent when it was read", () => {
+    show(view({ storage: { ...view().storage!, quota_read: false } }));
+    expect(screen.getByText("Some usage could not be read from TrueNAS.")).toBeInTheDocument();
+    expect(screen.getByText(/check the add-on's health on its system page/)).toBeInTheDocument();
+    expect(screen.queryByText(/ask makerspace staff/)).toBeNull();
+  });
+
+  it("says nothing about unread usage when quota_read is true", () => {
+    show(view({ storage: { ...view().storage!, quota_read: true } }));
+    expect(screen.queryByText(/usage could not be read/i)).toBeNull();
+  });
+
   it("being set up: the whole body is not open yet, with the step", () => {
     show(view({ setup: "no_project", account: undefined, entitled: false, storage: undefined }));
     expect(screen.getByText("Opens once TrueNAS is set up")).toBeInTheDocument();

@@ -8,7 +8,9 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MEMBER } from "@/components/results/copy";
 import { Reads } from "@/components/results/ReadResult";
+import { UsageUnread } from "@/components/results/StatusMeters";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FieldLabel, Input } from "@/components/ui/Input";
@@ -195,7 +197,12 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
           <Withheld items={(view.suspended ?? []).filter((s) => !isHold(view, s))} schemaOf={() => view.entitlement_schema} />
         </div>
       )}
-      <Reads reads={view.reads} skip={OWN_READS} name={label} audience="member" />
+      {view.storage?.quota_read === false && (
+        <div className="row-divider px-5 py-4">
+          <UsageUnread name={label} some={(view.storage.places ?? []).some((p) => p.usage)} reader={MEMBER} />
+        </div>
+      )}
+      <Reads reads={view.reads} skip={OWN_READS} name={label} reader={MEMBER} />
     </Card>
   );
 }

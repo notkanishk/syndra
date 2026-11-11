@@ -671,17 +671,28 @@ One set of generic renderers (`ui/src/components/results/`) draws every member-s
 
 | When | Says |
 |---|---|
-| A list with nothing in it | You hold nothing from {name}. Nothing for you to do. |
+| A list with nothing in it, to a member | {name} lists nothing for you. Nothing for you to do. |
+| A list with nothing in it, to an operator | {name} lists nothing for {person}. Nothing for you to do. |
 | A status with no meters, nothing unread | {name} reports no usage. Nothing for you to do. |
 | An activity log with no events | No recorded activity on {name}. Nothing for you to do. |
-| A read that did not come back: title | {name} could not be read |
+| A read that did not come back: title | One read from {name} did not come back |
 | A read that did not come back: body | Syndra asked {name} and did not get a usable answer. This is not a claim that nothing is there. |
-| A read that did not come back: next step | Try again in a minute. If it keeps failing, ask makerspace staff. |
+| A read that did not come back: next step, to a member | Try again in a minute. If it keeps failing, ask makerspace staff. |
+| A read that did not come back: next step, to an operator | Try again in a minute. If it keeps failing, check the add-on's health on its system page. |
 | Usage the add-on could not read, some of it | Some usage could not be read from {name}. |
 | Usage the add-on could not read, all of it | Usage could not be read from {name}. |
+| Usage the add-on could not read: body, some of it | The usage above is what was read. |
+| Usage the add-on could not read: body, all of it | This is not a claim that nothing is used. |
 | A meter with no ceiling | no limit |
+| A meter's ceiling | of {limit} |
+| A record held since a date | Since {date} |
+| A record due on a date | Due {date} |
 | What the add-on adds that Syndra does not know (heading) | What the add-on also says |
 | More of it than is shown | …and {n} more |
-| Places that were not recording the person | {places} were not recording {name}, so nothing from them appears here, whether or not it happened. Switch recording on there to see them. |
+| One place that was not recording, to a member | {place} did not record you, so nothing from that place appears here, whether or not it happened. Nothing for you to do. |
+| Several places that were not recording, to a member | {place} and {place} did not record you, so nothing from those places appears here, whether or not it happened. Nothing for you to do. |
+| One place that was not recording, to an operator | {place} did not record {person}, so nothing from that place appears here, whether or not it happened. Switch recording on there. |
+| Several places that were not recording, to an operator | {place} and {place} did not record {person}, so nothing from those places appears here, whether or not it happened. Switch recording on there. |
+| Under an empty activity list when some places were not recording | Some places were not recording this account, so this is not the same as nothing having happened. See below. |
 
-A record's lateness is the add-on's word (its standing note and next step, for example "Overdue since 3 November" and "Bring it back to the front desk"), never worked out in the UI from a date. The meters that were read stay when some usage was not; empty meters never stand in for "nothing used".
+A record's lateness is the add-on's word (its standing note and next step, for example "Overdue since 3 November" and "Bring it back to the front desk"), never worked out in the UI from a date. The meters that were read stay when some usage was not; empty meters never stand in for "nothing used". Records, meters and places are listed alphabetically (case aside), like every list of names. Where a sentence differs by reader it is one row per reader, and the code takes the reader (`Reader` in `copy.ts`) rather than choosing words inline. The storage kind says "shares" for the same places in `kinds/storage/ActivityCoverage.tsx`.

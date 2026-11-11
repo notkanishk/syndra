@@ -180,6 +180,32 @@ describe("usage", () => {
   });
 });
 
+describe("usage the target could not read", () => {
+  it("says so, in a member's words, rather than leaving usage lines out as if nothing were used", () => {
+    state.targets = [view({ storage: { ...view().storage!, quota_read: false } })];
+    renderStorage();
+    expect(screen.getByText("Some usage could not be read from TrueNAS.")).toBeTruthy();
+    expect(screen.getByText(/ask makerspace staff/)).toBeTruthy();
+    expect(screen.queryByText(/check the add-on's health/)).toBeNull();
+  });
+
+  it("says all of it could not be read when no place carries usage", () => {
+    const bare = [HOME, WADDLE].map(({ usage: _u, ...p }) => p);
+    state.targets = [view({ storage: { ...view().storage!, places: bare, quota_read: false } })];
+    renderStorage();
+    expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
+  });
+
+  it("says nothing when it was read (quota_read true) or the target does not say", () => {
+    for (const quota_read of [true, undefined]) {
+      state.targets = [view({ storage: { ...view().storage!, quota_read } })];
+      const { unmount } = renderStorage();
+      expect(screen.queryByText(/usage could not be read/i)).toBeNull();
+      unmount();
+    }
+  });
+});
+
 describe("addresses", () => {
   it("are the backend's, both of them, per folder", () => {
     state.targets = [view()];
