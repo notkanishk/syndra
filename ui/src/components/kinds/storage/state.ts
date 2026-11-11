@@ -1,6 +1,6 @@
 import { accountField } from "@/lib/fields";
 import { isStorage } from "@/lib/nav";
-import type { MyTargetView } from "@/lib/queries/useMyStorage";
+import type { MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 
 /**
  * Where a member is on a storage system, as the storage card's board states
@@ -58,4 +58,21 @@ export const PASSWORD_STEP = new Set<State>(["needs-password", "reenrol", "resto
  */
 export function needsPassword(view: MyTargetView): boolean {
   return isStorage(view) && PASSWORD_STEP.has(stateOf(view));
+}
+
+/**
+ * The usage a member's card draws for one place: only a place they can change,
+ * and nothing while the system is offline (the card says so instead).
+ */
+export function drawnUsage(place: StoragePlace, offline: boolean): StoragePlace["usage"] {
+  return place.access === "change" && !offline ? place.usage : undefined;
+}
+
+/**
+ * Whether a card shows any usage at all. Pass the usage figures the card
+ * DRAWS, and none for a place or folder it does not: the unread-usage notice
+ * says "the usage above is what was read" only when some is above it.
+ */
+export function usageShown(drawn: ReadonlyArray<unknown>): boolean {
+  return drawn.some((u) => u != null);
 }

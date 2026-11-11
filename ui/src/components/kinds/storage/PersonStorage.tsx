@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { Reads } from "@/components/results/ReadResult";
 import { UsageUnread } from "@/components/results/StatusMeters";
-import { OWN_READS } from "@/components/kinds/storage/state";
+import { OWN_READS, usageShown } from "@/components/kinds/storage/state";
 import { STORAGE_LABEL, isStorage } from "@/lib/nav";
 import { UserName } from "@/components/names/UserName";
 import {
@@ -79,6 +79,8 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
   const roles = roleNames(view.roles);
 
   let body: ReactNode;
+  // The only usage this card draws: the home folder's, from view.home, in the body's last branch.
+  let drawn: unknown[] = [];
   if (view.setup) {
     body = (
       <div className="px-5 pb-5 pt-1">
@@ -144,6 +146,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
     // Offline with no last read: the Notice alone, and these two rows aren't drawn.
     const drawRead = !(offline && !readable);
     const folders = (storage?.places ?? []).filter((p) => !p.home);
+    if (drawRead && readable && drawsHome(view)) drawn = [view.home?.used_bytes];
     body = (
       <>
         <Row label="Account" first>
@@ -213,7 +216,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
       {body}
       {view.storage?.quota_read === false && (
         <div className="row-divider px-5 py-4">
-          <UsageUnread name={label} some={(view.storage.places ?? []).some((p) => p.usage)} reader={{ audience: "operator", person: name }} />
+          <UsageUnread name={label} some={usageShown(drawn)} reader={{ audience: "operator", person: name }} />
         </div>
       )}
       <Reads reads={view.reads} skip={OWN_READS} name={label} reader={{ audience: "operator", person: name }} />
@@ -331,6 +334,9 @@ function LimitLines({ view }: { view: PersonTargetView }) {
   );
 }
 
+/** The home folder's own usage is drawn only for a home that exists or is given; otherwise the limit lines stand in. */
+const drawsHome = ({ home }: PersonTargetView) => Boolean(home?.home || home?.gives_home || home?.own);
+
 function HomeUse({ view }: { view: PersonTargetView }) {
   const home = view.home;
   const label = view.name;
@@ -338,7 +344,7 @@ function HomeUse({ view }: { view: PersonTargetView }) {
   const quota = home?.quota_bytes ?? 0;
   const hasHome = Boolean(home?.home);
   const kept = hasHome && home && !home.gives_home && !home.own;
-  if (!hasHome && !(home?.gives_home || home?.own)) return <LimitLines view={view} />;
+  if (!drawsHome(view)) return <LimitLines view={view} />;
   const pct = used !== undefined && quota > 0 ? Math.min(100, (used / quota) * 100) : 0;
   const full = pct >= 90;
   const over = used !== undefined && quota > 0 && used >= quota;

@@ -99,6 +99,31 @@ const eslintConfig = [
       selector,
       ...message("The storage kind's words live only in components/kinds/storage/ (and app/storage/, lib/nav.ts); say it by role or move it there."),
     }));
+    /**
+     * No sentence lives in a results renderer. Every sentence of results/*.tsx
+     * is written in results/copy.ts, where copy-guide section 12 holds it.
+     * "A sentence" is two words with whitespace between them (any letters), so
+     * a multi-line JSX text, one with {values} in it, a template that starts
+     * with a value, a lower-case fragment and a single-quoted string are all
+     * caught alike. Not human text, so not refused: className/class/key and
+     * data-* values, the "use client" directive and import sources. aria-label,
+     * title and alt are human text and are NOT exempt.
+     */
+    // A string: two words. A template element sits beside a value, so one word touching whitespace is enough
+    // (`of ${limit}`). JSX text likewise, on its own line's spaces only: indentation and newlines are layout.
+    const words = "/\\p{L}{2,}\\s+\\p{L}/u";
+    const besideValue = "/\\p{L}{2,}\\s|\\s\\p{L}{2,}/u";
+    const jsxWords = "/\\p{L}{2,}[^\\S\\n]+(\\S|$)|^[^\\S\\n]+\\p{L}{2,}|\\p{L}{2,}\\s+\\p{L}/u";
+    const notText = "JSXAttribute[name.name=/^(className|class|key|data-.*)$/]";
+    const skip = `:not(${notText} *, ExpressionStatement[directive] > Literal, ImportDeclaration > Literal, ExportAllDeclaration > Literal, ExportNamedDeclaration > Literal)`;
+    const sentence = [
+      `JSXText[value=${jsxWords}]`,
+      `Literal[value=${words}]${skip}`,
+      `TemplateElement[value.cooked=${besideValue}]${skip}`,
+    ].map((selector) => ({
+      selector,
+      ...message("Write the sentence in components/results/copy.ts and in copy-guide section 12 (openspec/changes/plain-language-copy/design.md); a renderer only calls it."),
+    }));
     const tests = ["src/**/__tests__/**", "src/**/__fixtures__/**", "src/**/*.test.{ts,tsx}"];
     const fieldHome = ["src/lib/fields.ts", "src/components/kinds/storage/**"];
     const wordHome = ["src/components/kinds/storage/**", "src/app/storage/**", "src/lib/nav.ts"];
@@ -109,8 +134,14 @@ const eslintConfig = [
       {
         // Everywhere: all three guards, minus where each is allowed.
         files: ["src/**/*.{ts,tsx}"],
-        ignores: ["src/lib/queries/invalidation.ts", ...fieldHome, ...wordHome, ...tests],
+        ignores: ["src/lib/queries/invalidation.ts", "src/components/results/*.tsx", ...fieldHome, ...wordHome, ...tests],
         rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles, ...kindWord] },
+      },
+      {
+        // The results renderers: the everywhere set, and no inline sentence.
+        files: ["src/components/results/*.tsx"],
+        ignores: tests,
+        rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles, ...kindWord, ...sentence] },
       },
       {
         // invalidation.ts owns the invalidation map: fields + words only.

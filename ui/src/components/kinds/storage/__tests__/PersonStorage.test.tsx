@@ -200,6 +200,19 @@ describe("a person's network storage (A-10 Part 1)", () => {
     expect(screen.queryByText(/ask makerspace staff/)).toBeNull();
   });
 
+  it("says some was read only when the home folder's usage is drawn, not when only an undrawn place carries it", () => {
+    // The places carry usage (homePlace does), but this card draws only view.home's.
+    const { used_bytes: _u, ...home } = view().home!;
+    show(view({ home, storage: { ...view().storage!, quota_read: false } }));
+    expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeInTheDocument();
+    expect(screen.queryByText(/Some usage could not be read/)).toBeNull();
+  });
+
+  it("says some was read when the home folder's usage is drawn", () => {
+    show(view({ storage: { ...view().storage!, quota_read: false } }));
+    expect(screen.getByText("Some usage could not be read from TrueNAS.")).toBeInTheDocument();
+  });
+
   it("says nothing about unread usage when quota_read is true", () => {
     show(view({ storage: { ...view().storage!, quota_read: true } }));
     expect(screen.queryByText(/usage could not be read/i)).toBeNull();

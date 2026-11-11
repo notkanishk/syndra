@@ -196,6 +196,20 @@ describe("usage the target could not read", () => {
     expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
   });
 
+  it("says all of it could not be read when only a read-only place carries usage, which is drawn nowhere", () => {
+    const bare = [HOME, WADDLE].map(({ usage: _u, ...p }) => p);
+    state.targets = [view({ storage: { ...view().storage!, places: [...bare, QUACK], quota_read: false } })];
+    renderStorage();
+    expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
+    expect(screen.queryByText(/Some usage could not be read/)).toBeNull();
+  });
+
+  it("says all of it could not be read while offline, when no usage line is drawn", () => {
+    state.targets = [view({ health: "offline", storage: { ...view().storage!, quota_read: false } })];
+    renderStorage();
+    expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
+  });
+
   it("says nothing when it was read (quota_read true) or the target does not say", () => {
     for (const quota_read of [true, undefined]) {
       state.targets = [view({ storage: { ...view().storage!, quota_read } })];

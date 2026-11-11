@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -73,42 +73,5 @@ describe("the copy guide's section on what an add-on says", () => {
   it("ends every empty state on a next step, and says each in plain words (no em dash, no exclamation)", () => {
     for (const s of [emptyRecords(N, MEMBER), emptyRecords(N, OP), emptyMeters(N), emptyEvents(N)]) expect(s.endsWith(NOTHING_TO_DO)).toBe(true);
     for (const s of SAID) expect(s).not.toMatch(/[—!]/);
-  });
-});
-
-/**
- * No sentence lives in a renderer. A string literal or JSX text in
- * `results/*.tsx` that reads as words (two or more, starting with a capital) is
- * a sentence that belongs in `copy.ts`, where the guide holds it. Class names,
- * attributes and one-word labels are not sentences.
- */
-const dir = resolve(__dirname, "../../components/results");
-const sentence = /^[A-Z][a-z']+(?: [A-Za-z'.,…-]+)+$/;
-
-function sentencesIn(source: string): string[] {
-  const code = source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/.*$/gm, "$1")
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
-  const found: string[] = [];
-  for (const m of code.matchAll(/"([^"\n]*)"|`([^`\n]*)`|>([^<>{}\n]+)</g)) {
-    const text = (m[1] ?? m[2] ?? m[3] ?? "").replace(/\$\{[^}]*\}/g, "x").trim();
-    if (sentence.test(text)) found.push(text);
-  }
-  return found;
-}
-
-describe("no sentence lives in a results renderer", () => {
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".tsx"))) {
-    it(`${file} says everything through copy.ts`, () => {
-      expect(sentencesIn(readFileSync(resolve(dir, file), "utf8"))).toEqual([]);
-    });
-  }
-
-  it("does catch an inline sentence, a template one and JSX text, and passes a class name and a one-word label", () => {
-    expect(sentencesIn('const a = "Some usage was missing.";')).toHaveLength(1);
-    expect(sentencesIn("const a = `Since ${d} onwards`;")).toHaveLength(1);
-    expect(sentencesIn("<p>Nothing for you to do.</p>")).toHaveLength(1);
-    expect(sentencesIn('<b className="flex flex-col gap-3">Refused</b>')).toEqual([]);
   });
 });
