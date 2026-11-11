@@ -113,7 +113,7 @@ const ARGUED: Record<string, Array<[RegExp, string]>> = {
   "lib/claims.ts": [[/\busers?\b/i, "Quotes Zitadel's User Info setting and the apps' own role words and settings."]],
   "components/apps/claim-words.ts": [[/\busers?\b/i, "Names Zitadel's User Info inside ID Token setting, exactly as Zitadel's console labels it."]],
   "components/apps/ShapeCard.tsx": [[/\busers?\b/i, "Names Zitadel's User Info inside ID Token setting, exactly as Zitadel's console labels it."]],
-  "components/storage/ConnectionGuide.tsx": [
+  "components/kinds/storage/ConnectionGuide.tsx": [
     [/\busers?\b/i, "Quotes the operating system's own sign-in dialog, which the member must match on screen."],
   ],
 };

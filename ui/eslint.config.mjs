@@ -39,7 +39,8 @@ const eslintConfig = [
       ],
     },
   },
-  {
+  ...(() => {
+    const message = (m) => ({ message: m });
     /**
      * One invalidation map (one-path W2c). A write learns which reads it made
      * stale in exactly one place, `invalidateAfter` in
@@ -48,22 +49,54 @@ const eslintConfig = [
      * `x["invalidateQueries"]` and destructuring it out all fail. Tests may
      * spy on it.
      */
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/lib/queries/invalidation.ts", "src/**/__tests__/**", "src/**/*.test.{ts,tsx}"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        ...[
-          "MemberExpression[property.name='invalidateQueries']",
-          "MemberExpression[computed=true][property.value='invalidateQueries']",
-          "ObjectPattern > Property[key.name='invalidateQueries']",
-        ].map((selector) => ({
-          selector,
-          message: "Invalidate through invalidateAfter(qc, kind, scope) in lib/queries/invalidation.ts, the one map.",
-        })),
-      ],
-    },
-  },
+    const invalidation = [
+      "MemberExpression[property.name='invalidateQueries']",
+      "MemberExpression[computed=true][property.value='invalidateQueries']",
+      "ObjectPattern > Property[key.name='invalidateQueries']",
+    ].map((selector) => ({
+      selector,
+      ...message("Invalidate through invalidateAfter(qc, kind, scope) in lib/queries/invalidation.ts, the one map."),
+    }));
+    /**
+     * The UI reads fields by role (addon-contract 3.4). The five TrueNAS field
+     * names and `smb` are written only in lib/fields.ts and in
+     * components/kinds/storage/; everywhere else a screen asks fieldsByRole /
+     * useFieldSchema and says what comes back in the add-on's label. "group"
+     * is also a layout word (a nav group, role="group"), so it is refused only
+     * where it names a field: compared with `.field`, a `field=` prop, a
+     * `field:` property, or a FIELD_* constant.
+     */
+    const fieldWord = "Literal[value=/^(home|home_quota|enabled|smb_enabled|smb)$/]";
+    const roles = [
+      fieldWord,
+      "BinaryExpression:has(> MemberExpression[property.name='field']) > Literal[value='group']",
+      "JSXAttribute[name.name='field'] > Literal[value='group']",
+      "Property[key.name='field'] > Literal[value='group']",
+      "VariableDeclarator[id.name=/^FIELD/] > Literal[value='group']",
+    ].map((selector) => ({
+      selector,
+      ...message("Read fields by role through lib/fields.ts (fieldsByRole, useFieldSchema); field names live only in lib/fields.ts and components/kinds/storage/."),
+    }));
+    const tests = ["src/**/__tests__/**", "src/**/*.test.{ts,tsx}"];
+    const storage = ["src/lib/fields.ts", "src/components/kinds/storage/**"];
+    return [
+      {
+        files: ["src/**/*.{ts,tsx}"],
+        ignores: ["src/lib/queries/invalidation.ts", ...storage, ...tests],
+        rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles] },
+      },
+      {
+        files: ["src/lib/queries/invalidation.ts"],
+        ignores: tests,
+        rules: { "no-restricted-syntax": ["error", ...roles] },
+      },
+      {
+        files: storage.map((f) => (f.endsWith("**") ? `${f}/*.{ts,tsx}` : f)),
+        ignores: tests,
+        rules: { "no-restricted-syntax": ["error", ...invalidation] },
+      },
+    ];
+  })(),
   {
     /**
      * One path for a missing name (one-path W2d). "Unknown project" is said by

@@ -10,6 +10,8 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Select";
 import { request } from "@/lib/api-client";
 import { describeFailure, sentence } from "@/lib/outcome";
+import { formatLimit } from "@/lib/fields";
+import { useMappingFields } from "@/lib/queries/useFieldSchema";
 import { formatBytes, formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useLiftHold } from "@/lib/queries/useHolds";
@@ -30,12 +32,10 @@ import { roleName } from "@/lib/names";
  */
 
 const GB = 1024 ** 3;
-const FIELD = "home_quota";
 
 function gbWords(bytes: number | undefined): string {
   if (bytes === undefined || bytes === 0) return "no limit";
-  const n = bytes / GB;
-  return `${Number.isInteger(n) ? n : n.toFixed(1)} GB`;
+  return formatLimit(bytes, "bytes");
 }
 
 function useRoleLabel() {
@@ -99,6 +99,7 @@ export function limitVerb(home: AccountHome | undefined): string | null {
 
 function useSetOwnLimit(target: string) {
   const client = useQueryClient();
+  const field = useMappingFields(target).limit;
   return useMutation({
     mutationFn: (input: { subjectId: string; bytes: number; reason: string; endsOn?: string; reviewOn?: string }) =>
       request<{ id: string }>("/allowances", {
@@ -106,7 +107,7 @@ function useSetOwnLimit(target: string) {
         body: {
           subject_id: input.subjectId,
           target,
-          field: FIELD,
+          field,
           value: String(input.bytes),
           // One person's own value in place of what their roles give: the
           // allowance's `set` direction, bounded like every hold.

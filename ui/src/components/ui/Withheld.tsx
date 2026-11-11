@@ -4,6 +4,7 @@ import React from "react";
 
 import { UserName } from "@/components/names/UserName";
 import { targetLabel } from "@/lib/nav";
+import { useFieldLookup } from "@/lib/queries/useFieldSchema";
 import { sortByName } from "@/lib/sort";
 
 /**
@@ -47,8 +48,14 @@ export interface WithheldItem {
  * opened with it read as a bare "true on truenas". Everything else is a value
  * somebody recognises (a group, a share), shown as the code it is.
  */
+function useIsAccount(): (item: WithheldItem) => boolean {
+  const lookup = useFieldLookup();
+  return (item) => lookup(item.target, item.field)?.role === "account";
+}
+
 function Held({ item, voice, className = "" }: { item: WithheldItem; voice: string; className?: string }) {
-  if (item.field !== "enabled") return <span className={`font-mono ${className}`}>{item.value}</span>;
+  const isAccount = useIsAccount();
+  if (!isAccount(item)) return <span className={`font-mono ${className}`}>{item.value}</span>;
   return (
     <span className="text-ink">
       {voice} {item.target ? `${targetLabel(item.target)} account` : "account"}
@@ -84,6 +91,7 @@ export function Withheld({
   audience?: "member" | "operator";
   className?: string;
 }) {
+  const isAccount = useIsAccount();
   if (items.length === 0) return null;
 
   return (
@@ -102,7 +110,7 @@ export function Withheld({
         {byValue(items).map((item) => (
           <li key={`${item.target ?? ""}:${item.field}:${item.value}`} className="text-[13.5px]">
             <Held item={item} voice={audience === "member" ? "Your" : "Their"} className="text-[13px] text-ink" />
-            {audience === "operator" && item.target && item.field !== "enabled" && (
+            {audience === "operator" && item.target && !isAccount(item) && (
               <span className="text-muted"> on {targetLabel(item.target)}</span>
             )}
             {audience === "operator" && item.actorId && (
@@ -163,6 +171,7 @@ const byValue = (items: WithheldItem[]) =>
   sortByName(items, (i) => i.value, (i) => `${i.target ?? ""}:${i.field}`);
 
 export function WithheldInline({ items }: { items: WithheldItem[] }) {
+  const isAccount = useIsAccount();
   if (items.length === 0) return null;
   return (
     <ul className="mt-1 grid gap-0.5">
@@ -173,7 +182,7 @@ export function WithheldInline({ items }: { items: WithheldItem[] }) {
         >
           <WithheldPill />
           <Held item={item} voice="Their" className="text-[12.5px] text-ink" />
-          {item.target && item.field !== "enabled" && <span className="text-faint">on {targetLabel(item.target)}</span>}
+          {item.target && !isAccount(item) && <span className="text-faint">on {targetLabel(item.target)}</span>}
           {item.reason && <span className="text-muted">{item.reason}</span>}
           {item.reviewDue && (
             <span className="text-warn-text">· review date passed, needs a decision</span>

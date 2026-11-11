@@ -18,6 +18,7 @@ import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
+import { StandingLine } from "@/components/ui/StandingLine";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -918,9 +919,22 @@ const OPERATION_LABEL: Record<string, string> = {
   "storage.status": "Reads space used and quota",
 };
 
-function Capabilities({ registered }: { registered: TargetSummary }) {
+export function Capabilities({ registered }: { registered: TargetSummary }) {
   const name = targetLabel(registered.target);
   return (
+    <>
+    {registered.last_error && (
+      // The add-on's latest description of itself was refused, and the last good one still runs.
+      // Said above the card it is about, with the reason as the backend gave it.
+      <Notice
+        tone="warn"
+        title={`${name}'s latest description of itself was not accepted`}
+        next={`Ask whoever looks after ${name}'s add-on to fix it. Syndra reads it again on its own.`}
+      >
+        Syndra is still using the last good one, so what this page lists has not changed. The reason:{" "}
+        <span data-last-error className="type-mono text-[13px] [overflow-wrap:anywhere]">{registered.last_error}</span>
+      </Notice>
+    )}
     <Card>
       <CardHeader
         title="What it can do"
@@ -969,7 +983,36 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
           </TechnicalDetail>
         </div>
       )}
+      <AlsoSays lines={registered.also_says} name={name} />
     </Card>
+    </>
+  );
+}
+
+/**
+ * What the add-on says about itself that Syndra does not use, quoted exactly as
+ * the backend carries it and never acted on. Always here, empty or not:
+ * structure never moves in response to data.
+ */
+export function AlsoSays({ lines, name }: { lines: string[] | undefined; name: string }) {
+  return (
+    <div className="row-divider grid gap-1.5 px-5 py-3" data-also-says>
+      <span className="type-label text-label">What the add-on also says</span>
+      {lines && lines.length > 0 ? (
+        <>
+          <ul className="grid gap-1">
+            {lines.map((line, i) => (
+              <li key={i} className="type-mono text-[12.5px] leading-[1.5] text-muted [overflow-wrap:anywhere]">
+                {line}
+              </li>
+            ))}
+          </ul>
+          <p className="text-[13px] text-faint">Shown as {name} sent it. Syndra does not use any of it.</p>
+        </>
+      ) : (
+        <p className="text-[13px] text-faint">Nothing beyond what Syndra uses.</p>
+      )}
+    </div>
   );
 }
 
@@ -1459,6 +1502,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
               }
             >
               <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
+              {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" />}
               <span className="flex-1" />
               {account.self ? (
                 // Syndra's own credential. Listed, because it IS on the target

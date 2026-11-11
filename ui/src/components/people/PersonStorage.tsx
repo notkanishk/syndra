@@ -1,5 +1,6 @@
 "use client";
 
+import { useFieldLookup } from "@/lib/queries/useFieldSchema";
 import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
 import type { ReactNode } from "react";
@@ -126,9 +127,10 @@ function Dotted({ tone, children }: { tone: StatusTone; children: ReactNode }) {
 }
 
 function Status({ view }: { view: PersonTargetView }) {
+  const lookup = useFieldLookup();
   if (!view.health || view.health === "unknown") return null;
   const offline = view.health === "offline";
-  const held = view.holds.some((h) => h.field === "enabled");
+  const held = view.holds.some((h) => lookup(view.target, h.field)?.role === "account");
   return (
     <span role="status" className={`inline-flex items-center gap-2 text-[13px] ${offline ? "text-warn-text" : "text-muted"}`}>
       <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
@@ -510,7 +512,9 @@ function FolderList({ places, roleNames }: { places: StoragePlace[]; roleNames: 
 }
 
 function HoldRow({ view, seat, page }: { view: PersonTargetView; seat: ReactNode; page: string }) {
-  const hold = view.holds.find((h) => h.field === "enabled") ?? view.holds[0];
+  const lookup = useFieldLookup();
+  const isAccount = (h: { field: string }) => lookup(view.target, h.field)?.role === "account";
+  const hold = view.holds.find(isAccount) ?? view.holds[0];
   return (
     <Row label="Hold" seat={seat}>
       {!hold ? (
@@ -521,7 +525,7 @@ function HoldRow({ view, seat, page }: { view: PersonTargetView; seat: ReactNode
       ) : (
         <>
           <Dotted tone="neutral">
-            {hold.field === "enabled" ? "Their whole account" : hold.value}, since {formatShortDate(hold.since)}
+            {isAccount(hold) ? "Their whole account" : hold.value}, since {formatShortDate(hold.since)}
           </Dotted>
           <Faint>
             “{hold.reason}” · put on hold by{" "}

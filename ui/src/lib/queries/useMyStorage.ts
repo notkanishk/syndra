@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, request } from "@/lib/api-client";
-import type { AccountHome } from "@/lib/queries/useTargets";
+import type { AccountHome, Standing } from "@/lib/queries/useTargets";
 import type { OneShotSecret } from "@/lib/secret";
 import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
@@ -66,6 +66,8 @@ export interface MyTargetView {
     needs_re_enrolment?: boolean;
     last_changed_at?: string;
   };
+  /** Whether the account can be used yet, and who is waited on, in the add-on's words. */
+  standing?: Standing;
   /** The add-on answered. A member whose target is down is told, not shown a form that fails. */
   reachable: boolean;
   /**

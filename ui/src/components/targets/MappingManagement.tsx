@@ -11,11 +11,10 @@ import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
 import { useLeavingRows } from "@/lib/motion";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { fieldNoun, mappingFields, type EntitlementField } from "@/lib/fields";
+import { useFieldSchema } from "@/lib/queries/useFieldSchema";
 import { AddMappingButton, RefusedFields, RoleMappingDialog, placeName } from "@/components/targets/AddMappingDialog";
 import {
-  FIELD_GROUP,
-  FIELD_HOME,
-  FIELD_HOME_QUOTA,
   applyParts,
   asQueued,
   limitWords,
@@ -84,11 +83,13 @@ export function MappingManagement({ target }: { target: string }) {
   const settings = useTargetSettings(target);
   const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
+  const schema = useFieldSchema(target);
+  const fields = mappingFields(schema);
   const all = mappings.data ?? [];
   const names = useShownNames();
   // A to Z by the role as its row reads it ("Project / Role").
   const shown = sortByName(
-    all.filter((m) => m.field !== FIELD_HOME && m.field !== FIELD_HOME_QUOTA),
+    all.filter((m) => m.field !== fields.flag && m.field !== fields.limit),
     (m) => `${names.project(m.project_id)} / ${names.role(m.project_id, m.role_key)}`,
   );
   const [editing, setEditing] = useState<RoleMapping | null>(null);
@@ -129,10 +130,10 @@ export function MappingManagement({ target }: { target: string }) {
               <FormPart key={mapping.id} appear={arrived.has(mapping.id)} {...drawn.props(mapping.id)}>
               <MappingRow
                 mapping={mapping}
-                home={mapping.field === FIELD_GROUP ? rowsOf(all, mapping.project_id, mapping.role_key) : undefined}
+                home={mapping.field === fields.membership ? rowsOf(all, mapping.project_id, mapping.role_key, fields) : undefined}
                 homeRoot={homeRoot}
                 first={i === 0}
-                opens={mapping.field === "group" && reach.data?.read ? (reach.data.groups?.[mapping.value] ?? []) : undefined}
+                opens={mapping.field === fields.membership && reach.data?.read ? (reach.data.groups?.[mapping.value] ?? []) : undefined}
                 lastKnown={reach.data?.read === true && reach.data.current === false}
                 onEdit={() => setEditing(mapping)}
                 onDelete={() => setDeleting(mapping)}
@@ -148,7 +149,7 @@ export function MappingManagement({ target }: { target: string }) {
       <VersionHistory target={target} />
 
       {editing &&
-        (editing.field === FIELD_GROUP ? (
+        (editing.field === fields.membership ? (
           <RoleMappingDialog
             target={target}
             role={{ projectId: editing.project_id, roleKey: editing.role_key }}
@@ -163,7 +164,7 @@ export function MappingManagement({ target }: { target: string }) {
       {deleting && (
         <DeleteMappingDialog
           mapping={deleting}
-          rows={deleting.field === FIELD_GROUP ? rowsOf(all, deleting.project_id, deleting.role_key) : { group: deleting }}
+          rows={deleting.field === fields.membership ? rowsOf(all, deleting.project_id, deleting.role_key, fields) : { group: deleting }}
           onClose={() => {
             setDeleting(null);
             void mappings.refetch();
@@ -220,8 +221,9 @@ function OpensNote({ name, reach }: { name: string; reach: TargetReach | undefin
 }
 
 /** What a mapping gives, in words: the group's name, never `field = value`. */
-function gives(mapping: RoleMapping): string {
-  return mapping.field === FIELD_GROUP ? `the ${mapping.value} group` : `${mapping.value}, as its ${mapping.field}`;
+function gives(mapping: RoleMapping, schema: EntitlementField[]): string {
+  const field = schema.find((f) => f.name === mapping.field);
+  return field?.role === "membership" ? `the ${mapping.value} ${fieldNoun(field)}` : `${mapping.value}, as its ${mapping.field}`;
 }
 
 function MappingRow({
@@ -247,6 +249,7 @@ function MappingRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const schema = useFieldSchema(mapping.target);
   const holders = useMappingHolders(mapping.id);
   const cohort = holders.data?.holders ?? [];
   const roleName = useRoleName(mapping.project_id, mapping.role_key);
@@ -266,7 +269,7 @@ function MappingRow({
         </Link>
       </span>
       <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-[3px]">
-        <span className="text-[14px]">Gives {gives(mapping)}</span>
+        <span className="text-[14px]">Gives {gives(mapping, schema)}</span>
         {opens && (
           <span className="flex flex-col gap-0.5">
             {opens.length === 0 ? (
@@ -360,13 +363,14 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
   const [value, setValue] = useState(mapping.value);
   const [rehearsed, setRehearsed] = useState<MappingRehearsal | null>(null);
   const touch = useIsTouch();
+  const schema = useFieldSchema(mapping.target);
   const roleName = useRoleName(mapping.project_id, mapping.role_key);
 
   return (
     <RehearsalDialog
       title="Change what this role gives"
       definitionLabel="Save the change"
-      lede={`${roleName} currently gives ${gives(mapping)} on ${targetLabel(mapping.target)}. Change it and everybody holding the role is moved too.`}
+      lede={`${roleName} currently gives ${gives(mapping, schema)} on ${targetLabel(mapping.target)}. Change it and everybody holding the role is moved too.`}
       noun={["person", "people"]}
       system={targetLabel(mapping.target)}
       ready={value.trim() !== "" && value !== mapping.value}
@@ -441,6 +445,7 @@ function DeleteMappingDialog({
   onClose: () => void;
 }) {
   const [parts, setParts] = useState<RehearsedPart[]>([]);
+  const schema = useFieldSchema(mapping.target);
   const roleName = useRoleName(mapping.project_id, mapping.role_key);
   const who = { target: mapping.target, projectId: mapping.project_id, roleKey: mapping.role_key };
 
@@ -448,7 +453,7 @@ function DeleteMappingDialog({
     <RehearsalDialog
       title="Remove this mapping"
       definitionLabel="Remove the mapping"
-      lede={`${roleName} will no longer give ${gives(mapping)} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.${
+      lede={`${roleName} will no longer give ${gives(mapping, schema)} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.${
         rows.home ? " New home folders stop; the ones already made stay, with their files." : ""
       }`}
       noun={["person", "people"]}
@@ -458,7 +463,7 @@ function DeleteMappingDialog({
       // dialog's own scope step is the ceremony.
       destructive
       onRehearse={async (acknowledgeScope) => {
-        const rehearsed = await rehearseOps(opsFor(rows, null), who, acknowledgeScope);
+        const rehearsed = await rehearseOps(opsFor(rows, null, mappingFields(schema)), who, acknowledgeScope);
         setParts(rehearsed);
         return mergePlans(rehearsed);
       }}

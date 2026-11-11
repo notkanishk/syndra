@@ -11,6 +11,8 @@ import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
+import { accountField } from "@/lib/fields";
+import { useFieldSchema } from "@/lib/queries/useFieldSchema";
 import { formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { glideTo } from "@/lib/motion";
@@ -135,6 +137,7 @@ function PersonRow({
   home?: AccountHome;
 }) {
   const [dialog, setDialog] = useState<"hold" | "revoke" | "limit" | null>(null);
+  const schema = useFieldSchema(target);
   const verb = limitVerb(home);
   // The name, because both dialogs speak to and about a person — and rung 3
   // asks the operator to type it. Through the same resolver every other surface
@@ -195,7 +198,7 @@ function PersonRow({
           // operator reads. Sending the label would be a malformed term the
           // backend refuses; showing the value would be a dialog saying "Hold
           // true for Charlotte".
-          field="enabled"
+          field={accountField(schema)?.name ?? ""}
           value="true"
           label={`access to ${targetLabel(target)}`}
           onClose={() => setDialog(null)}

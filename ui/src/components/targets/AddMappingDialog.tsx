@@ -10,7 +10,9 @@ import { Notice } from "@/components/ui/Notice";
 import { Segmented, Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
 import { ApiError } from "@/lib/api-client";
-import { formatClock } from "@/lib/format";
+import { fieldsByRole, mappingFields } from "@/lib/fields";
+import { useFieldSchema } from "@/lib/queries/useFieldSchema";
+import { formatClock, formatList } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useCreateMapping, useMappings } from "@/lib/queries/useMappings";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -82,13 +84,16 @@ export function RoleMappingDialog({
   const project = row?.project ?? undefined;
   const projects = useProjects();
   const mappings = useMappings(target);
+  const schema = useFieldSchema(target);
+  const fields = mappingFields(schema);
+  const FIELD = fields.membership ?? "";
   const values = useMappableValues(target, FIELD);
   const reach = useTargetReach(target);
   const settings = useTargetSettings(target);
   const create = useCreateMapping();
   const resolver = useNameResolver();
 
-  const current = role ? rowsOf(mappings.data ?? [], role.projectId, role.roleKey) : {};
+  const current = role ? rowsOf(mappings.data ?? [], role.projectId, role.roleKey, fields) : {};
   const [roleKey, setRoleKey] = useState(role?.roleKey ?? "");
   const [value, setValue] = useState(current.group?.value ?? "");
   const [home, setHome] = useState(Boolean(current.home));
@@ -110,7 +115,7 @@ export function RoleMappingDialog({
     home,
     quota: home ? (limit === "none" ? "0" : gbToBytes(gb)) : null,
   };
-  const ops = opsFor(current, choice);
+  const ops = opsFor(current, choice, fields);
 
   const list = values.data;
   const neverRead = values.error instanceof ApiError && values.error.code === "VALUES_NEVER_READ";
@@ -127,7 +132,7 @@ export function RoleMappingDialog({
         ? "Nothing has changed yet."
         : "Nothing is sent until you apply the preview.";
   const who = { target, projectId: role?.projectId ?? project?.id ?? "", roleKey };
-  const homes = homeCount(parts);
+  const homes = homeCount(parts, fields);
   const checked = parts.every((p) => p.plan.value_checked !== false);
   const movesGroup = ops.some((o) => o.kind === "edit" && o.field === FIELD);
 
@@ -354,12 +359,6 @@ export function RoleMappingDialog({
   );
 }
 
-/**
- * The field a mapping sets here. One today that a role picks a value for; the
- * home folder and its limit come with A-03.
- */
-const FIELD = "group";
-
 /** "It lists 34 groups, all of them built in, like builtin_users and …" */
 function builtinSentence(name: string, list: MappableValues | undefined): string {
   const count = list?.builtin_count ?? 0;
@@ -398,24 +397,28 @@ export function placeName(p: ReachPlace): string {
 }
 
 /**
- * The two fields Syndra will not map, named rather than left out (design M1).
+ * The settings Syndra will not map, named rather than left out (design M1): the
+ * account itself and each of its channels, found by role. They follow from
+ * whether somebody is entitled to the add-on at all. Mapping them would let a
+ * role switch an account off while the entitlement that created it still
+ * stood, so the API refuses them at three separate layers.
  *
- * `enabled` and `smb_enabled` follow from whether somebody is entitled to the
- * add-on at all. Mapping them would let a role switch an account off while the
- * entitlement that created it still stood, so the API refuses them at three
- * separate layers.
- *
- * Said here because a field box that silently rejects two names reads as
- * unfinished software — and because an operator who tries one deserves the
- * reason rather than a validation error.
+ * Said here because a field box that silently rejects them reads as unfinished
+ * software, and because an operator who tries one deserves the reason rather
+ * than a validation error. The words are the add-on's own labels.
  */
 export function RefusedFields({ target }: { target: string }) {
+  const by = fieldsByRole(useFieldSchema(target));
+  const names = [by.account.length ? "the account" : null, ...by.channel.map((c) => `its ${c.label ?? "other way in"}`)].filter(
+    (n): n is string => n !== null,
+  );
+  if (names.length === 0) return null;
+  const many = names.length > 1;
   return (
     <p className="px-1 text-[13.5px] leading-[1.55] text-muted">
-      Two settings cannot be mapped, on purpose: <span className="type-mono">enabled</span> and{" "}
-      <span className="type-mono">smb_enabled</span> follow from whether the person has any access to{" "}
-      {targetLabel(target)} at all. If a role could set them, one role could switch an account off while
-      another still gave that person access.
+      {many ? "Some settings cannot" : "One setting cannot"} be mapped, on purpose: {formatList(names)}.{" "}
+      {many ? "They follow" : "It follows"} from whether the person has any access to {targetLabel(target)} at all. If a role
+      could set {many ? "them" : "it"}, one role could switch an account off while another still gave that person access.
     </p>
   );
 }

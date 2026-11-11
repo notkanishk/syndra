@@ -451,29 +451,70 @@ After the two Opus reviews (11 Nov 2026), decided by the owner and built:
 
 ## 3. The UI reads roles (UI only)
 
-- [ ] 3.1 `ui/src/lib/fields.ts`: `fieldsByRole(schema)`, `accountField`,
+- [x] 3.1 `ui/src/lib/fields.ts`: `fieldsByRole(schema)`, `accountField`,
   `limitFields`, `formatLimit(value, unit)`; the manifest's schema reaches
   the UI through the existing targets endpoint unchanged #ready-for-agent
-- [ ] 3.2 `lib/role-mapping-plan.ts`, `targets/HomeLimit.tsx`,
+- [x] 3.2 `lib/role-mapping-plan.ts`, `targets/HomeLimit.tsx`,
   `AddMappingDialog.tsx`, `MappingManagement.tsx`, `PeopleOnTarget.tsx`,
   `ui/Withheld.tsx`, `review/HoldsDueForReview.tsx`, `people/PersonStorage.tsx`,
   `queries/useMyStorage.ts`: by role, copy from `label`/`unit`; the
   `enabled`/`smb_enabled` sentences in `AddMappingDialog.tsx:403-416` become
   "the account" and "its {channel label}" #ready-for-agent
-- [ ] 3.3 `storage/MyStorage.tsx` becomes the storage kind's module
+- [x] 3.3 `storage/MyStorage.tsx` becomes the storage kind's module
   (`components/kinds/storage/`), chosen by `kind`; a kind with no module
   (`access`, `inventory`, `machine` today) renders the core member card
   (account standing + `next`) #ready-for-agent
-- [ ] 3.4 Lint guard: the five field literals and `smb` are allowed only
-  under `components/kinds/storage/` and tests #ready-for-agent
-- [ ] 3.5 Copy guard run (`plain-language-copy`): every new sentence passes;
+- [x] 3.4 Lint guard: the five field literals and `smb` are allowed only
+  under `components/kinds/storage/`, `lib/fields.ts` and tests #ready-for-agent
+- [x] 3.5 Copy guard run (`plain-language-copy`): every new sentence passes;
   `standing.next` always ends in a next step or "nothing for you to do" #ready-for-agent
-- [ ] 3.6 (from slice 1) The target page renders what the backend now
+- [x] 3.6 (from slice 1) The target page renders what the backend now
   carries: `also_says` (the manifest's keys Syndra does not use, shown raw
   under "What the add-on also says") and `last_error` when a manifest was
   refused (the reason, and that the last good one is still in use), and
   `standing` where an unmanaged account's `password_set` used to be read
   #ready-for-agent
+
+- [ ] 3.7 (found by slice 3) What the UI now reads and the backend does not
+  yet send, each optional in the UI so nothing breaks meanwhile (backend, the
+  other agent's slice): `entitlement_schema` and `kind` on each row of
+  `GET /targets` (3.1 says "unchanged", but `targetSummary` carries neither);
+  `standing` on `GET /my-storage` and on `GET /targets/{t}/inventory`
+  `unmanaged[]`. Until then `lib/fields.ts` supplies the storage kind's schema
+  to a row that carries none (`STORAGE_SCHEMA`) and a row with no `kind` is
+  `storage`; both fallbacks are deleted when the backend sends them
+  #ready-for-agent
+
+Decided while building (slice 3, 11 Nov 2026), for the owner:
+
+- The field hooks (`useFieldSchema`, `useFieldLookup`, `useMappingFields`)
+  read the roster **from the query cache and never fetch it**: a member's proxy
+  refuses `/targets` and `Withheld`/`PersonStorage` rows show for members, and
+  the operator pages that need the schema already load the roster.
+- `role-mapping-plan.ts` keeps `RoleRows {group, home, quota}` and takes the
+  field names as a trailing `fields` argument (default: the storage kind's), so
+  its callers and existing tests did not move; the names come from
+  `mappingFields(schema)` (first field of each role).
+- Words now come from the add-on's `label`: "home folder size" in the version
+  history and findings reads "home folder limit" (the add-on's label), and a
+  flag reads by its label minus a leading "Gives a" ("home folder"). The
+  refused-fields note reads "Some settings cannot be mapped, on purpose: the
+  account and its SMB." (the channel's label), one sentence for any kind.
+- The lint guard is one `no-restricted-syntax` block set (a later block would
+  replace an earlier one, so the invalidation selectors are repeated in each).
+  `home`, `home_quota`, `enabled`, `smb_enabled` and `smb` are refused as any
+  string literal; `group` only where it names a field (compared with `.field`, a
+  `field=` prop, a `field:` property, a `FIELD_*` constant), since it is also a
+  layout word. `field-literal-guard.test.ts` is the mutation check. Left on
+  purpose: `smb_enabled` as a TypeScript property name in `useMyStorage.ts` (a
+  wire key, not a literal) and `value="true"` in the hold dialog.
+- `HomeLimit.tsx`, `PersonStorage.tsx` and `HoldsDueForReview.tsx` stay where
+  they are (they read by role now); only `MyStorage`, `ConnectionGuide` and
+  `device` moved to `components/kinds/storage/`. The kind registry is
+  `components/kinds/MemberTargetCard.tsx`; `CoreMemberCard` is the card for a
+  kind with no module.
+- `standing.next` falls back to a line from who is waited on, or "Nothing for
+  you to do." (`lib/account-standing.ts`), so no standing ends without a step.
 
 ## 4. The conformance kit and the reference add-on
 

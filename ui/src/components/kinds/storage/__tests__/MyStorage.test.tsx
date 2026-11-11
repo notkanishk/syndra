@@ -3,8 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MyStorage } from "@/components/storage/MyStorage";
-import { deviceFrom } from "@/components/storage/device";
+import { MyStorage } from "@/components/kinds/storage/MyStorage";
+import { deviceFrom } from "@/components/kinds/storage/device";
 import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
 import type { RetryState } from "@/lib/retry";

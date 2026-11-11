@@ -1,5 +1,6 @@
 "use client";
 
+import { MemberTargetCard } from "@/components/kinds/MemberTargetCard";
 import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import { useEffect, useState } from "react";
 
@@ -17,8 +18,8 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
-import type { GuideFolder } from "@/components/storage/ConnectionGuide";
-import { deviceFrom, type Device } from "@/components/storage/device";
+import type { GuideFolder } from "@/components/kinds/storage/ConnectionGuide";
+import { deviceFrom, type Device } from "@/components/kinds/storage/device";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
@@ -38,7 +39,7 @@ import { retryLine, type RetryState } from "@/lib/retry";
 import { roleName } from "@/lib/names";
 
 // Opened on demand, so it stays out of the page's first load.
-const ConnectionGuide = dynamic(() => import("@/components/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
+const ConnectionGuide = dynamic(() => import("@/components/kinds/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
 
 /**
  * A member's own storage page (route-storage; A-01, A-02).
@@ -77,7 +78,7 @@ export function MyStorage() {
       >
         <div className="grid gap-4">
           {(targets.data ?? []).map((view) => (
-            <TargetCard key={view.target} view={view} />
+            <MemberTargetCard key={view.target} view={view} />
           ))}
         </div>
       </ListStates>
@@ -138,7 +139,7 @@ function joinNames(names: string[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-function TargetCard({ view }: { view: MyTargetView }) {
+export function StorageMemberCard({ view }: { view: MyTargetView }) {
   const label = targetLabel(view.target);
   const state = stateOf(view);
   const roleName = useRoleName();

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { EntitlementField } from "@/lib/fields";
 import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
@@ -73,6 +74,11 @@ export interface TargetSummary {
   also_says?: string[];
   health?: HealthState;
   status?: TargetStatus;
+  /** What the manifest says each field is (its role, label, unit); the UI reads
+   * fields by role. The backend does not send it yet: see lib/fields.ts. */
+  entitlement_schema?: EntitlementField[];
+  /** The manifest's kind: storage, access, inventory or machine. */
+  kind?: string;
   /** The Zitadel project this system serves; null until chosen. */
   project?: { id: string; name: string } | null;
 }

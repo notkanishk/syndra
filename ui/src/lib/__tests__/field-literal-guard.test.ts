@@ -1,0 +1,46 @@
+import { ESLint } from "eslint";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+/**
+ * The lint guard (addon-contract 3.4), proved by mutation: the same source
+ * that is refused outside the storage kind passes inside it, and the
+ * invalidation guard it shares a rule with still bites.
+ */
+const eslint = new ESLint({ cwd: join(import.meta.dirname, "../../..") });
+const lint = async (code: string, file: string) => (await eslint.lintText(code, { filePath: join(import.meta.dirname, "../../..", file) }))[0].messages.filter((m) => m.ruleId === "no-restricted-syntax");
+
+const MUTANTS = [
+  'export const a = "smb_enabled";',
+  'export const a = "home_quota";',
+  'export const a = "enabled";',
+  'export const a = "home";',
+  'export const a = "smb";',
+  'export const a = (x: { field: string }) => x.field === "group";',
+  'export const a = <Thing field="group" />;',
+  'export const FIELD_X = "group";',
+];
+
+describe("field names are written only in the storage kind and fields.ts", () => {
+  for (const code of MUTANTS) {
+    it(`refuses ${code}`, async () => {
+      expect((await lint(code, "src/components/targets/Mutant.tsx")).length).toBeGreaterThan(0);
+      // invalidation.ts is plain TS: a JSX mutant cannot be parsed there.
+      if (!code.includes("<Thing")) expect((await lint(code, "src/lib/queries/invalidation.ts")).length).toBeGreaterThan(0);
+    });
+    it(`allows it in the storage kind and in fields.ts: ${code}`, async () => {
+      expect(await lint(code, "src/components/kinds/storage/Mutant.tsx")).toEqual([]);
+      expect(await lint(code, "src/lib/fields.ts")).toEqual([]);
+    });
+  }
+
+  it("leaves 'group' alone where it is a layout word", async () => {
+    expect(await lint('export const a = <div role="group" />; export const k = { kind: "group" };', "src/components/ui/X.tsx")).toEqual([]);
+  });
+
+  it("still refuses a second invalidation path, in the storage kind too", async () => {
+    const code = "export const a = (q: { invalidateQueries: () => void }) => q.invalidateQueries();";
+    expect((await lint(code, "src/components/targets/X.tsx")).length).toBeGreaterThan(0);
+    expect((await lint(code, "src/components/kinds/storage/X.tsx")).length).toBeGreaterThan(0);
+  });
+});

@@ -1,5 +1,7 @@
 "use client";
 
+import { fieldNoun, formatLimit, type EntitlementField } from "@/lib/fields";
+import { useFieldLookup } from "@/lib/queries/useFieldSchema";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useState } from "react";
 
@@ -103,10 +105,10 @@ function Subject({ id }: { id: string }) {
  * sent verbatim — "true" for a whole account — and is the wrong thing to put
  * in a sentence (see `HoldDialog`).
  */
-function holdLabel(hold: Hold): string {
-  if (hold.field === "enabled") return `their ${targetLabel(hold.target)} account`;
+function holdLabel(hold: Hold, field: EntitlementField | undefined): string {
+  if (field?.role === "account") return `their ${targetLabel(hold.target)} account`;
   if (hold.field === "share") return `the ${hold.value} share`;
-  if (hold.field === "group") return `the ${hold.value} group`;
+  if (field?.role === "membership") return `the ${hold.value} ${fieldNoun(field)}`;
   return `${hold.field} ${hold.value}`;
 }
 
@@ -118,7 +120,7 @@ function holdLabel(hold: Hold): string {
 function OwnValueRow({ hold, first }: { hold: Hold; first: boolean }) {
   const system = targetLabel(hold.target);
   const bytes = Number(hold.value);
-  const limit = !bytes ? "no limit" : `${(bytes / 1024 ** 3).toFixed(bytes % 1024 ** 3 ? 1 : 0)} GB`;
+  const limit = !bytes ? "no limit" : formatLimit(bytes, "bytes");
   return (
     <CardRow first={first} className="flex-wrap">
       <Subject id={hold.subject_id} />
@@ -143,7 +145,7 @@ function OwnValueRow({ hold, first }: { hold: Hold; first: boolean }) {
 function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
   const lift = useLiftHold();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const label = holdLabel(hold);
+  const label = holdLabel(hold, useFieldLookup()(hold.target, hold.field));
 
   return (
     <CardRow first={first} className="flex-wrap">

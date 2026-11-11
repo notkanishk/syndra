@@ -1,4 +1,4 @@
-import { MyStorage } from "@/components/storage/MyStorage";
+import { MyStorage } from "@/components/kinds/storage/MyStorage";
 
 /**
  * A member's own storage view. Present for every member whatever they can
