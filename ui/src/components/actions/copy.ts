@@ -33,10 +33,11 @@ export const PREVIEW_UNREADABLE_NEXT = "Go back and try again.";
 
 /** The action, while their last one is still being settled. */
 export const UNSETTLED_REASON = "Your last one is still being checked. Wait for it before trying again.";
+/** The same, once the hour is up and nobody can tell: the reason must not say "being checked". */
+export const UNSETTLED_DESK_REASON = "We still can't tell whether your last one went through. Ask at the desk.";
 
 /** The camera. */
 export const SCAN_BUTTON = "Scan with camera";
-export const SCAN_ARIA = "Scan the label with your camera";
 export const SCAN_TITLE = "Scan the label";
 export const SCAN_LEDE = "Hold the label in front of the camera. The id is filled in when it reads it.";
 export const SCAN_STARTING = "Starting the camera";
@@ -56,6 +57,11 @@ export const CHECKING_LATE = "We could not check just now. This page tries again
 export const ASK_DESK = "We still can't tell whether it went through";
 export const ASK_DESK_DETAIL = "Staff have been told.";
 export const ASK_DESK_NEXT = "Ask at the desk.";
+
+/** The reply was lost and the page could not even find the record to ask after. */
+export const UNSURE = "We can't tell yet whether it went through";
+export const UNSURE_DETAIL = "It was sent, and the answer did not come back.";
+export const UNSURE_NEXT = "Reload this page in a minute to see where it stands. Do not try again before then.";
 
 const TRY_LATER = "Try again in a minute. If it keeps failing, ask makerspace staff.";
 
@@ -100,6 +106,8 @@ export function refusal(code: string, details: Record<string, string> = {}): { m
       return { message: "We could not check on your last one. Nothing went out", next: "Try again in a minute." };
     case "TOO_MANY_ATTEMPTS":
       return { message: "That was tried too many times in a short while", next: "Wait a few minutes, then try again." };
+    case "RATE_LIMITED":
+      return { message: "Syndra is getting too many requests from you right now", next: "Wait a minute, then try again." };
     default:
       return undefined;
   }
@@ -122,6 +130,7 @@ export const REFUSAL_CODES = [
   "PREVIEW_UNANSWERED",
   "CALL_UNSETTLED_UNKNOWN",
   "TOO_MANY_ATTEMPTS",
+  "RATE_LIMITED",
 ] as const;
 
 /**

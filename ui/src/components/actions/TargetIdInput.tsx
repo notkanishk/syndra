@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { SCAN_ARIA, SCAN_BUTTON, SCAN_DENIED, SCAN_LEDE, SCAN_STARTING } from "@/components/actions/copy";
+import { SCAN_BUTTON, SCAN_DENIED, SCAN_LEDE, SCAN_STARTING } from "@/components/actions/copy";
 import { Button } from "@/components/ui/Button";
 import { FieldLabel, Input } from "@/components/ui/Input";
 
@@ -21,11 +21,30 @@ interface Detector {
 }
 type DetectorClass = new () => Detector;
 
-/** Whether this browser can read a label with its camera. Decided after mount, so the server and the first paint agree. */
+/** What an item's label can be printed as. A detector that reads none of these cannot read a label. */
+const LABEL_FORMATS = ["code_128", "code_39", "qr_code", "ean_13", "data_matrix"];
+
+/**
+ * Whether this browser can read a label with its camera: a camera to open and a
+ * detector that supports a format the labels use (some platforms ship the class
+ * with no formats). Decided after mount, so the server and the first paint agree.
+ */
 export function useCanScan(): boolean {
   const [can, setCan] = useState(false);
   useEffect(() => {
-    setCan("BarcodeDetector" in window && Boolean(navigator.mediaDevices?.getUserMedia));
+    let live = true;
+    (async () => {
+      try {
+        const Detector = (window as unknown as { BarcodeDetector?: DetectorClass & { getSupportedFormats?: () => Promise<string[]> } }).BarcodeDetector;
+        const formats = (await Detector?.getSupportedFormats?.()) ?? [];
+        if (live) setCan(Boolean(navigator.mediaDevices?.getUserMedia) && formats.some((f) => LABEL_FORMATS.includes(f)));
+      } catch {
+        // A detector that cannot say what it reads is not offered.
+      }
+    })();
+    return () => {
+      live = false;
+    };
   }, []);
   return can;
 }
@@ -72,7 +91,7 @@ export function TargetIdInput({
           />
         </div>
         {canScan && (
-          <Button type="button" variant="outline" aria-label={SCAN_ARIA} disabled={disabled} onClick={onScan}>
+          <Button type="button" variant="outline" disabled={disabled} onClick={onScan}>
             {SCAN_BUTTON}
           </Button>
         )}

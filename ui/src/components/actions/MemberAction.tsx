@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CameraScanner, TargetIdInput } from "@/components/actions/TargetIdInput";
 import * as copy from "@/components/actions/copy";
@@ -14,6 +14,7 @@ import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { ApiError } from "@/lib/api-client";
+import { mayHaveGoneThrough } from "@/lib/outcome";
 import { invalidateAfter } from "@/lib/queries/invalidation";
 import { settled, useMemberAction, useMemberOperation, type ActionParams } from "@/lib/queries/useMemberAction";
 import type { MyTargetView, ReadView } from "@/lib/queries/useMyStorage";
@@ -48,6 +49,8 @@ function ActionRow({ view, action }: { view: MyTargetView; action: Action }) {
   // The server's word that one is open, or this page's own poll saying so before the list has caught up.
   const polled = useMemberOperation(view.target, watching).data?.state;
   const blocked = Boolean(unsettled) || polled === "checking";
+  // An hour in doubt: the reason must not keep saying "being checked".
+  const atDesk = (polled ?? unsettled?.state) === "ask_desk";
   const label = copy.actionLabel(action.id);
 
   return (
@@ -57,7 +60,7 @@ function ActionRow({ view, action }: { view: MyTargetView; action: Action }) {
           size="sm"
           variant="outline"
           disabled={blocked}
-          reason={blocked ? copy.UNSETTLED_REASON : undefined}
+          reason={blocked ? (atDesk ? copy.UNSETTLED_DESK_REASON : copy.UNSETTLED_REASON) : undefined}
           onClick={() => {
             setKept(undefined);
             setOpen(true);
@@ -107,7 +110,9 @@ type Step =
   | { at: "scan"; param: string }
   | { at: "preview"; view: ReadView; noChange: boolean }
   | { at: "result"; said: Said; view?: ReadView | null }
-  | { at: "checking"; id: string };
+  | { at: "checking"; id: string }
+  /** A confirm whose reply was lost: finding the record to ask after. */
+  | { at: "asking" };
 
 /**
  * Preview, then confirm. Each step is the same dialog's content, never a second
@@ -128,13 +133,27 @@ function ActionDialog({
   onClose: () => void;
 }) {
   const send = useMemberAction(view.target, action.id);
+  const client = useQueryClient();
+  // Set before the send and cleared when it settles, so a second press in the same tick (before React has
+  // re-rendered the button as pending) cannot send a second one.
+  const inFlight = useRef(false);
+  const go = (vars: Parameters<typeof send.mutate>[0], on: NonNullable<Parameters<typeof send.mutate>[1]>) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    send.mutate(vars, {
+      ...on,
+      onSettled: () => {
+        inFlight.current = false;
+      },
+    });
+  };
   const [params, setParams] = useState<ActionParams>({});
   const [step, setStep] = useState<Step>({ at: "form" });
   const ready = action.params.every((p) => !p.required || (params[p.name] ?? "").trim() !== "");
   const sent = () => Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v.trim()]));
 
   const preview = () =>
-    send.mutate(
+    go(
       { params: sent(), mode: "preview" },
       {
         onSuccess: (a) => setStep(a.state === "preview" ? { at: "preview", view: a.view, noChange: a.outcome === "no_change" } : { at: "form" }),
@@ -143,7 +162,7 @@ function ActionDialog({
     );
 
   const confirm = () =>
-    send.mutate(
+    go(
       { params: sent(), mode: "confirm" },
       {
         onSuccess: (a) => {
@@ -159,10 +178,29 @@ function ActionDialog({
           if (held) {
             onWatch(held);
             setStep({ at: "checking", id: held });
-          } else setStep({ at: "result", said: saidFromError(error) });
+          } else if (mayHaveGoneThrough(error)) void findLost();
+          else setStep({ at: "result", said: saidFromError(error) });
         },
       },
     );
+
+  // The reply was lost, so it may have gone through: never "Not done". Read the member's systems again for the
+  // record the server holds and ask after it, as a reload would; with none, say we cannot tell yet.
+  const findLost = async () => {
+    setStep({ at: "asking" });
+    await client.refetchQueries({ queryKey: ["me", "targets"] });
+    const now = client.getQueryData<{ targets: MyTargetView[] }>(["me", "targets"])?.targets.find((t) => t.target === view.target);
+    const id = now?.unsettled?.operation === action.id ? now.unsettled.id : undefined;
+    if (id) {
+      onWatch(id);
+      setStep({ at: "checking", id });
+    } else {
+      setStep({
+        at: "result",
+        said: { word: copy.WORD.askDesk, outcome: { kind: "queued", message: copy.UNSURE, detail: copy.UNSURE_DETAIL, next: copy.UNSURE_NEXT } },
+      });
+    }
+  };
 
   const toForm = () => setStep({ at: "form" });
   const titleId = `action-${action.id}-title`;
@@ -170,7 +208,7 @@ function ActionDialog({
     step.at === "form" ? copy.FORM_LEDE : step.at === "preview" && !step.noChange && step.view.readable ? copy.PREVIEW_LEDE : undefined;
 
   return (
-    <Modal open onClose={onClose} busy={send.isPending} size="md" labelledBy={titleId}>
+    <Modal open onClose={onClose} busy={send.isPending || step.at === "asking"} size="md" labelledBy={titleId}>
       <ModalHeader titleId={titleId} title={step.at === "scan" ? copy.SCAN_TITLE : label} lede={step.at === "scan" ? undefined : lede} />
       <div className="flex flex-col gap-4 px-6">
         {step.at === "scan" && (
@@ -239,6 +277,7 @@ function ActionDialog({
             {step.view?.readable && <ReadResult read={step.view} name={view.name} reader={MEMBER} />}
           </>
         )}
+        {step.at === "asking" && <ActionOutcome word={saidFromState("checking").word} outcome={saidFromState("checking").outcome} />}
         {step.at === "checking" && <Watching target={view.target} name={view.name} id={step.id} />}
       </div>
       {step.at !== "scan" && (
@@ -255,11 +294,11 @@ function ActionDialog({
           note={step.at === "preview" && !step.noChange && step.view.readable ? copy.previewNote(view.name) : undefined}
         >
           {step.at === "form" ? (
-            <Button type="submit" form="action-form" variant="accent" disabled={!ready} isPending={send.isPending}>
+            <Button key="preview" type="submit" form="action-form" variant="accent" disabled={!ready} isPending={send.isPending}>
               {copy.PREVIEW_BUTTON}
             </Button>
           ) : step.at === "preview" && !step.noChange && step.view.readable ? (
-            <Button variant="accent" isPending={send.isPending} onClick={confirm}>
+            <Button key="confirm" variant="accent" isPending={send.isPending} onClick={confirm}>
               {copy.CONFIRM_BUTTON}
             </Button>
           ) : (

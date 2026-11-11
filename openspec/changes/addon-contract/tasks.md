@@ -1539,6 +1539,12 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   - `components/actions/copy.ts` labels `item.checkout` as "Check out an item"; any other action id is shown as its id in words ("Item return"). A real label belongs in the manifest (a future `label` on the operation), noted, not built.
   - Camera: `BarcodeDetector` + `getUserMedia({facingMode:"environment"})`, feature-detected after mount (no hydration mismatch); asked for only on the press; the stream stops on unmount however the step ends (read, Close, dialog closed, a stream that arrives after close). First label read fills the field; nothing is auto-submitted.
   - Dev-only learning: the plain-language scan flags the identifier `target` as a parameter name in `lib/queries` code ("say the system's name"); the hook's parameter is `system`.
+  - 6c UI round 2: a lost-reply confirm (`mayHaveGoneThrough`) never says "Not done". It shows Checking at once (step `asking`), refetches `["me","targets"]`, and goes to checking on that target's `unsettled.id` for the same action. With no id it says "Not sure yet" (`UNSURE*` in copy.ts) with the step "Reload this page in a minute... Do not try again before then." The row has no outcome in that case because there is no id to watch. This is the one place dialog and row cannot show the same thing.
+  - RATE_LIMITED worded in `refusal`/`REFUSAL_CODES` (now 16) and the section 14 table: "Syndra is getting too many requests from you right now" / "Wait a minute, then try again." Its wording is deliberately different from TOO_MANY_ATTEMPTS, which is the per-action limit.
+  - One shared `inFlight` ref in ActionDialog guards both preview and confirm (`go`), set before `mutate` and cleared in `onSettled`. Confirm and "Show what will happen" have distinct `key`s so the footer button is a new node and focus is not carried onto it.
+  - Scan button: `aria-label` and `SCAN_ARIA` dropped; the visible text is the name. `useCanScan` is now async: it needs a camera and `BarcodeDetector.getSupportedFormats()` containing one of code_128, code_39, qr_code, ean_13, data_matrix. A detector with no `getSupportedFormats` is not offered.
+  - ask_desk: `UNSETTLED_DESK_REASON` "We still can't tell whether your last one went through. Ask at the desk." The row uses the polled state first, then `unsettled.state`.
+  - Guide section 14 gained 5 rows: the desk reason, 3 for the unsure outcome, and RATE_LIMITED.
 
 **`stats` (decisions 11–17)**
 

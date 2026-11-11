@@ -46,6 +46,10 @@ const PLAIN = [
   copy.PREVIEW_UNREADABLE_NEXT,
   copy.CONFIRM_BUTTON,
   copy.UNSETTLED_REASON,
+  copy.UNSETTLED_DESK_REASON,
+  copy.UNSURE,
+  copy.UNSURE_DETAIL,
+  copy.UNSURE_NEXT,
   copy.DONE,
   copy.NO_CHANGE,
   copy.NOT_DONE,
@@ -70,7 +74,7 @@ describe("the copy guide's section on acting on things in the world", () => {
 
   it("names the five words and walks every code the page words", () => {
     for (const word of WORDS) expect(section, word).toContain(`**${word}**`);
-    expect(new Set(copy.REFUSAL_CODES).size).toBe(15);
+    expect(new Set(copy.REFUSAL_CODES).size).toBe(16);
     for (const code of copy.REFUSAL_CODES) expect(copy.refusal(code, DETAILS[code]), code).toBeDefined();
     expect(copy.refusal("SOMETHING_NEW")).toBeUndefined();
   });
@@ -93,6 +97,9 @@ describe("the copy guide's section on acting on things in the world", () => {
     for (const s of [copy.CHECKING_NEXT, copy.PREVIEW_NO_CHANGE]) expect(s).toContain(NOTHING_TO_DO);
     expect(copy.NOT_DONE_NEXT).toMatch(/try again/i);
     expect(copy.ASK_DESK_NEXT).toMatch(/desk/i);
+    expect(copy.UNSETTLED_DESK_REASON).toMatch(/Ask at the desk\.$/);
+    expect(copy.UNSETTLED_DESK_REASON).not.toMatch(/being checked/);
+    expect(copy.UNSURE_NEXT).toMatch(/do not try again/i);
   });
 
   it("carries the operator's row, one row per sentence", () => {

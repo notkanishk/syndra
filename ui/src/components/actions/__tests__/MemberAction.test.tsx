@@ -64,6 +64,9 @@ const bodies = (method: string, path: string) => sent(method, path).map(([, init
 
 function renderCard(v: MyTargetView = view()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  // The page's own read of the member's systems (useMyStorage), so a confirm can read it again.
+  client.setQueryDefaults(["me", "targets"], { queryFn: () => mocks.request("/me/targets") });
+  client.setQueryData(["me", "targets"], { targets: [v] });
   const ui = (x: MyTargetView) => (
     <QueryClientProvider client={client}>
       <MemberTargetCard view={x} untitled />
@@ -179,16 +182,55 @@ describe("what a press leaves stale", () => {
 });
 
 describe("a confirm whose reply never came back", () => {
-  it("is sent once, is not told it failed cleanly, and says where to look", async () => {
+  const LOST: Array<[string, () => Error]> = [
+    ["a dropped connection", () => new LostReply(new TypeError("Failed to fetch"), "POST")],
+    ["a proxy 502 after the send", () => refusalOf(502, "UPSTREAM_ERROR")],
+  ];
+  const confirms = () => bodies("POST", POST).filter((b) => (b as { confirm?: boolean }).confirm);
+  const open_ = { operation: "item.checkout", id: OP, sent_at: "2026-11-12T09:00:03Z", state: "checking" as const };
+
+  it.each(LOST)("%s: is sent once, finds the record the server holds, and goes to checking, never Not done", async (_n, lost) => {
     server({
-      [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, new LostReply(new TypeError("Failed to fetch"), "POST")],
+      [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, lost()],
+      "GET /me/targets": [{ targets: [view({ unsettled: open_ })] }],
+      [`GET ${GET}`]: [{ operation: OP, sent_at: "x", state: "checking" }],
     });
     renderCard();
     await toPreview();
     press(copy.CONFIRM_BUTTON);
-    await screen.findByText(/may have gone through/);
-    expect(bodies("POST", POST).filter((b) => (b as { confirm?: boolean }).confirm)).toHaveLength(1);
+    await screen.findByText(`${copy.CHECKING}.`);
+    expect(confirms()).toHaveLength(1);
+    expect(sent("GET", "/me/targets")).toHaveLength(1);
+    expect(screen.queryByText("Not done")).toBeNull();
     expect(document.body.textContent).not.toMatch(/Nothing was changed/);
+    // The row agrees with the dialog: closed, it still says checking, and the action stays off.
+    press("Close");
+    expect(screen.getByText(`${copy.CHECKING}.`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: copy.actionLabel("item.checkout") })).toBeDisabled();
+  });
+
+  it.each(LOST)("%s, and no record to be found: Not sure yet, with a step, never Not done", async (_n, lost) => {
+    server({
+      [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, lost()],
+      "GET /me/targets": [{ targets: [view()] }],
+    });
+    renderCard();
+    await toPreview();
+    press(copy.CONFIRM_BUTTON);
+    await screen.findByText(`${copy.UNSURE}.`);
+    expect(screen.getByText("Not sure yet")).toBeInTheDocument();
+    expect(screen.getByText(copy.UNSURE_NEXT)).toBeInTheDocument();
+    expect(screen.queryByText("Not done")).toBeNull();
+    expect(confirms()).toHaveLength(1);
+  });
+
+  it("a 5xx that is not a lost reply is still a plain refusal", async () => {
+    server({ [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, refusalOf(503, "TARGET_UNREACHABLE")] });
+    renderCard();
+    await toPreview();
+    press(copy.CONFIRM_BUTTON);
+    await screen.findByText("Not done");
+    expect(sent("GET", "/me/targets")).toHaveLength(0);
   });
 });
 
@@ -221,6 +263,7 @@ describe("each refusal says what is true and its one step", () => {
     [503, "TARGET_UNREACHABLE", undefined],
     [503, "CALL_UNSETTLED_UNKNOWN", undefined],
     [429, "TOO_MANY_ATTEMPTS", undefined],
+    [429, "RATE_LIMITED", undefined],
   ];
 
   it.each(CASES)("a confirm refused %i %s", async (status, code, details) => {
@@ -393,9 +436,72 @@ describe("while a call is unsettled", () => {
     expect(screen.getByRole("button", { name: copy.actionLabel("item.checkout") })).toBeEnabled();
   });
 
+  it("an hour in doubt: the reason under the off button ends on the desk and no longer says being checked", async () => {
+    server({ [`GET ${GET}`]: [{ operation: OP, sent_at: "x", state: "ask_desk" }] });
+    renderCard(view({ unsettled: unsettled("ask_desk") }));
+    expect(screen.getByText(copy.UNSETTLED_DESK_REASON)).toBeInTheDocument();
+    expect(screen.queryByText(copy.UNSETTLED_REASON)).toBeNull();
+    expect(screen.getByRole("button", { name: copy.actionLabel("item.checkout") })).toBeDisabled();
+  });
+
   it("a system with no account lists no action", () => {
     renderCard(view({ actions: undefined, account: undefined }));
     expect(screen.queryByRole("button", { name: copy.actionLabel("item.checkout") })).toBeNull();
+  });
+});
+
+describe("one press, one send", () => {
+  const confirmPosts = () => bodies("POST", POST).filter((b) => (b as { confirm?: boolean }).confirm);
+
+  it("two clicks on Confirm in the same tick send one confirm", async () => {
+    server({ [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }, { state: "done", operation: OP, view: record() }] });
+    renderCard();
+    await toPreview();
+    const button = screen.getByRole("button", { name: copy.CONFIRM_BUTTON });
+    act(() => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    await screen.findByText("Done");
+    expect(confirmPosts()).toHaveLength(1);
+  });
+
+  it("two clicks on the preview button in the same tick send one preview", async () => {
+    server({ [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }] });
+    renderCard();
+    open();
+    typeId();
+    const button = screen.getByRole("button", { name: copy.PREVIEW_BUTTON });
+    act(() => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    await screen.findByText(copy.PREVIEW_LEDE);
+    expect(bodies("POST", POST)).toHaveLength(1);
+  });
+
+  it("can be sent again once a send has settled (Back, then another preview)", async () => {
+    server({ [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }] });
+    renderCard();
+    await toPreview();
+    press("Back");
+    press(copy.PREVIEW_BUTTON);
+    await waitFor(() => expect(bodies("POST", POST)).toHaveLength(2));
+  });
+
+  it("the Confirm button is not the preview button: focus does not carry a second Enter onto Confirm", async () => {
+    server({ [`POST ${POST}`]: [{ state: "preview", outcome: "done", view: record() }] });
+    renderCard();
+    open();
+    typeId();
+    const previewButton = screen.getByRole("button", { name: copy.PREVIEW_BUTTON });
+    previewButton.focus();
+    fireEvent.click(previewButton);
+    await screen.findByText(copy.PREVIEW_LEDE);
+    const confirm = screen.getByRole("button", { name: copy.CONFIRM_BUTTON });
+    expect(previewButton.isConnected).toBe(false);
+    expect(document.activeElement).not.toBe(confirm);
+    expect(confirmPosts()).toHaveLength(0);
   });
 });
 
@@ -404,6 +510,12 @@ describe("the camera", () => {
   const stream = { getTracks: () => [track] };
   const getUserMedia = vi.fn();
   let detect: ReturnType<typeof vi.fn>;
+  let formats: string[];
+  const install = () =>
+    ((window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {
+      static getSupportedFormats = () => Promise.resolve(formats);
+      detect = detect;
+    });
 
   beforeEach(() => {
     track.stop.mockReset();
@@ -411,30 +523,59 @@ describe("the camera", () => {
     Object.defineProperty(navigator, "mediaDevices", { value: { getUserMedia }, configurable: true });
     HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
     detect = vi.fn().mockResolvedValue([]);
-    (window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {
-      detect = detect;
-    };
+    formats = ["qr_code", "code_128"];
+    install();
   });
 
-  const scanButton = () => screen.queryByRole("button", { name: copy.SCAN_ARIA });
+  // The offer is decided after mount, so wait for it where it is expected and flush where it is not.
+  const scanButton = () => screen.queryByRole("button", { name: copy.SCAN_BUTTON });
+  const offered = () => screen.findByRole("button", { name: copy.SCAN_BUTTON });
+  const settle = () => act(async () => {});
 
-  it("is offered only where the browser has BarcodeDetector, and the typed field is always there", () => {
+  it("is offered only where the browser has BarcodeDetector, and the typed field is always there", async () => {
     delete (window as { BarcodeDetector?: unknown }).BarcodeDetector;
     renderCard();
     open();
+    await settle();
     expect(scanButton()).toBeNull();
     expect(screen.getByLabelText("Item id")).toBeInTheDocument();
     cleanup();
+    install();
+    renderCard();
+    open();
+    expect(await offered()).toBeInTheDocument();
+  });
+
+  it("is named by its visible words (WCAG 2.5.3): no aria-label of its own", async () => {
+    renderCard();
+    open();
+    expect(await offered()).not.toHaveAttribute("aria-label");
+  });
+
+  it("is not offered where BarcodeDetector reads no formats, or none a label uses", async () => {
+    for (const none of [[], ["pdf417", "aztec"]]) {
+      formats = none;
+      renderCard();
+      open();
+      await settle();
+      expect(scanButton()).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("is not offered when a detector cannot say what it reads", async () => {
     (window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {};
     renderCard();
     open();
-    expect(scanButton()).toBeInTheDocument();
+    await settle();
+    expect(scanButton()).toBeNull();
   });
 
-  it("is not offered without a camera to open", () => {
+  it("is not offered without a camera to open", async () => {
     Object.defineProperty(navigator, "mediaDevices", { value: undefined, configurable: true });
     renderCard();
     open();
+    await settle();
     expect(scanButton()).toBeNull();
   });
 
@@ -460,7 +601,7 @@ describe("the camera", () => {
     renderCard();
     open();
     expect(getUserMedia).not.toHaveBeenCalled();
-    fireEvent.click(scanButton()!);
+    fireEvent.click(await offered());
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1));
   });
 
@@ -468,7 +609,7 @@ describe("the camera", () => {
     detect.mockResolvedValue([{ rawValue: "item-0042" }]);
     renderCard();
     open();
-    fireEvent.click(scanButton()!);
+    fireEvent.click(await offered());
     await waitFor(() => expect(screen.getByLabelText("Item id")).toHaveValue("item-0042"));
     expect(track.stop).toHaveBeenCalled();
     // Back on the form, not a second dialog.
@@ -478,7 +619,7 @@ describe("the camera", () => {
   it("stops the stream when closed without a read", async () => {
     renderCard();
     open();
-    fireEvent.click(scanButton()!);
+    fireEvent.click(await offered());
     await waitFor(() => expect(detect).toHaveBeenCalled());
     expect(track.stop).not.toHaveBeenCalled();
     press("Close");
@@ -491,7 +632,7 @@ describe("the camera", () => {
     getUserMedia.mockReturnValue(new Promise((r) => (arrive = r)));
     renderCard();
     open();
-    fireEvent.click(scanButton()!);
+    fireEvent.click(await offered());
     press("Close");
     await act(async () => arrive(stream));
     expect(track.stop).toHaveBeenCalled();
@@ -501,7 +642,7 @@ describe("the camera", () => {
     getUserMedia.mockRejectedValue(new DOMException("no", "NotAllowedError"));
     renderCard();
     open();
-    fireEvent.click(scanButton()!);
+    fireEvent.click(await offered());
     await screen.findByText(copy.SCAN_DENIED);
     press("Close");
     expect(screen.getByLabelText("Item id")).toBeInTheDocument();
