@@ -38,7 +38,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useTargetInventory: () => ({ ...idle(), refetch: vi.fn(), ...state.inventory }),
     useTargetInventoryAgain: () => {
       const cooldown = cooldownOf(state.again.error, state.again.errorAt);
-      return { press: state.press, pending: false, error: state.again.error, errorAt: state.again.errorAt, cooldown: cooldown && { ...cooldown, pressed: true } };
+      return { press: state.press, pending: false, error: state.again.error, errorAt: state.again.errorAt, cooldown };
     },
     useResolveLogFinding: inert,
     useResolveBindingConflict: inert,
@@ -131,5 +131,27 @@ describe("a Read again the add-on refused inside its cooldown", () => {
     renderTarget();
     expect(dot().className).toContain("bg-faint");
     expect(dot().className).not.toContain("warn");
+  });
+});
+
+// A press answered 200 carries its cooldown in the data (read_stale), and a press is the only way it gets there.
+describe("a cooldown carried in the account list's data", () => {
+  const dot = () => document.querySelector("[data-freshness-dot]") as HTMLElement;
+  const cooled = (since?: number) => ({ ...copyOf({ read_stale: { reason: "cooldown", retry_after: 30 } }), dataUpdatedAt: since });
+
+  it("is the reader's own press, so it is amber", () => {
+    state.inventory = cooled();
+    renderTarget();
+    expect(dot().className).toContain("bg-warn");
+  });
+
+  it("counts from when the copy arrived, so leaving and returning does not restart it", () => {
+    vi.useFakeTimers();
+    const arrived = Date.now();
+    state.inventory = cooled(arrived);
+    renderTarget().unmount();
+    act(() => void vi.advanceTimersByTime(12_000));
+    renderTarget();
+    expect(screen.getByText(cooldownLine("The account list", 18))).toBeInTheDocument();
   });
 });

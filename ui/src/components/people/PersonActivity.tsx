@@ -196,7 +196,7 @@ function TargetActivityCard({
   // How old the log is: its own read, or the cooldown it ran into with nothing kept to show.
   const age: ReadState | null =
     data?.readable && data.taken_at
-      ? observed({ taken_at: data.taken_at, current: data.current ?? true, stale: data.stale })
+      ? observed({ taken_at: data.taken_at, current: data.current ?? true, stale: data.stale }, activity.dataUpdatedAt)
       : data?.reason === "cooldown" && data.retry_after
         ? { stale: { reason: STALE.cooldown, retry_after: data.retry_after, since: activity.dataUpdatedAt } }
         : null;

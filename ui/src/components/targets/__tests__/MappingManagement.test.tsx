@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddMappingButton } from "@/components/targets/AddMappingDialog";
@@ -62,7 +62,7 @@ const state: {
 
 // What each group opens is read from the system; these tests are about the
 // mappings themselves.
-const reach = { data: undefined as TargetReach | undefined, press: (async () => {}) as () => Promise<void> };
+const reach = { data: undefined as TargetReach | undefined, arrived: 0, press: (async () => {}) as () => Promise<void> };
 
 const homeSettings = {
   data: { read: true, settings: [{ name: "home_root", label: "Where home folders go", value: "", values: [], values_read: true }] } as {
@@ -81,7 +81,7 @@ vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
     isLoading: false,
     refetch: () => {},
   }),
-  useTargetReach: () => ({ data: reach.data, isLoading: false, error: null }),
+  useTargetReach: () => ({ data: reach.data, isLoading: false, error: null, dataUpdatedAt: reach.arrived }),
   useTargetReachAgain: () => ({ press: reach.press, pending: false, error: null }),
 }));
 
@@ -456,6 +456,26 @@ describe("what each group opens", () => {
     expect(screen.getByText("What each group opens was read moments ago; you can read again in 20 s")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
     reach.data = undefined;
+  });
+
+  // A press answered 200 carries the cooldown in the data: the reader's own, so amber, and counted from when it arrived.
+  it("draws a cooldown in the reach amber, with or without a copy, and keeps its count across a remount", () => {
+    vi.useFakeTimers();
+    const dot = () => document.querySelector("[data-freshness-dot]") as HTMLElement;
+    reach.arrived = Date.now();
+    reach.data = { read: true, current: false, read_at: new Date(Date.now() - 3 * 60_000).toISOString(), stale: { reason: "cooldown", retry_after: 30 }, groups: { lab_makers: [] } };
+    renderMappings().unmount();
+    act(() => void vi.advanceTimersByTime(12_000));
+    const copy = renderMappings();
+    expect(screen.getByText(/you can read again in 18 s/)).toBeInTheDocument();
+    expect(dot().className).toContain("bg-warn");
+    copy.unmount();
+    reach.data = { read: false, current: false, retry_after: 30 };
+    renderMappings();
+    expect(dot().className).toContain("bg-warn");
+    reach.data = undefined;
+    reach.arrived = 0;
+    vi.useRealTimers();
   });
 
   it("says nothing was read rather than drawing nothing", () => {

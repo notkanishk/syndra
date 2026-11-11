@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
 import { formatClock, formatRelative } from "@/lib/format";
 import { outcomeFromError } from "@/lib/outcome";
-import { cooldownOf, STALE, useCountdown, type Stale } from "@/lib/queries/fresh";
+import { cooldownOf, STALE, stamped, useCountdown, type Stale } from "@/lib/queries/fresh";
 
 /**
  * How old the state on this screen is (design §31 A).
@@ -61,8 +61,8 @@ export function readStateOfQuery(q: { dataUpdatedAt: number; isError: boolean })
 }
 
 /** The read state of an add-on's answer that carries its own (`taken_at`, `current`, `stale`). */
-export function observed(o: { taken_at: string; current: boolean; stale?: Stale; truncated?: boolean }): ReadState {
-  return { readAt: o.taken_at, current: o.current, stale: o.stale, truncated: o.truncated };
+export function observed(o: { taken_at: string; current: boolean; stale?: Stale; truncated?: boolean }, since?: number): ReadState {
+  return { readAt: o.taken_at, current: o.current, stale: stamped(o.stale, since), truncated: o.truncated };
 }
 
 /**
@@ -107,11 +107,11 @@ const TONE: Record<Freshness, string> = {
 /**
  * What colour the line and its dot are drawn in. A copy the add-on kept is the
  * normal state of a read, so it is neutral however old it is, and so is a
- * cooldown the reader did not cause (a page load inside someone else's). A
- * cooldown the reader pressed into and a system that cannot be reached are
+ * cooldown the reader did not cause (a page load inside someone else's, marked
+ * `pressed: false`). A cooldown carried in the data is the reader's own press, so it is amber, and a system that cannot be reached are
  * amber; every other reading is drawn by its age.
  */
-export function toneOf(reading: Freshness, why: string | undefined, pressed = false): { text: string; dot: string } {
+export function toneOf(reading: Freshness, why: string | undefined, pressed = true): { text: string; dot: string } {
   if (why === STALE.cached || (why === STALE.cooldown && !pressed)) return { text: "text-faint", dot: "bg-faint" };
   if (why === STALE.cooldown) return { text: "text-warn-text", dot: "bg-warn" };
   return {
@@ -258,7 +258,7 @@ export function ReadFreshness({
   // Coloured by what the line says: the cooldown while it counts, then a copy is a copy (a copy of a
   // read that failed is still neutral) and anything else is drawn by its age.
   const said = cooling || why !== STALE.cooldown ? why : state.current === false ? STALE.cached : undefined;
-  const tone = toneOf(reading, said, state.stale?.pressed);
+  const tone = toneOf(reading, said, state.stale?.pressed !== false);
   const aCopy = why === STALE.cached || why === STALE.cooldown;
   const cannotReach = why === STALE.unreachable && Boolean(state.readAt);
   const lineId = useId();

@@ -30,7 +30,7 @@ import { HOME_ROOT, useTargetReach, useTargetReachAgain, useTargetSettings, type
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
 import { ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
-import { STALE } from "@/lib/queries/fresh";
+import { STALE, stamped } from "@/lib/queries/fresh";
 import { UserName } from "@/components/names";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
@@ -83,7 +83,7 @@ export function MappingManagement({ target }: { target: string }) {
   const mappings = useMappings(target);
   const reach = useTargetReach(target);
   const reachAgain = useTargetReachAgain(target);
-  const reachCopy = reach.data?.stale ?? (reach.data?.retry_after ? { reason: STALE.cooldown, retry_after: reach.data.retry_after, since: reach.dataUpdatedAt } : undefined);
+  const reachCopy = stamped(reach.data?.stale, reach.dataUpdatedAt) ?? (reach.data?.retry_after ? { reason: STALE.cooldown, retry_after: reach.data.retry_after, since: reach.dataUpdatedAt } : undefined);
   const settings = useTargetSettings(target);
   const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";

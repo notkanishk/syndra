@@ -18,8 +18,12 @@ export interface Stale {
   note?: string;
   /** When this answer arrived (ms since the epoch): a cooldown counts from here, not from when it was drawn. */
   since?: number;
-  /** The reader asked for the read that was refused (a press), so the wait is theirs: only then is it drawn amber. */
-  pressed?: boolean;
+  /**
+   * `false` where a page load ran into the wait, not a press: the reader did not cause it, so it is not
+   * drawn amber. Absent means the reader did: a cooldown only reaches the data through a press, because
+   * a load and a poll never send `fresh`. Marked at the load sites only.
+   */
+  pressed?: false;
 }
 
 /**
@@ -33,6 +37,14 @@ export const STALE = { cached: "cached", cooldown: "cooldown", unreachable: "unr
 export function withFresh(path: string): string {
   return `${path}${path.includes("?") ? "&" : "?"}fresh=true`;
 }
+
+/** A copy as of `since` (when its answer arrived), so a cooldown it carries counts from there and a remount does not restart it. */
+export function stamped(stale: Stale | undefined, since?: number): Stale | undefined {
+  return stale && since ? { ...stale, since } : stale;
+}
+
+/** The one marker: a cooldown a page load ran into, which the reader did not cause. */
+export const pageLoad = (stale: Stale | undefined): Stale | undefined => stale && { ...stale, pressed: false };
 
 /** A read refused inside the cooldown, as the copy it leaves; undefined for any other error. */
 export function cooldownOf(error: unknown, since?: number): Stale | undefined {
@@ -70,9 +82,7 @@ export function useReadAgain<T>(queryKey: QueryKey, path: string) {
       setPending(false);
     }
   }
-  // A press the cooldown refused: the wait is the pressing reader's own.
-  const refused = cooldownOf(error, errorAt);
-  return { press, pending, error, errorAt, cooldown: refused && { ...refused, pressed: true } };
+  return { press, pending, error, errorAt, cooldown: cooldownOf(error, errorAt) };
 }
 
 /**
@@ -83,9 +93,11 @@ export function useReadAgain<T>(queryKey: QueryKey, path: string) {
  */
 export function useCountdown(seconds: number | undefined, since?: number): number {
   const secondsLeft = (end: number) => Math.max(0, Math.ceil((end - Date.now()) / 1000));
-  const [left, setLeft] = useState(() => secondsLeft((since ?? Date.now()) + (seconds ?? 0) * 1000));
+  // A `since` of 0 is a query that has not answered, never the epoch.
+  const from = since || undefined;
+  const [left, setLeft] = useState(() => secondsLeft((from ?? Date.now()) + (seconds ?? 0) * 1000));
   useEffect(() => {
-    const end = (since ?? Date.now()) + (seconds ?? 0) * 1000;
+    const end = (from ?? Date.now()) + (seconds ?? 0) * 1000;
     const sync = () => setLeft(secondsLeft(end));
     sync();
     if (!seconds) return;
@@ -94,6 +106,6 @@ export function useCountdown(seconds: number | undefined, since?: number): numbe
       if (Date.now() >= end) clearInterval(id);
     }, 1000);
     return () => clearInterval(id);
-  }, [seconds, since]);
+  }, [seconds, from]);
   return left;
 }

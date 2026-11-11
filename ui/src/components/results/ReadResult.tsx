@@ -56,7 +56,7 @@ export function ReadResult({ read, name, reader }: { read: ReadView } & ReadProp
 function readStateOf(read: ReadView, since?: number): ReadState | null {
   if (read.retry_after) return { stale: { reason: STALE.cooldown, retry_after: read.retry_after, since } };
   const { result } = read;
-  return read.readable && result && typeof result !== "string" ? observed(result) : null;
+  return read.readable && result && typeof result !== "string" ? observed(result, since) : null;
 }
 
 /**

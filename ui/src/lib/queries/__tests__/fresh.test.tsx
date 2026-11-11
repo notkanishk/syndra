@@ -94,7 +94,7 @@ describe("what sends fresh", () => {
     });
     expect(cooldownOf(result.current.error)).toEqual({ reason: "cooldown", retry_after: 9 });
     // The reader's own press ran into it, so the wait is theirs (amber), counted from when it arrived.
-    expect(result.current.cooldown).toEqual({ reason: "cooldown", retry_after: 9, since: result.current.errorAt, pressed: true });
+    expect(result.current.cooldown).toEqual({ reason: "cooldown", retry_after: 9, since: result.current.errorAt });
     expect(result.current.pending).toBe(false);
     answer = () => json({ target: "truenas" });
     await act(async () => {

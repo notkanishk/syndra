@@ -128,8 +128,8 @@ describe("how a copy is drawn", () => {
     }
   });
 
-  it("a cooldown the reader pressed into stays amber, and so does a system that cannot be reached", () => {
-    const { unmount } = render(<ReadFreshness state={{ readAt: ago(0.2), current: true, stale: { reason: "cooldown", retry_after: 30, pressed: true } }} subject="The list" />);
+  it("a cooldown carried in the data is the reader's own press, so it is amber, and so does a system that cannot be reached", () => {
+    const { unmount } = render(<ReadFreshness state={{ readAt: ago(0.2), current: true, stale: { reason: "cooldown", retry_after: 30 } }} subject="The list" />);
     expect(dot().className).toContain("bg-warn");
     expect(line(/you can read again in/).className).toContain("text-warn-text");
     unmount();
@@ -138,9 +138,9 @@ describe("how a copy is drawn", () => {
     expect(line(/can.t be reached/).className).toContain("text-warn-text");
   });
 
-  // A page load inside somebody else's wait is not the reader's doing, so it is not a warning.
-  it("a cooldown the reader did not cause is neutral, like a copy", () => {
-    render(<ReadFreshness state={{ readAt: ago(0.2), current: true, stale: { reason: "cooldown", retry_after: 30 } }} subject="The list" />);
+  // A page load inside somebody else's wait is not the reader's doing, so it is not a warning: only the load sites say so.
+  it("a cooldown marked as a page load's is neutral, like a copy", () => {
+    render(<ReadFreshness state={{ readAt: ago(0.2), current: true, stale: { reason: "cooldown", retry_after: 30, pressed: false } }} subject="The list" />);
     expect(dot().className).toContain("bg-faint");
     expect(dot().className).not.toMatch(/warn/);
     expect(line(/you can read again in/).className).toContain("text-faint");
@@ -150,7 +150,7 @@ describe("how a copy is drawn", () => {
     afterEach(() => vi.useRealTimers());
     const over = (current: boolean) => {
       vi.useFakeTimers();
-      render(<ReadFreshness state={{ readAt: ago(0.2), current, stale: { reason: "cooldown", retry_after: 2, pressed: true } }} subject="The list" onRefresh={() => {}} />);
+      render(<ReadFreshness state={{ readAt: ago(0.2), current, stale: { reason: "cooldown", retry_after: 2 } }} subject="The list" onRefresh={() => {}} />);
       expect(dot().className).toContain("bg-warn");
       act(() => void vi.advanceTimersByTime(3000));
       expect(screen.queryByText(/you can read again in/)).toBeNull();
@@ -167,6 +167,11 @@ describe("how a copy is drawn", () => {
       expect(dot().className).toContain("bg-healthy");
       expect(dot().className).not.toContain("warn");
     });
+  });
+
+  it("never reads a since of 0 as the epoch: that is a query that has not answered", () => {
+    render(<ReadFreshness state={{ readAt: ago(0.2), stale: { reason: "cooldown", retry_after: 10, since: 0 } }} subject="The list" onRefresh={() => {}} />);
+    expect(screen.getByText(/you can read again in 10 s/)).toBeInTheDocument();
   });
 
   it("counts a cooldown from when it arrived, not from when it was drawn", () => {

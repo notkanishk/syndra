@@ -37,7 +37,7 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
-import { cooldownOf } from "@/lib/queries/fresh";
+import { cooldownOf, pageLoad, stamped } from "@/lib/queries/fresh";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
@@ -1460,14 +1460,14 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
   const refused = inventory.data
     ? again.cooldown
     : inventory.error
-      ? cooldownOf(inventory.error, inventory.errorUpdatedAt)
+      ? pageLoad(cooldownOf(inventory.error, inventory.errorUpdatedAt))
       : again.cooldown;
   const read = {
     readAt: inventory.data?.read_at,
     current: inventory.data?.current,
     truncated: inventory.data?.truncated,
     // A press the cooldown refused is newer than the copy it leaves on show.
-    stale: refused ?? inventory.data?.read_stale,
+    stale: refused ?? stamped(inventory.data?.read_stale, inventory.dataUpdatedAt),
   };
   const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
   const name = nameOf(target);

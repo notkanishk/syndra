@@ -12,7 +12,7 @@ import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { RowCheckbox } from "@/components/ui/SelectionBar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
@@ -22,7 +22,7 @@ import {
   type DormantAccount,
   type SweepResult,
 } from "@/lib/queries/useDormant";
-import { cooldownOf } from "@/lib/queries/fresh";
+import { cooldownOf, pageLoad } from "@/lib/queries/fresh";
 import { sortByName } from "@/lib/sort";
 import { oneShot } from "@/lib/secret";
 
@@ -62,7 +62,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   // Amber only when the reader's own press ran into it, not a page load inside someone else's wait.
   const [pressedAt, setPressedAt] = useState(0);
   const cooldown = cooldownOf(dormant.error, dormant.errorUpdatedAt);
-  const refused = cooldown && { ...cooldown, pressed: pressedAt > 0 && dormant.errorUpdatedAt >= pressedAt };
+  const refused = pressedAt > 0 && dormant.errorUpdatedAt >= pressedAt ? cooldown : pageLoad(cooldown);
   const name = nameOf(target);
   const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);
   const safe = byName(accounts.filter((a) => !a.subject_still_member));
@@ -106,11 +106,14 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         </div>
       )}
 
+      {/* A press that failed for any other reason says so beside the press and keeps the list on hand. */}
+      {dormant.data && <ReadAgainError error={dormant.error} />}
+
       {!dormant.data && refused ? null : (
       <ListStates
         isLoading={dormant.isLoading}
         // A refusal is the line's to say, never a reason to take the list away while it is on hand.
-        error={refused ? null : dormant.error}
+        error={refused || dormant.data ? null : dormant.error}
         isEmpty={accounts.length === 0}
         onRetry={() => dormant.refetch()}
         errorTitle="This list could not be read"

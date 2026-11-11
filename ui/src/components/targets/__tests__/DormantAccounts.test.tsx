@@ -293,6 +293,16 @@ describe("inside the add-on's cooldown", () => {
     vi.useRealTimers();
   });
 
+  it("a Read again that fails for another reason says Not read beside the press and keeps the list", () => {
+    state.keepData = true;
+    state.error = new ApiError(500, { error: "INTERNAL", message: "the add-on fell over" });
+    state.errorAt = Date.now();
+    renderDormant();
+    expect(screen.getByText("Not read")).toBeInTheDocument();
+    expect(screen.getByLabelText("Select former-member")).toBeInTheDocument();
+    expect(screen.queryByText("This list could not be read")).toBeNull();
+  });
+
   it("keeps the list and its selection when a refetch is refused while it is on hand", async () => {
     const view = renderDormant();
     fireEvent.click(screen.getByLabelText("Select former-member"));
