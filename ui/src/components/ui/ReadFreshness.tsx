@@ -111,7 +111,7 @@ const TONE: Record<Freshness, string> = {
  * `pressed: false`). A cooldown carried in the data is the reader's own press, so it is amber, and a system that cannot be reached are
  * amber; every other reading is drawn by its age.
  */
-export function toneOf(reading: Freshness, why: string | undefined, pressed = true): { text: string; dot: string } {
+export function toneOf(reading: Freshness, why: string | undefined, pressed: boolean): { text: string; dot: string } {
   if (why === STALE.cached || (why === STALE.cooldown && !pressed)) return { text: "text-faint", dot: "bg-faint" };
   if (why === STALE.cooldown) return { text: "text-warn-text", dot: "bg-warn" };
   return {

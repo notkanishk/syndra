@@ -37,7 +37,7 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
-import { cooldownOf, pageLoad, stamped } from "@/lib/queries/fresh";
+import { stamped } from "@/lib/queries/fresh";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
@@ -1456,12 +1456,8 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     { username: string; person: string; result: AdoptionResult } | null
   >(null);
 
-  // Refused inside the cooldown (a 429, nothing to show): the page's own load, or a press.
-  const refused = inventory.data
-    ? again.cooldown
-    : inventory.error
-      ? pageLoad(cooldownOf(inventory.error, inventory.errorUpdatedAt))
-      : again.cooldown;
+  // Refused inside the cooldown: only ever a press, since a load never sends fresh.
+  const refused = again.cooldown;
   const read = {
     readAt: inventory.data?.read_at,
     current: inventory.data?.current,

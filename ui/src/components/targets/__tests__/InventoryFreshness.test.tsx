@@ -106,9 +106,11 @@ describe("a Read again the add-on refused inside its cooldown", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  // A load never sends fresh, so a cooldown only ever comes from a press; with nothing to show, the press says it.
   it("with nothing to show, says so once, in the freshness line, never as a read that failed or a second countdown", () => {
     vi.useFakeTimers();
-    state.inventory = { error: cooling(9) };
+    state.inventory = {};
+    state.again = { error: cooling(9) };
     renderTarget();
     expect(screen.getByText(cooldownLine("The account list", 9))).toBeInTheDocument();
     expect(screen.queryByText(/nothing was changed/)).toBeNull();
@@ -118,19 +120,20 @@ describe("a Read again the add-on refused inside its cooldown", () => {
     expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
   });
 
-  // Only a wait the reader pressed into is a warning.
-  it("draws the refusal of the reader's own press amber, and a page load inside someone else's wait neutral", () => {
+  // Only a wait the reader pressed into is a warning, and on this card a press is the only way into one.
+  it("draws the refusal of the reader's own press amber, with a copy on show or after a load that failed", () => {
     const dot = () => document.querySelector("[data-freshness-dot]") as HTMLElement;
     state.inventory = copyOf();
     state.again = { error: cooling(9) };
     const mine = renderTarget();
     expect(dot().className).toContain("bg-warn");
     mine.unmount();
-    state.inventory = { error: cooling(9) };
-    state.again = { error: null };
+    // The load failed (not a cooldown) and nothing is on show: the press's refusal is still said, and counts down.
+    state.inventory = { error: new ApiError(503, { error: "TARGET_UNREACHABLE" }) };
+    state.again = { error: cooling(9) };
     renderTarget();
-    expect(dot().className).toContain("bg-faint");
-    expect(dot().className).not.toContain("warn");
+    expect(dot().className).toContain("bg-warn");
+    expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
   });
 });
 
