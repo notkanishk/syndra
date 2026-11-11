@@ -2,7 +2,7 @@
 
 import { NO_LIMIT, emptyMeters, notReadableNext, ofLimit, usageUnread, usageUnreadBody, type Reader } from "@/components/results/copy";
 import { Notice } from "@/components/ui/Notice";
-import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { observed, ReadFreshness, useReadAgainPress } from "@/components/ui/ReadFreshness";
 import { formatLimit } from "@/lib/fields";
 import { sortByName } from "@/lib/sort";
 import type { StatusResult } from "@/lib/queries/useMyStorage";
@@ -20,6 +20,7 @@ function amount(n: number, unit: string): string {
  * said not to be known: never empty meters standing in for "nothing used".
  */
 export function StatusMeters({ result, name, reader }: { result: StatusResult; name: string; reader: Reader }) {
+  const again = useReadAgainPress();
   const unread = result.quota_read === false;
   const meters = sortByName(result.meters ?? [], (m) => m.label, (m) => m.label);
   return (
@@ -55,7 +56,7 @@ export function StatusMeters({ result, name, reader }: { result: StatusResult; n
       {unread && (
         <UsageUnread name={name} some={meters.length > 0} reader={reader} />
       )}
-      <ReadFreshness state={{ readAt: result.taken_at, current: result.current }} subject={name} />
+      <ReadFreshness state={observed(result)} subject={name} reader={reader} onRefresh={again} />
     </div>
   );
 }

@@ -20,10 +20,12 @@ const state = vi.hoisted(() => ({
   crumb: [] as Array<string | null | undefined>,
   replace: vi.fn(),
   saved: [] as string[],
+  pressPerson: undefined as unknown as () => Promise<void>,
+  pressMine: undefined as unknown as () => Promise<void>,
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: state.replace }) }));
-vi.mock("@/lib/queries/useMyStorage", () => ({ usePersonTargets: () => state.views, useMyStorage: () => state.mine }));
+vi.mock("@/lib/queries/useMyStorage", () => ({ usePersonTargets: () => state.views, useMyStorage: () => state.mine, usePersonTargetsAgain: () => ({ press: state.pressPerson, pending: false, error: null }), useMyStorageAgain: () => ({ press: state.pressMine, pending: false, error: null }) }));
 vi.mock("@/lib/queries/useMySystems", () => ({ useMySystems: () => state.systems }));
 vi.mock("@/lib/page-crumb", () => ({ useCrumb: (label: string | null | undefined) => state.crumb.push(label) }));
 vi.mock("@/lib/queries/useTargets", () => ({
@@ -64,6 +66,8 @@ beforeEach(() => {
   state.crumb = [];
   state.replace.mockReset();
   state.saved = [];
+  state.pressPerson = vi.fn(async () => {});
+  state.pressMine = vi.fn(async () => {});
 });
 
 describe("a person's connected systems (operators)", () => {
@@ -185,5 +189,33 @@ describe("what an add-on says about a person, on their page (operators)", () => 
   it("a card with no reads draws none", () => {
     render(<PersonSystems userId="u1" name="Rey" />);
     expect(document.querySelector("[data-read]")).toBeNull();
+  });
+});
+
+// Feature freshness: the page that owns the read hands its one Read again to the cards.
+describe("Read again on a card served from the add-on's copy", () => {
+  const copied: NonNullable<PersonTargetView["reads"]> = [
+    {
+      operation: "holdings.list",
+      shape: "records",
+      readable: true,
+      result: { records: [], taken_at: new Date(Date.now() - 4 * 60_000).toISOString(), current: false, stale: { reason: "cached" } },
+    },
+  ];
+
+  it("asks for the person's systems again, once, from an operator's card", () => {
+    state.views = { data: [{ ...laser, reads: copied }], error: null, refetch: () => {} };
+    render(<PersonSystems userId="u1" name="Rey" />);
+    fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+    expect(state.pressPerson).toHaveBeenCalledTimes(1);
+    expect(state.pressMine).not.toHaveBeenCalled();
+  });
+
+  it("asks for the member's own systems again, once, from the member's page", () => {
+    state.mine = { ...state.mine, data: [{ ...laser, reads: copied }] };
+    render(<MemberSystemPage target="laser" />);
+    fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+    expect(state.pressMine).toHaveBeenCalledTimes(1);
+    expect(state.pressPerson).not.toHaveBeenCalled();
   });
 });

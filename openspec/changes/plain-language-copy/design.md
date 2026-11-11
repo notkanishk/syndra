@@ -696,3 +696,19 @@ One set of generic renderers (`ui/src/components/results/`) draws every member-s
 | Under an empty activity list when some places were not recording | Some places were not recording this account, so this is not the same as nothing having happened. See below. |
 
 A record's lateness is the add-on's word (its standing note and next step, for example "Overdue since 3 November" and "Bring it back to the front desk"), never worked out in the UI from a date. The meters that were read stay when some usage was not; empty meters never stand in for "nothing used". Records, meters and places are listed alphabetically (case aside), like every list of names. Where a sentence differs by reader it is one row per reader, and the code takes the reader (`Reader` in `copy.ts`) rather than choosing words inline. The storage kind says "shares" for the same places in `kinds/storage/ActivityCoverage.tsx`.
+
+## 13. How fresh a read is (addon-contract slice 6b)
+
+Every read of a system carries when it was read, and an add-on may answer from its own copy (feature `freshness`). The sentence and the one control that is its next step come from `components/results/copy.ts` (the read line) and `lib/outcome.ts` (a refusal); `freshnessCopyGuide.test.ts` fails when this table and those files disagree. The words on the control are the product's: **Read again**, and **Reading** while it runs. `{name}` is the system's name as the page calls it, `{age}` is "4 min ago", `{n}` whole seconds, `{time}` a clock time. A page load and a poll never ask the system itself; only the control does.
+
+| When | Says |
+|---|---|
+| A copy the add-on kept (the control is the next step) | {name} was read {age} |
+| Read again inside the cooldown, with a copy or without (the control waits, then the line above) | {name} was read moments ago; you can read again in {n} s |
+| The system cannot be reached, to a member (no control) | {name} can't be reached right now; this is what it said at {time}. Try again in a minute. If it keeps failing, ask makerspace staff. |
+| The system cannot be reached, to an operator (no control) | {name} can't be reached right now; this is what it said at {time}. Try again in a minute. If it keeps failing, check the add-on's health on its system page. |
+| A press refused inside the cooldown (the dormant list, a removal, the inventory with nothing to show): the refusal | That system was read moments ago, so nothing was changed |
+| The same refusal: its next step, counting down | You can try again in {n} s. |
+| The same refusal: its next step once the count is over | Press the same button once more. |
+
+The count starts from the add-on's `retry_after` (or the Retry-After header) and is a deadline, never a tally of ticks. The control is off, with the line beside it as its reason, until the count ends. A read that is only a copy keeps every binding action blocked (Adopt stays off until Read again returns a current read); the unreachable line has no control because only time helps. The words are never "Refresh".

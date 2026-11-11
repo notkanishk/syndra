@@ -26,9 +26,11 @@ import {
   type RehearsedPart,
   type RoleRows,
 } from "@/lib/role-mapping-plan";
-import { HOME_ROOT, useTargetReach, useTargetSettings, type ReachPlace } from "@/lib/queries/useTargets";
+import { HOME_ROOT, useTargetReach, useTargetReachAgain, useTargetSettings, type ReachPlace } from "@/lib/queries/useTargets";
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
+import { STALE } from "@/lib/queries/fresh";
 import { UserName } from "@/components/names";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
@@ -80,6 +82,8 @@ export function MappingManagement({ target }: { target: string }) {
   const nameOf = useSystemNames();
   const mappings = useMappings(target);
   const reach = useTargetReach(target);
+  const reachAgain = useTargetReachAgain(target);
+  const reachCopy = reach.data?.stale ?? (reach.data?.retry_after ? { reason: STALE.cooldown, retry_after: reach.data.retry_after } : undefined);
   const settings = useTargetSettings(target);
   const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
@@ -113,6 +117,16 @@ export function MappingManagement({ target }: { target: string }) {
           note={<OpensNote name={name} reach={reach.data} />}
           action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
         />
+        {reach.data && reachCopy && (
+          // What each group opens is a copy, or was read moments ago: the one place to read it again.
+          <div className="px-5 pb-3">
+            <ReadFreshness
+              subject="What each group opens"
+              state={{ readAt: reach.data.read_at, current: reach.data.current, stale: reachCopy }}
+              onRefresh={reachAgain.press}
+            />
+          </div>
+        )}
         <ListStates
           isLoading={mappings.isLoading}
           error={mappings.error}

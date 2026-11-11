@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { useReadAgain, type Stale } from "@/lib/queries/fresh";
 
 /**
  * What a target's OWN audit log holds for one person.
@@ -29,7 +30,13 @@ export interface TargetActivity {
    * never as an error; `unreachable` is everything else that stopped the read
    * (the target down, a bad response), and keeps the warning tone.
    */
-  reason?: "no_account" | "unreachable";
+  reason?: "no_account" | "unreachable" | "cooldown";
+  /** Whole seconds, with `reason: cooldown`: the log was read moments ago and nothing was kept to serve. */
+  retry_after?: number;
+  /** When the log was read, and whether this is that read or its copy (feature freshness). */
+  taken_at?: string;
+  current?: boolean;
+  stale?: Stale;
   /**
    * Resources (shares) that were not recording this person. Without it a short
    * list reads as a quiet week when half the shares were never being watched.
@@ -65,13 +72,17 @@ export interface TargetActivityEvent {
  * which takes no subject at all — there is no shape in which a member asks this
  * about somebody else.
  */
+const activityPath = (target: string | null, subject: string) =>
+  `/targets/${encodeURIComponent(target!)}/activity?subject=${encodeURIComponent(subject)}`;
+
+/** "Read again" on the log: the same GET, asking the target itself. */
+export const useTargetActivityAgain = (target: string | null, subject: string) =>
+  useReadAgain<TargetActivity>(["target-activity", target, subject], activityPath(target, subject));
+
 export function useTargetActivity(target: string | null, subject: string, enabled = true) {
   return useQuery({
     queryKey: ["target-activity", target, subject],
-    queryFn: () =>
-      request<TargetActivity>(
-        `/targets/${encodeURIComponent(target!)}/activity?subject=${encodeURIComponent(subject)}`,
-      ),
+    queryFn: () => request<TargetActivity>(activityPath(target, subject)),
     enabled: Boolean(target) && Boolean(subject) && enabled,
     // The target's log, not Syndra's record of it: it moves without Syndra
     // doing anything, so a long stale time would show a quiet screen for a busy

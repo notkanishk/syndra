@@ -37,6 +37,7 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
+import { cooldownOf } from "@/lib/queries/fresh";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
@@ -49,6 +50,7 @@ import {
   useResolveBindingConflict,
   useResolveLogFinding,
   useTargetInventory,
+  useTargetInventoryAgain,
   useTargets,
   useUnconfirmedOperations,
   type AdoptionResult,
@@ -1444,6 +1446,7 @@ function Reading({
 function Inventory({ target, stale }: { target: string; stale: boolean }) {
   const nameOf = useSystemNames();
   const inventory = useTargetInventory(target);
+  const again = useTargetInventoryAgain(target);
   const adopt = useAdoptAccount(target);
   const [adopting, setAdopting] = useState<string | null>(null);
   // The outcome is kept WITH the account it happened to. It used to be one
@@ -1453,10 +1456,14 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     { username: string; person: string; result: AdoptionResult } | null
   >(null);
 
+  // Refused inside the cooldown (a 429, nothing to show): the page's own load, or a press.
+  const refused = inventory.data ? again.error : (inventory.error ?? again.error);
   const read = {
     readAt: inventory.data?.read_at,
     current: inventory.data?.current,
     truncated: inventory.data?.truncated,
+    // A press the cooldown refused is newer than the copy it leaves on show.
+    stale: cooldownOf(refused) ?? inventory.data?.read_stale,
   };
   const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
   const name = nameOf(target);
@@ -1475,11 +1482,16 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
           state={read}
           onRefresh={() => {
             setResult(null);
-            inventory.refetch();
+            return again.press();
           }}
-          refreshing={inventory.isFetching}
+          refreshing={again.pending}
         />
       </div>
+      {!inventory.data && cooldownOf(refused) ? (
+        <div className="px-5 pb-4">
+          <ActionOutcome word="Not read" outcome={outcomeFromError(refused)} />
+        </div>
+      ) : (
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}
@@ -1566,6 +1578,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
           )}
         </>
       </ListStates>
+      )}
     </Card>
   );
 }

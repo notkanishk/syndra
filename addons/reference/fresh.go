@@ -33,6 +33,7 @@ type freshState struct {
 	list   []subject
 	at     string // taken_at of the read that filled the mirror
 	kept   bool
+	failed bool          // the last read failed, while it is the last read: the cooldown answers it as it was
 	began  time.Time     // when the last read of the app began
 	flight chan struct{} // closed when the running read ends; nil when none runs
 	gen    int           // moved by every write, so a read begun before one never refills the mirror after it
@@ -54,7 +55,8 @@ func (a *Addon) readApp() ([]subject, string, error) {
 	return list, at, nil
 }
 
-// forget drops the mirror, the cooldown and the read in flight; every write
+// forget drops the mirror, the cooldown (and with it the failure it answers, which is
+// only read inside one) and the read in flight; every write
 // calls it (record), under a.mu. A read arriving after the write then reads
 // the app, never joins or waits out a read begun before it (the TrueNAS
 // add-on's fresher.forget does the same).
@@ -99,6 +101,12 @@ func (a *Addon) freshSubjects(fresh bool) reply {
 			}
 			continue // the read failed, or a write forgot it: decide again
 		case fresh && since < freshCooldown:
+			if f.failed {
+				// The last read failed: answered as it was, the copy unreachable or
+				// the error, not as a read moments ago. Still no second attempt
+				// (the TrueNAS add-on's fresher does the same).
+				return a.unreached()
+			}
 			if f.kept {
 				return a.mirrored("cooldown")
 			}
@@ -116,14 +124,26 @@ func (a *Addon) freshSubjects(fresh bool) reply {
 		}
 		close(fl)
 		if err != nil {
-			if f.kept {
-				return a.mirrored("unreachable")
+			if gen == f.gen {
+				f.failed = true
 			}
-			return problem(503, "TARGET_UNREACHABLE", "The app could not be read and nothing is kept to answer from.", nil)
+			return a.unreached()
+		}
+		if gen == f.gen {
+			f.failed = false
 		}
 		a.keep(list, at, gen)
 		return ok(map[string]any{"subjects": list, "current": true, "taken_at": at, "truncated": false})
 	}
+}
+
+// unreached answers a read that failed: the mirror, unreachable, or the error
+// when nothing is kept; under a.mu.
+func (a *Addon) unreached() reply {
+	if a.fresh.kept {
+		return a.mirrored("unreachable")
+	}
+	return problem(503, "TARGET_UNREACHABLE", "The app could not be read and nothing is kept to answer from.", nil)
 }
 
 // mirrored is the mirror's value, not current, with why; under a.mu.

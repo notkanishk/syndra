@@ -22,6 +22,7 @@ import {
   type DormantAccount,
   type SweepResult,
 } from "@/lib/queries/useDormant";
+import { cooldownOf } from "@/lib/queries/fresh";
 import { sortByName } from "@/lib/sort";
 import { oneShot } from "@/lib/secret";
 
@@ -56,6 +57,8 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
 
   const accounts = dormant.data?.accounts ?? [];
+  // The list always reads the target itself, so a load inside the cooldown is refused (429, nothing was read).
+  const refused = cooldownOf(dormant.error);
   const name = nameOf(target);
   const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);
   const safe = byName(accounts.filter((a) => !a.subject_still_member));
@@ -80,14 +83,15 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         note="Accounts Syndra created that no active role needs any more"
       />
 
-      {dormant.data && (
+      {(dormant.data || refused) && (
         <div className="px-5 pb-2">
           <ReadFreshness
             subject="This list"
             state={{
-              readAt: dormant.data.state_read_at,
-              current: true,
-              truncated: dormant.data.truncated,
+              readAt: dormant.data?.state_read_at,
+              current: dormant.data ? true : undefined,
+              truncated: dormant.data?.truncated,
+              stale: refused,
             }}
             onRefresh={() => dormant.refetch()}
             refreshing={dormant.isFetching}
@@ -95,6 +99,12 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         </div>
       )}
 
+      {refused ? (
+        // Read moments ago, so the list is not read again yet: the same refusal a removal gets, counting down.
+        <div className="px-5 pb-4">
+          <ActionOutcome word="Not read" outcome={outcomeFromError(dormant.error)} />
+        </div>
+      ) : (
       <ListStates
         isLoading={dormant.isLoading}
         error={dormant.error}
@@ -150,6 +160,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
           )}
         </>
       </ListStates>
+      )}
 
       {result && (
         <div className="border-t border-line px-5 py-4">

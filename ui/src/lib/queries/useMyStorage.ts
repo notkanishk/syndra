@@ -8,6 +8,7 @@ import type { AccountHome, Standing } from "@/lib/queries/useTargets";
 import type { OneShotSecret } from "@/lib/secret";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
+import { useReadAgain, type Stale } from "./fresh";
 import type { RetryState } from "@/lib/retry";
 
 /**
@@ -52,6 +53,8 @@ export interface StoragePlace {
 export interface Observation {
   taken_at: string;
   current: boolean;
+  /** Why it is a copy, when it is one (feature freshness). */
+  stale?: Stale;
 }
 
 export interface RecordsResult extends Observation {
@@ -88,6 +91,8 @@ export interface ReadView {
   /** Absent when not readable; JSON text (capped) when `shape` is "". */
   result?: RecordsResult | StatusResult | ActivityResult | string;
   also_says?: string[];
+  /** Whole seconds: the add-on refused this read inside its cooldown and kept nothing to serve. */
+  retry_after?: number;
 }
 
 export interface MyTargetView {
@@ -232,20 +237,31 @@ export interface PersonTargetView extends MyTargetView {
   preview?: StoragePlace[];
 }
 
+const personTargetsPath = (userId: string) => `/users/${encodeURIComponent(userId)}/targets`;
+const personTargetsKey = (userId: string) => ["users", userId, "targets"];
+
+/** "Read again" on a person's systems: the same GET, asking the systems themselves. */
+export const usePersonTargetsAgain = (userId: string) =>
+  useReadAgain<{ targets: PersonTargetView[] }>(personTargetsKey(userId), personTargetsPath(userId));
+
 /** A person's storage on every connected system (operators). */
 export function usePersonTargets(userId: string, enabled = true) {
   return useQuery({
-    queryKey: ["users", userId, "targets"],
+    queryKey: personTargetsKey(userId),
     enabled,
-    queryFn: () => request<{ targets: PersonTargetView[] }>(`/users/${encodeURIComponent(userId)}/targets`),
+    queryFn: () => request<{ targets: PersonTargetView[] }>(personTargetsPath(userId)),
     select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
   });
 }
+
+/** "Read again" on a member's own systems: the same GET, asking the systems themselves. */
+export const useMyStorageAgain = () => useReadAgain<{ targets: MyTargetView[] }>(["me", "targets"], "/me/targets");
 
 export function useMyStorage(enabled = true) {
   return useQuery({
     queryKey: ["me", "targets"],
     enabled,
+    // Never `fresh`: a load and every poll below are answered from the add-on's copy.
     queryFn: () => request<{ targets: MyTargetView[] }>("/me/targets"),
     select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
     refetchInterval: (query) =>

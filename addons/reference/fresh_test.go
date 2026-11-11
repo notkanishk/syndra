@@ -143,3 +143,62 @@ func TestAReadAfterAWriteNeverJoinsAReadBegunBeforeIt(t *testing.T) {
 		t.Errorf("a read joining the one after the write answered %d %v, want it as cooldown", status, joined)
 	}
 }
+
+// Inside the cooldown of a read that FAILED, a fresh read is answered as that
+// failure was, not as "read moments ago": the copy `unreachable`, or the error
+// when nothing is kept (never 429 and never `cooldown`), with no second attempt
+// on the app. This is the TrueNAS add-on's rule (fresher.fallback), so the kit
+// sees one add-on behave one way.
+func TestAFreshReadInsideTheCooldownOfAFailedReadSaysUnreachable(t *testing.T) {
+	var down atomic.Bool
+	a, err := New(Config{Target: "reference", Secret: []byte("s"), Features: []string{"freshness"}, Down: down.Load})
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer := func() (reply, map[string]any) {
+		rep := a.freshSubjects(true)
+		var doc map[string]any
+		_ = json.Unmarshal(rep.body, &doc)
+		return rep, doc
+	}
+	reads := func() int { a.mu.Lock(); defer a.mu.Unlock(); return a.fresh.reads }
+	lapse := func() { a.mu.Lock(); a.fresh.began = time.Now().Add(-time.Hour); a.mu.Unlock() }
+
+	// Nothing kept: the failed read, then another at once, are both 503.
+	down.Store(true)
+	for i := range 2 {
+		if rep, doc := answer(); rep.status != 503 || doc["code"] != "TARGET_UNREACHABLE" {
+			t.Fatalf("attempt %d with nothing kept answered %d %v, want 503 TARGET_UNREACHABLE", i+1, rep.status, doc["code"])
+		}
+	}
+	if got := reads(); got != 1 {
+		t.Fatalf("the cooldown let %d reads through, want 1", got)
+	}
+
+	// A copy kept, then a failed read, then a fresh read inside its cooldown.
+	down.Store(false)
+	lapse()
+	_, live := answer()
+	down.Store(true)
+	lapse()
+	if _, doc := answer(); doc["stale"].(map[string]any)["reason"] != "unreachable" {
+		t.Fatalf("the failed read itself answered %v", doc)
+	}
+	before := reads()
+	rep, doc := answer()
+	stale, _ := doc["stale"].(map[string]any)
+	if rep.status != 200 || doc["current"] != false || stale["reason"] != "unreachable" || stale["retry_after"] != nil || doc["taken_at"] != live["taken_at"] {
+		t.Errorf("inside the cooldown of a failed read: %d %v, want 200, the last value (taken_at %v), stale unreachable with no retry_after", rep.status, doc, live["taken_at"])
+	}
+	if reads() != before {
+		t.Errorf("the cooldown let a second attempt reach the app")
+	}
+
+	// A success clears it: the next read inside its cooldown is a plain cooldown again.
+	down.Store(false)
+	lapse()
+	answer()
+	if _, doc := answer(); doc["stale"].(map[string]any)["reason"] != "cooldown" {
+		t.Errorf("after a successful read the cooldown answered %v, want cooldown", doc["stale"])
+	}
+}

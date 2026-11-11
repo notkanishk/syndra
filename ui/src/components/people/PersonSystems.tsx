@@ -12,6 +12,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Card, CardRow } from "@/components/ui/Card";
 import { NextStep } from "@/components/ui/NextStep";
+import { ReadAgainProvider } from "@/components/ui/ReadFreshness";
 import { Notice } from "@/components/ui/Notice";
 import { StandingLine } from "@/components/ui/StandingLine";
 import { Relative } from "@/components/ui/Time";
@@ -19,7 +20,7 @@ import { roleOf } from "@/lib/fields";
 import { formatClock, formatList, formatShortDate } from "@/lib/format";
 import { isStorage } from "@/lib/nav";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
-import { usePersonTargets, type PersonTargetView, type RoleSource } from "@/lib/queries/useMyStorage";
+import { usePersonTargets, usePersonTargetsAgain, type PersonTargetView, type RoleSource } from "@/lib/queries/useMyStorage";
 import { useTargets, type TargetSummary } from "@/lib/queries/useTargets";
 import { sortNames } from "@/lib/sort";
 
@@ -67,6 +68,7 @@ export function SystemsSection({
   card: (view: PersonTargetView) => ReactNode;
 }) {
   const { views, systems, data } = useSectionSystems(userId, pick);
+  const again = usePersonTargetsAgain(userId);
   if (systems.length === 0) return null;
   return (
     <section aria-label={label} className="flex flex-col gap-3.5">
@@ -81,7 +83,7 @@ export function SystemsSection({
           Syndra didn&apos;t answer when this page asked. Nothing was changed.
         </Notice>
       ) : data ? (
-        data.map((view) => card(view))
+        <ReadAgainProvider value={again.press}>{data.map((view) => card(view))}</ReadAgainProvider>
       ) : (
         systems.map((system) => (
           <Card key={system.target} id={`sys-${system.target}`}>

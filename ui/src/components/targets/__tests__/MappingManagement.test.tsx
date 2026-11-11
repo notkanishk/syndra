@@ -62,7 +62,7 @@ const state: {
 
 // What each group opens is read from the system; these tests are about the
 // mappings themselves.
-const reach = { data: undefined as TargetReach | undefined };
+const reach = { data: undefined as TargetReach | undefined, press: (async () => {}) as () => Promise<void> };
 
 const homeSettings = {
   data: { read: true, settings: [{ name: "home_root", label: "Where home folders go", value: "", values: [], values_read: true }] } as {
@@ -82,6 +82,7 @@ vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
     refetch: () => {},
   }),
   useTargetReach: () => ({ data: reach.data, isLoading: false, error: null }),
+  useTargetReachAgain: () => ({ press: reach.press, pending: false, error: null }),
 }));
 
 vi.mock("@/lib/queries/useMappings", async () => {
@@ -438,6 +439,23 @@ describe("what each group opens", () => {
     renderMappings();
     expect(screen.getByText(/Opens nothing yet\. No folder on TrueNAS gives lab_makers anything/)).toBeInTheDocument();
     expect(screen.getByText(/as last read from TrueNAS's folder permissions at/)).toBeInTheDocument();
+  });
+
+  // Feature freshness: a copy, or a read moments ago, has the one Read again.
+  it("offers Read again on a copy, and counts down a read that was refused with nothing kept", () => {
+    reach.press = vi.fn(async () => {});
+    reach.data = { read: true, current: false, read_at: new Date(Date.now() - 3 * 60_000).toISOString(), stale: { reason: "cached" }, groups: { lab_makers: [] } };
+    const { unmount } = renderMappings();
+    expect(screen.getByText("What each group opens was read 3 min ago")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+    expect(reach.press).toHaveBeenCalledTimes(1);
+    unmount();
+
+    reach.data = { read: false, current: false, retry_after: 20 };
+    renderMappings();
+    expect(screen.getByText("What each group opens was read moments ago; you can read again in 20 s")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Read again" })).toBeDisabled();
+    reach.data = undefined;
   });
 
   it("says nothing was read rather than drawing nothing", () => {

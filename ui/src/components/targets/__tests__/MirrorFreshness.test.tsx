@@ -46,6 +46,7 @@ vi.mock("@/lib/queries/useTargets", () => {
     useMergeFindings: () => ({ ...idle(), data: [] }),
     useTargetHealth: () => ({ ...idle(), data: currentHealth }),
     useTargetInventory: idle,
+    useTargetInventoryAgain: () => ({ press: async () => {}, pending: false, error: null }),
     useResolveLogFinding: inert,
     useResolveBindingConflict: inert,
     useReconcileTarget: inert,

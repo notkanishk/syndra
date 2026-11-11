@@ -52,6 +52,7 @@ vi.mock("@/lib/queries/useTargets", () => {
       data: state.reachable === undefined ? undefined : { reachable: state.reachable, lifecycle: "active" },
     }),
     useTargetInventory: idle,
+    useTargetInventoryAgain: () => ({ press: async () => {}, pending: false, error: null }),
     useResolveLogFinding: inert,
     useResolveBindingConflict: inert,
     useReconcileTarget: inert,

@@ -10,7 +10,8 @@ import { isStorage } from "@/lib/nav";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 import { useCrumb } from "@/lib/page-crumb";
 import { useMySystems } from "@/lib/queries/useMySystems";
-import { useMyStorage } from "@/lib/queries/useMyStorage";
+import { ReadAgainProvider } from "@/components/ui/ReadFreshness";
+import { useMyStorage, useMyStorageAgain } from "@/lib/queries/useMyStorage";
 
 /**
  * `/systems/{target}`: one system's card, by its kind's module (the core card
@@ -29,6 +30,7 @@ export function MemberSystemPage({ target }: { target: string }) {
   const storage = system !== undefined && isStorage(system);
   const here = system !== undefined && !storage;
   const mine = useMyStorage(here);
+  const again = useMyStorageAgain();
   const view = here ? mine.data?.find((t) => t.target === target) : undefined;
   useCrumb(here ? system.name : null);
 
@@ -55,7 +57,11 @@ export function MemberSystemPage({ target }: { target: string }) {
         }
       >
         {/* The page's heading already names the system: the card does not again. */}
-        {view && <MemberTargetCard view={view} untitled />}
+        {view && (
+          <ReadAgainProvider value={again.press}>
+            <MemberTargetCard view={view} untitled />
+          </ReadAgainProvider>
+        )}
       </ListStates>
     </div>
   );

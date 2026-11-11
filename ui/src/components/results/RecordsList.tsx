@@ -1,7 +1,7 @@
 "use client";
 
 import { dueDate, emptyRecords, sinceDate, type Reader } from "@/components/results/copy";
-import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { observed, ReadFreshness, useReadAgainPress } from "@/components/ui/ReadFreshness";
 import { StandingLine } from "@/components/ui/StandingLine";
 import { formatShortDate } from "@/lib/format";
 import type { RecordsResult } from "@/lib/queries/useMyStorage";
@@ -14,6 +14,7 @@ import { sortByName } from "@/lib/sort";
  * out here from a date.
  */
 export function RecordsList({ result, name, reader }: { result: RecordsResult; name: string; reader: Reader }) {
+  const again = useReadAgainPress();
   return (
     <div className="flex flex-col gap-3">
       {result.records.length === 0 ? (
@@ -35,7 +36,7 @@ export function RecordsList({ result, name, reader }: { result: RecordsResult; n
           ))}
         </ul>
       )}
-      <ReadFreshness state={{ readAt: result.taken_at, current: result.current }} subject={name} />
+      <ReadFreshness state={observed(result)} subject={name} reader={reader} onRefresh={again} />
     </div>
   );
 }

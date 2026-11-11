@@ -6,6 +6,7 @@ import { request } from "@/lib/api-client";
 import type { EntitlementField } from "@/lib/fields";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
+import { useReadAgain, type Stale } from "./fresh";
 
 /**
  * The add-on roster and the reads hanging off it.
@@ -307,7 +308,13 @@ export interface TargetInventory {
   truncated?: boolean;
   halted?: boolean;
   reason?: string;
+  /** Why this is the add-on's copy, when it is one (feature freshness). */
+  read_stale?: Stale;
 }
+
+/** "Read again" on the inventory: the same GET, asking the target itself. */
+export const useTargetInventoryAgain = (target: string | undefined) =>
+  useReadAgain<TargetInventory>(["targets", target, "inventory"], `/targets/${target}/inventory`);
 
 export function useTargetInventory(target: string | undefined) {
   return useQuery({
@@ -609,8 +616,16 @@ export interface TargetReach {
   read: boolean;
   read_at?: string;
   current?: boolean;
+  /** Why this is the add-on's copy, when it is one (feature freshness). */
+  stale?: Stale;
+  /** Whole seconds, with `read: false`: read moments ago, and nothing kept to serve. */
+  retry_after?: number;
   groups?: Record<string, ReachPlace[]>;
 }
+
+/** "Read again" on what each group opens: the same GET, asking the target itself. */
+export const useTargetReachAgain = (target: string | undefined) =>
+  useReadAgain<TargetReach>(["targets", target, "reach"], `/targets/${target}/reach`);
 
 export function useTargetReach(target: string | undefined) {
   return useQuery({
