@@ -79,13 +79,14 @@
       "reply_fields": []
     },
     "stats": {
-      "meaning": "Bucketed statistics pulled on a schedule.",
+      "meaning": "Bucketed statistics pulled on a schedule: one point per metric, subject, dimensions and calendar day in the manifest's stats_zone.",
       "routes": [
         "GET /stats"
       ],
       "request_fields": [],
       "manifest_keys": [
         "metrics",
+        "stats_zone",
         "limits.stats_buffer"
       ],
       "health_fields": [],

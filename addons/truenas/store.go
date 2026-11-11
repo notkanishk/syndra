@@ -52,7 +52,7 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("open store: %w", err)
 	}
 	err = db.Update(func(tx *bolt.Tx) error {
-		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot, bucketBindings, bucketIDs, bucketSettings} {
+		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot, bucketBindings, bucketIDs, bucketSettings, bucketStats} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return err
 			}

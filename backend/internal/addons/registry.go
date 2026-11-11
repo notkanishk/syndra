@@ -922,8 +922,8 @@ func decodeManifest(body []byte) (Manifest, error) {
 }
 
 // manifestKeys is every manifest key this backend knows, by object. A key
-// listed with nil is known and not looked inside: metrics are feature stats,
-// which this backend does not read yet.
+// listed with nil is known and not looked inside: metrics and stats_zone are
+// feature stats, which this backend does not read yet.
 var manifestKeys = keySpec{
 	"contract_version": nil, "product": nil, "product_version": nil, "kind": nil, "features": nil,
 	"entitlement_schema": {"name": nil, "role": nil, "label": nil, "unit": nil, "combine": nil, "unlimited": nil, "per_person": nil},
@@ -931,6 +931,7 @@ var manifestKeys = keySpec{
 	"connection":         {"protocol": nil, "host": nil},
 	"limits":             {"subjects_per_plan": nil, "fresh_read_cooldown": nil, "stats_buffer": nil},
 	"metrics":            nil,
+	"stats_zone":         nil,
 }
 
 type keySpec map[string]keySpec

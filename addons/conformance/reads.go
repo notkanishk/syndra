@@ -17,12 +17,16 @@ import (
 type manifest struct {
 	kind     string
 	features []string
-	fields   []struct{ Name, Role, Unlimited string }
+	fields   []struct{ Name, Role, Unlimited, Unit string }
 	account  string
 	ops      map[string]bool // id → available
 	confirm  map[string]bool // id → confirm
 	perPlan  int64           // limits.subjects_per_plan, 0 when undeclared
 	cooldown string          // limits.fresh_read_cooldown as declared, "" when undeclared
+	// metrics, statsZone and statsBuffer are feature stats' manifest keys.
+	metrics     []map[string]any
+	statsZone   string
+	statsBuffer string // limits.stats_buffer as declared, "" when undeclared
 }
 
 func (m *manifest) has(feature string) bool { return slices.Contains(m.features, feature) }
@@ -87,6 +91,7 @@ func (k *kit) reads() {
 
 	k.callsRead(k.at("calls.unknown"))
 	k.freshness()
+	k.stats()
 	k.scopes(k.at("dangerous-scopes"), health)
 }
 
@@ -151,7 +156,7 @@ func (k *kit) manifest(c *check, ex *exchange) *manifest {
 		name, role := str(f, "name"), str(f, "role")
 		c.expect(!seen[name], "field %q is declared twice", name)
 		seen[name] = true
-		m.fields = append(m.fields, struct{ Name, Role, Unlimited string }{name, role, str(f, "unlimited")})
+		m.fields = append(m.fields, struct{ Name, Role, Unlimited, Unit string }{name, role, str(f, "unlimited"), str(f, "unit")})
 	}
 	accounts := m.withRole("account")
 	if !c.expect(len(accounts) == 1, "%d fields have role account, want exactly one", len(accounts)) {
@@ -173,7 +178,9 @@ func (k *kit) manifest(c *check, ex *exchange) *manifest {
 	if limits, _ := doc["limits"].(map[string]any); limits != nil {
 		m.perPlan, _ = num(limits["subjects_per_plan"])
 		m.cooldown = str(limits, "fresh_read_cooldown")
+		m.statsBuffer = str(limits, "stats_buffer")
 	}
+	m.metrics, m.statsZone = objects(doc["metrics"]), str(doc, "stats_zone")
 	return m
 }
 

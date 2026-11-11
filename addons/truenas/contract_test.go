@@ -282,7 +282,8 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 				{ID: "health.get", Scope: "admin", Available: true},
 			},
 			Connection: &Connection{Protocol: "smb", Host: "nas.example.org"},
-			Limits:     Limits{SubjectsPerPlan: perRequestSubjectCap, FreshReadCooldown: "PT30S"},
+			Limits:     Limits{SubjectsPerPlan: perRequestSubjectCap, FreshReadCooldown: "PT30S", StatsBuffer: statsBuffer},
+			Metrics:    statsMetrics, StatsZone: "Asia/Kolkata",
 		}},
 		{"GET /health", "health.json", "health.json", Health{
 			Reachable: true, Product: productName, ProductVersion: "TrueNAS-25.10.5", VersionTested: true,

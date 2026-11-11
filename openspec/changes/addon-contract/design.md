@@ -990,8 +990,10 @@ time", which is what statistics are.
 upserts what comes back into one table; what can come back is declared in
 the manifest as metric descriptors, exactly as fields are declared with
 roles, so the backend stores and the UI renders any add-on's statistics
-with no product code. Every bucket is a UTC day in this major (`stats.hourly`
-is a later feature, owner decision 12): daily is what a makerspace reads,
+with no product code. Every bucket is a makerspace day in this major: a
+calendar day in the add-on's declared `stats_zone`, which must be Syndra's
+one zone (`stats.hourly` is a later feature, owner decision 12, amended 12
+Nov 2026): daily is what a makerspace reads,
 and it removes a rollup job, a second row shape and two double-counting
 hazards.
 Discrete records (what I did, what I hold) are not statistics: they stay
@@ -1059,9 +1061,9 @@ the vocabulary and refuses the machinery.
 | unit | `unit` from a closed registry `registry/units.json`: `count`, `items`, `bytes`, `seconds`, `grams` | OTel has a unit field; this one is a closed plain-word list rather than UCUM (`By`, `s`, `g`), because the UI must format it (`seconds` renders as minutes or hours; there is no `minutes`). A new unit is one registry entry and one formatter case |
 | instrument | `instrument: counter | gauge` (the word `kind` is the manifest's system kind and is not reused) | the two OTel instrument families every target has a use for |
 | histogram, summary | **not adopted** | no target reports a distribution; an average is two counters (`sum` + `count`) and a maximum is a gauge |
-| attributes / labels | `dimensions`, declared per metric in the manifest, ≤ 4 per metric, values are target vocabulary strings naming **resources, never people** (a home share is the one value `home`, not `homes/<name>`) | OTel attributes, OpenMetrics labels; declared, not free-form, so cardinality is bounded by contract |
+| attributes / labels | `dimensions`, declared per metric in the manifest, ≤ 4 per metric, values are target vocabulary strings naming **resources, never people** | OTel attributes, OpenMetrics labels; declared, not free-form, so cardinality is bounded by contract. A home folder is its own metric (`storage.home_bytes`), never a dimension value (ruling O3, 12 Nov 2026) |
 | temporality | **not OTel delta.** A point is the **complete total for its bucket**; equal keys replace | see below |
-| timestamps | RFC 3339 UTC `start`/`end`, one UTC day, `end = start + P1D` | the UI says "UTC day" where it shows a date |
+| timestamps | RFC 3339 `start`/`end` with the zone's offset: `start` a midnight in the manifest's `stats_zone` (an IANA zone, the add-on's `TZ`), `end` the next midnight (a calendar day: 23 or 25 hours across a DST change) | OTel points carry instants (`start_time_unix_nano`/`time_unix_nano`), so a makerspace day is as expressible as a UTC one; RFC 3339 §5.6 and ISO 8601-1 carry a local midnight with its offset. One zone for every day Syndra counts (the 5 Nov one-zone rule, `repoguard/one_zone_test.go`): no "UTC day" anywhere (ruling O1, 12 Nov 2026) |
 | resource / scope / instrumentation library | **not adopted** | the target and the add-on are the resource; `x-` keys carry anything else |
 | exemplars, text exposition, push gateway, remote-write | **not adopted** | nothing scrapes this except Syndra |
 
@@ -1097,13 +1099,16 @@ Manifest (under feature `stats`):
 
 ```json
 "metrics": [
+  {"name": "storage.home_bytes", "instrument": "gauge", "unit": "bytes", "label": "Home folder used",
+   "per_subject": true, "against": "home_quota"},
   {"name": "storage.used_bytes", "instrument": "gauge", "unit": "bytes", "label": "Storage used",
-   "per_subject": true, "dimensions": [{"name": "share", "label": "Share"}], "against": "home_quota"},
+   "per_subject": true, "dimensions": [{"name": "share", "label": "Share"}]},
   {"name": "storage.sessions", "instrument": "counter", "unit": "count", "label": "Storage sessions",
    "per_subject": true, "dimensions": [{"name": "share", "label": "Share"}]},
   {"name": "laser.job_seconds", "instrument": "counter", "unit": "seconds", "label": "Laser time",
    "per_subject": true, "dimensions": [{"name": "machine", "label": "Machine"}]}
-]
+],
+"stats_zone": "Asia/Kolkata"
 ```
 
 `per_subject` on a metric means "reported per person"; the field key
@@ -1111,13 +1116,21 @@ Manifest (under feature `stats`):
 one word is not reused for two things. `against` names a `limit` field of
 the same unit; the UI then renders the gauge as a meter against the
 subject's **observed** limit (§3) with no product code, which is the
-home-folder view today, generalised. The manifest's `limits` holds only
+home-folder view today, generalised. `against` is allowed only on a
+`per_subject` gauge with no dimensions (the schema says so): it means "this
+value is a fraction of that limit", which holds for a person's home folder
+and not for every other share, so a dimension-scoped meter would be a
+predicate over product vocabulary the core would have to evaluate. The home
+folder is its own metric (ruling O3, 12 Nov 2026). `stats_zone`, required
+with the feature, is the IANA zone the add-on counts days in; Syndra does
+not collect statistics counted in another zone than its own `clock.Name`
+(ruling O1). The manifest's `limits` holds only
 what the add-on knows: `subjects_per_plan`, `fresh_read_cooldown`,
 `stats_buffer`. Syndra's own caps (`series_per_metric = 500`,
 `max_reply_bytes = 1 MiB`) live in `registry/constants.json` and are never
 declared by the least trusted component.
 
-Request: `GET /stats?metric=laser.job_seconds&since=2026-11-07T00:00:00Z[&cursor=…]`,
+Request: `GET /stats?metric=laser.job_seconds&since=2026-11-07T00:00:00%2B05:30[&cursor=…]`,
 one metric per call. No `fresh`: when the app is read for statistics is
 the add-on's (§9.1), and "refresh the history" has no reader. Reply:
 
@@ -1126,15 +1139,15 @@ the add-on's (§9.1), and "refresh the history" has no reader. Reply:
   "contract_version": 2,
   "metric": "laser.job_seconds",
   "taken_at": "2026-11-10T07:40:00Z",
-  "watermark": "2026-11-08T00:00:00Z",
+  "watermark": "2026-11-08T00:00:00+05:30",
   "points": [
-    {"start": "2026-11-07T00:00:00Z", "end": "2026-11-08T00:00:00Z",
+    {"start": "2026-11-07T00:00:00+05:30", "end": "2026-11-08T00:00:00+05:30",
      "subject": "sub-7f3a", "dimensions": {"machine": "speedy-400"}, "value": 2520},
-    {"start": "2026-11-07T00:00:00Z", "end": "2026-11-08T00:00:00Z",
+    {"start": "2026-11-07T00:00:00+05:30", "end": "2026-11-08T00:00:00+05:30",
      "dimensions": {"machine": "speedy-400"}, "value": 3660}
   ],
   "unbound": {"accounts": 2},
-  "gaps": [{"start": "2026-11-08T00:00:00Z", "end": "2026-11-10T00:00:00Z",
+  "gaps": [{"start": "2026-11-08T00:00:00+05:30", "end": "2026-11-10T00:00:00+05:30",
             "dimensions": {"machine": "speedy-400"}, "reason": "The laser PC was off"}],
   "next_cursor": null
 }
@@ -1203,8 +1216,10 @@ make it the log of record for three products, which is the wholesale copy
 §9.7 forbids. Keeping them live also keeps their retention the target's.
 
 **The storage numbers, reconciled.** `storage.status.shares[].used_bytes`
-and `/homes` `used_bytes` are the same measurement the channel's
-`storage.used_bytes` gauge reports once a day per share. Decision: the live
+is the measurement the channel's `storage.used_bytes` gauge reports once a
+day per share, and `/homes` `used_bytes` the one `storage.home_bytes`
+reports per home folder, against `home_quota` (two metrics since ruling O3,
+12 Nov 2026: they answer two questions and may overlap). Decision: the live
 reads **stay**, as the storage profile's *current* query, served by the
 add-on from its own most recent read of the NAS (its mirror) with `taken_at`
 and `current`, re-read from the NAS when `fresh: true` asks and the cooldown
@@ -1338,7 +1353,7 @@ four targets does.
 - **Member page** (`/me/targets`): per target declaring `stats`, a card
   "What I have used": each `per_subject` counter summed over the last 30
   days and the last 12 months with a sparkline; each `per_subject` gauge as
-  its latest value with its UTC day, as a meter when `against` is declared
+  its latest value with its day, as a meter when `against` is declared
   (storage used against the observed home limit); gaps footnoted ("no data
   9–10 Nov: the laser PC was off"). Beside it, "What I hold" from
   `holdings.list` and "Now" from `storage.status`, live with `taken_at`.
@@ -1353,7 +1368,8 @@ four targets does.
   numbers are on that person's page, not here (§9.7, a UI choice). Where
   this page sits in the navigation contract is a design-canvas question
   (`basic-advanced-ia`), not this change's.
-- **Windows**: 30 days and 12 months, in UTC days and labelled so; a term
+- **Windows**: 30 days and 12 months, in makerspace days, the same day axis
+  as every other count Syndra shows (sign-ins, the audit day counts); a term
   boundary when the directory defines one (not in this change).
 
 ### 9.9 Conformance kit and guide additions
@@ -1362,10 +1378,10 @@ Kit checks under `stats` (skipped when the feature is absent):
 
 | Check | What it proves |
 |---|---|
-| descriptors | every metric validates (typos fail); unit in the registry; dimensions ≤ 4; `against` names a `limit` field with the same unit; `per_subject` is boolean |
-| points | every point in a `?metric=` reply belongs to that metric and names only declared dimensions; `start`/`end` one UTC day; `subject` only on `per_subject` metrics; `value` numeric, counters ≥ 0; an explicit counter zero is a warn |
-| totals | on a `per_subject` metric every bucket with a per-subject point has a subject-less total, and the sum of the per-subject points ≤ the total |
-| since | no point with `end <= since`; the watermark ≤ `taken_at`; a second collection never moves it backwards; an unknown `metric` → 404 `UNKNOWN_METRIC` |
+| descriptors | every metric validates (typos fail); unit in the registry; dimensions ≤ 4; `against` names a `limit` field with the same unit, only on a `per_subject` gauge with no dimensions; `per_subject` is boolean; `stats_zone` an IANA zone; `stats_buffer` ≤ `P400D` |
+| points | every point in a `?metric=` reply belongs to that metric and names only declared dimensions; `start` a midnight in `stats_zone`, `end` the next; `subject` only on `per_subject` metrics; `value` numeric |
+| totals | on a `per_subject` metric every bucket with a per-subject point has a subject-less total; every value ≥ 0; **counter**: the sum of the per-subject points ≤ the total; **gauge**: each per-subject point ≤ its bucket's total (ruling O2, 12 Nov 2026: OTel's counter is a monotonic sum, every event someone's, so the sum rule is an identity; the contract's gauge covers OTel's Gauge, where sums are not meaningful, and the additive UpDownCounter, so only "a part is never more than the whole" holds for both) |
+| since | no point with `end <= since`; the watermark a midnight in `stats_zone`, ≤ the start of `taken_at`'s day; a second collection never moves it backwards; an unknown `metric` → 404 `UNKNOWN_METRIC` |
 | idempotent | the same `(metric, since)` twice → the same points at or before the watermark, and the same final gaps |
 | gaps | every gap has `start < end`, a `reason`, and only declared dimensions; a gap at or before the watermark is unchanged on the next collection |
 | no people in dimensions | no dimension value equals a subject's `account_id` or display name (warn) |
@@ -1705,6 +1721,14 @@ Statistics, records and the fourth target (10 Nov 2026):
     job and two double-counting hazards; cumulative counters need a running
     total the add-on would have to keep across restarts; no target has a
     distribution to report. **Accepted 10 Nov 2026.**
+    *Amended 12 Nov 2026 (ruling O1, slice 6d):* the bucket is a
+    **makerspace day**, not a UTC one: a calendar day in the add-on's
+    declared `stats_zone`, which must equal Syndra's one zone (`clock.Name`);
+    points and gaps start at midnights there, RFC 3339 with the offset. "UTC"
+    above was a bulk acceptance never weighed against the 5 Nov one-zone
+    rule, and a UTC exception (`clock.UTCDay`) would re-admit by name the
+    bug that rule exists for; the OTel data model carries instants, so a
+    local day is as standard as a UTC one. No "UTC day" anywhere.
 13. **Retention** (§9.6), *revised*: no rollup; target-wide and per-dimension
     daily points 5 years; per-subject daily points 400 days, then deleted
     (the total is required to exist on its own); late points past retention

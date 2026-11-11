@@ -74,6 +74,12 @@
       "description": "Feature stats.",
       "x-feature": "stats"
     },
+    "stats_zone": {
+      "type": "string",
+      "pattern": "^(UTC|[A-Z][A-Za-z_]*(/[A-Za-z0-9_+-]+)+)$",
+      "description": "Feature stats, and required with it. The IANA time zone (the add-on's TZ) whose calendar days the buckets are: every point and gap starts at a midnight in it (RFC 3339 with its offset), and Syndra does not collect statistics counted in a zone other than its own.",
+      "x-feature": "stats"
+    },
     "limits": {
       "$ref": "#/$defs/Limits"
     }
@@ -86,6 +92,23 @@
     "features",
     "entitlement_schema"
   ],
+  "if": {
+    "properties": {
+      "features": {
+        "contains": {
+          "const": "stats"
+        }
+      }
+    },
+    "required": [
+      "features"
+    ]
+  },
+  "then": {
+    "required": [
+      "stats_zone"
+    ]
+  },
   "patternProperties": {
     "^x-": {
       "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."
@@ -261,7 +284,7 @@
         },
         "against": {
           "type": "string",
-          "description": "A limit field of the same unit; the UI draws the gauge as a meter against the subject's observed limit."
+          "description": "A limit field of the same unit; the UI draws the gauge as a meter against the subject's observed limit. Only on a per_subject gauge with no dimensions: a meter is one series per person."
         }
       },
       "required": [
@@ -270,6 +293,27 @@
         "unit",
         "label"
       ],
+      "if": {
+        "required": [
+          "against"
+        ]
+      },
+      "then": {
+        "properties": {
+          "instrument": {
+            "const": "gauge"
+          },
+          "per_subject": {
+            "const": true
+          },
+          "dimensions": {
+            "maxItems": 0
+          }
+        },
+        "required": [
+          "per_subject"
+        ]
+      },
       "patternProperties": {
         "^x-": {
           "description": "Vendor data: ignored by the core, never used for a decision, shown raw on the target page."

@@ -348,7 +348,7 @@ func (k *kit) report() *Report {
 		for _, f := range k.m.features {
 			id := "feature." + f
 			switch _, known := k.c.features[f]; {
-			case f == "operations" || f == "settings" || f == "freshness" || f == "calls" || f == "results":
+			case f == "operations" || f == "settings" || f == "freshness" || f == "calls" || f == "results" || f == "stats":
 				continue // a row of its own above
 			case known:
 				add(Result{ID: id, Status: "skip", Level: "MUST", Must: "feature " + f, Detail: []string{"declared; this kit checks the core and does not check this feature yet"}})

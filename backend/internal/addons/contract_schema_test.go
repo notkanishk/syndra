@@ -78,6 +78,7 @@ var contractMessages = []struct{ fixture, schema string }{
 	{"call_in_doubt.json", "call.json"},
 	{"call_unknown.json", "call.json"},
 	{"stats.json", "stats.json"},
+	{"stats_storage.json", "stats.json"},
 	{"identity_apply.json", "identity/vector.json"},
 	{"identity_operation.json", "identity/vector.json"},
 	{"identity_lifecycle.json", "identity/vector.json"},
@@ -222,6 +223,13 @@ func TestSchemasRefuseWhatTheyShould(t *testing.T) {
 		{"lifecycle with a blank reason", "lifecycle_request.json", "lifecycle_request.json", set("reason", " ")},
 		{"desired list field null", "apply_request.json", "apply_request.json", func(d map[string]any) {
 			d["desired"].(map[string]any)["group"] = nil
+		}},
+		{"feature stats without stats_zone", "manifest.json", "manifest.json", set("stats_zone", nil)},
+		{"a meter (against) on a dimensioned metric", "manifest.json", "manifest.json", func(d map[string]any) {
+			d["metrics"].([]any)[1].(map[string]any)["against"] = "home_quota"
+		}},
+		{"a stats bucket start that is not RFC 3339", "stats.json", "stats_storage.json", func(d map[string]any) {
+			d["points"].([]any)[0].(map[string]any)["start"] = "2026-11-09"
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

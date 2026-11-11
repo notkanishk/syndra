@@ -683,13 +683,7 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 	// unexpected type anywhere inside it fails the WHOLE decode — which is
 	// exactly how the timestamp took the operation down. What varies is decoded
 	// separately and defensively; what does not is decoded here.
-	var rows []struct {
-		Timestamp int64           `json:"message_timestamp"`
-		Event     string          `json:"event"`
-		Success   bool            `json:"success"`
-		Address   string          `json:"address"`
-		EventData json.RawMessage `json:"event_data"`
-	}
+	var rows []auditRow
 	filters := [][]any{{"username", "=", binding.Username}}
 	// The lower bound, in the target's own units. The backend hands this over
 	// as RFC3339 because that is what an HTTP caller writes; the column is an
@@ -743,6 +737,25 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 		Operation: "activity.get", Subject: req.Subject, Outcome: "succeeded",
 		Result: &report,
 	}, http.StatusOK, nil
+}
+
+// auditRow is one `audit.query` row as this add-on reads it (the keys in
+// addons/contract/truenas_observed.json): activity.get reads its event, and
+// the statistics collector its sessions.
+type auditRow struct {
+	Timestamp int64           `json:"message_timestamp"`
+	Event     string          `json:"event"`
+	Success   bool            `json:"success"`
+	Address   string          `json:"address"`
+	Username  string          `json:"username"`
+	Session   string          `json:"session"`
+	AuditID   string          `json:"audit_id"`
+	EventData json.RawMessage `json:"event_data"`
+	// ServiceData names the share an SMB event is on (`service`, Samba's
+	// word for a share).
+	ServiceData struct {
+		Service string `json:"service"`
+	} `json:"service_data"`
 }
 
 // decodeAnswer refuses an answer that is absent as well as one that is wrong.

@@ -4,9 +4,10 @@
 // and the features operations and settings, and, when Config.Features names
 // them, results (holdings.list, and health.get answering under result),
 // freshness (/subjects from a mirror, fresh reads with a cooldown and request
-// collapsing, health.target_reads) and calls (GET /calls/{call_id}, and with
+// collapsing, health.target_reads), calls (GET /calls/{call_id}, and with
 // results the physical operation item.checkout over a lending shelf,
-// checkout.go).
+// checkout.go) and stats (GET /stats over the print queue's job log,
+// stats.go).
 //
 // The target is a print queue: member accounts, the printers each may use, an
 // after-hours flag, a longest-job limit. Every behaviour below is derived from
@@ -126,7 +127,7 @@ type Config struct {
 }
 
 // OptionalFeatures is every feature Config.Features may name.
-var OptionalFeatures = []string{"results", "freshness", "calls"}
+var OptionalFeatures = []string{"results", "freshness", "calls", "stats"}
 
 func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Features, feature) }
 
@@ -151,6 +152,7 @@ type Addon struct {
 	loans     map[string]*loan   // feature calls: by item id
 	intents   map[string]*intent // feature calls: an open checkout, by subject
 	locks     sync.Map           // feature calls: one mutex per subject (serialise)
+	stats     statsState         // feature stats: the buffer (stats.go)
 	dev       deviations         // what the defects keep; empty in any real run
 }
 
@@ -207,6 +209,9 @@ func (a *Addon) Handler() http.Handler {
 	route("GET /settings", a.settings)
 	route("PUT /settings/{name}", a.putSetting)
 	route("GET /calls/{call_id}", a.callState)
+	if a.serves("stats") {
+		route("GET /stats", a.statsRead)
+	}
 	route("/", func(*http.Request, []byte) reply {
 		return problem(404, "UNKNOWN_ROUTE", "This add-on has no such route.", nil)
 	})
@@ -232,19 +237,26 @@ func (a *Addon) capabilities(*http.Request, []byte) reply {
 				"item_id": map[string]any{"type": "string", "format": "target_id", "title": "Item",
 					"description": "The id on the item's label, typed or scanned."}}}})
 	}
-	return ok(map[string]any{
+	m := map[string]any{
 		"contract_version": ContractVersion, "product": "reference", "product_version": "1.0.0",
 		"kind": "machine", "features": append([]string{"operations", "settings"}, a.cfg.Features...),
 		"entitlement_schema": fields,
 		"operations":         ops,
 		"limits":             a.limits(),
-	})
+	}
+	if a.serves("stats") {
+		m["metrics"], m["stats_zone"] = statsMetrics, statsZoneName
+	}
+	return ok(m)
 }
 
 func (a *Addon) limits() map[string]any {
 	l := map[string]any{"subjects_per_plan": subjectsPerPlan}
 	if a.serves("freshness") {
 		l["fresh_read_cooldown"] = "PT1S" // freshCooldown, short so the kit's waits are short
+	}
+	if a.serves("stats") {
+		l["stats_buffer"] = fmt.Sprintf("P%dD", statsBufferDays)
 	}
 	return l
 }

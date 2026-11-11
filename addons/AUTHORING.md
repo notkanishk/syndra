@@ -31,11 +31,11 @@ the repository root. Code is cited by symbol (`decide` in
 `results` ([chapter 7](#read-operations-and-result-feature-results)),
 `freshness` ([Fresh reads](#fresh-reads-feature-freshness)) and `calls`
 ([Physical operations](#physical-operations-and-get-callscall_id-feature-calls))
-included. One feature is in the schemas and not yet used by Syndra:
-`stats`. Its rules are in the appendix,
-[Designed, not yet served by Syndra](#appendix-designed-not-yet-served-by-syndra).
-A good time to build one is once Syndra serves it; what may be declared is
-in [chapter 3](#3-the-manifest-get-capabilities).
+included. `stats` ([Statistics](#statistics-get-stats-feature-stats)) is
+served by both add-ons and not yet collected by Syndra, which ignores it
+until its collector ships. Apps nobody has built an add-on for are in
+[the appendix](#appendix-designed-not-yet-served-by-syndra); what may be
+declared is in [chapter 3](#3-the-manifest-get-capabilities).
 
 ## 1. What an add-on is
 
@@ -182,7 +182,8 @@ key, the designed features' included.
     "storage.homes",
     "results",
     "freshness",
-    "calls"
+    "calls",
+    "stats"
   ],
   "entitlement_schema": [
     {
@@ -271,13 +272,51 @@ key, the designed features' included.
       "available": true
     }
   ],
+  "metrics": [
+    {
+      "name": "storage.sessions",
+      "instrument": "counter",
+      "unit": "count",
+      "label": "Storage sessions",
+      "per_subject": true,
+      "dimensions": [
+        {
+          "name": "share",
+          "label": "Share"
+        }
+      ]
+    },
+    {
+      "name": "storage.home_bytes",
+      "instrument": "gauge",
+      "unit": "bytes",
+      "label": "Home folder used",
+      "per_subject": true,
+      "against": "home_quota"
+    },
+    {
+      "name": "storage.used_bytes",
+      "instrument": "gauge",
+      "unit": "bytes",
+      "label": "Storage used",
+      "per_subject": true,
+      "dimensions": [
+        {
+          "name": "share",
+          "label": "Share"
+        }
+      ]
+    }
+  ],
+  "stats_zone": "Asia/Kolkata",
   "connection": {
     "protocol": "smb",
     "host": "nas.example.org"
   },
   "limits": {
     "subjects_per_plan": 200,
-    "fresh_read_cooldown": "PT30S"
+    "fresh_read_cooldown": "PT30S",
+    "stats_buffer": "P90D"
   }
 }
 ```
@@ -315,6 +354,8 @@ Rules the schema cannot express:
   of your own.
 - `operations[]` is [chapter 7](#7-operations); its `params` is a hint for
   the UI only.
+- `metrics[]`, `stats_zone` and `limits.stats_buffer` belong to feature
+  `stats` ([Statistics](#statistics-get-stats-feature-stats)).
 - `connection` is how a member reaches the app: `host` MUST be the name a
   member types, not the API address. A good default is to leave it out until
   the deployment says.
@@ -1233,6 +1274,251 @@ reply is `v2/fixtures/settings.json`.
 - The reply MUST be the setting as now held, with `set_by` (the `actor`) and
   `set_at`.
 
+### Statistics: `GET /stats` (feature `stats`)
+
+Schema: `v2/schema/stats.json`; the manifest's `metrics[]`, `stats_zone`
+and `limits.stats_buffer` are in `v2/fixtures/manifest.json`. The TrueNAS
+add-on and the reference serve it. Syndra does not collect it yet: until its
+collector ships it ignores `metrics` and never calls `/stats`, so declaring
+the feature changes nothing on Syndra's side today.
+
+Syndra keeps aggregates and never copies records. A number over time ("laser
+minutes per day") travels here and is kept; a list of things with ids (what
+a member holds, what they did) is a live read through an operation, never
+stored. The vocabulary is the OpenTelemetry metrics data model's (metric,
+instrument, unit, attributes as `dimensions`), without its machinery.
+
+**Declaring metrics.** Each entry of `metrics[]` is a descriptor, and Syndra
+stores and draws it with no code for your product. The limits on names,
+instruments, units and dimensions are in `v2/schema/manifest.json`. The
+rules the schema cannot express:
+
+- `name` MUST have your kind or product as its first segment
+  (`laser.job_seconds`), and no `_total` suffix: `instrument` says it.
+- A `counter` is how much happened in the day (an OpenTelemetry monotonic
+  sum); a `gauge` is a level: the last sample in the day, or its maximum.
+  There are no histograms: an average is two counters, a maximum is a gauge.
+- `per_subject: true` when the metric is also reported per person. A
+  per-person gauge is a level that belongs to the person (bytes stored,
+  items on loan); its total is the level of the whole, by sum or by maximum
+  as the quantity means.
+- Each dimension MUST name a **resource, never a person** (a machine, a
+  share, a category). Syndra will drop and log a dimension value equal to a
+  subject's `account_id` or name.
+- `against` names a `limit` field of the same unit, and Syndra then draws the
+  gauge as a meter against that person's observed limit. The schema allows
+  it only on a `per_subject` gauge with no dimensions: a meter is one series
+  per person, so a level that is a share of a limit in one place only is its
+  own metric (the TrueNAS add-on's `storage.home_bytes` beside
+  `storage.used_bytes`).
+- A metric's `instrument` and `unit` are fixed for ever; a new meaning MUST
+  be a new name. Syndra will refuse a manifest that changes them.
+- `stats_zone` is required with the feature and MUST be the IANA zone your
+  add-on counts days in (its `TZ`; `Asia/Kolkata` in this deployment). Every
+  bucket is a calendar day there. Syndra counts days in the makerspace's one
+  zone and will not collect statistics counted in another.
+
+**The collector is yours.** The add-on MUST read usage from the app on its
+own schedule, with its own backoff, within the app's rate limits, from the
+app's own log, and keep daily points in its own buffer. Syndra never asks
+the app for anything and never decides when the app is read; the add-on
+never calls Syndra. Where the app pushes events to the add-on, a good
+approach is to fold them into the same buffer; Syndra still pulls. The
+collector's reads of the app count in `target_reads` like any other, so a
+good habit is to switch it off for a kit run (the TrueNAS add-on's
+`STATS_COLLECT_EVERY=0`): the freshness checks then measure only what they
+send.
+
+**The buffer.** A point MUST stay in the buffer for `limits.stats_buffer`
+(default `P90D`, at most `P400D`) after its day ends, whether or not Syndra
+has collected it, under a size ceiling of your choosing that drops the
+oldest days first. Syndra's first collection of a metric asks from now
+minus `stats_buffer`. When Syndra asks from further back than you still
+hold, the add-on MUST answer a gap from the day `since` falls in to the
+first day it holds, with a reason (the TrueNAS add-on says "The add-on no
+longer holds these days"), and go on from what it has.
+
+**A point is the whole day.** A point's `start` MUST be a midnight in
+`stats_zone` and its `end` the next one, both RFC 3339 with the zone's
+offset (`2026-11-07T00:00:00+05:30`); a calendar day, which across a
+daylight-saving change is 23 or 25 hours. A counter point MUST be the
+complete total for that day; a gauge point the day's level. Points are not
+OpenTelemetry deltas, which add up: a point with the same `(metric,
+dimensions, subject, start)` replaces the one before, so sending partials
+undercounts. They are not cumulative counters either: a good way is to
+derive each day from the app's log, so a restart loses nothing and a day the
+app missed can be filled in later. Within a window you observed, an absent
+counter point is zero and an absent gauge point is "no new sample"; the
+add-on SHOULD NOT send a counter's zeros.
+
+**The watermark, per metric.** `watermark` is the instant through which this
+metric is final, absence included.
+
+- It MUST be a midnight in `stats_zone`, no later than the start of the day
+  `taken_at` is in: the day still running is never final.
+- The add-on MUST move a metric's watermark only forwards, and never past a
+  window it can still fill: while the laser PC is off, `laser.job_seconds`
+  stays at the last day it could read, while another metric moves on.
+- A point that ends at or before the watermark is final and MUST keep its
+  value. A point after it is provisional: send it again as it changes, and
+  Syndra replaces its provisional window with each reply, so a provisional
+  3 that turns out 0 is corrected by its absence.
+- A window you could not observe MUST be a `gap` with a `reason` in a
+  member's words, never a zero ("The laser PC was off" is not "nobody used
+  it"). A gap is keyed by `(metric, dimensions, start)`; one ending after
+  the watermark is provisional and is withdrawn when the window fills, one
+  at or before it is final. A good habit is to join a day's gaps into
+  windows, but never across the watermark, so a final gap keeps its end.
+  When the app comes back, read its log for the missed window and fill it;
+  the watermark had not passed it, so Syndra collects it.
+
+<!-- fixture: v2/fixtures/stats.json -->
+```json
+{
+  "contract_version": 2,
+  "metric": "laser.job_seconds",
+  "taken_at": "2026-11-10T07:40:00Z",
+  "watermark": "2026-11-08T00:00:00+05:30",
+  "points": [
+    {
+      "start": "2026-11-07T00:00:00+05:30",
+      "end": "2026-11-08T00:00:00+05:30",
+      "dimensions": {
+        "machine": "speedy-400"
+      },
+      "value": 3660
+    },
+    {
+      "start": "2026-11-07T00:00:00+05:30",
+      "end": "2026-11-08T00:00:00+05:30",
+      "subject": "289471021834760193",
+      "dimensions": {
+        "machine": "speedy-400"
+      },
+      "value": 2520
+    }
+  ],
+  "unbound": {
+    "accounts": 2
+  },
+  "gaps": [
+    {
+      "start": "2026-11-08T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "dimensions": {
+        "machine": "speedy-400"
+      },
+      "reason": "The laser PC was off"
+    }
+  ],
+  "next_cursor": "eyJzIjoiMjAyNi0xMS0wN1QwMDowMDowMCswNTozMCIsInUiOiIyODk0NzEwMjE4MzQ3NjAxOTMiLCJkIjp7Im1hY2hpbmUiOiJzcGVlZHktNDAwIn19"
+}
+```
+
+**The reply.**
+
+- One metric per call: `GET /stats?metric=<name>&since=<that metric's
+  watermark>[&cursor=…]`. An undeclared metric MUST be 404
+  `UNKNOWN_METRIC`; a `since` that is not RFC 3339, or a cursor you did not
+  give, 400 `BAD_REQUEST`. `stats` takes no `fresh`. Before your collector
+  has read the app once, a good answer is 503 `NO_CURRENT_READ`.
+- The reply MUST hold no point and no gap with `end <= since`.
+- A point without `subject` is the total for the whole app (or for its
+  dimensions) and MUST include everyone, managed or not. On a
+  `per_subject` metric every day that has any per-person point MUST also
+  have that total, so that Syndra can delete per-person points at their
+  retention and keep the total. Every value MUST be at least 0; a counter's
+  per-person points MUST sum to no more than its total, and each of a
+  gauge's MUST be no more than its total (a part is never more than the
+  whole).
+- A point with `subject` MUST be on a `per_subject` metric and MUST carry
+  the Syndra subject id, found through the binding the add-on recorded at
+  apply (by the account's stable id, never its name), never a local name.
+- Usage by an account you cannot bind (a local account, a shared desk
+  login) MUST count in the totals and in `unbound.accounts` (distinct
+  accounts across the reply's days), and never as a per-person point. **No
+  name of an unbound account crosses the wire.**
+- Pages MUST be keyed: points in `(start, subject, dimensions)` order, the
+  total first, `next_cursor` encoding the last one sent and `null` on the
+  last page, each page under `constants.max_reply_bytes`. `taken_at`,
+  `watermark` and `unbound` are the same on every page; a good habit is to
+  send `gaps` whole on the first page and `[]` after. `taken_at` MUST be
+  when your collector last read the app, not when you answered. There is no
+  `current`: the watermark says what is final.
+
+The TrueNAS add-on's `storage.sessions`, a share whose auditing does not
+record everyone a gap rather than a zero:
+
+<!-- fixture: v2/fixtures/stats_storage.json -->
+```json
+{
+  "contract_version": 2,
+  "metric": "storage.sessions",
+  "taken_at": "2026-11-10T07:40:00Z",
+  "watermark": "2026-11-10T00:00:00+05:30",
+  "points": [
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "dimensions": {
+        "share": "makers"
+      },
+      "value": 9
+    },
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "dimensions": {
+        "share": "projects"
+      },
+      "value": 4
+    },
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "subject": "289471021834760193",
+      "dimensions": {
+        "share": "makers"
+      },
+      "value": 3
+    },
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "subject": "289471021834760193",
+      "dimensions": {
+        "share": "projects"
+      },
+      "value": 1
+    }
+  ],
+  "unbound": {
+    "accounts": 1
+  },
+  "gaps": [
+    {
+      "start": "2026-11-09T00:00:00+05:30",
+      "end": "2026-11-10T00:00:00+05:30",
+      "dimensions": {
+        "share": "scratch"
+      },
+      "reason": "Auditing does not record everyone on this share"
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+**What Syndra will do with it.** Once its collector ships: collect hourly,
+per metric, since that metric's stored watermark, and write the watermark
+last, after the final page; upsert points by key and replace the
+provisional window; drop and count a point for a subject with no binding on
+your app, a `subject` on a metric that is not `per_subject`, and anything
+beyond `constants.series_per_metric` dimension sets; keep totals five years
+and per-person points 400 days. Admins see the totals and each person's
+numbers; a member sees their own. The kit's `stats.*` checks hold every MUST
+above that a black box can see.
+
 ## 5. Plan and apply agree
 
 - The add-on MUST compute a plan's outcome and an apply's write with one
@@ -1922,7 +2208,14 @@ What the reference simplifies, and a real add-on MUST do in full:
   `calls` and `results` it declares `item.checkout` over four items, one at
   a time per member; `Config.LoseReply` (test-only) loses an answer before or
   after the loan, which the kit cannot. Its intents live in memory; a real
-  add-on writes them to its mutation log. It declares no `stats`.
+  add-on writes them to its mutation log.
+- With `stats` (`-features stats`) it reports `machine.jobs` (a counter per
+  printer) and `machine.longest_job_seconds` (a gauge against `job_seconds`)
+  from a deterministic job log, plus a `guest` login no binding names
+  (`statsDay` in `addons/reference/stats.go`). It reads its in-memory app
+  on every `/stats`, before answering, where a real add-on reads its app on
+  its own timer; its buffer lives in memory, and `Config.Down` (test-only)
+  holds the watermark back, which the kit cannot.
 
 ## 12. The TrueNAS add-on
 
@@ -1938,7 +2231,7 @@ has the full map.
 | `smb_enabled` | `channel` | SMB on the account; TrueNAS turns it on only together with a password, so it waits for the member's next `password.set`, and `standing` says so |
 
 - Features `operations`, `settings`, `storage.reach`, `storage.homes`,
-  `results`, `freshness`, `calls` (`features` and `operationSet` in
+  `results`, `freshness`, `calls`, `stats` (`features` and `operationSet` in
   `addons/truenas/capabilities.go`). It has no physical operation: `calls`
   is declared for `GET /calls`, which answers every write from its call
   store, its lease and its mutation log (`handleCall` in
@@ -1962,9 +2255,18 @@ has the full map.
   Call records last 30 days (`idempotencyTTL` in `addons/truenas/store.go`).
 - A NAS that cannot be reached answers a write `TARGET_UNREACHABLE`
   (`ErrNotSent` in `addons/truenas/nas.go`).
+- Statistics (`statsMetrics` in `addons/truenas/stats.go`): `storage.sessions`
+  (distinct SMB sessions per account, share and day, from one bounded
+  `audit.query` per run), `storage.home_bytes` (home folder use, against
+  `home_quota`) and `storage.used_bytes` (use per share), each owned by the
+  account's uid, never its name. A share whose auditing does not record
+  everyone is a gap, never a zero. The collector runs every
+  `STATS_COLLECT_EVERY` (`PT1H`; `0` switches it off), reads only, and keeps
+  its days in the add-on's bbolt store, in the container's `TZ`
+  (`collectStats` in `addons/truenas/stats_collect.go`).
 
 Sketches for other apps (UniFi Access, a Trotec Ruby laser, an inventory
-system) are unverified and in [Appendix A.3](#a3-mapping-sketches).
+system) are unverified and in [Appendix A.2](#a2-mapping-sketches).
 
 ## 13. Validating before you ask to be connected
 
@@ -2042,7 +2344,12 @@ own tests carry them:
   shows it, so only the add-on's own test sees it:
   `TestAnUnlistedValueIsKeptAndNotShown` in
   `addons/reference/unlisted_test.go`);
-- that no secret is stored or logged (the kit reads only replies).
+- that no secret is stored or logged (the kit reads only replies);
+- statistics: the watermark held back while the app is down, and the days
+  filled once it is back (the reference's `TestTheWatermarkIsHeldWhileTheAppIsDown`
+  in `addons/reference/stats_test.go`); the buffer's size ceiling; usage by
+  an account outside any binding (the kit can only make bound ones), and
+  per-person points owned by the account's stable id, not its name.
 
 ### What Syndra refuses at registration
 
@@ -2105,7 +2412,7 @@ manifest key, health field and reply field each one introduces.
 | a field role | `v2/registry/roles.json`, Syndra's resolver and UI | a core change, rare by design |
 | an effect class | `v2/registry/operations.json` and Syndra's retry rule | a core change, rare by design (`physical` was the last) |
 | a per-person list | a read operation with `result` `common/records.json` | a registry entry and a policy entry ([Read operations and `result`](#read-operations-and-result-feature-results)) |
-| a metric | [Appendix A](#appendix-designed-not-yet-served-by-syndra) | once `stats` is served |
+| a metric | your manifest's `metrics[]` ([Statistics](#statistics-get-stats-feature-stats)) | nothing else: its descriptor says how Syndra keeps and draws it |
 
 Every contract change is an entry in `addons/contract/CHANGELOG.md` naming
 the feature or major, the schema files touched and the fixtures that
@@ -2114,17 +2421,15 @@ point.
 
 ## Appendix: Designed, not yet served by Syndra
 
-Two kinds of thing are here: a feature in the contract's files and not yet
-used by Syndra (statistics), and apps nobody has built an add-on for yet (the
-inventory worked case, whose operations Syndra does serve, and the mapping
-sketches). A feature is declared only once it is served in full
-([chapter 3](#3-the-manifest-get-capabilities)), and a good time to build one
-is once Syndra serves it.
+Apps nobody has built an add-on for yet: the inventory worked case, whose
+operations Syndra does serve, and the mapping sketches. A feature is
+declared only once it is served in full
+([chapter 3](#3-the-manifest-get-capabilities)).
 
 ### A.1 Worked case: an inventory checkout
 
 An inventory system where a member borrows items through Syndra (the
-mapping is in [A.3](#a3-mapping-sketches)):
+mapping is in [A.2](#a2-mapping-sketches)):
 
 - Desired state says only who can borrow: `borrower` (`account`),
   `categories` (`membership`, "May borrow from"), `max_items` (`limit` in
@@ -2177,157 +2482,7 @@ mapping is in [A.3](#a3-mapping-sketches)):
 - Overdue is `standing`: `{usable: true, waiting_on: "member", note: "1
   item overdue", next: "Return it at the desk"}`.
 
-### A.2 Statistics: `GET /stats` (feature `stats`)
-
-Schema: `v2/schema/stats.json`; the manifest's `metrics[]` and
-`limits.stats_buffer` are in `v2/fixtures/manifest.json`.
-
-Syndra keeps aggregates and never copies records. A number over time ("laser
-minutes per day") travels here and is kept; a list of things with ids (what
-a member holds, what they did) is a live read through an operation, never
-stored.
-
-**Declaring metrics.** Each entry of `metrics[]` is a descriptor, and Syndra
-stores and draws it with no code for your product. The limits on names,
-instruments, units and dimensions are in `v2/schema/manifest.json`. The
-rules the schema cannot express:
-
-- `name` MUST have your kind or product as its first segment
-  (`laser.job_seconds`), and no `_total` suffix: `instrument` says it.
-- A `counter` is how much happened in the day; a `gauge` the last sample in
-  the day. There are no histograms: an average is two counters, a maximum
-  is a gauge.
-- Each dimension MUST name a **resource, never a person** (a machine, a
-  share, a category; a home folder is the one value `home`, not one per
-  person). Syndra drops and logs a dimension value equal to any subject's
-  `account_id` or name.
-- `per_subject: true` when the metric is also reported per person.
-- `against` names a `limit` field of the same unit; Syndra then draws the
-  gauge as a meter against that person's observed limit.
-- A metric's `instrument` and `unit` are fixed for ever; a new meaning MUST
-  be a new name. Syndra will refuse a manifest that changes them.
-
-**The collector is yours.** The add-on MUST read usage from the app on its
-own schedule, with its own backoff, within the app's rate limits, from the
-app's own log, and keep daily points in its own buffer. Syndra never asks
-the app for anything and never decides when the app is read; the add-on
-never calls Syndra. Where the app pushes events to the add-on, a good
-approach is to fold them into the same buffer; Syndra still pulls.
-
-**The buffer.** A point MUST stay in the buffer for `limits.stats_buffer`
-(default `P90D`, at most `P400D`) whether or not Syndra has collected it,
-under a size ceiling of your choosing that drops the oldest first.
-Syndra's first collection of a metric asks from now minus `stats_buffer`.
-When Syndra asks from further back than you still hold, the add-on MUST
-answer a gap from `since` to its oldest point with the reason "the add-on no
-longer holds this window", and go on from what it has.
-
-**A point is the whole day.** A point's `start` and `end` (RFC 3339, UTC)
-MUST bound one UTC day, `end = start + P1D`. A counter point MUST be the
-complete total for that day; a gauge point the last sample inside it.
-Points are not OpenTelemetry deltas, which add up: a point with the same
-`(metric, dimensions, subject, start)` replaces the one before, so sending
-partials undercounts. They are not cumulative counters either: a good way is
-to derive each day from the app's log, so a restart loses nothing and a day
-the app missed can be filled in later. Within a window you observed, an
-absent counter point is zero and an absent gauge point is "no new sample";
-the add-on SHOULD NOT send a counter's zeros.
-
-**The watermark, per metric.** `watermark` is the instant through which this
-metric is final, absence included.
-
-- The add-on MUST move a metric's watermark only forwards, and never past a
-  window it can still fill: while the laser PC is off, `laser.job_seconds`
-  stays at the last day it could read, while another metric moves on.
-- A point that ends at or before the watermark is final and MUST keep its
-  value. A point after it is provisional: send it again as it changes, and
-  Syndra replaces its provisional window with each reply, so a provisional
-  3 that turns out 0 is corrected by its absence.
-- A window you could not observe MUST be a `gap` with a `reason` in a
-  member's words, never a zero ("The laser PC was off" is not "nobody used
-  it"). A gap is keyed by `(metric, dimensions, start)`; one ending after
-  the watermark is provisional and is withdrawn when the window fills, one
-  at or before it is final. When the app comes back, read its log for the
-  missed window and fill it; the watermark had not passed it, so Syndra
-  collects it.
-
-<!-- fixture: v2/fixtures/stats.json -->
-```json
-{
-  "contract_version": 2,
-  "metric": "laser.job_seconds",
-  "taken_at": "2026-11-10T07:40:00Z",
-  "watermark": "2026-11-08T00:00:00Z",
-  "points": [
-    {
-      "start": "2026-11-07T00:00:00Z",
-      "end": "2026-11-08T00:00:00Z",
-      "subject": "289471021834760193",
-      "dimensions": {
-        "machine": "speedy-400"
-      },
-      "value": 2520
-    },
-    {
-      "start": "2026-11-07T00:00:00Z",
-      "end": "2026-11-08T00:00:00Z",
-      "dimensions": {
-        "machine": "speedy-400"
-      },
-      "value": 3660
-    }
-  ],
-  "unbound": {
-    "accounts": 2
-  },
-  "gaps": [
-    {
-      "start": "2026-11-08T00:00:00Z",
-      "end": "2026-11-10T00:00:00Z",
-      "dimensions": {
-        "machine": "speedy-400"
-      },
-      "reason": "The laser PC was off"
-    }
-  ],
-  "next_cursor": "eyJzIjoiMjAyNi0xMS0wN1QwMDowMDowMFoiLCJ1Ijoic3ViLTdmM2EifQ"
-}
-```
-
-**The reply.**
-
-- One metric per call: `GET /stats?metric=<name>&since=<that metric's
-  watermark>[&cursor=…]`. An undeclared metric MUST be 404
-  `UNKNOWN_METRIC`. `stats` takes no `fresh`.
-- The reply MUST hold no point with `end <= since`.
-- A point without `subject` is the total for the whole app (or for its
-  dimensions) and MUST include everyone, managed or not. On a
-  `per_subject` metric every day that has any per-subject point MUST also
-  have that total, so that Syndra can delete per-person points at their
-  retention and keep the total.
-- A point with `subject` MUST be on a `per_subject` metric and MUST carry
-  the Syndra subject id, found through the binding the add-on recorded at
-  apply, never a local name.
-- Usage by an account you cannot bind (a local account, a shared desk
-  login) MUST count in the totals and in `unbound.accounts`, and never as a
-  per-person point. No name of an unbound account crosses the wire.
-- Pages MUST be keyed (`next_cursor` encodes the last `(start, subject,
-  dimensions)` sent; `null` on the last page), each under
-  `constants.max_reply_bytes`, with `taken_at` and `watermark` from the
-  first page. `taken_at` MUST be when your collector last read the app, not
-  when you answered. There is no `current`: the watermark says what is
-  final.
-
-**What Syndra will do with it.** Collect hourly, per metric, since that
-metric's stored watermark, and write the watermark last, after the final
-page; upsert points by key and replace the provisional window; drop and
-count a point for a subject with no binding on your app, a `subject` on a
-metric that is not `per_subject`, and anything beyond
-`constants.series_per_metric` dimension sets; keep totals five years and
-per-person points 400 days. Admins see the totals and each person's
-numbers; a member sees their own.
-
-### A.3 Mapping sketches
+### A.2 Mapping sketches
 
 Three apps mapped onto the contract, none built. Each names what nobody has
 verified; a good habit is to verify each before relying on it.

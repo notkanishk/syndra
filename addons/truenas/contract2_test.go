@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -156,6 +157,7 @@ var v2Messages = []struct{ fixture, schema string }{
 	{"call_in_doubt.json", "call.json"},
 	{"call_unknown.json", "call.json"},
 	{"stats.json", "stats.json"},
+	{"stats_storage.json", "stats.json"},
 	{"identity_apply.json", "identity/vector.json"},
 	{"identity_operation.json", "identity/vector.json"},
 	{"identity_lifecycle.json", "identity/vector.json"},
@@ -336,7 +338,7 @@ func TestV2SchemasRefuseWhatTheyShould(t *testing.T) {
 		{"unknown key on a field", man, man, v2Edit("colour", "red", fld(1)...)},
 		{"unknown key on an operation", man, man, v2Edit("colour", "red", "operations", 0)},
 		{"unknown key on a metric", man, man, v2Edit("colour", "red", "metrics", 0)},
-		{"unknown key on a dimension", man, man, v2Edit("colour", "red", "metrics", 0, "dimensions", 0)},
+		{"unknown key on a dimension", man, man, v2Edit("colour", "red", "metrics", 1, "dimensions", 0)},
 		{"unknown top-level key", man, man, v2Edit("colour", "red")},
 		{"unknown key in limits", man, man, v2Edit("requests_per_minute", 60, "limits")},
 		{"x- key in limits, which is closed", man, man, v2Edit("x-vendor", 1, "limits")},
@@ -351,11 +353,20 @@ func TestV2SchemasRefuseWhatTheyShould(t *testing.T) {
 		{"no account field", man, man, v2Edit("role", "channel", fld(3)...)},
 		{"two account fields", man, man, v2Edit("role", "account", fld(4)...)},
 		{"metric with a unit outside the registry", man, man, v2Edit("unit", "minutes", "metrics", 0)},
-		{"metric that is a histogram", man, man, v2Edit("instrument", "histogram", "metrics", 0)},
+		{"metric that is a histogram", man, man, v2Edit("instrument", "histogram", "metrics", 1)},
 		{"metric with five dimensions", man, man, v2Edit("dimensions", []any{
-			v2m{"name": "a", "label": "A"}, v2m{"name": "b", "label": "B"}, v2m{"name": "c", "label": "C"}, v2m{"name": "d", "label": "D"}, v2m{"name": "e", "label": "E"}}, "metrics", 0)},
+			v2m{"name": "a", "label": "A"}, v2m{"name": "b", "label": "B"}, v2m{"name": "c", "label": "C"}, v2m{"name": "d", "label": "D"}, v2m{"name": "e", "label": "E"}}, "metrics", 1)},
 		{"metric name with no namespace", man, man, v2Edit("name", "used", "metrics", 0)},
 		{"metric name in capitals", man, man, v2Edit("name", "Storage.Used", "metrics", 0)},
+		{"metric per_subject as text", man, man, v2Edit("per_subject", "yes", "metrics", 0)},
+		{"dimension without a label", man, man, v2Edit("label", nil, "metrics", 1, "dimensions", 0)},
+		{"feature stats without stats_zone", man, man, v2Edit("stats_zone", nil)},
+		{"stats_zone as an offset, not an IANA zone", man, man, v2Edit("stats_zone", "+05:30")},
+		{"stats_zone as an abbreviation", man, man, v2Edit("stats_zone", "IST")},
+		{"against on a counter", man, man, v2Edit("instrument", "counter", "metrics", 0)},
+		{"against on a dimensioned metric", man, man, v2Edit("dimensions", []any{v2m{"name": "share", "label": "Share"}}, "metrics", 0)},
+		{"against on a metric not per_subject", man, man, v2Edit("per_subject", false, "metrics", 0)},
+		{"against with per_subject left out", man, man, v2Edit("per_subject", nil, "metrics", 0)},
 
 		// the error envelope
 		{"error whose type is not a urn", "error.json", "error.json", v2Edit("type", "about:blank")},
@@ -412,6 +423,9 @@ func TestV2SchemasRefuseWhatTheyShould(t *testing.T) {
 		{"stats without gaps (absence is not a value)", "stats.json", "stats.json", v2Edit("gaps", nil)},
 		{"stats without unbound", "stats.json", "stats.json", v2Edit("unbound", nil)},
 		{"stats on contract 1", "stats.json", "stats.json", v2Edit("contract_version", 1)},
+		{"stats point value as text", "stats.json", "stats.json", v2Edit("value", "3660", "points", 0)},
+		{"stats with unbound accounts below zero", "stats.json", "stats.json", v2Edit("accounts", -1, "unbound")},
+		{"stats without next_cursor (the last page says null)", "stats.json", "stats.json", v2Edit("next_cursor", nil)},
 
 		// identity
 		{"apply identity carrying a fingerprint", "identity/vector.json", "identity_apply.json", v2Edit("fingerprint", FP2, "input")},
@@ -438,7 +452,7 @@ func TestV2SchemasAcceptWhatTheyShould(t *testing.T) {
 		{"x- key on a field", man, man, v2Edit("x-anything", 1, "entitlement_schema", 1)},
 		{"x- key on an operation", man, man, v2Edit("x-anything", 1, "operations", 0)},
 		{"x- key on a metric", man, man, v2Edit("x-anything", 1, "metrics", 0)},
-		{"x- key on a dimension", man, man, v2Edit("x-anything", 1, "metrics", 0, "dimensions", 0)},
+		{"x- key on a dimension", man, man, v2Edit("x-anything", 1, "metrics", 1, "dimensions", 0)},
 		{"a feature nobody here has heard of is skipped, not refused", man, man, v2Edit("features", []any{"operations", "fancy.new"})},
 		{"a manifest with no operations, metrics, limits or connection", man, man, v2Also(
 			v2Edit("operations", nil), v2Edit("metrics", nil), v2Edit("limits", nil), v2Edit("connection", nil))},
@@ -456,6 +470,11 @@ func TestV2SchemasAcceptWhatTheyShould(t *testing.T) {
 		{"a non-current reach with its stale", "profiles/storage/reach.json", "reach.json", v2Also(v2Edit("current", false), v2Edit("stale", v2m{"reason": "unreachable", "retry_after": 60}))},
 		{"a preview carries no call_id", "operation_request.json", "operation_request.json", v2Also(v2Edit("preview", true), v2Edit("call_id", nil))},
 		{"a gauge point of zero", "stats.json", "stats.json", v2Edit("value", 0, "points", 1)},
+		{"a manifest without feature stats needs no stats_zone", man, man, v2Also(
+			v2Edit("features", []any{"operations", "settings", "storage.reach", "storage.homes", "calls", "freshness", "results"}),
+			v2Edit("metrics", nil), v2Edit("stats_zone", nil), v2Edit("stats_buffer", nil, "limits"))},
+		{"stats_zone UTC", man, man, v2Edit("stats_zone", "UTC")},
+		{"stats_zone with three segments", man, man, v2Edit("stats_zone", "America/Argentina/Buenos_Aires")},
 	}
 	v2Run(t, cases, false)
 }
@@ -893,45 +912,85 @@ func asList2(v any) []any {
 	return l
 }
 
-func TestV2StatsFixtureWindowsAreUTCDays(t *testing.T) {
-	st := v2JSON(t, "fixtures", "stats.json")
-	type win struct{ start, end time.Time }
-	parse := func(o map[string]any) win {
-		s, err1 := time.Parse(time.RFC3339, o["start"].(string))
-		e, err2 := time.Parse(time.RFC3339, o["end"].(string))
-		if err1 != nil || err2 != nil {
-			t.Fatal(err1, err2)
-		}
-		return win{s, e}
+// Every bucket is a calendar day in the manifest's stats_zone (owner ruling
+// O1, 12 Nov 2026), not a UTC one: start a midnight there, end the next one
+// (RFC 3339 with the zone's offset). Points come in keyset order, (start,
+// subject, dimensions) with the total first, and next_cursor names the last
+// one sent; every per-subject bucket has its total; a gap never straddles the
+// watermark, which is itself a midnight.
+func TestV2StatsFixturesAreMakerspaceDays(t *testing.T) {
+	zone, err := time.LoadLocation(v2JSON(t, "fixtures", "manifest.json")["stats_zone"].(string))
+	if err != nil {
+		t.Fatal(err)
 	}
-	totals := map[string]bool{}
-	var subjectBuckets []string
-	key := func(o map[string]any, w win) string {
-		b, _ := json.Marshal(o["dimensions"]) // map keys marshal sorted
-		return w.start.Format(time.RFC3339) + string(b)
+	midnight := func(at time.Time) bool {
+		l := at.In(zone)
+		return l.Equal(time.Date(l.Year(), l.Month(), l.Day(), 0, 0, 0, 0, zone))
 	}
-	for _, p := range st["points"].([]any) {
-		pm := p.(map[string]any)
-		w := parse(pm)
-		if w.start != w.start.Truncate(24*time.Hour) || w.end.Sub(w.start) != 24*time.Hour {
-			t.Errorf("point %v..%v is not one UTC day", pm["start"], pm["end"])
-		}
-		if _, ok := pm["subject"]; ok {
-			subjectBuckets = append(subjectBuckets, key(pm, w))
-		} else {
-			totals[key(pm, w)] = true
-		}
+	nextDay := func(at time.Time) time.Time {
+		l := at.In(zone)
+		return time.Date(l.Year(), l.Month(), l.Day()+1, 0, 0, 0, 0, zone)
 	}
-	for _, b := range subjectBuckets {
-		if !totals[b] {
-			t.Errorf("bucket %s has a per-subject point and no total", b)
+	at := func(v any) time.Time {
+		tm, err := time.Parse(time.RFC3339, v.(string))
+		if err != nil {
+			t.Fatal(err)
 		}
+		return tm
 	}
-	wm, _ := time.Parse(time.RFC3339, st["watermark"].(string))
-	for _, g := range st["gaps"].([]any) {
-		w := parse(g.(map[string]any))
-		if !w.end.After(w.start) || w.start.Before(wm) && w.end.After(wm) {
-			t.Errorf("gap %v is empty or straddles the watermark", g)
+	for _, f := range []string{"stats.json", "stats_storage.json"} {
+		st := v2JSON(t, "fixtures", f)
+		wm := at(st["watermark"])
+		if !midnight(wm) {
+			t.Errorf("%s: watermark %v is not a midnight in %s", f, st["watermark"], zone)
+		}
+		totals := map[string]bool{}
+		var subjectBuckets, keys []string
+		for _, p := range st["points"].([]any) {
+			pm := p.(map[string]any)
+			start, end := at(pm["start"]), at(pm["end"])
+			if !midnight(start) || !end.Equal(nextDay(start)) {
+				t.Errorf("%s: point %v..%v is not one day in %s", f, pm["start"], pm["end"], zone)
+			}
+			dims, _ := json.Marshal(pm["dimensions"]) // map keys marshal sorted
+			bucket := start.UTC().Format(time.RFC3339) + string(dims)
+			subject, _ := pm["subject"].(string)
+			if subject != "" {
+				subjectBuckets = append(subjectBuckets, bucket)
+			} else {
+				totals[bucket] = true
+			}
+			keys = append(keys, start.UTC().Format(time.RFC3339)+"\x00"+subject+"\x00"+string(dims))
+		}
+		if !slices.IsSorted(keys) {
+			t.Errorf("%s: points are not in keyset order (start, subject, dimensions)", f)
+		}
+		for _, b := range subjectBuckets {
+			if !totals[b] {
+				t.Errorf("%s: bucket %s has a per-subject point and no total", f, b)
+			}
+		}
+		if c, ok := st["next_cursor"].(string); ok {
+			raw, err := base64.RawURLEncoding.DecodeString(c)
+			var k struct {
+				S string            `json:"s"`
+				U string            `json:"u"`
+				D map[string]string `json:"d"`
+			}
+			if err != nil || json.Unmarshal(raw, &k) != nil {
+				t.Fatalf("%s: next_cursor is not base64url JSON: %v", f, err)
+			}
+			dims, _ := json.Marshal(k.D)
+			if got := at(k.S).UTC().Format(time.RFC3339) + "\x00" + k.U + "\x00" + string(dims); got != keys[len(keys)-1] {
+				t.Errorf("%s: next_cursor names %q, the last point sent is %q", f, got, keys[len(keys)-1])
+			}
+		}
+		for _, g := range st["gaps"].([]any) {
+			gm := g.(map[string]any)
+			start, end := at(gm["start"]), at(gm["end"])
+			if !end.After(start) || !midnight(start) || !midnight(end) || start.Before(wm) && end.After(wm) {
+				t.Errorf("%s: gap %v is empty, off midnight, or straddles the watermark", f, g)
+			}
 		}
 	}
 }

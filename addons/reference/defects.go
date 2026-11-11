@@ -66,6 +66,17 @@ const (
 	CheckoutUnserialised      Defect = "checkout-unserialised"       // no per-subject lock, a pause between the checks and the loan (with results, calls)
 	NoChangeAsSucceeded       Defect = "no-change-as-succeeded"      // an item already held answers succeeded and logs (with results, calls)
 	CallsEchoParams           Defect = "calls-echo-params"           // a call keeps its params, and /calls answers them (with calls)
+	StatsUndeclaredDimension  Defect = "stats-undeclared-dimension"  // every point carries a dimension the manifest does not declare (with stats)
+	StatsLocalNameSubject     Defect = "stats-local-name-subject"    // a per-person point names the account id, not the subject (with stats)
+	StatsZeroForGap           Defect = "stats-zero-for-gap"          // a zero point inside each window it could not observe (with stats)
+	StatsWatermarkAhead       Defect = "stats-watermark-ahead"       // the watermark is tomorrow, past a day still running (with stats)
+	StatsSubjectsAboveTotal   Defect = "stats-subjects-above-total"  // a total below its people: the sum less one, the largest less one (with stats)
+	StatsSinceIgnored         Defect = "stats-since-ignored"         // answers from the start of the buffer whatever since says (with stats)
+	StatsFinalMoves           Defect = "stats-final-moves"           // a final point's value changes with every read (with stats)
+	StatsUnknownMetricOK      Defect = "stats-unknown-metric-ok"     // an undeclared metric is 200 with nothing in it (with stats)
+	StatsPageOverlap          Defect = "stats-page-overlap"          // next_cursor names the second-last point, so a page repeats one (with stats)
+	StatsNoBufferGap          Defect = "stats-no-buffer-gap"         // the window the buffer no longer holds has no gap (with stats)
+	StatsTotalMissing         Defect = "stats-total-missing"         // a day with per-person points has no total (with stats)
 )
 
 // Defects lists every defect, for the kit's self-tests and the binary's help.
@@ -76,7 +87,9 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	RebindsOnOperation, PlanForgetsAccount, CreateAnswersMember, RebindsQuietly, CreateOmitsAccount,
 	LimitEmptyClears, LogHeadEmpty, ReadsTakeCallID, StateShowsUnlisted, ResultOffSchema, ResultInPocket,
 	CachedAsCurrent, ReadsPerRequest, CooldownIgnored, PreviewRecorded, ReexecutesInDoubt, CheckoutUnserialised,
-	NoChangeAsSucceeded, CallsEchoParams}
+	NoChangeAsSucceeded, CallsEchoParams, StatsUndeclaredDimension, StatsLocalNameSubject, StatsZeroForGap,
+	StatsWatermarkAhead, StatsSubjectsAboveTotal, StatsSinceIgnored, StatsFinalMoves, StatsUnknownMetricOK,
+	StatsPageOverlap, StatsNoBufferGap, StatsTotalMissing}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -100,6 +113,7 @@ type deviations struct {
 	rebound  bool             // RebindsOnOperation: done once
 	quiet    bool             // RebindsQuietly: rebound, and plans no longer name the account
 	params   map[string]any   // CallsEchoParams: each call's params, by call_id
+	reads    int              // StatsFinalMoves: /stats answered so far
 }
 
 // openIntent is the subject's checkout in doubt, nil when none. Under a.mu.
@@ -241,6 +255,20 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 		a.mu.Unlock()
 		time.Sleep(300 * time.Millisecond) // the caller may have given up; the commit still happens
 		defer func() { a.mu.Lock(); a.dev.late--; a.mu.Unlock() }()
+	}
+
+	if route == "GET /stats" {
+		q := r.URL.Query()
+		if d[StatsUnknownMetricOK] && statsMetric(q.Get("metric")) == nil {
+			return ok(map[string]any{"contract_version": ContractVersion, "metric": q.Get("metric"), "taken_at": now(),
+				"watermark": stamp3339(dayOf(time.Now())), "points": []any{}, "unbound": map[string]int{"accounts": 0},
+				"gaps": []any{}, "next_cursor": nil})
+		}
+		if d[StatsSinceIgnored] {
+			q.Set("since", time.Now().AddDate(-1, 0, 0).UTC().Format(time.RFC3339))
+			r = r.Clone(r.Context())
+			r.URL.RawQuery = q.Encode()
+		}
 	}
 
 	var rep reply
@@ -393,6 +421,8 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 				reply["params"] = a.dev.params[r.PathValue("call_id")]
 			}
 		})
+	case route == "GET /stats" && rep.status == 200:
+		rewrite(func(doc map[string]any) { a.statsDeviate(r.URL.Query().Get("metric"), doc) })
 	case passwordSet && d[EchoesSecret] && rep.status == 200:
 		rewrite(func(doc map[string]any) { doc["detail"] = fmt.Sprintf("Password set to %v.", req.Params["password"]) })
 	}
@@ -435,3 +465,89 @@ func codeOf(rep reply) string {
 	_ = json.Unmarshal(rep.body, &p)
 	return p.Code
 }
+
+// statsDeviate breaks a /stats page the ways the stats defects say. Under a.mu.
+func (a *Addon) statsDeviate(metric string, doc map[string]any) {
+	d := a.cfg.Defects
+	a.dev.reads++
+	points := objectsOf(doc["points"])
+	gaps := objectsOf(doc["gaps"])
+	wm, _ := time.Parse(time.RFC3339, doc["watermark"].(string))
+	// bucket is a point's day and dimensions, which a total shares with its people.
+	bucket := func(p map[string]any) string {
+		dims, _ := json.Marshal(p["dimensions"])
+		return p["start"].(string) + string(dims)
+	}
+	people := map[string][]float64{}
+	for _, p := range points {
+		if p["subject"] != nil {
+			people[bucket(p)] = append(people[bucket(p)], p["value"].(float64))
+		}
+	}
+	kept := points[:0]
+	for _, p := range points {
+		end, _ := time.Parse(time.RFC3339, p["end"].(string))
+		values, shared := people[bucket(p)]
+		switch {
+		case p["subject"] == nil && shared && d[StatsTotalMissing]:
+			continue
+		case p["subject"] == nil && shared && d[StatsSubjectsAboveTotal]:
+			whole := slices.Max(values)
+			if statsMetric(metric)["instrument"] == "counter" {
+				whole = 0
+				for _, v := range values {
+					whole += v
+				}
+			}
+			p["value"] = whole - 1
+		case p["subject"] != nil && d[StatsLocalNameSubject]:
+			p["subject"] = a.bindings[p["subject"].(string)]
+		}
+		if d[StatsUndeclaredDimension] {
+			dims, _ := p["dimensions"].(map[string]any)
+			if dims == nil {
+				dims = map[string]any{}
+			}
+			dims["colour"] = "black"
+			p["dimensions"] = dims
+		}
+		if d[StatsFinalMoves] && !end.After(wm) {
+			p["value"] = p["value"].(float64) + float64(a.dev.reads)
+		}
+		kept = append(kept, p)
+	}
+	keptGaps := gaps[:0]
+	for _, g := range gaps {
+		if d[StatsNoBufferGap] && g["reason"] == bufferReason {
+			continue
+		}
+		if dims := g["dimensions"]; d[StatsZeroForGap] && dims != nil {
+			start, _ := time.Parse(time.RFC3339, g["start"].(string))
+			kept = append(kept, map[string]any{"start": g["start"], "end": stamp3339(next(dayOf(start))), "dimensions": dims, "value": 0})
+		}
+		keptGaps = append(keptGaps, g)
+	}
+	if d[StatsWatermarkAhead] {
+		doc["watermark"] = stamp3339(next(dayOf(time.Now())))
+	}
+	if c, _ := doc["next_cursor"].(string); d[StatsPageOverlap] && c != "" && len(kept) >= 2 {
+		p := kept[len(kept)-2]
+		dims := map[string]string{}
+		for k, v := range objectOf(p["dimensions"]) {
+			dims[k], _ = v.(string)
+		}
+		subject, _ := p["subject"].(string)
+		doc["next_cursor"] = cursorOf(point{Start: p["start"].(string), Subject: subject, Dimensions: dims})
+	}
+	doc["points"], doc["gaps"] = kept, keptGaps
+}
+
+func objectsOf(v any) []map[string]any {
+	out := []map[string]any{} // never null on the wire
+	for _, e := range v.([]any) {
+		out = append(out, e.(map[string]any))
+	}
+	return out
+}
+
+func objectOf(v any) map[string]any { m, _ := v.(map[string]any); return m }

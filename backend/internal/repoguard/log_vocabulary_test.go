@@ -42,7 +42,7 @@ var subsystems = map[string]bool{
 	// operator log: an add-on runs in its own container but its lines are read
 	// beside the backend's, by the same person, during the same incident.
 	"STARTUP": true, "SHUTDOWN": true, "HTTP": true,
-	"NAS": true, "STORE": true, "SUBJECTS": true,
+	"NAS": true, "STORE": true, "SUBJECTS": true, "STATS": true,
 }
 
 // Severity words are what a tag drifts into. Named so the failure explains

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://syndra.example.org/addon-contract/2/schema/stats.json",
   "title": "Stats",
-  "description": "GET /stats?metric=&since=[&cursor=] (feature stats). One metric per call: bucketed points (each the complete total for its UTC day, equal keys replace), the windows the add-on could not observe, and a watermark through which the metric is final.",
+  "description": "GET /stats?metric=&since=[&cursor=] (feature stats). One metric per call: bucketed points (each the complete total for one calendar day in the manifest's stats_zone, equal keys replace), the windows the add-on could not observe, and a watermark through which the metric is final.",
   "type": "object",
   "properties": {
     "contract_version": {
@@ -20,7 +20,7 @@
     "watermark": {
       "type": "string",
       "format": "date-time",
-      "description": "The instant through which this metric is final, including absence."
+      "description": "The instant through which this metric is final, including absence: a midnight in the manifest's stats_zone, never later than the start of taken_at's day."
     },
     "points": {
       "type": "array",
@@ -30,12 +30,12 @@
           "start": {
             "type": "string",
             "format": "date-time",
-            "description": "A UTC day start."
+            "description": "A midnight in the manifest's stats_zone (RFC 3339 with its offset)."
           },
           "end": {
             "type": "string",
             "format": "date-time",
-            "description": "start + P1D."
+            "description": "The next midnight in stats_zone (start + P1D on the calendar)."
           },
           "dimensions": {
             "type": "object",
@@ -79,12 +79,12 @@
           "start": {
             "type": "string",
             "format": "date-time",
-            "description": "A UTC day start."
+            "description": "A midnight in the manifest's stats_zone."
           },
           "end": {
             "type": "string",
             "format": "date-time",
-            "description": "End of the unobserved window, a UTC day boundary."
+            "description": "End of the unobserved window, a later midnight in stats_zone."
           },
           "dimensions": {
             "type": "object",

@@ -46,6 +46,7 @@ const (
 	CodeUnauthenticated          = "UNAUTHENTICATED"
 	CodeUnknownField             = "UNKNOWN_FIELD"
 	CodeUnknownLifecycleState    = "UNKNOWN_LIFECYCLE_STATE"
+	CodeUnknownMetric            = "UNKNOWN_METRIC"
 	CodeUnknownRequestField      = "UNKNOWN_REQUEST_FIELD"
 	CodeUnknownRoute             = "UNKNOWN_ROUTE"
 )
@@ -86,6 +87,7 @@ var problems = map[string]problemKind{
 	CodeUnauthenticated:          {"Unauthenticated", "never"},
 	CodeUnknownField:             {"Unknown field", "never"},
 	CodeUnknownLifecycleState:    {"Unknown lifecycle state", "never"},
+	CodeUnknownMetric:            {"Unknown metric", "never"},
 	CodeUnknownRequestField:      {"Unknown request field", "never"},
 	CodeUnknownRoute:             {"Unknown route", "never"},
 }
