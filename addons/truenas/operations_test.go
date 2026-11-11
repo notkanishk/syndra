@@ -483,7 +483,7 @@ func TestTheClientWrapperNeverSurfacesTheTargetsOwnText(t *testing.T) {
 	m := &mutatingRPC{fakeRPC: fakeRPC{err: errors.New("update failed for password=" + theSecret)}}
 	n := newNAS(func() (rpc, error) { return m, nil }, []string{"25.04"})
 
-	err := n.call("user.update", []any{1, map[string]any{"password": theSecret}}, nil)
+	err := n.sendWrite("user.update", []any{1, map[string]any{"password": theSecret}}, nil)
 	if err == nil {
 		t.Fatal("the failure must be reported")
 	}
@@ -612,12 +612,18 @@ func TestTheRecordedActorIsTheOneWhoAsked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var r Record
-	if err := json.Unmarshal([]byte(strings.TrimSpace(string(raw))), &r); err != nil {
-		t.Fatal(err)
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want an intent and a result, got %d records:\n%s", len(lines), raw)
 	}
-	if r.Actor != "op_7" || r.Subject != "sub-1" {
-		t.Fatalf("want actor op_7 on subject sub-1, got %+v", r)
+	for _, line := range lines {
+		var r Record
+		if err := json.Unmarshal([]byte(line), &r); err != nil {
+			t.Fatal(err)
+		}
+		if r.Actor != "op_7" || r.Subject != "sub-1" {
+			t.Fatalf("want actor op_7 on subject sub-1, got %+v", r)
+		}
 	}
 }
 

@@ -80,7 +80,7 @@ func TestAGroupIsUndoneOnlyWhileItIsStillEmptyAndStillOurs(t *testing.T) {
 	} {
 		s, m := applyServer(t, `[]`)
 		m.fakeRPC.groups = tc.groups
-		s.undoGroup("zoe", made)
+		s.undoGroup(caller{operation: "apply", subject: "sub-zoe"}, "zoe", made)
 		if got := m.groupDeletes == 1; got != tc.deleted {
 			t.Errorf("%s: deleted = %t, want %t", tc.name, got, tc.deleted)
 		}

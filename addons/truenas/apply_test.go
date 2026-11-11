@@ -137,7 +137,8 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		return nil, errors.New("websocket: read tcp 192.0.2.10:443: connection reset by peer")
 	}
 	if method == m.rateLimitOn {
-		return nil, errors.New("too many requests")
+		// An answer, as TrueNAS sends it: an error frame, not a dropped call.
+		return errorEnvelope("Too many requests"), nil
 	}
 	switch method {
 	case "user.update":
@@ -1642,5 +1643,30 @@ func TestARateLimitAfterAnAdoptedGroupIsStillNotReached(t *testing.T) {
 	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"enabled":true}}`)
 	if rr.Code != http.StatusTooManyRequests || m.groupDeletes != 0 {
 		t.Fatalf("want 429 and the adopted group kept, got %d deletes=%d %s", rr.Code, m.groupDeletes, rr.Body.String())
+	}
+}
+
+// A group.create that got no answer may have made the very group the next
+// read adopts, so this attempt has written: a failure after it is acted's
+// "possibly acted" 5xx, never a 429 or a "nothing was sent", and the group
+// is still never deleted.
+func TestAFailureAfterAGroupCreateWithNoAnswerIsPossiblyActed(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	m.resetOn = "group.create"
+	// The reset landed the group (the NAS made it; the answer was lost), and
+	// the reconnect cooldown is past, so the next read redials and adopts it.
+	m.after = map[string]func(){"group.create": func() {
+		s.nas.mu.Lock()
+		defer s.nas.mu.Unlock()
+		s.nas.lastTry = time.Now().Add(-time.Hour)
+	}}
+	m.fakeRPC.groups = `[{"id":93,"gid":250000,"group":"charlotte","builtin":false,"users":[]}]`
+	m.rateLimitOn = "user.create"
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"enabled":true}}`)
+	if !slices.Contains(m.fakeRPC.calls, "user.create") {
+		t.Fatalf("the group was not adopted; calls %v", m.fakeRPC.calls)
+	}
+	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeApplyFailed || m.groupDeletes != 0 {
+		t.Fatalf("want a possibly-acted 5xx and the group kept, got %d deletes=%d %s", rr.Code, m.groupDeletes, rr.Body.String())
 	}
 }

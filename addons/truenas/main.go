@@ -213,6 +213,7 @@ func run() error {
 		return fmt.Errorf("mutation log: %w", err)
 	}
 	defer mlog.Close()
+	recoverInDoubt(mlog)
 
 	nas := newNAS(dialTrueNAS(cfg.nasURL, cfg.nasAPIKey, cfg.nasVerify), cfg.supported)
 	// Probed at startup so `/capabilities` can answer with a version straight
@@ -506,4 +507,20 @@ func shareConnection(host string) *Connection {
 		return nil
 	}
 	return &Connection{Protocol: "smb", Host: host}
+}
+
+// recoverInDoubt settles, before anything is served, every write the last run
+// began and never settled (MutationLog.Recover), and says each one once: its
+// result is now recorded unknown, and whether it landed is read on the NAS.
+// Not fatal: a log that cannot be written refuses every mutation by itself
+// (errNotLogged), reads still serve, and the next start tries again.
+func recoverInDoubt(mlog *MutationLog) {
+	settled, err := mlog.Recover()
+	for _, r := range settled {
+		log.Printf("[STARTUP] write in doubt: record %d, %s %s for subject %q (call %s) was begun and never finished; recorded as unknown, check it on the NAS",
+			r.Seq, r.Operation, r.Write, r.Subject, r.CallID)
+	}
+	if err != nil {
+		log.Printf("[STARTUP] could not settle the writes in doubt in the mutation log: %v", err)
+	}
 }

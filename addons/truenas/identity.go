@@ -80,14 +80,14 @@ func (s *server) nextIdentity() (int64, error) {
 // second apply that took it over as an orphan) would otherwise lose its
 // primary group. Writes for one subject run one at a time (calls.go, rule 5);
 // this holds even if that ever stops being so. A failed read keeps the group.
-func (s *server) undoGroup(name string, id apiID) {
+func (s *server) undoGroup(who caller, name string, id apiID) {
 	if !id.known() {
 		return
 	}
 	if still, _, empty := s.emptyGroupNamed(name); !empty || still.String() != id.String() {
 		return
 	}
-	if err := s.nas.call("group.delete", []any{id}, nil); err != nil {
+	if err := s.send(who, "group.delete", []any{id}, nil); err != nil {
 		logStoreFailure("personal group cleanup", id.String(), err)
 	}
 }

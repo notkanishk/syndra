@@ -70,10 +70,13 @@ const (
 )
 
 var (
-	// ErrTargetUnreachable means nothing was asked. Distinct from a refusal,
-	// because only this one is safe to try again.
+	// ErrTargetUnreachable is a call the target did not answer: the session
+	// could not be had, or a request went out and no answer came back (a
+	// timeout, a reset, a closed socket). Alone, it says nothing about whether
+	// the target acted; only ErrNotSent, wrapping it, says it did not.
 	ErrTargetUnreachable = errors.New("the target is not reachable")
-	// ErrTargetRefused is the NAS answering no. Deterministic; retrying changes
+	// ErrTargetRefused is the NAS answering no: an error member it sent back,
+	// and nothing else (classifyNASError). Deterministic; retrying changes
 	// nothing.
 	ErrTargetRefused = errors.New("the target refused the call")
 	// ErrRateLimited is the NAS pushing back. Its own error because the right
@@ -348,7 +351,9 @@ func (n *NAS) Probe() error {
 // the next attempt is the one that locks the account — so it opens the circuit
 // immediately rather than after five more tries.
 func (n *NAS) recordFailureLocked(err error) {
-	if errors.Is(classifyNASError(err), ErrRateLimited) {
+	// The breaker sees logins too, which reach here as the client's text and
+	// not as an answer, so their rate-limit wording is read directly.
+	if err != nil && rateLimitWording(err.Error()) {
 		n.failures = breakerThreshold
 	} else {
 		n.failures++
@@ -377,12 +382,39 @@ func (n *NAS) drop() {
 	}
 }
 
-// call issues one JSON-RPC method and classifies the failure.
+// call issues one READ. A method not in readMethods is refused before
+// anything is sent: a write goes through `sendWrite`, which only the mutation
+// log's seam calls (server.send), so no write reaches the NAS without its
+// intent on disk first (5.3b). Listed rather than guessed from a name, so a
+// method nobody listed fails closed instead of going out unlogged.
+func (n *NAS) call(method string, params any, out any) error {
+	if !readMethods[method] {
+		return fmt.Errorf("%s is not a read this add-on makes; a write goes through the mutation log", method)
+	}
+	return n.roundTrip(method, params, out)
+}
+
+// sendWrite issues one write. Only server.send calls it, inside server.mutate
+// (TestEveryNASWriteGoesThroughTheSeam).
+func (n *NAS) sendWrite(method string, params any, out any) error {
+	return n.roundTrip(method, params, out)
+}
+
+// readMethods is every NAS method this add-on reads with.
+var readMethods = map[string]bool{
+	"alert.list": true, "audit.query": true, "auth.me": true, "core.get_methods": true,
+	"filesystem.getacl": true, "filesystem.listdir": true, "filesystem.stat": true,
+	"group.query": true, "pool.dataset.get_quota": true, "pool.dataset.query": true,
+	"pool.query": true, "service.query": true, "sharing.smb.query": true,
+	"system.info": true, "system.version": true, "user.query": true,
+}
+
+// roundTrip issues one JSON-RPC method and classifies the failure.
 //
 // The classification matters more than it looks: the backend's accounting
 // distinguishes "nothing happened" from "it refused" from "we do not know", and
 // collapsing them here would make that distinction a fiction one layer up.
-func (n *NAS) call(method string, params any, out any) error {
+func (n *NAS) roundTrip(method string, params any, out any) error {
 	c, err := n.session()
 	if err != nil {
 		return err
@@ -406,7 +438,7 @@ func (n *NAS) call(method string, params any, out any) error {
 		// add-on passes out == nil, so a refusal noticed only when a result was
 		// wanted would be a refusal never noticed at all — and `user.update`
 		// answering "no" would be reported to the backend as applied.
-		return fmt.Errorf("%s: %w (target error code %d)", method, n.classifyRefusal(refusal), refusal.Code)
+		return fmt.Errorf("%s: %w (target error code %d)", method, n.classify(refusal), refusal.Code)
 	}
 	if out == nil {
 		return nil
@@ -432,8 +464,8 @@ func (n *NAS) invoke(c rpc, method string, params any) (json.RawMessage, error) 
 	return c.Call(method, callTimeoutSeconds, params)
 }
 
-// classify maps a failure onto the three outcomes that differ and does the
-// bookkeeping each one implies.
+// classify is classifyNASError plus the bookkeeping each outcome implies, for
+// a failure on the shared session: a transport error or an answered refusal.
 func (n *NAS) classify(err error) error {
 	classified := classifyNASError(err)
 	switch classified {
@@ -442,8 +474,8 @@ func (n *NAS) classify(err error) error {
 		// subsequent one fails on a connection nothing will reopen.
 		n.drop()
 	case ErrRateLimited:
-		// Backpressure on a live session still counts: the next reconnect
-		// is what would trip the lockout, and the breaker has to be holding
+		// Backpressure still counts, answered or not: the next reconnect is
+		// what would trip the lockout, and the breaker has to be holding
 		// before that reconnect is attempted.
 		n.mu.Lock()
 		n.recordFailureLocked(err)
@@ -451,27 +483,6 @@ func (n *NAS) classify(err error) error {
 		n.drop()
 	}
 	return classified
-}
-
-// classifyRefusal narrows an answered refusal to the two outcomes it can be.
-//
-// Never unreachable, however the message reads: the target demonstrably
-// received the call, and the entire worth of that outcome is that it means
-// nothing happened. Rate limiting is the exception that still has to reach the
-// breaker — it is the target saying, in as many words, that the next reconnect
-// is the one that locks the account out.
-func (n *NAS) classifyRefusal(e *rpcError) error {
-	if errors.Is(classifyNASError(e), ErrRateLimited) {
-		n.mu.Lock()
-		n.recordFailureLocked(e)
-		n.mu.Unlock()
-		n.drop()
-		return ErrRateLimited
-	}
-	if e.Data.Errname == "ENOENT" {
-		return ErrNoSuchPath
-	}
-	return ErrTargetRefused
 }
 
 // rpcError is a JSON-RPC error member.
@@ -581,11 +592,12 @@ func callOnce(c rpc, method string, params any, out any) error {
 		return fmt.Errorf("%s: %w", method, err)
 	}
 	if refusal != nil {
+		classified := classifyNASError(refusal)
 		if fields := refusal.validationFields(); len(fields) > 0 {
 			return fmt.Errorf("%s: %w (target error code %d, rejected: %s)",
-				method, ErrTargetRefused, refusal.Code, strings.Join(fields, ", "))
+				method, classified, refusal.Code, strings.Join(fields, ", "))
 		}
-		return fmt.Errorf("%s: %w (target error code %d)", method, ErrTargetRefused, refusal.Code)
+		return fmt.Errorf("%s: %w (target error code %d)", method, classified, refusal.Code)
 	}
 	if out == nil {
 		return nil
@@ -596,28 +608,44 @@ func callOnce(c rpc, method string, params any, out any) error {
 	return json.Unmarshal(result, out)
 }
 
-// classifyNASError maps a client error onto the three outcomes that differ.
+// classifyNASError is the one place a NAS failure is classified: the shared
+// session (NAS.classify), the purge's own (callOnce), the ping and the breaker
+// all read it, and a write's log result and its reply follow from it
+// (resultOf, statusFor, failedWrite).
 //
-// String matching, and stated as the compromise it is: the client returns
-// errors built from the middleware's own text and carries no code. What is
-// matched on is the rate-limit and connection vocabulary, and anything
-// unrecognised falls to `refused` — the conservative direction, because
-// treating an unknown failure as retryable is how a lockout happens.
+// A refusal is an ANSWER: an error member the target sent back (*rpcError,
+// out of splitEnvelope), and nothing else is. Every other failure is the wire
+// (the client's "call timed out", a reset, a closed socket), which after a
+// request went out proves nothing about whether the target acted on it: it is
+// ErrTargetUnreachable, a write's result is unknown, and the reply says "may
+// have acted". Read the other way round, as this once did, a timeout matched
+// no word on its list and fell to "refused", and a write that may have landed
+// was recorded as failed.
+//
+// Whether the NAS answered is decided first, so no wording can turn a failure
+// with no answer (a write that may have landed) into a refusal. Text is then
+// matched for rate limiting only, in an answer's message, because the client
+// carries no code for it (a login turned away is read by recordFailureLocked).
 func classifyNASError(err error) error {
-	if err == nil {
-		return nil
-	}
-	text := strings.ToLower(err.Error())
+	var answer *rpcError
 	switch {
-	case strings.Contains(text, "rate limit"), strings.Contains(text, "too many"):
-		return ErrRateLimited
-	case strings.Contains(text, "connection"), strings.Contains(text, "closed"),
-		strings.Contains(text, "eof"), strings.Contains(text, "timeout"),
-		strings.Contains(text, "websocket"), strings.Contains(text, "not connected"):
+	case err == nil:
+		return nil
+	case !errors.As(err, &answer):
 		return ErrTargetUnreachable
+	case rateLimitWording(err.Error()):
+		return ErrRateLimited
+	case answer.Data.Errname == "ENOENT":
+		return ErrNoSuchPath
 	default:
 		return ErrTargetRefused
 	}
+}
+
+// rateLimitWording is how the target says it is rate-limiting.
+func rateLimitWording(text string) bool {
+	text = strings.ToLower(text)
+	return strings.Contains(text, "rate limit") || strings.Contains(text, "too many")
 }
 
 // SystemVersion reads and caches the target's version.

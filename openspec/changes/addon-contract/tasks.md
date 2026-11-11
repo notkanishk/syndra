@@ -1126,12 +1126,64 @@ settings with the full §5 rules.
     guide lists it as a simplification); once it does, the kit's `manifest`
     check can require both of an add-on that creates.
   - Moved to 5.3c: a membership that is not enumerable.
-- [ ] 5.3b The TrueNAS mutation log becomes an intent log: an intent
+- [x] 5.3b The TrueNAS mutation log becomes an intent log: an intent
   recorded and fsynced before each NAS write, a 500 refusal (nothing sent)
   when the sync fails, and the result recorded after. Today `record` in
   `addons/truenas/apply.go` appends after the write, best-effort; design §8
   and the guide (`addons/AUTHORING.md#every-write-once-per-call_id`) say intent
   first. **MUST before contract 2 reaches prod.** #ready-for-agent
+  *Done (11 Nov 2026):* one seam, `server.mutate` (`apply.go`): intent
+  appended and fsynced, then the write, then a result record naming the
+  intent's seq; `send` is mutate around `NAS.sendWrite`, `record` is gone.
+  Every write goes through it: `user.create/update`, `group.create/delete`,
+  `pool.dataset.set_quota`, the purge's `user.delete` on its own session, and
+  the three store-only writes (`account.adopt`, `account.release`,
+  `PUT /settings`). Tests in `addons/truenas/intent_test.go`, each
+  mutation-checked.
+  *Decided while building:*
+  - The refusal is 500 `APPLY_FAILED` / `OPERATION_FAILED` /
+    `SETTING_NOT_SAVED`, never 503 `TARGET_UNREACHABLE`: the NAS was
+    reachable (that code's registry meaning is false here), and within one
+    apply an earlier write (a personal group) may have landed, so the
+    backend's "may have acted" (`classifyStatus`) is the true reading; it
+    also surfaces as unconfirmed, which a failing disk needs. The guide
+    already said so.
+  - The guard is structural at runtime plus a syntax check: `NAS.call`
+    serves only the listed `readMethods` and refuses any other method before
+    sending; `NAS.sendWrite` is called only from `send`, the raw client's
+    `Call` only from `invoke`, the ping and `callOnce`, and `callOnce` only
+    inside a function literal handed to `mutate`
+    (`TestEveryNASWriteGoesThroughTheSeam`, go/ast).
+  - Record gains `write` and `intent`, both `omitempty` and in the digest
+    only when set, so a record written before them digests as it did; the
+    chain Syndra anchors verifies across the upgrade and the head only moves
+    forward (`TestALogWrittenBeforeIntentsCarriesOnUnderThem`, on
+    `testdata/mutations-before-intents.log` written by the code before this
+    change). `operation` keeps the call's name (`apply`, `password.set`);
+    `apply.create` and `apply.unverified` are no longer written (the write
+    says `user.create`; an unverified read-back is not a log fact).
+  - Four results, not three: `succeeded`, `failed` (the NAS answered no, or
+    a store transaction did not commit), `not_sent` (`ErrNotSent`) and
+    `unknown` (any other error: it may have landed), so no record claims
+    nothing happened when that is not known.
+  - Two records per write: the backend anchor, the kit's monotonic checks
+    and the guide only ever required at least one; the guide now says the
+    TrueNAS count grows by two, and that a write the NAS refuses still
+    counts.
+  - In doubt: settled `unknown` at start, before the server is built, said once, a second start appends nothing (`MutationLog.Recover`, `recoverInDoubt`).
+  - Directory fsynced on every open; after a rotation by the next `Append`, which fails while `dirDirty` cannot be cleared.
+  - Only an answer is a refusal: `classifyNASError` is the one classifier; a transport error (the client's "call timed out" included) is `unknown`, 503 "may or may not have happened".
+  - `failedWrite` says "refused" only for an answer; purge, set and rotation no longer claim a refusal after a timeout.
+  - Every binding change is its own `mutate` beside its NAS write (create bind, rebind, wanted SMB, purge unbind); a no-op store write is skipped; the AST guard holds store writes to `mutate` closures.
+  - The fake NAS answers a missing method with an error member, as TrueNAS does, not a transport error.
+  - Review of 3f774667: whether the NAS answered is decided before any wording, so no text turns a lost answer into a refusal (a login's rate limit is read by the breaker itself); an adopted group keeps a failure's own status only when this attempt's `group.create` was answered or never sent, otherwise the failure is "possibly acted"; a binding the log refuses after a create says the account was created. The fake NAS rate-limits with an error frame, as TrueNAS does.
+- [ ] 5.3d Adopting the account a crashed TrueNAS create left behind.
+  Settling a write in doubt is done (5.3b: each is settled `unknown` at
+  start, so `/health` needs no count). Left: whether the create path adopts
+  an unbound account of the derived name under a logged `user.create`
+  intent for that subject whose result is `unknown` (design §5 and the
+  guide's "Look up before you create" allow exactly that adoption; today it
+  is `BINDING_CONFLICT` for an operator). #needs-triage
 - [ ] 5.3c A membership field that is not enumerable: the add-on cannot
   tell its managed set, and the drift sweep compares the whole list. No
   add-on has one yet. **Before external authors:** refuse such a field at

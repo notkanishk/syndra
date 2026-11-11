@@ -479,6 +479,12 @@ func (s *server) applyNow(w http.ResponseWriter, req ApplyRequest) {
 		// drops ErrNotSent from those (acted).
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, so nothing was sent to it.", nil)
+	case errors.Is(err, errNotLogged):
+		// 500, which Syndra reads as "may have acted". Conservative, not a
+		// claim: the write that could not be recorded was not sent, and usually
+		// nothing was; it is the one answer that puts the change in front of a
+		// person, which a failing disk needs.
+		writeError(w, http.StatusInternalServerError, CodeApplyFailed, notLoggedDetail, nil)
 	case err != nil:
 		writeError(w, status, CodeApplyFailed, err.Error(), nil)
 	case outcome.Conflict != nil:
@@ -557,11 +563,11 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 			return noAccountToSwitchOffOutcome(req.Subject), http.StatusOK, nil
 		}
 		out, status, err := s.createAndConverge(req, desired, binding)
-		s.rememberWantedSMB(req.Subject, desired, err)
+		s.rememberWantedSMB(req, desired, err)
 		return out, status, err
 	}
 	out, status, err := s.converge(req, desired, current)
-	s.rememberWantedSMB(req.Subject, desired, err)
+	s.rememberWantedSMB(req, desired, err)
 	return out, status, err
 }
 
@@ -588,19 +594,20 @@ func noAccountToSwitchOffOutcome(subject string) ApplyOutcome {
 // rememberWantedSMB keeps what this apply asked for SMB on the subject's
 // binding, so the member's first password can turn it on (see Binding.WantsSMB).
 // Best-effort: the apply already happened, and failing it over this record
-// would report a mutation as not made.
-func (s *server) rememberWantedSMB(subject string, desired desiredState, applyErr error) {
+// would report a mutation as not made. Written only when it changes, so an
+// apply that asks what the binding already says adds nothing to the log.
+func (s *server) rememberWantedSMB(req ApplyRequest, desired desiredState, applyErr error) {
 	if applyErr != nil || !desired.managed[FieldSMBEnabled] {
 		return
 	}
-	b, found, err := s.store.GetBinding(subject)
-	if err != nil || !found {
+	b, found, err := s.store.GetBinding(req.Subject)
+	if err != nil || !found || (b.WantsSMB != nil && *b.WantsSMB == desired.smbEnabled) {
 		return
 	}
 	want := desired.smbEnabled
 	b.WantsSMB = &want
-	if err := s.store.PutBinding(b); err != nil {
-		logStoreFailure("binding", subject, err)
+	if err := s.mutate(applyCaller(req), "store.bind", func() error { return s.store.PutBinding(b) }); err != nil {
+		logStoreFailure("binding", req.Subject, err)
 	}
 }
 
@@ -689,7 +696,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		if resolved.Username != binding.Username || resolved.UID != binding.UID {
 			// A rename, or a legacy binding's real uid: recorded so the next
 			// pass finds the account by name and is guarded by its uid.
-			if err := s.store.PutBinding(resolved); err != nil {
+			if err := s.mutate(applyCaller(req), "store.bind", func() error { return s.store.PutBinding(resolved) }); err != nil {
 				logStoreFailure("binding", req.Subject, err)
 			}
 		}
@@ -800,8 +807,14 @@ func (c change) applyTo(s Subject) Subject {
 	return s
 }
 
+// applyCaller is what an apply's writes are logged under.
+func applyCaller(req ApplyRequest) caller {
+	return caller{"apply", req.Subject, req.Actor, req.CallID}
+}
+
 // converge brings an existing account onto the desired state.
 func (s *server) converge(req ApplyRequest, desired desiredState, current *Subject) (ApplyOutcome, int, error) {
+	who := applyCaller(req)
 	update := map[string]any{}
 	c := decide(current, desired, homeDecision{})
 
@@ -856,12 +869,11 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	if !c.writes() {
 		// Nothing for user.update. The limit is its own call, and may still be
 		// owed.
-		quota, err := s.convergeQuota(desired, homeAfter, current.UID)
+		quota, err := s.convergeQuota(who, desired, homeAfter, current.UID)
 		if err != nil {
 			return ApplyOutcome{}, statusFor(err), err
 		}
 		if quota != "" {
-			s.record("apply", req.Subject, req.Actor, req.CallID, "succeeded")
 			detail := quota
 			if smbPending {
 				detail = notes(quota, smbWait)
@@ -909,7 +921,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		}, http.StatusOK, nil
 	}
 
-	if err := s.nas.call("user.update", []any{current.ID, update}, nil); err != nil {
+	if err := s.send(who, "user.update", []any{current.ID, update}, nil); err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
 
@@ -942,7 +954,6 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		// failure would invite a retry of a mutation already performed;
 		// recording it as an ordinary success would hand the next plan a
 		// fingerprint nobody read.
-		s.record("apply.unverified", req.Subject, req.Actor, req.CallID, "succeeded")
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectApplied, Unverified: true,
 			// The statement goes in the DETAIL, not only in the consequence:
@@ -963,13 +974,12 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		}, http.StatusOK, nil
 	}
 
-	quota, err := s.convergeQuota(desired, homeAfter, current.UID)
+	quota, err := s.convergeQuota(who, desired, homeAfter, current.UID)
 	if err != nil {
 		// The account update landed; the limit did not. Said, not swallowed:
 		// the next pass sets it.
 		quota = "The home folder limit could not be set yet: " + err.Error() + "."
 	}
-	s.record("apply", req.Subject, req.Actor, req.CallID, "succeeded")
 	detail := describeChange(update, desired.groups)
 	if home.path != "" {
 		detail = notes(detail, "Home folder created at "+home.path+".", quota)
@@ -995,6 +1005,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 
 // createAndConverge makes the account as part of the convergence.
 func (s *server) createAndConverge(req ApplyRequest, desired desiredState, binding Binding) (ApplyOutcome, int, error) {
+	who := applyCaller(req)
 	if !ValidUsername(binding.Username) {
 		return ApplyOutcome{}, http.StatusUnprocessableEntity,
 			fmt.Errorf("derived name %q is not valid on this target", binding.Username)
@@ -1050,9 +1061,15 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	}
 	var groupID apiID
 	adopted := false
-	if err := s.nas.call("group.create", []any{map[string]any{
+	// createMayHaveLanded: group.create got no answer after it was sent (a
+	// timeout, a dropped socket), so the very group adopted below may be this
+	// attempt's write. An answer (a refusal, a rate limit) or nothing sent at
+	// all means this attempt wrote nothing.
+	createMayHaveLanded := false
+	if err := s.send(who, "group.create", []any{map[string]any{
 		"name": binding.Username, "gid": id, "smb": false,
 	}}, &groupID); err != nil {
+		createMayHaveLanded = errors.Is(err, ErrTargetUnreachable) && !errors.Is(err, ErrNotSent)
 		// An empty group of that name inside this add-on's own range is one an
 		// earlier attempt left, and ours to take; anything else is somebody's,
 		// and the refusal stands. Its number becomes the account's too, so the
@@ -1068,15 +1085,18 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	create["group_create"] = false
 	// failed answers a failure before the account exists. A group made here
 	// was a write, so it is undone and the failure is acted's. An adopted
-	// group predates this attempt (or a timed-out create of ours made it, and
-	// the next attempt takes it over the same way): nothing has been written,
-	// it is not ours to delete, and the failure keeps its own status (a 429
-	// stays a 429).
+	// group is never deleted (it may predate this attempt). Its failure keeps
+	// its own status (a 429 stays a 429) unless this attempt's own create got
+	// no answer: then the adopted group may be this attempt's write, and the
+	// failure is acted's.
 	failed := func(err error) (ApplyOutcome, int, error) {
 		if adopted {
+			if createMayHaveLanded {
+				return acted(err)
+			}
 			return ApplyOutcome{}, statusFor(err), err
 		}
-		s.undoGroup(binding.Username, groupID)
+		s.undoGroup(who, binding.Username, groupID)
 		return acted(err)
 	}
 
@@ -1093,7 +1113,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	}
 
 	var recordID apiID
-	if err := s.nas.call("user.create", []any{create}, &recordID); err != nil {
+	if err := s.send(who, "user.create", []any{create}, &recordID); err != nil {
 		return failed(err)
 	}
 	// `user.create` answers with the RECORD key, not the unix uid, and the
@@ -1110,14 +1130,14 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		uid = created.UID
 	}
 	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, uid, "apply"
-	if err := s.store.BindIfFree(binding); err != nil {
+	if err := s.mutate(who, "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
 		// The account exists and the record of whose it is did not land. Not a
 		// silent success: the next apply would derive the same name, find it
 		// unbound, and halt as a binding conflict — which is recoverable but
 		// needs an operator, so it is reported now rather than discovered then.
 		logStoreFailure("binding", req.Subject, err)
 		return ApplyOutcome{}, http.StatusInternalServerError,
-			fmt.Errorf("account %s was created and its binding could not be recorded: %w", binding.Username, err)
+			fmt.Errorf("account %s was created and its binding could not be recorded: %v", binding.Username, err)
 	}
 	if readErr != nil {
 		return acted(fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr))
@@ -1127,7 +1147,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	if home.path != "" {
 		detail += " Home folder created at " + home.path + "."
 	}
-	if quota, err := s.convergeQuota(desired, home.path, created.UID); err != nil {
+	if quota, err := s.convergeQuota(who, desired, home.path, created.UID); err != nil {
 		detail += " The home folder limit could not be set yet: " + err.Error() + "."
 	} else if quota != "" {
 		detail += " " + quota
@@ -1136,7 +1156,6 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		detail += " " + home.note
 	}
 
-	s.record("apply.create", req.Subject, req.Actor, req.CallID, "succeeded")
 	return ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApplied,
 		Detail:      detail,
@@ -1208,21 +1227,74 @@ func (s *server) emptyGroupNamed(name string) (apiID, int64, bool) {
 	return g.ID, g.GID, !g.Builtin && len(g.Users) == 0 && g.ID.known() && g.GID >= floor && g.GID <= ceiling
 }
 
-// record appends to the mutation log, best-effort AFTER the fact.
-//
-// Deliberately not fatal to the response: the mutation already happened, and
-// failing the call because the record failed would tell the caller nothing
-// happened when something did. The failure is logged loudly and the head digest
-// the backend anchors is what makes a lost record visible.
-func (s *server) record(operation, subject, actor, callID, outcome string) {
-	if strings.TrimSpace(actor) == "" {
+// caller is the call a write belongs to: what its log records say beside the
+// write itself. Never a parameter's value: there is no field for one, which is
+// what keeps a password out of the log.
+type caller struct{ operation, subject, actor, callID string }
+
+// errNotLogged is a write refused because its intent could not be made
+// durable: nothing was sent. Answered 500 (APPLY_FAILED, OPERATION_FAILED,
+// SETTING_NOT_SAVED), never TARGET_UNREACHABLE: the NAS was reachable, the
+// add-on's own disk failed, and that needs a person.
+var errNotLogged = errors.New("the add-on could not write the change to its mutation log, so it did not send it")
+
+// notLoggedDetail is what a person reads when errNotLogged refuses a write.
+const notLoggedDetail = "The add-on could not write this change to its mutation log on disk, so it did not send it. " +
+	"Check the add-on's log volume (space, permissions, the disk itself), then try again."
+
+// mutate is the one way this add-on changes anything, on the NAS or in its
+// own store: write-ahead, as a database journals (5.3b, design §8). The
+// intent is appended and fsynced, then do runs, then its result is appended.
+// The rule: every NAS write and every change to a binding or a setting is its
+// own mutate, logged under the call that caused it, whatever that call is (an
+// apply's create binds, a purge unbinds, each beside its NAS write); a store
+// write that would change nothing is not made, so it is not logged
+// (TestEveryNASWriteGoesThroughTheSeam, TestEveryBindingChangeIsInTheLog).
+// An intent that did not land is a write that does not happen: do is never
+// called and the answer is errNotLogged. A result that does not land leaves
+// the intent open, settled unknown at the next start (Recover); the reply still
+// says what happened, because the write did.
+func (s *server) mutate(c caller, write string, do func() error) error {
+	if strings.TrimSpace(c.actor) == "" {
 		// Unstated, not invented. The call arrived authenticated as the backend
-		// and named nobody, and recording the subject as their own actor —
-		// which this did — makes every record answer "who" with "whom".
-		actor = "syndra"
+		// and named nobody, and recording the subject as their own actor
+		// makes every record answer "who" with "whom".
+		c.actor = "syndra"
 	}
-	if _, err := s.log.Append(operation, subject, actor, callID, outcome); err != nil {
-		logStoreFailure("mutation log", callID, err)
+	r := Record{Operation: c.operation, Subject: c.subject, Actor: c.actor, CallID: c.callID, Write: write}
+	intent := r
+	intent.Outcome = outcomeIntent
+	logged, err := s.log.Append(intent)
+	if err != nil {
+		logStoreFailure("mutation log intent", c.callID, err)
+		return errNotLogged
+	}
+	err = do()
+	r.Intent, r.Outcome = logged.Seq, resultOf(write, err)
+	if _, logErr := s.log.Append(r); logErr != nil {
+		logStoreFailure("mutation log result", c.callID, logErr)
+	}
+	return err
+}
+
+// send is one NAS write through mutate: the method the intent names is the
+// method sent, one variable for both.
+func (s *server) send(c caller, method string, params, out any) error {
+	return s.mutate(c, method, func() error { return s.nas.sendWrite(method, params, out) })
+}
+
+// resultOf is what a result record says became of a write.
+func resultOf(write string, err error) string {
+	switch {
+	case err == nil:
+		return outcomeSucceeded
+	case errors.Is(err, ErrNotSent):
+		return outcomeNotSent
+	case errors.Is(err, ErrTargetRefused), errors.Is(err, ErrRateLimited), strings.HasPrefix(write, "store."):
+		// The target answered no, or a store transaction did not commit.
+		return outcomeFailed
+	default:
+		return outcomeUnknown
 	}
 }
 
@@ -1294,13 +1366,19 @@ func describeHolding(s Subject) string {
 // failure is "may have acted", a 5xx APPLY_FAILED a person looks at, never an
 // answer Syndra reads as not reached and re-queues by itself. So a later
 // call's "nothing was sent" is dropped (never TARGET_UNREACHABLE), and a 429
-// from a rate-limited NAS becomes 503. The text is kept.
+// from a rate-limited NAS becomes 503. The text is kept, except after a log
+// that could not be written: "it did not send it" would read as "nothing
+// happened", and the earlier write did happen.
 func acted(err error) (ApplyOutcome, int, error) {
 	status := statusFor(err)
 	if status == http.StatusTooManyRequests {
 		status = http.StatusServiceUnavailable
 	}
-	if errors.Is(err, ErrNotSent) {
+	switch {
+	case errors.Is(err, errNotLogged):
+		return ApplyOutcome{}, http.StatusInternalServerError,
+			errors.New("part of this change was already sent to the NAS, then the add-on could not write the rest to its mutation log, so the rest was not sent; check the add-on's log volume, then try again")
+	case errors.Is(err, ErrNotSent):
 		err = errors.New(err.Error())
 	}
 	return ApplyOutcome{}, status, err

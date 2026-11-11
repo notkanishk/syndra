@@ -68,7 +68,7 @@ func TestOneUsernameBindsToOneSubject(t *testing.T) {
 // its own line, so the chain still verifies.
 func TestATornLogTailIsCutBeforeTheNextAppend(t *testing.T) {
 	l, path := openLog(t)
-	if _, err := l.Append("password.set", "u1", "op_1", "c1", "succeeded"); err != nil {
+	if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c1", Outcome: "succeeded"}); err != nil {
 		t.Fatal(err)
 	}
 	l.Close()
@@ -84,7 +84,7 @@ func TestATornLogTailIsCutBeforeTheNextAppend(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	if _, err := reopened.Append("password.set", "u1", "op_1", "c2", "succeeded"); err != nil {
+	if _, err := reopened.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c2", Outcome: "succeeded"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := VerifyLog(filepath.Dir(path)); err != nil {
@@ -96,15 +96,15 @@ func TestATornLogTailIsCutBeforeTheNextAppend(t *testing.T) {
 // clean line instead of repeating one or following a partial.
 func TestAFailedAppendIsCutBackSoTheLogStillVerifies(t *testing.T) {
 	l, path := openLog(t)
-	if _, err := l.Append("password.set", "u1", "op_1", "c1", "succeeded"); err != nil {
+	if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c1", Outcome: "succeeded"}); err != nil {
 		t.Fatal(err)
 	}
 	l.sync = func() error { return errors.New("disk gone") }
-	if _, err := l.Append("password.set", "u1", "op_1", "c2", "succeeded"); err == nil {
+	if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c2", Outcome: "succeeded"}); err == nil {
 		t.Fatal("want the failed fsync reported")
 	}
 	l.sync = l.file.Sync
-	if _, err := l.Append("password.set", "u1", "op_1", "c3", "succeeded"); err != nil {
+	if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c3", Outcome: "succeeded"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := VerifyLog(filepath.Dir(path)); err != nil {

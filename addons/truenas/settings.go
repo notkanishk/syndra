@@ -126,11 +126,17 @@ func (s *server) putHomeRoot(w http.ResponseWriter, req putSettingRequest) {
 			return
 		}
 	}
-	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: req.Value, SetBy: req.Actor, SetAt: time.Now().UTC()}); err != nil {
+	err := s.mutate(caller{"settings." + settingHomeRoot, "", req.Actor, req.CallID}, "store.setting", func() error {
+		return s.store.PutSetting(settingHomeRoot, Setting{Value: req.Value, SetBy: req.Actor, SetAt: time.Now().UTC()})
+	})
+	switch {
+	case errors.Is(err, errNotLogged):
+		writeError(w, http.StatusInternalServerError, CodeSettingNotSaved, notLoggedDetail, nil)
+		return
+	case err != nil:
 		writeError(w, http.StatusInternalServerError, CodeSettingNotSaved, "The setting could not be stored.", nil)
 		return
 	}
-	s.record("settings."+settingHomeRoot, "", req.Actor, req.CallID, "succeeded")
 	view, err := s.homeRootView()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, CodeSettingsUnreadable, "The settings could not be read back.", nil)

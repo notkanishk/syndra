@@ -30,7 +30,7 @@ func openLog(t *testing.T) (*MutationLog, string) {
 func TestARecordIsDurableBeforeCompletionIsReported(t *testing.T) {
 	l, path := openLog(t)
 
-	if _, err := l.Append("password.set", "u1", "op_1", "c1", "succeeded"); err != nil {
+	if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c1", Outcome: "succeeded"}); err != nil {
 		t.Fatal(err)
 	}
 	// Read from disk, not from the writer: the contract is about what survives
@@ -60,7 +60,7 @@ func TestARecordIsDurableBeforeCompletionIsReported(t *testing.T) {
 func TestAlteringOrRemovingARecordBreaksTheChain(t *testing.T) {
 	l, path := openLog(t)
 	for _, id := range []string{"c1", "c2", "c3"} {
-		if _, err := l.Append("password.set", "u1", "op_1", id, "succeeded"); err != nil {
+		if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: id, Outcome: "succeeded"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -113,7 +113,7 @@ func TestAlteringOrRemovingARecordBreaksTheChain(t *testing.T) {
 func TestTheHeadAndCountAreWhatDetectTruncation(t *testing.T) {
 	l, path := openLog(t)
 	for _, id := range []string{"c1", "c2", "c3"} {
-		if _, err := l.Append("password.set", "u1", "op_1", id, "succeeded"); err != nil {
+		if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: id, Outcome: "succeeded"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -144,7 +144,7 @@ func TestTheHeadAndCountAreWhatDetectTruncation(t *testing.T) {
 // field for one, which is stronger than a rule that a writer must remember.
 func TestASecretBearingMutationLogsTheEventAndNotTheValue(t *testing.T) {
 	l, path := openLog(t)
-	if _, err := l.Append("password.set", "u1", "u1", "c1", "succeeded"); err != nil {
+	if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "u1", CallID: "c1", Outcome: "succeeded"}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(path)
@@ -182,7 +182,7 @@ func TestRotationBoundsTheVolumeAndKeepsTheChain(t *testing.T) {
 
 	var last Record
 	for i := range 12 {
-		r, err := l.Append("password.set", "u1", "op_1", "c"+strconv.Itoa(i), "succeeded")
+		r, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c" + strconv.Itoa(i), Outcome: "succeeded"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -209,7 +209,7 @@ func TestRotationBoundsTheVolumeAndKeepsTheChain(t *testing.T) {
 // and the partial one never was.
 func TestAPartialTrailingLineDoesNotLoseTheLog(t *testing.T) {
 	l, path := openLog(t)
-	if _, err := l.Append("password.set", "u1", "op_1", "c1", "succeeded"); err != nil {
+	if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c1", Outcome: "succeeded"}); err != nil {
 		t.Fatal(err)
 	}
 	want, _ := l.Head()
@@ -249,13 +249,13 @@ func writeLines(t *testing.T, path string, lines []string) {
 func TestAFailedFsyncFailsTheAppendAndDoesNotAdvanceTheChain(t *testing.T) {
 	l, _ := openLog(t)
 
-	first, err := l.Append("password.set", "u1", "op_1", "c1", "succeeded")
+	first, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c1", Outcome: "succeeded"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	l.sync = func() error { return errors.New("disk gone") }
-	if _, err := l.Append("password.set", "u1", "op_1", "c2", "succeeded"); err == nil {
+	if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c2", Outcome: "succeeded"}); err == nil {
 		t.Fatal("an unsynced record must not be reported as written")
 	}
 	head, count := l.Head()
@@ -266,7 +266,7 @@ func TestAFailedFsyncFailsTheAppendAndDoesNotAdvanceTheChain(t *testing.T) {
 	// And the chain resumes from the last durable record rather than from the
 	// one that failed, so nothing after it verifies against a phantom link.
 	l.sync = func() error { return nil }
-	next, err := l.Append("password.set", "u1", "op_1", "c3", "succeeded")
+	next, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c3", Outcome: "succeeded"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestARestartAfterARotationKeepsTheSequenceAndHead(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"c1", "c2", "c3"} {
-		if _, err := l.Append("password.set", "u1", "op_1", id, "succeeded"); err != nil {
+		if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: id, Outcome: "succeeded"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -331,7 +331,7 @@ func TestARestartAfterARotationKeepsTheSequenceAndHead(t *testing.T) {
 	}
 
 	// And the chain continues across the boundary rather than restarting.
-	next, err := reopened.Append("password.set", "u1", "op_1", "c4", "succeeded")
+	next, err := reopened.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: "c4", Outcome: "succeeded"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +353,7 @@ func TestARotatedSegmentVerifiesOnItsOwn(t *testing.T) {
 	}
 	defer l.Close()
 	for _, id := range []string{"c1", "c2", "c3"} {
-		if _, err := l.Append("password.set", "u1", "op_1", id, "succeeded"); err != nil {
+		if _, err := l.Append(Record{Operation: "password.set", Subject: "u1", Actor: "op_1", CallID: id, Outcome: "succeeded"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -365,5 +365,66 @@ func TestARotatedSegmentVerifiesOnItsOwn(t *testing.T) {
 		if err := VerifyChain(path); err != nil {
 			t.Errorf("%s: %v", filepath.Base(path), err)
 		}
+	}
+}
+
+// A rotation's directory sync that fails is retried before the next record is
+// written, and an append fails for as long as it cannot hold.
+func TestAFailedDirectorySyncIsRetriedByTheNextAppend(t *testing.T) {
+	dir := t.TempDir()
+	l, err := OpenMutationLog(dir, 1, 4) // rotates before every append after the first
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	rec := Record{Operation: "apply", Subject: "sub-rey", Actor: "op_lita", CallID: "c1", Outcome: outcomeSucceeded}
+	if _, err := l.Append(rec); err != nil {
+		t.Fatal(err)
+	}
+
+	l.syncDir = func() error { return errors.New("disk gone") }
+	if _, err := l.Append(rec); err == nil {
+		t.Fatal("an append after a rotation whose directory could not be synced must fail")
+	}
+	if _, err := l.Append(rec); err == nil {
+		t.Fatal("and keep failing while the directory still cannot be synced")
+	}
+	if _, count := l.Head(); count != 1 {
+		t.Fatalf("nothing may be recorded meanwhile, got %d records", count)
+	}
+
+	synced := 0
+	l.syncDir = func() error { synced++; return nil }
+	l.maxBytes = 1 << 20 // no further rotation: what syncs now is the retry
+	if _, err := l.Append(rec); err != nil {
+		t.Fatal(err)
+	}
+	if synced != 1 {
+		t.Fatalf("want the directory synced once before the record, got %d", synced)
+	}
+	if _, err := l.Append(rec); err != nil || synced != 1 {
+		t.Fatalf("a clean directory is not synced again: %d syncs, %v", synced, err)
+	}
+	if err := VerifyLog(dir); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The directory is synced on every open, an existing log's included: a run
+// that stopped before its own directory sync held left a name a crash can
+// still lose, and the log does not open on top of it.
+func TestEveryOpenSyncsTheDirectory(t *testing.T) {
+	dir := t.TempDir()
+	l, err := OpenMutationLog(dir, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Close()
+	real := syncDir
+	t.Cleanup(func() { syncDir = real })
+	syncDir = func(string) error { return errors.New("disk gone") }
+	if l, err := OpenMutationLog(dir, 0, 0); err == nil {
+		l.Close()
+		t.Fatal("an existing log must not open while its directory cannot be synced")
 	}
 }

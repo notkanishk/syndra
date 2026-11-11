@@ -122,7 +122,9 @@ func (f *fakeRPC) Call(method string, _ int64, params any) (json.RawMessage, err
 		}
 		body, ok := f.health[method]
 		if !ok {
-			return nil, errors.New("method unavailable on this target")
+			// Answered, as the target answers a method it does not have: a
+			// refusal, not a transport failure (classifyNASError).
+			return errorEnvelope("method unavailable on this target"), nil
 		}
 		return envelope(body), nil
 	}
