@@ -136,3 +136,30 @@ func TestReleasingWhatIsNotBoundIsAlreadyDone(t *testing.T) {
 		t.Errorf("outcome = %q", res.Outcome)
 	}
 }
+
+// One share's quota table unread makes quota_read false, and the meters that
+// were read are still sent: a partial read is said to be one, never passed off
+// as the whole, and never thrown away either.
+func TestAnUnreadQuotaTableMakesTheUsageUnread(t *testing.T) {
+	fake := reachFake()
+	fake.users = `[{"username":"charlotte","id":11,"uid":200001,"locked":false,"smb":true,"password_disabled":false,
+		"groups":[41,50],"home":"/mnt/tank/main/home_dir/charlotte"}]`
+	fake.answers["pool.dataset.get_quota tank/main"] = `[{"id":200001,"used_bytes":5000,"quota":1000000,"quota_type":"USER"}]`
+	fake.answers["pool.dataset.get_quota tank/open"] = `[{"id":200001,"used_bytes":7,"quota_type":"USER"}]`
+	fake.refuse = map[string]string{"pool.dataset.get_quota tank/open": "[EPERM] Operation not permitted"}
+	s := testServer(t, fake)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+		t.Fatal(err)
+	}
+	res, status, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
+	if err != nil || status != 200 {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	got := res.Result.(*StorageStatus)
+	if got.QuotaRead {
+		t.Error("a share's quota table was unread and quota_read says all of it was read")
+	}
+	if len(got.Meters) != 1 || got.Meters[0].Label != "main" || got.Meters[0].Used != 5000 {
+		t.Errorf("meters %+v, want the one share that was read", got.Meters)
+	}
+}

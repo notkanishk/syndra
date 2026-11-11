@@ -20,7 +20,7 @@ import (
 // it — while the four questions it answers (a failing disk, a degraded pool, a
 // stopped `cifs`) went unanswered by a system that could already answer them.
 
-func withSystemHealth(t *testing.T, stub func(ctx context.Context, target string) addons.SystemReport) {
+func withSystemHealth(t *testing.T, stub func(ctx context.Context, target, actor string) addons.SystemReport) {
 	t.Helper()
 	original := addonsSystemHealth
 	addonsSystemHealth = stub
@@ -45,7 +45,7 @@ func decodeBody(t *testing.T, rr *httptest.ResponseRecorder) map[string]any {
 }
 
 func TestSystemHealth_CarriesWhatTheTargetReported(t *testing.T) {
-	withSystemHealth(t, func(context.Context, string) addons.SystemReport {
+	withSystemHealth(t, func(context.Context, string, string) addons.SystemReport {
 		return addons.SystemReport{
 			Outcome: addons.OutcomeSucceeded,
 			System:  &addons.SystemInfo{Hostname: "truenas", Version: "25.10.5"},
@@ -75,7 +75,7 @@ func TestSystemHealth_CarriesWhatTheTargetReported(t *testing.T) {
 // asked and a target with nothing wrong are opposite facts, and a 502 would
 // make the page render as an error rather than as an unanswered question.
 func TestSystemHealth_UnreadableIsNotHealthy(t *testing.T) {
-	withSystemHealth(t, func(context.Context, string) addons.SystemReport {
+	withSystemHealth(t, func(context.Context, string, string) addons.SystemReport {
 		return addons.SystemReport{Outcome: addons.OutcomeUnreached, Err: errors.New("addon truenas: dial tcp: no route to host")}
 	})
 
@@ -103,7 +103,7 @@ func TestSystemHealth_UnreadableIsNotHealthy(t *testing.T) {
 // is wrong. `degraded` names the sources, so "no alerts" and "the alert source
 // could not be read while the other three could" stop being the same answer.
 func TestSystemHealth_NamesTheSourcesThatFailed(t *testing.T) {
-	withSystemHealth(t, func(context.Context, string) addons.SystemReport {
+	withSystemHealth(t, func(context.Context, string, string) addons.SystemReport {
 		return addons.SystemReport{
 			Outcome:  addons.OutcomeSucceeded,
 			Pools:    []addons.PoolStatus{{Name: "tank", Status: "ONLINE", Healthy: true}},
@@ -124,7 +124,7 @@ func TestSystemHealth_NamesTheSourcesThatFailed(t *testing.T) {
 // The target's own error text is a classification and a code by the time it
 // reaches here, and `detail` must not become the place that guarantee leaks.
 func TestSystemHealth_DetailIsTheBackendsSentence(t *testing.T) {
-	withSystemHealth(t, func(context.Context, string) addons.SystemReport {
+	withSystemHealth(t, func(context.Context, string, string) addons.SystemReport {
 		return addons.SystemReport{Outcome: addons.OutcomeIndeterminate, Err: nil}
 	})
 

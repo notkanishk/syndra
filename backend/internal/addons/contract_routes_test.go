@@ -456,8 +456,10 @@ func TestLifecycleSendsTheContractBodyAndReadsTheReply(t *testing.T) {
 // The three reads that ride POST /operations/{name} build their bodies inline.
 // Each leaves as a document the operation schema accepts, and what lands is
 // the same from the legacy pocket (an add-on without results) and from
-// `result` (one declaring it), so a deploy in either order never blanks a
-// card: the backend reads both before the TrueNAS add-on declares results.
+// `result` (one declaring it). The backend reads both shapes, so it may deploy
+// first or together with the add-on; never the add-on alone, whose `result` a
+// pre-6a backend does not read (deploy.yml ships both from one commit). The
+// operator reads name the person as subject and the operator as actor.
 func TestReadOperationsSendTheContractShapeAndReadTheirAnswer(t *testing.T) {
 	for _, tc := range []struct {
 		name                     string
@@ -491,8 +493,11 @@ func TestReadOperationsSendTheContractShapeAndReadTheirAnswer(t *testing.T) {
 			}
 
 			got = serve(tc.activity)
-			act := Activity(ctx, "truenas", "289471021834760193", "2026-11-01T00:00:00Z")
+			act := Activity(ctx, "truenas", "289471021834760193", "operator-1", "2026-11-01T00:00:00Z")
 			assertOperationRequest(t, got, "activity.get")
+			if subject, actor := sentAs(got); subject != "289471021834760193" || actor != "operator-1" {
+				t.Errorf("activity.get sent subject %q actor %q: the person is the subject, the operator the actor", subject, actor)
+			}
 			if act.Outcome != OutcomeSucceeded || !act.Truncated || len(act.Uncovered) != 1 || act.Uncovered[0] != "scratch" || len(act.Events) != 1 {
 				t.Fatalf("the activity report did not land: %+v", act)
 			}
@@ -504,8 +509,11 @@ func TestReadOperationsSendTheContractShapeAndReadTheirAnswer(t *testing.T) {
 			}
 
 			got = serve(tc.other)
-			sys := SystemHealth(ctx, "truenas")
+			sys := SystemHealth(ctx, "truenas", "operator-1")
 			assertOperationRequest(t, got, "health.get")
+			if subject, actor := sentAs(got); subject != "" || actor != "operator-1" {
+				t.Errorf("health.get sent subject %q actor %q: about the target, asked by the operator", subject, actor)
+			}
 			if sys.Outcome != OutcomeSucceeded || sys.System == nil || sys.System.Hostname != "nas.example.org" || sys.System.Version == "" || sys.System.UptimeSeconds != 864000.5 {
 				t.Fatalf("the system block did not land: %+v", sys)
 			}
@@ -520,6 +528,13 @@ func TestReadOperationsSendTheContractShapeAndReadTheirAnswer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// sentAs is who a captured operation request named.
+func sentAs(got *seen) (subject, actor string) {
+	var sent struct{ Subject, Actor string }
+	_ = json.Unmarshal(got.body, &sent)
+	return sent.Subject, sent.Actor
 }
 
 // declareResults is the installed add-on's manifest declaring feature results.

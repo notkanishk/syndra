@@ -59,7 +59,8 @@ type StorageStatus struct {
 	NeedsNewPassword bool `json:"needs_new_password"`
 	// QuotaRead distinguishes "nothing used" from "could not look" (homes.json's
 	// name for it). Zero bytes and an unread quota table are the same number
-	// otherwise.
+	// otherwise. One share's table unread makes it false: a partial read is
+	// not a whole one.
 	QuotaRead bool `json:"quota_read"`
 }
 
@@ -124,9 +125,12 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 
 	// Usage is best-effort: a member who cannot be told their usage can still
 	// be told whether their account works, and that is the more urgent half.
-	if meters, err := s.shareUsage(account.UID); err == nil {
-		status.Meters, status.QuotaRead = meters, true
+	// What was read is sent; QuotaRead is true only when all of it was.
+	meters, err := s.shareUsage(account.UID)
+	if meters != nil {
+		status.Meters = meters
 	}
+	status.QuotaRead = err == nil
 
 	return OperationResult{
 		Operation: "storage.status", Subject: req.Subject, Outcome: "succeeded",
@@ -135,7 +139,8 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 }
 
 // shareUsage reports what one uid holds in the dataset behind each enabled
-// share.
+// share. A quota table that cannot be read leaves that share out and makes the
+// whole an error, with the meters that were read: partial, and said to be.
 //
 // The dataset is DERIVED from the share's own path rather than configured. A
 // configured dataset would be a second definition of where a share lives, and
@@ -158,6 +163,7 @@ func (s *server) shareUsage(uid int64) ([]Meter, error) {
 	}
 
 	out := make([]Meter, 0, len(shares))
+	var unread []string
 	for _, sh := range shares {
 		if !sh.Enabled || !s.considers(sh.Name) {
 			continue
@@ -177,7 +183,8 @@ func (s *server) shareUsage(uid int64) ([]Meter, error) {
 		}
 		if err := s.nas.call("pool.dataset.get_quota", []any{dataset, "USER"}, &rows); err != nil {
 			// One share's quota table being unreadable is not a reason to
-			// withhold the others.
+			// withhold the others, and not one to pass the rest off as all.
+			unread = append(unread, sh.Name)
 			continue
 		}
 		for _, row := range rows {
@@ -191,6 +198,9 @@ func (s *server) shareUsage(uid int64) ([]Meter, error) {
 			out = append(out, m)
 			break
 		}
+	}
+	if len(unread) > 0 {
+		return out, fmt.Errorf("the quota of %s could not be read", strings.Join(unread, ", "))
 	}
 	return out, nil
 }

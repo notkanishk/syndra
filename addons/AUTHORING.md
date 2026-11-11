@@ -1402,6 +1402,19 @@ it:
           "waiting_on": "none"
         },
         "x-inventory-shelf": "B4"
+      },
+      {
+        "id": "item-0931",
+        "label": "Digital caliper, 150 mm",
+        "category": "measuring",
+        "since": "2026-10-20T11:00:00Z",
+        "due": "2026-11-03T17:00:00Z",
+        "standing": {
+          "usable": false,
+          "waiting_on": "member",
+          "note": "Overdue since 3 November",
+          "next": "Bring it back to the front desk"
+        }
       }
     ],
     "taken_at": "2026-11-10T09:30:00Z",
@@ -1480,7 +1493,8 @@ Rules:
   an old one, `unverified` for a write that could not be read back, an
   absent `limit` in `state` when the limit could not be read,
   `values_read: false` for a setting's options, and in the storage profile
-  `quota_read: false`. An empty list means the app holds none.
+  `quota_read: false` (one share's usage unread is enough). An empty list
+  means the app holds none.
 - **When the app is down**: `/health` says `reachable: false`; reads answer
   their last value as `stale` ([Observations](#observations-taken_at-current-stale));
   writes answer `TARGET_UNREACHABLE`

@@ -31,7 +31,7 @@
     },
     "quota_read": {
       "type": "boolean",
-      "description": "Completeness, as in homes.json: false means the usage could not be read, so meters is empty for that reason and not because nothing is used."
+      "description": "Completeness, as in homes.json: true only when every share's usage was read. false means some or all of it could not be read, a partial read included, so a share may be missing from meters (or meters empty) for that reason and not because nothing is used; the meters present were read."
     }
   },
   "required": [

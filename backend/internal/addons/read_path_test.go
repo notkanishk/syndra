@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"syndra/internal/db"
 )
@@ -76,11 +79,17 @@ func TestAnOperatorsReadOfHoldingsWritesNoRow(t *testing.T) {
 	}
 	v := reply.View()
 	recs, ok := v.Result.(*Records)
-	if !v.Readable || v.Shape != "records" || !ok || len(recs.Records) != 1 || recs.TakenAt.IsZero() || !recs.Current {
+	if !v.Readable || v.Shape != "records" || !ok || len(recs.Records) != 2 || recs.TakenAt.IsZero() || !recs.Current {
 		t.Fatalf("the holdings did not land: %+v", v)
 	}
 	if r := recs.Records[0]; r.ID != "item-2207" || r.Label == "" || r.Category != "tools" || r.Due == nil || r.Since == nil || r.Standing == nil {
 		t.Errorf("the record did not land: %+v", r)
+	}
+	// The overdue one: due before the read, waiting on the member, with the
+	// next step the page shows.
+	if r := recs.Records[1]; r.Due == nil || !r.Due.Before(recs.TakenAt) || r.Standing == nil || r.Standing.Usable ||
+		r.Standing.WaitingOn != "member" || r.Standing.Next == "" {
+		t.Errorf("the overdue record did not land with its next step: %+v", r)
 	}
 	if !slices.Equal(v.AlsoSays, []string{`"records[0].x-inventory-shelf": "B4"`}) {
 		t.Errorf("what the add-on also says: %q", v.AlsoSays)
@@ -94,6 +103,16 @@ func TestReadRefusesAnOperationThatIsNotARead(t *testing.T) {
 	reply := Read(context.Background(), "truenas", "password.set", "s", "s", map[string]any{"password": "x"})
 	if !errors.Is(reply.Err, ErrNotARead) || reply.Outcome != OutcomeUnreached || got.method != "" {
 		t.Fatalf("a write through Read: %+v, sent %s %s", reply, got.method, got.path)
+	}
+}
+
+// Nor does a read go through Call, the write path's transport: Read alone
+// sends one, as Dispatch refuses one.
+func TestCallRefusesARead(t *testing.T) {
+	got := addonAnswering(t, "operation_response_result.json")
+	resp := Call(context.Background(), CallRequest{Target: "truenas", Operation: "storage.status", Subject: "s", Actor: "s"})
+	if !errors.Is(resp.Err, ErrReadNotCalled) || resp.Outcome != OutcomeUnreached || got.method != "" {
+		t.Fatalf("a read through Call: %+v, sent %s %s", resp, got.method, got.path)
 	}
 }
 
@@ -151,16 +170,32 @@ func TestAResultMissingWhatItsSchemaRequiresIsNotAReading(t *testing.T) {
 		{"operation_response_activity_result.json", "activity.get", "uncovered"},
 		{"operation_response_activity_result.json", "activity.get", "events[0].success"},
 		{"operation_response_records.json", "holdings.list", "records[0].label"},
+		// Nested: a standing wherever one is, and each place, have their own.
+		{"operation_response_result.json", "storage.status", "standing.usable"},
+		{"operation_response_result.json", "storage.status", "standing.waiting_on"},
+		{"operation_response_result.json", "storage.status", "places[0].share"},
+		{"operation_response_result.json", "storage.status", "places[0].path"},
+		{"operation_response_result.json", "storage.status", "places[0].access"},
+		{"operation_response_result.json", "storage.status", "places[0].usage.used_bytes"},
+		{"operation_response_records.json", "holdings.list", "records[0].standing.usable"},
+		{"operation_response_records.json", "holdings.list", "records[1].standing.waiting_on"},
 	} {
 		t.Run(tc.op+" without "+tc.drop, func(t *testing.T) {
 			var doc map[string]any
 			_ = json.Unmarshal(contractFixture(t, tc.fixture), &doc)
-			result := doc["result"].(map[string]any)
-			if list, key, nested := strings.Cut(tc.drop, "[0]."); nested {
-				delete(result[list].([]any)[0].(map[string]any), key)
-			} else {
-				delete(result, tc.drop)
+			// Walk to the key's parent: "a.b" is a key, "a[1]" an item.
+			node := doc["result"].(map[string]any)
+			steps := strings.Split(tc.drop, ".")
+			for _, step := range steps[:len(steps)-1] {
+				key, index, isItem := strings.Cut(strings.TrimSuffix(step, "]"), "[")
+				next := node[key]
+				if isItem {
+					i, _ := strconv.Atoi(index)
+					next = next.([]any)[i]
+				}
+				node = next.(map[string]any)
 			}
+			delete(node, steps[len(steps)-1])
 			body, _ := json.Marshal(doc)
 			addonServing(t, body)
 			manifest := "manifest_truenas.json"
@@ -198,13 +233,13 @@ func TestTheTrueNASAddOnWithResultsLandsInTheReader(t *testing.T) {
 	}
 	reply := Read(context.Background(), "truenas", "storage.status", "289471021834760193", "289471021834760193", nil)
 	st := reply.Storage()
-	if st.Outcome != OutcomeSucceeded || !st.NeedsPassword || st.NeedsNewPassword || st.Usable || !st.PlacesReadable ||
+	if st.Outcome != OutcomeSucceeded || !st.NeedsPassword || st.NeedsNewPassword || st.Usable || !st.PlacesReadable || !st.QuotaRead ||
 		len(st.Places) != 1 || st.Places[0].Usage == nil || st.Standing == nil || st.Standing.WaitingOn != "member" {
 		t.Fatalf("the storage card's facts did not land: %+v", st)
 	}
 	v := reply.View()
-	status, ok := v.Result.(*Status)
-	if !v.Readable || v.Shape != "status" || !ok || len(status.Meters) != 1 || len(v.AlsoSays) != 0 {
+	status, ok := v.Result.(*StorageResult)
+	if !v.Readable || v.Shape != "status" || !ok || len(status.Meters) != 1 || !status.QuotaRead || len(v.AlsoSays) != 0 {
 		t.Fatalf("the status did not land: %+v", v)
 	}
 	if m := status.Meters[0]; m.Label != "makers" || m.Used != 19756849561 || m.Limit == nil || *m.Limit != 53687091200 || m.Unit != "bytes" {
@@ -235,8 +270,65 @@ func TestTheTrueNASAddOnWithResultsLandsInTheReader(t *testing.T) {
 func TestARefusedReadCarriesItsStatus(t *testing.T) {
 	addonServingStatus(t, http.StatusUnprocessableEntity, []byte(`{"type":"urn:syndra:addon:error:OPERATION_FAILED","title":"Operation failed",`+
 		`"status":422,"detail":"No account is bound to this subject yet.","code":"OPERATION_FAILED","retry":"never"}`))
-	act := Activity(context.Background(), "truenas", "s", "")
+	act := Activity(context.Background(), "truenas", "s", "s", "")
 	if act.Outcome != OutcomeRejected || act.Status != http.StatusUnprocessableEntity {
 		t.Fatalf("a refused read: %+v", act)
+	}
+}
+
+// quota_read is carried, never dropped: a storage profile whose usage could
+// not be read in full reaches the card (view.storage) and the generic renderer
+// (reads) as quota_read false, with the meters that were read kept beside it,
+// so the page says "couldn't read" rather than drawing what it has as all
+// there is. The legacy pocket's usage_readable lands on the same field.
+func TestAnUnreadQuotaReachesThePageAsUnread(t *testing.T) {
+	var doc map[string]any
+	_ = json.Unmarshal(contractFixture(t, "operation_response_result.json"), &doc)
+	doc["result"].(map[string]any)["quota_read"] = false
+	body, _ := json.Marshal(doc)
+	addonServing(t, body)
+	underManifest(t, "manifest_truenas.json")
+
+	reply := Read(context.Background(), "truenas", "storage.status", "s", "s", nil)
+	if st := reply.Storage(); st.Outcome != OutcomeSucceeded || st.QuotaRead {
+		t.Errorf("view.storage: %+v, want quota_read false", st)
+	}
+	v := reply.View()
+	got, _ := json.Marshal(v)
+	if !v.Readable || !strings.Contains(string(got), `"quota_read":false`) || !strings.Contains(string(got), `"label":"makers"`) {
+		t.Errorf("reads: %s, want quota_read false beside the meter that was read", got)
+	}
+
+	for _, readable := range []bool{true, false} {
+		doc := map[string]any{}
+		_ = json.Unmarshal(contractFixture(t, "operation_response_storage.json"), &doc)
+		doc["storage"].(map[string]any)["usage_readable"] = readable
+		body, _ := json.Marshal(doc)
+		addonServing(t, body)
+		if st := Read(context.Background(), "truenas", "storage.status", "s", "s", nil).Storage(); st.QuotaRead != readable {
+			t.Errorf("legacy usage_readable %v landed as quota_read %v", readable, st.QuotaRead)
+		}
+	}
+}
+
+// What the add-on also says is capped whole: each entry, its key path
+// included, and how many entries, the last line then saying how many more.
+// The least trusted component chooses the size of both.
+func TestWhatTheAddOnAlsoSaysIsCappedWhole(t *testing.T) {
+	doc := map[string]any{"x-##" + strings.Repeat("é", 300): "v"} // odd prefix: the cut lands inside a rune
+	for i := range 60 {
+		doc[fmt.Sprintf("x-%02d", i)] = i
+	}
+	got := unknownKeys("", doc, keySpec{})
+	if len(got) != alsoSaysMax+1 || got[alsoSaysMax] != "…and 11 more" {
+		t.Fatalf("%d entries, last %q: want %d and then how many more", len(got), got[len(got)-1], alsoSaysMax)
+	}
+	for _, e := range got {
+		if len(e) > alsoSaysCap+len("…") || !utf8.ValidString(e) {
+			t.Errorf("entry of %d bytes (valid UTF-8 %v): %.40q…", len(e), utf8.ValidString(e), e)
+		}
+	}
+	if !strings.HasPrefix(got[0], `"x-##é`) {
+		t.Errorf("the long key's entry is not first: %.40q", got[0])
 	}
 }

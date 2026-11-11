@@ -663,6 +663,10 @@ type StorageStatus struct {
 	// home folder first. PlacesReadable false is "not read", never "none".
 	Places         []Place `json:"places"`
 	PlacesReadable bool    `json:"places_readable"`
+	// QuotaRead is the storage profile's quota_read (the legacy pocket's
+	// usage_readable): every quota table was read. False is "the usage
+	// couldn't be read", in part or in full, never "nothing used".
+	QuotaRead bool `json:"quota_read"`
 	// Standing is the account's standing as the add-on reports it in this
 	// reply (contract 2): nil when it did not say.
 	Standing *Standing `json:"standing,omitempty"`
@@ -935,14 +939,26 @@ type PlaceRole struct {
 func (r ReadReply) Storage() StorageStatus {
 	raw, err := r.answer()
 	var w storageWire
+	var quotaRead bool
 	switch {
 	case err != nil:
 	case r.Results:
 		// The storage profile (profiles/storage/status.json): the common
 		// status, plus the five keys the storage card decides on.
-		err = decodeShape("status", raw, &w, storageExtra...)
+		var p struct {
+			storageWire
+			QuotaRead bool `json:"quota_read"`
+		}
+		err = decodeShape(storageNeed, raw, &p)
+		w, quotaRead = p.storageWire, p.QuotaRead
 	default:
-		err = json.Unmarshal(raw, &w)
+		// ponytail: the legacy pocket's name for quota_read, read until major 3.
+		var p struct {
+			storageWire
+			UsageReadable bool `json:"usage_readable"`
+		}
+		err = json.Unmarshal(raw, &p)
+		w, quotaRead = p.storageWire, p.UsageReadable
 	}
 	if err != nil {
 		out := StorageStatus{}
@@ -950,12 +966,13 @@ func (r ReadReply) Storage() StorageStatus {
 		return out
 	}
 	return StorageStatus{Usable: w.Usable, NeedsPassword: w.NeedsPassword, NeedsNewPassword: w.NeedsNewPassword,
-		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, Standing: w.Standing, Outcome: OutcomeSucceeded}
+		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, QuotaRead: quotaRead, Standing: w.Standing, Outcome: OutcomeSucceeded}
 }
 
 // storageWire is what Storage reads of either shape, the profile's result or
-// the legacy pocket: the keys they share, with places as the add-on sends them,
-// never the view's.
+// the legacy pocket: the keys they share, with places as the add-on sends
+// them, never the view's. Usage completeness is each shape's own key
+// (quota_read, the pocket's usage_readable), read beside it.
 type storageWire struct {
 	Usable           bool        `json:"usable"`
 	NeedsPassword    bool        `json:"needs_password"`
@@ -1019,12 +1036,16 @@ type ActivityEvent struct {
 // were configured on the deployment's API key and exercised by nothing. The
 // same shape as every other defect this branch found: two halves that agree
 // with each other and never meet.
-func Activity(ctx context.Context, target, subject, since string) ActivityReport {
+//
+// The subject is the person whose log it is and the actor whoever asked (the
+// operator on the person page): the guide's subject/actor split, never the
+// member named as their own reader.
+func Activity(ctx context.Context, target, subject, actor, since string) ActivityReport {
 	params := map[string]any{}
 	if since != "" {
 		params["since"] = since
 	}
-	return Read(ctx, target, "activity.get", subject, subject, params).Activity()
+	return Read(ctx, target, "activity.get", subject, actor, params).Activity()
 }
 
 // Activity is an activity.get reply read into Syndra's view.
@@ -1072,7 +1093,7 @@ func (r ReadReply) Activity() ActivityReport {
 }
 
 func decodeActivity(raw json.RawMessage, into *ActivityReport) error {
-	return decodeShape("activity", raw, into)
+	return decodeShape(activityNeed, raw, into)
 }
 
 // SystemReport is the NAS's own account of itself: what it is, what is wrong
@@ -1140,8 +1161,11 @@ type ServiceState struct {
 // target can do advertised a capability with nothing behind it. The four reads
 // it makes are the ones an operator wants first when a NAS misbehaves: a failing
 // disk, a degraded pool, a stopped `cifs`.
-func SystemHealth(ctx context.Context, target string) SystemReport {
-	return Read(ctx, target, "health.get", "", "", nil).Health()
+//
+// It is about the target, so it has no subject; actor is the operator who
+// opened the page.
+func SystemHealth(ctx context.Context, target, actor string) SystemReport {
+	return Read(ctx, target, "health.get", "", actor, nil).Health()
 }
 
 // Health is a health.get reply read into Syndra's view: `result` from a

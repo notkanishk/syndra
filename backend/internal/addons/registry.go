@@ -935,13 +935,26 @@ var manifestKeys = keySpec{
 
 type keySpec map[string]keySpec
 
-// alsoSaysCap bounds one shown value: the least trusted component chooses it.
-const alsoSaysCap = 200
+// alsoSaysCap bounds one shown entry, its key path included, and alsoSaysMax
+// how many are shown: the least trusted component chooses both.
+const (
+	alsoSaysCap = 200
+	alsoSaysMax = 50
+)
 
 // unknownKeys walks v against spec and returns each key spec does not name, as
-// `path: value`, the value as JSON (quoted and escaped) and capped. An x- key
+// `path: value`, the value as JSON (quoted and escaped), each entry capped and
+// the list too, its last line then saying how many more there were. An x- key
 // is vendor data and listed the same way: shown, never used.
 func unknownKeys(path string, v any, spec keySpec) []string {
+	out := unknownWalk(path, v, spec)
+	if len(out) > alsoSaysMax {
+		out = append(out[:alsoSaysMax], fmt.Sprintf("…and %d more", len(out)-alsoSaysMax))
+	}
+	return out
+}
+
+func unknownWalk(path string, v any, spec keySpec) []string {
 	var out []string
 	switch x := v.(type) {
 	case map[string]any:
@@ -953,20 +966,21 @@ func unknownKeys(path string, v any, spec keySpec) []string {
 			inner, known := spec[k]
 			if !known {
 				raw, _ := json.Marshal(x[k])
-				shown := string(raw)
-				if len(shown) > alsoSaysCap {
-					shown = shown[:alsoSaysCap] + "…"
+				entry := strconv.Quote(p) + ": " + string(raw)
+				if len(entry) > alsoSaysCap {
+					// Cut on a byte, so a rune cut in two is dropped.
+					entry = strings.ToValidUTF8(entry[:alsoSaysCap], "") + "…"
 				}
-				out = append(out, strconv.Quote(p)+": "+shown)
+				out = append(out, entry)
 				continue
 			}
 			if inner != nil {
-				out = append(out, unknownKeys(p, x[k], inner)...)
+				out = append(out, unknownWalk(p, x[k], inner)...)
 			}
 		}
 	case []any:
 		for i, e := range x {
-			out = append(out, unknownKeys(fmt.Sprintf("%s[%d]", path, i), e, spec)...)
+			out = append(out, unknownWalk(fmt.Sprintf("%s[%d]", path, i), e, spec)...)
 		}
 	}
 	return out

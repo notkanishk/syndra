@@ -137,8 +137,9 @@ export interface MyTargetView {
     needs_password: boolean;
     smb_enabled: boolean;
     shares?: Array<{ share: string; used_bytes: number; quota_bytes?: number }>;
-    /** "Nothing used" and "could not look" are the same zero without this. */
-    usage_readable?: boolean;
+    /** "Nothing used" and "could not look" are the same zero without this.
+     *  False when any share's usage was unread (a partial read too). */
+    quota_read?: boolean;
     /** Access given back: SMB waits for a new password. */
     needs_new_password?: boolean;
     places?: StoragePlace[];

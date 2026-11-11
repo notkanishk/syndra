@@ -305,6 +305,35 @@ func checkPolicyAgainstRegistry(t *testing.T, dir string) {
 	}
 }
 
+// Every legacy pocket the registry names is a property of the operation
+// response, the one other place it is written: a pocket the reply schema does
+// not have is one no add-on was ever allowed to send.
+func TestEveryRegistryPocketIsAReplyProperty(t *testing.T) {
+	var reg operationRegistry
+	if err := json.Unmarshal(mustRead(t, "registry", "operations.json"), &reg); err != nil {
+		t.Fatal(err)
+	}
+	var reply struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(mustRead(t, "schema", "operation_response.json"), &reply); err != nil {
+		t.Fatal(err)
+	}
+	pockets := 0
+	for id, op := range reg.Operations {
+		if op.Pocket == "" {
+			continue
+		}
+		pockets++
+		if _, ok := reply.Properties[op.Pocket]; !ok {
+			t.Errorf("%s's pocket %q is not a property of schema/operation_response.json", id, op.Pocket)
+		}
+	}
+	if pockets == 0 {
+		t.Fatal("the registry names no pocket: this test reads nothing")
+	}
+}
+
 // Every reply fixture that answers under `result` validates against the schema
 // the registry names for its operation, so a fixture cannot drift from the
 // shape its id promises. An id that declares its own (health.get) needs only

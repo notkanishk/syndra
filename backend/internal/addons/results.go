@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -30,6 +31,10 @@ import (
 // ErrNotARead is Read asked for an operation whose effect is not read: a write
 // goes through addonop.Dispatch, with its record, and never through here.
 var ErrNotARead = errors.New("addon: not an effect: read operation")
+
+// ErrReadNotCalled is Call asked for an effect: read operation: a read is
+// sent by Read alone, with no call record (design §4).
+var ErrReadNotCalled = errors.New("addon: a read is never called with a record; it goes through Read")
 
 // ReadReply is one answer to an effect: read operation, as it travelled.
 type ReadReply struct {
@@ -184,30 +189,41 @@ type Meter struct {
 	Unit  string   `json:"unit"`
 }
 
-// shapes is what each registry result schema is, for a generic renderer, with
-// the keys this backend knows (the rest is what the add-on also says). A
-// profile of status is a status: every valid reply is a valid common one.
-var shapes = map[string]struct {
-	shape string
-	keys  keySpec
-	// extra is what a profile requires beyond its shape.
-	extra []string
-}{
-	"common/records.json": {shape: "records", keys: keySpec{
+// StorageResult is the storage profile's result for a generic renderer: the
+// status, and whether its meters are complete. QuotaRead false is "couldn't
+// read" (some or all of the usage), never "nothing used": the meters that were
+// read stay beside it, each a true observation, and the flag says the list is
+// not the whole of it.
+type StorageResult struct {
+	Status
+	QuotaRead bool `json:"quota_read"`
+}
+
+// resultShape is one registry result schema, for a generic renderer: its
+// shape, what it requires (absence is never a value), the keys this backend
+// knows (the rest is what the add-on also says), and the type it decodes into.
+type resultShape struct {
+	shape  string
+	need   needSpec
+	keys   keySpec
+	result func() any
+}
+
+// shapes is every registry result schema this backend reads. A profile of
+// status is a status: every valid reply is a valid common one.
+var shapes = map[string]resultShape{
+	"common/records.json": {"records", recordsNeed, keySpec{
 		"records":  {"id": nil, "label": nil, "category": nil, "since": nil, "due": nil, "standing": nil},
-		"taken_at": nil, "current": nil, "stale": nil}},
-	"common/activity.json": {shape: "activity", keys: activityKeys},
-	"common/status.json":   {shape: "status", keys: statusKeys},
-	storageProfile: {shape: "status", extra: storageExtra, keys: func() keySpec {
-		k := keySpec{}
+		"taken_at": nil, "current": nil, "stale": nil}, func() any { return new(Records) }},
+	"common/activity.json": {"activity", activityNeed, activityKeys, func() any { return new(ActivityReport) }},
+	"common/status.json":   {"status", statusNeed, statusKeys, func() any { return new(Status) }},
+	storageProfile: {"status", storageNeed, func() keySpec {
+		k := maps.Clone(statusKeys)
 		for _, key := range storageExtra {
 			k[key] = nil
 		}
-		for key, v := range statusKeys {
-			k[key] = v
-		}
 		return k
-	}()},
+	}(), func() any { return new(StorageResult) }},
 }
 
 // storageProfile is storage.status's result: the common status plus the keys
@@ -225,48 +241,72 @@ var (
 		"uncovered": nil, "truncated": nil, "taken_at": nil, "current": nil, "stale": nil}
 )
 
-// required names, per shape, the keys its schema requires at the top and on
-// each item: decoded only when present, because absence is never a value.
-var required = map[string]struct {
-	top  []string
-	list string
-	item []string
-}{
-	"records":  {top: []string{"records", "taken_at", "current"}, list: "records", item: []string{"id", "label"}},
-	"activity": {top: []string{"events", "uncovered", "truncated", "taken_at", "current"}, list: "events", item: []string{"at", "event", "success"}},
-	"status":   {top: []string{"usable", "standing", "meters", "taken_at", "current"}, list: "meters", item: []string{"label", "used", "unit"}},
+// needSpec is what a schema requires: keys on the object, and, for a key whose
+// value is an object or a list of objects, what each requires wherever it is
+// present (a record's standing is optional; a standing that is there has its
+// own required keys).
+type needSpec struct {
+	keys   []string
+	nested map[string]needSpec
 }
 
-// decodeShape unmarshals raw into into once every key the shape requires is
-// there, on the object and on each item of its list.
-func decodeShape(shape string, raw json.RawMessage, into any, extra ...string) error {
-	req := required[shape]
-	var top map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &top); err != nil {
-		return err
+var (
+	standingNeed = needSpec{keys: []string{"usable", "waiting_on"}}
+	metersNeed   = needSpec{keys: []string{"label", "used", "unit"}}
+	recordsNeed  = needSpec{keys: []string{"records", "taken_at", "current"}, nested: map[string]needSpec{
+		"records": {keys: []string{"id", "label"}, nested: map[string]needSpec{"standing": standingNeed}}}}
+	activityNeed = needSpec{keys: []string{"events", "uncovered", "truncated", "taken_at", "current"}, nested: map[string]needSpec{
+		"events": {keys: []string{"at", "event", "success"}}}}
+	statusNeed = needSpec{keys: []string{"usable", "standing", "meters", "taken_at", "current"}, nested: map[string]needSpec{
+		"standing": standingNeed, "meters": metersNeed}}
+	// storageNeed is the status's, the storage card's five keys, and each
+	// place's own (profiles/storage/reach.json, Place).
+	storageNeed = needSpec{keys: slices.Concat(statusNeed.keys, storageExtra), nested: map[string]needSpec{
+		"standing": standingNeed, "meters": metersNeed,
+		"places": {keys: []string{"share", "path", "access"}, nested: map[string]needSpec{"usage": {keys: []string{"used_bytes"}}}}}}
+)
+
+// check holds raw to spec: every key it requires, then each nested object, or
+// each item of a nested list, to its own. A null is never a value: a required
+// key that is null is missing, and a nested one that is null is not an object.
+func (spec needSpec) check(raw json.RawMessage) error {
+	if string(raw) == "null" {
+		return errors.New("null")
 	}
-	if err := need(top, slices.Concat(req.top, extra)); err != nil {
-		return err
-	}
-	var items []map[string]json.RawMessage
-	if err := json.Unmarshal(top[req.list], &items); err != nil {
-		return fmt.Errorf("%s: %w", req.list, err)
-	}
-	for i, item := range items {
-		if err := need(item, req.item); err != nil {
-			return fmt.Errorf("%s[%d]: %w", req.list, i, err)
+	var list []json.RawMessage
+	if json.Unmarshal(raw, &list) == nil {
+		for i, item := range list {
+			if err := spec.check(item); err != nil {
+				return fmt.Errorf("[%d]: %w", i, err)
+			}
 		}
+		return nil
 	}
-	return json.Unmarshal(raw, into)
-}
-
-func need(m map[string]json.RawMessage, keys []string) error {
-	for _, k := range keys {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return err
+	}
+	for _, k := range spec.keys {
 		if v, ok := m[k]; !ok || string(v) == "null" {
 			return fmt.Errorf("no %q", k)
 		}
 	}
+	for k, sub := range spec.nested {
+		if v, ok := m[k]; ok {
+			if err := sub.check(v); err != nil {
+				return fmt.Errorf("%s: %w", k, err)
+			}
+		}
+	}
 	return nil
+}
+
+// decodeShape unmarshals raw into into once it holds to spec.
+func decodeShape(spec needSpec, raw json.RawMessage, into any) error {
+	if err := spec.check(raw); err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, into)
 }
 
 // ReadView is one read for a generic renderer: the shape, the decoded result,
@@ -289,37 +329,26 @@ const rawResultCap = 4 << 10
 // View is the reply for a generic renderer. Only a results add-on's reply has
 // one; a legacy pocket is read by its own typed reader alone.
 func (r ReadReply) View() ReadView {
-	v := ReadView{Operation: r.Operation, Shape: shapes[r.Schema].shape}
+	sh := shapes[r.Schema]
+	v := ReadView{Operation: r.Operation, Shape: sh.shape}
 	raw, err := r.answer()
 	if err != nil || !r.Results {
 		return v
 	}
-	var decoded any
-	switch v.Shape {
-	case "records":
-		var x Records
-		err, decoded = decodeShape(v.Shape, raw, &x), &x
-	case "activity":
-		var x ActivityReport
-		err, decoded = decodeActivity(raw, &x), &x
-	case "status":
-		var x Status
-		err, decoded = decodeShape(v.Shape, raw, &x, shapes[r.Schema].extra...), &x
-	default:
+	if sh.shape == "" {
 		shown := string(raw)
 		if len(shown) > rawResultCap {
 			shown = shown[:rawResultCap] + "…"
 		}
-		decoded = shown
+		v.Readable, v.Result = true, shown
+		return v
 	}
-	if err != nil {
+	decoded := sh.result()
+	if err := decodeShape(sh.need, raw, decoded); err != nil {
 		return v
 	}
 	var doc any
 	_ = json.Unmarshal(raw, &doc)
-	if v.Shape != "" {
-		v.AlsoSays = unknownKeys("", doc, shapes[r.Schema].keys)
-	}
-	v.Readable, v.Result = true, decoded
+	v.Readable, v.Result, v.AlsoSays = true, decoded, unknownKeys("", doc, sh.keys)
 	return v
 }

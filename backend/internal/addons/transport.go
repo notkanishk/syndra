@@ -199,6 +199,10 @@ func Call(ctx context.Context, req CallRequest) CallResponse {
 	if err != nil {
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}
 	}
+	// A read goes through Read alone, the one read path, as Dispatch refuses it.
+	if op.Effect == EffectRead {
+		return CallResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s/%s", ErrReadNotCalled, req.Target, req.Operation)}
+	}
 	// Re-checked here as well as at the caller. The caller validates so that an
 	// invalid request never becomes a durable record; this validates so that no
 	// path to an add-on exists that skipped the schema, whoever adds it later.

@@ -15,7 +15,8 @@ that does not, until major 3. The TrueNAS add-on declares `results`.
 - `storage.status`'s result is the storage profile,
   `v2/schema/profiles/storage/status.json` (new): `common/status.json` plus
   `places`, `places_readable`, `needs_password`, `needs_new_password` and
-  `quota_read` (the pocket's `usage_readable`, named as in `homes.json`).
+  `quota_read` (the pocket's `usage_readable`, named as in `homes.json`;
+  false on a partial read too).
   Every valid reply is a valid common status. `username` and `smb_enabled`
   are not in it: Syndra has the username from its binding. An amendment
   before release: no add-on declared `results` until this entry.

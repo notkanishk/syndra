@@ -571,7 +571,7 @@ func handleReconcileTarget(w http.ResponseWriter, r *http.Request) {
 func handleTargetSystemHealth(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("target")
 
-	report := addonsSystemHealth(r.Context(), target)
+	report := addonsSystemHealth(r.Context(), target, resolveActor(r, ""))
 	if report.Outcome != addons.OutcomeSucceeded {
 		jsonResponse(w, http.StatusOK, map[string]any{
 			"target":   target,
@@ -614,7 +614,7 @@ func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	report := addonsActivity(r.Context(), target, subject, since)
+	report := addonsActivity(r.Context(), target, subject, resolveActor(r, ""), since)
 	if report.Outcome != addons.OutcomeSucceeded {
 		// 200 with `readable: false`, for the same reason the health surface
 		// answers 200 when the add-on is down: "the log could not be read" is

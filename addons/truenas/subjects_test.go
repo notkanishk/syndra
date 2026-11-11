@@ -79,9 +79,12 @@ func (f *fakeRPC) Call(method string, _ int64, params any) (json.RawMessage, err
 		return errorEnvelope(msg), nil
 	}
 	// A per-path answer ("filesystem.getacl /mnt/tank/main") wins over the
-	// method's own, for reads made once per folder.
+	// method's own, for reads made once per folder; a per-path refusal too.
 	if args, ok := params.([]any); ok && len(args) > 0 {
 		if at, ok := args[0].(string); ok {
+			if msg, ok := f.refuse[method+" "+at]; ok {
+				return errorEnvelope(msg), nil
+			}
 			if body, ok := f.answers[method+" "+at]; ok {
 				return envelope(body), nil
 			}
