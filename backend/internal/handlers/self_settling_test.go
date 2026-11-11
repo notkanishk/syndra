@@ -116,9 +116,13 @@ func TestTheStorageReadCarriesAnUnconfirmedChange(t *testing.T) {
 
 func readMyTargets(t *testing.T) myTargetView {
 	t.Helper()
-	saved := addonsRegistered
-	t.Cleanup(func() { addonsRegistered = saved })
+	saved, manifest := addonsRegistered, addonsAcceptedManifest
+	t.Cleanup(func() { addonsRegistered, addonsAcceptedManifest = saved, manifest })
 	addonsRegistered = func() []addons.Registration { return []addons.Registration{{Target: "truenas"}} }
+	// Read, so a member meets it (memberMeets).
+	addonsAcceptedManifest = func(string) (addons.Manifest, error) {
+		return addons.Manifest{Product: "TrueNAS", Kind: "storage", EntitlementSchema: truenasSchema}, nil
+	}
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
 	r = r.WithContext(withPrincipal(r.Context(), &auth.Principal{Subject: "u1"}))
 	rr := httptest.NewRecorder()

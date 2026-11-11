@@ -262,8 +262,7 @@ func testServer(t *testing.T, fake *fakeRPC) *server {
 	return &server{
 		auth: &authenticator{now: time.Now},
 		nas:  nas, store: store, log: mlog,
-		life:    newLifecycle(LifecycleActive),
-		product: "truenas_scale",
+		life: newLifecycle(LifecycleActive),
 	}
 }
 

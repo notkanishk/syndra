@@ -30,6 +30,7 @@ import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import { ShellNotices } from "@/components/shell/ShellNotices";
 import { greeting, lastHere, WELCOME } from "@/lib/greeting";
 import { Crossfade, glideTo } from "@/lib/motion";
+import { needsPassword } from "@/components/kinds/storage/state";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { sortByName } from "@/lib/sort";
@@ -195,9 +196,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
           : [],
         missing: Array.from(missing.values()),
         storage: (() => {
-          const target = (storage.data ?? []).find(
-            (t) => t.entitled && (!t.credential.set || t.credential.needs_re_enrolment),
-          );
+          const target = (storage.data ?? []).find(needsPassword);
           return target ? { name: target.name } : undefined;
         })(),
         requests: (myRequests.data ?? [])

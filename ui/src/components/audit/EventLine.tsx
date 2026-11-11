@@ -3,7 +3,6 @@
 import { UserName, BundleName, ProjectName } from "@/components/names";
 import { ADDON_EVENT, OPERATION_NOUN, describeAction, targetKind } from "@/lib/audit-vocabulary";
 import { formatAt, formatClock, formatClockSeconds, formatList, formatRelative } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import type { AuditEntry, CancelledUnsentDetails } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -146,7 +145,7 @@ export function isPasswordSend(entry: AuditEntry): boolean {
  */
 export function describeSends(
   entry: AuditEntry,
-  nameOf: (target: string) => string = targetLabel,
+  nameOf: (target: string) => string,
 ): { headline: string; sends: string } {
   const op = entry.operation!;
   const system = entry.action.match(ADDON_EVENT)?.[1] ?? "";

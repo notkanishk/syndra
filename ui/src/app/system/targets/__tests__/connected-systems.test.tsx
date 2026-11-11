@@ -45,6 +45,7 @@ vi.mock("@/lib/queries/useTargets", async () => {
 function target(over: Partial<TargetSummary> = {}): TargetSummary {
   return {
     target: "truenas",
+    name_from: "product",
     registered: true,
     auth_mode: "derived",
     callable: true,

@@ -243,7 +243,6 @@ func run() error {
 		life:            life,
 		keyExpiry:       cfg.keyExpiry,
 		keyNeverExpires: cfg.keyNeverExpires,
-		product:         "truenas_scale",
 		// Nil unless the deployment named a share host. The manifest omits the
 		// block, and the member's page omits the instructions with it.
 		connection: shareConnection(cfg.shareHost),

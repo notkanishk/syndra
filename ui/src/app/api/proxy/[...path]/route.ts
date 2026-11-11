@@ -80,9 +80,9 @@ function isOwnMemberRoute(method: "GET" | "POST" | "PUT" | "DELETE", path: strin
   if (path[0] !== "me") return false;
   const rest = path.slice(1);
   if (method === "GET") {
-    // Their own name and team, their own view of every target, and what
-    // changed in their own access lately.
-    return rest.length === 1 && ["profile", "targets", "changes"].includes(rest[0]);
+    // Their own name and team, their own view of every target, the systems
+    // they meet (their rail's rows), and what changed in their own access lately.
+    return rest.length === 1 && ["profile", "targets", "systems", "changes"].includes(rest[0]);
   }
   if (method === "POST") {
     // POST /me/first-sign-in (the sign-in route's own call, idempotent and self-scoped).

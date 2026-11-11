@@ -11,6 +11,7 @@ import (
 	"syndra/internal/addons"
 	"syndra/internal/auth"
 	"syndra/internal/db"
+	"syndra/internal/services"
 )
 
 // stubNames names "laser" by hand and gives "truenas" a manifest saying
@@ -46,16 +47,13 @@ func stubNames(t *testing.T) {
 // one place, and nothing about a product lives in core code.
 func TestASystemIsNamedByTheOperatorThenItsProductThenItsID(t *testing.T) {
 	stubNames(t)
-	for target, want := range map[string]struct {
-		name string
-		set  bool
-	}{
-		"laser":   {"Big laser", true},
-		"truenas": {"TrueNAS", false},
-		"door":    {"Door", false},
+	for target, want := range map[string]struct{ name, from string }{
+		"laser":   {"Big laser", "operator"},
+		"truenas": {"TrueNAS", "product"},
+		"door":    {"Door", "id"},
 	} {
-		if name, set := systemName(context.Background(), target); name != want.name || set != want.set {
-			t.Errorf("%s: got (%q, %v), want (%q, %v)", target, name, set, want.name, want.set)
+		if name, from := systemName(context.Background(), target); name != want.name || from != want.from {
+			t.Errorf("%s: got (%q, %q), want (%q, %q)", target, name, from, want.name, want.from)
 		}
 	}
 }
@@ -73,18 +71,18 @@ func TestBothRostersCarryTheOneName(t *testing.T) {
 	NewRouter().ServeHTTP(rr, operatorRequest(http.MethodGet, "/api/v1/targets", ""))
 	var roster struct {
 		Targets []struct {
-			Target  string `json:"target"`
-			Name    string `json:"name"`
-			NameSet bool   `json:"name_set"`
+			Target   string `json:"target"`
+			Name     string `json:"name"`
+			NameFrom string `json:"name_from"`
 		} `json:"targets"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &roster); err != nil || len(roster.Targets) != 2 {
 		t.Fatalf("roster: %d %s", rr.Code, rr.Body.String())
 	}
-	if got := roster.Targets[0]; got.Name != "Big laser" || !got.NameSet {
+	if got := roster.Targets[0]; got.Name != "Big laser" || got.NameFrom != "operator" {
 		t.Errorf("operator roster: %+v", got)
 	}
-	if got := roster.Targets[1]; got.Name != "Door" || got.NameSet {
+	if got := roster.Targets[1]; got.Name != "Door" || got.NameFrom != "id" {
 		t.Errorf("operator roster: %+v", got)
 	}
 
@@ -143,5 +141,66 @@ func TestNamingASystem(t *testing.T) {
 	}
 	if strings.Join(wrote, ",") != "laser=Big laser,laser=" {
 		t.Errorf("wrote %v, want the trimmed name then a clear", wrote)
+	}
+}
+
+// A member meets a system only once its kind is known: the rail's read and
+// the full view both leave a not-read registration out, so neither payload
+// carries it. The rail's read is the registry and the database alone, sorted
+// by name the way a person reads them ("big mill" before "TrueNAS", which
+// byte order would reverse), and never calls an add-on.
+func TestAMemberMeetsOnlySystemsWhoseKindIsKnown(t *testing.T) {
+	stubNames(t)
+	manifest, reg := addonsAcceptedManifest, addonsRegistered
+	t.Cleanup(func() { addonsAcceptedManifest, addonsRegistered = manifest, reg })
+	addonsAcceptedManifest = func(target string) (addons.Manifest, error) {
+		if target == "mill" {
+			return addons.Manifest{Product: "big mill", Kind: "machine"}, nil
+		}
+		return manifest(target)
+	}
+	// laser has a product but no kind, door no manifest at all: both not read.
+	// Out of name order, so the order the rail gets is the sort's.
+	addonsRegistered = func() []addons.Registration {
+		return []addons.Registration{{Target: "door"}, {Target: "truenas"}, {Target: "laser"}, {Target: "mill"}}
+	}
+	h := &storageHarness{entitled: true}
+	stubMyStorage(t, h)
+	resolve := svcResolveEntitlementSet
+	var called []string
+	svcResolveEntitlementSet = func(ctx context.Context, subject, target string) (services.EntitlementSet, error) {
+		called = append(called, target)
+		return resolve(ctx, subject, target)
+	}
+	member := func(path string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		return r.WithContext(withPrincipal(r.Context(), &auth.Principal{Subject: "u1"}))
+	}
+
+	rr := httptest.NewRecorder()
+	handleMySystems(rr, member("/api/v1/me/systems"))
+	if want := `{"systems":[{"target":"mill","name":"big mill","kind":"machine"},{"target":"truenas","name":"TrueNAS","kind":"storage"}]}`; strings.TrimSpace(rr.Body.String()) != want {
+		t.Errorf("GET /me/systems:\n got %s\nwant %s", rr.Body.String(), want)
+	}
+	if len(called) != 0 || len(h.dispatched) != 0 {
+		t.Errorf("the rail's read resolved or called something: %v %v", called, h.dispatched)
+	}
+
+	rr = httptest.NewRecorder()
+	handleMyTargets(rr, member("/api/v1/me/targets"))
+	var mine struct {
+		Targets []struct {
+			Target string `json:"target"`
+		} `json:"targets"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &mine); err != nil || rr.Code != http.StatusOK {
+		t.Fatalf("GET /me/targets: %d %s", rr.Code, rr.Body.String())
+	}
+	var got []string
+	for _, v := range mine.Targets {
+		got = append(got, v.Target)
+	}
+	if strings.Join(got, ",") != "truenas,mill" {
+		t.Errorf("GET /me/targets carried %v, want only the systems whose kind is known", got)
 	}
 }

@@ -22,8 +22,8 @@ vi.mock("@/lib/ui-view", () => ({
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargets: () => targets,
 }));
-vi.mock("@/lib/queries/useMyStorage", () => ({
-  useMyStorage: () => mine,
+vi.mock("@/lib/queries/useMySystems", () => ({
+  useMySystems: () => mine,
 }));
 vi.mock("@/lib/queries/useIndicators", () => ({
   useIndicators: () => indicators,

@@ -67,9 +67,12 @@ export function useFieldSchemaState(system: string | undefined): { schema: Entit
   return { schema: source(system), loading: source.loading, error: source.error, refetch: source.refetch };
 }
 
-/** What an operator's page calls each system: the roster's name for it. */
-export function useSystemNames(): (system: string) => string {
-  return sourceOf(useTargets()).nameOf;
+/**
+ * What an operator's page calls each system: the roster's name for it.
+ * `enabled` false asks nothing (a member's shell, whose proxy refuses it).
+ */
+export function useSystemNames(enabled = true): (system: string) => string {
+  return sourceOf(useTargets(enabled)).nameOf;
 }
 
 export function useFieldSchema(system: string | undefined): EntitlementField[] | undefined {

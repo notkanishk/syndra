@@ -3,6 +3,16 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Major 2: `product` is a display name (slice 3, 11 Nov 2026)
+
+Backward compatible within major 2: the shape is unchanged, and no end keys
+anything on the value. The manifest's `product` is what people call the
+product, and Syndra shows it as a system's name until an operator names the
+system (addon-contract design §6.1). `v2/schema/manifest.json` (and `health.json`) now say so;
+the TrueNAS add-on reports `"TrueNAS"` (it reported `"truenas_scale"`), in its
+manifest and its health. Fixtures `manifest.json`, `manifest_truenas.json`,
+`health.json`.
+
 ## Major 2, amended before release (slice 2, 11 Nov 2026)
 
 v2 has not been released to anything but the TrueNAS add-on, which moves with

@@ -18,6 +18,7 @@ import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
 import type { GuideFolder } from "@/components/kinds/storage/ConnectionGuide";
 import { deviceFrom, type Device } from "@/components/kinds/storage/device";
+import { PASSWORD_STEP, stateOf, type State } from "@/components/kinds/storage/state";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
@@ -52,39 +53,6 @@ const ConnectionGuide = dynamic(() => import("@/components/kinds/storage/Connect
  * backend from the registered host, and usage that couldn't be read is never
  * drawn as zero.
  */
-
-type State =
-  | "none"
-  | "held"
-  | "waiting"
-  | "needs-password"
-  | "reenrol"
-  | "restored"
-  | "ready"
-  | "unread"
-  | "opens-nothing"
-  | "nohost";
-
-/** Where this member is, as one of the board's states. */
-function stateOf(view: MyTargetView): State {
-  const suspended = view.suspended ?? [];
-  if (!view.entitled) {
-    return suspended.some((s) => s.field === "enabled") ? "held" : "none";
-  }
-  if (!view.account) return "waiting";
-  const storage = view.storage;
-  if (storage?.needs_new_password) return "restored";
-  if (view.credential.needs_re_enrolment) return "reenrol";
-  if (storage?.needs_password || (!storage && !view.credential.set)) return "needs-password";
-  if (storage?.places_readable && (storage.places ?? []).length === 0) return "opens-nothing";
-  // The target's own answer about this account is missing: a read that failed,
-  // not an account that is fine. Offline is its own sentence ("ready", below).
-  if (!storage && view.health !== "offline") return "unread";
-  if (!view.connection) return "nohost";
-  return "ready";
-}
-
-const PASSWORD_STEP = new Set<State>(["needs-password", "reenrol", "restored"]);
 
 function paused(view: MyTargetView) {
   return view.lifecycle === "draining" || view.lifecycle === "read_only";

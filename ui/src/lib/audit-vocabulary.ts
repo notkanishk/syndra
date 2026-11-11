@@ -1,4 +1,3 @@
-import { targetLabel } from "@/lib/nav";
 import type { AuditEntry } from "@/lib/queries/useAudit";
 
 /**
@@ -203,8 +202,8 @@ export const OPERATION_NOUN: Record<string, string> = {
 
 export function describeAction(
   action: string,
-  /** The roster's name for a system (useSystemNames); the id title-cased without one. */
-  nameOf: (target: string) => string = targetLabel,
+  /** The roster's name for a system (useSystemNames): the one path for names. */
+  nameOf: (target: string) => string,
 ): { verb: string; template?: string; passive?: string; destructive: boolean } {
   const known = AUDIT_ACTIONS[action];
   if (known) {

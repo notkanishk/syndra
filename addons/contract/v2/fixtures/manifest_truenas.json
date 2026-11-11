@@ -1,6 +1,6 @@
 {
   "contract_version": 2,
-  "product": "truenas",
+  "product": "TrueNAS",
   "product_version": "TrueNAS-25.10.5",
   "kind": "storage",
   "features": [

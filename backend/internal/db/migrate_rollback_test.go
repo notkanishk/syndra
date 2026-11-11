@@ -64,7 +64,15 @@ func TestABackendStartsOnACleanNewerSchemaAndNotOnADirtyOne(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Cleanup(func() { set(newest, false) })
+	// Restore exactly what was recorded: this database is shared, and a
+	// version it never had (newest, from this checkout) would claim a schema
+	// another branch's migrations never built.
+	var recorded int64
+	var recordedDirty bool
+	if err := PG.QueryRow(ctx, `SELECT version, dirty FROM schema_migrations`).Scan(&recorded, &recordedDirty); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { set(uint(recorded), recordedDirty) })
 
 	set(newest+1, false)
 	if err := migrateUp(m, newest); err != nil {

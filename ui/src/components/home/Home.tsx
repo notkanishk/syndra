@@ -39,7 +39,6 @@ import { useExtend } from "@/lib/useExtend";
 import type { SessionUser } from "@/lib/session";
 import type { ServiceAccount } from "@/lib/types";
 import { useIsAdvanced } from "@/lib/ui-view";
-import { targetLabel } from "@/lib/nav";
 import { ArriveList } from "@/lib/motion";
 import { ARROW_LINK, ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
@@ -878,7 +877,7 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
  */
 export function systemsOf(
   by: Record<string, number> | undefined,
-  nameOf: (target: string) => string = targetLabel,
+  nameOf: (target: string) => string,
 ): string {
   const names = sortNames(Object.keys(by ?? {}).filter((t) => (by?.[t] ?? 0) > 0).map(nameOf));
   if (names.length === 0) return "Zitadel";
@@ -1002,7 +1001,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           onClick={async () => {
             setOutcome(null);
             try {
-              setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto, count, nameOf));
+              setOutcome(outcomeFromDrain(await drain.mutateAsync(), nameOf, auto, count));
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }

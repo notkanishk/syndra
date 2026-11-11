@@ -74,8 +74,9 @@ export interface NavLeaf {
 
 /**
  * A connected system as a rail draws it, from GET /targets (operators) or
- * GET /me/targets (members). `name` is the backend's (one source); `kind` is
- * absent until Syndra has read the system.
+ * GET /me/systems (anyone's own rows). `name` is the backend's (one source);
+ * `kind` is absent until Syndra has read the system, and GET /me/systems never
+ * carries one without it (not read is operators-only).
  */
 export interface NavSystem {
   target: string;
@@ -290,14 +291,26 @@ export const MEMBER_NAV: NavEntry[] = [
 /** The kind that folds into Network storage rather than drawing a row. */
 export const STORAGE_KIND = "storage";
 
-/** The systems a member's rail draws a row for, alphabetical (lib/sort). */
+/** A system of the storage kind: Network storage's, never a row of its own. */
+export const isStorage = (system: { kind?: string }) => system.kind === STORAGE_KIND;
+
+/**
+ * The systems that get a row of their own, alphabetical (lib/sort): the one
+ * rule, for the member's rail and an operator's account sheet alike. The
+ * member reads (GET /me/systems, /me/targets) never carry a system not read
+ * yet, so kind is known here; a kindless row is still never drawn.
+ */
 export function memberSystems<T extends NavSystem>(systems: readonly T[]): T[] {
   return sortByName(
-    systems.filter((s) => s.kind && s.kind !== STORAGE_KIND),
+    systems.filter((s) => s.kind && !isStorage(s)),
     (s) => s.name,
     (s) => s.target,
   );
 }
+
+/** One row per system of `memberSystems`, each to its own page. */
+const systemRows = (systems: readonly NavSystem[]): NavLeaf[] =>
+  memberSystems(systems).map((s) => leaf(s.name, `/systems/${s.target}`));
 
 /**
  * The member's rail: `MEMBER_NAV` with its family seat replaced by one row per
@@ -306,7 +319,7 @@ export function memberSystems<T extends NavSystem>(systems: readonly T[]): T[] {
  * page says so with a next step.
  */
 export function memberNav(systems: readonly NavSystem[]): NavEntry[] {
-  const rows = memberSystems(systems).map((s) => leaf(s.name, `/systems/${s.target}`));
+  const rows = systemRows(systems);
   return MEMBER_NAV.flatMap((entry) => (entry.kind === "leaf" && entry.family ? rows : [entry]));
 }
 
@@ -321,6 +334,15 @@ export function memberNav(systems: readonly NavSystem[]): NavEntry[] {
  * per job means the sheet doesn't offer it to them twice.
  */
 export const ACCOUNT_NAV: NavLeaf[] = [leaf("My access", "/me"), leaf("Network storage", "/storage")];
+
+/**
+ * The account sheet's rows: `ACCOUNT_NAV`, then the operator's own systems
+ * that are not storage, from the same GET /me/systems a member's rail reads
+ * (`memberSystems`), so an operator's own laser account has a way in.
+ */
+export function accountNav(systems: readonly NavSystem[]): NavLeaf[] {
+  return [...ACCOUNT_NAV, ...systemRows(systems)];
+}
 
 export function navFor(audience: Audience): NavEntry[] {
   if (audience === "member") return MEMBER_NAV;
@@ -428,9 +450,10 @@ export function crumbsFor(
     return rest ? [{ label: "System" }, self] : [{ label: "System" }, { label: self.label }];
   }
 
-  // A family row is named by its system; the seat itself is never a crumb.
-  const onSystem = /^\/systems\/([^/]+)$/.exec(pathname);
-  if (onSystem) return [{ label: nameOf(onSystem[1]) }];
+  // A family row (`/systems/{target}`) has no crumb from here: the seat is
+  // never one, and the page names itself with `useCrumb` once its read lands,
+  // so a system a member does not meet is never named and a name never
+  // replaces an id.
 
   const own = findCrumb(navFor(audience), pathname);
   if (own.length > 0) return own;

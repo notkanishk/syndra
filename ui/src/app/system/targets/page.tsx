@@ -162,8 +162,10 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
 
   const answering = reading.tone === "healthy";
   const bound = inventory.data?.bound;
-  const version = versionLabel(name, health.data?.product_version);
-  const product = health.data?.product ? `${health.data.product} ${version}`.trim() : null;
+  // The product and its version, whatever the operator named the system.
+  const product = health.data?.product
+    ? `${health.data.product} ${versionLabel(health.data.product, health.data.product_version)}`.trim()
+    : null;
   const href = `/system/targets/${row.target}`;
 
   // What is waiting, each linking to where it is handled on the system's page.

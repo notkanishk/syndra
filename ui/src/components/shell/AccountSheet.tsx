@@ -12,16 +12,18 @@ import { Segmented } from "@/components/ui/Select";
 import { STORAGE_NOTE } from "@/components/kinds/storage/captions";
 import { firstName } from "@/lib/greeting";
 import { Unfold } from "@/lib/motion";
-import { ACCOUNT_NAV } from "@/lib/nav";
+import { accountNav } from "@/lib/nav";
+import { useMySystems } from "@/lib/queries/useMySystems";
 import type { SessionUser } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
 import { useInstallPrompt } from "@/lib/useInstallPrompt";
 
-/** What each of an operator's own pages is for, under its link. */
+/** What each of an operator's own pages is for, under its link; a system's own page, the rest. */
 const OWN_NOTES: Record<string, string> = {
   "/me": "What you can use, and asking for more",
   "/storage": STORAGE_NOTE,
 };
+const SYSTEM_NOTE = "Your account here, and what to do next";
 
 /**
  * Who you are signed in as, and the two things that belong to this device.
@@ -40,6 +42,10 @@ export function AccountSheet({ session }: { session: SessionUser }) {
   const [about, setAbout] = useState(false);
   const { choice, setTheme } = useTheme();
   const installer = useInstallPrompt();
+  // An operator's own systems that are not storage, from the read a member's
+  // rail draws from, so their own laser account has a way in.
+  const operator = session.role !== "user";
+  const own = accountNav(useMySystems(operator).data ?? []);
 
   return (
     <>
@@ -88,9 +94,9 @@ export function AccountSheet({ session }: { session: SessionUser }) {
 
           {/* An operator's own pages, between two hairlines: going somewhere,
               so violet links. A member has these in their rail already. */}
-          {session.role !== "user" && (
+          {operator && (
             <div className="flex flex-col border-y border-line py-1.5">
-              {ACCOUNT_NAV.map((item) => (
+              {own.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -100,7 +106,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
                   <span className="text-[14.5px] font-semibold text-accent-text">
                     {item.label} <span aria-hidden>→</span>
                   </span>
-                  <span className="text-[13px] text-muted">{OWN_NOTES[item.href]}</span>
+                  <span className="text-[13px] text-muted">{OWN_NOTES[item.href] ?? SYSTEM_NOTE}</span>
                 </Link>
               ))}
             </div>

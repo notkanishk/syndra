@@ -219,7 +219,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 		value                  any
 	}{
 		{"GET /capabilities", "manifest_truenas.json", "manifest.json", Manifest{
-			ContractVersion: ContractVersion, Product: "truenas", ProductVersion: "TrueNAS-25.10.5",
+			ContractVersion: ContractVersion, Product: productName, ProductVersion: "TrueNAS-25.10.5",
 			Kind: kindStorage, Features: features, EntitlementSchema: entitlementSchema(),
 			Operations: []Operation{
 				{ID: "password.set", Scope: "member", SecretParams: []string{"password"}, Available: true},
@@ -236,7 +236,7 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 			Limits:     Limits{SubjectsPerPlan: perRequestSubjectCap},
 		}},
 		{"GET /health", "health.json", "health.json", Health{
-			Reachable: true, Product: "truenas", ProductVersion: "TrueNAS-25.10.5", VersionTested: true,
+			Reachable: true, Product: productName, ProductVersion: "TrueNAS-25.10.5", VersionTested: true,
 			VersionNote: "25.10 is a tested release.", LastReadAt: strp("2026-11-10T09:29:41Z"),
 			CredentialExpiresAt: strp("2027-02-01T00:00:00Z"), CredentialExpiry: "set", UnauditedShares: []string{"scratch"},
 			SharesReadable: true, Lifecycle: LifecycleReadOnly, LifecycleNote: "Maintenance window.", Drained: true,

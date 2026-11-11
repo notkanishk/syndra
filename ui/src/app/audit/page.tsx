@@ -21,6 +21,7 @@ import { TraceCell } from "@/components/audit/TraceCell";
 import { describeAction, machineName, targetKind, shortId } from "@/lib/audit-vocabulary";
 import { useAuditPages, type AuditEntry } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import { toCsv } from "@/lib/csv";
 import { useDebounce } from "@/lib/useDebounce";
 import { formatShortDate, formatWhen, humanizeKey } from "@/lib/format";
@@ -54,6 +55,7 @@ export default function AuditPage() {
   const [window, setWindow] = useState<Window>(scopedUser ? "all" : "7");
   const debounced = useDebounce(actor, 250).trim().toLowerCase();
   const resolver = useNameResolver();
+  const nameOf = useSystemNames();
 
   const entries = useAuditPages({ limit: 100, userId: scopedUser || undefined });
 
@@ -133,7 +135,7 @@ export default function AuditPage() {
         }
         trailing={
           // Exports every entry the filter matches, not just the page showing.
-          <Button variant="outline" size="sm" onClick={() => downloadCsv(rows, resolver)} disabled={rows.length === 0}>
+          <Button variant="outline" size="sm" onClick={() => downloadCsv(rows, resolver, nameOf)} disabled={rows.length === 0}>
             Export CSV
           </Button>
         }
@@ -243,6 +245,7 @@ function Actor({ id }: { id: string }) {
 function downloadCsv(
   rows: AuditEntry[],
   resolver: ReturnType<typeof useNameResolver>,
+  nameOf: (target: string) => string,
 ): void {
   // Names where there are names; the ids sit in their own columns, so the file
   // can still be matched to Zitadel but never has an id in a name column.
@@ -261,7 +264,7 @@ function downloadCsv(
       entry.created_at,
       entry.actor_id.startsWith("system:") ? humanizeKey(entry.actor_id.slice(7)) : person(entry.actor_id),
       entry.actor_id,
-      describeAction(entry.action).verb,
+      describeAction(entry.action, nameOf).verb,
       target,
       entry.target_id,
       entry.resource_id,

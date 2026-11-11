@@ -274,9 +274,12 @@ describe("the member's connected systems", () => {
     expect(MEMBER_NAV.find((e) => e.kind === "leaf" && e.family)).toMatchObject({ href: "/systems", family: "systems" });
   });
 
-  it("names a family row's crumb by its system, and never names the seat", () => {
+  // A family row's page names itself (useCrumb, once GET /me/systems lands),
+  // so no id is crumbed first and a system a member does not meet is never named.
+  it("crumbs neither a family row nor the seat from the path", () => {
     const names = (t: string) => (t === "lathe" ? "Big laser" : t);
-    expect(crumbsFor("/systems/lathe", "member", names)).toEqual([{ label: "Big laser" }]);
+    expect(crumbsFor("/systems/lathe", "member", names)).toEqual([]);
+    expect(crumbsFor("/systems/lathe", "advanced", names)).toEqual([]);
     expect(crumbsFor("/systems", "member")).toEqual([]);
   });
 });

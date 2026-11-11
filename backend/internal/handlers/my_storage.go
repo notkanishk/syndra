@@ -175,7 +175,8 @@ type myCredentialStatus struct {
 	LastChangedAt *time.Time `json:"last_changed_at,omitempty"`
 }
 
-// handleMyTargets is a member's own storage view, for every registered target.
+// handleMyTargets is a member's own storage view, for every target a member
+// meets (memberMeets).
 //
 // Registered targets, not entitled ones: the nav leaf is present for every
 // member regardless of entitlement (10.1/10.2), so the page behind it has to
@@ -191,6 +192,9 @@ func handleMyTargets(w http.ResponseWriter, r *http.Request) {
 	registrations := addonsRegistered()
 	views := make([]myTargetView, 0, len(registrations))
 	for _, reg := range registrations {
+		if _, ok := memberMeets(reg.Target); !ok {
+			continue
+		}
 		view, err := describeMyTarget(r, reg.Target, subject)
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "VIEW_ERROR", err.Error())

@@ -12,6 +12,7 @@ import type { TargetSummary } from "@/lib/queries/useTargets";
 const base: TargetSummary = {
   target: "truenas",
   name: "TrueNAS",
+  name_from: "product",
   registered: true,
   auth_mode: "derived",
   callable: true,
@@ -88,12 +89,9 @@ describe("a kind with no module of its own gets the core member card", () => {
     expect(screen.queryByText("Enrol a card at the front desk")).toBeNull();
   });
 
-  // Owner, 11 Nov: a system Syndra has not read is the operators' alone. A
-  // member gets no card for it, never a guess at a kind.
-  it("draws no member card for a system not read yet", () => {
-    const { container } = render(<MemberTargetCard view={{ ...view, kind: undefined, entitlement_schema: undefined }} />);
-    expect(container).toBeEmptyDOMElement();
-  });
+  // Owner, 11 Nov: a system Syndra has not read is the operators' alone. The
+  // member reads never carry one (backend
+  // TestAMemberMeetsOnlySystemsWhoseKindIsKnown), so no card guesses a kind.
 
   it("words each state with its next step, by the system's name", () => {
     const { rerender } = render(<CoreMemberCard view={{ ...view, account: undefined, entitled: false, standing: undefined }} />);

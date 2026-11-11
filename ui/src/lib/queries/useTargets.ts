@@ -53,14 +53,17 @@ export interface HealthState {
 /** The one reading a row and a header show, ranked on the backend (A-01). */
 export type TargetStatus = "cannot_connect" | "offline" | "waiting_to_retry" | "checking" | "answering";
 
+/** Where a system's name came from (backend `systemName`). */
+export type NameFrom = "operator" | "product" | "id";
+
 export interface TargetSummary {
   target: string;
   /** What it is called (backend `systemName`): the operator's name, else the
    * accepted manifest's product, else the id title-cased. Every surface draws
    * the system by this. */
   name: string;
-  /** An operator named it; the Name setting can go back to the default. */
-  name_set?: boolean;
+  /** Where `name` came from: the operator, the add-on's product, or the id. */
+  name_from: NameFrom;
   registered: boolean;
   auth_mode: string;
   /** Whether that secret still loads — read now, not at start-up. */
@@ -578,17 +581,18 @@ export function useSetTargetProject(target: string) {
 /**
  * Naming a system: what members and every page call it. Blank goes back to
  * the default (the add-on's product, else the id). Changes nobody's access;
- * both rosters carry the name, so both are read again.
+ * every roster carries the name, so each is read again.
  */
 export function useSetTargetName(target: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (name: string) =>
-      request<{ target: string; name: string; name_set: boolean }>(`/targets/${target}/name`, {
+      request<{ target: string; name: string; name_from: NameFrom }>(`/targets/${target}/name`, {
         method: "PUT",
         body: { name },
       }),
-    onSuccess: () => invalidateAfter(client, "target", { extra: [["me", "targets"]] }),
+    // Both member reads carry the name: the cards' and the rail's.
+    onSuccess: () => invalidateAfter(client, "target", { extra: [["me", "targets"], ["me", "systems"]] }),
   });
 }
 

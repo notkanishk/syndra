@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { AUDIT_ACTIONS, describeAction } from "@/lib/audit-vocabulary";
+import { targetLabel } from "@/lib/nav";
 
 /**
  * The action vocabulary falls through to the raw key for anything it does not recognise, which is
@@ -64,7 +65,7 @@ export function joinedActionsIn(source: string): string[] {
 }
 
 /** The ones with no sentence: describeAction falls back to the raw key for them. */
-const unworded = (actions: string[]) => actions.filter((a) => describeAction(a).verb === a);
+const unworded = (actions: string[]) => actions.filter((a) => describeAction(a, targetLabel).verb === a);
 
 describe("joined audit actions (entitlement.<system>.*)", () => {
   it("has a sentence for every one the backend writes", () => {
@@ -96,11 +97,11 @@ describe("joined audit actions (entitlement.<system>.*)", () => {
 
   it("words them for any system, in plain language", () => {
     for (const verb of ["superseded", "abandoned"]) {
-      const said = describeAction(`entitlement.unifi-doors.${verb}`).verb;
+      const said = describeAction(`entitlement.unifi-doors.${verb}`, targetLabel).verb;
       expect(said).not.toContain("entitlement.");
       expect(said).toMatch(/queued change/);
     }
-    expect(describeAction("entitlement.unifi-doors.abandoned").verb).toContain("was disconnected from Syndra before it was sent");
+    expect(describeAction("entitlement.unifi-doors.abandoned", targetLabel).verb).toContain("was disconnected from Syndra before it was sent");
   });
 });
 

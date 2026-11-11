@@ -17,29 +17,33 @@ import type { MyTargetView } from "@/lib/queries/useMyStorage";
  * core card: the account's standing and its next step, which every kind can
  * say and none has to build.
  *
- * A system Syndra has not read yet has no kind, and no member card: members
- * see a system only once its kind is known, so it is never taken for one and
- * never shown half-described (owner, 11 Nov). Operators see it on theirs.
+ * A system Syndra has not read yet never reaches a member: the member reads
+ * (GET /me/systems, /me/targets) leave it out (owner, 11 Nov), so it is never
+ * taken for one kind and never shown half-described. Operators see it on theirs.
+ *
+ * `untitled` leaves the card's own title off where the page's heading is
+ * already the system's name (`/systems/{target}`).
  */
-const KIND_CARD: Record<string, (props: { view: MyTargetView }) => React.ReactElement> = {
+type CardProps = { view: MyTargetView; untitled?: boolean };
+
+const KIND_CARD: Record<string, (props: CardProps) => React.ReactElement> = {
   storage: StorageMemberCard,
 };
 
-export function MemberTargetCard({ view }: { view: MyTargetView }) {
-  if (!view.kind) return null;
-  const Module = KIND_CARD[view.kind];
-  return Module ? <Module view={view} /> : <CoreMemberCard view={view} />;
+export function MemberTargetCard(props: CardProps) {
+  const Module = KIND_CARD[props.view.kind ?? ""] ?? CoreMemberCard;
+  return <Module {...props} />;
 }
 
 /** "Your account on Big laser is not made yet. Nothing for you to do. Syndra makes it." */
 const SYNDRA_MAKES_IT = `${NOTHING_TO_DO} Syndra makes it.`;
 
-export function CoreMemberCard({ view }: { view: MyTargetView }) {
+export function CoreMemberCard({ view, untitled = false }: CardProps) {
   const name = view.name;
   const offline = view.health === "offline";
   return (
     <Card>
-      <CardHeader title={name} />
+      {!untitled && <CardHeader title={name} />}
       {/* Every kind has an offline, so the core card says it the way the
           storage card does: what is safe, and that the page catches up. */}
       <Unfold open={offline}>

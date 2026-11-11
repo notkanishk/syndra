@@ -29,6 +29,7 @@ import type { AccessRequest } from "@/lib/queries/useRequests";
 import { approvalOutcome, withRuleWaits } from "@/lib/request-decisions";
 import { refusedOutcome, retireOutcome, retryingOutcome } from "@/lib/retry";
 import { refusalCause, waitReasonLine } from "@/lib/wait-reason";
+import { targetLabel } from "@/lib/nav";
 
 /**
  * Final verification, 6 Nov 2026 (owner: "fix everything the audit finds
@@ -189,7 +190,7 @@ describe("N3: no promise either way before the drain switch is read", () => {
     }
     expect(waitsBeforeLine("give", null)).not.toMatch(promise);
     expect(offlineNext("TrueNAS", null)).not.toMatch(promise);
-    expect(describeDrain({ applied: 0, failed: 0, requeued: 2, errored: 0 } as never, null).detail).not.toMatch(promise);
+    expect(describeDrain({ applied: 0, failed: 0, requeued: 2, errored: 0 } as never, targetLabel, null).detail).not.toMatch(promise);
   });
 
   it("a bulk revoke before the switch is read is neither on its way nor waiting for Send", () => {

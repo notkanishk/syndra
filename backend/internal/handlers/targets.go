@@ -36,9 +36,9 @@ type targetSummary struct {
 	// else the accepted manifest's product, else the id. Every surface draws
 	// the system by this, never by a map of its own.
 	Name string `json:"name"`
-	// NameSet says an operator named it, so the System page can offer to go
-	// back to the default.
-	NameSet bool `json:"name_set"`
+	// NameFrom is where Name came from: "operator", "product" or "id", so
+	// the System page words its Name setting for the case it is in.
+	NameFrom string `json:"name_from"`
 	// Registered is always true here — it is what this list is — and is carried
 	// so a client reading one target's payload does not have to infer it from
 	// the row's presence.
@@ -163,7 +163,7 @@ func handleListTargets(w http.ResponseWriter, r *http.Request) {
 	out := make([]targetSummary, 0, len(registrations))
 	for _, reg := range registrations {
 		s := describeTarget(reg, transport[reg.Target])
-		s.Name, s.NameSet = systemName(r.Context(), reg.Target)
+		s.Name, s.NameFrom = systemName(r.Context(), reg.Target)
 		if id, ok := projects[reg.Target]; ok {
 			s.Project = &targetProjectRef{ID: id, Name: names[id]}
 		}

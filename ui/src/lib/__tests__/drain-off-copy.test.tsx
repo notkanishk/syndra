@@ -10,6 +10,7 @@ import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { nextStepOf, SEND_IT, waitsForSend, type ActionOutcome } from "@/lib/outcome";
 import { retireOutcome } from "@/lib/retry";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
+import { targetLabel } from "@/lib/nav";
 
 /**
  * One-path 1.8o. With REVOCATION_DRAIN_ENABLED=false (`auto_retry: false` in the
@@ -97,11 +98,11 @@ describe("a bulk revocation's note", () => {
 describe("a send that left changes unanswered", () => {
   const requeued = { applied: 0, failed: 0, requeued: 2, errored: 0, exhausted: 0 } as Parameters<typeof outcomeFromDrain>[0];
   it("drain on: sent again on its own", () => {
-    const o = outcomeFromDrain(requeued, true);
+    const o = outcomeFromDrain(requeued, targetLabel, true);
     expect(goesItself(o)).toBe(true);
   });
   it("drain off: waits for Send", () => {
-    const o = outcomeFromDrain(requeued, false);
+    const o = outcomeFromDrain(requeued, targetLabel, false);
     expect(goesItself(o)).toBe(false);
     expect(o.detail).toMatch(/doesn't send them again on its own/);
     expect(nextStepOf(o)).toBe(SEND_IT);

@@ -695,6 +695,39 @@ already did). See 3.7.
     day") carry a reasoned `eslint-disable-next-line`.
   - [x] 3.10h Specs: this list, `design.md` §6 (the name), `basic-advanced-ia`
     §1 (the family seat), `NEXT.md`.
+  - [x] 3.10i Review fixes (11 Nov 2026), `design.md` §6.1 updated:
+    - The header's "set a password" step is `needsPassword(view)`
+      (`kinds/storage/state.ts`): the storage card's own password step
+      (`stateOf`/`PASSWORD_STEP`, moved there from `MyStorage`), only for kind
+      `storage`; a door, a laser or a system not read never asks. No other
+      kind-blind credential read exists.
+    - `product` is a display name: the TrueNAS add-on reports `"TrueNAS"` from
+      one constant (`productName`) that its fixture test pins; fixtures,
+      `contract_routes_test`, the schema's `product` description and the
+      CHANGELOG follow. Nothing keyed on it. No name seeded by migration.
+    - `GET /api/v1/me/systems` (no add-on call; registry, accepted kind,
+      `targets.name`; sorted by `textsort`) is the one source for the member
+      rail, `TouchNav`, `GoToHost`, the `/systems/{target}` gate and crumb, and
+      the account sheet (`accountNav`). On the proxy's member allowlist. The
+      touch bar holds an empty seat while it loads.
+    - `handlers.memberMeets` is the one server-side rule: `/me/systems` and
+      `/me/targets` skip a registration with no kind. UI: `isStorage` and
+      `memberSystems` (`lib/nav.ts`) are the only kind predicates; the card's
+      kindless guard and `PersonSystems`' copy of `isStorage` are gone;
+      `crumbsFor` no longer crumbs `/systems/{t}` (the page's `useCrumb`).
+    - `nameOf` is required on `describeAction`, `describeSends`, `systemsOf`,
+      `describeDrain(result, nameOf, auto)` and `outcomeFromDrain(result,
+      nameOf, auto, total)`; the audit CSV uses `useSystemNames()`.
+    - `GET /targets` carries `name_from` (`operator`/`product`/`id`) in place
+      of `name_set`; the Name hint is worded per case, not read included.
+      `versionLabel` strips the product's name (compared as text), not the
+      system's, so an operator's name cannot break the pattern or double it.
+    - Name limit: one parity test (`name-limit.test.ts`) ties the CHECK, the
+      Go refusal and `NAME_MAX`.
+    - Copy: `/storage` empty state "No shared storage to show yet." +
+      "Nothing for you to do."; the `/systems/{t}` card drops the title its
+      page heading already says.
+    - `migrate_rollback_test` restores the recorded version, not `newest`.
 
 Decided while building (slice 3, 11 Nov 2026), for the owner:
 

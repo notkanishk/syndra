@@ -2,13 +2,13 @@
 
 import type { ReactNode } from "react";
 
+import { isStorage } from "@/lib/nav";
 import { UserName } from "@/components/names/UserName";
 import {
   CardTop,
   Dotted,
   Faint,
   HoldRow,
-  isStorage,
   OfflineNotice,
   reachWords,
   Row,

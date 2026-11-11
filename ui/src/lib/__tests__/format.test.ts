@@ -10,6 +10,7 @@ import {
   humanizeKey,
   personLine,
   roleLabel,
+  versionLabel,
 } from "@/lib/format";
 
 describe("expiryLabel", () => {
@@ -160,5 +161,21 @@ describe("formatAgoShort", () => {
     expect(formatAgoShort("2026-10-14T12:00:00Z", now)).toBe("3d ago");
     expect(formatAgoShort("2026-08-01T12:00:00Z", now)).toBe("1 Aug");
     expect(formatAgoShort(undefined, now)).toBe("");
+  });
+});
+
+// The version is stripped of the PRODUCT's name, never the system's: an
+// operator may name a system anything ("Laser (big"), and that is data, not a
+// pattern, so it can neither break the page nor leave the product doubled.
+describe("versionLabel", () => {
+  it("strips the product's own name off its version", () => {
+    expect(versionLabel("TrueNAS", "TrueNAS-25.10.5")).toBe("25.10.5");
+    expect(versionLabel("TrueNAS", "25.10.5")).toBe("25.10.5");
+  });
+
+  it("reads a product with pattern characters as text", () => {
+    expect(() => versionLabel("Laser (big", "Laser (big 2.1")).not.toThrow();
+    expect(versionLabel("Laser (big", "Laser (big 2.1")).toBe("2.1");
+    expect(versionLabel("A.B", "AxB 1.0")).toBe("AxB 1.0");
   });
 });

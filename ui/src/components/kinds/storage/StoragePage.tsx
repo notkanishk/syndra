@@ -3,7 +3,8 @@
 import { MemberTargetCard } from "@/components/kinds/MemberTargetCard";
 import { EmptyState, ListStates } from "@/components/states";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { STORAGE_KIND } from "@/lib/nav";
+import { isStorage } from "@/lib/nav";
+import { NOTHING_TO_DO } from "@/lib/outcome";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
 
 /**
@@ -15,7 +16,7 @@ import { useMyStorage } from "@/lib/queries/useMyStorage";
  */
 export function StoragePage() {
   const targets = useMyStorage();
-  const storage = targets.data?.filter((t) => t.kind === STORAGE_KIND) ?? [];
+  const storage = targets.data?.filter(isStorage) ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -31,8 +32,8 @@ export function StoragePage() {
         errorTitle="Couldn't read your storage access."
         empty={
           <EmptyState
-            title="No shared storage yet."
-            guidance="This makerspace has not connected any storage to Syndra. When it does, your account and how to reach it appear here."
+            title="No shared storage to show yet."
+            guidance={NOTHING_TO_DO}
           />
         }
       >

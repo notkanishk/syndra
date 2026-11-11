@@ -205,6 +205,11 @@ type capabilityProbe interface {
 	availability(operationID string) (available bool, reason string)
 }
 
+// productName is what people call the product: the manifest's and health's
+// `product`, which Syndra shows as the system's name until an operator names
+// the system. A display name, never a key (contract 2 schema).
+const productName = "TrueNAS"
+
 // manifest composes the whole answer.
 func manifest(product, productVersion string, probe capabilityProbe, connection *Connection) Manifest {
 	return Manifest{

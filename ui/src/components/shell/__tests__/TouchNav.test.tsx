@@ -13,7 +13,7 @@ const indicators = vi.hoisted(() => ({
   isPlaceholderData: false,
 }));
 const targets = vi.hoisted(() => ({ data: [] as Array<{ target: string; name: string }> }));
-const mine = vi.hoisted(() => ({ data: [] as Array<{ target: string; name: string; kind?: string }> }));
+const mine = vi.hoisted(() => ({ data: [] as Array<{ target: string; name: string; kind?: string }> | undefined, isLoading: false }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
 vi.mock("@/lib/ui-view", () => ({
@@ -29,7 +29,7 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => targets }));
 vi.mock("@/lib/queries/useIndicators", () => ({ useIndicatorsRead: () => indicators }));
-vi.mock("@/lib/queries/useMyStorage", () => ({ useMyStorage: () => mine }));
+vi.mock("@/lib/queries/useMySystems", () => ({ useMySystems: () => mine }));
 
 function renderNav() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -54,6 +54,7 @@ beforeEach(() => {
   indicators.isPlaceholderData = false;
   targets.data = [];
   mine.data = [];
+  mine.isLoading = false;
 });
 
 describe("the tab bar carries the rail's own tree", () => {
@@ -78,6 +79,23 @@ describe("the tab bar carries the rail's own tree", () => {
     mine.data = [...mine.data, { target: "door", name: "Door", kind: "access" }];
     renderNav();
     expect(screen.queryByRole("link", { name: "Door" })).toBeNull();
+  });
+
+  // The tab count is the member's systems', so the bar holds an empty seat of
+  // its own height until GET /me/systems lands, never three tabs then four.
+  it("holds the bar's seat, with no tabs, until a member's systems are read", () => {
+    view.audience = "member";
+    view.isOperator = false;
+    mine.data = undefined;
+    mine.isLoading = true;
+    const { container, unmount } = renderNav();
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    expect(container.querySelector('[data-testid="touch-nav-settling"]')).not.toBeNull();
+    unmount();
+    mine.data = [{ target: "lathe", name: "Big laser", kind: "machine" }];
+    mine.isLoading = false;
+    renderNav();
+    expect(tabLabels()).toEqual(["My access", "Requests", "Network storage", "Big laser"]);
   });
 
   // Basic has four entries and six leaves. Six tabs would be the rail again.

@@ -16,7 +16,7 @@ import { StandingLine } from "@/components/ui/StandingLine";
 import { Relative } from "@/components/ui/Time";
 import { roleOf } from "@/lib/fields";
 import { formatClock, formatList, formatShortDate } from "@/lib/format";
-import { STORAGE_KIND } from "@/lib/nav";
+import { isStorage } from "@/lib/nav";
 import { useAutoRetry } from "@/lib/queries/useIndicators";
 import { usePersonTargets, type PersonTargetView, type RoleSource } from "@/lib/queries/useMyStorage";
 import { useTargets, type TargetSummary } from "@/lib/queries/useTargets";
@@ -30,9 +30,6 @@ import { sortNames } from "@/lib/sort";
  * the parts both share. Not a word of storage in it: it is built from the same
  * core view the member's card is.
  */
-
-/** A system on the person page: storage folds into its own section. */
-export const isStorage = (system: { kind?: string }) => system.kind === STORAGE_KIND;
 
 /**
  * Which systems a section draws, known before their reads are (the card's name

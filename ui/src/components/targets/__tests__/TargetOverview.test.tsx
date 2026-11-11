@@ -166,6 +166,7 @@ function summary(operations: TargetSummary["operations"]): TargetSummary {
   return {
     target: "truenas",
     name: "TrueNAS",
+    name_from: "product",
     registered: true,
     auth_mode: "derived",
     callable: true,

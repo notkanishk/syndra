@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { GoTo } from "@/components/ui/GoTo";
 import { otherDialogOpen, typingIn } from "@/lib/keys";
 import { memberNav, navFor, targetNav } from "@/lib/nav";
-import { useMyStorage } from "@/lib/queries/useMyStorage";
+import { useMySystems } from "@/lib/queries/useMySystems";
 import { useTargets } from "@/lib/queries/useTargets";
 import { useUiView } from "@/lib/ui-view";
 
@@ -21,7 +21,7 @@ export function GoToHost() {
   const [open, setOpen] = useState(false);
   const { audience, isOperator } = useUiView();
   const { data: targets } = useTargets(isOperator);
-  const { data: mine } = useMyStorage(audience === "member");
+  const { data: mine } = useMySystems(audience === "member");
   const nav =
     audience === "advanced"
       ? targetNav(targets ?? [])

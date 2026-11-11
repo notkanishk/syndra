@@ -25,6 +25,7 @@ vi.mock("@/lib/queries/useAudit", () => ({
     fetchNextPage: log.fetchNextPage,
   }),
 }));
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveUser: () => ({ value: null }) }),
 }));

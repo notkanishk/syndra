@@ -114,7 +114,9 @@ export function TargetOverview({ target }: { target: string }) {
   ];
 
   const meta = [
-    health.data?.product ? `${name} ${versionLabel(name, health.data.product_version)}`.trim() : null,
+    health.data?.product
+      ? `${health.data.product} ${versionLabel(health.data.product, health.data.product_version)}`.trim()
+      : null,
     gated && !justSet ? "no Zitadel project yet" : null,
   ];
 

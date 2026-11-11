@@ -1,4 +1,3 @@
-import { targetLabel } from "@/lib/nav";
 import { DRAIN_UNKNOWN_NEXT, type ActionOutcome, type AutoRetry, type OutcomeKind } from "@/lib/outcome";
 import type { DrainResult } from "@/lib/queries/usePropagation";
 
@@ -30,11 +29,11 @@ export interface DrainOutcome {
  * silence on an HTTP 200: an operator reads "0 sent, 0 failed" after a pass
  * that requeued eight changes and concludes the queue is idle.
  */
-/** `nameOf` is the roster's name for a system (useSystemNames); the id title-cased without one. */
+/** `nameOf` is the roster's name for a system (useSystemNames): the one path for names. */
 export function describeDrain(
   result: DrainResult | undefined,
+  nameOf: (target: string) => string,
   auto: AutoRetry = true,
-  nameOf: (target: string) => string = targetLabel,
 ): DrainOutcome {
   const applied = result?.applied ?? 0;
   const failed = result?.failed ?? 0;
@@ -208,11 +207,11 @@ export const STOPPED_NEXT =
  */
 export function outcomeFromDrain(
   result: DrainResult | undefined,
+  nameOf: (target: string) => string,
   auto: AutoRetry = true,
   total?: number,
-  nameOf: (target: string) => string = targetLabel,
 ): ActionOutcome & { word: string } {
-  const { tone, message, detail, sendsItself, next } = describeDrain(result, auto, nameOf);
+  const { tone, message, detail, sendsItself, next } = describeDrain(result, nameOf, auto);
   const kind: OutcomeKind =
     tone === "success" ? "applied" : tone === "warning" ? "queued" : tone === "error" ? "failed" : "no_change";
   return { kind, message, detail, ...(sendsItself ? { sendsItself } : {}), ...(next ? { next } : {}), word: drainWord(result, total) };

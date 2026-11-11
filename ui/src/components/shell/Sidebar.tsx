@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useTargets } from "@/lib/queries/useTargets";
-import { useMyStorage } from "@/lib/queries/useMyStorage";
+import { useMySystems } from "@/lib/queries/useMySystems";
 import { useIndicators, type Indicators } from "@/lib/queries/useIndicators";
 import { leafMatches, memberNav, operatorNav, type NavLeaf } from "@/lib/nav";
 // Shared with the tab bar, because the rail and the tab bar are two renderings
@@ -40,10 +40,11 @@ export default function Sidebar() {
   // The rail renders without it and gains the rows when it arrives: a structure
   // that waited for a fetch would be a rail that moves in response to a poll.
   const { data: targets } = useTargets(isOperator);
-  // A member's rows come from their own list the same way: one per connected
-  // system Syndra has read that is not storage (memberNav), drawn when it lands.
+  // A member's rows come from their own systems the same way (GET /me/systems,
+  // no add-on call): one per system that is not storage (memberNav), drawn
+  // below every static row when it lands, so nothing above them moves.
   const member = audience === "member";
-  const { data: mine } = useMyStorage(member);
+  const { data: mine } = useMySystems(member);
   // An operator's rail is Advanced's whole tree in both views; what Basic
   // lacks is folded shut, so a row both share is the same row in each and
   // switching moves only the parts that come and go (A-08 §3).
