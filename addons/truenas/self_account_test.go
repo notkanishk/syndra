@@ -160,8 +160,8 @@ func TestAdoptWaitsUntilTheAddonKnowsItsOwnAccount(t *testing.T) {
 	}
 
 	rr := adopt("adopt-1")
-	if rr.Code != http.StatusServiceUnavailable || problemCode(t, rr) != CodeTargetUnreachable || rr.Header().Get("Retry-After") == "" {
-		t.Fatalf("want 503 TARGET_UNREACHABLE with Retry-After, got %d %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeOperationFailed {
+		t.Fatalf("want 422 OPERATION_FAILED, got %d %s", rr.Code, rr.Body.String())
 	}
 	if _, bound, _ := s.store.GetBinding("sub-1"); bound {
 		t.Fatal("a refused adoption bound the account")

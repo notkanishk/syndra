@@ -159,9 +159,6 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, so nothing was sent to it.", nil)
 		return
-	case errors.Is(err, errSelfUnknown):
-		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable, err.Error(), nil)
-		return
 	case err != nil:
 		// The error's text is this add-on's own, never the target's response
 		// body: that body is where a submitted password comes back.
@@ -486,11 +483,8 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// guard, or predate a key reissued against a different account, and this is
 	// the one operation that cannot be undone.
 	//
-	// Unlike adoption, an unknown identity refuses here: a purge that cannot
-	// tell whether it is deleting Syndra's own credential is not one to attempt.
-	if _, _, known := s.nas.Self(); !known {
-		return OperationResult{}, http.StatusUnprocessableEntity,
-			errors.New("this add-on could not confirm which target account it authenticates as, so it will not delete one; try again shortly")
+	if err := s.requireSelfKnown(); err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 	if err := s.refuseSelfAccount(binding.Username); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
@@ -1066,11 +1060,21 @@ func requireSecret(params map[string]any, name string) (string, error) {
 	return value, nil
 }
 
-// errSelfUnknown is account.adopt while the add-on does not yet know its own
-// account (readSelf). Nothing was done, so it is 503 TARGET_UNREACHABLE
-// (operateNow): Syndra keeps it for later (classifyStatus), where any other 5xx
-// would read as "possibly acted" and go to a person for nothing.
+// errSelfUnknown refuses adopt and purge while the add-on does not yet know its
+// own account (readSelf): either could otherwise bind or delete the account
+// Syndra itself signs in with. Nothing was done, so it is a 4xx
+// (OPERATION_FAILED, 422): certain, and its sentence reaches the operator.
 var errSelfUnknown = errors.New("this add-on can't check yet whether that account is its own on the NAS, so nothing was done; try again shortly")
+
+// requireSelfKnown is the one guard for the operations that bind or delete an
+// existing account: until auth.me has named the add-on's own account, any
+// account might be it, so they fail closed.
+func (s *server) requireSelfKnown() error {
+	if _, _, known := s.nas.Self(); !known {
+		return errSelfUnknown
+	}
+	return nil
+}
 
 // noAdoptableAccount is adopt's miss, said once for the first adoption and a
 // repeat whose account has gone.
@@ -1100,8 +1104,8 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 	// perfectly well; the reason it is not on offer has nothing to do with
 	// whether it can be found. And fail closed: until auth.me has named the
 	// add-on's own account, any account might be it.
-	if _, _, known := s.nas.Self(); !known {
-		return OperationResult{}, http.StatusServiceUnavailable, errSelfUnknown
+	if err := s.requireSelfKnown(); err != nil {
+		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 	if err := s.refuseSelfAccount(username); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err

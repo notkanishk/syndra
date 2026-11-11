@@ -1312,9 +1312,10 @@ feature and serve both:
   subject, after reading it, and answers its `account_id`
   (`handleAdoptAccount` in `backend/internal/handlers/inventory.go`). While
   the add-on cannot yet tell which account is its own service account, it
-  MUST refuse with 503 `TARGET_UNREACHABLE` (nothing was done; Syndra keeps
-  it for later) rather than risk binding that account (`adoptAccount` in
-  `addons/truenas/operations.go`).
+  MUST refuse with 422 `OPERATION_FAILED` (nothing was done, and the
+  sentence reaches the operator, who tries again) rather than risk binding
+  that account. `account.purge` refuses the same way, through the same check
+  (`requireSelfKnown` in `addons/truenas/operations.go`).
 - `account.release` forgets the subject's binding and touches nothing on the
   app. It is how an operator lets go of an account (`handleReleaseBinding`
   there, and `releaseOnTarget` in
