@@ -1061,9 +1061,15 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	}
 	var groupID apiID
 	adopted := false
+	// createMayHaveLanded: group.create got no answer after it was sent (a
+	// timeout, a dropped socket), so the very group adopted below may be this
+	// attempt's write. An answer (a refusal, a rate limit) or nothing sent at
+	// all means this attempt wrote nothing.
+	createMayHaveLanded := false
 	if err := s.send(who, "group.create", []any{map[string]any{
 		"name": binding.Username, "gid": id, "smb": false,
 	}}, &groupID); err != nil {
+		createMayHaveLanded = errors.Is(err, ErrTargetUnreachable) && !errors.Is(err, ErrNotSent)
 		// An empty group of that name inside this add-on's own range is one an
 		// earlier attempt left, and ours to take; anything else is somebody's,
 		// and the refusal stands. Its number becomes the account's too, so the
@@ -1079,12 +1085,15 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	create["group_create"] = false
 	// failed answers a failure before the account exists. A group made here
 	// was a write, so it is undone and the failure is acted's. An adopted
-	// group predates this attempt (or a timed-out create of ours made it, and
-	// the next attempt takes it over the same way): nothing has been written,
-	// it is not ours to delete, and the failure keeps its own status (a 429
-	// stays a 429).
+	// group is never deleted (it may predate this attempt). Its failure keeps
+	// its own status (a 429 stays a 429) unless this attempt's own create got
+	// no answer: then the adopted group may be this attempt's write, and the
+	// failure is acted's.
 	failed := func(err error) (ApplyOutcome, int, error) {
 		if adopted {
+			if createMayHaveLanded {
+				return acted(err)
+			}
 			return ApplyOutcome{}, statusFor(err), err
 		}
 		s.undoGroup(who, binding.Username, groupID)
@@ -1128,7 +1137,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		// needs an operator, so it is reported now rather than discovered then.
 		logStoreFailure("binding", req.Subject, err)
 		return ApplyOutcome{}, http.StatusInternalServerError,
-			fmt.Errorf("account %s was created and its binding could not be recorded: %w", binding.Username, err)
+			fmt.Errorf("account %s was created and its binding could not be recorded: %v", binding.Username, err)
 	}
 	if readErr != nil {
 		return acted(fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr))

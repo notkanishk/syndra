@@ -1176,6 +1176,7 @@ settings with the full §5 rules.
   - `failedWrite` says "refused" only for an answer; purge, set and rotation no longer claim a refusal after a timeout.
   - Every binding change is its own `mutate` beside its NAS write (create bind, rebind, wanted SMB, purge unbind); a no-op store write is skipped; the AST guard holds store writes to `mutate` closures.
   - The fake NAS answers a missing method with an error member, as TrueNAS does, not a transport error.
+  - Review of 3f774667: whether the NAS answered is decided before any wording, so no text turns a lost answer into a refusal (a login's rate limit is read by the breaker itself); an adopted group keeps a failure's own status only when this attempt's `group.create` was answered or never sent, otherwise the failure is "possibly acted"; a binding the log refuses after a create says the account was created. The fake NAS rate-limits with an error frame, as TrueNAS does.
 - [ ] 5.3d Adopting the account a crashed TrueNAS create left behind.
   Settling a write in doubt is done (5.3b: each is settled `unknown` at
   start, so `/health` needs no count). Left: whether the create path adopts

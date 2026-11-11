@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 	truenas "github.com/truenas/api_client_golang/truenas_api"
@@ -599,13 +600,26 @@ func TestOnlyAnAnswerIsARefusal(t *testing.T) {
 		{errors.New("call timed out"), ErrTargetUnreachable},
 		{errors.New("failed to send call: websocket: close sent"), ErrTargetUnreachable},
 		{errors.New("unexpected ping response format"), ErrTargetUnreachable},
-		{errors.New("login error: map[message:Rate Limit Exceeded]"), ErrRateLimited},
+		// No answer came back, so no wording makes it a refusal or a rate
+		// limit: a write behind it may have landed.
+		{errors.New("failed to send call: write: too many open files"), ErrTargetUnreachable},
+		{errors.New("login error: map[message:Rate Limit Exceeded]"), ErrTargetUnreachable},
 		{&rpcError{Code: -32001, Message: "[EINVAL] nope"}, ErrTargetRefused},
 		{&rpcError{Code: -32001, Message: "Too many requests"}, ErrRateLimited},
 	} {
 		if got := classifyNASError(tc.err); got != tc.want {
 			t.Errorf("%v: want %v, got %v", tc.err, tc.want, got)
 		}
+	}
+
+	// A login turned away for rate limiting reaches only the breaker, which
+	// reads its wording and holds at once rather than counting to the limit.
+	n := &NAS{now: time.Now}
+	n.mu.Lock()
+	n.recordFailureLocked(errors.New("login error: map[message:Rate Limit Exceeded]"))
+	n.mu.Unlock()
+	if !n.CircuitOpen() {
+		t.Error("a rate-limited login did not open the breaker")
 	}
 }
 
@@ -657,4 +671,22 @@ func TestEveryBindingChangeIsInTheLog(t *testing.T) {
 			t.Fatalf("want one bind for the wanted SMB state and none for the repeat, got %s", got)
 		}
 	})
+}
+
+// An account created and then left unbound because the log refused the
+// binding's intent is reported as exactly that: the account exists. The
+// generic "it did not send it" would tell the operator nothing happened, and
+// the next apply then halts as a conflict over an account they were told was
+// never made.
+func TestABindingTheLogRefusesAfterACreateSaysTheAccountWasCreated(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	m.after = map[string]func(){"user.create": func() { s.log.sync = func() error { return errors.New("disk gone") } }}
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"enabled":true}}`)
+	var p struct {
+		Detail string `json:"detail"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &p)
+	if rr.Code != http.StatusInternalServerError || !strings.HasPrefix(p.Detail, "account charlotte was created") || p.Detail == notLoggedDetail {
+		t.Fatalf("want a 500 saying the account was created, got %d %q", rr.Code, p.Detail)
+	}
 }

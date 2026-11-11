@@ -351,7 +351,9 @@ func (n *NAS) Probe() error {
 // the next attempt is the one that locks the account — so it opens the circuit
 // immediately rather than after five more tries.
 func (n *NAS) recordFailureLocked(err error) {
-	if errors.Is(classifyNASError(err), ErrRateLimited) {
+	// The breaker sees logins too, which reach here as the client's text and
+	// not as an answer, so their rate-limit wording is read directly.
+	if errors.Is(classifyNASError(err), ErrRateLimited) || (err != nil && rateLimitWording(err.Error())) {
 		n.failures = breakerThreshold
 	} else {
 		n.failures++
@@ -620,18 +622,19 @@ func callOnce(c rpc, method string, params any, out any) error {
 // no word on its list and fell to "refused", and a write that may have landed
 // was recorded as failed.
 //
-// Text is matched for rate limiting only, because the client carries no code
-// for it: in an answer's message, and in a login the target turned away
-// (which reaches here as the client's text, from the breaker).
+// Whether the NAS answered is decided first, so no wording can turn a failure
+// with no answer (a write that may have landed) into a refusal. Text is then
+// matched for rate limiting only, in an answer's message, because the client
+// carries no code for it (a login turned away is read by recordFailureLocked).
 func classifyNASError(err error) error {
 	var answer *rpcError
 	switch {
 	case err == nil:
 		return nil
-	case rateLimitWording(err.Error()):
-		return ErrRateLimited
 	case !errors.As(err, &answer):
 		return ErrTargetUnreachable
+	case rateLimitWording(err.Error()):
+		return ErrRateLimited
 	case answer.Data.Errname == "ENOENT":
 		return ErrNoSuchPath
 	default:
