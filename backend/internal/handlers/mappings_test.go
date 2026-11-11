@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -1230,5 +1231,51 @@ func TestAMappingIsWordedFromItsRoleAndLabel(t *testing.T) {
 		if got := mappedTo(tc.target, tc.field, tc.value); got != tc.want {
 			t.Errorf("mappedTo(%s, %s, %s) = %q, want %q", tc.target, tc.field, tc.value, got, tc.want)
 		}
+	}
+}
+
+// A membership the add-on cannot list is a second refusal of the same family,
+// and its step is not a correction: the dialog must not tell the operator to
+// change what they typed. It has its own detail key, the system's name and the
+// field's label (never the ids), and carries its own step.
+func TestAMappingOnAnUnlistableMembershipIsRefusedInPlainWords(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Label: "Group", Role: "membership"}})
+	name := dbTargetName
+	t.Cleanup(func() { dbTargetName = name })
+	dbTargetName = func(context.Context, string) (string, error) { return "Shop NAS", nil }
+	h.valueErr = fmt.Errorf("%w: truenas can't list the values of group, so a mapping can't name one", addons.ErrFieldNotListable)
+
+	rr := postMapping(`{"target":"truenas","project_id":"pLab","role_key":"maker","field":"group","value":"lab_makers"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	var got ErrorResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Details["field"] != "unlistable" || got.Details["value"] != "" {
+		t.Errorf("its own detail key, not the value one: %v", got.Details)
+	}
+	if want := "Shop NAS doesn't list its groups, so Syndra can't check or manage one. Nothing was changed."; got.Message != want {
+		t.Errorf("message = %q, want %q", got.Message, want)
+	}
+	if want := "Ask whoever maintains the Shop NAS add-on to make them listable."; got.Details["next"] != want {
+		t.Errorf("next = %q, want %q", got.Details["next"], want)
+	}
+	if strings.Contains(rr.Body.String(), "addon:") || strings.Contains(rr.Body.String(), "truenas") {
+		t.Errorf("no developer prefix or ids: %s", rr.Body.String())
+	}
+	if len(h.created) != 0 {
+		t.Error("nothing may be written")
+	}
+}
+
+// The refusal of an unlistable membership belongs to both families, so a check
+// against either sentinel, now or later, finds it.
+func TestAnUnlistableRefusalIsInBothSentinelFamilies(t *testing.T) {
+	var err error = notListable{sentence: "s", next: "n"}
+	if !errors.Is(err, addons.ErrFieldNotListable) || !errors.Is(err, addons.ErrValueNotResolvable) {
+		t.Fatalf("errors.Is: field-not-listable %v, value-not-resolvable %v",
+			errors.Is(err, addons.ErrFieldNotListable), errors.Is(err, addons.ErrValueNotResolvable))
 	}
 }

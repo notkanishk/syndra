@@ -339,7 +339,7 @@ func TestResolvesValueRefusesUnlistableMembership(t *testing.T) {
 	memRoles.Unlock()
 	addonServing(t, []byte(`{"field":"group","enumerable":false,"values":[]}`))
 	_, err := ResolvesValue(context.Background(), "truenas", "group", "Hulk Hogan")
-	if !errors.Is(err, ErrValueNotResolvable) || !strings.Contains(err.Error(), "can't list the values of group") {
+	if !errors.Is(err, ErrFieldNotListable) || !errors.Is(err, ErrValueNotResolvable) || !strings.Contains(err.Error(), "can't list the values of group") {
 		t.Errorf("a non-enumerable membership must be refused, got %v", err)
 	}
 	addonServing(t, []byte(`{"field":"quota","enumerable":false,"values":[]}`))
