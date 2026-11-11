@@ -218,12 +218,14 @@ func TestActivityBeyondTheLimitSaysItWasTruncated(t *testing.T) {
 		s, m := opServer(t)
 		m.fakeRPC.audit, m.fakeRPC.shares = rows(tc.n), `[]`
 		rr := postOperation(t, s, "activity.get", `{"call_id":"c1","subject":"sub-1"}`)
-		var out OperationResult
-		if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil || out.Activity == nil {
+		var out struct {
+			Result *ActivityReport `json:"result"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil || out.Result == nil {
 			t.Fatalf("%d rows: %v (%s)", tc.n, err, rr.Body.String())
 		}
-		if out.Activity.Truncated != tc.truncated || len(out.Activity.Events) != tc.returned {
-			t.Errorf("%d rows: truncated=%t returned=%d", tc.n, out.Activity.Truncated, len(out.Activity.Events))
+		if out.Result.Truncated != tc.truncated || len(out.Result.Events) != tc.returned {
+			t.Errorf("%d rows: truncated=%t returned=%d", tc.n, out.Result.Truncated, len(out.Result.Events))
 		}
 	}
 }

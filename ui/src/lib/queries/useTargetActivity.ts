@@ -31,17 +31,18 @@ export interface TargetActivity {
    */
   reason?: "no_account" | "unreachable";
   /**
-   * Shares with auditing switched off. Without it a short list reads as a quiet
-   * week when half the shares were never being watched.
+   * Resources (shares) that were not recording this person. Without it a short
+   * list reads as a quiet week when half the shares were never being watched.
    */
-  uncovered_shares?: string[];
+  uncovered?: string[];
   detail?: string;
 }
 
 export interface TargetActivityEvent {
   at: string;
   event: string;
-  share?: string;
+  /** Where on the target it happened (a share), named as `uncovered` names them. */
+  resource?: string;
   success: boolean;
   /**
    * Where it came from. Measured on the live NAS: a week of SMB events was 553

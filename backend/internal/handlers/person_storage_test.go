@@ -33,18 +33,17 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 	t.Helper()
 	stubMyStorage(t, &h.storageHarness)
 	lastStorage.Range(func(k, _ any) bool { lastStorage.Delete(k); return true })
-	prev := []any{addonsMyStorage, addonsRegistered, dbTargetProjects, dbListRoleMappings, dbAllowancesInForce,
+	prev := []any{addonsRegistered, dbTargetProjects, dbListRoleMappings, dbAllowancesInForce,
 		dbAllowancesForSubject, addonsReadReach, dbLastSucceededAddonOperation, addonsConnection}
 	t.Cleanup(func() {
-		addonsMyStorage = prev[0].(func(context.Context, string, string, string) addons.StorageStatus)
-		addonsRegistered = prev[1].(func() []addons.Registration)
-		dbTargetProjects = prev[2].(func(context.Context) (map[string]string, error))
-		dbListRoleMappings = prev[3].(func(context.Context, string) ([]db.RoleMapping, error))
-		dbAllowancesInForce = prev[4].(func(context.Context, string, string) ([]db.Allowance, error))
-		dbAllowancesForSubject = prev[5].(func(context.Context, string) ([]db.Allowance, error))
-		addonsReadReach = prev[6].(func(context.Context, string) addons.Reach)
-		dbLastSucceededAddonOperation = prev[7].(func(context.Context, string, string, string) (db.AddonOperation, bool, error))
-		addonsConnection = prev[8].(func(string) (*addons.Connection, error))
+		addonsRegistered = prev[0].(func() []addons.Registration)
+		dbTargetProjects = prev[1].(func(context.Context) (map[string]string, error))
+		dbListRoleMappings = prev[2].(func(context.Context, string) ([]db.RoleMapping, error))
+		dbAllowancesInForce = prev[3].(func(context.Context, string, string) ([]db.Allowance, error))
+		dbAllowancesForSubject = prev[4].(func(context.Context, string) ([]db.Allowance, error))
+		addonsReadReach = prev[5].(func(context.Context, string) addons.Reach)
+		dbLastSucceededAddonOperation = prev[6].(func(context.Context, string, string, string) (db.AddonOperation, bool, error))
+		addonsConnection = prev[7].(func(string) (*addons.Connection, error))
 	})
 
 	schema := addonsEntitlementSchema
@@ -66,7 +65,7 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 			Lifecycle: services.LifecycleState{Account: h.entitled},
 		}, nil
 	}
-	addonsMyStorage = func(_ context.Context, _, subject, actor string) addons.StorageStatus {
+	answerStorage(t, func(subject, actor string) addons.StorageStatus {
 		h.asked = append(h.asked, subject+"/"+actor)
 		if h.failRead || h.unreachable {
 			return addons.StorageStatus{Outcome: addons.OutcomeUnreached}
@@ -77,9 +76,9 @@ func stubPersonStorage(t *testing.T, h *personStorageHarness) {
 			QuotaBytes int64 `json:"quota_bytes,omitempty"`
 		}{UsedBytes: 18 * gb, QuotaBytes: 50 * gb}
 		renders := addons.Place{Share: "main", Folder: "projects/renders", Path: "/mnt/main/projects/renders", Access: "change"}
-		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, Username: "roman.reigns", Usable: true,
+		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, Usable: true,
 			PlacesReadable: true, Places: []addons.Place{home, renders}}
-	}
+	})
 	addonsRegistered = func() []addons.Registration { return []addons.Registration{{Target: "truenas"}} }
 	dbTargetProjects = func(context.Context) (map[string]string, error) {
 		if h.noProject {

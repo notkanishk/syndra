@@ -116,7 +116,7 @@ describe("the target's own log, beside Syndra's", () => {
       subject: "u1",
       readable: true,
       events: [],
-      uncovered_shares: ["scratch"],
+      uncovered: ["scratch"],
     };
     renderTab();
 
@@ -135,8 +135,8 @@ describe("the target's own log, beside Syndra's", () => {
       subject: "u1",
       readable: true,
       events: [
-        { at: "2026-08-20T10:00:00Z", event: "CONNECT", share: "lab", success: true },
-        { at: "2026-08-20T11:00:00Z", event: "CONNECT", share: "vault", success: false },
+        { at: "2026-08-20T10:00:00Z", event: "CONNECT", resource: "lab", success: true },
+        { at: "2026-08-20T11:00:00Z", event: "CONNECT", resource: "vault", success: false },
       ],
     };
     renderTab();
@@ -202,7 +202,7 @@ describe("a refusal an operator can act on", () => {
       target: "truenas",
       subject: "u1",
       readable: true,
-      events: [{ at: "2026-08-23T10:45:31Z", event: "CONNECT", share: "main", success: true }],
+      events: [{ at: "2026-08-23T10:45:31Z", event: "CONNECT", resource: "main", success: true }],
     };
     renderTab();
 

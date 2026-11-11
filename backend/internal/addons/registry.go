@@ -689,6 +689,25 @@ func (a *Addon) Operations() []EffectiveOperation {
 	return out
 }
 
+// MemberReads is every read a member's own page makes of a target, in id
+// order: the available effect: read operations at member scope that need no
+// parameter. Each goes through Read, for the member on /me/targets and for an
+// operator on the person's page.
+func MemberReads(target string) []string {
+	a, err := Get(target)
+	if err != nil {
+		return nil
+	}
+	var ids []string
+	for _, op := range a.Operations() {
+		if op.Available && op.Effect == EffectRead && op.Scope == ScopeMember &&
+			!slices.ContainsFunc(op.Params, func(p ParamSpec) bool { return p.Required }) {
+			ids = append(ids, op.ID)
+		}
+	}
+	return ids
+}
+
 // LastError reports why the most recent refresh failed, or nil. Held so an
 // operator surface can distinguish "never answered" from "answered wrongly".
 func (a *Addon) LastError() error {

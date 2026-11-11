@@ -49,8 +49,9 @@ var catalogue = []struct {
 	{id: "lifecycle", guide: "9-lifecycle-and-degradation", must: "read_only refuses writes with 503 LIFECYCLE_REFUSAL and Retry-After while reads answer; no reason 400 REASON_REQUIRED; unknown state 422 UNKNOWN_LIFECYCLE_STATE", mutate: true},
 	{id: "operations", guide: "post-operationsname-feature-operations", must: "an unknown operation is 404; a missing parameter 400; a re-send with another secret is the recorded reply, nothing written", mutate: true},
 	{id: "operations.reads", guide: "every-write-once-per-call_id", must: "an effect: read operation ignores call_id: two reads under one call_id, and a read of another operation under it, all answer 200", mutate: true},
+	{id: "results", guide: "read-operations-and-result-feature-results", must: "with feature results, every read operation answers one result valid against the schema the registry names for it; a read with no pocket is declared only with results", mutate: true},
 	{id: "operations.secret", guide: "8-security-rules", must: "a secret parameter never appears in any later byte of any reply", mutate: true},
-	{id: "operations.physical", guide: "a3-physical-operations-and-get-callscall_id-feature-calls", must: "physical operations: confirm, preview, /calls, CALL_UNSETTLED (feature calls)"},
+	{id: "operations.physical", guide: "a2-physical-operations-and-get-callscall_id-feature-calls", must: "physical operations: confirm, preview, /calls, CALL_UNSETTLED (feature calls)"},
 	{id: "freshness", guide: "a1-fresh-reads-feature-freshness", must: "fresh reads, cached and cooldown answers, single-flight (feature freshness)"},
 	{id: "dangerous-scopes", guide: "2-before-you-write-a-line", must: "the credential holds no scope the kind's denylist names (advisory: the list is self-reported)", advisory: true},
 }

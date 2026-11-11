@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -224,19 +226,22 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 	opOK := func(op, subject string) OperationResult {
 		return OperationResult{Operation: op, Subject: subject, Outcome: "succeeded"}
 	}
+	// The three reads answer `result` (feature results): the fixtures the
+	// backend's reader is held to (TestTheTrueNASAddOnWithResultsLandsInTheReader).
 	activity := opOK("activity.get", "289471021834760193")
-	activity.Activity = &ActivityReport{
-		Events:          []ActivityEvent{{At: "2026-11-10T08:12:30Z", Event: "CONNECT", Share: "makers", Success: false, Address: "192.0.2.17", Detail: "NT_STATUS_NO_SUCH_USER"}},
-		UncoveredShares: []string{"scratch"}, Truncated: true,
+	activity.Result = &ActivityReport{
+		Events:    []ActivityEvent{{At: "2026-11-10T08:12:30Z", Event: "CONNECT", Resource: "makers", Success: false, Address: "192.0.2.17", Detail: "NT_STATUS_NO_SUCH_USER"}},
+		Uncovered: []string{"scratch"}, Truncated: true, TakenAt: "2026-11-10T09:30:00Z", Current: true,
 	}
+	quota := int64(53687091200)
 	storage := opOK("storage.status", "289471021834760193")
-	storage.Storage = &StorageStatus{
-		Username: "rey_mysterio", Usable: true, NeedsPassword: true, SMBEnabled: true,
-		Shares:        []ShareUsage{{Share: "makers", UsedBytes: 19756849561, QuotaBytes: 53687091200}},
-		UsageReadable: true, NeedsNewPassword: true, Places: []Place{placeHome}, PlacesReadable: true, Standing: member,
+	storage.Result = &StorageStatus{
+		Usable: false, Standing: member, Meters: []Meter{{Label: "makers", Used: 19756849561, Limit: &quota, Unit: "bytes"}},
+		TakenAt: "2026-11-10T09:30:00Z", Current: true,
+		Places: []Place{placeHome}, PlacesReadable: true, NeedsPassword: true, NeedsNewPassword: false, QuotaRead: true,
 	}
 	health := opOK("health.get", "")
-	health.Health = &TargetHealth{
+	health.Result = &TargetHealth{
 		System:   &SystemInfo{Hostname: "nas.example.org", Version: "TrueNAS-25.10.5", UptimeSeconds: 864000.5},
 		Alerts:   []TargetAlert{{Level: "WARNING", Class: "SMART", Text: "Disk sda reports pending sectors.", At: "2026-11-09T22:41:00Z"}},
 		Pools:    []PoolStatus{{Name: "tank", Status: "ONLINE", Healthy: true, FreeBytes: 4398046511104, AllocatedBytes: 2199023255552, SizeBytes: 6597069766656}},
@@ -323,9 +328,9 @@ func TestWhatTheAddOnSendsMatchesTheContract(t *testing.T) {
 				FieldHomeQuota: []string{"5368709120"}, FieldEnabled: true, FieldSMBEnabled: true},
 		}},
 		{"POST /operations/{name} reply", "operation_response.json", "operation_response.json", adopt},
-		{"POST /operations/activity.get reply", "operation_response_activity.json", "operation_response.json", activity},
-		{"POST /operations/storage.status reply", "operation_response_storage.json", "operation_response.json", storage},
-		{"POST /operations/health.get reply", "operation_response_health.json", "operation_response.json", health},
+		{"POST /operations/activity.get reply", "operation_response_activity_result.json", "operation_response.json", activity},
+		{"POST /operations/storage.status reply", "operation_response_result.json", "operation_response.json", storage},
+		{"POST /operations/health.get reply", "operation_response_health_result.json", "operation_response.json", health},
 	} {
 		if tc.value == nil {
 			continue
@@ -500,5 +505,95 @@ func sameContractJSON(t *testing.T, got, want []byte, what string) {
 	wn, _ := json.Marshal(w)
 	if !bytes.Equal(gn, wn) {
 		t.Errorf("%s: the encoded document does not match the contract fixture\n got: %s\nwant: %s", what, gn, wn)
+	}
+}
+
+// Every read this add-on declares answers, through its real handler, a result
+// the schema registry/operations.json names for the id accepts (feature
+// results), and health.get, which declares its own, an object. The fixtures
+// show the shape; this holds what is actually sent to it, including the
+// answers a schema cannot tell apart: a share with no quota has a meter with
+// no limit (never a limit of 0, a full bar), in bytes, and a log every share
+// was recording says so with an empty uncovered list, never null.
+func TestEveryReadAnswersTheSchemaItsRegistryNames(t *testing.T) {
+	type answer struct {
+		id     string
+		result any
+	}
+	var answers []answer
+
+	fake := reachFake()
+	fake.users = `[{"username":"charlotte","id":11,"uid":200001,"locked":false,"smb":true,"password_disabled":false,
+		"groups":[41,50],"home":"/mnt/tank/main/home_dir/charlotte"}]`
+	fake.answers["pool.dataset.get_quota"] = `[]`
+	// The share main has a quota for this uid, open none.
+	fake.answers["pool.dataset.get_quota tank/main"] = `[{"id":200001,"used_bytes":5000,"quota":1000000,"quota_type":"USER"}]`
+	fake.answers["pool.dataset.get_quota tank/open"] = `[{"id":200001,"used_bytes":7,"quota_type":"USER"}]`
+	s := testServer(t, fake)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+		t.Fatal(err)
+	}
+	res, _, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := res.Result.(*StorageStatus)
+	answers = append(answers, answer{"storage.status", st})
+	limits := map[string]string{}
+	for _, m := range st.Meters {
+		if m.Unit != "bytes" {
+			t.Errorf("meter %s is in %q, not bytes", m.Label, m.Unit)
+		}
+		limits[m.Label] = "none"
+		if m.Limit != nil {
+			limits[m.Label] = strconv.FormatInt(*m.Limit, 10)
+		}
+	}
+	if vals := slices.Collect(maps.Values(limits)); !st.QuotaRead || slices.Contains(vals, "0") ||
+		!slices.Contains(vals, "none") || !slices.Contains(vals, "1000000") {
+		t.Errorf("meters %v: a quota is its limit, no quota is no limit", limits)
+	}
+
+	ops, m := opServer(t)
+	m.fakeRPC.audit = `[{"message_timestamp":1700000000,"event":"CONNECT","success":true,"address":"192.0.2.17",` +
+		`"event_data":{"service":"smb","share":"lab","result":{"type":"NTSTATUS","value_parsed":"NT_STATUS_OK"}}}]`
+	m.fakeRPC.health = map[string]string{"system.info": `{"version":"25.04.2"}`, "pool.query": `[{"name":"tank"}]`}
+	for _, tc := range []struct{ id, shares string }{
+		{"activity.get", `[{"name":"lab","audit":{"enable":false}}]`},
+		{"activity.get", `[]`}, // every share recording: uncovered is [], never null
+		{"health.get", `[]`},
+	} {
+		m.fakeRPC.shares = tc.shares
+		rr := postOperation(t, ops, tc.id, `{"call_id":"c1","subject":"sub-1"}`)
+		var doc map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &doc); rr.Code != http.StatusOK || err != nil {
+			t.Fatalf("%s: %d %s", tc.id, rr.Code, rr.Body.String())
+		}
+		for _, pocket := range []string{"activity", "storage", "health"} {
+			if _, has := doc[pocket]; has {
+				t.Errorf("%s still answers the %s pocket beside result", tc.id, pocket)
+			}
+		}
+		answers = append(answers, answer{tc.id, doc["result"]})
+	}
+
+	registry := v2JSON(t, "registry", "operations.json")["operations"].(map[string]any)
+	for _, op := range operationSet(s) {
+		if registry[op.ID].(map[string]any)["effect"] == "read" &&
+			!slices.ContainsFunc(answers, func(a answer) bool { return a.id == op.ID }) {
+			t.Errorf("%s is a read this add-on declares and this test does not hold", op.ID)
+		}
+	}
+	for _, a := range answers {
+		schema, _ := registry[a.id].(map[string]any)["result"].(string)
+		if schema == "" {
+			if _, ok := a.result.(map[string]any); !ok {
+				t.Errorf("%s answered a result that is not an object: %v", a.id, a.result)
+			}
+			continue
+		}
+		if err := v2Validate(t, schema, a.result); err != nil {
+			t.Errorf("%s's result does not satisfy %s: %v", a.id, schema, err)
+		}
 	}
 }

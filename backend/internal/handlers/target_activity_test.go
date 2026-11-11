@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 )
@@ -163,32 +164,38 @@ func TestTargetActivity_OtherFailuresGetPlainLanguageDetail(t *testing.T) {
 	}
 }
 
-func TestTargetActivity_CarriesTheUncoveredShares(t *testing.T) {
+func TestTargetActivity_CarriesTheUncoveredResources(t *testing.T) {
+	taken := time.Date(2026, 8, 20, 10, 5, 0, 0, time.UTC)
 	withActivity(t, func(context.Context, string, string, string) addons.ActivityReport {
 		return addons.ActivityReport{
-			Events:          []addons.ActivityEvent{{At: "2026-08-20T10:00:00Z", Event: "CONNECT", Share: "lab", Success: true}},
-			UncoveredShares: []string{"scratch"},
-			Outcome:         addons.OutcomeSucceeded,
+			Events:      []addons.ActivityEvent{{At: "2026-08-20T10:00:00Z", Event: "CONNECT", Resource: "lab", Success: true}},
+			Uncovered:   []string{"scratch"},
+			Truncated:   true,
+			Observation: &addons.Observation{TakenAt: taken, Current: true},
+			Outcome:     addons.OutcomeSucceeded,
 		}
 	})
 
 	rr := activityRequest("?subject=u1")
 	var body struct {
-		Readable        bool     `json:"readable"`
-		UncoveredShares []string `json:"uncovered_shares"`
-		Events          []struct {
-			Event string `json:"event"`
+		Readable  bool      `json:"readable"`
+		Uncovered []string  `json:"uncovered"`
+		Truncated bool      `json:"truncated"`
+		TakenAt   time.Time `json:"taken_at"`
+		Events    []struct {
+			Event    string `json:"event"`
+			Resource string `json:"resource"`
 		} `json:"events"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !body.Readable || len(body.Events) != 1 || body.Events[0].Event != "CONNECT" {
+	if !body.Readable || len(body.Events) != 1 || body.Events[0].Event != "CONNECT" || body.Events[0].Resource != "lab" {
 		t.Fatalf("unexpected body: %s", rr.Body.String())
 	}
 	// Without this an operator reads a short list as "quiet" when half the
 	// shares were never being watched.
-	if len(body.UncoveredShares) != 1 || body.UncoveredShares[0] != "scratch" {
-		t.Fatalf("the uncovered shares must travel: %s", rr.Body.String())
+	if len(body.Uncovered) != 1 || body.Uncovered[0] != "scratch" || !body.Truncated || !body.TakenAt.Equal(taken) {
+		t.Fatalf("the uncovered resources, truncation and read time must travel: %s", rr.Body.String())
 	}
 }

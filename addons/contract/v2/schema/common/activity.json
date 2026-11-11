@@ -16,7 +16,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Resources that were not recording this subject, so their silence is not 'did nothing'."
+      "description": "Resources that were not recording this subject, named as events[].resource names them, so their silence is not 'did nothing'."
     },
     "truncated": {
       "type": "boolean",
@@ -65,6 +65,10 @@
         "address": {
           "type": "string",
           "description": "Where it came from."
+        },
+        "resource": {
+          "type": "string",
+          "description": "The resource on the target where it happened (a share, a door, a printer), in the same vocabulary as uncovered[]."
         },
         "detail": {
           "type": "string",

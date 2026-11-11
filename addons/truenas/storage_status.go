@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // storage.status answers the two questions a member actually has: can I use
@@ -20,27 +21,35 @@ import (
 // takes no parameters at all, so there is no shape in which one member asks
 // about another.
 
-// StorageStatus is a member's own account, as the target sees it.
+// StorageStatus is a member's own account, as the target sees it: the storage
+// profile's result (profiles/storage/status.json), the common status shape
+// plus where the account connects and what its password waits on. Who it is
+// (the username) is the backend's own binding, and stays off the wire.
 type StorageStatus struct {
-	Username string `json:"username"`
 	// Usable is whether they can actually connect right now. NOT the same as
 	// the account existing: an account with password authentication disabled is
 	// present, correct, and refuses them.
 	Usable bool `json:"usable"`
+	// Standing is the account's standing, the one a subjects read reports for
+	// it (standingOf, same rule), so the member's page says it without a full
+	// subjects read.
+	Standing *Standing `json:"standing"`
+	// Meters is what they hold in each share they can see, against its quota.
+	// Empty is a real answer when QuotaRead is true.
+	Meters []Meter `json:"meters"`
+	// TakenAt is when the account was read: always now, never the mirror.
+	TakenAt string `json:"taken_at"`
+	Current bool   `json:"current"`
+	// Places is everywhere this account can connect, read from the folder
+	// ACLs for the groups it is actually in, home folder first (reach.go).
+	// PlacesReadable is false when the ACLs have never been read; an empty
+	// list that was read is "no folder is open to you yet".
+	Places         []Place `json:"places"`
+	PlacesReadable bool    `json:"places_readable"`
 	// NeedsPassword is the reason, when there is one an action fixes. Setting a
 	// password is what turns the account on, so this is an invitation rather
 	// than an error.
 	NeedsPassword bool `json:"needs_password"`
-	// SMBEnabled says share access is on. A member entitled to a share whose
-	// account has no password cannot have it yet — TrueNAS refuses SMB on an
-	// account with password authentication disabled — so this follows the
-	// password rather than the entitlement.
-	SMBEnabled bool `json:"smb_enabled"`
-	// Shares is what they can see, with usage. Empty is a real answer.
-	Shares []ShareUsage `json:"shares"`
-	// UsageReadable distinguishes "nothing used" from "could not look". Zero
-	// bytes and an unread quota table are the same number otherwise.
-	UsageReadable bool `json:"usage_readable"`
 	// NeedsNewPassword is an account that has had a password and is kept off
 	// SMB until it gets a new one: access was taken away, which rotated the
 	// password, and has since been given back. TrueNAS turns SMB on only in
@@ -48,28 +57,24 @@ type StorageStatus struct {
 	// opens their folders again. Distinct from a first password
 	// (NeedsPassword).
 	NeedsNewPassword bool `json:"needs_new_password"`
-	// Places is everywhere this account can connect, read from the folder
-	// ACLs for the groups it is actually in, home folder first (reach.go).
-	// PlacesReadable is false when the ACLs have never been read; an empty
-	// list that was read is "no folder is open to you yet".
-	Places         []Place `json:"places"`
-	PlacesReadable bool    `json:"places_readable"`
-	// Standing is the account's standing, the one a subjects read reports for
-	// it (standingOf, same rule), so the member's page says it without a full
-	// subjects read.
-	Standing *Standing `json:"standing"`
+	// QuotaRead distinguishes "nothing used" from "could not look" (homes.json's
+	// name for it). Zero bytes and an unread quota table are the same number
+	// otherwise.
+	QuotaRead bool `json:"quota_read"`
 }
 
-// ShareUsage is one share and what this member is holding in it.
-type ShareUsage struct {
-	Share string `json:"share"`
-	// UsedBytes is what the target says this uid is using in the dataset behind
+// Meter is one share and what this member is holding in it
+// (common/status.json's Meter), in bytes.
+type Meter struct {
+	Label string `json:"label"`
+	// Used is what the target says this uid is using in the dataset behind
 	// the share.
-	UsedBytes int64 `json:"used_bytes"`
-	// QuotaBytes is 0 when no quota is set, which is the common case and is not
-	// the same as a quota of zero. A surface must say "no limit set" rather
+	Used int64 `json:"used"`
+	// Limit is absent when no quota is set, which is the common case and is
+	// not the same as a quota of zero: a surface says "no limit set" rather
 	// than draw a full bar.
-	QuotaBytes int64 `json:"quota_bytes,omitempty"`
+	Limit *int64 `json:"limit,omitempty"`
+	Unit  string `json:"unit"`
 }
 
 // storageStatus reads the caller's own account state and usage.
@@ -79,7 +84,7 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 
-	status := StorageStatus{Username: binding.Username, Shares: []ShareUsage{}, Places: []Place{}}
+	status := StorageStatus{Meters: []Meter{}, Places: []Place{}, TakenAt: time.Now().UTC().Format(time.RFC3339), Current: true}
 
 	// Account state from a live read, not the mirror. This is the field a
 	// member is about to act on, and a mirror could be six hours old — telling
@@ -105,7 +110,6 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 			fmt.Errorf("the account this binding names is not on the target")
 	}
 	account := accounts[0]
-	status.SMBEnabled = account.SMB
 	status.NeedsPassword = account.PasswordDisabled
 	status.NeedsNewPassword = !account.PasswordDisabled && !account.SMB &&
 		binding.WantsSMB != nil && *binding.WantsSMB
@@ -120,13 +124,13 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 
 	// Usage is best-effort: a member who cannot be told their usage can still
 	// be told whether their account works, and that is the more urgent half.
-	if shares, err := s.shareUsage(account.UID); err == nil {
-		status.Shares, status.UsageReadable = shares, true
+	if meters, err := s.shareUsage(account.UID); err == nil {
+		status.Meters, status.QuotaRead = meters, true
 	}
 
 	return OperationResult{
 		Operation: "storage.status", Subject: req.Subject, Outcome: "succeeded",
-		Storage: &status,
+		Result: &status,
 	}, http.StatusOK, nil
 }
 
@@ -142,7 +146,7 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 // Matched on UID and never on the name in the quota row: that name is null for
 // a uid the target can no longer resolve, and matching on it would silently
 // report nothing for the accounts most likely to matter.
-func (s *server) shareUsage(uid int64) ([]ShareUsage, error) {
+func (s *server) shareUsage(uid int64) ([]Meter, error) {
 	var shares []struct {
 		Name    string `json:"name"`
 		Path    string `json:"path"`
@@ -153,7 +157,7 @@ func (s *server) shareUsage(uid int64) ([]ShareUsage, error) {
 		return nil, err
 	}
 
-	out := make([]ShareUsage, 0, len(shares))
+	out := make([]Meter, 0, len(shares))
 	for _, sh := range shares {
 		if !sh.Enabled || !s.considers(sh.Name) {
 			continue
@@ -180,9 +184,11 @@ func (s *server) shareUsage(uid int64) ([]ShareUsage, error) {
 			if row.ID != uid {
 				continue
 			}
-			out = append(out, ShareUsage{
-				Share: sh.Name, UsedBytes: row.UsedBytes, QuotaBytes: row.QuotaBytes,
-			})
+			m := Meter{Label: sh.Name, Used: row.UsedBytes, Unit: "bytes"}
+			if row.QuotaBytes > 0 {
+				m.Limit = &row.QuotaBytes
+			}
+			out = append(out, m)
 			break
 		}
 	}

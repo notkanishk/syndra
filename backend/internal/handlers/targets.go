@@ -647,11 +647,17 @@ func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"target":           target,
-		"subject":          subject,
-		"readable":         true,
-		"events":           report.Events,
-		"uncovered_shares": report.UncoveredShares,
-	})
+	body := map[string]any{
+		"target":    target,
+		"subject":   subject,
+		"readable":  true,
+		"events":    report.Events,
+		"uncovered": report.Uncovered,
+		"truncated": report.Truncated,
+	}
+	// When the log was read, from an add-on that says (feature results).
+	if report.Observation != nil {
+		body["taken_at"], body["current"] = report.TakenAt, report.Current
+	}
+	jsonResponse(w, http.StatusOK, body)
 }

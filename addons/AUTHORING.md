@@ -27,9 +27,10 @@ fails when one drifts. Paths that begin `v2/` or name a file directly in
 the repository root. Code is cited by symbol (`decide` in
 `addons/reference/reference.go`), never by line.
 
-**What is live.** Syndra and the TrueNAS add-on speak contract 2 today. Four
-features are in the schemas and not yet used by Syndra: `results`,
-`freshness`, `calls` and `stats`. Their rules are in the appendix,
+**What is live.** Syndra and the TrueNAS add-on speak contract 2 today,
+`results` included ([chapter 7](#read-operations-and-result-feature-results)).
+Three features are in the schemas and not yet used by Syndra: `freshness`,
+`calls` and `stats`. Their rules are in the appendix,
 [Designed, not yet served by Syndra](#appendix-designed-not-yet-served-by-syndra).
 A good time to build one is once Syndra serves it; what may be declared is
 in [chapter 3](#3-the-manifest-get-capabilities).
@@ -176,7 +177,8 @@ key, the designed features' included.
     "operations",
     "settings",
     "storage.reach",
-    "storage.homes"
+    "storage.homes",
+    "results"
   ],
   "entitlement_schema": [
     {
@@ -437,9 +439,8 @@ The rules, from draft-ietf-httpapi-idempotency-key-header where it has one:
 **A read operation is not a write.** For an operation whose registry
 `effect` is `read`, the add-on MUST ignore `call_id`: no record, no
 in-flight lease, no reuse check. Syndra sends the same `call_id` for every
-read (`read-<target>-<subject>`; `read-<target>-system-health` for
-`health.get`, in `MyStorage` and its siblings in
-`backend/internal/addons/read.go`), so an add-on that leases reads answers
+read (`read-<target>-<subject>`, the subject empty for `health.get`, from
+`Read` in `backend/internal/addons/results.go`), so an add-on that leases reads answers
 409 to the second of two page loads, and one that checks reuse answers 422
 to `activity.get` after `storage.status`. The kit's `operations.reads`
 check sends one `call_id` to every read you declare.
@@ -1312,10 +1313,9 @@ Rules for the route:
   state, and MUST ignore `call_id`
   ([A read operation is not a write](#every-write-once-per-call_id)).
   `readOperation` in `addons/truenas/operations.go` and `healthGet` in
-  `addons/reference/reference.go` are the examples. Syndra serves three
-  today, each through a read path of its own: `storage.status`,
-  `activity.get` and `health.get`. A generic reader for any `effect: read`
-  id is [designed, not yet served](#a2-results-feature-results).
+  `addons/reference/reference.go` are the examples. Syndra sends every
+  read through one path and never records one
+  ([Read operations and `result`](#read-operations-and-result-feature-results)).
 - The reply is thin by design: `outcome` and a `detail`. There is no field
   for the app's own error payload.
 - The member credential operation is `password.set`. A PIN or a card is
@@ -1350,7 +1350,85 @@ There is no destructive effect, because there is no destructive operation:
 removal disables, and `account.purge` is an admin act with a separately
 issued key. Syndra's own policy does not read `effect` yet: the rules by
 effect, `physical` included, are
-[designed, not yet served](#a3-physical-operations-and-get-callscall_id-feature-calls).
+[designed, not yet served](#a2-physical-operations-and-get-callscall_id-feature-calls).
+
+### Read operations and `result` (feature `results`)
+
+An `effect: read` operation answers what the app says now about one subject
+(or, for `health.get`, about the app). Syndra sends every one through one
+path, `Read` in `backend/internal/addons/results.go`: never dispatched,
+never written to its operations log, never confirmed. A member reads for
+themself on their own page; an admin reads for any person on that person's
+page, where the person is the `subject` and the admin the `actor`. Your add-on
+answers both the same way, about the body's `subject`.
+
+An add-on that declares `results` answers each read with one `result`
+object, valid against the schema `v2/registry/operations.json` names for the
+id under `result`:
+
+| Schema | What it is | Read by |
+|---|---|---|
+| `v2/schema/common/records.json` | things the subject holds or did: `id`, `label`, and `category`, `since`, `due`, `standing` when known | a generic list on the member's and the person's page |
+| `v2/schema/common/activity.json` | what the subject did, newest first, with the `resource` each event happened on, the resources not recording them (`uncovered`), and `truncated` | the person page's activity |
+| `v2/schema/common/status.json` | whether the subject can use the app now, and meters of use against a ceiling | a generic status block |
+| `v2/schema/profiles/storage/status.json` | `storage.status`: the status shape, plus places and password state, for kind `storage` | the storage card |
+
+An id with no `result` in the registry (`health.get`) declares its own
+object, shown raw until a page reads it. Every `result` is an observation:
+it carries `taken_at` and `current`, and `stale` exactly when `current` is
+false ([Observations](#observations-taken_at-current-stale)). Syndra reads a
+result missing a key its schema requires as no reading at all. A key that
+begins `x-`, on the result or inside a record, event or meter, is vendor
+data, shown quoted on the page and never used for a decision. The per-person
+list for an inventory, as Syndra sends `holdings.list` and an add-on answers
+it:
+
+<!-- fixture: v2/fixtures/operation_response_records.json -->
+```json
+{
+  "operation": "holdings.list",
+  "subject": "289471021834760193",
+  "outcome": "succeeded",
+  "result": {
+    "records": [
+      {
+        "id": "item-2207",
+        "label": "Soldering iron, Hakko FX-888D",
+        "category": "tools",
+        "since": "2026-11-03T16:10:00Z",
+        "due": "2026-11-17T17:00:00Z",
+        "standing": {
+          "usable": true,
+          "waiting_on": "none"
+        },
+        "x-inventory-shelf": "B4"
+      }
+    ],
+    "taken_at": "2026-11-10T09:30:00Z",
+    "current": true
+  }
+}
+```
+
+Rules:
+
+- An add-on that declares `results` MUST answer every read with `result`
+  and SHOULD NOT also send a pocket. Syndra reads `result` only from an
+  add-on that declares `results`, and from one that does not, only the typed
+  pocket the three original reads had (`storage`, `activity`, `health`, the
+  registry's `pocket`), which goes at the next major. A new add-on declares
+  `results`.
+- A read the registry gives no `pocket` (`holdings.list`) can be answered
+  only under `result`: declared without `results`, Syndra shows it
+  unavailable with that reason, and the kit's `results` check fails.
+- A new per-person list (holdings, bookings, jobs in a queue) is a read
+  operation whose `result` is `common/records.json`: a registry entry and a
+  policy entry ([chapter 14](#14-evolving)), and the page that lists it
+  exists.
+- `secret_result` will mark an id whose reply carries a secret (a generated
+  PIN). The add-on MUST record such a reply redacted: a replay and
+  `GET /calls` answer `recorded` without it. No registered operation has a
+  secret reply yet.
 
 ## 8. Security rules
 
@@ -1448,7 +1526,8 @@ not a stale one.
 `addons/reference` is a complete contract-2 add-on over an in-memory print
 queue (`kind: machine`): accounts, one field of each role, a built-in
 `lobby` printer as the value Syndra never manages, `health.get` as its one
-read operation, `password.set` and one setting. CI runs the kit against it
+read operation (two with `-features results`, which adds `holdings.list`),
+`password.set` and one setting. CI runs the kit against it
 on every push. Read `addons/reference/reference.go` in this order; each row
 says what to take from it.
 
@@ -1469,6 +1548,7 @@ says what to take from it.
 | `parseDesired` | Each desired value checked against its field's role |
 | `fingerprint`, `username` | A fingerprint with its own value for "no account"; a name derived once, at create |
 | `operation`, `healthGet` | Path and body agree; a write with the secret outside the identity and the lifecycle gate; a read that ignores `call_id` |
+| `holdingsList`, `serves` | A read answering `common/records.json` under `result`, declared only with feature `results` |
 | `setLifecycle`, `putSetting` | Lifecycle and the one setting, both through the call record; `LIFECYCLE_REFUSAL` |
 | `once` | The call rules and the in-flight lease, only a 2xx recorded |
 | `identityDigest`, `plain` | Request identity: SHA-256 over canonical JSON of decoded values |
@@ -1504,7 +1584,9 @@ What the reference simplifies, and a real add-on MUST do in full:
 - It declares neither `account.adopt` nor `account.release`, though it can
   answer `BINDING_CONFLICT`; a real add-on MUST
   ([The account operations](#the-account-operations)).
-- It declares no `results`, `freshness`, `calls` or `stats`.
+- It declares `results` only when asked (`Config.Features`, `-features
+  results`), so the kit's `results` check is watched both ways; it declares
+  no `freshness`, `calls` or `stats`.
 
 ## 12. The TrueNAS add-on
 
@@ -1532,13 +1614,15 @@ has the full map.
   `ACCOUNT_WRITE` can delete an account and TrueNAS has nothing narrower, so
   the separate purge key is an audit separation, not a capability one.
 - Read operations (`storage.status`, `activity.get`, `health.get`) are never
-  recorded, held or gated (`readOperation` in `addons/truenas/operations.go`).
+  recorded, held or gated (`readOperation` in `addons/truenas/operations.go`),
+  and answer under `result` (feature `results`): `storage.status` the storage
+  profile, `activity.get` the share as each event's `resource`.
   Call records last 30 days (`idempotencyTTL` in `addons/truenas/store.go`).
 - A NAS that cannot be reached answers a write `TARGET_UNREACHABLE`
   (`ErrNotSent` in `addons/truenas/nas.go`).
 
 Sketches for other apps (UniFi Access, a Trotec Ruby laser, an inventory
-system) are unverified and in [Appendix A.6](#a6-mapping-sketches).
+system) are unverified and in [Appendix A.5](#a5-mapping-sketches).
 
 ## 13. Validating before you ask to be connected
 
@@ -1673,7 +1757,8 @@ manifest key, health field and reply field each one introduces.
 | a new route or request field beside the core | `v2/registry/features.json` and the schema | a feature |
 | a field role | `v2/registry/roles.json`, Syndra's resolver and UI | a core change, rare by design |
 | an effect class | `v2/registry/operations.json` and Syndra's retry rule | a core change, rare by design (`physical` was the last) |
-| a metric, a per-person list | [Appendix A](#appendix-designed-not-yet-served-by-syndra) | once `stats` and `results` are served |
+| a per-person list | a read operation with `result` `common/records.json` | a registry entry and a policy entry ([Read operations and `result`](#read-operations-and-result-feature-results)) |
+| a metric | [Appendix A](#appendix-designed-not-yet-served-by-syndra) | once `stats` is served |
 
 Every contract change is an entry in `addons/contract/CHANGELOG.md` naming
 the feature or major, the schema files touched and the fixtures that
@@ -1709,33 +1794,7 @@ declares `freshness`:
 - MUST answer 429 `FRESH_READ_COOLDOWN` or 503 `TARGET_UNREACHABLE`, each
   with `Retry-After`, only when it has nothing at all to serve.
 
-### A.2 Results (feature `results`)
-
-An add-on that declares `results` answers an operation with one `result`
-object, validated by the schema the registry names for the id:
-`v2/schema/common/records.json` (things the subject holds or did),
-`common/activity.json` (events), or `common/status.json` (whether the
-subject can use the app now, and meters), or an id's own schema, shown raw
-until something reads it. A `result` is an observation and carries
-`taken_at` and `current` (and `stale` when not current), as each of those
-schemas says; the plain `operation_response.json` carries none of them. The
-fixtures are `v2/fixtures/records.json`, `activity.json`, `status.json` and
-`operation_response_result.json`. Syndra will read `result` only from an
-add-on that declares `results`, through one generic reader for every
-`effect: read` id; until then it reads the TrueNAS add-on's typed pockets
-(`activity`, `storage`, `health`), which go at the next major. A new add-on
-SHOULD write `result` and no pocket.
-
-**`secret_result`.** The registry will mark an id whose reply carries a
-secret (a generated PIN). The add-on MUST record such a reply redacted: a
-replay and `GET /calls` answer `recorded` without it. No registered
-operation has a secret reply yet.
-
-A per-person list (holdings, bookings, jobs) will be a `read` operation
-whose result is `common/records.json`: two registry entries, and the
-renderer exists.
-
-### A.3 Physical operations and `GET /calls/{call_id}` (feature `calls`)
+### A.2 Physical operations and `GET /calls/{call_id}` (feature `calls`)
 
 Schema: `v2/schema/call.json`.
 
@@ -1800,10 +1859,10 @@ Not yet in the contract's files, so not yet usable:
   `LIMIT_REACHED` (409), the `params[].format: target_id` hint and the
   inventory ids below are not yet in the registry.
 
-### A.4 Worked case: an inventory checkout
+### A.3 Worked case: an inventory checkout
 
 An inventory system where a member borrows items through Syndra (the
-mapping is in [A.6](#a6-mapping-sketches)):
+mapping is in [A.5](#a5-mapping-sketches)):
 
 - Desired state says only who can borrow: `borrower` (`account`),
   `categories` (`membership`, "May borrow from"), `max_items` (`limit` in
@@ -1856,7 +1915,7 @@ mapping is in [A.6](#a6-mapping-sketches)):
 - Overdue is `standing`: `{usable: true, waiting_on: "member", note: "1
   item overdue", next: "Return it at the desk"}`.
 
-### A.5 Statistics: `GET /stats` (feature `stats`)
+### A.4 Statistics: `GET /stats` (feature `stats`)
 
 Schema: `v2/schema/stats.json`; the manifest's `metrics[]` and
 `limits.stats_buffer` are in `v2/fixtures/manifest.json`.
@@ -2006,7 +2065,7 @@ metric that is not `per_subject`, and anything beyond
 per-person points 400 days. Admins see the totals and each person's
 numbers; a member sees their own.
 
-### A.6 Mapping sketches
+### A.5 Mapping sketches
 
 Three apps mapped onto the contract, none built. Each names what nobody has
 verified; a good habit is to verify each before relying on it.
@@ -2100,7 +2159,7 @@ From read-only checks against a live install (5 Nov 2026).
 
 **Its API is unknown: nothing about it has been researched.** This sketch
 tests the contract, not the product, and uses the operations of
-[A.4](#a4-worked-case-an-inventory-checkout).
+[A.3](#a3-worked-case-an-inventory-checkout).
 
 | Need | Mechanism |
 |---|---|

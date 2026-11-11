@@ -22,7 +22,7 @@ func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 	if err != nil || status != 200 {
 		t.Fatalf("status=%d err=%v", status, err)
 	}
-	got := res.Storage
+	got := res.Result.(*StorageStatus)
 	if got == nil {
 		t.Fatal("no storage status returned")
 	}
@@ -31,9 +31,6 @@ func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 	}
 	if !got.NeedsPassword {
 		t.Error("the member is not told the one action that fixes it")
-	}
-	if got.Username != "charlotte" {
-		t.Errorf("username = %q", got.Username)
 	}
 	// The standing a subjects read reports, carried here (contract 2): the
 	// member is waited on, with the storage page's next step.
@@ -55,13 +52,13 @@ func TestALockedAccountIsNotUsableAndNotTheMembersToFix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Storage.Usable {
+	if res.Result.(*StorageStatus).Usable {
 		t.Error("a locked account was reported as usable")
 	}
-	if res.Storage.NeedsPassword {
+	if res.Result.(*StorageStatus).NeedsPassword {
 		t.Error("a locked account told the member to set a password, which would not help")
 	}
-	if st := res.Storage.Standing; st == nil || st.Usable || st.WaitingOn != "none" {
+	if st := res.Result.(*StorageStatus).Standing; st == nil || st.Usable || st.WaitingOn != "none" {
 		t.Errorf("a switched-off account waits on nobody the member can name: %+v", st)
 	}
 }

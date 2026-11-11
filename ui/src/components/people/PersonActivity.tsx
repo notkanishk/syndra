@@ -182,7 +182,7 @@ function TargetActivityCard({
   if (activity.isError) return null;
 
   const events = data?.readable ? (data.events ?? []) : [];
-  const uncovered = data?.uncovered_shares ?? [];
+  const uncovered = data?.uncovered ?? [];
 
   return (
     <Card>
@@ -249,7 +249,7 @@ function TargetEventRow({ event }: { event: TargetActivityEvent }) {
       <span className="w-[64px] shrink-0 text-[12.5px] text-faint">{formatClock(event.at)}</span>
       <span className="min-w-[200px] flex-1 text-[14px]">
         <span className="font-semibold">{event.event}</span>
-        {event.share ? <span className="text-muted"> · {event.share}</span> : null}
+        {event.resource ? <span className="text-muted"> · {event.resource}</span> : null}
         {/* The reason, in the target's own vocabulary rather than a
             translation of it. `NT_STATUS_NO_SUCH_USER` is the string an
             operator searches for, and inventing friendlier wording would make

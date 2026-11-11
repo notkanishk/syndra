@@ -642,9 +642,11 @@ func ResolvesValue(ctx context.Context, target, field, value string) (Resolution
 }
 
 // StorageStatus is one member's own account on a target, as the target sees it
-// right now.
+// right now: storage.status read into Syndra's own view, from the storage
+// profile's result (results) or the legacy pocket. How much room is used
+// travels once, as the result's meters (ReadView); this view is what the
+// storage card decides on.
 type StorageStatus struct {
-	Username string `json:"username"`
 	// Usable is whether they can connect. NOT the same as the account
 	// existing: Syndra creates it before any password exists — it has none to
 	// set — and the target disables password authentication until the member
@@ -652,17 +654,6 @@ type StorageStatus struct {
 	Usable bool `json:"usable"`
 	// NeedsPassword is that state, named as the action that fixes it.
 	NeedsPassword bool `json:"needs_password"`
-	// SMBEnabled follows the password rather than the entitlement, because the
-	// target refuses share access on an account with no credential.
-	SMBEnabled bool `json:"smb_enabled"`
-	Shares     []struct {
-		Share      string `json:"share"`
-		UsedBytes  int64  `json:"used_bytes"`
-		QuotaBytes int64  `json:"quota_bytes,omitempty"`
-	} `json:"shares"`
-	// UsageReadable distinguishes "nothing used" from "could not look", which
-	// are the same zero otherwise.
-	UsageReadable bool `json:"usage_readable"`
 	// NeedsNewPassword is access given back after it was taken away: the
 	// account has had a password, and SMB waits for a new one. Distinct from a
 	// first password (NeedsPassword) and from re-enrolment.
@@ -940,72 +931,34 @@ type PlaceRole struct {
 	RoleKey   string `json:"role_key"`
 }
 
-// MyStorage reads one member's own account state and usage.
-//
-// A READ, dispatched like `Health` rather than like an operation: it claims no
-// durable row, because it runs on an ordinary page load and a row per page view
-// would fill the operation log with events that changed nothing — the same
-// reason an unchanged apply issues no call.
-//
-// The add-on takes no subject parameter: the subject is the call's own, set
-// here. Who may name it is the route's decision, made before this is called:
-// the member's own page passes the authenticated person as both subject and
-// actor, and the operator-only person page (GET /users/{id}/targets) passes
-// the person it shows as subject and the operator as actor.
-func MyStorage(ctx context.Context, target, subject, actor string) StorageStatus {
-	a, err := Get(target)
-	if err != nil {
-		return StorageStatus{Outcome: OutcomeUnreached, Err: err}
+// Storage is a storage.status reply read into Syndra's view.
+func (r ReadReply) Storage() StorageStatus {
+	raw, err := r.answer()
+	var w storageWire
+	switch {
+	case err != nil:
+	case r.Results:
+		// The storage profile (profiles/storage/status.json): the common
+		// status, plus the five keys the storage card decides on.
+		err = decodeShape("status", raw, &w, storageExtra...)
+	default:
+		err = json.Unmarshal(raw, &w)
 	}
-
-	body, err := json.Marshal(map[string]any{
-		"contract_version": ContractVersion,
-		"call_id":          "read-" + target + "-" + subject,
-		"operation":        "storage.status",
-		"subject":          subject,
-		"actor":            actor,
-		"params":           map[string]any{},
-	})
 	if err != nil {
-		return StorageStatus{Outcome: OutcomeUnreached, Err: err}
-	}
-
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/storage.status", Body: body})
-	if err != nil {
-		return StorageStatus{Outcome: OutcomeUnreached, Err: err}
-	}
-
-	out := StorageStatus{Outcome: resp.Outcome, Err: resp.Err}
-	if resp.Outcome != OutcomeSucceeded {
+		out := StorageStatus{}
+		out.Outcome, out.Err = r.failed(err)
 		return out
 	}
-	var envelope struct {
-		Storage *storageWire `json:"storage"`
-	}
-	if err := json.Unmarshal(resp.Body, &envelope); err != nil || envelope.Storage == nil {
-		out.Outcome = OutcomeIndeterminate
-		out.Err = fmt.Errorf("addon %s: decode storage status: %w", target, err)
-		return out
-	}
-	w := envelope.Storage
-	return StorageStatus{Username: w.Username, Usable: w.Usable, NeedsPassword: w.NeedsPassword, SMBEnabled: w.SMBEnabled,
-		Shares: w.Shares, UsageReadable: w.UsageReadable, NeedsNewPassword: w.NeedsNewPassword,
+	return StorageStatus{Usable: w.Usable, NeedsPassword: w.NeedsPassword, NeedsNewPassword: w.NeedsNewPassword,
 		Places: placesOf(w.Places), PlacesReadable: w.PlacesReadable, Standing: w.Standing, Outcome: OutcomeSucceeded}
 }
 
-// storageWire is the storage.status pocket as it travels: StorageStatus with
-// its places as the add-on sends them, never the view's.
+// storageWire is what Storage reads of either shape, the profile's result or
+// the legacy pocket: the keys they share, with places as the add-on sends them,
+// never the view's.
 type storageWire struct {
-	Username      string `json:"username"`
-	Usable        bool   `json:"usable"`
-	NeedsPassword bool   `json:"needs_password"`
-	SMBEnabled    bool   `json:"smb_enabled"`
-	Shares        []struct {
-		Share      string `json:"share"`
-		UsedBytes  int64  `json:"used_bytes"`
-		QuotaBytes int64  `json:"quota_bytes,omitempty"`
-	} `json:"shares"`
-	UsageReadable    bool        `json:"usage_readable"`
+	Usable           bool        `json:"usable"`
+	NeedsPassword    bool        `json:"needs_password"`
 	NeedsNewPassword bool        `json:"needs_new_password"`
 	Places           []placeWire `json:"places"`
 	PlacesReadable   bool        `json:"places_readable"`
@@ -1013,7 +966,7 @@ type storageWire struct {
 }
 
 // ActivityReport is what a target's own audit log says about one subject, and
-// what that log could not see.
+// what that log could not see (common/activity.json).
 //
 // Deliberately NOT merged into Syndra's audit feed by the surface that renders
 // it. Syndra's ledger records what Syndra did; this records what the account
@@ -1023,13 +976,16 @@ type storageWire struct {
 // trusted.
 type ActivityReport struct {
 	Events []ActivityEvent `json:"events"`
-	// UncoveredShares names the shares that were not watching this member —
+	// Uncovered names the resources that were not recording this member —
 	// switched off, or scoped past them by a watch or ignore list. Without it
 	// an empty result reads as "no activity", which is a different and far more
 	// reassuring statement than "nobody was watching".
-	UncoveredShares []string `json:"uncovered_shares,omitempty"`
+	Uncovered []string `json:"uncovered"`
 	// Truncated says older events exist than the newest ones returned.
-	Truncated bool `json:"truncated,omitempty"`
+	Truncated bool `json:"truncated"`
+	// Observation is when the log was read; nil from a legacy pocket, which
+	// never said.
+	*Observation
 
 	Outcome Outcome `json:"-"`
 	// Status is the add-on's raw HTTP status, carried so a caller can tell a
@@ -1043,8 +999,10 @@ type ActivityReport struct {
 type ActivityEvent struct {
 	At      string `json:"at"`
 	Event   string `json:"event"`
-	Share   string `json:"share,omitempty"`
 	Success bool   `json:"success"`
+	// Resource is where on the target it happened (a share, a door), named as
+	// Uncovered names them.
+	Resource string `json:"resource,omitempty"`
 	// Address and Detail are what make a refusal actionable. Measured against
 	// the live NAS: a week of SMB events was 553 rows, every one an
 	// AUTHENTICATION failure, and without these two the whole week renders as
@@ -1055,10 +1013,6 @@ type ActivityEvent struct {
 
 // Activity reads the target's audit log for one subject.
 //
-// A READ, dispatched like `Health` and `MyStorage` rather than as an operation:
-// it writes nothing and claims no durable row, and an operator opening a
-// person's record must not append to the operation log for having looked.
-//
 // The add-on has implemented `activity.get` since the platform landed and the
 // backend's policy table has always declared it, but nothing ever called it —
 // so the two TrueNAS roles it needs, `audit.query` and `sharing.smb.query`,
@@ -1066,53 +1020,59 @@ type ActivityEvent struct {
 // same shape as every other defect this branch found: two halves that agree
 // with each other and never meet.
 func Activity(ctx context.Context, target, subject, since string) ActivityReport {
-	a, err := Get(target)
-	if err != nil {
-		return ActivityReport{Outcome: OutcomeUnreached, Err: err}
-	}
-
 	params := map[string]any{}
 	if since != "" {
 		params["since"] = since
 	}
-	body, err := json.Marshal(map[string]any{
-		"contract_version": ContractVersion,
-		"call_id":          "read-" + target + "-" + subject,
-		"operation":        "activity.get",
-		"subject":          subject,
-		"actor":            subject,
-		"params":           params,
-	})
-	if err != nil {
-		return ActivityReport{Outcome: OutcomeUnreached, Err: err}
-	}
+	return Read(ctx, target, "activity.get", subject, subject, params).Activity()
+}
 
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/activity.get", Body: body})
-	if err != nil {
-		return ActivityReport{Outcome: OutcomeUnreached, Err: err}
+// Activity is an activity.get reply read into Syndra's view.
+func (r ReadReply) Activity() ActivityReport {
+	raw, err := r.answer()
+	var out ActivityReport
+	switch {
+	case err != nil:
+	case r.Results:
+		err = decodeActivity(raw, &out)
+	default:
+		// ponytail: the legacy pocket's names, read until major 3.
+		var w struct {
+			Events []struct {
+				ActivityEvent
+				Share string `json:"share"`
+			} `json:"events"`
+			UncoveredShares []string `json:"uncovered_shares"`
+			Truncated       bool     `json:"truncated"`
+		}
+		if err = json.Unmarshal(raw, &w); err == nil {
+			out = ActivityReport{Uncovered: w.UncoveredShares, Truncated: w.Truncated}
+			for _, e := range w.Events {
+				e.Resource = e.Share
+				out.Events = append(out.Events, e.ActivityEvent)
+			}
+		}
 	}
-
-	out := ActivityReport{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err}
-	if resp.Outcome != OutcomeSucceeded {
+	if err != nil {
+		out = ActivityReport{Status: r.Status}
+		out.Outcome, out.Err = r.failed(err)
 		return out
 	}
-	var envelope struct {
-		Activity *ActivityReport `json:"activity"`
-	}
-	if err := json.Unmarshal(resp.Body, &envelope); err != nil || envelope.Activity == nil {
-		out.Outcome = OutcomeIndeterminate
-		out.Err = fmt.Errorf("addon %s: decode activity report: %w", target, err)
-		return out
-	}
-	report := *envelope.Activity
 	// Never nil to a caller: a JSON `null` and an empty list render as
 	// different things, and "no events" is the answer this read most often
 	// gives.
-	if report.Events == nil {
-		report.Events = []ActivityEvent{}
+	if out.Events == nil {
+		out.Events = []ActivityEvent{}
 	}
-	report.Outcome = OutcomeSucceeded
-	return report
+	if out.Uncovered == nil {
+		out.Uncovered = []string{}
+	}
+	out.Outcome, out.Status = OutcomeSucceeded, r.Status
+	return out
+}
+
+func decodeActivity(raw json.RawMessage, into *ActivityReport) error {
+	return decodeShape("activity", raw, into)
 }
 
 // SystemReport is the NAS's own account of itself: what it is, what is wrong
@@ -1174,10 +1134,6 @@ type ServiceState struct {
 
 // SystemHealth reads what the target says about itself.
 //
-// A READ, dispatched like `Activity` and `MyStorage`: it writes nothing, claims
-// no durable row, and an operator opening a target page must not append to the
-// operation log for having looked.
-//
 // `health.get` was declared in the manifest, implemented by the add-on,
 // dispatched by it and given a policy entry from the day the platform landed,
 // and no line of backend code ever called it — so the surface that lists what a
@@ -1185,44 +1141,25 @@ type ServiceState struct {
 // it makes are the ones an operator wants first when a NAS misbehaves: a failing
 // disk, a degraded pool, a stopped `cifs`.
 func SystemHealth(ctx context.Context, target string) SystemReport {
-	a, err := Get(target)
-	if err != nil {
-		return SystemReport{Outcome: OutcomeUnreached, Err: err}
-	}
+	return Read(ctx, target, "health.get", "", "", nil).Health()
+}
 
-	body, err := json.Marshal(map[string]any{
-		"contract_version": ContractVersion,
-		"call_id":          "read-" + target + "-system-health",
-		"operation":        "health.get",
-		// No subject: this is about the target, not about a person. The field
-		// travels empty rather than being omitted so the add-on's request
-		// decoding sees the same shape every operation sends it.
-		"subject": "",
-		"actor":   "",
-		"params":  map[string]any{},
-	})
-	if err != nil {
-		return SystemReport{Outcome: OutcomeUnreached, Err: err}
+// Health is a health.get reply read into Syndra's view: `result` from a
+// results add-on, the `health` pocket otherwise, the same shape either way.
+//
+// ponytail: SystemReport is TrueNAS-shaped; at major 3 it goes and the raw
+// renderer serves health.get (it declares no registry result).
+func (r ReadReply) Health() SystemReport {
+	raw, err := r.answer()
+	var out SystemReport
+	if err == nil {
+		err = json.Unmarshal(raw, &out)
 	}
-
-	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/health.get", Body: body})
 	if err != nil {
-		return SystemReport{Outcome: OutcomeUnreached, Err: err}
-	}
-
-	out := SystemReport{Outcome: resp.Outcome, Err: resp.Err}
-	if resp.Outcome != OutcomeSucceeded {
+		out = SystemReport{}
+		out.Outcome, out.Err = r.failed(err)
 		return out
 	}
-	var envelope struct {
-		Health *SystemReport `json:"health"`
-	}
-	if err := json.Unmarshal(resp.Body, &envelope); err != nil || envelope.Health == nil {
-		out.Outcome = OutcomeIndeterminate
-		out.Err = fmt.Errorf("addon %s: decode system health: %w", target, err)
-		return out
-	}
-	report := *envelope.Health
-	report.Outcome = OutcomeSucceeded
-	return report
+	out.Outcome = OutcomeSucceeded
+	return out
 }

@@ -106,6 +106,11 @@ type myTargetView struct {
 	// password authentication disabled until the member sets one, so it exists,
 	// is correct, and refuses them.
 	Storage *addons.StorageStatus `json:"storage,omitempty"`
+	// Reads is every member read the target answered under feature results
+	// (storage.status, holdings.list), for the generic renderers: its shape,
+	// its result and what the add-on also says. A kind module may render the
+	// ones it specialises itself (storage reads Storage above).
+	Reads []addons.ReadView `json:"reads,omitempty"`
 	// RecordedAt dates the middle state — entitled, no account yet — which is
 	// the ordinary experience of every new member because these changes wait
 	// for an operator rather than for a timer.
@@ -204,6 +209,10 @@ func handleMyTargets(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"targets": views})
 }
+
+// storageStatusRead is the read whose answer is also the storage kind's own
+// block (Storage): the storage profile's result.
+const storageStatusRead = "storage.status"
 
 func describeMyTarget(r *http.Request, target, subject string) (myTargetView, error) {
 	view, _, err := describeTargetFor(r, target, subject)
@@ -329,21 +338,32 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 		// accepts it, and the gap between those is a member staring at working
 		// instructions that refuse them.
 		//
-		// Best-effort: a page that cannot read usage is still worth serving,
-		// and every field it fills is additive.
-		// The actor is whoever asked: the member on their own page, the
-		// operator on the person's page (each route decides who may ask).
-		if status := addonsMyStorage(r.Context(), target, subject, resolveActor(r, "")); status.Outcome == addons.OutcomeSucceeded {
-			for i := range status.Places {
-				kinds.Address(view.Connection, &status.Places[i])
+		// Every member read the target offers, each through the one read path
+		// and each once: storage.status's answer also feeds the storage block.
+		// Best-effort: a page that cannot read one is still worth serving, and
+		// every field it fills is additive. The actor is whoever asked: the
+		// member on their own page, the operator on the person's page (each
+		// route decides who may ask).
+		for _, op := range addonsMemberReads(target) {
+			reply := addonsRead(r.Context(), target, op, subject, resolveActor(r, ""), nil)
+			if reply.Results {
+				view.Reads = append(view.Reads, reply.View())
 			}
-			view.Standing = status.Standing
-			attributePlaces(r.Context(), target, set, status.Places)
-			view.HomeKept = homeKept(set, status.Places)
-			view.Storage = &status
-			rememberStorage(target, subject, status)
-			if status.NeedsNewPassword {
-				view.RestoredAt = restoredAt(r.Context(), subject, target)
+			if op != storageStatusRead {
+				continue
+			}
+			if status := reply.Storage(); status.Outcome == addons.OutcomeSucceeded {
+				for i := range status.Places {
+					kinds.Address(view.Connection, &status.Places[i])
+				}
+				view.Standing = status.Standing
+				attributePlaces(r.Context(), target, set, status.Places)
+				view.HomeKept = homeKept(set, status.Places)
+				view.Storage = &status
+				rememberStorage(target, subject, status)
+				if status.NeedsNewPassword {
+					view.RestoredAt = restoredAt(r.Context(), subject, target)
+				}
 			}
 		}
 	}

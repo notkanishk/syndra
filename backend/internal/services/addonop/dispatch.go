@@ -42,6 +42,11 @@ var ErrConfirmationRequired = errors.New("addonop: this operation requires an ex
 // credential (design §14).
 var ErrSubjectNotActor = errors.New("addonop: a member-scoped operation may only act on the person invoking it")
 
+// ErrReadNotDispatched is the refusal for an effect: read operation: a read
+// goes through addons.Read, which writes no row, and never through here, so no
+// caller can log one (design §4: one read path, no log).
+var ErrReadNotDispatched = errors.New("addonop: a read is never dispatched; it goes through the one read path")
+
 // Request is one operation invocation.
 //
 // Params carries the secret and nothing else does. It reaches the add-on and is
@@ -251,6 +256,9 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	op, err := resolveOperation(req.Target, req.Operation)
 	if err != nil {
 		return Result{}, err
+	}
+	if op.Effect == addons.EffectRead {
+		return Result{}, fmt.Errorf("%w: %s/%s", ErrReadNotDispatched, req.Target, req.Operation)
 	}
 	if op.Confirm && !req.Confirmed {
 		return Result{}, fmt.Errorf("%w: %s/%s", ErrConfirmationRequired, req.Target, req.Operation)

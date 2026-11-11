@@ -20,13 +20,14 @@ import (
 type names []string
 
 func (n *names) String() string     { return strings.Join(*n, ",") }
-func (n *names) Set(v string) error { *n = append(*n, v); return nil }
+func (n *names) Set(v string) error { *n = append(*n, strings.Split(v, ",")...); return nil }
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:8443", "address to serve on")
 	target := flag.String("target", "reference", "the target name: the salt of the key derivation")
 	secretFile := flag.String("secret-file", "", "file holding the per-target secret (trimmed UTF-8)")
-	var defects names
+	var defects, features names
+	flag.Var(&features, "features", fmt.Sprintf("serve an optional feature (repeatable, or comma-separated): %v", reference.OptionalFeatures))
 	flag.Var(&defects, "defect", fmt.Sprintf("switch on a deliberate contract violation, for the kit's self-tests only (repeatable): %v", reference.Defects))
 	flag.Parse()
 
@@ -42,7 +43,7 @@ func main() {
 	if len(set) > 0 {
 		log.Printf("WARNING: deliberately violating the contract (%s); never connect this to Syndra", defects.String())
 	}
-	addon, err := reference.New(reference.Config{Target: *target, Secret: []byte(secret), Defects: set})
+	addon, err := reference.New(reference.Config{Target: *target, Secret: []byte(secret), Features: features, Defects: set})
 	if err != nil {
 		log.Fatal(err)
 	}

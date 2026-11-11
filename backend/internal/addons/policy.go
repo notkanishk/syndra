@@ -43,7 +43,28 @@ type OperationPolicy struct {
 	// no cannot remove it; a manifest saying yes adds it.
 	Confirm bool
 	Params  []ParamSpec
+	// Effect is what the operation changes (registry/operations.json): a read
+	// is served through Read alone, never dispatched, logged or confirmed.
+	Effect string
+	// Result is the schema a feature-results add-on answers under `result`,
+	// relative to v2/schema; "" for an id that declares its own.
+	Result string
+	// Pocket is the reply key a read was answered under before feature
+	// results: the add-on's own typed report, which the core compiled. Read
+	// only from an add-on without results; a read with none needs results.
+	//
+	// ponytail: deleted at major 3, with the pockets; then every read needs results.
+	Pocket string
 }
+
+// The effect vocabulary (registry/operations.json). A new class is a core
+// change: the retry rule and the read path key on it.
+const (
+	EffectRead       = "read"
+	EffectAccount    = "account"
+	EffectCredential = "credential"
+	EffectPhysical   = "physical"
+)
 
 // operationPolicy is keyed by operation id, not by (target, id): an operation
 // id is a contract-level name, and two targets offering `password.set` mean the
@@ -59,12 +80,14 @@ var operationPolicy = map[string]OperationPolicy{
 		Params: []ParamSpec{
 			{Name: "password", Type: "string", Required: true, Secret: true},
 		},
+		Effect: EffectCredential,
 	},
 	// The credential half of a revocation: mint and apply a new secret without
 	// returning or retaining it. Operator-driven, so admin.
 	"password.rotate": {
 		Scope:   ScopeAdmin,
 		Confirm: true,
+		Effect:  EffectCredential,
 	},
 	// Adoption: attach an account the target already holds to a subject.
 	//
@@ -83,6 +106,7 @@ var operationPolicy = map[string]OperationPolicy{
 			// by the same binding rule every operation goes through.
 			{Name: "username", Type: "string", Required: true},
 		},
+		Effect: EffectAccount,
 	},
 	// The one irreversible operation in the set. Confirmation is not a UI
 	// nicety here — the backend refuses the call without it.
@@ -102,6 +126,7 @@ var operationPolicy = map[string]OperationPolicy{
 			// one operation nobody had exercised.
 			{Name: "elevated_key", Type: "string", Required: true, Secret: true},
 		},
+		Effect: EffectAccount,
 	},
 	"activity.get": {
 		Scope:   ScopeAdmin,
@@ -109,10 +134,16 @@ var operationPolicy = map[string]OperationPolicy{
 		Params: []ParamSpec{
 			{Name: "since", Type: "string", Required: false},
 		},
+		Effect: EffectRead,
+		Result: "common/activity.json",
+		Pocket: "activity",
 	},
+	// Declares its own result, shown raw until a kind module reads it.
 	"health.get": {
 		Scope:   ScopeAdmin,
 		Confirm: false,
+		Effect:  EffectRead,
+		Pocket:  "health",
 	},
 	// Stop managing an account without touching it.
 	//
@@ -124,6 +155,7 @@ var operationPolicy = map[string]OperationPolicy{
 	"account.release": {
 		Scope:   ScopeAdmin,
 		Confirm: true,
+		Effect:  EffectAccount,
 	},
 	// A member asking about their own storage account: whether it can be used
 	// yet, and how much room is left.
@@ -139,12 +171,26 @@ var operationPolicy = map[string]OperationPolicy{
 	// The operator case (A-10): a person's page reads the same answer about
 	// that person, read-only, so an operator sees what the member sees. It is
 	// not a second operation and not a subject parameter. It is a read
-	// (addons.MyStorage, never dispatched), and the operator-only route
+	// (addons.Read, never dispatched), and the operator-only route
 	// GET /users/{id}/targets names the subject and passes the operator as the
 	// actor. Members still reach it only through /me/targets, for themselves.
 	"storage.status": {
 		Scope:   ScopeMember,
 		Confirm: false,
+		Effect:  EffectRead,
+		Result:  "profiles/storage/status.json",
+		Pocket:  "storage",
+	},
+	// What the member holds on the target (a borrowed item, a booked room),
+	// read live and never stored: the same read path and the same two routes
+	// as storage.status, so an admin looking at a person's page writes no
+	// operations-log row. It has no legacy pocket, so only an add-on declaring
+	// feature results can serve it.
+	"holdings.list": {
+		Scope:   ScopeMember,
+		Confirm: false,
+		Effect:  EffectRead,
+		Result:  "common/records.json",
 	},
 }
 
@@ -159,6 +205,11 @@ type EffectiveOperation struct {
 	Params            []ParamSpec
 	Available         bool
 	UnavailableReason string
+	// Effect, Result and Pocket are the policy's alone: a manifest cannot
+	// make a write a read, nor name another reply shape.
+	Effect string
+	Result string
+	Pocket string
 }
 
 // resolveOperations intersects a manifest's operation set with backend policy.
@@ -202,9 +253,18 @@ func resolveOperations(m Manifest) (ops []EffectiveOperation, unknown []string) 
 			SecretParams:      unionSecretParams(p, mo.SecretParams),
 			Available:         mo.Available,
 			UnavailableReason: mo.UnavailableReason,
+			Effect:            p.Effect,
+			Result:            p.Result,
+			Pocket:            p.Pocket,
 		}
 		if !eff.Available && eff.UnavailableReason == "" {
 			eff.UnavailableReason = "the add-on reported this operation unavailable without a reason"
+		}
+		if eff.Available && p.Effect == EffectRead && p.Pocket == "" && !m.Declares("results") {
+			// A read with no pocket to answer under: without results the
+			// add-on has no shape Syndra reads, so it is shown, not dropped.
+			eff.Available = false
+			eff.UnavailableReason = "the add-on does not declare feature results, which this read needs"
 		}
 		if previous, seen := byID[mo.ID]; seen {
 			eff = mostRestrictiveOperation(previous, eff)
@@ -229,6 +289,9 @@ func mostRestrictiveOperation(a, b EffectiveOperation) EffectiveOperation {
 		Scope:   mostRestrictiveScope(a.Scope, b.Scope),
 		Confirm: a.Confirm || b.Confirm,
 		Params:  a.Params,
+		Effect:  a.Effect,
+		Result:  a.Result,
+		Pocket:  a.Pocket,
 		// Union, for the reason the policy/manifest union exists: a second
 		// declaration that omits a secret parameter must not make the value
 		// loggable.

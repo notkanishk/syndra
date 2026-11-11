@@ -86,7 +86,10 @@ func (k *kit) mutate() error {
 		{"absent", []string{"absent-unmanaged", "plan-equals-apply"}, func() { k.absent(k.at("absent-unmanaged")) }},
 		{"limit-empty", []string{"limit-empty", "plan-equals-apply"}, func() { k.limitEmpty(k.at("limit-empty")) }},
 		{"operations", []string{"operations", "operations.secret", "strict-requests", "health"}, func() { k.operations(k.at("operations")) }},
-		{"reads", []string{"operations.reads"}, func() { k.readOperations(k.at("operations.reads"), callID) }},
+		{"reads", []string{"operations.reads", "results"}, func() {
+			k.readOperations(k.at("operations.reads"), callID)
+			k.results(k.at("results"))
+		}},
 		{"lifecycle", []string{"lifecycle", "replay.refusal", "strict-requests"}, func() { k.lifecycle(k.at("lifecycle"), k.at("replay.refusal")) }},
 		{"withdraw", []string{"withdraw-only.existing", "channel-follows-account", "plan-equals-apply"}, func() {
 			k.withdrawExisting(k.at("withdraw-only.existing"), k.at("channel-follows-account"))
@@ -389,23 +392,73 @@ func (k *kit) limitEmpty(c *check) {
 // contract, sent only for the kit's own subject, after a plan naming its
 // account (viaOwned), like every other operation.
 func (k *kit) readOperations(c *check, callID string) {
-	var reads []string
-	for id, available := range k.m.ops {
-		if available && k.c.operations[id].Effect == "read" {
-			reads = append(reads, id)
-		}
-	}
+	reads := k.readOps()
 	if len(reads) == 0 {
 		c.skip("no effect: read operation is declared available")
 		return
 	}
-	slices.Sort(reads)
 	send := k.viaOwned(c)
 	for _, id := range append([]string{reads[0]}, reads...) {
 		ex := send(request{method: http.MethodPost, target: "/operations/" + id,
 			body: k.operationBody(id, callID, map[string]any{}), schema: "operation_request.json"})
 		if doc := k.ok(c, ex, "operation_response.json"); doc != nil {
 			c.expect(str(doc, "operation") == id, "%s under the creating apply's call_id answered for %q", id, str(doc, "operation"))
+		}
+	}
+}
+
+// readOps is every effect: read operation the manifest declares available, in
+// id order.
+func (k *kit) readOps() []string {
+	var reads []string
+	for id, available := range k.m.ops {
+		if available && k.c.operations[id].Effect == "read" {
+			reads = append(reads, id)
+		}
+	}
+	slices.Sort(reads)
+	return reads
+}
+
+// results holds an add-on declaring feature results to its promise: every
+// read answers one `result`, valid against the schema the registry names for
+// the id (which also holds current false iff stale), or, for an id that
+// declares its own, an object. Without the feature, a read that had no pocket
+// to answer under before results (holdings.list) cannot be served at all, so
+// declaring it available is a failure; otherwise there is nothing to judge.
+func (k *kit) results(c *check) {
+	reads := k.readOps()
+	if !k.m.has("results") {
+		for _, id := range reads {
+			if k.c.operations[id].Pocket == "" {
+				c.fail("%s is declared available without feature results, and has no other shape to answer in", id)
+			}
+		}
+		if len(c.fails) == 0 {
+			c.skip("feature results not declared")
+		}
+		return
+	}
+	if len(reads) == 0 {
+		c.skip("no effect: read operation is declared available")
+		return
+	}
+	send := k.viaOwned(c)
+	for _, id := range reads {
+		ex := send(request{method: http.MethodPost, target: "/operations/" + id,
+			body: k.operationBody(id, k.callID(), map[string]any{}), schema: "operation_request.json"})
+		doc := k.ok(c, ex, "operation_response.json")
+		if doc == nil {
+			continue
+		}
+		result, ok := doc["result"].(map[string]any)
+		if !c.expect(ok, "%s: an add-on declaring results answered no result object", id) {
+			continue
+		}
+		if schema := k.c.operations[id].Result; schema != "" {
+			if err := k.c.validate(schema, result); err != nil {
+				c.fail("%s: the result %v", id, err)
+			}
 		}
 	}
 }

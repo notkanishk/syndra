@@ -183,6 +183,8 @@ func goodManifest() Manifest {
 		Operations: []Operation{
 			{ID: "health.get", Scope: ScopeAdmin, Available: true},
 			{ID: "password.set", Scope: ScopeMember, SecretParams: []string{"password"}, Available: true},
+			{ID: "storage.status", Scope: ScopeMember, Available: true},
+			{ID: "activity.get", Scope: ScopeAdmin, Available: true},
 		},
 	}
 }

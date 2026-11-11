@@ -35,19 +35,19 @@ const testSecret = "conformance-self-test-secret-not-a-credential"
 // false, and after, answered true.
 func serve(t *testing.T, secret string, hook func(r *http.Request, body []byte, answered bool), defects ...reference.Defect) (string, func() []string) {
 	t.Helper()
-	return serveRewriting(t, secret, hook, nil, defects...)
+	return serveRewriting(t, secret, hook, nil, nil, defects...)
 }
 
 // serveRewriting is serve with each reply body passed through rewrite, for an
-// answer the reference never gives.
+// answer the reference never gives, and the reference serving features.
 func serveRewriting(t *testing.T, secret string, hook func(r *http.Request, body []byte, answered bool),
-	rewrite func(r *http.Request, reply []byte) []byte, defects ...reference.Defect) (string, func() []string) {
+	rewrite func(r *http.Request, reply []byte) []byte, features []string, defects ...reference.Defect) (string, func() []string) {
 	t.Helper()
 	set := map[reference.Defect]bool{}
 	for _, d := range defects {
 		set[d] = true
 	}
-	addon, err := reference.New(reference.Config{Target: "reference", Secret: []byte(secret), Defects: set})
+	addon, err := reference.New(reference.Config{Target: "reference", Secret: []byte(secret), Features: features, Defects: set})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
 			skipped = append(skipped, res.ID)
 		}
 	}
-	want := []string{"subjects.paged", "replay.29d", "operations.physical", "freshness", "dangerous-scopes"}
+	want := []string{"subjects.paged", "replay.29d", "results", "operations.physical", "freshness", "dangerous-scopes"}
 	if !slices.Equal(skipped, want) {
 		t.Errorf("skipped %v, want exactly %v", skipped, want)
 	}
@@ -221,7 +221,11 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.LogHeadEmpty:        "health",
 		reference.ReadsTakeCallID:     "operations.reads",
 		reference.StateShowsUnlisted:  "unlisted-hidden",
+		reference.ResultOffSchema:     "results",
+		reference.ResultInPocket:      "results",
 	}
+	// A defect in a feature's half is served with that feature declared.
+	features := map[reference.Defect][]string{reference.ResultOffSchema: {"results"}, reference.ResultInPocket: {"results"}}
 	for _, d := range reference.Defects {
 		id, ok := catches[d]
 		if !ok {
@@ -233,7 +237,7 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		}
 		t.Run(string(d), func(t *testing.T) {
 			t.Parallel()
-			url, _ := serve(t, testSecret, nil, d)
+			url, _ := serveRewriting(t, testSecret, nil, nil, features[d], d)
 			r, err := Run(context.Background(), config(url, true))
 			if err != nil && !errors.Is(err, ErrReadsFailed) {
 				t.Fatal(err)
@@ -1539,7 +1543,7 @@ func TestUnlistedHiddenIsNotJudgedFromAStaleReply(t *testing.T) {
 			return reply
 		}
 		return bytes.Replace(reply, []byte(`"current":true`), []byte(`"current":false,"stale":{"reason":"cached"}`), 1)
-	}, reference.StateShowsUnlisted)
+	}, nil, reference.StateShowsUnlisted)
 	if r, err := Run(context.Background(), config(url, true)); err != nil && !errors.Is(err, ErrReadsFailed) {
 		t.Fatal(err)
 	} else if r.Status("unlisted-hidden") != "fail" {
@@ -1560,4 +1564,39 @@ func TestUnlistedHiddenIsNotJudgedFromAStaleReply(t *testing.T) {
 		}
 	}
 	t.Fatal("no unlisted-hidden result")
+}
+
+// The results check (feature results) is a skip, with the reason, when the
+// feature is not declared, and a pass against the reference serving it, every
+// read's result held to its registry schema. A read with no pocket declared
+// without results fails: it has no shape to answer in.
+func TestTheResultsCheckJudgesOnlyWhatIsDeclared(t *testing.T) {
+	url, _ := serve(t, testSecret, nil)
+	r := run(t, config(url, true))
+	if got := r.Status("results"); got != "skip" {
+		t.Errorf("results says %s against a reference without the feature, want skip", got)
+	}
+
+	url, seen := serveRewriting(t, testSecret, nil, nil, []string{"results"})
+	r = run(t, config(url, true))
+	if got := r.Status("results"); got != "pass" || r.Failed() {
+		t.Errorf("results says %s against the reference serving it (failed %v): %v", got, r.Failed(), failures(r))
+	}
+	if !slices.Contains(seen(), "POST /operations/holdings.list") {
+		t.Error("holdings.list was never read")
+	}
+
+	url, _ = serveRewriting(t, testSecret, nil, func(r *http.Request, reply []byte) []byte {
+		if r.URL.Path != "/capabilities" {
+			return reply
+		}
+		return bytes.Replace(reply, []byte(`,"results"]`), []byte(`]`), 1)
+	}, []string{"results"})
+	r, err := Run(context.Background(), config(url, true))
+	if err != nil && !errors.Is(err, ErrReadsFailed) {
+		t.Fatal(err)
+	}
+	if got := r.Status("results"); got != "fail" {
+		t.Errorf("holdings.list declared without results: results says %s, want fail", got)
+	}
 }

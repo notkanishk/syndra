@@ -1216,10 +1216,16 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   `physical` operation (`item.checkout` with `item_id`, per-subject
   serialisation, natural idempotency, refused when the target is marked
   unreachable). ~200 lines #ready-for-agent
+  - [x] The `results` half (slice 6a, 11 Nov 2026): `Config.Features` /
+    `-features results` adds `results` and `holdings.list` (member, the
+    printers the account may use, as `common/records.json`, current, call_id
+    ignored, every lifecycle, 422 for an unbound subject), and `health.get`
+    answers under `result`; defects `result-off-schema` and
+    `result-in-pocket`. The other four halves stay open.
 
 **`results` (decision 20)**
 
-- [ ] 6.1 `registry/operations.json[id].result` (a schema ref); an add-on
+- [x] 6.1 `registry/operations.json[id].result` (a schema ref); an add-on
   declaring `results` answers one `result` validated against the id's
   schema, and the backend reads `result` only from such an add-on (the
   typed pockets `Activity`/`Health` stay readable from one without, and are
@@ -1233,6 +1239,50 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   answers `common/status.json`; the UI's generic renderers for the three
   shapes, the `records` one driven by the reference add-on's
   `holdings.list` so the inventory target lands as a manifest and a binary #ready-for-agent
+  *Done, Go side (slice 6a, 11 Nov 2026):* contract (`holdings.list`, the
+  storage profile `profiles/storage/status.json`, activity `resource`,
+  registry `pocket`, five fixtures), backend (`addons.Read` in
+  `backend/internal/addons/results.go` the one read path; `MemberReads`;
+  `ReadReply.Storage/Activity/Health/View`; `Dispatch` refuses a read with
+  `ErrReadNotDispatched`; `myTargetView.Reads`; the activity route answers
+  `uncovered`, `truncated`, `taken_at`), TrueNAS declares `results`, the
+  reference and the kit. The admin-read test is
+  `TestAnAdminsReadOfHoldingsWritesNoOperationsRow` (handlers) over
+  `TestAnOperatorsReadOfHoldingsWritesNoRow` (addons, a begun row or a claim
+  fails it); the deploy-order pair is
+  `TestReadOperationsSendTheContractShapeAndReadTheirAnswer` (both shapes)
+  and `TestTheTrueNASAddOnWithResultsLandsInTheReader` against the fixtures
+  `TestWhatTheAddOnSendsMatchesTheContract` holds the add-on's encoding to.
+  The UI's generic renderers are 6.1u below.
+  *Decided while building:*
+  - Owner rulings O1–O3 (10 Nov): `storage.status` answers the storage
+    profile (`quota_read`); `health.get` is read into today's
+    `SystemReport` with no registry `result` (a `ponytail:` comment names
+    major 3); events carry a generic optional `resource`, not an `x-` key.
+  - Which reads have a pocket is the registry's (`pocket`), held equal to
+    the policy's `Pocket` by `TestEveryPolicyOperationIsInTheRegistry`, so
+    the backend and the kit read one list instead of each keeping one.
+  - Syndra's `StorageStatus` loses `username`, `smb_enabled`, `shares` and
+    `usage_readable`: no page read them, two could not be filled honestly
+    from the profile, and use now travels once, as the status meters in
+    `reads`.
+  - `reads` lists only replies under `result`: a legacy pocket feeds its own
+    typed reader (the storage card) and nothing generic, so a deploy in
+    either order shows the same card.
+  - A result missing a key its schema requires (top level or per item, and
+    the profile's five) is not a reading (indeterminate, `readable: false`);
+    the `current` ⇔ `stale` invariant is the kit's, not refused at runtime.
+  - `no_account` on the activity route stays the add-on's 422 (the plan's
+    B3, reading the binding first, was not needed: `ReadReply.Status`
+    carries it). The read call_id is `read-<target>-<subject>` for every
+    read, `health.get`'s subject empty (it was `-system-health`; ignored by
+    contract either way).
+  - Only member-scope reads with no required parameter are read on
+    `/me/targets` and `/users/{id}/targets`; `activity.get` and `health.get`
+    keep their admin routes, now through `Read` (B2).
+- [ ] 6.1u The UI half of 6.1: the generic renderers for the three shapes
+  from `myTargetView.reads`, and the activity list's `resource` column
+  (a separate builder, from the backend shape 6.1 left) #ready-for-agent
 
 **`freshness` (decision 21)**
 
@@ -1376,6 +1426,15 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   points summing above the total, two app reads for two concurrent fresh
   reads, a `physical` call re-executed after `in_doubt`, a preview that is
   recorded, a secret in a `/calls` answer) #ready-for-agent
+  - [x] The `results` part (slice 6a, 11 Nov 2026): check `results`
+    (`-mutate`, in the reads step): every available read answers a `result`
+    valid against its registry schema, or an object for its own; `skip`
+    without the feature, `fail` for a read with no `pocket` declared without
+    it. Watched to fail against `result-off-schema` and `result-in-pocket`,
+    to skip against the plain reference and pass with `-features results`
+    (`TestTheResultsCheckJudgesOnlyWhatIsDeclared`). The appendix lost A.2
+    to chapter 7, so A.3–A.6 are A.2–A.5 and `operations.physical` cites
+    `a2-…`.
 
 ## Out of scope, stated so nobody builds it here
 

@@ -474,10 +474,10 @@ var (
 	// Zitadel and for nothing else, so the answer to "is this target in step?"
 	// was "wait up to six hours and read a log line".
 	svcReconcileAddon = drift.ReconcileAddon
-	// A member's own account state and usage. A read, not an operation: it runs
-	// on an ordinary page load, and a durable row per page view would fill the
-	// operation log with events that changed nothing.
-	addonsMyStorage      = addons.MyStorage
+	// The one read path for every effect: read operation (storage.status,
+	// holdings.list): never dispatched, so a page view writes no row.
+	addonsRead           = addons.Read
+	addonsMemberReads    = addons.MemberReads
 	addonsReadReach      = addons.ReadReach
 	addonsReadValues     = addons.ReadValues
 	addonsReadSettings   = addons.ReadSettings
