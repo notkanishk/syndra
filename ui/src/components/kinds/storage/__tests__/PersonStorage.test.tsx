@@ -47,7 +47,7 @@ function view(over: Partial<PersonTargetView> = {}): PersonTargetView {
     reachable: true,
     health: "online",
     checked_at: new Date().toISOString(),
-    storage: { username: "roman.reigns", usable: true, needs_password: false, smb_enabled: true, places: [homePlace, renders], places_readable: true },
+    storage: { usable: true, needs_password: false, places: [homePlace, renders], places_readable: true },
     home: {
       subject_id: "u1",
       username: "roman.reigns",
@@ -129,7 +129,7 @@ describe("a person's network storage (A-10 Part 1)", () => {
     show(
       view({
         restored_at: "2026-10-20T10:00:00Z",
-        storage: { ...view().storage!, usable: false, smb_enabled: false, needs_new_password: true },
+        storage: { ...view().storage!, usable: false, needs_new_password: true },
       }),
     );
     expect(within(rowOf("Password")).getByText("Needs a new password")).toBeInTheDocument();
@@ -220,5 +220,20 @@ describe("a person's network storage (A-10 Part 1)", () => {
     const names = within(rowOf("Folders")).getAllByText(/^(zine|assets)$/).map((el) => el.textContent);
     expect(names).toEqual(["assets", "zine"]);
     expect(screen.queryByText(/Limits, holds and folders are set on/)).toBeNull();
+  });
+});
+
+describe("reads beside the storage card", () => {
+  const read = (operation: string) => ({
+    operation,
+    shape: "records" as const,
+    readable: true,
+    result: { records: [{ id: "a", label: `From ${operation}` }], taken_at: "2026-11-10T09:30:00Z", current: true },
+  });
+
+  it("skips the read it draws itself from view.storage and draws any other", () => {
+    show(view({ reads: [read("storage.status"), read("holdings.list")] }));
+    expect(screen.queryByText("From storage.status")).toBeNull();
+    expect(screen.getByText("From holdings.list")).toBeInTheDocument();
   });
 });

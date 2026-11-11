@@ -8,6 +8,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Reads } from "@/components/results/ReadResult";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FieldLabel, Input } from "@/components/ui/Input";
@@ -18,7 +19,7 @@ import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
 import type { GuideFolder } from "@/components/kinds/storage/ConnectionGuide";
 import { deviceFrom, type Device } from "@/components/kinds/storage/device";
-import { PASSWORD_STEP, isHold, stateOf, type State } from "@/components/kinds/storage/state";
+import { OWN_READS, PASSWORD_STEP, isHold, stateOf, type State } from "@/components/kinds/storage/state";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
@@ -194,6 +195,7 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
           <Withheld items={(view.suspended ?? []).filter((s) => !isHold(view, s))} schemaOf={() => view.entitlement_schema} />
         </div>
       )}
+      <Reads reads={view.reads} skip={OWN_READS} name={label} audience="member" />
     </Card>
   );
 }

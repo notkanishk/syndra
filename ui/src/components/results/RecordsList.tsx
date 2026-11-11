@@ -1,0 +1,40 @@
+"use client";
+
+import { emptyRecords } from "@/components/results/copy";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { StandingLine } from "@/components/ui/StandingLine";
+import { formatShortDate } from "@/lib/format";
+import type { RecordsResult } from "@/lib/queries/useMyStorage";
+
+/**
+ * What a person holds, one row each: its label, its category, the two dates it
+ * carries, and the add-on's own standing for it with that standing's next step.
+ * Whether a record is late is the add-on's word (its standing), never worked
+ * out here from a date.
+ */
+export function RecordsList({ result, name, audience }: { result: RecordsResult; name: string; audience: "member" | "operator" }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {result.records.length === 0 ? (
+        <p className="m-0 text-[14px] text-muted">{emptyRecords(name)}</p>
+      ) : (
+        <ul className="m-0 flex list-none flex-col p-0">
+          {result.records.map((r) => (
+            <li key={r.id} className="row-divider flex flex-wrap items-start gap-x-4 gap-y-2 py-3 first:border-t-0 first:pt-0">
+              <span className="flex min-w-[200px] flex-1 flex-col gap-0.5">
+                <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{r.label}</span>
+                <span className="text-[13px] text-faint">
+                  {[r.category, r.since && `Since ${formatShortDate(r.since)}`, r.due && `Due ${formatShortDate(r.due)}`]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </span>
+              {r.standing && <StandingLine standing={r.standing} system={name} audience={audience} />}
+            </li>
+          ))}
+        </ul>
+      )}
+      <ReadFreshness state={{ readAt: result.taken_at, current: result.current }} subject={name} />
+    </div>
+  );
+}

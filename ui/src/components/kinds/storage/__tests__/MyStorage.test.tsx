@@ -87,10 +87,8 @@ function view(over: Partial<MyTargetView> = {}): MyTargetView {
     connection: { protocol: "smb", host: HOST },
     roles: [{ project_id: "p1", role_key: "fab_lead" }],
     storage: {
-      username: "charlotte",
       usable: true,
       needs_password: false,
-      smb_enabled: true,
       places: [HOME, WADDLE, QUACK],
       places_readable: true,
     },
@@ -136,7 +134,7 @@ describe("the three states", () => {
     state.targets = [
       view({
         credential: { set: false },
-        storage: { ...view().storage!, usable: false, needs_password: true, smb_enabled: false },
+        storage: { ...view().storage!, usable: false, needs_password: true },
       }),
     ];
     renderStorage();
@@ -204,7 +202,7 @@ describe("Q-02 states", () => {
     state.targets = [
       view({
         restored_at: "2026-10-12T10:00:00Z",
-        storage: { ...view().storage!, usable: false, needs_new_password: true, smb_enabled: false },
+        storage: { ...view().storage!, usable: false, needs_new_password: true },
       }),
     ];
     renderStorage();
@@ -500,5 +498,21 @@ describe("a password change nobody has confirmed", () => {
     expect(screen.getByText(/You can set it again here once TrueNAS is back/)).toBeTruthy();
     expect(passwordField()).toBeNull();
     expect(screen.queryByText(/You can't change your password while TrueNAS is offline/)).toBeNull();
+  });
+});
+
+describe("reads beside the storage card", () => {
+  const read = (operation: string) => ({
+    operation,
+    shape: "records" as const,
+    readable: true,
+    result: { records: [{ id: "a", label: `From ${operation}` }], taken_at: "2026-11-10T09:30:00Z", current: true },
+  });
+
+  it("skips the read it draws itself from view.storage and draws any other", () => {
+    state.targets = [view({ reads: [read("storage.status"), read("holdings.list")] })];
+    renderStorage();
+    expect(screen.queryByText("From storage.status")).toBeNull();
+    expect(screen.getByText("From holdings.list")).toBeTruthy();
   });
 });

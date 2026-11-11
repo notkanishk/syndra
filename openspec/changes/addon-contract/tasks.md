@@ -1295,9 +1295,10 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   - The records fixture gains an overdue record (`item-0931`, `standing.next`) for the UI's next-step test; the guide's inline copy follows.
   - `addons.Call` refuses an `effect: read` operation (`ErrReadNotCalled`), as `Dispatch` does.
   - Deploy order: the backend reads both shapes, so it may deploy first or together with the add-on, never the add-on alone; `deploy.yml` ships both from one commit. Pockets stay off the TrueNAS add-on.
-- [ ] 6.1u The UI half of 6.1: the generic renderers for the three shapes
+- [x] 6.1u The UI half of 6.1: the generic renderers for the three shapes
   from `myTargetView.reads`, and the activity list's `resource` column
-  (a separate builder, from the backend shape 6.1 left) #ready-for-agent
+  (a separate builder, from the backend shape 6.1 left)
+  - Done: `ui/src/components/results/` (`ReadResult` picks by shape, raw fallback; `copy.ts` is the sentences, pinned to the guide's section 12), wired into the core member card, the person page's system card and the storage cards (which skip `storage.status`); `MemberTargetCard.inventory.test.tsx` renders `manifest_inventory.json` + `operation_response_records.json` with no inventory code; storage type lost `username`, `smb_enabled`, `shares`; both lint guards cover `components/results/`.
 
 **`freshness` (decision 21)**
 

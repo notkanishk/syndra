@@ -158,3 +158,32 @@ describe("the Name setting, the one write place", () => {
     expect(screen.getByText("Members see it as Ruby.")).toBeInTheDocument();
   });
 });
+
+describe("what an add-on says about a person, on their page (operators)", () => {
+  it("draws every read through the generic renderer, for the operator's audience", () => {
+    const reads = [
+      {
+        operation: "holdings.list",
+        shape: "records" as const,
+        readable: true,
+        result: {
+          records: [{ id: "a", label: "Digital caliper", standing: { usable: false, waiting_on: "member" as const, next: "Bring it back to the front desk" } }],
+          taken_at: "2026-11-10T09:30:00Z",
+          current: true,
+        },
+      },
+    ];
+    state.views = { data: [{ ...laser, reads }], error: null, refetch: () => {} };
+    render(<PersonSystems userId="u1" name="Rey" />);
+    expect(screen.getByText("Digital caliper")).toBeInTheDocument();
+    // An operator's standing is worded for the operator, not as "you".
+    const read = document.querySelector("[data-read='holdings.list']") as HTMLElement;
+    expect(within(read).getByText("Waiting on the member")).toBeInTheDocument();
+    expect(within(read).getByText("Bring it back to the front desk")).toBeInTheDocument();
+  });
+
+  it("a card with no reads draws none", () => {
+    render(<PersonSystems userId="u1" name="Rey" />);
+    expect(document.querySelector("[data-read]")).toBeNull();
+  });
+});

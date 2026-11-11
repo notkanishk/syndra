@@ -46,6 +46,9 @@ export function stateOf(view: MyTargetView): State {
   return "ready";
 }
 
+/** The read this module draws itself, from `view.storage`; any other read goes to `Reads`. */
+export const OWN_READS = ["storage.status"];
+
 export const PASSWORD_STEP = new Set<State>(["needs-password", "reenrol", "restored"]);
 
 /**

@@ -5,7 +5,6 @@ import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import { useMemo, useState } from "react";
 
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Badge } from "@/components/ui/Badge";
 import { UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 
@@ -17,11 +16,12 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { actedOn, describeAction, machineName } from "@/lib/audit-vocabulary";
 import { EventSentence, describeSends, isPasswordSend } from "@/components/audit/EventLine";
+import { ActivityRows } from "@/components/results/ActivityList";
 import { UNCOVERED_GUIDANCE, UncoveredNote } from "@/components/kinds/storage/ActivityCoverage";
 import { formatClock, formatShortDate } from "@/lib/format";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
-import { useTargetActivity, type TargetActivityEvent } from "@/lib/queries/useTargetActivity";
+import { useTargetActivity } from "@/lib/queries/useTargetActivity";
 
 /**
  * One person's history — what they did, and what was done to them.
@@ -210,9 +210,7 @@ function TargetActivityCard({
           />
         }
       >
-        {events.map((event, at) => (
-          <TargetEventRow key={`${event.at}-${at}`} event={event} />
-        ))}
+        <ActivityRows events={events} />
       </ListStates>
 
       {/* The distinction the whole card exists for. "Could not look" and
@@ -240,36 +238,6 @@ function TargetActivityCard({
         </div>
       )}
     </Card>
-  );
-}
-
-function TargetEventRow({ event }: { event: TargetActivityEvent }) {
-  return (
-    <div className="row-divider flex flex-wrap items-baseline gap-4 px-5 py-3">
-      <span className="w-[64px] shrink-0 text-[12.5px] text-faint">{formatClock(event.at)}</span>
-      <span className="min-w-[200px] flex-1 text-[14px]">
-        <span className="font-semibold">{event.event}</span>
-        {event.resource ? <span className="text-muted"> · {event.resource}</span> : null}
-        {/* The reason, in the target's own vocabulary rather than a
-            translation of it. `NT_STATUS_NO_SUCH_USER` is the string an
-            operator searches for, and inventing friendlier wording would make
-            it unfindable. */}
-        {event.detail ? (
-          <span className="ml-2 font-mono text-[12.5px] text-faint">{event.detail}</span>
-        ) : null}
-      </span>
-      {/* Where from. Without it a week of refusals is a week of refusals from
-          nowhere: on the live target 553 rows shared one verb and one outcome,
-          and the only thing that distinguished them was the address. */}
-      {event.address ? (
-        <span className="shrink-0 font-mono text-[12.5px] text-faint">{event.address}</span>
-      ) : null}
-      {/* Refusals are the rows worth finding. An access that was denied is a
-          different fact from one that never happened. */}
-      {!event.success && (
-        <Badge tone="warnSoft">Refused</Badge>
-      )}
-    </div>
   );
 }
 

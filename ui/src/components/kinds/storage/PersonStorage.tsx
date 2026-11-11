@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import { Reads } from "@/components/results/ReadResult";
+import { OWN_READS } from "@/components/kinds/storage/state";
 import { STORAGE_LABEL, isStorage } from "@/lib/nav";
 import { UserName } from "@/components/names/UserName";
 import {
@@ -208,6 +210,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
         {name}&apos;s access hasn&apos;t changed, and their folders open again when it&apos;s back.
       </OfflineNotice>
       {body}
+      <Reads reads={view.reads} skip={OWN_READS} name={label} audience="operator" />
     </Card>
   );
 }

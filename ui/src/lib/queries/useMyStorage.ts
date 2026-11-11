@@ -43,6 +43,54 @@ export interface StoragePlace {
   roles?: RoleSource[];
 }
 
+/**
+ * One read answered through the add-on contract's `results` feature: what the
+ * add-on said about this person, in one of three shapes the core knows or
+ * raw. Syndra shows it; it never decides on it, and `also_says` is whatever
+ * else the add-on added, already quoted.
+ */
+export interface Observation {
+  taken_at: string;
+  current: boolean;
+  stale?: { reason: "cached" | "cooldown" | "unreachable" | "draining" | "never_read"; retry_after?: number; note?: string };
+}
+
+export interface RecordsResult extends Observation {
+  records: Array<{
+    id: string;
+    label: string;
+    category?: string;
+    since?: string;
+    due?: string;
+    standing?: Standing;
+  }>;
+}
+
+export interface StatusResult extends Observation {
+  usable: boolean;
+  standing: Standing;
+  meters: Array<{ label: string; used: number; limit?: number; unit: string }>;
+  /** False: the meters are not the whole of it, some usage could not be read. */
+  quota_read?: boolean;
+}
+
+export interface ActivityResult extends Observation {
+  events: Array<{ at: string; event: string; success: boolean; resource?: string; address?: string; detail?: string }>;
+  uncovered: string[];
+  truncated: boolean;
+}
+
+export interface ReadView {
+  operation: string;
+  /** "" is an id's own shape, shown raw. */
+  shape: "records" | "activity" | "status" | "";
+  /** False: unreachable, refused, or a reply missing a required key. */
+  readable: boolean;
+  /** Absent when not readable; JSON text (capped) when `shape` is "". */
+  result?: RecordsResult | StatusResult | ActivityResult | string;
+  also_says?: string[];
+}
+
 export interface MyTargetView {
   target: string;
   /** What the system is called, the same name the operator's roster carries. */
@@ -72,6 +120,8 @@ export interface MyTargetView {
    * manifest's. Both absent until one is accepted ("not read yet"). */
   kind?: string;
   entitlement_schema?: EntitlementField[];
+  /** Every member-scope read the add-on answered under `results`, in the add-on's order. */
+  reads?: ReadView[];
   /** Whether the account can be used yet, and who is waited on, in the add-on's words. */
   standing?: Standing;
   /** The add-on answered. A member whose target is down is told, not shown a form that fails. */
@@ -130,13 +180,10 @@ export interface MyTargetView {
    * until its member sets one, so it exists, is correct, and refuses them.
    */
   storage?: {
-    username: string;
     /** Whether they can connect right now. */
     usable: boolean;
     /** The one action that fixes it, when that is what is wrong. */
     needs_password: boolean;
-    smb_enabled: boolean;
-    shares?: Array<{ share: string; used_bytes: number; quota_bytes?: number }>;
     /** "Nothing used" and "could not look" are the same zero without this.
      *  False when any share's usage was unread (a partial read too). */
     quota_read?: boolean;

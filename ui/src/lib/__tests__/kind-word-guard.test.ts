@@ -21,7 +21,7 @@ const WORDS = [
   'export const a = "Mount";',
   "export const a = `Shares`;",
 ];
-const CORE = ["src/components/targets/Mutant.tsx", "src/components/people/Mutant.tsx", "src/lib/queries/useThing.tsx", "src/lib/fields.ts"];
+const CORE = ["src/components/results/Mutant.tsx", "src/components/targets/Mutant.tsx", "src/components/people/Mutant.tsx", "src/lib/queries/useThing.tsx", "src/lib/fields.ts"];
 const HOMES = ["src/components/kinds/storage/Mutant.tsx", "src/app/storage/Mutant.tsx", "src/lib/nav.ts"];
 
 // JSX cannot parse in a .ts file, and a parse error is no rule message: it would pass an "allowed" check for nothing.

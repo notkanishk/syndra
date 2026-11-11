@@ -7,6 +7,7 @@ import { useShownNames } from "@/components/names/shownNames";
 import { RowSkeleton } from "@/components/states";
 import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
+import { Reads } from "@/components/results/ReadResult";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Card, CardRow } from "@/components/ui/Card";
@@ -310,6 +311,7 @@ export function PersonSystemCard({ view, userId, name }: { view: PersonTargetVie
       <CardTop target={view.target} name={system} status={<Status view={view} />} />
       <OfflineNotice view={view}>{name}&apos;s access hasn&apos;t changed.</OfflineNotice>
       {body}
+      <Reads reads={view.reads} name={system} audience="operator" />
     </Card>
   );
 }

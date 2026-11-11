@@ -664,3 +664,24 @@ Rules G20 to G31 (`design_handoff_syndra/reconcile-2026-10/RULES.md`, "Messages 
 - **Words.** Revoke direct access and Drift: forecast **Will be revoked**, **Revoked**, **Not revoked**; **Removed** stays for a bundle out of a person's set (Q4). Manage bundles: **Will be applied**, **Recorded**, **Not applied**. Every failure is "Not" plus the act's word; "Refused by Zitadel" when Syndra recorded it and Zitadel refused. Retired for good (the guard fails on them): Didn't go through, Couldn't put it on hold, Couldn't lift it, That didn't save., That did not go through., Revocation recorded, Not all sent.
 - **Send** (Pending changes, Home): **Sent 7 of 9** (changes counted, the whole said), **Sent 9**, **Not sent** (none went, or another send was running), **Nothing to send**. When the queue is empty after the send the empty state is the result and no card is drawn (Q6).
 - **Colour follows what happens to the person** (G25): red when a named person loses access that reaches a system, amber when a step is left or a state must be read, quiet for what only records, asks, previews or cancels something unsent.
+
+## 12. What an add-on says about a person (addon-contract slice 6a)
+
+One set of generic renderers (`ui/src/components/results/`) draws every member-scope read an add-on answers, by its shape (records, status, activity) and never by what the add-on is. `components/results/copy.ts` holds the sentences; `resultsCopyGuide.test.ts` fails when this table and that file disagree. Every outcome ends on a next step or "Nothing for you to do."; `{name}` is the system's name as the page calls it.
+
+| When | Says |
+|---|---|
+| A list with nothing in it | You hold nothing from {name}. Nothing for you to do. |
+| A status with no meters, nothing unread | {name} reports no usage. Nothing for you to do. |
+| An activity log with no events | No recorded activity on {name}. Nothing for you to do. |
+| A read that did not come back: title | {name} could not be read |
+| A read that did not come back: body | Syndra asked {name} and did not get a usable answer. This is not a claim that nothing is there. |
+| A read that did not come back: next step | Try again in a minute. If it keeps failing, ask makerspace staff. |
+| Usage the add-on could not read, some of it | Some usage could not be read from {name}. |
+| Usage the add-on could not read, all of it | Usage could not be read from {name}. |
+| A meter with no ceiling | no limit |
+| What the add-on adds that Syndra does not know (heading) | What the add-on also says |
+| More of it than is shown | …and {n} more |
+| Places that were not recording the person | {places} were not recording {name}, so nothing from them appears here, whether or not it happened. Switch recording on there to see them. |
+
+A record's lateness is the add-on's word (its standing note and next step, for example "Overdue since 3 November" and "Bring it back to the front desk"), never worked out in the UI from a date. The meters that were read stay when some usage was not; empty meters never stand in for "nothing used".
