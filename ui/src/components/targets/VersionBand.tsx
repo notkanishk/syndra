@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { RoleRef, UserName } from "@/components/names";
+import type { EntitlementField } from "@/lib/fields";
+import { useFieldSchema } from "@/lib/queries/useFieldSchema";
 import { fieldWords } from "@/lib/role-mapping-plan";
 import {
   usePublishMappingVersion,
@@ -40,6 +42,7 @@ import {
  * is true only while nothing lists it, and four rows discharge it.
  */
 export function VersionBand({ target, history }: { target: string; history?: MappingHistory }) {
+  const schema = useFieldSchema(target);
   const [note, setNote] = useState("");
   const publish = usePublishMappingVersion(target);
 
@@ -140,7 +143,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
           </p>
           <div className="grid gap-1.5">
             {changes.map((change) => (
-              <ChangeRow key={rowKey(change)} change={change} />
+              <ChangeRow key={rowKey(change)} change={change} schema={schema} />
             ))}
           </div>
 
@@ -180,7 +183,7 @@ const KIND: Record<MappingChange["kind"], { label: string; tone: StatusTone }> =
  * somebody who did not do it, and an empty space would read as a rendering
  * fault rather than as an absence of knowledge.
  */
-function ChangeRow({ change }: { change: MappingChange }) {
+function ChangeRow({ change, schema }: { change: MappingChange; schema: EntitlementField[] | undefined }) {
   const kind = KIND[change.kind];
   return (
     <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 rounded-inner bg-tint-1 px-3.5 py-2.5 text-[13.5px]">
@@ -188,7 +191,7 @@ function ChangeRow({ change }: { change: MappingChange }) {
       <span className="font-semibold">
         <RoleRef projectId={change.project_id} roleKey={change.role_key} />
       </span>
-      <span className="text-muted">{fieldWords(change.field)}</span>
+      <span className="text-muted">{fieldWords(change.field, schema)}</span>
       <span className="text-muted">
         {change.kind === "changed" ? (
           <>

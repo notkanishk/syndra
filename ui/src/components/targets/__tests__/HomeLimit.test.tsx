@@ -118,6 +118,8 @@ describe("giving one person their own limit", () => {
     fireEvent.change(screen.getByLabelText("Review on"), { target: { value: "2027-02-28" } });
     fireEvent.click(screen.getByRole("button", { name: "Keep this limit" }));
     await waitFor(() => expect(screen.getByText("Kept")).toBeTruthy());
+    // One wording of the choice, shared with the finding panel: a review date does not end the limit.
+    expect(screen.getByText(/It stays until somebody keeps or ends it, and lists under holds due for review on 28 Feb/)).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
     expect(sent.map((s) => s.path)).toEqual(["/allowances"]);
     unmount();
@@ -129,3 +131,5 @@ describe("giving one person their own limit", () => {
     await waitFor(() => expect(screen.getByText("Ended")).toBeTruthy());
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

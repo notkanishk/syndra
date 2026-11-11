@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AddMappingButton } from "@/components/targets/AddMappingDialog";
 import { MappingManagement } from "@/components/targets/MappingManagement";
 import type { MappingHistory, RoleMapping } from "@/lib/queries/useMappings";
 import type { TargetReach } from "@/lib/queries/useTargets";
@@ -306,8 +307,8 @@ describe("changing what a role reaches · the consequence no count implies", () 
 
     // On the REVIEW step, beside the plan — it is part of what is being
     // approved, not a caveat about the form that composed it.
-    await waitFor(() => expect(screen.getByText(/stay with that group/)).toBeTruthy());
-    expect(screen.getByText(/owner on TrueNAS/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/owns stays with it/)).toBeTruthy());
+    expect(screen.getByText(/its owner on TrueNAS/)).toBeTruthy();
     // The group it is leaving, named — "the old group" is not something an
     // operator can check against the NAS.
     expect(screen.getByText("lab_makers")).toBeTruthy();
@@ -349,7 +350,7 @@ describe("a value the target could not be asked about", () => {
     fireEvent.change(screen.getByLabelText("Group on TrueNAS"), { target: { value: "lab_x" } });
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
-    await waitFor(() => expect(screen.getByText(/stay with that group/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/owns stays with it/)).toBeTruthy());
     expect(screen.queryByText(/could not be reached, so/)).toBeNull();
   });
 });
@@ -443,5 +444,70 @@ describe("a role's home line", () => {
     expect(screen.queryByText(/home_quota →/)).toBeNull();
     expect(screen.getAllByRole("button", { name: "Change" })).toHaveLength(1);
     state.mappings = [mapping];
+  });
+});
+
+// Whether the system's accepted description has been read; the "not read yet" tests turn it off.
+const schemaState = vi.hoisted(() => ({ read: true, loading: false, error: null as unknown, refetch: vi.fn() }));
+vi.mock("@/lib/queries/useFieldSchema", async () => {
+  const m = (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock;
+  return {
+    ...m,
+    useFieldSchema: () => (schemaState.read ? m.useFieldSchema() : undefined),
+    useFieldSchemaState: () => (schemaState.read ? m.useFieldSchemaState() : { schema: undefined, loading: schemaState.loading, error: schemaState.error, refetch: schemaState.refetch }),
+    useMappingFields: () => (schemaState.read ? m.useMappingFields() : {}),
+  };
+});
+
+describe("a system whose description has not been read", () => {
+  beforeEach(() => {
+    schemaState.read = false;
+    schemaState.loading = false;
+    schemaState.error = null;
+    schemaState.refetch.mockClear();
+  });
+  afterEach(() => {
+    schemaState.read = true;
+  });
+
+  it("says not read yet, with its next step, and draws no mappings from a guess", () => {
+    renderMappings();
+    expect(screen.getByText("Syndra has not read TrueNAS's fields yet")).toBeInTheDocument();
+    expect(screen.getByText(/This fills in once TrueNAS answers/)).toBeInTheDocument();
+    expect(screen.queryByText("lab_makers")).toBeNull();
+    expect(screen.queryByText(/Add (a|the first) mapping/)).toBeNull();
+  });
+
+  it("says nothing of not-read while the roster is still being asked", () => {
+    schemaState.loading = true;
+    renderMappings();
+    expect(screen.queryByText("Syndra has not read TrueNAS's fields yet")).toBeNull();
+    expect(screen.queryByText("lab_makers")).toBeNull();
+  });
+
+  it("a failed read is the failed-read state with Try again, never 'not read yet'", () => {
+    schemaState.error = new Error("roster down");
+    renderMappings();
+    expect(screen.getByText("TrueNAS's fields could not be read")).toBeInTheDocument();
+    expect(screen.queryByText("Syndra has not read TrueNAS's fields yet")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(schemaState.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Add a mapping, with the reason", () => {
+    render(<AddMappingButton target="truenas" first={false} />);
+    expect((screen.getByText("Add a mapping").closest("button") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/has not read TrueNAS's fields yet/)).toBeInTheDocument();
+  });
+
+  it("says why while reading and after a failed read, in different words", () => {
+    schemaState.loading = true;
+    const { unmount } = render(<AddMappingButton target="truenas" first={false} />);
+    expect(screen.getByText(/still reading TrueNAS's fields/)).toBeInTheDocument();
+    unmount();
+    schemaState.loading = false;
+    schemaState.error = new Error("down");
+    render(<AddMappingButton target="truenas" first={false} />);
+    expect(screen.getByText(/could not read TrueNAS's fields/)).toBeInTheDocument();
   });
 });

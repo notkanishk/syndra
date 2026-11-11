@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
 import {
-  STORAGE_SCHEMA,
   accountField,
   fieldNoun,
   fieldsByRole,
@@ -33,7 +33,7 @@ describe("fields are read by role", () => {
 
   it("finds the account whatever it is called", () => {
     expect(accountField(ACCESS)?.name).toBe("active");
-    expect(accountField(STORAGE_SCHEMA)?.name).toBe("enabled");
+    expect(accountField(TRUENAS_SCHEMA)?.name).toBe("enabled");
     expect(accountField([])).toBeUndefined();
   });
 
@@ -48,12 +48,12 @@ describe("fields are read by role", () => {
 
   it("finds a role mapping's fields without naming any", () => {
     expect(mappingFields(ACCESS)).toEqual({ membership: "policy", flag: undefined, limit: "guests" });
-    expect(mappingFields(STORAGE_SCHEMA)).toEqual({ membership: "group", flag: "home", limit: "home_quota" });
+    expect(mappingFields(TRUENAS_SCHEMA)).toEqual({ membership: "group", flag: "home", limit: "home_quota" });
   });
 
   it("says a field in the add-on's label, lowercase, and a flag by what it gives", () => {
     expect(fieldNoun(ACCESS[0])).toBe("access policy");
-    expect(fieldNoun(STORAGE_SCHEMA[1])).toBe("home folder");
+    expect(fieldNoun(TRUENAS_SCHEMA[1])).toBe("home folder");
     expect(fieldNoun(undefined)).toBe("setting");
   });
 });
@@ -80,7 +80,7 @@ describe("formatLimit", () => {
   });
 
   it("says no limit for the field's own unlimited value", () => {
-    const quota = STORAGE_SCHEMA[2];
+    const quota = TRUENAS_SCHEMA[2];
     expect(limitWordsFor(quota, "0")).toBe("no limit");
     expect(limitWordsFor(quota, undefined)).toBe("no limit");
     expect(limitWordsFor(quota, "21474836480")).toBe("20 GB");

@@ -1,10 +1,9 @@
 "use client";
 
-import { MemberTargetCard } from "@/components/kinds/MemberTargetCard";
 import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import { useEffect, useState } from "react";
 
-import { EmptyState, ListStates } from "@/components/states";
+import { EmptyState } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
@@ -15,7 +14,6 @@ import { FieldLabel, Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
 import { Unfold } from "@/lib/motion";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
 import type { GuideFolder } from "@/components/kinds/storage/ConnectionGuide";
@@ -26,7 +24,6 @@ import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/forma
 import { targetLabel } from "@/lib/nav";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import {
-  useMyStorage,
   useSetStorageCredential,
   type MyTargetView,
   type RoleSource,
@@ -42,7 +39,9 @@ import { roleName } from "@/lib/names";
 const ConnectionGuide = dynamic(() => import("@/components/kinds/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
 
 /**
- * A member's own storage page (route-storage; A-01, A-02).
+ * The storage kind's card for a member (route-storage; A-01, A-02): the module
+ * `components/kinds/MemberTargetCard.tsx` picks for a system of kind `storage`.
+ * The page that lists the cards is `components/member/MySystems.tsx`.
  *
  * One card per system. A three-step line opens every state, so a member can
  * always see where they are: a role gives you access, your account is
@@ -54,37 +53,6 @@ const ConnectionGuide = dynamic(() => import("@/components/kinds/storage/Connect
  * backend from the registered host, and usage that couldn't be read is never
  * drawn as zero.
  */
-export function MyStorage() {
-  const targets = useMyStorage();
-
-  return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Network storage"
-        lede="Your account on the makerspace's shared storage, and how to connect to it. Your access follows the roles you hold."
-      />
-      <ListStates
-        isLoading={targets.isLoading}
-        error={targets.error}
-        isEmpty={(targets.data ?? []).length === 0}
-        onRetry={() => targets.refetch()}
-        errorTitle="Couldn't read your storage access."
-        empty={
-          <EmptyState
-            title="No shared storage yet."
-            guidance="This makerspace has not connected any storage to Syndra. When it does, your account and how to reach it appear here."
-          />
-        }
-      >
-        <div className="grid gap-4">
-          {(targets.data ?? []).map((view) => (
-            <MemberTargetCard key={view.target} view={view} />
-          ))}
-        </div>
-      </ListStates>
-    </div>
-  );
-}
 
 type State =
   | "none"
@@ -256,7 +224,7 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
 
       {!hasAccount && (view.suspended ?? []).filter((s) => s.field !== "enabled").length > 0 && (
         <div className="px-5 pb-5">
-          <Withheld items={(view.suspended ?? []).filter((s) => s.field !== "enabled")} />
+          <Withheld items={(view.suspended ?? []).filter((s) => s.field !== "enabled")} schemaOf={() => view.entitlement_schema} />
         </div>
       )}
     </Card>
@@ -520,7 +488,7 @@ function Folders({
         </NotOpenYet>
       )}
 
-      {withheld.length > 0 && <Withheld items={withheld} />}
+      {withheld.length > 0 && <Withheld items={withheld} schemaOf={() => view.entitlement_schema} />}
 
       {guide && host && view.account && (
         <ConnectionGuide

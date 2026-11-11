@@ -74,11 +74,11 @@ export interface TargetSummary {
   also_says?: string[];
   health?: HealthState;
   status?: TargetStatus;
-  /** What the manifest says each field is (its role, label, unit); the UI reads
-   * fields by role. The backend does not send it yet: see lib/fields.ts. */
-  entitlement_schema?: EntitlementField[];
-  /** The manifest's kind: storage, access, inventory or machine. */
+  /** The accepted manifest's kind (storage, access, inventory, machine) and
+   * what each field is (role, label, unit); the UI reads fields by role.
+   * Both absent until a manifest is accepted: "not read yet", never a guess. */
   kind?: string;
+  entitlement_schema?: EntitlementField[];
   /** The Zitadel project this system serves; null until chosen. */
   project?: { id: string; name: string } | null;
 }
@@ -273,6 +273,8 @@ export interface AdoptionResult {
 
 /** One account Syndra DOES manage, and who it belongs to. */
 export interface BoundAccount {
+  /** Whether the account can be used yet, and who is waited on; absent when the read did not list it. */
+  standing?: Standing;
   target: string;
   subject_id: string;
   username: string;

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSchemaSource } from "@/lib/queries/useFieldSchema";
 import { ResolvedProjectName } from "@/components/names";
 import { MemberCatalog } from "@/components/member/MemberCatalog";
 import { headerLine, type NamedRole } from "@/components/member/headerLine";
@@ -46,6 +47,7 @@ import { roleName } from "@/lib/names";
  * — no "derived", no effective_role_keys, no role keys.
  */
 export function MemberAccess({ session }: { session: SessionUser }) {
+  const schemaOf = useSchemaSource(false);
   // The member's home is a screen's first paint (S11): the greeting tints in, then the cards arrive.
   const head = usePageHead();
   const access = useUserAccess(session.id);
@@ -285,6 +287,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         <Card>
           <div className="px-5 py-4">
             <Withheld
+              schemaOf={schemaOf}
               items={inForce.map((allowance) => ({
                 field: allowance.field,
                 value: allowance.value,

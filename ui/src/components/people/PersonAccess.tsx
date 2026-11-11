@@ -57,6 +57,7 @@ import { daysUntil, expiryLabel, formatAgoShort, formatShortDate } from "@/lib/f
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 import { useApplications } from "@/lib/queries/useApplications";
 import { usePersonSignIns } from "@/lib/queries/useSignIns";
+import { useSchemaSource } from "@/lib/queries/useFieldSchema";
 import { useTargets } from "@/lib/queries/useTargets";
 import { projectSignInLine } from "@/lib/sign-in-line";
 import { sortByName } from "@/lib/sort";
@@ -202,6 +203,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
   const signIns = usePersonSignIns(userId, isOperator);
   const apps = useApplications();
   const systems = useTargets(isOperator);
+  const schemaOf = useSchemaSource(isOperator);
 
   const multiSource = useMemo(() => findMultiSource(access.data?.projects ?? []), [access.data]);
   const roleName = useRoleName();
@@ -441,6 +443,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
               <div className="px-5 py-4">
                 <Withheld
                   audience={isOperator ? "operator" : "member"}
+                  schemaOf={schemaOf}
                   items={inForce.map((a) => ({
                     field: a.field,
                     value: a.value,

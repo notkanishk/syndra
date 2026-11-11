@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 
@@ -109,5 +109,39 @@ describe("accounts Syndra manages, as the board's table", () => {
     expect(screen.getByText(/Showing 10 of 12/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Show 2 more/ }));
     expect(screen.getAllByRole("button", { name: "Revoke" })).toHaveLength(12);
+  });
+});
+
+// How the fields stand: known (the TrueNAS fixture), being read, failed, or read with no schema.
+const fields = vi.hoisted(() => ({ mode: "known" as "known" | "loading" | "failed" | "unread" }));
+vi.mock("@/lib/queries/useFieldSchema", async () => {
+  const m = (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock;
+  return {
+    ...m,
+    useFieldSchemaState: () => {
+      if (fields.mode === "known") return m.useFieldSchemaState();
+      return { schema: undefined, loading: fields.mode === "loading", error: fields.mode === "failed" ? new Error("down") : null, refetch: () => {} };
+    },
+  };
+});
+
+describe("Put on hold before the fields are known", () => {
+  afterEach(() => {
+    fields.mode = "known";
+  });
+
+  it("is off in all three states, each saying a different true thing", () => {
+    state.count = 1;
+    const said: string[] = [];
+    for (const mode of ["loading", "failed", "unread"] as const) {
+      fields.mode = mode;
+      const { unmount } = render(<PeopleOnTarget target="truenas" />);
+      expect((screen.getByRole("button", { name: "Put on hold" }) as HTMLButtonElement).disabled).toBe(true);
+      said.push((screen.getByText(/TrueNAS's fields/).textContent ?? ""));
+      unmount();
+    }
+    expect(said[0]).toMatch(/still reading/);
+    expect(said[1]).toMatch(/could not read/);
+    expect(said[2]).toMatch(/has not read/);
   });
 });

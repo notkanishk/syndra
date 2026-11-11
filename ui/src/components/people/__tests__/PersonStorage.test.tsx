@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -37,6 +38,8 @@ function view(over: Partial<PersonTargetView> = {}): PersonTargetView {
   return {
     target: "truenas",
     entitled: true,
+    kind: "storage",
+    entitlement_schema: TRUENAS_SCHEMA,
     account: { username: "roman.reigns", bound_at: "2026-09-03T10:00:00Z" },
     roles: [lead],
     credential: { set: true, last_changed_at: "2026-10-14T10:00:00Z" },

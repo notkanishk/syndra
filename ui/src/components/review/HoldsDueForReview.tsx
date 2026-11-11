@@ -1,7 +1,7 @@
 "use client";
 
-import { fieldNoun, formatLimit, type EntitlementField } from "@/lib/fields";
-import { useFieldLookup } from "@/lib/queries/useFieldSchema";
+import { fieldNoun, limitWordsFor, type EntitlementField } from "@/lib/fields";
+import { useSchemaSource, type SchemaSource } from "@/lib/queries/useFieldSchema";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useState } from "react";
 
@@ -35,6 +35,8 @@ import { useHoldsDueForReview, useLiftHold, type Hold } from "@/lib/queries/useH
  */
 export function HoldsDueForReview() {
   const due = useHoldsDueForReview();
+  // Every row is worded from its system's fields, so none is drawn before they are read (or after the read failed).
+  const schemaOf = useSchemaSource(true);
   const rows = due.data?.due_for_review ?? [];
   // S5: a hold that leaves the list on a later read (lifted, kept or ended elsewhere) fades where
   // it was and closes its gap after, and not under the pointer.
@@ -57,10 +59,13 @@ export function HoldsDueForReview() {
       )}
       <Card {...leaving.listProps}>
         <ListStates
-          isLoading={due.isLoading}
-          error={due.error}
+          isLoading={due.isLoading || schemaOf.loading}
+          error={due.error ?? schemaOf.error}
           isEmpty={rows.length === 0}
-          onRetry={() => due.refetch()}
+          onRetry={() => {
+            if (due.error) void due.refetch();
+            if (schemaOf.error) schemaOf.refetch();
+          }}
           errorTitle="Couldn't load holds due."
           empty={
             <EmptyState
@@ -76,9 +81,9 @@ export function HoldsDueForReview() {
             {leaving.rows.map((hold, i) => (
               <LeavingRow key={hold.id} {...leaving.props(hold.id)}>
                 {hold.direction === "set" ? (
-                  <OwnValueRow hold={hold} first={i === 0} />
+                  <OwnValueRow hold={hold} first={i === 0} schemaOf={schemaOf} />
                 ) : (
-                  <HoldRow hold={hold} first={i === 0} />
+                  <HoldRow hold={hold} first={i === 0} schemaOf={schemaOf} />
                 )}
               </LeavingRow>
             ))}
@@ -105,11 +110,15 @@ function Subject({ id }: { id: string }) {
  * sent verbatim — "true" for a whole account — and is the wrong thing to put
  * in a sentence (see `HoldDialog`).
  */
-function holdLabel(hold: Hold, field: EntitlementField | undefined): string {
+function holdLabel(hold: Hold, schema: EntitlementField[] | undefined): string {
+  const field = schema?.find((f) => f.name === hold.field);
+  // No accepted description of the system: say so rather than word the hold from a guess.
+  if (!schema) return `something on ${targetLabel(hold.target)}, whose fields Syndra has not read yet`;
   if (field?.role === "account") return `their ${targetLabel(hold.target)} account`;
-  if (hold.field === "share") return `the ${hold.value} share`;
   if (field?.role === "membership") return `the ${hold.value} ${fieldNoun(field)}`;
-  return `${hold.field} ${hold.value}`;
+  if (field?.role === "flag") return `their ${fieldNoun(field)}`;
+  if (field?.role === "limit") return `their ${fieldNoun(field)}, ${limitWordsFor(field, hold.value)}`;
+  return `${fieldNoun(field)} ${hold.value}`;
 }
 
 /**
@@ -117,14 +126,17 @@ function holdLabel(hold: Hold, field: EntitlementField | undefined): string {
  * their roles give. Read-only here; it is kept or ended on the system's page,
  * its one write place (A-03 §3).
  */
-function OwnValueRow({ hold, first }: { hold: Hold; first: boolean }) {
+function OwnValueRow({ hold, first, schemaOf }: { hold: Hold; first: boolean; schemaOf: SchemaSource }) {
   const system = targetLabel(hold.target);
-  const bytes = Number(hold.value);
-  const limit = !bytes ? "no limit" : formatLimit(bytes, "bytes");
+  const schema = schemaOf(hold.target);
+  const field = schema?.find((f) => f.name === hold.field && f.role === "limit");
+  // The value's words are the field's: its unit, its "no limit". Not read, Syndra says so rather than guess.
+  const limit = field ? limitWordsFor(field, hold.value) : null;
+  const what = field ? `their own ${fieldNoun(field)}, ${limit}` : `their own value, which Syndra cannot word until it has read ${system}'s fields`;
   return (
     <CardRow first={first} className="flex-wrap">
       <Subject id={hold.subject_id} />
-      <span className="text-[13.5px]">their own home folder limit, {limit}</span>
+      <span className="text-[13.5px]">{what}</span>
       <span className="text-[13px] text-faint">
         on {system} · set by <UserName id={hold.actor_id} /> <Relative iso={hold.created_at} />
       </span>
@@ -136,16 +148,16 @@ function OwnValueRow({ hold, first }: { hold: Hold; first: boolean }) {
         {hold.reason || <span className="text-faint">No reason recorded.</span>}
       </p>
       <p className="w-full text-[13px] text-faint">
-        Review date passed <Relative iso={hold.review_date} />. It stays at {limit} until it is kept or ended.
+        Review date passed <Relative iso={hold.review_date} />. {limit ? `It stays at ${limit}` : "It stays as it is"} until it is kept or ended.
       </p>
     </CardRow>
   );
 }
 
-function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
+function HoldRow({ hold, first, schemaOf }: { hold: Hold; first: boolean; schemaOf: SchemaSource }) {
   const lift = useLiftHold();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const label = holdLabel(hold, useFieldLookup()(hold.target, hold.field));
+  const label = holdLabel(hold, schemaOf(hold.target));
 
   return (
     <CardRow first={first} className="flex-wrap">

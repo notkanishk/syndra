@@ -53,3 +53,5 @@ describe("accounts on a connected system", () => {
     expect(screen.queryByText(/200001/)).not.toBeInTheDocument();
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

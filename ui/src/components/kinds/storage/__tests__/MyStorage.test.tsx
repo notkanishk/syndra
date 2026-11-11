@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MyStorage } from "@/components/kinds/storage/MyStorage";
+import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
+import { MySystems } from "@/components/member/MySystems";
 import { deviceFrom } from "@/components/kinds/storage/device";
 import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
@@ -73,6 +74,8 @@ const QUACK = place({ path: "main/quack_share", access: "read", usage: { used_by
 function view(over: Partial<MyTargetView> = {}): MyTargetView {
   return {
     target: "truenas",
+    kind: "storage",
+    entitlement_schema: TRUENAS_SCHEMA,
     entitled: true,
     account: { username: "charlotte" },
     credential: { set: true, last_changed_at: "2026-09-20T10:00:00Z" },
@@ -98,7 +101,7 @@ function renderStorage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MyStorage />
+      <MySystems />
     </QueryClientProvider>,
   );
 }

@@ -84,7 +84,7 @@ export const GLOSSARY = {
   provision: {
     title: "Provision",
     definition:
-      "Create the account and everything that goes with it (home directory, primary group, shell) rather than merely adding a membership to an account that already exists.",
+      "Create the account on the system, not only add a membership to an account that already exists.",
     kind: "standard",
   },
   reconcile: {

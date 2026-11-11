@@ -64,12 +64,22 @@ const eslintConfig = [
      * useFieldSchema and says what comes back in the add-on's label. "group"
      * is also a layout word (a nav group, role="group"), so it is refused only
      * where it names a field: compared with `.field`, a `field=` prop, a
-     * `field:` property, or a FIELD_* constant.
+     * `field:` property, a FIELD_* constant, or a `switch` on one. "Compared
+     * with a field" is `.field` or a bare `field` identifier; a literal is a
+     * string or a template with no expressions (`\`group\``).
      */
     const fieldWord = "Literal[value=/^(home|home_quota|enabled|smb_enabled|smb)$/]";
+    const fieldWordTemplate = "TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked=/^(home|home_quota|enabled|smb_enabled|smb)$/]";
+    const literalGroup = ["Literal[value='group']", "TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked='group']"];
     const roles = [
       fieldWord,
-      "BinaryExpression:has(> MemberExpression[property.name='field']) > Literal[value='group']",
+      fieldWordTemplate,
+      ...literalGroup.flatMap((lit) => [
+        `BinaryExpression:has(> MemberExpression[property.name='field']) > ${lit}`,
+        `BinaryExpression:has(> Identifier[name='field']) > ${lit}`,
+        `SwitchStatement[discriminant.property.name='field'] > SwitchCase > ${lit}`,
+        `SwitchStatement[discriminant.name='field'] > SwitchCase > ${lit}`,
+      ]),
       "JSXAttribute[name.name='field'] > Literal[value='group']",
       "Property[key.name='field'] > Literal[value='group']",
       "VariableDeclarator[id.name=/^FIELD/] > Literal[value='group']",
@@ -77,7 +87,7 @@ const eslintConfig = [
       selector,
       ...message("Read fields by role through lib/fields.ts (fieldsByRole, useFieldSchema); field names live only in lib/fields.ts and components/kinds/storage/."),
     }));
-    const tests = ["src/**/__tests__/**", "src/**/*.test.{ts,tsx}"];
+    const tests = ["src/**/__tests__/**", "src/**/__fixtures__/**", "src/**/*.test.{ts,tsx}"];
     const storage = ["src/lib/fields.ts", "src/components/kinds/storage/**"];
     return [
       {
@@ -97,32 +107,48 @@ const eslintConfig = [
       },
     ];
   })(),
-  {
-    /**
-     * One path for a missing name (one-path W2d). "Unknown project" is said by
-     * the names components only: projectLabel(name) where a string is needed,
-     * <ProjectName> where a component is. Importing the phrase elsewhere is how
-     * a second fallback starts. Its own rule, not no-restricted-syntax: a later
-     * block setting that rule would replace the invalidation guard above.
-     */
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/components/names/**", "src/**/__tests__/**", "src/**/*.test.{ts,tsx}"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          // By pattern, so the alias and any relative path are both caught.
-          patterns: [
+  ...(() => {
+    /** Fixtures are for tests: production code never imports one (a hand-made schema in a screen is a second source of the fact). */
+    const fixtures = {
+      group: ["**/__fixtures__", "**/__fixtures__/**"],
+      message: "Fixtures are for tests only; production code reads the real source.",
+    };
+    const tests = ["src/**/__tests__/**", "src/**/__fixtures__/**", "src/**/*.test.{ts,tsx}"];
+    return [
+      {
+        files: ["src/components/names/**/*.{ts,tsx}"],
+        ignores: tests,
+        rules: { "no-restricted-imports": ["error", { patterns: [fixtures] }] },
+      },
+      {
+        /**
+         * One path for a missing name (one-path W2d). "Unknown project" is said by
+         * the names components only: projectLabel(name) where a string is needed,
+         * <ProjectName> where a component is. Importing the phrase elsewhere is how
+         * a second fallback starts. Its own rule, not no-restricted-syntax: a later
+         * block setting that rule would replace the invalidation guard above.
+         */
+        files: ["src/**/*.{ts,tsx}"],
+        ignores: ["src/components/names/**", ...tests],
+        rules: {
+          "no-restricted-imports": [
+            "error",
             {
-              group: ["**/components/names", "**/components/names/Unresolved", "**/names/Unresolved"],
-              importNames: ["UNKNOWN_PROJECT"],
-              message: "Say a missing project name through projectLabel(name) or <ProjectName>, the one fallback.",
+              // By pattern, so the alias and any relative path are both caught.
+              patterns: [
+                fixtures,
+                {
+                  group: ["**/components/names", "**/components/names/Unresolved", "**/names/Unresolved"],
+                  importNames: ["UNKNOWN_PROJECT"],
+                  message: "Say a missing project name through projectLabel(name) or <ProjectName>, the one fallback.",
+                },
+              ],
             },
           ],
         },
-      ],
-    },
-  },
+      },
+    ];
+  })(),
 ];
 
 export default eslintConfig;

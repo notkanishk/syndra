@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Select";
+import { UntilChoice, untilWords } from "@/components/targets/UntilChoice";
 import { request } from "@/lib/api-client";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { formatLimit } from "@/lib/fields";
@@ -138,6 +139,7 @@ export function LimitDialog({
   const system = targetLabel(target);
   const roleLabel = useRoleLabel();
   const set = useSetOwnLimit(target);
+  const limitField = useMappingFields(target).limit;
   const lift = useLiftHold();
   const own = home.own;
   const [kind, setKind] = useState<"size" | "none">(own?.bytes === 0 ? "none" : "size");
@@ -149,7 +151,7 @@ export function LimitDialog({
 
   const bytes = kind === "none" ? 0 : Math.round(Number(gb) * GB);
   const sized = kind === "none" || (Number(gb) > 0 && Number.isFinite(Number(gb)));
-  const ready = sized && reason.trim() !== "" && date !== "";
+  const ready = sized && reason.trim() !== "" && date !== "" && Boolean(limitField);
   const from = roleLabel(home.roles_limit_from);
   const rolesWords = home.roles_limit === undefined ? "no limit" : `up to ${gbWords(home.roles_limit)}`;
   const busy = set.isPending || lift.isPending;
@@ -171,7 +173,7 @@ export function LimitDialog({
         onSuccess: () =>
           setDone({
             word: reviewing ? "Kept" : "Given",
-            message: `${name} has their own limit of ${kind === "none" ? "no limit" : gbWords(bytes)}, and ${system} gets it now.`,
+            message: `${name} has their own limit of ${kind === "none" ? "no limit" : gbWords(bytes)}, and ${system} gets it now. It ${untilWords(until, endOfDayISO(date))}.`,
           }),
       },
     );
@@ -221,25 +223,14 @@ export function LimitDialog({
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="type-label text-label">Until</span>
-          <span className="flex flex-wrap items-center gap-3">
-            <Segmented
-              label="Until"
-              value={until}
-              onChange={setUntil}
-              options={[
-                { value: "ends", label: "Ends on" },
-                { value: "review", label: "Review on" },
-              ]}
-            />
-            <span className="w-[170px]">
-              <Input aria-label={until === "ends" ? "Ends on" : "Review on"} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </span>
-          </span>
-          <FieldHint>
-            {until === "ends"
-              ? `On that day their roles' ${rolesWords} comes back by itself. If they have more than that in their folder then, they keep it all and can't save more until they're under.`
-              : "It stays until you keep it or end it. On that day it lists under Holds due."}
-          </FieldHint>
+          <UntilChoice
+            until={until}
+            onUntil={setUntil}
+            date={date}
+            onDate={setDate}
+            comesBack={`their roles' ${rolesWords}`}
+            endsNote="If they have more than that in their folder then, they keep it all and can't save more until they're under."
+          />
         </div>
         {(set.error || lift.error) && (
           <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error ?? lift.error))}</p>

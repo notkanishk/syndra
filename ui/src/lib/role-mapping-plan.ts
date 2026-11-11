@@ -1,5 +1,5 @@
 import { ApiError } from "@/lib/api-client";
-import { STORAGE_SCHEMA, fieldNoun, mappingFields, type EntitlementField, type MappingFields } from "@/lib/fields";
+import { fieldNoun, type EntitlementField, type MappingFields } from "@/lib/fields";
 import { describeFailure, sentence } from "@/lib/outcome";
 import type { BulkEffect, BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 import {
@@ -22,15 +22,11 @@ import {
  */
 
 /**
- * The fields a role mapping works with, found by role (`mappingFields`): the
- * membership, the flag and the limit. Left out, they are the storage kind's,
- * the only kind that exists today (`STORAGE_SCHEMA`).
+ * A mapping's field in words, from the add-on's own label (A-20 P11). A schema
+ * not read yet, or a field it does not declare, is "setting".
  */
-const STORAGE_FIELDS: MappingFields = mappingFields(STORAGE_SCHEMA);
-
-/** A mapping's field in words, from the add-on's own label (A-20 P11). */
-export function fieldWords(field: string | undefined, schema: EntitlementField[] = STORAGE_SCHEMA): string {
-  return fieldNoun(schema.find((f) => f.name === field));
+export function fieldWords(field: string | undefined, schema: EntitlementField[] | undefined): string {
+  return fieldNoun(schema?.find((f) => f.name === field));
 }
 
 /** A role's rows on a system, by field. */
@@ -40,7 +36,7 @@ export interface RoleRows {
   quota?: RoleMapping;
 }
 
-export function rowsOf(mappings: RoleMapping[], projectId: string, roleKey: string, fields: MappingFields = STORAGE_FIELDS): RoleRows {
+export function rowsOf(mappings: RoleMapping[], projectId: string, roleKey: string, fields: MappingFields): RoleRows {
   const mine = mappings.filter((m) => m.project_id === projectId && m.role_key === roleKey);
   return {
     group: mine.find((m) => m.field === fields.membership),
@@ -62,7 +58,7 @@ export type RowOp =
   | { kind: "delete"; field: string; row: RoleMapping };
 
 /** The row changes that take a role from what it has to what was chosen. */
-export function opsFor(current: RoleRows, choice: RoleChoice | null, fields: MappingFields = STORAGE_FIELDS): RowOp[] {
+export function opsFor(current: RoleRows, choice: RoleChoice | null, fields: MappingFields): RowOp[] {
   const ops: RowOp[] = [];
   const want = (field: string | undefined, row: RoleMapping | undefined, value: string | null) => {
     if (!field) return;
@@ -139,7 +135,7 @@ export function mergePlans(parts: RehearsedPart[]): MappingRehearsal {
  * "Makes 34 home folders in main › home_dir; 2 people already have one there"
  * (A-02 §5), from the home row's own rehearsal.
  */
-export function homeCount(parts: RehearsedPart[], fields: MappingFields = STORAGE_FIELDS): { makes: number; already: number } | null {
+export function homeCount(parts: RehearsedPart[], fields: MappingFields): { makes: number; already: number } | null {
   const home = parts.find((p) => p.op.field === fields.flag && p.op.kind === "create");
   if (!home || home.plan.outcomes.length === 0) return null;
   const makes = home.plan.outcomes.filter((o) => o.effect === "apply").length;

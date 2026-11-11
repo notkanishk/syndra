@@ -64,3 +64,5 @@ describe("lists named by lookup are A to Z by the shown name", () => {
     expect(rows.map((t) => ["Archive", "lab-2", "studio"].find((v) => t.includes(v)))).toEqual(["Archive", "lab-2", "studio"]);
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

@@ -173,6 +173,13 @@ export const AUDIT_ACTIONS: Record<
  * Neither can be a static key above, so they are matched by shape.
  */
 const ACCOUNT_CHANGE = /^entitlement\.([a-z0-9_-]+)\.enqueued$/;
+/**
+ * A queued change that never went out, said by Syndra and not by a person:
+ * replaced by a newer one (or naming a setting the system stopped using), or
+ * cancelled because the system was disconnected before it was sent.
+ */
+const CHANGE_SUPERSEDED = /^entitlement\.([a-z0-9_-]+)\.superseded$/;
+const CHANGE_ABANDONED = /^entitlement\.([a-z0-9_-]+)\.abandoned$/;
 const HOLD_LAPSED = /^allowance\.([a-z0-9_-]+)\.lapsed$/;
 /**
  * Changes sent to a connected system, and what was said about one it never
@@ -208,6 +215,20 @@ export function describeAction(
   if (account) {
     return {
       verb: `Recorded a change to their ${targetLabel(account[1])} account, waiting for makerspace staff to send it`,
+      destructive: false,
+    };
+  }
+  const superseded = action.match(CHANGE_SUPERSEDED);
+  if (superseded) {
+    return {
+      verb: `Dropped a queued change to their ${targetLabel(superseded[1])} account: a newer change replaced it, or ${targetLabel(superseded[1])} no longer uses the setting it named`,
+      destructive: false,
+    };
+  }
+  const abandoned = action.match(CHANGE_ABANDONED);
+  if (abandoned) {
+    return {
+      verb: `Cancelled a queued change to their ${targetLabel(abandoned[1])} account, because ${targetLabel(abandoned[1])} was disconnected from Syndra before it was sent`,
       destructive: false,
     };
   }

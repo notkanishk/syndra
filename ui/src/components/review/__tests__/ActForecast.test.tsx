@@ -124,3 +124,5 @@ describe("the first 100ms, in the future tense (A-19 P2)", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

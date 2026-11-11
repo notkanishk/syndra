@@ -11,8 +11,9 @@ import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
 import { useLeavingRows } from "@/lib/motion";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
-import { fieldNoun, mappingFields, type EntitlementField } from "@/lib/fields";
-import { useFieldSchema } from "@/lib/queries/useFieldSchema";
+import { fieldNoun, mappingFields, membershipNoun, type EntitlementField } from "@/lib/fields";
+import { SchemaNotReady } from "@/components/states/SchemaState";
+import { useFieldSchema, useFieldSchemaState } from "@/lib/queries/useFieldSchema";
 import { AddMappingButton, RefusedFields, RoleMappingDialog, placeName } from "@/components/targets/AddMappingDialog";
 import {
   applyParts,
@@ -83,7 +84,8 @@ export function MappingManagement({ target }: { target: string }) {
   const settings = useTargetSettings(target);
   const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
-  const schema = useFieldSchema(target);
+  const state = useFieldSchemaState(target);
+  const { schema } = state;
   const fields = mappingFields(schema);
   const all = mappings.data ?? [];
   const names = useShownNames();
@@ -100,6 +102,8 @@ export function MappingManagement({ target }: { target: string }) {
   const read = !mappings.isLoading && !mappings.error;
   const drawn = useLeavingRows(shown, (m) => m.id, read);
   const arrived = useAddedKeys(shown.map((m) => m.id), read);
+
+  if (!state.schema) return <SchemaNotReady state={state} name={name} />;
 
   return (
     <>
@@ -119,7 +123,7 @@ export function MappingManagement({ target }: { target: string }) {
           empty={
             <EmptyState
               title={`No role is mapped to ${name} yet`}
-              guidance={`Nobody gets an account on ${name} until a role is mapped to a ${name} group. Pick a role and the group it should get; Syndra shows how many people that affects before anything changes. A newly connected system with no mappings is normal, not an error.`}
+              guidance={`Nobody gets an account on ${name} until a role is mapped to a ${name} ${membershipNoun(schema)}. Pick a role and the ${membershipNoun(schema)} it should get; Syndra shows how many people that affects before anything changes. A newly connected system with no mappings is normal, not an error.`}
             />
           }
         >
@@ -221,8 +225,8 @@ function OpensNote({ name, reach }: { name: string; reach: TargetReach | undefin
 }
 
 /** What a mapping gives, in words: the group's name, never `field = value`. */
-function gives(mapping: RoleMapping, schema: EntitlementField[]): string {
-  const field = schema.find((f) => f.name === mapping.field);
+function gives(mapping: RoleMapping, schema: EntitlementField[] | undefined): string {
+  const field = schema?.find((f) => f.name === mapping.field);
   return field?.role === "membership" ? `the ${mapping.value} ${fieldNoun(field)}` : `${mapping.value}, as its ${mapping.field}`;
 }
 
@@ -387,14 +391,14 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
             autoFocus={!touch}
           />
           <FieldHint>
-            Checked against {targetLabel(mapping.target)} before you go further. A group
+            Checked against {targetLabel(mapping.target)} before you go further. A {membershipNoun(schema)}
             that does not exist there is refused now, not later.
           </FieldHint>
         </div>
       }
       // The consequence no count implies, and the one an operator is most
-      // likely to discover afterwards. Syndra moves the group; it does not move
-      // what the old group owns, and it has no way to.
+      // likely to discover afterwards. Syndra moves the membership; it does not move
+      // what the old one owns, and it has no way to.
       //
       // The second half is the other card of design M4's pair: when the add-on
       // could not be asked, the edit is allowed through on purpose and the
@@ -402,9 +406,9 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
       // that passed. Amber and not red, because nothing is wrong.
       consequence={
         <>
-          Files owned by group <span className="type-mono">{mapping.value}</span> stay with
-          that group. People moved to the new group lose access to those files unless somebody
-          changes the files&rsquo; owner on {targetLabel(mapping.target)}.
+          What the {membershipNoun(schema)} <span className="type-mono">{mapping.value}</span> owns stays with
+          it. People moved to the new {membershipNoun(schema)} lose access to that unless somebody
+          changes its owner on {targetLabel(mapping.target)}.
           {rehearsed?.value_checked === false && (
             <>
               {" "}
@@ -453,7 +457,7 @@ function DeleteMappingDialog({
     <RehearsalDialog
       title="Remove this mapping"
       definitionLabel="Remove the mapping"
-      lede={`${roleName} will no longer give ${gives(mapping, schema)} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.${
+      lede={`${roleName} will no longer give ${gives(mapping, schema)} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that ${membershipNoun(schema)}.${
         rows.home ? " New home folders stop; the ones already made stay, with their files." : ""
       }`}
       noun={["person", "people"]}

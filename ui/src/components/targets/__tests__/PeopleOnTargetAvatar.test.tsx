@@ -40,3 +40,5 @@ describe("accounts on a connected system, before a name resolves", () => {
     expect(avatar?.textContent).toBe("");
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

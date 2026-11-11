@@ -1219,3 +1219,5 @@ describe("while TrueNAS isn't answering", () => {
     expect(screen.queryByText(/waits too/)).toBeNull();
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

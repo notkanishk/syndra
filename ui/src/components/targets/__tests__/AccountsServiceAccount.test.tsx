@@ -41,3 +41,5 @@ describe("a connected system's accounts, a service account's row", () => {
     expect(hrefs).toContain("/users/u1");
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

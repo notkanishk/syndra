@@ -10,6 +10,8 @@ import { ApiError } from "@/lib/api-client";
 import { MappingManagement } from "@/components/targets/MappingManagement";
 import { VersionBand } from "@/components/targets/VersionBand";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { mappedTo } from "@/lib/fields";
+import { useFieldSchema } from "@/lib/queries/useFieldSchema";
 import { targetLabel } from "@/lib/nav";
 import { useCrumb } from "@/lib/page-crumb";
 import { useMappingHistory, useMappings } from "@/lib/queries/useMappings";
@@ -34,6 +36,7 @@ export function MappingScreen({ target }: { target: string }) {
   const mappings = useMappings(target);
   const history = useMappingHistory(target);
   const roster = useTargets();
+  const schema = useFieldSchema(target);
   useCrumb("Mappings");
 
   const reach = mappings.data ? roleCount(mappings.data) : undefined;
@@ -64,7 +67,7 @@ export function MappingScreen({ target }: { target: string }) {
             ]}
           </MetaRow>
         }
-        lede={`A mapping gives everyone who holds one of ${owner} roles an account on ${name}, in a group. Changing one moves access for all of them, so every change is previewed before anything is sent.`}
+        lede={`A mapping gives everyone who holds one of ${owner} roles an account on ${name}, through ${mappedTo(name, schema)}. Changing one moves access for all of them, so every change is previewed before anything is sent.`}
       />
       {noProject ? (
         // Reached by a link before the system has a project: why the project
@@ -72,7 +75,7 @@ export function MappingScreen({ target }: { target: string }) {
         <Card>
           <EmptyState
             title={`${name} has no Zitadel project yet.`}
-            guidance={`A mapping ties one of that project's roles to a ${name} group, so the project comes first. It is chosen on ${name}'s own page.`}
+            guidance={`A mapping ties one of that project's roles to ${mappedTo(name, schema).replace(/s$/, "")}, so the project comes first. It is chosen on ${name}'s own page.`}
             action={{ label: `Choose it on ${name}'s page`, href: `/system/targets/${target}` }}
           />
         </Card>

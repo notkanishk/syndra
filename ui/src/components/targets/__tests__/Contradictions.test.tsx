@@ -105,3 +105,5 @@ describe("a decision somebody else already took", () => {
     expect(document.body.textContent).toContain("has not gone anywhere");
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

@@ -451,3 +451,5 @@ describe("MemberAccess first welcome", () => {
     expect(screen.queryByText("Nothing needs you right now.")).toBeNull();
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

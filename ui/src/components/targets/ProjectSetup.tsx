@@ -12,6 +12,8 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { Select } from "@/components/ui/Select";
 import { describeFailure, sentence } from "@/lib/outcome";
+import { mappedTo } from "@/lib/fields";
+import { useFieldSchema } from "@/lib/queries/useFieldSchema";
 import { targetLabel } from "@/lib/nav";
 import { useMappingHistory, useMappings } from "@/lib/queries/useMappings";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -38,6 +40,7 @@ import { sortByName } from "@/lib/sort";
 
 export function ProjectStep({ target, onSet }: { target: string; onSet: (name: string) => void }) {
   const name = targetLabel(target);
+  const schema = useFieldSchema(target);
   const projects = useProjects();
   const roster = useTargets();
   const set = useSetTargetProject(target);
@@ -59,7 +62,7 @@ export function ProjectStep({ target, onSet }: { target: string; onSet: (name: s
         <div className="flex flex-col gap-4 px-5 pb-5">
           <p className="max-w-[72ch] text-[14.5px] leading-[1.55] text-ink [text-wrap:pretty]">
             Its roles decide who gets an account on {name}, so nothing below can give anyone access until it
-            is set. Next, you map those roles to {name} groups.
+            is set. Next, you map those roles to {mappedTo(name, schema)}.
           </p>
           <form
             className="flex flex-wrap items-center gap-x-3 gap-y-2.5"
@@ -104,6 +107,7 @@ export function ProjectStep({ target, onSet }: { target: string; onSet: (name: s
 /** The step's result, in its place, for this visit only. */
 export function ProjectSet({ target, project }: { target: string; project: string }) {
   const name = targetLabel(target);
+  const schema = useFieldSchema(target);
   return (
     <div className="flex flex-col gap-3">
       <ActionOutcome
@@ -111,11 +115,11 @@ export function ProjectSet({ target, project }: { target: string; project: strin
         outcome={{
           kind: "applied",
           message: `${name} uses ${project}.`,
-          detail: `Nobody's access changed: no role reaches ${name} yet. Map ${project}'s roles to ${name} groups to give people accounts there.`,
+          detail: `Nobody's access changed: no role reaches ${name} yet. Map ${project}'s roles to ${mappedTo(name, schema)} to give people accounts there.`,
         }}
       />
       <ArrowLink href={`/system/targets/${target}/mappings`} className="self-start whitespace-nowrap">
-        Map its roles to {name} groups
+        Map its roles to {mappedTo(name, schema)}
       </ArrowLink>
     </div>
   );
@@ -138,6 +142,7 @@ export function SetupStrip({
   lastKnown?: boolean;
 }) {
   const name = targetLabel(target);
+  const schema = useFieldSchema(target);
   const mappings = useMappings(target);
   const history = useMappingHistory(target);
   const settings = useTargetSettings(target);
@@ -168,7 +173,7 @@ export function SetupStrip({
             ? "…"
             : roles === 0
               ? "None yet"
-              : `${roles} role${roles === 1 ? "" : "s"} to ${name} groups${version ? ` · version ${version}` : ""}`}
+              : `${roles} role${roles === 1 ? "" : "s"} to ${mappedTo(name, schema)}${version ? ` · version ${version}` : ""}`}
         </span>
       </SettingRow>
       {settings.data?.read && home && (

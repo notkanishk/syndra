@@ -34,6 +34,7 @@ vi.mock("@/lib/queries/useHolds", async (importOriginal) => ({
 vi.mock("@/components/names", () => ({ UserName: ({ id }: { id: string }) => <span>{id}</span> }));
 
 beforeEach(() => {
+  fields.mode = "truenas";
   state.due = holds;
   state.lift.mockReset().mockResolvedValue(undefined);
 });
@@ -112,5 +113,80 @@ describe("a hold's row states", () => {
     expect((await screen.findByRole("status")).textContent).toContain("Lifted");
     expect(state.lift).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+});
+
+// How the fields stand for these holds: the TrueNAS fixture, another add-on's, or not known yet.
+const fields = vi.hoisted(() => ({
+  mode: "truenas" as "truenas" | "laser" | "unread" | "loading" | "failed",
+  refetch: vi.fn(),
+}));
+vi.mock("@/lib/queries/useFieldSchema", async () => {
+  const m = (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock;
+  const laser = [
+    { name: "on", role: "account" },
+    { name: "minutes", role: "limit", label: "Laser time", unit: "seconds", unlimited: "-1" },
+  ];
+  return {
+    ...m,
+    useSchemaSource: () => {
+      const read = { loading: fields.mode === "loading", error: fields.mode === "failed" ? new Error("roster down") : null, refetch: fields.refetch };
+      const schema = fields.mode === "laser" ? laser : fields.mode === "truenas" ? m.useFieldSchema() : undefined;
+      return Object.assign(() => schema, read);
+    },
+  };
+});
+
+// A hold is worded from ITS system's fields: the unit, the unlimited value and the noun are the
+// field's, and a system whose fields are not known is said so, never guessed.
+describe("an own value on a system that is not storage", () => {
+  const own = (value: string): Hold => ({ id: "h3", subject_id: "u3", target: "laser", field: "minutes", value, direction: "set", actor_id: "op", reason: "course", review_date: "2026-10-01T00:00:00Z", created_at: "2026-09-01T00:00:00Z" });
+
+  it("reads a seconds limit in minutes, by the field's label", () => {
+    fields.mode = "laser";
+    state.due = [own("5400")];
+    render(<HoldsDueForReview />);
+    expect(screen.getByText("their own laser time, 90 minutes")).toBeTruthy();
+    expect(screen.getByText(/It stays at 90 minutes until it is kept or ended/)).toBeTruthy();
+    expect(screen.queryByText(/home folder/)).toBeNull();
+  });
+
+  it("says no limit for the field's own unlimited, and 0 is not that here", () => {
+    fields.mode = "laser";
+    state.due = [own("-1")];
+    const { unmount } = render(<HoldsDueForReview />);
+    expect(screen.getByText("their own laser time, no limit")).toBeTruthy();
+    unmount();
+    state.due = [own("0")];
+    render(<HoldsDueForReview />);
+    expect(screen.getByText("their own laser time, 0 seconds")).toBeTruthy();
+  });
+
+  it("says it cannot word the value when the system's fields are not read, and does not guess", () => {
+    fields.mode = "unread";
+    state.due = [own("5400"), holds[0]];
+    render(<HoldsDueForReview />);
+    expect(screen.getByText(/cannot word until it has read .*'s fields/)).toBeTruthy();
+    expect(screen.getAllByText(/something on TrueNAS, whose fields Syndra has not read yet/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/5400|90 minutes/)).toBeNull();
+    expect(screen.queryByText(/\btrue\b/)).toBeNull();
+  });
+});
+
+describe("the fields still being read, or failed", () => {
+  it("draws no hold, and never the words 'not read' or a raw value, while they are read", () => {
+    fields.mode = "loading";
+    render(<HoldsDueForReview />);
+    expect(screen.queryByText(/not read/)).toBeNull();
+    expect(screen.queryByText("safety review")).toBeNull();
+    expect(screen.queryByText(/\btrue\b/)).toBeNull();
+  });
+
+  it("shows the failed read with Try again, which reads the fields again", () => {
+    fields.mode = "failed";
+    render(<HoldsDueForReview />);
+    expect(screen.queryByText("safety review")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(fields.refetch).toHaveBeenCalledTimes(1);
   });
 });

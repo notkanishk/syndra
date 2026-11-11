@@ -408,3 +408,5 @@ describe("a role's home folder", () => {
     withRoot("");
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

@@ -60,6 +60,8 @@ describe("what the add-on says about itself (3.6)", () => {
 describe("a kind with no module of its own gets the core member card", () => {
   const view: MyTargetView = {
     target: "doors",
+    kind: "access",
+    entitlement_schema: [{ name: "active", role: "account" }],
     entitled: true,
     account: { username: "mick.foley" },
     credential: { set: false },
@@ -68,7 +70,7 @@ describe("a kind with no module of its own gets the core member card", () => {
   };
 
   it("renders the account's standing and its next step, from the add-on's words", () => {
-    render(<MemberTargetCard view={view} kind="access" />, { wrapper: roster([{ target: "doors", kind: "access" }]) });
+    render(<MemberTargetCard view={view} />);
     expect(screen.getByText("Waiting on you")).toBeInTheDocument();
     expect(screen.getByText("No card enrolled yet")).toBeInTheDocument();
     expect(screen.getByText("Enrol a card at the front desk")).toBeInTheDocument();
@@ -79,26 +81,36 @@ describe("a kind with no module of its own gets the core member card", () => {
     expect(screen.getByText("Nothing for you to do.")).toBeInTheDocument();
   });
 
-  it("chooses by the roster's kind when none is passed", () => {
-    render(<MemberTargetCard view={view} />, { wrapper: roster([{ target: "doors", kind: "machine" }]) });
-    expect(screen.getByText("Enrol a card at the front desk")).toBeInTheDocument();
+  it("chooses the kind's own module: storage gets the storage card, not the core one", () => {
+    render(<MemberTargetCard view={{ ...view, kind: "storage" }} />, { wrapper: roster([]) });
+    expect(screen.queryByText("Enrol a card at the front desk")).toBeNull();
+  });
+
+  it("says not read yet, with its next step, when no manifest has been accepted: never a guess at a kind", () => {
+    render(<MemberTargetCard view={{ ...view, kind: undefined, entitlement_schema: undefined }} />);
+    expect(screen.getByText(/Syndra has not read Doors yet|has not read doors yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nothing for you to do\./)).toBeInTheDocument();
+    expect(screen.queryByText("Enrol a card at the front desk")).toBeNull();
   });
 });
 
 describe("a hold on the account is known by role, not by name", () => {
+  const items = (field: string, value: string) => [{ field, value, reason: "safety", target: "doors" }];
+
   it("reads another kind's account field as the whole account", () => {
-    const schema = [{ name: "active", role: "account" as const }, { name: "policy", role: "membership" as const, label: "Access policy" }];
-    render(<Withheld audience="operator" items={[{ field: "active", value: "true", reason: "safety", target: "doors" }]} />, {
-      wrapper: roster([{ target: "doors", entitlement_schema: schema }]),
-    });
-    expect(screen.getByText(/Their Doors account|Their doors account/i)).toBeInTheDocument();
+    const schema = [{ name: "active", role: "account" as const }];
+    render(<Withheld audience="operator" items={items("active", "true")} schemaOf={() => schema} />);
+    expect(screen.getByText(/Their .* account/i)).toBeInTheDocument();
   });
 
   it("does not treat a name the schema calls something else as the account", () => {
     const schema = [{ name: "active", role: "account" as const }, { name: "enabled", role: "membership" as const, label: "Zone" }];
-    render(<Withheld audience="operator" items={[{ field: "enabled", value: "north", reason: "safety", target: "doors" }]} />, {
-      wrapper: roster([{ target: "doors", entitlement_schema: schema }]),
-    });
+    render(<Withheld audience="operator" items={items("enabled", "north")} schemaOf={() => schema} />);
     expect(screen.getByText("north")).toBeInTheDocument();
+  });
+
+  it("guesses nothing when the schema has not been read: the value shows as the code it is", () => {
+    render(<Withheld audience="operator" items={items("enabled", "true")} schemaOf={() => undefined} />);
+    expect(screen.getByText("true")).toBeInTheDocument();
   });
 });

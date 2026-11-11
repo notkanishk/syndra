@@ -11,8 +11,10 @@ import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
+import { StandingLine } from "@/components/ui/StandingLine";
 import { accountField } from "@/lib/fields";
-import { useFieldSchema } from "@/lib/queries/useFieldSchema";
+import { schemaReason } from "@/components/states/SchemaState";
+import { useFieldSchemaState } from "@/lib/queries/useFieldSchema";
 import { formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { glideTo } from "@/lib/motion";
@@ -137,7 +139,9 @@ function PersonRow({
   home?: AccountHome;
 }) {
   const [dialog, setDialog] = useState<"hold" | "revoke" | "limit" | null>(null);
-  const schema = useFieldSchema(target);
+  const state = useFieldSchemaState(target);
+  const accountName = accountField(state.schema)?.name;
+  const why = schemaReason(state, targetLabel(target)) ?? (accountName ? undefined : `${targetLabel(target)}'s fields name no account, so Syndra cannot say what to hold.`);
   const verb = limitVerb(home);
   // The name, because both dialogs speak to and about a person — and rung 3
   // asks the operator to type it. Through the same resolver every other surface
@@ -159,6 +163,11 @@ function PersonRow({
         </span>
         <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-[13.5px] text-ink">
           {account.username}
+          {account.standing && (
+            <span className="mt-1 block font-sans">
+              <StandingLine standing={account.standing} system={targetLabel(target)} audience="operator" />
+            </span>
+          )}
         </span>
         <span className="w-[110px] flex-none text-right text-[13.5px] text-muted">{formatShortDate(account.bound_at)}</span>
         <span className={`flex flex-none flex-wrap items-center justify-end gap-2 ${seat}`}>
@@ -169,7 +178,13 @@ function PersonRow({
               {verb}
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => setDialog("hold")}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!accountName}
+            reason={why}
+            onClick={() => setDialog("hold")}
+          >
             Put on hold
           </Button>
           <Button variant="danger" size="sm" onClick={() => setDialog("revoke")}>
@@ -198,7 +213,7 @@ function PersonRow({
           // operator reads. Sending the label would be a malformed term the
           // backend refuses; showing the value would be a dialog saying "Hold
           // true for Charlotte".
-          field={accountField(schema)?.name ?? ""}
+          field={accountName ?? ""}
           value="true"
           label={`access to ${targetLabel(target)}`}
           onClose={() => setDialog(null)}

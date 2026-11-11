@@ -10,8 +10,9 @@ import { Notice } from "@/components/ui/Notice";
 import { Segmented, Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
 import { ApiError } from "@/lib/api-client";
-import { fieldsByRole, mappingFields } from "@/lib/fields";
-import { useFieldSchema } from "@/lib/queries/useFieldSchema";
+import { fieldsByRole, mappingFields, membershipNoun } from "@/lib/fields";
+import { schemaReason } from "@/components/states/SchemaState";
+import { useFieldSchema, useFieldSchemaState } from "@/lib/queries/useFieldSchema";
 import { formatClock, formatList } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useCreateMapping, useMappings } from "@/lib/queries/useMappings";
@@ -86,6 +87,7 @@ export function RoleMappingDialog({
   const mappings = useMappings(target);
   const schema = useFieldSchema(target);
   const fields = mappingFields(schema);
+  const noun = membershipNoun(schema);
   const FIELD = fields.membership ?? "";
   const values = useMappableValues(target, FIELD);
   const reach = useTargetReach(target);
@@ -120,14 +122,14 @@ export function RoleMappingDialog({
   const list = values.data;
   const neverRead = values.error instanceof ApiError && values.error.code === "VALUES_NEVER_READ";
   const noGroups = Boolean(list && list.values.length === 0);
-  const fieldName = list ? `${list.label} on ${name}` : `Group on ${name}`;
+  const fieldName = list ? `${list.label} on ${name}` : `${noun[0].toUpperCase()}${noun.slice(1)} on ${name}`;
   const ready = Boolean(
     project && roleKey && value && list && !noGroups && ops.length > 0 && (choice.quota !== "" || !home),
   );
   const notReadyReason = neverRead
-    ? `Nothing to preview until ${name} lists its groups.`
+    ? `Nothing to preview until ${name} lists its ${noun}s.`
     : noGroups
-      ? `Nothing to preview until ${name} has a group of its own.`
+      ? `Nothing to preview until ${name} has a ${noun} of its own.`
       : role && ops.length === 0
         ? "Nothing has changed yet."
         : "Nothing is sent until you apply the preview.";
@@ -142,7 +144,7 @@ export function RoleMappingDialog({
       lede={
         role
           ? `Everyone who holds ${roleLabel} moves with the change. The preview says how many people that is before anything is sent.`
-          : `Everyone who holds the role gets an account on ${name} in this group. The preview says how many people that is before anything is sent.`
+          : `Everyone who holds the role gets an account on ${name} through this ${noun}. The preview says how many people that is before anything is sent.`
       }
       noun={["person", "people"]}
       system={name}
@@ -177,29 +179,29 @@ export function RoleMappingDialog({
               <>
                 <Select id="m-val" disabled>
                   <option>
-                    {neverRead ? `Waiting for ${name}'s list` : noGroups ? "No groups to offer" : `Reading ${name}'s groups…`}
+                    {neverRead ? `Waiting for ${name}'s list` : noGroups ? `No ${noun}s to offer` : `Reading ${name}'s ${noun}s…`}
                   </option>
                 </Select>
                 <FieldHint>{neverRead ? "Not read yet." : list ? <>Read from {name} <Relative iso={list.read_at} />.</> : " "}</FieldHint>
                 {(neverRead || noGroups) && (
                   <Notice
                     tone="neutral"
-                    title={neverRead ? `${name} hasn't listed its groups yet.` : `${name} has no groups of its own yet.`}
+                    title={neverRead ? `${name} hasn't listed its ${noun}s yet.` : `${name} has no ${noun}s of its own yet.`}
                     action={{ label: "Read again", onClick: () => void values.refetch() }}
-                    next={neverRead ? "Press Read again in a minute." : `Press Read again once ${name} has groups of its own.`}
+                    next={neverRead ? "Press Read again in a minute." : `Press Read again once ${name} has ${noun}s of its own.`}
                   >
                     {neverRead
                       ? `Syndra asks for the list when this opens, and ${name} hasn't answered${
                           row?.health?.started_at ? ` since Syndra restarted at ${formatClock(row.health.started_at)}` : " yet"
                         }. This usually clears within a minute and a half.`
-                      : builtinSentence(name, list)}
+                      : builtinSentence(name, list, noun)}
                   </Notice>
                 )}
               </>
             ) : (
               <>
                 <Select id="m-val" value={value} onChange={(e) => setValue(e.target.value)}>
-                  <option value="">Choose a group</option>
+                  <option value="">Choose a {noun}</option>
                   {sortByName(list.values, (v) => list.labels?.[v] ?? v, (v) => v).map((v) => (
                     <option key={v} value={v}>
                       {list.labels?.[v] ?? v}
@@ -209,7 +211,7 @@ export function RoleMappingDialog({
                 <FieldHint>
                   {list.current ? (
                     <>
-                      Groups made on {name}, read <Relative iso={list.read_at} />. Its built-in groups are never
+                      Made on {name}, read <Relative iso={list.read_at} />. Its built-in ones are never
                       offered.
                     </>
                   ) : (
@@ -218,8 +220,8 @@ export function RoleMappingDialog({
                 </FieldHint>
                 {value && <OpensLine name={name} places={reach.data?.read ? reach.data.groups?.[value] : undefined} />}
                 {!list.current && (
-                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`} next={`Preview as usual. If you doubt a group still exists, check it on ${name} first.`}>
-                    Syndra can&apos;t read {name}&apos;s groups right now. You can still preview. A group deleted since{" "}
+                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`} next={`Preview as usual. If you doubt a ${noun} still exists, check it on ${name} first.`}>
+                    Syndra can&apos;t read {name}&apos;s {noun}s right now. You can still preview. A {noun} deleted since{" "}
                     {formatClock(list.read_at)} fails when the mapping is applied, and the failure is reported.
                   </Notice>
                 )}
@@ -305,8 +307,8 @@ export function RoleMappingDialog({
               // The consequence no count implies: Syndra moves the group, not
               // what the old group owns, and it has no way to.
               <>
-                Files owned by group <span className="type-mono">{current.group.value}</span> stay with that group.
-                People moved to the new group lose access to those files unless somebody changes the files&rsquo;
+                What the {noun} <span className="type-mono">{current.group.value}</span> owns stays with it.
+                People moved to the new {noun} lose access to that unless somebody changes its
                 owner on {name}.{" "}
               </>
             )}
@@ -344,7 +346,7 @@ export function RoleMappingDialog({
             void values.refetch();
             throw new ApiError(400, {
               error: "VALIDATION_FAILED",
-              message: `${gone} is no longer on ${name}. It was deleted on ${name} after the list was read, and the preview asked again. Pick another group, or create it on ${name}. The list above is fresh.`,
+              message: `${gone} is no longer on ${name}. It was deleted on ${name} after the list was read, and the preview asked again. Pick another ${noun}, or create it on ${name}. The list above is fresh.`,
             });
           }
           throw error;
@@ -360,11 +362,11 @@ export function RoleMappingDialog({
 }
 
 /** "It lists 34 groups, all of them built in, like builtin_users and …" */
-function builtinSentence(name: string, list: MappableValues | undefined): string {
+function builtinSentence(name: string, list: MappableValues | undefined, noun: string): string {
   const count = list?.builtin_count ?? 0;
   const examples = list?.builtin_examples ?? [];
   const like = examples.length ? `, like ${examples.join(" and ")}` : "";
-  return `It lists ${count} group${count === 1 ? "" : "s"}, all of them built in${like}. Syndra never offers those: a role mapped to one would give everyone who holds it ${name}'s administration or its default share access. Make a group on ${name}, under Credentials → Groups, then read again.`;
+  return `It lists ${count} ${noun}${count === 1 ? "" : "s"}, all of them built in${like}. Syndra never offers those: a role mapped to one would give everyone who holds it ${name}'s administration or its default access. Make one on ${name}, then read again.`;
 }
 
 /**
@@ -426,9 +428,18 @@ export function RefusedFields({ target }: { target: string }) {
 /** Outline: the one violet fill on this screen is Publish, in the version band. */
 export function AddMappingButton({ target, first }: { target: string; first: boolean }) {
   const [open, setOpen] = useState(false);
+  const state = useFieldSchemaState(target);
+  const why = schemaReason(state, targetLabel(target));
+  const readable = !why && Boolean(mappingFields(state.schema).membership);
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!readable}
+        reason={why}
+        onClick={() => setOpen(true)}
+      >
         {first ? "Add the first mapping" : "Add a mapping"}
       </Button>
       {open && <AddMappingDialog target={target} onClose={() => setOpen(false)} />}

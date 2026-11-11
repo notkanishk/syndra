@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, request } from "@/lib/api-client";
+import type { EntitlementField } from "@/lib/fields";
 import type { AccountHome, Standing } from "@/lib/queries/useTargets";
 import type { OneShotSecret } from "@/lib/secret";
 import { targetLabel } from "@/lib/nav";
@@ -66,6 +67,10 @@ export interface MyTargetView {
     needs_re_enrolment?: boolean;
     last_changed_at?: string;
   };
+  /** What kind of system this is, and what its fields are: the accepted
+   * manifest's. Both absent until one is accepted ("not read yet"). */
+  kind?: string;
+  entitlement_schema?: EntitlementField[];
   /** Whether the account can be used yet, and who is waited on, in the add-on's words. */
   standing?: Standing;
   /** The add-on answered. A member whose target is down is told, not shown a form that fails. */
@@ -189,9 +194,10 @@ export function usePersonTargets(userId: string, enabled = true) {
   });
 }
 
-export function useMyStorage() {
+export function useMyStorage(enabled = true) {
   return useQuery({
     queryKey: ["me", "targets"],
+    enabled,
     queryFn: () => request<{ targets: MyTargetView[] }>("/me/targets"),
     select: (data) => sortByName(data.targets ?? [], (t) => targetLabel(t.target), (t) => t.target),
     refetchInterval: (query) =>

@@ -105,6 +105,16 @@ export function fieldNoun(field: EntitlementField | undefined): string {
   return label.toLowerCase();
 }
 
+/** What this schema's membership field is called in a sentence ("group"); "setting" before it is read. */
+export function membershipNoun(schema: EntitlementField[] | undefined): string {
+  return fieldNoun(fieldsByRole(schema).membership[0]);
+}
+
+/** What roles are mapped to on a system, plural: "TrueNAS groups"; before the fields are read, "what TrueNAS gives". */
+export function mappedTo(system: string, schema: EntitlementField[] | undefined): string {
+  return schema ? `${system} ${membershipNoun(schema)}s` : `what ${system} gives`;
+}
+
 /** The names a role mapping works with: its membership, its flag, its limit. */
 export interface MappingFields {
   membership?: string;
@@ -116,17 +126,3 @@ export function mappingFields(schema: EntitlementField[] | undefined): MappingFi
   const by = fieldsByRole(schema);
   return { membership: by.membership[0]?.name, flag: by.flag[0]?.name, limit: by.limit[0]?.name };
 }
-
-/**
- * What the storage kind declares today, held here until the backend carries
- * the schema on the targets endpoint (it does not yet: see tasks 3.1). Used
- * only when a target arrives with no schema, so a deployment that has not
- * shipped it keeps working; a target that sends one is never second-guessed.
- */
-export const STORAGE_SCHEMA: EntitlementField[] = [
-  { name: "group", role: "membership", label: "Group" },
-  { name: "home", role: "flag", label: "Gives a home folder" },
-  { name: "home_quota", role: "limit", label: "Home folder limit", unit: "bytes", combine: "max", unlimited: "0", per_person: true },
-  { name: "enabled", role: "account" },
-  { name: "smb_enabled", role: "channel", label: "SMB" },
-];

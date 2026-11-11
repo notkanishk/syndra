@@ -1,4 +1,4 @@
-import { MyStorage } from "@/components/kinds/storage/MyStorage";
+import { MySystems } from "@/components/member/MySystems";
 
 /**
  * A member's own storage view. Present for every member whatever they can
@@ -6,5 +6,5 @@ import { MyStorage } from "@/components/kinds/storage/MyStorage";
  * not.
  */
 export default function StoragePage() {
-  return <MyStorage />;
+  return <MySystems />;
 }

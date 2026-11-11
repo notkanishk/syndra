@@ -93,3 +93,5 @@ describe("a hold in force", () => {
     expect(screen.queryByText("On hold")).not.toBeInTheDocument();
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

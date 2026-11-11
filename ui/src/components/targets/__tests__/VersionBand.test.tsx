@@ -244,3 +244,5 @@ describe("the note is the audit record, so it is required", () => {
     ).toBe(false);
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);
