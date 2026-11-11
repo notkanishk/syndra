@@ -84,7 +84,6 @@ func (k *kit) mutate() error {
 		{"limits", []string{"limit-combine"}, func() { k.limits(k.at("limit-combine")) }},
 		{"replay", []string{"replay"}, func() { k.replay(k.at("replay"), callID, created) }},
 		{"absent", []string{"absent-unmanaged", "plan-equals-apply"}, func() { k.absent(k.at("absent-unmanaged")) }},
-		{"unlisted", []string{"unlisted-preserved", "plan-equals-apply"}, func() { k.unlisted(k.at("unlisted-preserved")) }},
 		{"limit-empty", []string{"limit-empty", "plan-equals-apply"}, func() { k.limitEmpty(k.at("limit-empty")) }},
 		{"operations", []string{"operations", "operations.secret", "strict-requests", "health"}, func() { k.operations(k.at("operations")) }},
 		{"reads", []string{"operations.reads"}, func() { k.readOperations(k.at("operations.reads"), callID) }},
@@ -274,6 +273,7 @@ func (k *kit) state(c *check) map[string]any {
 	for _, s := range objects(doc["subjects"]) {
 		if k.owner(s, false) == ours {
 			st, _ := s["state"].(map[string]any)
+			k.unlistedHidden("the kit's account", st)
 			return st
 		}
 	}
@@ -352,17 +352,31 @@ func (k *kit) limits(c *check) {
 
 // limitEmpty sends each limit as [] after setting it to 5 GiB: no role sets
 // it, so nothing is set, and the account keeps the limit it holds. Clearing
-// it would read as "no limit" on most apps, which nobody decided.
+// it would read as "no limit" on most apps, which nobody decided. It judges
+// only from a 5 GiB the add-on was seen to hold: from an unreported limit, or
+// one the first apply did not set, [] keeping it proves nothing.
 func (k *kit) limitEmpty(c *check) {
-	for _, name := range k.m.withRole("limit") {
-		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{"5368709120"}}, false)
-		before := k.state(c)[name]
+	const fiveGiB = "5368709120"
+	limits := k.m.withRole("limit")
+	if len(limits) == 0 {
+		c.skip("the manifest declares no limit field")
+	}
+	for _, name := range limits {
+		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{fiveGiB}}, false)
+		state := k.state(c)
+		before, reported := state[name]
+		switch {
+		case state == nil: // state failed c already
+			continue
+		case !reported:
+			c.skip("%s is not in the kit's account's state (not read), so what [] does to it cannot be seen", name)
+			continue
+		case !c.expect(same(before, []string{fiveGiB}), "%s: an apply giving it [%q] left it %v", name, fiveGiB, before):
+			continue
+		}
 		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{}}, false)
 		after := k.state(c)[name]
 		c.expect(same(after, before), "%s: an apply giving it [] changed it from %v to %v; [] sets nothing", name, before, after)
-	}
-	if !c.ran {
-		c.skip("the manifest declares no limit field")
 	}
 }
 
@@ -425,27 +439,6 @@ func (k *kit) absent(c *check) {
 	before := k.state(c)
 	k.converge(c, k.callID(), map[string]any{k.m.account: true}, false)
 	k.untouched(c, before, k.state(c), "an apply naming the account alone")
-}
-
-func (k *kit) unlisted(c *check) {
-	for _, name := range k.m.withRole("membership") {
-		managed, enumerable := k.values[name]
-		if !enumerable {
-			c.skip("%s is not enumerable, so the kit cannot know its managed set", name)
-			continue
-		}
-		held, _ := stringList(k.state(c)[name])
-		kept := slices.DeleteFunc(held, func(v string) bool { return slices.Contains(managed, v) })
-		if len(kept) == 0 {
-			c.skip("%s: the kit's account holds no value outside the managed set", name)
-			continue
-		}
-		k.converge(c, k.callID(), map[string]any{k.m.account: true, name: []string{}}, false)
-		c.expect(same(k.state(c)[name], kept), "%s: an apply emptying it left %v, want the unlisted %v and nothing else", name, k.state(c)[name], kept)
-	}
-	if !c.ran && len(c.skips) == 0 {
-		c.skip("the manifest declares no membership field")
-	}
 }
 
 func (k *kit) operationBody(name, callID string, params map[string]any) map[string]any {

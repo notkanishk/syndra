@@ -1001,7 +1001,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		if !adopted {
 			s.undoGroup(groupID)
 		}
-		return ApplyOutcome{}, statusFor(err), acted(err)
+		return acted(err)
 	}
 	if home.path != "" {
 		for k, v := range homeFields(home.path) {
@@ -1016,7 +1016,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		if !adopted {
 			s.undoGroup(groupID)
 		}
-		return ApplyOutcome{}, statusFor(err), acted(err)
+		return acted(err)
 	}
 	// `user.create` answers with the RECORD key, not the unix uid, and the
 	// binding recognises an account by its uid across a rename. Read back
@@ -1042,8 +1042,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 			fmt.Errorf("account %s was created and its binding could not be recorded: %w", binding.Username, err)
 	}
 	if readErr != nil {
-		return ApplyOutcome{}, statusFor(readErr),
-			acted(fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr))
+		return acted(fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr))
 	}
 
 	detail := fmt.Sprintf("Created %s.", binding.Username)
@@ -1212,16 +1211,21 @@ func describeHolding(s Subject) string {
 	}
 }
 
-// acted is a failure after this apply had already written to the target (here,
-// the personal group). Whatever the cause, the target may have acted, so the
-// "nothing was sent" a later call's session failure carries is dropped: the
-// reply is APPLY_FAILED, never TARGET_UNREACHABLE. The text is kept; the status
-// was computed from the original before this is called.
-func acted(err error) error {
-	if errors.Is(err, ErrNotSent) {
-		return errors.New(err.Error())
+// acted answers a failure after this apply had already written to the target
+// (here, the personal group). The one rule: after the first write, every
+// failure is "may have acted", a 5xx APPLY_FAILED a person looks at, never an
+// answer Syndra reads as not reached and re-queues by itself. So a later
+// call's "nothing was sent" is dropped (never TARGET_UNREACHABLE), and a 429
+// from a rate-limited NAS becomes 503. The text is kept.
+func acted(err error) (ApplyOutcome, int, error) {
+	status := statusFor(err)
+	if status == http.StatusTooManyRequests {
+		status = http.StatusServiceUnavailable
 	}
-	return err
+	if errors.Is(err, ErrNotSent) {
+		err = errors.New(err.Error())
+	}
+	return ApplyOutcome{}, status, err
 }
 
 func statusFor(err error) int {

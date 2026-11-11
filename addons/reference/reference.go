@@ -51,8 +51,9 @@ var fields = []field{
 }
 
 // printers is the managed set of the membership field. lobby is the target's
-// own: every account is in it, /values does not list it, and Syndra never
-// removes it (unlisted values are preserved, design §3).
+// own: every account is in it, /values does not list it, Syndra never removes
+// it (unlisted values are preserved, converge), and state never shows it
+// (shown).
 var printers = []string{"mk4-a", "mk4-b", "xl-1"}
 
 const lobby = "lobby"
@@ -76,6 +77,16 @@ type standing struct {
 	WaitingOn string `json:"waiting_on"`
 	Note      string `json:"note,omitempty"`
 	Next      string `json:"next,omitempty"`
+}
+
+// shown is the account's state as Syndra sees it: a membership holds only the
+// managed set. Syndra compares state with desired over the whole list, so a
+// value it can never remove (lobby) would be a difference for ever.
+func (acct *account) shown() map[string]any {
+	out := maps.Clone(acct.state)
+	out["printers"] = slices.DeleteFunc(slices.Clone(acct.state["printers"].([]string)),
+		func(p string) bool { return !slices.Contains(printers, p) })
+	return out
 }
 
 // standing is observed, never desired: why a converged account cannot be used
@@ -211,7 +222,7 @@ func (a *Addon) subjects(*http.Request, []byte) reply {
 	list := []subject{}
 	for _, id := range slices.Sorted(maps.Keys(a.accounts)) {
 		acct := a.accounts[id]
-		list = append(list, subject{acct.id, acct.username, acct.id, acct.state, acct.standing()})
+		list = append(list, subject{acct.id, acct.username, acct.id, acct.shown(), acct.standing()})
 	}
 	return ok(map[string]any{"subjects": list, "current": true, "taken_at": now(), "truncated": false})
 }
@@ -450,7 +461,7 @@ func (a *Addon) commit(out outcome, acct *account, next map[string]any) reply {
 	}
 	describe(&out, acct)
 	if acct != nil {
-		out.Observed, out.Fingerprint = acct.state, fingerprint(acct)
+		out.Observed, out.Fingerprint = acct.shown(), fingerprint(acct)
 	}
 	return ok(out)
 }

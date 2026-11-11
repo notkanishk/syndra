@@ -281,7 +281,9 @@ Rules the schema cannot express:
   registration ([What Syndra refuses](#what-syndra-refuses-at-registration)).
 - `product` is what people call the product ("TrueNAS"); Syndra shows it as
   the system's name until an operator names the system. `product_version` is
-  the app's own version string.
+  the app's own version string, `""` until the add-on has read it: the
+  manifest is served while the app is unreachable, and a version is never
+  invented. `/health` then says `version_tested: false`.
 - `kind` MUST be one word of `v2/registry/kinds.json` ([chapter 10](#10-kinds)).
 - `features` MUST list only what the add-on serves in full.
 - `entitlement_schema` has one entry per field of desired state, each with
@@ -301,6 +303,9 @@ Rules the schema cannot express:
   bindings; its role is fixed for ever, and a new meaning MUST be a new name.
 - `per_person: true` lets an operator set the field for one person over what
   roles give.
+- A limit's `unit` is the closest word in `v2/registry/units.json`; one that
+  is missing is a registry entry ([chapter 14](#14-evolving)), never a word
+  of your own.
 - `operations[]` is [chapter 7](#7-operations); its `params` is a hint for
   the UI only.
 - `connection` is how a member reaches the app: `host` MUST be the name a
@@ -328,7 +333,8 @@ and the six below. The rules in this first part hold on every route.
 
 Specified, with vectors, in `transport_derivation.json`; the reference copy
 is `addons/reference/transport.go` (`deriveKeys`, `signedTarget`,
-`authenticator`).
+`authenticator`). A good start is to copy it and prove the copy against the
+vectors.
 
 - One per-target secret, as its trimmed UTF-8 bytes (never hex-decoded),
   gives two keys through HKDF-SHA-256 (RFC 5869) with the target name as
@@ -367,7 +373,9 @@ is `addons/reference/transport.go` (`deriveKeys`, `signedTarget`,
   strict add-on is never surprised.
 - **`contract_version` in every request body.** Absent or not `2` MUST be
   422 `CONTRACT_VERSION_MISMATCH` with `caller_version` (0 when absent) and
-  `addon_version` (fixture in [chapter 6](#6-errors)).
+  `addon_version` (fixture in [chapter 6](#6-errors)). A body wrong both ways
+  MAY answer either refusal: Syndra reads the two alike
+  ([How Syndra reads a reply](#how-syndra-reads-a-reply)).
 - **Absence is never a value.** Every reply MUST carry every field its schema
   lists in `required`. Syndra reads a missing `current`, `truncated`,
   `taken_at`, `standing.usable` or `effect` as "could not look", never as
@@ -394,13 +402,13 @@ JSON of its identity object: `v2/schema/identity/apply.json`,
 - The identity is the add-on's own: it never crosses the wire, so neither
   Syndra nor the kit can check its algorithm. What both can see, and what
   the add-on MUST get right, is the behaviour: the same JSON in any spelling
-  (`"a"` and `"a"`, `[ "x" ]` and `["x"]`) is the same identity. A good
+  (`"a"` and `"\u0061"`, `[ "x" ]` and `["x"]`) is the same identity. A good
   way to get it is to canonicalise decoded values (`plain` in
   `addons/reference/reference.go`).
 - Reproducing the four vectors
   `v2/fixtures/identity_{apply,operation,lifecycle,setting}.json` is
   RECOMMENDED: they prove the canonicalisation.
-- Syndra omits an empty `params` and an empty `subject`
+- On an operation, Syndra omits an empty `params` and an empty `subject`
   (`callEnvelope` in `backend/internal/addons/transport.go`, `omitempty`);
   the identity MUST treat them as `{}` and `""`.
 
@@ -414,9 +422,10 @@ The rules, from draft-ietf-httpapi-idempotency-key-header where it has one:
 2. The add-on MUST record only a 2xx reply. A refusal is evaluated afresh
    when the same `call_id` comes again.
 3. Same `call_id`, another identity or another kind of write: the add-on
-   MUST answer 422 `CALL_ID_REUSED`.
-4. Same `call_id` while a request carrying it executes in this process: the
-   add-on MUST answer 409 `CALL_IN_PROGRESS` with `Retry-After`. It MUST hold
+   MUST answer 422 `CALL_ID_REUSED`, whether or not the first is still
+   executing.
+4. Same `call_id` and identity while a request carrying it executes in this
+   process: the add-on MUST answer 409 `CALL_IN_PROGRESS` with `Retry-After`. It MUST hold
    this as an in-memory lease, taken before the mutation-log intent and
    released when the reply is written, and MUST NOT carry it across a
    restart or infer it from an intent with no result: a re-send after a
@@ -452,8 +461,8 @@ not an observation. The rules the schemas cannot express:
   the true reason, each defined in the schema; Syndra treats every reason
   alike, as "not current". `retry_after` is in integer seconds, like
   `Retry-After`; `note` is a sentence for a person, in your words.
-- `taken_at` (RFC 3339) MUST be when the app was read, not when you
-  answered.
+- `taken_at` (RFC 3339) MUST be an instant during the read of the app (the
+  TrueNAS add-on takes its end), not when you answered.
 - `truncated: true` MUST be set whenever a read stopped short of everything
   (a cap, a page limit). A truncated read cannot support a conclusion about
   absence, and Syndra draws none from it.
@@ -523,21 +532,27 @@ Schema: `v2/schema/health.json`.
   - `log_head` MUST be non-empty from the first `/health`: the digest of the
     empty log until the first record (`emptyLogDigest` in
     `addons/reference/reference.go`). Syndra refuses an empty head at first
-    sight.
+    sight. Its format is yours: Syndra only compares heads for equality.
   - Each record MUST change `log_head`, and `log_records` MUST never go
     down, across restart, rotation or compaction. Syndra flags as tampering
     fewer records than before, the same count with another head, and more
     records with the same head.
   - `log_records` MUST advance on every write the add-on sends the app, and
-    MUST stay put on a read, a replay and a refusal.
+    MUST stay put on a read, a replay and a refusal. One record per write
+    sent is the least; a record of a result or a binding MAY be added, since
+    Syndra sees only the head and the count.
   - The log itself MUST be append-only, mode `0600`, synced to disk before
-    the write it describes (a record whose sync failed never happened), each
-    record carrying the digest of the one before (`addons/truenas/mutationlog.go`).
+    the write it describes, each record carrying the digest of the one before
+    (`addons/truenas/mutationlog.go`). A record whose sync failed never
+    happened: the add-on MUST NOT send that write, and answers
+    `APPLY_FAILED` or `OPERATION_FAILED` 500, which a person sees, as a
+    failing disk needs.
 - `lifecycle`, `lifecycle_note`, `in_flight` and `drained` are
   [chapter 9](#9-lifecycle-and-degradation); `version_tested` and
   `version_note` are [chapter 2](#2-before-you-write-a-line), step 2;
-  `credential_scopes` is step 4. `credential_expiry` takes a value from the
-  schema, with `credential_expires_at` when it is `set`.
+  `credential_scopes` is step 4. `credential_expiry` is `set` (with
+  `credential_expires_at`), `none` (issued without an expiry) or
+  `unrecorded` (nobody told the add-on).
 - `unaudited_shares` and `shares_readable` are the storage add-on's; a good
   default is to leave them out unless they mean something for your app.
   `target_reads` belongs to `freshness`.
@@ -612,9 +627,12 @@ mirror holds no limits: absent in `state` is "not known".
 
 - The add-on MUST list every account the app holds, managed or not, in one
   reply. Syndra matches accounts to people itself; an account nobody
-  manages is listed and left alone. The add-on's own service account MUST be
-  marked `self: true`.
-- `id` is the app's record key, `account_id` the stable id
+  manages is listed and left alone. The add-on's own service account, the
+  one its credential belongs to, MUST be marked `self: true`; a good way is
+  to ask the app who the credential is (`readSelf` in
+  `addons/truenas/nas.go`).
+- `id` is the app's record key (it MAY equal `account_id` when the app has
+  one id), `account_id` the stable id
   ([chapter 2](#2-before-you-write-a-line)), `username` display only.
   `groups`, `home`, `enabled` and `smb_enabled` on a subject are the storage
   add-on's own; every value Syndra reads is in `state`.
@@ -623,6 +641,15 @@ mirror holds no limits: absent in `state` is "not known".
   shape, `[]` for none. A `limit` MUST be exactly one value, the effective
   limit the app holds (`["0"]` when unlimited), and MUST be left out when it
   could not be read.
+- A `membership` field in `state`, and in an apply's `observed`, MUST hold
+  only values of the managed set. A value the app holds outside it (one
+  `/values` leaves out) MUST be left out, though the account keeps it
+  ([Unlisted values are preserved](#what-desired-means)). Syndra compares the
+  whole list with desired (`Classify` in
+  `backend/internal/services/merge/classify.go`), and no mapping can name
+  such a value, so it would be a difference for ever. The TrueNAS add-on
+  leaves built-in groups out for this reason (`readSubjectsWhere` in
+  `addons/truenas/subjects.go`); the kit's `unlisted-hidden` checks it.
 - `standing` MUST be on every subject, because every listed subject has an
   account. It is observed: why this account can or cannot be used yet, and
   who is waited on (`waiting_on`, from the schema).
@@ -668,9 +695,9 @@ Schema: `v2/schema/values.json`.
 
 - Every field of the entitlement schema MUST answer; any other name MUST be
   404 `UNKNOWN_FIELD`.
-- `account` and `channel` MUST answer `enumerable: true` with
-  `["false","true"]`, a `flag` `["true"]`, and a `limit`
-  `enumerable: false` with `values: []`.
+- The `account` and `channel` fields, whatever you named them, MUST answer
+  `enumerable: true` with `["false","true"]`, a `flag` `["true"]`, and a
+  `limit` `enumerable: false` with `values: []`.
 - For a `membership` field, `values` MUST be the managed set: the values
   that exist now and that Syndra gives and takes away, sorted, with `labels`
   for people. Values the app owns that Syndra never manages (built-in
@@ -762,8 +789,9 @@ Schemas: `v2/schema/plan_request.json`, `v2/schema/plan_response.json`.
   `blocked` MUST carry the `fingerprint` the apply will send back. `detail`
   says what changes; `consequence` says what the subject holds afterwards.
 - For a subject with no account and a desired `account: true`, the outcome
-  MUST be `apply` with the `username` the create would derive; nothing is
-  created.
+  MUST be `apply` with the `username` the create would derive and a
+  `fingerprint`, and no `account_id` or `standing`: there is no account yet,
+  and nothing is created.
 - `email` MAY be empty (the kit's over-limit probe sends `""`). With no
   binding and no email there is no name to create under: the outcome SHOULD
   be `blocked` (`no_change` for withdraw-only), as `applyOne` in
@@ -881,8 +909,11 @@ The add-on MUST work in this order:
 5. Read that account on the app now, decide ([chapter 5](#5-plan-and-apply-agree)),
    and compare the fingerprint of what you read with the request's. A
    difference is 409 `PLAN_STALE` and nothing is written. The comparison
-   MUST happen immediately before the write, from that read.
-6. Append the intent to the mutation log, synced to disk, before the write.
+   MUST happen immediately before the write, from that read. A blocked or
+   conflicting outcome writes nothing either, so which of it and
+   `PLAN_STALE` answers first is yours (the two shipped add-ons differ).
+6. Append the intent to the mutation log, synced to disk, before each write
+   ([`GET /health`](#get-health)).
 7. Write, read the account back, and answer. `observed` MUST be what the
    read-back reports, not what was sent; when the read-back fails, the reply
    MUST set `unverified: true` and leave `observed` out.
@@ -897,19 +928,23 @@ The kit checks each of these with `-mutate`.
 - **Absent is unmanaged.** A field absent from `desired` MUST NOT be
   touched. A field present and empty MUST be made empty, except a `limit`:
   a `limit` present and empty (no role sets it) MUST set nothing, and the
-  app's limit stays as it is and `state` reports it. Syndra sends every
-  mapped field, `[]` when no role the person holds sets it
-  (`backend/internal/services/entitlement.go`), and clearing a limit means
-  "no limit" on most apps (`converge` in `addons/reference/reference.go`).
-- **Withdraw-only never creates.** A withdraw-only desired state for a
-  subject with no account MUST be `no_change`: nothing is created, and the
-  outcome carries no `account_id` and no `standing`. For an existing
-  account it MUST switch the account and every channel off and leave every
-  other field as it was.
+  app's limit stays as it is and `state` reports it. Syndra always sends the
+  `account` field and every `channel`, and every other mapped field unless
+  the state is withdraw-only, `[]` when no role the person holds sets it
+  (`Desired` in `backend/internal/services/entitlement.go`); clearing a
+  limit means "no limit" on most apps (`converge` in
+  `addons/reference/reference.go`).
+- **Only `account: true` creates.** For a subject with no account, a desired
+  `account: false`, withdraw-only included, MUST be `no_change`: nothing is
+  created, and the outcome carries no `account_id` and no `standing` (in a
+  plan, the fingerprint of "no account", like every outcome not blocked).
+  For an existing account, withdraw-only MUST switch the account and every
+  channel off and leave every other field as it was.
 - **A channel follows the account.** Every `channel` field MUST be `false`
   whenever the `account` field ends `false`, whatever `desired` said.
 - **Unlisted values are preserved.** On a `membership` field, a value the
-  app holds outside the managed set MUST NOT be removed. Where the app's API
+  app holds outside the managed set MUST NOT be removed, and `state` never
+  shows it ([`GET /subjects`](#get-subjects)). Where the app's API
   replaces a subject's whole set, read, merge, then write. Where it replaces
   a set shared by many subjects (a group's member list), the add-on MUST
   serialise read, merge and write per shared set, and preserve the members
@@ -921,10 +956,12 @@ The kit checks each of these with `-mutate`.
   unlimited. `observed` MUST carry the effective limit, one value, or leave
   it out when it could not be read.
 - **Every value is checked against its role** (a `flag` value is `"true"`,
-  a `limit` value a non-negative integer, a `membership` value one the app
-  has). A desired state the app cannot hold MUST be 422 `APPLY_BLOCKED`, its
-  outcome as extension members, `consequence` saying what was left as it
-  was.
+  a `limit` value a non-negative decimal integer, a `membership` value one
+  the app has), and every key against your entitlement schema. A desired
+  state the app cannot hold MUST be 422 `APPLY_BLOCKED`, its outcome as
+  extension members, `consequence` saying what was left as it was. Whether
+  a limit may carry leading zeros or a sign, and its largest value, are
+  yours, decided once for plan and apply.
 
 #### The one create
 
@@ -933,7 +970,9 @@ whole burden.
 
 - **Name it from the email.** A new account's username MUST be derived from
   the local part of `email`, once, at create (`DeriveUsername` in
-  `addons/truenas/username.go`); the binding is authoritative from then on.
+  `addons/truenas/username.go`, which keeps `[a-z0-9_.-]`, caps at 32 and
+  falls back to a digest of the subject id when nothing usable is left; the
+  rules are yours); the binding is authoritative from then on.
   The kit's subject is `conformance-<UTC time>` and its email
   `conformance-<UTC time>@example.org`, and the kit owns an account only if
   its `username` begins `conformance-` (`owner` in
@@ -944,9 +983,11 @@ whole burden.
   **only** when the add-on's own mutation log holds a create intent for this
   subject with no recorded id: the crash between a create and its record.
   Any other match, or two candidates, MUST be 409 `BINDING_CONFLICT` with
-  `conflict` (`username`, `account_id`, `adoptable`, `bound_to` when another
-  subject holds it), and an operator decides through the confirmed
-  `account.adopt` operation. Anyone with console access can type an
+  `conflict` (`username`, `account_id`, `bound_to` when another subject
+  holds it, and `adoptable`, `true` exactly when no other subject does), and
+  an operator decides through the confirmed `account.adopt` operation, which
+  every add-on that creates accounts therefore serves
+  ([The account operations](#the-account-operations)). Anyone with console access can type an
   external reference, and a wrong adoption hands one person's data to
   another.
 - **Record it before you answer.** The add-on MUST write the mutation-log
@@ -954,6 +995,11 @@ whole burden.
   `call_id` before it answers, and MUST answer a replay from that record.
 - **A rename is not a loss.** A rename on the app MUST be recognised by
   `account_id`, reported, and never taken for a missing account.
+- **A bound account the app no longer holds**, by `account_id` or name, MUST
+  be created again under the binding's name by the next apply that wants
+  it, as `locate` in `addons/truenas/apply.go` does. Syndra's drift sweep
+  shows it to an operator, who re-provisions it (that apply) or lets it go
+  (`account.release`).
 
 #### The reply
 
@@ -996,6 +1042,10 @@ Schemas: `v2/schema/lifecycle_request.json`,
 - It is a write, deduplicated by `call_id` with identity `{state, reason}`,
   and it MUST be accepted in every state.
 - The reply MUST carry `in_flight` and `drained` as `/health` does.
+- The state is the add-on's own, and neither shipped add-on keeps it across
+  a restart (the TrueNAS add-on starts in `LIFECYCLE_STATE` from its
+  environment); `/health` reports it, so an operator sees what a restart
+  did.
 
 ### Settings: `GET /settings` and `PUT /settings/{name}` (feature `settings`)
 
@@ -1054,8 +1104,14 @@ reply is `v2/fixtures/settings.json`.
   decision; the apply reads again, decides again, compares fingerprints and
   executes that decision. There is no second implementation for the plan.
 - The fingerprint MUST be a digest of exactly the state the decision read,
-  and "no account" MUST have a value of its own, distinct from "an account
-  holding nothing" (`fingerprint` in `addons/reference/reference.go`).
+  the same state always giving the same value, and "no account" MUST have a
+  value of its own, distinct from "an account holding nothing"
+  (`fingerprint` in `addons/reference/reference.go`). It is opaque: Syndra
+  never parses it and sends back what the plan said.
+- `consequence` MUST be built the same way in plan and apply
+  (`describeHolding` in `addons/truenas/apply.go` serves both). A value the
+  plan cannot know, such as the app's default for a limit nobody set, is
+  named as such, never guessed.
 - The kit's `plan-equals-apply` check holds you to it on every convergence
   it makes: a plan's `apply` is the apply's `applied`, with the same
   `consequence`.
@@ -1089,7 +1145,8 @@ Schema: `v2/schema/error.json`; every code: `v2/registry/errors.json`.
 - `retry` MUST be the code's class from the registry. A `by_status` code
   MUST resolve per reply: `backoff` for 429 and every 5xx, `never`
   otherwise. A `retry_after` code MUST send a `Retry-After` header
-  (RFC 9110), in seconds.
+  (RFC 9110), in seconds. Syndra does not read it today: it asks again on
+  its next pass.
 - Anything else a refusal carries MUST be an extension member (RFC 9457 §3.2):
   the outcome of a blocked apply, `caller_version` and `addon_version`,
   `subjects` and `limit`, `lifecycle`, `subject`.
@@ -1115,8 +1172,10 @@ Schema: `v2/schema/error.json`; every code: `v2/registry/errors.json`.
 | any other 4xx | it checked the request and did nothing; the change is dropped |
 
 So the add-on MUST answer a 4xx only when it wrote nothing, and SHOULD
-answer a write with a 5xx only when it cannot tell whether the app acted: a
-5xx sent before any write costs an operator a check for nothing.
+answer a write with a 5xx (other than `TARGET_UNREACHABLE` and
+`LIFECYCLE_REFUSAL`) only when it cannot tell whether the app acted: a 5xx
+sent before any write costs an operator a check for nothing. Which 5xx is
+yours; Syndra reads them alike.
 
 ### Writes while the app is unreachable
 
@@ -1127,11 +1186,16 @@ answer a write with a 5xx only when it cannot tell whether the app acted: a
   or TLS handshake failure before any request byte, or the add-on's own
   breaker holding the call back. A write that failed after its request may
   have reached the app (a timeout, a reset) MUST answer `APPLY_FAILED` or
-  `OPERATION_FAILED` with a 5xx: the app may have acted. So MUST a failure
-  after an earlier write in the same request.
+  `OPERATION_FAILED` with a 5xx: the app may have acted. So MUST every
+  failure after an earlier write in the same request, never
+  `TARGET_UNREACHABLE` or a 429, which Syndra re-queues by itself.
+- A read that fails before any write sent the app no write, and MAY be
+  answered `TARGET_UNREACHABLE`; the TrueNAS add-on answers `APPLY_FAILED`,
+  the conservative choice.
 - A good way to know: tell "no session could be had" apart from "a call on
-  a session failed" (`ErrNotSent` in `addons/truenas/nas.go`), and answer
-  `TARGET_UNREACHABLE` only from the first, before any write (`acted` in
+  a session failed" (`ErrNotSent` in `addons/truenas/nas.go`), answer
+  `TARGET_UNREACHABLE` only from the first, before any write, and send every
+  failure after a write through one function (`acted` in
   `addons/truenas/apply.go`).
 
 ## 7. Operations
@@ -1191,7 +1255,8 @@ Rules for the route:
 
 - The path and the body name the operation; a disagreement MUST be 400
   `OPERATION_MISMATCH`, resolved in neither direction. An unknown name MUST
-  be 404 `OPERATION_FAILED`; a missing parameter 400 `OPERATION_FAILED`.
+  be 404 `OPERATION_FAILED`, before any gate and with nothing recorded; a
+  missing parameter 400 `OPERATION_FAILED`.
 - **A member scope binds the subject.** For a member operation Syndra sets
   `subject` to the member acting. The add-on MUST act on the body's
   `subject` and on no subject a parameter names.
@@ -1199,8 +1264,11 @@ Rules for the route:
   `call_id` with identity `{name, subject, params}` minus every secret
   parameter, so a re-send with the same `call_id` and another password is a
   replay of the first, and the store never holds even a hash of a password.
-  It MUST be refused while the lifecycle is not `active` and against an
-  unrecorded app version, and MUST be in the mutation log.
+  It MUST be refused while the lifecycle is not `active`, and MUST be in
+  the mutation log. It MUST be refused against an unrecorded app version
+  exactly when the manifest declares it `available: false`: one function
+  answers both (`unavailable` in `addons/truenas/server.go`), so an
+  operation that touches only the add-on (`account.release`) stays usable.
 - **A read operation** (`effect: read`) MUST write nothing, MUST leave the
   mutation log and the call record alone, MUST answer in every lifecycle
   state, and MUST ignore `call_id`
@@ -1214,6 +1282,24 @@ Rules for the route:
   for the app's own error payload.
 - The member credential operation is `password.set`. A PIN or a card is
   another credential and gets its own id the day a target needs one.
+
+#### The account operations
+
+Every add-on that creates accounts can answer `BINDING_CONFLICT`
+([The one create](#the-one-create)), and so MUST declare the `operations`
+feature and serve both:
+
+- `account.adopt` binds the account named in `params.username` to the
+  subject, after reading it, and answers its `account_id`. It is the only
+  way an operator resolves a conflict (`handleAdoptAccount` in
+  `backend/internal/handlers/inventory.go`).
+- `account.release` forgets the subject's binding and touches nothing on the
+  app. It is how an operator lets go of an account (`handleReleaseBinding`
+  there, and `releaseOnTarget` in
+  `backend/internal/handlers/merge_findings.go` for one the app no longer
+  holds), so it MUST answer while the app is unreachable.
+
+Without them a conflict sits refused for ever.
 
 **`effect`**, in the registry for every id, says what an operation touches.
 There is no destructive effect, because there is no destructive operation:
@@ -1264,7 +1350,9 @@ effect, `physical` included, are
   the lifecycle, and so MUST `/lifecycle` itself.
 - `in_flight` MUST count writes executing now, lifecycle changes not
   included; `drained` MUST say whether a `draining` or `read_only` add-on
-  has finished what was running.
+  has finished what was running. In `active` its value is yours (TrueNAS
+  `false`, the reference `in_flight == 0`): Syndra shows it and decides
+  nothing on it.
 - **"Could not look" is never "nothing".** Every read that can partly fail
   MUST say which part is missing: `truncated` for a short read, `stale` for
   an old one, `unverified` for a write that could not be read back, an
@@ -1322,7 +1410,7 @@ says what to take from it.
 
 | Symbol | What it shows |
 |---|---|
-| `fields`, `printers` | One field per role, and the managed set beside the app's own value (`lobby`) |
+| `fields`, `printers`, `shown` | One field per role, the managed set beside the app's own value (`lobby`), and `state` showing the managed set only |
 | `standing` | Observed standing: off and waiting on nobody, waiting on the member for a password, or usable |
 | `New`, `emptyLogDigest` | A log head that is never empty, from the first `/health` |
 | `Handler` | Every route behind the signature check, and every other route 404 `UNKNOWN_ROUTE` |
@@ -1369,6 +1457,9 @@ What the reference simplifies, and a real add-on MUST do in full:
   and `TARGET_UNREACHABLE`.
 - `Retry-After` is a constant 30; a real add-on sends what its app's state
   says.
+- It declares neither `account.adopt` nor `account.release`, though it can
+  answer `BINDING_CONFLICT`; a real add-on MUST
+  ([The account operations](#the-account-operations)).
 - It declares no `results`, `freshness`, `calls` or `stats`.
 
 ## 12. The TrueNAS add-on
@@ -1413,14 +1504,18 @@ Steps, in order; each ends on a check.
    `transport_derivation.json`, and every reply you produce MUST validate
    against its schema with format assertion on (in Go,
    `github.com/santhosh-tekuri/jsonschema/v6`, as both Syndra ends use).
-   Reproducing the four `identity_*.json` vectors is RECOMMENDED
+   The contract is files, not a Go module to import: read them from disk,
+   adding each schema under its `$id` so the relative `$ref`s resolve, as
+   `v2Schema` in `addons/truenas/contract2_test.go` does. Reproducing the
+   four `identity_*.json` vectors is RECOMMENDED
    ([Every write](#every-write-once-per-call_id)). *Done when:* the suite is
    green.
 2. **Build the kit.** From the repository root:
    `go build -C addons/conformance -o "$PWD/syndra-addon-conform" ./cmd/syndra-addon-conform`.
-   It embeds the contract it was built from; there is no override. *Done
-   when:* `./syndra-addon-conform -h` lists `-url`, `-target`,
-   `-secret-file`, `-mutate`.
+   It embeds the contract it was built from; there is no override. It is a
+   binary to run, not a package to import. *Done when:*
+   `./syndra-addon-conform -h` lists `-url`, `-target`, `-secret-file`,
+   `-mutate`.
 3. **Run it reads only**, against your add-on in front of a test instance of
    the app (or your own fake of it):
    `./syndra-addon-conform -url https://192.0.2.10:8443 -target <name> -secret-file ./secret`.
@@ -1450,6 +1545,31 @@ Steps, in order; each ends on a check.
    Syndra shows your manifest accepted.
 
 Against production, the kit runs reads only.
+
+### What the kit cannot check
+
+A green kit is not every MUST. These cannot be seen from outside, so your
+own tests carry them:
+
+- that the add-on alone holds the app's credential, and that it holds no
+  more scopes than it reports ([chapter 2](#2-before-you-write-a-line), step
+  4; `dangerous-scopes` reads the self-reported list);
+- the recording, the version gate against it, and your README (chapter 2);
+- the mutation log on disk: mode `0600`, append-only, synced before each
+  write, its head and count surviving a restart and rotation (the kit sees
+  them move within one run);
+- the binding table for the life of the account, and call records for
+  `constants.call_memory`, both surviving a restart (`replay.29d` skips);
+- concurrency: `CALL_IN_PROGRESS`, and serialised writes to a shared set;
+- an outage: `stale` and `NO_CURRENT_READ` on reads, `TARGET_UNREACHABLE`
+  against `APPLY_FAILED` on writes, and `unverified` on a failed read-back
+  (the kit cannot take your app down);
+- lookup before create after a crash between the create and its record;
+- that a value outside the managed set survives an apply (`state` never
+  shows it, so only the add-on's own test sees it:
+  `TestAnUnlistedValueIsKeptAndNotShown` in
+  `addons/reference/unlisted_test.go`);
+- that no secret is stored or logged (the kit reads only replies).
 
 ### What Syndra refuses at registration
 

@@ -1046,9 +1046,53 @@ settings with the full §5 rules.
     anchor; registration refusals listed once. Guard additions: every JSON
     block marked, routes named as `METHOD /path`, every
     `` `symbol` in `path` `` declared there, every section link landing.
-- [ ] 5.3 A fresh agent with only `AUTHORING.md`, `addons/contract/` and the
+- [x] 5.3 A fresh agent with only `AUTHORING.md`, `addons/contract/` and the
   kit builds an add-on for a toy target and passes the kit; what it had to
   ask is written back into the guide #ready-for-agent
+  *Outcome (11 Nov 2026):* a fresh agent passed the kit first run (Doorman,
+  `kind: access`, reads-only and `-mutate`); 31 gaps written back.
+  *Decided while writing:*
+  - `state` and `observed` show a membership's managed set only (A5). The
+    drift sweep compares the whole list (`merge.Classify`), so a value no
+    mapping can name is a finding for ever; TrueNAS already hid built-in
+    groups, the reference showed `lobby`. The reference now hides it
+    (`shown`), the kit's `unlisted-preserved` (which needed it visible) is
+    replaced by `unlisted-hidden` (read-only, every `state` it reads;
+    reference defect `state-shows-unlisted`), and preservation itself is
+    the add-on's own test (`TestAnUnlistedValueIsKeptAndNotShown`).
+  - An add-on that creates accounts MUST serve `account.adopt` and
+    `account.release` (B16): the backend reads a `BINDING_CONFLICT` apply as
+    an ordinary 4xx (`target_refused`), and its only resolutions are
+    `handleAdoptAccount` and `handleReleaseBinding`/`releaseOnTarget`, both
+    through the operations route.
+  - A log sync that fails before a write: the write is not sent, answered
+    `APPLY_FAILED`/`OPERATION_FAILED` 500 (a person looks; the registry has
+    no "add-on store" code for writes). `product_version` is `""` until read
+    (cold start, schema allows it). A pre-write read failure MAY be
+    `TARGET_UNREACHABLE`. Which 5xx, which of blocked/`PLAN_STALE` first,
+    `drained` in `active`, the log head's format, the username rules and a
+    limit's leading zeros are the add-on's, said once each.
+  - Review of fc3cfd14: TrueNAS `unavailable` is the one source for the
+    manifest's `available` and the operation gate (release answers on an
+    unread or untested version); an undeclared operation id is 404 before
+    any gate; `acted` is the one after-write rule (a 429 there becomes 503
+    `APPLY_FAILED`); the kit's `limit-empty` judges only from a 5 GiB it saw
+    set and skips an unreported limit; kit texts cite `AUTHORING.md#…`
+    anchors, guarded by `TestEveryCheckCitesAGuideSection`.
+- [ ] 5.3a (found at 5.3) Where TrueNAS and the contract differ #needs-triage
+  - The mutation log is appended after the write, best-effort (`record` in
+    `addons/truenas/apply.go`); design §8 and the guide say an intent,
+    synced, before the write.
+  - An unknown key in `desired` is 400 `APPLY_FAILED`; the guide's rule is
+    422 `APPLY_BLOCKED` (the reference). Syndra reads both as "dropped".
+  - `v2/fixtures/error_binding_conflict.json` says "not bound to anyone"
+    beside a `bound_to`; correcting it is a contract-file change for both
+    ends' suites.
+  - The reference serves neither `account.adopt` nor `account.release` (the
+    guide lists it as a simplification); once it does, the kit's `manifest`
+    check can require both of an add-on that creates.
+  - A membership that is not enumerable: the add-on cannot tell its managed
+    set, and the drift sweep compares the whole list. No add-on has one yet.
 - [x] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
   point here; `addon-platform/design.md` §5 and §16 gain a one-line pointer
   to this contract as the current statement #ready-for-agent

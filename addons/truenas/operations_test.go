@@ -854,3 +854,65 @@ func TestReadOperationsAreTheRegistrysReads(t *testing.T) {
 		}
 	}
 }
+
+// The manifest and the route answer from one source (unavailable): release
+// touches nothing on the NAS, so the manifest offers it on a version never
+// read or untested, and the route must then do it, not refuse it for the
+// version. password.set touches the NAS and is refused for it, as offered.
+func TestTheRouteRefusesExactlyWhatTheManifestWithdraws(t *testing.T) {
+	for _, version := range []string{"", "27.10.0"} {
+		t.Run("version "+version, func(t *testing.T) {
+			s, _ := opServer(t)
+			s.nas.version = version
+			offered := map[string]bool{}
+			for _, op := range operationSet(s) {
+				offered[op.ID] = op.Available
+			}
+			if !offered["account.release"] || offered["password.set"] {
+				t.Fatalf("the manifest offers release %t, password.set %t", offered["account.release"], offered["password.set"])
+			}
+			rr := postOperation(t, s, "account.release", `{"call_id":"r1","operation":"account.release","subject":"sub-1"}`)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("release, offered, answered %d %s", rr.Code, rr.Body.String())
+			}
+			if _, bound, _ := s.store.GetBinding("sub-1"); bound {
+				t.Error("release answered 200 and left the binding")
+			}
+			rr = postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+			if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeTargetVersionUnsupported {
+				t.Fatalf("password.set, withdrawn, answered %d %s", rr.Code, problemCode(t, rr))
+			}
+		})
+	}
+}
+
+// An id this add-on does not declare is no operation at all: 404
+// OPERATION_FAILED in every lifecycle state and on any version, never a write
+// refused for the lifecycle or the version, and nothing recorded.
+func TestAnUnknownOperationIsNotFoundBeforeAnyGate(t *testing.T) {
+	s, _ := opServer(t)
+	s.nas.version = ""
+	_ = s.life.Set(LifecycleReadOnly, "maintenance")
+	rr := postOperation(t, s, "door.open", `{"call_id":"u1","operation":"door.open","subject":"sub-1"}`)
+	if rr.Code != http.StatusNotFound || problemCode(t, rr) != CodeOperationFailed {
+		t.Fatalf("an unknown operation answered %d %s, want 404 OPERATION_FAILED", rr.Code, problemCode(t, rr))
+	}
+	if recordedEntry(t, s.store, "u1") != nil {
+		t.Error("an unknown operation was recorded under its call_id")
+	}
+}
+
+// A tested release that lacks the method an operation needs: the manifest says
+// "it cannot", and the route refuses it the same way, with the same reason.
+func TestAMissingMethodRefusesWhatTheManifestWithdraws(t *testing.T) {
+	s, _ := opServer(t)
+	s.nas.methods = map[string]bool{"user.query": true}
+	ok, reason := s.availability("password.set")
+	if ok {
+		t.Fatal("password.set is offered on a NAS without user.update")
+	}
+	rr := postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"`+theSecret+`"}}`)
+	if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeOperationFailed || !strings.Contains(rr.Body.String(), reason) {
+		t.Fatalf("want 422 OPERATION_FAILED %q, got %d %s", reason, rr.Code, rr.Body.String())
+	}
+}

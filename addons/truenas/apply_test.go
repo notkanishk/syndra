@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -55,6 +57,8 @@ type mutatingRPC struct {
 	// between two calls.
 	resetOn string
 	after   map[string]func()
+	// rateLimitOn makes one method's call answer as a rate-limited NAS does.
+	rateLimitOn string
 }
 
 // remember adds a created account to the fixture the next read serves.
@@ -115,6 +119,9 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 	if method == m.resetOn {
 		return nil, errors.New("websocket: read tcp 192.0.2.10:443: connection reset by peer")
 	}
+	if method == m.rateLimitOn {
+		return nil, errors.New("too many requests")
+	}
 	switch method {
 	case "user.update":
 		args, _ := params.([]any)
@@ -137,6 +144,9 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		return envelope(`92`), nil
 	case "group.delete":
 		m.groupDeletes++
+		return envelope(`null`), nil
+	case "pool.dataset.set_quota":
+		m.setQuota(params)
 		return envelope(`null`), nil
 	case "user.create":
 		if m.refuseUserCreate {
@@ -165,6 +175,33 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 	m.fakeRPC.calls = m.fakeRPC.calls[:len(m.fakeRPC.calls)-1]
 	m.fakeRPC.params = m.fakeRPC.params[:len(m.fakeRPC.params)-1]
 	return m.fakeRPC.Call(method, timeout, params)
+}
+
+// setQuota keeps a limit the way a NAS does, so the next get_quota of that
+// dataset reads what was set: a limit of 0 is no row, which is no limit.
+func (m *mutatingRPC) setQuota(params any) {
+	args, _ := params.([]any)
+	if len(args) != 2 {
+		return
+	}
+	dataset, _ := args[0].(string)
+	entries, _ := args[1].([]any)
+	key := "pool.dataset.get_quota " + dataset
+	if m.fakeRPC.answers == nil {
+		m.fakeRPC.answers = map[string]string{}
+	}
+	var rows []map[string]any
+	_ = json.Unmarshal([]byte(orEmptyList(m.fakeRPC.answers[key])), &rows)
+	for _, e := range entries {
+		q, _ := e.(map[string]any)
+		id, _ := strconv.ParseInt(fmt.Sprint(q["id"]), 10, 64)
+		rows = slices.DeleteFunc(rows, func(r map[string]any) bool { return fmt.Sprint(r["id"]) == fmt.Sprint(id) })
+		if v, _ := q["quota_value"].(int64); v != 0 {
+			rows = append(rows, map[string]any{"id": id, "quota": v, "quota_type": "USER", "used_bytes": 0})
+		}
+	}
+	out, _ := json.Marshal(rows)
+	m.fakeRPC.answers[key] = string(out)
 }
 
 // applyUpdate makes the fixture agree with the write, the way a target does.
@@ -1376,6 +1413,28 @@ func TestAWriteOperationSaysWhetherAnythingWasSent(t *testing.T) {
 		rr := postOperation(t, s, "password.set", `{"call_id":"p1","operation":"password.set","subject":"sub-1","params":{"password":"correct horse battery staple"}}`)
 		if rr.Code < 500 || problemCode(t, rr) != tc.code {
 			t.Errorf("%s: want a 5xx %s, got %d %s", tc.name, tc.code, rr.Code, problemCode(t, rr))
+		}
+	}
+}
+
+// A 429 is "not reached": Syndra re-queues it by itself. Before any write
+// that is true, and the apply says 429. After the first write (the personal
+// group) it is not, and the apply says 503 APPLY_FAILED, a person looks: the
+// one rule acted holds.
+func TestARateLimitIsNotReachedOnlyBeforeTheFirstWrite(t *testing.T) {
+	for _, tc := range []struct {
+		method string
+		groups int
+		status int
+	}{
+		{"group.create", 0, http.StatusTooManyRequests},
+		{"user.create", 1, http.StatusServiceUnavailable},
+	} {
+		s, m := applyServer(t, `[]`)
+		m.rateLimitOn = tc.method
+		rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.edu","desired":{"enabled":true}}`)
+		if m.groupCreates < tc.groups || rr.Code != tc.status || problemCode(t, rr) != CodeApplyFailed {
+			t.Errorf("rate-limited %s (%d groups made): want %d APPLY_FAILED, got %d %s", tc.method, m.groupCreates, tc.status, rr.Code, problemCode(t, rr))
 		}
 	}
 }

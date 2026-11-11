@@ -202,6 +202,7 @@ func TestEveryDefectFailsTheCheckThatCatchesIt(t *testing.T) {
 		reference.LimitEmptyClears:    "limit-empty",
 		reference.LogHeadEmpty:        "health",
 		reference.ReadsTakeCallID:     "operations.reads",
+		reference.StateShowsUnlisted:  "unlisted-hidden",
 	}
 	for _, d := range reference.Defects {
 		id, ok := catches[d]

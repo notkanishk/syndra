@@ -101,6 +101,12 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 			"The operation named in the body is not the one this route runs.", nil)
 		return
 	}
+	if !declaredOperation(name) {
+		// Before the call record and the gates: an id this add-on does not
+		// declare is not a write it refused, it is no operation at all.
+		writeError(w, http.StatusNotFound, CodeOperationFailed, "This add-on has no such operation.", nil)
+		return
+	}
 	if readOperation(name) {
 		// A read is never recorded, held or reuse-checked: a read that happens
 		// again is a read, Syndra sends one call_id for every read it makes,
@@ -126,8 +132,15 @@ func (s *server) handleOperation(w http.ResponseWriter, r *http.Request, body []
 			return
 		}
 		defer done()
-		if supported, why := s.nas.MajorSupported(); !supported {
+		// The manifest's own answer (availability): an operation that touches
+		// nothing on the NAS (account.release) is never refused for its
+		// version, the one that does is refused for it.
+		switch code, why := s.unavailable(name); code {
+		case CodeTargetVersionUnsupported:
 			writeError(w, http.StatusUnprocessableEntity, CodeTargetVersionUnsupported, why, nil)
+			return
+		case CodeOperationFailed:
+			writeError(w, http.StatusUnprocessableEntity, CodeOperationFailed, why, nil)
 			return
 		}
 		s.operateNow(w, name, req)
@@ -184,10 +197,20 @@ func failedWrite(err error, sentence string) error {
 	return errors.New(sentence)
 }
 
+// declaredOperation is an id this add-on's manifest declares (operationSet).
+func declaredOperation(name string) bool {
+	for _, op := range operationSet(nil) {
+		if op.ID == name {
+			return true
+		}
+	}
+	return false
+}
+
 // readOperation is an operation whose registry effect is `read`
 // (registry/operations.json), held equal to it by
-// TestReadOperationsAreTheRegistrysReads. Every other id, an unknown one
-// included, is a write: recorded, leased and lifecycle-gated (once).
+// TestReadOperationsAreTheRegistrysReads. Every other declared id is a write:
+// recorded, leased and lifecycle-gated (once).
 func readOperation(name string) bool {
 	switch name {
 	case "activity.get", "health.get", "storage.status":

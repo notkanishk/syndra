@@ -61,10 +61,17 @@ func (k *kit) reads() {
 	}
 	k.transport(k.at("transport.refusals"), k.at("transport.query"))
 	health := k.health(k.at("health"))
-	k.subjects(k.at("subjects"))
-	k.at("subjects.paged").skip("feature subjects.paged is deferred (decision 27); no add-on declares it yet")
+	subjects := k.subjects(k.at("subjects"))
+	k.at("subjects.paged").skip("feature subjects.paged is deferred; no add-on declares it yet")
 	k.current(k.at("current"))
 	k.valuesCheck(k.at("values"))
+	for _, s := range objects(subjects["subjects"]) {
+		state, _ := s["state"].(map[string]any)
+		k.unlistedHidden("subject "+display(s), state)
+	}
+	if c := k.at("unlisted-hidden"); !c.ran {
+		c.skip("no subject listed holds an enumerable membership field")
+	}
 	if c := k.at("settings"); !k.m.has("settings") {
 		c.skip("feature settings not declared")
 	} else {
@@ -75,9 +82,9 @@ func (k *kit) reads() {
 	ex := k.send(request{method: http.MethodGet, target: "/conformance/no-such-route"})
 	k.refused(k.at("error-envelope"), ex, 404, "UNKNOWN_ROUTE", "an unknown route")
 
-	k.at("operations.physical").skip("feature calls: its checks are slice 6")
+	k.at("operations.physical").skip("feature calls: this kit does not check it yet")
 	if k.m.has("freshness") {
-		k.at("freshness").skip("declared; its checks are slice 6")
+		k.at("freshness").skip("declared; this kit does not check it yet")
 	} else {
 		k.at("freshness").skip("feature freshness not declared")
 	}
@@ -235,6 +242,23 @@ func (k *kit) subjects(c *check) map[string]any {
 		}
 	}
 	return doc
+}
+
+// unlistedHidden: a membership in state or observed holds only the managed
+// set. Syndra compares state with desired over the whole list, so a value
+// /values leaves out, which no mapping can name, would be a difference it can
+// never close.
+func (k *kit) unlistedHidden(where string, state map[string]any) {
+	c := k.at("unlisted-hidden")
+	for name, v := range state {
+		managed, enumerable := k.values[name]
+		if !enumerable || k.m.role(name) != "membership" {
+			continue
+		}
+		held, _ := stringList(v)
+		extra := slices.DeleteFunc(held, func(s string) bool { return slices.Contains(managed, s) })
+		c.expect(len(extra) == 0, "%s: %s holds %v, which /values/%s does not list", where, name, extra, name)
+	}
 }
 
 // shape checks one field value against its role's wire shape (design §3).
