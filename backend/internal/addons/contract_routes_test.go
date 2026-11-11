@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -302,7 +303,7 @@ func TestAnAddOnCannotSetTheBackendsOwnReadFlags(t *testing.T) {
 		}
 	}
 	addonServing(t, []byte(`{"operation":"storage.status","subject":"s","outcome":"succeeded","storage":{"username":"rey_mysterio","places":[`+planted+`]}}`))
-	st := MyStorage(context.Background(), "truenas", "s", "s")
+	st := Read(context.Background(), "truenas", "storage.status", "s", "s", nil).Storage()
 	if len(st.Places) != 1 || st.Places[0].SMBAddress != "" || st.Places[0].UNCAddress != "" || len(st.Places[0].Roles) != 0 {
 		t.Errorf("a storage place carries what the add-on planted: %+v", st.Places)
 	}
@@ -453,53 +454,99 @@ func TestLifecycleSendsTheContractBodyAndReadsTheReply(t *testing.T) {
 }
 
 // The three reads that ride POST /operations/{name} build their bodies inline.
-// Each leaves as a document the operation schema accepts, and the reply's
-// pocket lands.
-func TestReadOperationsSendTheContractShapeAndReadTheirPocket(t *testing.T) {
-	ctx := context.Background()
+// Each leaves as a document the operation schema accepts, and what lands is
+// the same from the legacy pocket (an add-on without results) and from
+// `result` (one declaring it). The backend reads both shapes, so it may deploy
+// first or together with the add-on; never the add-on alone, whose `result` a
+// pre-6a backend does not read (deploy.yml ships both from one commit). The
+// operator reads name the person as subject and the operator as actor.
+func TestReadOperationsSendTheContractShapeAndReadTheirAnswer(t *testing.T) {
+	for _, tc := range []struct {
+		name                     string
+		results                  bool
+		storage, activity, other string
+	}{
+		{"the legacy pockets", false, "operation_response_storage.json", "operation_response_activity.json", "operation_response_health.json"},
+		{"results", true, "operation_response_result.json", "operation_response_activity_result.json", "operation_response_health_result.json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			serve := func(fixture string) *seen {
+				got := addonAnswering(t, fixture)
+				if tc.results {
+					declareResults(t)
+				}
+				return got
+			}
 
-	got := addonAnswering(t, "operation_response_storage.json")
-	st := MyStorage(ctx, "truenas", "289471021834760193", "289471021834760193")
-	assertOperationRequest(t, got, "storage.status")
-	if st.Outcome != OutcomeSucceeded || st.Username != "rey_mysterio" || !st.Usable || !st.NeedsPassword || !st.SMBEnabled ||
-		!st.UsageReadable || !st.NeedsNewPassword || !st.PlacesReadable {
-		t.Errorf("storage status did not land: %+v", st)
-	}
-	if len(st.Shares) != 1 || st.Shares[0].Share != "makers" || st.Shares[0].UsedBytes != 19756849561 || st.Shares[0].QuotaBytes != 53687091200 {
-		t.Errorf("storage shares did not land: %+v", st.Shares)
-	}
-	if len(st.Places) != 1 || !st.Places[0].Home || st.Places[0].Usage == nil || st.Places[0].Usage.UsedBytes != 19756849561 {
-		t.Errorf("storage places did not land: %+v", st.Places)
-	}
-	if st.Standing == nil || st.Standing.Usable || st.Standing.WaitingOn != "member" || st.Standing.Next == "" {
-		t.Errorf("the account's standing did not land: %+v", st.Standing)
-	}
+			got := serve(tc.storage)
+			st := Read(ctx, "truenas", "storage.status", "289471021834760193", "289471021834760193", nil).Storage()
+			assertOperationRequest(t, got, "storage.status")
+			if st.Outcome != OutcomeSucceeded || !st.NeedsPassword || !st.PlacesReadable || st.NeedsNewPassword == tc.results {
+				t.Errorf("storage status did not land: %+v", st)
+			}
+			if len(st.Places) != 1 || !st.Places[0].Home || st.Places[0].Usage == nil || st.Places[0].Usage.UsedBytes != 19756849561 {
+				t.Errorf("storage places did not land: %+v", st.Places)
+			}
+			if st.Standing == nil || st.Standing.Usable || st.Standing.WaitingOn != "member" || st.Standing.Next == "" {
+				t.Errorf("the account's standing did not land: %+v", st.Standing)
+			}
 
-	got = addonAnswering(t, "operation_response_activity.json")
-	act := Activity(ctx, "truenas", "289471021834760193", "2026-11-01T00:00:00Z")
-	assertOperationRequest(t, got, "activity.get")
-	if act.Outcome != OutcomeSucceeded || !act.Truncated || len(act.UncoveredShares) != 1 || len(act.Events) != 1 {
-		t.Fatalf("the activity report did not land: %+v", act)
-	}
-	if e := act.Events[0]; e.At != "2026-11-10T08:12:30Z" || e.Event != "CONNECT" || e.Share != "makers" || e.Success || e.Address != "192.0.2.17" || e.Detail != "NT_STATUS_NO_SUCH_USER" {
-		t.Errorf("an event did not land: %+v", e)
-	}
+			got = serve(tc.activity)
+			act := Activity(ctx, "truenas", "289471021834760193", "operator-1", "2026-11-01T00:00:00Z")
+			assertOperationRequest(t, got, "activity.get")
+			if subject, actor := sentAs(got); subject != "289471021834760193" || actor != "operator-1" {
+				t.Errorf("activity.get sent subject %q actor %q: the person is the subject, the operator the actor", subject, actor)
+			}
+			if act.Outcome != OutcomeSucceeded || !act.Truncated || len(act.Uncovered) != 1 || act.Uncovered[0] != "scratch" || len(act.Events) != 1 {
+				t.Fatalf("the activity report did not land: %+v", act)
+			}
+			if e := act.Events[0]; e.At != "2026-11-10T08:12:30Z" || e.Event != "CONNECT" || e.Resource != "makers" || e.Success || e.Address != "192.0.2.17" || e.Detail != "NT_STATUS_NO_SUCH_USER" {
+				t.Errorf("an event did not land: %+v", e)
+			}
+			if (act.Observation != nil) != tc.results {
+				t.Errorf("when the log was read: %+v, want it exactly from a results reply", act.Observation)
+			}
 
-	got = addonAnswering(t, "operation_response_health.json")
-	sys := SystemHealth(ctx, "truenas")
-	assertOperationRequest(t, got, "health.get")
-	if sys.Outcome != OutcomeSucceeded || sys.System == nil || sys.System.Hostname != "nas.example.org" || sys.System.Version == "" || sys.System.UptimeSeconds != 864000.5 {
-		t.Fatalf("the system block did not land: %+v", sys)
+			got = serve(tc.other)
+			sys := SystemHealth(ctx, "truenas", "operator-1")
+			assertOperationRequest(t, got, "health.get")
+			if subject, actor := sentAs(got); subject != "" || actor != "operator-1" {
+				t.Errorf("health.get sent subject %q actor %q: about the target, asked by the operator", subject, actor)
+			}
+			if sys.Outcome != OutcomeSucceeded || sys.System == nil || sys.System.Hostname != "nas.example.org" || sys.System.Version == "" || sys.System.UptimeSeconds != 864000.5 {
+				t.Fatalf("the system block did not land: %+v", sys)
+			}
+			if len(sys.Alerts) != 1 || sys.Alerts[0].Level != "WARNING" || sys.Alerts[0].Class != "SMART" || sys.Alerts[0].Text == "" || sys.Alerts[0].At == "" || sys.Alerts[0].Dismissed {
+				t.Errorf("an alert did not land: %+v", sys.Alerts)
+			}
+			if len(sys.Pools) != 1 || sys.Pools[0].Name != "tank" || !sys.Pools[0].Healthy || sys.Pools[0].Warning || sys.Pools[0].FreeBytes == 0 || sys.Pools[0].AllocatedBytes == 0 || sys.Pools[0].SizeBytes == 0 || sys.Pools[0].Status != "ONLINE" {
+				t.Errorf("a pool did not land: %+v", sys.Pools)
+			}
+			if len(sys.Services) != 1 || sys.Services[0].Service != "cifs" || sys.Services[0].State != "RUNNING" || !sys.Services[0].Enabled || len(sys.Degraded) != 1 {
+				t.Errorf("services did not land: %+v %v", sys.Services, sys.Degraded)
+			}
+		})
 	}
-	if len(sys.Alerts) != 1 || sys.Alerts[0].Level != "WARNING" || sys.Alerts[0].Class != "SMART" || sys.Alerts[0].Text == "" || sys.Alerts[0].At == "" || sys.Alerts[0].Dismissed {
-		t.Errorf("an alert did not land: %+v", sys.Alerts)
+}
+
+// sentAs is who a captured operation request named.
+func sentAs(got *seen) (subject, actor string) {
+	var sent struct{ Subject, Actor string }
+	_ = json.Unmarshal(got.body, &sent)
+	return sent.Subject, sent.Actor
+}
+
+// declareResults is the installed add-on's manifest declaring feature results.
+func declareResults(t *testing.T) {
+	t.Helper()
+	a, err := Get("truenas")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(sys.Pools) != 1 || sys.Pools[0].Name != "tank" || !sys.Pools[0].Healthy || sys.Pools[0].Warning || sys.Pools[0].FreeBytes == 0 || sys.Pools[0].AllocatedBytes == 0 || sys.Pools[0].SizeBytes == 0 || sys.Pools[0].Status != "ONLINE" {
-		t.Errorf("a pool did not land: %+v", sys.Pools)
-	}
-	if len(sys.Services) != 1 || sys.Services[0].Service != "cifs" || sys.Services[0].State != "RUNNING" || !sys.Services[0].Enabled || len(sys.Degraded) != 1 {
-		t.Errorf("services did not land: %+v %v", sys.Services, sys.Degraded)
-	}
+	registryMu.Lock()
+	a.manifest.Features = append(slices.Clone(a.manifest.Features), "results")
+	registryMu.Unlock()
 }
 
 func assertOperationRequest(t *testing.T, got *seen, operation string) {

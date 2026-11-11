@@ -22,7 +22,7 @@ func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 	if err != nil || status != 200 {
 		t.Fatalf("status=%d err=%v", status, err)
 	}
-	got := res.Storage
+	got := res.Result.(*StorageStatus)
 	if got == nil {
 		t.Fatal("no storage status returned")
 	}
@@ -31,9 +31,6 @@ func TestAnAccountWithNoPasswordIsReportedAsNotYetUsable(t *testing.T) {
 	}
 	if !got.NeedsPassword {
 		t.Error("the member is not told the one action that fixes it")
-	}
-	if got.Username != "charlotte" {
-		t.Errorf("username = %q", got.Username)
 	}
 	// The standing a subjects read reports, carried here (contract 2): the
 	// member is waited on, with the storage page's next step.
@@ -55,13 +52,13 @@ func TestALockedAccountIsNotUsableAndNotTheMembersToFix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Storage.Usable {
+	if res.Result.(*StorageStatus).Usable {
 		t.Error("a locked account was reported as usable")
 	}
-	if res.Storage.NeedsPassword {
+	if res.Result.(*StorageStatus).NeedsPassword {
 		t.Error("a locked account told the member to set a password, which would not help")
 	}
-	if st := res.Storage.Standing; st == nil || st.Usable || st.WaitingOn != "none" {
+	if st := res.Result.(*StorageStatus).Standing; st == nil || st.Usable || st.WaitingOn != "none" {
 		t.Errorf("a switched-off account waits on nobody the member can name: %+v", st)
 	}
 }
@@ -137,5 +134,32 @@ func TestReleasingWhatIsNotBoundIsAlreadyDone(t *testing.T) {
 	}
 	if res.Outcome != "succeeded" {
 		t.Errorf("outcome = %q", res.Outcome)
+	}
+}
+
+// One share's quota table unread makes quota_read false, and the meters that
+// were read are still sent: a partial read is said to be one, never passed off
+// as the whole, and never thrown away either.
+func TestAnUnreadQuotaTableMakesTheUsageUnread(t *testing.T) {
+	fake := reachFake()
+	fake.users = `[{"username":"charlotte","id":11,"uid":200001,"locked":false,"smb":true,"password_disabled":false,
+		"groups":[41,50],"home":"/mnt/tank/main/home_dir/charlotte"}]`
+	fake.answers["pool.dataset.get_quota tank/main"] = `[{"id":200001,"used_bytes":5000,"quota":1000000,"quota_type":"USER"}]`
+	fake.answers["pool.dataset.get_quota tank/open"] = `[{"id":200001,"used_bytes":7,"quota_type":"USER"}]`
+	fake.refuse = map[string]string{"pool.dataset.get_quota tank/open": "[EPERM] Operation not permitted"}
+	s := testServer(t, fake)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 200001}); err != nil {
+		t.Fatal(err)
+	}
+	res, status, err := s.storageStatus(OperationRequest{Subject: "sub-1"})
+	if err != nil || status != 200 {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	got := res.Result.(*StorageStatus)
+	if got.QuotaRead {
+		t.Error("a share's quota table was unread and quota_read says all of it was read")
+	}
+	if len(got.Meters) != 1 || got.Meters[0].Label != "main" || got.Meters[0].Used != 5000 {
+		t.Errorf("meters %+v, want the one share that was read", got.Meters)
 	}
 }

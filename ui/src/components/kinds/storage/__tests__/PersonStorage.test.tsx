@@ -47,7 +47,7 @@ function view(over: Partial<PersonTargetView> = {}): PersonTargetView {
     reachable: true,
     health: "online",
     checked_at: new Date().toISOString(),
-    storage: { username: "roman.reigns", usable: true, needs_password: false, smb_enabled: true, places: [homePlace, renders], places_readable: true },
+    storage: { usable: true, needs_password: false, places: [homePlace, renders], places_readable: true },
     home: {
       subject_id: "u1",
       username: "roman.reigns",
@@ -129,7 +129,7 @@ describe("a person's network storage (A-10 Part 1)", () => {
     show(
       view({
         restored_at: "2026-10-20T10:00:00Z",
-        storage: { ...view().storage!, usable: false, smb_enabled: false, needs_new_password: true },
+        storage: { ...view().storage!, usable: false, needs_new_password: true },
       }),
     );
     expect(within(rowOf("Password")).getByText("Needs a new password")).toBeInTheDocument();
@@ -193,6 +193,31 @@ describe("a person's network storage (A-10 Part 1)", () => {
     expect(within(rowOf("Home folder")).getByText(/didn't answer when this page asked/)).toBeInTheDocument();
   });
 
+  it("usage the target could not read is said, in an operator's words, and absent when it was read", () => {
+    show(view({ storage: { ...view().storage!, quota_read: false } }));
+    expect(screen.getByText("Some usage could not be read from TrueNAS.")).toBeInTheDocument();
+    expect(screen.getByText(/check the add-on's health on its system page/)).toBeInTheDocument();
+    expect(screen.queryByText(/ask makerspace staff/)).toBeNull();
+  });
+
+  it("says some was read only when the home folder's usage is drawn, not when only an undrawn place carries it", () => {
+    // The places carry usage (homePlace does), but this card draws only view.home's.
+    const { used_bytes: _u, ...home } = view().home!;
+    show(view({ home, storage: { ...view().storage!, quota_read: false } }));
+    expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeInTheDocument();
+    expect(screen.queryByText(/Some usage could not be read/)).toBeNull();
+  });
+
+  it("says some was read when the home folder's usage is drawn", () => {
+    show(view({ storage: { ...view().storage!, quota_read: false } }));
+    expect(screen.getByText("Some usage could not be read from TrueNAS.")).toBeInTheDocument();
+  });
+
+  it("says nothing about unread usage when quota_read is true", () => {
+    show(view({ storage: { ...view().storage!, quota_read: true } }));
+    expect(screen.queryByText(/usage could not be read/i)).toBeNull();
+  });
+
   it("being set up: the whole body is not open yet, with the step", () => {
     show(view({ setup: "no_project", account: undefined, entitled: false, storage: undefined }));
     expect(screen.getByText("Opens once TrueNAS is set up")).toBeInTheDocument();
@@ -220,5 +245,20 @@ describe("a person's network storage (A-10 Part 1)", () => {
     const names = within(rowOf("Folders")).getAllByText(/^(zine|assets)$/).map((el) => el.textContent);
     expect(names).toEqual(["assets", "zine"]);
     expect(screen.queryByText(/Limits, holds and folders are set on/)).toBeNull();
+  });
+});
+
+describe("reads beside the storage card", () => {
+  const read = (operation: string) => ({
+    operation,
+    shape: "records" as const,
+    readable: true,
+    result: { records: [{ id: "a", label: `From ${operation}` }], taken_at: "2026-11-10T09:30:00Z", current: true },
+  });
+
+  it("skips the read it draws itself from view.storage and draws any other", () => {
+    show(view({ reads: [read("storage.status"), read("holdings.list")] }));
+    expect(screen.queryByText("From storage.status")).toBeNull();
+    expect(screen.getByText("From holdings.list")).toBeInTheDocument();
   });
 });

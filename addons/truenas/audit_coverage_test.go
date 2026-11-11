@@ -62,14 +62,16 @@ func activityReport(t *testing.T, s *server) *ActivityReport {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
 	}
-	var out OperationResult
+	var out struct {
+		Result *ActivityReport `json:"result"`
+	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.Activity == nil {
+	if out.Result == nil {
 		t.Fatal("want an activity report")
 	}
-	return out.Activity
+	return out.Result
 }
 
 // The regression. `charlotte` is in `lab_makers` (fixture group 42) and nothing else;
@@ -83,9 +85,9 @@ func TestAnEnabledShareScopedPastTheMemberIsReportedAsNotWatchingThem(t *testing
 	]`
 
 	report := activityReport(t, s)
-	if len(report.UncoveredShares) != 2 {
+	if len(report.Uncovered) != 2 {
 		t.Fatalf("both shares are switched on and neither records this member; "+
-			"reading `enable` alone reported them as watched: %v", report.UncoveredShares)
+			"reading `enable` alone reported them as watched: %v", report.Uncovered)
 	}
 }
 
@@ -94,8 +96,8 @@ func TestAShareWatchingTheMembersOwnGroupIsNotReported(t *testing.T) {
 	m.fakeRPC.audit = `[]`
 	m.fakeRPC.shares = `[{"name":"main","audit":{"enable":true,"watch_list":["lab_makers"],"ignore_list":[]}}]`
 
-	if report := activityReport(t, s); len(report.UncoveredShares) != 0 {
-		t.Fatalf("this share is watching the member's own group: %v", report.UncoveredShares)
+	if report := activityReport(t, s); len(report.Uncovered) != 0 {
+		t.Fatalf("this share is watching the member's own group: %v", report.Uncovered)
 	}
 }
 
@@ -113,8 +115,8 @@ func TestTheMembersPrimaryGroupCountsTowardsCoverage(t *testing.T) {
 	m.fakeRPC.shares = `[{"name":"main","audit":{"enable":true,"watch_list":[],"ignore_list":["builtin_users"]}}]`
 
 	report := activityReport(t, s)
-	if len(report.UncoveredShares) != 1 || report.UncoveredShares[0] != "main" {
-		t.Fatalf("the ignore list names the member's primary group: %v", report.UncoveredShares)
+	if len(report.Uncovered) != 1 || report.Uncovered[0] != "main" {
+		t.Fatalf("the ignore list names the member's primary group: %v", report.Uncovered)
 	}
 }
 
@@ -128,10 +130,10 @@ func TestCoverageIsUnknownRatherThanCompleteWhenTheGroupsCannotBeRead(t *testing
 	m.fakeRPC.refuse = map[string]string{"group.query": "permission denied"}
 
 	report := activityReport(t, s)
-	if len(report.UncoveredShares) != 1 {
-		t.Fatalf("want one caveat, got %v", report.UncoveredShares)
+	if len(report.Uncovered) != 1 {
+		t.Fatalf("want one caveat, got %v", report.Uncovered)
 	}
-	if report.UncoveredShares[0] == "main" {
+	if report.Uncovered[0] == "main" {
 		t.Fatal("a share named here reads as a fact about that share; nothing was determined")
 	}
 }

@@ -87,10 +87,8 @@ function view(over: Partial<MyTargetView> = {}): MyTargetView {
     connection: { protocol: "smb", host: HOST },
     roles: [{ project_id: "p1", role_key: "fab_lead" }],
     storage: {
-      username: "charlotte",
       usable: true,
       needs_password: false,
-      smb_enabled: true,
       places: [HOME, WADDLE, QUACK],
       places_readable: true,
     },
@@ -136,7 +134,7 @@ describe("the three states", () => {
     state.targets = [
       view({
         credential: { set: false },
-        storage: { ...view().storage!, usable: false, needs_password: true, smb_enabled: false },
+        storage: { ...view().storage!, usable: false, needs_password: true },
       }),
     ];
     renderStorage();
@@ -182,6 +180,46 @@ describe("usage", () => {
   });
 });
 
+describe("usage the target could not read", () => {
+  it("says so, in a member's words, rather than leaving usage lines out as if nothing were used", () => {
+    state.targets = [view({ storage: { ...view().storage!, quota_read: false } })];
+    renderStorage();
+    expect(screen.getByText("Some usage could not be read from TrueNAS.")).toBeTruthy();
+    expect(screen.getByText(/ask makerspace staff/)).toBeTruthy();
+    expect(screen.queryByText(/check the add-on's health/)).toBeNull();
+  });
+
+  it("says all of it could not be read when no place carries usage", () => {
+    const bare = [HOME, WADDLE].map(({ usage: _u, ...p }) => p);
+    state.targets = [view({ storage: { ...view().storage!, places: bare, quota_read: false } })];
+    renderStorage();
+    expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
+  });
+
+  it("says all of it could not be read when only a read-only place carries usage, which is drawn nowhere", () => {
+    const bare = [HOME, WADDLE].map(({ usage: _u, ...p }) => p);
+    state.targets = [view({ storage: { ...view().storage!, places: [...bare, QUACK], quota_read: false } })];
+    renderStorage();
+    expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
+    expect(screen.queryByText(/Some usage could not be read/)).toBeNull();
+  });
+
+  it("says all of it could not be read while offline, when no usage line is drawn", () => {
+    state.targets = [view({ health: "offline", storage: { ...view().storage!, quota_read: false } })];
+    renderStorage();
+    expect(screen.getByText("Usage could not be read from TrueNAS.")).toBeTruthy();
+  });
+
+  it("says nothing when it was read (quota_read true) or the target does not say", () => {
+    for (const quota_read of [true, undefined]) {
+      state.targets = [view({ storage: { ...view().storage!, quota_read } })];
+      const { unmount } = renderStorage();
+      expect(screen.queryByText(/usage could not be read/i)).toBeNull();
+      unmount();
+    }
+  });
+});
+
 describe("addresses", () => {
   it("are the backend's, both of them, per folder", () => {
     state.targets = [view()];
@@ -204,7 +242,7 @@ describe("Q-02 states", () => {
     state.targets = [
       view({
         restored_at: "2026-10-12T10:00:00Z",
-        storage: { ...view().storage!, usable: false, needs_new_password: true, smb_enabled: false },
+        storage: { ...view().storage!, usable: false, needs_new_password: true },
       }),
     ];
     renderStorage();
@@ -500,5 +538,21 @@ describe("a password change nobody has confirmed", () => {
     expect(screen.getByText(/You can set it again here once TrueNAS is back/)).toBeTruthy();
     expect(passwordField()).toBeNull();
     expect(screen.queryByText(/You can't change your password while TrueNAS is offline/)).toBeNull();
+  });
+});
+
+describe("reads beside the storage card", () => {
+  const read = (operation: string) => ({
+    operation,
+    shape: "records" as const,
+    readable: true,
+    result: { records: [{ id: "a", label: `From ${operation}` }], taken_at: "2026-11-10T09:30:00Z", current: true },
+  });
+
+  it("skips the read it draws itself from view.storage and draws any other", () => {
+    state.targets = [view({ reads: [read("storage.status"), read("holdings.list")] })];
+    renderStorage();
+    expect(screen.queryByText("From storage.status")).toBeNull();
+    expect(screen.getByText("From holdings.list")).toBeTruthy();
   });
 });

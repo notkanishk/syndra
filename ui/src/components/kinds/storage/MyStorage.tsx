@@ -8,6 +8,9 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MEMBER } from "@/components/results/copy";
+import { Reads } from "@/components/results/ReadResult";
+import { UsageUnread } from "@/components/results/StatusMeters";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FieldLabel, Input } from "@/components/ui/Input";
@@ -18,7 +21,7 @@ import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
 import type { GuideFolder } from "@/components/kinds/storage/ConnectionGuide";
 import { deviceFrom, type Device } from "@/components/kinds/storage/device";
-import { PASSWORD_STEP, isHold, stateOf, type State } from "@/components/kinds/storage/state";
+import { OWN_READS, PASSWORD_STEP, drawnUsage, isHold, stateOf, usageShown, type State } from "@/components/kinds/storage/state";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
@@ -90,6 +93,8 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
   const roles = (view.roles ?? []).map(roleName);
   const [headline, body, aside] = copyFor(state, label, view);
   const notice = pausedNotice(view, label);
+  // The usage Folders draws, place by place: what the unread-usage notice below stands beside.
+  const drawn = hasAccount && view.storage?.places_readable ? (view.storage.places ?? []).map((p) => drawnUsage(p, offline)) : [];
 
   return (
     <Card>
@@ -194,6 +199,12 @@ export function StorageMemberCard({ view }: { view: MyTargetView }) {
           <Withheld items={(view.suspended ?? []).filter((s) => !isHold(view, s))} schemaOf={() => view.entitlement_schema} />
         </div>
       )}
+      {view.storage?.quota_read === false && (
+        <div className="row-divider px-5 py-4">
+          <UsageUnread name={label} some={usageShown(drawn)} reader={MEMBER} />
+        </div>
+      )}
+      <Reads reads={view.reads} skip={OWN_READS} name={label} reader={MEMBER} />
     </Card>
   );
 }
@@ -505,7 +516,7 @@ function PlaceBlock({
         ? `From your ${joinNames(roles)} ${roles.length === 1 ? "role" : "roles"}`
         : "";
 
-  const usage = place.usage;
+  const usage = drawnUsage(place, offline);
   const quota = usage?.quota_bytes ?? 0;
   const pct = usage && quota > 0 ? Math.min(100, (usage.used_bytes / quota) * 100) : 0;
   const full = pct >= 90;

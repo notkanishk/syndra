@@ -1,5 +1,5 @@
 {
-  "$comment": "Every operation id in the backend's operationPolicy. scope is the broadest scope it may be offered at; confirm is whether the backend requires it; effect is read (never dispatched or logged), account, credential or physical; result names the schema of the reply under feature results (health.get declares its own and is shown raw). secret_result would mark an operation whose reply carries a secret; none does yet.",
+  "$comment": "Every operation id in the backend's operationPolicy. scope is the broadest scope it may be offered at; confirm is whether the backend requires it; effect is read (served through Syndra's one read path: never dispatched, logged or confirmed), account, credential or physical; result names the schema a feature-results add-on answers under result (health.get declares its own and is shown raw). pocket is the reply key a read was answered under before feature results, read only from an add-on without results and removed at major 3; a read with no pocket (holdings.list) needs feature results. secret_result would mark an operation whose reply carries a secret; none does yet.",
   "operations": {
     "account.adopt": {
       "meaning": "Bind an existing unbound target account to the subject.",
@@ -55,7 +55,8 @@
       ],
       "secret_params": [],
       "effect": "read",
-      "result": "common/activity.json"
+      "result": "common/activity.json",
+      "pocket": "activity"
     },
     "health.get": {
       "meaning": "The target's own health, read live.",
@@ -63,7 +64,17 @@
       "confirm": false,
       "params": [],
       "secret_params": [],
-      "effect": "read"
+      "effect": "read",
+      "pocket": "health"
+    },
+    "holdings.list": {
+      "meaning": "What the subject holds on the target, read live.",
+      "scope": "member",
+      "confirm": false,
+      "params": [],
+      "secret_params": [],
+      "effect": "read",
+      "result": "common/records.json"
     },
     "password.rotate": {
       "meaning": "Replace the subject's password with a generated one the member never sees.",
@@ -97,7 +108,8 @@
       "params": [],
       "secret_params": [],
       "effect": "read",
-      "result": "common/status.json"
+      "result": "profiles/storage/status.json",
+      "pocket": "storage"
     }
   }
 }

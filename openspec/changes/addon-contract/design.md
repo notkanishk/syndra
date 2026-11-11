@@ -404,10 +404,13 @@ and nothing becomes a major 3 later (owner decisions 18, 20):
   generic renderer: `common/records.json` (a list of things the subject
   holds or did: `{id, label, category?, since?, due?, standing?, x-*}`),
   `common/activity.json` (what `activity.get` answers today, with
-  `uncovered[]` and `truncated`, the share word gone), and
-  `common/status.json` (`storage.status`'s shape: `usable`, `standing`, a
-  list of `{label, used, limit, unit}`). A new operation picks one of these
-  or declares its own; its own is shown raw until a kind module reads it.
+  `uncovered[]` and `truncated`, the share word gone: an event's place is
+  its generic `resource`), and `common/status.json` (`usable`, `standing`, a
+  list of `{label, used, limit, unit}`; `storage.status` answers the storage
+  profile `profiles/storage/status.json`, this shape plus places and password
+  state, decided in slice 6a). A new operation picks one of these, a kind
+  profile of one, or declares its own; its own is shown raw until a kind
+  module reads it.
 - **`effect`: what the operation changes** (registry only; the backend
   reads it from the registry, so no feature). `read` (writes nothing),
   `account` (the subject's account or entitlements), `credential` (a secret
@@ -847,6 +850,7 @@ keep, and it does not pretend to.
 | unlisted hidden | a membership in `state` or `observed` holds only the managed set (no value `/values` leaves out); that such a value survives an apply is invisible from outside, so it is the add-on's own test (5.3) |
 | limit combine | two mappings, `"0"` and `"5368709120"` → observed limit is `unlimited` (unlimited dominates, §3) |
 | lifecycle | `read_only` → apply answers `LIFECYCLE_REFUSAL` (503, `Retry-After`), reads still answer; no reason → `REASON_REQUIRED`; unknown → `UNKNOWN_LIFECYCLE_STATE`; back to `active` |
+| results (feature `results`) | every available `effect: read` operation answers one `result` valid against the schema `registry/operations.json` names for it (which holds `current: false` ⇔ `stale`), or an object for an id that declares its own; without the feature, a read with no registry `pocket` (`holdings.list`) declared available is a `fail`, and otherwise `skip` |
 | operations | unknown → 404; missing required param → 400; a canary secret value never appears in any later byte of any reply, health, error, replay or `/calls` answer (`secret_result` redaction included); a `physical` operation refuses without `confirm`, answers `preview: true` with no effect and no record (`log_records` unchanged; a preview sends nothing to `/calls`, and `/calls` on a never-used id → `unknown`), and `GET /calls/{call_id}` answers `recorded` after the confirm; a second call while the first is `in_doubt` → 409 `CALL_UNSETTLED` |
 | transport | unsigned → 401; stale timestamp → 401; wrong key → 401 without saying which half; a signed request with its query reordered or altered → 401; the served key equals the derived one; the three query vectors in `transport_derivation.json` reproduce |
 | freshness (feature `freshness`) | the reads in scope carry `taken_at` and `current`, and `current == false` ⇔ `stale` present; a read without `fresh` answered from the mirror says `stale.reason: cached` and does not advance `health.target_reads`; `fresh: true` advances it by one or answers `stale.reason: cooldown` with `retry_after`; two concurrent `fresh: true` reads advance it by **one**; with the target unreachable, a read answers the last known value with `stale.reason: unreachable`, not an error |

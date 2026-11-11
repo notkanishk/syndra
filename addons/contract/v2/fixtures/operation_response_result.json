@@ -12,18 +12,31 @@
     },
     "meters": [
       {
-        "label": "Home folder",
+        "label": "makers",
         "used": 19756849561,
         "limit": 53687091200,
-        "unit": "bytes"
-      },
-      {
-        "label": "Scratch",
-        "used": 1048576,
         "unit": "bytes"
       }
     ],
     "taken_at": "2026-11-10T09:30:00Z",
-    "current": true
+    "current": true,
+    "places": [
+      {
+        "share": "homes",
+        "folder": "rey_mysterio",
+        "path": "/mnt/tank/homes/rey_mysterio",
+        "access": "change",
+        "dataset": "tank/homes",
+        "home": true,
+        "usage": {
+          "used_bytes": 19756849561,
+          "quota_bytes": 53687091200
+        }
+      }
+    ],
+    "places_readable": true,
+    "needs_password": true,
+    "needs_new_password": false,
+    "quota_read": true
   }
 }

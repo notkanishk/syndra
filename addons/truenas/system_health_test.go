@@ -99,7 +99,7 @@ func TestSystemHealthReadsWhatTheTargetActuallyAnswers(t *testing.T) {
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %v", code, err)
 	}
-	h := res.Health
+	h := res.Result.(*TargetHealth)
 	if h == nil {
 		t.Fatal("no health report")
 	}
@@ -173,7 +173,7 @@ func TestOneFailedSourceDegradesByNameAndKeepsTheRest(t *testing.T) {
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("a partial read is still an answer, got %d: %v", code, err)
 	}
-	h := res.Health
+	h := res.Result.(*TargetHealth)
 	if len(h.Degraded) != 1 || h.Degraded[0] != "alerts" {
 		t.Fatalf("the failed source must be NAMED, got %v", h.Degraded)
 	}
@@ -203,7 +203,7 @@ func TestADeadSessionDegradesEverythingAfterIt(t *testing.T) {
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("the source that answered first still answered, got %d: %v", code, err)
 	}
-	h := res.Health
+	h := res.Result.(*TargetHealth)
 	if h.System == nil {
 		t.Fatal("the read before the socket died must survive")
 	}
@@ -265,9 +265,9 @@ func TestAMalformedSourceIsDegradedRatherThanIgnored(t *testing.T) {
 			if err != nil || code != http.StatusOK {
 				t.Fatalf("the other sources still answered, got %d: %v", code, err)
 			}
-			if len(res.Health.Degraded) != 1 {
+			if len(res.Result.(*TargetHealth).Degraded) != 1 {
 				t.Fatalf("the source that could not be decoded must be named, got %v",
-					res.Health.Degraded)
+					res.Result.(*TargetHealth).Degraded)
 			}
 		})
 	}
@@ -287,25 +287,25 @@ func TestANullSourceIsNotAnEmptyOne(t *testing.T) {
 			if err != nil || code != http.StatusOK {
 				t.Fatalf("want 200, got %d: %v", code, err)
 			}
-			if len(res.Health.Degraded) != 1 {
-				t.Fatalf("a null answer must be degraded, not empty: %v", res.Health.Degraded)
+			if len(res.Result.(*TargetHealth).Degraded) != 1 {
+				t.Fatalf("a null answer must be degraded, not empty: %v", res.Result.(*TargetHealth).Degraded)
 			}
 			switch method {
 			case "alert.list":
-				if res.Health.Alerts != nil {
-					t.Fatalf("an unread source must be ABSENT, not an empty list: %v", res.Health.Alerts)
+				if res.Result.(*TargetHealth).Alerts != nil {
+					t.Fatalf("an unread source must be ABSENT, not an empty list: %v", res.Result.(*TargetHealth).Alerts)
 				}
 			case "pool.query":
-				if res.Health.Pools != nil {
-					t.Fatalf("an unread source must be ABSENT, not an empty list: %v", res.Health.Pools)
+				if res.Result.(*TargetHealth).Pools != nil {
+					t.Fatalf("an unread source must be ABSENT, not an empty list: %v", res.Result.(*TargetHealth).Pools)
 				}
 			case "service.query":
-				if res.Health.Services != nil {
-					t.Fatalf("an unread source must be ABSENT, not an empty list: %v", res.Health.Services)
+				if res.Result.(*TargetHealth).Services != nil {
+					t.Fatalf("an unread source must be ABSENT, not an empty list: %v", res.Result.(*TargetHealth).Services)
 				}
 			case "system.info":
-				if res.Health.System != nil {
-					t.Fatalf("an unread source must be ABSENT: %+v", res.Health.System)
+				if res.Result.(*TargetHealth).System != nil {
+					t.Fatalf("an unread source must be ABSENT: %+v", res.Result.(*TargetHealth).System)
 				}
 			}
 		})
@@ -322,11 +322,11 @@ func TestAnEmptyListIsAnAnswerAndNotADegradation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("targetHealth: %v", err)
 	}
-	if len(res.Health.Degraded) != 0 {
-		t.Fatalf("a target with no alerts is not a target that failed: %v", res.Health.Degraded)
+	if len(res.Result.(*TargetHealth).Degraded) != 0 {
+		t.Fatalf("a target with no alerts is not a target that failed: %v", res.Result.(*TargetHealth).Degraded)
 	}
-	if res.Health.Alerts == nil || len(res.Health.Alerts) != 0 {
-		t.Fatalf("an answered empty list must be an empty list: %v", res.Health.Alerts)
+	if res.Result.(*TargetHealth).Alerts == nil || len(res.Result.(*TargetHealth).Alerts) != 0 {
+		t.Fatalf("an answered empty list must be an empty list: %v", res.Result.(*TargetHealth).Alerts)
 	}
 }
 

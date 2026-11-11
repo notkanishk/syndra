@@ -50,6 +50,32 @@ type storageHarness struct {
 	dispatchErr error     // returned beside a result that HAS an operation id
 }
 
+// storageReply is a storage.status answer as the one read path returns it from
+// an add-on without results (the legacy pocket), so a test states the status
+// as Syndra's own view and the reader decodes it for real.
+func storageReply(st addons.StorageStatus) addons.ReadReply {
+	if st.Outcome != addons.OutcomeSucceeded {
+		return addons.ReadReply{Operation: "storage.status", Outcome: st.Outcome}
+	}
+	body, _ := json.Marshal(map[string]any{"operation": "storage.status", "outcome": "succeeded", "storage": st})
+	return addons.ReadReply{Operation: "storage.status", Pocket: "storage", Outcome: addons.OutcomeSucceeded, Status: http.StatusOK, Body: body}
+}
+
+// answerStorage stands the target up offering one member read, storage.status,
+// answered by status for whoever asks (subject, actor).
+func answerStorage(t *testing.T, status func(subject, actor string) addons.StorageStatus) {
+	t.Helper()
+	read, reads := addonsRead, addonsMemberReads
+	t.Cleanup(func() { addonsRead, addonsMemberReads = read, reads })
+	addonsMemberReads = func(string) []string { return []string{"storage.status"} }
+	addonsRead = func(_ context.Context, _, op, subject, actor string, _ map[string]any) addons.ReadReply {
+		if op != "storage.status" {
+			t.Errorf("read %s, which the target does not offer", op)
+		}
+		return storageReply(status(subject, actor))
+	}
+}
+
 func stubMyStorage(t *testing.T, h *storageHarness) {
 	t.Helper()
 	resolve, binding, cred, dispatch, record, callable, health, recorded :=
@@ -390,18 +416,18 @@ func TestTheMemberViewCarriesConfirmedHealth(t *testing.T) {
 // Syndra builds each address once, from the registered host. A folder name with
 // a space is escaped in the URL and kept as is in the Windows path.
 func TestEachPlaceCarriesBothAddressesBuiltFromTheHost(t *testing.T) {
-	connection, storage := addonsConnection, addonsMyStorage
-	t.Cleanup(func() { addonsConnection, addonsMyStorage = connection, storage })
+	connection := addonsConnection
+	t.Cleanup(func() { addonsConnection = connection })
 	addonsConnection = func(string) (*addons.Connection, error) {
 		return &addons.Connection{Protocol: "smb", Host: "nas.example.edu"}, nil
 	}
-	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus {
+	answerStorage(t, func(string, string) addons.StorageStatus {
 		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, PlacesReadable: true, Places: []addons.Place{
 			{Share: "main", Folder: "home_dir/charlotte", Access: "change", Home: true},
 			{Share: "main", Folder: "laser cutter", Access: "read"},
 			{Share: "open", Access: "read"},
 		}}
-	}
+	})
 	stubMyStorage(t, &storageHarness{entitled: true, bound: true})
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
 
@@ -424,11 +450,11 @@ func TestEachPlaceCarriesBothAddressesBuiltFromTheHost(t *testing.T) {
 // Access given back waits for a new password, and the page says when it was
 // given back: the latest end of a deny hold on this target, lifted or lapsed.
 func TestAccessGivenBackCarriesWhenItWasGivenBack(t *testing.T) {
-	storage, allowances := addonsMyStorage, dbAllowancesForSubject
-	t.Cleanup(func() { addonsMyStorage, dbAllowancesForSubject = storage, allowances })
-	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus {
+	allowances := dbAllowancesForSubject
+	t.Cleanup(func() { dbAllowancesForSubject = allowances })
+	answerStorage(t, func(string, string) addons.StorageStatus {
 		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, NeedsNewPassword: true}
-	}
+	})
 	lifted := time.Date(2026, 10, 12, 10, 0, 0, 0, time.UTC)
 	lapsed := time.Date(2026, 10, 13, 8, 0, 0, 0, time.UTC)
 	later := time.Now().Add(24 * time.Hour)
@@ -456,15 +482,15 @@ func TestAccessGivenBackCarriesWhenItWasGivenBack(t *testing.T) {
 // "from your Fabrication lead role": each place names the member's own roles
 // whose groups open it, and a home no role gives any more is said to be kept.
 func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
-	storage, reach := addonsMyStorage, addonsReadReach
-	t.Cleanup(func() { addonsMyStorage, addonsReadReach = storage, reach })
-	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus {
+	reach := addonsReadReach
+	t.Cleanup(func() { addonsReadReach = reach })
+	answerStorage(t, func(string, string) addons.StorageStatus {
 		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, PlacesReadable: true, Places: []addons.Place{
 			{Share: "main", Folder: "home_dir/charlotte", Path: "/mnt/p/main/home_dir/charlotte", Access: "change", Home: true},
 			{Share: "main", Folder: "waddle_share", Path: "/mnt/p/main/waddle_share", Access: "change"},
 			{Share: "main", Folder: "quack_share", Path: "/mnt/p/main/quack_share", Access: "read"},
 		}}
-	}
+	})
 	addonsReadReach = func(context.Context, string) addons.Reach {
 		return addons.Reach{Read: true, Groups: map[string][]addons.Place{
 			"community": {{Path: "/mnt/p/main/waddle_share"}},
@@ -503,11 +529,11 @@ func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
 // (addon-contract slice 2, for task 3.7). Nothing when no manifest has been
 // accepted, or when the add-on does not answer.
 func TestTheMembersViewCarriesKindSchemaAndTheirOwnStanding(t *testing.T) {
-	storage, manifest := addonsMyStorage, addonsAcceptedManifest
-	t.Cleanup(func() { addonsMyStorage, addonsAcceptedManifest = storage, manifest })
+	manifest := addonsAcceptedManifest
+	t.Cleanup(func() { addonsAcceptedManifest = manifest })
 	answer := addons.StorageStatus{Outcome: addons.OutcomeSucceeded,
 		Standing: &addons.Standing{WaitingOn: "member", Note: "Waiting for a password."}}
-	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus { return answer }
+	answerStorage(t, func(string, string) addons.StorageStatus { return answer })
 	addonsAcceptedManifest = func(string) (addons.Manifest, error) {
 		return addons.Manifest{Kind: "storage", EntitlementSchema: truenasSchema}, nil
 	}

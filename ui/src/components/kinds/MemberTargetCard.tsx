@@ -1,5 +1,7 @@
 "use client";
 
+import { MEMBER } from "@/components/results/copy";
+import { Reads } from "@/components/results/ReadResult";
 import { StorageMemberCard } from "@/components/kinds/storage/MyStorage";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
@@ -75,6 +77,7 @@ export function CoreMemberCard({ view, untitled = false }: CardProps) {
           <span className="text-[13px] text-muted">{view.account ? NOTHING_TO_DO : SYNDRA_MAKES_IT}</span>
         )}
       </CardRow>
+      <Reads reads={view.reads} name={name} reader={MEMBER} />
     </Card>
   );
 }

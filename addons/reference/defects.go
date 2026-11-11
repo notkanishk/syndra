@@ -55,6 +55,8 @@ const (
 	LogHeadEmpty              Defect = "log-head-empty"              // health.log_head is "" until the first record
 	ReadsTakeCallID           Defect = "reads-take-call-id"          // health.get is deduplicated on call_id like a write
 	StateShowsUnlisted        Defect = "state-shows-unlisted"        // /subjects lists lobby, which /values leaves out
+	ResultOffSchema           Defect = "result-off-schema"           // holdings.list answers a record with no label (with results)
+	ResultInPocket            Defect = "result-in-pocket"            // holdings.list answers under a pocket of its own, no result (with results)
 )
 
 // Defects lists every defect, for the kit's self-tests and the binary's help.
@@ -63,7 +65,7 @@ var Defects = []Defect{IgnoresFingerprint, CreatesOnWithdraw, EchoesSecret, Repl
 	LimitIgnoresUnlimited, WithdrawTouchesMembership, WithdrawStripsManaged, NumericAccountID,
 	FailsAfterCreate, LogNeverMoves, CommitsLate, RebindsSubject, AdoptsExisting, BindsOnWithdraw, IgnoresReadOnly, OperationNamesOther,
 	RebindsOnOperation, PlanForgetsAccount, CreateAnswersMember, RebindsQuietly, CreateOmitsAccount,
-	LimitEmptyClears, LogHeadEmpty, ReadsTakeCallID, StateShowsUnlisted}
+	LimitEmptyClears, LogHeadEmpty, ReadsTakeCallID, StateShowsUnlisted, ResultOffSchema, ResultInPocket}
 
 // ParseDefects turns names into a set, refusing any name it does not know.
 func ParseDefects(names []string) (map[Defect]bool, error) {
@@ -124,6 +126,7 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 	_ = json.Unmarshal(body, &req)
 	apply := route == "POST /apply"
 	passwordSet := route == "POST /operations/{name}" && r.PathValue("name") == "password.set"
+	holdings := route == "POST /operations/{name}" && r.PathValue("name") == "holdings.list"
 	if route == "POST /operations/{name}" && r.PathValue("name") == "health.get" && d[ReadsTakeCallID] {
 		// A read deduplicated like a write: recorded, and refused when its
 		// call_id was used before for anything else.
@@ -310,6 +313,12 @@ func (a *Addon) deviate(route string, h func(*http.Request, []byte) reply, r *ht
 				break
 			}
 		}
+	case holdings && d[ResultOffSchema] && rep.status == 200:
+		rewrite(func(doc map[string]any) {
+			doc["result"].(map[string]any)["records"] = []any{map[string]any{"id": printers[0]}}
+		})
+	case holdings && d[ResultInPocket] && rep.status == 200:
+		rewrite(func(doc map[string]any) { doc["holdings"] = doc["result"]; delete(doc, "result") })
 	case passwordSet && d[EchoesSecret] && rep.status == 200:
 		rewrite(func(doc map[string]any) { doc["detail"] = fmt.Sprintf("Password set to %v.", req.Params["password"]) })
 	}

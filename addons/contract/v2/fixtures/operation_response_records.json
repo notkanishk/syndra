@@ -1,0 +1,36 @@
+{
+  "operation": "holdings.list",
+  "subject": "289471021834760193",
+  "outcome": "succeeded",
+  "result": {
+    "records": [
+      {
+        "id": "item-2207",
+        "label": "Soldering iron, Hakko FX-888D",
+        "category": "tools",
+        "since": "2026-11-03T16:10:00Z",
+        "due": "2026-11-17T17:00:00Z",
+        "standing": {
+          "usable": true,
+          "waiting_on": "none"
+        },
+        "x-inventory-shelf": "B4"
+      },
+      {
+        "id": "item-0931",
+        "label": "Digital caliper, 150 mm",
+        "category": "measuring",
+        "since": "2026-10-20T11:00:00Z",
+        "due": "2026-11-03T17:00:00Z",
+        "standing": {
+          "usable": false,
+          "waiting_on": "member",
+          "note": "Overdue since 3 November",
+          "next": "Bring it back to the front desk"
+        }
+      }
+    ],
+    "taken_at": "2026-11-10T09:30:00Z",
+    "current": true
+  }
+}

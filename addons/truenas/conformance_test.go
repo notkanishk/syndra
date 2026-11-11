@@ -134,7 +134,7 @@ func TestTheConformanceKitPassesThisAddOn(t *testing.T) {
 	}
 	// The run that writes judges what reads cannot: these must have run.
 	for _, id := range []string{"replay", "replay.refusal", "read-back", "limit-combine", "limit-empty", "operations.reads", "health", "channel-follows-account",
-		"withdraw-only.existing", "lifecycle", "operations", "plan-equals-apply", "create-is-new", "bound-to-created"} {
+		"withdraw-only.existing", "lifecycle", "operations", "plan-equals-apply", "create-is-new", "bound-to-created", "results"} {
 		for _, res := range mutate.Results {
 			if res.ID == id && res.Status != "pass" {
 				t.Errorf("-mutate: %s is %s, want pass: %v", id, res.Status, res.Detail)

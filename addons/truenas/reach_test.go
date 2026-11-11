@@ -229,7 +229,7 @@ func TestAMembersPlacesAreTheirOwnGroupsWithHomeFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := res.Storage
+	got := res.Result.(*StorageStatus)
 	if !got.PlacesReadable {
 		t.Fatal("places were read and reported unreadable")
 	}
@@ -262,8 +262,9 @@ func TestAGroupThatOpensNothingLeavesTheMemberAnEmptyReadList(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Not in builtin_users, so only everyone@ reaches them.
-	if d := describe(res.Storage.Places); !res.Storage.PlacesReadable || d != "open:read" {
-		t.Fatalf("places = %q readable=%v", d, res.Storage.PlacesReadable)
+	got := res.Result.(*StorageStatus)
+	if d := describe(got.Places); !got.PlacesReadable || d != "open:read" {
+		t.Fatalf("places = %q readable=%v", d, got.PlacesReadable)
 	}
 }
 
@@ -318,16 +319,16 @@ func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Storage.NeedsNewPassword || res.Storage.Usable || res.Storage.NeedsPassword {
+	if !res.Result.(*StorageStatus).NeedsNewPassword || res.Result.(*StorageStatus).Usable || res.Result.(*StorageStatus).NeedsPassword {
 		t.Fatalf("got needs_new_password=%v usable=%v needs_password=%v",
-			res.Storage.NeedsNewPassword, res.Storage.Usable, res.Storage.NeedsPassword)
+			res.Result.(*StorageStatus).NeedsNewPassword, res.Result.(*StorageStatus).Usable, res.Result.(*StorageStatus).NeedsPassword)
 	}
 
 	off := false
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: 3001, WantsSMB: &off}); err != nil {
 		t.Fatal(err)
 	}
-	if res, _, _ := s.storageStatus(OperationRequest{Subject: "sub-1"}); res.Storage.NeedsNewPassword {
+	if res, _, _ := s.storageStatus(OperationRequest{Subject: "sub-1"}); res.Result.(*StorageStatus).NeedsNewPassword {
 		t.Fatal("SMB that isn't wanted was reported as waiting for a password")
 	}
 }

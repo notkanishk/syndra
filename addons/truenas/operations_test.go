@@ -311,18 +311,20 @@ func TestAnEmptyActivityResultNamesWhatWasNotWatched(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
 	}
-	var out OperationResult
+	var out struct {
+		Result *ActivityReport `json:"result"`
+	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.Activity == nil {
+	if out.Result == nil {
 		t.Fatal("want an activity report")
 	}
-	if len(out.Activity.Events) != 0 {
-		t.Fatalf("the fixture has no events: %+v", out.Activity.Events)
+	if len(out.Result.Events) != 0 {
+		t.Fatalf("the fixture has no events: %+v", out.Result.Events)
 	}
-	if len(out.Activity.UncoveredShares) != 1 || out.Activity.UncoveredShares[0] != "lab" {
-		t.Fatalf("an empty result must name the shares that were not being watched: %v", out.Activity.UncoveredShares)
+	if len(out.Result.Uncovered) != 1 || out.Result.Uncovered[0] != "lab" {
+		t.Fatalf("an empty result must name the shares that were not being watched: %v", out.Result.Uncovered)
 	}
 }
 
@@ -342,15 +344,17 @@ func TestHealthComposesFourSourcesAndDegradesPerSource(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
 	}
-	var out OperationResult
+	var out struct {
+		Result *TargetHealth `json:"result"`
+	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.Health == nil || out.Health.System == nil || out.Health.Pools == nil {
-		t.Fatalf("the sources that answered must be present: %+v", out.Health)
+	if out.Result == nil || out.Result.System == nil || out.Result.Pools == nil {
+		t.Fatalf("the sources that answered must be present: %+v", out.Result)
 	}
-	if len(out.Health.Degraded) != 1 || out.Health.Degraded[0] != "alerts" {
-		t.Fatalf("the source that failed must be named: %v", out.Health.Degraded)
+	if len(out.Result.Degraded) != 1 || out.Result.Degraded[0] != "alerts" {
+		t.Fatalf("the source that failed must be named: %v", out.Result.Degraded)
 	}
 }
 
@@ -818,8 +822,10 @@ func TestAReadIgnoresItsCallID(t *testing.T) {
 		t.Fatalf("password.set: %d %s", rr.Code, rr.Body.String())
 	}
 	rr := postOperation(t, s, "activity.get", `{"call_id":"p1","subject":"sub-1"}`)
-	var out OperationResult
-	if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &out) != nil || out.Activity == nil {
+	var out struct {
+		Result *ActivityReport `json:"result"`
+	}
+	if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &out) != nil || out.Result == nil {
 		t.Fatalf("a read under a recorded write's call_id answered %d %s", rr.Code, rr.Body.String())
 	}
 }

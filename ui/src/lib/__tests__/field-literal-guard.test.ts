@@ -49,6 +49,8 @@ describe("field names are written only in the storage kind and fields.ts", () =>
   for (const code of MUTANTS) {
     it(`refuses ${code}`, async () => {
       expect((await lint(code, "src/components/targets/Mutant.tsx")).length).toBeGreaterThan(0);
+      // The generic read renderers know no product and no field.
+      expect((await lint(code, "src/components/results/Mutant.tsx")).length).toBeGreaterThan(0);
       // invalidation.ts is plain TS: a JSX mutant cannot be parsed there.
       if (!code.includes("<Thing")) expect((await lint(code, "src/lib/queries/invalidation.ts")).length).toBeGreaterThan(0);
     });

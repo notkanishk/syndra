@@ -62,11 +62,11 @@ type OperationResult struct {
 	// here and is nowhere else either: rotation is the credential half of a
 	// revocation, and returning what it minted would defeat the point.
 	Rotated bool `json:"rotated,omitempty"`
-	// Activity and Health are the read-only operations' payloads.
-	Activity *ActivityReport `json:"activity,omitempty"`
-	// Storage is a member's own account state and usage (storage.status).
-	Storage *StorageStatus `json:"storage,omitempty"`
-	Health  *TargetHealth  `json:"health,omitempty"`
+	// Result is a read operation's answer (feature results), in the shape
+	// registry/operations.json names for it: *ActivityReport
+	// (common/activity.json), *StorageStatus (profiles/storage/status.json),
+	// *TargetHealth (health.get's own).
+	Result any `json:"result,omitempty"`
 	// AccountID is the identity (the unix uid, as contract 2's string
 	// account_id) of the account an adoption bound.
 	//
@@ -553,10 +553,11 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	}, http.StatusOK, nil
 }
 
-// ActivityReport is SMB activity, and what it could not see.
+// ActivityReport is SMB activity, and what it could not see
+// (common/activity.json).
 type ActivityReport struct {
 	Events []ActivityEvent `json:"events"`
-	// UncoveredShares names the shares that were not watching THIS member —
+	// Uncovered names the shares that were not watching THIS member —
 	// auditing switched off, or switched on and scoped past them by a watch or
 	// ignore list. Without it an empty result reads as "no activity", which is
 	// a different and much more reassuring statement than "we were not
@@ -567,9 +568,12 @@ type ActivityReport struct {
 	// about one person, and a share can be audited and still be on this list.
 	// One name over two questions is the defect this whole branch keeps
 	// finding, and a wire field is the worst place to leave an instance of it.
-	UncoveredShares []string `json:"uncovered_shares,omitempty"`
+	Uncovered []string `json:"uncovered"`
 	// Truncated says older events exist than the newest activityLimit returned.
-	Truncated bool `json:"truncated,omitempty"`
+	Truncated bool `json:"truncated"`
+	// TakenAt is when the audit log was read: always now, never a mirror.
+	TakenAt string `json:"taken_at"`
+	Current bool   `json:"current"`
 }
 
 // activityLimit is how many events one activity.get returns.
@@ -578,8 +582,9 @@ const activityLimit = 200
 type ActivityEvent struct {
 	At      string `json:"at"`
 	Event   string `json:"event"`
-	Share   string `json:"share,omitempty"`
 	Success bool   `json:"success"`
+	// Resource is the share it happened on, named as Uncovered names them.
+	Resource string `json:"resource,omitempty"`
 	// Where it came from. Every row in a real SMB audit log carries one, and
 	// without it a week of refusals is a week of refusals from nowhere — the
 	// difference between "somebody's saved password is stale" and "somebody is
@@ -657,13 +662,15 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 			"query-options": map[string]any{"limit": activityLimit + 1, "order_by": []string{"-message_timestamp"}},
 		},
 	}
+	takenAt := time.Now()
 	if err := s.nas.call("audit.query", query, &rows); err != nil {
 		return OperationResult{}, statusFor(err), fmt.Errorf("the audit log could not be read")
 	}
 
 	// One more than is returned asked for, so "exactly the limit" and "more
 	// than the limit" can be told apart; the newest rows are the ones kept.
-	report := ActivityReport{Events: make([]ActivityEvent, 0, len(rows)), Truncated: len(rows) > activityLimit}
+	report := ActivityReport{Events: make([]ActivityEvent, 0, len(rows)), Truncated: len(rows) > activityLimit,
+		TakenAt: takenAt.UTC().Format(time.RFC3339), Current: true}
 	if report.Truncated {
 		rows = rows[:activityLimit]
 	}
@@ -674,20 +681,20 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 			Success: r.Success,
 			Address: r.Address,
 		}
-		event.Share, event.Detail = eventDetail(r.EventData)
+		event.Resource, event.Detail = eventDetail(r.EventData)
 		report.Events = append(report.Events, event)
 	}
 	// Reported whether or not there were events, because the case that matters
 	// is the empty one.
 	if blind, err := s.sharesNotWatching(binding.Username); err != nil {
-		report.UncoveredShares = []string{"(the audit coverage of the shares could not be read, so coverage is unknown)"}
+		report.Uncovered = []string{"(the audit coverage of the shares could not be read, so coverage is unknown)"}
 	} else {
-		report.UncoveredShares = blind
+		report.Uncovered = append([]string{}, blind...)
 	}
 
 	return OperationResult{
 		Operation: "activity.get", Subject: req.Subject, Outcome: "succeeded",
-		Activity: &report,
+		Result: &report,
 	}, http.StatusOK, nil
 }
 
@@ -1019,7 +1026,7 @@ func (s *server) targetHealth(req OperationRequest) (OperationResult, int, error
 		return OperationResult{}, http.StatusServiceUnavailable, fmt.Errorf("the target answered none of the health reads")
 	}
 	return OperationResult{
-		Operation: "health.get", Subject: req.Subject, Outcome: "succeeded", Health: &h,
+		Operation: "health.get", Subject: req.Subject, Outcome: "succeeded", Result: &h,
 	}, http.StatusOK, nil
 }
 

@@ -32,6 +32,7 @@ const schemaBase = "https://syndra.example.org/addon-contract/2/schema/"
 var contractMessages = []struct{ fixture, schema string }{
 	{"manifest.json", "manifest.json"},
 	{"manifest_truenas.json", "manifest.json"},
+	{"manifest_inventory.json", "manifest.json"},
 	{"health.json", "health.json"},
 	{"subjects.json", "subjects.json"},
 	{"subjects_stale.json", "subjects.json"},
@@ -46,6 +47,9 @@ var contractMessages = []struct{ fixture, schema string }{
 	{"operation_response_activity.json", "operation_response.json"},
 	{"operation_response_storage.json", "operation_response.json"},
 	{"operation_response_health.json", "operation_response.json"},
+	{"operation_response_activity_result.json", "operation_response.json"},
+	{"operation_response_health_result.json", "operation_response.json"},
+	{"operation_response_records.json", "operation_response.json"},
 	{"status.json", "common/status.json"},
 	{"records.json", "common/records.json"},
 	{"activity.json", "common/activity.json"},
@@ -228,6 +232,9 @@ type operationRegistry struct {
 	Operations map[string]struct {
 		Scope        string   `json:"scope"`
 		Confirm      bool     `json:"confirm"`
+		Effect       string   `json:"effect"`
+		Result       string   `json:"result"`
+		Pocket       string   `json:"pocket"`
 		SecretParams []string `json:"secret_params"`
 		Params       []struct {
 			Name     string `json:"name"`
@@ -239,7 +246,7 @@ type operationRegistry struct {
 }
 
 // The registry must say what the policy says (id, scope, confirm, params,
-// secrets). It adds effect and result, which the policy does not carry yet.
+// secrets, effect, result), and a read is never confirmed.
 func TestEveryPolicyOperationIsInTheRegistry(t *testing.T) {
 	checkPolicyAgainstRegistry(t, contractDir)
 }
@@ -261,6 +268,15 @@ func checkPolicyAgainstRegistry(t *testing.T, dir string) {
 		}
 		if r.Scope != string(p.Scope) || r.Confirm != p.Confirm {
 			t.Errorf("%s: registry says scope %s confirm %v, policy says %s %v", id, r.Scope, r.Confirm, p.Scope, p.Confirm)
+		}
+		if r.Effect != p.Effect || r.Result != p.Result || r.Pocket != p.Pocket {
+			t.Errorf("%s: registry says effect %q result %q pocket %q, policy says %q %q %q", id, r.Effect, r.Result, r.Pocket, p.Effect, p.Result, p.Pocket)
+		}
+		if p.Effect == EffectRead && p.Confirm {
+			t.Errorf("%s is a read and asks for confirmation: a read is never confirmed", id)
+		}
+		if p.Pocket != "" && p.Effect != EffectRead {
+			t.Errorf("%s has a legacy pocket and is not a read", id)
 		}
 		if len(r.Params) != len(p.Params) {
 			t.Errorf("%s: registry lists %d params, policy %d", id, len(r.Params), len(p.Params))
@@ -286,5 +302,80 @@ func checkPolicyAgainstRegistry(t *testing.T, dir string) {
 		if _, ok := operationPolicy[id]; !ok {
 			t.Errorf("registry/operations.json lists %s and operationPolicy does not", id)
 		}
+	}
+}
+
+// Every legacy pocket the registry names is a property of the operation
+// response, the one other place it is written: a pocket the reply schema does
+// not have is one no add-on was ever allowed to send.
+func TestEveryRegistryPocketIsAReplyProperty(t *testing.T) {
+	var reg operationRegistry
+	if err := json.Unmarshal(mustRead(t, "registry", "operations.json"), &reg); err != nil {
+		t.Fatal(err)
+	}
+	var reply struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(mustRead(t, "schema", "operation_response.json"), &reply); err != nil {
+		t.Fatal(err)
+	}
+	pockets := 0
+	for id, op := range reg.Operations {
+		if op.Pocket == "" {
+			continue
+		}
+		pockets++
+		if _, ok := reply.Properties[op.Pocket]; !ok {
+			t.Errorf("%s's pocket %q is not a property of schema/operation_response.json", id, op.Pocket)
+		}
+	}
+	if pockets == 0 {
+		t.Fatal("the registry names no pocket: this test reads nothing")
+	}
+}
+
+// Every reply fixture that answers under `result` validates against the schema
+// the registry names for its operation, so a fixture cannot drift from the
+// shape its id promises. An id that declares its own (health.get) needs only
+// an object, which operation_response.json already holds it to.
+func TestEveryResultFixtureMatchesItsRegistrySchema(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(contractDir, "registry", "operations.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reg operationRegistry
+	if err := json.Unmarshal(raw, &reg); err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, m := range contractMessages {
+		if m.schema != "operation_response.json" {
+			continue
+		}
+		var doc struct {
+			Operation string          `json:"operation"`
+			Result    json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(contractFixture(t, m.fixture), &doc); err != nil {
+			t.Fatal(err)
+		}
+		if doc.Result == nil {
+			continue
+		}
+		op, ok := reg.Operations[doc.Operation]
+		if !ok {
+			t.Errorf("fixtures/%s answers %q, which the registry lacks", m.fixture, doc.Operation)
+			continue
+		}
+		if op.Effect != EffectRead {
+			t.Errorf("fixtures/%s: %s answers a result and is not a read", m.fixture, doc.Operation)
+		}
+		if op.Result != "" {
+			assertSchema(t, op.Result, doc.Result, "fixtures/"+m.fixture+" result")
+			checked++
+		}
+	}
+	if checked < 3 {
+		t.Errorf("only %d result fixtures were held to their registry schema; the three common shapes each have one", checked)
 	}
 }

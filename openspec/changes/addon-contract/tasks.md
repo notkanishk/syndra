@@ -1216,10 +1216,16 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   `physical` operation (`item.checkout` with `item_id`, per-subject
   serialisation, natural idempotency, refused when the target is marked
   unreachable). ~200 lines #ready-for-agent
+  - [x] The `results` half (slice 6a, 11 Nov 2026): `Config.Features` /
+    `-features results` adds `results` and `holdings.list` (member, the
+    printers the account may use, as `common/records.json`, current, call_id
+    ignored, every lifecycle, 422 for an unbound subject), and `health.get`
+    answers under `result`; defects `result-off-schema` and
+    `result-in-pocket`. The other four halves stay open.
 
 **`results` (decision 20)**
 
-- [ ] 6.1 `registry/operations.json[id].result` (a schema ref); an add-on
+- [x] 6.1 `registry/operations.json[id].result` (a schema ref); an add-on
   declaring `results` answers one `result` validated against the id's
   schema, and the backend reads `result` only from such an add-on (the
   typed pockets `Activity`/`Health` stay readable from one without, and are
@@ -1233,6 +1239,77 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   answers `common/status.json`; the UI's generic renderers for the three
   shapes, the `records` one driven by the reference add-on's
   `holdings.list` so the inventory target lands as a manifest and a binary #ready-for-agent
+  *Done, Go side (slice 6a, 11 Nov 2026):* contract (`holdings.list`, the
+  storage profile `profiles/storage/status.json`, activity `resource`,
+  registry `pocket`, five fixtures), backend (`addons.Read` in
+  `backend/internal/addons/results.go` the one read path; `MemberReads`;
+  `ReadReply.Storage/Activity/Health/View`; `Dispatch` refuses a read with
+  `ErrReadNotDispatched`; `myTargetView.Reads`; the activity route answers
+  `uncovered`, `truncated`, `taken_at`), TrueNAS declares `results`, the
+  reference and the kit. The admin-read test is
+  `TestAnAdminsReadOfHoldingsWritesNoOperationsRow` (handlers) over
+  `TestAnOperatorsReadOfHoldingsWritesNoRow` (addons, a begun row or a claim
+  fails it); the deploy-order pair is
+  `TestReadOperationsSendTheContractShapeAndReadTheirAnswer` (both shapes)
+  and `TestTheTrueNASAddOnWithResultsLandsInTheReader` against the fixtures
+  `TestWhatTheAddOnSendsMatchesTheContract` holds the add-on's encoding to.
+  The UI's generic renderers are 6.1u below.
+  *Decided while building:*
+  - Owner rulings O1–O3 (10 Nov): `storage.status` answers the storage
+    profile (`quota_read`); `health.get` is read into today's
+    `SystemReport` with no registry `result` (a `ponytail:` comment names
+    major 3); events carry a generic optional `resource`, not an `x-` key.
+  - Which reads have a pocket is the registry's (`pocket`), held equal to
+    the policy's `Pocket` by `TestEveryPolicyOperationIsInTheRegistry`, so
+    the backend and the kit read one list instead of each keeping one.
+  - Syndra's `StorageStatus` loses `username`, `smb_enabled`, `shares` and
+    `usage_readable`: no page read them, two could not be filled honestly
+    from the profile, and use now travels once, as the status meters in
+    `reads`.
+  - `reads` lists only replies under `result`: a legacy pocket feeds its own
+    typed reader (the storage card) and nothing generic. The backend reads
+    both shapes, so it may deploy first or together with the add-on; never
+    the add-on alone (it answers only under `result`, which a pre-6a backend
+    does not read). `deploy.yml` ships both from one commit, so the workflow
+    never produces that order. Pockets are not re-added for it.
+  - A result missing a key its schema requires (top level, per item, inside
+    any `standing` and each `places[]` item, and the profile's five) is not
+    a reading (indeterminate, `readable: false`);
+    the `current` ⇔ `stale` invariant is the kit's, not refused at runtime.
+  - `no_account` on the activity route stays the add-on's 422 (the plan's
+    B3, reading the binding first, was not needed: `ReadReply.Status`
+    carries it). The read call_id is `read-<target>-<subject>` for every
+    read, `health.get`'s subject empty (it was `-system-health`; ignored by
+    contract either way).
+  - Only member-scope reads with no required parameter are read on
+    `/me/targets` and `/users/{id}/targets`; `activity.get` and `health.get`
+    keep their admin routes, now through `Read` (B2).
+  - Fix round (11 Nov 2026), one line each:
+  - `quota_read` is carried, not dropped: `StorageStatus.QuotaRead` (the old `usage_readable`, read from either shape) and, in `reads`, `StorageResult` (status plus `quota_read`); meters are kept beside the flag, never dropped (`TestAnUnreadQuotaReachesThePageAsUnread`).
+  - TrueNAS `shareUsage` reports one unread share's quota table as `quota_read: false` with the meters it did read; the profile schema says a partial read is false (`TestAnUnreadQuotaTableMakesTheUsageUnread`).
+  - `activity.get` and `health.get` on the operator routes send the operator (`resolveActor`) as actor, the person as subject (`TestTargetOperatorReads_CarryTheOperatorAsActor`).
+  - `also_says` caps each whole entry, key path included, at 200 bytes (cut on a rune) and the list at 50 plus "…and N more"; the manifest's `also_says` shares the cap (`TestWhatTheAddOnAlsoSaysIsCappedWhole`).
+  - Required keys are one recursive `needSpec` per registry schema, held in `shapes` beside the keys and the decode type; a nested `null` is not an object.
+  - The TrueNAS kit test requires `results` to pass under `-mutate`.
+  - Every registry `pocket` is a property of `operation_response.json` (`TestEveryRegistryPocketIsAReplyProperty`).
+  - The records fixture gains an overdue record (`item-0931`, `standing.next`) for the UI's next-step test; the guide's inline copy follows.
+  - `addons.Call` refuses an `effect: read` operation (`ErrReadNotCalled`), as `Dispatch` does.
+  - Deploy order: the backend reads both shapes, so it may deploy first or together with the add-on, never the add-on alone; `deploy.yml` ships both from one commit. Pockets stay off the TrueNAS add-on.
+- [x] 6.1u The UI half of 6.1: the generic renderers for the three shapes
+  from `myTargetView.reads`, and the activity list's `resource` column
+  (a separate builder, from the backend shape 6.1 left)
+  - Done: `ui/src/components/results/` (`ReadResult` picks by shape, raw fallback; `copy.ts` is the sentences, pinned to the guide's section 12), wired into the core member card, the person page's system card and the storage cards (which skip `storage.status`); `MemberTargetCard.inventory.test.tsx` renders `manifest_inventory.json` + `operation_response_records.json` with no inventory code; storage type lost `username`, `smb_enabled`, `shares`; both lint guards cover `components/results/`.
+
+  - Decided while building (6.1u fix round, 11 Nov 2026), one line each:
+  - Copy that differs by reader takes a `Reader` (member, or operator with the person's name), passed from the page down through `Reads` to every renderer; an operator's next step is the add-on's health on its system page, a member's is makerspace staff.
+  - The "not recording" note names the person ("you" to a member), says one place or many, and tells an operator to switch recording on; storage keeps its own "shares" words and `PersonActivity` uses them only for kind storage (`isStorage`).
+  - A failed read's title is per read ("One read from {name} did not come back") so it never contradicts the system's own "read just now" line.
+  - `quota_read: false` on a storage card shows the shared `UsageUnread` notice instead of silently omitting usage lines; "some" is `usageShown(drawn)` (`kinds/storage/state.ts`) over the usage the card actually draws (the operator card's home folder from `view.home`; the member card's places they can change, none offline), never over every place.
+  - Long text: `[overflow-wrap:anywhere]` on the read root, the activity row and `StandingLine`; the address columns are `min-w`, not a fixed width; the activity detail is `inline-block` so a short reason moves whole rather than breaking mid-token.
+  - Records, meters and uncovered places are alphabetical through `sortByName`/`sortNames`.
+  - Every results sentence, including the "Since", "Due", "of" fragments, lives in `copy.ts` and the copy guide's section 12; the guard is an ESLint `no-restricted-syntax` block on `src/components/results/*.tsx` (JSX text, string literals, template elements; `className`/`key`/`data-*`, the directive and imports exempt, `aria-label`/`title`/`alt` not), proved by mutation in `results-sentence-guard.test.ts`; `resultsCopyGuide.test.ts` keeps only copy.ts against the guide table.
+  - `OWN_READS` is held to the registry by a test (`ownReads.test.ts`); `needSpec` is held to the result schemas by `TestNeedSpecMatchesTheSchemas`, and now requires a `stale`'s `reason`.
+  - `Observation.stale` is left out of the UI type until freshness (6.2): its reason literals tripped `TestEveryFixedReasonIsNeverQuoted`.
 
 **`freshness` (decision 21)**
 
@@ -1376,6 +1453,15 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   points summing above the total, two app reads for two concurrent fresh
   reads, a `physical` call re-executed after `in_doubt`, a preview that is
   recorded, a secret in a `/calls` answer) #ready-for-agent
+  - [x] The `results` part (slice 6a, 11 Nov 2026): check `results`
+    (`-mutate`, in the reads step): every available read answers a `result`
+    valid against its registry schema, or an object for its own; `skip`
+    without the feature, `fail` for a read with no `pocket` declared without
+    it. Watched to fail against `result-off-schema` and `result-in-pocket`,
+    to skip against the plain reference and pass with `-features results`
+    (`TestTheResultsCheckJudgesOnlyWhatIsDeclared`). The appendix lost A.2
+    to chapter 7, so A.3–A.6 are A.2–A.5 and `operations.physical` cites
+    `a2-…`.
 
 ## Out of scope, stated so nobody builds it here
 

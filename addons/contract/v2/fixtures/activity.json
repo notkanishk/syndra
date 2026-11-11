@@ -5,8 +5,8 @@
       "event": "CONNECT",
       "success": false,
       "address": "192.0.2.17",
-      "detail": "NT_STATUS_NO_SUCH_USER",
-      "x-truenas-share": "makers"
+      "resource": "makers",
+      "detail": "NT_STATUS_NO_SUCH_USER"
     }
   ],
   "uncovered": [

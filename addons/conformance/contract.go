@@ -37,6 +37,10 @@ type contract struct {
 		} `json:"params"`
 		SecretParams []string `json:"secret_params"`
 		Effect       string   `json:"effect"`
+		// Result is the schema a results add-on answers under; Pocket the
+		// key a read was answered under before results ("" for none).
+		Result string `json:"result"`
+		Pocket string `json:"pocket"`
 	}
 	features map[string]struct {
 		RequiresKind string `json:"requires_kind"`

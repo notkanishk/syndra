@@ -1,0 +1,41 @@
+{
+  "contract_version": 2,
+  "product": "Inventory",
+  "product_version": "1.0.0",
+  "kind": "inventory",
+  "features": [
+    "operations",
+    "results"
+  ],
+  "entitlement_schema": [
+    {
+      "name": "borrower",
+      "role": "account"
+    },
+    {
+      "name": "categories",
+      "role": "membership",
+      "label": "May borrow from"
+    },
+    {
+      "name": "max_items",
+      "role": "limit",
+      "label": "Items at once",
+      "unit": "items",
+      "combine": "max",
+      "unlimited": "0",
+      "per_person": true
+    }
+  ],
+  "operations": [
+    {
+      "id": "holdings.list",
+      "scope": "member",
+      "confirm": false,
+      "available": true
+    }
+  ],
+  "limits": {
+    "subjects_per_plan": 200
+  }
+}

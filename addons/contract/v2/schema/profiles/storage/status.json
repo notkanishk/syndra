@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://syndra.example.org/addon-contract/2/schema/profiles/storage/status.json",
+  "title": "Storage status",
+  "description": "storage.status's result (feature results, kind storage): the common status shape, plus where the member can connect and what their password waits on. Every valid reply is also a valid common/status.json reply. Read live, never stored.",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../common/status.json"
+    }
+  ],
+  "properties": {
+    "places": {
+      "type": "array",
+      "items": {
+        "$ref": "reach.json#/$defs/Place"
+      },
+      "description": "Everywhere the account can connect, read from the folder permissions for the groups it is in, home folder first."
+    },
+    "places_readable": {
+      "type": "boolean",
+      "description": "false is 'the folder permissions could not be read', never 'no places'."
+    },
+    "needs_password": {
+      "type": "boolean",
+      "description": "The account has no password yet, so it cannot be used until the member sets one."
+    },
+    "needs_new_password": {
+      "type": "boolean",
+      "description": "Access was given back after it was taken away, and the account waits for a new password."
+    },
+    "quota_read": {
+      "type": "boolean",
+      "description": "Completeness, as in homes.json: true only when every share's usage was read. false means some or all of it could not be read, a partial read included, so a share may be missing from meters (or meters empty) for that reason and not because nothing is used; the meters present were read."
+    }
+  },
+  "required": [
+    "places",
+    "places_readable",
+    "needs_password",
+    "needs_new_password",
+    "quota_read"
+  ]
+}

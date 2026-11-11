@@ -387,7 +387,7 @@ func TestAnUndeclaredFeatureIsNeverCalled(t *testing.T) {
 	if resp, _ := PutSetting(ctx, "truenas", "home_root", "/mnt/x", "op"); !errors.Is(resp.Err, ErrFeatureNotDeclared) {
 		t.Errorf("an undeclared setting write: %+v", resp)
 	}
-	if st := MyStorage(ctx, "truenas", "s", "s"); !errors.Is(st.Err, ErrFeatureNotDeclared) {
+	if st := Read(ctx, "truenas", "storage.status", "s", "s", nil).Storage(); !errors.Is(st.Err, ErrFeatureNotDeclared) {
 		t.Errorf("an undeclared operation was dispatched: %+v", st)
 	}
 	if hits.Load() != 0 || len(*began) != 0 || a.CircuitOpen() {

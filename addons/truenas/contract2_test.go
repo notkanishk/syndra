@@ -110,6 +110,7 @@ func v2Validate(t *testing.T, schema string, doc any) error {
 var v2Messages = []struct{ fixture, schema string }{
 	{"manifest.json", "manifest.json"},
 	{"manifest_truenas.json", "manifest.json"},
+	{"manifest_inventory.json", "manifest.json"},
 	{"health.json", "health.json"},
 	{"subjects.json", "subjects.json"},
 	{"subjects_stale.json", "subjects.json"},
@@ -124,6 +125,9 @@ var v2Messages = []struct{ fixture, schema string }{
 	{"operation_response_activity.json", "operation_response.json"},
 	{"operation_response_storage.json", "operation_response.json"},
 	{"operation_response_health.json", "operation_response.json"},
+	{"operation_response_activity_result.json", "operation_response.json"},
+	{"operation_response_health_result.json", "operation_response.json"},
+	{"operation_response_records.json", "operation_response.json"},
 	{"status.json", "common/status.json"},
 	{"records.json", "common/records.json"},
 	{"activity.json", "common/activity.json"},

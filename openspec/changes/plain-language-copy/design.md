@@ -664,3 +664,35 @@ Rules G20 to G31 (`design_handoff_syndra/reconcile-2026-10/RULES.md`, "Messages 
 - **Words.** Revoke direct access and Drift: forecast **Will be revoked**, **Revoked**, **Not revoked**; **Removed** stays for a bundle out of a person's set (Q4). Manage bundles: **Will be applied**, **Recorded**, **Not applied**. Every failure is "Not" plus the act's word; "Refused by Zitadel" when Syndra recorded it and Zitadel refused. Retired for good (the guard fails on them): Didn't go through, Couldn't put it on hold, Couldn't lift it, That didn't save., That did not go through., Revocation recorded, Not all sent.
 - **Send** (Pending changes, Home): **Sent 7 of 9** (changes counted, the whole said), **Sent 9**, **Not sent** (none went, or another send was running), **Nothing to send**. When the queue is empty after the send the empty state is the result and no card is drawn (Q6).
 - **Colour follows what happens to the person** (G25): red when a named person loses access that reaches a system, amber when a step is left or a state must be read, quiet for what only records, asks, previews or cancels something unsent.
+
+## 12. What an add-on says about a person (addon-contract slice 6a)
+
+One set of generic renderers (`ui/src/components/results/`) draws every member-scope read an add-on answers, by its shape (records, status, activity) and never by what the add-on is. `components/results/copy.ts` holds the sentences; `resultsCopyGuide.test.ts` fails when this table and that file disagree. Every outcome ends on a next step or "Nothing for you to do."; `{name}` is the system's name as the page calls it.
+
+| When | Says |
+|---|---|
+| A list with nothing in it, to a member | {name} lists nothing for you. Nothing for you to do. |
+| A list with nothing in it, to an operator | {name} lists nothing for {person}. Nothing for you to do. |
+| A status with no meters, nothing unread | {name} reports no usage. Nothing for you to do. |
+| An activity log with no events | No recorded activity on {name}. Nothing for you to do. |
+| A read that did not come back: title | One read from {name} did not come back |
+| A read that did not come back: body | Syndra asked {name} and did not get a usable answer. This is not a claim that nothing is there. |
+| A read that did not come back: next step, to a member | Try again in a minute. If it keeps failing, ask makerspace staff. |
+| A read that did not come back: next step, to an operator | Try again in a minute. If it keeps failing, check the add-on's health on its system page. |
+| Usage the add-on could not read, some of it | Some usage could not be read from {name}. |
+| Usage the add-on could not read, all of it | Usage could not be read from {name}. |
+| Usage the add-on could not read: body, some of it | The usage above is what was read. |
+| Usage the add-on could not read: body, all of it | This is not a claim that nothing is used. |
+| A meter with no ceiling | no limit |
+| A meter's ceiling | of {limit} |
+| A record held since a date | Since {date} |
+| A record due on a date | Due {date} |
+| What the add-on adds that Syndra does not know (heading) | What the add-on also says |
+| More of it than is shown | …and {n} more |
+| One place that was not recording, to a member | {place} did not record you, so nothing from that place appears here, whether or not it happened. Nothing for you to do. |
+| Several places that were not recording, to a member | {place} and {place} did not record you, so nothing from those places appears here, whether or not it happened. Nothing for you to do. |
+| One place that was not recording, to an operator | {place} did not record {person}, so nothing from that place appears here, whether or not it happened. Switch recording on there. |
+| Several places that were not recording, to an operator | {place} and {place} did not record {person}, so nothing from those places appears here, whether or not it happened. Switch recording on there. |
+| Under an empty activity list when some places were not recording | Some places were not recording this account, so this is not the same as nothing having happened. See below. |
+
+A record's lateness is the add-on's word (its standing note and next step, for example "Overdue since 3 November" and "Bring it back to the front desk"), never worked out in the UI from a date. The meters that were read stay when some usage was not; empty meters never stand in for "nothing used". Records, meters and places are listed alphabetically (case aside), like every list of names. Where a sentence differs by reader it is one row per reader, and the code takes the reader (`Reader` in `copy.ts`) rather than choosing words inline. The storage kind says "shares" for the same places in `kinds/storage/ActivityCoverage.tsx`.

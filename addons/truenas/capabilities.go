@@ -134,7 +134,12 @@ func entitlementSchema() []EntitlementField {
 // beyond the core (design §2, §4).
 const kindStorage = "storage"
 
-var features = []string{"operations", "settings", "storage.reach", "storage.homes"}
+// results: every read operation answers one `result` in the shape the
+// registry names for it, and no typed pocket. The backend reads both shapes
+// until major 3, so it may deploy first or together with this add-on; never
+// this add-on alone, whose `result` a pre-6a backend does not read.
+// deploy.yml ships both from one commit, so the workflow never does that.
+var features = []string{"operations", "settings", "storage.reach", "storage.homes", "results"}
 
 // operationSet is the one-shot, event-shaped half. Anything with a desired
 // state belongs in the schema above instead.

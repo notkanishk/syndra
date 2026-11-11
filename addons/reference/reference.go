@@ -1,7 +1,8 @@
 // Package reference is a complete contract-2 add-on over an in-memory target:
 // the conformance kit's self-test and the author's guide's worked example
 // (openspec/changes/addon-contract, design §7 and §8). It implements the core
-// and the features operations and settings, and nothing else.
+// and the features operations and settings, and, when Config.Features names
+// it, results: holdings.list, and health.get answering under result.
 //
 // The target is a print queue: member accounts, the printers each may use, an
 // after-hours flag, a longest-job limit. Every behaviour below is derived from
@@ -102,11 +103,19 @@ func (acct *account) standing() *standing {
 }
 
 // Config is everything the add-on needs. Defects is empty in any real run.
+// Features are the optional features it serves beyond operations and settings
+// (OptionalFeatures), so the kit's feature checks can be watched both ways.
 type Config struct {
-	Target  string
-	Secret  []byte
-	Defects map[Defect]bool
+	Target   string
+	Secret   []byte
+	Features []string
+	Defects  map[Defect]bool
 }
+
+// OptionalFeatures is every feature Config.Features may name.
+var OptionalFeatures = []string{"results"}
+
+func (a *Addon) serves(feature string) bool { return slices.Contains(a.cfg.Features, feature) }
 
 // Addon is the add-on: an in-memory target, the call store, the mutation log
 // and the lifecycle, behind one lock. Writes take the lock only around the
@@ -133,6 +142,11 @@ type Addon struct {
 func New(cfg Config) (*Addon, error) {
 	if strings.TrimSpace(cfg.Target) == "" || len(cfg.Secret) == 0 {
 		return nil, errors.New("a target name and a per-target secret are required")
+	}
+	for _, f := range cfg.Features {
+		if !slices.Contains(OptionalFeatures, f) {
+			return nil, fmt.Errorf("unknown feature %q; the reference serves %v", f, OptionalFeatures)
+		}
 	}
 	priv, key, err := deriveKeys(cfg.Secret, cfg.Target)
 	if err != nil {
@@ -183,14 +197,20 @@ func (a *Addon) Handler() http.Handler {
 // ---- reads ----------------------------------------------------------------
 
 func (a *Addon) capabilities(*http.Request, []byte) reply {
+	ops := []map[string]any{
+		{"id": "health.get", "scope": "admin", "confirm": false, "available": true},
+		{"id": "password.set", "scope": "member", "confirm": false, "secret_params": []string{"password"}, "available": true}}
+	if a.serves("results") {
+		// holdings.list has no pocket to answer under, so it is declared only
+		// with results.
+		ops = append(ops, map[string]any{"id": "holdings.list", "scope": "member", "confirm": false, "available": true})
+	}
 	return ok(map[string]any{
 		"contract_version": ContractVersion, "product": "reference", "product_version": "1.0.0",
-		"kind": "machine", "features": []string{"operations", "settings"},
+		"kind": "machine", "features": append([]string{"operations", "settings"}, a.cfg.Features...),
 		"entitlement_schema": fields,
-		"operations": []map[string]any{
-			{"id": "health.get", "scope": "admin", "confirm": false, "available": true},
-			{"id": "password.set", "scope": "member", "confirm": false, "secret_params": []string{"password"}, "available": true}},
-		"limits": map[string]any{"subjects_per_plan": subjectsPerPlan},
+		"operations":         ops,
+		"limits":             map[string]any{"subjects_per_plan": subjectsPerPlan},
 	})
 }
 
@@ -558,7 +578,7 @@ type operationRequest struct {
 
 func (a *Addon) operation(r *http.Request, body []byte) reply {
 	name := r.PathValue("name")
-	if name != "password.set" && name != "health.get" {
+	if name != "password.set" && name != "health.get" && (name != "holdings.list" || !a.serves("results")) {
 		return problem(404, "OPERATION_FAILED", "This add-on has no such operation.", nil)
 	}
 	var req operationRequest
@@ -568,8 +588,11 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 	if req.Operation != name {
 		return problem(400, "OPERATION_MISMATCH", "The body names another operation.", nil)
 	}
-	if name == "health.get" {
+	switch name {
+	case "health.get":
 		return a.healthGet(req)
+	case "holdings.list":
+		return a.holdingsList(req)
 	}
 	switch password, _ := req.Params["password"].(string); {
 	case blank(req.CallID) || blank(req.Subject):
@@ -607,12 +630,47 @@ func (a *Addon) operation(r *http.Request, body []byte) reply {
 // healthGet is an effect: read operation. Its call_id is ignored: never
 // recorded, held or checked for reuse, because Syndra sends one call_id for
 // every read. Not lifecycle-gated either: reads answer in every state.
+// With results it answers under `result`, without it under the `health`
+// pocket a contract-2 add-on wrote before results.
 func (a *Addon) healthGet(req operationRequest) reply {
 	if len(req.Params) != 0 {
 		return problem(400, "OPERATION_FAILED", "health.get takes no parameters.", nil)
 	}
+	key := "health"
+	if a.serves("results") {
+		key = "result"
+	}
 	return ok(map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded",
-		"detail": "The print queue is up.", "health": map[string]any{"system": map[string]any{"hostname": "reference", "version": "1.0.0"}}})
+		"detail": "The print queue is up.", key: map[string]any{"system": map[string]any{"hostname": "reference", "version": "1.0.0"}}})
+}
+
+// record is common/records.json's Record.
+type record struct {
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Category string `json:"category,omitempty"`
+}
+
+// holdingsList is the subject's holdings (feature results): a read like
+// healthGet, so call_id is ignored and every lifecycle answers. Here what an
+// account holds is the printers it may use, read now from the target, so the
+// answer is current.
+func (a *Addon) holdingsList(req operationRequest) reply {
+	if len(req.Params) != 0 {
+		return problem(400, "OPERATION_FAILED", "holdings.list takes no parameters.", nil)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	acct := a.accounts[a.bindings[req.Subject]]
+	if acct == nil {
+		return problem(422, "OPERATION_FAILED", "This subject has no account here.", nil)
+	}
+	records := []record{}
+	for _, p := range acct.shown()["printers"].([]string) {
+		records = append(records, record{ID: p, Label: "Printer " + p, Category: "printer"})
+	}
+	return ok(map[string]any{"operation": req.Operation, "subject": req.Subject, "outcome": "succeeded",
+		"result": map[string]any{"records": records, "taken_at": now(), "current": true}})
 }
 
 type lifecycleRequest struct {

@@ -683,3 +683,21 @@ func TestOperationAnswerReadsAccountIDFromTheContractFixture(t *testing.T) {
 		t.Errorf("account_id did not land: %q", answer.AccountID)
 	}
 }
+
+// A read is never dispatched (design §4: one read path, no log): Dispatch
+// refuses an effect: read operation before validation, the rate count and the
+// record, so no caller can write an operations-log row for one, even a
+// confirmed admin call naming another subject.
+func TestAReadIsNeverDispatched(t *testing.T) {
+	h := newHarness(t)
+	h.op = addons.EffectiveOperation{ID: "storage.status", Scope: addons.ScopeMember, Available: true, Effect: addons.EffectRead}
+
+	_, err := Dispatch(context.Background(), Request{Target: "truenas", Operation: "storage.status",
+		ActorID: "operator-1", SubjectID: "user-42", Confirmed: true})
+	if !errors.Is(err, ErrReadNotDispatched) {
+		t.Fatalf("a read was dispatched: %v", err)
+	}
+	if got := h.order(); got != "resolve" || len(h.begun) != 0 || len(h.calls) != 0 {
+		t.Fatalf("a read went past resolution: %q, begun %d, called %d", got, len(h.begun), len(h.calls))
+	}
+}

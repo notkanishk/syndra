@@ -3,6 +3,40 @@
 One entry per major or feature: what it is, the schema files it touches, and the
 fixture that changed. This file lives above both majors because it spans them.
 
+## Feature `results` served (slice 6a, 11 Nov 2026)
+
+Additive within major 2. Syndra now reads `result` from an add-on declaring
+`results`, through one read path for every `effect: read` operation (never
+dispatched, logged or confirmed), and still reads the typed pockets from one
+that does not, until major 3. The TrueNAS add-on declares `results`.
+
+- `holdings.list` added (`v2/registry/operations.json`): scope `member`,
+  `effect: read`, no parameters, result `common/records.json`.
+- `storage.status`'s result is the storage profile,
+  `v2/schema/profiles/storage/status.json` (new): `common/status.json` plus
+  `places`, `places_readable`, `needs_password`, `needs_new_password` and
+  `quota_read` (the pocket's `usage_readable`, named as in `homes.json`;
+  false on a partial read too).
+  Every valid reply is a valid common status. `username` and `smb_enabled`
+  are not in it: Syndra has the username from its binding. An amendment
+  before release: no add-on declared `results` until this entry.
+- Activity events gain an optional `resource` (`v2/schema/common/activity.json`),
+  the place on the target an event happened, in the vocabulary of
+  `uncovered`: the pocket's `share`, without the product word.
+- Registry `pocket` (`storage`, `activity`, `health`): the key each read was
+  answered under before `results`, read only from an add-on without it and
+  removed at major 3. A read with no pocket needs `results`; the
+  `results` feature's meaning says so (`v2/registry/features.json`).
+- `operation_response.json`'s `result` description names kind profiles.
+- Fixtures: new `operation_response_records.json`,
+  `operation_response_activity_result.json`,
+  `operation_response_health_result.json` (the TrueNAS add-on's three read
+  replies and the inventory's) and `manifest_inventory.json` (kind
+  `inventory`, `holdings.list`); `operation_response_result.json` is the
+  storage profile as the TrueNAS add-on sends it; `activity.json`'s event
+  carries `resource` instead of `x-truenas-share`; `manifest_truenas.json`
+  declares `results`.
+
 ## Major 2, rules the author's guide review found (slice 5, 11 Nov 2026)
 
 Backward compatible within major 2 (owner decision, as above): each rule was
