@@ -35,6 +35,7 @@ export default function ServiceAccountsPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Service accounts"
+        // eslint-disable-next-line no-restricted-syntax -- "shares" is a verb here (a login the team uses together), not the storage kind's word
         lede="Accounts made for one purpose, not one person: an integration, a device, an agent, or a login the team shares. Each has someone answerable for it."
         meta={accounts.data ? `${rows.length} service ${rows.length === 1 ? "account" : "accounts"}` : undefined}
       />

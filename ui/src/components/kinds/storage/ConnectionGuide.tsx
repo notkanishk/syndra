@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { type Device } from "@/components/storage/device";
+import { type Device } from "@/components/kinds/storage/device";
 import { Button } from "@/components/ui/Button";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FieldLabel } from "@/components/ui/Input";

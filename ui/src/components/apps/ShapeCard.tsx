@@ -251,7 +251,7 @@ function NewAppOffer({
   if (/truenas/i.test(app)) {
     return (
       <div className="row-divider flex flex-col gap-2 px-[22px] py-4 text-[14px] text-muted">
-        TrueNAS&rsquo;s web interface can&rsquo;t sign in with Zitadel. Access to its shares goes through the TrueNAS add-on.
+        TrueNAS&rsquo;s web interface can&rsquo;t sign in with Zitadel. Access to what it holds goes through the TrueNAS add-on.
         <ArrowLink href="/system/targets">TrueNAS add-on</ArrowLink>
       </div>
     );

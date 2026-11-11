@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountSheet } from "@/components/shell/AccountSheet";
 import type { SessionUser } from "@/lib/session";
 
 const setTheme = vi.fn();
+// GET /me/systems: the systems the signed-in person meets.
+const mine = vi.hoisted(() => ({ systems: [] as Array<{ target: string; name: string; kind: string }> }));
+vi.mock("@/lib/queries/useMySystems", () => ({ useMySystems: () => ({ data: mine.systems }) }));
+beforeEach(() => {
+  mine.systems = [];
+});
 vi.mock("@/lib/theme", () => ({
   useTheme: () => ({ theme: "dark", choice: "dark", toggle: vi.fn(), setTheme }),
 }));
@@ -139,6 +145,21 @@ describe("the account sheet", () => {
     expect(links[0].textContent).toContain("What you can use, and asking for more");
     expect(links[1].textContent).toContain("Your password and folders");
     for (const link of links) expect(link.className).toContain("min-h-[var(--tap)]");
+  });
+
+  // An operator's own laser account has a way in: one row per system that is
+  // not storage, after their storage, by name (the rows a member's rail draws).
+  it("takes an operator to their own systems that are not storage, alphabetical", () => {
+    mine.systems = [
+      { target: "truenas", name: "TrueNAS", kind: "storage" },
+      { target: "laser", name: "Big laser", kind: "machine" },
+      { target: "door", name: "Annex door", kind: "access" },
+    ];
+    open();
+    const links = screen.getAllByRole("link");
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/me", "/storage", "/systems/door", "/systems/laser"]);
+    expect(links[3].textContent).toContain("Big laser");
+    expect(links[3].textContent).toContain("Your account here, and what to do next");
   });
 
   // A member has the same page in their rail; one row per job.

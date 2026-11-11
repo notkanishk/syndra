@@ -43,6 +43,7 @@ const summaryRead = vi.hoisted(() => ({ isLoading: false, error: null as unknown
 const NAMES: Record<string, string> = { u1: "Finn Balor", u2: "Chad Gable", u3: "Jimmy Uso" };
 const PROJECTS: Record<string, string> = { p1: "Electronics bench", p2: "Wood shop" };
 
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
   useRouter: () => ({ replace: () => {} }),

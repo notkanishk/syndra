@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
+import { mappingFields } from "@/lib/fields";
 import { applyParts, bytesToGb, gbToBytes, homeCount, limitWords, mergePlans, opsFor, roleCount, rowsOf } from "@/lib/role-mapping-plan";
+
+const F = mappingFields(TRUENAS_SCHEMA);
 import type { MappingRehearsal, RoleMapping } from "@/lib/queries/useMappings";
 
 const row = (field: string, value: string): RoleMapping =>
@@ -17,24 +21,24 @@ const plan = (outcomes: Array<[string, string, string]>, planId?: string): Mappi
 
 describe("what a role change needs", () => {
   it("creates a role's group, home and limit together", () => {
-    const ops = opsFor({}, { group: "fab", home: true, quota: "21474836480" });
+    const ops = opsFor({}, { group: "fab", home: true, quota: "21474836480" }, F);
     expect(ops.map((o) => `${o.kind} ${o.field}`)).toEqual(["create group", "create home", "create home_quota"]);
   });
 
   it("changes only what differs, and takes a home away with its limit", () => {
-    const current = rowsOf([row("group", "fab"), row("home", "true"), row("home_quota", "1")], "p", "lead");
-    expect(opsFor(current, { group: "fab", home: true, quota: "1" })).toEqual([]);
-    expect(opsFor(current, { group: "fab", home: true, quota: "0" }).map((o) => `${o.kind} ${o.field}`)).toEqual(["edit home_quota"]);
-    expect(opsFor(current, { group: "fab", home: false, quota: null }).map((o) => `${o.kind} ${o.field}`)).toEqual([
+    const current = rowsOf([row("group", "fab"), row("home", "true"), row("home_quota", "1")], "p", "lead", F);
+    expect(opsFor(current, { group: "fab", home: true, quota: "1" }, F)).toEqual([]);
+    expect(opsFor(current, { group: "fab", home: true, quota: "0" }, F).map((o) => `${o.kind} ${o.field}`)).toEqual(["edit home_quota"]);
+    expect(opsFor(current, { group: "fab", home: false, quota: null }, F).map((o) => `${o.kind} ${o.field}`)).toEqual([
       "delete home_quota",
       "delete home",
     ]);
   });
 
   it("removes every row of a role when the role is removed", () => {
-    const current = rowsOf([row("group", "fab"), row("home", "true")], "p", "lead");
+    const current = rowsOf([row("group", "fab"), row("home", "true")], "p", "lead", F);
     // Group last: a removal that stops part-way leaves the row the list shows.
-    expect(opsFor(current, null).map((o) => `${o.kind} ${o.field}`)).toEqual(["delete home", "delete group"]);
+    expect(opsFor(current, null, F).map((o) => `${o.kind} ${o.field}`)).toEqual(["delete home", "delete group"]);
   });
 });
 
@@ -52,7 +56,7 @@ describe("one review from several rehearsals", () => {
       ["u3", "no_change", ""],
     ]);
     expect(merged.summary).toMatchObject({ total: 3, apply: 2, no_change: 1 });
-    expect(homeCount(parts)).toEqual({ makes: 2, already: 1 });
+    expect(homeCount(parts, F)).toEqual({ makes: 2, already: 1 });
   });
 });
 

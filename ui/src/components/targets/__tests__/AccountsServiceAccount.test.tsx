@@ -19,7 +19,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
   }),
   useTargetHomes: () => ({ data: { accounts: [] }, isLoading: false, error: null }),
 }));
-vi.mock("@/components/targets/HomeLimit", () => ({
+vi.mock("@/components/kinds/storage/HomeLimit", () => ({
   HomeLine: () => null,
   LimitDialog: () => null,
   limitVerb: () => null,
@@ -41,3 +41,5 @@ describe("a connected system's accounts, a service account's row", () => {
     expect(hrefs).toContain("/users/u1");
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

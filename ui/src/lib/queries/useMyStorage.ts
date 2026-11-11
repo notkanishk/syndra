@@ -3,9 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, request } from "@/lib/api-client";
-import type { AccountHome } from "@/lib/queries/useTargets";
+import type { EntitlementField } from "@/lib/fields";
+import type { AccountHome, Standing } from "@/lib/queries/useTargets";
 import type { OneShotSecret } from "@/lib/secret";
-import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
 import type { RetryState } from "@/lib/retry";
@@ -45,6 +45,8 @@ export interface StoragePlace {
 
 export interface MyTargetView {
   target: string;
+  /** What the system is called, the same name the operator's roster carries. */
+  name: string;
   /** At least one mapped role reaches this target for this person. */
   entitled: boolean;
   /** The add-on-reported name they connect with, or absent. */
@@ -66,6 +68,12 @@ export interface MyTargetView {
     needs_re_enrolment?: boolean;
     last_changed_at?: string;
   };
+  /** What kind of system this is, and what its fields are: the accepted
+   * manifest's. Both absent until one is accepted ("not read yet"). */
+  kind?: string;
+  entitlement_schema?: EntitlementField[];
+  /** Whether the account can be used yet, and who is waited on, in the add-on's words. */
+  standing?: Standing;
   /** The add-on answered. A member whose target is down is told, not shown a form that fails. */
   reachable: boolean;
   /**
@@ -183,15 +191,16 @@ export function usePersonTargets(userId: string, enabled = true) {
     queryKey: ["users", userId, "targets"],
     enabled,
     queryFn: () => request<{ targets: PersonTargetView[] }>(`/users/${encodeURIComponent(userId)}/targets`),
-    select: (data) => sortByName(data.targets ?? [], (t) => targetLabel(t.target), (t) => t.target),
+    select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
   });
 }
 
-export function useMyStorage() {
+export function useMyStorage(enabled = true) {
   return useQuery({
     queryKey: ["me", "targets"],
+    enabled,
     queryFn: () => request<{ targets: MyTargetView[] }>("/me/targets"),
-    select: (data) => sortByName(data.targets ?? [], (t) => targetLabel(t.target), (t) => t.target),
+    select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
     refetchInterval: (query) =>
       (query.state.data?.targets ?? []).some(waitingOn) ? 30_000 : false,
   });

@@ -1,12 +1,13 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import { useState } from "react";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { targetLabel } from "@/lib/nav";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCreateHold } from "@/lib/queries/useHolds";
 import { endOfDayISO } from "@/lib/time";
@@ -60,6 +61,7 @@ export function HoldDialog({
   label?: string;
   onClose: () => void;
 }) {
+  const nameOf = useSystemNames();
   const spoken = label ?? value;
   const create = useCreateHold();
   const [ending, setEnding] = useState<Ending>("stays");
@@ -81,7 +83,7 @@ export function HoldDialog({
       <ModalHeader
         titleId="hold-title"
         title={`Put ${spoken} on hold for ${subjectName}`}
-        lede={succeeded ? undefined : `They keep every role they have. This blocks ${spoken} on ${targetLabel(target)}, and nothing else.`}
+        lede={succeeded ? undefined : `They keep every role they have. This blocks ${spoken} on ${nameOf(target)}, and nothing else.`}
       />
 
       <div className="grid gap-4 px-6">
@@ -180,8 +182,8 @@ export function HoldDialog({
                   message: `${spoken.charAt(0).toUpperCase()}${spoken.slice(1)} is on hold for ${subjectName}.`,
                   detail:
                     ending === "stays"
-                      ? `It appears under Holds due on the date you set. ${targetLabel(target)} catches up on its next pass.`
-                      : `It lifts itself on the date you set. ${targetLabel(target)} catches up on its next pass.`,
+                      ? `It appears under Holds due on the date you set. ${nameOf(target)} catches up on its next pass.`
+                      : `It lifts itself on the date you set. ${nameOf(target)} catches up on its next pass.`,
                 });
               } catch (error) {
                 setOutcome(outcomeFromError(error));

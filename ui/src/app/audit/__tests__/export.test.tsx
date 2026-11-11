@@ -23,6 +23,7 @@ vi.mock("@/lib/queries/useAudit", () => ({
     fetchNextPage: () => {},
   }),
 }));
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveUser: () => ({ value: null }) }),
 }));
@@ -44,7 +45,11 @@ afterEach(cleanup);
 describe("Audit export", () => {
   it("exports every matching entry: past the ten on screen, formulas defused", async () => {
     // The 7-day window is the default; entries a minute apart all sit inside it.
-    log.entries = [entry(0, "=HYPERLINK(1)"), ...Array.from({ length: 29 }, (_, i) => entry(i + 1))];
+    log.entries = [
+      entry(0, "=HYPERLINK(1)"),
+      ...Array.from({ length: 28 }, (_, i) => entry(i + 1)),
+      { ...entry(29), action: "entitlement.truenas.enqueued" },
+    ];
     let blob: Blob | undefined;
     URL.createObjectURL = vi.fn((made: Blob) => ((blob = made), "blob:x"));
     URL.revokeObjectURL = vi.fn();
@@ -68,6 +73,8 @@ describe("Audit export", () => {
     expect(head).toBe(`"when","who","who_id","what","target","target_id","resource"`);
     expect(first).toContain(`"Unknown account","'=HYPERLINK(1)"`);
     expect(first).toContain(`"Unknown account","u2"`);
+    // A system is named the way the page names it: the roster's name, not its id.
+    expect(text).toContain("Recorded a change to their TrueNAS account");
   });
 
   it("is one FilterBar: search, then the window, then Export, and a read line", () => {

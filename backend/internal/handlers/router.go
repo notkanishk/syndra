@@ -314,6 +314,7 @@ func NewRouter() http.Handler {
 	// from the request, because a member-scoped operation must bind who it acts
 	// ON and not only who may call it.
 	mux.HandleFunc("GET /api/v1/me/targets", withCORS(withUserAuth(handleMyTargets)))
+	mux.HandleFunc("GET /api/v1/me/systems", withCORS(withUserAuth(handleMySystems)))
 	mux.HandleFunc("GET /api/v1/me/changes", withCORS(withUserAuth(handleMyChanges)))
 	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(withSelfServiceLimit(handleSetMyCredential))))
 
@@ -392,6 +393,9 @@ func NewRouter() http.Handler {
 	// wrapped in withTargetProject GIVE access and wait for it; taking access
 	// away never does.
 	mux.HandleFunc("PUT /api/v1/targets/{target}/project", withCORS(withOperatorAuth(handleSetTargetProject)))
+	// What members see it called (addon-contract 3.10a). One write place: the
+	// system's own page. Changes nobody's access.
+	mux.HandleFunc("PUT /api/v1/targets/{target}/name", withCORS(withOperatorAuth(handleSetTargetName)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/lifecycle", withCORS(withOperatorAuth(handleSetTargetLifecycle)))
 
 	// Revocation as a composition (design §10). This target cannot end a

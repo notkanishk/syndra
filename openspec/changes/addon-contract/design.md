@@ -740,6 +740,67 @@ target adds one, and the core would be learning each product, which §0 of
 `addons/README.md` forbids. The add-on knows the word; the core knows who is
 waited on.
 
+### 6.1 What a system is called, and where a member meets it (3.10)
+
+**The name is a registration attribute, shaped once by the backend.**
+`targets.name` (migration 000091, nullable, `targets_name_check`: never blank,
+at most 60 characters) is set on the system's own page under System, its one
+write place (`PUT /api/v1/targets/{target}/name`, strict JSON, audited as
+`target.named` with the old and new name in the same transaction). Every
+roster carries `name = coalesce(targets.name, manifest.product, the id
+title-cased)`, computed by `handlers.systemName` alone: `GET /targets` (with
+`name_from`: `operator`, `product` or `id`, so the Name setting words its hint
+for the case it is in), `GET /me/systems`, `GET /me/targets` and a person's
+targets. Every surface draws a system by that `name`; the UI's `targetLabel`
+is only the id title-cased for a row drawn before a roster lands, and its
+product map is gone. Every helper that words a system (`describeAction`,
+`describeSends`, `systemsOf`, `describeDrain`, `outcomeFromDrain`) takes the
+caller's `nameOf` as a required argument, so there is one path for names (the
+audit CSV export included). Two laser cutters from one image share a
+manifest, so both default to its `product` until an operator names one.
+**Rejected:** a manifest field (wrong owner: two deployments of one image
+share it), a name per kind (cannot tell two apart), and the UI map (product
+names in core code). The contract's `product` is therefore a display name
+("What people call the product", `v2/schema/manifest.json`, CHANGELOG): the
+TrueNAS add-on reports `"TrueNAS"` (it reported `"truenas_scale"`), from one
+constant its fixture test pins. No name is seeded by migration. The 60-char
+limit is the CHECK's; the backend's refusal and the Name field's `maxLength`
+say the same number, held by one parity test (`name-limit.test.ts`, which
+reads the migration and the Go refusal, the way the proxy test reads the
+router) rather than an API field for a number that does not change.
+
+**Where a member meets a system.** By kind, decided by the accepted manifest
+(owner, 11 Nov 2026): kind `storage` folds into Network storage (`/storage`
+lists kind `storage` only); any other kind gets its own row in the member rail
+and its own page, `/systems/{target}` (a storage system there is sent to
+`/storage`, one address per page). A registration with **no accepted manifest
+is operators-only**: no member row, no member card, decided server-side
+(`handlers.memberMeets`), so neither member read ever carries one. Rows are
+registrations, never entitlements: a member none of whose roles reaches the
+system has the row, and the page says so with a next step. The rail's seat is
+a static *family* leaf in `MEMBER_NAV` (`basic-advanced-ia` §1), so
+reachability stays derived from the static tree and the Edge middleware needs
+no data.
+
+**The rows' one source** is `GET /api/v1/me/systems` (`withUserAuth`, on the
+proxy's member allowlist): `[{target, name, kind}]` from the registry, the
+accepted manifest's kind and `targets.name` only, never an add-on call, the
+systems a member meets, sorted by name (`textsort`, the UI's collation). The
+member rail, the touch bar, Go to, the `/systems/{target}` gate and an
+operator's account sheet all read it (`useMySystems`); `memberSystems` is the
+one rule for which of them get a row. `GET /me/targets` (live add-on calls)
+stays the cards' read. The touch bar holds an empty seat of its own height
+while the read is in flight, so it never draws three tabs and then four; a
+`/systems/{target}` page names its crumb (`useCrumb`) only once the read
+lands, never an id first, and never a system the member does not meet. An
+operator's account sheet lists their own non-storage systems after Network
+storage, so their own laser account has a way in.
+
+**The person page** (operators): Network storage (the storage kind's module,
+`components/kinds/storage/PersonStorage`), then **Connected systems**, one
+kind-agnostic card per other system, not read included: the account, the
+add-on's `standing`, the roles that reach it and any hold.
+
 ## 7. The conformance kit
 
 `addons/conformance`: a Go module, one binary.

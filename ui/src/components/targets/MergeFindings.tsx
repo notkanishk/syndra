@@ -10,6 +10,11 @@ import { describeFailure, mayHaveGoneThrough, outcomeFromError, partialSentence,
 import { UserName } from "@/components/names";
 import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
 import { RoleRef } from "@/components/names/RoleRef";
+import { fieldNoun, limitWordsFor, membershipNoun, type EntitlementField } from "@/lib/fields";
+import { schemaReason } from "@/components/states/SchemaState";
+import { useFieldSchemaState, useSystemNames } from "@/lib/queries/useFieldSchema";
+import { UntilChoice, untilWords, type Until } from "@/components/targets/UntilChoice";
+import { endOfDayISO, } from "@/lib/time";
 import { fieldWords } from "@/lib/role-mapping-plan";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
@@ -18,7 +23,6 @@ import { Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
 import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { Relative } from "@/components/ui/Time";
-import { targetLabel } from "@/lib/nav";
 import {
   useMergeFindings,
   useResolveMergeFinding,
@@ -41,16 +45,22 @@ import {
  * it is the entire reason the merge base exists.
  */
 export function MergeFindings({ target }: { target: string }) {
+  const nameOf = useSystemNames();
   const findings = useMergeFindings(target);
   const resolve = useResolveMergeFinding(target);
+  const schemaState = useFieldSchemaState(target);
+  const { schema } = schemaState;
   const [deciding, setDeciding] = useState<string | null>(null);
+  // What a saved limit said, kept past the refetch that moves its row to "waiting
+  // for the system to match", so the result is shown where the decision was made.
+  const [saved, setSaved] = useState<{ id: string; message: string } | null>(null);
   // The "Finish" button below has no onSuccess and no server field to key off
   // until the list refetches, so a second click before then re-submits the
   // same finish. Marked synchronously, same idiom as the request queues.
   const [finishing, setFinishing] = useState<Set<string>>(new Set());
 
   const rows = findings.data ?? [];
-  const name = targetLabel(target);
+  const name = nameOf(target);
 
   return (
     <Card>
@@ -65,11 +75,16 @@ export function MergeFindings({ target }: { target: string }) {
         }
       />
       <ListStates
-        isLoading={findings.isLoading}
-        error={findings.error}
+        // Every sentence and decision here is worded from the fields, so none is drawn before they are read.
+        isLoading={findings.isLoading || schemaState.loading}
+        error={findings.error ?? schemaState.error}
         isEmpty={rows.length === 0}
-        onRetry={() => findings.refetch()}
-        errorTitle="The findings could not be read"
+        onRetry={() => {
+          if (findings.error) void findings.refetch();
+          if (schemaState.error) schemaState.refetch();
+        }}
+        // Says which read failed: the findings, or the system's fields they are worded from.
+        errorTitle={findings.error ? "The findings could not be read" : `${name}'s fields could not be read`}
         empty={
           <EmptyState
             title="Nothing disputed."
@@ -82,14 +97,14 @@ export function MergeFindings({ target }: { target: string }) {
             <div key={f.id}>
               <CardRow first={i === 0} className="flex-wrap">
                 <Person id={f.subject_id} />
-                {f.field ? <span className="text-[13.5px] text-muted">{fieldWords(f.field)}</span> : null}
+                {f.field ? <span className="text-[13.5px] text-muted">{fieldWords(f.field, schema)}</span> : null}
                 <span className="flex-1" />
                 <span className="text-[13px] text-faint">
                   first seen <Relative iso={f.detected_at} />
                 </span>
               </CardRow>
               <div className="px-5 pb-3 text-[13.5px] text-muted">
-                {describe(f, name)}
+                {describe(f, name, schema)}
                 {rawSides(f) && (
                   <TechnicalDetail className="mt-2" placeKey={`finding:${f.id}`}>
                     <TechnicalPayload>{rawSides(f)}</TechnicalPayload>
@@ -140,7 +155,12 @@ export function MergeFindings({ target }: { target: string }) {
                 // has changed; the row closes when a pass sees the target agree.
                 // Saying "resolved" here would be the surface claiming the
                 // difference is over while it is still on the target.
-                <CardRow>
+                <CardRow className="flex-wrap">
+                  {saved?.id === f.id && (
+                    <div className="w-full pb-1">
+                      <ActionOutcome word="Saved" outcome={{ kind: "applied", message: saved.message }} />
+                    </div>
+                  )}
                   <span className="text-[13px] text-faint">
                     {decisionLabel(f.decision, name)} by <Person id={f.decided_by ?? ""} /> ·
                     waiting for {name} to match
@@ -150,11 +170,17 @@ export function MergeFindings({ target }: { target: string }) {
                 <DecisionForm
                   finding={f}
                   name={name}
+                  schemaState={schemaState}
                   pending={resolve.isPending}
                   error={resolve.error}
                   onCancel={() => setDeciding(null)}
-                  onResolve={(input) =>
-                    resolve.mutate(input, { onSuccess: () => setDeciding(null) })
+                  onResolve={(input, savedMessage) =>
+                    resolve.mutate(input, {
+                      onSuccess: () => {
+                        if (savedMessage) setSaved({ id: f.id, message: savedMessage });
+                        setDeciding(null);
+                      },
+                    })
                   }
                 />
               ) : (
@@ -176,13 +202,17 @@ export function MergeFindings({ target }: { target: string }) {
 /**
  * The finding as a sentence, leading with the history.
  *
- * `value` is rendered as JSON rather than prettified per field: the shapes are
- * the target's, not this component's, and a renderer that knows what a `group`
- * looks like is a second definition of the entitlement schema.
+ * A value is worded by its field's ROLE, never its name: a limit reads in the
+ * field's unit and says "no limit" for the field's own unlimited; every other
+ * role keeps the target's own words, and a structured value is left to
+ * Technical detail. A renderer that knew what a `group` looks like would be a
+ * second definition of the entitlement schema.
  */
-function describe(f: MergeFinding, name: string): string {
+function describe(f: MergeFinding, name: string, schema: EntitlementField[] | undefined): string {
+  const limit = schema?.find((x) => x.name === f.field && x.role === "limit");
+  const show = (v: unknown) => showValue(v, limit);
   const was = show(f.base);
-  const its = f.field ? `Its ${fieldWords(f.field)}` : "It";
+  const its = f.field ? `Its ${fieldWords(f.field, schema)}` : "It";
   switch (f.outcome) {
     case "deleted_upstream":
       return `This account is no longer on ${name}. Somebody deleted it there. Creating it again brings back what they deleted; stopping management leaves ${name} alone and Syndra forgets the account.`;
@@ -225,8 +255,9 @@ function decisionLabel(decision: string, name: string): string {
   }
 }
 
-function show(value: unknown): string {
+function showValue(value: unknown, limit: EntitlementField | undefined): string {
   if (value === undefined || value === null) return "unrecorded";
+  if (limit) return limitWordsFor(limit, valueOf(value));
   if (typeof value === "string") return value;
   // A structured value is the machine's words: its exact form is under Technical detail.
   return typeof value === "object" ? "a structured value" : String(value);
@@ -250,6 +281,7 @@ function rawSides(f: MergeFinding): string | null {
 function DecisionForm({
   finding,
   name,
+  schemaState,
   pending,
   error,
   onResolve,
@@ -257,14 +289,25 @@ function DecisionForm({
 }: {
   finding: MergeFinding;
   name: string;
+  schemaState: Parameters<typeof schemaReason>[0];
   pending: boolean;
   error: unknown;
-  onResolve: (input: ResolveFindingInput) => void;
+  /** `saved` is the sentence to show once it lands, for a decision that makes something new. */
+  onResolve: (input: ResolveFindingInput, saved?: string) => void;
   onCancel: () => void;
 }) {
   const [reason, setReason] = useState("");
   const [resolution, setResolution] = useState<string | null>(null);
   const gone = finding.outcome === "deleted_upstream";
+  // A limit the target changed: taking its value saves it as this person's own
+  // limit, which needs an end or a review date, chosen here (design §3, 3.8).
+  const schema = schemaState.schema;
+  // Until the fields are known the button cannot tell a limit (a panel) from a switched-off account (one press).
+  const unknown = gone ? undefined : schemaReason(schemaState, name);
+  const limit = schema?.find((f) => f.name === finding.field && f.role === "limit");
+  const [adopting, setAdopting] = useState(false);
+  const [until, setUntil] = useState<Until>("ends");
+  const [date, setDate] = useState("");
   const alreadyDecided = decidedElsewhere(error);
 
   return (
@@ -295,9 +338,13 @@ function DecisionForm({
             size="sm"
             variant="outline"
             isPending={pending}
-            disabled={!reason.trim()}
-            reason={!reason.trim() ? "Say why. This becomes the record of the decision." : undefined}
+            disabled={!reason.trim() || Boolean(unknown)}
+            reason={unknown ?? (!reason.trim() ? "Say why. This becomes the record of the decision." : undefined)}
             onClick={() => {
+              if (limit) {
+                setAdopting(true);
+                return;
+              }
               const pick = gone ? "unbound" : "take_theirs";
               setResolution(pick);
               onResolve({
@@ -322,6 +369,48 @@ function DecisionForm({
           Cancel
         </Button>
       </div>
+      {limit && adopting && (
+        <div className="grid gap-2.5 rounded-inner bg-tint-1 px-4 py-3.5" data-adopt-limit>
+          <p className="text-[13.5px] leading-[1.55] text-ink [text-wrap:pretty]">
+            This saves {name}&apos;s value, {limitWordsFor(limit, valueOf(finding.theirs))}, as this person&apos;s own{" "}
+            {fieldNoun(limit)}. It takes the place of what their roles give until it ends or you review it.
+          </p>
+          <UntilChoice
+            until={until}
+            onUntil={setUntil}
+            date={date}
+            onDate={setDate}
+            comesBack={`their roles' ${fieldNoun(limit)}`}
+          />
+          <span className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="accent"
+              isPending={pending}
+              disabled={!reason.trim() || date === ""}
+              reason={!reason.trim() ? "Say why. This becomes the record of the decision." : date === "" ? "Pick the day it ends or is reviewed." : undefined}
+              onClick={() => {
+                setResolution("take_theirs");
+                const day = endOfDayISO(date);
+                onResolve(
+                  {
+                    id: finding.id,
+                    resolution: "take_theirs",
+                    reason,
+                    ...(until === "ends" ? { expires_at: day } : { review_date: day }),
+                  },
+                  `Their own ${fieldNoun(limit)} is now ${limitWordsFor(limit, valueOf(finding.theirs))}. It ${untilWords(until, day)}. Their roles' ${fieldNoun(limit)} does not apply to them while it stands.`,
+                );
+              }}
+            >
+              Save it as their own limit
+            </Button>
+            <Button size="sm" onClick={() => setAdopting(false)}>
+              Back
+            </Button>
+          </span>
+        </div>
+      )}
       {!gone && !finding.adoptable && (
         // The alternative to a button that cannot work. Adopting a group value
         // has nowhere to live — it belongs to a mapping that reaches every
@@ -335,7 +424,7 @@ function DecisionForm({
           <span>{finding.why_not}</span>
           {(finding.policy ?? []).map((p) => (
             <span key={p.mapping_id} className="text-faint">
-              <RoleRef projectId={p.project_id} roleKey={p.role_key} /> gives the {p.value} group ·{" "}
+              <RoleRef projectId={p.project_id} roleKey={p.role_key} /> gives the {p.value} {membershipNoun(schema)} ·{" "}
               Syndra gives that role to {p.holders} {p.holders === 1 ? "person" : "people"}
             </span>
           ))}
@@ -370,6 +459,12 @@ function DecisionForm({
       )}
     </div>
   );
+}
+
+/** A limit's value as the finding carries it: a string, or a list of one. */
+function valueOf(v: unknown): string | undefined {
+  const one = Array.isArray(v) ? v[v.length - 1] : v;
+  return one === undefined || one === null ? undefined : String(one);
 }
 
 function sixMonthsOut(): string {

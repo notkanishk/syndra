@@ -1,4 +1,3 @@
-import { targetLabel } from "@/lib/nav";
 import { DRAIN_UNKNOWN_NEXT, type ActionOutcome, type AutoRetry, type OutcomeKind } from "@/lib/outcome";
 import type { DrainResult } from "@/lib/queries/usePropagation";
 
@@ -30,7 +29,12 @@ export interface DrainOutcome {
  * silence on an HTTP 200: an operator reads "0 sent, 0 failed" after a pass
  * that requeued eight changes and concludes the queue is idle.
  */
-export function describeDrain(result: DrainResult | undefined, auto: AutoRetry = true): DrainOutcome {
+/** `nameOf` is the roster's name for a system (useSystemNames): the one path for names. */
+export function describeDrain(
+  result: DrainResult | undefined,
+  nameOf: (target: string) => string,
+  auto: AutoRetry = true,
+): DrainOutcome {
   const applied = result?.applied ?? 0;
   const failed = result?.failed ?? 0;
   const requeued = result?.requeued ?? 0;
@@ -53,9 +57,9 @@ export function describeDrain(result: DrainResult | undefined, auto: AutoRetry =
   const whose = result?.halted_target ?? halted[0]?.target;
   const stalled =
     halted.length > 0
-      ? halted.map((pass) => targetLabel(pass.target)).join(", ")
+      ? halted.map((pass) => nameOf(pass.target)).join(", ")
       : whose
-        ? targetLabel(whose)
+        ? nameOf(whose)
         : undefined;
 
   // Only when the response actually says whose pass stopped. A single-system
@@ -69,7 +73,7 @@ export function describeDrain(result: DrainResult | undefined, auto: AutoRetry =
       ? halted.reduce((n, pass) => n + (pass.waiting ?? 0), 0)
       : undefined;
     // One clause per system, in the fold's order (A-22 §3.5): who got theirs, then who didn't answer.
-    const wentTo = (result.passes ?? []).filter((pass) => !pass.halted && pass.applied > 0).map((pass) => targetLabel(pass.target));
+    const wentTo = (result.passes ?? []).filter((pass) => !pass.halted && pass.applied > 0).map((pass) => nameOf(pass.target));
     const went = applied ? (wentTo.length ? `${applied} reached ${wentTo.join(" and ")}` : `${applied} sent`) : "";
     const rest = parts.filter((part) => !part.endsWith(" sent"));
     const still = left ? `its ${left}` : "its changes";
@@ -201,8 +205,13 @@ export const STOPPED_NEXT =
  * not a failure, and an operator who reads it as one goes looking for a broken
  * machine instead of pressing the button again.
  */
-export function outcomeFromDrain(result: DrainResult | undefined, auto: AutoRetry = true, total?: number): ActionOutcome & { word: string } {
-  const { tone, message, detail, sendsItself, next } = describeDrain(result, auto);
+export function outcomeFromDrain(
+  result: DrainResult | undefined,
+  nameOf: (target: string) => string,
+  auto: AutoRetry = true,
+  total?: number,
+): ActionOutcome & { word: string } {
+  const { tone, message, detail, sendsItself, next } = describeDrain(result, nameOf, auto);
   const kind: OutcomeKind =
     tone === "success" ? "applied" : tone === "warning" ? "queued" : tone === "error" ? "failed" : "no_change";
   return { kind, message, detail, ...(sendsItself ? { sendsItself } : {}), ...(next ? { next } : {}), word: drainWord(result, total) };

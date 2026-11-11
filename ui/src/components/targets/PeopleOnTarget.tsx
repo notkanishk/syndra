@@ -11,12 +11,15 @@ import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UNKNOWN_ACCOUNT, UserAvatar, UserName } from "@/components/names";
+import { StandingLine } from "@/components/ui/StandingLine";
+import { accountField } from "@/lib/fields";
+import { schemaReason } from "@/components/states/SchemaState";
+import { useFieldSchemaState, useSystemNames } from "@/lib/queries/useFieldSchema";
 import { formatShortDate } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import { glideTo } from "@/lib/motion";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetHomes, useTargetInventory, type AccountHome, type BoundAccount } from "@/lib/queries/useTargets";
-import { HomeLine, LimitDialog, limitVerb } from "@/components/targets/HomeLimit";
+import { HomeLine, LimitDialog, limitVerb } from "@/components/kinds/storage/HomeLimit";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
@@ -36,12 +39,13 @@ import { useShownNames } from "@/components/names/shownNames";
  */
 /** `stale`: the system isn't answering, so this is its last read and the card recedes (A-13). */
 export function PeopleOnTarget({ target, stale = false }: { target: string; stale?: boolean }) {
+  const nameOf = useSystemNames();
   const inventory = useTargetInventory(target);
   const homes = useTargetHomes(target);
   const names = useShownNames();
   const accounts = sortByName(inventory.data?.accounts ?? [], (a) => names.user(a.subject_id), (a) => a.subject_id);
   const homeOf = new Map((homes.data?.accounts ?? []).map((h) => [h.subject_id, h]));
-  const name = targetLabel(target);
+  const name = nameOf(target);
   const paging = usePaging(undefined, undefined, "people");
   // S5: somebody whose access has been revoked leaves on the next read, fading where they were and
   // closing the gap after, and not under the pointer.
@@ -134,7 +138,11 @@ function PersonRow({
   /** Their home folder limit and where it comes from; absent until read. */
   home?: AccountHome;
 }) {
+  const nameOf = useSystemNames();
   const [dialog, setDialog] = useState<"hold" | "revoke" | "limit" | null>(null);
+  const state = useFieldSchemaState(target);
+  const accountName = accountField(state.schema)?.name;
+  const why = schemaReason(state, nameOf(target)) ?? (accountName ? undefined : `${nameOf(target)}'s fields name no account, so Syndra cannot say what to hold.`);
   const verb = limitVerb(home);
   // The name, because both dialogs speak to and about a person — and rung 3
   // asks the operator to type it. Through the same resolver every other surface
@@ -156,6 +164,11 @@ function PersonRow({
         </span>
         <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-[13.5px] text-ink">
           {account.username}
+          {account.standing && (
+            <span className="mt-1 block font-sans">
+              <StandingLine standing={account.standing} system={nameOf(target)} audience="operator" />
+            </span>
+          )}
         </span>
         <span className="w-[110px] flex-none text-right text-[13.5px] text-muted">{formatShortDate(account.bound_at)}</span>
         <span className={`flex flex-none flex-wrap items-center justify-end gap-2 ${seat}`}>
@@ -166,7 +179,13 @@ function PersonRow({
               {verb}
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => setDialog("hold")}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!accountName}
+            reason={why}
+            onClick={() => setDialog("hold")}
+          >
             Put on hold
           </Button>
           <Button variant="danger" size="sm" onClick={() => setDialog("revoke")}>
@@ -195,9 +214,9 @@ function PersonRow({
           // operator reads. Sending the label would be a malformed term the
           // backend refuses; showing the value would be a dialog saying "Hold
           // true for Charlotte".
-          field="enabled"
+          field={accountName ?? ""}
           value="true"
-          label={`access to ${targetLabel(target)}`}
+          label={`access to ${nameOf(target)}`}
           onClose={() => setDialog(null)}
         />
       )}

@@ -1,17 +1,20 @@
 "use client";
 
 import { roleName } from "@/lib/names";
-import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 
+import { HomeChoice, HomesMade } from "@/components/kinds/storage/HomeMapping";
+import { OpensLine } from "@/components/kinds/storage/MappingReach";
 import { Button } from "@/components/ui/Button";
-import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
-import { Segmented, Select } from "@/components/ui/Select";
+import { Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
 import { ApiError } from "@/lib/api-client";
-import { formatClock } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
+import { fieldsByRole, mappingFields, membershipNoun } from "@/lib/fields";
+import { schemaReason } from "@/components/states/SchemaState";
+import { useFieldSchema, useFieldSchemaState, useSystemNames } from "@/lib/queries/useFieldSchema";
+import { formatClock, formatList } from "@/lib/format";
 import { useCreateMapping, useMappings } from "@/lib/queries/useMappings";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
@@ -35,7 +38,6 @@ import {
   useTargetSettings,
   useTargets,
   type MappableValues,
-  type ReachPlace,
 } from "@/lib/queries/useTargets";
 import dynamic from "next/dynamic";
 import { sortByName } from "@/lib/sort";
@@ -76,19 +78,24 @@ export function RoleMappingDialog({
   role?: { projectId: string; roleKey: string };
   onClose: () => void;
 }) {
-  const name = targetLabel(target);
+  const nameOf = useSystemNames();
+  const name = nameOf(target);
   const roster = useTargets();
   const row = (roster.data ?? []).find((t) => t.target === target);
   const project = row?.project ?? undefined;
   const projects = useProjects();
   const mappings = useMappings(target);
+  const schema = useFieldSchema(target);
+  const fields = mappingFields(schema);
+  const noun = membershipNoun(schema);
+  const FIELD = fields.membership ?? "";
   const values = useMappableValues(target, FIELD);
   const reach = useTargetReach(target);
   const settings = useTargetSettings(target);
   const create = useCreateMapping();
   const resolver = useNameResolver();
 
-  const current = role ? rowsOf(mappings.data ?? [], role.projectId, role.roleKey) : {};
+  const current = role ? rowsOf(mappings.data ?? [], role.projectId, role.roleKey, fields) : {};
   const [roleKey, setRoleKey] = useState(role?.roleKey ?? "");
   const [value, setValue] = useState(current.group?.value ?? "");
   const [home, setHome] = useState(Boolean(current.home));
@@ -110,24 +117,24 @@ export function RoleMappingDialog({
     home,
     quota: home ? (limit === "none" ? "0" : gbToBytes(gb)) : null,
   };
-  const ops = opsFor(current, choice);
+  const ops = opsFor(current, choice, fields);
 
   const list = values.data;
   const neverRead = values.error instanceof ApiError && values.error.code === "VALUES_NEVER_READ";
   const noGroups = Boolean(list && list.values.length === 0);
-  const fieldName = list ? `${list.label} on ${name}` : `Group on ${name}`;
+  const fieldName = list ? `${list.label} on ${name}` : `${noun[0].toUpperCase()}${noun.slice(1)} on ${name}`;
   const ready = Boolean(
     project && roleKey && value && list && !noGroups && ops.length > 0 && (choice.quota !== "" || !home),
   );
   const notReadyReason = neverRead
-    ? `Nothing to preview until ${name} lists its groups.`
+    ? `Nothing to preview until ${name} lists its ${noun}s.`
     : noGroups
-      ? `Nothing to preview until ${name} has a group of its own.`
+      ? `Nothing to preview until ${name} has a ${noun} of its own.`
       : role && ops.length === 0
         ? "Nothing has changed yet."
         : "Nothing is sent until you apply the preview.";
   const who = { target, projectId: role?.projectId ?? project?.id ?? "", roleKey };
-  const homes = homeCount(parts);
+  const homes = homeCount(parts, fields);
   const checked = parts.every((p) => p.plan.value_checked !== false);
   const movesGroup = ops.some((o) => o.kind === "edit" && o.field === FIELD);
 
@@ -137,7 +144,7 @@ export function RoleMappingDialog({
       lede={
         role
           ? `Everyone who holds ${roleLabel} moves with the change. The preview says how many people that is before anything is sent.`
-          : `Everyone who holds the role gets an account on ${name} in this group. The preview says how many people that is before anything is sent.`
+          : `Everyone who holds the role gets an account on ${name} through this ${noun}. The preview says how many people that is before anything is sent.`
       }
       noun={["person", "people"]}
       system={name}
@@ -172,29 +179,29 @@ export function RoleMappingDialog({
               <>
                 <Select id="m-val" disabled>
                   <option>
-                    {neverRead ? `Waiting for ${name}'s list` : noGroups ? "No groups to offer" : `Reading ${name}'s groups…`}
+                    {neverRead ? `Waiting for ${name}'s list` : noGroups ? `No ${noun}s to offer` : `Reading ${name}'s ${noun}s…`}
                   </option>
                 </Select>
                 <FieldHint>{neverRead ? "Not read yet." : list ? <>Read from {name} <Relative iso={list.read_at} />.</> : " "}</FieldHint>
                 {(neverRead || noGroups) && (
                   <Notice
                     tone="neutral"
-                    title={neverRead ? `${name} hasn't listed its groups yet.` : `${name} has no groups of its own yet.`}
+                    title={neverRead ? `${name} hasn't listed its ${noun}s yet.` : `${name} has no ${noun}s of its own yet.`}
                     action={{ label: "Read again", onClick: () => void values.refetch() }}
-                    next={neverRead ? "Press Read again in a minute." : `Press Read again once ${name} has groups of its own.`}
+                    next={neverRead ? "Press Read again in a minute." : `Press Read again once ${name} has ${noun}s of its own.`}
                   >
                     {neverRead
                       ? `Syndra asks for the list when this opens, and ${name} hasn't answered${
                           row?.health?.started_at ? ` since Syndra restarted at ${formatClock(row.health.started_at)}` : " yet"
                         }. This usually clears within a minute and a half.`
-                      : builtinSentence(name, list)}
+                      : builtinSentence(name, list, noun)}
                   </Notice>
                 )}
               </>
             ) : (
               <>
                 <Select id="m-val" value={value} onChange={(e) => setValue(e.target.value)}>
-                  <option value="">Choose a group</option>
+                  <option value="">Choose a {noun}</option>
                   {sortByName(list.values, (v) => list.labels?.[v] ?? v, (v) => v).map((v) => (
                     <option key={v} value={v}>
                       {list.labels?.[v] ?? v}
@@ -204,7 +211,7 @@ export function RoleMappingDialog({
                 <FieldHint>
                   {list.current ? (
                     <>
-                      Groups made on {name}, read <Relative iso={list.read_at} />. Its built-in groups are never
+                      Made on {name}, read <Relative iso={list.read_at} />. Its built-in ones are never
                       offered.
                     </>
                   ) : (
@@ -213,8 +220,8 @@ export function RoleMappingDialog({
                 </FieldHint>
                 {value && <OpensLine name={name} places={reach.data?.read ? reach.data.groups?.[value] : undefined} />}
                 {!list.current && (
-                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`} next={`Preview as usual. If you doubt a group still exists, check it on ${name} first.`}>
-                    Syndra can&apos;t read {name}&apos;s groups right now. You can still preview. A group deleted since{" "}
+                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`} next={`Preview as usual. If you doubt a ${noun} still exists, check it on ${name} first.`}>
+                    Syndra can&apos;t read {name}&apos;s {noun}s right now. You can still preview. A {noun} deleted since{" "}
                     {formatClock(list.read_at)} fails when the mapping is applied, and the failure is reported.
                   </Notice>
                 )}
@@ -223,73 +230,18 @@ export function RoleMappingDialog({
           </div>
 
           {settings.data?.read && (
-            <div className="grid gap-1.5">
-              <span className="type-label text-label" id="m-home">
-                Home folder
-              </span>
-              {!homeRoot && !current.home ? (
-                // One control that can't act now: a sentence and the step.
-                <span className="text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
-                  No mapping can give one until you choose where home folders go on {name}. This one works without
-                  it; give it a home folder later by changing it.{" "}
-                  <ArrowLink href={`/system/targets/${target}`}>Choose where home folders go</ArrowLink>
-                </span>
-              ) : (
-                <>
-                  <span aria-labelledby="m-home">
-                    <Segmented
-                      label="Home folder"
-                      value={home ? "gives" : "none"}
-                      onChange={(v) => setHome(v === "gives")}
-                      options={[
-                        { value: "none", label: "No home folder" },
-                        { value: "gives", label: "Gives a home folder" },
-                      ]}
-                    />
-                  </span>
-                  <FieldHint>
-                    {home
-                      ? `Each person who holds the role gets a folder of their own in ${homeRoot}, named after their account and private to them. Syndra never moves or deletes one, even when the role is revoked.`
-                      : `Home folders go in ${homeRoot}, set on ${name}'s page for every role.`}
-                  </FieldHint>
-                  {home && (
-                    <div className="mt-1 grid gap-1.5">
-                      <span className="type-label text-label">Home folder limit</span>
-                      <span className="flex flex-wrap items-center gap-3">
-                        <Segmented
-                          label="Home folder limit"
-                          value={limit}
-                          onChange={setLimit}
-                          options={[
-                            { value: "size", label: "Up to a size" },
-                            { value: "none", label: "No limit" },
-                          ]}
-                        />
-                        {limit === "size" && (
-                          <span className="flex items-center gap-2">
-                            <span className="w-[110px]">
-                              <Input
-                                aria-label="Limit in GB"
-                                type="number"
-                                min={1}
-                                inputMode="decimal"
-                                value={gb}
-                                onChange={(e) => setGb(e.target.value)}
-                              />
-                            </span>
-                            <span className="text-[14px] text-muted">GB</span>
-                          </span>
-                        )}
-                      </span>
-                      <FieldHint>
-                        Someone holding two roles that each carry a home folder gets the larger limit. One person can be given
-                        their own, on {name}&apos;s page under Accounts.
-                      </FieldHint>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            <HomeChoice
+              target={target}
+              name={name}
+              homeRoot={homeRoot}
+              hadHome={Boolean(current.home)}
+              home={home}
+              onHome={setHome}
+              limit={limit}
+              onLimit={setLimit}
+              gb={gb}
+              onGb={setGb}
+            />
           )}
         </div>
       }
@@ -300,18 +252,12 @@ export function RoleMappingDialog({
               // The consequence no count implies: Syndra moves the group, not
               // what the old group owns, and it has no way to.
               <>
-                Files owned by group <span className="type-mono">{current.group.value}</span> stay with that group.
-                People moved to the new group lose access to those files unless somebody changes the files&rsquo;
+                What the {noun} <span className="type-mono">{current.group.value}</span> owns stays with it.
+                People moved to the new {noun} lose access to that unless somebody changes its
                 owner on {name}.{" "}
               </>
             )}
-            {homes && homes.makes > 0 && (
-              <>
-                Makes {homes.makes} home folder{homes.makes === 1 ? "" : "s"} in{" "}
-                <span className="type-mono">{homeRoot}</span>
-                {homes.already > 0 ? `; ${homes.already} ${homes.already === 1 ? "person already has" : "people already have"} one there.` : "."}{" "}
-              </>
-            )}
+            {homes && homes.makes > 0 && <HomesMade homes={homes} homeRoot={homeRoot} />}
             {!checked && (
               <>
                 <span className="font-semibold">
@@ -339,7 +285,7 @@ export function RoleMappingDialog({
             void values.refetch();
             throw new ApiError(400, {
               error: "VALIDATION_FAILED",
-              message: `${gone} is no longer on ${name}. It was deleted on ${name} after the list was read, and the preview asked again. Pick another group, or create it on ${name}. The list above is fresh.`,
+              message: `${gone} is no longer on ${name}. It was deleted on ${name} after the list was read, and the preview asked again. Pick another ${noun}, or create it on ${name}. The list above is fresh.`,
             });
           }
           throw error;
@@ -354,78 +300,58 @@ export function RoleMappingDialog({
   );
 }
 
-/**
- * The field a mapping sets here. One today that a role picks a value for; the
- * home folder and its limit come with A-03.
- */
-const FIELD = "group";
-
 /** "It lists 34 groups, all of them built in, like builtin_users and …" */
-function builtinSentence(name: string, list: MappableValues | undefined): string {
+function builtinSentence(name: string, list: MappableValues | undefined, noun: string): string {
   const count = list?.builtin_count ?? 0;
   const examples = list?.builtin_examples ?? [];
   const like = examples.length ? `, like ${examples.join(" and ")}` : "";
-  return `It lists ${count} group${count === 1 ? "" : "s"}, all of them built in${like}. Syndra never offers those: a role mapped to one would give everyone who holds it ${name}'s administration or its default share access. Make a group on ${name}, under Credentials → Groups, then read again.`;
+  return `It lists ${count} ${noun}${count === 1 ? "" : "s"}, all of them built in${like}. Syndra never offers those: a role mapped to one would give everyone who holds it ${name}'s administration or its default access. Make one on ${name}, then read again.`;
 }
 
 /**
- * What a group opens, under the picker, so the operator sees what a mapping
- * gives before the preview (A-02 §3).
- */
-export function OpensLine({ name, places }: { name: string; places: ReachPlace[] | undefined }) {
-  if (!places) return null;
-  if (places.length === 0) {
-    return <span className="text-[13.5px] text-warn-text">Opens nothing on {name} yet.</span>;
-  }
-  return (
-    <span className="text-[13.5px] leading-[1.5] text-ink [text-wrap:pretty]">
-      Opens{" "}
-      {places.map((p, i) => (
-        <Fragment key={p.path}>
-          {i > 0 && (i === places.length - 1 ? ", and " : ", ")}
-          <span className="type-mono text-[12.5px]">{placeName(p)}</span>,{" "}
-          {p.access === "change" ? "can change files" : "read only"}
-        </Fragment>
-      ))}
-      .
-    </span>
-  );
-}
-
-/** `main › waddle_share`. */
-export function placeName(p: ReachPlace): string {
-  return [p.share, ...(p.folder ? p.folder.split("/") : [])].join(" › ");
-}
-
-/**
- * The two fields Syndra will not map, named rather than left out (design M1).
+ * The settings Syndra will not map, named rather than left out (design M1): the
+ * account itself and each of its channels, found by role. They follow from
+ * whether somebody is entitled to the add-on at all. Mapping them would let a
+ * role switch an account off while the entitlement that created it still
+ * stood, so the API refuses them at three separate layers.
  *
- * `enabled` and `smb_enabled` follow from whether somebody is entitled to the
- * add-on at all. Mapping them would let a role switch an account off while the
- * entitlement that created it still stood, so the API refuses them at three
- * separate layers.
- *
- * Said here because a field box that silently rejects two names reads as
- * unfinished software — and because an operator who tries one deserves the
- * reason rather than a validation error.
+ * Said here because a field box that silently rejects them reads as unfinished
+ * software, and because an operator who tries one deserves the reason rather
+ * than a validation error. The words are the add-on's own labels.
  */
 export function RefusedFields({ target }: { target: string }) {
+  const nameOf = useSystemNames();
+  const by = fieldsByRole(useFieldSchema(target));
+  const names = [by.account.length ? "the account" : null, ...by.channel.map((c) => `its ${c.label ?? "other way in"}`)].filter(
+    (n): n is string => n !== null,
+  );
+  if (names.length === 0) return null;
+  const many = names.length > 1;
   return (
     <p className="px-1 text-[13.5px] leading-[1.55] text-muted">
-      Two settings cannot be mapped, on purpose: <span className="type-mono">enabled</span> and{" "}
-      <span className="type-mono">smb_enabled</span> follow from whether the person has any access to{" "}
-      {targetLabel(target)} at all. If a role could set them, one role could switch an account off while
-      another still gave that person access.
+      {many ? "Some settings cannot" : "One setting cannot"} be mapped, on purpose: {formatList(names)}.{" "}
+      {many ? "They follow" : "It follows"} from whether the person has any access to {nameOf(target)} at all. If a role
+      could set {many ? "them" : "it"}, one role could switch an account off while another still gave that person access.
     </p>
   );
 }
 
 /** Outline: the one violet fill on this screen is Publish, in the version band. */
 export function AddMappingButton({ target, first }: { target: string; first: boolean }) {
+  const nameOf = useSystemNames();
   const [open, setOpen] = useState(false);
+  const state = useFieldSchemaState(target);
+  const why = schemaReason(state, nameOf(target));
+  const readable = !why && Boolean(mappingFields(state.schema).membership);
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!readable}
+        reason={why}
+        onClick={() => setOpen(true)}
+      >
         {first ? "Add the first mapping" : "Add a mapping"}
       </Button>
       {open && <AddMappingDialog target={target} onClose={() => setOpen(false)} />}

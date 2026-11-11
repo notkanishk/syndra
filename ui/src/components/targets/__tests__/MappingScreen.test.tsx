@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MappingScreen } from "@/components/targets/MappingScreen";
+import { ApiError } from "@/lib/api-client";
 import type { RoleMapping } from "@/lib/queries/useMappings";
 
 /**
@@ -15,7 +16,8 @@ const state: {
   mappings: RoleMapping[];
   version: number;
   project: { id: string; name: string } | null;
-} = { mappings: [], version: 4, project: { id: "p_storage", name: "Network storage" } };
+  error: unknown;
+} = { mappings: [], version: 4, project: { id: "p_storage", name: "Network storage" }, error: null };
 
 vi.mock("@/lib/queries/useMappings", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useMappings")>(
@@ -23,7 +25,7 @@ vi.mock("@/lib/queries/useMappings", async () => {
   );
   return {
     ...actual,
-    useMappings: () => ({ data: state.mappings, isLoading: false, error: null }),
+    useMappings: () => ({ data: state.error ? undefined : state.mappings, isLoading: false, error: state.error }),
     useMappingHistory: () => ({
       data: {
         target: "truenas",
@@ -36,8 +38,14 @@ vi.mock("@/lib/queries/useMappings", async () => {
   };
 });
 vi.mock("@/lib/queries/useTargets", () => ({
-  useTargets: () => ({ data: [{ target: "truenas", project: state.project }] }),
+  useTargets: () => ({ data: [{ target: "truenas", name: "TrueNAS", project: state.project }] }),
 }));
+const schema = vi.hoisted(() => ({ read: true }));
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => {
+  const m = await (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig);
+  const { TRUENAS_SCHEMA } = await import("@/lib/__fixtures__/truenas-schema");
+  return { ...m, useFieldSchema: () => (schema.read ? TRUENAS_SCHEMA : undefined) };
+});
 vi.mock("@/lib/page-crumb", () => ({ useCrumb: () => {} }));
 vi.mock("@/components/targets/MappingManagement", () => ({ MappingManagement: () => null }));
 vi.mock("@/components/targets/VersionBand", () => ({ VersionBand: () => null }));
@@ -50,6 +58,28 @@ beforeEach(() => {
   state.mappings = [mapping("archive-admin"), mapping("fabrication-lead")];
   state.version = 4;
   state.project = { id: "p_storage", name: "Network storage" };
+  state.error = null;
+  schema.read = true;
+});
+
+// Review finding 4: the singular was the plural with its "s" cut off ("to
+// TrueNAS group"), and "to what TrueNAS give" before the fields were read.
+describe("a system with no project yet", () => {
+  beforeEach(() => {
+    state.error = new ApiError(409, { error: "PROJECT_REQUIRED", message: "Choose it first." });
+  });
+
+  it("says one of its groups, by the field's own noun", () => {
+    render(<MappingScreen target="truenas" />);
+    expect(screen.getByText(/ties one of that project's roles to one group on TrueNAS, so/)).toBeTruthy();
+  });
+
+  it("says something on it before its fields are read", () => {
+    schema.read = false;
+    render(<MappingScreen target="truenas" />);
+    expect(screen.getByText(/ties one of that project's roles to something on TrueNAS, so/)).toBeTruthy();
+    expect(screen.queryByText(/what TrueNAS give\b/)).toBeNull();
+  });
 });
 
 describe("the mappings header", () => {

@@ -39,7 +39,6 @@ type server struct {
 	// expiry nobody wrote down look identical from here, and only one of them
 	// is a problem.
 	keyNeverExpires bool
-	product         string
 	// connection is how a member reaches the target, for the instructions on
 	// their own page. Nil when the deployment has not said, and the manifest
 	// then omits it rather than guessing from the API URL — a share path that
@@ -112,7 +111,7 @@ func (s *server) routes() http.Handler {
 // that are merely unobservable — the same mistake as concluding an absence from
 // a read that could not happen.
 func (s *server) handleCapabilities(w http.ResponseWriter, r *http.Request, _ []byte) {
-	writeJSON(w, http.StatusOK, manifest(s.product, s.nas.Version(), s, s.connection))
+	writeJSON(w, http.StatusOK, manifest(productName, s.nas.Version(), s, s.connection))
 }
 
 // availability answers the capability probe for one operation (4.7).
@@ -240,7 +239,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request, _ []byte) 
 	head, count := s.log.Head()
 
 	h := Health{
-		Product:        s.product,
+		Product:        productName,
 		ProductVersion: s.nas.Version(),
 		VersionTested:  supported,
 		VersionNote:    versionNote,

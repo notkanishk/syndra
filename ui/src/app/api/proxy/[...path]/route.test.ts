@@ -94,6 +94,15 @@ describe("proxy route admin/member boundary", () => {
     }
   });
 
+  // The rail's own read: a member's systems, by name, and nothing under it.
+  it("forwards a member's own systems, and nothing under the prefix", async () => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    expect((await call(GET, "GET", ["me", "systems"])).status).toBe(200);
+    expect(proxy.calls.length).toBe(1);
+    expect((await call(GET, "GET", ["me", "systems", "truenas"])).status).toBe(403);
+    expect(proxy.calls.length).toBe(1);
+  });
+
   it("blocks member GET of bundles without hitting the backend", async () => {
     (getSession as Mock).mockResolvedValue(MEMBER);
     const res = await call(GET, "GET", ["bundles"]);

@@ -82,7 +82,7 @@ func TestTheTrueNASManifestIsFetchedAndEveryFieldLands(t *testing.T) {
 	if got.method != http.MethodGet || got.path != "/capabilities" {
 		t.Errorf("sent %s %s", got.method, got.path)
 	}
-	if m.ContractVersion != ContractVersion || m.Product != "truenas" || m.ProductVersion != "TrueNAS-25.10.5" || m.Kind != "storage" {
+	if m.ContractVersion != ContractVersion || m.Product != "TrueNAS" || m.ProductVersion != "TrueNAS-25.10.5" || m.Kind != "storage" {
 		t.Errorf("identity did not land: %+v", m)
 	}
 	if !m.Declares("storage.homes") || !m.Declares("operations") || m.Declares("calls") || m.Limits.SubjectsPerPlan != 200 {
@@ -154,7 +154,7 @@ func TestHealthReplyLands(t *testing.T) {
 	if got.method != http.MethodGet || got.path != "/health" {
 		t.Fatalf("sent %s %s", got.method, got.path)
 	}
-	if h.Outcome != OutcomeSucceeded || !h.Reachable || h.Product != "truenas" || h.ProductVersion != "TrueNAS-25.10.5" || !h.VersionTested || h.VersionNote == "" {
+	if h.Outcome != OutcomeSucceeded || !h.Reachable || h.Product != "TrueNAS" || h.ProductVersion != "TrueNAS-25.10.5" || !h.VersionTested || h.VersionNote == "" {
 		t.Errorf("health identity did not land: %+v", h)
 	}
 	if h.Lifecycle != "read_only" || h.LifecycleNote == "" || h.InFlight != 0 || !h.Drained || h.CircuitOpen {

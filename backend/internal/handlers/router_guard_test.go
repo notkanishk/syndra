@@ -118,6 +118,7 @@ func TestUserLevelRoutesAreClassified(t *testing.T) {
 		"GET /api/v1/users/{uid}/shadow-credential/audit":  true,
 		"GET /api/v1/me/profile":                           true,
 		"GET /api/v1/me/targets":                           true,
+		"GET /api/v1/me/systems":                           true,
 		"GET /api/v1/me/changes":                           true,
 		"POST /api/v1/me/targets/{target}/credential":      true,
 		"POST /api/v1/me/first-sign-in":                    true,

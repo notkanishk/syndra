@@ -255,12 +255,21 @@ func TestPersonTargets_CarryNoPasswordChange(t *testing.T) {
 
 // A target with no stored role map (its add-on has never had a manifest
 // accepted) is "not read": not entitled, no resources, beside a target that
-// has one, on both the member's own page and the operator's person page.
-// Never a 500 for the whole page (addon-contract 2.1).
+// has one, on the operator's person page; the member's own page leaves it out
+// (operators-only, owner 11 Nov 2026). Never a 500 for the whole page
+// (addon-contract 2.1).
 func TestATargetWithNoRoleMapIsNotReadAndTheOthersStillShow(t *testing.T) {
 	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true}}
 	stubPersonStorage(t, h)
 	addonsRegistered = func() []addons.Registration { return []addons.Registration{{Target: "truenas"}, {Target: "unifi"}} }
+	manifest := addonsAcceptedManifest
+	t.Cleanup(func() { addonsAcceptedManifest = manifest })
+	addonsAcceptedManifest = func(target string) (addons.Manifest, error) {
+		if target == "truenas" {
+			return addons.Manifest{Product: "TrueNAS", Kind: "storage", EntitlementSchema: truenasSchema}, nil
+		}
+		return addons.Manifest{}, addons.ErrNoManifest
+	}
 	svcResolveEntitlementSet = func(_ context.Context, _, target string) (services.EntitlementSet, error) {
 		if target == "unifi" {
 			return services.EntitlementSet{}, fmt.Errorf("resolve entitlements for u1: %w: unifi has no accepted contract-2 manifest yet", addons.ErrNoManifest)
@@ -268,12 +277,12 @@ func TestATargetWithNoRoleMapIsNotReadAndTheOthersStillShow(t *testing.T) {
 		return services.EntitlementSet{Roles: truenasRoles, Fields: map[string][]string{"group": {"staff"}},
 			Lifecycle: services.LifecycleState{Account: true}}, nil
 	}
-	check := func(name string, rr *httptest.ResponseRecorder) {
+	check := func(name string, rr *httptest.ResponseRecorder, want int) {
 		t.Helper()
 		var body struct {
 			Targets []myTargetView `json:"targets"`
 		}
-		if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &body) != nil || len(body.Targets) != 2 {
+		if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &body) != nil || len(body.Targets) != want {
 			t.Fatalf("%s: %d %s", name, rr.Code, rr.Body.String())
 		}
 		for _, v := range body.Targets {
@@ -291,13 +300,13 @@ func TestATargetWithNoRoleMapIsNotReadAndTheOthersStillShow(t *testing.T) {
 	req = req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "op-1"}))
 	rr := httptest.NewRecorder()
 	handleUserTargets(rr, req)
-	check("the operator's page", rr)
+	check("the operator's page", rr, 2)
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
 	req = req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "u1"}))
 	rr = httptest.NewRecorder()
 	handleMyTargets(rr, req)
-	check("the member's page", rr)
+	check("the member's page", rr, 1)
 
 	// Any other failure still fails the page: an unreadable store is not a
 	// target that has not spoken.

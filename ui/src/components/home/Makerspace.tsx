@@ -1,5 +1,7 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -16,7 +18,6 @@ import { machineName } from "@/lib/audit-vocabulary";
 import { EventSentence } from "@/components/audit/EventLine";
 import { heldSortKey, holdersLine, holdersToneClass } from "@/lib/holders";
 import { formatShortDate, formatWhen } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import { hasAccess, isDeparted, isPerson, peopleHref } from "@/lib/people-filters";
 import { useAuditEntries } from "@/lib/queries/useAudit";
 import { useBundles } from "@/lib/queries/useBundles";
@@ -70,6 +71,7 @@ export function Makerspace() {
  * loading says so rather than reporting a zero.
  */
 function Tiles() {
+  const nameOf = useSystemNames();
   const summary = useGovernanceSummary();
   const targets = useTargets();
   const users = useUsers("");
@@ -113,7 +115,7 @@ function Tiles() {
             : unread.length === 0
               ? "Every system answered its last read."
               : unread.length === 1
-                ? `${targetLabel(unread[0].target)} has not been read since ${formatShortDate(unread[0].since)}.`
+                ? `${nameOf(unread[0].target)} has not been read since ${formatShortDate(unread[0].since)}.`
                 : `${unread.length} systems have not been read.`
         }
       />

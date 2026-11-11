@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { outcomeFromDrain, describeDrain } from "@/lib/drain-outcome";
 import { waitsForSend } from "@/lib/outcome";
 import type { DrainResult } from "@/lib/queries/usePropagation";
+import { truenasName } from "@/lib/__fixtures__/field-schema-mock";
+
+/** A send names each system by the roster's name (useSystemNames). */
+const named = (r: DrainResult | undefined, auto: boolean | null = true) => describeDrain(r, truenasName, auto);
 
 function result(overrides: Partial<DrainResult> = {}): DrainResult {
   return { applied: 0, failed: 0, requeued: 0, errored: 0, halted: false, ...overrides };
@@ -10,7 +14,7 @@ function result(overrides: Partial<DrainResult> = {}): DrainResult {
 
 describe("describeDrain", () => {
   it("celebrates only a clean pass", () => {
-    const outcome = describeDrain(result({ applied: 12 }));
+    const outcome = describeDrain(result({ applied: 12 }), truenasName);
     expect(outcome.tone).toBe("success");
     expect(outcome.message).toBe("12 sent.");
   });
@@ -20,41 +24,41 @@ describe("describeDrain", () => {
   // And, since the background drain retries them (owner, 5 Nov 2026), it
   // never tells the operator to send again: Syndra does, at each row's next try.
   it("never reports a requeue as success, nor as the operator's to resend", () => {
-    const outcome = describeDrain(result({ requeued: 8 }));
+    const outcome = describeDrain(result({ requeued: 8 }), truenasName);
     expect(outcome.tone).toBe("warning");
     expect(outcome.message).toContain("8 to be sent again");
     expect(outcome.message).not.toMatch(/Send again|waiting for you/);
     expect(outcome.detail).toMatch(/Syndra sends them again on its own; each change below says when/);
     expect(outcome.sendsItself).toBe(true);
-    expect(outcomeFromDrain(result({ requeued: 8 }))).toMatchObject({ kind: "queued", sendsItself: true });
+    expect(outcomeFromDrain(result({ requeued: 8 }), truenasName)).toMatchObject({ kind: "queued", sendsItself: true });
   });
 
   it("says a decided-but-unrecorded change is settled at its next try", () => {
-    const outcome = describeDrain(result({ applied: 3, errored: 1 }));
+    const outcome = describeDrain(result({ applied: 3, errored: 1 }), truenasName);
     expect(outcome.tone).toBe("warning");
     expect(outcome.message).toBe("3 sent · 1 not recorded.");
     expect(outcome.detail).toMatch(/could not record/);
   });
 
   it("reports every non-zero count, in a fixed order", () => {
-    const outcome = describeDrain(result({ applied: 1, failed: 2, requeued: 3, errored: 4 }));
+    const outcome = describeDrain(result({ applied: 1, failed: 2, requeued: 3, errored: 4 }), truenasName);
     expect(outcome.message).toBe("1 sent · 2 failed · 3 to be sent again · 4 not recorded.");
   });
 
   it("does not celebrate a terminal failure", () => {
-    expect(describeDrain(result({ applied: 5, failed: 1 })).tone).toBe("warning");
+    expect(describeDrain(result({ applied: 5, failed: 1 }), truenasName).tone).toBe("warning");
   });
 
   it("distinguishes the three halt reasons", () => {
-    expect(describeDrain(result({ halted: true, reason: "drain_in_progress" }))).toMatchObject({
+    expect(describeDrain(result({ halted: true, reason: "drain_in_progress" }), truenasName)).toMatchObject({
       tone: "info",
     });
-    const offline = describeDrain(result({ halted: true, reason: "zitadel_offline" }));
+    const offline = describeDrain(result({ halted: true, reason: "zitadel_offline" }), truenasName);
     expect(offline.tone).toBe("error");
     expect(offline.message).toMatch(/Nothing was sent/);
     // No pass halts on a spent row any more (drain.go processRow), so the
     // reason has no words of its own: it reads as any early stop.
-    const other = describeDrain(result({ halted: true, reason: "max_retries_exceeded", applied: 4 }));
+    const other = describeDrain(result({ halted: true, reason: "max_retries_exceeded", applied: 4 }), truenasName);
     expect(other.message).toBe("4 sent. Stopped early.");
   });
 
@@ -62,7 +66,7 @@ describe("describeDrain", () => {
   // to say what does — and never use the mechanism's words for it. Some went,
   // so it is not "failed" (whose result would add "Nothing was changed").
   it("tells the reader what to do about a change that was given up on", () => {
-    const outcome = describeDrain(result({ applied: 2, failed: 1, exhausted: 1 }));
+    const outcome = describeDrain(result({ applied: 2, failed: 1, exhausted: 1 }), truenasName);
     expect(outcome.tone).toBe("warning");
     expect(outcome.message).toBe("2 sent · 1 failed. Syndra stopped sending one change.");
     expect(outcome.next).toMatch(/Syndra stopped sending, on Pending changes/);
@@ -73,14 +77,14 @@ describe("describeDrain", () => {
   // A refused row is terminal: Send won't move it, so the result never ends
   // on the "Waiting for you to send" link (re-audit (c)).
   it("a refused change ends on where it is, not on Send", () => {
-    const outcome = outcomeFromDrain(result({ applied: 2, failed: 1 }));
+    const outcome = outcomeFromDrain(result({ applied: 2, failed: 1 }), truenasName);
     expect(outcome).toMatchObject({ kind: "queued", next: expect.stringMatching(/Syndra stopped sending/) });
     expect(waitsForSend(outcome)).toBe(false);
   });
 
   it("says so when there was nothing to do", () => {
-    expect(describeDrain(result())).toMatchObject({ tone: "info", message: "Nothing was waiting." });
-    expect(describeDrain(undefined).tone).toBe("info");
+    expect(describeDrain(result(), truenasName)).toMatchObject({ tone: "info", message: "Nothing was waiting." });
+    expect(describeDrain(undefined, truenasName).tone).toBe("info");
   });
 });
 
@@ -92,7 +96,7 @@ describe("describeDrain", () => {
  */
 describe("a send with more than one connected system", () => {
   it("names which system was skipped, by its name, rather than calling the whole pass a failure", () => {
-    const out = describeDrain(
+    const out = named(
       result({
         applied: 9,
         halted: true,
@@ -125,9 +129,9 @@ describe("a send with more than one connected system", () => {
         { target: "truenas", applied: 0, failed: 0, requeued: 0, abandoned: 0, errored: 0, halted: false },
       ],
     });
-    const out = describeDrain(res);
+    const out = named(res);
     expect(out).toEqual({ tone: "success", message: "3 sent." });
-    expect(outcomeFromDrain(res).kind).toBe("applied");
+    expect(outcomeFromDrain(res, truenasName, true).kind).toBe("applied");
   });
 
   it("a skipped system with changes of its own says how many it left waiting", () => {
@@ -143,16 +147,16 @@ describe("a send with more than one connected system", () => {
           { ...pass, waiting },
         ],
       });
-    expect(describeDrain(res(2))).toEqual({
+    expect(named(res(2))).toEqual({
       tone: "warning",
       message: "3 reached Zitadel. TrueNAS didn't answer, so its 2 are still here.",
       detail: "TrueNAS is not answering. Its 2 changes are still waiting for you to send, and nothing counts against the retry limit.",
     });
-    expect(describeDrain(res(1)).detail).toMatch(/^TrueNAS is not answering\. Its 1 change is still waiting/);
+    expect(named(res(1)).detail).toMatch(/^TrueNAS is not answering\. Its 1 change is still waiting/);
   });
 
   it("says nothing was sent when the only pass that could run did not", () => {
-    const out = describeDrain(
+    const out = named(
       result({
         halted: true,
         reason: "target_unreachable",

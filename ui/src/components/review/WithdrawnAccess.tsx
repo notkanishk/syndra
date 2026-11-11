@@ -25,7 +25,7 @@ import { Unfold } from "@/lib/motion";
 import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { request } from "@/lib/api-client";
 import { formatShortDate, humanizeKey } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { sortByName } from "@/lib/sort";
 
@@ -106,6 +106,7 @@ export function WithdrawnAccess() {
     refetchInterval: 60_000,
   });
   const resolver = useNameResolver();
+  const nameOf = useSystemNames();
 
   const rows = useMemo(() => query.data?.revocations ?? [], [query.data]);
   const clearedByMe = useQueueCleared(rows, !query.isLoading && !query.error, true).cleared?.mine != null;
@@ -118,11 +119,11 @@ export function WithdrawnAccess() {
   const text = useMemo(
     () => ({
       who: (row: UnconfirmedRevocation) => resolver.resolveUser(row.user_id).value?.display_name ?? "",
-      what: (row: UnconfirmedRevocation) => whatText(row, resolver.resolveProject(row.project_id).value?.name ?? ""),
-      where: (row: UnconfirmedRevocation) => targetLabel(row.target),
+      what: (row: UnconfirmedRevocation) => whatText(row, resolver.resolveProject(row.project_id).value?.name ?? "", nameOf),
+      where: (row: UnconfirmedRevocation) => nameOf(row.target),
       when: (row: UnconfirmedRevocation) => row.age_seconds,
     }),
-    [resolver],
+    [resolver, nameOf],
   );
   const needle = search.trim().toLowerCase();
   const filtered = needle !== "" || where !== "";
@@ -137,8 +138,8 @@ export function WithdrawnAccess() {
   );
   // Only systems with a row, so nothing on offer returns nothing.
   const systems = useMemo(
-    () => sortByName(Array.from(new Set(rows.map((row) => row.target))), targetLabel, (t) => t),
-    [rows],
+    () => sortByName(Array.from(new Set(rows.map((row) => row.target))), nameOf, (t) => t),
+    [rows, nameOf],
   );
 
   const spent = matched.filter((row) => row.spent);
@@ -214,7 +215,7 @@ export function WithdrawnAccess() {
                     <option value="">Every system</option>
                     {systems.map((target) => (
                       <option key={target} value={target}>
-                        {targetLabel(target)}
+                        {nameOf(target)}
                       </option>
                     ))}
                   </Select>
@@ -277,8 +278,8 @@ export function WithdrawnAccess() {
 }
 
 /** What a row revokes as a person would search for it: project, role keys, or an add-on's reason. */
-function whatText(row: UnconfirmedRevocation, project: string) {
-  if (!row.project_id) return row.reason ?? `Access on ${targetLabel(row.target)}`;
+function whatText(row: UnconfirmedRevocation, project: string, nameOf: (target: string) => string) {
+  if (!row.project_id) return row.reason ?? `Access on ${nameOf(row.target)}`;
   return `${project} ${row.role_keys.map(humanizeKey).join(", ")} ${row.role_keys.join(" ")}`.trim();
 }
 
@@ -315,15 +316,16 @@ function RevocationSection({
 }) {
   const paging = usePaging(undefined, undefined, "withdrawn");
   const resolver = useNameResolver();
+  const nameOf = useSystemNames();
   const anchor = useRef<HTMLDivElement>(null);
   const shown = rows.slice(0, paging.limit);
   // What and Where gather equal values under a counted label; Who and Revoked do not.
   const runAt = runStarts(
     rows,
     view.sort.key === "what"
-      ? (row) => whatText(row, resolver.resolveProject(row.project_id).value?.name ?? "")
+      ? (row) => whatText(row, resolver.resolveProject(row.project_id).value?.name ?? "", nameOf)
       : view.sort.key === "where"
-        ? (row) => targetLabel(row.target)
+        ? (row) => nameOf(row.target)
         : null,
   );
   return (
@@ -401,7 +403,7 @@ function RevocationSection({
 function Row({ row }: { row: UnconfirmedRevocation }) {
   const resolver = useNameResolver();
   const first = resolver.resolveUser(row.user_id).value?.display_name?.split(" ")[0];
-  const where = targetLabel(row.target);
+  const where = useSystemNames()(row.target);
   return (
     <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]">
       <WhoSeat id={row.user_id} />

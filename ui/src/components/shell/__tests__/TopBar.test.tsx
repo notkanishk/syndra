@@ -9,6 +9,7 @@ const view = vi.hoisted(() => ({ audience: "basic" as string }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/users" }));
 vi.mock("@/lib/page-crumb", () => ({ usePageCrumb: () => ({ crumb: null }) }));
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);
 vi.mock("@/lib/ui-view", () => ({
   useUiView: () => ({
     audience: view.audience,

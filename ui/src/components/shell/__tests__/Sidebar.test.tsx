@@ -12,7 +12,8 @@ const indicators = vi.hoisted(() => ({
   data: undefined as Indicators | undefined,
   isPlaceholderData: false,
 }));
-const targets = vi.hoisted(() => ({ data: [] as Array<{ target: string }> }));
+const targets = vi.hoisted(() => ({ data: [] as Array<{ target: string; name: string }> }));
+const mine = vi.hoisted(() => ({ data: [] as Array<{ target: string; name: string; kind?: string }> }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
 vi.mock("@/lib/ui-view", () => ({
@@ -20,6 +21,9 @@ vi.mock("@/lib/ui-view", () => ({
 }));
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargets: () => targets,
+}));
+vi.mock("@/lib/queries/useMySystems", () => ({
+  useMySystems: () => mine,
 }));
 vi.mock("@/lib/queries/useIndicators", () => ({
   useIndicators: () => indicators,
@@ -47,6 +51,7 @@ beforeEach(() => {
   indicators.data = undefined;
   indicators.isPlaceholderData = false;
   targets.data = [];
+  mine.data = [];
 });
 
 describe("the rail's stable structure", () => {
@@ -167,6 +172,37 @@ describe("the rail's stable structure", () => {
     expect(screen.queryByText("Bundles")).toBeNull();
     expect(screen.queryByText("Member")).toBeNull();
   });
+
+  // addon-contract 3.10: one row per connected system Syndra has read whose
+  // kind is not storage, alphabetical, after the three. Storage folds into
+  // Network storage; a system not read yet is the operators' alone.
+  it("gives a member one row per read system that is not storage, alphabetical, last", () => {
+    view.audience = "member";
+    view.isOperator = false;
+    mine.data = [
+      { target: "lathe", name: "big laser", kind: "machine" },
+      { target: "nas", name: "TrueNAS", kind: "storage" },
+      { target: "etage", name: "Étage", kind: "access" },
+      { target: "door", name: "Door" },
+      { target: "anvil", name: "Anvil", kind: "inventory" },
+    ];
+    renderRail();
+    expect(railOrder()).toEqual(["My access", "Requests", "Network storage", "Anvil", "big laser", "Étage"]);
+    expect(screen.getByRole("link", { name: "Étage" })).toHaveAttribute("href", "/systems/etage");
+  });
+
+  it("does not move a member's rows when counts go from zero to non-zero", () => {
+    view.audience = "member";
+    view.isOperator = false;
+    mine.data = [{ target: "lathe", name: "Big laser", kind: "machine" }];
+    indicators.data = { pending_requests: 0, expiring_grants: 0, holds_due: 0, pending_propagation: 0, drift: 0, unconfirmed_revocations: 0, revocations_escalated: false, zitadel_reachable: true };
+    const { unmount } = renderRail();
+    const quiet = railOrder();
+    unmount();
+    indicators.data = { pending_requests: 4, expiring_grants: 2, holds_due: 1, pending_propagation: 3, drift: 9, unconfirmed_revocations: 1, revocations_escalated: true, zitadel_reachable: false };
+    renderRail();
+    expect(railOrder()).toEqual(quiet);
+  });
 });
 
 // 9.14 — the rail carries a row for every registered add-on regardless of what
@@ -175,7 +211,7 @@ describe("the rail's target rows", () => {
   it("renders a row per registered add-on and none for the retired bridge", () => {
     view.audience = "advanced";
     view.isOperator = true;
-    targets.data = [{ target: "truenas" }, { target: "unifi" }];
+    targets.data = [{ target: "truenas", name: "TrueNAS" }, { target: "unifi", name: "UniFi Access" }];
     renderRail();
 
     expect(screen.getByText("TrueNAS")).toBeInTheDocument();
@@ -186,7 +222,7 @@ describe("the rail's target rows", () => {
   it("renders those rows with no data of any kind behind them", () => {
     view.audience = "advanced";
     view.isOperator = true;
-    targets.data = [{ target: "truenas" }];
+    targets.data = [{ target: "truenas", name: "TrueNAS" }];
     // No indicators, no inventory, nobody bound. The row is a deployment fact.
     indicators.data = undefined;
     renderRail();

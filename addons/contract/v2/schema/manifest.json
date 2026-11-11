@@ -10,7 +10,8 @@
       "description": "The wire contract major both ends speak. Contract 2: equality-checked, a mismatch is refused with CONTRACT_VERSION_MISMATCH."
     },
     "product": {
-      "type": "string"
+      "type": "string",
+      "description": "What people call the product (\"TrueNAS\"), never an id or a key. Syndra shows it as the system's name until an operator names the system."
     },
     "product_version": {
       "type": "string"

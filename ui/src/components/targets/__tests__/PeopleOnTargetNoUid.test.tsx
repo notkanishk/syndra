@@ -36,7 +36,7 @@ vi.mock("@/components/names", () => ({
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveUser: () => ({ value: { display_name: "Charlotte Flair" }, resolved: true }) }),
 }));
-vi.mock("@/components/targets/HomeLimit", () => ({
+vi.mock("@/components/kinds/storage/HomeLimit", () => ({
   HomeLine: () => null,
   LimitDialog: () => null,
   limitVerb: () => "Set a limit",
@@ -53,3 +53,5 @@ describe("accounts on a connected system", () => {
     expect(screen.queryByText(/200001/)).not.toBeInTheDocument();
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

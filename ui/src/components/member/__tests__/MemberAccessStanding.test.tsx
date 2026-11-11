@@ -402,13 +402,32 @@ describe("MemberAccess header line and cards", () => {
     expect(jump.textContent).toContain("↓");
   });
 
+  // The password step is the storage card's own (needsPassword): an account
+  // that is made and has no password yet, on a system of the storage kind.
+  const waitingForPassword = { entitled: true, account: { username: "rey_mysterio" }, credential: { set: false } };
+
   it("sends a storage step to Network storage", () => {
     reset();
-    mine.targets = [{ target: "truenas", entitled: true, credential: { set: false } }];
+    mine.targets = [{ target: "truenas", name: "TrueNAS", kind: "storage", ...waitingForPassword }];
     access.value = view(COMPLETE, ["laser", "mill"]);
     render(<MemberAccess session={session} />);
     expect(screen.getByText("Your TrueNAS account is ready. Set its password to connect.")).toBeTruthy();
     expect(screen.getByRole("link", { name: /Network storage/ })).toHaveAttribute("href", "/storage");
+  });
+
+  // A door or a laser has no password a member sets, and a system not read
+  // yet is nothing a member meets: neither is ever a "set its password" step.
+  it.each([
+    ["a door", { target: "door", name: "Front door", kind: "access" }],
+    ["a system not read yet", { target: "lathe", name: "Lathe" }],
+  ])("never asks for a password on %s", (_, system) => {
+    reset();
+    mine.targets = [{ ...system, ...waitingForPassword }];
+    access.value = view(COMPLETE, ["laser", "mill"]);
+    render(<MemberAccess session={session} />);
+    expect(screen.queryByText(/Set its password/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Network storage/ })).toBeNull();
+    expect(screen.getByText("Nothing needs you right now.")).toBeTruthy();
   });
 
   it("orders the project cards A to Z whatever order the API gave", () => {
@@ -451,3 +470,5 @@ describe("MemberAccess first welcome", () => {
     expect(screen.queryByText("Nothing needs you right now.")).toBeNull();
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

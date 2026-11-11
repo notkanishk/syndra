@@ -10,6 +10,7 @@ import {
   humanizeKey,
   personLine,
   roleLabel,
+  versionLabel,
 } from "@/lib/format";
 
 describe("expiryLabel", () => {
@@ -160,5 +161,42 @@ describe("formatAgoShort", () => {
     expect(formatAgoShort("2026-10-14T12:00:00Z", now)).toBe("3d ago");
     expect(formatAgoShort("2026-08-01T12:00:00Z", now)).toBe("1 Aug");
     expect(formatAgoShort(undefined, now)).toBe("");
+  });
+});
+
+// The version is stripped of the PRODUCT's name, never the system's: an
+// operator may name a system anything ("Laser (big"), and that is data, not a
+// pattern, so it can neither break the page nor leave the product doubled.
+describe("versionLabel", () => {
+  it("strips the product's own name off its version", () => {
+    expect(versionLabel("TrueNAS", "TrueNAS-25.10.5")).toBe("25.10.5");
+    expect(versionLabel("TrueNAS", "25.10.5")).toBe("25.10.5");
+  });
+
+  it("strips the whole product name when the version starts with it", () => {
+    expect(versionLabel("TrueNAS", "TrueNAS-SCALE-24.04.0")).toBe("SCALE-24.04.0");
+    expect(versionLabel("truenas", "TrueNAS 25.04.1")).toBe("25.04.1");
+    expect(versionLabel("TrueNAS", "TrueNAS")).toBe("TrueNAS");
+    expect(versionLabel("TrueNAS", "25.04.1")).toBe("25.04.1");
+    expect(versionLabel("TrueNAS", "TrueNAS - 25.1")).toBe("25.1");
+  });
+
+  it("strips the product only as a whole word", () => {
+    expect(versionLabel("True", "TrueNAS-25.10.5")).toBe("TrueNAS-25.10.5");
+    expect(versionLabel("Laser", "Laser2 1.0")).toBe("Laser2 1.0");
+  });
+
+  it("keeps the version when the product is empty", () => {
+    expect(versionLabel("", "TrueNAS-25.10.5")).toBe("TrueNAS-25.10.5");
+    expect(versionLabel("", "25.10.5")).toBe("25.10.5");
+  });
+
+  it("reads a product with pattern characters as text", () => {
+    expect(() => versionLabel("Laser (big", "Laser (big 2.1")).not.toThrow();
+    expect(versionLabel("Laser (big", "Laser (big 2.1")).toBe("2.1");
+    expect(versionLabel("A.B", "AxB 1.0")).toBe("AxB 1.0");
+    expect(versionLabel("A.B", "A.B-1.0")).toBe("1.0");
+    expect(versionLabel("(", "( 1.0")).toBe("1.0");
+    expect(versionLabel("(", "(1.0")).toBe("(1.0");
   });
 });

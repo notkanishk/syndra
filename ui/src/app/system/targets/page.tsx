@@ -12,7 +12,6 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { formatClock, versionLabel } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import {
   useMergeFindings,
   useTargetHealth,
@@ -40,7 +39,7 @@ import { sortByName } from "@/lib/sort";
 export default function ConnectedSystemsPage() {
   const targets = useTargets();
   // A to Z, as the board draws it: the roster arrives in registration order.
-  const rows = sortByName(targets.data ?? [], (t) => targetLabel(t.target), (t) => t.target
+  const rows = sortByName(targets.data ?? [], (t) => t.name, (t) => t.target
   );
 
   return (
@@ -111,7 +110,7 @@ export default function ConnectedSystemsPage() {
  * No answer yet is no fault and gets none — it clears by itself.
  */
 function FaultNotice({ row }: { row: TargetSummary }) {
-  const name = targetLabel(row.target);
+  const name = row.name;
   const reading = readingFor(row);
   if (row.status === "cannot_connect") {
     return (
@@ -155,7 +154,7 @@ function FaultNotice({ row }: { row: TargetSummary }) {
  */
 function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
   const reading = readingFor(row);
-  const name = targetLabel(row.target);
+  const name = row.name;
   const ask = row.callable ? row.target : undefined;
   const health = useTargetHealth(ask);
   const inventory = useTargetInventory(ask);
@@ -163,8 +162,10 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
 
   const answering = reading.tone === "healthy";
   const bound = inventory.data?.bound;
-  const version = versionLabel(name, health.data?.product_version);
-  const product = health.data?.product ? `${health.data.product} ${version}`.trim() : null;
+  // The product and its version, whatever the operator named the system.
+  const product = health.data?.product
+    ? `${health.data.product} ${versionLabel(health.data.product, health.data.product_version)}`.trim()
+    : null;
   const href = `/system/targets/${row.target}`;
 
   // What is waiting, each linking to where it is handled on the system's page.
@@ -312,7 +313,7 @@ function NeedsNote({
  * sentence stays under the row; the faults' go to a Notice above the card.
  */
 function readingFor(row: TargetSummary): Reading & { detail?: string } {
-  const name = targetLabel(row.target);
+  const name = row.name;
   const reading = targetReading({ status: row.status, health: row.health, name, transportError: row.transport_error });
   if (!row.callable && !(row.status === "cannot_connect" || row.status === "offline" || row.status === "waiting_to_retry")) {
     // Neutral, not amber. Registered-and-not-yet-answered resolves on its own

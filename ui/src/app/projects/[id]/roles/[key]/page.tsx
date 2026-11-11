@@ -1,5 +1,6 @@
 "use client";
 
+import { useSchemaSource } from "@/lib/queries/useFieldSchema";
 import Link from "next/link";
 import { use, useMemo, useState } from "react";
 
@@ -250,6 +251,7 @@ function MemberRow({
   roleKey: string;
   onRemove: (removal: Removal & { userName: string }) => void;
 }) {
+  const schemaOf = useSchemaSource(true);
   const sources = orderedSources(member.reasons);
   const strongest = sources[0];
 
@@ -298,6 +300,7 @@ function MemberRow({
             person, and only one of them is what the operator is looking at. */}
         {member.withheld && member.withheld.length > 0 && (
           <WithheldInline
+            schemaOf={schemaOf}
             items={member.withheld.map((held) => ({
               field: held.field,
               value: held.value,

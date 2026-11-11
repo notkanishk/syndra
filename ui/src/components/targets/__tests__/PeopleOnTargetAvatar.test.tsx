@@ -26,7 +26,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveUser: () => ({ value: undefined, resolved: false }) }),
 }));
-vi.mock("@/components/targets/HomeLimit", () => ({
+vi.mock("@/components/kinds/storage/HomeLimit", () => ({
   HomeLine: () => null,
   LimitDialog: () => null,
   limitVerb: () => null,
@@ -40,3 +40,5 @@ describe("accounts on a connected system, before a name resolves", () => {
     expect(avatar?.textContent).toBe("");
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

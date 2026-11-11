@@ -1,5 +1,7 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { LeavingRow, useLeavingRows, type LeaveProps } from "@/lib/motion";
@@ -26,7 +28,6 @@ import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RoleInPlace, RoleRef, UserName } from "@/components/names";
 import { machineName } from "@/lib/audit-vocabulary";
-import { targetLabel } from "@/lib/nav";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
@@ -59,6 +60,7 @@ const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${
 export default function PendingChangesPage() {
   const pending = usePendingPropagations();
   const auto = useAutoRetry();
+  const nameOf = useSystemNames();
   const summary = useGovernanceSummary();
   const drain = useDrainPropagations();
   // Named, not just numbered: a bundle or rule is the thing an operator
@@ -144,7 +146,7 @@ export default function PendingChangesPage() {
                   setOutcome(null);
                   beginSend(rows.length);
                   try {
-                    setOutcome(outcomeFromDrain(await drain.mutateAsync(), auto, rows.length));
+                    setOutcome(outcomeFromDrain(await drain.mutateAsync(), nameOf, auto, rows.length));
                   } catch (error) {
                     failedSend();
                     setOutcome(outcomeFromError(error));
@@ -310,6 +312,7 @@ export default function PendingChangesPage() {
  * the next check and revoked there. A give is given again from their page.
  */
 function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; loading: boolean }) {
+  const nameOf = useSystemNames();
   return (
     <Card id="stopped-sending">
       <CardHeader title="Syndra stopped sending" count={rows.length} />
@@ -323,7 +326,7 @@ function StoppedSending({ rows, loading }: { rows: PendingPropagationRow[]; load
         />
       ) : (
         rows.map((row) => {
-          const system = targetLabel(row.target ?? "zitadel");
+          const system = nameOf(row.target ?? "zitadel");
           const outOfTries = (row.last_error ?? "").startsWith("out of retries");
           const revocation = row.op_type === "revoke";
           const zitadel = (row.target ?? "zitadel") === "zitadel";
@@ -559,9 +562,10 @@ function groupByCascade(rows: PendingPropagationRow[]): CascadeGroup[] {
  * every such row does.
  */
 function SystemChange({ row }: { row: PendingPropagationRow }) {
+  const nameOf = useSystemNames();
   return (
     <>
-      <span className="text-muted">{targetLabel(row.target ?? "")} account:</span>{" "}
+      <span className="text-muted">{nameOf(row.target ?? "")} account:</span>{" "}
       {row.reason || "brought in line with their roles."}
     </>
   );
@@ -592,8 +596,9 @@ function sharedWait(rows: PendingPropagationRow[]): string | undefined {
  * about one truthfully (S4).
  */
 function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: string }) {
+  const nameOf = useSystemNames();
   const auto = useAutoRetry();
-  if (row.retry) return <RetryStatus retry={row.retry} system={targetLabel(row.target ?? "zitadel")} />;
+  if (row.retry) return <RetryStatus retry={row.retry} system={nameOf(row.target ?? "zitadel")} />;
   const line = waitLine(row);
   return (
     <>

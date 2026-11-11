@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HomeLine, LimitDialog, limitVerb } from "@/components/targets/HomeLimit";
+import { HomeLine, LimitDialog, limitVerb } from "@/components/kinds/storage/HomeLimit";
 import type { AccountHome } from "@/lib/queries/useTargets";
 
 // A-03 §3: one person's own home folder limit, on the system's account list.
@@ -110,6 +110,17 @@ describe("giving one person their own limit", () => {
     expect((sent[0].body as { expires_at?: string }).expires_at).toBeTruthy();
   });
 
+  it("says why Save is off: the reason first, then the day, then the size", () => {
+    wrap(<LimitDialog target="truenas" name="Charlotte Flair" home={base} onClose={() => {}} />);
+    expect(screen.getByText("Say why. This becomes the record of the decision.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Why"), { target: { value: "thesis data" } });
+    expect(screen.getByText("Pick the day it ends or is reviewed.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Ends on"), { target: { value: "2026-11-30" } });
+    expect(screen.getByText("Say how large the limit is, in GB.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Limit in GB"), { target: { value: "50" } });
+    expect(screen.queryByText(/Say why|Pick the day|Say how large/)).toBeNull();
+  });
+
   it("keeps a reviewed limit as one write (the server replaces the old), or just ends it", async () => {
     const own = { allowance_id: "a1", bytes: 50 * GB, reason: "thesis data", actor_id: "op", set_at: "", review_date: "2026-11-30T00:00:00Z", review_due: true };
     const onClose = vi.fn();
@@ -118,6 +129,8 @@ describe("giving one person their own limit", () => {
     fireEvent.change(screen.getByLabelText("Review on"), { target: { value: "2027-02-28" } });
     fireEvent.click(screen.getByRole("button", { name: "Keep this limit" }));
     await waitFor(() => expect(screen.getByText("Kept")).toBeTruthy());
+    // One wording of the choice, shared with the finding panel: a review date does not end the limit.
+    expect(screen.getByText(/It stays until somebody keeps or ends it, and lists under holds due for review on 28 Feb/)).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
     expect(sent.map((s) => s.path)).toEqual(["/allowances"]);
     unmount();
@@ -129,3 +142,5 @@ describe("giving one person their own limit", () => {
     await waitFor(() => expect(screen.getByText("Ended")).toBeTruthy());
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

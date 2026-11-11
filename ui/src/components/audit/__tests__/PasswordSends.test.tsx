@@ -3,11 +3,13 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { EventSentence, describeSends } from "@/components/audit/EventLine";
+import { truenasName } from "@/lib/__fixtures__/field-schema-mock";
 import type { AuditEntry, AuditOperation } from "@/lib/queries/useAudit";
 
 // A-13 §4, "In the record": one change, its sends listed faint, the second
 // marked "Sent again automatically" with both times and which was confirmed.
 
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);
 vi.mock("@/components/names", () => ({ UserName: ({ id }: { id: string }) => <span>{id}</span> }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveUser: () => ({ value: undefined, resolved: true }) }),
@@ -37,6 +39,7 @@ describe("a password change in the record", () => {
   it("confirmed on the second send", () => {
     const { headline, sends } = describeSends(
       send({ retry: { id: "op2", status: "succeeded", sent_at: at("09:41:14") } }),
+      truenasName,
     );
     expect(headline).toBe("Storage password changed on TrueNAS");
     expect(sends).toBe(
@@ -51,6 +54,7 @@ describe("a password change in the record", () => {
         resolution: "superseded",
         resolved_at: at("11:52:00"),
       }),
+      truenasName,
     );
     expect(headline).toBe("Storage password change on TrueNAS, not confirmed");
     expect(sends).toBe(
@@ -59,13 +63,13 @@ describe("a password change in the record", () => {
   });
 
   it("the change that settles it says so", () => {
-    const { headline, sends } = describeSends(send({ status: "succeeded", supersedes: [at("09:41:02")] }));
+    const { headline, sends } = describeSends(send({ status: "succeeded", supersedes: [at("09:41:02")] }), truenasName);
     expect(headline).toBe("Storage password changed on TrueNAS");
     expect(sends).toBe("TrueNAS confirmed it at once. It also settles the change at 09:41 today.");
   });
 
   it("a plain confirmed change needs no sends line", () => {
-    expect(describeSends(send({ status: "succeeded" })).sends).toBe("");
+    expect(describeSends(send({ status: "succeeded" }), truenasName).sends).toBe("");
   });
 
   it("a resend's own row, in Audit, says it was sent again automatically", () => {

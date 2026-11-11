@@ -33,7 +33,7 @@ const resolver = {
   resolveBundle: () => ({ value: undefined, resolved: true }),
 };
 vi.mock("@/lib/queries/useNameResolver", () => ({ useNameResolver: () => resolver }));
-vi.mock("@/components/targets/HomeLimit", () => ({ HomeLine: () => null, LimitDialog: () => null, limitVerb: () => null }));
+vi.mock("@/components/kinds/storage/HomeLimit", () => ({ HomeLine: () => null, LimitDialog: () => null, limitVerb: () => null }));
 
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { Withheld } from "@/components/ui/Withheld";
@@ -64,3 +64,5 @@ describe("lists named by lookup are A to Z by the shown name", () => {
     expect(rows.map((t) => ["Archive", "lab-2", "studio"].find((v) => t.includes(v)))).toEqual(["Archive", "lab-2", "studio"]);
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

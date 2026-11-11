@@ -40,6 +40,9 @@ import (
 
 type myTargetView struct {
 	Target string `json:"target"`
+	// Name is what the system is called (systemName), the same name the
+	// operator's roster carries.
+	Name string `json:"name"`
 	// Entitled says at least one mapped role reaches this target for this
 	// person. Derived from the resolver, never from the target's own state — a
 	// member whose account exists and whose entitlement has lapsed is not
@@ -172,7 +175,8 @@ type myCredentialStatus struct {
 	LastChangedAt *time.Time `json:"last_changed_at,omitempty"`
 }
 
-// handleMyTargets is a member's own storage view, for every registered target.
+// handleMyTargets is a member's own storage view, for every target a member
+// meets (memberMeets).
 //
 // Registered targets, not entitled ones: the nav leaf is present for every
 // member regardless of entitlement (10.1/10.2), so the page behind it has to
@@ -188,6 +192,9 @@ func handleMyTargets(w http.ResponseWriter, r *http.Request) {
 	registrations := addonsRegistered()
 	views := make([]myTargetView, 0, len(registrations))
 	for _, reg := range registrations {
+		if _, ok := memberMeets(reg.Target); !ok {
+			continue
+		}
 		view, err := describeMyTarget(r, reg.Target, subject)
 		if err != nil {
 			jsonErrorResponse(w, http.StatusInternalServerError, "VIEW_ERROR", err.Error())
@@ -207,6 +214,7 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 // the operator's person page, which reads more from the same set.
 func describeTargetFor(r *http.Request, target, subject string) (myTargetView, services.EntitlementSet, error) {
 	view := myTargetView{Target: target}
+	view.Name, _ = systemName(r.Context(), target)
 	view.Kind, view.EntitlementSchema = acceptedShape(target)
 
 	set, err := svcResolveEntitlementSet(r.Context(), subject, target)

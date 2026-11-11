@@ -1,6 +1,6 @@
 {
   "reachable": true,
-  "product": "truenas",
+  "product": "TrueNAS",
   "product_version": "TrueNAS-25.10.5",
   "version_tested": true,
   "version_note": "25.10 is a tested release.",

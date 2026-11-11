@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
  * opening a string, is.
  */
 const SRC = join(import.meta.dirname, "../../..");
-const SCOPE = ["app/system", "app/zitadel", "components/targets", "components/storage", "components/system", "components/people/PersonStorage.tsx"];
+const SCOPE = ["app/system", "app/zitadel", "components/targets", "components/kinds", "components/system", "components/people/PersonSystems.tsx"];
 const HOME = "components/targets/TargetReading.tsx";
 const WORDS = /(^\s*|["'`>}]\s*)(Answering|Not answering|Offline|Unreachable|Unresponsive|Waiting to retry|Not connected)\b/;
 

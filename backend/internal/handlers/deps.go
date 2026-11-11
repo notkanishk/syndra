@@ -590,6 +590,8 @@ var (
 	dbTargetProjects         = db.TargetProjects
 	dbRequireTargetProject   = db.RequireTargetProject
 	dbSetTargetProject       = db.SetTargetProject
+	dbTargetName             = db.TargetName
+	dbSetTargetName          = db.SetTargetName
 	resolveMappingProject    = mappingProject
 	svcConvergeProjectChange = services.ConvergeProjectChange
 	svcConvergeSubjectOn     = services.ConvergeSubjectOn

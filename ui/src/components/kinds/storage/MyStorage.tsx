@@ -3,7 +3,7 @@
 import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import { useEffect, useState } from "react";
 
-import { EmptyState, ListStates } from "@/components/states";
+import { EmptyState } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot } from "@/components/ui/Badge";
@@ -14,18 +14,16 @@ import { FieldLabel, Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
 import { Unfold } from "@/lib/motion";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
-import type { GuideFolder } from "@/components/storage/ConnectionGuide";
-import { deviceFrom, type Device } from "@/components/storage/device";
+import type { GuideFolder } from "@/components/kinds/storage/ConnectionGuide";
+import { deviceFrom, type Device } from "@/components/kinds/storage/device";
+import { PASSWORD_STEP, isHold, stateOf, type State } from "@/components/kinds/storage/state";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import {
-  useMyStorage,
   useSetStorageCredential,
   type MyTargetView,
   type RoleSource,
@@ -38,10 +36,12 @@ import { retryLine, type RetryState } from "@/lib/retry";
 import { roleName } from "@/lib/names";
 
 // Opened on demand, so it stays out of the page's first load.
-const ConnectionGuide = dynamic(() => import("@/components/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
+const ConnectionGuide = dynamic(() => import("@/components/kinds/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
 
 /**
- * A member's own storage page (route-storage; A-01, A-02).
+ * The storage kind's card for a member (route-storage; A-01, A-02): the module
+ * `components/kinds/MemberTargetCard.tsx` picks for a system of kind `storage`.
+ * The page that lists the cards is `components/kinds/storage/StoragePage.tsx`.
  *
  * One card per system. A three-step line opens every state, so a member can
  * always see where they are: a role gives you access, your account is
@@ -53,70 +53,6 @@ const ConnectionGuide = dynamic(() => import("@/components/storage/ConnectionGui
  * backend from the registered host, and usage that couldn't be read is never
  * drawn as zero.
  */
-export function MyStorage() {
-  const targets = useMyStorage();
-
-  return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Network storage"
-        lede="Your account on the makerspace's shared storage, and how to connect to it. Your access follows the roles you hold."
-      />
-      <ListStates
-        isLoading={targets.isLoading}
-        error={targets.error}
-        isEmpty={(targets.data ?? []).length === 0}
-        onRetry={() => targets.refetch()}
-        errorTitle="Couldn't read your storage access."
-        empty={
-          <EmptyState
-            title="No shared storage yet."
-            guidance="This makerspace has not connected any storage to Syndra. When it does, your account and how to reach it appear here."
-          />
-        }
-      >
-        <div className="grid gap-4">
-          {(targets.data ?? []).map((view) => (
-            <TargetCard key={view.target} view={view} />
-          ))}
-        </div>
-      </ListStates>
-    </div>
-  );
-}
-
-type State =
-  | "none"
-  | "held"
-  | "waiting"
-  | "needs-password"
-  | "reenrol"
-  | "restored"
-  | "ready"
-  | "unread"
-  | "opens-nothing"
-  | "nohost";
-
-/** Where this member is, as one of the board's states. */
-function stateOf(view: MyTargetView): State {
-  const suspended = view.suspended ?? [];
-  if (!view.entitled) {
-    return suspended.some((s) => s.field === "enabled") ? "held" : "none";
-  }
-  if (!view.account) return "waiting";
-  const storage = view.storage;
-  if (storage?.needs_new_password) return "restored";
-  if (view.credential.needs_re_enrolment) return "reenrol";
-  if (storage?.needs_password || (!storage && !view.credential.set)) return "needs-password";
-  if (storage?.places_readable && (storage.places ?? []).length === 0) return "opens-nothing";
-  // The target's own answer about this account is missing: a read that failed,
-  // not an account that is fine. Offline is its own sentence ("ready", below).
-  if (!storage && view.health !== "offline") return "unread";
-  if (!view.connection) return "nohost";
-  return "ready";
-}
-
-const PASSWORD_STEP = new Set<State>(["needs-password", "reenrol", "restored"]);
 
 function paused(view: MyTargetView) {
   return view.lifecycle === "draining" || view.lifecycle === "read_only";
@@ -138,8 +74,8 @@ function joinNames(names: string[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-function TargetCard({ view }: { view: MyTargetView }) {
-  const label = targetLabel(view.target);
+export function StorageMemberCard({ view }: { view: MyTargetView }) {
+  const label = view.name;
   const state = stateOf(view);
   const roleName = useRoleName();
   const offline = view.health === "offline";
@@ -253,9 +189,9 @@ function TargetCard({ view }: { view: MyTargetView }) {
         </>
       )}
 
-      {!hasAccount && (view.suspended ?? []).filter((s) => s.field !== "enabled").length > 0 && (
+      {!hasAccount && (view.suspended ?? []).filter((s) => !isHold(view, s)).length > 0 && (
         <div className="px-5 pb-5">
-          <Withheld items={(view.suspended ?? []).filter((s) => s.field !== "enabled")} />
+          <Withheld items={(view.suspended ?? []).filter((s) => !isHold(view, s))} schemaOf={() => view.entitlement_schema} />
         </div>
       )}
     </Card>
@@ -270,7 +206,7 @@ const PAUSE_ENDS = "Makerspace staff end the pause; account changes held back wa
 const PERSON = "Need it today? Ask makerspace staff: they can see this pause and how long it should last.";
 
 function copyFor(state: State, label: string, view: MyTargetView): [string, string, React.ReactNode] {
-  const hold = (view.suspended ?? []).find((s) => s.field === "enabled");
+  const hold = (view.suspended ?? []).find((s) => isHold(view, s));
   const ready = "Copy an address below into your computer, then sign in with your account name and storage password.";
   switch (state) {
     case "none":
@@ -457,7 +393,7 @@ function Folders({
   const storage = view.storage;
   const offline = view.health === "offline";
   const locked = PASSWORD_STEP.has(state);
-  const withheld = (view.suspended ?? []).filter((s) => s.field !== "enabled");
+  const withheld = (view.suspended ?? []).filter((s) => !isHold(view, s));
   const host = view.connection?.host;
   // Nothing is pinned: the home folder sorts by its name like the rest.
   const places = sortByName(storage?.places ?? [], placeName, (p) => p.path);
@@ -519,7 +455,7 @@ function Folders({
         </NotOpenYet>
       )}
 
-      {withheld.length > 0 && <Withheld items={withheld} />}
+      {withheld.length > 0 && <Withheld items={withheld} schemaOf={() => view.entitlement_schema} />}
 
       {guide && host && view.account && (
         <ConnectionGuide

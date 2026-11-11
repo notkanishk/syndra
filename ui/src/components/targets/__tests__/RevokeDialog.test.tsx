@@ -19,6 +19,7 @@ const state: {
   result: RevocationResult | null;
 } = { revoked: [], held: [], result: null };
 
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/lib/queries/useHolds", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useHolds")>(
     "@/lib/queries/useHolds",

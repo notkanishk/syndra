@@ -3,8 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MyStorage } from "@/components/storage/MyStorage";
-import { deviceFrom } from "@/components/storage/device";
+import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
+import { StoragePage as MySystems } from "@/components/kinds/storage/StoragePage";
+import { deviceFrom } from "@/components/kinds/storage/device";
 import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
 import type { RetryState } from "@/lib/retry";
@@ -73,6 +74,9 @@ const QUACK = place({ path: "main/quack_share", access: "read", usage: { used_by
 function view(over: Partial<MyTargetView> = {}): MyTargetView {
   return {
     target: "truenas",
+    name: "TrueNAS",
+    kind: "storage",
+    entitlement_schema: TRUENAS_SCHEMA,
     entitled: true,
     account: { username: "charlotte" },
     credential: { set: true, last_changed_at: "2026-09-20T10:00:00Z" },
@@ -98,7 +102,7 @@ function renderStorage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MyStorage />
+      <MySystems />
     </QueryClientProvider>,
   );
 }
@@ -304,6 +308,33 @@ describe("when changes can't happen", () => {
     expect(screen.getByText("On hold since 9 Oct")).toBeTruthy();
     expect(screen.getByText(/Answering · your account is on hold/)).toBeTruthy();
     expect(passwordField()).toBeNull();
+  });
+
+  it("held: found by the schema's account role, whatever the add-on calls the field", () => {
+    const schema = TRUENAS_SCHEMA.map((f) => (f.role === "account" ? { ...f, name: "active" } : f));
+    state.targets = [
+      view({
+        entitled: false,
+        entitlement_schema: schema,
+        suspended: [{ field: "active", value: "true", reason: "safety review", actor_id: "op", since: "2026-10-09T10:00:00Z" }],
+      }),
+    ];
+    renderStorage();
+    expect(screen.getByText("Your account is switched off for now")).toBeTruthy();
+    expect(screen.getByText("On hold since 9 Oct")).toBeTruthy();
+  });
+
+  it("a field named enabled that is not the account is a held-back change, not a hold", () => {
+    const schema = TRUENAS_SCHEMA.map((f) => (f.role === "account" ? { ...f, name: "active" } : f));
+    state.targets = [
+      view({
+        entitled: false,
+        entitlement_schema: schema,
+        suspended: [{ field: "enabled", value: "true", reason: "safety review", actor_id: "op" }],
+      }),
+    ];
+    renderStorage();
+    expect(screen.queryByText("Your account is switched off for now")).toBeNull();
   });
 
   it("a held-back folder is named with its reason, never dropped", () => {

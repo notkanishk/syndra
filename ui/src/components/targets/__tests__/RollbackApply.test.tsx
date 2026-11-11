@@ -126,3 +126,5 @@ describe("rolling back, through the dialog", () => {
     expect(state.applied).toEqual([]);
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

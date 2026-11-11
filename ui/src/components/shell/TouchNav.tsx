@@ -10,8 +10,18 @@ import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
 import { Unfold } from "@/lib/motion";
 import { GoToPanel } from "@/components/ui/GoTo";
-import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavEntry, type NavLeaf } from "@/lib/nav";
+import {
+  leafMatches,
+  memberNav,
+  navFor,
+  operatorNav,
+  targetNav,
+  type IndicatorKey,
+  type NavEntry,
+  type NavLeaf,
+} from "@/lib/nav";
 import { useIndicatorsRead } from "@/lib/queries/useIndicators";
+import { useMySystems } from "@/lib/queries/useMySystems";
 import { useTargets } from "@/lib/queries/useTargets";
 import {
   destinationMatches,
@@ -48,16 +58,20 @@ export function TouchNav() {
   const { audience, isOperator } = useUiView();
   const { data: indicators, isPlaceholderData } = useIndicatorsRead(isOperator);
   const { data: targets } = useTargets(isOperator);
+  const member = audience === "member";
+  const mine = useMySystems(member);
 
   const entries =
     audience === "advanced"
-      ? targetNav((targets ?? []).map((t) => t.target))
-      : navFor(audience);
+      ? targetNav(targets ?? [])
+      : member
+        ? memberNav(mine.data ?? [])
+        : navFor(audience);
   const destinations = touchDestinations(entries);
   const counts = isPlaceholderData ? undefined : indicators;
   // The sheet draws Advanced's whole tree in either view and folds what Basic
   // lacks (A-08 §3). `touchDestinations` is one destination per entry, in order.
-  const operatorEntries = audience === "member" ? entries : operatorNav((targets ?? []).map((t) => t.target));
+  const operatorEntries = audience === "member" ? entries : operatorNav(targets ?? []);
   const sheetDestinations: SheetDestination[] = touchDestinations(operatorEntries).map((destination, index) => ({
     ...destination,
     advancedOnly: operatorEntries[index].advancedOnly,
@@ -66,6 +80,10 @@ export function TouchNav() {
   // bar into tabs, and the sheet must stay mounted to fold Advanced's rows away.
   const [sheetOpen, setSheetOpen] = useState(false);
   const shape = sheetOpen ? "sheet" : navShape(destinations);
+  // A member's tab count is their systems', so the bar waits for that read
+  // (GET /me/systems, no add-on call) rather than drawing three tabs and then
+  // four, or tabs and then a sheet. A failed read draws the static tabs.
+  const settling = member && mine.isLoading;
 
   return (
     <nav
@@ -74,7 +92,12 @@ export function TouchNav() {
       // width, and one of the two is always the only one visible.
       className="flex-none border-t border-line bg-rail px-1.5 pb-[env(safe-area-inset-bottom)] pt-2 tablet:hidden"
     >
-      {shape === "tabs" ? (
+      {settling ? (
+        // The bar's own height, empty: the same seat tabs or the trigger take.
+        <div aria-hidden data-testid="touch-nav-settling" className="pb-2">
+          <div className="min-h-[var(--tap)]" />
+        </div>
+      ) : shape === "tabs" ? (
         <TabBar destinations={destinations} pathname={pathname} counts={counts} />
       ) : (
         <SheetTrigger

@@ -165,6 +165,8 @@ vi.mock("@/lib/queries/useTargets", async () => {
 function summary(operations: TargetSummary["operations"]): TargetSummary {
   return {
     target: "truenas",
+    name: "TrueNAS",
+    name_from: "product",
     registered: true,
     auth_mode: "derived",
     callable: true,
@@ -1219,3 +1221,5 @@ describe("while TrueNAS isn't answering", () => {
     expect(screen.queryByText(/waits too/)).toBeNull();
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

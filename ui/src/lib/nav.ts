@@ -12,6 +12,11 @@
  * what was already there.
  */
 
+import { sortByName } from "@/lib/sort";
+
+/** What the storage page is called, said once. */
+export const STORAGE_LABEL = "Network storage";
+
 export type UiView = "basic" | "advanced";
 export type Audience = UiView | "member";
 
@@ -60,6 +65,26 @@ export interface NavLeaf {
    * always in the know (owner, 5 Nov 2026).
    */
   retries?: boolean;
+  /**
+   * A seat for rows drawn from the registry, never a row itself: `memberNav`
+   * puts one row per connected system in its place. Its `pattern` is what
+   * makes those rows reachable from the static tree, so the middleware (no
+   * fetch at the Edge) admits them without knowing them. Its own `href` is no
+   * page: it is not reachable, not a route and never a crumb.
+   */
+  family?: "systems";
+}
+
+/**
+ * A connected system as a rail draws it, from GET /targets (operators) or
+ * GET /me/systems (anyone's own rows). `name` is the backend's (one source);
+ * `kind` is absent until Syndra has read the system, and GET /me/systems never
+ * carries one without it (not read is operators-only).
+ */
+export interface NavSystem {
+  target: string;
+  name: string;
+  kind?: string;
 }
 
 export interface NavGroup {
@@ -179,7 +204,7 @@ export const ADVANCED_NAV: NavEntry[] = [
  * what is reachable. Reachability belongs on the page, where it can be
  * explained.
  */
-export function targetNav(targets: string[]): NavEntry[] {
+export function targetNav(targets: readonly NavSystem[]): NavEntry[] {
   if (targets.length === 0) return ADVANCED_NAV;
   return ADVANCED_NAV.map((entry) => {
     if (entry.kind !== "group" || entry.label !== "System") return entry;
@@ -187,8 +212,8 @@ export function targetNav(targets: string[]): NavEntry[] {
       // Zitadel, then Connected systems — the two static rows — and
       // each registered target under the index it belongs to.
       ...entry.children.slice(0, 2),
-      ...targets.map((target) =>
-        leaf(targetLabel(target), `/system/targets/${target}`, {
+      ...targets.map(({ target, name }) =>
+        leaf(name, `/system/targets/${target}`, {
           pattern: new RegExp(`^/system/targets/${target}(/|$)`),
         }),
       ),
@@ -208,7 +233,7 @@ export function targetNav(targets: string[]): NavEntry[] {
  * A group Basic does not have is marked as a whole (its rows follow it); in a
  * group both views have, each row is judged on its own.
  */
-export function operatorNav(targets: string[]): NavEntry[] {
+export function operatorNav(targets: readonly NavSystem[]): NavEntry[] {
   const basicLeaves = new Set(navLeaves(BASIC_NAV).map((entry) => entry.href));
   const basicGroups = new Set(BASIC_NAV.flatMap((entry) => (entry.kind === "group" ? [entry.label] : [])));
   const mark = (entry: NavLeaf): NavLeaf => ({ ...entry, advancedOnly: !basicLeaves.has(entry.href) });
@@ -220,21 +245,24 @@ export function operatorNav(targets: string[]): NavEntry[] {
 }
 
 /**
- * A target's display name. Title-cased from its id, because the id is
- * deployment configuration an operator wrote and a mapping table here would be
- * a second place to add a target — which is how the day a UniFi add-on ships,
- * its row is called `unifi` on one screen and `UniFi Access` on another.
+ * A system's id title-cased: the fallback for a row drawn before any roster
+ * has loaded, and the backend's own last resort (handlers.titleCased).
+ *
+ * Never a map of product names. A system's name is a registration attribute
+ * the backend shapes once (`name` on both rosters: the operator's name, else
+ * the manifest's product, else this); a map here was a second place to name a
+ * system, and the day a second laser cutter shipped it would have called both
+ * the same. `useSystemNames` is how a surface reads the real one.
  */
 export function targetLabel(target: string): string {
-  const known: Record<string, string> = { truenas: "TrueNAS", unifi: "UniFi Access" };
-  if (known[target]) return known[target];
   return target.charAt(0).toUpperCase() + target.slice(1);
 }
 
 /**
- * Member — three destinations. No Home: a member's landing IS their access, so
- * a separate landing would be an empty room in front of the only room. The view
- * switch is not rendered for members at all.
+ * Member — three destinations, then one row per connected system that is not
+ * storage. No Home: a member's landing IS their access, so a separate landing
+ * would be an empty room in front of the only room. The view switch is not
+ * rendered for members at all.
  *
  * This comment said "two" until the storage row shipped, which is the same
  * drift that put the row in the rail and not in the middleware — a developer
@@ -252,8 +280,51 @@ export const MEMBER_NAV: NavEntry[] = [
    * answer to the question a member without access is asking, which is "can I
    * get storage?". The page answers that; a missing row does not.
    */
-  leaf("Network storage", "/storage"),
+  leaf(STORAGE_LABEL, "/storage"),
+  /**
+   * The family seat (addon-contract 3.10): last, so nothing above it ever
+   * moves. `memberNav` draws one row here per system Syndra has read whose kind
+   * is not storage (storage folds into the row above), alphabetical by name.
+   * A system not read yet has no row and no member page: only operators see it
+   * (owner, 11 Nov). No system, no row: no placeholder.
+   */
+  leaf("Connected systems", "/systems", { family: "systems", pattern: /^\/systems\/[^/]+$/ }),
 ];
+
+/** The kind that folds into Network storage rather than drawing a row. */
+export const STORAGE_KIND = "storage";
+
+/** A system of the storage kind: Network storage's, never a row of its own. */
+export const isStorage = (system: { kind?: string }) => system.kind === STORAGE_KIND;
+
+/**
+ * The systems that get a row of their own, alphabetical (lib/sort): the one
+ * rule, for the member's rail and an operator's account sheet alike. The
+ * member reads (GET /me/systems, /me/targets) never carry a system not read
+ * yet, so kind is known here; a kindless row is still never drawn.
+ */
+export function memberSystems<T extends NavSystem>(systems: readonly T[]): T[] {
+  return sortByName(
+    systems.filter((s) => s.kind && !isStorage(s)),
+    (s) => s.name,
+    (s) => s.target,
+  );
+}
+
+/** One row per system of `memberSystems`, each to its own page. */
+const systemRows = (systems: readonly NavSystem[]): NavLeaf[] =>
+  memberSystems(systems).map((s) => leaf(s.name, `/systems/${s.target}`));
+
+/**
+ * The member's rail: `MEMBER_NAV` with its family seat replaced by one row per
+ * system (`memberSystems`). Rows are a registration, never an entitlement: a
+ * member none of whose roles reaches the system still has the row, and the
+ * page says so with a next step.
+ */
+export function memberNav(systems: readonly NavSystem[]): NavEntry[] {
+  const rows = systemRows(systems);
+  return MEMBER_NAV.flatMap((entry) => (entry.kind === "leaf" && entry.family ? rows : [entry]));
+}
 
 /**
  * An operator's own pages, reached from the Account sheet (A-03 §4, B).
@@ -265,7 +336,16 @@ export const MEMBER_NAV: NavEntry[] = [
  * an operator. A member already has the same page in their rail, and one row
  * per job means the sheet doesn't offer it to them twice.
  */
-export const ACCOUNT_NAV: NavLeaf[] = [leaf("My access", "/me"), leaf("Network storage", "/storage")];
+export const ACCOUNT_NAV: NavLeaf[] = [leaf("My access", "/me"), leaf(STORAGE_LABEL, "/storage")];
+
+/**
+ * The account sheet's rows: `ACCOUNT_NAV`, then the operator's own systems
+ * that are not storage, from the same GET /me/systems a member's rail reads
+ * (`memberSystems`), so an operator's own laser account has a way in.
+ */
+export function accountNav(systems: readonly NavSystem[]): NavLeaf[] {
+  return [...ACCOUNT_NAV, ...systemRows(systems)];
+}
 
 export function navFor(audience: Audience): NavEntry[] {
   if (audience === "member") return MEMBER_NAV;
@@ -274,6 +354,7 @@ export function navFor(audience: Audience): NavEntry[] {
 
 /** True when `pathname` belongs to this nav row. */
 export function leafMatches(item: NavLeaf, pathname: string): boolean {
+  if (item.family) return Boolean(item.pattern?.test(pathname));
   if (pathname === item.href) return true;
   if (item.pattern) return item.pattern.test(pathname);
   return item.href !== "/" && pathname.startsWith(`${item.href}/`);
@@ -315,15 +396,19 @@ export function navLeaves(entries: NavEntry[]): NavLeaf[] {
  * protected the moment it exists, instead of being exposed until somebody
  * remembers to add it here.
  */
-export const MEMBER_ROUTES = navLeaves(MEMBER_NAV).map((leaf) => leaf.href);
+export const MEMBER_ROUTES = navLeaves(MEMBER_NAV)
+  .filter((leaf) => !leaf.family)
+  .map((leaf) => leaf.href);
 
 /**
  * Reachability is `leafMatches` over the member's own leaves, so the rule the
  * middleware enforces is exactly the rule the rail highlights. It follows a
  * leaf's `pattern` if it ever gains one — `/projects/{id}/roles/{key}` is why
  * that field exists, and a member leaf with a detail route would need it.
- * Otherwise a sub-path belongs to its parent, so `/storage/{target}` is
- * reachable the day it exists; `/` matches exactly, or it admits everything.
+ * Otherwise a sub-path belongs to its parent; `/` matches exactly, or it
+ * admits everything. The family seat's pattern admits every
+ * `/systems/{target}` with no data, so the rows `memberNav` draws are
+ * reachable the moment they are drawn (and `/systems` itself, no page, is not).
  */
 export function memberMayVisit(pathname: string): boolean {
   return navLeaves(MEMBER_NAV).some((leaf) => leafMatches(leaf, pathname));
@@ -339,7 +424,11 @@ export interface Crumb {
  * two can never disagree. Detail pages append their own trailing crumb once
  * the name resolves (see useCrumb) rather than flashing a raw id.
  */
-export function crumbsFor(pathname: string, audience: Audience): Crumb[] {
+export function crumbsFor(
+  pathname: string,
+  audience: Audience,
+  nameOf: (target: string) => string = targetLabel,
+): Crumb[] {
   // A target's own routes, resolved from the PATH rather than from the roster.
   //
   // The per-target rows are appended by `targetNav` from deployment
@@ -355,12 +444,19 @@ export function crumbsFor(pathname: string, audience: Audience): Crumb[] {
   // live under System, an Advanced-only section, but the crumb names the PAGE,
   // not the sidebar — an operator who followed a link there in Basic still
   // needs to know where they are.
+  // `nameOf` is the roster's name when the caller has it (TopBar), else the
+  // id title-cased.
   const onTarget = /^\/system\/targets\/([^/]+)(\/.*)?$/.exec(pathname);
   if (onTarget && audience !== "member") {
     const [, target, rest] = onTarget;
-    const self: Crumb = { label: targetLabel(target), href: `/system/targets/${target}` };
+    const self: Crumb = { label: nameOf(target), href: `/system/targets/${target}` };
     return rest ? [{ label: "System" }, self] : [{ label: "System" }, { label: self.label }];
   }
+
+  // A family row (`/systems/{target}`) has no crumb from here: the seat is
+  // never one, and the page names itself with `useCrumb` once its read lands,
+  // so a system a member does not meet is never named and a name never
+  // replaces an id.
 
   const own = findCrumb(navFor(audience), pathname);
   if (own.length > 0) return own;
@@ -383,7 +479,7 @@ export function crumbsFor(pathname: string, audience: Audience): Crumb[] {
 function findCrumb(entries: NavEntry[], pathname: string): Crumb[] {
   for (const entry of entries) {
     if (entry.kind === "leaf") {
-      if (entry.href === pathname) return [{ label: entry.label }];
+      if (entry.href === pathname && !entry.family) return [{ label: entry.label }];
       continue;
     }
     for (const child of entry.children) {
@@ -397,7 +493,7 @@ function findCrumb(entries: NavEntry[], pathname: string): Crumb[] {
   // the product rather than a URL.
   for (const entry of entries) {
     const candidates = entry.kind === "leaf" ? [entry] : entry.children;
-    for (const child of candidates) {
+    for (const child of candidates.filter((c) => !c.family)) {
       if (child.href !== pathname && leafMatches(child, pathname)) {
         const parent: Crumb[] = entry.kind === "group" ? [{ label: entry.label }] : [];
         return [...parent, { label: child.label, href: child.href }];

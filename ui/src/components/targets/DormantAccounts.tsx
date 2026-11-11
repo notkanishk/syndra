@@ -1,5 +1,7 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import { NOTHING_TO_DO, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { formatBytes } from "@/lib/format";
 import { useState } from "react";
@@ -20,7 +22,6 @@ import {
   type DormantAccount,
   type SweepResult,
 } from "@/lib/queries/useDormant";
-import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
 import { oneShot } from "@/lib/secret";
 
@@ -42,6 +43,7 @@ import { oneShot } from "@/lib/secret";
  */
 /** `stale`: the system isn't answering, so this is its last read and the card recedes (A-13). */
 export function DormantAccounts({ target, stale = false }: { target: string; stale?: boolean }) {
+  const nameOf = useSystemNames();
   const dormant = useDormantAccounts(target);
   const remove = useSweepDormant(target);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -54,7 +56,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   const [result, setResult] = useState<{ outcome: Outcome; word: string } | null>(null);
 
   const accounts = dormant.data?.accounts ?? [];
-  const name = targetLabel(target);
+  const name = nameOf(target);
   const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);
   const safe = byName(accounts.filter((a) => !a.subject_still_member));
   const lockouts = byName(accounts.filter((a) => a.subject_still_member));

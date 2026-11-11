@@ -17,6 +17,7 @@ import { WithdrawnAccess } from "@/components/review/WithdrawnAccess";
 const NAMES: Record<string, string> = { u1: "Iyo Sky", u2: "Jimmy Uso", u3: "Tiffany Stratton" };
 const PROJECTS: Record<string, string> = { pWood: "Wood shop" };
 
+vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
     resolveUser: (id: string) => ({ value: NAMES[id] ? { display_name: NAMES[id] } : undefined, resolved: true }),

@@ -39,7 +39,8 @@ const eslintConfig = [
       ],
     },
   },
-  {
+  ...(() => {
+    const message = (m) => ({ message: m });
     /**
      * One invalidation map (one-path W2c). A write learns which reads it made
      * stale in exactly one place, `invalidateAfter` in
@@ -48,48 +49,137 @@ const eslintConfig = [
      * `x["invalidateQueries"]` and destructuring it out all fail. Tests may
      * spy on it.
      */
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/lib/queries/invalidation.ts", "src/**/__tests__/**", "src/**/*.test.{ts,tsx}"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        ...[
-          "MemberExpression[property.name='invalidateQueries']",
-          "MemberExpression[computed=true][property.value='invalidateQueries']",
-          "ObjectPattern > Property[key.name='invalidateQueries']",
-        ].map((selector) => ({
-          selector,
-          message: "Invalidate through invalidateAfter(qc, kind, scope) in lib/queries/invalidation.ts, the one map.",
-        })),
-      ],
-    },
-  },
-  {
+    const invalidation = [
+      "MemberExpression[property.name='invalidateQueries']",
+      "MemberExpression[computed=true][property.value='invalidateQueries']",
+      "ObjectPattern > Property[key.name='invalidateQueries']",
+    ].map((selector) => ({
+      selector,
+      ...message("Invalidate through invalidateAfter(qc, kind, scope) in lib/queries/invalidation.ts, the one map."),
+    }));
     /**
-     * One path for a missing name (one-path W2d). "Unknown project" is said by
-     * the names components only: projectLabel(name) where a string is needed,
-     * <ProjectName> where a component is. Importing the phrase elsewhere is how
-     * a second fallback starts. Its own rule, not no-restricted-syntax: a later
-     * block setting that rule would replace the invalidation guard above.
+     * The UI reads fields by role (addon-contract 3.4). The five TrueNAS field
+     * names and `smb` are written only in lib/fields.ts and in
+     * components/kinds/storage/; everywhere else a screen asks fieldsByRole /
+     * useFieldSchema and says what comes back in the add-on's label. "group"
+     * is also a layout word (a nav group, role="group"), so it is refused only
+     * where it names a field: compared with `.field`, a `field=` prop, a
+     * `field:` property, a FIELD_* constant, or a `switch` on one. "Compared
+     * with a field" is `.field` or a bare `field` identifier; a literal is a
+     * string or a template with no expressions (`\`group\``).
      */
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/components/names/**", "src/**/__tests__/**", "src/**/*.test.{ts,tsx}"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          // By pattern, so the alias and any relative path are both caught.
-          patterns: [
+    const fieldWord = "Literal[value=/^(home|home_quota|enabled|smb_enabled|smb)$/]";
+    const fieldWordTemplate = "TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked=/^(home|home_quota|enabled|smb_enabled|smb)$/]";
+    const literalGroup = ["Literal[value='group']", "TemplateLiteral[expressions.length=0] > TemplateElement[value.cooked='group']"];
+    const roles = [
+      fieldWord,
+      fieldWordTemplate,
+      ...literalGroup.flatMap((lit) => [
+        `BinaryExpression:has(> MemberExpression[property.name='field']) > ${lit}`,
+        `BinaryExpression:has(> Identifier[name='field']) > ${lit}`,
+        `SwitchStatement[discriminant.property.name='field'] > SwitchCase > ${lit}`,
+        `SwitchStatement[discriminant.name='field'] > SwitchCase > ${lit}`,
+      ]),
+      "JSXAttribute[name.name='field'] > Literal[value='group']",
+      "Property[key.name='field'] > Literal[value='group']",
+      "VariableDeclarator[id.name=/^FIELD/] > Literal[value='group']",
+    ].map((selector) => ({
+      selector,
+      ...message("Read fields by role through lib/fields.ts (fieldsByRole, useFieldSchema); field names live only in lib/fields.ts and components/kinds/storage/."),
+    }));
+    /**
+     * The UI core does not speak a product's words (addon-contract 3.10g).
+     * The storage kind's words (folder, share, SMB, mount, "Network storage")
+     * are written only in components/kinds/storage/, app/storage/ and
+     * lib/nav.ts. Matched as a string literal, any template element (a
+     * sentence is a template with expressions) and JSX text.
+     */
+    const kindWords = "/\\b([Ff]olders?|[Ss]hares?|SMB|[Mm]ount(ed|s|ing)?|Network storage)\\b/";
+    const kindWord = [`Literal[value=${kindWords}]`, `TemplateElement[value.cooked=${kindWords}]`, `JSXText[value=${kindWords}]`].map((selector) => ({
+      selector,
+      ...message("The storage kind's words live only in components/kinds/storage/ (and app/storage/, lib/nav.ts); say it by role or move it there."),
+    }));
+    const tests = ["src/**/__tests__/**", "src/**/__fixtures__/**", "src/**/*.test.{ts,tsx}"];
+    const fieldHome = ["src/lib/fields.ts", "src/components/kinds/storage/**"];
+    const wordHome = ["src/components/kinds/storage/**", "src/app/storage/**", "src/lib/nav.ts"];
+    const kindDir = "src/components/kinds/storage/**/*.{ts,tsx}";
+    // Flat config: for a file, the LAST matching block that sets the rule wins whole. So each
+    // block below lists every selector set its files owe, and the blocks partition the files.
+    return [
+      {
+        // Everywhere: all three guards, minus where each is allowed.
+        files: ["src/**/*.{ts,tsx}"],
+        ignores: ["src/lib/queries/invalidation.ts", ...fieldHome, ...wordHome, ...tests],
+        rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles, ...kindWord] },
+      },
+      {
+        // invalidation.ts owns the invalidation map: fields + words only.
+        files: ["src/lib/queries/invalidation.ts"],
+        ignores: tests,
+        rules: { "no-restricted-syntax": ["error", ...roles, ...kindWord] },
+      },
+      {
+        // The storage kind: may say fields and words, still may not invalidate by hand.
+        files: [kindDir],
+        ignores: tests,
+        rules: { "no-restricted-syntax": ["error", ...invalidation] },
+      },
+      {
+        // app/storage and nav.ts: words allowed; fields and invalidation still refused.
+        files: ["src/app/storage/**/*.{ts,tsx}", "src/lib/nav.ts"],
+        ignores: tests,
+        rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles] },
+      },
+      {
+        // fields.ts: may say fields; words and invalidation refused.
+        files: ["src/lib/fields.ts"],
+        ignores: tests,
+        rules: { "no-restricted-syntax": ["error", ...invalidation, ...kindWord] },
+      },
+    ];
+  })(),
+  ...(() => {
+    /** Fixtures are for tests: production code never imports one (a hand-made schema in a screen is a second source of the fact). */
+    const fixtures = {
+      group: ["**/__fixtures__", "**/__fixtures__/**"],
+      message: "Fixtures are for tests only; production code reads the real source.",
+    };
+    const tests = ["src/**/__tests__/**", "src/**/__fixtures__/**", "src/**/*.test.{ts,tsx}"];
+    return [
+      {
+        files: ["src/components/names/**/*.{ts,tsx}"],
+        ignores: tests,
+        rules: { "no-restricted-imports": ["error", { patterns: [fixtures] }] },
+      },
+      {
+        /**
+         * One path for a missing name (one-path W2d). "Unknown project" is said by
+         * the names components only: projectLabel(name) where a string is needed,
+         * <ProjectName> where a component is. Importing the phrase elsewhere is how
+         * a second fallback starts. Its own rule, not no-restricted-syntax: a later
+         * block setting that rule would replace the invalidation guard above.
+         */
+        files: ["src/**/*.{ts,tsx}"],
+        ignores: ["src/components/names/**", ...tests],
+        rules: {
+          "no-restricted-imports": [
+            "error",
             {
-              group: ["**/components/names", "**/components/names/Unresolved", "**/names/Unresolved"],
-              importNames: ["UNKNOWN_PROJECT"],
-              message: "Say a missing project name through projectLabel(name) or <ProjectName>, the one fallback.",
+              // By pattern, so the alias and any relative path are both caught.
+              patterns: [
+                fixtures,
+                {
+                  group: ["**/components/names", "**/components/names/Unresolved", "**/names/Unresolved"],
+                  importNames: ["UNKNOWN_PROJECT"],
+                  message: "Say a missing project name through projectLabel(name) or <ProjectName>, the one fallback.",
+                },
+              ],
             },
           ],
         },
-      ],
-    },
-  },
+      },
+    ];
+  })(),
 ];
 
 export default eslintConfig;

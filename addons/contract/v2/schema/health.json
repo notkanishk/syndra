@@ -10,7 +10,8 @@
       "description": "A real call to the target just succeeded."
     },
     "product": {
-      "type": "string"
+      "type": "string",
+      "description": "The manifest's product: what people call it."
     },
     "product_version": {
       "type": "string"

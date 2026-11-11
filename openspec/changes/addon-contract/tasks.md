@@ -547,48 +547,274 @@ already did). See 3.7.
 
 ## 3. The UI reads roles (UI only)
 
-- [ ] 3.1 `ui/src/lib/fields.ts`: `fieldsByRole(schema)`, `accountField`,
+- [x] 3.1 `ui/src/lib/fields.ts`: `fieldsByRole(schema)`, `accountField`,
   `limitFields`, `formatLimit(value, unit)`; the manifest's schema reaches
   the UI through the existing targets endpoint unchanged #ready-for-agent
-- [ ] 3.2 `lib/role-mapping-plan.ts`, `targets/HomeLimit.tsx`,
+- [x] 3.2 `lib/role-mapping-plan.ts`, `targets/HomeLimit.tsx`,
   `AddMappingDialog.tsx`, `MappingManagement.tsx`, `PeopleOnTarget.tsx`,
   `ui/Withheld.tsx`, `review/HoldsDueForReview.tsx`, `people/PersonStorage.tsx`,
   `queries/useMyStorage.ts`: by role, copy from `label`/`unit`; the
   `enabled`/`smb_enabled` sentences in `AddMappingDialog.tsx:403-416` become
   "the account" and "its {channel label}" #ready-for-agent
-- [ ] 3.3 `storage/MyStorage.tsx` becomes the storage kind's module
+- [x] 3.3 `storage/MyStorage.tsx` becomes the storage kind's module
   (`components/kinds/storage/`), chosen by `kind`; a kind with no module
   (`access`, `inventory`, `machine` today) renders the core member card
   (account standing + `next`) #ready-for-agent
-- [ ] 3.4 Lint guard: the five field literals and `smb` are allowed only
-  under `components/kinds/storage/` and tests #ready-for-agent
-- [ ] 3.5 Copy guard run (`plain-language-copy`): every new sentence passes;
+- [x] 3.4 Lint guard: the five field literals and `smb` are allowed only
+  under `components/kinds/storage/`, `lib/fields.ts` and tests #ready-for-agent
+- [x] 3.5 Copy guard run (`plain-language-copy`): every new sentence passes;
   `standing.next` always ends in a next step or "nothing for you to do" #ready-for-agent
-- [ ] 3.7 The UI reads field roles and kind from the backend, never a
+- [x] 3.7 The UI reads field roles and kind from the backend, never a
   fallback. Backend half built in slice 2 (11 Nov 2026): `GET /targets`
   carries `kind` and the accepted `entitlement_schema` per target (absent
   before a manifest is accepted: "not read"), `/me/targets` carries the same
   two plus the member's own `standing`, and the inventory's bound and unmanaged
   rows carry `standing`. **Once that lands, the UI's `STORAGE_SCHEMA` and its
-  "no kind = storage" fallback must be removed** (UI half, open) #ready-for-agent
-- [ ] 3.8 (from slice 2) "Take theirs" on a limit finding: the action now
+  "no kind = storage" fallback must be removed** (UI half, done 11 Nov 2026):
+  `STORAGE_SCHEMA` and the "no kind = storage" rule are deleted; `lib/fields.ts`
+  holds no schema. An operator page takes its schema from the `GET /targets` it
+  loaded (`useFieldSchema`, `useFieldSchemaState`), a member's from
+  `/me/targets` (`useSchemaSource(false)`, which never asks the roster their
+  proxy refuses), a person's page from the view it loaded. A system with no
+  accepted manifest has no schema or kind and renders "not read yet" with its
+  next step (the member card, the mappings page, a disabled Add and Put on
+  hold), never a guess; an account hold with no schema is shown as the code it
+  is. Standing shows on bound and unmanaged account rows #ready-for-agent
+- [x] 3.8 (from slice 2) "Take theirs" on a limit finding: the action now
   answers `adoptable: true` and needs a reason and an end or review date in
   the request (as adopting a switched-off account does); the dialog asks for
   both and says it saves the target's value as this person's own limit
-  #ready-for-agent
-- [ ] 3.6 (from slice 1) The target page renders what the backend now
+  (done: a limit finding's "Use {system}'s value" opens a panel with the
+  sentence, an Ends on / Review on choice and a date, sends `expires_at` or
+  `review_date`, and the result shows as "Saved" in the outcome pattern where
+  it was decided; a switched-off account keeps its one press) #ready-for-agent
+- [x] 3.6 (from slice 1) The target page renders what the backend now
   carries: `also_says` (the manifest's keys Syndra does not use, shown raw
   under "What the add-on also says") and `last_error` when a manifest was
   refused (the reason, and that the last good one is still in use), and
   `standing` where an unmanaged account's `password_set` used to be read
   #ready-for-agent
 
-- [ ] 3.9 (found by the slice-2 review, older than this change) The audit actions
+- [x] 3.9 (found by the slice-2 review, older than this change) The audit actions
   `entitlement.<target>.superseded` and `entitlement.<target>.abandoned` have no
   wording in `ui/src/lib/audit-vocabulary.ts` (only `.enqueued` does), so Audit and
   a person's Activity show the raw key; the coverage guard cannot see actions built
   by joining strings. Add a pattern with a plain-language sentence for each, and
-  extend the guard to cover joined `entitlement.<target>.*` actions #ready-for-agent
+  extend the guard to cover joined `entitlement.<target>.*` actions (done:
+  both worded in `audit-vocabulary.ts`; the guard reads the three ways the
+  backend joins one, Go `"entitlement."+x+".verb"`, SQL `'allowance.' || x ||
+  '.lapsed'` and `Sprintf("entitlement.%s.verb")`, with a floor per family
+  (entitlement 3, allowance 1) and fails on one with no sentence,
+  mutation-checked by removing a wording and by fixture lines for each form) #ready-for-agent
+
+- [x] 3.10 (found by the slice-3 review) A door or laser system's card appears
+  under "Network storage" on `/storage` and in the person page's storage
+  section, because both list every kind. **Owner decided 11 Nov 2026: option 1,
+  plus a member sidebar item per live add-on**: the storage surfaces show only
+  kind `storage`; every other live add-on gets its own member sidebar item when
+  it goes live, and the person page's access section shows the other kinds.
+  Design: `310-design` note (11 Nov), with the owner's answers overriding it:
+  name = `targets.name`, set on the system's page, default the manifest's
+  `product`, then the id; **a registration with no accepted manifest is
+  operators-only: no member row, no member card**; no placeholder row; the
+  touch bar keeps its ≤4-tabs-then-sheet rule. Built as 3.10a–h:
+  - [x] 3.10a Backend: migration **000091** `targets.name TEXT` (nullable,
+    `targets_name_check`: never blank, ≤ 60 chars; additive, down drops it).
+    `handlers.systemName` is the one coalescing function (operator's name, else
+    the accepted manifest's `product`, else the id title-cased) and fills `name`
+    (+ `name_set`) on `GET /targets` and `name` on `GET /me/targets` and a
+    person's targets. `PUT /api/v1/targets/{target}/name {"name": ...}`
+    (operator, `decodeJSONStrict`, unregistered → 404, blank clears, too long →
+    400 `VALIDATION_FAILED` `{name: too_long}`); `db.SetTargetName` writes the
+    name and a `target.named` audit row `{from, to}` in one transaction.
+    Tests: coalescing (set / product / title-case), both rosters carry it,
+    strict JSON / 404 / clear / too long, live: write + audit + clear + CHECK
+    refusal with no audit row, migration guard.
+  - [x] 3.10b `lib/nav.ts`: `NavLeaf.family`, the family seat
+    `Connected systems /systems` last in `MEMBER_NAV` (pattern
+    `^/systems/[^/]+$`), `memberNav(systems)` (one row per system whose kind is
+    known and not `storage`, `sortByName` by `name`), `memberSystems`,
+    `STORAGE_KIND`; `targetNav`/`operatorNav` take `{target, name}`;
+    `targetLabel` is the id title-cased only (the map is gone; a source guard
+    forbids an object literal in it); `crumbsFor(path, audience, nameOf)` names
+    `/system/targets/{t}` and `/systems/{t}` by the roster's name and never the
+    seat; `MEMBER_ROUTES` and `leafMatches` skip the seat's own href.
+  - [x] 3.10c Shell: `Sidebar`, `TouchNav`, `GoToHost` draw
+    `memberNav(useMyStorage(member).data)`; `TopBar` passes
+    `useSchemaSource(isOperator).nameOf` to `crumbsFor`. Middleware unchanged:
+    reachability is the seat's pattern.
+  - [x] 3.10d `app/systems/[target]` (`member/MemberSystemPage`): the kind's
+    card under a header named by `name`; a storage-kind system
+    `router.replace("/storage")`; not connected or not read → "This system
+    isn't connected here." + "Nothing for you to do." + My access. `/storage`
+    (`kinds/storage/StoragePage`, moved from `member/MySystems`) lists kind
+    `storage` only.
+  - [x] 3.10e `MemberTargetCard` draws nothing for a system with no kind (the
+    member `NotReadCard` is gone); `CoreMemberCard` reads `view.name`, has the
+    offline Notice ("{name} is offline", the page updates on its own), the
+    unentitled step "Ask for access in Requests" (`/requests?ask`), and
+    "Nothing for you to do. Syndra makes it." while the account is made. Every
+    surface reads `name`: the storage card, the person cards, the system page,
+    the roster page, and the operator pages through `useSystemNames()`
+    (`lib/queries/useFieldSchema.ts`, the roster's `name`, else the id); pure
+    helpers (`describeAction`, `describeSends`, `describeDrain`,
+    `systemsOf`) take a `nameOf` from their component.
+  - [x] 3.10f Person page: `PersonStorage` moved to
+    `components/kinds/storage/` and filtered to kind `storage`;
+    `people/PersonSystems.tsx` holds the kind-agnostic parts (rows, status,
+    hold row, `offlineNext`, `OfflineNotice`) and the new **Connected
+    systems** section after it: one `PersonSystemCard` per other system,
+    including not read (operators only): account, the add-on's standing,
+    roles reaching, hold. Chips are named by `name`, storage first, then the
+    rest, each alphabetical. The operator system page has a **Name** region
+    (`targets/TargetName.tsx`), the one write place.
+  - [x] 3.10g Tests and guards: `nav.test` (rows alphabetical from a shuffled
+    fixture with "Étage" and "big laser", storage and unkinded give no row, no
+    placeholder, no count, every drawn row reachable, `/systems` not, crumbs,
+    the `targetLabel` source guard), `middleware.test` (every href
+    `memberNav(fixture)` renders passes; `/system/targets/x`, `/systems` and
+    `/systems/x/y` redirect; the `MEMBER_ROUTES` canary kept), `Sidebar` /
+    `TouchNav` (member rows, double render with zero and non-zero counts,
+    fourth tab then sheet), `AddOnSays` (every core-card state with its step;
+    no card unread). The storage-word lint guard (`eslint.config.mjs`):
+    `folder(s)`, `share(s)`, `SMB`, `mount…`, `Network storage` as a literal,
+    any template element or JSX text, allowed only in
+    `components/kinds/storage/`, `app/storage/`, `lib/nav.ts` and tests; the
+    `no-restricted-syntax` blocks re-cut into five that partition the files,
+    each listing every selector set it owes (invalidation, field names,
+    storage words). `kind-word-guard.test.ts` is the mutation check (ten
+    mutations, each failing it, including each allow-list entry and each
+    re-cut block). Moved to make it pass: the home-folder setup card and
+    dialog (`kinds/storage/HomeLocation`), the mapping dialog's home fields
+    (`HomeMapping`), "what each group opens" (`MappingReach`), TargetOverview's
+    TrueNAS service words (`readings`), the home-place unconfirmed-change copy
+    (`unconfirmed`), the activity coverage lines (`ActivityCoverage`),
+    `HomeLimit`; the glossary and ShapeCard reworded product-free;
+    `headerLine` reads the storage row's label from `MEMBER_NAV`, AccountSheet
+    its caption from `kinds/storage/captions`; two verbs ("shares", "share a
+    day") carry a reasoned `eslint-disable-next-line`.
+  - [x] 3.10h Specs: this list, `design.md` §6 (the name), `basic-advanced-ia`
+    §1 (the family seat), `NEXT.md`.
+  - [x] 3.10i Review fixes (11 Nov 2026), `design.md` §6.1 updated:
+    - The header's "set a password" step is `needsPassword(view)`
+      (`kinds/storage/state.ts`): the storage card's own password step
+      (`stateOf`/`PASSWORD_STEP`, moved there from `MyStorage`), only for kind
+      `storage`; a door, a laser or a system not read never asks. No other
+      kind-blind credential read exists.
+    - `versionLabel` also strips the whole product name off a version that
+      starts with it ("TrueNAS-SCALE-24.04.0" beside "TrueNAS"), as text.
+    - The Name hint for a named storage system says "Network storage page"
+      (it has no menu row of its own); the account hold is found by the
+      schema's account ROLE (`isHold`, `kinds/storage/state.ts`), never the
+      field name `enabled`.
+    - `product` is a display name: the TrueNAS add-on reports `"TrueNAS"` from
+      one constant (`productName`) that its fixture test pins; fixtures,
+      `contract_routes_test`, the schema's `product` description and the
+      CHANGELOG follow. Nothing keyed on it. No name seeded by migration.
+    - `GET /api/v1/me/systems` (no add-on call; registry, accepted kind,
+      `targets.name`; sorted by `textsort`) is the one source for the member
+      rail, `TouchNav`, `GoToHost`, the `/systems/{target}` gate and crumb, and
+      the account sheet (`accountNav`). On the proxy's member allowlist. The
+      touch bar holds an empty seat while it loads.
+    - `handlers.memberMeets` is the one server-side rule: `/me/systems` and
+      `/me/targets` skip a registration with no kind. UI: `isStorage` and
+      `memberSystems` (`lib/nav.ts`) are the only kind predicates; the card's
+      kindless guard and `PersonSystems`' copy of `isStorage` are gone;
+      `crumbsFor` no longer crumbs `/systems/{t}` (the page's `useCrumb`).
+    - `nameOf` is required on `describeAction`, `describeSends`, `systemsOf`,
+      `describeDrain(result, nameOf, auto)` and `outcomeFromDrain(result,
+      nameOf, auto, total)`; the audit CSV uses `useSystemNames()`.
+    - `GET /targets` carries `name_from` (`operator`/`product`/`id`) in place
+      of `name_set`; the Name hint is worded per case, not read included.
+      `versionLabel` strips the product's name (compared as text), not the
+      system's, so an operator's name cannot break the pattern or double it.
+    - Name limit: one parity test (`name-limit.test.ts`) ties the CHECK, the
+      Go refusal and `NAME_MAX`.
+    - Copy: `/storage` empty state "No shared storage to show yet." +
+      "Nothing for you to do."; the `/systems/{t}` card drops the title its
+      page heading already says.
+    - `migrate_rollback_test` restores the recorded version, not `newest`.
+
+Decided while building (slice 3, 11 Nov 2026), for the owner:
+
+- The field hooks read the response the page loaded (3.7): `useFieldSchema`
+  and `useMappingFields` the roster, `useSchemaSource(isOperator)` the roster or
+  `/me/targets` (only the one it needs is fetched); `Withheld` takes a
+  `schemaOf` from its caller.
+- `role-mapping-plan.ts` keeps `RoleRows {group, home, quota}` and takes the
+  field names as a required trailing `fields` argument; the names come from
+  `mappingFields(schema)` (first field of each role).
+- Words now come from the add-on's `label`: "home folder size" in the version
+  history and findings reads "home folder limit" (the add-on's label), and a
+  flag reads by its label minus a leading "Gives a" ("home folder"). The
+  refused-fields note reads "Some settings cannot be mapped, on purpose: the
+  account and its SMB." (the channel's label), one sentence for any kind.
+- The lint guard is one `no-restricted-syntax` block set (a later block would
+  replace an earlier one, so the invalidation selectors are repeated in each).
+  `home`, `home_quota`, `enabled`, `smb_enabled` and `smb` are refused as any
+  string literal; `group` only where it names a field (compared with `.field`, a
+  `field=` prop, a `field:` property, a `FIELD_*` constant), since it is also a
+  layout word. `field-literal-guard.test.ts` is the mutation check. Left on
+  purpose: `smb_enabled` as a TypeScript property name in `useMyStorage.ts` (a
+  wire key, not a literal) and `value="true"` in the hold dialog.
+- `HomeLimit.tsx`, `PersonStorage.tsx` and `HoldsDueForReview.tsx` stay where
+  they are (they read by role now); only `MyStorage`, `ConnectionGuide` and
+  `device` moved to `components/kinds/storage/`. The kind registry is
+  `components/kinds/MemberTargetCard.tsx`; `CoreMemberCard` is the card for a
+  kind with no module.
+- Review fixes (11 Nov 2026), in one line each:
+  A. A limit field's values in a finding read by role through `limitWordsFor`
+  ("100 GB", "no limit" for the field's own unlimited); other roles unchanged.
+  B. `HoldsDueForReview` words an own value from the hold's field
+  (`limitWordsFor`, `fieldNoun`), not "home folder limit"/bytes/0; not read says so.
+  C. One schema-state shape `{schema, loading, error, refetch}` (`useFieldSchemaState`;
+  `useSchemaSource` is the same facts as props of the lookup function).
+  `components/states/SchemaState.tsx` is the one place that words them:
+  `SchemaNotReady` (skeleton / failed read with Try again / "not read yet", only
+  when the read succeeded with no schema) and `schemaReason` for a disabled
+  control. Used by MappingManagement, Add a mapping, Put on hold, MergeFindings,
+  HoldsDueForReview, Withheld.
+  D. "Use {system}'s value" is off with its reason until the fields are known.
+  E. `targets/UntilChoice.tsx` is the one Ends on / Review on chooser (hint and
+  outcome words) for `HomeLimit` and the finding panel; a review date is said to
+  stay until somebody keeps or ends it. Save says why when the reason is empty.
+  F. Audit coverage guard sees Go, SQL and Sprintf joins, floor per family.
+  G. Lint guard also refuses template literals, `switch (x.field)` and a bare
+  `field` identifier (mutants in `field-literal-guard.test.ts`).
+  H. Production code may not import `__fixtures__` (`no-restricted-imports`);
+  `truenas-schema.ts` reads `addons/contract/v2/fixtures/manifest_truenas.json`,
+  the file the add-on's Go test keeps equal to `capabilities.go`.
+  I. Core copy by role: glossary PROVISION generic; "map roles to {mappedTo}",
+  `membershipNoun` in mapping dialogs, finding policy line. The home-folder
+  setup card, the mapping dialog's home block, "what each group opens" and
+  `TargetOverview`'s TrueNAS service words moved under
+  `components/kinds/storage/` in 3.10g. Still drawn by the storage module, not
+  by role: the mapping dialog's home fields (`HomeChoice`).
+  J. The `/storage` page shell moved to `components/member/MySystems.tsx`
+  (since 3.10d: `components/kinds/storage/StoragePage.tsx`);
+  `kinds/storage/MyStorage.tsx` exports only the storage card; no import cycle.
+- Review of the fix round (11 Nov 2026), folded into 3.10, one line each:
+  2. `__fixtures__/truenas-schema.ts` reads the contract fixture at test time
+  (`readFileSync`), not by import: the UI image builds from `ui/` alone, where
+  `addons/` is absent, and `next build` type-checks `__fixtures__` (TS2307).
+  One source kept; checked by `tsc` and `next build` on a copy of `ui/` alone.
+  3. `sourceOf` (useFieldSchema) reports a failed read only when there are no
+  rows (`error: data ? null : error`): a failed 30s roster refresh no longer
+  blanks MergeFindings (and its typed reason), HoldsDue or Withheld.
+  MergeFindings says which read failed. Unit-tested, mutation-checked.
+  4. `fields.oneMappedTo`: "one group on TrueNAS" / "something on TrueNAS"
+  (no cut plural, no article, no built plural); MappingScreen uses it.
+  5. HomeLimit's Save says why it is off (`schemaReason`, then "Say why…",
+  then "Pick the day…", then "Say how large the limit is, in GB."), the chain
+  MergeFindings uses plus the size it also needs; a test per reason.
+  6. `useSchemaSource(isOperator, enabled)`: My access asks for the fields
+  only when a hold is in force. (Since 3.10 the member rail reads
+  `/me/targets` for its rows on every page, so this saves the hold card's
+  wait, not the read.)
+  7. `WithheldInline` says "still reading" / "could not read… Reload the page"
+  (`schemaReason`) instead of the raw value while the fields are not known.
+- `standing.next` falls back to a line from who is waited on, or "Nothing for
+  you to do." (`lib/account-standing.ts`), so no standing ends without a step.
 
 ## 4. The conformance kit and the reference add-on
 

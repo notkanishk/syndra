@@ -326,10 +326,22 @@ export function whyNotChecked(reason: string): string {
  * Some add-ons report `product_version` already carrying the product name
  * ("TrueNAS-25.10.5"), which doubled the name wherever it was shown beside
  * one ("TrueNAS TrueNAS-25.10.5"). Stripped once, here, so every caller gets
- * a plain version number.
+ * a plain version number: the words before the number go when the product's
+ * name starts with them ("TrueNAS SCALE" beside "TrueNAS-24.10.2"), or the
+ * whole product name when the version starts with it ("TrueNAS-SCALE-24.04.0"
+ * beside "TrueNAS" leaves "SCALE-24.04.0"), and only as a whole word ("True"
+ * beside "TrueNAS-25.10.5" strips nothing). Compared as text, never built
+ * into a pattern: the name is the add-on's data. The head is cut from the
+ * version itself, so a case change that alters a string's length cannot
+ * move the cut.
  */
-export function versionLabel(name: string, productVersion?: string): string {
+export function versionLabel(product: string, productVersion?: string): string {
   if (!productVersion) return "";
-  const stripped = productVersion.replace(new RegExp(`^${name}[-\\s]*`, "i"), "");
-  return stripped || productVersion;
+  const head = productVersion.slice(0, product.length);
+  const next = productVersion.charAt(product.length);
+  if (product && head.toLowerCase() === product.toLowerCase() && (next === "" || /[-\s]/.test(next))) {
+    return productVersion.slice(product.length).replace(/^[-\s]+/, "") || productVersion;
+  }
+  const [, lead, number] = /^(\D*?)[-\s]+(\d.*)$/.exec(productVersion) ?? [];
+  return lead && product.toLowerCase().startsWith(lead.toLowerCase()) ? number : productVersion;
 }

@@ -235,3 +235,5 @@ describe("role members — holding is observed", () => {
     state.advanced = false;
   });
 });
+
+vi.mock("@/lib/queries/useFieldSchema", async () => (await import("@/lib/__fixtures__/field-schema-mock")).fieldSchemaMock);

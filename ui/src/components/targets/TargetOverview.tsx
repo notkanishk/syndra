@@ -1,7 +1,11 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
-import { Fragment, useState } from "react";
+import { useState } from "react";
+
+import { ADOPT_STAYS, SERVICE_STOPPED, STORAGE_OPERATION_LABEL, UNAUDITED_LABEL, UnauditedShares, serviceName } from "@/components/kinds/storage/readings";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
@@ -18,6 +22,7 @@ import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
+import { StandingLine } from "@/components/ui/StandingLine";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -27,11 +32,11 @@ import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFre
 import { Relative } from "@/components/ui/Time";
 import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
+import { TargetName } from "@/components/targets/TargetName";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
@@ -55,7 +60,7 @@ import {
 } from "@/lib/queries/useTargets";
 import { useUsers } from "@/lib/queries/useUsers";
 import { Avatar } from "@/components/ui/Avatar";
-import { sortByName, sortNames } from "@/lib/sort";
+import { sortByName } from "@/lib/sort";
 
 /**
  * One add-on target's operator page (9.20, 1.18/1.19, 15.6; design §21).
@@ -65,6 +70,7 @@ import { sortByName, sortNames } from "@/lib/sort";
  * state did somebody put it in.
  */
 export function TargetOverview({ target }: { target: string }) {
+  const nameOf = useSystemNames();
   const roster = useTargets();
   const health = useTargetHealth(target);
   const findings = useMergeFindings(target);
@@ -84,7 +90,7 @@ export function TargetOverview({ target }: { target: string }) {
   const waitingKnown =
     !findings.isLoading && !findings.error && !health.isLoading && !health.error &&
     !unconfirmed.isLoading && !unconfirmed.error;
-  const name = targetLabel(target);
+  const name = nameOf(target);
   // It isn't answering, so its own cards show the last read (A-13): they
   // recede, and the controls that need it live are off. Syndra's own cards
   // (reach, lifecycle, Waiting on you, what runs here) stay raised.
@@ -108,7 +114,9 @@ export function TargetOverview({ target }: { target: string }) {
   ];
 
   const meta = [
-    health.data?.product ? `${name} ${versionLabel(name, health.data.product_version)}`.trim() : null,
+    health.data?.product
+      ? `${health.data.product} ${versionLabel(health.data.product, health.data.product_version)}`.trim()
+      : null,
     gated && !justSet ? "no Zitadel project yet" : null,
   ];
 
@@ -216,6 +224,15 @@ export function TargetOverview({ target }: { target: string }) {
           )}
         </Region>
 
+        {/* What members see it called: its one write place (addon-contract
+            3.10a). Above the project's gate, because a name changes nobody's
+            access and a system nobody has set up still has one. */}
+        {registered && (
+          <Region id="name" title="Name">
+            <TargetName registered={registered} />
+          </Region>
+        )}
+
         {/* What reports on the system and its pause stays live above; what
             waits for the project is drawn whole, inert, under one line. */}
         <NotOpenYet
@@ -322,9 +339,10 @@ export function TargetOverview({ target }: { target: string }) {
  * reaches here is what changes a decision.
  */
 function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
+  const nameOf = useSystemNames();
   const report = useTargetSystemHealth(target);
   const data = report.data;
-  const name = targetLabel(target);
+  const name = nameOf(target);
 
   // The card keeps its seat while it is asked, with nothing in it. Four calls to
   // the target take a moment, and a card that flashes "no alerts" before the
@@ -428,7 +446,7 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
         .filter((s) => s.state !== "RUNNING")
         .map((s) => (
           <Reading key={s.service} tone="danger" label={`${serviceName(s.service)} is not running`}>
-            Nobody can open their shares while it is stopped
+            {SERVICE_STOPPED}
             {s.enable
               ? `, and it is set to start on boot, so it stopped by itself. Check ${name}.`
               : ", and it is not set to start on boot."}
@@ -452,13 +470,6 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
       )}
     </Card>
   );
-}
-
-/** The sharing services by what they do, not by their process name. */
-function serviceName(service: string): string {
-  if (service === "cifs") return "File sharing (SMB)";
-  if (service === "nfs") return "NFS sharing";
-  return service;
 }
 
 /** The alert classes the connection is known to report, in plain words; any other is named by its level. */
@@ -494,6 +505,7 @@ function alertLabel(level: string): string {
  * as a create, and acting on it would recreate an account somebody deleted.
  */
 function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: boolean }) {
+  const nameOf = useSystemNames();
   const run = useReconcileTarget(target);
   const release = useReleaseBinding(target);
   // Which row asked, and which rows have already let go. The reconcile result
@@ -510,7 +522,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
   // press must stay on screen, which is what marking the row released removed.
   const [unfinished, setUnfinished] = useState<Record<string, string>>({});
   const result = run.data;
-  const name = targetLabel(target);
+  const name = nameOf(target);
 
   return (
     <Card>
@@ -674,7 +686,8 @@ function ReachNotice({
   health: TargetHealth | undefined;
   transportError?: string;
 }) {
-  const name = targetLabel(target);
+  const nameOf = useSystemNames();
+  const name = nameOf(target);
 
   if (transportError || health?.status === "cannot_connect") {
     return (
@@ -726,7 +739,8 @@ function ReachCard({
   isLoading: boolean;
   transportError?: string;
 }) {
-  const name = targetLabel(target);
+  const nameOf = useSystemNames();
+  const name = nameOf(target);
 
   // Nothing read yet: no word, no count, no age.
   if (isLoading && !health) {
@@ -815,7 +829,8 @@ function ConnectionNotices({
   target: string;
   health: TargetHealth | undefined;
 }) {
-  const name = targetLabel(target);
+  const nameOf = useSystemNames();
+  const name = nameOf(target);
   if (!health?.reachable) return null;
 
   const notices: React.ReactNode[] = [];
@@ -851,17 +866,8 @@ function ConnectionNotices({
   // learned before somebody depends on it.
   if (health.shares_readable && (health.unaudited_shares?.length ?? 0) > 0) {
     notices.push(
-      <Reading key="unaudited" tone="warn" label="SMB auditing is off">
-        {health.unaudited_shares!.length === 1 ? "Share" : "Shares"}{" "}
-        {sortNames(health.unaudited_shares!).map((s, i, all) => (
-          <Fragment key={s}>
-            {i > 0 && (i === all.length - 1 ? " and " : ", ")}
-            <Mono>{s}</Mono>
-          </Fragment>
-        ))}{" "}
-        {health.unaudited_shares!.length === 1 ? "has" : "have"} auditing disabled, so a
-        member&rsquo;s activity report comes back empty whether or not they used it. Enable it
-        per share in {name}: Shares → SMB → Edit → Advanced.
+      <Reading key="unaudited" tone="warn" label={UNAUDITED_LABEL}>
+        <UnauditedShares shares={health.unaudited_shares!} name={name} />
       </Reading>,
     );
   }
@@ -905,6 +911,7 @@ function TargetRead({ health, name }: { health: TargetHealth | undefined; name: 
  * report. The id stays beneath in mono: it is what an operator matches against the manifest.
  */
 const OPERATION_LABEL: Record<string, string> = {
+  ...STORAGE_OPERATION_LABEL,
   "account.provision": "Creates an account",
   "account.converge": "Brings an account in line",
   "account.release": "Lets go of an account, keeping it",
@@ -912,15 +919,27 @@ const OPERATION_LABEL: Record<string, string> = {
   "account.purge": "Deletes an account and its files",
   "account.list": "Reads the list of accounts",
   "health.get": "Reads the system's own health report",
-  "activity.get": "Reads a share's activity",
   "credential.set": "Sets a member's password, never logged",
   "password.rotate": "Replaces a person's password, never logged",
   "storage.status": "Reads space used and quota",
 };
 
-function Capabilities({ registered }: { registered: TargetSummary }) {
-  const name = targetLabel(registered.target);
+export function Capabilities({ registered }: { registered: TargetSummary }) {
+  const name = registered.name;
   return (
+    <>
+    {registered.last_error && (
+      // The add-on's latest description of itself was refused, and the last good one still runs.
+      // Said above the card it is about, with the reason as the backend gave it.
+      <Notice
+        tone="warn"
+        title={`${name}'s latest description of itself was not accepted`}
+        next={`Ask whoever looks after ${name}'s add-on to fix it. Syndra reads it again on its own.`}
+      >
+        Syndra is still using the last good one, so what this page lists has not changed. The reason:{" "}
+        <span data-last-error className="type-mono text-[13px] [overflow-wrap:anywhere]">{registered.last_error}</span>
+      </Notice>
+    )}
     <Card>
       <CardHeader
         title="What it can do"
@@ -969,7 +988,36 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
           </TechnicalDetail>
         </div>
       )}
+      <AlsoSays lines={registered.also_says} name={name} />
     </Card>
+    </>
+  );
+}
+
+/**
+ * What the add-on says about itself that Syndra does not use, quoted exactly as
+ * the backend carries it and never acted on. Always here, empty or not:
+ * structure never moves in response to data.
+ */
+export function AlsoSays({ lines, name }: { lines: string[] | undefined; name: string }) {
+  return (
+    <div className="row-divider grid gap-1.5 px-5 py-3" data-also-says>
+      <span className="type-label text-label">What the add-on also says</span>
+      {lines && lines.length > 0 ? (
+        <>
+          <ul className="grid gap-1">
+            {lines.map((line, i) => (
+              <li key={i} className="type-mono text-[12.5px] leading-[1.5] text-muted [overflow-wrap:anywhere]">
+                {line}
+              </li>
+            ))}
+          </ul>
+          <p className="text-[13px] text-faint">Shown as {name} sent it. Syndra does not use any of it.</p>
+        </>
+      ) : (
+        <p className="text-[13px] text-faint">Nothing beyond what Syndra uses.</p>
+      )}
+    </div>
   );
 }
 
@@ -982,8 +1030,9 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
  * operator as one line in a log file.
  */
 function LogFinding({ anchor }: { anchor: LogAnchor }) {
+  const nameOf = useSystemNames();
   const [resolving, setResolving] = useState(false);
-  const name = targetLabel(anchor.target);
+  const name = nameOf(anchor.target);
   // Read from the two counts, not from the verdict.
   //
   // `head_rewritten` has TWO producers in ClassifyLogHead: the same number of
@@ -1061,6 +1110,7 @@ function BindingConflictFinding({
   target: string;
   conflict: BindingConflict;
 }) {
+  const nameOf = useSystemNames();
   const [deciding, setDeciding] = useState(false);
   return (
     <Notice
@@ -1074,7 +1124,7 @@ function BindingConflictFinding({
         <UserName id={conflict.converged_subject_id} /> was
         applied to this account, and Syndra records it as belonging to{" "}
         <UserName id={conflict.bound_subject_id} />. The change
-        reached {targetLabel(target)}, but whose account it is could not be recorded.
+        reached {nameOf(target)}, but whose account it is could not be recorded.
       </p>
       <p className="mt-1 text-[13px] text-faint">
         Noticed <Relative iso={conflict.detected_at} />. Nothing else will resolve this: any
@@ -1108,12 +1158,13 @@ function ResolveConflictDialog({
   conflict: BindingConflict;
   onClose: () => void;
 }) {
+  const nameOf = useSystemNames();
   const resolve = useResolveBindingConflict(target);
   const [owner, setOwner] = useState("");
   const [note, setNote] = useState("");
   const confirmation = useTypedConfirmation(conflict.username);
   const ready = owner !== "" && note.trim() !== "" && confirmation.armed && !resolve.isPending;
-  const name = targetLabel(target);
+  const name = nameOf(target);
   const [done, setDone] = useState<string | null>(null);
   const owners = useNameResolver();
 
@@ -1254,6 +1305,7 @@ function ResolveFindingDialog({
   anchor: LogAnchor;
   onClose: () => void;
 }) {
+  const nameOf = useSystemNames();
   const resolve = useResolveLogFinding(target);
   const [note, setNote] = useState("");
   const confirmation = useTypedConfirmation(target);
@@ -1265,13 +1317,13 @@ function ResolveFindingDialog({
       <ModalHeader
         titleId="resolve-finding-title"
         title="Resolve this finding"
-        lede={done ? undefined : `Syndra will accept the log as ${targetLabel(target)} reports it now, and compare against that from here on.`}
+        lede={done ? undefined : `Syndra will accept the log as ${nameOf(target)} reports it now, and compare against that from here on.`}
       />
       {done ? (
         <div className="grid gap-3 px-6">
           <ActionOutcome
             word="Resolved"
-            outcome={{ kind: "applied", message: `Syndra takes the log as ${targetLabel(target)} reports it now.` }}
+            outcome={{ kind: "applied", message: `Syndra takes the log as ${nameOf(target)} reports it now.` }}
           />
         </div>
       ) : (
@@ -1390,6 +1442,7 @@ function Reading({
  * two must not be unified.
  */
 function Inventory({ target, stale }: { target: string; stale: boolean }) {
+  const nameOf = useSystemNames();
   const inventory = useTargetInventory(target);
   const adopt = useAdoptAccount(target);
   const [adopting, setAdopting] = useState<string | null>(null);
@@ -1406,7 +1459,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
     truncated: inventory.data?.truncated,
   };
   const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
-  const name = targetLabel(target);
+  const name = nameOf(target);
   const unmanaged = inventory.data?.unmanaged ?? [];
 
   return (
@@ -1459,6 +1512,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
               }
             >
               <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
+              {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" />}
               <span className="flex-1" />
               {account.self ? (
                 // Syndra's own credential. Listed, because it IS on the target
@@ -1545,7 +1599,8 @@ function AdoptPanel({
   onAdopt: (subjectId: string, person: string) => void;
   onCancel: () => void;
 }) {
-  const name = targetLabel(target);
+  const nameOf = useSystemNames();
+  const name = nameOf(target);
   const [q, setQ] = useState("");
   const [chosen, setChosen] = useState<{ id: string; name: string } | null>(null);
   const people = useUsers(q.trim());
@@ -1633,7 +1688,7 @@ function AdoptPanel({
             <div className="row-divider flex gap-3.5 px-4 py-3">
               <span className="w-[72px] flex-none text-[12.5px] font-semibold text-label">Stays</span>
               <span className="text-[14px] leading-[1.5] text-muted [text-wrap:pretty]">
-                Its home folder, its shares and its group memberships, as they are. The next time Syndra brings
+                {ADOPT_STAYS} The next time Syndra brings
                 accounts in line, it adds what {first}&apos;s roles give them on top.
               </span>
             </div>
@@ -1742,12 +1797,13 @@ function LifecycleControl({
   health: TargetHealth | undefined;
   isLoading: boolean;
 }) {
+  const nameOf = useSystemNames();
   const set = useSetLifecycle(target);
   const [reason, setReason] = useState("");
   // Which action row is asking why. One at a time, so a reason typed for one
   // state is never sent for another.
   const [asking, setAsking] = useState<string | null>(null);
-  const name = targetLabel(target);
+  const name = nameOf(target);
   // The state is whatever health says it is. Before health has answered there is no state to
   // call Active, and no Drain or Read-only to offer from it: the card keeps its seat and says so.
   if (!health?.lifecycle) {

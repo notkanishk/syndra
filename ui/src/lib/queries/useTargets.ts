@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
-import { targetLabel } from "@/lib/nav";
+import type { EntitlementField } from "@/lib/fields";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
 
@@ -53,8 +53,17 @@ export interface HealthState {
 /** The one reading a row and a header show, ranked on the backend (A-01). */
 export type TargetStatus = "cannot_connect" | "offline" | "waiting_to_retry" | "checking" | "answering";
 
+/** Where a system's name came from (backend `systemName`). */
+export type NameFrom = "operator" | "product" | "id";
+
 export interface TargetSummary {
   target: string;
+  /** What it is called (backend `systemName`): the operator's name, else the
+   * accepted manifest's product, else the id title-cased. Every surface draws
+   * the system by this. */
+  name: string;
+  /** Where `name` came from: the operator, the add-on's product, or the id. */
+  name_from: NameFrom;
   registered: boolean;
   auth_mode: string;
   /** Whether that secret still loads — read now, not at start-up. */
@@ -73,6 +82,11 @@ export interface TargetSummary {
   also_says?: string[];
   health?: HealthState;
   status?: TargetStatus;
+  /** The accepted manifest's kind (storage, access, inventory, machine) and
+   * what each field is (role, label, unit); the UI reads fields by role.
+   * Both absent until a manifest is accepted: "not read yet", never a guess. */
+  kind?: string;
+  entitlement_schema?: EntitlementField[];
   /** The Zitadel project this system serves; null until chosen. */
   project?: { id: string; name: string } | null;
 }
@@ -88,7 +102,7 @@ export function useTargets(enabled = true) {
     // as often as the rail's indicators are, and never cached longer than that.
     staleTime: 30_000,
     refetchInterval: 30_000,
-    select: (data) => sortByName(data.targets ?? [], (t) => targetLabel(t.target), (t) => t.target),
+    select: (data) => sortByName(data.targets ?? [], (t) => t.name, (t) => t.target),
   });
 }
 
@@ -267,6 +281,8 @@ export interface AdoptionResult {
 
 /** One account Syndra DOES manage, and who it belongs to. */
 export interface BoundAccount {
+  /** Whether the account can be used yet, and who is waited on; absent when the read did not list it. */
+  standing?: Standing;
   target: string;
   subject_id: string;
   username: string;
@@ -559,6 +575,24 @@ export function useSetTargetProject(target: string) {
       }),
     // The roster carries the project, so it is the whole list that is read again.
     onSuccess: () => invalidateAfter(client, "target"),
+  });
+}
+
+/**
+ * Naming a system: what members and every page call it. Blank goes back to
+ * the default (the add-on's product, else the id). Changes nobody's access;
+ * every roster carries the name, so each is read again.
+ */
+export function useSetTargetName(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      request<{ target: string; name: string; name_from: NameFrom }>(`/targets/${target}/name`, {
+        method: "PUT",
+        body: { name },
+      }),
+    // Both member reads carry the name: the cards' and the rail's.
+    onSuccess: () => invalidateAfter(client, "target", { extra: [["me", "targets"], ["me", "systems"]] }),
   });
 }
 

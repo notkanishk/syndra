@@ -11,12 +11,12 @@ describe("operatorNav", () => {
     const shape = (entries: ReturnType<typeof operatorNav>) =>
       entries.map((e) => (e.kind === "leaf" ? e.href : `${e.label}:${e.children.map((c) => c.href).join(",")}`));
     expect(shape(operatorNav([]))).toEqual(shape(ADVANCED_NAV));
-    expect(shape(operatorNav(["truenas"]))).toEqual(shape(targetNav(["truenas"])));
+    expect(shape(operatorNav([{ target: "truenas", name: "TrueNAS" }]))).toEqual(shape(targetNav([{ target: "truenas", name: "TrueNAS" }])));
   });
 
   it("marks a row Advanced-only exactly when Basic does not have it", () => {
     const basic = new Set(navLeaves(BASIC_NAV).map((leaf) => leaf.href));
-    for (const leaf of navLeaves(operatorNav(["truenas", "unifi"]))) {
+    for (const leaf of navLeaves(operatorNav([{ target: "truenas", name: "TrueNAS" }, { target: "unifi", name: "UniFi Access" }]))) {
       expect(Boolean(leaf.advancedOnly), leaf.href).toBe(!basic.has(leaf.href));
     }
   });
@@ -32,7 +32,7 @@ describe("operatorNav", () => {
   });
 
   it("marks a group Basic lacks as a whole, and a target's row with it", () => {
-    const entries = operatorNav(["truenas"]);
+    const entries = operatorNav([{ target: "truenas", name: "TrueNAS" }]);
     for (const label of ["Bundles", "Automatic rules", "Insights", "Changes", "Review", "System", "Makerspace settings"]) {
       expect(entries.find((e) => e.label === label)?.advancedOnly, label).toBe(true);
     }

@@ -2,16 +2,19 @@
 
 import { useState } from "react";
 
+import { schemaReason } from "@/components/states/SchemaState";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Select";
+import { UntilChoice, untilWords } from "@/components/targets/UntilChoice";
 import { request } from "@/lib/api-client";
 import { describeFailure, sentence } from "@/lib/outcome";
+import { formatLimit } from "@/lib/fields";
+import { useFieldSchemaState, useMappingFields, useSystemNames } from "@/lib/queries/useFieldSchema";
 import { formatBytes, formatShortDate } from "@/lib/format";
-import { targetLabel } from "@/lib/nav";
 import { useLiftHold } from "@/lib/queries/useHolds";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { AccountHome } from "@/lib/queries/useTargets";
@@ -30,12 +33,10 @@ import { roleName } from "@/lib/names";
  */
 
 const GB = 1024 ** 3;
-const FIELD = "home_quota";
 
 function gbWords(bytes: number | undefined): string {
   if (bytes === undefined || bytes === 0) return "no limit";
-  const n = bytes / GB;
-  return `${Number.isInteger(n) ? n : n.toFixed(1)} GB`;
+  return formatLimit(bytes, "bytes");
 }
 
 function useRoleLabel() {
@@ -99,6 +100,7 @@ export function limitVerb(home: AccountHome | undefined): string | null {
 
 function useSetOwnLimit(target: string) {
   const client = useQueryClient();
+  const field = useMappingFields(target).limit;
   return useMutation({
     mutationFn: (input: { subjectId: string; bytes: number; reason: string; endsOn?: string; reviewOn?: string }) =>
       request<{ id: string }>("/allowances", {
@@ -106,7 +108,7 @@ function useSetOwnLimit(target: string) {
         body: {
           subject_id: input.subjectId,
           target,
-          field: FIELD,
+          field,
           value: String(input.bytes),
           // One person's own value in place of what their roles give: the
           // allowance's `set` direction, bounded like every hold.
@@ -134,9 +136,12 @@ export function LimitDialog({
   home: AccountHome;
   onClose: () => void;
 }) {
-  const system = targetLabel(target);
+  const nameOf = useSystemNames();
+  const system = nameOf(target);
   const roleLabel = useRoleLabel();
   const set = useSetOwnLimit(target);
+  const limitField = useMappingFields(target).limit;
+  const schemaState = useFieldSchemaState(target);
   const lift = useLiftHold();
   const own = home.own;
   const [kind, setKind] = useState<"size" | "none">(own?.bytes === 0 ? "none" : "size");
@@ -148,7 +153,11 @@ export function LimitDialog({
 
   const bytes = kind === "none" ? 0 : Math.round(Number(gb) * GB);
   const sized = kind === "none" || (Number(gb) > 0 && Number.isFinite(Number(gb)));
-  const ready = sized && reason.trim() !== "" && date !== "";
+  const ready = sized && reason.trim() !== "" && date !== "" && Boolean(limitField);
+  // Why Save is off, in the order MergeFindings words it: the fields first, then the record, then the day.
+  const saveReason =
+    schemaReason(schemaState, system) ??
+    (!reason.trim() ? "Say why. This becomes the record of the decision." : date === "" ? "Pick the day it ends or is reviewed." : !sized ? "Say how large the limit is, in GB." : undefined);
   const from = roleLabel(home.roles_limit_from);
   const rolesWords = home.roles_limit === undefined ? "no limit" : `up to ${gbWords(home.roles_limit)}`;
   const busy = set.isPending || lift.isPending;
@@ -170,7 +179,7 @@ export function LimitDialog({
         onSuccess: () =>
           setDone({
             word: reviewing ? "Kept" : "Given",
-            message: `${name} has their own limit of ${kind === "none" ? "no limit" : gbWords(bytes)}, and ${system} gets it now.`,
+            message: `${name} has their own limit of ${kind === "none" ? "no limit" : gbWords(bytes)}, and ${system} gets it now. It ${untilWords(until, endOfDayISO(date))}.`,
           }),
       },
     );
@@ -220,25 +229,14 @@ export function LimitDialog({
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="type-label text-label">Until</span>
-          <span className="flex flex-wrap items-center gap-3">
-            <Segmented
-              label="Until"
-              value={until}
-              onChange={setUntil}
-              options={[
-                { value: "ends", label: "Ends on" },
-                { value: "review", label: "Review on" },
-              ]}
-            />
-            <span className="w-[170px]">
-              <Input aria-label={until === "ends" ? "Ends on" : "Review on"} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </span>
-          </span>
-          <FieldHint>
-            {until === "ends"
-              ? `On that day their roles' ${rolesWords} comes back by itself. If they have more than that in their folder then, they keep it all and can't save more until they're under.`
-              : "It stays until you keep it or end it. On that day it lists under Holds due."}
-          </FieldHint>
+          <UntilChoice
+            until={until}
+            onUntil={setUntil}
+            date={date}
+            onDate={setDate}
+            comesBack={`their roles' ${rolesWords}`}
+            endsNote="If they have more than that in their folder then, they keep it all and can't save more until they're under."
+          />
         </div>
         {(set.error || lift.error) && (
           <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error ?? lift.error))}</p>
@@ -272,7 +270,7 @@ export function LimitDialog({
                 End this limit
               </Button>
             )}
-            <Button variant="accent" disabled={!ready || busy} onClick={save}>
+            <Button variant="accent" disabled={!ready || busy} reason={ready ? undefined : saveReason} onClick={save}>
               {reviewing ? "Keep this limit" : `Give them ${kind === "none" ? "no limit" : gbWords(bytes)}`}
             </Button>
           </>

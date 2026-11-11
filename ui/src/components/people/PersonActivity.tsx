@@ -1,5 +1,7 @@
 "use client";
 
+import { useSystemNames } from "@/lib/queries/useFieldSchema";
+
 import { useMemo, useState } from "react";
 
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -15,10 +17,10 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { actedOn, describeAction, machineName } from "@/lib/audit-vocabulary";
 import { EventSentence, describeSends, isPasswordSend } from "@/components/audit/EventLine";
-import { formatClock, formatList, formatShortDate } from "@/lib/format";
+import { UNCOVERED_GUIDANCE, UncoveredNote } from "@/components/kinds/storage/ActivityCoverage";
+import { formatClock, formatShortDate } from "@/lib/format";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
-import { targetLabel } from "@/lib/nav";
 import { useTargetActivity, type TargetActivityEvent } from "@/lib/queries/useTargetActivity";
 
 /**
@@ -169,9 +171,10 @@ function TargetActivityCard({
   userId: string;
   name: string;
 }) {
+  const nameOf = useSystemNames();
   const activity = useTargetActivity(target, userId);
   const data = activity.data;
-  const label = targetLabel(target);
+  const label = nameOf(target);
 
   // Nothing at all rather than an empty card: a person with no account on a
   // target has no activity to be missing, and a card saying so on every target
@@ -201,7 +204,7 @@ function TargetActivityCard({
             title={`No recorded activity for ${name} on ${label}.`}
             guidance={
               uncovered.length > 0
-                ? "Some shares were not auditing this account, so this is not the same as nothing having happened. See below."
+                ? UNCOVERED_GUIDANCE
                 : `${label} has no activity for this account.`
             }
           />
@@ -233,14 +236,7 @@ function TargetActivityCard({
 
       {uncovered.length > 0 && (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
-          {/* Not "auditing is off". A share can have auditing switched on and
-              still record nothing for this person, because TrueNAS scopes it by
-              group — so the honest claim is about coverage of THIS account, and
-              an operator sent to switch on a setting that is already on would
-              find nothing wrong and conclude the gap was imaginary. */}
-          Auditing on {formatList(uncovered)} does not cover {name}, so nothing on{" "}
-          {uncovered.length === 1 ? "that share" : "those shares"} appears here whether or not it
-          happened.
+          <UncoveredNote shares={uncovered} name={name} />
         </div>
       )}
     </Card>
@@ -278,7 +274,7 @@ function TargetEventRow({ event }: { event: TargetActivityEvent }) {
 }
 
 function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
-  const { verb, passive, destructive } = describeAction(entry.action);
+  const { verb, passive, destructive } = describeAction(entry.action, useSystemNames());
   const direction = actedOn(entry, userId);
 
   return (
@@ -330,7 +326,7 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
 
 /** A password change on this person's record: what happened, who did it, then its sends, faint (A-13 §4). */
 function SendRow({ entry }: { entry: AuditEntry }) {
-  const { headline, sends } = describeSends(entry);
+  const { headline, sends } = describeSends(entry, useSystemNames());
   return (
     <span className="flex flex-col gap-0.5">
       <span>

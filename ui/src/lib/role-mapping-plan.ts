@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api-client";
+import { fieldNoun, type EntitlementField, type MappingFields } from "@/lib/fields";
 import { describeFailure, sentence } from "@/lib/outcome";
 import type { BulkEffect, BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 import {
@@ -20,13 +21,12 @@ import {
  * as one plan, then applied each under its own approval.
  */
 
-export const FIELD_GROUP = "group";
-export const FIELD_HOME = "home";
-export const FIELD_HOME_QUOTA = "home_quota";
-
-/** A mapping's field in words, never the field's own name (A-20 P11). */
-export function fieldWords(field: string | undefined): string {
-  return field === FIELD_GROUP ? "group" : field === FIELD_HOME ? "home folder" : field === FIELD_HOME_QUOTA ? "home folder size" : "setting";
+/**
+ * A mapping's field in words, from the add-on's own label (A-20 P11). A schema
+ * not read yet, or a field it does not declare, is "setting".
+ */
+export function fieldWords(field: string | undefined, schema: EntitlementField[] | undefined): string {
+  return fieldNoun(schema?.find((f) => f.name === field));
 }
 
 /** A role's rows on a system, by field. */
@@ -36,12 +36,12 @@ export interface RoleRows {
   quota?: RoleMapping;
 }
 
-export function rowsOf(mappings: RoleMapping[], projectId: string, roleKey: string): RoleRows {
+export function rowsOf(mappings: RoleMapping[], projectId: string, roleKey: string, fields: MappingFields): RoleRows {
   const mine = mappings.filter((m) => m.project_id === projectId && m.role_key === roleKey);
   return {
-    group: mine.find((m) => m.field === FIELD_GROUP),
-    home: mine.find((m) => m.field === FIELD_HOME),
-    quota: mine.find((m) => m.field === FIELD_HOME_QUOTA),
+    group: mine.find((m) => m.field === fields.membership),
+    home: mine.find((m) => m.field === fields.flag),
+    quota: mine.find((m) => m.field === fields.limit),
   };
 }
 
@@ -58,9 +58,10 @@ export type RowOp =
   | { kind: "delete"; field: string; row: RoleMapping };
 
 /** The row changes that take a role from what it has to what was chosen. */
-export function opsFor(current: RoleRows, choice: RoleChoice | null): RowOp[] {
+export function opsFor(current: RoleRows, choice: RoleChoice | null, fields: MappingFields): RowOp[] {
   const ops: RowOp[] = [];
-  const want = (field: string, row: RoleMapping | undefined, value: string | null) => {
+  const want = (field: string | undefined, row: RoleMapping | undefined, value: string | null) => {
+    if (!field) return;
     if (value === null || value === "") {
       if (row) ops.push({ kind: "delete", field, row });
     } else if (!row) {
@@ -69,9 +70,9 @@ export function opsFor(current: RoleRows, choice: RoleChoice | null): RowOp[] {
       ops.push({ kind: "edit", field, value, row });
     }
   };
-  want(FIELD_GROUP, current.group, choice ? choice.group : null);
-  want(FIELD_HOME, current.home, choice?.home ? "true" : null);
-  want(FIELD_HOME_QUOTA, current.quota, choice?.home ? choice.quota : null);
+  want(fields.membership, current.group, choice ? choice.group : null);
+  want(fields.flag, current.home, choice?.home ? "true" : null);
+  want(fields.limit, current.quota, choice?.home ? choice.quota : null);
   // Removals last and group last among them: a removal that stops part-way
   // then leaves the group row, which the list shows and can remove again.
   // Group first, it left home rows no list shows, still giving home folders.
@@ -134,8 +135,8 @@ export function mergePlans(parts: RehearsedPart[]): MappingRehearsal {
  * "Makes 34 home folders in main › home_dir; 2 people already have one there"
  * (A-02 §5), from the home row's own rehearsal.
  */
-export function homeCount(parts: RehearsedPart[]): { makes: number; already: number } | null {
-  const home = parts.find((p) => p.op.field === FIELD_HOME && p.op.kind === "create");
+export function homeCount(parts: RehearsedPart[], fields: MappingFields): { makes: number; already: number } | null {
+  const home = parts.find((p) => p.op.field === fields.flag && p.op.kind === "create");
   if (!home || home.plan.outcomes.length === 0) return null;
   const makes = home.plan.outcomes.filter((o) => o.effect === "apply").length;
   return { makes, already: home.plan.outcomes.length - makes };
