@@ -17,12 +17,27 @@ import (
 	"time"
 )
 
+// What a record says became of a write. failed is the target answering no
+// (or a store transaction that did not commit): nothing changed. unknown is
+// every other error: the write may have landed, and a record must not claim
+// otherwise.
+const (
+	outcomeIntent    = "intent"
+	outcomeSucceeded = "succeeded"
+	outcomeFailed    = "failed"
+	outcomeNotSent   = "not_sent"
+	outcomeUnknown   = "unknown"
+)
+
 // The mutation log (design §17).
 //
 // An append-only file with no stated guarantees is not a forensic record, so
-// this one has a contract: `0600`, fsynced before the operation it describes is
-// reported complete, rotated by size with long retention, and each record
-// carrying the digest of the record before it.
+// this one has a contract: `0600`, rotated by size with long retention, each
+// record carrying the digest of the record before it, and written ahead of the
+// change it describes, as a database journals (5.3b): an intent record,
+// fsynced, before each write (server.mutate), and a result record after it. An
+// intent with no result is a write in doubt: the add-on stopped between the
+// two (InDoubt).
 //
 // The chain is worth a few lines because it buys real tamper evidence: an entry
 // cannot be altered, and no entry can be removed from the middle, without
@@ -53,7 +68,16 @@ type Record struct {
 	Subject   string `json:"subject"`
 	Actor     string `json:"actor"`
 	CallID    string `json:"call_id"`
-	Outcome   string `json:"outcome"`
+	// Outcome is outcomeIntent on an intent, and on a result what became of
+	// the write. A record from before intents is a result written after the
+	// fact, always "succeeded".
+	Outcome string `json:"outcome"`
+	// Write is what the intent is about to change: the NAS method it sends, or
+	// "store.…" for the add-on's own store (a binding, a setting). Intent is,
+	// on a result, the Seq of the intent it settles. Both are absent from
+	// every record written before intents.
+	Write  string `json:"write,omitempty"`
+	Intent uint64 `json:"intent,omitempty"`
 	// Prev is the digest of the record before this one, empty for the first.
 	Prev string `json:"prev"`
 	// Digest covers every field above it. Held on the record rather than
@@ -68,11 +92,20 @@ type Record struct {
 // two encoders that order keys differently would produce two digests for one
 // record, and a chain that breaks when the writer is upgraded is a chain nobody
 // trusts.
+//
+// Write and Intent join only when set: a record from before them digests
+// exactly as it always did, so the chain Syndra anchors verifies across the
+// upgrade and the head only moves forward. Absent and zero are one value, on
+// the wire (omitempty) and here alike.
 func (r Record) digestOf() string {
-	h := sha256.New()
-	for _, f := range []string{
+	fields := []string{
 		fmt.Sprint(r.Seq), r.At, r.Operation, r.Subject, r.Actor, r.CallID, r.Outcome, r.Prev,
-	} {
+	}
+	if r.Write != "" || r.Intent != 0 {
+		fields = append(fields, r.Write, fmt.Sprint(r.Intent))
+	}
+	h := sha256.New()
+	for _, f := range fields {
 		fmt.Fprintf(h, "%d:", len(f))
 		h.Write([]byte(f))
 	}
@@ -125,6 +158,7 @@ func OpenMutationLog(dir string, maxBytes int64, keep int) (*MutationLog, error)
 	l := &MutationLog{dir: dir, maxBytes: maxBytes, keep: keep, now: time.Now}
 
 	path := filepath.Join(dir, logFileName)
+	_, statErr := os.Stat(path)
 	// 0600: the log names who did what to whom, and the volume it sits on is
 	// shared with whatever else the container mounts.
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
@@ -133,6 +167,14 @@ func OpenMutationLog(dir string, maxBytes int64, keep int) (*MutationLog, error)
 	}
 	l.file = f
 	l.sync = f.Sync
+	if os.IsNotExist(statErr) {
+		// A file's fsync makes its bytes durable, not its name: the directory
+		// entry of a file just created is durable only once the directory is.
+		if err := syncDir(dir); err != nil {
+			f.Close()
+			return nil, err
+		}
+	}
 
 	// Before anything is appended: a crash mid-line leaves bytes that the next
 	// Append would otherwise write straight after, merging two records into one
@@ -229,18 +271,24 @@ func (l *MutationLog) segmentsNewestFirst() ([]string, error) {
 }
 
 // lastRecordIn returns the final complete record in one segment.
-func lastRecordIn(path string) (Record, bool, error) {
+func lastRecordIn(path string) (last Record, found bool, err error) {
+	err = eachRecord(path, func(r Record) { last, found = r, true })
+	return last, found, err
+}
+
+// eachRecord calls fn for every complete record in one segment, in order. A
+// missing segment has none; a line that does not parse is the torn tail a
+// crash leaves, and skipped.
+func eachRecord(path string, fn func(Record)) error {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Record{}, false, nil
+			return nil
 		}
-		return Record{}, false, fmt.Errorf("read mutation log: %w", err)
+		return fmt.Errorf("read mutation log: %w", err)
 	}
 	defer f.Close()
 
-	var last Record
-	var found bool
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for sc.Scan() {
@@ -252,12 +300,12 @@ func lastRecordIn(path string) (Record, bool, error) {
 		if err := json.Unmarshal([]byte(line), &r); err != nil {
 			continue
 		}
-		last, found = r, true
+		fn(r)
 	}
 	if err := sc.Err(); err != nil && !errors.Is(err, io.EOF) {
-		return Record{}, false, fmt.Errorf("scan mutation log: %w", err)
+		return fmt.Errorf("scan mutation log: %w", err)
 	}
-	return last, found, nil
+	return nil
 }
 
 // Append writes one record and returns only once it is durable.
@@ -267,7 +315,9 @@ func lastRecordIn(path string) (Record, bool, error) {
 // is the only one that matters here: a completion reported before the record
 // reached the disk is a completion with no evidence behind it, which is exactly
 // the case the log exists for.
-func (l *MutationLog) Append(operation, subject, actor, callID, outcome string) (Record, error) {
+//
+// The log sets Seq, At, Prev and Digest; the caller says the rest.
+func (l *MutationLog) Append(r Record) (Record, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -275,13 +325,7 @@ func (l *MutationLog) Append(operation, subject, actor, callID, outcome string) 
 		return Record{}, err
 	}
 
-	r := Record{
-		Seq:       l.seq + 1,
-		At:        l.now().UTC().Format(time.RFC3339Nano),
-		Operation: operation, Subject: subject, Actor: actor,
-		CallID: callID, Outcome: outcome,
-		Prev: l.head,
-	}
+	r.Seq, r.At, r.Prev = l.seq+1, l.now().UTC().Format(time.RFC3339Nano), l.head
 	r.Digest = r.digestOf()
 
 	line, err := json.Marshal(r)
@@ -297,8 +341,8 @@ func (l *MutationLog) Append(operation, subject, actor, callID, outcome string) 
 	}
 	if err := l.sync(); err != nil {
 		// Written and not durable. Reported as a failure, because the caller is
-		// about to tell somebody the operation completed and the evidence for
-		// that claim is what just failed to land.
+		// about to send the write this record announces, and a write whose
+		// intent may not survive a crash must not be sent (server.mutate).
 		//
 		// The head is deliberately NOT advanced. A record that may not have
 		// survived must not become the link the next one chains onto, or one
@@ -382,6 +426,11 @@ func (l *MutationLog) rotateIfNeededLocked() error {
 		return fmt.Errorf("reopen mutation log: %w", err)
 	}
 	l.file, l.size, l.sync = f, 0, f.Sync
+	// The rename and the new file are directory entries: durable with the
+	// directory, or a crash could lose the rotated segment's name.
+	if err := syncDir(l.dir); err != nil {
+		return err
+	}
 	return l.pruneLocked()
 }
 
@@ -400,6 +449,56 @@ func (l *MutationLog) pruneLocked() error {
 		if err := os.Remove(old); err != nil {
 			return fmt.Errorf("prune rotated log: %w", err)
 		}
+	}
+	return nil
+}
+
+// InDoubt is every intent with no result, oldest first: a write the add-on
+// may or may not have made, because it stopped between the two records. Read
+// once at start and said loudly (main.go); the records stay as they are, for
+// a person. Syndra already holds the same call as unconfirmed, since its reply
+// never came, and re-plans before it re-sends.
+//
+// ponytail: reads every segment, up to keep × maxBytes (~192MB by default),
+// once per start; a checkpoint of open intents is the upgrade if that is slow.
+func (l *MutationLog) InDoubt() ([]Record, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	segments, err := l.segmentsNewestFirst()
+	if err != nil {
+		return nil, err
+	}
+	open := map[uint64]Record{}
+	for i := len(segments) - 1; i >= 0; i-- {
+		err := eachRecord(segments[i], func(r Record) {
+			if r.Outcome == outcomeIntent {
+				open[r.Seq] = r
+			} else if r.Intent != 0 {
+				delete(open, r.Intent)
+			}
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	out := make([]Record, 0, len(open))
+	for _, r := range open {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
+	return out, nil
+}
+
+// syncDir makes a directory's entries durable: a created or renamed file's
+// name, which the file's own fsync does not cover.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("open log dir: %w", err)
+	}
+	defer d.Close()
+	if err := d.Sync(); err != nil {
+		return fmt.Errorf("fsync log dir: %w", err)
 	}
 	return nil
 }

@@ -159,6 +159,10 @@ func (s *server) operateNow(w http.ResponseWriter, name string, req OperationReq
 		writeError(w, http.StatusServiceUnavailable, CodeTargetUnreachable,
 			"The NAS could not be reached, so nothing was sent to it.", nil)
 		return
+	case errors.Is(err, errNotLogged):
+		// The same answer an apply gives (applyNow).
+		writeError(w, http.StatusInternalServerError, CodeOperationFailed, notLoggedDetail, nil)
+		return
 	case err != nil:
 		// The error's text is this add-on's own, never the target's response
 		// body: that body is where a submitted password comes back.
@@ -188,13 +192,22 @@ func publicParams(name string, params map[string]any) map[string]any {
 	return out
 }
 
+// opCaller is what an operation's writes are logged under.
+func opCaller(name string, req OperationRequest) caller {
+	return caller{name, req.Subject, req.Actor, req.CallID}
+}
+
 // failedWrite is what a failed write call reports: ErrNotSent when the call
-// never left this add-on, so the reply can say nothing happened, and otherwise
+// never left this add-on, so the reply can say nothing happened, errNotLogged
+// when its intent never reached the disk, and otherwise
 // the sentence. Never the error's own text, which is the target's and may echo
 // what was sent.
 func failedWrite(err error, sentence string) error {
 	if errors.Is(err, ErrNotSent) {
 		return ErrNotSent
+	}
+	if errors.Is(err, errNotLogged) {
+		return errNotLogged
 	}
 	return errors.New(sentence)
 }
@@ -298,11 +311,13 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	// only accepted ordering is the password and the SMB flag arriving
 	// together. So a member setting their first password is also the moment
 	// their share access becomes possible.
+	// The value goes to the NAS and nowhere else: the log records the event,
+	// and a Record has no field for a value (caller).
 	update := map[string]any{"password": password, "password_disabled": false}
 	if smb, known := s.desiredSMB(req.Subject); known && smb {
 		update["smb"] = true
 	}
-	if err := s.nas.call("user.update", []any{id, update}, nil); err != nil {
+	if err := s.send(opCaller("password.set", req), "user.update", []any{id, update}, nil); err != nil {
 		// A sentence an operator can read, not the security boundary. The
 		// client wrapper already classifies rather than wraps, so the target's
 		// own text — built from a call whose parameters include the password —
@@ -311,8 +326,6 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 		// and "user.update: the target refused the call".
 		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the credential change")
 	}
-	// The event, never the value. There is no field on a Record for one.
-	s.record("password.set", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "password.set", Subject: req.Subject, Outcome: "succeeded",
 		Detail: "The credential was set on " + binding.Username + ".",
@@ -398,10 +411,11 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 			Detail: "No account was bound to this subject.",
 		}, http.StatusOK, nil
 	}
-	if err := s.store.DeleteBinding(req.Subject); err != nil {
-		return OperationResult{}, http.StatusInternalServerError, fmt.Errorf("the binding could not be released")
+	if err := s.mutate(opCaller("account.release", req), "store.unbind", func() error {
+		return s.store.DeleteBinding(req.Subject)
+	}); err != nil {
+		return OperationResult{}, http.StatusInternalServerError, failedWrite(err, "the binding could not be released")
 	}
-	s.record("account.release", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "account.release", Subject: req.Subject, Outcome: "succeeded",
 		Detail: "Syndra no longer manages " + binding.Username +
@@ -432,11 +446,10 @@ func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, err
 	// authentication disabled. A rotation deliberately does NOT touch `smb` —
 	// it is the credential half of a revocation, and turning share access on
 	// during one would be the opposite of what it is for.
-	if err := s.nas.call("user.update", []any{id,
+	if err := s.send(opCaller("password.rotate", req), "user.update", []any{id,
 		map[string]any{"password": minted, "password_disabled": false}}, nil); err != nil {
 		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the rotation")
 	}
-	s.record("password.rotate", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "password.rotate", Subject: req.Subject, Outcome: "succeeded", Rotated: true,
 		Detail: "A new credential was set on " + binding.Username +
@@ -507,8 +520,11 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	}
 	defer client.Close()
 
-	if err := callOnce(client, "user.delete", []any{id}, nil); err != nil {
-		return OperationResult{}, statusFor(err), fmt.Errorf("the target refused the deletion")
+	// Through the seam like every write, on its own session: callOnce, not send.
+	if err := s.mutate(opCaller("account.purge", req), "user.delete", func() error {
+		return callOnce(client, "user.delete", []any{id}, nil)
+	}); err != nil {
+		return OperationResult{}, statusFor(err), failedWrite(err, "the target refused the deletion")
 	}
 	// The binding goes with the account. Leaving it would leave this add-on
 	// claiming an account that no longer exists, and the next apply takes the
@@ -522,7 +538,6 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 		// is not discovered as an account that re-creates itself.
 		detail += " The binding to this subject could not be removed and is still recorded; release it before the next apply."
 	}
-	s.record("account.purge", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "account.purge", Subject: req.Subject, Outcome: "succeeded",
 		Detail: detail,
@@ -1199,11 +1214,14 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
 	}
 
-	if err := s.store.BindIfFree(Binding{
-		SubjectID: req.Subject, Username: account.Username, UID: account.UID,
-		// Who decided it. An adoption that turns out to be wrong hands somebody
-		// else's data to a member, and the actor is the first thing asked for.
-		BoundBy: req.Actor,
+	if err := s.mutate(opCaller("account.adopt", req), "store.bind", func() error {
+		return s.store.BindIfFree(Binding{
+			SubjectID: req.Subject, Username: account.Username, UID: account.UID,
+			// Who decided it. An adoption that turns out to be wrong hands
+			// somebody else's data to a member, and the actor is the first
+			// thing asked for.
+			BoundBy: req.Actor,
+		})
 	}); err != nil {
 		// Taken since the check above: the same refusal, not a 500.
 		var bound ErrUsernameBound
@@ -1212,8 +1230,6 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		}
 		return OperationResult{}, http.StatusInternalServerError, err
 	}
-
-	s.record("account.adopt", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "account.adopt", Subject: req.Subject, Outcome: "succeeded",
 		AccountID: accountID(account.UID),

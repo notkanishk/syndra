@@ -537,16 +537,29 @@ Schema: `v2/schema/health.json`.
     down, across restart, rotation or compaction. Syndra flags as tampering
     fewer records than before, the same count with another head, and more
     records with the same head.
-  - `log_records` MUST advance on every write the add-on sends the app, and
-    MUST stay put on a read, a replay and a refusal. One record per write
-    sent is the least; a record of a result or a binding MAY be added, since
-    Syndra sees only the head and the count.
-  - The log itself MUST be append-only, mode `0600`, synced to disk before
-    the write it describes, each record carrying the digest of the one before
-    (`addons/truenas/mutationlog.go`). A record whose sync failed never
-    happened: the add-on MUST NOT send that write, and answers
-    `APPLY_FAILED` or `OPERATION_FAILED` 500, which a person sees, as a
-    failing disk needs.
+  - `log_records` MUST advance on every write the add-on sends the app, a
+    write the app then refuses included, and MUST stay put on a read, a
+    replay and a refusal by the add-on itself. One record per write sent is
+    the least; more MAY be added, since Syndra sees only the head and the
+    count. The TrueNAS add-on writes two per write, the intent and the
+    result, so its count grows by two.
+  - The log itself MUST be append-only, mode `0600`, and written ahead, as a
+    database journals: the intent record synced to disk before the write it
+    describes (and the directory synced when the file is created), each
+    record carrying the digest of the one before. An intent whose sync
+    failed never happened: the add-on MUST NOT send that write, and answers
+    `APPLY_FAILED` or `OPERATION_FAILED` 500, which Syndra reads as "may
+    have acted" and a person sees, as a failing disk needs; never
+    `TARGET_UNREACHABLE`, since the app was reachable, and an earlier write
+    in the same call may have landed. The TrueNAS add-on routes every write,
+    to the app or to its own store, through one function (`mutate` in
+    `addons/truenas/apply.go`) and records the result after it:
+    `succeeded`, `failed` (the app answered no), `not_sent` or `unknown`
+    (it may have landed). An intent with no result is a write in doubt; the
+    add-on says each one at start (`InDoubt` in
+    `addons/truenas/mutationlog.go`) and leaves it for a person. Adding
+    fields to a record later, keep a record that lacks them digesting as it
+    did, so the anchored chain verifies across the upgrade.
 - `lifecycle`, `lifecycle_note`, `in_flight` and `drained` are
   [chapter 9](#9-lifecycle-and-degradation); `version_tested` and
   `version_note` are [chapter 2](#2-before-you-write-a-line), step 2;
@@ -1580,8 +1593,10 @@ own tests carry them:
   more scopes than it reports ([chapter 2](#2-before-you-write-a-line), step
   4; `dangerous-scopes` reads the self-reported list);
 - the recording, the version gate against it, and your README (chapter 2);
-- the mutation log on disk: mode `0600`, append-only, synced before each
-  write, its head and count surviving a restart and rotation (the kit sees
+- the mutation log on disk: mode `0600`, append-only, each write's intent
+  on disk before the app sees the write (a fake app that reads the log as
+  the write arrives), no write sent when that sync fails, its head and count
+  surviving a restart, rotation and a change of record format (the kit sees
   them move within one run);
 - the binding table for the life of the account, and call records for
   `constants.call_memory`, both surviving a restart (`replay.29d` skips);

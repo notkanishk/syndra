@@ -377,12 +377,39 @@ func (n *NAS) drop() {
 	}
 }
 
-// call issues one JSON-RPC method and classifies the failure.
+// call issues one READ. A method not in readMethods is refused before
+// anything is sent: a write goes through `sendWrite`, which only the mutation
+// log's seam calls (server.send), so no write reaches the NAS without its
+// intent on disk first (5.3b). Listed rather than guessed from a name, so a
+// method nobody listed fails closed instead of going out unlogged.
+func (n *NAS) call(method string, params any, out any) error {
+	if !readMethods[method] {
+		return fmt.Errorf("%s is not a read this add-on makes; a write goes through the mutation log", method)
+	}
+	return n.roundTrip(method, params, out)
+}
+
+// sendWrite issues one write. Only server.send calls it, inside server.mutate
+// (TestEveryNASWriteGoesThroughTheSeam).
+func (n *NAS) sendWrite(method string, params any, out any) error {
+	return n.roundTrip(method, params, out)
+}
+
+// readMethods is every NAS method this add-on reads with.
+var readMethods = map[string]bool{
+	"alert.list": true, "audit.query": true, "auth.me": true, "core.get_methods": true,
+	"filesystem.getacl": true, "filesystem.listdir": true, "filesystem.stat": true,
+	"group.query": true, "pool.dataset.get_quota": true, "pool.dataset.query": true,
+	"pool.query": true, "service.query": true, "sharing.smb.query": true,
+	"system.info": true, "system.version": true, "user.query": true,
+}
+
+// roundTrip issues one JSON-RPC method and classifies the failure.
 //
 // The classification matters more than it looks: the backend's accounting
 // distinguishes "nothing happened" from "it refused" from "we do not know", and
 // collapsing them here would make that distinction a fiction one layer up.
-func (n *NAS) call(method string, params any, out any) error {
+func (n *NAS) roundTrip(method string, params any, out any) error {
 	c, err := n.session()
 	if err != nil {
 		return err

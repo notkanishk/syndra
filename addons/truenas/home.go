@@ -125,12 +125,12 @@ func homeFields(p string) map[string]any {
 // convergeQuota sets the account's limit on the dataset holding its home, when
 // one is wanted and it differs. A limit nobody gives any more is left as it
 // is: removing it would make the folder unlimited, which no one decided.
-func (s *server) convergeQuota(desired desiredState, home string, uid int64) (string, error) {
+func (s *server) convergeQuota(who caller, desired desiredState, home string, uid int64) (string, error) {
 	dataset, want, owed, err := s.quotaOwed(desired, home, uid)
 	if err != nil || !owed {
 		return "", err
 	}
-	if err := s.nas.call("pool.dataset.set_quota", []any{dataset, []any{map[string]any{
+	if err := s.send(who, "pool.dataset.set_quota", []any{dataset, []any{map[string]any{
 		"quota_type": "USER", "id": strconv.FormatInt(uid, 10), "quota_value": want,
 	}}}, nil); err != nil {
 		return "", fmt.Errorf("set the home folder limit: %w", err)

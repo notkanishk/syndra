@@ -76,7 +76,7 @@ func TestAResultIsReadFromInsideTheEnvelope(t *testing.T) {
 func TestARefusalIsAFailureEvenWhenNoResultIsWanted(t *testing.T) {
 	n := recordedNAS(recordedRefusalResponse)
 
-	err := n.call("user.update", []any{1, map[string]any{"password": "x"}}, nil)
+	err := n.sendWrite("user.update", []any{1, map[string]any{"password": "x"}}, nil)
 	if err == nil {
 		t.Fatal("a refused mutation must not be reported as applied")
 	}
@@ -91,7 +91,7 @@ func TestARefusalIsAFailureEvenWhenNoResultIsWanted(t *testing.T) {
 func TestTheTargetsOwnErrorTextNeverLeavesTheClient(t *testing.T) {
 	n := recordedNAS(recordedRefusalResponse)
 
-	err := n.call("user.update", []any{1, map[string]any{"password": "x"}}, nil)
+	err := n.sendWrite("user.update", []any{1, map[string]any{"password": "x"}}, nil)
 	if err == nil {
 		t.Fatal("the call must fail")
 	}

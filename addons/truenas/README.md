@@ -67,7 +67,7 @@ key, so a deployment with no NAS must not be running it.
 | `plan.go` · `apply.go` | Rehearse, then converge against a plan id |
 | `operations.go` | The one-shot half |
 | `storage_status.go` | The member's own view: is my account usable, how much room is left |
-| `mutationlog.go` | Append-only, `0600`, fsynced before the mutation it describes |
+| `mutationlog.go` | Append-only, `0600`, hash-chained; written ahead: an intent fsynced before each write, its result after (`mutate` in `apply.go`) |
 | `store.go` | bbolt. A result cache and a state mirror — never a queue |
 | `lifecycle.go` | `active` · `draining` · `read_only`, at runtime |
 | `username.go` | Deriving the account name. TrueNAS generates none and `user.create` demands one, so it comes from the Zitadel identity's email localpart — the one handle the IdP guarantees stable and unique |
