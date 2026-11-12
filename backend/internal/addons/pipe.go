@@ -117,6 +117,9 @@ func (a *Addon) send(ctx context.Context, s sendSpec) (CallResponse, error) {
 			a.Registration.Target, s.Method, s.Path, resp.Status, resp.Code)
 		rereadAfterShapeRefusal(a)
 	}
+	// Which route answered is the pipe's to know; what that means for the
+	// breaker is record's (StatsRefusal).
+	resp.StatsRefusal = featureOf(s.Path) == "stats" && resp.Code != ""
 	if !s.SkipBreaker {
 		a.br.record(timeNow(), resp)
 	}

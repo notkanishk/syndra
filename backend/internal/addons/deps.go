@@ -54,4 +54,6 @@ var (
 	dbDisableUnconfiguredTargets = db.DisableUnconfiguredTargets
 	dbTargetFieldRoles           = db.TargetFieldRoles
 	dbSaveTargetFieldRoles       = db.SaveTargetFieldRoles
+	dbStatsDescriptors           = db.StatsDescriptors
+	dbSaveStatsDescriptors       = db.SaveStatsDescriptors
 )

@@ -360,6 +360,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/insights/timeline", withCORS(withOperatorAuth(handleInsightsTimeline)))
 	mux.HandleFunc("GET /api/v1/insights/usage", withCORS(withOperatorAuth(handleInsightsUsage)))
 	mux.HandleFunc("GET /api/v1/insights/lens", withCORS(withOperatorAuth(handleInsightsLens)))
+	mux.HandleFunc("GET /api/v1/insights/stats", withCORS(withOperatorAuth(handleInsightsStats)))
 	mux.HandleFunc("GET /api/v1/users/{id}/usage", withCORS(withOperatorAuth(handleGetUserUsage)))
 	mux.HandleFunc("GET /api/v1/applications/{id}/usage", withCORS(withOperatorAuth(handleGetApplicationUsage)))
 	// "Who signed in, and when": only from Zitadel's own log, with a reason,
@@ -402,6 +403,10 @@ func NewRouter() http.Handler {
 	// What members see it called (addon-contract 3.10a). One write place: the
 	// system's own page. Changes nobody's access.
 	mux.HandleFunc("PUT /api/v1/targets/{target}/name", withCORS(withOperatorAuth(handleSetTargetName)))
+	// Statistics (addon-contract 6.8): the target-wide series and the one
+	// write place of per-person retention. Admin only, like insights below.
+	mux.HandleFunc("GET /api/v1/targets/{target}/stats", withCORS(withOperatorAuth(handleTargetStats)))
+	mux.HandleFunc("PUT /api/v1/targets/{target}/stats-retention", withCORS(withOperatorAuth(handleSetStatsRetention)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/lifecycle", withCORS(withOperatorAuth(handleSetTargetLifecycle)))
 
 	// Revocation as a composition (design §10). This target cannot end a

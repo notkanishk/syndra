@@ -1694,7 +1694,7 @@ O1 (`acceptMetrics` drops the feature when `stats_zone != clock.Name`;
 breaks the three conditions) and O4 (`stats_subject_retention_days`,
 per-person only) applied there.
 
-- [ ] 6.6 Backend collection: hourly per target declaring `stats`, **one
+- [x] 6.6 Backend collection: hourly per target declaring `stats`, **one
   call per declared metric** with that metric's stored watermark as
   `since` (first run `now − limits.stats_buffer`), keyset-paged, never
   with `fresh`; descriptors validated at registration (unit in the
@@ -1714,24 +1714,155 @@ per-person only) applied there.
   gaps; a provisional 3 that comes back absent is gone; a day reported late
   under a held-back watermark lands and retracts its gap; one dark metric
   does not re-send another #ready-for-agent
-- [ ] 6.7 Migration: `addon_metric_points` (PK `target_id, metric, subject
+  - Done (slice 6d-2, 12 Nov 2026): `acceptMetrics` and `ReadStats` in
+    `backend/internal/addons/stats.go`, the collector in
+    `backend/internal/services/stats/collect.go` (`Collect`, `CollectAll`),
+    its transaction in `backend/internal/db/stats.go` (`StatsTx`), the
+    `ADDON-STATS` runner in `cmd/api/main.go`. Live tests
+    (`internal/db/stats_collect_live_test.go`, the collector against the
+    real schema with a scripted add-on): the same `(metric, since)` twice
+    changes nothing for points and gaps; a provisional value absent next
+    time is gone (the watermark's own day included); a late day under a
+    held-back watermark lands and retracts its gap; one dark metric does not
+    re-send another; a failed second page keeps the watermark and the
+    provisional rows; the watermark never goes back, is floored to a
+    midnight and never passes today's; each drop reason counted; 500 series
+    kept and the 501st dropped; a repeating cursor stops, and so does a
+    cycle (A, B, A). Registration
+    (`internal/addons/stats_test.go`): a changed unit or instrument refuses
+    the manifest; each bad descriptor dropped alone and said once; another
+    zone drops the feature; `/stats` never carries `fresh`.
+    - Decided while building (ruling O1): `acceptMetrics` drops the whole
+      feature, said once, when `stats_zone` is not `clock.Name`; a point is
+      kept only when `start` is the first instant of its makerspace day and
+      `end` the next day's (`clock.Midnight`, which now resolves a skipped
+      00:00 to the instant the clocks resume, as the add-ons do; `clock.AddDate`
+      for day arithmetic), and `bucket_start` is that day as `$n::date`.
+    - Decided while building: `ADDON-STATS` is its own runner (hourly,
+      started after `awaitFirstManifests`), not a step in the reconcile;
+      `STATS_COLLECTION_ENABLED=false` stops collection only, never the
+      retention runner (fix round). Each metric has its own five-minute
+      context. `/stats` goes through the pipe and the breaker like every
+      read, but a coded answer there neither opens nor clears it (fix round).
+    - Decided while building: the stored watermark is the reply's floored to
+      its makerspace midnight and capped at the start of today (a watermark
+      of tomorrow would freeze today's provisional points); `GREATEST` in SQL
+      keeps it from going back. The series the cap counts are read before
+      the provisional window is deleted, so a held series is not forgotten
+      because today is being replaced. A person in a dimension value or a
+      gap reason is any text containing a binding's subject id, account
+      name or account id, in any case (B7; fix round); directory display
+      names wait. Drops are counted by reason (`not_a_day`, `bad_value`,
+      `not_per_subject`, `unbound_subject`, `undeclared_dimension`,
+      `person_in_dimension`, `past_retention`, `series`) in
+      `addon_metrics.dropped`, the last collection's, and logged as counts,
+      never values. A descriptor is stored only when it changed (a label), so
+      the 15-minute refresh writes nothing. A failure to store descriptors
+      leaves the manifest accepted with no metrics collected until the next
+      refresh, rather than refusing the add-on.
+- [x] 6.7 Migration: `addon_metric_points` (PK `target_id, metric, subject
   NOT NULL DEFAULT '', dims, bucket_start`; no `bucket_end`),
   `addon_metric_gaps` (`dims JSONB NOT NULL DEFAULT '{}'`; PK `target_id,
   metric, dims, gap_start`),
-  `addon_stats_watermarks` (per metric), and
-  `targets.stats_retention_days INT NULL` for the per-target shortening
+  `addon_metrics` (per metric: descriptor and watermark, ruling B3), and
+  `targets.stats_subject_retention_days INT NULL` for the per-target shortening
   (same migration, not a fifth) (design §9.6); nightly retention:
   per-subject points deleted after 400 days, target-wide after 5 years,
   gaps with the points they cover; no rollup; the per-target setting
-  shortens either retention (one write place) and cannot lengthen it.
+  shortens the per-person retention only (ruling O4; one write place) and
+  cannot lengthen it.
   Day-maths tests use `clock.Now`. Decision 13 #ready-for-agent
-- [ ] 6.8 Access: `/me/targets` carries the actor's `per_subject` points
+  - Done (slice 6d-2, 12 Nov 2026): migration **000093_addon_stats**,
+    expand-only (`TestMigration93IsExpandOnly`; `TestLiveMigration93RunsDownAndUp`
+    on the real engine; `TestLiveMigration92RunsDownAndUp` now works from any
+    later version). `db.PruneStats` on the `STATS-RETENTION` runner (daily);
+    `PUT /api/v1/targets/{target}/stats-retention {"days": 1..400|null}`
+    (admin, audited `target.stats_retention_set`, 422 on the CHECK, 400 on a
+    malformed body, 404 for an unknown target). Live tests: per-person
+    points kept 400 days and the totals beyond; a 30-day setting shortens
+    the people and not the totals; gaps go at five years; 0, 401 and 1000
+    refused by the CHECK, 1, 400 and none accepted, each change audited.
+    - Decided while building (ruling O4): one column, per-person only;
+      `COALESCE(t.stats_subject_retention_days, 400)` and `INTERVAL '5
+      years'` are SQL constants in `db/stats.go` that the prune and a late
+      point at ingestion both read (a point or gap already past retention is
+      not stored, counted `past_retention`); the ceiling is the CHECK, no Go
+      `min`. A gap is kept until its end is five years old, with the totals
+      it explains; the per-person setting does not touch gaps.
+    - Decided while building: day-maths tests pin the four instants around
+      India's and UTC's midnight (`TestStatsWindowsAreMakerspaceDays`); the
+      live tests take their days from `clock.Now`.
+- [x] 6.8 Access: `/me/targets` carries the actor's `per_subject` points
   for the last 30 days and 12 months; `GET /users/{id}/targets` (admin
   role) carries that person's with the page, beside their storage status;
   target and insights endpoints (admin role) serve the totals and the
   per-dimension series. No view audit, no separate endpoint, no
   suppression (decision 14). Tests: a member cannot read another's; a
   non-admin operator cannot read the target or insights series #ready-for-agent
+  - Done (slice 6d-2, 12 Nov 2026), `backend/internal/handlers/stats.go`:
+    `myTargetView.usage` (filled by the two views, `/me/targets` and the
+    person page, from Syndra's store, so it shows while the target is down) carries
+    the person's own per-person metrics; `GET /api/v1/targets/{target}/stats`
+    (admin) every metric's totals with the collection line and the
+    retention; `GET /api/v1/insights/stats` (admin) each per-person series
+    over the last 30 days as members, p50, p90. Tests:
+    `TestMyUsageIsTheActorsOwn` (`/me/targets?subject=u2&id=u2` as u1 reads
+    u1 only; the person page reads the path's person),
+    `TestStatsRoutesAreAdminOnly` (a member gets 403 on the three routes and
+    the person page through the real router; every `stats` route in
+    `router.go` is `withOperatorAuth`), `TestInsightsStatsNameNobody` and
+    `TestLiveDistributionsNameNobody` (no subject in the spread),
+    `TestUsageCarriesSumsLatestAndGaps` (the shape).
+    - Decided while building: the API shape 6e reads. `usage` is
+      `{"reported": false}` for a target with no stored metric, else
+      `{"reported": true, "metrics": [...]}`, each metric its descriptor
+      (`name, instrument, unit, label, per_subject, dimensions, against`)
+      plus `watermark` (the makerspace midnight before which it is final,
+      null before the first collection), `series` and `gaps` (`start`,
+      `end` exclusive, `dimensions`, `reason`, days `YYYY-MM-DD`). A
+      series is `{dimensions, days: [{day, value}]}` over the last 30 days,
+      sparse; a counter adds `sum_30d`, `sum_12m` (0, never absent) and
+      `months: [{month: "YYYY-MM", value}]` over 12 calendar months; a
+      gauge adds `latest: {day, value}`. The totals page adds `collected:
+      {at, unbound_accounts, dropped}` per metric and `retention:
+      {subject_days, set}`; insights is `{window_days: 30, from, metrics:
+      [{target, system, ...descriptor, series: [{dimensions, members, p50,
+      p90}]}]}`. Metrics sort by label and series by dimension value
+      (textsort); sums are over days, never across series (ruling B8).
+    - Decided while building: no `?window=` parameter: every page carries
+      both windows. A person's page shows only `per_subject` metrics and
+      never the collection line; the person page is the member's own path
+      (`describeTargetFor`, then `personalUsage`), so the two cannot differ.
+    - Decided while building (6d-2 fix round, 12 Nov 2026), one line each:
+      - Retention always runs: `statsRunners` builds `STATS-RETENTION`
+        unconditionally and `ADDON-STATS` only with an add-on and
+        `STATS_COLLECTION_ENABLED`; `main` starts retention at top level
+        (`TestStatsRetentionRunsWithoutCollection`, with a source guard).
+      - A coded `/stats` answer neither opens nor clears the breaker;
+        transport failures, timeouts and uncoded 5xx still count, the
+        breaker is still consulted first, and `NO_CURRENT_READ` on
+        `/subjects` still counts
+        (`TestACodedStatsAnswerIsNeverABreakerFailure`; where the rule
+        lives: round 2 below).
+      - A person's page keeps a gap only when its dimensions are `{}` or
+        one of that person's series; at ingestion one rule, `people.names`,
+        guards dimension values and gap reasons, counted
+        `person_in_dimension` (`TestAPersonSeesOnlyGapsOnTheirOwnSeries`,
+        `TestNoValueOrReasonNamesABoundPerson`; both rules sharpened in
+        round 2 below).
+      - Every cursor followed in a collection is remembered; any repeat
+        stops it (`TestLiveACursorCycleStopsTheCollection`).
+      - `PUT stats-retention` requires the `days` key: `{}` is 400
+        `VALIDATION_FAILED` (`days: required`) and writes nothing; only
+        `{"days": null}` clears.
+      - Usage is filled by the two views only, never in `describeTargetFor`,
+        so setting a password and a member action make no statistics query
+        (`TestOnlyTheViewsReadUsage`).
+    - Decided while building (6d-2 fix round 2, 12 Nov 2026), one line each:
+      - A name is matched as a whole token, not contained: one RE2 pattern per collection, `(?i)(?:^|[^\pL\pN])(?:` + the `QuoteMeta`d non-empty names joined by `|` + `)(?:[^\pL\pN]|$)`, an empty class when there is none; not `\b`, ASCII-only and `_`-blind (`TestANameIsAWholeToken`).
+      - A gap whose reason names a person is kept with the fixed reason "The add-on's reason named a person." and counted `person_in_dimension`; one whose dimensions name a person is dropped, as its series is (`TestNoValueOrReasonNamesABoundPerson`).
+      - A person's page keeps a gap whose dimensions are `{}` or a subset of one of their series (every key=value of the gap in it), so `{"share":"makers"}` reaches their makers/smb series (`TestAGapOnPartOfASeriesIsOnThatSeries`).
+      - Every breaker counting rule lives in `breaker.record`: `send` only marks a coded `/stats` answer `CallResponse.StatsRefusal`, and `record` neither counts nor clears it (`TestACodedStatsAnswerDoesNotClearTheBreaker`).
 - [ ] 6.9 UI, from descriptors only: the member card "What I have used"
   (counters summed with a sparkline, gauges latest with their day,
   `against` as a meter over the **observed** limit, gaps footnoted, every

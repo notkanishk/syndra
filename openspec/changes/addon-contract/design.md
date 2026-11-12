@@ -1016,8 +1016,14 @@ laser PC is off: `laser.job_seconds` stays at the last day it could read,
 while `storage.used_bytes` on another source moves on). Syndra calls
 `GET /stats?metric=<name>&since=<that metric's watermark>` **once per
 declared metric** (≤ 50) per target on its own schedule (hourly, through
-the existing pipe and breaker, as a step beside the drift sweep) and takes
-everything since. One call per metric, not one `since` for all: with a
+the existing pipe and breaker, by its own runner `ADDON-STATS` beside the
+add-on reconcile, never a step inside it: a slow `/stats` must not delay
+convergence, and a failed collection is not a failed reconcile) and takes
+everything since. A coded `/stats` answer (`NO_CURRENT_READ` before the
+add-on's first read of its app) is the add-on answering on purpose: it
+neither opens nor clears the breaker; a transport failure, a timeout or an
+uncoded 5xx counts as on any route, and the open breaker is still consulted
+first (6d-2 fix round). One call per metric, not one `since` for all: with a
 single oldest mark, a laser PC off for a term would make every hourly
 collection re-send up to 90 days of every other metric (per-subject ×
 per-share `storage.used_bytes` is ~10⁴ points a day, hundreds of MiB an
@@ -1183,7 +1189,9 @@ Rules, MUST on the add-on:
   numbers).
 - Paged with a **keyset** cursor (`next_cursor` encodes the last
   `(start, subject, dimensions)` sent; no snapshot needed, because
-  ingestion is upsert-by-key and the watermark is written last);
+  ingestion is upsert-by-key and the watermark is written last); a cursor
+  the add-on already gave in the same collection (A, B, A) stops it,
+  keeping the watermark;
   `taken_at` and `watermark` from the first page. `taken_at` is when the
   add-on's collector last read the app, not when it answered Syndra. No
   `current`: the watermark says what is final.
@@ -1244,9 +1252,10 @@ in the totals". No local name crosses the wire for an unbound account.
 
 ### 9.6 Storage, retention, cardinality, gaps, idempotency
 
-- **Tables** (one additive migration, which also adds the per-target
-  retention override as a nullable column on `targets`, so it is not a
-  fifth migration): `addon_metric_points(target_id, metric,
+- **Tables** (one additive migration, 000093, which also adds the
+  per-target retention override as a nullable column on `targets`,
+  `stats_subject_retention_days`, so it is not a fifth migration):
+  `addon_metric_points(target_id, metric,
   subject TEXT NOT NULL DEFAULT '' /* '' = target-wide */, dims JSONB sorted,
   bucket_start DATE, value NUMERIC, observed_at)` with the plain primary key
   `(target_id, metric, subject, dims, bucket_start)` (a PRIMARY KEY cannot
@@ -1254,7 +1263,13 @@ in the totals". No local name crosses the wire for an unbound account.
   `addon_metric_gaps(target_id, metric, dims JSONB NOT NULL DEFAULT '{}' sorted, gap_start, gap_end, reason)`
   with the primary key `(target_id, metric, dims, gap_start)` (a PK column
   cannot be NULL, so a gap without dimensions is `{}`);
-  `addon_stats_watermarks(target_id, metric, watermark, last_collected_at, dropped_series INT)`.
+  `addon_metrics(target_id, metric, descriptor JSONB, watermark,
+  last_collected_at, unbound_accounts, dropped JSONB)`, the stored meaning
+  of each metric name (written at registration, never deleted, so a name
+  never comes back meaning something else) beside its watermark and what
+  its last collection dropped, by reason (ruling B3; points and gaps
+  reference it, so a descriptor before any point is a constraint).
+  `bucket_start`, `gap_start` and `gap_end` are makerspace dates.
 - **Ingestion is one transaction per metric per collection**: the stored
   points and gaps of that metric with `end > stored watermark` (the
   provisional window) are **deleted and replaced** by the reply's, points
@@ -1263,13 +1278,30 @@ in the totals". No local name crosses the wire for an unbound account.
   failed page leaves the watermark where it was and the next collection
   re-reads. `since` is that metric's stored watermark; a metric's first
   collection uses `now − limits.stats_buffer`. Re-reading any window twice
-  is a no-op, for points and for gaps.
+  is a no-op, for points and for gaps. The stored watermark is the reply's
+  floored to its makerspace midnight, capped at the start of today (today
+  is still being counted, whatever the add-on says) and never moved back
+  (6d-2).
 - **Content validation, because the add-on is least trusted**: a point with
   a `subject` that has **no binding on this target** is dropped and counted
   (an add-on cannot write usage onto an arbitrary member's page); a point
-  with `subject` on a metric not `per_subject` is dropped; a dimension value
-  equal to any subject's `account_id` or display name is dropped and
-  logged.
+  with `subject` on a metric not `per_subject` is dropped. A text **names a
+  bound person** when it holds a bound subject's id, account name or
+  `account_id` (non-empty) as a whole token, case-insensitively: one RE2
+  pattern per collection, `(?i)(?:^|[^\pL\pN])(?:n1|n2|…)(?:[^\pL\pN]|$)`
+  with each name `QuoteMeta`d (a pattern matching nothing when no binding
+  has a name). A token boundary is the text's start or end or any
+  character that is neither a Unicode letter nor a digit, so
+  `home-JOHN_CENA`, `home_ana` and `john_cena's` name them while `makerlab`,
+  `proj-30512` and `ME3051` do not name `lab` or `3051`; not `\b`, which in
+  RE2 is ASCII-only and counts `_` as a word character. One rule for
+  dimension values and gap reasons (display names wait for a cheap source,
+  ruling B7): a point or gap whose **dimension** names a person is dropped;
+  a gap whose **reason** does is kept, its reason replaced by the fixed
+  "The add-on's reason named a person." (the gap is still true); both
+  counted `person_in_dimension`. So is a point dropped that is not one
+  makerspace day, or has no value or a negative one. Each is counted by
+  reason on the metric's row.
 - **A metric is never re-purposed**: a manifest that changes an existing
   metric's `instrument` or `unit` is refused at registration with the
   reason; a new meaning is a new name (§2 rule 6). Bucket width is not
@@ -1279,13 +1311,21 @@ in the totals". No local name crosses the wire for an unbound account.
   a margin for "same time last year"), then deleted, not anonymised: the
   total they would anonymise into is required to exist as its own point
   (§9.3). A point older than its retention arriving late is dropped at
-  ingestion. Gaps follow the points they cover. No rollup job exists
-  because every point is already a day.
+  ingestion. Gaps follow the points they cover: kept with the totals, five
+  years. The nightly retention runs whether or not anything is collected
+  (`STATS_COLLECTION_ENABLED` gates collection only, and a backend with no
+  add-on registered still prunes what it holds). An operator may shorten the per-person retention of one target
+  (1 to 400 days, the column's CHECK the ceiling's one place) and never the
+  totals' (ruling O4, 12 Nov 2026: 400 days is the privacy ceiling on
+  personal data, five years the history of a resource that names nobody,
+  and totals erased are unrecoverable). One SQL definition serves the
+  nightly prune and ingestion. No rollup job exists because every point is
+  already a day.
 - **Cardinality**: `constants.series_per_metric` (500) caps distinct
   `dimensions` sets per metric (subject does not count; it is bounded by
   members).
   Beyond the cap Syndra keeps the series it already knows, drops the rest,
-  increments `dropped_series`, and the target page says "the add-on reports
+  counts them (`dropped.series`), and the target page says "the add-on reports
   more {label} series than Syndra keeps". ≤ 50 metrics per manifest, ≤ 4
   dimensions per metric; a metric with an unknown unit or an undeclared
   dimension is dropped at registration and logged, never partially stored.
@@ -1331,13 +1371,21 @@ this contract carries.
   one out of Syndra's own sentences.
 - **No raw logs copied wholesale**: events and holdings are live reads (§9.4);
   Syndra stores points, gaps and watermarks.
-- **Retention is a ceiling, not a target**: the operator may shorten it per
-  target in settings (one write place); the ceiling in §9.6 cannot be
-  raised without a change here.
+- **Retention is a ceiling, not a target**: the operator may shorten the
+  per-person retention per target on its System page (one write place,
+  `PUT /targets/{target}/stats-retention`); the ceiling in §9.6 cannot be
+  raised without a change here, and the totals' five years have no setting
+  (ruling O4).
 - **Declared or refused** (§9.6 content validation): a `subject` with no
   binding on this target, a `subject` on a metric not `per_subject`, a
-  dimension value that names a person: dropped, counted, logged, and the
-  kit warns. Dimensions are resources, never people.
+  dimension value that names a person (§9.6, whole token): dropped,
+  counted, logged, and the kit warns; a gap reason that names one is
+  withheld, its gap kept and counted. Dimensions are resources, never
+  people. A person's page carries only the gaps whose dimensions are `{}`
+  or a subset of one of that person's own series (every key=value of the
+  gap in that series: `{"share":"makers"}` is on their
+  `{"share":"makers","protocol":"smb"}`), never a gap on a resource only
+  somebody else used.
 - **Add-on text is quoted, never trusted**: `label`, `reason`, `note` and
   raw `x-` content are rendered as escaped, length-capped quoted text; the
   copy guard runs on Syndra's own sentences around them, not on what an
@@ -1735,6 +1783,9 @@ Statistics, records and the fourth target (10 Nov 2026):
     dropped. Operators may shorten per target, never lengthen. Recommend
     these numbers; 400 days is "the same week last year" and no more.
     **Accepted 10 Nov 2026.**
+    *Amended 12 Nov 2026 (ruling O4, slice 6d):* the setting shortens the
+    per-person retention only (`stats_subject_retention_days`, 1 to 400);
+    totals and gaps keep five years with no override.
 14. **Who sees per-person usage** (§9.7): a member their own; admins
     everything, target-wide, per-resource and per-subject, directly on the
     person page, the target overview and insights, with no view audit, no

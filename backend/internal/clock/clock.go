@@ -47,8 +47,29 @@ func Now() time.Time { return time.Now().In(Loc) }
 // Day is t's calendar day in the makerspace's zone, YYYY-MM-DD.
 func Day(t time.Time) string { return t.In(Loc).Format(time.DateOnly) }
 
-// Midnight is the instant `day` (YYYY-MM-DD) starts in the makerspace's zone.
-func Midnight(day string) (time.Time, error) { return time.ParseInLocation(time.DateOnly, day, Loc) }
+// Midnight is the instant `day` (YYYY-MM-DD) starts in the makerspace's zone:
+// its first instant, 00:00, or, on a day whose 00:00 a daylight-saving change
+// skips (America/Santiago, 6 Sep 2026), the instant the clocks resume. Go
+// resolves a skipped 00:00 to the previous day's 23:00, so that one case takes
+// the end of the zone period it fell in (the add-ons' and the kit's rule too).
+func Midnight(day string) (time.Time, error) {
+	t, err := time.ParseInLocation(time.DateOnly, day, Loc)
+	if err == nil && t.Format(time.DateOnly) != day {
+		_, t = t.ZoneBounds()
+	}
+	return t, err
+}
+
+// AddDate is the calendar day years, months and days after `day` (YYYY-MM-DD),
+// normalised as time.AddDate does; a day is a date here, never 24 hours. A
+// `day` that is not YYYY-MM-DD is returned as it came.
+func AddDate(day string, years, months, days int) string {
+	d, err := time.Parse(time.DateOnly, day)
+	if err != nil {
+		return day
+	}
+	return d.AddDate(years, months, days).Format(time.DateOnly)
+}
 
 // Every end date means one thing (owner, 5 Nov 2026): access "until 30 Nov"
 // lasts through the whole of 30 Nov in the makerspace's zone, and "for 7 days"
@@ -58,11 +79,14 @@ func Midnight(day string) (time.Time, error) { return time.ParseInLocation(time.
 
 // EndOfDay is the last second of `day` (YYYY-MM-DD) in the makerspace's zone.
 func EndOfDay(day string) (time.Time, error) {
-	m, err := Midnight(day)
+	if _, err := time.Parse(time.DateOnly, day); err != nil {
+		return time.Time{}, err
+	}
+	next, err := Midnight(AddDate(day, 0, 0, 1))
 	if err != nil {
 		return time.Time{}, err
 	}
-	return m.AddDate(0, 0, 1).Add(-time.Second), nil
+	return next.Add(-time.Second), nil
 }
 
 // EndAfterDays is the last second of the n-th day after t's own (both in the

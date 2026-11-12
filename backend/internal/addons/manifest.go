@@ -78,6 +78,12 @@ type Manifest struct {
 	// distrust is the part that was right.
 	Connection *Connection `json:"connection,omitempty"`
 	Limits     Limits      `json:"limits"`
+	// Metrics and StatsZone are feature stats (design §9.3): what the add-on
+	// reports on GET /stats, and the IANA zone whose calendar days its buckets
+	// are. Read through acceptMetrics, never directly: a metric that breaks a
+	// rule is dropped there, and the whole feature when the zone is not ours.
+	Metrics   []Metric `json:"metrics,omitempty"`
+	StatsZone string   `json:"stats_zone,omitempty"`
 
 	// Unknown is every key of the manifest this backend does not know, top
 	// level or nested, as `path: value` with the value quoted, escaped and
@@ -88,9 +94,11 @@ type Manifest struct {
 // Limits are what the add-on refuses beyond. SubjectsPerPlan bounds one plan:
 // the backend plans in chunks below it (design §11). Zero is undeclared.
 // FreshReadCooldown is feature freshness's cooldown, ISO 8601 (FreshCooldown).
+// StatsBuffer is how long the add-on holds a statistics point (statsBuffer).
 type Limits struct {
 	SubjectsPerPlan   int    `json:"subjects_per_plan,omitempty"`
 	FreshReadCooldown string `json:"fresh_read_cooldown,omitempty"`
+	StatsBuffer       string `json:"stats_buffer,omitempty"`
 }
 
 // cooldownDefault is constants.cooldown_default (registry/constants.json):
@@ -121,9 +129,18 @@ var isoDuration = regexp.MustCompile(`^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:
 // isoCooldown reads a declared cooldown; anything not a positive ISO 8601
 // duration (PT30MS, PT+30S, PT30S5M, P, PT) is constants.cooldown_default.
 func isoCooldown(iso string) time.Duration {
+	if d, ok := isoPositive(iso); ok {
+		return d
+	}
+	return cooldownDefault
+}
+
+// isoPositive reads a positive ISO 8601 duration (isoDuration); false for
+// anything else, a zero, or more than a time.Duration holds.
+func isoPositive(iso string) (time.Duration, bool) {
 	parts := isoDuration.FindStringSubmatch(iso)
 	if parts == nil || iso == "P" || strings.HasSuffix(iso, "T") {
-		return cooldownDefault
+		return 0, false
 	}
 	seconds := 0.0
 	for i, unit := range []float64{86400, 3600, 60, 1} {
@@ -133,9 +150,9 @@ func isoCooldown(iso string) time.Duration {
 		}
 	}
 	if seconds <= 0 || seconds > float64(math.MaxInt64/int64(time.Second)) {
-		return cooldownDefault
+		return 0, false
 	}
-	return time.Duration(seconds * float64(time.Second))
+	return time.Duration(seconds * float64(time.Second)), true
 }
 
 // Connection is the member-facing address of a target, and nothing else. Never

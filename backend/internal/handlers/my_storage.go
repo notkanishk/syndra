@@ -161,6 +161,11 @@ type myTargetView struct {
 	// Unsettled is their latest confirm still being settled, so a reload keeps
 	// saying where it stands instead of offering the action again.
 	Unsettled *myUnsettled `json:"unsettled,omitempty"`
+	// Usage is what this person has used here over time (feature stats,
+	// design §9.8): their own per-person points only, from Syndra's store,
+	// so it is there while the target is down. Reported false when the
+	// add-on reports no statistics; absent when they could not be read.
+	Usage *statsUsage `json:"usage,omitempty"`
 }
 
 type myPasswordChange struct {
@@ -213,6 +218,7 @@ func handleMyTargets(w http.ResponseWriter, r *http.Request) {
 			jsonErrorResponse(w, http.StatusInternalServerError, "VIEW_ERROR", err.Error())
 			return
 		}
+		view.Usage = personalUsage(r.Context(), reg.Target, subject)
 		views = append(views, view)
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"targets": views})

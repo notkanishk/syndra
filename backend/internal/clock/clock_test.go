@@ -66,3 +66,29 @@ func TestEndsAreTheWholeOfTheirDay(t *testing.T) {
 		t.Fatalf("EndAfterDays across the year = %s, want 2027-01-04", Day(got))
 	}
 }
+
+// A day's midnight is its first instant: where a daylight-saving change skips
+// 00:00 (America/Santiago, 6 Sep 2026) it is the instant the clocks resume, not
+// the previous day's 23:00, and that day still ends as its own day does. A
+// statistics bucket starts there (addon-contract §9.2), as the add-ons' do.
+func TestASkippedMidnightIsWhenTheClocksResume(t *testing.T) {
+	_, santiago := load("America/Santiago")
+	old := Loc
+	Loc = santiago
+	t.Cleanup(func() { Loc = old })
+
+	m, err := Midnight("2026-09-06")
+	if err != nil || !m.Equal(time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC)) || Day(m) != "2026-09-06" {
+		t.Fatalf("Midnight(6 Sep, Santiago) = %v, %v; want 01:00 -03:00 (04:00 UTC), on its own day", m, err)
+	}
+	end, err := EndOfDay("2026-09-05")
+	if err != nil || Day(end) != "2026-09-05" || !end.Add(time.Second).Equal(m) {
+		t.Fatalf("EndOfDay(5 Sep, Santiago) = %v, %v; want the second before 6 Sep begins", end, err)
+	}
+	if got := AddDate("2026-12-31", 0, 0, 1); got != "2027-01-01" {
+		t.Fatalf("AddDate(31 Dec, +1 day) = %s", got)
+	}
+	if got := AddDate("2026-11-12", 0, -11, 0); got != "2025-12-12" {
+		t.Fatalf("AddDate(12 Nov, -11 months) = %s", got)
+	}
+}
