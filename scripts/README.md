@@ -79,23 +79,48 @@ this checks them in order and stops at the first break:
 
 ## addon-quiet-run.sh
 
-Staging only (it refuses where `/var/lib/syndra-staging` is absent). Two readers
-besides the kit move the add-on's `/health` `target_reads`: its statistics
-collector and the backend's 30-second health probe. For one command the add-on
-is recreated with `TRUENAS_STATS_COLLECT_EVERY=0` and the backend is stopped;
-on any exit both go back and the script checks they did. Nothing is written to
-`.env`, so the production setting is never changed, only shadowed for the run.
+Staging only. It refuses unless both hold: `/var/lib/syndra-staging` exists, and
+`.env` has the stand-in Zitadel (`ZITADEL_FAKE_WORLD` set, `ZITADEL_DOMAIN`
+empty). Two readers besides the kit move the add-on's `/health` `target_reads`:
+its statistics collector and the backend's 30-second health probe. For one
+command the add-on is recreated with `TRUENAS_STATS_COLLECT_EVERY=0` and the
+backend is stopped. On any exit, including a dropped ssh session, both go back
+and the script checks they did (the add-on's setting equals its value before,
+the backend answers `/healthz`). The outcome also goes to syslog
+(`journalctl -t addon-quiet-run`). Nothing is written to `.env`, so the
+production setting is never changed, only shadowed for the run.
+
+The whole staging run, in order. Every step that reaches the real NAS is the
+owner's to approve:
 
 ```bash
-# on the Mac: the kit for the staging host (x86_64)
+# 0. Hold merges to main for the run: a main deploy re-checks-out staging,
+#    stops the backend and the add-on, and resets the database mid-run.
+# 1. Deploy the contract branch to staging (it has the collector; main does not):
+gh workflow run deploy-staging.yml -f ref=feat/addon-contract
+# 2. On staging, switch the add-on on: in /opt/syndra/.env set
+#    COMPOSE_PROFILES=truenas and ADDON_TARGETS=truenas, then
+#    docker compose up -d   (from /opt/syndra, with COMPOSE_FILE as below)
+# 3. On the Mac: the kit for the staging host (x86_64)
 GOOS=linux GOARCH=amd64 go build -C addons/conformance -o /tmp/syndra-addon-conform ./cmd/syndra-addon-conform
 scp /tmp/syndra-addon-conform root@<staging>:/tmp/
-# on staging, from /opt/syndra (the add-on running: COMPOSE_PROFILES=truenas)
+# 4. On staging, inside tmux, from /opt/syndra:
 SECRET="$(docker volume inspect -f '{{.Mountpoint}}' syndra_truenas_addon_secret)/secret.key" \
 scripts/addon-quiet-run.sh -- sh -c \
-  '/tmp/syndra-addon-conform -url "https://$ADDON_IP:8443" -target truenas -secret-file "$SECRET"'
+  '/tmp/syndra-addon-conform -url "https://$ADDON_IP:8443" -target truenas -secret-file "$SECRET" -mutate -json /tmp/conformance.json'
+# 5. When staging testing is over, staging goes back to its normal settings
+#    (no add-on: it shares production's NAS): remove truenas from
+#    COMPOSE_PROFILES and ADDON_TARGETS in .env, then
+#    docker compose stop truenas-addon && docker compose up -d
 ```
 
-`$ADDON_IP` is set by the script, so it is expanded inside the quoted `sh -c`, not by
-your shell before the script runs. If the script is killed
-outright, `scripts/addon-quiet-run.sh --restore` (or the next deploy) puts it back.
+`$ADDON_IP` is set by the script, so it is expanded inside the quoted `sh -c`,
+not by your shell before the script runs. The script layers
+`docker-compose.staging.yml` itself (as `_staging.yml` does) when `COMPOSE_FILE`
+is unset, so a recreate keeps the stand-in Zitadel.
+
+If the script is killed outright (SIGKILL, a lost host), run
+`scripts/addon-quiet-run.sh --restore`. It recreates the add-on from `.env`,
+starts the backend, and fails loudly if the setting is still `0`. A later deploy
+also recreates the add-on from `.env`, but only while `COMPOSE_PROFILES`
+includes `truenas`. Otherwise `--restore` is the only way back.

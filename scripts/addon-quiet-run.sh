@@ -14,49 +14,80 @@
 # TRUENAS_STATS_COLLECT_EVERY=0 and the backend is stopped.
 #
 # Nothing is written to any file. The override exists only in this process's
-# environment, so .env (and with it every later deploy) keeps the production
-# setting. The restore runs on every exit, success, failure or Ctrl-C, and is
-# verified: the add-on's STATS_COLLECT_EVERY must be the value it had before,
-# and the backend must be running again if it was running before. If this
-# script is killed outright (SIGKILL, a lost host), run it with --restore, or
-# let the next deploy do it (`up -d` recreates the add-on from .env).
+# environment, so .env keeps the production setting. The restore runs on every
+# exit (success, failure, Ctrl-C, a dropped ssh session, a closed output pipe)
+# and is verified: the add-on's STATS_COLLECT_EVERY must be the value it had
+# before, and the backend must answer /healthz again if it was running before.
+# Its outcome also goes to syslog (tag addon-quiet-run), for when the terminal
+# that started it is gone. Run it inside tmux all the same. If this script is
+# killed outright (SIGKILL, a lost host), run it with --restore.
 #
 # The command sees ADDON_IP, the add-on's address on its network. Quote the
 # command so it expands there, not in your shell before this script runs:
 #   scripts/addon-quiet-run.sh -- sh -c 'kit -url "https://$ADDON_IP:8443" ...'
-# (scripts/README.md has the whole kit invocation.)
+# (scripts/README.md has the whole procedure.)
 set -euo pipefail
+# A write to a closed pipe is an error to handle, never a silent death that
+# skips the restore.
+trap '' PIPE
 
 cd "$(dirname "$0")/.."
 
 read -ra COMPOSE <<<"${COMPOSE:-docker compose}"
 ADDON=truenas-addon
 VAR=TRUENAS_STATS_COLLECT_EVERY
+# Test knobs (repoguard/addon_quiet_run_test.go); never set them on a host.
+MARKER="${STAGING_MARKER:-/var/lib/syndra-staging}"
+ENV_FILE="${SYNDRA_ENV_FILE:-.env}"
 
-die() { printf 'addon-quiet-run: %s\n' "$*" >&2; exit 1; }
+# A terminal that hung up (or a reader that went away) is not written to again:
+# bash keeps output it failed to write and a later child, a $(…) included,
+# would flush it into whatever it writes, the settings check among them.
+say() { printf '%s\n' "$*" 2>/dev/null || exec >/dev/null 2>&1; }
+die() { printf 'addon-quiet-run: %s\n' "$*" >&2 2>/dev/null || exec >/dev/null 2>&1; exit 1; }
+note() { if command -v logger >/dev/null; then logger -t addon-quiet-run -- "$*" || true; fi; }
 
-# Staging only. Production pushes its nightly dump INTO this directory on
-# staging, so it exists there and nowhere else; stopping production's backend
-# is never what this script is for.
-[[ -d "${STAGING_MARKER:-/var/lib/syndra-staging}" ]] ||
-  die "refusing: this is not the staging host (no ${STAGING_MARKER:-/var/lib/syndra-staging})"
+# Staging only, by two facts production cannot have together: the directory
+# production pushes its nightly dump into, and the stand-in Zitadel (staging's
+# .env sets ZITADEL_FAKE_WORLD and leaves ZITADEL_DOMAIN empty; production's
+# deploy refuses an empty ZITADEL_DOMAIN and the backend refuses both set).
+envval() { sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; }
+[[ -d "$MARKER" && -f "$ENV_FILE" && -n "$(envval ZITADEL_FAKE_WORLD)" && -z "$(envval ZITADEL_DOMAIN)" ]] ||
+  die "refusing: this is not the staging host (needs $MARKER and a stand-in Zitadel in $ENV_FILE)"
+
+# The staging override, as _staging.yml layers it, so a recreate never drops
+# the backend's stand-in Zitadel.
+if [[ -z "${COMPOSE_FILE:-}" && -f docker-compose.staging.yml ]]; then
+  export COMPOSE_FILE=docker-compose.yml:docker-compose.staging.yml
+fi
 
 container() { "${COMPOSE[@]}" ps -q "$1"; }
 running() { [[ -n "$(container "$1")" ]]; }
 collect_every() {
-  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(container "$ADDON")" |
-    sed -n 's/^STATS_COLLECT_EVERY=//p'
+  local id
+  id="$(container "$ADDON")" && [[ -n "$id" ]] || return 1
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$id" | sed -n 's/^STATS_COLLECT_EVERY=//p'
 }
 addon_up() { "${COMPOSE[@]}" up -d --no-deps --wait "$ADDON" >/dev/null; }
-
 # The add-on as .env describes it: the override removed from the environment,
 # so the compose file's own interpolation (.env, then its PT1H default) decides.
 restore_addon() { env -u "$VAR" "${COMPOSE[@]}" up -d --no-deps --wait "$ADDON" >/dev/null; }
+# Running is not answering: a crash-looping container is listed by `ps`.
+backend_answers() {
+  local port
+  port="$("${COMPOSE[@]}" port backend 8080 | sed 's/.*://')" && [[ -n "$port" ]] &&
+    curl -fsS --retry 30 --retry-delay 3 --retry-all-errors "http://localhost:$port/healthz" >/dev/null
+}
 
 if [[ "${1:-}" == "--restore" ]]; then
-  restore_addon
-  "${COMPOSE[@]}" start backend >/dev/null
-  printf 'restored: STATS_COLLECT_EVERY=%s, backend running\n' "$(collect_every)"
+  running "$ADDON" || die "the $ADDON service is not running: nothing to restore"
+  restore_addon || die "could not recreate $ADDON"
+  "${COMPOSE[@]}" start backend >/dev/null || die "could not start the backend"
+  now="$(collect_every || true)"
+  [[ -n "$now" && "$now" != 0 ]] || die "STATS_COLLECT_EVERY is still '${now}': is $VAR exported in this shell or set in $ENV_FILE?"
+  backend_answers || die "the backend does not answer /healthz"
+  say "restored: STATS_COLLECT_EVERY=$now, backend answering"
+  note "restored by hand: STATS_COLLECT_EVERY=$now"
   exit 0
 fi
 
@@ -64,48 +95,61 @@ fi
 shift
 
 running "$ADDON" || die "the $ADDON service is not running: nothing to quiet"
-before="$(collect_every)"
-[[ -n "$before" ]] || die "could not read STATS_COLLECT_EVERY from the running add-on"
+before="$(collect_every)" || die "could not read the add-on's settings"
+[[ -n "$before" ]] || die "the running add-on has no STATS_COLLECT_EVERY (deploy a ref with the statistics collector first)"
+[[ "$before" != 0 ]] || die "STATS_COLLECT_EVERY is already 0: run $0 --restore first"
 backend_was_running=false
-running backend && backend_was_running=true
+if running backend; then backend_was_running=true; fi
 
 restore() {
-  local status=$? ok=true
-  trap - EXIT INT TERM
-  echo "==> restoring"
+  local status=$? ok=true now
+  # Nothing may stop the restore: not a failing echo on a terminal that hung
+  # up, not a second Ctrl-C while compose waits on the health check.
+  set +e
+  trap '' HUP INT TERM
+  trap - EXIT
+  say "==> restoring"
   restore_addon || ok=false
   if $backend_was_running; then "${COMPOSE[@]}" start backend >/dev/null || ok=false; fi
-  local now
-  now="$(collect_every 2>/dev/null || true)"
+  now="$(collect_every)"
   if [[ "$now" != "$before" ]]; then
-    printf '  FAIL  STATS_COLLECT_EVERY is %q, was %q before: run %s --restore\n' "$now" "$before" "$0" >&2
+    say "  FAIL  STATS_COLLECT_EVERY is '$now', was '$before' before: run $0 --restore"
     ok=false
   else
-    printf '  ok    STATS_COLLECT_EVERY=%s (as before)\n' "$now"
+    say "  ok    STATS_COLLECT_EVERY=$now (as before)"
   fi
-  if $backend_was_running && ! running backend; then
-    printf '  FAIL  backend is not running: run %s --restore\n' "$0" >&2
-    ok=false
-  elif $backend_was_running; then
-    echo "  ok    backend running"
+  if $backend_was_running; then
+    if backend_answers; then
+      say "  ok    backend answering"
+    else
+      say "  FAIL  the backend does not answer /healthz: run $0 --restore"
+      ok=false
+    fi
   fi
-  $ok || exit 1
-  exit "$status"
+  if $ok; then
+    note "restored: STATS_COLLECT_EVERY=$now"
+    exit "$status"
+  fi
+  note "RESTORE FAILED: STATS_COLLECT_EVERY=$now (was $before); run $0 --restore"
+  exit 1
 }
 trap restore EXIT
+trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-echo "==> quieting (was STATS_COLLECT_EVERY=$before)"
+say "==> quieting (was STATS_COLLECT_EVERY=$before)"
+note "quieting: collector off, backend stopped (was STATS_COLLECT_EVERY=$before)"
 if $backend_was_running; then "${COMPOSE[@]}" stop backend >/dev/null; fi
 export "$VAR=0"
 addon_up
 unset "$VAR"
-[[ "$(collect_every)" == "0" ]] || die "the add-on did not take STATS_COLLECT_EVERY=0"
-echo "  ok    collector off, backend stopped"
+[[ "$(collect_every)" == 0 ]] || die "the add-on did not take STATS_COLLECT_EVERY=0"
+say "  ok    collector off, backend stopped"
 
 ADDON_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$(container "$ADDON")" | awk '{print $1}')"
+[[ -n "$ADDON_IP" ]] || die "could not read the add-on's address"
 export ADDON_IP
 
-echo "==> running: $*"
+say "==> running: $*"
 "$@"

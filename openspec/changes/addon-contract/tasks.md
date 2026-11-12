@@ -946,16 +946,24 @@ settings with the full §5 rules.
   never deletes) #ready-for-human
   *Prepared (13 Nov 2026), owner's rule "only temporary, back to the
   production setting afterwards":* run the kit inside
-  `scripts/addon-quiet-run.sh` (staging only, refuses elsewhere), which
-  recreates the add-on with `TRUENAS_STATS_COLLECT_EVERY=0` and stops the
-  backend (its 30 s HEALTH probe) for the one command, then restores both on
-  any exit and verifies the add-on's `STATS_COLLECT_EVERY` equals its value
-  before the run. Nothing is written to `.env`. Invocation in
-  `scripts/README.md`; held by `repoguard/addon_quiet_run_test.go` (a fake
-  `docker`: restore on success, on failure, a restore that did not take
-  reported, a stopped backend left stopped, refusal off staging). Staging's
-  `.env` has no `COMPOSE_PROFILES=truenas` today: the add-on must be
-  switched on there first (the owner's step, with this run's OK).
+  `scripts/addon-quiet-run.sh`. It refuses off staging (the dump directory
+  and a stand-in-Zitadel `.env`, both required). It recreates the add-on
+  with `TRUENAS_STATS_COLLECT_EVERY=0` and stops the backend (its 30 s HEALTH
+  probe) for the one command, then restores both on any exit. That includes a
+  dropped ssh session or a closed pipe: PIPE is ignored, the restore ignores
+  HUP, INT and TERM, and output stops after a failed write. The restore
+  verifies the add-on's setting equals its value before and the backend
+  answers `/healthz`, and records the outcome in syslog. Nothing is written to
+  `.env`. The whole staging procedure, including switching staging's add-on
+  back off afterwards, is in `scripts/README.md`. Held by
+  `repoguard/addon_quiet_run_test.go` against a fake `docker`, which checks:
+  - restore on success, on a failing command, and on a failing quiet
+    (`env -u` proved);
+  - a SIGHUP with nobody reading;
+  - a restore that did not take, and a backend that does not answer, both
+    reported;
+  - a stopped backend left stopped;
+  - refusal off staging and with a production `.env`.
 
 ## 5. The guide
 

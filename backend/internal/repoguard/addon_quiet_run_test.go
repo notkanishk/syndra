@@ -22,11 +22,14 @@ if [[ "$1" == compose ]]; then
   case "$1 ${*: -1}" in
     "ps truenas-addon") echo addon-id ;;
     "ps backend") [[ -e "$S/backend" ]] && echo backend-id ;;
+    "port 8080") echo "0.0.0.0:18080" ;;
     "up truenas-addon")
+      [[ "$*" == "up -d --no-deps --wait truenas-addon" ]] || { echo "fake docker: unexpected up $*" >&2; exit 9; }
       if [[ -e "$S/sticky" ]]; then exit 0; fi
+      if [[ -e "$S/fail-quiet-up" && "${TRUENAS_STATS_COLLECT_EVERY:-}" == 0 ]]; then rm "$S/fail-quiet-up"; exit 1; fi
       echo "${TRUENAS_STATS_COLLECT_EVERY:-$FAKE_DOTENV}" > "$S/every" ;;
     "stop backend") rm -f "$S/backend" ;;
-    "start backend") touch "$S/backend" ;;
+    "start backend") [[ -e "$S/backend-broken" ]] || touch "$S/backend" ;;
     *) echo "fake docker: unexpected compose $*" >&2; exit 9 ;;
   esac
   exit 0
@@ -41,6 +44,16 @@ fi
 echo "fake docker: unexpected $*" >&2; exit 9
 `
 
+// curl answers /healthz only while the fake backend runs; logger keeps what
+// the script would send to syslog.
+const fakeCurl = `#!/bin/bash
+[[ -e "$FAKE_STATE/backend" ]]
+`
+
+const fakeLogger = `#!/bin/bash
+echo "${*: -1}" >> "$FAKE_STATE/syslog"
+`
+
 type quietRun struct {
 	state string
 	out   string
@@ -48,6 +61,11 @@ type quietRun struct {
 }
 
 func runQuiet(t *testing.T, staging bool, setup func(state string), args ...string) quietRun {
+	return runQuietTo(t, staging, setup, nil, args...)
+}
+
+// runQuietTo runs the script with its output going to out (nil: captured).
+func runQuietTo(t *testing.T, staging bool, setup func(state string), out *os.File, args ...string) quietRun {
 	t.Helper()
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")
@@ -64,7 +82,13 @@ func runQuiet(t *testing.T, staging bool, setup func(state string), args ...stri
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(fakeDocker), 0o755); err != nil {
+	for name, body := range map[string]string{"docker": fakeDocker, "curl": fakeCurl, "logger": fakeLogger} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	envFile := filepath.Join(dir, "env")
+	if err := os.WriteFile(envFile, []byte("ZITADEL_DOMAIN=\nZITADEL_FAKE_WORLD=/var/lib/syndra-staging/world/world.json\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	write := func(name, s string) {
@@ -83,15 +107,24 @@ func runQuiet(t *testing.T, staging bool, setup func(state string), args ...stri
 		"FAKE_STATE="+state,
 		"FAKE_DOTENV=PT1H",
 		"STAGING_MARKER="+marker,
+		"SYNDRA_ENV_FILE="+envFile,
+		"COMPOSE_FILE=",
 	)
-	out, err := cmd.CombinedOutput()
+	var captured []byte
+	var err error
+	if out != nil {
+		cmd.Stdout, cmd.Stderr = out, out
+		err = cmd.Run()
+	} else {
+		captured, err = cmd.CombinedOutput()
+	}
 	code := 0
 	if ee, ok := err.(*exec.ExitError); ok {
 		code = ee.ExitCode()
 	} else if err != nil {
 		t.Fatal(err)
 	}
-	return quietRun{state: state, out: string(out), code: code}
+	return quietRun{state: state, out: string(captured), code: code}
 }
 
 func (r quietRun) file(t *testing.T, name string) (string, bool) {
@@ -166,5 +199,74 @@ func TestAddonQuietRunRefusesOffStaging(t *testing.T) {
 	}
 	if calls, _ := r.file(t, "calls"); calls != "" {
 		t.Errorf("docker was called off staging: %q", calls)
+	}
+}
+
+// The quiet recreate failing leaves TRUENAS_STATS_COLLECT_EVERY=0 in the
+// script's environment; the restore must still bring back .env's value, which
+// only removing the override (env -u) does.
+func TestAddonQuietRunRestoresWhenQuietingItselfFails(t *testing.T) {
+	r := runQuiet(t, true, func(state string) {
+		os.WriteFile(filepath.Join(state, "fail-quiet-up"), nil, 0o644)
+	}, "--", "true")
+	if r.code == 0 {
+		t.Fatalf("exit 0 after a failed quiet\n%s", r.out)
+	}
+	if every, _ := r.file(t, "every"); every != "PT1H" {
+		t.Errorf("STATS_COLLECT_EVERY after a failed quiet = %q, want PT1H", every)
+	}
+	if _, up := r.file(t, "backend"); !up {
+		t.Error("the backend was not started again after a failed quiet")
+	}
+}
+
+// An ssh session that drops mid-run: SIGHUP, and stdout a pipe nobody reads.
+// The restore must still run in full and say so in syslog.
+func TestAddonQuietRunRestoresAfterAHangupWithNoOneReading(t *testing.T) {
+	rd, wr, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rd.Close()
+	defer wr.Close()
+	r := runQuietTo(t, true, nil, wr, "--", "bash", "-c", "kill -HUP $PPID; sleep 0.2")
+	if r.code != 129 {
+		t.Errorf("exit %d, want 129 (SIGHUP)", r.code)
+	}
+	if every, _ := r.file(t, "every"); every != "PT1H" {
+		t.Errorf("STATS_COLLECT_EVERY after a hangup = %q, want PT1H", every)
+	}
+	if _, up := r.file(t, "backend"); !up {
+		t.Error("the backend was not started again after a hangup")
+	}
+	if log, _ := r.file(t, "syslog"); !strings.Contains(log, "restored: STATS_COLLECT_EVERY=PT1H") {
+		t.Errorf("syslog = %q, want the restore recorded", log)
+	}
+}
+
+// A backend that starts but does not answer is a failed restore, not "ok".
+func TestAddonQuietRunReportsABackendThatDoesNotAnswer(t *testing.T) {
+	r := runQuiet(t, true, func(state string) {
+		os.WriteFile(filepath.Join(state, "backend-broken"), nil, 0o644)
+	}, "--", "true")
+	if r.code != 1 || !strings.Contains(r.out, "FAIL  the backend does not answer") {
+		t.Fatalf("exit %d, want 1 with a FAIL line\n%s", r.code, r.out)
+	}
+	if log, _ := r.file(t, "syslog"); !strings.Contains(log, "RESTORE FAILED") {
+		t.Errorf("syslog = %q, want the failure recorded", log)
+	}
+}
+
+// A production-shaped .env (a real Zitadel) refuses even with the marker.
+func TestAddonQuietRunRefusesAProductionEnv(t *testing.T) {
+	r := runQuiet(t, true, func(state string) {
+		env := filepath.Join(filepath.Dir(state), "env")
+		os.WriteFile(env, []byte("ZITADEL_DOMAIN=auth.example.org\nZITADEL_FAKE_WORLD=\n"), 0o644)
+	}, "--", "true")
+	if r.code == 0 || !strings.Contains(r.out, "not the staging host") {
+		t.Fatalf("exit %d, want a refusal\n%s", r.code, r.out)
+	}
+	if calls, _ := r.file(t, "calls"); calls != "" {
+		t.Errorf("docker was called with a production .env: %q", calls)
 	}
 }
