@@ -193,12 +193,12 @@ func Preview(ctx context.Context, target, op, subject, actor string, params map[
 // ViewOf is a physical operation's reply (the confirm's, or the one GET /calls
 // recorded) for the generic renderer, through the same decoder as a read's:
 // one shape, one reader. Empty for a secret reply, which is never shown.
-func ViewOf(target, op string, body []byte) ReadView {
+func ViewOf(target, op string, body []byte, c Clock) ReadView {
 	p := operationPolicy[op]
 	if secretResult(op) {
 		return ReadView{Operation: op, Shape: shapes[p.Result].shape}
 	}
-	return ReadReply{Operation: op, Target: target, Schema: p.Result, Results: true, Body: body, Outcome: OutcomeSucceeded}.View()
+	return ReadReply{Operation: op, Target: target, Schema: p.Result, Results: true, Body: body, Outcome: OutcomeSucceeded, Clock: c}.View()
 }
 
 // answer is the reply's payload: `result` from an add-on declaring results,

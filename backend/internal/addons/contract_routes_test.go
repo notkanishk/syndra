@@ -46,9 +46,9 @@ func addonServingStatus(t *testing.T, status int, body []byte) *seen {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got.method, got.path, got.rawQuery, got.idempotencyKey = r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Get("Idempotency-Key")
 		got.body, _ = io.ReadAll(r.Body)
-		// No Date: these fixtures date their copies as sent. Go's server would
-		// add one off the real clock, which is not the clocks these tests fake
-		// (the Date tests are in clock_age_test.go).
+		// No Date: these fixtures date their copies as sent. Go's server adds
+		// one, and its one-second resolution would put up to a second on every
+		// copy these tests compare exactly (the Date tests: clock_age_test.go).
 		w.Header()["Date"] = nil
 		w.Header().Set("Content-Type", "application/json")
 		if status >= 400 {

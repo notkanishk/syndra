@@ -46,6 +46,9 @@ type Settlement struct {
 	// (secret_result) or the registry marks the operation's reply secret, in
 	// which case Syndra drops it unread.
 	Reply json.RawMessage
+	// Clock is the /calls answer's: on the add-on's clock its Date less the
+	// reply's taken_at is how old the recorded reply is (ahead, via ViewOf).
+	Clock Clock
 }
 
 // ErrNotACallAnswer is a /calls reply that is not one of the three answers
@@ -87,7 +90,7 @@ func CallAnswer(ctx context.Context, target, op, callID string) (Settlement, err
 	case ans.State != CallRecorded && ans.Reply != nil:
 		return Settlement{}, fmt.Errorf("%w: a reply with %s", ErrNotACallAnswer, ans.State)
 	}
-	out := Settlement{State: ans.State}
+	out := Settlement{State: ans.State, Clock: resp.Clock}
 	if ans.Reply != nil && string(*ans.Reply) != "null" && !secretResult(op) {
 		out.Reply = *ans.Reply
 	}

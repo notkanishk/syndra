@@ -193,17 +193,17 @@ type CallResponse struct {
 // Clock is what lets a copy be dated by its age instead of by the add-on's
 // clock, as an HTTP cache does (RFC 9111 §4.2.3, Calculating Age). Date is the
 // response's Date header (RFC 9110 §6.6.1), the add-on's clock at the moment
-// it answered; Sent is this backend's clock when the request went out. The zero
-// Clock (no Date, or one that does not parse) dates nothing, and a taken_at is
-// then held to this clock as sent.
+// it answered; Sent is this backend's clock when the request went out (the
+// RFC's request_time). The zero Clock (no Date, or one that does not parse)
+// dates nothing, and a taken_at is then held to this clock as sent.
 type Clock struct {
 	Date, Sent time.Time
 }
 
-// age is apparent_age = max(0, Date - taken_at) (RFC 9111 §4.2.3): both are
-// the add-on's own clock, so a skew between the clocks cancels out. Never
-// negative: a Date before taken_at is a bogus add-on, and a copy is not from
-// the future.
+// age is age_value = Date - taken_at: both are the add-on's own clock, so a
+// skew between the clocks cancels out. Never negative: Date has one-second
+// resolution, so a taken_at within a second after it is age 0 (ahead ignores a
+// Date further before it).
 func (c Clock) age(takenAt time.Time) time.Duration {
 	return max(0, c.Date.Sub(takenAt))
 }
