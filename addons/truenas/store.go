@@ -423,6 +423,23 @@ func (s *Store) GetBinding(subjectID string) (Binding, bool, error) {
 	return b, found, err
 }
 
+// UIDBound says whether any subject's binding holds this uid, under whatever
+// name it last recorded: BoundUsernames sees a name, and an account renamed
+// since its binding was written is still bound.
+func (s *Store) UIDBound(uid int64) (bool, error) {
+	bound := false
+	err := s.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucketBindings).ForEach(func(_, v []byte) error {
+			var b Binding
+			if json.Unmarshal(v, &b) == nil && (b.UID == uid || b.AccountID == accountID(uid)) {
+				bound = true
+			}
+			return nil
+		})
+	})
+	return bound, err
+}
+
 // BoundUsernames is every name this add-on has claimed, so a collision check
 // can tell "taken by somebody we manage" from "taken by an account we have
 // never seen" — which are an ordinary rename and an operator decision

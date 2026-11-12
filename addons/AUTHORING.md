@@ -1157,10 +1157,18 @@ whole burden.
   `account.adopt` operation, which every add-on that creates accounts
   therefore serves ([The account operations](#the-account-operations)).
   Anyone with console access can type an external reference, and a wrong
-  adoption hands one person's data to another. (`boundAccount` and `locate`
-  in `addons/truenas/apply.go`, `adoptAccount` in
-  `addons/truenas/operations.go`; the conflict's words, one source for plan
-  and apply, are `BindingConflict.words`.)
+  adoption hands one person's data to another. Tie the intent to the account
+  it creates by the app's own id where the create can choose it (TrueNAS
+  asks for a uid from the add-on's range and logs it on the intent), since a
+  name is display, never identity; the create in doubt is the one whose
+  latest result is unknown with no binding of the subject logged since, and
+  the adoption's own logged bind is what settles it, so it adopts once. Plan
+  MUST predict the adoption as apply makes it. (`boundAccount` and `locate`
+  in `addons/truenas/apply.go`, the adoption rule `leftByCrashedCreate` in
+  `addons/truenas/apply.go` and `CreateInDoubt` in
+  `addons/truenas/mutationlog.go`,
+  `adoptAccount` in `addons/truenas/operations.go`; the conflict's words,
+  one source for plan and apply, are `BindingConflict.words`.)
 - **Record it before you answer.** The add-on MUST write the mutation-log
   intent before the create, MUST record the binding and the reply under the
   `call_id` before it answers, and MUST answer a replay from that record.

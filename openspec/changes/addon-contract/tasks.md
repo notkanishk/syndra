@@ -1177,13 +1177,51 @@ settings with the full §5 rules.
   - Every binding change is its own `mutate` beside its NAS write (create bind, rebind, wanted SMB, purge unbind); a no-op store write is skipped; the AST guard holds store writes to `mutate` closures.
   - The fake NAS answers a missing method with an error member, as TrueNAS does, not a transport error.
   - Review of 3f774667: whether the NAS answered is decided before any wording, so no text turns a lost answer into a refusal (a login's rate limit is read by the breaker itself); an adopted group keeps a failure's own status only when this attempt's `group.create` was answered or never sent, otherwise the failure is "possibly acted"; a binding the log refuses after a create says the account was created. The fake NAS rate-limits with an error frame, as TrueNAS does.
-- [ ] 5.3d Adopting the account a crashed TrueNAS create left behind.
+- [x] 5.3d Adopting the account a crashed TrueNAS create left behind.
   Settling a write in doubt is done (5.3b: each is settled `unknown` at
   start, so `/health` needs no count). Left: whether the create path adopts
   an unbound account of the derived name under a logged `user.create`
   intent for that subject whose result is `unknown` (design §5 and the
   guide's "Look up before you create" allow exactly that adoption; today it
-  is `BINDING_CONFLICT` for an operator). #needs-triage
+  is `BINDING_CONFLICT` for an operator).
+  *Done (13 Nov 2026):* `leftByCrashedCreate` (apply.go), asked by `locate`
+  and `planOne` alike, adopts only when every check holds: the account's name
+  is exactly the derived one; `unboundConflict(...).Adoptable` (no binding
+  names it, the add-on knows its own account and this is not it); its uid is
+  in the add-on's range; no binding holds that uid under an older name
+  (`Store.UIDBound`); and `MutationLog.CreateInDoubt(subject, account_id)`
+  finds a `user.create` intent for this subject asking for that uid whose
+  latest result is `unknown`, with no `store.bind` of the subject (succeeded
+  or unknown) logged after it. Anything else stays `BINDING_CONFLICT`.
+  - Log format: `Record.AccountID` (`account_id`, omitempty, in the digest
+    only when set, so older records digest as before and the anchored chain
+    verifies across the upgrade), set on every write of a create from the
+    uid on (`caller.accountID` in `createAndConverge`). The intent is tied to
+    the account by the uid it asked for, not the name (ClaimID never hands a
+    uid out twice; a name is display, never identity), so an email change, a
+    released account or another subject's crashed create of the same name is
+    never adopted. An intent written before this field is never adopted.
+  - The trace that settles the doubt is the adoption's own bind, logged
+    through `mutate` (`store.bind`, `BindIfFree`) like every binding change:
+    `CreateInDoubt` reads no create before a binding of the subject, so a
+    second create (or one after an operator's `account.release`) does not
+    adopt again. No new record kind or outcome.
+  - The bind happens in `applyOne` after the fingerprint check, so a stale
+    plan writes nothing; then `converge` and the outcome is `applied`
+    ("Adopted X, which an earlier create made and could not record."), the
+    plan saying `apply` ("Adopts X, …") with the account's fingerprint, so a
+    re-planned system row dispatches instead of going `target_refused`.
+    Under the subject lock (`once`); `BindIfFree` holds the name against
+    every other subject.
+  - Tests: `adopt_in_doubt_test.go` (crash after the intent then `Recover`
+    then adopt; no intent, failed, not_sent, still open, another subject,
+    another uid, out of range, bound under an older name: conflict, plan
+    alike; second create bound path; release then create: conflict; the
+    bind logged; a create names its account). Mutation-checked: subject
+    equality, the `unknown` check, the later-binding rule, the uid tie,
+    `UIDBound`, the range.
+  - A name bound to another managed subject never reaches this rule: the
+    derivation suffixes past it (unchanged).
 - [x] 5.3c A membership field that is not enumerable: the add-on cannot
   tell its managed set, and the drift sweep compares the whole list. No
   add-on has one yet.

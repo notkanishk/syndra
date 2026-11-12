@@ -332,7 +332,7 @@ func TestAWriteForgetsEveryCopy(t *testing.T) {
 	fake := &fakeRPC{users: fixtureUsers, groups: fixtureGroups}
 	s := testServer(t, fake)
 	getSubjects(t, s, true)
-	if err := s.mutate(caller{"password.set", "sub-1", "sub-1", "call-1"}, "store.binding", func() error { return nil }); err != nil {
+	if err := s.mutate(caller{operation: "password.set", subject: "sub-1", actor: "sub-1", callID: "call-1"}, "store.binding", func() error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	reads := userReads(fake)

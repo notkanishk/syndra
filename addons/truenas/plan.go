@@ -190,6 +190,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 
 	var current *Subject
 	name := binding.Username
+	adopts := false // leftByCrashedCreate, as the apply decides it
 	if bound {
 		// The rule the apply's locate uses, read from this snapshot.
 		floor, ceiling := s.idRange()
@@ -217,16 +218,24 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 		})
 		if existing, ok := byName[name]; ok {
 			// Reported, not resolved. Adopting silently is the dangerous
-			// outcome — that account may belong to somebody else entirely.
+			// outcome — that account may belong to somebody else entirely —
+			// save the one case the apply adopts (5.3d), planned the same.
 			conflict := s.unboundConflict(existing, claimed[name])
-			detail, next := conflict.words()
-			return ApplyOutcome{
-				Subject: req.Subject, Effect: EffectBlocked,
-				Detail: detail, Consequence: "Nothing would change. " + next,
-				Username:    name,
-				Fingerprint: fingerprintSubject(existing),
-				Conflict:    conflict,
-			}, nil
+			adopts, err = s.leftByCrashedCreate(req.Subject, name, existing, conflict)
+			if err != nil {
+				return ApplyOutcome{}, fmt.Errorf("%w: %w", errStoreUnreadable, err)
+			}
+			if !adopts {
+				detail, next := conflict.words()
+				return ApplyOutcome{
+					Subject: req.Subject, Effect: EffectBlocked,
+					Detail: detail, Consequence: "Nothing would change. " + next,
+					Username:    name,
+					Fingerprint: fingerprintSubject(existing),
+					Conflict:    conflict,
+				}, nil
+			}
+			current = existing
 		}
 	}
 
@@ -305,13 +314,17 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 		if home.note != "" {
 			detail += " " + home.note
 		}
-		return ApplyOutcome{
+		out := ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
 			Detail:      detail,
 			Consequence: describeHolding(*current),
 			Username:    current.Username, Fingerprint: fingerprint,
 			AccountID: accountID(current.UID), Standing: standingOf(current),
-		}, nil
+		}
+		if adopts {
+			out = adoptionWords(out, true)
+		}
+		return out, nil
 	}
 	detail := ""
 	if changes {
@@ -320,13 +333,17 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, byUID map[
 	if quotaOwed {
 		detail = strings.TrimSpace(detail + " " + quotaWords(quota))
 	}
-	return ApplyOutcome{
+	out := ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApply,
 		Detail:      detail,
 		Consequence: describeHolding(after),
 		Username:    current.Username, Fingerprint: fingerprint,
 		AccountID: accountID(current.UID), Standing: standingOf(current),
-	}, nil
+	}
+	if adopts {
+		out = adoptionWords(out, true)
+	}
+	return out, nil
 }
 
 // projected is the state a NEW account would be left in: the shared decision

@@ -348,7 +348,7 @@ func withFingerprint(t *testing.T, s *server, body string) string {
 	if err := json.Unmarshal([]byte(body), &req); err != nil {
 		return body
 	}
-	current, _, _, _, err := s.locate(req)
+	current, _, _, _, _, err := s.locate(req)
 	if err != nil {
 		// The target is unreadable in this test; the request never gets as far
 		// as the comparison, so any value will do.

@@ -740,6 +740,18 @@ a human; with no intent, or with two candidates, it is a `conflict`. The
 guide says this in those words and the kit replays an apply and asserts one
 account.
 
+"The log holds the intent", made exact for TrueNAS (5.3d,
+`leftByCrashedCreate`): the account holding the derived name is unbound (by
+name and by uid), not the add-on's own, inside the add-on's uid range, and
+the log holds a `user.create` intent for **this** subject asking for **that
+uid** (each create's records carry `account_id`, the uid it asked for; a name
+is display, never identity) whose latest result is `unknown`, with no
+binding of the subject logged after it. Plan predicts it (`Adopts …`), apply
+binds it after the fingerprint check through `mutate`, then converges and
+answers as the create would have. That logged bind is the trace that settles
+the doubt: a later create, even after a release, finds a binding after the
+intent and does not adopt again.
+
 ## 6. States beyond on and off: `standing`
 
 Every subject in `GET /subjects` and every apply outcome carries:

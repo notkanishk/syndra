@@ -236,7 +236,7 @@ func publicParams(name string, params map[string]any) map[string]any {
 
 // opCaller is what an operation's writes are logged under.
 func opCaller(name string, req OperationRequest) caller {
-	return caller{name, req.Subject, req.Actor, req.CallID}
+	return caller{operation: name, subject: req.Subject, actor: req.Actor, callID: req.CallID}
 }
 
 // failedWrite is what a failed write call reports: ErrNotSent when the call

@@ -215,7 +215,7 @@ func TestAnIntentThatCannotBeSyncedSendsNothing(t *testing.T) {
 // only when nothing changed, unknown when it may have.
 func TestEveryWriteHasAResultThatSaysWhatBecameOfIt(t *testing.T) {
 	s := testServer(t, &fakeRPC{})
-	who := caller{"apply", "sub-1", "op_lita", "c1"}
+	who := caller{operation: "apply", subject: "sub-1", actor: "op_lita", callID: "c1"}
 	for _, tc := range []struct {
 		write string
 		err   error
