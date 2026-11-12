@@ -512,6 +512,11 @@ not an observation. The rules the schemas cannot express:
   more than two minutes ahead of its own clock as now, and logs it once per
   target (`takenAt` in `backend/internal/addons/read.go`): keep the add-on
   host's clock synchronised.
+- An add-on SHOULD send a `Date` header (RFC 9110 §6.6.1) on every reply; Go's
+  `net/http` server does. Syndra then dates a kept copy by its age on your own
+  clock, `Date` less `taken_at` (RFC 9111 §4.2.3), so a clock that runs ahead
+  or behind does not make a copy read as new; without one it takes `taken_at`
+  as sent. `Date` MUST NOT be faked: it is your clock at the moment you answer.
 - `truncated: true` MUST be set whenever a read stopped short of everything
   (a cap, a page limit). A truncated read cannot support a conclusion about
   absence, and Syndra draws none from it.

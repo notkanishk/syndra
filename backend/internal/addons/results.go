@@ -64,6 +64,8 @@ type ReadReply struct {
 	// NoChange is a preview answered no_change: the confirm would change
 	// nothing (the subject already holds it).
 	NoChange bool
+	// Clock dates the reply (ahead): the add-on's Date and when it was asked.
+	Clock Clock
 }
 
 // Read sends one effect: read operation about subject, on behalf of actor.
@@ -131,7 +133,7 @@ func (r ReadReply) sent(resp CallResponse, err error) ReadReply {
 		return r
 	}
 	r.Body, r.Outcome, r.Status, r.Err, r.RetryAfter = resp.Body, resp.Outcome, resp.Status, resp.Err, cooldownOf(resp)
-	r.Code, r.Refusal, r.NoChange = resp.Code, resp.Refusal, resp.NoChange
+	r.Code, r.Refusal, r.NoChange, r.Clock = resp.Code, resp.Refusal, resp.NoChange, resp.Clock
 	return r
 }
 
@@ -412,7 +414,7 @@ func (r ReadReply) decodeShape(spec needSpec, raw json.RawMessage, into any) err
 			if seen.TakenAt.IsZero() {
 				return errors.New("taken_at is the zero time")
 			}
-			seen.TakenAt = ahead(r.Target, seen.TakenAt)
+			seen.TakenAt = ahead(r.Target, seen.TakenAt, r.Clock)
 		}
 	}
 	return nil

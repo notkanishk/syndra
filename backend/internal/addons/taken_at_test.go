@@ -24,7 +24,7 @@ func TestATakenAtFromTheFutureIsReadAsNow(t *testing.T) {
 
 	read := func(target, raw string) time.Time {
 		t.Helper()
-		at, ok := takenAt(target, &raw)
+		at, ok := takenAt(target, &raw, Clock{})
 		if !ok {
 			t.Fatalf("%s: not read", raw)
 		}

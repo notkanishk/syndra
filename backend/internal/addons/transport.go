@@ -185,6 +185,37 @@ type CallResponse struct {
 	// Outcome stays succeeded, the transport fact (it was answered, and the
 	// state is as asked); the record says no_change (StatusOf).
 	NoChange bool
+	// Clock is the response's own date and when it was asked for: what dates a
+	// kept copy by its age (ahead).
+	Clock Clock
+}
+
+// Clock is what lets a copy be dated by its age instead of by the add-on's
+// clock, as an HTTP cache does (RFC 9111 §4.2.3, Calculating Age). Date is the
+// response's Date header (RFC 9110 §6.6.1), the add-on's clock at the moment
+// it answered; Sent is this backend's clock when the request went out. The zero
+// Clock (no Date, or one that does not parse) dates nothing, and a taken_at is
+// then held to this clock as sent.
+type Clock struct {
+	Date, Sent time.Time
+}
+
+// age is apparent_age = max(0, Date - taken_at) (RFC 9111 §4.2.3): both are
+// the add-on's own clock, so a skew between the clocks cancels out. Never
+// negative: a Date before taken_at is a bogus add-on, and a copy is not from
+// the future.
+func (c Clock) age(takenAt time.Time) time.Duration {
+	return max(0, c.Date.Sub(takenAt))
+}
+
+// parseDate reads a Date header (RFC 9110 §5.6.7, http.ParseTime); the zero
+// time when absent or not a date, never an invented one.
+func parseDate(h http.Header) time.Time {
+	t, err := http.ParseTime(h.Get("Date"))
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 // Refusal is a refusal's extension members (RFC 9457 §3.2) that name what was
@@ -354,7 +385,9 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 		Idempotent: method == http.MethodGet,
 		Subsystem:  "ADDON",
 	}
+	var sent time.Time
 	httpResp, err := extcall.Do(ctx, addonPolicy(timeout), call, func(ctx context.Context) (*http.Response, error) {
+		sent = timeNow() // the attempt that answered, not the first
 		var rdr io.Reader
 		if body != nil {
 			rdr = bytes.NewReader(body)
@@ -398,7 +431,7 @@ func doAuthenticated(ctx context.Context, cred *credential, method, url string, 
 		respBody = respBody[:maxResponseBytes]
 	}
 
-	out := CallResponse{Status: httpResp.StatusCode, Body: respBody}
+	out := CallResponse{Status: httpResp.StatusCode, Body: respBody, Clock: Clock{Date: parseDate(httpResp.Header), Sent: sent}}
 	if out.Status < 200 || out.Status >= 300 {
 		out.Code, out.Refusal = refusalOf(respBody)
 	}

@@ -19,7 +19,7 @@ import (
 // assumes the add-on is its alone while it runs, and waits the declared
 // cooldown before each fresh step.
 
-var freshChecks = []string{"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable"}
+var freshChecks = []string{"freshness.cached", "freshness.date", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable"}
 
 func (k *kit) freshness() {
 	skip := func(why string) {
@@ -57,7 +57,13 @@ func (k *kit) freshness() {
 	if c := k.at("freshness.cached"); k.wait(cooldown) {
 		k.ok(c, k.subjectsRead(true), "subjects.json")
 		var doc map[string]any
-		n, ok := measure(func() { doc = k.ok(c, k.subjectsRead(false), "subjects.json") })
+		var plain *exchange
+		n, ok := measure(func() { plain = k.subjectsRead(false); doc = k.ok(c, plain, "subjects.json") })
+		// A copy is dated by its Date (RFC 9111 §4.2.3); advisory, as Go's server sends one itself.
+		if d := k.at("freshness.date"); plain.err == nil {
+			_, err := http.ParseTime(plain.header.Get("Date"))
+			d.expect(err == nil, "a read answered with Date %q, which is not an HTTP date: Syndra cannot date a kept copy by its age", plain.header.Get("Date"))
+		}
 		stale, _ := doc["stale"].(map[string]any)
 		switch {
 		case doc == nil:

@@ -146,7 +146,7 @@ var aheadLogged sync.Map
 
 // takenAt reads a target's reply's taken_at: present, RFC 3339, and not the
 // zero time, then held to this clock (ahead).
-func takenAt(target string, raw *string) (time.Time, bool) {
+func takenAt(target string, raw *string, c Clock) (time.Time, bool) {
 	if raw == nil {
 		return time.Time{}, false
 	}
@@ -154,16 +154,26 @@ func takenAt(target string, raw *string) (time.Time, bool) {
 	if err != nil || ts.IsZero() {
 		return time.Time{}, false
 	}
-	return ahead(target, ts), true
+	return ahead(target, ts, c), true
 }
 
-// ahead holds a target's taken_at to this clock: one later than now (beyond
-// clockSkew) is read as now. No read happened in the future, and a reply dated
-// ahead would pass for newer than the read that replaces it, and never age.
-// Every taken_at a target sends is read through here: the typed readers'
-// through takenAt, every result shape's through ReadReply.decodeShape.
-func ahead(target string, ts time.Time) time.Time {
+// ahead dates a target's taken_at on this clock. It is the one place every
+// taken_at a target sends is read through: the typed readers' through takenAt,
+// every result shape's through ReadReply.decodeShape.
+//
+// With the reply's Date, the copy's age is the add-on's own (RFC 9111 §4.2.3):
+// apparent_age = max(0, Date - taken_at), and the response delay is added, the
+// RFC's conservative (older) bound, corrected_age = apparent_age + (received -
+// sent). The copy then dates received - corrected_age = sent - apparent_age,
+// on this clock, whatever the add-on's clock says. Without a Date, taken_at is
+// taken as sent. Last, one later than now (beyond clockSkew) is read as now:
+// no read happened in the future, and a reply dated ahead would pass for newer
+// than the read that replaces it, and never age.
+func ahead(target string, ts time.Time, c Clock) time.Time {
 	now := timeNow().UTC()
+	if !c.Date.IsZero() && !c.Sent.IsZero() {
+		ts = c.Sent.Add(-c.age(ts))
+	}
 	if ts.After(now.Add(clockSkew)) {
 		if _, logged := aheadLogged.LoadOrStore(target, true); !logged {
 			log.Printf("[ADDON] %s dates a read %s ahead of this clock; read as now (said once per target: check the add-on host's clock)",
@@ -260,7 +270,7 @@ func planChunk(ctx context.Context, a *Addon, target string, subjects []PlanSubj
 		}
 		// No readable taken_at is not current and not complete, and then
 		// (below) not a plan at all: a chunk merge can never meet a zero date.
-		if at, ok := takenAt(target, decoded.TakenAt); ok {
+		if at, ok := takenAt(target, decoded.TakenAt, resp.Clock); ok {
 			out.TakenAt = at
 		} else {
 			out.Current, out.Truncated = false, true
@@ -446,7 +456,7 @@ func Subjects(ctx context.Context, target string, fresh bool) SubjectsResult {
 	// A read that does not say, readably, when it happened is not one to
 	// conclude from (design §2(b)): the accounts are still served, labelled
 	// unusable, never dated by Go's zero time.
-	if at, ok := takenAt(target, decoded.TakenAt); ok {
+	if at, ok := takenAt(target, decoded.TakenAt, resp.Clock); ok {
 		out.TakenAt = at
 	} else {
 		out.Current, out.Truncated = false, true
@@ -916,7 +926,7 @@ func ReadHomes(ctx context.Context, target string, fresh bool) Homes {
 		// two ways, is not one to show as a reading (design §2(b), §4).
 		return Homes{}
 	}
-	at, ok := takenAt(target, wire.TakenAt)
+	at, ok := takenAt(target, wire.TakenAt, resp.Clock)
 	if !ok {
 		return Homes{}
 	}
@@ -965,7 +975,7 @@ func ReadReach(ctx context.Context, target string, fresh bool) Reach {
 	if err := json.Unmarshal(resp.Body, &wire); err != nil || staleInvariant(resp.Body) != nil {
 		return Reach{}
 	}
-	at, ok := takenAt(target, wire.TakenAt)
+	at, ok := takenAt(target, wire.TakenAt, resp.Clock)
 	if !ok {
 		return Reach{}
 	}

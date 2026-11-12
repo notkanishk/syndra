@@ -143,7 +143,7 @@ func TestTheCleanReferencePassesEveryCheck(t *testing.T) {
 		}
 	}
 	want := []string{"subjects.paged", "replay.29d", "results", "calls.unknown", "calls.recorded", "operations.physical", "calls.unsettled", "calls.serialised",
-		"freshness.cached", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable"}
+		"freshness.cached", "freshness.date", "freshness.cooldown", "freshness.coalesce", "freshness.unreachable"}
 	want = append(append(want, statsChecks...), "dangerous-scopes")
 	if !slices.Equal(skipped, want) {
 		t.Errorf("skipped %v, want exactly %v", skipped, want)
@@ -1682,7 +1682,7 @@ func TestTheFreshnessChecksJudgeOnlyWhatIsDeclared(t *testing.T) {
 	for _, f := range failures(r) {
 		t.Errorf("%s failed against the reference serving freshness: %v", f.ID, f.Detail)
 	}
-	for _, id := range freshChecks[:3] {
+	for _, id := range freshChecks[:4] {
 		if got := r.Status(id); got != "pass" {
 			t.Errorf("%s says %s against the reference serving freshness, want pass", id, got)
 		}
