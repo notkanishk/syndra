@@ -92,6 +92,8 @@ export const AUDIT_ACTIONS: Record<
   "terms.updated": { verb: "Changed the term dates" },
   // Its old and new name are in the row's details (addon-contract 3.10a).
   "target.named": { verb: "Changed what a connected system is called" },
+  // Its old and new days are in the row's details (addon-contract 6.7, O4): how long people's own usage is kept.
+  "target.stats_retention_set": { verb: "Changed how long a connected system's usage per person is kept" },
   // Welcome roles at a first sign-in (owner, 3 Nov): Makerspace settings' switch.
   "welcome_claims.turned_on": { verb: "Turned on welcome roles at a first sign-in" },
   "welcome_claims.turned_off": { verb: "Turned off welcome roles at a first sign-in" },
