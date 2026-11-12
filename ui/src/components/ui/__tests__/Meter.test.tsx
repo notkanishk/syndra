@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { StatusMeters } from "@/components/results/StatusMeters";
 import { Meter, METER_WORD, meterState } from "@/components/ui/Meter";
 import { UsageCard } from "@/components/usage/UsageCard";
-import { GIB, homeBytes } from "@/components/usage/__tests__/fixtures";
+import { GIB, homeBytes, windows } from "@/components/usage/__tests__/fixtures";
 import { MEMBER } from "@/components/results/copy";
 import type { StatusResult } from "@/lib/queries/useMyStorage";
 
@@ -71,7 +71,7 @@ describe("the same value looks the same everywhere", () => {
     cleanup();
 
     const latest = { day: "2026-11-01", value: used * GIB };
-    render(<UsageCard title="t" metrics={[homeBytes({ series: [{ dimensions: {}, latest, days: [] }] })]} limits={{ quota_field: 100 * GIB }} />);
+    render(<UsageCard title="t" windows={windows()} metrics={[homeBytes({ series: [{ dimensions: {}, latest, days: [] }] })]} limits={{ quota_field: 100 * GIB }} />);
     expect(fill()).toHaveClass(token);
     expect(said()).toEqual(expected);
   });

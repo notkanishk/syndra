@@ -306,7 +306,13 @@ function confirmLabel(source: string, at: number): string {
   const literals = [...body.matchAll(/[>:]\s*\{?\s*["`]?([A-Z][^<>{}"`\n]{3,60})/g)].map((m) =>
     m[1].trim().replace(/[.…]+$/, ""),
   );
-  return literals[literals.length - 1] ?? "";
+  if (literals.length > 0) return literals[literals.length - 1];
+  // A label said by a copy module (`{copy.name(…)}`): the sentence is that export's own text.
+  const call = /\{\s*copy\.(\w+)\b/.exec(body);
+  const from = /import \* as copy from "@\/([^"]+)"/.exec(source);
+  if (!call || !from) return "";
+  const said = new RegExp(`export const ${call[1]}\\b[^\`"]*[\`"]([^\`"$]{4,60})`).exec(readFileSync(join(SRC, `${from[1]}.ts`), "utf8"));
+  return said ? said[1].trim() : "";
 }
 
 /** The text of a `{...}` expression starting at the opening brace. */

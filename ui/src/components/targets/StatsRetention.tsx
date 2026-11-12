@@ -7,6 +7,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { useSetStatsRetention, useTargetStats } from "@/lib/queries/useStats";
 
@@ -16,8 +17,11 @@ export const RETENTION_MAX = 400;
 /**
  * How long a system keeps per-person numbers: the one write place for it (the
  * overview's totals only say what is set, here). Shortening deletes history
- * for good at the next nightly retention, so it asks first; lengthening, or
- * going back to the full 400 days, changes nothing that exists and does not.
+ * for good within a day (the retention runs at start-up and every 24 hours
+ * after), so it asks first, in a dialog; lengthening, or going back to the
+ * full 400 days, changes nothing that exists and does not. A number the
+ * backend would refuse (below 1) is sent without asking: its 422 is the
+ * only answer, never a question about deleting.
  */
 export function StatsRetention({ target }: { target: string }) {
   const stats = useTargetStats(target);
@@ -55,7 +59,7 @@ function RetentionForm({ target, days, set }: { target: string; days: number; se
         onSubmit={(event) => {
           event.preventDefault();
           if (unchanged) return;
-          if (wanted < days) setAsking(wanted);
+          if (1 <= wanted && wanted < days) setAsking(wanted);
           else submit(wanted);
         }}
       >
@@ -73,34 +77,31 @@ function RetentionForm({ target, days, set }: { target: string; days: number; se
             onChange={(event) => {
               setDraft(event.target.value);
               setDone(null);
-              setAsking(null);
+              save.reset(); // an old refusal is not about the number now typed
             }}
           />
           <FieldHint>{copy.retentionHint(days, set)}</FieldHint>
         </div>
-        {asking !== null ? (
-          <div className="flex flex-col gap-3">
-            <span className="text-[13.5px] text-muted">{copy.retentionAsk(asking)}</span>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button variant="ghost" onClick={() => setAsking(null)}>
-                {copy.RETENTION_ASK_NO}
-              </Button>
-              <Button variant="accent" isPending={save.isPending} onClick={() => submit(asking)}>
+        <div className="flex flex-wrap items-start gap-3">
+          <Button type="submit" variant="accent" isPending={save.isPending} disabled={unchanged} reason={unchanged ? copy.RETENTION_UNCHANGED : undefined}>
+            {copy.RETENTION_SAVE}
+          </Button>
+          {set && (
+            <Button isPending={save.isPending} onClick={() => submit(null)}>
+              {copy.RETENTION_FULL}
+            </Button>
+          )}
+        </div>
+        {asking !== null && (
+          <Modal open onClose={() => !save.isPending && setAsking(null)} busy={save.isPending} size="sm">
+            <ModalHeader title={copy.retentionAskTitle(asking)} lede={copy.retentionAsk(asking)} />
+            <ModalFooter cancel={{ onClick: () => setAsking(null), label: copy.RETENTION_ASK_NO, disabled: save.isPending }}>
+              {/* dangerConfirm: the numbers older than this are deleted for good. */}
+              <Button variant="dangerConfirm" isPending={save.isPending} onClick={() => submit(asking)}>
                 {copy.retentionAskYes(asking)}
               </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-start gap-3">
-            <Button type="submit" variant="accent" isPending={save.isPending} disabled={unchanged} reason={unchanged ? copy.RETENTION_UNCHANGED : undefined}>
-              {copy.RETENTION_SAVE}
-            </Button>
-            {set && (
-              <Button isPending={save.isPending} onClick={() => submit(null)}>
-                {copy.RETENTION_FULL}
-              </Button>
-            )}
-          </div>
+            </ModalFooter>
+          </Modal>
         )}
         {done !== null && (
           <ActionOutcome

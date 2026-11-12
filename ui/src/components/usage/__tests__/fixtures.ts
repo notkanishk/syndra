@@ -1,10 +1,23 @@
 import { addDays, today } from "@/components/insights/days";
 import type { MyTargetView } from "@/lib/queries/useMyStorage";
-import type { StatsMetric, TargetStats } from "@/lib/queries/useStats";
+import type { StatsMetric, TargetStats, UsageWindows } from "@/lib/queries/useStats";
 
 /** Statistics fixtures: ring names and example.org only. Days are relative to today, in the makerspace's zone. */
 export const GIB = 1024 ** 3;
 export const ago = (n: number) => addDays(today(), -n);
+
+/**
+ * The windows the backend sends (handlers statsWindows, statsUsageFor): the
+ * last 30 days, the 12 months from the first of the month 11 back, and for a
+ * person kept `n` days (today − (n − 1) on) each start no earlier than that.
+ */
+export function windows(n?: number): UsageWindows {
+  const [y, m] = today().split("-").map(Number);
+  const [from30, from12m] = [ago(29), new Date(Date.UTC(y, m - 12, 1)).toISOString().slice(0, 10)];
+  if (n === undefined) return { window_30d_from: from30, window_12m_from: from12m };
+  const kept = ago(n - 1);
+  return { kept_from: kept, window_30d_from: kept > from30 ? kept : from30, window_12m_from: kept > from12m ? kept : from12m };
+}
 
 export const homeBytes = (over: Partial<StatsMetric> = {}): StatsMetric => ({
   name: "volume.used_bytes",
@@ -55,6 +68,7 @@ export const targetStats = (over: Partial<TargetStats> = {}): TargetStats => ({
   target: "gym",
   usage: {
     reported: true,
+    ...windows(),
     metrics: [
       sessions({
         series: [{ dimensions: { area: "ring" }, sum_30d: 61, sum_12m: 512, days: [{ day: ago(1), value: 9 }], months: [] }],

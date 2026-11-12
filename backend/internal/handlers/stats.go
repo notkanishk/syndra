@@ -37,8 +37,13 @@ type statsUsage struct {
 	// KeptFrom, on a person's page, is the first day whose per-person points
 	// this target still keeps (retention): a day before it is deleted, never
 	// zero. Every series starts there at the earliest.
-	KeptFrom string            `json:"kept_from,omitempty"`
-	Metrics  []statsMetricView `json:"metrics,omitempty"`
+	KeptFrom string `json:"kept_from,omitempty"`
+	// Window30dFrom and Window12mFrom are the first day each window's numbers
+	// are read from (YYYY-MM-DD): the window's own start, or KeptFrom when
+	// retention is shorter. The page names each window from them.
+	Window30dFrom string            `json:"window_30d_from,omitempty"`
+	Window12mFrom string            `json:"window_12m_from,omitempty"`
+	Metrics       []statsMetricView `json:"metrics,omitempty"`
 }
 
 // statsMetricView is one metric: its descriptor, through when Syndra holds it
@@ -114,21 +119,20 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 		return statsUsage{}, err
 	}
 	today, from30, from12m := statsWindows(now)
-	daysFrom, monthsFrom := from30, from12m
-	out := statsUsage{Reported: true, Metrics: []statsMetricView{}}
+	out := statsUsage{Reported: true, Window30dFrom: from30, Window12mFrom: from12m, Metrics: []statsMetricView{}}
 	if subject != "" {
 		// A person's points are read no earlier than retention keeps them, so
-		// a sum never counts a day the nightly prune has yet to delete.
+		// a sum never counts a day the daily prune has yet to delete.
 		if out.KeptFrom, err = dbStatsKeptFrom(ctx, today, target); err != nil {
 			return statsUsage{}, err
 		}
-		daysFrom, monthsFrom = max(from30, out.KeptFrom), max(from12m, out.KeptFrom) // YYYY-MM-DD orders as text
+		out.Window30dFrom, out.Window12mFrom = max(from30, out.KeptFrom), max(from12m, out.KeptFrom) // YYYY-MM-DD orders as text
 	}
-	days, err := dbStatsDays(ctx, target, subject, daysFrom)
+	days, err := dbStatsDays(ctx, target, subject, out.Window30dFrom)
 	if err != nil {
 		return statsUsage{}, err
 	}
-	months, err := dbStatsMonths(ctx, target, subject, monthsFrom)
+	months, err := dbStatsMonths(ctx, target, subject, out.Window12mFrom)
 	if err != nil {
 		return statsUsage{}, err
 	}
@@ -342,20 +346,20 @@ type insightsStatsRow struct {
 type insightsStatsMetric struct {
 	Target string `json:"target"`
 	System string `json:"system"`
-	// KeptFrom is the first day whose per-person points this target keeps:
-	// after `from`, its retention is shorter than the window and the spread
-	// covers only the days since.
-	KeptFrom string `json:"kept_from"`
+	// Window30dFrom is the first day the spread covers: the window's `from`,
+	// or later when this target's retention is shorter (the read's own clamp).
+	Window30dFrom string `json:"window_30d_from"`
 	addons.Metric
 	Series []insightsStatsRow `json:"series"`
 }
 
 // handleInsightsStats is GET /api/v1/insights/stats (admin): every per-person
-// metric of every target over the last 30 days, a counter's sum or a gauge's
+// metric of every target over the last 30 days (or the days its target keeps,
+// when fewer), a counter's sum or a gauge's
 // latest value per member, as distributions; the UI groups them by unit.
 func handleInsightsStats(w http.ResponseWriter, r *http.Request) {
 	today, from30, _ := statsWindows(clock.Now())
-	rows, err := dbStatsDistributions(r.Context(), from30)
+	rows, err := dbStatsDistributions(r.Context(), today, from30)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -363,13 +367,9 @@ func handleInsightsStats(w http.ResponseWriter, r *http.Request) {
 	out := []insightsStatsMetric{}
 	at := map[string]int{}
 	descriptors := map[string]map[string]addons.Metric{}
-	keptFrom := map[string]string{}
 	for _, row := range rows {
 		if descriptors[row.Target] == nil {
 			stored, err := dbStatsMetrics(r.Context(), row.Target)
-			if err == nil {
-				keptFrom[row.Target], err = dbStatsKeptFrom(r.Context(), today, row.Target)
-			}
 			if err != nil {
 				jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 				return
@@ -390,7 +390,7 @@ func handleInsightsStats(w http.ResponseWriter, r *http.Request) {
 		if _, seen := at[key]; !seen {
 			system, _ := systemName(r.Context(), row.Target)
 			at[key] = len(out)
-			out = append(out, insightsStatsMetric{Target: row.Target, System: system, KeptFrom: keptFrom[row.Target], Metric: m, Series: []insightsStatsRow{}})
+			out = append(out, insightsStatsMetric{Target: row.Target, System: system, Window30dFrom: row.From, Metric: m, Series: []insightsStatsRow{}})
 		}
 		i := at[key]
 		out[i].Series = append(out[i].Series, insightsStatsRow{Dimensions: row.Dims, Members: row.Members, P50: row.P50, P90: row.P90})

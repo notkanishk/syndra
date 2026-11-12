@@ -65,11 +65,20 @@ export interface StatsMetric {
   collected?: StatsCollected;
 }
 
+/**
+ * Where a page's two windows start, as the backend read them: each window's
+ * own first day, or `kept_from` when retention is shorter. Each window is
+ * named from its start, never from a window the page works out itself.
+ */
+export interface UsageWindows {
+  /** A person's view only: the first makerspace day whose per-person points are kept on this system; earlier days are gone, not zero. */
+  kept_from?: string;
+  window_30d_from: string;
+  window_12m_from: string;
+}
+
 /** Absent: Syndra could not read its own store just now. */
-export type Usage =
-  | { reported: false }
-  /** `kept_from`: the first makerspace day whose per-person points are kept on this system; earlier days are gone, not zero. Optional: older data has none. */
-  | { reported: true; metrics: StatsMetric[]; kept_from?: string };
+export type Usage = { reported: false } | ({ reported: true; metrics: StatsMetric[] } & UsageWindows);
 
 export interface TargetStats {
   target: string;
@@ -95,8 +104,8 @@ export interface InsightsStatsMetric {
   per_subject?: boolean;
   against?: string;
   dimensions?: Array<{ name: string; label: string }>;
-  /** That system's first kept per-person day: after the window's `from`, the spread covers fewer days. Optional: older data has none. */
-  kept_from?: string;
+  /** The first day the spread covers: the window's `from`, or later when that system keeps per-person numbers for fewer days (the backend's own clamp). */
+  window_30d_from: string;
   series: Array<{ dimensions: Record<string, string>; members: number; p50: number; p90: number }>;
 }
 

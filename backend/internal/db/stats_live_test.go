@@ -90,8 +90,8 @@ func TestLiveRetentionKeepsTotalsLongerThanPeople(t *testing.T) {
 	day := func(n int) string { return clock.AddDate(today, 0, 0, -n) }
 	year5 := clock.AddDate(today, -5, 0, 0)
 	put(t, ctx, "storage.sessions", then,
-		StatsPoint{Subject: "sub-a", Day: day(400), Value: 1}, StatsPoint{Subject: "sub-a", Day: day(401), Value: 1},
-		StatsPoint{Subject: "sub-a", Day: day(30), Value: 1}, StatsPoint{Subject: "sub-a", Day: day(31), Value: 1},
+		StatsPoint{Subject: "sub-a", Day: day(399), Value: 1}, StatsPoint{Subject: "sub-a", Day: day(400), Value: 1},
+		StatsPoint{Subject: "sub-a", Day: day(29), Value: 1}, StatsPoint{Subject: "sub-a", Day: day(30), Value: 1},
 		StatsPoint{Day: day(401), Value: 2}, StatsPoint{Day: year5, Value: 2}, StatsPoint{Day: clock.AddDate(year5, 0, 0, -1), Value: 2})
 	err := CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error {
 		_, err := c.UpsertGaps(ctx, then, []StatsGap{
@@ -107,8 +107,9 @@ func TestLiveRetentionKeepsTotalsLongerThanPeople(t *testing.T) {
 	if _, _, err := PruneStats(ctx, today); err != nil {
 		t.Fatal(err)
 	}
-	if got := pointDays(t, ctx, "sub-a"); !got[day(400)] || got[day(401)] {
-		t.Errorf("per-person days after the prune %v: want %s kept and %s gone", got, day(400), day(401))
+	// N days counting today: 400 are today − 399 through today.
+	if got := pointDays(t, ctx, "sub-a"); !got[day(399)] || got[day(400)] {
+		t.Errorf("per-person days after the prune %v: want %s kept and %s gone", got, day(399), day(400))
 	}
 	if got := pointDays(t, ctx, ""); !got[day(401)] || !got[year5] || got[clock.AddDate(year5, 0, 0, -1)] {
 		t.Errorf("totals after the prune %v: want 401 days and five years kept, the day before gone", got)
@@ -127,8 +128,8 @@ func TestLiveRetentionKeepsTotalsLongerThanPeople(t *testing.T) {
 	if _, _, err := PruneStats(ctx, today); err != nil {
 		t.Fatal(err)
 	}
-	if got := pointDays(t, ctx, "sub-a"); !got[day(30)] || got[day(31)] || got[day(400)] {
-		t.Errorf("per-person days with a 30-day setting %v: want %s kept, %s gone", got, day(30), day(31))
+	if got := pointDays(t, ctx, "sub-a"); !got[day(29)] || got[day(30)] || got[day(399)] {
+		t.Errorf("per-person days with a 30-day setting %v: want %s kept, %s gone", got, day(29), day(30))
 	}
 	if got := pointDays(t, ctx, ""); !got[day(401)] {
 		t.Errorf("a per-person setting shortened the totals: %v", got)
@@ -137,20 +138,20 @@ func TestLiveRetentionKeepsTotalsLongerThanPeople(t *testing.T) {
 
 // The first day a read says retention keeps is the prune's and ingestion's
 // own line: kept on it, gone (and refused late) the day before; 400 days
-// unless shortened.
+// counting today unless shortened (today − 399).
 func TestLiveKeptFromIsThePrunesLine(t *testing.T) {
 	ctx := statsLive(t)
 	today := clock.Day(clock.Now())
-	if from, err := StatsKeptFrom(ctx, today, statsTarget); err != nil || from != clock.AddDate(today, 0, 0, -400) {
-		t.Errorf("unset: kept from %q (%v), want 400 days back", from, err)
+	if from, err := StatsKeptFrom(ctx, today, statsTarget); err != nil || from != clock.AddDate(today, 0, 0, -399) {
+		t.Errorf("unset: kept from %q (%v), want 399 days back (400 counting today)", from, err)
 	}
 	ninety := 90
 	if err := SetStatsRetention(ctx, statsTarget, &ninety, "op-1"); err != nil {
 		t.Fatal(err)
 	}
 	from, err := StatsKeptFrom(ctx, today, statsTarget)
-	if err != nil || from != clock.AddDate(today, 0, 0, -90) {
-		t.Fatalf("90 days: kept from %q (%v), want 90 days back", from, err)
+	if err != nil || from != clock.AddDate(today, 0, 0, -89) {
+		t.Fatalf("90 days: kept from %q (%v), want 89 days back (90 counting today)", from, err)
 	}
 	before := clock.AddDate(from, 0, 0, -1)
 	err = CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error {
@@ -222,7 +223,7 @@ func TestLiveDistributionsNameNobody(t *testing.T) {
 		StatsPoint{Subject: "sub-batista", Day: d2, Value: 10}, StatsPoint{Day: d2, Value: 50})
 	put(t, ctx, "storage.home_bytes", today,
 		StatsPoint{Subject: "sub-cena", Day: d1, Value: 900}, StatsPoint{Subject: "sub-cena", Day: d2, Value: 100})
-	rows, err := StatsDistributions(ctx, clock.AddDate(today, 0, 0, -29))
+	rows, err := StatsDistributions(ctx, today, clock.AddDate(today, 0, 0, -29))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,6 +242,50 @@ func TestLiveDistributionsNameNobody(t *testing.T) {
 	raw, _ := json.Marshal(rows)
 	if strings.Contains(string(raw), "sub-cena") || strings.Contains(string(raw), "sub-batista") {
 		t.Errorf("insights name a member: %s", raw)
+	}
+}
+
+// A target kept for fewer days than the window spreads only the days it
+// keeps, before the prune has run as after, and says from which day: a
+// member's 20-day-old sessions, still stored, are not in the spread.
+func TestLiveDistributionsKeepToRetention(t *testing.T) {
+	ctx := statsLive(t)
+	today := clock.Day(clock.Now())
+	put(t, ctx, "storage.sessions", today,
+		StatsPoint{Subject: "sub-cena", Day: clock.AddDate(today, 0, 0, -20), Value: 100}, StatsPoint{Subject: "sub-cena", Day: clock.AddDate(today, 0, 0, -9), Value: 2},
+		StatsPoint{Subject: "sub-batista", Day: clock.AddDate(today, 0, 0, -20), Value: 50})
+	ten := 10
+	if err := SetStatsRetention(ctx, statsTarget, &ten, "op-1"); err != nil {
+		t.Fatal(err)
+	}
+	from30 := clock.AddDate(today, 0, 0, -29)
+	spread := func() (StatsDistribution, bool) {
+		rows, err := StatsDistributions(ctx, today, from30)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range rows {
+			if r.Target == statsTarget && r.Metric == "storage.sessions" {
+				return r, true
+			}
+		}
+		return StatsDistribution{}, false
+	}
+	kept, _ := StatsKeptFrom(ctx, today, statsTarget)
+	if s, ok := spread(); !ok || s.Members != 1 || s.P50 != 2 || s.From != kept || kept != clock.AddDate(today, 0, 0, -9) {
+		t.Errorf("10 days kept, before the prune: %+v (found %t), want only cena's 2 from %s", s, ok, kept)
+	}
+	if _, _, err := PruneStats(ctx, today); err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := spread(); !ok || s.Members != 1 || s.P50 != 2 || s.From != kept {
+		t.Errorf("10 days kept, after the prune: %+v, want the same spread", s)
+	}
+	if err := SetStatsRetention(ctx, statsTarget, nil, "op-1"); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := spread(); s.From != from30 {
+		t.Errorf("400 days kept: the spread starts %s, want the window's %s", s.From, from30)
 	}
 }
 

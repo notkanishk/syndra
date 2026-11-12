@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StatsRetention } from "@/components/targets/StatsRetention";
@@ -56,13 +56,18 @@ describe("the retention control", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("asks before shortening, since it deletes history for good, and sends nothing until told to", async () => {
+  it("asks before shortening, in a dialog, since it deletes history for good, and sends nothing until told to", async () => {
     const stub = mount({ subject_days: 400, set: false });
     type(await field(), "90");
     fireEvent.click(screen.getByRole("button", { name: copy.RETENTION_SAVE }));
-    expect(await screen.findByText(copy.retentionAsk(90))).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: copy.retentionAskTitle(90) });
+    expect(within(dialog).getByText(copy.retentionAsk(90))).toBeInTheDocument();
     expect(puts(stub)).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: copy.retentionAskYes(90) }));
+    // The destructive confirm names the number, in the destructive fill; the way out is "Keep them".
+    const yes = within(dialog).getByRole("button", { name: copy.retentionAskYes(90) });
+    expect(yes.className).toContain("bg-danger");
+    expect(within(dialog).getByRole("button", { name: copy.RETENTION_ASK_NO })).toBeInTheDocument();
+    fireEvent.click(yes);
     expect(await screen.findByText(copy.retentionSaved(90))).toBeInTheDocument();
     expect(puts(stub).map((c) => c.body)).toEqual([{ days: 90 }]);
   });
@@ -72,7 +77,7 @@ describe("the retention control", () => {
     type(await field(), "90");
     fireEvent.click(screen.getByRole("button", { name: copy.RETENTION_SAVE }));
     fireEvent.click(await screen.findByRole("button", { name: copy.RETENTION_ASK_NO }));
-    expect(screen.queryByText(copy.retentionAsk(90))).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(puts(stub)).toHaveLength(0);
   });
 
@@ -81,7 +86,7 @@ describe("the retention control", () => {
     type(await field(), "200");
     fireEvent.click(screen.getByRole("button", { name: copy.RETENTION_SAVE }));
     expect(await screen.findByText(copy.retentionSaved(200))).toBeInTheDocument();
-    expect(screen.queryByText(copy.retentionAsk(200))).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(puts(stub).map((c) => c.body)).toEqual([{ days: 200 }]);
   });
 
@@ -114,13 +119,27 @@ describe("the retention control", () => {
     expect(input).toHaveValue(500);
   });
 
-  it("asks again to shorten after a refusal, never silently retrying", async () => {
-    const stub = mount({ subject_days: 400, set: false }, () => respondWith(422, { error: "VALIDATION_FAILED", message: "no", details: {} }));
+  it("never asks to delete for a number the backend refuses: 0 is sent as typed and its 422 is the only answer", async () => {
+    const message = "Per-person statistics are kept between 1 and 400 days.";
+    const stub = mount({ subject_days: 400, set: false }, () => respondWith(422, { error: "VALIDATION_FAILED", message, details: { days: "out_of_range" } }));
     type(await field(), "0");
     fireEvent.click(screen.getByRole("button", { name: copy.RETENTION_SAVE }));
-    fireEvent.click(await screen.findByRole("button", { name: copy.retentionAskYes(0) }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(puts(stub).map((c) => c.body)).toEqual([{ days: 0 }]);
+  });
+
+  it("closes the dialog on a refusal and shows it, never silently retrying; typing again clears it", async () => {
+    const stub = mount({ subject_days: 400, set: false }, () => respondWith(422, { error: "VALIDATION_FAILED", message: "no", details: {} }));
+    const input = await field();
+    type(input, "90");
+    fireEvent.click(screen.getByRole("button", { name: copy.RETENTION_SAVE }));
+    fireEvent.click(await screen.findByRole("button", { name: copy.retentionAskYes(90) }));
     await screen.findByRole("alert");
-    expect(screen.queryByRole("button", { name: copy.retentionAskYes(0) })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(puts(stub)).toHaveLength(1);
+    // An old refusal is not about the number typed next.
+    type(input, "91");
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 });

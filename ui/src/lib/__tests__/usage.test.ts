@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ago, GAP, GIB } from "@/components/usage/__tests__/fixtures";
-import { capText, dimensionWords, formatValue, gapIsOn, gapRange, keptDays, plot, quoted, windowDays, WINDOW_DAYS } from "@/lib/usage";
+import { capText, daysSince, dimensionWords, formatValue, gapIsOn, gapRange, plot, quoted, windowDays, WINDOW_DAYS } from "@/lib/usage";
 
 describe("a value in its unit", () => {
   it("says each registry unit in its own words", () => {
@@ -88,22 +88,24 @@ describe("add-on text cannot reorder or hide Syndra's line", () => {
 
 describe("days Syndra no longer keeps", () => {
   const series = { dimensions: {}, days: [{ day: ago(1), value: 3 }] };
-  it("counts the days kept, today included", () => {
-    // The backend's rule: kept_from is today minus N, and N is what it says.
-    expect(keptDays(ago(90))).toBe(90);
-    expect(keptDays(undefined)).toBeUndefined();
-    expect(keptDays(null)).toBeUndefined();
+  it("counts a window's days from its start, today included: N days kept start N − 1 days ago", () => {
+    expect(daysSince(ago(89))).toBe(90);
+    expect(daysSince(ago(0))).toBe(1);
+    expect(daysSince(ago(29))).toBe(WINDOW_DAYS);
   });
-  it("hatches every day before kept_from, for a counter and a gauge, and never makes one a zero", () => {
+  it("hatches every day before the window's start, for a counter and a gauge, and never makes one a zero", () => {
     for (const instrument of ["counter", "gauge"] as const) {
-      const { cells, gapRuns } = plot(series, [], instrument, undefined, { keptFrom: ago(10) });
-      const gone = cells.filter((c) => c.day < ago(10));
-      expect(gone).toHaveLength(WINDOW_DAYS - 11);
+      const { cells, gapRuns } = plot(series, [], instrument, undefined, { from: ago(9) });
+      const gone = cells.filter((c) => c.day < ago(9));
+      expect(gone).toHaveLength(WINDOW_DAYS - 10);
       expect(gone.every((c) => c.gap && c.kept && c.value === undefined), instrument).toBe(true);
-      expect(gapRuns).toEqual([[0, WINDOW_DAYS - 12]]);
-      // The first kept day is an ordinary day again.
-      expect(cells.find((c) => c.day === ago(10))?.gap).toBe(false);
+      expect(gapRuns).toEqual([[0, WINDOW_DAYS - 11]]);
+      // The window's first day is an ordinary day again.
+      expect(cells.find((c) => c.day === ago(9))?.gap).toBe(false);
     }
+  });
+  it("hatches nothing when the window starts where it always does", () => {
+    expect(plot(series, [], "counter", undefined, { from: ago(29) }).gapRuns).toEqual([]);
   });
 });
 

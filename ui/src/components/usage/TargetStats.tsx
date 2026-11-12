@@ -45,7 +45,7 @@ export function TargetStats({ target }: { target: string }) {
   return (
     <Card>
       {usage.metrics.map((m) => (
-        <MetricBlock key={m.name} metric={m} />
+        <MetricBlock key={m.name} metric={m} windows={usage} />
       ))}
       <CardRow first={usage.metrics.length === 0}>
         <span className="text-[13px] text-muted">{copy.NOTHING_TO_DO}</span>

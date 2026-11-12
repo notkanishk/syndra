@@ -41,7 +41,7 @@ func stubStats(t *testing.T, s *statsStore) {
 		dbStatsDays = prev[1].(func(context.Context, string, string, string) ([]db.StatsValue, error))
 		dbStatsMonths = prev[2].(func(context.Context, string, string, string) ([]db.StatsValue, error))
 		dbStatsGaps = prev[3].(func(context.Context, string, string) ([]db.StatsGapRow, error))
-		dbStatsDistributions = prev[4].(func(context.Context, string) ([]db.StatsDistribution, error))
+		dbStatsDistributions = prev[4].(func(context.Context, string, string) ([]db.StatsDistribution, error))
 		dbStatsRetention = prev[5].(func(context.Context, string) (int, bool, error))
 		dbStatsKeptFrom = prev[6].(func(context.Context, string, string) (string, error))
 	})
@@ -87,9 +87,10 @@ func stubStats(t *testing.T, s *statsStore) {
 		return []db.StatsGapRow{{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": "scratch"}, Start: "2026-11-08", End: "2026-11-10", Reason: "Auditing is off on this share"}}}, nil
 	}
 	dbStatsRetention = func(context.Context, string) (int, bool, error) { return 400, false, nil }
-	// The db's line (StatsKeptFrom, proved against the prune live): today − days.
+	// The db's line (StatsKeptFrom, proved against the prune live): N days
+	// counting today, today − (N − 1).
 	dbStatsKeptFrom = func(_ context.Context, today, _ string) (string, error) {
-		return clock.AddDate(today, 0, 0, -cmp.Or(s.retention, 400)), nil
+		return clock.AddDate(today, 0, 0, 1-cmp.Or(s.retention, 400)), nil
 	}
 }
 
@@ -215,9 +216,12 @@ func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
 		retention              int
 		keptFrom, days, months string
 	}{
-		{0, "2025-10-09", "2026-10-15", "2025-12-01"},  // the 400-day ceiling: both windows whole
-		{90, "2026-08-15", "2026-10-15", "2026-08-15"}, // the year starts where retention does
-		{10, "2026-11-03", "2026-11-03", "2026-11-03"}, // so do the 30 days
+		{0, "2025-10-10", "2026-10-15", "2025-12-01"},   // the 400-day ceiling: both windows whole
+		{350, "2025-11-29", "2026-10-15", "2025-12-01"}, // 350 days reach past the 12 months' first day: whole
+		{340, "2025-12-09", "2026-10-15", "2025-12-09"}, // 340 do not: the year starts where retention does
+		{90, "2026-08-16", "2026-10-15", "2026-08-16"},  // as it does at 90
+		{30, "2026-10-15", "2026-10-15", "2026-10-15"},  // 30 days are exactly the 30-day window
+		{10, "2026-11-04", "2026-11-04", "2026-11-04"},  // 10 start both windows
 	} {
 		s := &statsStore{retention: c.retention}
 		stubStats(t, s)
@@ -231,6 +235,10 @@ func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
 		if len(s.from) != 2 || s.from[0] != c.days || s.from[1] != c.months {
 			t.Errorf("retention %d: points read from %v, want days from %s and months from %s", c.retention, s.from, c.days, c.months)
 		}
+		// The page names each window from the start the read used, never its own.
+		if usage.Window30dFrom != c.days || usage.Window12mFrom != c.months {
+			t.Errorf("retention %d: says windows from %s and %s, want %s and %s", c.retention, usage.Window30dFrom, usage.Window12mFrom, c.days, c.months)
+		}
 		for _, m := range usage.Metrics {
 			if got, _ := json.Marshal(m.CountedThrough); string(got) != `"2026-11-10"` {
 				t.Errorf("%s counted through %s, want 2026-11-10 (watermark midnight 11 Nov)", m.Name, got)
@@ -241,7 +249,7 @@ func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
 	s := &statsStore{retention: 10}
 	stubStats(t, s)
 	totals, _ := statsUsageFor(context.Background(), "truenas", "", now)
-	if totals.KeptFrom != "" || s.from[0] != "2026-10-15" || s.from[1] != "2025-12-01" {
+	if totals.KeptFrom != "" || s.from[0] != "2026-10-15" || s.from[1] != "2025-12-01" || totals.Window30dFrom != "2026-10-15" || totals.Window12mFrom != "2025-12-01" {
 		t.Errorf("the totals say kept_from %q and read from %v: a per-person setting is not theirs", totals.KeptFrom, s.from)
 	}
 	for _, m := range totals.Metrics {
@@ -362,9 +370,11 @@ func TestStatsWindowsAreMakerspaceDays(t *testing.T) {
 // metric not reported per person is not among them.
 func TestInsightsStatsNameNobody(t *testing.T) {
 	stubStats(t, &statsStore{})
-	dbStatsDistributions = func(context.Context, string) ([]db.StatsDistribution, error) {
+	var asked []string
+	dbStatsDistributions = func(_ context.Context, today, from string) ([]db.StatsDistribution, error) {
+		asked = []string{today, from}
 		return []db.StatsDistribution{
-			{Target: "truenas", Metric: "storage.sessions", Dims: map[string]string{"share": "makers"}, Members: 12, P50: 4, P90: 19},
+			{Target: "truenas", Metric: "storage.sessions", Dims: map[string]string{"share": "makers"}, From: "2026-11-03", Members: 12, P50: 4, P90: 19},
 			{Target: "truenas", Metric: "storage.total_bytes", Dims: map[string]string{}, Members: 1, P50: 1, P90: 1},
 		}, nil
 	}
@@ -376,9 +386,12 @@ func TestInsightsStatsNameNobody(t *testing.T) {
 	if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &body) != nil || len(body.Metrics) != 1 {
 		t.Fatalf("%d %s", rr.Code, rr.Body.String())
 	}
-	if m := body.Metrics[0]; m.Name != "storage.sessions" || m.Series[0].Members != 12 || m.Series[0].P90 != 19 ||
-		m.KeptFrom != clock.AddDate(clock.Day(clock.Now()), 0, 0, -400) {
+	// The spread's start is the read's own clamp, carried through, never recomputed.
+	if m := body.Metrics[0]; m.Name != "storage.sessions" || m.Series[0].Members != 12 || m.Series[0].P90 != 19 || m.Window30dFrom != "2026-11-03" {
 		t.Errorf("insights %+v", m)
+	}
+	if today, from30, _ := statsWindows(clock.Now()); len(asked) != 2 || asked[0] != today || asked[1] != from30 {
+		t.Errorf("distributions read with %v, want today %s and the window's %s", asked, today, from30)
 	}
 	if strings.Contains(rr.Body.String(), `"subject`) {
 		t.Errorf("insights carry a subject: %s", rr.Body.String())

@@ -5,8 +5,8 @@ import { Spark } from "@/components/usage/Spark";
 import { CardRow } from "@/components/ui/Card";
 import { Meter } from "@/components/ui/Meter";
 import { formatRelative } from "@/lib/format";
-import type { StatsMetric, StatsSeries } from "@/lib/queries/useStats";
-import { CAP, capText, dayWords, dimensionWords, formatValue, gapRange, keptDays, plot, quoted, WINDOW_DAYS } from "@/lib/usage";
+import type { StatsMetric, StatsSeries, UsageWindows } from "@/lib/queries/useStats";
+import { CAP, capText, dayWords, daysSince, dimensionWords, formatValue, gapRange, plot, quoted, type Plot } from "@/lib/usage";
 
 /**
  * One metric, drawn from its descriptor and nothing else: a counter is its sum
@@ -35,23 +35,28 @@ function Limit({ value, limit, metric }: { value: number; limit: number | undefi
   );
 }
 
-/** Days in the 12-month window: a shorter retention changes what its sum is a sum of. */
-const YEAR_DAYS = 365;
+/**
+ * A window's sum in words, named from the day the backend read it from: a
+ * start retention set (`kept_from`) is "the last n days", n counted from it to
+ * today; otherwise the window's own name.
+ */
+function inWindow(value: string, start: string, windows: UsageWindows, own: (value: string) => string): string {
+  return start === windows.kept_from ? copy.inLastDays(value, daysSince(start)) : own(value);
+}
 
-function SeriesRow({ metric, series, limits, keptFrom }: { metric: StatsMetric; series: StatsSeries; limits?: Limits; keptFrom?: string }) {
-  const kept = keptDays(keptFrom);
+function SeriesRow({ metric, series, cells, limits, windows }: { metric: StatsMetric; series: StatsSeries; cells: Plot; limits?: Limits; windows: UsageWindows }) {
   const where = dimensionWords(metric, series.dimensions);
   const counter = metric.instrument === "counter";
-  const cells = plot(series, metric.gaps, metric.instrument, undefined, { keptFrom, countedThrough: metric.counted_through });
   const metered = limits !== undefined && !counter && metric.against !== undefined && series.latest !== undefined;
 
   let headline: ReactNode;
   let detail: ReactNode = null;
   if (counter) {
     // Kept for fewer days than a window: the sum is of the days kept, and says so.
-    const [d30, d12] = [formatValue(series.sum_30d ?? 0, metric.unit), formatValue(series.sum_12m ?? 0, metric.unit)];
-    headline = kept !== undefined && kept < WINDOW_DAYS ? copy.inLastDays(d30, kept) : copy.inDays(d30);
-    detail = kept === undefined || kept >= YEAR_DAYS ? copy.inMonths(d12) : kept <= WINDOW_DAYS ? null : copy.inLastDays(d12, kept);
+    // Both windows starting on one day are one sum, said once.
+    const { window_30d_from: w30, window_12m_from: w12 } = windows;
+    headline = inWindow(formatValue(series.sum_30d ?? 0, metric.unit), w30, windows, copy.inDays);
+    detail = w12 === w30 ? null : inWindow(formatValue(series.sum_12m ?? 0, metric.unit), w12, windows, copy.inMonths);
   } else if (series.latest) {
     headline = copy.latestOn(formatValue(series.latest.value, metric.unit), dayWords(series.latest.day));
   } else {
@@ -66,22 +71,20 @@ function SeriesRow({ metric, series, limits, keptFrom }: { metric: StatsMetric; 
         {detail && <span className="text-[13px] tabular-nums text-faint">{detail}</span>}
         {metered && <Limit value={series.latest!.value} limit={limits![metric.against!]} metric={metric} />}
       </span>
-      <Spark plot={cells} unit={metric.unit} keptDays={kept} what={where ? `${capText(metric.label, CAP.label)}, ${where}` : capText(metric.label, CAP.label)} />
+      <Spark plot={cells} unit={metric.unit} keptDays={daysSince(windows.window_30d_from)} what={where ? `${capText(metric.label, CAP.label)}, ${where}` : capText(metric.label, CAP.label)} />
     </CardRow>
   );
 }
 
+/** `kept`: how many days Syndra keeps, said only when a drawn day is hatched for it. */
 function Gaps({ metric, kept }: { metric: StatsMetric; kept?: number }) {
-  // Days before what Syndra keeps are hatched too, with Syndra's own reason.
-  // Only where a day is drawn: a metric not counted yet, or with no series, has nothing hatched to explain.
-  const short = kept !== undefined && kept < WINDOW_DAYS && metric.watermark !== null && metric.series.length > 0;
-  if (metric.gaps.length === 0 && !short) return null;
+  if (metric.gaps.length === 0 && kept === undefined) return null;
   const shown = metric.gaps.slice(0, MAX_ROWS);
   return (
     <div className="row-divider flex flex-col gap-1 px-5 py-3 text-[13px] text-muted">
       <span className="font-semibold">{copy.GAPS_HEADING}</span>
       <ul className="flex flex-col gap-0.5">
-        {short && <li>{copy.keptLine(kept)}</li>}
+        {kept !== undefined && <li>{copy.keptLine(kept)}</li>}
         {shown.map((g) => (
           <li key={`${g.start}-${g.end}-${JSON.stringify(g.dimensions ?? {})}`} className="[overflow-wrap:anywhere]">
             {copy.gapLine(gapRange(g), dimensionWords(metric, g.dimensions), quoted(g.reason, CAP.reason))}
@@ -111,9 +114,12 @@ function Collected({ metric }: { metric: StatsMetric }) {
 }
 
 /** `limits` absent draws no meter (a totals page is no one person's); present and empty draws the meter that says its limit was not read. */
-/** `keptFrom`: the first day per-person numbers are kept (a per-person card only; a totals page is kept for years). */
-export function MetricBlock({ metric, limits, keptFrom }: { metric: StatsMetric; limits?: Limits; keptFrom?: string }) {
+/** `windows`: where the backend read this page's two windows from (a person's are cut short by retention; a totals page's never are). */
+export function MetricBlock({ metric, limits, windows }: { metric: StatsMetric; limits?: Limits; windows: UsageWindows }) {
   const rows = metric.series.slice(0, MAX_ROWS);
+  const plots = (metric.watermark === null ? [] : rows).map((s) => plot(s, metric.gaps, metric.instrument, undefined, { from: windows.window_30d_from, countedThrough: metric.counted_through }));
+  // The days before the window's start are hatched with Syndra's own reason, said only where one is drawn.
+  const hatched = plots.some((p) => p.cells.some((c) => c.kept));
   return (
     <section aria-label={capText(metric.label, CAP.label)}>
       <div className="row-divider px-5 pb-1 pt-3.5">
@@ -128,14 +134,14 @@ export function MetricBlock({ metric, limits, keptFrom }: { metric: StatsMetric;
           <span className="text-[14px] text-muted">{metric.instrument === "counter" ? copy.NOTHING_COUNTED : copy.NO_RECENT_VALUE}</span>
         </CardRow>
       ) : (
-        rows.map((s) => <SeriesRow key={JSON.stringify(s.dimensions)} metric={metric} series={s} limits={limits} keptFrom={keptFrom} />)
+        rows.map((s, i) => <SeriesRow key={JSON.stringify(s.dimensions)} metric={metric} series={s} cells={plots[i]} limits={limits} windows={windows} />)
       )}
       {metric.series.length > rows.length && (
         <CardRow>
           <span className="text-[13px] text-faint">{copy.noMoreLines(metric.series.length - rows.length)}</span>
         </CardRow>
       )}
-      <Gaps metric={metric} kept={keptDays(keptFrom)} />
+      <Gaps metric={metric} kept={hatched ? daysSince(windows.window_30d_from) : undefined} />
       <Collected metric={metric} />
     </section>
   );

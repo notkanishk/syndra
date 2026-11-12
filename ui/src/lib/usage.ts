@@ -79,14 +79,13 @@ export function windowDays(end: string = today()): string[] {
   return Array.from({ length: WINDOW_DAYS }, (_, i) => addDays(end, i - (WINDOW_DAYS - 1)));
 }
 
-/** How many days per-person numbers are kept on this system: the retention, as the backend counts it (`kept_from` is today minus N); undefined when it did not say. */
-export const keptDays = (keptFrom: string | null | undefined, end: string = today()): number | undefined =>
-  keptFrom == null ? undefined : daysBetween(keptFrom, end);
+/** How many days a window starting on `from` covers, today included: N days are today − (N − 1) through today, as the backend keeps them. */
+export const daysSince = (from: string, end: string = today()): number => daysBetween(from, end) + 1;
 
 export interface Plot {
   /**
    * Every day of the window with what is known about it: a value, a gap (no
-   * value, `kept` when Syndra no longer keeps that day), or neither (`pending`
+   * value, `kept` when it is before the day the window was read from), or neither (`pending`
    * when it is after the last final day, else a gauge's no new sample).
    */
   cells: Array<{ day: string; value?: number; gap: boolean; kept?: boolean; pending?: boolean }>;
@@ -95,9 +94,10 @@ export interface Plot {
 }
 
 /**
- * One series over the window. A day inside a gap, or before `keptFrom` (the
- * first day Syndra keeps per-person points; earlier ones are gone, not zero),
- * is a gap whatever the points say. Outside one, a counter's missing day is 0
+ * One series over the window. A day inside a gap, or before `from` (the day
+ * the backend read the window from, `window_30d_from`: later than the
+ * window's first day only when retention keeps fewer, and the days before it
+ * are gone, not zero), is a gap whatever the points say. Outside one, a counter's missing day is 0
  * only when it is final (not after `countedThrough`); a day not yet counted
  * has no value. That is the only place a zero is made, and a gap or a day not
  * yet counted never gets one.
@@ -107,12 +107,12 @@ export function plot(
   gaps: StatsGap[],
   instrument: StatsMetric["instrument"],
   days: string[] = windowDays(),
-  known: { keptFrom?: string; countedThrough?: string | null } = {},
+  known: { from?: string; countedThrough?: string | null } = {},
 ): Plot {
   const given = new Map<string, number>(series.days.map((d: StatsDay) => [d.day, d.value]));
   const mine = gaps.filter((g) => gapIsOn(g, series));
   const cells = days.map((day) => {
-    const kept = known.keptFrom != null && day < known.keptFrom;
+    const kept = known.from != null && day < known.from;
     const gap = kept || mine.some((g) => day >= g.start && day < g.end);
     if (gap) return { day, gap, ...(kept ? { kept } : {}), value: undefined };
     const point = given.get(day);

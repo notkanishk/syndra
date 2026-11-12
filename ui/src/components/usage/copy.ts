@@ -61,10 +61,11 @@ export const RETENTION_SAVE = "Save";
 export const RETENTION_FULL = "Keep the full 400 days";
 export const RETENTION_UNCHANGED = "Type a new number of days first.";
 export const RETENTION_WORD = "Saved";
-export const retentionSaved = (days: number) => `Per-person numbers older than ${days} days are deleted tonight. Totals stay for 5 years.`;
+export const retentionSaved = (days: number) => `Per-person numbers older than ${keptFor(days)} are deleted within a day. Totals stay for 5 years.`;
 export const RETENTION_SAVED_NEXT = NOTHING_TO_DO;
-export const retentionAsk = (days: number) => `Per-person numbers older than ${days} days are deleted tonight, and cannot be brought back. Totals stay for 5 years.`;
-export const retentionAskYes = (days: number) => `Delete numbers older than ${days} days`;
+export const retentionAskTitle = (days: number) => `Keep per-person numbers for only ${keptFor(days)}?`;
+export const retentionAsk = (days: number) => `Per-person numbers older than ${keptFor(days)} are deleted within a day, and cannot be brought back. Totals stay for 5 years.`;
+export const retentionAskYes = (days: number) => `Delete numbers older than ${keptFor(days)}`;
 export const RETENTION_ASK_NO = "Keep them";
 
 /** What the last count did not keep, by the reason the backend gives. */

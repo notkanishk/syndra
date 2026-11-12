@@ -50,6 +50,7 @@ const SAID = [
   copy.RETENTION_UNCHANGED,
   copy.RETENTION_WORD,
   sub(copy.retentionSaved(777), 777, "{n}"),
+  sub(copy.retentionAskTitle(777), 777, "{n}"),
   sub(copy.retentionAsk(777), 777, "{n}"),
   sub(copy.retentionAskYes(777), 777, "{n}"),
   copy.RETENTION_ASK_NO,

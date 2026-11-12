@@ -6,7 +6,8 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { useInsightsStats, type InsightsStatsMetric, type StatsUnit } from "@/lib/queries/useStats";
-import { CAP, capText, dayWords, dimensionWords, formatValue, keptDays, MIN_SPREAD_MEMBERS, WINDOW_DAYS } from "@/lib/usage";
+import { daysBetween } from "@/components/insights/days";
+import { CAP, capText, dayWords, dimensionWords, formatValue, MIN_SPREAD_MEMBERS } from "@/lib/usage";
 
 /**
  * Insights, Usage (Advanced view): every system's per-person metrics grouped
@@ -78,8 +79,9 @@ export function InsightsUsage() {
                     {capText(m.system, CAP.label)}: {capText(m.label, CAP.label)}
                   </h3>
                 </div>
-                {keptDays(m.kept_from) !== undefined && keptDays(m.kept_from)! < (stats.data?.window_days ?? WINDOW_DAYS) && (
-                  <p className="px-5 pb-1 text-[13px] text-faint">{copy.spreadDays(keptDays(m.kept_from)!)}</p>
+                {/* The backend started this spread later than the window: the days it covers are the window's less those before. */}
+                {stats.data && m.window_30d_from > stats.data.from && (
+                  <p className="px-5 pb-1 text-[13px] text-faint">{copy.spreadDays(stats.data.window_days - daysBetween(stats.data.from, m.window_30d_from))}</p>
                 )}
                 {m.series.map((row) => (
                   <Spread key={JSON.stringify(row.dimensions)} metric={m} row={row} />

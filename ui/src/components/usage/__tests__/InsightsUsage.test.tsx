@@ -7,19 +7,20 @@ import { InsightsUsage } from "@/components/usage/InsightsUsage";
 import * as copy from "@/components/usage/copy";
 import { ADVANCED_NAV, BASIC_NAV, type NavEntry } from "@/lib/nav";
 import type { InsightsStats } from "@/lib/queries/useStats";
+import { dayWords } from "@/lib/usage";
 import { makeProxyFetch } from "@/test-utils/proxyFetch";
 
 import { ago, GIB } from "./fixtures";
 
 const stats = (): InsightsStats => ({
   window_days: 30,
-  from: "2026-10-14",
+  from: ago(29),
   metrics: [
-    { target: "gym", system: "Training hall", name: "volume.sessions", instrument: "counter", unit: "count", label: "Sessions", per_subject: true, dimensions: [{ name: "area", label: "Area" }],
+    { target: "gym", system: "Training hall", name: "volume.sessions", instrument: "counter", unit: "count", label: "Sessions", per_subject: true, dimensions: [{ name: "area", label: "Area" }], window_30d_from: ago(29),
       series: [{ dimensions: { area: "ring" }, members: 41, p50: 3, p90: 11.5 }, { dimensions: { area: "mat" }, members: 1, p50: 2, p90: 2 }] },
-    { target: "gym", system: "Training hall", name: "volume.used_bytes", instrument: "gauge", unit: "bytes", label: "Home folder used", per_subject: true, against: "quota_field",
+    { target: "gym", system: "Training hall", name: "volume.used_bytes", instrument: "gauge", unit: "bytes", label: "Home folder used", per_subject: true, against: "quota_field", window_30d_from: ago(29),
       series: [{ dimensions: {}, members: 214, p50: 1.2 * GIB, p90: 9 * GIB }] },
-    { target: "lab", system: "Laser lab", name: "laser.minutes", instrument: "counter", unit: "seconds", label: "Machine time", per_subject: true,
+    { target: "lab", system: "Laser lab", name: "laser.minutes", instrument: "counter", unit: "seconds", label: "Machine time", per_subject: true, window_30d_from: ago(29),
       series: [{ dimensions: {}, members: 12, p50: 1800, p90: 7200 }] },
   ],
 });
@@ -51,7 +52,7 @@ describe("Insights, Usage", () => {
     expect(screen.getByText(/Half are at 3 or under; nine in ten are at 11\.5 or under\./)).toBeInTheDocument();
     expect(screen.getByText(/Half are at 1\.2 GiB or under; nine in ten are at 9\.0 GiB or under\./)).toBeInTheDocument();
     expect(screen.getByText(/Half are at 30 minutes or under; nine in ten are at 2 hours or under\./)).toBeInTheDocument();
-    expect(screen.getByText(copy.windowFrom("14 Oct"))).toBeInTheDocument();
+    expect(screen.getByText(copy.windowFrom(dayWords(ago(29))))).toBeInTheDocument();
   });
 
   it("says how many people and shows no spread and no bar below 5: with one, the middle would be them", async () => {
@@ -62,14 +63,14 @@ describe("Insights, Usage", () => {
     expect(one.querySelector("[aria-hidden]")).toBeNull();
   });
 
-  it("says a spread is over fewer days when the system keeps fewer than the window, and says nothing otherwise", async () => {
+  it("says a spread is over fewer days when the backend started it later than the window, and says nothing otherwise", async () => {
     const s = stats();
-    s.metrics[0].kept_from = ago(10);
-    s.metrics[1].kept_from = ago(400);
+    s.metrics[0].window_30d_from = ago(9); // a system keeping 10 days: the backend's own clamp
     mount(s);
     await screen.findByText(/^41 people\./);
     expect(screen.getAllByText(copy.spreadDays(10))).toHaveLength(1);
-    expect(screen.queryByText(copy.spreadDays(400))).toBeNull();
+    expect(screen.queryByText(/^Over the last/, { selector: "p" })?.textContent).toBe(copy.spreadDays(10));
+    expect(screen.queryByText(copy.spreadDays(30))).toBeNull();
   });
 
   it("shows the spread from 5 people", async () => {

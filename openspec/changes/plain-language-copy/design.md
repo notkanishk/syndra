@@ -788,7 +788,7 @@ The dialog is one dialog: the form, the preview, the camera and the result are i
 
 An add-on that reports statistics (feature `stats`) gets the same four surfaces with no code of its own: the member's card **What I have used**, the same card on a person's page, the target overview's totals, and Insights, Usage. `components/usage/copy.ts` holds every sentence; `usageCopyGuide.test.ts` fails when this table and that file disagree, and the lint guard refuses an inline sentence in `components/usage/*.tsx` (as in sections 12 and 14). Syndra's own sentences only: what the add-on wrote (a metric's label, a breakdown's name and value, a gap's reason) is escaped, capped (label 60, value 40, reason 120 characters) and, inside a sentence, put in quotes; this table never holds it. `{value}` is a number in its unit's words ("18.4 GiB", "3 items"), `{day}` a makerspace day ("9 Nov", with the year when it is not this year's; never "UTC"), `{range}` days ("8–9 Nov"), `{where}` a breakdown (`Area: “ring”`). Every card ends on a next step or "Nothing for you to do."
 
-**A day nobody could count is not a zero.** It is hatched in the chart, the line breaks there, its hover says "couldn't count", and the card footnotes it with the add-on's reason. A counter's day with nothing in an observed window is a real 0 and is drawn as one; a day after the last one counted (`counted_through`) is not yet counted and is left blank, never 0. A day before the first one Syndra keeps for a person (`kept_from`, the operator's retention) is hatched with Syndra's own reason, and the headline then says the days it is a sum of ("in the last {n} days"). A line joins only adjacent days that have a value: a gauge is never interpolated, and a value standing alone is a dot. **Nothing ranks.** No sentence here, and no word in the renderers, says top, most, worst, best, highest, lowest, leader or rank, of people or of systems; Insights shows how many people and a spread, never who (`usageCopyGuide.test.ts` reads the files for those words). A series is never added to another.
+**A day nobody could count is not a zero.** It is hatched in the chart, the line breaks there, its hover says "couldn't count", and the card footnotes it with the add-on's reason. A counter's day with nothing in an observed window is a real 0 and is drawn as one; a day after the last one counted (`counted_through`) is not yet counted and is left blank, never 0. Each window is named from the day the backend read it from (`window_30d_from`, `window_12m_from`): the window's own first day, or the first day Syndra keeps for a person (`kept_from`, the operator's retention of N days counting today, so today − (N − 1)) when that is later. A window retention starts later is "in the last {n} days", n counted from its start to today, today included; a 12-month window it does not cut is "in the last 12 months"; when both start on one day the year line is not said twice. Only the drawn days before the 30-day start are hatched, with Syndra's own reason, and "Kept for only {n} days" is said only when such a day is drawn. A line joins only adjacent days that have a value: a gauge is never interpolated, and a value standing alone is a dot. **Nothing ranks.** No sentence here, and no word in the renderers, says top, most, worst, best, highest, lowest, leader or rank, of people or of systems; Insights shows how many people and a spread, never who (`usageCopyGuide.test.ts` reads the files for those words). A series is never added to another.
 
 | When | Says |
 |---|---|
@@ -796,7 +796,7 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | The operator's card on a person's page: title | What {person} has used |
 | A counter over its window | {value} in the last 30 days |
 | The same, over the year | {value} in the last 12 months |
-| The same, when per-person numbers are kept for fewer days than the window | {value} in the last {n} days |
+| The same, when retention starts either window later (n: its start to today, today included) | {value} in the last {n} days |
 | A counted metric with no series | Nothing counted in the last 30 days |
 | A gauge's latest value | {value} on {day} |
 | A gauge with no value in the window | No value in the last 30 days |
@@ -824,11 +824,12 @@ An add-on that reports statistics (feature `stats`) gets the same four surfaces 
 | The retention control: save | Save |
 | The retention control: back to the ceiling (only when a shorter value is set) | Keep the full 400 days |
 | The retention control: nothing to save | Type a new number of days first. |
-| Shortening asks first | Per-person numbers older than {n} days are deleted tonight, and cannot be brought back. Totals stay for 5 years. |
-| Shortening: the button that does it | Delete numbers older than {n} days |
+| Shortening asks first, in a dialog: its title | Keep per-person numbers for only {n} days? |
+| Shortening asks first: the dialog's words | Per-person numbers older than {n} days are deleted within a day, and cannot be brought back. Totals stay for 5 years. |
+| Shortening: the button that does it (the destructive fill) | Delete numbers older than {n} days |
 | Shortening: the button that does not | Keep them |
 | The retention control: the word on the result | Saved |
-| The retention control: the result | Per-person numbers older than {n} days are deleted tonight. Totals stay for 5 years. |
+| The retention control: the result | Per-person numbers older than {n} days are deleted within a day. Totals stay for 5 years. |
 | What the last count did not keep | The last count did not keep {reason}. |
 | a value for a day that is not a whole day, one | {n} value that was not for a whole day |
 | a value for a day that is not a whole day, several | {n} values that were not for a whole day |
