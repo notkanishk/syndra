@@ -427,7 +427,7 @@ export interface Crumb {
 export function crumbsFor(
   pathname: string,
   audience: Audience,
-  nameOf: (target: string) => string = targetLabel,
+  nameOf: (target: string) => string | undefined = targetLabel,
 ): Crumb[] {
   // A target's own routes, resolved from the PATH rather than from the roster.
   //
@@ -445,11 +445,14 @@ export function crumbsFor(
   // not the sidebar — an operator who followed a link there in Basic still
   // needs to know where they are.
   // `nameOf` is the roster's name when the caller has it (TopBar), else the
-  // id title-cased.
+  // id title-cased; undefined while the roster is being read, and then the
+  // target is not crumbed yet, so the id is never drawn and then replaced.
   const onTarget = /^\/system\/targets\/([^/]+)(\/.*)?$/.exec(pathname);
   if (onTarget && audience !== "member") {
     const [, target, rest] = onTarget;
-    const self: Crumb = { label: nameOf(target), href: `/system/targets/${target}` };
+    const name = nameOf(target);
+    if (name === undefined) return [{ label: "System" }];
+    const self: Crumb = { label: name, href: `/system/targets/${target}` };
     return rest ? [{ label: "System" }, self] : [{ label: "System" }, { label: self.label }];
   }
 
