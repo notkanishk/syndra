@@ -38,6 +38,10 @@ type statsUsage struct {
 	// this target still keeps (retention): a day before it is deleted, never
 	// zero. Every series starts there at the earliest.
 	KeptFrom string `json:"kept_from,omitempty"`
+	// Today is the makerspace day this response was built on (YYYY-MM-DD). A
+	// window "in the last n days" counts n to it, so a response cached across
+	// midnight never miscounts against the reader's own clock.
+	Today string `json:"today,omitempty"`
 	// Window30dFrom and Window12mFrom are the first day each window's numbers
 	// are read from (YYYY-MM-DD): the window's own start, or KeptFrom when
 	// retention is shorter. The page names each window from them.
@@ -119,7 +123,7 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 		return statsUsage{}, err
 	}
 	today, from30, from12m := statsWindows(now)
-	out := statsUsage{Reported: true, Window30dFrom: from30, Window12mFrom: from12m, Metrics: []statsMetricView{}}
+	out := statsUsage{Reported: true, Today: today, Window30dFrom: from30, Window12mFrom: from12m, Metrics: []statsMetricView{}}
 	if subject != "" {
 		// A person's points are read no earlier than retention keeps them, so
 		// a sum never counts a day the daily prune has yet to delete.

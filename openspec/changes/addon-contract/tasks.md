@@ -1894,6 +1894,10 @@ per-person only) applied there.
   - "Deleted tonight" was false: the prune runs at start-up, then every 24 hours; the copy says "within a day", and the PruneStats, Prune, main and design text says daily.
   - Shortening is confirmed in a dialog (Modal / ModalFooter): title "Keep per-person numbers for only {n} days?", the act `dangerConfirm` naming the number, "Keep them" the cancel; the destructive-fill guard now reads a label said by a copy module (`{copy.name(…)}`) from that export's text.
   - The dialog asks only for a value the backend accepts (1 ≤ wanted < current); anything else is sent as typed, so the backend's 422 is the only answer; typing clears an old error (`save.reset()`).
+  Decided while building (6e fix round 4):
+  - The one-control-surface guard reads a confirm's label from the LAST `{copy.X` in its body (an attribute such as `reason={copy.NOTHING_TO_DELETE}` is not the label), and an export it cannot read on one line returns "" and fails closed; two self-tests hold both.
+  - The "Kept for only {n} days" footnote shows whenever a drawn row's window starts at `kept_from` (30-day or 12-month line), not only when a cell is hatched, so the 12-month line vanishing at N = 30 is explained; n counts `kept_from` to `today`.
+  - `usage.today` (makerspace day, YYYY-MM-DD) is sent with every reported `usage` and the UI counts `daysSince(start, usage.today)`, so a response cached across midnight keeps its n; Go test on the makerspace day (not UTC's), UI test on a response built yesterday. "nightly" comments reworded to "within a day".
 - [ ] 6.10 (the owner's, not an agent's) Staging: 48 hours of collection against staging TrueNAS, then an
   operator checks that the member storage card's current number matches
   `storage.status`, that the trend exists, that a share with auditing off

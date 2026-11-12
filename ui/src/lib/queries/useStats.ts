@@ -71,6 +71,8 @@ export interface StatsMetric {
  * named from its start, never from a window the page works out itself.
  */
 export interface UsageWindows {
+  /** The makerspace day the backend built this on: what "the last n days" count to, however long the response was cached. */
+  today: string;
   /** A person's view only: the first makerspace day whose per-person points are kept on this system; earlier days are gone, not zero. */
   kept_from?: string;
   window_30d_from: string;
@@ -126,7 +128,7 @@ export function useInsightsStats() {
 /**
  * The one write place for how long per-person numbers are kept (1 to 400
  * days; null is the 400-day ceiling). It deletes older per-person history at
- * the next nightly retention, so the caller asks first when it shortens.
+ * the next retention pass (within a day), so the caller asks first when it shortens.
  */
 export function useSetStatsRetention(target: string) {
   const client = useQueryClient();

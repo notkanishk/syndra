@@ -242,13 +242,13 @@ describe("what Syndra keeps, and what is not counted yet", () => {
   const ring = (el: HTMLElement) => el.querySelectorAll("svg")[0];
   const said = (svg: Element) => Array.from(svg.querySelectorAll("title")).map((t) => t.textContent);
 
-  it("says a 12-month sum is of the last 90 days when only 90 are kept, and hatches nothing in a 30-day window", () => {
+  it("says a 12-month sum is of the last 90 days when only 90 are kept, and hatches nothing in a 30-day window, the footnote saying what is kept", () => {
     const { container } = render(<UsageCard title="t" windows={windows(90)} metrics={[sessions()]} />);
     expect(screen.getByText("7 in the last 30 days")).toBeInTheDocument();
     expect(screen.getByText("37 in the last 90 days")).toBeInTheDocument();
     expect(screen.queryByText(/12 months/)).toBeNull();
     expect(ring(container).querySelectorAll("[data-gap]")).toHaveLength(0);
-    expect(screen.queryByText(copy.GAPS_HEADING)).toBeNull();
+    expect(screen.getByText(copy.keptLine(90))).toBeInTheDocument(); // the year's line starts at what is kept, so the page says so
   });
 
   it("with 400 kept, or on a totals page, the headline and the year are the ordinary ones", () => {
@@ -258,14 +258,30 @@ describe("what Syndra keeps, and what is not counted yet", () => {
     expect(screen.getByText("37 in the last 12 months")).toBeInTheDocument();
   });
 
-  it("with exactly 30 kept, the window is whole: the last 30 days, nothing hatched, no footnote, and the year not said twice", () => {
+  it("with exactly 30 kept, the window is whole: the last 30 days, nothing hatched, the footnote still says what is kept, and the year not said twice", () => {
     const { container } = render(<UsageCard title="t" windows={windows(30)} metrics={[sessions()]} />);
     expect(screen.getByText("7 in the last 30 days")).toBeInTheDocument();
     expect(screen.queryByText(/in the last (12 months|\d+ days)$/, { selector: ".text-faint" })).toBeNull();
     expect(ring(container).querySelectorAll("[data-gap]")).toHaveLength(0);
     expect(said(ring(container)).filter((t) => t?.includes("kept for only"))).toHaveLength(0);
-    expect(screen.queryByText(copy.keptLine(30))).toBeNull();
-    expect(screen.queryByText(copy.GAPS_HEADING)).toBeNull();
+    // The 12-month line is gone (one window), so the page says why: retention keeps 30 days.
+    expect(screen.getByText(copy.keptLine(30))).toBeInTheDocument();
+  });
+
+  it("with 200 kept, the 30 days are whole and unhatched but the 12-month line is the last 200 days, and the footnote says 200", () => {
+    const { container } = render(<UsageCard title="t" windows={windows(200)} metrics={[sessions()]} />);
+    expect(screen.getByText("7 in the last 30 days")).toBeInTheDocument();
+    expect(screen.getByText("37 in the last 200 days")).toBeInTheDocument();
+    expect(ring(container).querySelectorAll("[data-gap]")).toHaveLength(0);
+    expect(screen.getByText(copy.keptLine(200))).toBeInTheDocument();
+  });
+
+  it("counts n to the backend's day, so a response cached across midnight still says the right n", () => {
+    // Built yesterday for 10 kept days; read today: still 10, not 11.
+    const w = { ...windows(10), today: ago(1), kept_from: ago(10), window_30d_from: ago(10), window_12m_from: ago(10) };
+    render(<UsageCard title="t" windows={w} metrics={[sessions()]} />);
+    expect(screen.getByText("7 in the last 10 days")).toBeInTheDocument();
+    expect(screen.getByText(copy.keptLine(10))).toBeInTheDocument();
   });
 
   it("with 10 kept, the headline names 10 days, exactly 10 days are drawn unhatched, the 20 before are Syndra's reason, and none is a zero", () => {
@@ -292,9 +308,9 @@ describe("what Syndra keeps, and what is not counted yet", () => {
     rerender(<UsageCard title="t" windows={w} metrics={[sessions()]} />);
     expect(screen.getByText(w.window_12m_from === w.kept_from ? "37 in the last 350 days" : "37 in the last 12 months")).toBeInTheDocument();
     // A start the backend says is retention's is said as days from it, whatever the window would have been.
-    rerender(<UsageCard title="t" windows={{ kept_from: ago(199), window_30d_from: ago(29), window_12m_from: ago(199) }} metrics={[sessions()]} />);
+    rerender(<UsageCard title="t" windows={{ today: windows().today, kept_from: ago(199), window_30d_from: ago(29), window_12m_from: ago(199) }} metrics={[sessions()]} />);
     expect(screen.getByText("37 in the last 200 days")).toBeInTheDocument();
-    rerender(<UsageCard title="t" windows={{ kept_from: ago(399), window_30d_from: ago(29), window_12m_from: ago(340) }} metrics={[sessions()]} />);
+    rerender(<UsageCard title="t" windows={{ today: windows().today, kept_from: ago(399), window_30d_from: ago(29), window_12m_from: ago(340) }} metrics={[sessions()]} />);
     expect(screen.getByText("37 in the last 12 months")).toBeInTheDocument();
   });
 

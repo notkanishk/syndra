@@ -14,9 +14,9 @@ export const ago = (n: number) => addDays(today(), -n);
 export function windows(n?: number): UsageWindows {
   const [y, m] = today().split("-").map(Number);
   const [from30, from12m] = [ago(29), new Date(Date.UTC(y, m - 12, 1)).toISOString().slice(0, 10)];
-  if (n === undefined) return { window_30d_from: from30, window_12m_from: from12m };
+  if (n === undefined) return { today: today(), window_30d_from: from30, window_12m_from: from12m };
   const kept = ago(n - 1);
-  return { kept_from: kept, window_30d_from: kept > from30 ? kept : from30, window_12m_from: kept > from12m ? kept : from12m };
+  return { today: today(), kept_from: kept, window_30d_from: kept > from30 ? kept : from30, window_12m_from: kept > from12m ? kept : from12m };
 }
 
 export const homeBytes = (over: Partial<StatsMetric> = {}): StatsMetric => ({

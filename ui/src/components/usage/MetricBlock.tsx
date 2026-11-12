@@ -41,7 +41,7 @@ function Limit({ value, limit, metric }: { value: number; limit: number | undefi
  * today; otherwise the window's own name.
  */
 function inWindow(value: string, start: string, windows: UsageWindows, own: (value: string) => string): string {
-  return start === windows.kept_from ? copy.inLastDays(value, daysSince(start)) : own(value);
+  return start === windows.kept_from ? copy.inLastDays(value, daysSince(start, windows.today)) : own(value);
 }
 
 function SeriesRow({ metric, series, cells, limits, windows }: { metric: StatsMetric; series: StatsSeries; cells: Plot; limits?: Limits; windows: UsageWindows }) {
@@ -71,12 +71,12 @@ function SeriesRow({ metric, series, cells, limits, windows }: { metric: StatsMe
         {detail && <span className="text-[13px] tabular-nums text-faint">{detail}</span>}
         {metered && <Limit value={series.latest!.value} limit={limits![metric.against!]} metric={metric} />}
       </span>
-      <Spark plot={cells} unit={metric.unit} keptDays={daysSince(windows.window_30d_from)} what={where ? `${capText(metric.label, CAP.label)}, ${where}` : capText(metric.label, CAP.label)} />
+      <Spark plot={cells} unit={metric.unit} keptDays={daysSince(windows.window_30d_from, windows.today)} what={where ? `${capText(metric.label, CAP.label)}, ${where}` : capText(metric.label, CAP.label)} />
     </CardRow>
   );
 }
 
-/** `kept`: how many days Syndra keeps, said only when a drawn day is hatched for it. */
+/** `kept`: how many days Syndra keeps, said only when a drawn row's window starts at what retention keeps. */
 function Gaps({ metric, kept }: { metric: StatsMetric; kept?: number }) {
   if (metric.gaps.length === 0 && kept === undefined) return null;
   const shown = metric.gaps.slice(0, MAX_ROWS);
@@ -118,8 +118,9 @@ function Collected({ metric }: { metric: StatsMetric }) {
 export function MetricBlock({ metric, limits, windows }: { metric: StatsMetric; limits?: Limits; windows: UsageWindows }) {
   const rows = metric.series.slice(0, MAX_ROWS);
   const plots = (metric.watermark === null ? [] : rows).map((s) => plot(s, metric.gaps, metric.instrument, undefined, { from: windows.window_30d_from, countedThrough: metric.counted_through }));
-  // The days before the window's start are hatched with Syndra's own reason, said only where one is drawn.
-  const hatched = plots.some((p) => p.cells.some((c) => c.kept));
+  // Syndra's own reason (what retention keeps) is said whenever a drawn row's window starts at `kept_from`, hatched day or not.
+  const { kept_from, window_30d_from: w30, window_12m_from: w12 } = windows;
+  const keptShort = plots.length > 0 && kept_from !== undefined && (w30 === kept_from || w12 === kept_from);
   return (
     <section aria-label={capText(metric.label, CAP.label)}>
       <div className="row-divider px-5 pb-1 pt-3.5">
@@ -141,7 +142,7 @@ export function MetricBlock({ metric, limits, windows }: { metric: StatsMetric; 
           <span className="text-[13px] text-faint">{copy.noMoreLines(metric.series.length - rows.length)}</span>
         </CardRow>
       )}
-      <Gaps metric={metric} kept={hatched ? daysSince(windows.window_30d_from) : undefined} />
+      <Gaps metric={metric} kept={keptShort ? daysSince(kept_from, windows.today) : undefined} />
       <Collected metric={metric} />
     </section>
   );

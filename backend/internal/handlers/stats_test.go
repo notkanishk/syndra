@@ -177,6 +177,9 @@ func TestUsageCarriesSumsLatestAndGaps(t *testing.T) {
 	if usage.Metrics[0].Label != "Home folder used" || usage.Metrics[1].Label != "Storage sessions" {
 		t.Errorf("metrics in order %s, %s", usage.Metrics[0].Label, usage.Metrics[1].Label)
 	}
+	if usage.Today != "2026-11-12" {
+		t.Errorf("today is the makerspace day the response was built on: %q", usage.Today)
+	}
 	home := usage.Metrics[0]
 	if len(home.Series) != 1 || home.Series[0].Latest == nil || home.Series[0].Latest.Day != "2026-11-11" || home.Series[0].Latest.Value != 6000 ||
 		home.Series[0].Sum30d != nil || home.Series[0].Months != nil || home.Against != "home_quota" {
@@ -207,7 +210,7 @@ func TestUsageCarriesSumsLatestAndGaps(t *testing.T) {
 }
 
 // A person's page says from which day retention still keeps their points,
-// and reads none from before it (the prune runs nightly, so a day past
+// and reads none from before it (the prune runs daily from start-up, so a day past
 // retention can still be stored); every metric says its last final day. The
 // totals keep five years and say neither.
 func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
@@ -228,6 +231,9 @@ func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
 		usage, err := statsUsageFor(context.Background(), "truenas", "u1", now)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if usage.Today != "2026-11-13" { // the makerspace's day, not UTC's 12th
+			t.Errorf("retention %d: today %q, want the makerspace day 2026-11-13", c.retention, usage.Today)
 		}
 		if usage.KeptFrom != c.keptFrom {
 			t.Errorf("retention %d: kept_from %q, want %q", c.retention, usage.KeptFrom, c.keptFrom)
