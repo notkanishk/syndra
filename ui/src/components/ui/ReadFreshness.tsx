@@ -147,11 +147,20 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
   const [pressedAt, setPressedAt] = useState<string | null | undefined>(undefined);
   const [pressing, setPressing] = useState(false);
   const [landed, setLanded] = useState<string | null>(null);
-  // The pending "forget this press" timer: one at a time (a later press
-  // replaces an earlier one's), and cancelled when the card unmounts, so it
-  // never sets state on a card that is gone.
+  // The pending "forget this press" timer: one at a time (a press cancels the
+  // one before it), never armed once the card has unmounted (a read still in
+  // flight settles after), and cancelled on unmount, so it never sets state on
+  // a card that is gone. `mounted` is set in the effect, not at creation, so
+  // StrictMode's unmount and remount leaves it true.
   const forget = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(forget.current), []);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      clearTimeout(forget.current);
+    };
+  }, []);
   // Decided in the render the new read arrives in, so the line that says so is drawn with it:
   // an effect would let one frame of the new age through before the crossfade began.
   if (pressedAt !== undefined && (readAt ?? null) !== pressedAt) {
@@ -164,6 +173,7 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
     return () => clearTimeout(t);
   }, [landed]);
   async function press(run: () => unknown) {
+    clearTimeout(forget.current);
     setPressedAt(readAt ?? null);
     setPressing(true);
     try {
@@ -171,9 +181,10 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
     } catch {
       // The read failed: the button comes back, nothing blooms.
     } finally {
-      setPressing(false);
-      clearTimeout(forget.current);
-      forget.current = setTimeout(() => setPressedAt(undefined), PRESS_FORGET_MS);
+      if (mounted.current) {
+        setPressing(false);
+        forget.current = setTimeout(() => setPressedAt(undefined), PRESS_FORGET_MS);
+      }
     }
   }
   return { pressing, landed, press };
