@@ -327,6 +327,16 @@ After the two Opus reviews (11 Nov 2026), decided by the owner and built:
   name **only under a logged create intent**, else `conflict` (test: an
   `employee_number` typed in a console does not bind; a second conflict on
   the same account inserts after the first is resolved) #ready-for-agent
+  - *Rollback note (slice 7b, 13 Nov 2026):* the TrueNAS mutation log's
+    records gain `account_id` (5.3d). A binary from before 7b decodes such a
+    record and drops the field, so its own `VerifyChain`/`VerifyLog` would
+    recompute those records' digests without it and call them altered. Both
+    are test-only: no running path calls them. `Append` chains on the stored
+    `digest`, and recovery (`recoverHead`, `InDoubt`, `Recover`) reads the
+    stored head and the outcome fields, so a rolled-back add-on appends,
+    recovers and reports its head as before, and Syndra's anchor still moves
+    forward. Rollback works; only an offline verify by the old binary
+    misreads the newer records.
 - [ ] 1.7b A release later: drop `account_uid` from both tables and the
   dual write; the one task the earlier draft lacked #ready-for-agent
 - [x] 1.9 Code for every message that moved in 1a: `PLAN_TOO_LARGE` (422)
@@ -1221,13 +1231,90 @@ settings with the full §5 rules.
   - Every binding change is its own `mutate` beside its NAS write (create bind, rebind, wanted SMB, purge unbind); a no-op store write is skipped; the AST guard holds store writes to `mutate` closures.
   - The fake NAS answers a missing method with an error member, as TrueNAS does, not a transport error.
   - Review of 3f774667: whether the NAS answered is decided before any wording, so no text turns a lost answer into a refusal (a login's rate limit is read by the breaker itself); an adopted group keeps a failure's own status only when this attempt's `group.create` was answered or never sent, otherwise the failure is "possibly acted"; a binding the log refuses after a create says the account was created. The fake NAS rate-limits with an error frame, as TrueNAS does.
-- [ ] 5.3d Adopting the account a crashed TrueNAS create left behind.
+- [x] 5.3d Adopting the account a crashed TrueNAS create left behind.
   Settling a write in doubt is done (5.3b: each is settled `unknown` at
   start, so `/health` needs no count). Left: whether the create path adopts
   an unbound account of the derived name under a logged `user.create`
   intent for that subject whose result is `unknown` (design §5 and the
   guide's "Look up before you create" allow exactly that adoption; today it
-  is `BINDING_CONFLICT` for an operator). #needs-triage
+  is `BINDING_CONFLICT` for an operator).
+  *Done (13 Nov 2026):* `leftByCrashedCreate` (apply.go), asked by `locate`
+  and `planOne` alike, adopts only when every check holds: the account's name
+  is exactly the derived one; `unboundConflict(...).Adoptable` (no binding
+  names it, the add-on knows its own account and this is not it); its uid is
+  in the add-on's range; no binding holds that uid under an older name
+  (`Store.UIDBound`); and `MutationLog.CreateInDoubt(subject, account_id)`,
+  reading every subject's records of that id, finds a `user.create` intent
+  for this subject asking for that uid whose latest result is `unknown`,
+  with no later binding record of the uid by anyone (`store.bind` or
+  `store.unbind`, succeeded or unknown), no later `store.bind` of this
+  subject, and no other subject's create of the uid that did not plainly
+  fail (failed, not_sent). Anything else stays `BINDING_CONFLICT`.
+  - Log format: `Record.AccountID` (`account_id`, omitempty, in the digest
+    only when set, so older records digest as before and the anchored chain
+    verifies across the upgrade), set on a create's writes from the uid on
+    and on every binding write: apply's binds (create, rename, wanted SMB,
+    adoption), and `account.adopt`, `account.release` and `account.purge`
+    (`caller.on`). The intent is tied to the account by the uid it asked
+    for, not the name (a name is display, never identity). A uid is NOT
+    unique across the log on trust: an orphan group's gid is reused by the
+    next create (`emptyGroupNamed`), and a restored `state.db` rolls
+    `ClaimID`'s high-water mark back. Hence the cross-subject reading: any
+    later binding of the uid cancels the doubt whoever wrote it (an operator
+    adopting it to someone else, who then released it, review finding (a)),
+    and two subjects' creates of one uid are a conflict for a person, never
+    an adoption (design §5's two candidates, finding (b)). An intent written
+    before this field is never adopted.
+  - The trace that settles the doubt is the adoption's own bind, logged
+    through `mutate` (`store.bind`, `BindIfFree`, carrying the uid) like
+    every binding change, so a second create (or one after an operator's
+    `account.release`) does not adopt again. No new record kind or outcome.
+  - What can block the converge (the groups) is asked before the bind, so
+    a blocked adoption binds nothing and "Nothing was changed." is true; a
+    block that arises later (the group table changed in between) says
+    "Adopted X …" and "Only the binding was recorded", and a converge
+    error after the bind says the account was adopted.
+  - The bind happens in `applyOne` after the fingerprint check, so a stale
+    plan writes nothing; then `converge` and the outcome is `applied`
+    ("Adopted X, which an earlier create made and could not record."), the
+    plan saying `apply` ("Adopts X, …") with the account's fingerprint, so a
+    re-planned system row dispatches instead of going `target_refused`.
+    Under the subject lock (`once`); `BindIfFree` holds the name against
+    every other subject.
+  - Tests: `adopt_in_doubt_test.go` (crash after the intent then `Recover`
+    then adopt; another subject's failed create of the uid still adopts; no
+    intent, failed, not_sent, still open, another subject's create, another
+    uid, two subjects' creates both unknown, bound since by another subject
+    with an unknown result, released since, this subject bound since before
+    ids, bound under an older name, the add-on's own account, below and
+    above the range: conflict, plan alike; adopted elsewhere then released,
+    end to end: conflict; a blocked adoption binds nothing; rotated
+    segments; second create bound path; release then create: conflict; the
+    bind logged; a create names its account) and `intent_test.go`
+    (`namesItsAccount`: every bind, unbind and purge delete carries the id).
+    Mutation-checked, each red: subject equality, the `unknown` check, the
+    uid tie, `!conflict.Adoptable`, the floor, the ceiling, an unknown bind
+    result cancelling, another subject's bind cancelling, the two-candidate
+    rule, `UIDBound`, the group check before the bind, the id on release and
+    on purge, the account still as created (password, SMB), and the scoped
+    own-bind cancel.
+  - *Review round 3 (13 Nov 2026):* a whole-volume restore (log and
+    `state.db` together, as a vzdump or LXC restore does) brings back an old
+    create in doubt with a log that agrees with it, after the account was
+    adopted, released and adopted again. So one check does not read the log:
+    the account must still be exactly as a create leaves it, no usable
+    password and SMB off (`!PasswordSet && !SMBEnabled`; the create sends
+    `password_disabled: true`, `smb: false`, and only a member's
+    `password.set` changes either). The fake NAS now keeps
+    `password_disabled` on a create, as TrueNAS does. And a later bind of
+    this subject cancels only this subject's candidates, never another
+    subject's claim on the uid. Staging's nightly restore (`_staging.yml`)
+    resets only Postgres and the stand-in Zitadel's world file, and staging
+    runs with the add-on off; deploys copy `state.db` out (never
+    `mutations.log`) and restore nothing, so no repo path restores the
+    add-on volume. A Proxmox-level restore of the app LXC would.
+  - A name bound to another managed subject never reaches this rule: the
+    derivation suffixes past it (unchanged).
 - [x] 5.3c A membership field that is not enumerable: the add-on cannot
   tell its managed set, and the drift sweep compares the whole list. No
   add-on has one yet.
@@ -1587,11 +1674,94 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       `operations.physical` counts the item as lent unless the confirm was a
       4xx refusal, so a lost or unreadable confirm's report says the item
       may be checked out.
-  - [ ] 6.3r (follow-up from the 6c fix round) A recorded `/calls` answer for
+  - [x] 6.3r (follow-up from the 6c fix round) A recorded `/calls` answer for
     an adoption or release could settle itself by running the same binding
     half as the adopt and release handlers (`handlers/inventory.go`), so the
     backend's copy is written with it; until then those two stay with a
-    person. #needs-triage
+    person.
+    *Done (13 Nov 2026):* the halves are extracted once,
+    `recordAdoptedBinding` and `forgetReleasedBinding` (handlers/inventory.go),
+    and called by the live handlers and by `settleByCall` through
+    `bindingHalf` (handlers/unconfirmed.go). A `recorded` adopt or release is
+    settled by `db.ResolveBindingCall`: one transaction that locks the row
+    (`FOR UPDATE`), skips the half when the subject's binding was decided
+    since (see the review fixes below), runs the
+    half (its writes join via `beginOrJoin`/`querier`), then
+    `ResolveAddonOperation` (now joining an ambient transaction) as happened
+    by `system:syndra`. One transaction rather than an order, so a crash
+    leaves both or neither; a second settle finds the row answered and runs
+    nothing.
+    *Review fixes (13 Nov 2026, rounds 2 and 3):* two locks, always in this
+    order, so settles cannot deadlock: the row `FOR UPDATE`, then the
+    subject's binding row `FOR UPDATE`. No advisory lock: the insert takes
+    one only for a physical call, so it would never meet an adopt or
+    release. The copy counts as decided since, and the half is NOT run, when:
+    a later adopt/release/purge of the subject may have reached the add-on
+    (succeeded or no_change, still open, or answered happened or superseded;
+    one unreached, refused or answered not happened does not count); for an
+    adoption, the binding row was written or seen at or after the call
+    (`last_seen_at`; the drain's `recordBinding` writes the copy with no
+    operation row) AND names another account than the recorded reply (an
+    older copy naming another account is stale, since the add-on accepted the
+    adoption, and is rewritten); for a release, the copy names another
+    account than the one released (the reply's `account_id`, else the row's
+    `about`), or, with neither, the copy is at or after the call. Decided
+    since, the row is still settled as happened (the add-on recorded it; the
+    later write owns the copy), never left with a person who could only
+    repeat what is true; `ErrBindingDecidedSince` is gone. `superseded` was
+    not used: its CHECK needs `superseded_by`, and a drain write has no row
+    to name. An adoption's half needs `account_id` from the recorded reply
+    (`addonop.AccountIDOf`, the one reading of it, now also Dispatch's) and
+    the row's `about` (the username); without either it is not settled.
+    `in_doubt` and `unknown` are unchanged (neither is physical). The
+    insert's `CALL_UNSETTLED` and advisory lock are untouched (byte for byte
+    as before 7b).
+    - Tests: `binding_settle_test.go` (the settle leaves exactly the live
+      handler's binding / forgets exactly what the live release forgets;
+      no account id, in_doubt, unknown, decided since: open) and
+      `binding_call_live_test.go` (live: adopt and release settle with the
+      binding, twice runs the half once, a failed half or an unresolvable row
+      rolls the binding back, a later call of the same subject blocks and
+      another subject's does not). Mutation-checked: a settle that writes its
+      own binding, forgets without the merge base, settles by status alone,
+      or drops the account-id check, each fails.
+    - Copy traced: AUTHORING "What settles a record" said these were never
+      asked (fixed); the unconfirmed list's header comment (fixed);
+      `unconfirmed-and-self-settling` 2.5 annotated. The Say what happened
+      dialog (`UnconfirmedChanges.tsx`) told a person to look under Accounts
+      Syndra manages and promised "Syndra manages it", but a person's answer
+      writes no binding (`handleSettleUnconfirmed`) and those lists read
+      Syndra's copy: now it says the lists can't tell and the next step is to
+      assign it (or stop tracking it) again, which the system answers either
+      way and the lists then follow (test in `UnconfirmedChanges.test.tsx`).
+    - `merge_findings.go`'s `ResolutionUnbound` now calls
+      `forgetReleasedBinding`, so an unbind also forgets what Syndra landed
+      (`ForgetPropagations`), which the inline copy skipped.
+    - More tests: concurrent settles of one row run the half once (live, 5
+      rounds); a later release blocks the copy when dispatching, succeeded or
+      indeterminate, and does not when unreached or refused; a release keeps
+      a drain-written copy of another account, forgets one of the account
+      released, and, naming nothing, goes by time; an adoption skips only a
+      newer copy of another account (an older one, or one of the same
+      account, is rewritten); an adopt row with no `about` stays for a
+      person. Mutation-checked: each of those rules.
+    - The Say what happened copy (round 3): "it didn't happen" now says the
+      next step too ("Assign it again if {account} should be {who}'s.",
+      "Stop tracking it again if Syndra shouldn't manage it."), and How to
+      tell no longer says the system "answers either way": an assign is
+      refused when someone else now holds the account.
+    - Review round 4: the TrueNAS `account.release` reply carries the
+      `account_id` it let go of (none when nothing was bound, or for a
+      legacy binding whose uid is outside the add-on's range and may be the
+      NAS record key: `inIDRange`, the one check `boundAccount` and
+      `leftByCrashedCreate` use too), so the settle compares ids, not the name:
+      a release of charlotte (200001) recorded before the drain made
+      charlotte again (200002) keeps the new copy (live test). The reply
+      schema already allowed `account_id`; its description and the guide's
+      account operations now say so (SHOULD; the reference serves no
+      release, so the kit is unchanged). The copy guide's §14 carries the
+      assign and let-go rows as a table, guarded by `actionsCopyGuide.test.ts`
+      against `wording` in `UnconfirmedChanges.tsx`.
   - [x] The UI half (6.3u, a separate builder from the 6c UI handoff): the
     member action with `format: target_id` as a typed-or-scanned input,
     preview then confirm, the poll, and the desk's sentence on Waiting on you

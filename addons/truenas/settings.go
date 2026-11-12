@@ -127,7 +127,7 @@ func (s *server) putHomeRoot(w http.ResponseWriter, req putSettingRequest) {
 			return
 		}
 	}
-	err := s.mutate(caller{"settings." + settingHomeRoot, "", req.Actor, req.CallID}, "store.setting", func() error {
+	err := s.mutate(caller{operation: "settings." + settingHomeRoot, actor: req.Actor, callID: req.CallID}, "store.setting", func() error {
 		return s.store.PutSetting(settingHomeRoot, Setting{Value: req.Value, SetBy: req.Actor, SetAt: time.Now().UTC()})
 	})
 	switch {

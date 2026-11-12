@@ -82,8 +82,12 @@ function usePersonName(id: string): string {
   return personOr(useNameResolver().resolveUser(id).value?.display_name);
 }
 
-/** Each kind, worded (A-09 §4's table, less the two password rows A-13 §5 drops). */
-function wording(op: UnconfirmedOperation, who: string, name: string) {
+/**
+ * Each kind, worded (A-09 §4's table, less the two password rows A-13 §5 drops).
+ * Exported for the copy guide's guard: the adopt and release rows are its §14
+ * table (actionsCopyGuide.test.ts).
+ */
+export function wording(op: UnconfirmedOperation, who: string, name: string) {
   const account = op.about || `${who}'s account`;
   switch (op.operation) {
     case "account.purge":
@@ -96,25 +100,30 @@ function wording(op: UnconfirmedOperation, who: string, name: string) {
         done: `${name} deleted ${who}'s account and files.`,
         notDone: `You recorded that ${name} didn't delete ${who}'s account and files.`,
       };
+    // Syndra's lists of accounts change only when the system confirms an
+    // assign or a stop, and an answer here records the answer alone (it writes
+    // no binding). So the lists cannot tell, and the next step is to do it
+    // again: if it already happened the system says so and the lists follow;
+    // an assign is refused when someone else now holds the account (6.3r).
     case "account.adopt":
       return {
         asked: [`Assign ${account} to `, ""],
         question: `Did ${name} assign ${account} to ${who}?`,
-        tell: `If ${account} is under Accounts Syndra manages, it happened.`,
-        yes: `${account} is ${who}'s account, and Syndra manages it.`,
-        no: `${account} is still under Not created by Syndra.`,
-        done: `${account} is ${who}'s account on ${name}.`,
-        notDone: `You recorded that ${name} didn't assign ${account} to ${who}.`,
+        tell: `Syndra's lists change only when ${name} confirms, so they can't tell you. Assign ${account} to ${who} again. If it already happened, ${name} says so and Syndra lists it then. If someone else holds it now, ${name} refuses.`,
+        yes: `${name} assigned ${account} to ${who}. Syndra lists it once you assign it again.`,
+        no: `${name} didn't assign ${account}.`,
+        done: `You recorded that ${name} assigned ${account} to ${who}. Assign it again to have Syndra list it.`,
+        notDone: `You recorded that ${name} didn't assign ${account} to ${who}. Assign it again if ${account} should be ${who}'s.`,
       };
     case "account.release":
       return {
         asked: [`Let go of `, `'s account on ${name}, keeping it`],
         question: `Did ${name} let go of ${who}'s account?`,
-        tell: `If ${account} is under Not created by Syndra, it happened.`,
-        yes: `${account} stays on ${name}, and Syndra no longer manages it.`,
-        no: `Syndra still manages ${account}.`,
-        done: `Syndra no longer manages ${account}. It stays on ${name}.`,
-        notDone: `You recorded that ${name} didn't let go of ${account}.`,
+        tell: `Syndra's lists change only when ${name} confirms, so they can't tell you. Stop tracking ${account} again. If it already happened, ${name} says so and Syndra stops listing it then.`,
+        yes: `${name} let go of ${account}. Syndra stops listing it once you stop tracking it again.`,
+        no: `${name} still holds ${account} for ${who}.`,
+        done: `You recorded that ${name} let go of ${account}. Stop tracking it again to have Syndra stop listing it.`,
+        notDone: `You recorded that ${name} didn't let go of ${account}. Stop tracking it again if Syndra shouldn't manage it.`,
       };
     // A maintenance change is about the system itself, not a person
     // (addons/read.go SetLifecycle: subject is the target, about is the state).

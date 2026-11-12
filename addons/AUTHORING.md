@@ -1163,10 +1163,25 @@ whole burden.
   `account.adopt` operation, which every add-on that creates accounts
   therefore serves ([The account operations](#the-account-operations)).
   Anyone with console access can type an external reference, and a wrong
-  adoption hands one person's data to another. (`boundAccount` and `locate`
-  in `addons/truenas/apply.go`, `adoptAccount` in
-  `addons/truenas/operations.go`; the conflict's words, one source for plan
-  and apply, are `BindingConflict.words`.)
+  adoption hands one person's data to another. Tie the intent to the account
+  it creates by the app's own id where the create can choose it (TrueNAS
+  asks for a uid from the add-on's range and logs it on the intent), since a
+  name is display, never identity. Log that id on every binding write too,
+  and read every subject's records of it: an id is not unique on trust (a
+  reused orphan group, a restored store). The create in doubt is this
+  subject's, its latest result unknown, with no binding of that id by
+  anyone, and none of this subject, logged since; another subject's create
+  of the id that did not plainly fail is a second candidate, so a conflict.
+  The adoption's own logged bind settles the doubt, so it adopts once. Adopt
+  only an account still exactly as your create leaves it (TrueNAS: no usable
+  password, SMB off), since a restore of the whole volume brings an old
+  doubt back with its log. Plan MUST predict the adoption as apply makes it,
+  and what can block the apply is checked before the bind. (`boundAccount` and `locate`
+  in `addons/truenas/apply.go`, the adoption rule `leftByCrashedCreate` in
+  `addons/truenas/apply.go` and `CreateInDoubt` in
+  `addons/truenas/mutationlog.go`,
+  `adoptAccount` in `addons/truenas/operations.go`; the conflict's words,
+  one source for plan and apply, are `BindingConflict.words`.)
 - **Record it before you answer.** The add-on MUST write the mutation-log
   intent before the create, MUST record the binding and the reply under the
   `call_id` before it answers, and MUST answer a replay from that record.
@@ -1752,7 +1767,11 @@ feature and serve both:
   app. It is how an operator lets go of an account (`handleReleaseBinding`
   there, and `releaseOnTarget` in
   `backend/internal/handlers/merge_findings.go` for one the app no longer
-  holds), so it MUST answer while the app is unreachable.
+  holds), so it MUST answer while the app is unreachable. It SHOULD answer
+  the `account_id` it let go of when one was bound, so a release Syndra
+  settles from its record (`GET /calls`) forgets Syndra's copy only while
+  that copy names the same account (`ResolveBindingCall` in
+  `backend/internal/db/addon_operations.go`).
 
 `account.adopt` and `account.release` are the only way inside Syndra to
 resolve a conflict (renaming the account in the app is the other); without
@@ -1987,9 +2006,15 @@ every call before acting, so there no record is no effect. Any other
 `unknown` settles nothing and the record stays for a person: an add-on may
 keep no intent for a non-physical write (an older build, a write sent
 before its log was written ahead), and past `call_memory` it may have
-forgotten. An `account.adopt` or `account.release` is never asked, since
-settling it would leave Syndra's own copy of the binding unwritten; the
-person repeats it, which writes both.
+forgotten. An `account.adopt` or `account.release` that is `recorded` is
+settled together with Syndra's own copy of the binding, written by the same
+function its handler runs after a live answer, in one transaction with the
+settle (`ResolveBindingCall` in `backend/internal/db/addon_operations.go`);
+an adoption's recorded reply MUST therefore carry `account_id`, or the
+record stays for a person. When the subject's binding was acted on again
+since (a later adopt, release or purge that may have reached the add-on, or
+a copy Syndra recorded after the call naming another account), the record
+settles as happened and the copy is left to the later write.
 
 **4. Naturally idempotent.** Checking out an item this subject already
 holds MUST answer `outcome: no_change` with the record, and write nothing

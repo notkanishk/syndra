@@ -481,16 +481,20 @@ var ErrAddonOperationNotUnresolved = errors.New("db: that change is not waiting 
 //
 // by is the operator's id, or SyndraReader for a read of the target; the audit
 // action says which (`.answered` or `.read`), with the answer in its details.
+// It joins an ambient transaction (ResolveBindingCall's) and opens its own
+// otherwise.
 func ResolveAddonOperation(ctx context.Context, target, id string, happened bool, by string, grace time.Duration) (AddonOperation, error) {
 	resolution := AddonResolutionNotHappened
 	if happened {
 		resolution = AddonResolutionHappened
 	}
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return AddonOperation{}, fmt.Errorf("begin resolve addon operation tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op after a successful Commit
+	if owned {
+		defer tx.Rollback(ctx) // no-op after a successful Commit
+	}
 
 	const q = `
 		UPDATE addon_operations
@@ -521,10 +525,111 @@ func ResolveAddonOperation(ctx context.Context, target, id string, happened bool
 	if _, err := tx.Exec(ctx, insertAudit, by, o.SubjectID, "addon."+o.Target+"."+o.Operation+how, o.ID, details); err != nil {
 		return AddonOperation{}, fmt.Errorf("insert addon operation answer audit: %w", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return AddonOperation{}, fmt.Errorf("commit resolve addon operation tx: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return AddonOperation{}, fmt.Errorf("commit resolve addon operation tx: %w", err)
+		}
 	}
 	return o, nil
+}
+
+// BindingOperations are the calls that write or forget the add-on's binding,
+// and so the backend's copy of it: an adoption, a release and a purge.
+var BindingOperations = []string{"account.adopt", "account.release", "account.purge"}
+
+// ResolveBindingCall settles an open account.adopt or account.release as
+// happened, from the add-on's own record of it (GET /calls answered recorded,
+// tasks 6.3r), with half, the backend's half of the binding change that the
+// live handler runs after a success (recordAdoptedBinding,
+// forgetReleasedBinding in handlers/inventory.go). accountID is the account
+// id the recorded reply names (an adoption's always; a release's when it
+// carries one).
+//
+// One transaction, not an order: half's writes join it (beginOrJoin,
+// querier), as does ResolveAddonOperation, so the binding copy and the row's
+// answer commit together or not at all. Two locks, always in this order, so
+// two settles cannot deadlock: the row (FOR UPDATE), then the subject's
+// binding row (FOR UPDATE, when there is one). The row lock makes a second
+// settle of the row find it answered, ErrAddonOperationNotUnresolved, and run
+// nothing; the binding-row lock holds the copy still while the checks below
+// read it and half writes it. (No advisory lock: the insert takes one only
+// for a physical call, so it would meet no adopt or release.)
+//
+// The copy was decided since, and half is NOT run, when:
+//   - a later account.adopt, account.release or account.purge of the subject
+//     on the target may have reached the add-on: it succeeded (or changed
+//     nothing), is still open, or was answered as happened or superseded. One
+//     that never arrived (unreached, refused, or answered not happened) does
+//     not count;
+//   - for an adoption: the copy was written or seen at or after the call was
+//     recorded (`last_seen_at`, which every RecordTargetBinding sets, the
+//     drain's included, where no operation row is written) AND names another
+//     account than the recorded reply. An older copy naming another account
+//     is stale (the add-on accepted the adoption, so it held no binding for
+//     the subject) and is rewritten;
+//   - for a release: the copy names another account than the one released
+//     (by the reply's account id, else the row's `about`); with neither to
+//     compare, when the copy was written or seen at or after the call.
+//
+// Decided since, the row is still settled as happened (the add-on recorded
+// it) and the later write owns the copy: nobody is left with a question
+// whose only answer is to repeat what is already true.
+func ResolveBindingCall(ctx context.Context, target, id, accountID string, grace time.Duration, half func(context.Context) error) (AddonOperation, error) {
+	var out AddonOperation
+	err := InTx(ctx, func(tx pgx.Tx) error {
+		var subject, operation, about string
+		var sent time.Time
+		var later bool
+		err := tx.QueryRow(ctx, `
+			SELECT o.subject_id, o.operation, COALESCE(o.about, ''), o.created_at,
+			       EXISTS (SELECT 1 FROM addon_operations l
+			                WHERE l.target = o.target AND l.subject_id = o.subject_id AND l.id <> o.id
+			                  AND l.operation = ANY($3::text[]) AND l.created_at >= o.created_at
+			                  AND (l.status IN ('succeeded', 'no_change') OR `+openCall("l")+`
+			                       OR l.resolution IN ('happened', 'superseded')))
+			  FROM addon_operations o
+			 WHERE o.id = $1::uuid AND o.target = $2 AND o.resolution IS NULL
+			   AND o.operation IN ('account.adopt', 'account.release')
+			   FOR UPDATE OF o`, id, target, BindingOperations).Scan(&subject, &operation, &about, &sent, &later)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrAddonOperationNotUnresolved
+		}
+		if err != nil {
+			return fmt.Errorf("lock binding call: %w", err)
+		}
+		var username string
+		var bound *string
+		var seen time.Time
+		err = tx.QueryRow(ctx, `SELECT username, `+accountIDColumn+`, last_seen_at FROM target_account_bindings
+			 WHERE target = $1 AND subject_id = $2 FOR UPDATE`, target, subject).Scan(&username, &bound, &seen)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return fmt.Errorf("lock binding: %w", err)
+		default:
+			newer := !seen.Before(sent)
+			other := func(want string) bool { return bound == nil || *bound != want }
+			switch {
+			case operation == "account.adopt":
+				later = later || (newer && other(accountID))
+			case accountID != "":
+				later = later || other(accountID)
+			case about != "":
+				later = later || username != about
+			default:
+				later = later || newer
+			}
+		}
+		joined := context.WithValue(ctx, txKey, tx)
+		if !later {
+			if err := half(joined); err != nil {
+				return err
+			}
+		}
+		out, err = ResolveAddonOperation(joined, target, id, true, SyndraReader, grace)
+		return err
+	})
+	return out, err
 }
 
 // SupersedeAddonOperations closes every earlier open operation of the same

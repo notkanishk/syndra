@@ -428,8 +428,10 @@ func TestTheMemberPollSettlesAnUnsentCallAsUnreached(t *testing.T) {
 // constants.call_memory as not happened: a non-physical row's add-on may keep
 // no write-ahead record (TrueNAS in production), and an older row's add-on
 // may have forgotten it; both stay for a person, as in_doubt does. An
-// adoption or release is never asked, so it stays with a person whose repeat
-// writes the backend's binding. An add-on that cannot answer settles nothing.
+// adoption or release is asked too; one recorded without the account id its
+// binding copy needs, or not recorded, stays with a person
+// (TestARecordedAdoptionOrReleaseSettlesWithTheHandlersBindingHalf has the
+// rest). An add-on that cannot answer settles nothing.
 func TestCallsSettleOnlyWhatTheAddonCanVouchFor(t *testing.T) {
 	p := stubPoll(t)
 	answers := map[string]addons.Settlement{
@@ -462,8 +464,8 @@ func TestCallsSettleOnlyWhatTheAddonCanVouchFor(t *testing.T) {
 	if len(p.resolved) != 2 || !p.resolved["rec"] || p.resolved["phys-new"] {
 		t.Errorf("settled %v, want rec happened and phys-new not", p.resolved)
 	}
-	if slices.Contains(p.asked, "adopt") || slices.Contains(p.asked, "release") {
-		t.Errorf("asked about an adoption or release: %v", p.asked)
+	if !slices.Contains(p.asked, "adopt") || !slices.Contains(p.asked, "release") {
+		t.Errorf("an adoption and a release are asked too: %v", p.asked)
 	}
 
 	p = stubPoll(t)

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -877,6 +878,37 @@ func TestReleaseIsAWrite(t *testing.T) {
 	}
 	if _, bound, _ := s.store.GetBinding("sub-1"); !bound {
 		t.Fatal("the binding was released while read_only")
+	}
+}
+
+// A release answers the account it let go of, by id, so Syndra settling one
+// whose answer was lost forgets its copy only while the copy names that
+// account. A legacy binding's uid may be the NAS record key (boundAccount),
+// so one outside the add-on's range answers none and Syndra compares the
+// name; so does a repeat, with nothing bound.
+func TestAReleaseAnswersTheAccountItLetGoOf(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		uid  int64
+		want string
+	}{
+		{"an account of the add-on's range", 200001, "200001"},
+		{"a legacy binding holding a record key", 19, ""},
+		{"a legacy binding with no uid", 0, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := opServer(t)
+			if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "charlotte", UID: tc.uid}); err != nil {
+				t.Fatal(err)
+			}
+			for i, want := range []string{tc.want, ""} {
+				rr := postOperation(t, s, "account.release", `{"call_id":"r`+strconv.Itoa(i)+`","operation":"account.release","subject":"sub-1"}`)
+				var out OperationResult
+				if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil || rr.Code != http.StatusOK || out.AccountID != want {
+					t.Fatalf("release %d: want account_id %q, got %d %s", i, want, rr.Code, rr.Body.String())
+				}
+			}
+		})
 	}
 }
 

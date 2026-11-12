@@ -236,7 +236,7 @@ func publicParams(name string, params map[string]any) map[string]any {
 
 // opCaller is what an operation's writes are logged under.
 func opCaller(name string, req OperationRequest) caller {
-	return caller{name, req.Subject, req.Actor, req.CallID}
+	return caller{operation: name, subject: req.Subject, actor: req.Actor, callID: req.CallID}
 }
 
 // failedWrite is what a failed write call reports: ErrNotSent when the call
@@ -458,15 +458,25 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 			Detail: "No account was bound to this subject.",
 		}, http.StatusOK, nil
 	}
-	if err := s.mutate(opCaller("account.release", req), "store.unbind", func() error {
+	if err := s.mutate(opCaller("account.release", req).on(binding.UID), "store.unbind", func() error {
 		return s.store.DeleteBinding(req.Subject)
 	}); errors.Is(err, errNotLogged) {
 		return OperationResult{}, http.StatusInternalServerError, errNotLogged
 	} else if err != nil {
 		return OperationResult{}, http.StatusInternalServerError, errors.New("the binding could not be released")
 	}
+	// The account let go of, by id, so Syndra settling a release whose answer
+	// was lost (GET /calls) forgets its copy only while the copy still names
+	// this account, never one bound since under the same name. None for a
+	// legacy binding, whose uid may be the NAS record key (boundAccount):
+	// Syndra then compares the name.
+	released := ""
+	if floor, ceiling := s.idRange(); inIDRange(binding.UID, floor, ceiling) {
+		released = accountID(binding.UID)
+	}
 	return OperationResult{
 		Operation: "account.release", Subject: req.Subject, Outcome: "succeeded",
+		AccountID: released,
 		Detail: "Syndra no longer manages " + binding.Username +
 			". Nothing on the target was changed — the account still exists and still works.",
 	}, http.StatusOK, nil
@@ -570,7 +580,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	defer client.Close()
 
 	// Through the seam like every write, on its own session: callOnce, not send.
-	if err := s.mutate(opCaller("account.purge", req), "user.delete", func() error {
+	if err := s.mutate(opCaller("account.purge", req).on(binding.UID), "user.delete", func() error {
 		return callOnce(client, "user.delete", []any{id}, nil)
 	}); err != nil {
 		return OperationResult{}, statusFor(err), failedWrite(err, "deletion")
@@ -581,7 +591,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// that path exists for an account deleted BEHIND our back. A purge is not
 	// that: we deleted it, on purpose, and it must not resurrect itself.
 	detail := "Deleted " + binding.Username + "."
-	if err := s.mutate(opCaller("account.purge", req), "store.unbind", func() error {
+	if err := s.mutate(opCaller("account.purge", req).on(binding.UID), "store.unbind", func() error {
 		return s.store.DeleteBinding(req.Subject)
 	}); err != nil {
 		logStoreFailure("binding", req.Subject, err)
@@ -1306,7 +1316,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
 	}
 
-	if err := s.mutate(opCaller("account.adopt", req), "store.bind", func() error {
+	if err := s.mutate(opCaller("account.adopt", req).on(account.UID), "store.bind", func() error {
 		return s.store.BindIfFree(Binding{
 			SubjectID: req.Subject, Username: account.Username, UID: account.UID,
 			// Who decided it. An adoption that turns out to be wrong hands

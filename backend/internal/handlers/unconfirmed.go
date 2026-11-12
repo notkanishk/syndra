@@ -12,6 +12,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
+	"syndra/internal/services/addonop"
 )
 
 // Changes nobody can confirm (A-09 §3–4, revised by A-13 §5).
@@ -25,17 +26,19 @@ import (
 //   - setting.put is read back from the target's own setting, and settled by
 //     Syndra when the read can tell;
 //   - password.set and password.rotate never appear (db.SelfSettledOperations);
-//   - on an add-on declaring calls, every row but an adopt or release is first
-//     settled by asking it what it recorded (GET /calls, settleFromCalls), the
-//     same question the member's own page asks;
+//   - on an add-on declaring calls, every row is first settled by asking it
+//     what it recorded (GET /calls, settleFromCalls), the same question the
+//     member's own page asks; an adopt or release it recorded is settled with
+//     the backend's binding half as well (tasks 6.3r);
 //   - a physical row is the add-on's to settle for constants.in_doubt_bound
 //     and only then listed (addons.PhysicalHold), naming the desk.
 //
 // What is left in practice is deletes, a write whose add-on answered unknown
-// (it may keep no write-ahead record, or have forgotten), and the adopt or
-// release whose answer was lost: those two write the add-on's binding and the
-// backend's copy of it, and only the handler's repeat writes both, so a person
-// looks (the inventory and the binding conflict are where it shows).
+// (it may keep no write-ahead record, or have forgotten), and an adopt or
+// release the add-on did not record, or recorded without the account id an
+// adoption's copy needs: a person looks, and repeats it (their answer writes
+// no binding copy; the repeat does). One recorded after which the subject's
+// binding was acted on again settles without its half (db.ResolveBindingCall).
 
 // unresolvedGrace is how long a claimed call may go unanswered before it is a
 // question rather than a call in flight; one value for the read, the answer
@@ -50,6 +53,7 @@ var (
 	dbListUnresolvedAddonOperations  = db.ListUnresolvedAddonOperations
 	dbSettleUnclaimedAddonOperations = db.SettleUnclaimedAddonOperations
 	dbResolveAddonOperation          = db.ResolveAddonOperation
+	dbResolveBindingCall             = db.ResolveBindingCall
 	addonsCallAnswer                 = addons.CallAnswer
 )
 
@@ -119,15 +123,13 @@ func settleFromCalls(ctx context.Context, ops []db.AddonOperation) []db.AddonOpe
 //     is forgetting; either stays for a person;
 //   - in_doubt settles nothing: the add-on is still finding out.
 //
-// An adoption or a release is never asked: settling it here would leave the
-// backend's binding copy unwritten, so a person repeats it, which writes or
-// forgets the binding (tasks 6.3r, #needs-triage). A row settled meanwhile by
-// someone else counts as settled. The answer is returned for the page that
-// asked (the recorded reply's view).
+// An adoption or a release writes the backend's copy of the binding as well
+// as the add-on's, so a recorded one is settled together with the handler's
+// own binding half (bindingHalf, db.ResolveBindingCall), never by its status
+// alone; one it cannot settle that way stays for a person. A row settled
+// meanwhile by someone else counts as settled. The answer is returned for the
+// page that asked (the recorded reply's view).
 func settleByCall(ctx context.Context, o db.AddonOperation) (settled bool, s addons.Settlement, err error) {
-	if o.Operation == "account.adopt" || o.Operation == "account.release" {
-		return false, s, nil
-	}
 	s, err = addonsCallAnswer(ctx, o.Target, o.Operation, o.ID)
 	if err != nil {
 		return false, s, err
@@ -139,7 +141,15 @@ func settleByCall(ctx context.Context, o db.AddonOperation) (settled bool, s add
 	if !vouched {
 		return false, s, nil
 	}
-	_, err = dbResolveAddonOperation(ctx, o.Target, o.ID, happened, db.SyndraReader, unresolvedGrace)
+	if half, accountID, binding := bindingHalf(o, s.Reply); binding {
+		// Only recorded gets here: neither is physical.
+		if half == nil {
+			return false, s, nil
+		}
+		_, err = dbResolveBindingCall(ctx, o.Target, o.ID, accountID, unresolvedGrace, half)
+	} else {
+		_, err = dbResolveAddonOperation(ctx, o.Target, o.ID, happened, db.SyndraReader, unresolvedGrace)
+	}
 	if errors.Is(err, db.ErrAddonOperationNotUnresolved) {
 		return true, s, nil
 	}
@@ -148,6 +158,31 @@ func settleByCall(ctx context.Context, o db.AddonOperation) (settled bool, s add
 		return false, s, nil
 	}
 	return true, s, nil
+}
+
+// bindingHalf is the backend's half of a recorded adopt or release, the same
+// function its handler runs after a live success, bound to what the row and
+// the add-on's recorded reply say, with the account id the reply names: binding
+// is false for any other operation. An adoption's copy needs the account id
+// the add-on read off the target and the name the row was sent about; a reply
+// without either leaves half nil and the row with a person, never a copy keyed
+// on the name alone.
+func bindingHalf(o db.AddonOperation, reply []byte) (half func(context.Context) error, accountID string, binding bool) {
+	switch o.Operation {
+	case "account.adopt":
+		id := addonop.AccountIDOf(reply)
+		if id == "" || o.About == "" {
+			return nil, "", true
+		}
+		return func(ctx context.Context) error {
+			return recordAdoptedBinding(ctx, o.Target, o.SubjectID, o.About, o.ActorID, id)
+		}, id, true
+	case "account.release":
+		return func(ctx context.Context) error {
+			return forgetReleasedBinding(ctx, o.Target, o.SubjectID)
+		}, addonop.AccountIDOf(reply), true
+	}
+	return nil, "", false
 }
 
 // settleFromRead settles the setting changes a read of the target can answer,

@@ -43,7 +43,10 @@ type findingHarness struct {
 	// half-done unbind the repair path exists for.
 	forgetErr error
 	forgotten []string
-	allowErr  error
+	// landedForgotten is the memory of what Syndra landed, which an unbind
+	// forgets with the binding (forgetReleasedBinding, as a release does).
+	landedForgotten []string
+	allowErr        error
 	// The add-on's half of a release. Recorded so a test can assert that the
 	// backend never forgets its own record without the add-on confirming it let
 	// go — the split-store failure `account.release` exists to close.
@@ -61,13 +64,13 @@ func stubFindings(t *testing.T, h *findingHarness) {
 		dbRecordMergeDecision, dbReleaseMergeDecision = decide, releaseDecision
 	})
 	resolveSet, inTx := svcResolveEntitlementSet, svcInTxLockingAccess
-	forget, forgetBase := dbForgetTargetBinding, dbForgetMergeBase
+	forget, forgetBase, forgetLanded := dbForgetTargetBinding, dbForgetMergeBase, dbForgetPropagations
 	dispatch := svcDispatchOperation
 	t.Cleanup(func() {
 		dbGetStandingMergeFinding, dbResolveMergeFinding = get, resolve
 		dbRecordSystemConvergence, dbCreateAllowance = converge, allow
 		svcResolveEntitlementSet, svcInTxLockingAccess = resolveSet, inTx
-		dbForgetTargetBinding, dbForgetMergeBase = forget, forgetBase
+		dbForgetTargetBinding, dbForgetMergeBase, dbForgetPropagations = forget, forgetBase, forgetLanded
 		svcDispatchOperation = dispatch
 	})
 
@@ -130,6 +133,10 @@ func stubFindings(t *testing.T, h *findingHarness) {
 		return nil
 	}
 	dbForgetMergeBase = func(context.Context, string, string) error { return nil }
+	dbForgetPropagations = func(_ context.Context, _, subject string) error {
+		h.landedForgotten = append(h.landedForgotten, subject)
+		return nil
+	}
 }
 
 func resolveFinding(t *testing.T, body string) *httptest.ResponseRecorder {
@@ -299,8 +306,8 @@ func TestUnbindingForgetsTheBindingAndTheObservation(t *testing.T) {
 	if len(h.dispatched) != 1 || h.dispatched[0].Operation != "account.release" {
 		t.Fatalf("the ADD-ON must be told to let go first: %+v", h.dispatched)
 	}
-	if len(h.forgotten) != 1 {
-		t.Fatalf("the binding must go: %v", h.forgotten)
+	if len(h.forgotten) != 1 || len(h.landedForgotten) != 1 {
+		t.Fatalf("the binding and what Syndra landed must go, as a release forgets them: %v %v", h.forgotten, h.landedForgotten)
 	}
 	if len(h.converged) != 0 {
 		t.Fatal("unbinding must not queue a convergence — that would recreate the account")
