@@ -303,3 +303,28 @@ func TestAddonQuietRunPutsReadOnlyBackWhenAWritesQuietFails(t *testing.T) {
 		t.Errorf("LIFECYCLE_STATE after a failed --writes quiet = %q, want read_only", life)
 	}
 }
+
+// A restore that cannot put the add-on back after --writes never starts the
+// backend beside an active add-on.
+func TestAddonQuietRunKeepsTheBackendStoppedBesideAnActiveAddon(t *testing.T) {
+	r := runQuiet(t, true, nil, "--writes", "--", "bash", "-c", `touch "$FAKE_STATE/sticky"`)
+	if r.code != 1 || !strings.Contains(r.out, "backend stays stopped") {
+		t.Fatalf("exit %d, want 1 with the backend held\n%s", r.code, r.out)
+	}
+	if _, up := r.file(t, "backend"); up {
+		t.Error("the backend was started beside an add-on left active")
+	}
+}
+
+// Staging's add-on must already be read_only; a run refuses otherwise.
+func TestAddonQuietRunRefusesAnAddonThatIsNotReadOnly(t *testing.T) {
+	r := runQuiet(t, true, func(state string) {
+		os.WriteFile(filepath.Join(state, "life"), []byte("active\n"), 0o644)
+	}, "--", "true")
+	if r.code == 0 || !strings.Contains(r.out, "must run read_only") {
+		t.Fatalf("exit %d, want a refusal\n%s", r.code, r.out)
+	}
+	if _, up := r.file(t, "backend"); !up {
+		t.Error("the refusal touched the backend")
+	}
+}

@@ -14,8 +14,9 @@
 # TRUENAS_STATS_COLLECT_EVERY=0 and the backend is stopped.
 #
 # Staging shares production's NAS, so its add-on normally runs read_only
-# (TRUENAS_LIFECYCLE_STATE in .env): nothing staging's backend decides can
-# write there. --writes recreates it `active` for the command alone (a kit
+# (TRUENAS_LIFECYCLE_STATE in .env, required here): nothing staging's backend
+# decides can write there, unless an operator switches the add-on to active on
+# staging's target page, which lasts until the add-on's next recreate. --writes recreates it `active` for the command alone (a kit
 # -mutate run on its throwaway subject), while the backend is stopped, and the
 # restore puts read_only back with everything else.
 #
@@ -93,9 +94,11 @@ backend_answers() {
 if [[ "${1:-}" == "--restore" ]]; then
   running "$ADDON" || die "the $ADDON service is not running: nothing to restore"
   restore_addon || die "could not recreate $ADDON"
-  "${COMPOSE[@]}" start backend >/dev/null || die "could not start the backend"
   now="$(collect_every || true)"
   [[ -n "$now" && "$now" != 0 ]] || die "STATS_COLLECT_EVERY is still '${now}': is $VAR exported in this shell or set in $ENV_FILE?"
+  # The backend starts only beside a read_only add-on.
+  [[ "$(lifecycle)" == read_only ]] || die "the add-on is '$(lifecycle)', not read_only: set $LIFE=read_only in $ENV_FILE (and unset it in this shell); the backend stays stopped"
+  "${COMPOSE[@]}" start backend >/dev/null || die "could not start the backend"
   backend_answers || die "the backend does not answer /healthz"
   say "restored: STATS_COLLECT_EVERY=$now, LIFECYCLE_STATE=$(lifecycle), backend answering"
   note "restored by hand: STATS_COLLECT_EVERY=$now LIFECYCLE_STATE=$(lifecycle)"
@@ -112,6 +115,7 @@ before="$(collect_every)" || die "could not read the add-on's settings"
 [[ -n "$before" ]] || die "the running add-on has no STATS_COLLECT_EVERY (deploy a ref with the statistics collector first)"
 [[ "$before" != 0 ]] || die "STATS_COLLECT_EVERY is already 0: run $0 --restore first"
 life_before="$(lifecycle)"
+[[ "$life_before" == read_only ]] || die "staging's add-on is '$life_before': it must run read_only ($LIFE=read_only in $ENV_FILE), since it shares production's NAS"
 backend_was_running=false
 if running backend; then backend_was_running=true; fi
 
@@ -124,7 +128,6 @@ restore() {
   trap - EXIT
   say "==> restoring"
   restore_addon || ok=false
-  if $backend_was_running; then "${COMPOSE[@]}" start backend >/dev/null || ok=false; fi
   now="$(collect_every)"
   if [[ "$now" != "$before" ]]; then
     say "  FAIL  STATS_COLLECT_EVERY is '$now', was '$before' before: run $0 --restore"
@@ -138,6 +141,14 @@ restore() {
     ok=false
   else
     say "  ok    LIFECYCLE_STATE=$life (as before)"
+  fi
+  # Never a backend beside an add-on left active: it stays stopped until
+  # --restore puts the add-on back.
+  if $backend_was_running && [[ "$life" != "$life_before" ]]; then
+    say "  FAIL  the backend stays stopped until the add-on is $life_before again"
+    backend_was_running=false
+  elif $backend_was_running; then
+    "${COMPOSE[@]}" start backend >/dev/null || ok=false
   fi
   if $backend_was_running; then
     if backend_answers; then

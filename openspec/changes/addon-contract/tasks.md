@@ -955,8 +955,10 @@ settings with the full §5 rules.
   verifies the add-on's setting equals its value before and the backend
   answers `/healthz`, and records the outcome in syslog. Nothing is written to
   `.env`. Staging shares production's NAS, so its add-on runs `read_only`
-  (`TRUENAS_LIFECYCLE_STATE`): nothing staging's backend decides can write
-  there. `--writes` makes it `active` for the one command, the kit's `-mutate`
+  (`TRUENAS_LIFECYCLE_STATE`, which the script requires): nothing staging's
+  backend decides can write there, unless an operator switches it to active
+  on staging's target page (until the next recreate). The restore never
+  starts the backend beside an add-on it could not put back to read_only. `--writes` makes it `active` for the one command, the kit's `-mutate`
   run, while the backend is stopped, and the restore puts `read_only` back and
   verifies it. The whole staging procedure, including switching staging's
   add-on back off afterwards, is in `scripts/README.md`. Held by

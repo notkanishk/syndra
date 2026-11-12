@@ -103,7 +103,8 @@ export COMPOSE_FILE=docker-compose.yml:docker-compose.staging.yml
 # 1. Deploy the contract branch to staging (it has the collector; main does not):
 gh workflow run deploy-staging.yml -f ref=feat/addon-contract
 # 2. On staging, switch the add-on on READ-ONLY: staging shares production's
-#    NAS, so nothing staging's backend decides may write there. In
+#    NAS, so nothing staging's backend decides may write there (do not switch
+#    it to active on staging's target page; that lasts until a recreate). In
 #    /opt/syndra/.env set COMPOSE_PROFILES=truenas, ADDON_TARGETS=truenas and
 #    TRUENAS_LIFECYCLE_STATE=read_only, then (from /opt/syndra):
 docker compose up -d
