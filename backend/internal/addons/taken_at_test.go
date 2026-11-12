@@ -20,7 +20,7 @@ func TestATakenAtFromTheFutureIsReadAsNow(t *testing.T) {
 	w := log.Writer()
 	log.SetOutput(&logs)
 	t.Cleanup(func() { log.SetOutput(w) })
-	t.Cleanup(func() { aheadLogged.Delete("ahead-a"); aheadLogged.Delete("ahead-b") })
+	forgetLogged(t)
 
 	read := func(target, raw string) time.Time {
 		t.Helper()
@@ -57,7 +57,8 @@ func TestEveryDatedReadIsClampedAlike(t *testing.T) {
 	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
 	saved := timeNow
 	timeNow = func() time.Time { return now }
-	t.Cleanup(func() { timeNow = saved; aheadLogged.Delete("truenas") })
+	forgetLogged(t)
+	t.Cleanup(func() { timeNow = saved })
 	addonServing(t, []byte(`{"taken_at":"2099-01-01T00:00:00Z","current":true,"groups":{},"everyone":[]}`))
 	if r := ReadReach(context.Background(), "truenas", false); !r.Read || !r.ReadAt.Equal(now) {
 		t.Errorf("reach dated 2099 read %+v, want read at now", r)
@@ -79,7 +80,8 @@ func TestEveryResultShapeIsClampedAlike(t *testing.T) {
 	var logs bytes.Buffer
 	w := log.Writer()
 	log.SetOutput(&logs)
-	t.Cleanup(func() { timeNow = saved; log.SetOutput(w); aheadLogged.Delete("shapes") })
+	forgetLogged(t)
+	t.Cleanup(func() { timeNow = saved; log.SetOutput(w) })
 
 	standing := `"standing":{"usable":true,"waiting_on":"nobody"}`
 	shapes := map[string]string{
@@ -125,4 +127,13 @@ func TestEveryResultShapeIsClampedAlike(t *testing.T) {
 	if n := strings.Count(logs.String(), "ahead of this clock"); n != 1 {
 		t.Errorf("logged %d times for one target ahead in %d shapes, want once:\n%s", n, len(shapes), logs.String())
 	}
+}
+
+// forgetLogged clears every log-once entry (aheadLogged is keyed target/kind),
+// before the test and after it, so a count of what a test logged does not
+// depend on the tests that ran earlier or on -count.
+func forgetLogged(t *testing.T) {
+	t.Helper()
+	aheadLogged.Clear()
+	t.Cleanup(aheadLogged.Clear)
 }

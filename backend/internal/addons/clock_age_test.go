@@ -18,7 +18,7 @@ import (
 func TestACopyIsDatedByItsAgeNotByTheAddonsClock(t *testing.T) {
 	now := time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
 	withClock(t, now)
-	t.Cleanup(func() { aheadLogged.Delete("truenas") })
+	forgetLogged(t)
 
 	// serve answers /reach, a copy taken copyAge before the add-on's own clock,
 	// which runs skew ahead of (or, negative, behind) this backend's. date, when
@@ -216,7 +216,8 @@ func TestAClockOffAndABogusDateAreSaidOnce(t *testing.T) {
 	var logs bytes.Buffer
 	w := log.Writer()
 	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(w); aheadLogged.Delete("skewy/skew"); aheadLogged.Delete("skewy/date") })
+	forgetLogged(t)
+	t.Cleanup(func() { log.SetOutput(w) })
 	c := Clock{Date: now.Add(10 * time.Minute), Sent: now}
 	for range 3 {
 		ahead("skewy", now.Add(7*time.Minute), c)
