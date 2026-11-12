@@ -600,6 +600,7 @@ var (
 	dbStatsGaps              = db.StatsGaps
 	dbStatsDistributions     = db.StatsDistributions
 	dbStatsRetention         = db.StatsRetention
+	dbStatsKeptFrom          = db.StatsKeptFrom
 	dbSetStatsRetention      = db.SetStatsRetention
 	resolveMappingProject    = mappingProject
 	svcConvergeProjectChange = services.ConvergeProjectChange

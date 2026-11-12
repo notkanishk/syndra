@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ago, GAP, GIB } from "@/components/usage/__tests__/fixtures";
-import { capText, dimensionWords, formatValue, gapIsOn, gapRange, plot, quoted, windowDays, WINDOW_DAYS } from "@/lib/usage";
+import { capText, dimensionWords, formatValue, gapIsOn, gapRange, keptDays, plot, quoted, windowDays, WINDOW_DAYS } from "@/lib/usage";
 
 describe("a value in its unit", () => {
   it("says each registry unit in its own words", () => {
@@ -75,5 +75,53 @@ describe("the plot of one series", () => {
   it("leaves a series a gap does not name alone", () => {
     const mat = { dimensions: { area: "mat" }, days: [] };
     expect(plot(mat, [GAP], "counter").cells.every((c) => !c.gap && c.value === 0)).toBe(true);
+  });
+});
+
+describe("add-on text cannot reorder or hide Syndra's line", () => {
+  it("strips control and bidi characters, and keeps a control space a space", () => {
+    expect(capText("a\u202Eb\u2066c\u200Bd", 40)).toBe("abcd");
+    expect(capText("one\ntwo\tthree", 40)).toBe("one two three");
+    expect(quoted("\u202Eevil", 40)).toBe("“evil”");
+  });
+});
+
+describe("days Syndra no longer keeps", () => {
+  const series = { dimensions: {}, days: [{ day: ago(1), value: 3 }] };
+  it("counts the days kept, today included", () => {
+    // The backend's rule: kept_from is today minus N, and N is what it says.
+    expect(keptDays(ago(90))).toBe(90);
+    expect(keptDays(undefined)).toBeUndefined();
+    expect(keptDays(null)).toBeUndefined();
+  });
+  it("hatches every day before kept_from, for a counter and a gauge, and never makes one a zero", () => {
+    for (const instrument of ["counter", "gauge"] as const) {
+      const { cells, gapRuns } = plot(series, [], instrument, undefined, { keptFrom: ago(10) });
+      const gone = cells.filter((c) => c.day < ago(10));
+      expect(gone).toHaveLength(WINDOW_DAYS - 11);
+      expect(gone.every((c) => c.gap && c.kept && c.value === undefined), instrument).toBe(true);
+      expect(gapRuns).toEqual([[0, WINDOW_DAYS - 12]]);
+      // The first kept day is an ordinary day again.
+      expect(cells.find((c) => c.day === ago(10))?.gap).toBe(false);
+    }
+  });
+});
+
+describe("days not yet counted", () => {
+  const series = { dimensions: {}, days: [{ day: ago(3), value: 5 }, { day: ago(0), value: 2 }] };
+  it("leaves a counter's day after the last final day blank when it has no point, and keeps a point it has", () => {
+    const { cells } = plot(series, [], "counter", undefined, { countedThrough: ago(2) });
+    const at = (n: number) => cells.find((c) => c.day === ago(n))!;
+    expect(at(2).value).toBe(0); // final, nothing happened: a real zero
+    expect(at(1).value).toBeUndefined();
+    expect(at(1).pending).toBe(true);
+    expect(at(0).value).toBe(2); // provisional, but it is a number
+    expect(at(0).pending).toBeUndefined();
+  });
+  it("treats a null counted_through (nothing collected yet) as no day named", () => {
+    expect(plot(series, [], "counter", undefined, { countedThrough: null }).cells.find((c) => c.day === ago(1))?.value).toBe(0);
+  });
+  it("is today's old behaviour when the backend names no day", () => {
+    expect(plot(series, [], "counter").cells.find((c) => c.day === ago(1))?.value).toBe(0);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { NO_LIMIT, emptyMeters, notReadableNext, ofLimit, usageUnread, usageUnreadBody, type Reader } from "@/components/results/copy";
+import { Meter } from "@/components/ui/Meter";
 import { Notice } from "@/components/ui/Notice";
 import { observed, ReadFreshness, useReadAgainPress, useReadAgainSince } from "@/components/ui/ReadFreshness";
 import { formatLimit } from "@/lib/fields";
@@ -39,16 +40,7 @@ export function StatusMeters({ result, name, reader }: { result: StatusResult; n
                 </span>
               </span>
               {m.limit !== undefined && m.limit > 0 && (
-                <span
-                  role="meter"
-                  aria-label={m.label}
-                  aria-valuemin={0}
-                  aria-valuemax={m.limit}
-                  aria-valuenow={Math.min(m.used, m.limit)}
-                  className="block h-1.5 overflow-hidden rounded-pill bg-tint-2"
-                >
-                  <span className="block h-full rounded-pill bg-accent" style={{ width: `${Math.min(100, (m.used / m.limit) * 100)}%` }} />
-                </span>
+                <Meter value={m.used} limit={m.limit} label={m.label} valueText={`${amount(m.used, m.unit)} ${ofLimit(amount(m.limit, m.unit))}`} />
               )}
             </li>
           ))}

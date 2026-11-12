@@ -12,6 +12,7 @@ import { DormantAccounts } from "@/components/targets/DormantAccounts";
 import { UnconfirmedChanges } from "@/components/targets/UnconfirmedChanges";
 import { MergeFindings } from "@/components/targets/MergeFindings";
 import { OVERVIEW_LEDE, OVERVIEW_TITLE } from "@/components/usage/copy";
+import { StatsRetention } from "@/components/targets/StatsRetention";
 import { TargetStats } from "@/components/usage/TargetStats";
 import { Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
@@ -328,6 +329,7 @@ export function TargetOverview({ target }: { target: string }) {
             an add-on that reports no statistics says so in place. */}
         <Region id="stats" title={OVERVIEW_TITLE} lede={OVERVIEW_LEDE}>
           <TargetStats target={target} />
+          <StatsRetention target={target} />
         </Region>
         </div>
         </NotOpenYet>

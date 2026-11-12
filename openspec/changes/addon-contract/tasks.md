@@ -1875,6 +1875,18 @@ per-person only) applied there.
   the `dataviz` skill's rules for gap-vs-zero and both themes; copy guard
   for the new sentences and for the absence of ranking words #ready-for-agent
     - Built (6e, 12 Nov 2026): `components/usage/` (sentences in `copy.ts`, copy guide section 15, lint-guarded like 12 and 14), `lib/usage.ts`, `lib/queries/useStats.ts`; the card sits beside every kind's card (`MemberTargetCard`) and every person-page system card (`SystemsSection`), a fixed "What has been used here" region on the target overview, and a Usage tab on Insights. Meters read the limit the kind observed (`kinds/limits.ts`, storage from its home place), never a computed one; a totals page draws none. Not built: the System-page retention control (read-only line only), a per-day table view, provisional-day styling after the watermark.
+  - [x] 6e (Go) **Decided while building:** a person's `usage` carries `kept_from` (`YYYY-MM-DD`, first day per-person points are kept), read by `db.StatsKeptFrom` from the same `statsSubjectKeptFrom` SQL the prune and ingestion use (today − N days, not N − 1), and the per-person points reads start at `max(window, kept_from)` so a sum never counts a day the nightly prune has yet to delete; every metric carries `counted_through` (the watermark as its last final day, null with it), computed once in Go from the stored makerspace-midnight watermark; insights metrics carry the target's `kept_from` too, since they read per-person points whose retention can be shorter than the 30-day window; totals unchanged (five years outlast 12 months). Live test proves the read line is the prune's and ingestion's line.
+  Decided while building (6e UI fix round 2):
+  - One meter: `components/ui/Meter.tsx`; >=90% warn + "nearly full", >=100% "full"; used by MetricBlock, MyStorage, PersonStorage, StatusMeters; `Meter.test.tsx` also fails if any of those writes `role="meter"` itself.
+  - Retention: `kept_from` (usage, per-person card only) and `counted_through` (per metric, null-safe) are read as the backend names them; days before kept_from are hatched with Syndra's own reason ("Kept for only {n} days on this system"), N = today - kept_from; headline "{value} in the last {n} days" when n < window; Insights shows "Over the last {n} days only" per metric when its kept_from is inside the window.
+  - A day after counted_through with no point is blank ("not counted yet"), never 0; a day with a point is drawn.
+  - Retention control `StatsRetention.tsx` under TargetStats in region #stats; form is noValidate so the backend's 422 words are shown; shortening asks first, lengthening and "Keep the full 400 days" do not.
+  - Spark: any day without a value breaks the line; single-day runs are dots (gauges are never interpolated).
+  - Dropped sentence uses the shared `formatList` (format.ts); `joinNames` in MyStorage removed.
+  - storageLimits: exactly one bytes limit field, gated on drawnUsage(home, offline).
+  - Insights: fewer than 5 people shows the count and no spread or bar (MIN_SPREAD_MEMBERS; the backend has no floor for this read, insights.go's 5 is the single-route holder count).
+  - capText strips Cf and turns Cc into a space.
+  - Open: handoff said kept days are "not hatched like a gap"; built as the same hatch with its own reason per the brief. Say if a distinct treatment is wanted.
 - [ ] 6.10 (the owner's, not an agent's) Staging: 48 hours of collection against staging TrueNAS, then an
   operator checks that the member storage card's current number matches
   `storage.status`, that the trend exists, that a share with auditing off

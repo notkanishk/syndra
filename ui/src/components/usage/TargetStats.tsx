@@ -32,7 +32,7 @@ export function TargetStats({ target }: { target: string }) {
       </Card>
     );
   }
-  const { usage, retention } = stats.data;
+  const { usage } = stats.data;
   if (!usage.reported) {
     return (
       <Card>
@@ -48,10 +48,7 @@ export function TargetStats({ target }: { target: string }) {
         <MetricBlock key={m.name} metric={m} />
       ))}
       <CardRow first={usage.metrics.length === 0}>
-        <span className="flex flex-col gap-0.5 text-[13px] text-muted">
-          <span>{copy.retention(retention.subject_days, retention.set)}</span>
-          <span>{copy.NOTHING_TO_DO}</span>
-        </span>
+        <span className="text-[13px] text-muted">{copy.NOTHING_TO_DO}</span>
       </CardRow>
     </Card>
   );

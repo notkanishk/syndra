@@ -249,6 +249,20 @@ func StatsRetention(ctx context.Context, target string) (days int, set bool, err
 	return days, setting != nil, err
 }
 
+// StatsKeptFrom is the first day (YYYY-MM-DD) whose per-person points a
+// target still keeps on `today`: the prune's own line, so a read can tell a
+// day retention deleted from a day nothing was counted.
+func StatsKeptFrom(ctx context.Context, today, target string) (string, error) {
+	var day string
+	err := querier(ctx).QueryRow(ctx, `
+		SELECT to_char(`+statsSubjectKeptFrom+`, 'YYYY-MM-DD') FROM targets t WHERE t.target = $2`,
+		today, target).Scan(&day)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", fmt.Errorf("no target %q", target)
+	}
+	return day, err
+}
+
 // SetStatsRetention sets, or with nil clears, how many days a target keeps
 // per-person points, audited in the same transaction.
 func SetStatsRetention(ctx context.Context, target string, days *int, actor string) error {

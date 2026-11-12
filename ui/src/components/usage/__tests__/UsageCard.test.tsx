@@ -32,15 +32,15 @@ describe("What I have used: data", () => {
   });
 
   it("draws the gauge as a meter over the OBSERVED limit", () => {
-    render(<UsageCard title={copy.MEMBER_TITLE} metrics={[homeBytes()]} limits={{ quota_field: 20 * GIB }} />);
+    render(<UsageCard title={copy.MEMBER_TITLE} metrics={[homeBytes()]} limits={{ quota_field: 40 * GIB }} />);
     const meter = screen.getByRole("meter");
-    expect(meter).toHaveAttribute("aria-valuemax", String(20 * GIB));
+    expect(meter).toHaveAttribute("aria-valuemax", String(40 * GIB));
     expect(meter).toHaveAttribute("aria-valuenow", String(18.4 * GIB));
-    expect(screen.getByText("18.4 GiB of 20.0 GiB")).toBeInTheDocument();
+    expect(screen.getByText("18.4 GiB of 40.0 GiB")).toBeInTheDocument();
     expect(meter.firstElementChild).toHaveClass("bg-accent");
   });
 
-  it("turns the meter warn at the limit, says no limit for 0, and says it was not read for none", () => {
+  it("turns the meter warn at the limit (see Meter.test for the threshold), says no limit for 0, and says it was not read for none", () => {
     const { rerender } = render(<UsageCard title="t" metrics={[homeBytes()]} limits={{ quota_field: 18 * GIB }} />);
     expect(screen.getByRole("meter").firstElementChild).toHaveClass("bg-warn");
     rerender(<UsageCard title="t" metrics={[homeBytes()]} limits={{ quota_field: 0 }} />);
@@ -106,11 +106,13 @@ describe("What I have used: gaps", () => {
     expect(screen.getAllByRole("img")[1]).not.toHaveAccessibleName(/hatched/);
   });
 
-  it("a gauge's gap breaks its line too, and a gauge's day with no sample is joined over", () => {
+  it("a gauge's gap breaks its line, and a gauge's day with no sample breaks it too", () => {
     const gauge = homeBytes({ against: undefined, gaps: [{ start: ago(8), end: ago(5), reason: "The NAS was off" }], series: [{ dimensions: {}, latest: { day: ago(1), value: 5 }, days: [{ day: ago(12), value: 4 }, { day: ago(10), value: 4 }, { day: ago(3), value: 5 }, { day: ago(1), value: 5 }] }] });
     render(<UsageCard title="t" metrics={[gauge]} />);
     const svg = screen.getByRole("img");
-    expect(svg.querySelectorAll("[data-line]")).toHaveLength(2);
+    // Gauges are never interpolated: days 12 and 10 are not adjacent, so none is joined; each stands alone as a dot.
+    expect(svg.querySelectorAll("[data-line]")).toHaveLength(0);
+    expect(svg.querySelectorAll("[data-dot]")).toHaveLength(4);
     expect(svg.querySelectorAll("[data-gap]")).toHaveLength(1);
   });
 });
@@ -206,18 +208,16 @@ describe("the target overview", () => {
     expect(container.querySelectorAll("[data-gap]")).toHaveLength(1);
     expect(screen.getByText(copy.unbound(1))).toBeInTheDocument();
     expect(screen.getByText(/Last counted 4 min ago/)).toBeInTheDocument();
-    expect(screen.getByText(/reports more “Sessions” series than Syndra keeps/)).toBeInTheDocument();
-    expect(screen.getByText(copy.retention(400, false))).toBeInTheDocument();
+    expect(screen.getByText(copy.droppedLine([copy.DROPPED.series(3)]))).toBeInTheDocument();
     expect(screen.getByText(copy.NOTHING_TO_DO)).toBeInTheDocument();
   });
 
-  it("says an operator shortened the retention, and counts accounts in the plural", async () => {
-    const t = targetStats({ retention: { subject_days: 90, set: true } });
+  it("counts accounts in the plural", async () => {
+    const t = targetStats();
     if (t.usage.reported) t.usage.metrics[0].collected = { at: null, unbound_accounts: 2 };
     stubStats(t);
     render(withQuery(<TargetStats target="gym" />));
-    expect(await screen.findByText(copy.retention(90, true))).toBeInTheDocument();
-    expect(screen.getByText(/2 accounts Syndra does not manage also used it. They are in the totals./)).toBeInTheDocument();
+    expect(await screen.findByText(/2 accounts Syndra does not manage also used it. They are in the totals./)).toBeInTheDocument();
     expect(screen.getByText(copy.NOT_COUNTED)).toBeInTheDocument();
   });
 
@@ -235,5 +235,151 @@ describe("the target overview", () => {
     render(withQuery(<TargetStats target="gym" />));
     expect(await screen.findByText(copy.UNAVAILABLE)).toBeInTheDocument();
     expect(within(document.body).queryByText(copy.NOTHING_TO_DO)).toBeNull();
+  });
+});
+
+describe("what Syndra keeps, and what is not counted yet", () => {
+  const ring = (el: HTMLElement) => el.querySelectorAll("svg")[0];
+  const said = (svg: Element) => Array.from(svg.querySelectorAll("title")).map((t) => t.textContent);
+
+  it("says a 12-month sum is of the last 90 days when only 90 are kept, and hatches nothing in a 30-day window", () => {
+    const { container } = render(<UsageCard title="t" metrics={[sessions()]} keptFrom={ago(90)} />);
+    expect(screen.getByText("7 in the last 30 days")).toBeInTheDocument();
+    expect(screen.getByText("37 in the last 90 days")).toBeInTheDocument();
+    expect(screen.queryByText(/12 months/)).toBeNull();
+    expect(ring(container).querySelectorAll("[data-gap]")).toHaveLength(0);
+  });
+
+  it("with 400 kept or nothing said, the headline and the year are the ordinary ones", () => {
+    const { rerender } = render(<UsageCard title="t" metrics={[sessions()]} keptFrom={ago(400)} />);
+    expect(screen.getByText("37 in the last 12 months")).toBeInTheDocument();
+    rerender(<UsageCard title="t" metrics={[sessions()]} />);
+    expect(screen.getByText("37 in the last 12 months")).toBeInTheDocument();
+  });
+
+  it("when fewer days are kept than the window, the headline names them, the earlier days are hatched with Syndra's reason, and none is a zero", () => {
+    const { container } = render(<UsageCard title="t" metrics={[sessions()]} keptFrom={ago(10)} />);
+    expect(screen.getByText("7 in the last 10 days")).toBeInTheDocument();
+    expect(screen.queryByText(/in the last 12 months|in the last 30 days/)).toBeNull();
+    expect(ring(container).querySelectorAll("[data-gap]")).toHaveLength(1);
+    expect(screen.getByText(copy.keptLine(10))).toBeInTheDocument();
+    const titles = said(ring(container));
+    expect(titles.filter((t) => t === copy.dayKept(dayWords(ago(20)), 10))).toHaveLength(1);
+    expect(titles.filter((t) => t?.includes("kept for only"))).toHaveLength(19);
+    expect(titles.filter((t) => t?.endsWith(": 0")).length).toBeLessThanOrEqual(11);
+    expect(screen.getByText(copy.GAPS_NOTE)).toBeInTheDocument();
+  });
+
+  it("explains the days Syndra does not keep only where days are drawn: not on a metric not counted yet", () => {
+    render(<UsageCard title="t" metrics={[sessions({ watermark: null, series: [] })]} keptFrom={ago(10)} />);
+    expect(screen.queryByText(copy.keptLine(10))).toBeNull();
+    expect(screen.queryByText(copy.GAPS_HEADING)).toBeNull();
+  });
+
+  it("reaches a person's card from the view's usage", () => {
+    render(<ViewUsage view={view({ reported: true, metrics: [sessions()], kept_from: ago(90) })} />);
+    expect(screen.getByText("37 in the last 90 days")).toBeInTheDocument();
+  });
+
+  it("never draws a day after the last counted one as a zero: it is blank and says not counted yet", () => {
+    const m = sessions({ counted_through: ago(2), series: [{ dimensions: { area: "ring" }, sum_30d: 5, sum_12m: 5, days: [{ day: ago(3), value: 5 }], months: [] }] });
+    const { container } = render(<UsageCard title="t" metrics={[m]} />);
+    const titles = said(ring(container));
+    expect(titles).toContain(copy.dayPending(dayWords(ago(1))));
+    expect(titles).toContain(copy.dayPending(dayWords(ago(0))));
+    expect(titles).toContain(copy.dayValue(dayWords(ago(2)), "0"));
+    expect(titles).not.toContain(copy.dayValue(dayWords(ago(1)), "0"));
+    expect(titles).not.toContain(copy.dayValue(dayWords(ago(0)), "0"));
+  });
+});
+
+describe("a value with no neighbour is a dot", () => {
+  const solo = (instrument: "counter" | "gauge", days: number[], gaps: Array<[number, number]> = []) => {
+    const base = instrument === "counter" ? sessions() : homeBytes({ against: undefined });
+    return {
+      ...base,
+      dimensions: undefined,
+      gaps: gaps.map(([a, b]) => ({ start: ago(a), end: ago(b), reason: "The NAS was off" })),
+      series: [{ dimensions: {}, latest: { day: ago(days[days.length - 1]), value: 4 }, days: days.map((d) => ({ day: ago(d), value: 4 })), sum_30d: 4, sum_12m: 4, months: [] }],
+    };
+  };
+
+  it("draws a value standing alone between gaps as a dot (r 2.5, accent, a surface ring)", () => {
+    // ago(4) and ago(3) are a gap, and so is ago(1): ago(2) stands alone.
+    render(<UsageCard title="t" metrics={[solo("counter", [10, 2], [[4, 2], [1, 0]])]} />);
+    const svg = screen.getByRole("img");
+    const dots = svg.querySelectorAll("[data-dot]");
+    // The lone day and the last day (today, a real zero after the gap) are both alone.
+    expect(dots).toHaveLength(2);
+    for (const d of Array.from(dots)) {
+      expect(d).toHaveAttribute("r", "2.5");
+      expect(d).toHaveAttribute("fill", "var(--accent)");
+      expect(d).toHaveAttribute("stroke", "var(--surface-1)");
+    }
+    expect(svg.querySelectorAll("[data-line]")).toHaveLength(1);
+  });
+
+  it("never joins a gauge over a day with no sample: only adjacent sampled days are a line, the rest are dots", () => {
+    render(<UsageCard title="t" metrics={[solo("gauge", [6, 5, 2, 0])]} />);
+    const svg = screen.getByRole("img");
+    expect(svg.querySelectorAll("[data-line]")).toHaveLength(1);
+    expect(svg.querySelectorAll("[data-line]")[0].getAttribute("points")!.split(" ")).toHaveLength(2);
+    expect(svg.querySelectorAll("[data-dot]")).toHaveLength(2);
+  });
+});
+
+describe("what the last count did not keep, in words", () => {
+  it("says one reason in the singular and in the plural, and never a name", () => {
+    expect(copy.DROPPED.not_a_day(1)).toBe("1 value that was not for a whole day");
+    expect(copy.DROPPED.not_a_day(3)).toBe("3 values that were not for a whole day");
+    expect(copy.DROPPED.bad_value(1)).toBe("1 value or gap that was empty or below zero");
+    expect(copy.DROPPED.bad_value(2)).toBe("2 values or gaps that were empty or below zero");
+    expect(copy.DROPPED.series(1)).toBe("1 value from more series than Syndra keeps");
+    expect(copy.droppedLine([copy.DROPPED.not_a_day(1)])).toBe("The last count did not keep 1 value that was not for a whole day.");
+  });
+
+  it("has words for every reason the backend sends, none of them a person's name", () => {
+    const sent = ["not_a_day", "bad_value", "not_per_subject", "unbound_subject", "undeclared_dimension", "person_in_dimension", "past_retention", "series"];
+    for (const reason of sent) {
+      expect(copy.DROPPED[reason], reason).toBeTypeOf("function");
+      expect(copy.DROPPED[reason](2)).toMatch(/^2 /);
+    }
+  });
+
+  it("joins several reasons into one sentence that ends in 'and'", async () => {
+    const t = targetStats();
+    if (t.usage.reported) t.usage.metrics[0].collected = { at: null, dropped: { not_a_day: 1, past_retention: 4, series: 2, person_in_dimension: 0, mystery: 9 } };
+    const stub = makeProxyFetch();
+    stub.register("GET", "/api/proxy/targets/gym/stats", () => t);
+    vi.stubGlobal("fetch", stub.fetchImpl);
+    render(withQuery(<TargetStats target="gym" />));
+    expect(
+      await screen.findByText("The last count did not keep 1 value that was not for a whole day, 4 values older than Syndra keeps and 2 values from more series than Syndra keeps."),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("the storage kind's limit for a meter", () => {
+  const field = (name: string, unit: string) => ({ name, role: "limit", unit, label: name });
+  const read = (schema: unknown[], over = {}) => {
+    const v = view({ reported: true, metrics: [homeBytes()] }, { kind: "storage", entitlement_schema: schema as never, ...over });
+    return { ...v, storage: { usable: true, needs_password: false, places: [{ share: "a", path: "/a", access: "change" as const, home: true, usage: { used_bytes: 1, quota_bytes: 20 * GIB } }] } };
+  };
+
+  it("takes the one limit in bytes, and none when two are (it would be a guess) or none is", async () => {
+    const { storageLimits } = await import("@/components/kinds/storage/limits");
+    expect(storageLimits(read([field("quota_field", "bytes")]))).toEqual({ quota_field: 20 * GIB });
+    expect(storageLimits(read([field("quota_field", "bytes"), field("roles_limit", "bytes")]))).toEqual({});
+    expect(storageLimits(read([field("quota_field", "bytes"), field("seats", "items")]))).toEqual({ quota_field: 20 * GIB });
+    expect(storageLimits(read([field("seats", "items")]))).toEqual({});
+  });
+
+  it("draws nothing while offline or where the person cannot change the place, as the storage card does", async () => {
+    const { storageLimits } = await import("@/components/kinds/storage/limits");
+    const schema = [field("quota_field", "bytes")];
+    expect(storageLimits(read(schema, { health: "offline" }))).toEqual({});
+    const readOnly = read(schema);
+    readOnly.storage.places[0] = { ...readOnly.storage.places[0], access: "read" as never };
+    expect(storageLimits(readOnly)).toEqual({});
   });
 });

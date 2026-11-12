@@ -226,7 +226,8 @@ describe("a person's network storage (A-10 Part 1)", () => {
 
   it("nearly full turns the line amber; at the limit it says what still works", () => {
     show(view({ home: { ...view().home!, used_bytes: 46 * GB } }));
-    expect(screen.getByText("· nearly full")).toBeInTheDocument();
+    expect(screen.getByText("nearly full")).toBeInTheDocument();
+    expect(screen.getByRole("meter").firstElementChild).toHaveClass("bg-warn");
   });
 
   it("loading shows the name and caption with no values; an error replaces the card", () => {

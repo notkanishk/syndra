@@ -135,6 +135,49 @@ func TestLiveRetentionKeepsTotalsLongerThanPeople(t *testing.T) {
 	}
 }
 
+// The first day a read says retention keeps is the prune's and ingestion's
+// own line: kept on it, gone (and refused late) the day before; 400 days
+// unless shortened.
+func TestLiveKeptFromIsThePrunesLine(t *testing.T) {
+	ctx := statsLive(t)
+	today := clock.Day(clock.Now())
+	if from, err := StatsKeptFrom(ctx, today, statsTarget); err != nil || from != clock.AddDate(today, 0, 0, -400) {
+		t.Errorf("unset: kept from %q (%v), want 400 days back", from, err)
+	}
+	ninety := 90
+	if err := SetStatsRetention(ctx, statsTarget, &ninety, "op-1"); err != nil {
+		t.Fatal(err)
+	}
+	from, err := StatsKeptFrom(ctx, today, statsTarget)
+	if err != nil || from != clock.AddDate(today, 0, 0, -90) {
+		t.Fatalf("90 days: kept from %q (%v), want 90 days back", from, err)
+	}
+	before := clock.AddDate(from, 0, 0, -1)
+	err = CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error {
+		n, err := c.UpsertPoints(ctx, today, time.Now(), []StatsPoint{{Subject: "sub-a", Day: from, Value: 1}, {Subject: "sub-a", Day: before, Value: 1}})
+		if n != 1 {
+			t.Errorf("ingestion kept %d points, want the one on %s", n, from)
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PG.Exec(ctx, `INSERT INTO addon_metric_points (target_id, metric, subject, dims, bucket_start, value, observed_at)
+		VALUES ($1, 'storage.sessions', 'sub-a', '{}', $2::date, 1, now())`, statsTarget, before); err != nil {
+		t.Fatal(err) // stored before the setting was shortened
+	}
+	if _, _, err := PruneStats(ctx, today); err != nil {
+		t.Fatal(err)
+	}
+	if got := pointDays(t, ctx, "sub-a"); !got[from] || got[before] {
+		t.Errorf("after the prune %v: want %s kept and %s gone", got, from, before)
+	}
+	if _, err := StatsKeptFrom(ctx, today, "no_such_target"); err == nil {
+		t.Error("an unknown target has a kept-from day")
+	}
+}
+
 // The setting is 1 to 400 days or none, by the schema's CHECK (its one
 // place): it can shorten and never lengthen. Each change is audited.
 func TestLiveRetentionSettingCannotLengthen(t *testing.T) {

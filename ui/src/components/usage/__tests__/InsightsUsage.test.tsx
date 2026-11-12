@@ -9,7 +9,7 @@ import { ADVANCED_NAV, BASIC_NAV, type NavEntry } from "@/lib/nav";
 import type { InsightsStats } from "@/lib/queries/useStats";
 import { makeProxyFetch } from "@/test-utils/proxyFetch";
 
-import { GIB } from "./fixtures";
+import { ago, GIB } from "./fixtures";
 
 const stats = (): InsightsStats => ({
   window_days: 30,
@@ -52,6 +52,33 @@ describe("Insights, Usage", () => {
     expect(screen.getByText(/Half are at 1\.2 GiB or under; nine in ten are at 9\.0 GiB or under\./)).toBeInTheDocument();
     expect(screen.getByText(/Half are at 30 minutes or under; nine in ten are at 2 hours or under\./)).toBeInTheDocument();
     expect(screen.getByText(copy.windowFrom("14 Oct"))).toBeInTheDocument();
+  });
+
+  it("says how many people and shows no spread and no bar below 5: with one, the middle would be them", async () => {
+    mount(stats());
+    const one = (await screen.findByText(/^1 person\./)).closest(".row-divider") as HTMLElement;
+    expect(one.textContent).toContain(copy.FEW_PEOPLE);
+    expect(one.textContent).not.toMatch(/Half are at|nine in ten/);
+    expect(one.querySelector("[aria-hidden]")).toBeNull();
+  });
+
+  it("says a spread is over fewer days when the system keeps fewer than the window, and says nothing otherwise", async () => {
+    const s = stats();
+    s.metrics[0].kept_from = ago(10);
+    s.metrics[1].kept_from = ago(400);
+    mount(s);
+    await screen.findByText(/^41 people\./);
+    expect(screen.getAllByText(copy.spreadDays(10))).toHaveLength(1);
+    expect(screen.queryByText(copy.spreadDays(400))).toBeNull();
+  });
+
+  it("shows the spread from 5 people", async () => {
+    const s = stats();
+    s.metrics[0].series[1].members = 5;
+    mount(s);
+    const five = (await screen.findByText(/^5 people\./)).closest(".row-divider") as HTMLElement;
+    expect(five.textContent).toContain("Half are at 2 or under; nine in ten are at 2 or under.");
+    expect(five.querySelector("[aria-hidden]")).not.toBeNull();
   });
 
   it("keeps each breakdown as its own row and never adds them", async () => {

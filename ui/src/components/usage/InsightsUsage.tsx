@@ -6,7 +6,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { useInsightsStats, type InsightsStatsMetric, type StatsUnit } from "@/lib/queries/useStats";
-import { CAP, capText, dayWords, dimensionWords, formatValue } from "@/lib/usage";
+import { CAP, capText, dayWords, dimensionWords, formatValue, keptDays, MIN_SPREAD_MEMBERS, WINDOW_DAYS } from "@/lib/usage";
 
 /**
  * Insights, Usage (Advanced view): every system's per-person metrics grouped
@@ -22,19 +22,22 @@ function Spread({ metric, row }: { metric: InsightsStatsMetric; row: InsightsSta
   const where = dimensionWords(metric, row.dimensions);
   const p50 = formatValue(row.p50, metric.unit);
   const p90 = formatValue(row.p90, metric.unit);
+  const few = row.members < MIN_SPREAD_MEMBERS;
   const share = row.p90 > 0 ? Math.min(100, (row.p50 / row.p90) * 100) : 0;
   return (
     <CardRow className="flex-wrap items-center gap-x-6 gap-y-2">
       <span className="flex min-w-0 flex-1 basis-[260px] flex-col gap-0.5">
         {where && <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{where}</span>}
         <span className="text-[13px] tabular-nums text-muted">
-          {copy.members(row.members)}. {copy.spread(p50, p90)}
+          {copy.members(row.members)}. {few ? copy.FEW_PEOPLE : copy.spread(p50, p90)}
         </span>
       </span>
       {/* Zero to nine in ten; the darker part is up to the middle. Aria-hidden: the sentence beside it holds the numbers. */}
+      {!few && (
       <span aria-hidden className="flex h-2 w-[132px] shrink-0 overflow-hidden rounded-full bg-accent-soft">
         <span className="block h-full bg-accent" style={{ width: `${share}%` }} />
       </span>
+      )}
     </CardRow>
   );
 }
@@ -75,6 +78,9 @@ export function InsightsUsage() {
                     {capText(m.system, CAP.label)}: {capText(m.label, CAP.label)}
                   </h3>
                 </div>
+                {keptDays(m.kept_from) !== undefined && keptDays(m.kept_from)! < (stats.data?.window_days ?? WINDOW_DAYS) && (
+                  <p className="px-5 pb-1 text-[13px] text-faint">{copy.spreadDays(keptDays(m.kept_from)!)}</p>
+                )}
                 {m.series.map((row) => (
                   <Spread key={JSON.stringify(row.dimensions)} metric={m} row={row} />
                 ))}

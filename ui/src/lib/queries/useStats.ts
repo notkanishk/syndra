@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { invalidateAfter } from "@/lib/queries/invalidation";
 
 /**
  * Mirrors the backend's statistics views (handlers/stats.go). Every day is a
@@ -57,13 +58,18 @@ export interface StatsMetric {
   against?: string;
   /** Null before the metric's first collection. */
   watermark: string | null;
+  /** The last makerspace day that is final; later days with no point are not counted yet, never 0. Optional: older data has none. */
+  counted_through?: string | null;
   series: StatsSeries[];
   gaps: StatsGap[];
   collected?: StatsCollected;
 }
 
 /** Absent: Syndra could not read its own store just now. */
-export type Usage = { reported: false } | { reported: true; metrics: StatsMetric[] };
+export type Usage =
+  | { reported: false }
+  /** `kept_from`: the first makerspace day whose per-person points are kept on this system; earlier days are gone, not zero. Optional: older data has none. */
+  | { reported: true; metrics: StatsMetric[]; kept_from?: string };
 
 export interface TargetStats {
   target: string;
@@ -89,6 +95,8 @@ export interface InsightsStatsMetric {
   per_subject?: boolean;
   against?: string;
   dimensions?: Array<{ name: string; label: string }>;
+  /** That system's first kept per-person day: after the window's `from`, the spread covers fewer days. Optional: older data has none. */
+  kept_from?: string;
   series: Array<{ dimensions: Record<string, string>; members: number; p50: number; p90: number }>;
 }
 
@@ -103,5 +111,23 @@ export function useInsightsStats() {
   return useQuery({
     queryKey: ["insights", "stats"],
     queryFn: () => request<InsightsStats>("/insights/stats"),
+  });
+}
+
+/**
+ * The one write place for how long per-person numbers are kept (1 to 400
+ * days; null is the 400-day ceiling). It deletes older per-person history at
+ * the next nightly retention, so the caller asks first when it shortens.
+ */
+export function useSetStatsRetention(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (days: number | null) =>
+      request<{ target: string; subject_days: number; set: boolean }>(`/targets/${encodeURIComponent(target)}/stats-retention`, {
+        method: "PUT",
+        body: { days },
+      }),
+    // ["targets", t] reaches this page's stats; every card's "kept from" is in the member and person reads.
+    onSuccess: () => invalidateAfter(client, "target", { target, extra: [["me", "targets"], ["users"]] }),
   });
 }

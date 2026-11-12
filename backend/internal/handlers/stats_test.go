@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -26,11 +27,15 @@ import (
 // and every subject a read asked for.
 type statsStore struct {
 	asked []string
+	// retention is the target's per-person days (400 when 0); from, the day
+	// each points read started on.
+	retention int
+	from      []string
 }
 
 func stubStats(t *testing.T, s *statsStore) {
 	t.Helper()
-	prev := []any{dbStatsMetrics, dbStatsDays, dbStatsMonths, dbStatsGaps, dbStatsDistributions, dbStatsRetention}
+	prev := []any{dbStatsMetrics, dbStatsDays, dbStatsMonths, dbStatsGaps, dbStatsDistributions, dbStatsRetention, dbStatsKeptFrom}
 	t.Cleanup(func() {
 		dbStatsMetrics = prev[0].(func(context.Context, string) ([]db.StatsMetric, error))
 		dbStatsDays = prev[1].(func(context.Context, string, string, string) ([]db.StatsValue, error))
@@ -38,6 +43,7 @@ func stubStats(t *testing.T, s *statsStore) {
 		dbStatsGaps = prev[3].(func(context.Context, string, string) ([]db.StatsGapRow, error))
 		dbStatsDistributions = prev[4].(func(context.Context, string) ([]db.StatsDistribution, error))
 		dbStatsRetention = prev[5].(func(context.Context, string) (int, bool, error))
+		dbStatsKeptFrom = prev[6].(func(context.Context, string, string) (string, error))
 	})
 	watermark := time.Date(2026, 11, 10, 18, 30, 0, 0, time.UTC)
 	dbStatsMetrics = func(_ context.Context, target string) ([]db.StatsMetric, error) {
@@ -53,8 +59,8 @@ func stubStats(t *testing.T, s *statsStore) {
 	}
 	// Each subject's own numbers: u1 has used 3 + 4 sessions, u2 90.
 	values := map[string]float64{"u1": 3, "u2": 90, "": 500}
-	dbStatsDays = func(_ context.Context, _, subject, _ string) ([]db.StatsValue, error) {
-		s.asked = append(s.asked, subject)
+	dbStatsDays = func(_ context.Context, _, subject, from string) ([]db.StatsValue, error) {
+		s.asked, s.from = append(s.asked, subject), append(s.from, from)
 		v := values[subject]
 		out := []db.StatsValue{
 			{Metric: "storage.home_bytes", Dims: map[string]string{}, When: "2026-11-09", Value: v * 1000},
@@ -67,8 +73,8 @@ func stubStats(t *testing.T, s *statsStore) {
 		}
 		return out, nil
 	}
-	dbStatsMonths = func(_ context.Context, _, subject, _ string) ([]db.StatsValue, error) {
-		s.asked = append(s.asked, subject)
+	dbStatsMonths = func(_ context.Context, _, subject, from string) ([]db.StatsValue, error) {
+		s.asked, s.from = append(s.asked, subject), append(s.from, from)
 		v := values[subject]
 		return []db.StatsValue{
 			{Metric: "storage.home_bytes", Dims: map[string]string{}, When: "2026-11", Value: 1},
@@ -81,6 +87,10 @@ func stubStats(t *testing.T, s *statsStore) {
 		return []db.StatsGapRow{{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": "scratch"}, Start: "2026-11-08", End: "2026-11-10", Reason: "Auditing is off on this share"}}}, nil
 	}
 	dbStatsRetention = func(context.Context, string) (int, bool, error) { return 400, false, nil }
+	// The db's line (StatsKeptFrom, proved against the prune live): today − days.
+	dbStatsKeptFrom = func(_ context.Context, today, _ string) (string, error) {
+		return clock.AddDate(today, 0, 0, -cmp.Or(s.retention, 400)), nil
+	}
 }
 
 // myUsage is the usage block on the one target a page returns.
@@ -192,6 +202,56 @@ func TestUsageCarriesSumsLatestAndGaps(t *testing.T) {
 	}
 	if none, _ := statsUsageFor(context.Background(), "unifi", "u1", now); none.Reported || none.Metrics != nil {
 		t.Errorf("a target reporting nothing says so: %+v", none)
+	}
+}
+
+// A person's page says from which day retention still keeps their points,
+// and reads none from before it (the prune runs nightly, so a day past
+// retention can still be stored); every metric says its last final day. The
+// totals keep five years and say neither.
+func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
+	now := time.Date(2026, 11, 12, 20, 0, 0, 0, time.UTC) // 13 Nov, 01:30 in the makerspace
+	for _, c := range []struct {
+		retention              int
+		keptFrom, days, months string
+	}{
+		{0, "2025-10-09", "2026-10-15", "2025-12-01"},  // the 400-day ceiling: both windows whole
+		{90, "2026-08-15", "2026-10-15", "2026-08-15"}, // the year starts where retention does
+		{10, "2026-11-03", "2026-11-03", "2026-11-03"}, // so do the 30 days
+	} {
+		s := &statsStore{retention: c.retention}
+		stubStats(t, s)
+		usage, err := statsUsageFor(context.Background(), "truenas", "u1", now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if usage.KeptFrom != c.keptFrom {
+			t.Errorf("retention %d: kept_from %q, want %q", c.retention, usage.KeptFrom, c.keptFrom)
+		}
+		if len(s.from) != 2 || s.from[0] != c.days || s.from[1] != c.months {
+			t.Errorf("retention %d: points read from %v, want days from %s and months from %s", c.retention, s.from, c.days, c.months)
+		}
+		for _, m := range usage.Metrics {
+			if got, _ := json.Marshal(m.CountedThrough); string(got) != `"2026-11-10"` {
+				t.Errorf("%s counted through %s, want 2026-11-10 (watermark midnight 11 Nov)", m.Name, got)
+			}
+		}
+	}
+
+	s := &statsStore{retention: 10}
+	stubStats(t, s)
+	totals, _ := statsUsageFor(context.Background(), "truenas", "", now)
+	if totals.KeptFrom != "" || s.from[0] != "2026-10-15" || s.from[1] != "2025-12-01" {
+		t.Errorf("the totals say kept_from %q and read from %v: a per-person setting is not theirs", totals.KeptFrom, s.from)
+	}
+	for _, m := range totals.Metrics {
+		if want := m.Watermark != nil; (m.CountedThrough != nil) != want {
+			t.Errorf("%s: counted_through %v with watermark %v", m.Name, m.CountedThrough, m.Watermark)
+		}
+	}
+	raw, _ := json.Marshal(totals)
+	if !strings.Contains(string(raw), `"counted_through":null`) || strings.Contains(string(raw), "kept_from") {
+		t.Errorf("a metric never collected says counted_through null; the totals no kept_from: %s", raw)
 	}
 }
 
@@ -316,7 +376,8 @@ func TestInsightsStatsNameNobody(t *testing.T) {
 	if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &body) != nil || len(body.Metrics) != 1 {
 		t.Fatalf("%d %s", rr.Code, rr.Body.String())
 	}
-	if m := body.Metrics[0]; m.Name != "storage.sessions" || m.Series[0].Members != 12 || m.Series[0].P90 != 19 {
+	if m := body.Metrics[0]; m.Name != "storage.sessions" || m.Series[0].Members != 12 || m.Series[0].P90 != 19 ||
+		m.KeptFrom != clock.AddDate(clock.Day(clock.Now()), 0, 0, -400) {
 		t.Errorf("insights %+v", m)
 	}
 	if strings.Contains(rr.Body.String(), `"subject`) {

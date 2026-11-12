@@ -17,12 +17,12 @@ function End({ metrics }: { metrics: StatsMetric[] }) {
 }
 
 /** "What I have used", or the operator's "What {person} has used": the metrics the backend sent for this one person, drawn from their descriptors. */
-export function UsageCard({ title, metrics, limits }: { title: string; metrics: StatsMetric[]; limits?: Limits }) {
+export function UsageCard({ title, metrics, limits, keptFrom }: { title: string; metrics: StatsMetric[]; limits?: Limits; keptFrom?: string }) {
   return (
     <Card role="group" aria-label={title}>
       <CardHeader title={title} />
       {metrics.map((m) => (
-        <MetricBlock key={m.name} metric={m} limits={limits} />
+        <MetricBlock key={m.name} metric={m} limits={limits} keptFrom={keptFrom} />
       ))}
       <End metrics={metrics} />
     </Card>
@@ -52,5 +52,5 @@ export function ViewUsage({ view, person }: { view: MyTargetView; person?: strin
     );
   }
   if (!usage.reported || usage.metrics.length === 0) return null;
-  return <UsageCard title={title} metrics={usage.metrics} limits={observedLimits(view)} />;
+  return <UsageCard title={title} metrics={usage.metrics} limits={observedLimits(view)} keptFrom={usage.kept_from} />;
 }
