@@ -955,6 +955,34 @@ settings with the full §5 rules.
   against the **v2** add-on before 1.10; report attached; the kit's last
   line names the one disabled, labelled account it leaves (removal disables,
   never deletes) #ready-for-human
+  *Prepared (13 Nov 2026), owner's rule "only temporary, back to the
+  production setting afterwards":* run the kit inside
+  `scripts/addon-quiet-run.sh`. It refuses off staging (the dump directory
+  and a stand-in-Zitadel `.env`, both required). It recreates the add-on
+  with `TRUENAS_STATS_COLLECT_EVERY=0` and stops the backend (its 30 s HEALTH
+  probe) for the one command, then restores both on any exit. That includes a
+  dropped ssh session or a closed pipe: PIPE is ignored, the restore ignores
+  HUP, INT and TERM, and output stops after a failed write. The restore
+  verifies the add-on's setting equals its value before and the backend
+  answers `/healthz`, and records the outcome in syslog. Nothing is written to
+  `.env`. Staging shares production's NAS, so its add-on runs `read_only`
+  (`TRUENAS_LIFECYCLE_STATE`, which the script requires): nothing staging's
+  backend decides can write there, unless an operator switches it to active
+  on staging's target page (until the next recreate). The restore never
+  starts the backend beside an add-on it could not put back to read_only. `--writes` makes it `active` for the one command, the kit's `-mutate`
+  run, while the backend is stopped, and the restore puts `read_only` back and
+  verifies it. The whole staging procedure, including switching staging's
+  add-on back off afterwards, is in `scripts/README.md`. Held by
+  `repoguard/addon_quiet_run_test.go` against a fake `docker`, which checks:
+  - restore on success, on a failing command, and on a failing quiet
+    (`env -u` proved, for both overrides);
+  - read_only during a run without `--writes`, active only inside a
+    `--writes` command;
+  - a SIGHUP with nobody reading;
+  - a restore that did not take, and a backend that does not answer, both
+    reported;
+  - a stopped backend left stopped;
+  - refusal off staging and with a production `.env`.
 
 ## 5. The guide
 
@@ -1488,7 +1516,8 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   - toneOf(reading, why) is the one place that draws the line and dot: cached = neutral (bg-faint, text-faint) at any age; cooldown and unreachable stay amber; the rest by age.
   - Decided while building 6b (Go review round 3): every `taken_at` is held to this clock in one place. `takenAt` parses (present, RFC 3339, not the zero time) and `ahead(target, ts)` reads one more than `clockSkew` (2 min) ahead as now, logged once per target. `decodeShape` is now `ReadReply.decodeShape`, so it knows `r.Target`; after the unmarshal it clamps through `observed` (`observation() *Observation`, defined on `*Observation` and promoted to `*Records`, `*Status`, `*StorageResult` and `*ActivityReport`; a nil embedded pointer answers nil) and refuses the zero time. Records, activity and status were kept exactly as sent before this. `Storage()` decodes an embedded `Observation` and drops its own clamp, and `decodeActivity` is gone. A storage reply with a zero or unparseable `taken_at` is now unreadable (indeterminate), like reach and homes, where before it was read with no Observation (TestEveryResultShapeIsClampedAlike).
   - Decided while building 6b (round 3): the reference add-on's joiner answers the failure whenever `failed` is set (`if f.failed`, addons/reference/fresh.go). `forget` clears `failed`, so the old `&& f.flight == nil` only misreported one race: another reader begins the next read before the joiner wakes, and the joiner took that read's answer as its own. The test is deterministic: `testing/synctest` parks the joiner, and both reads are played by hand under `a.mu` (TestAJoinerOfAFailedReadNeverJoinsTheNextRead).
-  - [ ] 6b.f1 (follow-up from 6b round 3) Date a kept copy by its age, not by the add-on's clock, as RFC 9111 §4.2.3 does: age = the add-on's `Date` header − `taken_at`, both read off the add-on's own clock, so a skew between the clocks cancels out; the copy is then dated this backend's receive time − age. Today a copy is re-clamped to now on every serve, so with the NAS clock S ahead it reads "just now" for about S − 2 min. This needs response headers (`Date`) on `CallResponse`, carried through `ReadReply` to the clamp. Not built. #needs-triage
+  - [x] 6b.f1 (follow-up from 6b round 3) Date a kept copy by its age, not by the add-on's clock, as RFC 9111 §4.2.3 does: age = the add-on's `Date` header − `taken_at`, both read off the add-on's own clock, so a skew between the clocks cancels out; the copy is then dated this backend's receive time − age. Today a copy is re-clamped to now on every serve, so with the NAS clock S ahead it reads "just now" for about S − 2 min. This needs response headers (`Date`) on `CallResponse`, carried through `ReadReply` to the clamp. #needs-triage
+    *Done (13 Nov 2026):* RFC 9111 §4.2.3, Calculating Age. `CallResponse.Clock` (`Clock{Date, Sent}`, set in `doAuthenticated`, `Date` by `parseDate`/`http.ParseTime`) rides `ReadReply.Clock`, `Settlement.Clock` (the `/calls` answer) and `ViewOf(..., Clock)` into `ahead(target, ts, Clock)`, the one place a taken_at is dated on this clock: the typed readers (`takenAt`), every result shape (`ReadReply.decodeShape`), a physical confirm and its recorded reply, `/stats` (`ReadStats`), and the health `snapshot_taken_at` and `last_read_at` (`dated`; `checked_at` is this backend's own `timeNow` and needs none). age_value = `Date` - `taken_at` (both the add-on's clock, so a skew cancels), corrected_age = age_value + response_delay (the conservative older bound), the copy dates request_time - age_value; the RFC's apparent_age (response_time - `Date`) is omitted on purpose, it compares two clocks. A `Date` more than 1 s before `taken_at` is another clock's: ignored, said once; so is none (taken_at as sent, as before); a clock more than `clockSkew` from this one is said once; the clamp to now stays last. Both add-ons are Go `net/http` servers, which add `Date`; nothing strips it. Guide: an add-on MUST send `Date`. Kit: check `date` on `/subjects` (no feature gate), a fail for no, unparseable, or earlier-than-taken_at `Date`. Tests: TestACopyIsDatedByItsAgeNotByTheAddonsClock, TestACopyDatesFromWhenTheRequestWasSent, TestALiveReadIsDatedWhenItWasAsked, TestAResultShapeIsDatedByItsAgeToo, TestARecordedReplyIsDatedByTheCallsAnswer, TestStatsAndHealthAreDatedByAge, TestAClockOffAndABogusDateAreSaidOnce, TestTheDateCheckFailsAReadWithoutAUsableDate; mutation-checked (the age arithmetic, `Sent`, the bogus-`Date` rule, the kit's 1 s rule). Not corrected: the stats and activity `since` values stay on the backend's clock.
   - Decided while building (6b UI round 3): `useReadAgain` cancels in-flight queries only when a copy is cached (`getQueryData !== undefined`); cancelling a first load reverts it to idle and the list drew "Nothing outside Syndra.". A press that fails for any reason but the cooldown is shown as `ReadAgainError` ("Not read" + failure sentence) under the line, on every page that owns a press (inventory, reach, person activity, my/person storage via the provider).
   - Decided while building (flipped in the 6b UI fix round 4): a cooldown carried in the data only ever comes from a press (page loads and polls never send `fresh`, and both add-ons label a cooldown only on fresh reads), so the reader caused it unless it is marked otherwise. `Stale.pressed` is `false` or absent, and `pageLoad()` (`lib/queries/fresh.ts`) is its one marker, set at the one load site that can meet a cooldown, the dormant list (it reads fresh on every load), when `errorUpdatedAt < pressedAt` or there was no press. `toneOf` draws a cooldown amber unless `pressed === false`. Tone follows the line: cooldown while counting, then cached (neutral) if `current === false`, else by reading.
   - Decided while building: every cooldown counts from its answer: `since` = query `dataUpdatedAt` (reach, person activity, and my/person storage through `ReadAgainProvider value={{ press, since }}`); round 4 stamps it on a cooldown that comes with a copy too (`observed(o, since)`, `stamped()`), at every `stale` site, so a remount does not restart the count; `useCountdown` reads a `since` of 0 as absent. The dormant list keeps its rows when a refetch is refused with data on hand (the refusal is the line's to say, not ListStates').

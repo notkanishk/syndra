@@ -394,7 +394,7 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	result := Result{OperationID: id, Status: status, Outcome: resp.Outcome, Err: resp.Err,
 		NoChange: status == db.AddonOpNoChange, Code: resp.Code, Refusal: resp.Refusal}
 	if op.Effect == addons.EffectPhysical && resp.Outcome == addons.OutcomeSucceeded {
-		v := addons.ViewOf(req.Target, req.Operation, resp.Body)
+		v := addons.ViewOf(req.Target, req.Operation, resp.Body, resp.Clock)
 		result.View = &v
 	}
 	// Only on success, and never fatally. A body that will not parse is not a

@@ -109,7 +109,7 @@ func TestAMemberActionIsPreviewedThenConfirmed(t *testing.T) {
 		t.Errorf("a preview of an item already held: %v", out)
 	}
 
-	view := addons.ViewOf("truenas", "item.checkout", []byte(recordsReply))
+	view := addons.ViewOf("truenas", "item.checkout", []byte(recordsReply), addons.Clock{})
 	for _, tc := range []struct {
 		name   string
 		result addonop.Result

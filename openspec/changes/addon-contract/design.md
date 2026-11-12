@@ -585,9 +585,16 @@ person's request and never waits (`ReconcileAddonNow`). An add-on's
 now, logged once per target (decided while building 6b, review round 2),
 and one dated the zero time is not a reading: every reply shape, the typed
 readers' and every `results` shape's, through one clamp (round 3). A kept
-copy is re-clamped on every serve, so behind a clock S ahead it reads "just
-now" for about S − 2 min; correcting by the add-on's `Date` header (RFC 9111
-§4.2.3) is a follow-up. For the kit to prove any of this black-box, an add-on
+copy is dated by its age on the add-on's own clock, as an HTTP cache does (RFC
+9111 §4.2.3; 7c): age_value = the reply's `Date` less `taken_at`, corrected_age
+= age_value + response_delay, and the copy dates request_time - age_value on
+this clock, so a skew cancels. The RFC's apparent_age (response_time - `Date`)
+is left out on purpose: it compares two clocks. A `Date` more than a second
+before `taken_at` is another clock's and ignored; without a usable `Date` the
+clamp above applies as before, and an add-on MUST send one (kit check `date`).
+One function, `ahead`, dates every taken_at: the typed readers', every result
+shape's, a physical call's reply and its `/calls` record, `/stats`, and the
+health timestamps. For the kit to prove any of this black-box, an add-on
 declaring `freshness` MUST carry `health.target_reads`, every read it has
 made of its app since it started, never decreasing while it runs and free to
 start again at 0, like an OpenMetrics counter (`log_records` counts

@@ -300,7 +300,7 @@ func TestCallAnswerReadsTheThreeAnswersStrictly(t *testing.T) {
 		if err != nil || s.State != CallRecorded || s.Reply != nil {
 			t.Fatalf("%+v %v: a secret reply was kept", s, err)
 		}
-		if v := ViewOf("inventory", "item.checkout", []byte(`{"result":{"records":[],"taken_at":"2026-11-10T09:30:00Z","current":true}}`)); v.Readable {
+		if v := ViewOf("inventory", "item.checkout", []byte(`{"result":{"records":[],"taken_at":"2026-11-10T09:30:00Z","current":true}}`), Clock{}); v.Readable {
 			t.Errorf("a secret reply was shown: %+v", v)
 		}
 	})

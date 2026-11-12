@@ -291,7 +291,7 @@ func ReadStats(ctx context.Context, target, metric string, since time.Time, curs
 	case w.Watermark.IsZero() || w.TakenAt.IsZero():
 		return StatsPage{}, fmt.Errorf("%w: no watermark or taken_at", ErrStatsReply)
 	}
-	page := StatsPage{TakenAt: w.TakenAt, Watermark: w.Watermark, Points: w.Points, Gaps: w.Gaps, Unbound: max(0, w.Unbound.Accounts)}
+	page := StatsPage{TakenAt: ahead(target, w.TakenAt, resp.Clock), Watermark: w.Watermark, Points: w.Points, Gaps: w.Gaps, Unbound: max(0, w.Unbound.Accounts)}
 	if w.NextCursor != nil {
 		page.NextCursor = *w.NextCursor
 	}

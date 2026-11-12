@@ -26,6 +26,7 @@ var catalogue = []struct {
 	{id: "subjects.paged", guide: "get-subjects", must: "snapshot cursor paging (feature subjects.paged)"},
 	{id: "unlisted-hidden", guide: "get-subjects", must: "a membership in state or observed holds only the managed set: no value /values leaves out"},
 	{id: "current", guide: "observations-taken_at-current-stale", must: "current: true means a read of the app that began after the request arrived, never a mirror (subjects, plan, and the storage profile's reach and homes when declared)"},
+	{id: "date", guide: "observations-taken_at-current-stale", must: "a read (/subjects) carries a Date header from the clock that stamps taken_at, at the moment it answers, and never one more than a second before its taken_at (RFC 9110 section 6.6.1)"},
 	{id: "values", guide: "get-valuesfield", must: "every schema field answers /values; account and channel answer false,true; a membership answers enumerable: true; an unknown field is 404 UNKNOWN_FIELD"},
 	{id: "settings", guide: "settings-get-settings-and-put-settingsname-feature-settings", must: "GET /settings validates; with -mutate-settings, writing the current value back is accepted"},
 	{id: "plan", guide: "post-plan", must: "plan validates; one outcome with a fingerprint per subject; above limits.subjects_per_plan 422 PLAN_TOO_LARGE with the limit"},

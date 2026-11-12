@@ -241,6 +241,7 @@ func TestACohortLargerThanAPlanIsPlannedInChunks(t *testing.T) {
 		}
 		body, _ := json.Marshal(map[string]any{"outcomes": outcomes, "current": len(sizes) != 3, "taken_at": taken, "truncated": false,
 			"stale": map[string]any{"reason": "unreachable"}})
+		w.Header()["Date"] = nil // dated as sent (clock_age_test.go has the Date)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(body)
 	}))
