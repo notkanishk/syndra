@@ -410,6 +410,15 @@ describe("the target rows", () => {
     expect(fn).not.toMatch(/Record<|new Map|\bknown\b/);
   });
 
+  // While the roster is being read the name is unknown (undefined): the crumb
+  // stops at System rather than drawing the id and then swapping it for the
+  // name a moment later.
+  it("does not crumb a target before its name is read, on its page or a sub-route", () => {
+    const reading = () => undefined;
+    expect(crumbsFor("/system/targets/laser", "advanced", reading)).toEqual([{ label: "System" }]);
+    expect(crumbsFor("/system/targets/laser/mappings", "advanced", reading)).toEqual([{ label: "System" }]);
+  });
+
   // The crumb names a system by the roster's name when the shell has it.
   it("names a target's crumb by the roster's name when given one", () => {
     const names = (t: string) => (t === "laser" ? "Big laser" : t);

@@ -3,7 +3,8 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TRUENAS_SCHEMA } from "@/lib/__fixtures__/truenas-schema";
-import { useFieldSchemaState, useSchemaSource, useSystemNames } from "@/lib/queries/useFieldSchema";
+import { targetLabel } from "@/lib/nav";
+import { useFieldSchemaState, useSchemaSource, useSystemNames, useSystemNamesIfRead } from "@/lib/queries/useFieldSchema";
 
 /**
  * The one place a page learns how the read its fields come from went, and
@@ -78,5 +79,27 @@ describe("a source that is not needed asks nothing", () => {
     renderHook(() => useSchemaSource(false, true));
     expect(mine).toHaveBeenLastCalledWith(true);
     expect(ops).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe("a name only once it is read", () => {
+  it("is undefined while the roster is first being read, so a crumb can wait", () => {
+    roster.isLoading = true;
+    const { result } = renderHook(() => useSystemNamesIfRead());
+    expect(result.current("truenas")).toBeUndefined();
+  });
+
+  it("is the roster's name once read, and the id title-cased for a system it does not list", () => {
+    roster.data = [ROW];
+    const { result } = renderHook(() => useSystemNamesIfRead());
+    expect(result.current("truenas")).toBe("Big NAS");
+    expect(result.current("laser")).toBe(targetLabel("laser"));
+  });
+
+  it("falls back to the id title-cased when the read failed, as the other names do", () => {
+    roster.error = new Error("down");
+    const { result } = renderHook(() => useSystemNamesIfRead());
+    const names = renderHook(() => useSystemNames()).result.current;
+    expect(result.current("truenas")).toBe(names("truenas"));
   });
 });

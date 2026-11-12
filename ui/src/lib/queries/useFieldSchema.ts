@@ -75,6 +75,17 @@ export function useSystemNames(enabled = true): (system: string) => string {
   return sourceOf(useTargets(enabled)).nameOf;
 }
 
+/**
+ * As `useSystemNames`, but undefined while the roster is first being read, so
+ * a caller that would otherwise draw the id and then swap it for the name (a
+ * breadcrumb) can wait instead. Read, or failed: exactly `useSystemNames`.
+ */
+export function useSystemNamesIfRead(enabled = true): (system: string) => string | undefined {
+  const q = useTargets(enabled);
+  const { nameOf } = sourceOf(q);
+  return q.isLoading ? () => undefined : nameOf;
+}
+
 export function useFieldSchema(system: string | undefined): EntitlementField[] | undefined {
   return useFieldSchemaState(system).schema;
 }
