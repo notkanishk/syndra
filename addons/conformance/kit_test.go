@@ -44,6 +44,14 @@ func serve(t *testing.T, secret string, hook func(r *http.Request, body []byte, 
 func serveRewriting(t *testing.T, secret string, hook func(r *http.Request, body []byte, answered bool),
 	rewrite func(r *http.Request, reply []byte) []byte, features []string, defects ...reference.Defect) (string, func() []string) {
 	t.Helper()
+	return serveRewritingHeaders(t, secret, hook, rewrite, nil, features, defects...)
+}
+
+// serveRewritingHeaders is serveRewriting that may also change the reply's
+// headers (header sees the request and the reply's headers, Date included).
+func serveRewritingHeaders(t *testing.T, secret string, hook func(r *http.Request, body []byte, answered bool),
+	rewrite func(r *http.Request, reply []byte) []byte, header func(r *http.Request, h http.Header), features []string, defects ...reference.Defect) (string, func() []string) {
+	t.Helper()
 	set := map[reference.Defect]bool{}
 	for _, d := range defects {
 		set[d] = true
@@ -64,15 +72,22 @@ func serveRewriting(t *testing.T, secret string, hook func(r *http.Request, body
 		if hook != nil {
 			hook(r, body, false)
 		}
-		if rewrite == nil {
+		if rewrite == nil && header == nil {
 			h.ServeHTTP(w, r)
 		} else {
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, r)
 			maps.Copy(w.Header(), rec.Header())
 			w.Header().Del("Content-Length")
+			if header != nil {
+				header(r, w.Header())
+			}
 			w.WriteHeader(rec.Code)
-			_, _ = w.Write(rewrite(r, rec.Body.Bytes()))
+			reply := rec.Body.Bytes()
+			if rewrite != nil {
+				reply = rewrite(r, reply)
+			}
+			_, _ = w.Write(reply)
 		}
 		if hook != nil {
 			hook(r, body, true)
@@ -1708,6 +1723,33 @@ func TestTheFreshnessChecksJudgeOnlyWhatIsDeclared(t *testing.T) {
 	}
 	if bad := slices.DeleteFunc(slices.Clone(fresh), func(s string) bool { return s == "GET /subjects" }); len(bad) > 0 || len(fresh) == 0 {
 		t.Errorf("fresh was sent on %v; want GET /subjects only, at least once", fresh)
+	}
+}
+
+// Every read carries a Date from the clock that stamped its taken_at: the
+// reference passes (Go's server sets one), and a reply with none, with one that
+// is no date, or with one an hour before its taken_at fails.
+func TestTheDateCheckFailsAReadWithoutAUsableDate(t *testing.T) {
+	url, _ := serve(t, testSecret, nil)
+	if got := run(t, config(url, false)).Status("date"); got != "pass" {
+		t.Fatalf("date says %s against the reference, want pass", got)
+	}
+	for name, set := range map[string]func(h http.Header){
+		"none":         func(h http.Header) { h["Date"] = nil },
+		"not a date":   func(h http.Header) { h.Set("Date", "yesterday") },
+		"an hour back": func(h http.Header) { h.Set("Date", time.Now().Add(-time.Hour).UTC().Format(http.TimeFormat)) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			url, _ := serveRewritingHeaders(t, testSecret, nil, nil, func(r *http.Request, h http.Header) {
+				if r.URL.Path == "/subjects" {
+					set(h)
+				}
+			}, nil)
+			if got := run(t, config(url, false)).Status("date"); got != "fail" {
+				t.Errorf("date says %s, want fail", got)
+			}
+		})
 	}
 }
 
