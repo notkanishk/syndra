@@ -4,6 +4,7 @@ import { MemberActions } from "@/components/actions/MemberAction";
 import { MEMBER } from "@/components/results/copy";
 import { Reads } from "@/components/results/ReadResult";
 import { StorageMemberCard } from "@/components/kinds/storage/MyStorage";
+import { ViewUsage } from "@/components/usage/UsageCard";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
@@ -35,7 +36,14 @@ const KIND_CARD: Record<string, (props: CardProps) => React.ReactElement> = {
 
 export function MemberTargetCard(props: CardProps) {
   const Module = KIND_CARD[props.view.kind ?? ""] ?? CoreMemberCard;
-  return <Module {...props} />;
+  // "What I have used" is every kind's, from the same descriptors, so it sits
+  // beside the kind's card and not inside any of them.
+  return (
+    <div className="grid gap-4">
+      <Module {...props} />
+      <ViewUsage view={props.view} />
+    </div>
+  );
 }
 
 /** "Your account on Big laser is not made yet. Nothing for you to do. Syndra makes it." */

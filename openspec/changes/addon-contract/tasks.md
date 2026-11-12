@@ -1863,7 +1863,7 @@ per-person only) applied there.
       - A gap whose reason names a person is kept with the fixed reason "The add-on's reason named a person." and counted `person_in_dimension`; one whose dimensions name a person is dropped, as its series is (`TestNoValueOrReasonNamesABoundPerson`).
       - A person's page keeps a gap whose dimensions are `{}` or a subset of one of their series (every key=value of the gap in it), so `{"share":"makers"}` reaches their makers/smb series (`TestAGapOnPartOfASeriesIsOnThatSeries`).
       - Every breaker counting rule lives in `breaker.record`: `send` only marks a coded `/stats` answer `CallResponse.StatsRefusal`, and `record` neither counts nor clears it (`TestACodedStatsAnswerDoesNotClearTheBreaker`).
-- [ ] 6.9 UI, from descriptors only: the member card "What I have used"
+- [x] 6.9 UI, from descriptors only: the member card "What I have used"
   (counters summed with a sparkline, gauges latest with their day,
   `against` as a meter over the **observed** limit, gaps footnoted, every
   card ending in a next step or "nothing for you to do"), the same card on
@@ -1874,7 +1874,8 @@ per-person only) applied there.
   names; dates are makerspace days, as everywhere (ruling O1, no "UTC day"); add-on text quoted and capped;
   the `dataviz` skill's rules for gap-vs-zero and both themes; copy guard
   for the new sentences and for the absence of ranking words #ready-for-agent
-- [ ] 6.10 Staging: 48 hours of collection against staging TrueNAS, then an
+    - Built (6e, 12 Nov 2026): `components/usage/` (sentences in `copy.ts`, copy guide section 15, lint-guarded like 12 and 14), `lib/usage.ts`, `lib/queries/useStats.ts`; the card sits beside every kind's card (`MemberTargetCard`) and every person-page system card (`SystemsSection`), a fixed "What has been used here" region on the target overview, and a Usage tab on Insights. Meters read the limit the kind observed (`kinds/limits.ts`, storage from its home place), never a computed one; a totals page draws none. Not built: the System-page retention control (read-only line only), a per-day table view, provisional-day styling after the watermark.
+- [ ] 6.10 (the owner's, not an agent's) Staging: 48 hours of collection against staging TrueNAS, then an
   operator checks that the member storage card's current number matches
   `storage.status`, that the trend exists, that a share with auditing off
   shows a gap and not zero, that a day with the NAS stopped shows a gap and
