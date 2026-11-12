@@ -11,6 +11,7 @@ Operational helpers. Most are also reachable through `make` targets — see the
 | `smoke-test-event-listener.sh` | Signed POST to `/api/webhooks/zitadel`, asserts event handling |
 | `smoke-test-lxc.sh` | Checks UI, API health, and container status on a deployed host |
 | `smoke-test-addon.sh` | Checks an add-on's bring-up leg by leg, stopping before the target itself |
+| `addon-quiet-run.sh` | Staging only: runs one command (a kit run) with the TrueNAS add-on's collector off and the backend stopped, then restores both and verifies |
 | `record-truenas-fixtures.sh` | Records what a real TrueNAS answers — and refuses — into the contract fixtures |
 | `lib/` | Shared shell helpers |
 
@@ -75,3 +76,26 @@ this checks them in order and stops at the first break:
    needing hardware, and diagnosing it together with leg 2 is what the bring-up
    order exists to prevent.
 
+
+## addon-quiet-run.sh
+
+Staging only (it refuses where `/var/lib/syndra-staging` is absent). Two readers
+besides the kit move the add-on's `/health` `target_reads`: its statistics
+collector and the backend's 30-second health probe. For one command the add-on
+is recreated with `TRUENAS_STATS_COLLECT_EVERY=0` and the backend is stopped;
+on any exit both go back and the script checks they did. Nothing is written to
+`.env`, so the production setting is never changed, only shadowed for the run.
+
+```bash
+# on the Mac: the kit for the staging host (x86_64)
+GOOS=linux GOARCH=amd64 go build -C addons/conformance -o /tmp/syndra-addon-conform ./cmd/syndra-addon-conform
+scp /tmp/syndra-addon-conform root@<staging>:/tmp/
+# on staging, from /opt/syndra (the add-on running: COMPOSE_PROFILES=truenas)
+SECRET="$(docker volume inspect -f '{{.Mountpoint}}' syndra_truenas_addon_secret)/secret.key" \
+scripts/addon-quiet-run.sh -- sh -c \
+  '/tmp/syndra-addon-conform -url "https://$ADDON_IP:8443" -target truenas -secret-file "$SECRET"'
+```
+
+`$ADDON_IP` is set by the script, so it is expanded inside the quoted `sh -c`, not by
+your shell before the script runs. If the script is killed
+outright, `scripts/addon-quiet-run.sh --restore` (or the next deploy) puts it back.

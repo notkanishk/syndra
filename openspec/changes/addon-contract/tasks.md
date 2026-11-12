@@ -944,6 +944,18 @@ settings with the full §5 rules.
   against the **v2** add-on before 1.10; report attached; the kit's last
   line names the one disabled, labelled account it leaves (removal disables,
   never deletes) #ready-for-human
+  *Prepared (13 Nov 2026), owner's rule "only temporary, back to the
+  production setting afterwards":* run the kit inside
+  `scripts/addon-quiet-run.sh` (staging only, refuses elsewhere), which
+  recreates the add-on with `TRUENAS_STATS_COLLECT_EVERY=0` and stops the
+  backend (its 30 s HEALTH probe) for the one command, then restores both on
+  any exit and verifies the add-on's `STATS_COLLECT_EVERY` equals its value
+  before the run. Nothing is written to `.env`. Invocation in
+  `scripts/README.md`; held by `repoguard/addon_quiet_run_test.go` (a fake
+  `docker`: restore on success, on failure, a restore that did not take
+  reported, a stopped backend left stopped, refusal off staging). Staging's
+  `.env` has no `COMPOSE_PROFILES=truenas` today: the add-on must be
+  switched on there first (the owner's step, with this run's OK).
 
 ## 5. The guide
 
