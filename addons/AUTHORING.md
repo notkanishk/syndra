@@ -1172,9 +1172,11 @@ whole burden.
   subject's, its latest result unknown, with no binding of that id by
   anyone, and none of this subject, logged since; another subject's create
   of the id that did not plainly fail is a second candidate, so a conflict.
-  The adoption's own logged bind settles the doubt, so it adopts once. Plan
-  MUST predict the adoption as apply makes it, and what can block the
-  apply is checked before the bind. (`boundAccount` and `locate`
+  The adoption's own logged bind settles the doubt, so it adopts once. Adopt
+  only an account still exactly as your create leaves it (TrueNAS: no usable
+  password, SMB off), since a restore of the whole volume brings an old
+  doubt back with its log. Plan MUST predict the adoption as apply makes it,
+  and what can block the apply is checked before the bind. (`boundAccount` and `locate`
   in `addons/truenas/apply.go`, the adoption rule `leftByCrashedCreate` in
   `addons/truenas/apply.go` and `CreateInDoubt` in
   `addons/truenas/mutationlog.go`,
@@ -2006,9 +2008,9 @@ function its handler runs after a live answer, in one transaction with the
 settle (`ResolveBindingCall` in `backend/internal/db/addon_operations.go`);
 an adoption's recorded reply MUST therefore carry `account_id`, or the
 record stays for a person. When the subject's binding was acted on again
-since (a later adopt, release or purge, a binding Syndra recorded after the
-call, or a copy naming another account), the record settles as happened and
-the copy is left to the later write.
+since (a later adopt, release or purge that may have reached the add-on, or
+a copy Syndra recorded after the call naming another account), the record
+settles as happened and the copy is left to the later write.
 
 **4. Naturally idempotent.** Checking out an item this subject already
 holds MUST answer `outcome: no_change` with the record, and write nothing

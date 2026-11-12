@@ -749,12 +749,15 @@ account.
 
 "The log holds the intent", made exact for TrueNAS (5.3d,
 `leftByCrashedCreate`): the account holding the derived name is unbound (by
-name and by uid), not the add-on's own, inside the add-on's uid range, and
-the log holds a `user.create` intent for **this** subject asking for **that
+name and by uid), not the add-on's own, inside the add-on's uid range,
+still exactly as a create leaves it (no usable password, SMB off: a check
+that does not read the log, so a whole-volume restore that brings an old
+doubt back with its log cannot hand over a used account), and the log
+holds a `user.create` intent for **this** subject asking for **that
 uid** (a create's records and every binding write carry `account_id`; a
 name is display, never identity) whose latest result is `unknown`, with no
-binding of that uid by any subject, and none of this subject, logged after
-it, and no other subject's create of the uid that did not plainly fail (two
+binding of that uid by any subject logged after it, no bind of this
+subject after it (which ends this subject's own doubt only), and no other subject's create of the uid that did not plainly fail (two
 candidates are a conflict). The log is read across subjects because a uid is
 not unique on trust: an orphan group's gid is reused, and a restored store
 rolls the high-water mark back. Plan predicts it (`Adopts …`); apply checks

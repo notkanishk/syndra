@@ -74,7 +74,19 @@ describe("Waiting on you: changes nobody confirmed", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Say what happened/ }));
     const dialog = document.body.textContent ?? "";
     expect(dialog).toMatch(again);
-    expect(dialog).not.toMatch(/Syndra manages it|Syndra no longer manages it|under Accounts Syndra manages|under Not created by Syndra, it happened/);
+    expect(dialog).not.toMatch(/Syndra manages it|Syndra no longer manages it|under Accounts Syndra manages|under Not created by Syndra, it happened|either way/);
+  });
+
+  // Every outcome says the next step (copy guide): "it didn't happen" too.
+  it.each([
+    ["account.adopt", "Assign it again if sami.zayn should be Sami Zayn's."],
+    ["account.release", "Stop tracking it again if Syndra shouldn't manage it."],
+  ])("%s: it didn't happen still says what to do next", (operation, next) => {
+    answer.isSuccess = true;
+    answer.variables = { id: PURGE.id, happened: false };
+    renderIt([{ ...PURGE, operation }]);
+    fireEvent.click(screen.getByRole("button", { name: /^Say what happened/ }));
+    expect(document.body.textContent).toContain(next);
   });
 
   it("no rows: nothing shows, no card and no zero", () => {

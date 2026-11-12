@@ -124,7 +124,7 @@ func logWrite(t *testing.T, s *server, subject, write, account, result string) {
 // Every case but the ones that adopt: each keeps BINDING_CONFLICT, plan and
 // apply alike, and binds nothing.
 func TestOnlyThisSubjectsUnknownCreateOfThatAccountIsAdopted(t *testing.T) {
-	const inRange = `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"groups":[42]}]`
+	const inRange = `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`
 	unknownCreate := func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "200001", outcomeUnknown) }
 	for _, tc := range []struct {
 		name, users string
@@ -162,6 +162,13 @@ func TestOnlyThisSubjectsUnknownCreateOfThatAccountIsAdopted(t *testing.T) {
 			unknownCreate(t, s)
 			logWrite(t, s, "sub-1", "store.bind", "", outcomeSucceeded)
 		}},
+		// This subject's own bind ends its own doubt, never another subject's
+		// claim on the uid: that one still makes two candidates.
+		{name: "another subject's create survives this subject's own bind", users: inRange, setup: func(t *testing.T, s *server) {
+			logWrite(t, s, "sub-2", "user.create", "200001", outcomeUnknown)
+			logWrite(t, s, "sub-1", "store.bind", "", outcomeSucceeded)
+			unknownCreate(t, s)
+		}},
 		{name: "bound to another subject", users: inRange, routedAround: true, setup: func(t *testing.T, s *server) {
 			unknownCreate(t, s)
 			if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "charlotte", UID: 200001}); err != nil {
@@ -178,10 +185,17 @@ func TestOnlyThisSubjectsUnknownCreateOfThatAccountIsAdopted(t *testing.T) {
 			unknownCreate(t, s)
 			s.nas.selfName, s.nas.selfUID = "charlotte", 200001
 		}},
+		// Review round 3: a whole-volume restore brings back an old create in
+		// doubt with a log that agrees, after the account was used. Only an
+		// account still as a create leaves it is adopted.
+		{name: "a password set since, with a perfect log", setup: unknownCreate,
+			users: `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"password_disabled":false,"groups":[42]}]`},
+		{name: "SMB on since, with a perfect log", setup: unknownCreate,
+			users: `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":true,"password_disabled":true,"groups":[42]}]`},
 		{name: "below the add-on's range", setup: func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "9001", outcomeUnknown) },
-			users: `[{"username":"charlotte","id":19,"uid":9001,"locked":false,"smb":false,"groups":[42]}]`},
+			users: `[{"username":"charlotte","id":19,"uid":9001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`},
 		{name: "above the add-on's range", setup: func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "1000000", outcomeUnknown) },
-			users: `[{"username":"charlotte","id":19,"uid":1000000,"locked":false,"smb":false,"groups":[42]}]`},
+			users: `[{"username":"charlotte","id":19,"uid":1000000,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, m := applyServer(t, tc.users)
@@ -219,7 +233,7 @@ func TestOnlyThisSubjectsUnknownCreateOfThatAccountIsAdopted(t *testing.T) {
 // adopts the account to someone else, who releases it. The next create must
 // not take that person's former account.
 func TestAnAccountBoundElsewhereSinceIsNotAdoptedByAnOldDoubt(t *testing.T) {
-	s, _ := applyServer(t, `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"groups":[42]}]`)
+	s, _ := applyServer(t, `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
 	logWrite(t, s, "sub-1", "user.create", "200001", outcomeUnknown)
 	if rr := postOperation(t, s, "account.adopt", `{"call_id":"c2","operation":"account.adopt","subject":"sub-2","actor":"op-lita","params":{"username":"charlotte"}}`); rr.Code != http.StatusOK {
 		t.Fatalf("adopt: %d %s", rr.Code, rr.Body.String())
@@ -243,7 +257,7 @@ func TestAnAccountBoundElsewhereSinceIsNotAdoptedByAnOldDoubt(t *testing.T) {
 // An adoption whose converge would block binds nothing, so the blocked
 // outcome's "Nothing was changed." is true; the plan blocks alike.
 func TestAnAdoptionThatWouldBlockBindsNothing(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"groups":[42]}]`)
+	s, m := applyServer(t, `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
 	logWrite(t, s, "sub-1", "user.create", "200001", outcomeUnknown)
 	body := `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"group":["no_such_group"],"enabled":true}}`
 	rr := postApply(t, s, body)

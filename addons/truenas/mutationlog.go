@@ -548,9 +548,10 @@ func (l *MutationLog) Recover() ([]Record, error) {
 //     store.bind or store.unbind whose result is succeeded or unknown, since
 //     an unknown one may have landed), cancels every candidate before it: the
 //     account has been bound since, by a create, an adoption or this licence
-//     itself, so the doubt is over and it is adopted at most once. So does a
-//     later bind of this subject to any account, which covers a binding
-//     written before records carried an id.
+//     itself, so the doubt is over and it is adopted at most once. A later
+//     bind of this subject to any account cancels this subject's own
+//     candidates (it has had an account since; this covers a binding
+//     written before records carried an id), and leaves another subject's.
 //   - Another subject's surviving candidate that did not plainly fail (any
 //     result but failed or not_sent) is a second claim on the id: two
 //     candidates are a conflict for a person, never an adoption.
@@ -580,9 +581,16 @@ func (l *MutationLog) CreateInDoubt(subject, accountID string) (bool, error) {
 			case r.Intent != 0 && create:
 				c.result = r.Outcome
 				creates[r.Intent] = c
-			case bound && mine && (r.Write == "store.bind" || r.Write == "store.unbind"),
-				bound && r.Subject == subject && r.Write == "store.bind":
+			case bound && mine && (r.Write == "store.bind" || r.Write == "store.unbind"):
 				clear(creates)
+			case bound && r.Subject == subject && r.Write == "store.bind":
+				// This subject has had an account since: its own doubt is
+				// over. Another subject's claim on the id is not.
+				for seq, c := range creates {
+					if c.subject == subject {
+						delete(creates, seq)
+					}
+				}
 			}
 		})
 		if err != nil {

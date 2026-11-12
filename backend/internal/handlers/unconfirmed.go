@@ -178,7 +178,9 @@ func bindingHalf(o db.AddonOperation, reply []byte) (half func(context.Context) 
 			return recordAdoptedBinding(ctx, o.Target, o.SubjectID, o.About, o.ActorID, id)
 		}, id, true
 	case "account.release":
-		return func(ctx context.Context) error { return forgetReleasedBinding(ctx, o.Target, o.SubjectID) }, "", true
+		return func(ctx context.Context) error {
+			return forgetReleasedBinding(ctx, o.Target, o.SubjectID)
+		}, addonop.AccountIDOf(reply), true
 	}
 	return nil, "", false
 }

@@ -99,26 +99,27 @@ function wording(op: UnconfirmedOperation, who: string, name: string) {
     // Syndra's lists of accounts change only when the system confirms an
     // assign or a stop, and an answer here records the answer alone (it writes
     // no binding). So the lists cannot tell, and the next step is to do it
-    // again: the system answers either way, and the lists follow (6.3r).
+    // again: if it already happened the system says so and the lists follow;
+    // an assign is refused when someone else now holds the account (6.3r).
     case "account.adopt":
       return {
         asked: [`Assign ${account} to `, ""],
         question: `Did ${name} assign ${account} to ${who}?`,
-        tell: `Syndra's lists change only when ${name} confirms, so they can't tell you. Assign ${account} to ${who} again: ${name} answers either way, and Syndra lists it then.`,
+        tell: `Syndra's lists change only when ${name} confirms, so they can't tell you. Assign ${account} to ${who} again. If it already happened, ${name} says so and Syndra lists it then. If someone else holds it now, ${name} refuses.`,
         yes: `${name} assigned ${account} to ${who}. Syndra lists it once you assign it again.`,
         no: `${name} didn't assign ${account}.`,
         done: `You recorded that ${name} assigned ${account} to ${who}. Assign it again to have Syndra list it.`,
-        notDone: `You recorded that ${name} didn't assign ${account} to ${who}.`,
+        notDone: `You recorded that ${name} didn't assign ${account} to ${who}. Assign it again if ${account} should be ${who}'s.`,
       };
     case "account.release":
       return {
         asked: [`Let go of `, `'s account on ${name}, keeping it`],
         question: `Did ${name} let go of ${who}'s account?`,
-        tell: `Syndra's lists change only when ${name} confirms, so they can't tell you. Stop tracking ${account} again: ${name} answers either way, and Syndra stops listing it then.`,
+        tell: `Syndra's lists change only when ${name} confirms, so they can't tell you. Stop tracking ${account} again. If it already happened, ${name} says so and Syndra stops listing it then.`,
         yes: `${name} let go of ${account}. Syndra stops listing it once you stop tracking it again.`,
         no: `${name} still holds ${account} for ${who}.`,
         done: `You recorded that ${name} let go of ${account}. Stop tracking it again to have Syndra stop listing it.`,
-        notDone: `You recorded that ${name} didn't let go of ${account}.`,
+        notDone: `You recorded that ${name} didn't let go of ${account}. Stop tracking it again if Syndra shouldn't manage it.`,
       };
     // A maintenance change is about the system itself, not a person
     // (addons/read.go SetLifecycle: subject is the target, about is the state).

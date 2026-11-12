@@ -139,12 +139,6 @@ func BeginAddonOperation(ctx context.Context, p AddonOperationParams) (string, e
 // insertAddonOperation writes the record and its audit row on an existing
 // transaction. Both or neither: a record with no audit row is a mutation with
 // no trace, and an audit row with no record is a trace pointing at nothing.
-// addonOperationLock is the transaction lock on one call kind for one subject
-// on one target ($1 target, $2 subject, $3 operation): a physical insert takes
-// it (CALL_UNSETTLED), and so does ResolveBindingCall. Separated by chr(31),
-// the unit separator: Postgres text cannot hold NUL.
-const addonOperationLock = `SELECT pg_advisory_xact_lock(hashtextextended(concat_ws(chr(31), 'addon_operation', $1::text, $2::text, $3::text), 0))`
-
 func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams) (string, error) {
 	var id string
 	var details []byte
@@ -154,7 +148,8 @@ func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams
 			// statement below reads the one before it committed (READ
 			// COMMITTED takes its snapshot after the lock). Separated by
 			// chr(31), the unit separator: Postgres text cannot hold NUL.
-			if _, err := tx.Exec(ctx, addonOperationLock, p.Target, p.SubjectID, p.Operation); err != nil {
+			const lock = `SELECT pg_advisory_xact_lock(hashtextextended(concat_ws(chr(31), 'addon_operation', $1::text, $2::text, $3::text), 0))`
+			if _, err := tx.Exec(ctx, lock, p.Target, p.SubjectID, p.Operation); err != nil {
 				return "", fmt.Errorf("lock addon operation: %w", err)
 			}
 		}
@@ -546,70 +541,84 @@ var BindingOperations = []string{"account.adopt", "account.release", "account.pu
 // happened, from the add-on's own record of it (GET /calls answered recorded,
 // tasks 6.3r), with half, the backend's half of the binding change that the
 // live handler runs after a success (recordAdoptedBinding,
-// forgetReleasedBinding in handlers/inventory.go). accountID is what the
-// recorded adoption's reply names; a release passes none.
+// forgetReleasedBinding in handlers/inventory.go). accountID is the account
+// id the recorded reply names (an adoption's always; a release's when it
+// carries one).
 //
 // One transaction, not an order: half's writes join it (beginOrJoin,
 // querier), as does ResolveAddonOperation, so the binding copy and the row's
-// answer commit together or not at all. Locks are taken in one order, so two
-// settles cannot deadlock: the call's advisory lock (addonOperationLock, as
-// the insert takes it), then the row (FOR UPDATE), then the subject's binding
-// row (FOR UPDATE). A second settle of the row finds it answered,
-// ErrAddonOperationNotUnresolved, and runs nothing.
+// answer commit together or not at all. Two locks, always in this order, so
+// two settles cannot deadlock: the row (FOR UPDATE), then the subject's
+// binding row (FOR UPDATE, when there is one). The row lock makes a second
+// settle of the row find it answered, ErrAddonOperationNotUnresolved, and run
+// nothing; the binding-row lock holds the copy still while the checks below
+// read it and half writes it. (No advisory lock: the insert takes one only
+// for a physical call, so it would meet no adopt or release.)
 //
-// The binding copy was decided since, and half is NOT run, when any of these
-// holds: a later account.adopt, account.release or account.purge of the
-// subject on the target exists (any status); the subject's binding row was
-// written or seen at or after the call was recorded (`last_seen_at`, which
-// every RecordTargetBinding sets, the drain's included, where no operation
-// row is written); or, for an adoption, the binding row names another
-// account than the recorded reply does. The later write owns the copy, so the
-// row is still settled as happened (the add-on recorded it), and nothing
-// waits on a person who could only repeat what is already true.
+// The copy was decided since, and half is NOT run, when:
+//   - a later account.adopt, account.release or account.purge of the subject
+//     on the target may have reached the add-on: it succeeded (or changed
+//     nothing), is still open, or was answered as happened or superseded. One
+//     that never arrived (unreached, refused, or answered not happened) does
+//     not count;
+//   - for an adoption: the copy was written or seen at or after the call was
+//     recorded (`last_seen_at`, which every RecordTargetBinding sets, the
+//     drain's included, where no operation row is written) AND names another
+//     account than the recorded reply. An older copy naming another account
+//     is stale (the add-on accepted the adoption, so it held no binding for
+//     the subject) and is rewritten;
+//   - for a release: the copy names another account than the one released
+//     (by the reply's account id, else the row's `about`); with neither to
+//     compare, when the copy was written or seen at or after the call.
+//
+// Decided since, the row is still settled as happened (the add-on recorded
+// it) and the later write owns the copy: nobody is left with a question
+// whose only answer is to repeat what is already true.
 func ResolveBindingCall(ctx context.Context, target, id, accountID string, grace time.Duration, half func(context.Context) error) (AddonOperation, error) {
 	var out AddonOperation
 	err := InTx(ctx, func(tx pgx.Tx) error {
-		var subject, operation string
-		err := tx.QueryRow(ctx, `
-			SELECT subject_id, operation FROM addon_operations
-			 WHERE id = $1::uuid AND target = $2 AND operation IN ('account.adopt', 'account.release')`,
-			id, target).Scan(&subject, &operation)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrAddonOperationNotUnresolved
-		}
-		if err != nil {
-			return fmt.Errorf("read binding call: %w", err)
-		}
-		if _, err := tx.Exec(ctx, addonOperationLock, target, subject, operation); err != nil {
-			return fmt.Errorf("lock binding call: %w", err)
-		}
-		var later bool
+		var subject, operation, about string
 		var sent time.Time
-		err = tx.QueryRow(ctx, `
-			SELECT o.created_at,
+		var later bool
+		err := tx.QueryRow(ctx, `
+			SELECT o.subject_id, o.operation, COALESCE(o.about, ''), o.created_at,
 			       EXISTS (SELECT 1 FROM addon_operations l
 			                WHERE l.target = o.target AND l.subject_id = o.subject_id AND l.id <> o.id
-			                  AND l.operation = ANY($3::text[]) AND l.created_at >= o.created_at)
+			                  AND l.operation = ANY($3::text[]) AND l.created_at >= o.created_at
+			                  AND (l.status IN ('succeeded', 'no_change') OR `+openCall("l")+`
+			                       OR l.resolution IN ('happened', 'superseded')))
 			  FROM addon_operations o
 			 WHERE o.id = $1::uuid AND o.target = $2 AND o.resolution IS NULL
-			   FOR UPDATE OF o`, id, target, BindingOperations).Scan(&sent, &later)
+			   AND o.operation IN ('account.adopt', 'account.release')
+			   FOR UPDATE OF o`, id, target, BindingOperations).Scan(&subject, &operation, &about, &sent, &later)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrAddonOperationNotUnresolved
 		}
 		if err != nil {
-			return fmt.Errorf("lock binding call row: %w", err)
+			return fmt.Errorf("lock binding call: %w", err)
 		}
+		var username string
 		var bound *string
 		var seen time.Time
-		err = tx.QueryRow(ctx, `SELECT `+accountIDColumn+`, last_seen_at FROM target_account_bindings
-			 WHERE target = $1 AND subject_id = $2 FOR UPDATE`, target, subject).Scan(&bound, &seen)
+		err = tx.QueryRow(ctx, `SELECT username, `+accountIDColumn+`, last_seen_at FROM target_account_bindings
+			 WHERE target = $1 AND subject_id = $2 FOR UPDATE`, target, subject).Scan(&username, &bound, &seen)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 		case err != nil:
 			return fmt.Errorf("lock binding: %w", err)
-		case !seen.Before(sent),
-			operation == "account.adopt" && (bound == nil || *bound != accountID):
-			later = true
+		default:
+			newer := !seen.Before(sent)
+			other := func(want string) bool { return bound == nil || *bound != want }
+			switch {
+			case operation == "account.adopt":
+				later = later || (newer && other(accountID))
+			case accountID != "":
+				later = later || other(accountID)
+			case about != "":
+				later = later || username != about
+			default:
+				later = later || newer
+			}
 		}
 		joined := context.WithValue(ctx, txKey, tx)
 		if !later {

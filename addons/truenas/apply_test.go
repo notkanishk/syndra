@@ -97,9 +97,12 @@ func (m *mutatingRPC) remember(params any) {
 	}
 	locked, _ := create["locked"].(bool)
 	smb, _ := create["smb"].(bool)
+	// As TrueNAS keeps it: an account made with password_disabled reads back
+	// with it, so it has no usable password until password.set.
+	passwordDisabled, _ := create["password_disabled"].(bool)
 	row := map[string]any{
 		"id": m.nextID, "username": create["username"], "uid": m.nextUID,
-		"locked": locked, "smb": smb, "groups": create["groups"],
+		"locked": locked, "smb": smb, "groups": create["groups"], "password_disabled": passwordDisabled,
 	}
 	if home, ok := create["home"]; ok {
 		row["home"] = home

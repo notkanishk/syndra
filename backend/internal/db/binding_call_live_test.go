@@ -218,76 +218,132 @@ func TestLiveABindingHalfAndItsSettleCommitTogether(t *testing.T) {
 
 // The binding copy was decided since: the row settles as happened (the
 // add-on recorded it), and the half does not run over the later write.
+// Otherwise it runs, a stale copy included.
 func TestLiveABindingCallDecidedSinceSettlesWithoutItsHalf(t *testing.T) {
-	never := func(t *testing.T) (func(context.Context) error, *bool) {
-		ran := false
-		return func(context.Context) error { ran = true; return nil }, &ran
-	}
-	settledWithout := func(t *testing.T, ctx context.Context, call, accountID string) {
+	settles := func(t *testing.T, ctx context.Context, call, accountID string, wantHalf bool) {
 		t.Helper()
-		half, ran := never(t)
-		if _, err := ResolveBindingCall(ctx, bindTarget, call, accountID, AddonUnresolvedGrace, half); err != nil || *ran {
-			t.Fatalf("want settled without the half, got %v (ran %t)", err, *ran)
+		ran := false
+		if _, err := ResolveBindingCall(ctx, bindTarget, call, accountID, AddonUnresolvedGrace, func(context.Context) error { ran = true; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if ran != wantHalf {
+			t.Fatalf("the half ran %t, want %t", ran, wantHalf)
 		}
 		if res, _ := resolution(t, ctx, call); res != AddonResolutionHappened {
 			t.Fatalf("the row must settle as happened, got %q", res)
 		}
 	}
-
-	t.Run("a later call of the subject", func(t *testing.T) {
-		ctx := bindingLive(t)
-		call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
-		if _, err := BeginAddonOperation(ctx, AddonOperationParams{Target: bindTarget, Operation: "account.release", ActorID: "op-lita", SubjectID: "u-becky"}); err != nil {
+	laterCall := func(t *testing.T, ctx context.Context, op, subject, status string) {
+		t.Helper()
+		id, err := BeginAddonOperation(ctx, AddonOperationParams{Target: bindTarget, Operation: op, ActorID: "op-lita", SubjectID: subject})
+		if err != nil {
 			t.Fatal(err)
 		}
-		settledWithout(t, ctx, call, "200001")
-	})
+		if status == AddonOpDispatching {
+			return
+		}
+		if status != AddonOpUnreached {
+			if _, err := ClaimAddonOperation(ctx, id, bindTarget, op, subject); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := SettleAddonOperation(ctx, id, status); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Review round 3, item 2: only a later call that may have reached the
+	// add-on decides the copy.
+	for _, tc := range []struct {
+		status string
+		skips  bool
+	}{
+		{AddonOpDispatching, true}, {AddonOpSucceeded, true}, {AddonOpIndeterminate, true},
+		{AddonOpUnreached, false}, {AddonOpRejected, false},
+	} {
+		t.Run("a later release, "+tc.status, func(t *testing.T) {
+			ctx := bindingLive(t)
+			call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
+			laterCall(t, ctx, "account.release", "u-becky", tc.status)
+			settles(t, ctx, call, "200001", !tc.skips)
+		})
+	}
 	t.Run("another subject's later call is not this binding's", func(t *testing.T) {
 		ctx := bindingLive(t)
 		call := lostCall(t, ctx, "account.adopt", "u-kofi", "kofi")
-		if _, err := BeginAddonOperation(ctx, AddonOperationParams{Target: bindTarget, Operation: "account.purge", ActorID: "op-lita", SubjectID: "u-xavier"}); err != nil {
+		laterCall(t, ctx, "account.purge", "u-xavier", AddonOpDispatching)
+		settles(t, ctx, call, "200002", true)
+	})
+
+	// Item 3, a release: the copy decides only when it names another account
+	// than the one released; with no name to compare, by time.
+	t.Run("a release, the drain since bound another account", func(t *testing.T) {
+		ctx := bindingLive(t)
+		call := lostCall(t, ctx, "account.release", "u-becky", "charlotte")
+		if err := adoptionOf("u-becky", "lita", "200009")(ctx); err != nil {
 			t.Fatal(err)
 		}
-		half, ran := never(t)
-		if _, err := ResolveBindingCall(ctx, bindTarget, call, "200002", AddonUnresolvedGrace, half); err != nil || !*ran {
-			t.Fatalf("want the half run, got %v (ran %t)", err, *ran)
+		settles(t, ctx, call, "", false)
+		if _, found := boundRow(t, ctx, "u-becky"); !found {
+			t.Fatal("a stale release deleted a newer binding of another account")
 		}
 	})
-	// Review 2: the drain records a binding with no operation row. A release
-	// recorded before it must not delete it, its merge base or its memory.
-	t.Run("a binding written after the release, by the drain", func(t *testing.T) {
+	t.Run("a release of the account the copy names", func(t *testing.T) {
 		ctx := bindingLive(t)
 		call := lostCall(t, ctx, "account.release", "u-becky", "charlotte")
 		if err := adoptionOf("u-becky", "charlotte", "200001")(ctx); err != nil {
 			t.Fatal(err)
 		}
-		settledWithout(t, ctx, call, "")
-		if _, found := boundRow(t, ctx, "u-becky"); !found {
-			t.Fatal("a stale release deleted a newer binding")
-		}
+		settles(t, ctx, call, "", true)
 	})
-	t.Run("an adoption whose binding names another account", func(t *testing.T) {
-		ctx := bindingLive(t)
-		if err := adoptionOf("u-becky", "charlotte", "200009")(ctx); err != nil {
-			t.Fatal(err)
-		}
-		aged(t, ctx, "u-becky")
-		call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
-		settledWithout(t, ctx, call, "200001")
-		if b, _ := boundRow(t, ctx, "u-becky"); b.AccountID == nil || *b.AccountID != "200009" {
-			t.Fatalf("the binding was rewritten: %+v", b)
-		}
-	})
-	t.Run("an older binding of the same account is rewritten", func(t *testing.T) {
+	t.Run("a release whose reply names another account", func(t *testing.T) {
 		ctx := bindingLive(t)
 		if err := adoptionOf("u-becky", "charlotte", "200001")(ctx); err != nil {
 			t.Fatal(err)
 		}
 		aged(t, ctx, "u-becky")
-		call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
-		half, ran := never(t)
-		if _, err := ResolveBindingCall(ctx, bindTarget, call, "200001", AddonUnresolvedGrace, half); err != nil || !*ran {
-			t.Fatalf("want the half run, got %v (ran %t)", err, *ran)
-		}
+		call := lostCall(t, ctx, "account.release", "u-becky", "charlotte")
+		settles(t, ctx, call, "200009", false)
 	})
+	for _, tc := range []struct {
+		name  string
+		age   bool
+		skips bool
+	}{{"a release naming nothing, the copy newer", false, true}, {"a release naming nothing, the copy older", true, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := bindingLive(t)
+			call := lostCall(t, ctx, "account.release", "u-becky", "")
+			if err := adoptionOf("u-becky", "charlotte", "200001")(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if tc.age {
+				aged(t, ctx, "u-becky")
+			}
+			settles(t, ctx, call, "", !tc.skips)
+		})
+	}
+
+	// Item 3, an adoption: only a copy newer than the call AND naming another
+	// account decides it. An older one naming another account is stale.
+	for _, tc := range []struct {
+		name, copyID string
+		age, skips   bool
+	}{
+		{"an adoption, a newer copy of another account", "200009", false, true},
+		{"an adoption, an older copy of another account", "200009", true, false},
+		{"an adoption, a newer copy of the same account", "200001", false, false},
+		{"an adoption, an older copy of the same account", "200001", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := bindingLive(t)
+			call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
+			if err := adoptionOf("u-becky", "charlotte", tc.copyID)(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if tc.age {
+				aged(t, ctx, "u-becky")
+			}
+			settles(t, ctx, call, "200001", !tc.skips)
+		})
+	}
 }

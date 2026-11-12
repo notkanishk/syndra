@@ -244,6 +244,13 @@ func (s *server) unboundConflict(account *Subject, owner string) *BindingConflic
 //   - its uid is in this add-on's range, so it is no system or built-in
 //     account and none a person made by hand, and no binding holds that uid
 //     under an older name;
+//   - it is still exactly as a create leaves it: no usable password and SMB
+//     off (the create sends password_disabled true and smb false; only a
+//     member's password.set changes either). This one does not read the log,
+//     so it holds when the log does not: a whole-volume restore brings back
+//     an old create in doubt with the log and the store together, and an
+//     account since adopted by someone, released, and adopted by another has
+//     been used in between;
 //   - the log holds a user.create intent for THIS subject that asked for that
 //     very uid, whose result is unknown; no binding of that uid by anyone,
 //     and none of this subject, logged since; and no other subject's create
@@ -253,7 +260,8 @@ func (s *server) unboundConflict(account *Subject, owner string) *BindingConflic
 //     rather than the uid trusted to name one create.
 func (s *server) leftByCrashedCreate(subject, derived string, account *Subject, conflict *BindingConflict) (bool, error) {
 	floor, ceiling := s.idRange()
-	if account.Username != derived || !conflict.Adoptable || account.UID < floor || account.UID > ceiling {
+	if account.Username != derived || !conflict.Adoptable || account.UID < floor || account.UID > ceiling ||
+		account.PasswordSet || account.SMBEnabled {
 		return false, nil
 	}
 	if bound, err := s.store.UIDBound(account.UID); err != nil || bound {

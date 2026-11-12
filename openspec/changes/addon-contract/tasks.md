@@ -1296,7 +1296,23 @@ settings with the full §5 rules.
     uid tie, `!conflict.Adoptable`, the floor, the ceiling, an unknown bind
     result cancelling, another subject's bind cancelling, the two-candidate
     rule, `UIDBound`, the group check before the bind, the id on release and
-    on purge.
+    on purge, the account still as created (password, SMB), and the scoped
+    own-bind cancel.
+  - *Review round 3 (13 Nov 2026):* a whole-volume restore (log and
+    `state.db` together, as a vzdump or LXC restore does) brings back an old
+    create in doubt with a log that agrees with it, after the account was
+    adopted, released and adopted again. So one check does not read the log:
+    the account must still be exactly as a create leaves it, no usable
+    password and SMB off (`!PasswordSet && !SMBEnabled`; the create sends
+    `password_disabled: true`, `smb: false`, and only a member's
+    `password.set` changes either). The fake NAS now keeps
+    `password_disabled` on a create, as TrueNAS does. And a later bind of
+    this subject cancels only this subject's candidates, never another
+    subject's claim on the uid. Staging's nightly restore (`_staging.yml`)
+    resets only Postgres and the stand-in Zitadel's world file, and staging
+    runs with the add-on off; deploys copy `state.db` out (never
+    `mutations.log`) and restore nothing, so no repo path restores the
+    add-on volume. A Proxmox-level restore of the app LXC would.
   - A name bound to another managed subject never reaches this rule: the
     derivation suffixes past it (unchanged).
 - [x] 5.3c A membership field that is not enumerable: the add-on cannot
@@ -1675,24 +1691,31 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     by `system:syndra`. One transaction rather than an order, so a crash
     leaves both or neither; a second settle finds the row answered and runs
     nothing.
-    *Review fixes (13 Nov 2026):* locks in one order, so settles cannot
-    deadlock: the call's advisory lock (`addonOperationLock`, the insert's
-    own spelling, now one const for both), the row `FOR UPDATE`, then the
-    subject's binding row `FOR UPDATE`. The copy counts as decided since,
-    and the half is NOT run, when a later adopt/release/purge of the subject
-    exists, when the binding row's `last_seen_at` is at or after the call was
-    recorded (the drain's `recordBinding` writes the copy with no operation
-    row, so a stale release would otherwise delete a newer copy, its merge
-    base and its propagation memory), or, for an adoption, when the binding
-    row names another account than the recorded reply. Decided since, the row
-    is still settled as happened (the add-on recorded it; the later write
-    owns the copy), never left with a person who could only repeat what is
-    true; `ErrBindingDecidedSince` is gone. `superseded` was not used: its
-    CHECK needs `superseded_by`, and a drain write has no row to name. An adoption's half needs `account_id` from the recorded reply
+    *Review fixes (13 Nov 2026, rounds 2 and 3):* two locks, always in this
+    order, so settles cannot deadlock: the row `FOR UPDATE`, then the
+    subject's binding row `FOR UPDATE`. No advisory lock: the insert takes
+    one only for a physical call, so it would never meet an adopt or
+    release. The copy counts as decided since, and the half is NOT run, when:
+    a later adopt/release/purge of the subject may have reached the add-on
+    (succeeded or no_change, still open, or answered happened or superseded;
+    one unreached, refused or answered not happened does not count); for an
+    adoption, the binding row was written or seen at or after the call
+    (`last_seen_at`; the drain's `recordBinding` writes the copy with no
+    operation row) AND names another account than the recorded reply (an
+    older copy naming another account is stale, since the add-on accepted the
+    adoption, and is rewritten); for a release, the copy names another
+    account than the one released (the reply's `account_id`, else the row's
+    `about`), or, with neither, the copy is at or after the call. Decided
+    since, the row is still settled as happened (the add-on recorded it; the
+    later write owns the copy), never left with a person who could only
+    repeat what is true; `ErrBindingDecidedSince` is gone. `superseded` was
+    not used: its CHECK needs `superseded_by`, and a drain write has no row
+    to name. An adoption's half needs `account_id` from the recorded reply
     (`addonop.AccountIDOf`, the one reading of it, now also Dispatch's) and
     the row's `about` (the username); without either it is not settled.
     `in_doubt` and `unknown` are unchanged (neither is physical). The
-    insert's `CALL_UNSETTLED` and advisory lock are untouched.
+    insert's `CALL_UNSETTLED` and advisory lock are untouched (byte for byte
+    as before 7b).
     - Tests: `binding_settle_test.go` (the settle leaves exactly the live
       handler's binding / forgets exactly what the live release forgets;
       no account id, in_doubt, unknown, decided since: open) and
@@ -1715,9 +1738,18 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       `forgetReleasedBinding`, so an unbind also forgets what Syndra landed
       (`ForgetPropagations`), which the inline copy skipped.
     - More tests: concurrent settles of one row run the half once (live, 5
-      rounds); a newer drain-written binding survives a stale release; an
-      adoption whose copy names another account is not rewritten, one of the
-      same account is; an adopt row with no `about` stays for a person.
+      rounds); a later release blocks the copy when dispatching, succeeded or
+      indeterminate, and does not when unreached or refused; a release keeps
+      a drain-written copy of another account, forgets one of the account
+      released, and, naming nothing, goes by time; an adoption skips only a
+      newer copy of another account (an older one, or one of the same
+      account, is rewritten); an adopt row with no `about` stays for a
+      person. Mutation-checked: each of those rules.
+    - The Say what happened copy (round 3): "it didn't happen" now says the
+      next step too ("Assign it again if {account} should be {who}'s.",
+      "Stop tracking it again if Syndra shouldn't manage it."), and How to
+      tell no longer says the system "answers either way": an assign is
+      refused when someone else now holds the account.
   - [x] The UI half (6.3u, a separate builder from the 6c UI handoff): the
     member action with `format: target_id` as a typed-or-scanned input,
     preview then confirm, the poll, and the desk's sentence on Waiting on you
