@@ -92,18 +92,29 @@ jobs:
       - name: conformance kit self-tests
         working-directory: addons/conformance
         run: go vet ./... && go test -count=1 ./...
+      # Twice: the reference with no optional feature, then a second process
+      # serving every one, whose runs follow each other against that one
+      # process, as an operator's do: each -mutate leaves its account behind,
+      # and the next run must still pass (#51 D1, stats.unbound).
       - name: the kit against the reference, end to end
+        timeout-minutes: 8
         run: |
           go build -C addons/reference -o "$RUNNER_TEMP/reference-addon" ./cmd/reference-addon
           go build -C addons/conformance -o "$RUNNER_TEMP/syndra-addon-conform" ./cmd/syndra-addon-conform
           printf '%s' conformance-ci-test-secret-not-a-credential > "$RUNNER_TEMP/addon-secret"
-          "$RUNNER_TEMP/reference-addon" -listen 127.0.0.1:8443 -target reference -secret-file "$RUNNER_TEMP/addon-secret" &
-          for _ in $(seq 50); do (: </dev/tcp/127.0.0.1/8443) 2>/dev/null && break; sleep 0.2; done
-          kit() { "$RUNNER_TEMP/syndra-addon-conform" -url https://127.0.0.1:8443 -target reference \
+          reference() { "$RUNNER_TEMP/reference-addon" -listen "127.0.0.1:$1" -target reference -secret-file "$RUNNER_TEMP/addon-secret" "${@:2}" &
+                        for _ in $(seq 50); do (: </dev/tcp/127.0.0.1/$1) 2>/dev/null && break; sleep 0.2; done; }
+          kit() { "$RUNNER_TEMP/syndra-addon-conform" -url "https://127.0.0.1:$port" -target reference \
                     -secret-file "$RUNNER_TEMP/addon-secret" "$@"; }
+          port=8443; reference $port
           kit
           kit -mutate -json "$RUNNER_TEMP/conformance.json"
           kit -mutate -mutate-settings -subject "conformance-ci-settings-$GITHUB_RUN_ID"
+          port=8444; reference $port -features results,freshness,calls,stats
+          kit
+          kit -mutate -item item-0001 -subject "conformance-ci-all-$GITHUB_RUN_ID"
+          kit
+          kit -mutate -mutate-settings -item item-0002 -subject "conformance-ci-all-settings-$GITHUB_RUN_ID"
 
   ui:
     runs-on: ubuntu-latest

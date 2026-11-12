@@ -44,7 +44,7 @@ type statsRead struct {
 type statsSetup struct {
 	zone   *time.Location
 	since  time.Time
-	locals map[string]bool // every target account id and username /subjects lists, but the kit's own subject
+	locals map[string]bool // every target account id and username /subjects lists
 	own    map[string]bool // the username and account_id of the account the kit created, once it has
 }
 
@@ -165,10 +165,6 @@ func (k *kit) statsSetup(c *check) (statsSetup, string) {
 		set.locals[str(s, "account_id")], set.locals[str(s, "username")] = true, true
 	}
 	delete(set.locals, "")
-	// A subject id the kit knows is Syndra's: its own, so a point may carry
-	// it. A dimension may not, even where the add-on named the account after
-	// it (the reference does): that is the kit's own username.
-	delete(set.locals, k.cfg.Subject)
 	// Only the kit's own account is surely a person: its name and id are the
 	// kit's to make unique. Another listed account may be a service account a
 	// resource is named after (a scanner share, a scanner user), so a match on
@@ -176,6 +172,20 @@ func (k *kit) statsSetup(c *check) (statsSetup, string) {
 	set.own = map[string]bool{k.created.username: true, k.created.id: true}
 	delete(set.own, "")
 	return set, ""
+}
+
+// kitSubject: a point's subject that is also a listed account's name is
+// still a Syndra subject when it is in the kit's namespace. Only kit runs make
+// conformance- subjects, and their accounts carry conformance- names (kit.go
+// refuses any other -subject or -email), which an add-on may derive from the
+// subject itself (the reference does). Every earlier run's account stays
+// listed, disabled and bound, so its subject's usage is reported by it
+// (#51 D1). The one exception the kit can prove: this run's own account,
+// when its name or id is not its subject.
+// Ceiling: an earlier run's name that differs from its subject is not told
+// apart; /subjects carries no binding, so the kit cannot know it.
+func (k *kit) kitSubject(subject string, set statsSetup) bool {
+	return subject == k.cfg.Subject || strings.HasPrefix(subject, subjectPrefix) && !set.own[subject]
 }
 
 // statsCollected is why nothing is judged when the add-on has read nothing
@@ -328,7 +338,7 @@ func (k *kit) judgeStats(m map[string]any, r statsRead, set statsSetup) {
 		bucket := start.UTC().Format(time.RFC3339) + " " + canonical(dims)
 		if subject := str(p, "subject"); subject != "" {
 			pts.expect(perSubject, "%s: %s carries a subject on a metric that is not per_subject", name, what)
-			unbound.expect(!set.locals[subject], "%s: %s is reported for %q, the id or name of an account on the target, not a Syndra subject", name, what, subject)
+			unbound.expect(!set.locals[subject] || k.kitSubject(subject, set), "%s: %s is reported for %q, the id or name of an account on the target, not a Syndra subject", name, what, subject)
 			sums[bucket] += v
 			maxes[bucket] = max(maxes[bucket], v)
 		} else {

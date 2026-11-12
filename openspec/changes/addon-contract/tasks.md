@@ -937,6 +937,13 @@ settings with the full §5 rules.
   non-zero on a MUST failure, `--mutate` gated, reads only without it #ready-for-agent
 - [x] 4.3 CI: the kit runs against the reference add-on on every push
   (`ci.yml` job `addon-conformance`); the job is required for `ci-ok` #ready-for-agent
+  - *Done (13 Nov 2026, slice 7g):* the end-to-end step also starts a second
+    reference with every feature (`-features results,freshness,calls,stats`)
+    and runs reads, `-mutate -item item-0001`, reads, `-mutate
+    -mutate-settings -item item-0002` against that one process, as an
+    operator's runs follow each other (step bound: 8 minutes; about 30 s
+    locally). The featureless run stays. Run against the pre-fix kit, the
+    step exits 1 on `stats.unbound` (#51 D1, below).
 - [x] 4.4 The kit's own tests: each check is watched to fail against a
   deliberately broken reference (a flag per defect: ignores fingerprint,
   creates on withdraw-only, echoes the secret, answers a replay after the
@@ -2226,6 +2233,28 @@ per-person only) applied there.
       names both halves the add-on's own tests carry. A 503
       `NO_CURRENT_READ` (nothing collected yet) skips the stats checks with
       the reason.
+    - *Fixed (13 Nov 2026, slice 7g; #51 D1):* reads after a `-mutate`
+      run against the same add-on failed `stats.unbound`, and the next
+      `-mutate` was refused. Root cause, in the kit: the reference was
+      right. Removal disables and keeps the binding, so the earlier run's
+      subject still has usage, reported by its subject (`sendersOn`, from
+      `a.bindings`). The reference names an account from the email's local
+      part, and the kit's email is `<subject>@example.org`, so that
+      account's username *is* the earlier subject. `statsSetup` put every
+      listed username in `locals` and excused only this run's subject.
+      `/subjects` carries no binding (its schema has `id`, `username`,
+      `account_id`; never a Syndra subject), so the kit cannot exclude
+      "every listed subject". It excuses the kit's namespace instead
+      (`kitSubject`): only kit runs make `conformance-` subjects, and kit.go
+      refuses any `-subject` or `-email` outside it. This run's own
+      account stays strict when its name or id is not its subject. Ceiling:
+      an earlier run whose name differed from its subject is not told
+      apart. `locals` is now every listed id and username, so the
+      dimension checks are unchanged. Tests:
+      `TestPointsForAnEarlierKitSubjectAreNotAccountNames` (one reference,
+      every feature: `-mutate`, reads, `-mutate -mutate-settings`; fails
+      before the fix) and `TestAPointNamingTheKitsOwnAccountIsStillALocalName`;
+      `stats-local-name-subject` still fails `stats.unbound`.
     - Decided while building (6d-1 fix round): the `.no-people` MUST is the kit's own account only (username and `account_id`, which it makes unique); any other listed account is advisory (`.no-people.ids`), since TrueNAS lists service accounts and a `scanner` share by a `scanner` user is no leak (`TestAResourceNamedLikeAServiceAccountIsAdvisory`; `stats-dimension-names-person` still fails the MUST).
 
 ## Owner's answers of 13 Nov 2026

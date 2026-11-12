@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
 	"testing"
 	"time"
+
+	"syndra/addons/reference"
 )
 
 // The stats checks skip, with the reason, without the feature, and pass the
@@ -228,5 +231,49 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 		if failed := len(k.at("stats.points").fails) > 0; failed != tc.fails {
 			t.Errorf("%s: stats.points failed %v (%v), want %v", tc.name, failed, k.at("stats.points").fails, tc.fails)
 		}
+	}
+}
+
+// One add-on outlives many kit runs. Each -mutate run leaves its subject's
+// account behind, disabled and still bound, so a later run's reads see
+// points for an earlier kit subject: that is a Syndra subject, not an
+// account name, even where the add-on named the account after it (the
+// reference does). Report #51 D1: reads after a -mutate failed stats.unbound,
+// and the next -mutate was refused.
+func TestPointsForAnEarlierKitSubjectAreNotAccountNames(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, nil, reference.OptionalFeatures)
+	for i, step := range []struct {
+		mutate, settings bool
+		item             string
+	}{{true, false, "item-0001"}, {false, false, ""}, {true, true, "item-0002"}} {
+		cfg := config(url, step.mutate)
+		cfg.Subject, cfg.MutateSettings, cfg.Item = fmt.Sprintf("conformance-self-test-%d", i), step.settings, step.item
+		r := run(t, cfg)
+		for _, f := range failures(r) {
+			t.Errorf("run %d (mutate %v): %s failed against one reference serving every feature: %v", i, step.mutate, f.ID, f.Detail)
+		}
+		if got := r.Status("stats.unbound"); got != "pass" {
+			t.Errorf("run %d: stats.unbound says %s, want pass", i, got)
+		}
+	}
+}
+
+// The namespace does not excuse this run's own account: when the add-on named
+// it from an -email that is not the subject, a point carrying that name
+// instead of the subject is a local name, and the kit can prove it.
+func TestAPointNamingTheKitsOwnAccountIsStillALocalName(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, statsRewrite("/stats", eachPoint(func(p map[string]any) {
+		if p["subject"] == "conformance-self-test" {
+			p["subject"] = "conformance-nickname" // the account's username, not its subject
+		}
+	})), []string{"stats"})
+	cfg := config(url, true)
+	cfg.Email = "conformance-nickname@example.org"
+	r, err := Run(context.Background(), cfg)
+	if err != nil && !errors.Is(err, ErrReadsFailed) {
+		t.Fatal(err)
+	}
+	if got := r.Status("stats.unbound"); got != "fail" {
+		t.Errorf("stats.unbound says %s, want fail: %v", got, result(r, "stats.unbound").Detail)
 	}
 }
