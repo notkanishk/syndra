@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useState } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 
 import { copyLine, cooldownLine, READ_AGAIN, READING, unreachableLine, type Reader } from "@/components/results/copy";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -147,6 +147,11 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
   const [pressedAt, setPressedAt] = useState<string | null | undefined>(undefined);
   const [pressing, setPressing] = useState(false);
   const [landed, setLanded] = useState<string | null>(null);
+  // The pending "forget this press" timer: one at a time (a later press
+  // replaces an earlier one's), and cancelled when the card unmounts, so it
+  // never sets state on a card that is gone.
+  const forget = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(forget.current), []);
   // Decided in the render the new read arrives in, so the line that says so is drawn with it:
   // an effect would let one frame of the new age through before the crossfade began.
   if (pressedAt !== undefined && (readAt ?? null) !== pressedAt) {
@@ -167,7 +172,8 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
       // The read failed: the button comes back, nothing blooms.
     } finally {
       setPressing(false);
-      setTimeout(() => setPressedAt(undefined), PRESS_FORGET_MS);
+      clearTimeout(forget.current);
+      forget.current = setTimeout(() => setPressedAt(undefined), PRESS_FORGET_MS);
     }
   }
   return { pressing, landed, press };
