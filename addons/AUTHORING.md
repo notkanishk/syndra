@@ -508,10 +508,16 @@ not an observation. The rules the schemas cannot express:
   alike, as "not current". `retry_after` is in integer seconds, like
   `Retry-After`; `note` is a sentence for a person, in your words.
 - `taken_at` (RFC 3339) MUST be an instant during the read of the app (the
-  TrueNAS add-on takes its end), not when you answered. Syndra reads one
-  more than two minutes ahead of its own clock as now, and logs it once per
-  target (`takenAt` in `backend/internal/addons/read.go`): keep the add-on
-  host's clock synchronised.
+  TrueNAS add-on takes its end), not when you answered.
+- An add-on MUST send `Date` (RFC 9110 §6.6.1) from the same clock as
+  `taken_at`, at the moment it answers; Go's `net/http` server does. Syndra
+  dates a kept copy by its age on your clock, `Date` less `taken_at`
+  (`age_value`, RFC 9111 §4.2.3), so a clock that runs ahead or behind does
+  not make a copy read as new. A `Date` more than a second before `taken_at`
+  is not from that clock and is ignored. Only a reply with no usable `Date`
+  falls back to `taken_at` as sent, where one more than two minutes ahead of
+  Syndra's clock is read as now (`ahead` in `backend/internal/addons/read.go`).
+  Both are logged once per target: keep the add-on host's clock synchronised.
 - `truncated: true` MUST be set whenever a read stopped short of everything
   (a cap, a page limit). A truncated read cannot support a conclusion about
   absence, and Syndra draws none from it.

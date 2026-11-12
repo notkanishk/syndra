@@ -232,10 +232,12 @@ func (k *kit) health(c *check) map[string]any {
 
 // subjects reads /subjects and checks every state against the schema's roles.
 func (k *kit) subjects(c *check) map[string]any {
-	doc := k.ok(c, k.send(request{method: http.MethodGet, target: "/subjects"}), "subjects.json")
+	ex := k.send(request{method: http.MethodGet, target: "/subjects"})
+	doc := k.ok(c, ex, "subjects.json")
 	if doc == nil {
 		return nil
 	}
+	k.dated(k.at("date"), ex, doc)
 	_, stale := doc["stale"]
 	c.expect(doc["current"] != false || stale, "current is false and no stale says why")
 	c.expect(doc["current"] != true || !stale, "current is true and stale is present")
@@ -250,6 +252,21 @@ func (k *kit) subjects(c *check) map[string]any {
 		}
 	}
 	return doc
+}
+
+// dated: the read carries a Date (RFC 9110 §6.6.1) from the clock that stamped
+// its taken_at, which is how Syndra dates a kept copy (RFC 9111 §4.2.3). A
+// Date more than a second before taken_at (one-second resolution) is another
+// clock's.
+func (k *kit) dated(c *check, ex *exchange, doc map[string]any) {
+	date, err := http.ParseTime(ex.header.Get("Date"))
+	if !c.expect(err == nil, "%s carried Date %q, which is not an HTTP date", ex, ex.header.Get("Date")) {
+		return
+	}
+	if taken, err := time.Parse(time.RFC3339, str(doc, "taken_at")); err == nil {
+		c.expect(taken.Sub(date) <= time.Second, "%s carried Date %s, %s before its taken_at %s: not the clock that stamped it",
+			ex, date.Format(time.RFC3339), taken.Sub(date).Round(time.Second), str(doc, "taken_at"))
+	}
 }
 
 // unlistedHidden: a membership in state or observed holds only the managed

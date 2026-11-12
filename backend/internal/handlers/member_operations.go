@@ -311,7 +311,7 @@ func handleMemberActionStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if s.State == addons.CallRecorded && len(s.Reply) > 0 {
-			v := addonsViewOf(target, o.Operation, s.Reply)
+			v := addonsViewOf(target, o.Operation, s.Reply, s.Clock)
 			body["view"] = v
 			if replyNoChange(s.Reply) {
 				o.Status = db.AddonOpNoChange
