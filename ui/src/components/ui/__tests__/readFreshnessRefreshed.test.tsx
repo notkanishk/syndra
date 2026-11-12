@@ -136,4 +136,44 @@ describe("a press on a card that goes away", () => {
       vi.useRealTimers();
     }
   });
+
+  it("leaves no timer behind when its read is still in flight at unmount", async () => {
+    vi.useFakeTimers();
+    try {
+      const d = deferred();
+      const { result, unmount } = renderHook(() => useRefreshPress("2026-11-13T10:00:00Z"));
+      let pressed: Promise<void> = Promise.resolve();
+      act(() => {
+        pressed = result.current.press(() => d.promise);
+      });
+      unmount();
+      d.resolve();
+      await pressed;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A press settled moments ago must not forget the next press while that
+  // next read is still in flight: pressing cancels the earlier timer.
+  it("does not let an earlier press's timer forget a later one", async () => {
+    vi.useFakeTimers();
+    try {
+      const first = deferred();
+      const second = deferred();
+      const { result } = renderHook(() => useRefreshPress("2026-11-13T10:00:00Z"));
+      await act(async () => {
+        const p = result.current.press(() => first.promise);
+        first.resolve();
+        await p;
+      });
+      act(() => {
+        void result.current.press(() => second.promise);
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
