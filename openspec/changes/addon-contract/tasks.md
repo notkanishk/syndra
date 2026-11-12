@@ -2251,8 +2251,11 @@ per-person only) applied there.
       `account_id` only when an account exists (`apply_response.json`),
       and withdraw-only on an unbound subject is `no_change` whatever the
       email (guide; reference `decide`), so the empty email cannot
-      mislead. Only collisions are asked: usually no extra call. A plan
-      that fails proves nothing, so the point stays a local name. A
+      mislead. Only collisions are asked, in plans of at most
+      `subjects_per_plan`: usually no extra call. A plan that is refused
+      or fails proves nothing, so the point stays a local name, and the
+      failure says what `/plan` answered (`TestBindingsAreAskedInPlansOfTheLimit`,
+      `TestARefusedPlanSaysTheBindingIsUnproven`). A
       username equal to a bound subject is excused: ambiguous by
       construction. The first cut excused the `conformance-` namespace;
       review showed an add-on reporting under usernames (`-email

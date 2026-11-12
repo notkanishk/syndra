@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -302,5 +303,72 @@ func TestPointsUnderAnEarlierRunsUsernameAreLocalNames(t *testing.T) {
 		if got := r.Status("stats.unbound"); i < 2 && got != "fail" {
 			t.Errorf("run %d (mutate %v): stats.unbound says %s, want fail: points name accounts, not subjects", i, mutate, got)
 		}
+	}
+}
+
+// The binding question is asked in plans of at most limits.subjects_per_plan
+// subjects, and each chunk's answers land on its own subjects.
+func TestBindingsAreAskedInPlansOfTheLimit(t *testing.T) {
+	var mu sync.Mutex
+	var sizes []int
+	url, _ := serve(t, testSecret, func(r *http.Request, body []byte, answered bool) {
+		var plan struct{ Subjects []any }
+		if !answered && r.URL.Path == "/plan" && json.Unmarshal(body, &plan) == nil {
+			mu.Lock()
+			sizes = append(sizes, len(plan.Subjects))
+			mu.Unlock()
+		}
+	})
+	subs := []string{"conformance-self-test-0", "conformance-self-test-1"}
+	for _, s := range subs {
+		cfg := config(url, true)
+		cfg.Subject = s
+		run(t, cfg) // leaves an account named after s, disabled and bound
+	}
+	k, err := newKit(context.Background(), config(url, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.m = &manifest{account: "enabled", perPlan: 1}
+	set := statsSetup{locals: map[string]bool{subs[0]: true, subs[1]: true}, bound: map[string]bool{}, unproven: map[string]string{}}
+	mu.Lock()
+	sizes = nil
+	mu.Unlock()
+	k.learnBound(set, []map[string]any{{"subject": subs[0]}, {"subject": subs[1]}, {"subject": subs[0]}})
+	if !set.bound[subs[0]] || !set.bound[subs[1]] || len(set.unproven) > 0 {
+		t.Errorf("bound %v, unproven %v; want both bound", set.bound, set.unproven)
+	}
+	if mu.Lock(); !slices.Equal(sizes, []int{1, 1}) {
+		t.Errorf("plans of %v subjects, want two plans of 1 (subjects_per_plan 1)", sizes)
+	}
+	mu.Unlock()
+}
+
+// A refused plan proves no binding, so the point still fails, and the failure
+// names the refusal: a passing hiccup is not read as a naming defect.
+func TestARefusedPlanSaysTheBindingIsUnproven(t *testing.T) {
+	url, _ := serve(t, testSecret, nil)
+	k, err := newKit(context.Background(), config(url, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.m = &manifest{account: "enabled", statsZone: "Asia/Kolkata"} // no subjects_per_plan: one plan, past the reference's 50
+	zone, _ := time.LoadLocation("Asia/Kolkata")
+	day := "2026-11-09T00:00:00+05:30"
+	set := statsSetup{zone: zone, locals: map[string]bool{}, bound: map[string]bool{}, unproven: map[string]string{}}
+	r := statsRead{first: map[string]any{"unbound": map[string]any{"accounts": json.Number("0")}, "gaps": []any{}, "watermark": day, "taken_at": "2026-11-10T09:00:00Z"}}
+	r.watermark, _ = time.Parse(time.RFC3339, day)
+	r.takeAt, _ = time.Parse(time.RFC3339, "2026-11-10T09:00:00Z")
+	set.since = r.watermark.Add(-time.Hour)
+	for i := range 51 {
+		s := fmt.Sprintf("conformance-name-%02d", i)
+		set.locals[s] = true
+		r.points = append(r.points, map[string]any{"start": day, "end": "2026-11-10T00:00:00+05:30", "subject": s, "value": json.Number("1")})
+	}
+	r.points = append([]map[string]any{{"start": day, "end": "2026-11-10T00:00:00+05:30", "value": json.Number("51")}}, r.points...)
+	k.judgeStats(map[string]any{"name": "machine.jobs", "instrument": "counter", "per_subject": true}, r, set)
+	fails := k.at("stats.unbound").fails
+	if len(fails) != 51 || !strings.HasSuffix(fails[0], "not a Syndra subject, and /plan answered 422, so its binding is unproven") {
+		t.Errorf("stats.unbound failed %d times (%.1q); want 51, each naming /plan's 422", len(fails), fails)
 	}
 }
