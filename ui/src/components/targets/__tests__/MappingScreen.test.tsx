@@ -37,8 +37,12 @@ vi.mock("@/lib/queries/useMappings", async () => {
     }),
   };
 });
+const roster = vi.hoisted(() => ({ loading: false }));
 vi.mock("@/lib/queries/useTargets", () => ({
-  useTargets: () => ({ data: [{ target: "truenas", name: "TrueNAS", project: state.project }] }),
+  useTargets: () =>
+    roster.loading
+      ? { data: undefined, isLoading: true }
+      : { data: [{ target: "truenas", name: "TrueNAS", project: state.project }], isLoading: false },
 }));
 const schema = vi.hoisted(() => ({ read: true }));
 vi.mock("@/lib/queries/useFieldSchema", async (orig) => {
@@ -46,7 +50,8 @@ vi.mock("@/lib/queries/useFieldSchema", async (orig) => {
   const { TRUENAS_SCHEMA } = await import("@/lib/__fixtures__/truenas-schema");
   return { ...m, useFieldSchema: () => (schema.read ? TRUENAS_SCHEMA : undefined) };
 });
-vi.mock("@/lib/page-crumb", () => ({ useCrumb: () => {} }));
+const crumb = vi.hoisted(() => ({ last: undefined as string | null | undefined }));
+vi.mock("@/lib/page-crumb", () => ({ useCrumb: (label: string | null | undefined) => void (crumb.last = label) }));
 vi.mock("@/components/targets/MappingManagement", () => ({ MappingManagement: () => null }));
 vi.mock("@/components/targets/VersionBand", () => ({ VersionBand: () => null }));
 
@@ -60,6 +65,25 @@ beforeEach(() => {
   state.project = { id: "p_storage", name: "Network storage" };
   state.error = null;
   schema.read = true;
+  roster.loading = false;
+  crumb.last = undefined;
+});
+
+// The system's own crumb waits for the roster's name (crumbsFor), so this page's
+// waits too: the trail then grows only at its end, System, then
+// System / TrueNAS / Mappings, never System / Mappings with the name put in
+// the middle later.
+describe("the page's crumb", () => {
+  it("is absent while the roster is being read", () => {
+    roster.loading = true;
+    render(<MappingScreen target="truenas" />);
+    expect(crumb.last).toBeNull();
+  });
+
+  it("is Mappings once the roster is read", () => {
+    render(<MappingScreen target="truenas" />);
+    expect(crumb.last).toBe("Mappings");
+  });
 });
 
 // Review finding 4: the singular was the plural with its "s" cut off ("to

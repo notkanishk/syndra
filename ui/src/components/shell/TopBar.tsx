@@ -29,8 +29,9 @@ export function TopBar({ session }: { session: SessionUser }) {
   const { crumb } = usePageCrumb();
 
   // An operator's system page is crumbed by the roster's name (the rail reads
-  // the same one), and by nothing until the roster is read, never the id first. A member's system page names itself (useCrumb) from
-  // GET /me/systems, so nothing here asks a read that calls each add-on.
+  // the same one), and only once the roster is read, never the id first. A
+  // member's system page names itself (useCrumb) from GET /me/systems, so
+  // nothing here asks a read that calls each add-on.
   const crumbs = crumbsFor(pathname, audience, useSystemNamesIfRead(isOperator));
   const trail = crumb ? [...crumbs, { label: crumb }] : crumbs;
 

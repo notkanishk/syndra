@@ -35,8 +35,7 @@ export interface SchemaRead {
  * the operator's name, else the manifest's product, else the id), and before
  * they arrive the id title-cased (`targetLabel`).
  */
-export type SchemaSource = SchemaLookup &
-  SchemaRead & { nameOf: (system: string) => string; nameIfRead: (system: string) => string | undefined };
+export type SchemaSource = SchemaLookup & SchemaRead & { nameOf: (system: string) => string };
 
 type Row = { target: string; name?: string; entitlement_schema?: EntitlementField[] };
 
@@ -60,11 +59,6 @@ const sourceOf = (q: Query): SchemaSource =>
     error: q.data ? null : q.error,
     refetch: () => void q.refetch(),
     nameOf: (system: string) => q.data?.find((t) => t.target === system)?.name ?? targetLabel(system),
-    // The same name, but undefined while the roster is still being read, so a
-    // caller that would otherwise draw the id first and then swap it for the
-    // name (a breadcrumb) can wait instead. Read, or failed: as `nameOf`.
-    nameIfRead: (system: string) =>
-      q.isLoading ? undefined : (q.data?.find((t) => t.target === system)?.name ?? targetLabel(system)),
   });
 
 /** The operator's: from the roster the page loads, for one system. */
@@ -81,9 +75,15 @@ export function useSystemNames(enabled = true): (system: string) => string {
   return sourceOf(useTargets(enabled)).nameOf;
 }
 
-/** As `useSystemNames`, but undefined until the roster is read (see `nameIfRead`). */
+/**
+ * As `useSystemNames`, but undefined while the roster is first being read, so
+ * a caller that would otherwise draw the id and then swap it for the name (a
+ * breadcrumb) can wait instead. Read, or failed: exactly `useSystemNames`.
+ */
 export function useSystemNamesIfRead(enabled = true): (system: string) => string | undefined {
-  return sourceOf(useTargets(enabled)).nameIfRead;
+  const q = useTargets(enabled);
+  const { nameOf } = sourceOf(q);
+  return q.isLoading ? () => undefined : nameOf;
 }
 
 export function useFieldSchema(system: string | undefined): EntitlementField[] | undefined {

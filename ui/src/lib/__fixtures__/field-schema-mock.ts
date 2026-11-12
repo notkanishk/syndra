@@ -22,7 +22,7 @@ export const fieldSchemaMock = {
   useFieldSchema: () => TRUENAS_SCHEMA,
   useFieldSchemaState: () => ({ schema: TRUENAS_SCHEMA, ...READ }),
   useMappingFields: () => mappingFields(TRUENAS_SCHEMA),
-  useSchemaSource: () => Object.assign(() => TRUENAS_SCHEMA, READ, { nameOf: truenasName, nameIfRead: truenasName }),
+  useSchemaSource: () => Object.assign(() => TRUENAS_SCHEMA, READ, { nameOf: truenasName }),
   useSystemNames: () => truenasName,
   useSystemNamesIfRead: () => truenasName,
 };
