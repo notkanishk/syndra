@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -170,9 +171,11 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 		textsort.ByName(view.Series, func(s statsSeries) string { return dimsText(s.Dimensions) }, func(s statsSeries) string { return "" })
 		for _, g := range gaps {
 			// A person's page carries a gap over the whole metric ({}) or over
-			// one of their own series, never the target's others: a gap on a
-			// share only someone else used would say that share exists here.
-			if g.Metric != m.Name || subject != "" && len(g.Dims) > 0 && bySeries[dimsText(g.Dims)] == nil {
+			// a part of one of their own series (every key=value of the gap in
+			// that series: {"share":"makers"} covers their makers/smb), never
+			// the target's others: a gap on a share only someone else used
+			// would say that share exists here.
+			if g.Metric != m.Name || subject != "" && len(g.Dims) > 0 && !slices.ContainsFunc(view.Series, func(s statsSeries) bool { return within(g.Dims, s.Dimensions) }) {
 				continue
 			}
 			view.Gaps = append(view.Gaps, statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Reason: g.Reason})
@@ -181,6 +184,16 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 	}
 	textsort.ByName(out.Metrics, func(m statsMetricView) string { return m.Label }, func(m statsMetricView) string { return m.Name })
 	return out, nil
+}
+
+// within reports whether every key=value of part is also in whole.
+func within(part, whole map[string]string) bool {
+	for k, v := range part {
+		if w, ok := whole[k]; !ok || w != v {
+			return false
+		}
+	}
+	return true
 }
 
 func addTo(sum *float64, v float64) *float64 {

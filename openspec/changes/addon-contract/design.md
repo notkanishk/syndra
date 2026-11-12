@@ -1285,13 +1285,23 @@ in the totals". No local name crosses the wire for an unbound account.
 - **Content validation, because the add-on is least trusted**: a point with
   a `subject` that has **no binding on this target** is dropped and counted
   (an add-on cannot write usage onto an arbitrary member's page); a point
-  with `subject` on a metric not `per_subject` is dropped; a dimension value
-  or a gap `reason` that contains a bound subject's id, account name or
-  `account_id`, compared case-insensitively, is dropped and counted
-  `person_in_dimension` (one rule for both; display names wait for a cheap
-  source, ruling B7); so is a point
-  that is not one makerspace day, or has no value or a negative one. Each
-  is counted by reason on the metric's row.
+  with `subject` on a metric not `per_subject` is dropped. A text **names a
+  bound person** when it holds a bound subject's id, account name or
+  `account_id` (non-empty) as a whole token, case-insensitively: one RE2
+  pattern per collection, `(?i)(?:^|[^\pL\pN])(?:n1|n2|…)(?:[^\pL\pN]|$)`
+  with each name `QuoteMeta`d (a pattern matching nothing when no binding
+  has a name). A token boundary is the text's start or end or any
+  character that is neither a Unicode letter nor a digit, so
+  `home-JOHN_CENA`, `home_ana` and `john_cena's` name them while `makerlab`,
+  `proj-30512` and `ME3051` do not name `lab` or `3051`; not `\b`, which in
+  RE2 is ASCII-only and counts `_` as a word character. One rule for
+  dimension values and gap reasons (display names wait for a cheap source,
+  ruling B7): a point or gap whose **dimension** names a person is dropped;
+  a gap whose **reason** does is kept, its reason replaced by the fixed
+  "The add-on's reason named a person." (the gap is still true); both
+  counted `person_in_dimension`. So is a point dropped that is not one
+  makerspace day, or has no value or a negative one. Each is counted by
+  reason on the metric's row.
 - **A metric is never re-purposed**: a manifest that changes an existing
   metric's `instrument` or `unit` is refused at registration with the
   reason; a new meaning is a new name (§2 rule 6). Bucket width is not
@@ -1368,11 +1378,14 @@ this contract carries.
   (ruling O4).
 - **Declared or refused** (§9.6 content validation): a `subject` with no
   binding on this target, a `subject` on a metric not `per_subject`, a
-  dimension value or gap reason that names a person: dropped, counted,
-  logged, and the kit warns. Dimensions are resources, never people. A
-  person's page carries only the gaps over the whole metric (`{}`) or over
-  one of that person's own series, never a gap on a resource only somebody
-  else used.
+  dimension value that names a person (§9.6, whole token): dropped,
+  counted, logged, and the kit warns; a gap reason that names one is
+  withheld, its gap kept and counted. Dimensions are resources, never
+  people. A person's page carries only the gaps whose dimensions are `{}`
+  or a subset of one of that person's own series (every key=value of the
+  gap in that series: `{"share":"makers"}` is on their
+  `{"share":"makers","protocol":"smb"}`), never a gap on a resource only
+  somebody else used.
 - **Add-on text is quoted, never trusted**: `label`, `reason`, `note` and
   raw `x-` content are rendered as escaped, length-capped quoted text; the
   copy guard runs on Syndra's own sentences around them, not on what an

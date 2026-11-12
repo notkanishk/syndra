@@ -1838,18 +1838,18 @@ per-person only) applied there.
         unconditionally and `ADDON-STATS` only with an add-on and
         `STATS_COLLECTION_ENABLED`; `main` starts retention at top level
         (`TestStatsRetentionRunsWithoutCollection`, with a source guard).
-      - A coded `/stats` answer neither opens nor clears the breaker, in the
-        pipe's one record call; transport failures, timeouts and uncoded
-        5xx still count, the breaker is still consulted first, and
-        `NO_CURRENT_READ` on `/subjects` still counts
-        (`TestACodedStatsAnswerIsNeverABreakerFailure`).
-      - A person's page keeps a gap only when its dimensions are `{}` or one
-        of that person's series; at ingestion one rule, `people.names`
-        (case-insensitive containment of a subject id, account name or
-        account id), drops a dimension value or a gap reason naming a bound
-        person, counted `person_in_dimension`
-        (`TestAPersonSeesOnlyGapsOnTheirOwnSeries`,
-        `TestNoValueOrReasonNamesABoundPerson`).
+      - A coded `/stats` answer neither opens nor clears the breaker;
+        transport failures, timeouts and uncoded 5xx still count, the
+        breaker is still consulted first, and `NO_CURRENT_READ` on
+        `/subjects` still counts
+        (`TestACodedStatsAnswerIsNeverABreakerFailure`; where the rule
+        lives: round 2 below).
+      - A person's page keeps a gap only when its dimensions are `{}` or
+        one of that person's series; at ingestion one rule, `people.names`,
+        guards dimension values and gap reasons, counted
+        `person_in_dimension` (`TestAPersonSeesOnlyGapsOnTheirOwnSeries`,
+        `TestNoValueOrReasonNamesABoundPerson`; both rules sharpened in
+        round 2 below).
       - Every cursor followed in a collection is remembered; any repeat
         stops it (`TestLiveACursorCycleStopsTheCollection`).
       - `PUT stats-retention` requires the `days` key: `{}` is 400
@@ -1858,6 +1858,11 @@ per-person only) applied there.
       - Usage is filled by the two views only, never in `describeTargetFor`,
         so setting a password and a member action make no statistics query
         (`TestOnlyTheViewsReadUsage`).
+    - Decided while building (6d-2 fix round 2, 12 Nov 2026), one line each:
+      - A name is matched as a whole token, not contained: one RE2 pattern per collection, `(?i)(?:^|[^\pL\pN])(?:` + the `QuoteMeta`d non-empty names joined by `|` + `)(?:[^\pL\pN]|$)`, an empty class when there is none; not `\b`, ASCII-only and `_`-blind (`TestANameIsAWholeToken`).
+      - A gap whose reason names a person is kept with the fixed reason "The add-on's reason named a person." and counted `person_in_dimension`; one whose dimensions name a person is dropped, as its series is (`TestNoValueOrReasonNamesABoundPerson`).
+      - A person's page keeps a gap whose dimensions are `{}` or a subset of one of their series (every key=value of the gap in it), so `{"share":"makers"}` reaches their makers/smb series (`TestAGapOnPartOfASeriesIsOnThatSeries`).
+      - Every breaker counting rule lives in `breaker.record`: `send` only marks a coded `/stats` answer `CallResponse.StatsRefusal`, and `record` neither counts nor clears it (`TestACodedStatsAnswerDoesNotClearTheBreaker`).
 - [ ] 6.9 UI, from descriptors only: the member card "What I have used"
   (counters summed with a sparkline, gauges latest with their day,
   `against` as a meter over the **observed** limit, gaps footnoted, every

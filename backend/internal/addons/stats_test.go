@@ -332,3 +332,19 @@ func TestACodedStatsAnswerIsNeverABreakerFailure(t *testing.T) {
 		t.Errorf("an open breaker let /stats through: %v, %d hits", err, hits.Load()-before)
 	}
 }
+
+// A coded /stats answer does not clear the breaker either, even a 4xx one: a
+// broken add-on answering /stats with a code between its 5xx would otherwise
+// keep the breaker shut for ever. The answer pauses the count.
+func TestACodedStatsAnswerDoesNotClearTheBreaker(t *testing.T) {
+	b := &breaker{}
+	now := time.Unix(1_700_000_000, 0)
+	for range breakerThreshold - 1 {
+		b.record(now, CallResponse{Outcome: OutcomeIndeterminate, Status: 500})
+		b.record(now, CallResponse{Outcome: OutcomeRejected, Status: 400, Code: "WINDOW_OUT_OF_RANGE", StatsRefusal: true})
+	}
+	b.record(now, CallResponse{Outcome: OutcomeIndeterminate, Status: 500})
+	if b.allow(now) {
+		t.Fatal("coded /stats answers reset the count a failing add-on is accumulating")
+	}
+}

@@ -14,7 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"slices"
+	"regexp"
 	"strings"
 	"time"
 
@@ -36,10 +36,14 @@ const (
 	DropNotPerSubject       = "not_per_subject"      // a subject on a metric not reported per person
 	DropUnboundSubject      = "unbound_subject"      // a subject with no binding on this target
 	DropUndeclaredDimension = "undeclared_dimension" // a dimension the metric does not declare
-	DropPersonInDimension   = "person_in_dimension"  // a dimension value or gap reason that names a bound person
+	DropPersonInDimension   = "person_in_dimension"  // a dimension value that names a bound person; a gap reason that does is withheld (reasonWithheld), its gap kept
 	DropPastRetention       = "past_retention"       // older than retention keeps
 	DropSeries              = "series"               // a new series past constants.series_per_metric
 )
+
+// reasonWithheld is a kept gap's reason in place of one that named a bound
+// person (ruling B7).
+const reasonWithheld = "The add-on's reason named a person."
 
 // metricTimeout bounds one metric's collection, its pages and its
 // transaction: one slow metric holds only its own rows, and only this long.
@@ -189,18 +193,24 @@ func finalThrough(reported, now time.Time) (time.Time, error) {
 }
 
 // people is who is bound on the target: the subjects a point may name, and
-// every word that names a bound person (subject id, account name and id),
-// which no dimension value and no gap reason may contain (ruling B7).
+// the one pattern for every word that names a bound person (subject id,
+// account name and id), which no dimension value and no gap reason may
+// contain (ruling B7).
 type people struct {
 	bound map[string]bool
-	named []string // lower-cased, none empty
+	named *regexp.Regexp
 }
+
+// nobody is an RE2 class with no members: the alternation when no binding
+// has a name, so the pattern matches no text at all, "" included.
+const nobody = `[^\x00-\x{10FFFF}]`
 
 func peopleOn(bindings []db.TargetBinding) people {
 	who := people{bound: map[string]bool{}}
+	var quoted []string
 	add := func(name string) {
-		if name != "" {
-			who.named = append(who.named, strings.ToLower(name))
+		if name != "" { // "" would name every text
+			quoted = append(quoted, regexp.QuoteMeta(name))
 		}
 	}
 	for _, b := range bindings {
@@ -211,18 +221,21 @@ func peopleOn(bindings []db.TargetBinding) people {
 			add(*b.AccountID)
 		}
 	}
+	if len(quoted) == 0 {
+		quoted = []string{nobody}
+	}
+	who.named = regexp.MustCompile(`(?i)(?:^|[^\pL\pN])(?:` + strings.Join(quoted, "|") + `)(?:[^\pL\pN]|$)`)
 	return who
 }
 
-// names is the one rule for "this text names a bound person": it contains a
-// name, in any case. A dimension value equal to a username is the plain case;
-// "home-JOHN_CENA" or a gap reason "john_cena's share is offline" name him
-// too. Stricter than equality on purpose: a series dropped and counted is
-// recoverable, a name stored beside usage is not.
-func (p people) names(text string) bool {
-	text = strings.ToLower(text)
-	return slices.ContainsFunc(p.named, func(n string) bool { return strings.Contains(text, n) })
-}
+// names is the one rule for "this text names a bound person": a name, in any
+// case, as a whole token — at the text's ends or beside a character that is
+// neither a letter nor a digit, in any script. "home-JOHN_CENA", "home_ana"
+// and the reason "john_cena's share is offline" name them; "makerlab" does not
+// name lab, nor "proj-30512" account 3051, nor "activity" ty. Not \b: RE2's
+// \b is ASCII-only and counts "_" as a word character, so "home_ana" would
+// hide ana.
+func (p people) names(text string) bool { return p.named.MatchString(text) }
 
 // keep is the points of a page worth storing, each checked (checkPoint), the
 // series cap applied, and one per key (an add-on that repeats a key in a page
@@ -275,8 +288,10 @@ func checkPoint(p addons.StatPoint, m addons.Metric, who people) (string, string
 }
 
 // keepGaps is the gaps of a page worth storing: whole makerspace days, only
-// declared dimensions naming nobody, a reason naming nobody, capped at 200
-// characters.
+// declared dimensions naming nobody, a reason capped at 200 characters. A
+// reason that names a person is withheld, never stored, and counted: the gap
+// itself is still true and still says the numbers are incomplete. A dimension
+// that names a person drops the gap, as it drops that series' points.
 func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[string]int) []db.StatsGap {
 	var out []db.StatsGap
 	for _, g := range gaps {
@@ -290,10 +305,12 @@ func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[st
 			dropped[DropBadValue]++
 		case why != "":
 			dropped[why]++
-		case who.names(g.Reason):
-			dropped[DropPersonInDimension]++
 		default:
 			reason := []rune(g.Reason)
+			if who.names(g.Reason) {
+				dropped[DropPersonInDimension]++
+				reason = []rune(reasonWithheld)
+			}
 			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Reason: string(reason[:min(len(reason), 200)])})
 		}
 	}

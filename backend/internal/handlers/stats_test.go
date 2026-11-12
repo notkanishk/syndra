@@ -233,6 +233,49 @@ func TestAPersonSeesOnlyGapsOnTheirOwnSeries(t *testing.T) {
 	}
 }
 
+// A gap over part of a series' dimensions is on that series: on a metric by
+// share and protocol, the gap {"share":"makers"} is on edge's makers/smb
+// series, so edge sees it; lita never used makers and does not, nor a gap on
+// makers over nfs, which edge never used either. Every key=value of the gap
+// must be in one series, not just one of them; a key the series lacks is not
+// in it, even with an empty value. A gap over the whole metric ({}) is on
+// every person's page, orton's too, who has no series here.
+func TestAGapOnPartOfASeriesIsOnThatSeries(t *testing.T) {
+	stubStats(t, &statsStore{})
+	dbStatsMetrics = func(context.Context, string) ([]db.StatsMetric, error) {
+		return []db.StatsMetric{{Metric: "storage.sessions", Descriptor: json.RawMessage(`{"name":"storage.sessions","instrument":"counter","unit":"count","label":"Storage sessions","per_subject":true,"dimensions":[{"name":"share","label":"Share"},{"name":"protocol","label":"Protocol"}]}`)}}, nil
+	}
+	used := map[string]map[string]string{"edge": {"share": "makers", "protocol": "smb"}, "lita": {"share": "kiln", "protocol": "smb"}}
+	dbStatsDays = func(_ context.Context, _, subject, _ string) ([]db.StatsValue, error) {
+		if used[subject] == nil {
+			return nil, nil
+		}
+		return []db.StatsValue{{Metric: "storage.sessions", Dims: used[subject], When: "2026-11-11", Value: 1}}, nil
+	}
+	dbStatsMonths = func(context.Context, string, string, string) ([]db.StatsValue, error) { return nil, nil }
+	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {
+		var out []db.StatsGapRow
+		for _, dims := range []map[string]string{{}, {"share": "makers"}, {"share": "makers", "protocol": "nfs"}, {"share": "makers", "room": ""}} {
+			out = append(out, db.StatsGapRow{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: dims, Start: "2026-11-08", End: "2026-11-10", Reason: "Auditing was off"}})
+		}
+		return out, nil
+	}
+	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
+	for subject, want := range map[string]string{"edge": `{} {"share":"makers"}`, "lita": `{}`, "orton": `{}`} {
+		usage, err := statsUsageFor(context.Background(), "truenas", subject, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, g := range sessionsOf(t, usage).Gaps {
+			got = append(got, dimsText(g.Dimensions))
+		}
+		if strings.Join(got, " ") != want {
+			t.Errorf("%q sees gaps on %v, want %q", subject, got, want)
+		}
+	}
+}
+
 // The two windows are makerspace days (ruling O1): the four instants around
 // India's midnight and UTC's each fall on their own Indian day.
 func TestStatsWindowsAreMakerspaceDays(t *testing.T) {

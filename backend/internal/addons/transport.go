@@ -169,6 +169,10 @@ type CallResponse struct {
 	// unreached, and the manifest is read again: the add-on is not the one the
 	// backend thinks it is (a rollback, an add-on that dropped a feature).
 	ShapeRefusal bool
+	// StatsRefusal is a coded answer to /stats (NO_CURRENT_READ while the
+	// add-on has not read its app yet, a window it cannot serve): the add-on
+	// answering on purpose about its own data, never a breaker failure.
+	StatsRefusal bool
 	// RetryAfter is the reply's Retry-After in seconds (RFC 9110 §10.2.3,
 	// delay-seconds only, as registry/errors.json has it): 0 when absent or
 	// not an integer. A cooldown's countdown (FRESH_READ_COOLDOWN, 429).
@@ -592,6 +596,15 @@ func (b *breaker) allow(now time.Time) bool {
 func (b *breaker) record(now time.Time, resp CallResponse) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	// A coded /stats answer neither opens nor clears the breaker: counted, an
+	// hourly collection of an unread metric would take the target away from
+	// everybody; clearing, a broken add-on answering /stats with a code would
+	// hide its failures elsewhere. A transport failure, a timeout, an uncoded
+	// 5xx on /stats still counts, and a 2xx still clears. /stats only: a coded
+	// refusal on any other route is recorded as ever.
+	if resp.StatsRefusal {
+		return
+	}
 	// A 2xx and a 4xx are the add-on demonstrably working: it read the request
 	// and decided. Those clear the count.
 	if resp.Outcome == OutcomeSucceeded || resp.Outcome == OutcomeRejected {

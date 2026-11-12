@@ -117,14 +117,10 @@ func (a *Addon) send(ctx context.Context, s sendSpec) (CallResponse, error) {
 			a.Registration.Target, s.Method, s.Path, resp.Status, resp.Code)
 		rereadAfterShapeRefusal(a)
 	}
-	// A coded answer to /stats (NO_CURRENT_READ while the add-on has not read
-	// its app yet, a window it cannot serve) is the add-on answering on
-	// purpose about its own data: it neither opens nor clears the breaker,
-	// or an hourly collection of an unread metric would take the target away
-	// from everybody. A transport failure, a timeout, an uncoded 5xx still
-	// counts, and a 2xx still clears. /stats only: a coded refusal on any
-	// other route is recorded as ever.
-	if !s.SkipBreaker && !(featureOf(s.Path) == "stats" && resp.Code != "") {
+	// Which route answered is the pipe's to know; what that means for the
+	// breaker is record's (StatsRefusal).
+	resp.StatsRefusal = featureOf(s.Path) == "stats" && resp.Code != ""
+	if !s.SkipBreaker {
 		a.br.record(timeNow(), resp)
 	}
 	return resp, nil
