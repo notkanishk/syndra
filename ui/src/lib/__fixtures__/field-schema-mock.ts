@@ -22,8 +22,9 @@ export const fieldSchemaMock = {
   useFieldSchema: () => TRUENAS_SCHEMA,
   useFieldSchemaState: () => ({ schema: TRUENAS_SCHEMA, ...READ }),
   useMappingFields: () => mappingFields(TRUENAS_SCHEMA),
-  useSchemaSource: () => Object.assign(() => TRUENAS_SCHEMA, READ, { nameOf: truenasName }),
+  useSchemaSource: () => Object.assign(() => TRUENAS_SCHEMA, READ, { nameOf: truenasName, nameIfRead: truenasName }),
   useSystemNames: () => truenasName,
+  useSystemNamesIfRead: () => truenasName,
 };
 
 /**
@@ -32,5 +33,5 @@ export const fieldSchemaMock = {
  * `vi.mock("@/lib/queries/useFieldSchema", async (orig) => (await import("@/lib/__fixtures__/field-schema-mock")).withRosterNames(orig))`.
  */
 export async function withRosterNames(importOriginal: () => Promise<unknown>) {
-  return { ...(await importOriginal() as object), useSystemNames: () => truenasName };
+  return { ...(await importOriginal() as object), useSystemNames: () => truenasName, useSystemNamesIfRead: () => truenasName };
 }

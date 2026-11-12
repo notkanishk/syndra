@@ -643,6 +643,12 @@ already did). See 3.7.
     `memberNav(useMyStorage(member).data)`; `TopBar` passes
     `useSchemaSource(isOperator).nameOf` to `crumbsFor`. Middleware unchanged:
     reachability is the seat's pattern.
+    *Fixed (13 Nov 2026):* the operator's crumb drew the id title-cased while
+    the roster was being read, then swapped it for the name. `TopBar` now
+    passes `useSystemNamesIfRead` (`nameIfRead` on the one `sourceOf`:
+    undefined while the roster is first read, otherwise `nameOf`'s answer) and
+    `crumbsFor` stops at "System" until a name is known, as a member's page
+    waits for its `useCrumb`.
   - [x] 3.10d `app/systems/[target]` (`member/MemberSystemPage`): the kind's
     card under a header named by `name`; a storage-kind system
     `router.replace("/storage")`; not connected or not read → "This system
