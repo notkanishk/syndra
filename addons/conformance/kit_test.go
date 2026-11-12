@@ -329,6 +329,22 @@ func TestMutateRefusesBeforeAnyWriteWhenItCannotProveTheSubjectIsNew(t *testing.
 	if r.Left != "nothing; no write was sent" {
 		t.Errorf("left %q", r.Left)
 	}
+	// 4.4a: a run that wrote nothing has not judged the halves of these that
+	// are about writes, whether or not -mutate was asked for.
+	for _, id := range []string{"health", "required-fields"} {
+		if got := r.Status(id); got != "skip" {
+			t.Errorf("%s says %s after a run that sent no write, want skip (not judged)", id, got)
+		}
+		var d []string
+		for _, res := range r.Results {
+			if res.ID == id {
+				d = res.Detail
+			}
+		}
+		if len(d) == 0 || !strings.HasPrefix(d[0], "not judged: ") || !strings.Contains(d[0], "-mutate run sent none") {
+			t.Errorf("%s detail %q", id, d)
+		}
+	}
 	for _, pre := range []map[string]any{
 		{"effect": "apply", "account_id": json.Number("1001")},
 		{"effect": "apply", "standing": map[string]any{}},

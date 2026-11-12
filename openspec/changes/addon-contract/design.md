@@ -1318,8 +1318,8 @@ in the totals". No local name crosses the wire for an unbound account.
   `home-JOHN_CENA`, `home_ana` and `john_cena's` name them while `makerlab`,
   `proj-30512` and `ME3051` do not name `lab` or `3051`; not `\b`, which in
   RE2 is ASCII-only and counts `_` as a word character. One rule for
-  dimension values and gap reasons (display names wait for a cheap source,
-  ruling B7): a point or gap whose **dimension** names a person is dropped;
+  dimension values and gap reasons (ruling B7; each bound person's
+  directory display name is in the name set too, 13 Nov 2026): a point or gap whose **dimension** names a person is dropped;
   a gap whose **reason** does is kept, its reason replaced by the fixed
   "The add-on's reason named a person." (the gap is still true); both
   counted `person_in_dimension`. So is a point dropped that is not one
@@ -1808,6 +1808,9 @@ Statistics, records and the fourth target (10 Nov 2026):
     rule, and a UTC exception (`clock.UTCDay`) would re-admit by name the
     bug that rule exists for; the OTel data model carries instants, so a
     local day is as standard as a UTC one. No "UTC day" anywhere.
+    *Confirmed by the owner 13 Nov 2026:* statistics days are makerspace
+    days (IST); O1 stands as amended above, and the text above it is kept as
+    the history of the bulk acceptance.
 13. **Retention** (§9.6), *revised*: no rollup; target-wide and per-dimension
     daily points 5 years; per-subject daily points 400 days, then deleted
     (the total is required to exist on its own); late points past retention

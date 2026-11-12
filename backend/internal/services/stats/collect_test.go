@@ -8,6 +8,7 @@ import (
 	"syndra/internal/addons"
 	"syndra/internal/clock"
 	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // One rule names a bound person (ruling B7), for a dimension value and a gap
@@ -16,7 +17,7 @@ import (
 // counted; a gap whose reason does is kept, its reason withheld, and counted.
 func TestNoValueOrReasonNamesABoundPerson(t *testing.T) {
 	account := "3051"
-	who := peopleOn([]db.TargetBinding{{SubjectID: "sub-cena", Username: "john_cena", AccountID: &account}, {SubjectID: "sub-orton", Username: ""}, {SubjectID: "sub-rey", Username: "Rey_Mysterio"}})
+	who := peopleOn([]db.TargetBinding{{SubjectID: "sub-cena", Username: "john_cena", AccountID: &account}, {SubjectID: "sub-orton", Username: ""}, {SubjectID: "sub-rey", Username: "Rey_Mysterio"}}, nil)
 	m := addons.Metric{Name: "storage.sessions", Instrument: "counter", Unit: "count", PerSubject: true,
 		Dimensions: []addons.Dimension{{Name: "share", Label: "Share"}}}
 	day := clock.Day(clock.Now())
@@ -68,7 +69,7 @@ func TestANameIsAWholeToken(t *testing.T) {
 		for _, n := range names {
 			b = append(b, db.TargetBinding{SubjectID: "sub-" + n, Username: n})
 		}
-		return peopleOn(b)
+		return peopleOn(b, nil)
 	}
 	for _, c := range []struct {
 		name, text string
@@ -93,7 +94,80 @@ func TestANameIsAWholeToken(t *testing.T) {
 		}
 	}
 	// No binding has a name: the pattern names no text, the empty one included.
-	if nobody := peopleOn([]db.TargetBinding{{}}); nobody.names("") || nobody.names("anything") {
+	if nobody := peopleOn([]db.TargetBinding{{}}, nil); nobody.names("") || nobody.names("anything") {
 		t.Error("a target with no names named someone")
+	}
+}
+
+// Design 6d-2: a display name is checked like any other name. Only a bound
+// person's counts (an unbound user's name is not a person this target holds),
+// a name with spaces matches as a whole phrase, and a blank or one-character
+// name matches nothing at all.
+func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
+	who := peopleOn(
+		[]db.TargetBinding{{SubjectID: "sub-cena"}, {SubjectID: "sub-blank"}, {SubjectID: "sub-one"}, {SubjectID: "sub-rey"}, {SubjectID: "sub-dashes"}, {SubjectID: "sub-digits"}, {SubjectID: "sub-accent"}, {SubjectID: "sub-raj"}, {SubjectID: "sub-ram"}},
+		[]models.UserProfile{
+			{ID: "sub-cena", Name: "John Cena"},
+			{ID: "sub-blank", Name: "   "},
+			{ID: "sub-one", Name: "x"},
+			{ID: "sub-dashes", Name: "--"},
+			{ID: "sub-digits", Name: "42"},
+			{ID: "sub-raj", Name: "Raj\u0915"},
+			{ID: "sub-ram", Name: "\u0930\u093e\u092e"},
+			{ID: "sub-accent", Name: "Andr\u00e9 the Giant"}, // precomposed
+			{ID: "sub-rey", Name: "Rey (Mysterio)"},
+			{ID: "sub-unbound", Name: "The Undertaker"},
+		})
+	for _, c := range []struct {
+		text string
+		want bool
+	}{
+		{"John Cena", true},
+		{"home of JOHN CENA", true},
+		{"john cena's share", true},
+		{"john  cena", false}, // one phrase, as spelled
+		{"John", false},
+		{"Johnny Cena", false},
+		{"Rey (Mysterio) files", true}, // metacharacters are literal
+		{"The Undertaker", false},      // not bound on this target
+		{"x", false},                   // one character is never a name
+		// A combining mark is part of the word: a nukta letter (NFC decomposes
+		// U+0958 to U+0915 U+093C) and a vowel sign continue the name's token.
+		{"Raj\u0958", false},
+		{"\u0930\u093e\u092e\u093e", false},
+		{"Raj\u0915 files", true},
+		{"\u0930\u093e\u092e files", true},
+		{"a -- b", false},               // no letter, no name
+		{"room 42", false},              // digits alone are no name
+		{"Andre\u0301 the Giant", true}, // decomposed spelling of the same name
+		{"", false},                     // nor is blank
+		{"makers", false},
+	} {
+		if got := who.names(c.text); got != c.want {
+			t.Errorf("%q names someone: %t, want %t", c.text, got, c.want)
+		}
+	}
+
+	// Through the same two places an account name goes: a value drops its
+	// series and is counted; a reason is withheld, its gap kept.
+	m := addons.Metric{Name: "storage.sessions", Instrument: "counter", Unit: "count", PerSubject: true,
+		Dimensions: []addons.Dimension{{Name: "share", Label: "Share"}}}
+	day := clock.Day(clock.Now())
+	start, _ := clock.Midnight(day)
+	end, _ := clock.Midnight(clock.AddDate(day, 0, 0, 1))
+	v := 1.0
+	dropped := map[string]int{}
+	kept := keep([]addons.StatPoint{
+		{Start: start, End: end, Dimensions: map[string]string{"share": "John Cena"}, Value: &v},
+		{Start: start, End: end, Dimensions: map[string]string{"share": "makers"}, Value: &v},
+	}, m, who, map[string]bool{}, dropped)
+	if len(kept) != 1 || kept[0].Dims["share"] != "makers" || dropped[DropPersonInDimension] != 1 {
+		t.Errorf("kept %+v, dropped %v: a display name in a dimension value was stored", kept, dropped)
+	}
+	gaps := keepGaps([]addons.StatGap{
+		{Start: start, End: end, Dimensions: map[string]string{"share": "makers"}, Reason: "John Cena's home is offline"},
+	}, m, who, dropped)
+	if len(gaps) != 1 || gaps[0].Reason != reasonWithheld || dropped[DropPersonInDimension] != 2 {
+		t.Errorf("gaps %+v, dropped %v: want the gap kept, its reason withheld, and counted", gaps, dropped)
 	}
 }

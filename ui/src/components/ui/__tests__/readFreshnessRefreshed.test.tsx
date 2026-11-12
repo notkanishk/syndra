@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ReadFreshness, useRefreshPress } from "@/components/ui/ReadFreshness";
 import { motionInTests } from "@/test-utils/motion";
@@ -115,5 +115,65 @@ describe("S17 Refreshed, pressed from elsewhere", () => {
     const { rerender } = render(<Page readAt={ago(5)} run={async () => {}} />);
     rerender(<Page readAt={new Date().toISOString()} run={async () => {}} />);
     expect(dot().className).not.toContain("bloom");
+  });
+});
+
+// CI caught a card unmounting before its press was forgotten: the forget
+// timer then set state after the test environment was gone ("window is not
+// defined"). Unmounting cancels it.
+describe("a press on a card that goes away", () => {
+  it("leaves no timer behind", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result, unmount } = renderHook(() => useRefreshPress("2026-11-13T10:00:00Z"));
+      await act(async () => {
+        await result.current.press(() => undefined);
+      });
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves no timer behind when its read is still in flight at unmount", async () => {
+    vi.useFakeTimers();
+    try {
+      const d = deferred();
+      const { result, unmount } = renderHook(() => useRefreshPress("2026-11-13T10:00:00Z"));
+      let pressed: Promise<void> = Promise.resolve();
+      act(() => {
+        pressed = result.current.press(() => d.promise);
+      });
+      unmount();
+      d.resolve();
+      await pressed;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A press settled moments ago must not forget the next press while that
+  // next read is still in flight: pressing cancels the earlier timer.
+  it("does not let an earlier press's timer forget a later one", async () => {
+    vi.useFakeTimers();
+    try {
+      const first = deferred();
+      const second = deferred();
+      const { result } = renderHook(() => useRefreshPress("2026-11-13T10:00:00Z"));
+      await act(async () => {
+        const p = result.current.press(() => first.promise);
+        first.resolve();
+        await p;
+      });
+      act(() => {
+        void result.current.press(() => second.promise);
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

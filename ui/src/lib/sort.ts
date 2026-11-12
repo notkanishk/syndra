@@ -1,8 +1,9 @@
 /**
  * Names in the order a person reads them: case and accents aside, "Lab 2"
- * before "Lab 10". Every list or picker of names is alphabetical by its shown
- * name (RULES.md); lists whose order carries meaning (send order, time,
- * relevance) keep theirs.
+ * before "Lab 10". Every dropdown or picker of names, and every list of places
+ * looked up by name, is alphabetical by its shown name; any other list opens in
+ * its most logical order (soonest due, most recent) with sortable headings
+ * (owner, 13 Nov 2026).
  */
 const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 

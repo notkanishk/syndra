@@ -943,11 +943,16 @@ settings with the full §5 rules.
   fingerprint check, remembers a refusal, omits `truncated`, says
   `current: true` from its mirror, accepts an altered query, treats
   max(`"0"`, 5 GiB) as 5 GiB, lets a withdraw-only apply touch a membership) #ready-for-agent
-- [ ] 4.4a (found by the last slice-4 review, below its bar) A `-mutate` run refused
+- [x] 4.4a (found by the last slice-4 review, below its bar) A `-mutate` run refused
   before any write (subject exists, `before` unreadable or not current, a reads
   MUST failed) still reports `health` and `required-fields` as pass on their read
   halves; give it the reads-only "not judged: needs a write" marking too. Report
   wording only: such a run already exits 2 #ready-for-agent
+  *Done (13 Nov 2026, slice 7a):* `Run` marks `health` and `required-fields` not
+  judged whenever no write was sent (`!k.wrote`, decided after the run), so a
+  refused `-mutate` run is marked like a reads-only one; its wording says the
+  run sent none. `TestMutateRefusesBeforeAnyWriteWhenItCannotProveTheSubjectIsNew`
+  holds it.
 - [ ] 4.4b (found by the guide review, finding 4) The kit owns only an account
   whose `username` begins `conformance-` (`owner` in `addons/conformance/owner.go`),
   so an app that cannot hold that name (generated ids, display names only, a
@@ -1302,7 +1307,8 @@ settings with the full §5 rules.
   mapping-union managed set; the kit's `values` check requires it; a mapping
   on a non-enumerable membership is refused at `ResolvesValue`, not at
   registration (the manifest does not say it; `/values` does, once). Not a
-  rollout gate. #needs-info: owner confirms the resolution
+  rollout gate. #decided
+  *Confirmed by the owner (13 Nov 2026):* a membership must be enumerable.
   *Review fixes (11 Nov 2026):* the refusal is `ErrFieldNotListable`
   (inside the `ErrValueNotResolvable` family), answered 400 with
   `details.field = "unlistable"`, the system's name and the field's label, and
@@ -1310,10 +1316,26 @@ settings with the full §5 rules.
   default "change what it says". The Add dialog says the same plain sentence
   when `MappableValues.enumerable` is false (it used to show the built-in-groups
   sentence and never read the flag).
-- [ ] 5.3e Pre-existing: allowances (`validateAllowanceAgainstTarget`,
+- [x] 5.3e Pre-existing: allowances (`validateAllowanceAgainstTarget`,
   `backend/internal/handlers/allowances.go`) check structure only and never
   call `ResolvesValue`, so an allowance can name a value no `/values` lists,
-  for any field. #needs-triage
+  for any field. #ready-for-agent
+  *Done (13 Nov 2026, slice 7a):* `validateAllowanceAgainstTarget` ends in
+  `resolveValue` (`handlers/mappings.go`), the one rule `validateMappingAgainstTarget`
+  now calls too, and `writeAllowanceError` answers through `writeValueRefusal`,
+  the one writer of the `ErrFieldNotListable` (`details.field = "unlistable"`,
+  with `details.next`) and `ErrValueNotResolvable` (`details.value =
+  "unresolvable"`) answers; tests post the same value to both surfaces and
+  compare the two answers (`allowances_value_test.go`). The UI needs nothing:
+  the hold dialog shows a refusal through `outcomeFromError`, which already
+  words the `unlistable` step.
+  Note for a future group-hold dialog: it must handle `details.value ===
+  "unresolvable"` the way `AddMappingDialog.tsx` does (read the list again,
+  pick another). Today the only hold the UI creates is lifecycle, so that
+  refusal is unreachable from it.
+  *Display names (7a review):* a name needs a letter as well as two characters,
+  and names and checked values are compared in NFC (`golang.org/x/text`, already
+  a dependency).
 - [x] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
   point here; `addon-platform/design.md` §5 and §16 gain a one-line pointer
   to this contract as the current statement #ready-for-agent
@@ -1483,6 +1505,7 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
   - `quota_read: false` on a storage card shows the shared `UsageUnread` notice instead of silently omitting usage lines; "some" is `usageShown(drawn)` (`kinds/storage/state.ts`) over the usage the card actually draws (the operator card's home folder from `view.home`; the member card's places they can change, none offline), never over every place.
   - Long text: `[overflow-wrap:anywhere]` on the read root, the activity row and `StandingLine`; the address columns are `min-w`, not a fixed width; the activity detail is `inline-block` so a short reason moves whole rather than breaking mid-token.
   - Records, meters and uncovered places are alphabetical through `sortByName`/`sortNames`.
+    *Records superseded (13 Nov 2026, slice 7a):* see "Owner's answers of 13 Nov 2026" below; meters and uncovered places stay alphabetical.
   - Every results sentence, including the "Since", "Due", "of" fragments, lives in `copy.ts` and the copy guide's section 12; the guard is an ESLint `no-restricted-syntax` block on `src/components/results/*.tsx` (JSX text, string literals, template elements; `className`/`key`/`data-*`, the directive and imports exempt, `aria-label`/`title`/`alt` not), proved by mutation in `results-sentence-guard.test.ts`; `resultsCopyGuide.test.ts` keeps only copy.ts against the guide table.
   - `OWN_READS` is held to the registry by a test (`ownReads.test.ts`); `needSpec` is held to the result schemas by `TestNeedSpecMatchesTheSchemas`, and now requires a `stale`'s `reason`.
   - `Observation.stale` is in the UI type since 6b; its reasons are named once (`STALE` in `lib/queries/fresh.ts`), never written as `reason: "..."`, which `TestEveryFixedReasonIsNeverQuoted` reads.
@@ -1695,10 +1718,16 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       rounds); a newer drain-written binding survives a stale release; an
       adoption whose copy names another account is not rewritten, one of the
       same account is; an adopt row with no `about` stays for a person.
-  - [ ] The UI half (6.3u, a separate builder from the 6c UI handoff): the
+  - [x] The UI half (6.3u, a separate builder from the 6c UI handoff): the
     member action with `format: target_id` as a typed-or-scanned input,
     preview then confirm, the poll, and the desk's sentence on Waiting on you
     #ready-for-agent
+    *Done in slice 6c's UI, verified (13 Nov 2026, slice 7a):* a typed-or-scanned
+    input (`TargetIdInput.tsx`, the scan step in `MemberAction.tsx`), preview then
+    confirm (`MemberAction.tsx`, `mode: "preview"`), the poll
+    (`useMemberOperation` in `lib/queries/useMemberAction.ts`), and the desk's
+    sentence (`ASK_DESK*` in `actions/copy.ts`, drawn for a physical row by
+    `targets/UnconfirmedChanges.tsx`); `MemberAction.test.tsx` covers the flow.
 
 - [x] 6.3a (the guide review's ruling (b)) Add `no_change` to
   `common/outcome.json`, listed under feature `calls`, mirroring
@@ -1815,12 +1844,22 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       lies over a point. Past the audit page bound, the days from the last
       row's day are cleared into one provisional gap ("Too much activity to
       count yet") and the watermark stops there; the next run goes on.
+    - Display names (slice 7a, 13 Nov 2026): the privacy matcher (`peopleOn`)
+      also holds each **bound** person's directory display name
+      (`directory.Default.Users`, the cached list, read once per collection),
+      through the same pattern and no second path; a name is trimmed, added
+      only at two characters or more (a blank or one-letter name would name
+      every text), and `QuoteMeta`d so a name with spaces matches as a phrase.
+      An unreadable directory fails the collection (the watermark stays):
+      a check that could not look must not read as one that found nothing.
+      `TestADisplayNameIsCheckedLikeAnyOtherName`.
     - Decided while building: a CONNECT row's share is
       `service_data.service` (the observed key, Samba's word for a share),
       for the collector and `activity.get` alike (`auditRow.share`).
       `activity.get` read `event_data.share`, which no observed row has, so
       it never named the share (a live bug, also on main); fixed in the
-      review round below.
+      review round below. *Owner (13 Nov 2026):* the live fix ships with
+      contract 2, with no hotfix on main.
     - Decided while building: `home_bytes` is a level for every bound member
       with a home, 0 included (the meter needs one); `used_bytes` per person
       only above 0; for both levels a uid under 1000 counts in totals,
@@ -2144,6 +2183,24 @@ per-person only) applied there.
       `NO_CURRENT_READ` (nothing collected yet) skips the stats checks with
       the reason.
     - Decided while building (6d-1 fix round): the `.no-people` MUST is the kit's own account only (username and `account_id`, which it makes unique); any other listed account is advisory (`.no-people.ids`), since TrueNAS lists service accounts and a `scanner` share by a `scanner` user is no leak (`TestAResourceNamedLikeAServiceAccountIsAdvisory`; `stats-dimension-names-person` still fails the MUST).
+
+## Owner's answers of 13 Nov 2026
+
+- **Statistics days are makerspace days (IST).** Ruling O1 is confirmed and
+  stands as the amendment to design decision 12; no "UTC day" anywhere.
+- **List order.** Dropdowns and pickers of names stay alphabetical (case
+  aside, locale-aware). Every other list defaults to its most logical order
+  (most recent first, soonest due or overdue first, and so on) with sortable
+  column headers (`SortHead`). Built for records (slice 7a):
+  `results/RecordsList.tsx` opens on Due, soonest first (an earlier date is
+  what is overdue; lateness itself stays the add-on's word), then records with
+  no due date, then by name, with Record, Since and Due headings
+  (`RECORD_HEADS`, copy guide section 12); a record with no date for the
+  column in force sits last either way. Meters and uncovered places stay
+  alphabetical: a place's name is what a person looks up.
+- **The live activity-share fix** (`service_data.service`) ships with contract
+  2; no hotfix on main.
+- **5.3c confirmed:** a membership must be enumerable.
 
 ## Out of scope, stated so nobody builds it here
 

@@ -858,6 +858,14 @@ func TestAHandEditedLimitIsAdoptedAsTheirOwnLimit(t *testing.T) {
 		t.Fatalf("a per-person limit is adoptable: %v", row)
 	}
 
+	// The adoption runs under the global access lock and a limit is never
+	// enumerable, so it must never reach the add-on's /values.
+	resolves := addonsResolvesValue
+	t.Cleanup(func() { addonsResolvesValue = resolves })
+	addonsResolvesValue = func(context.Context, string, string, string) (addons.Resolution, error) {
+		t.Error("adopting a limit asked the add-on's /values while holding the access lock")
+		return addons.Resolution{}, nil
+	}
 	h := &findingHarness{finding: theirsOnly("home_quota", `["10737418240"]`)}
 	stubFindings(t, h)
 	rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"thesis data","review_date":"2027-01-15T00:00:00Z"}`)

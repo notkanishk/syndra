@@ -209,13 +209,6 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	}
 	k.reads()
 	var refused error
-	if !k.cfg.Mutate {
-		// Half of each of these is about replies to writes (log_records
-		// advancing, what an apply answers): reads alone cannot pass them.
-		for _, id := range []string{"health", "required-fields"} {
-			k.at(id).notJudged = "not judged: half of this check is about writes (log_records advancing, apply replies), which need -mutate"
-		}
-	}
 	switch {
 	case ctx.Err() != nil:
 		k.halted, refused = "not reached: the run was interrupted", ErrInterrupted
@@ -225,6 +218,21 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 		refused = ErrReadsFailed
 	default:
 		refused = k.mutate()
+	}
+	// Half of each of these is about replies to writes (log_records advancing,
+	// what an apply answers): reads alone cannot pass them. Decided after the
+	// run, by whether a write was sent, so a -mutate run refused before its
+	// first write is marked like a reads-only one (4.4a).
+	if !k.wrote {
+		why := "which need -mutate"
+		if k.cfg.Mutate {
+			why = "and this -mutate run sent none (see the last line)"
+		}
+		for _, id := range []string{"health", "required-fields"} {
+			if c := k.at(id); c.notJudged == "" {
+				c.notJudged = "not judged: half of this check is about writes (log_records advancing, apply replies), " + why
+			}
+		}
 	}
 	if ctx.Err() != nil {
 		refused = ErrInterrupted
