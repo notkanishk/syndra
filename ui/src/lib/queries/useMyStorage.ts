@@ -6,6 +6,7 @@ import { ApiError, request } from "@/lib/api-client";
 import type { EntitlementField } from "@/lib/fields";
 import type { AccountHome, Standing } from "@/lib/queries/useTargets";
 import type { OneShotSecret } from "@/lib/secret";
+import type { Usage } from "@/lib/queries/useStats";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
 import { useReadAgain, type Stale } from "./fresh";
@@ -124,6 +125,12 @@ export interface MyTargetView {
    * manifest's. Both absent until one is accepted ("not read yet"). */
   kind?: string;
   entitlement_schema?: EntitlementField[];
+  /**
+   * What this person has used, from Syndra's own store (feature `stats`), so
+   * it is present while the system is offline. Absent: Syndra could not read
+   * that store just now, which is not "no data".
+   */
+  usage?: Usage;
   /** Every member-scope read the add-on answered under `results`, in the add-on's order. */
   reads?: ReadView[];
   /** Whether the account can be used yet, and who is waited on, in the add-on's words. */

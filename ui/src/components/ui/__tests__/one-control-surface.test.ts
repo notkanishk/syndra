@@ -176,7 +176,6 @@ describe("a control states its role in the vocabulary the product already has", 
    * rather than loosening the rule.
    */
   it("spends the destructive fill only on a destructive act", () => {
-    const TAKES_AWAY = /remov|revok|revoc|delet|purg|take away|withdraw|drop|clear|end |stop/i;
     const ARGUED: Record<string, string> = {
       "Record the owner":
         "the other claimant stops holding the account in Syndra, immediately and without being told",
@@ -197,6 +196,26 @@ describe("a control states its role in the vocabulary the product already has", 
       offenders,
       "a confirm that grants is `accent`; irreversibility is carried by the rung and the copy",
     ).toEqual([]);
+  });
+
+  // The guard's own reading: the label is the button's, never an attribute's, and what it cannot read it fails.
+  describe("reads the label a confirm carries", () => {
+    const COPY = 'import * as copy from "@/x/copy";\n';
+    const read = (text: string) => () => text;
+    const label = (source: string, text: string) => confirmLabel(source, source.indexOf("<Button"), read(text));
+
+    it("takes the copy said last, not an attribute's: a grant is not a delete for naming one in `reason`", () => {
+      const source = `${COPY}<Button variant="dangerConfirm" reason={copy.NOTHING_TO_DELETE}>{copy.GRANT}</Button>`;
+      const got = label(source, 'export const NOTHING_TO_DELETE = "Nothing to delete";\nexport const GRANT = "Grant access";');
+      expect(got).toBe("Grant access");
+      expect(TAKES_AWAY.test(got)).toBe(false);
+    });
+
+    it("fails closed on an export it cannot read", () => {
+      const source = `${COPY}<Button variant="dangerConfirm">{copy.GRANT}</Button>`;
+      expect(label(source, "export const GRANT =\n  say(\"Delete it\");")).toBe("");
+      expect(label(source, "export const OTHER = \"Delete it\";")).toBe("");
+    });
   });
 
   /**
@@ -296,17 +315,26 @@ function tagAt(source: string, at: number): string {
   return source.slice(at, i + 1);
 }
 
+const TAKES_AWAY = /remov|revok|revoc|delet|purg|take away|withdraw|drop|clear|end |stop/i;
+
 /**
  * The label a confirming button carries — the last string literal before its
  * closing tag, which is what the operator actually reads on the control.
  */
-function confirmLabel(source: string, at: number): string {
+function confirmLabel(source: string, at: number, readCopy: (path: string) => string = (path) => readFileSync(join(SRC, `${path}.ts`), "utf8")): string {
   const close = source.indexOf("</Button>", at);
   const body = source.slice(at, close < 0 ? at + 600 : close);
   const literals = [...body.matchAll(/[>:]\s*\{?\s*["`]?([A-Z][^<>{}"`\n]{3,60})/g)].map((m) =>
     m[1].trim().replace(/[.…]+$/, ""),
   );
-  return literals[literals.length - 1] ?? "";
+  if (literals.length > 0) return literals[literals.length - 1];
+  // A label said by a copy module (`{copy.name(…)}`): the sentence is that export's own text.
+  // The LAST one, like the literals above: an attribute (`reason={copy.X}`) before the label is not the label.
+  const call = [...body.matchAll(/\{\s*copy\.(\w+)\b/g)].at(-1);
+  const from = /import \* as copy from "@\/([^"]+)"/.exec(source);
+  if (!call || !from) return "";
+  const said = new RegExp(`export const ${call[1]}\\b[^\`"\\n]*[\`"]([^\`"$]{4,60})`).exec(readCopy(from[1]));
+  return said ? said[1].trim() : "";
 }
 
 /** The text of a `{...}` expression starting at the opening brace. */

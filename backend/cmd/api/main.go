@@ -497,7 +497,7 @@ func main() {
 
 	// Statistics (addon-contract 6.6, 6.7): each add-on's declared metrics
 	// collected hourly, each from its own watermark and in its own
-	// transaction, and the nightly retention. Runners beside the reconcile,
+	// transaction, and the daily retention (at start-up, then every 24 hours). Runners beside the reconcile,
 	// never steps inside it: a slow /stats must not delay convergence, and a
 	// failed collection is not a failed reconcile. Collection starts once the
 	// manifests are in (a metric is collected only once accepted).

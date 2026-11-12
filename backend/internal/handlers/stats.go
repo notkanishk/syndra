@@ -33,8 +33,21 @@ import (
 // statsUsage is a target's statistics as one page shows them. Reported false
 // is "this add-on does not report statistics", said rather than implied.
 type statsUsage struct {
-	Reported bool              `json:"reported"`
-	Metrics  []statsMetricView `json:"metrics,omitempty"`
+	Reported bool `json:"reported"`
+	// KeptFrom, on a person's page, is the first day whose per-person points
+	// this target still keeps (retention): a day before it is deleted, never
+	// zero. Every series starts there at the earliest.
+	KeptFrom string `json:"kept_from,omitempty"`
+	// Today is the makerspace day this response was built on (YYYY-MM-DD). A
+	// window "in the last n days" counts n to it, so a response cached across
+	// midnight never miscounts against the reader's own clock.
+	Today string `json:"today,omitempty"`
+	// Window30dFrom and Window12mFrom are the first day each window's numbers
+	// are read from (YYYY-MM-DD): the window's own start, or KeptFrom when
+	// retention is shorter. The page names each window from them.
+	Window30dFrom string            `json:"window_30d_from,omitempty"`
+	Window12mFrom string            `json:"window_12m_from,omitempty"`
+	Metrics       []statsMetricView `json:"metrics,omitempty"`
 }
 
 // statsMetricView is one metric: its descriptor, through when Syndra holds it
@@ -43,10 +56,14 @@ type statsMetricView struct {
 	addons.Metric
 	// Watermark is the makerspace midnight before which the metric is final;
 	// nil before its first collection.
-	Watermark *time.Time      `json:"watermark"`
-	Series    []statsSeries   `json:"series"`
-	Gaps      []statsGapView  `json:"gaps"`
-	Collected *statsCollected `json:"collected,omitempty"`
+	Watermark *time.Time `json:"watermark"`
+	// CountedThrough is the watermark as a day: the last final one, nil with
+	// it. A day after it may still change, and one with no point is not yet
+	// a zero.
+	CountedThrough *string         `json:"counted_through"`
+	Series         []statsSeries   `json:"series"`
+	Gaps           []statsGapView  `json:"gaps"`
+	Collected      *statsCollected `json:"collected,omitempty"`
 }
 
 // statsSeries is one dimension set's days. A counter carries its 30-day and
@@ -105,12 +122,21 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 	if err != nil || len(stored) == 0 {
 		return statsUsage{}, err
 	}
-	_, from30, from12m := statsWindows(now)
-	days, err := dbStatsDays(ctx, target, subject, from30)
+	today, from30, from12m := statsWindows(now)
+	out := statsUsage{Reported: true, Today: today, Window30dFrom: from30, Window12mFrom: from12m, Metrics: []statsMetricView{}}
+	if subject != "" {
+		// A person's points are read no earlier than retention keeps them, so
+		// a sum never counts a day the daily prune has yet to delete.
+		if out.KeptFrom, err = dbStatsKeptFrom(ctx, today, target); err != nil {
+			return statsUsage{}, err
+		}
+		out.Window30dFrom, out.Window12mFrom = max(from30, out.KeptFrom), max(from12m, out.KeptFrom) // YYYY-MM-DD orders as text
+	}
+	days, err := dbStatsDays(ctx, target, subject, out.Window30dFrom)
 	if err != nil {
 		return statsUsage{}, err
 	}
-	months, err := dbStatsMonths(ctx, target, subject, from12m)
+	months, err := dbStatsMonths(ctx, target, subject, out.Window12mFrom)
 	if err != nil {
 		return statsUsage{}, err
 	}
@@ -118,7 +144,6 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 	if err != nil {
 		return statsUsage{}, err
 	}
-	out := statsUsage{Reported: true, Metrics: []statsMetricView{}}
 	for _, s := range stored {
 		var m addons.Metric
 		if err := json.Unmarshal(s.Descriptor, &m); err != nil {
@@ -128,6 +153,10 @@ func statsUsageFor(ctx context.Context, target, subject string, now time.Time) (
 			continue
 		}
 		view := statsMetricView{Metric: m, Watermark: s.Watermark, Series: []statsSeries{}, Gaps: []statsGapView{}}
+		if s.Watermark != nil { // a makerspace midnight: the day before it is the last final one
+			through := clock.AddDate(clock.Day(*s.Watermark), 0, 0, -1)
+			view.CountedThrough = &through
+		}
 		if subject == "" {
 			view.Collected = &statsCollected{At: s.LastCollectedAt, UnboundAccounts: s.UnboundAccounts, Dropped: s.Dropped}
 		}
@@ -321,16 +350,20 @@ type insightsStatsRow struct {
 type insightsStatsMetric struct {
 	Target string `json:"target"`
 	System string `json:"system"`
+	// Window30dFrom is the first day the spread covers: the window's `from`,
+	// or later when this target's retention is shorter (the read's own clamp).
+	Window30dFrom string `json:"window_30d_from"`
 	addons.Metric
 	Series []insightsStatsRow `json:"series"`
 }
 
 // handleInsightsStats is GET /api/v1/insights/stats (admin): every per-person
-// metric of every target over the last 30 days, a counter's sum or a gauge's
+// metric of every target over the last 30 days (or the days its target keeps,
+// when fewer), a counter's sum or a gauge's
 // latest value per member, as distributions; the UI groups them by unit.
 func handleInsightsStats(w http.ResponseWriter, r *http.Request) {
-	_, from30, _ := statsWindows(clock.Now())
-	rows, err := dbStatsDistributions(r.Context(), from30)
+	today, from30, _ := statsWindows(clock.Now())
+	rows, err := dbStatsDistributions(r.Context(), today, from30)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -361,7 +394,7 @@ func handleInsightsStats(w http.ResponseWriter, r *http.Request) {
 		if _, seen := at[key]; !seen {
 			system, _ := systemName(r.Context(), row.Target)
 			at[key] = len(out)
-			out = append(out, insightsStatsMetric{Target: row.Target, System: system, Metric: m, Series: []insightsStatsRow{}})
+			out = append(out, insightsStatsMetric{Target: row.Target, System: system, Window30dFrom: row.From, Metric: m, Series: []insightsStatsRow{}})
 		}
 		i := at[key]
 		out[i].Series = append(out[i].Series, insightsStatsRow{Dimensions: row.Dims, Members: row.Members, P50: row.P50, P90: row.P90})

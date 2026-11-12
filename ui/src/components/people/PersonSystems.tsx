@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import { UserName } from "@/components/names/UserName";
 import { useShownNames } from "@/components/names/shownNames";
@@ -14,6 +14,7 @@ import { Card, CardRow } from "@/components/ui/Card";
 import { NextStep } from "@/components/ui/NextStep";
 import { ReadAgainError, ReadAgainProvider } from "@/components/ui/ReadFreshness";
 import { Notice } from "@/components/ui/Notice";
+import { ViewUsage } from "@/components/usage/UsageCard";
 import { StandingLine } from "@/components/ui/StandingLine";
 import { Relative } from "@/components/ui/Time";
 import { roleOf } from "@/lib/fields";
@@ -85,7 +86,12 @@ export function SystemsSection({
       ) : data ? (
         <ReadAgainProvider value={{ press: again.press, since: views.dataUpdatedAt }}>
           <ReadAgainError error={again.error} />
-          {data.map((view) => card(view))}
+          {data.map((view) => (
+            <Fragment key={view.target}>
+              {card(view)}
+              <ViewUsage view={view} person={name} />
+            </Fragment>
+          ))}
         </ReadAgainProvider>
       ) : (
         systems.map((system) => (

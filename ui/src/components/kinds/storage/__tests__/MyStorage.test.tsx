@@ -166,7 +166,11 @@ describe("usage", () => {
     state.targets = [view()];
     renderStorage();
     expect(screen.getByText("Nothing saved here yet")).toBeTruthy();
-    expect(screen.getByText(/46\.0 GiB of 50\.0 GiB · nearly full/)).toBeTruthy();
+    expect(screen.getByText("46.0 GiB of 50.0 GiB")).toBeTruthy();
+    // The word is the shared meter's, beside the bar, at 90% and over.
+    expect(screen.getByText("nearly full")).toBeTruthy();
+    const row = screen.getByText("46.0 GiB of 50.0 GiB").closest(".row-divider") as HTMLElement;
+    expect(within(row).getByRole("meter").firstElementChild).toHaveClass("bg-warn");
     const quack = screen.getByText("quack_share").closest(".row-divider") as HTMLElement;
     expect(within(quack).queryByText(/GiB|Nothing saved/)).toBeNull();
   });

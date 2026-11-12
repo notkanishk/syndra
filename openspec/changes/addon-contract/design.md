@@ -1312,14 +1312,22 @@ in the totals". No local name crosses the wire for an unbound account.
   total they would anonymise into is required to exist as its own point
   (§9.3). A point older than its retention arriving late is dropped at
   ingestion. Gaps follow the points they cover: kept with the totals, five
-  years. The nightly retention runs whether or not anything is collected
+  years. Retention of N days counts today: a per-person point is kept from
+  today − (N − 1), so 400 days are 400 days and 30 are the same days as "the
+  last 30 days". The daily retention (at start-up, then every 24 hours, so a
+  shortened setting takes effect within a day) runs whether or not anything is collected
   (`STATS_COLLECTION_ENABLED` gates collection only, and a backend with no
   add-on registered still prunes what it holds). An operator may shorten the per-person retention of one target
   (1 to 400 days, the column's CHECK the ceiling's one place) and never the
   totals' (ruling O4, 12 Nov 2026: 400 days is the privacy ceiling on
   personal data, five years the history of a resource that names nobody,
-  and totals erased are unrecoverable). One SQL definition serves the
-  nightly prune and ingestion. No rollup job exists because every point is
+  and totals erased are unrecoverable). One SQL definition
+  (`statsSubjectKeptFrom`) serves the prune, ingestion and every per-person
+  read: a person's windows start at `max(window, kept_from)` and are returned
+  as `window_30d_from` / `window_12m_from`, which the page names its windows
+  from; Insights' spread is clamped to `GREATEST(from, kept_from)` in its
+  own query and returns that start, so a day the prune has yet to delete is
+  never counted. No rollup job exists because every point is
   already a day.
 - **Cardinality**: `constants.series_per_metric` (500) caps distinct
   `dimensions` sets per metric (subject does not count; it is bounded by

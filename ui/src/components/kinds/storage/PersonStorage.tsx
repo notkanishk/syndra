@@ -25,6 +25,7 @@ import { Card } from "@/components/ui/Card";
 import { NextStep } from "@/components/ui/NextStep";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { formatClock, formatList, formatRelative, formatShortDate } from "@/lib/format";
+import { Meter } from "@/components/ui/Meter";
 import { Tinted } from "@/lib/motion";
 import type { PersonTargetView, RoleSource, StoragePlace } from "@/lib/queries/useMyStorage";
 import { sortByName } from "@/lib/sort";
@@ -345,8 +346,6 @@ function HomeUse({ view }: { view: PersonTargetView }) {
   const hasHome = Boolean(home?.home);
   const kept = hasHome && home && !home.gives_home && !home.own;
   if (!drawsHome(view)) return <LimitLines view={view} />;
-  const pct = used !== undefined && quota > 0 ? Math.min(100, (used / quota) * 100) : 0;
-  const full = pct >= 90;
   const over = used !== undefined && quota > 0 && used >= quota;
   return (
     <>
@@ -359,13 +358,10 @@ function HomeUse({ view }: { view: PersonTargetView }) {
       ) : (
         <span>
           {quota > 0 ? `${size(used)} of ${size(quota)}` : `${size(used)} used · no limit set`}
-          {full && <span className="text-warn-text"> · nearly full</span>}
         </span>
       )}
       {used !== undefined && quota > 0 && (
-        <span aria-hidden className="my-1 block h-[5px] w-full max-w-[360px] overflow-hidden rounded-pill bg-line">
-          <span className={`block h-full rounded-pill ${full ? "bg-warn" : "bg-muted"}`} style={{ width: `${Math.max(pct, 1)}%` }} />
-        </span>
+        <Meter value={used} limit={quota} label={`${label} home folder usage`} className="my-1" />
       )}
       {kept ? (
         <Faint>No role of theirs gives a home folder any more. It stays, with their files, and only they can open it.</Faint>

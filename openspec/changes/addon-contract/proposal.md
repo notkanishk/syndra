@@ -159,7 +159,7 @@ it. The code already holds the rule; the contract did not say it.
   `desired_state_snapshots` stays readable).
 - Slice 6, four additive features: `internal/addons/stats.go` (collection,
   content validation, one-transaction upsert), three additive tables and a
-  nightly retention job (no rollup: every bucket is a UTC day),
+  daily retention job (at start-up, then every 24 hours; no rollup: every bucket is a UTC day),
   `/me/targets` carrying the actor's points, `GET /users/{id}/targets`
   carrying that person's for admins, target and insights endpoints for the
   totals and per-dimension series; `GET /calls/{call_id}`;

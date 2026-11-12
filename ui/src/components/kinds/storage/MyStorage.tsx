@@ -24,7 +24,7 @@ import { deviceFrom, type Device } from "@/components/kinds/storage/device";
 import { OWN_READS, PASSWORD_STEP, drawnUsage, isHold, stateOf, usageShown, type State } from "@/components/kinds/storage/state";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { sortByName } from "@/lib/sort";
-import { formatAt, formatBytes, formatClock, formatShortDate } from "@/lib/format";
+import { formatAt, formatBytes, formatClock, formatList, formatShortDate } from "@/lib/format";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import {
   useSetStorageCredential,
@@ -32,6 +32,7 @@ import {
   type RoleSource,
   type StoragePlace,
 } from "@/lib/queries/useMyStorage";
+import { Meter } from "@/components/ui/Meter";
 import { oneShot } from "@/lib/secret";
 import dynamic from "next/dynamic";
 import { RetryStatus } from "@/components/ui/RetryStatus";
@@ -69,12 +70,6 @@ function useRoleName() {
     const found = project?.roles.find((r) => r.key === role.role_key);
     return roleName(found?.label, role.role_key);
   };
-}
-
-/** "Fabrication lead", "Fabrication lead and Lab tech". */
-function joinNames(names: string[]): string {
-  if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 export function StorageMemberCard({ view }: { view: MyTargetView }) {
@@ -440,7 +435,7 @@ function Folders({
           title="No folder is open to you yet."
           guidance={`${
             roles.length > 0
-              ? `Your ${joinNames(roles)} ${roles.length === 1 ? "role reaches" : "roles reach"} ${label}, but no folder there is open to ${roles.length === 1 ? "it" : "them"}.`
+              ? `Your ${formatList(roles)} ${roles.length === 1 ? "role reaches" : "roles reach"} ${label}, but no folder there is open to ${roles.length === 1 ? "it" : "them"}.`
               : `Your access reaches ${label}, but no folder there is open to it.`
           } Makerspace staff open folders on ${label} itself; this list fills in by itself when they do.`}
         />
@@ -511,15 +506,13 @@ function PlaceBlock({
   const where = place.home
     ? `In ${[place.share, ...(place.folder ?? "").split("/").slice(0, -1)].join(" › ")} · private to you`
     : place.folder
-      ? `In ${[place.share, ...place.folder.split("/").slice(0, -1)].join(" › ")}${roles.length ? ` · from your ${joinNames(roles)} ${roles.length === 1 ? "role" : "roles"}` : ""}`
+      ? `In ${[place.share, ...place.folder.split("/").slice(0, -1)].join(" › ")}${roles.length ? ` · from your ${formatList(roles)} ${roles.length === 1 ? "role" : "roles"}` : ""}`
       : roles.length
-        ? `From your ${joinNames(roles)} ${roles.length === 1 ? "role" : "roles"}`
+        ? `From your ${formatList(roles)} ${roles.length === 1 ? "role" : "roles"}`
         : "";
 
   const usage = drawnUsage(place, offline);
   const quota = usage?.quota_bytes ?? 0;
-  const pct = usage && quota > 0 ? Math.min(100, (usage.used_bytes / quota) * 100) : 0;
-  const full = pct >= 90;
   // At or over its limit TrueNAS refuses new writes and keeps every file, so
   // the member can still open and delete (a limit set below what they hold).
   const over = Boolean(usage && quota > 0 && usage.used_bytes >= quota);
@@ -530,7 +523,7 @@ function PlaceBlock({
       use = !usage.used_bytes
         ? "Nothing saved here yet"
         : quota > 0
-          ? `${formatBytes(usage.used_bytes)} of ${formatBytes(quota)}${full ? " · nearly full" : ""}`
+          ? `${formatBytes(usage.used_bytes)} of ${formatBytes(quota)}`
           : `${formatBytes(usage.used_bytes)} used · no limit set`;
     }
   }
@@ -547,7 +540,7 @@ function PlaceBlock({
           </span>
           {where && <span className="text-[13px] text-faint [text-wrap:pretty]">{where}</span>}
         </span>
-        {use && <span className={`ml-auto text-[13.5px] ${!offline && full ? "text-warn-text" : "text-muted"}`}>{use}</span>}
+        {use && <span className="ml-auto text-[13.5px] text-muted">{use}</span>}
       </div>
       {can && over && !offline && (
         <span className="max-w-[70ch] text-[14px] leading-[1.55] text-warn-text [text-wrap:pretty]">
@@ -561,9 +554,7 @@ function PlaceBlock({
         </span>
       )}
       {can && usage && quota > 0 && !offline && (
-        <div aria-hidden className="h-[5px] overflow-hidden rounded-pill bg-line">
-          <div className={`h-full rounded-pill ${full ? "bg-warn" : "bg-muted"}`} style={{ width: `${Math.max(pct, 1)}%` }} />
-        </div>
+        <Meter value={usage.used_bytes} limit={quota} label={`${placeName(place)} usage`} valueText={use ?? undefined} />
       )}
       {showAddresses && place.smb_address && place.unc_address && (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-x-3.5 gap-y-2.5">

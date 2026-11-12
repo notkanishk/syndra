@@ -783,3 +783,95 @@ The dialog is one dialog: the form, the preview, the camera and the result are i
 | It didn't happen | {item} did not go out to {person}. |
 | After "It happened" | {item} went out to {person} on {name}. |
 | After "It didn't happen" | You recorded that {item} did not go out to {person}. |
+
+## 15. What has been used (addon-contract slice 6e)
+
+An add-on that reports statistics (feature `stats`) gets the same four surfaces with no code of its own: the member's card **What I have used**, the same card on a person's page, the target overview's totals, and Insights, Usage. `components/usage/copy.ts` holds every sentence; `usageCopyGuide.test.ts` fails when this table and that file disagree, and the lint guard refuses an inline sentence in `components/usage/*.tsx` (as in sections 12 and 14). Syndra's own sentences only: what the add-on wrote (a metric's label, a breakdown's name and value, a gap's reason) is escaped, capped (label 60, value 40, reason 120 characters) and, inside a sentence, put in quotes; this table never holds it. `{value}` is a number in its unit's words ("18.4 GiB", "3 items"), `{day}` a makerspace day ("9 Nov", with the year when it is not this year's; never "UTC"), `{range}` days ("8–9 Nov"), `{where}` a breakdown (`Area: “ring”`). Every card ends on a next step or "Nothing for you to do."
+
+**A day nobody could count is not a zero.** It is hatched in the chart, the line breaks there, its hover says "couldn't count", and the card footnotes it with the add-on's reason. A counter's day with nothing in an observed window is a real 0 and is drawn as one; a day after the last one counted (`counted_through`) is not yet counted and is left blank, never 0. Each window is named from the day the backend read it from (`window_30d_from`, `window_12m_from`): the window's own first day, or the first day Syndra keeps for a person (`kept_from`, the operator's retention of N days counting today, so today − (N − 1)) when that is later. A window retention starts later is "in the last {n} days", n counted from its start to today, today included; a 12-month window it does not cut is "in the last 12 months"; when both start on one day the year line is not said twice. Only the drawn days before the 30-day start are hatched, with Syndra's own reason, and "Kept for only {n} days" is said only when such a day is drawn. A line joins only adjacent days that have a value: a gauge is never interpolated, and a value standing alone is a dot. **Nothing ranks.** No sentence here, and no word in the renderers, says top, most, worst, best, highest, lowest, leader or rank, of people or of systems; Insights shows how many people and a spread, never who (`usageCopyGuide.test.ts` reads the files for those words). A series is never added to another.
+
+| When | Says |
+|---|---|
+| The member's card: title | What I have used |
+| The operator's card on a person's page: title | What {person} has used |
+| A counter over its window | {value} in the last 30 days |
+| The same, over the year | {value} in the last 12 months |
+| The same, when retention starts either window later (n: its start to today, today included) | {value} in the last {n} days |
+| A counted metric with no series | Nothing counted in the last 30 days |
+| A gauge's latest value | {value} on {day} |
+| A gauge with no value in the window | No value in the last 30 days |
+| A meter's ceiling (the limit Syndra observed) | of {limit} |
+| A meter over a limit of 0 | no limit |
+| A meter whose limit was not read | Its limit could not be read, so there is no meter. |
+| Gaps: heading | Couldn't count these days |
+| Gaps: one line, with its breakdown | {range}, {where}: {reason} |
+| Gaps: one line, for the whole metric | {range}: {reason} |
+| Gaps: a system that keeps per-person numbers for fewer days than the window | Kept for only {n} days on this system |
+| Gaps: under the lines | A day left blank was not counted. It is not a zero. |
+| A metric not collected yet | Not counted yet |
+| A card with such a metric: its step | Nothing for you to do. The numbers appear here once Syndra has counted. |
+| The add-on reports no statistics (target overview; a member or person page shows nothing) | This add-on does not report statistics. Nothing for you to do. |
+| Syndra could not read its own numbers | Syndra couldn't read these numbers just now. Reload this page to try again. |
+| Target overview: region title | What has been used here |
+| Target overview: lede | Totals for everyone who used it, over the last 30 days and the last 12 months. One person's numbers are on their page. |
+| When the last count ran | Last counted {age} |
+| Accounts Syndra does not manage, one | {n} account Syndra does not manage also used it. It is in the totals. |
+| Accounts Syndra does not manage, several | {n} accounts Syndra does not manage also used it. They are in the totals. |
+| The retention control: title (the target overview, under the totals; the one place it is set) | How long per-person numbers are kept |
+| The retention control: the field | Days |
+| The retention control: its hint, which is the one statement of what is set | Per-person numbers are kept for {days} days. Totals are kept for 5 years. |
+| The same, when an operator shortened it | Per-person numbers are kept for {days} days, as an operator set. Totals are kept for 5 years. |
+| The retention control: save | Save |
+| The retention control: back to the ceiling (only when a shorter value is set) | Keep the full 400 days |
+| The retention control: nothing to save | Type a new number of days first. |
+| Shortening asks first, in a dialog: its title | Keep per-person numbers for only {n} days? |
+| Shortening asks first: the dialog's words | Per-person numbers older than {n} days are deleted within a day, and cannot be brought back. Totals stay for 5 years. |
+| Shortening: the button that does it (the destructive fill) | Delete numbers older than {n} days |
+| Shortening: the button that does not | Keep them |
+| The retention control: the word on the result | Saved |
+| The retention control: the result | Per-person numbers older than {n} days are deleted within a day. Totals stay for 5 years. |
+| What the last count did not keep | The last count did not keep {reason}. |
+| a value for a day that is not a whole day, one | {n} value that was not for a whole day |
+| a value for a day that is not a whole day, several | {n} values that were not for a whole day |
+| a value or gap that is empty or below zero, one | {n} value or gap that was empty or below zero |
+| a value or gap that is empty or below zero, several | {n} values or gaps that were empty or below zero |
+| a per-person value for a number that is not per person, one | {n} per-person value for a number that is not per person |
+| a per-person value for a number that is not per person, several | {n} per-person values for a number that is not per person |
+| a value for an account Syndra does not manage, one | {n} value for accounts Syndra does not manage |
+| a value for an account Syndra does not manage, several | {n} values for accounts Syndra does not manage |
+| a value with a breakdown the add-on did not declare, one | {n} value with a breakdown the add-on did not declare |
+| a value with a breakdown the add-on did not declare, several | {n} values with a breakdown the add-on did not declare |
+| a value broken down by a person (never says who), one | {n} value broken down by a person |
+| a value broken down by a person, several | {n} values broken down by a person |
+| a value older than Syndra keeps, one | {n} value older than Syndra keeps |
+| a value older than Syndra keeps, several | {n} values older than Syndra keeps |
+| a value from more series than Syndra keeps, one | {n} value from more series than Syndra keeps |
+| a value from more series than Syndra keeps, several | {n} values from more series than Syndra keeps |
+| Insights: tab | Usage |
+| Insights: lede | How much of each thing is used across the makerspace, as spreads over the people who used it. No names are shown. |
+| Insights: the window | The last 30 days, from {day} |
+| Insights: how many people, one | 1 person |
+| Insights: how many people, several | {n} people |
+| Insights: a system that keeps fewer days than the window | Over the last {n} days only, as that is how long this system keeps per-person numbers. |
+| Insights: fewer than 5 people (no spread, no bar) | Too few people to show a spread without pointing at one of them. |
+| Insights: the spread | Half are at {p50} or under; nine in ten are at {p90} or under. |
+| Insights: nothing reports | No system reports per-person statistics yet. Nothing for you to do. |
+| Insights: its step | Nothing for you to do. One person's numbers are on their page in People. |
+| Insights: the link | Open People |
+| Insights: loading | Loading the usage |
+| Insights: could not read | Couldn't read the usage. |
+| Insights: freshness subject | The usage |
+| A chart's hover, a day with a value | {day}: {value} |
+| A chart's hover, a day nobody could count | {day}: couldn't count |
+| A chart's hover, a gauge's day with no new sample | {day}: no new value |
+| A chart's hover, a day Syndra no longer keeps | {day}: kept for only {n} days on this system |
+| A chart's hover, a day after the last one counted | {day}: not counted yet |
+| A chart's description for a screen reader | {what}, day by day over the last 30 days |
+| The same, with gaps | {what}, day by day over the last 30 days. Days that could not be counted are hatched |
+| A unit's group heading, count | Counts |
+| A unit's group heading, items | Items |
+| A unit's group heading, bytes | Sizes |
+| A unit's group heading, seconds | Durations |
+| A unit's group heading, grams | Weights |
+
+One meter draws every "used of limit" in the product (`components/ui/Meter.tsx`): 90% and over turns it warn and writes "nearly full" beside the bar, the limit itself writes "full", and the word is never left to the colour. Units are the registry's (`registry/units.json`): count plain, items "3 items", bytes in binary steps with one decimal ("18.4 GiB", as the storage card says it), seconds as minutes or hours, grams as g or kg. A meter is drawn over the limit Syndra **read** (the storage card's number), and when none was read it says so instead of guessing. Rows are in the order the backend sends them (alphabetical by label, then by breakdown).

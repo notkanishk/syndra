@@ -67,7 +67,7 @@ export function useInsightsUrl() {
   return {
     period: period as TrendPeriod,
     asof,
-    tab: params.get("tab") === "trends" ? ("trends" as const) : ("map" as const),
+    tab: params.get("tab") === "trends" ? ("trends" as const) : params.get("tab") === "usage" ? ("usage" as const) : ("map" as const),
     question: fromParams((k) => params.get(k)),
     view: params.get("view") === "list" ? ("list" as const) : ("map" as const),
     pins,

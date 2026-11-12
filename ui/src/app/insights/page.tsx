@@ -3,6 +3,8 @@
 import { TrendsTab } from "@/components/insights/TrendsTab";
 import { MapTab } from "@/components/insights/MapTab";
 import { useInsightsUrl } from "@/components/insights/useInsightsUrl";
+import { InsightsUsage } from "@/components/usage/InsightsUsage";
+import { INSIGHTS_TAB } from "@/components/usage/copy";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 
@@ -20,14 +22,15 @@ export default function InsightsPage() {
       <Tabs
         label="Views of the makerspace’s access"
         value={url.tab}
-        onSelect={(tab) => url.set({ tab: tab === "trends" ? "trends" : null })}
+        onSelect={(tab) => url.set({ tab: tab === "map" ? null : tab })}
         options={[
           { value: "map", label: "Map" },
           { value: "trends", label: "Trends" },
+          { value: "usage", label: INSIGHTS_TAB },
         ]}
       />
 
-      {url.tab === "trends" ? <TrendsTab url={url} /> : <MapTab url={url} />}
+      {url.tab === "trends" ? <TrendsTab url={url} /> : url.tab === "usage" ? <InsightsUsage /> : <MapTab url={url} />}
     </div>
   );
 }

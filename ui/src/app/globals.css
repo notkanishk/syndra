@@ -508,6 +508,11 @@
     --hover: rgba(243, 245, 239, 0.05);
     --divider: rgba(255, 255, 255, 0.05);
 
+    /* The stripe of a hatched gap in a chart: a day nobody could observe is
+       drawn as this, never as a zero. Over --surface-1 it clears 3:1 (checked
+       by chartTokens.test.ts); the series itself is --accent. */
+    --chart-hatch: rgba(243, 245, 239, 0.45);
+
     --shadow-dialog: 0 22px 50px rgba(0, 0, 0, 0.55);
     /* The wash behind a dialog or sheet: today's black in the dark room. */
     --scrim: rgba(0, 0, 0, 0.55);
@@ -578,6 +583,8 @@
     --tint-3: rgba(37, 28, 66, 0.08);
     --hover: rgba(37, 28, 66, 0.04);
     --divider: rgba(37, 28, 66, 0.06);
+
+    --chart-hatch: rgba(29, 24, 48, 0.5);
 
     --shadow-dialog: 0 22px 50px rgba(60, 40, 120, 0.18);
     /* The same violet-black as the dialog shadow, so daylight is never greyed by pure black. */

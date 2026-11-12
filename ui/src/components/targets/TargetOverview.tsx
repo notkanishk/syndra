@@ -11,6 +11,9 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
 import { UnconfirmedChanges } from "@/components/targets/UnconfirmedChanges";
 import { MergeFindings } from "@/components/targets/MergeFindings";
+import { OVERVIEW_LEDE, OVERVIEW_TITLE } from "@/components/usage/copy";
+import { StatsRetention } from "@/components/targets/StatsRetention";
+import { TargetStats } from "@/components/usage/TargetStats";
 import { Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
@@ -113,6 +116,7 @@ export function TargetOverview({ target }: { target: string }) {
     },
     { id: "accounts", label: "Accounts", count: inventory.data?.bound },
     { id: "runs", label: "What runs here", count: registered?.callable ? registered.operations.length : undefined },
+    { id: "stats", label: OVERVIEW_TITLE },
   ];
 
   const meta = [
@@ -319,6 +323,13 @@ export function TargetOverview({ target }: { target: string }) {
             {registered && <Capabilities registered={registered} />}
             <ReconcileControl target={target} lastKnown={lastKnown} />
           </div>
+        </Region>
+
+        {/* Region 4 · what has been used here. Every region keeps its seat:
+            an add-on that reports no statistics says so in place. */}
+        <Region id="stats" title={OVERVIEW_TITLE} lede={OVERVIEW_LEDE}>
+          <TargetStats target={target} />
+          <StatsRetention target={target} />
         </Region>
         </div>
         </NotOpenYet>

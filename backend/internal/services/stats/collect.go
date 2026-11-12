@@ -1,7 +1,7 @@
 // Package stats is Syndra's own statistics collector (addon-contract 6.6,
 // design §9.1, §9.6): each declared metric of each add-on read from its
 // watermark, checked, and kept, one transaction per metric per collection;
-// and the nightly retention (6.7).
+// and the daily retention (6.7): at start-up, then every 24 hours.
 //
 // A runner beside the drift sweep, never a step inside it: the sweep queues
 // work every six hours, and a slow /stats would delay convergence while a
@@ -359,8 +359,9 @@ func dimsKey(d map[string]string) string {
 	return string(raw)
 }
 
-// Prune is the nightly retention (STATS-RETENTION, 6.7): what retention no
-// longer keeps on today's makerspace day goes.
+// Prune is the daily retention (STATS-RETENTION, 6.7; at start-up, then every
+// 24 hours, so a shortened setting takes effect within a day): what retention
+// no longer keeps on today's makerspace day goes.
 func Prune(ctx context.Context) error {
 	points, gaps, err := db.PruneStats(ctx, clock.Day(clock.Now()))
 	if err != nil {

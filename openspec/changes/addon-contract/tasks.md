@@ -1766,7 +1766,7 @@ per-person only) applied there.
   metric, dims, gap_start`),
   `addon_metrics` (per metric: descriptor and watermark, ruling B3), and
   `targets.stats_subject_retention_days INT NULL` for the per-target shortening
-  (same migration, not a fifth) (design §9.6); nightly retention:
+  (same migration, not a fifth) (design §9.6); daily retention:
   per-subject points deleted after 400 days, target-wide after 5 years,
   gaps with the points they cover; no rollup; the per-target setting
   shortens the per-person retention only (ruling O4; one write place) and
@@ -1863,7 +1863,7 @@ per-person only) applied there.
       - A gap whose reason names a person is kept with the fixed reason "The add-on's reason named a person." and counted `person_in_dimension`; one whose dimensions name a person is dropped, as its series is (`TestNoValueOrReasonNamesABoundPerson`).
       - A person's page keeps a gap whose dimensions are `{}` or a subset of one of their series (every key=value of the gap in it), so `{"share":"makers"}` reaches their makers/smb series (`TestAGapOnPartOfASeriesIsOnThatSeries`).
       - Every breaker counting rule lives in `breaker.record`: `send` only marks a coded `/stats` answer `CallResponse.StatsRefusal`, and `record` neither counts nor clears it (`TestACodedStatsAnswerDoesNotClearTheBreaker`).
-- [ ] 6.9 UI, from descriptors only: the member card "What I have used"
+- [x] 6.9 UI, from descriptors only: the member card "What I have used"
   (counters summed with a sparkline, gauges latest with their day,
   `against` as a meter over the **observed** limit, gaps footnoted, every
   card ending in a next step or "nothing for you to do"), the same card on
@@ -1874,7 +1874,31 @@ per-person only) applied there.
   names; dates are makerspace days, as everywhere (ruling O1, no "UTC day"); add-on text quoted and capped;
   the `dataviz` skill's rules for gap-vs-zero and both themes; copy guard
   for the new sentences and for the absence of ranking words #ready-for-agent
-- [ ] 6.10 Staging: 48 hours of collection against staging TrueNAS, then an
+    - Built (6e, 12 Nov 2026): `components/usage/` (sentences in `copy.ts`, copy guide section 15, lint-guarded like 12 and 14), `lib/usage.ts`, `lib/queries/useStats.ts`; the card sits beside every kind's card (`MemberTargetCard`) and every person-page system card (`SystemsSection`), a fixed "What has been used here" region on the target overview, and a Usage tab on Insights. Meters read the limit the kind observed (`kinds/limits.ts`, storage from its home place), never a computed one; a totals page draws none. Not built: the System-page retention control (read-only line only), a per-day table view, provisional-day styling after the watermark.
+  - [x] 6e (Go) **Decided while building:** a person's `usage` carries `kept_from` (`YYYY-MM-DD`, first day per-person points are kept), read by `db.StatsKeptFrom` from the same `statsSubjectKeptFrom` SQL the prune and ingestion use (today − (N − 1): N days counting today, since fix round 3), and the per-person points reads start at `max(window, kept_from)` so a sum never counts a day the daily prune has yet to delete; every metric carries `counted_through` (the watermark as its last final day, null with it), computed once in Go from the stored makerspace-midnight watermark; insights metrics carry the start of their spread (`window_30d_from` since fix round 3, was `kept_from`), since they read per-person points whose retention can be shorter than the 30-day window; totals unchanged (five years outlast 12 months). Live test proves the read line is the prune's and ingestion's line.
+  Decided while building (6e UI fix round 2):
+  - One meter: `components/ui/Meter.tsx`; >=90% warn + "nearly full", >=100% "full"; used by MetricBlock, MyStorage, PersonStorage, StatusMeters; `Meter.test.tsx` also fails if any of those writes `role="meter"` itself.
+  - Retention: `kept_from` (usage, per-person card only) and `counted_through` (per metric, null-safe) are read as the backend names them; days before kept_from are hatched with Syndra's own reason ("Kept for only {n} days on this system"); headline "{value} in the last {n} days" when n < window; Insights shows "Over the last {n} days only" per metric when its kept_from is inside the window. (Superseded by fix round 3: N counts today, and windows are named from the backend's starts.)
+  - A day after counted_through with no point is blank ("not counted yet"), never 0; a day with a point is drawn.
+  - Retention control `StatsRetention.tsx` under TargetStats in region #stats; form is noValidate so the backend's 422 words are shown; shortening asks first, lengthening and "Keep the full 400 days" do not.
+  - Spark: any day without a value breaks the line; single-day runs are dots (gauges are never interpolated).
+  - Dropped sentence uses the shared `formatList` (format.ts); `joinNames` in MyStorage removed.
+  - storageLimits: exactly one bytes limit field, gated on drawnUsage(home, offline).
+  - Insights: fewer than 5 people shows the count and no spread or bar (MIN_SPREAD_MEMBERS; the backend has no floor for this read, insights.go's 5 is the single-route holder count).
+  - capText strips Cf and turns Cc into a space.
+  - Open: handoff said kept days are "not hatched like a gap"; built as the same hatch with its own reason per the brief. Say if a distinct treatment is wanted.
+  Decided while building (6e fix round 3):
+  - Retention of N days counts today: `statsSubjectKeptFrom` is today − (N − 1), the one SQL line the prune, ingestion, `StatsKeptFrom` and every per-person read share; 400 keep 400 days, 30 the same days as "the last 30 days"; the CHECK stays 1..400; live tests assert today − (N − 1).
+  - Windows are named from the backend's starts: a person's (and the totals') `usage` carries `window_30d_from` / `window_12m_from`, the starts `statsUsageFor` already read from; the card says "in the last 30 days" / "in the last 12 months", or "in the last {n} days" (n = start to today, today included) when the start is `kept_from`; the year line is not said when both start on one day; only drawn days before the 30-day start are hatched, and "Kept for only {n} days" is said only when one is; `YEAR_DAYS` and `keptDays` are gone.
+  - Insights' spread is clamped in its own query to `GREATEST(from, kept_from)` (targets joined, today a parameter, the shared line), before the prune as after; each metric returns that start as `window_30d_from` (replacing `kept_from`), and the page says "Over the last {n} days only" from it and the response's `from`, no clock of its own.
+  - "Deleted tonight" was false: the prune runs at start-up, then every 24 hours; the copy says "within a day", and the PruneStats, Prune, main and design text says daily.
+  - Shortening is confirmed in a dialog (Modal / ModalFooter): title "Keep per-person numbers for only {n} days?", the act `dangerConfirm` naming the number, "Keep them" the cancel; the destructive-fill guard now reads a label said by a copy module (`{copy.name(…)}`) from that export's text.
+  - The dialog asks only for a value the backend accepts (1 ≤ wanted < current); anything else is sent as typed, so the backend's 422 is the only answer; typing clears an old error (`save.reset()`).
+  Decided while building (6e fix round 4):
+  - The one-control-surface guard reads a confirm's label from the LAST `{copy.X` in its body (an attribute such as `reason={copy.NOTHING_TO_DELETE}` is not the label), and an export it cannot read on one line returns "" and fails closed; two self-tests hold both.
+  - The "Kept for only {n} days" footnote shows whenever a drawn row's window starts at `kept_from` (30-day or 12-month line), not only when a cell is hatched, so the 12-month line vanishing at N = 30 is explained; n counts `kept_from` to `today`.
+  - `usage.today` (makerspace day, YYYY-MM-DD) is sent with every reported `usage` and the UI counts `daysSince(start, usage.today)`, so a response cached across midnight keeps its n; Go test on the makerspace day (not UTC's), UI test on a response built yesterday. "nightly" comments reworded to "within a day".
+- [ ] 6.10 (the owner's, not an agent's) Staging: 48 hours of collection against staging TrueNAS, then an
   operator checks that the member storage card's current number matches
   `storage.status`, that the trend exists, that a share with auditing off
   shows a gap and not zero, that a day with the NAS stopped shows a gap and

@@ -67,6 +67,7 @@ vi.mock("next/navigation", async () => {
   };
 });
 
+vi.mock("@/components/usage/InsightsUsage", () => ({ InsightsUsage: () => <p>The usage tab</p> }));
 vi.mock("@/lib/queries/useTopology", () => ({
   useTopology: () => ({ ...topology, refetch: () => {} }),
 }));
@@ -194,6 +195,23 @@ describe("tabs and the link", () => {
     fireEvent.click(screen.getByRole("button", { name: "Map" }));
     expect(nav.state.search).toBe("");
     expect(screen.getByRole("group", { name: "Access map" })).toBeInTheDocument();
+  });
+
+  it("has a Usage tab the link holds, drawn by the statistics component, and Map takes it back", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Usage" }));
+    expect(nav.state.search).toBe("tab=usage");
+    expect(screen.getByText("The usage tab")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Access map" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    expect(nav.state.search).toBe("");
+    expect(screen.queryByText("The usage tab")).not.toBeInTheDocument();
+  });
+
+  it("opens straight on Usage from the link", () => {
+    nav.set("tab=usage");
+    renderPage();
+    expect(screen.getByRole("button", { name: "Usage" })).toHaveAttribute("aria-current", "page");
   });
 
   it("opens straight on Trends from the link", () => {

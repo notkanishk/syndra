@@ -15,14 +15,15 @@ import (
 // the stored meaning of each metric, its daily points and its gaps. Every day
 // here is a makerspace day, travelling as YYYY-MM-DD text ($n::date).
 
-// Retention (decision 13, ruling O4), the one definition the nightly prune and
-// a late point at ingestion both read, today being $1 and t the target's row:
-// a per-person point is kept stats_subject_retention_days (400 when unset; the
-// column's CHECK is the ceiling), a total five years, and a gap as long as the
-// totals it explains.
+// Retention (decision 13, ruling O4), the one definition the prune, a late
+// point at ingestion and every per-person read share, today being $1 and t the
+// target's row: a per-person point is kept stats_subject_retention_days (400
+// when unset; the column's CHECK is the ceiling) counting today, so N days are
+// today − (N − 1) through today, as "the last 30 days" are; a total five
+// years, and a gap as long as the totals it explains.
 const (
 	statsSubjectDays     = `COALESCE(t.stats_subject_retention_days, 400)`
-	statsSubjectKeptFrom = `$1::date - ` + statsSubjectDays
+	statsSubjectKeptFrom = `($1::date - (` + statsSubjectDays + ` - 1))`
 	statsTotalKeptFrom   = `$1::date - INTERVAL '5 years'`
 )
 
@@ -213,7 +214,8 @@ func nonNilDims(d map[string]string) map[string]string {
 
 // PruneStats deletes what retention no longer keeps on `today` (a makerspace
 // day): per-person points past their target's retention, totals and gaps
-// past five years. Nightly; returns how many points and gaps went.
+// past five years. Run at start-up and every 24 hours after (so a shortened
+// retention takes effect within a day); returns how many points and gaps went.
 func PruneStats(ctx context.Context, today string) (points, gaps int64, err error) {
 	tag, err := querier(ctx).Exec(ctx, `
 		DELETE FROM addon_metric_points p USING targets t
@@ -247,6 +249,20 @@ func StatsRetention(ctx context.Context, target string) (days int, set bool, err
 		return 0, false, fmt.Errorf("no target %q", target)
 	}
 	return days, setting != nil, err
+}
+
+// StatsKeptFrom is the first day (YYYY-MM-DD) whose per-person points a
+// target still keeps on `today`: the prune's own line, so a read can tell a
+// day retention deleted from a day nothing was counted.
+func StatsKeptFrom(ctx context.Context, today, target string) (string, error) {
+	var day string
+	err := querier(ctx).QueryRow(ctx, `
+		SELECT to_char(`+statsSubjectKeptFrom+`, 'YYYY-MM-DD') FROM targets t WHERE t.target = $2`,
+		today, target).Scan(&day)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", fmt.Errorf("no target %q", target)
+	}
+	return day, err
 }
 
 // SetStatsRetention sets, or with nil clears, how many days a target keeps
@@ -382,30 +398,37 @@ func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error)
 
 // StatsDistribution is how one per-person series spreads over members from a
 // day on: each member's sum of a counter's days, or a gauge's latest value,
-// counted and its median and 90th percentile. Never which member.
+// counted and its median and 90th percentile. Never which member. From is the
+// day the spread starts: the window's, or its target's first kept day when
+// retention is shorter.
 type StatsDistribution struct {
 	Target, Metric string
 	Dims           map[string]string
+	From           string
 	Members        int
 	P50, P90       float64
 }
 
-// StatsDistributions is every per-person series' distribution, every target.
-func StatsDistributions(ctx context.Context, from string) ([]StatsDistribution, error) {
+// StatsDistributions is every per-person series' distribution, every target,
+// over the days from `from` that its target still keeps on `today` (the
+// prune's own line, so a day it has yet to delete is never counted).
+func StatsDistributions(ctx context.Context, today, from string) ([]StatsDistribution, error) {
+	start := `GREATEST($2::date, ` + statsSubjectKeptFrom + `)`
 	rows, err := querier(ctx).Query(ctx, `
 		WITH per AS (
-			SELECT p.target_id, p.metric, p.dims, p.subject,
+			SELECT p.target_id, p.metric, p.dims, p.subject, `+start+` AS start,
 			       CASE WHEN m.descriptor->>'instrument' = 'counter' THEN SUM(p.value)
 			            ELSE (array_agg(p.value ORDER BY p.bucket_start DESC))[1] END AS v
 			  FROM addon_metric_points p
 			  JOIN addon_metrics m ON m.target_id = p.target_id AND m.metric = p.metric
-			 WHERE p.bucket_start >= $1::date AND p.subject <> ''
-			 GROUP BY p.target_id, p.metric, p.dims, p.subject, m.descriptor->>'instrument')
-		SELECT target_id, metric, dims, count(*),
+			  JOIN targets t ON t.target = p.target_id
+			 WHERE p.bucket_start >= `+start+` AND p.subject <> ''
+			 GROUP BY p.target_id, p.metric, p.dims, p.subject, m.descriptor->>'instrument', t.stats_subject_retention_days)
+		SELECT target_id, metric, dims, to_char(start, 'YYYY-MM-DD'), count(*),
 		       percentile_cont(0.5) WITHIN GROUP (ORDER BY v), percentile_cont(0.9) WITHIN GROUP (ORDER BY v)
 		  FROM per
-		 GROUP BY target_id, metric, dims
-		 ORDER BY target_id, metric`, from)
+		 GROUP BY target_id, metric, dims, start
+		 ORDER BY target_id, metric`, today, from)
 	if err != nil {
 		return nil, fmt.Errorf("read distributions: %w", err)
 	}
@@ -413,7 +436,7 @@ func StatsDistributions(ctx context.Context, from string) ([]StatsDistribution, 
 	var out []StatsDistribution
 	for rows.Next() {
 		var d StatsDistribution
-		if err := rows.Scan(&d.Target, &d.Metric, &d.Dims, &d.Members, &d.P50, &d.P90); err != nil {
+		if err := rows.Scan(&d.Target, &d.Metric, &d.Dims, &d.From, &d.Members, &d.P50, &d.P90); err != nil {
 			return nil, err
 		}
 		out = append(out, d)

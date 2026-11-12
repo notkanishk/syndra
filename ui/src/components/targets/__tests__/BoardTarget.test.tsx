@@ -129,13 +129,14 @@ describe("the jump chips", () => {
 
     const nav = screen.getByRole("navigation", { name: "Regions of this page" });
     const links = within(nav).getAllByRole("link");
-    expect(links.map((a) => a.getAttribute("href"))).toEqual(["#waiting", "#accounts", "#runs"]);
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["#waiting", "#accounts", "#runs", "#stats"]);
     expect(links[0]).toHaveTextContent("Waiting on you");
     expect(links[1]).toHaveTextContent("Accounts");
     expect(links[1]).toHaveTextContent("48");
     expect(links[2]).toHaveTextContent("What runs here");
+    expect(links[3]).toHaveTextContent("What has been used here");
     // Each lands on a region that keeps its seat.
-    for (const id of ["land", "waiting", "accounts", "runs"]) expect(document.getElementById(id)).not.toBeNull();
+    for (const id of ["land", "waiting", "accounts", "runs", "stats"]) expect(document.getElementById(id)).not.toBeNull();
   });
 
   // 8d: a jump glides there, and the heading it lands on flashes once. It is a control, not a hash jump.

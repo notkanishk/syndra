@@ -123,7 +123,7 @@ const eslintConfig = [
       `TemplateElement[value.cooked=${besideValue}]${skip}`,
     ].map((selector) => ({
       selector,
-      ...message("Write the sentence in components/results/copy.ts (copy-guide section 12) or components/actions/copy.ts (section 14), in openspec/changes/plain-language-copy/design.md; a renderer only calls it."),
+      ...message("Write the sentence in components/results/copy.ts (copy-guide section 12) or components/actions/copy.ts (section 14) or components/usage/copy.ts (section 15), in openspec/changes/plain-language-copy/design.md; a renderer only calls it."),
     }));
     const tests = ["src/**/__tests__/**", "src/**/__fixtures__/**", "src/**/*.test.{ts,tsx}"];
     const fieldHome = ["src/lib/fields.ts", "src/components/kinds/storage/**"];
@@ -135,12 +135,12 @@ const eslintConfig = [
       {
         // Everywhere: all three guards, minus where each is allowed.
         files: ["src/**/*.{ts,tsx}"],
-        ignores: ["src/lib/queries/invalidation.ts", "src/components/results/*.tsx", "src/components/actions/*.tsx", ...fieldHome, ...wordHome, ...tests],
+        ignores: ["src/lib/queries/invalidation.ts", "src/components/results/*.tsx", "src/components/actions/*.tsx", "src/components/usage/*.tsx", ...fieldHome, ...wordHome, ...tests],
         rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles, ...kindWord] },
       },
       {
         // The results and actions renderers: the everywhere set, and no inline sentence.
-        files: ["src/components/results/*.tsx", "src/components/actions/*.tsx"],
+        files: ["src/components/results/*.tsx", "src/components/actions/*.tsx", "src/components/usage/*.tsx"],
         ignores: tests,
         rules: { "no-restricted-syntax": ["error", ...invalidation, ...roles, ...kindWord, ...sentence] },
       },
