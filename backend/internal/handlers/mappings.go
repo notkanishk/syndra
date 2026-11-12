@@ -328,14 +328,22 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 	// The resolution comes back whether or not it refused, because "the value is
 	// fine" and "nobody could be asked" are different answers and a surface has
 	// to be able to say which one it is showing.
-	resolution, err := addonsResolvesValue(ctx, target, field, value)
-	if errors.Is(err, addons.ErrFieldNotListable) {
-		return "", "", resolution, newNotListable(ctx, target, field, schema)
-	}
+	resolution, err := resolveValue(ctx, target, field, value, schema)
 	if err != nil {
 		return "", "", resolution, err
 	}
 	return field, value, resolution, nil
+}
+
+// resolveValue is the ONE rule for whether a value may be named on a target:
+// the add-on's own /values decides, for a mapping and for an allowance alike.
+// A membership it cannot list comes back as the operator-worded notListable.
+func resolveValue(ctx context.Context, target, field, value string, schema []addons.EntitlementField) (addons.Resolution, error) {
+	resolution, err := addonsResolvesValue(ctx, target, field, value)
+	if errors.Is(err, addons.ErrFieldNotListable) {
+		return resolution, newNotListable(ctx, target, field, schema)
+	}
+	return resolution, err
 }
 
 // errMappingTargetSilent separates "the add-on is wrong" from "the add-on has
@@ -367,21 +375,11 @@ func newNotListable(ctx context.Context, target, field string, schema []addons.E
 	}
 }
 
-func writeMappingError(w http.ResponseWriter, err error) {
+// writeValueRefusal answers the two refusals resolveValue can produce and
+// reports whether it did. Shared by mappings and allowances, so a value the
+// add-on will not vouch for is refused in one shape wherever it is named.
+func writeValueRefusal(w http.ResponseWriter, err error) bool {
 	switch {
-	case errors.Is(err, db.ErrProjectRequired):
-		jsonErrorResponse(w, http.StatusConflict, "PROJECT_REQUIRED",
-			"Choose this system's Zitadel project first. Until then nothing can give access there.")
-	case errors.Is(err, db.ErrMappingExists):
-		jsonErrorResponse(w, http.StatusConflict, "MAPPING_EXISTS", err.Error())
-	case errors.Is(err, db.ErrMappingNotFound):
-		jsonErrorResponse(w, http.StatusNotFound, "MAPPING_NOT_FOUND", err.Error())
-	case errors.Is(err, db.ErrMappingInvalid):
-		jsonValidationErrorResponse(w, err.Error(), map[string]string{"mapping": "invalid"})
-	case errors.Is(err, errMappingTargetSilent):
-		// 503, not 400: the request may be perfectly correct and the backend
-		// cannot tell yet. Retrying once the add-on answers is the right move.
-		writeUpstreamStatus(w, http.StatusServiceUnavailable, err, "TARGET_CAPABILITIES_UNKNOWN")
 	case errors.Is(err, addons.ErrFieldNotListable):
 		// Before the family sentinel it wraps. A distinct detail key, because the
 		// dialog's step for "unresolvable" (read again, pick another) is false here.
@@ -401,6 +399,29 @@ func writeMappingError(w http.ResponseWriter, err error) {
 		// typo can't happen, and the one refusal left is a value removed on the
 		// target after the list was read. The dialog reads the list again.
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"value": "unresolvable"})
+	default:
+		return false
+	}
+	return true
+}
+
+func writeMappingError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, db.ErrProjectRequired):
+		jsonErrorResponse(w, http.StatusConflict, "PROJECT_REQUIRED",
+			"Choose this system's Zitadel project first. Until then nothing can give access there.")
+	case errors.Is(err, db.ErrMappingExists):
+		jsonErrorResponse(w, http.StatusConflict, "MAPPING_EXISTS", err.Error())
+	case errors.Is(err, db.ErrMappingNotFound):
+		jsonErrorResponse(w, http.StatusNotFound, "MAPPING_NOT_FOUND", err.Error())
+	case errors.Is(err, db.ErrMappingInvalid):
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"mapping": "invalid"})
+	case errors.Is(err, errMappingTargetSilent):
+		// 503, not 400: the request may be perfectly correct and the backend
+		// cannot tell yet. Retrying once the add-on answers is the right move.
+		writeUpstreamStatus(w, http.StatusServiceUnavailable, err, "TARGET_CAPABILITIES_UNKNOWN")
+	case writeValueRefusal(w, err):
+		// The value half is shared with the allowance surface: one answer shape.
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}

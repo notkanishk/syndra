@@ -687,6 +687,9 @@ One set of generic renderers (`ui/src/components/results/`) draws every member-s
 | A meter's ceiling | of {limit} |
 | A record held since a date | Since {date} |
 | A record due on a date | Due {date} |
+| A records list's column heading, the record's name (sorts the list) | Record |
+| A records list's column heading, held since (sorts the list) | Since |
+| A records list's column heading, due (sorts the list; the list opens on it) | Due |
 | What the add-on adds that Syndra does not know (heading) | What the add-on also says |
 | More of it than is shown | …and {n} more |
 | One place that was not recording, to a member | {place} did not record you, so nothing from that place appears here, whether or not it happened. Nothing for you to do. |
@@ -695,7 +698,7 @@ One set of generic renderers (`ui/src/components/results/`) draws every member-s
 | Several places that were not recording, to an operator | {place} and {place} did not record {person}, so nothing from those places appears here, whether or not it happened. Switch recording on there. |
 | Under an empty activity list when some places were not recording | Some places were not recording this account, so this is not the same as nothing having happened. See below. |
 
-A record's lateness is the add-on's word (its standing note and next step, for example "Overdue since 3 November" and "Bring it back to the front desk"), never worked out in the UI from a date. The meters that were read stay when some usage was not; empty meters never stand in for "nothing used". Records, meters and places are listed alphabetically (case aside), like every list of names. Where a sentence differs by reader it is one row per reader, and the code takes the reader (`Reader` in `copy.ts`) rather than choosing words inline. The storage kind says "shares" for the same places in `kinds/storage/ActivityCoverage.tsx`.
+A record's lateness is the add-on's word (its standing note and next step, for example "Overdue since 3 November" and "Bring it back to the front desk"), never worked out in the UI from a date. The meters that were read stay when some usage was not; empty meters never stand in for "nothing used". Records open in their most logical order, soonest due first (so overdue comes before due soon), then records with no due date, then by name (owner, 13 Nov 2026), and the Record, Since and Due headings re-sort the list (`SortHead`; a record with no date in the column in force always sits last). Meters and uncovered places stay alphabetical (case aside), since a place's name is what a person looks up. Where a sentence differs by reader it is one row per reader, and the code takes the reader (`Reader` in `copy.ts`) rather than choosing words inline. The storage kind says "shares" for the same places in `kinds/storage/ActivityCoverage.tsx`.
 
 ## 13. How fresh a read is (addon-contract slice 6b)
 

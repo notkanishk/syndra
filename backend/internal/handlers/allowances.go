@@ -169,7 +169,17 @@ func validateAllowanceAgainstTarget(ctx context.Context, target, field, value st
 	}
 	// Lifecycle fields are included rather than skipped: they are not bindable
 	// by a mapping and they are exactly what an operator suspension names.
-	return services.ValidateAllowanceTerm(schema, field, value)
+	field, value, err = services.ValidateAllowanceTerm(schema, field, value)
+	if err != nil {
+		return "", "", err
+	}
+	// Reference, last, through the SAME rule a mapping answers to: the add-on's
+	// /values decides what a value may be, so a hold on a group the target does
+	// not list is refused like a mapping on one (5.3e).
+	if _, err := resolveValue(ctx, target, field, value, schema); err != nil {
+		return "", "", err
+	}
+	return field, value, nil
 }
 
 func writeAllowanceError(w http.ResponseWriter, err error) {
@@ -184,6 +194,8 @@ func writeAllowanceError(w http.ResponseWriter, err error) {
 			"Adding to what a person already holds is not available yet. Replace their allowance instead.")
 	case errors.Is(err, db.ErrAllowanceInvalid):
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"allowance": "invalid"})
+	case writeValueRefusal(w, err):
+		// The mapping surface's answer, in its shape (5.3e).
 	case errors.Is(err, db.ErrAllowanceNotFound):
 		jsonErrorResponse(w, http.StatusNotFound, "ALLOWANCE_NOT_FOUND", err.Error())
 	case errors.Is(err, db.ErrAllowanceAlreadyInForce):

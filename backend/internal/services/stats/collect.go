@@ -17,11 +17,20 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"syndra/internal/addons"
 	"syndra/internal/clock"
 	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 )
+
+// directoryUsers is who the directory knows, for the display names the privacy
+// rule checks. A var so a test can stand in for Zitadel.
+var directoryUsers = func(ctx context.Context) ([]models.UserProfile, error) {
+	return directory.Default.Users(ctx)
+}
 
 // Read is one page of one metric's GET /stats, since an instant, from a
 // cursor ("" the first page).
@@ -97,7 +106,14 @@ func Collect(ctx context.Context, target string, m addons.Metric, buffer time.Du
 	if err != nil {
 		return nil, err
 	}
-	who := peopleOn(bindings)
+	// A refusal to read the directory fails the collection (the watermark
+	// stays): a privacy check that could not look at the names must not read
+	// as one that found none.
+	users, err := directoryUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("stats: the directory could not be read for display names: %w", err)
+	}
+	who := peopleOn(bindings, users)
 	dropped := map[string]int{}
 	err = db.CollectStats(ctx, target, m.Name, func(c *db.StatsTx) error {
 		stored, err := c.Watermark(ctx)
@@ -194,7 +210,7 @@ func finalThrough(reported, now time.Time) (time.Time, error) {
 
 // people is who is bound on the target: the subjects a point may name, and
 // the one pattern for every word that names a bound person (subject id,
-// account name and id), which no dimension value and no gap reason may
+// account name and id, and the display name the directory holds), which no dimension value and no gap reason may
 // contain (ruling B7).
 type people struct {
 	bound map[string]bool
@@ -205,7 +221,7 @@ type people struct {
 // has a name, so the pattern matches no text at all, "" included.
 const nobody = `[^\x00-\x{10FFFF}]`
 
-func peopleOn(bindings []db.TargetBinding) people {
+func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
 	who := people{bound: map[string]bool{}}
 	var quoted []string
 	add := func(name string) {
@@ -219,6 +235,15 @@ func peopleOn(bindings []db.TargetBinding) people {
 		add(b.Username)
 		if b.AccountID != nil {
 			add(*b.AccountID)
+		}
+	}
+	// A bound person's display name goes through the same matcher. QuoteMeta
+	// keeps a name with spaces or punctuation literal; whole-token matching
+	// holds for it as for any word. Under two characters it is never added:
+	// a one-letter "name" would name every text that has the letter as a token.
+	for _, u := range users {
+		if name := strings.TrimSpace(u.Name); who.bound[u.ID] && utf8.RuneCountInString(name) >= 2 {
+			add(name)
 		}
 	}
 	if len(quoted) == 0 {

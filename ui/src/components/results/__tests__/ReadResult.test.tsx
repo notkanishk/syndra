@@ -88,16 +88,39 @@ describe("records", () => {
     expect(screen.getByText("Parts shelf lists nothing for Bobby Roode. Nothing for you to do.")).toBeInTheDocument();
   });
 
-  it("lists records alphabetically by label, case aside", () => {
-    const { container } = show(
-      records([
-        { id: "1", label: "zip ties" },
-        { id: "2", label: "Caliper" },
-        { id: "3", label: "bandsaw" },
-      ]),
-    );
-    const labels = [...container.querySelectorAll("li > span > span:first-child")].map((n) => n.textContent);
-    expect(labels).toEqual(["bandsaw", "Caliper", "zip ties"]);
+  const order = (container: HTMLElement) =>
+    [...container.querySelectorAll("li > span:first-child > span:first-child")].map((n) => n.textContent);
+  const dated = records([
+    { id: "1", label: "zip ties" },
+    { id: "2", label: "Caliper", due: "2026-12-01T00:00:00Z" },
+    { id: "3", label: "bandsaw", due: "2026-11-03T00:00:00Z" },
+    { id: "4", label: "Anvil", due: "2026-12-01T00:00:00Z", since: "2026-11-01T00:00:00Z" },
+    { id: "5", label: "Awl" },
+    { id: "6", label: "Jig", due: "2026-10-01T00:00:00Z" },
+  ]);
+
+  it("opens in the logical order: earliest due first (overdue before due soon), then no due date, then name", () => {
+    const { container } = show(dated);
+    // Jig and bandsaw are the earlier dates, Anvil and Caliper tie on a day (name), Awl and zip ties have none (name).
+    expect(order(container)).toEqual(["Jig", "bandsaw", "Anvil", "Caliper", "Awl", "zip ties"]);
+  });
+
+  it("re-sorts by a heading, reverses on a second press, and keeps records with no date last either way", () => {
+    const { container } = show(dated);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by due" }));
+    expect(order(container)).toEqual(["Anvil", "Caliper", "bandsaw", "Jig", "Awl", "zip ties"]); // ties stay in name order
+    fireEvent.click(screen.getByRole("button", { name: "Sort by record" }));
+    expect(order(container)).toEqual(["Anvil", "Awl", "bandsaw", "Caliper", "Jig", "zip ties"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by record" }));
+    expect(order(container)).toEqual(["zip ties", "Jig", "Caliper", "bandsaw", "Awl", "Anvil"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by since" }));
+    expect(order(container)[0]).toBe("Anvil");
+  });
+
+  it("marks the heading in force, and the list opens on Due", () => {
+    show(dated);
+    expect(screen.getByRole("columnheader", { name: /due/i })).toHaveAttribute("aria-sort", "ascending");
+    expect(screen.getByRole("columnheader", { name: /record/i })).toHaveAttribute("aria-sort", "none");
   });
 
   it("shows label, category and both dates, and a standing's note and next step", () => {
@@ -114,7 +137,9 @@ describe("records", () => {
       ]),
     );
     expect(screen.getByText("Digital caliper")).toBeInTheDocument();
-    expect(screen.getByText(/measuring/)).toHaveTextContent(/Since 20 Oct.*Due 3 Nov/);
+    expect(screen.getByText("measuring")).toBeInTheDocument();
+    expect(screen.getByText("Since 20 Oct")).toBeInTheDocument();
+    expect(screen.getByText("Due 3 Nov")).toBeInTheDocument();
     expect(screen.getByText("Overdue since 3 November")).toBeInTheDocument();
     expect(screen.getByText("Bring it back to the front desk")).toBeInTheDocument();
   });
@@ -123,7 +148,7 @@ describe("records", () => {
     const { container } = show(records([{ id: "a", label: "Hot glue gun" }]));
     expect(screen.getByText("Hot glue gun")).toBeInTheDocument();
     expect(container.querySelector("[data-standing]")).toBeNull();
-    expect(container.textContent).not.toMatch(/Due|Since/);
+    expect(container.querySelector("li")?.textContent).not.toMatch(/Due|Since/);
   });
 
   it("never works out lateness from a date: a past due date with no standing says nothing is late", () => {

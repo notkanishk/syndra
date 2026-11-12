@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   ALSO_SAYS,
   NO_LIMIT,
+  RECORD_HEADS,
   UNCOVERED_GUIDANCE,
   dueDate,
   emptyEvents,
@@ -52,6 +53,7 @@ const SAID = [
   ofLimit("{limit}"),
   sinceDate("{date}"),
   dueDate("{date}"),
+  ...Object.values(RECORD_HEADS),
   ALSO_SAYS,
   noMoreLines(0).replace("0", "{n}"),
   ...[MEMBER, OP].flatMap((who) => PLACES.map((places) => uncoveredNote(places, who))),
