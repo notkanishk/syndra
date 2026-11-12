@@ -481,16 +481,20 @@ var ErrAddonOperationNotUnresolved = errors.New("db: that change is not waiting 
 //
 // by is the operator's id, or SyndraReader for a read of the target; the audit
 // action says which (`.answered` or `.read`), with the answer in its details.
+// It joins an ambient transaction (ResolveBindingCall's) and opens its own
+// otherwise.
 func ResolveAddonOperation(ctx context.Context, target, id string, happened bool, by string, grace time.Duration) (AddonOperation, error) {
 	resolution := AddonResolutionNotHappened
 	if happened {
 		resolution = AddonResolutionHappened
 	}
-	tx, err := PG.Begin(ctx)
+	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return AddonOperation{}, fmt.Errorf("begin resolve addon operation tx: %w", err)
 	}
-	defer tx.Rollback(ctx) // no-op after a successful Commit
+	if owned {
+		defer tx.Rollback(ctx) // no-op after a successful Commit
+	}
 
 	const q = `
 		UPDATE addon_operations
@@ -521,10 +525,65 @@ func ResolveAddonOperation(ctx context.Context, target, id string, happened bool
 	if _, err := tx.Exec(ctx, insertAudit, by, o.SubjectID, "addon."+o.Target+"."+o.Operation+how, o.ID, details); err != nil {
 		return AddonOperation{}, fmt.Errorf("insert addon operation answer audit: %w", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return AddonOperation{}, fmt.Errorf("commit resolve addon operation tx: %w", err)
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return AddonOperation{}, fmt.Errorf("commit resolve addon operation tx: %w", err)
+		}
 	}
 	return o, nil
+}
+
+// BindingOperations are the calls that write or forget the add-on's binding,
+// and so the backend's copy of it: an adoption, a release and a purge.
+var BindingOperations = []string{"account.adopt", "account.release", "account.purge"}
+
+// ErrBindingDecidedSince is ResolveBindingCall refusing a row whose subject's
+// binding on the target was acted on again after it was sent: running its half
+// now would write over that later decision, so a person settles it.
+var ErrBindingDecidedSince = errors.New("db: that subject's binding was changed again after this call")
+
+// ResolveBindingCall settles an open account.adopt or account.release as
+// happened, from the add-on's own record of it (GET /calls answered
+// recorded, tasks 6.3r), with half, the backend's half of the binding change
+// that the live handler runs after a success (recordAdoptedBinding,
+// forgetReleasedBinding in handlers/inventory.go).
+//
+// One transaction, not an order: half's writes join it (beginOrJoin,
+// querier), as does ResolveAddonOperation, so the binding copy and the row's
+// answer commit together or not at all, and a crash between them cannot
+// leave a settled row whose copy was never written, or the reverse. The row
+// is locked first (FOR UPDATE), so two lists settling it at once run half
+// once: the second finds it answered, ErrAddonOperationNotUnresolved, and
+// changes nothing. A later adopt, release or purge of the subject on the
+// target (any status) is ErrBindingDecidedSince, with nothing written.
+func ResolveBindingCall(ctx context.Context, target, id string, grace time.Duration, half func(context.Context) error) (AddonOperation, error) {
+	var out AddonOperation
+	err := InTx(ctx, func(tx pgx.Tx) error {
+		var later bool
+		err := tx.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM addon_operations l
+			                WHERE l.target = o.target AND l.subject_id = o.subject_id AND l.id <> o.id
+			                  AND l.operation = ANY($3::text[]) AND l.created_at >= o.created_at)
+			  FROM addon_operations o
+			 WHERE o.id = $1::uuid AND o.target = $2 AND o.resolution IS NULL
+			   AND o.operation IN ('account.adopt', 'account.release')
+			   FOR UPDATE OF o`, id, target, BindingOperations).Scan(&later)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return ErrAddonOperationNotUnresolved
+		case err != nil:
+			return fmt.Errorf("lock binding call: %w", err)
+		case later:
+			return ErrBindingDecidedSince
+		}
+		joined := context.WithValue(ctx, txKey, tx)
+		if err := half(joined); err != nil {
+			return err
+		}
+		out, err = ResolveAddonOperation(joined, target, id, true, SyndraReader, grace)
+		return err
+	})
+	return out, err
 }
 
 // SupersedeAddonOperations closes every earlier open operation of the same

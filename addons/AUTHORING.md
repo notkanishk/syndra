@@ -1989,9 +1989,13 @@ every call before acting, so there no record is no effect. Any other
 `unknown` settles nothing and the record stays for a person: an add-on may
 keep no intent for a non-physical write (an older build, a write sent
 before its log was written ahead), and past `call_memory` it may have
-forgotten. An `account.adopt` or `account.release` is never asked, since
-settling it would leave Syndra's own copy of the binding unwritten; the
-person repeats it, which writes both.
+forgotten. An `account.adopt` or `account.release` that is `recorded` is
+settled together with Syndra's own copy of the binding, written by the same
+function its handler runs after a live answer, in one transaction with the
+settle (`ResolveBindingCall` in `backend/internal/db/addon_operations.go`);
+an adoption's recorded reply MUST therefore carry `account_id`, or the
+record stays for a person, as it does when the subject's binding was acted
+on again since.
 
 **4. Naturally idempotent.** Checking out an item this subject already
 holds MUST answer `outcome: no_change` with the record, and write nothing

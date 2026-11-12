@@ -129,19 +129,7 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 	// add-on's store is what the apply consults; this is the copy the inventory
 	// and the member's view read, and writing it first would have made an
 	// account look managed that the add-on had refused to bind.
-	if err := dbRecordTargetBinding(r.Context(), db.TargetBinding{
-		Target: target, SubjectID: req.SubjectID,
-		Username: username, BoundBy: resolveActor(r, ""),
-		// The account id as the add-on read it off the target, not as this
-		// request described the account. A binding recorded by name alone
-		// stops recognising its account the moment somebody renames it on the
-		// NAS, and the account then reappears as unmanaged — offered for
-		// adoption to a second person while this binding still claims it.
-		//
-		// A pointer, and left nil when the add-on sent nothing: writing an
-		// empty id for "we were not told" would record an account nobody has.
-		AccountID: optionalID(res.AccountID),
-	}); err != nil {
+	if err := recordAdoptedBinding(r.Context(), target, req.SubjectID, username, resolveActor(r, ""), res.AccountID); err != nil {
 		// The adoption happened. Reported as a partial rather than a failure,
 		// because retrying it would be a second adoption of an account that
 		// is already bound — which the add-on answers from its dedup store,
@@ -163,6 +151,38 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 		// and the next convergence is a separate decision.
 		"detail": "The account is now bound to that person. Nothing on it was changed.",
 	})
+}
+
+// recordAdoptedBinding is the backend's half of an adoption the add-on
+// confirmed: its own copy of the binding. One function for the live answer
+// (handleAdoptAccount) and for the answer the add-on recorded when the live
+// one was lost (settleByCall, through db.ResolveBindingCall), so both leave
+// the same row. actor is who asked for the adoption.
+func recordAdoptedBinding(ctx context.Context, target, subject, username, actor, accountID string) error {
+	return dbRecordTargetBinding(ctx, db.TargetBinding{
+		Target: target, SubjectID: subject,
+		Username: username, BoundBy: actor,
+		// The account id as the add-on read it off the target, not as the
+		// request described the account. A binding recorded by name alone
+		// stops recognising its account the moment somebody renames it on the
+		// NAS, and the account then reappears as unmanaged — offered for
+		// adoption to a second person while this binding still claims it.
+		//
+		// A pointer, and left nil when the add-on sent nothing: writing an
+		// empty id for "we were not told" would record an account nobody has.
+		AccountID: optionalID(accountID),
+	})
+}
+
+// forgetReleasedBinding is the backend's half of a release the add-on
+// confirmed, one function for the live answer (handleReleaseBinding) and the
+// recorded one (settleByCall), as recordAdoptedBinding is for an adoption.
+// The observation goes with the binding: both are records of an account this
+// deployment no longer manages, and a base that outlives its binding is
+// compared on the next pass against whatever that subject is bound to next.
+func forgetReleasedBinding(ctx context.Context, target, subject string) error {
+	forgetMergeBase(ctx, target, subject)
+	return dbForgetTargetBinding(ctx, target, subject)
 }
 
 func writeAdoptionError(w http.ResponseWriter, err error) {
@@ -259,11 +279,7 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The observation goes with the binding. Both are records of an account this
-	// deployment no longer manages, and a base that outlives its binding is
-	// compared on the next pass against whatever that subject is bound to next.
-	forgetMergeBase(r.Context(), target, subject)
-	if err := dbForgetTargetBinding(r.Context(), target, subject); err != nil {
+	if err := forgetReleasedBinding(r.Context(), target, subject); err != nil {
 		// The add-on has already let go. Reported as a partial rather than a
 		// failure, because pressing again is safe and is exactly the repair:
 		// the add-on answers the second release as done, and this line runs

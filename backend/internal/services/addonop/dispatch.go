@@ -180,6 +180,17 @@ type operationAnswer struct {
 	AccountID string `json:"account_id"`
 }
 
+// AccountIDOf is an operation reply's account_id, empty when it has none or
+// does not parse: the one reading of it, for a live reply (Dispatch) and for
+// the reply an add-on recorded and GET /calls hands back (settleByCall).
+func AccountIDOf(reply []byte) string {
+	var answer operationAnswer
+	if len(reply) == 0 || json.Unmarshal(reply, &answer) != nil {
+		return ""
+	}
+	return answer.AccountID
+}
+
 // ErrRateLimited refuses a member driving a secret-bearing path faster than any
 // honest member would.
 var ErrRateLimited = errors.New("addonop: too many recent attempts for this subject; try again shortly")
@@ -389,11 +400,8 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	// Only on success, and never fatally. A body that will not parse is not a
 	// reason to un-succeed a call the target confirmed; it is a reason for the
 	// caller to see a zero and decide.
-	if resp.Outcome == addons.OutcomeSucceeded && len(resp.Body) > 0 {
-		var answer operationAnswer
-		if err := json.Unmarshal(resp.Body, &answer); err == nil {
-			result.AccountID = answer.AccountID
-		}
+	if resp.Outcome == addons.OutcomeSucceeded {
+		result.AccountID = AccountIDOf(resp.Body)
 	}
 	if err := settleOperation(ctx, id, status); err != nil {
 		// The call already happened; failing to record its outcome does not

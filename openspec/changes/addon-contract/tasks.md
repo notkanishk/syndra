@@ -1562,11 +1562,41 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       `operations.physical` counts the item as lent unless the confirm was a
       4xx refusal, so a lost or unreadable confirm's report says the item
       may be checked out.
-  - [ ] 6.3r (follow-up from the 6c fix round) A recorded `/calls` answer for
+  - [x] 6.3r (follow-up from the 6c fix round) A recorded `/calls` answer for
     an adoption or release could settle itself by running the same binding
     half as the adopt and release handlers (`handlers/inventory.go`), so the
     backend's copy is written with it; until then those two stay with a
-    person. #needs-triage
+    person.
+    *Done (13 Nov 2026):* the halves are extracted once,
+    `recordAdoptedBinding` and `forgetReleasedBinding` (handlers/inventory.go),
+    and called by the live handlers and by `settleByCall` through
+    `bindingHalf` (handlers/unconfirmed.go). A `recorded` adopt or release is
+    settled by `db.ResolveBindingCall`: one transaction that locks the row
+    (`FOR UPDATE`), refuses with `ErrBindingDecidedSince` when a later
+    `account.adopt`, `account.release` or `account.purge` of the subject on
+    the target exists (its half would write over that decision), runs the
+    half (its writes join via `beginOrJoin`/`querier`), then
+    `ResolveAddonOperation` (now joining an ambient transaction) as happened
+    by `system:syndra`. One transaction rather than an order, so a crash
+    leaves both or neither; a second settle finds the row answered and runs
+    nothing. An adoption's half needs `account_id` from the recorded reply
+    (`addonop.AccountIDOf`, the one reading of it, now also Dispatch's) and
+    the row's `about` (the username); without either it is not settled.
+    `in_doubt` and `unknown` are unchanged (neither is physical). The
+    insert's `CALL_UNSETTLED` and advisory lock are untouched.
+    - Tests: `binding_settle_test.go` (the settle leaves exactly the live
+      handler's binding / forgets exactly what the live release forgets;
+      no account id, in_doubt, unknown, decided since: open) and
+      `binding_call_live_test.go` (live: adopt and release settle with the
+      binding, twice runs the half once, a failed half or an unresolvable row
+      rolls the binding back, a later call of the same subject blocks and
+      another subject's does not). Mutation-checked: a settle that writes its
+      own binding, forgets without the merge base, settles by status alone,
+      or drops the account-id check, each fails.
+    - Copy traced: AUTHORING "What settles a record" said these were never
+      asked (fixed); the unconfirmed list's header comment (fixed); the UI
+      copy and help say nothing about how these rows settle, so nothing
+      there lies. `unconfirmed-and-self-settling` 2.5 annotated.
   - [ ] The UI half (6.3u, a separate builder from the 6c UI handoff): the
     member action with `format: target_id` as a typed-or-scanned input,
     preview then confirm, the poll, and the desk's sentence on Waiting on you
