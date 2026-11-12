@@ -37,7 +37,9 @@ export function MappingScreen({ target }: { target: string }) {
   const history = useMappingHistory(target);
   const roster = useTargets();
   const schema = useFieldSchema(target);
-  useCrumb("Mappings");
+  // Waits for the roster, as the system's own crumb does (crumbsFor), so the
+  // trail only ever grows at its end: System, then System / name / Mappings.
+  useCrumb(roster.isLoading ? null : "Mappings");
 
   const reach = mappings.data ? roleCount(mappings.data) : undefined;
   const name = nameOf(target);
