@@ -46,6 +46,7 @@ type statsSetup struct {
 	since  time.Time
 	locals map[string]bool // every target account id and username /subjects lists
 	own    map[string]bool // the username and account_id of the account the kit created, once it has
+	bound  map[string]bool // point subjects that are also local names, by whether the add-on's /plan says they are bound
 }
 
 func (k *kit) stats() {
@@ -165,6 +166,7 @@ func (k *kit) statsSetup(c *check) (statsSetup, string) {
 		set.locals[str(s, "account_id")], set.locals[str(s, "username")] = true, true
 	}
 	delete(set.locals, "")
+	set.bound = map[string]bool{}
 	// Only the kit's own account is surely a person: its name and id are the
 	// kit's to make unique. Another listed account may be a service account a
 	// resource is named after (a scanner share, a scanner user), so a match on
@@ -174,18 +176,42 @@ func (k *kit) statsSetup(c *check) (statsSetup, string) {
 	return set, ""
 }
 
-// kitSubject: a point's subject that is also a listed account's name is
-// still a Syndra subject when it is in the kit's namespace. Only kit runs make
-// conformance- subjects, and their accounts carry conformance- names (kit.go
-// refuses any other -subject or -email), which an add-on may derive from the
-// subject itself (the reference does). Every earlier run's account stays
-// listed, disabled and bound, so its subject's usage is reported by it
-// (#51 D1). The one exception the kit can prove: this run's own account,
-// when its name or id is not its subject.
-// Ceiling: an earlier run's name that differs from its subject is not told
-// apart; /subjects carries no binding, so the kit cannot know it.
-func (k *kit) kitSubject(subject string, set statsSetup) bool {
-	return subject == k.cfg.Subject || strings.HasPrefix(subject, subjectPrefix) && !set.own[subject]
+// learnBound asks the add-on, in one withdraw-only /plan, which point
+// subjects that are also a listed account's id or name are bound. A plan
+// changes nothing, and its outcome carries account_id only when the subject
+// has an account (apply_response.json), which for a subject is its binding.
+// Withdraw-only never creates, so the empty email (which the guide allows)
+// derives no name. A bound subject is a Syndra subject, whatever an account is
+// named: an add-on may name it after the subject (the reference does, so every
+// earlier kit run's account, disabled and still bound, collides; #51 D1). A
+// subject the plan does not prove bound (a failed plan included) stays a local
+// name. Only collisions are asked, so a run usually sends no plan here.
+func (k *kit) learnBound(set statsSetup, points []map[string]any) {
+	var ask []string
+	for _, p := range points {
+		s := str(p, "subject")
+		if _, known := set.bound[s]; s != "" && set.locals[s] && !known && !slices.Contains(ask, s) {
+			ask = append(ask, s)
+		}
+	}
+	for len(ask) > 0 {
+		n := len(ask)
+		if k.m.perPlan > 0 {
+			n = min(n, int(k.m.perPlan))
+		}
+		subjects := []any{}
+		for _, s := range ask[:n] {
+			set.bound[s] = false
+			subjects = append(subjects, map[string]any{"subject": s, "email": "", "desired": map[string]any{k.m.account: false}})
+		}
+		plan := k.readFor("/plan", map[string]any{"contract_version": Major, "subjects": subjects}, "plan_request.json")
+		for _, o := range objects(plan["outcomes"]) {
+			if s := str(o, "subject"); slices.Contains(ask[:n], s) && o["account_id"] != nil {
+				set.bound[s] = true
+			}
+		}
+		ask = ask[n:]
+	}
 }
 
 // statsCollected is why nothing is judged when the add-on has read nothing
@@ -326,6 +352,7 @@ func (k *kit) judgeStats(m map[string]any, r statsRead, set statsSetup) {
 	}
 
 	sums, maxes, totalOf := map[string]float64{}, map[string]float64{}, map[string]float64{}
+	k.learnBound(set, r.points)
 	for _, p := range r.points {
 		what := "point " + str(p, "start")
 		start, end, ok := day(pts, what, p)
@@ -338,7 +365,7 @@ func (k *kit) judgeStats(m map[string]any, r statsRead, set statsSetup) {
 		bucket := start.UTC().Format(time.RFC3339) + " " + canonical(dims)
 		if subject := str(p, "subject"); subject != "" {
 			pts.expect(perSubject, "%s: %s carries a subject on a metric that is not per_subject", name, what)
-			unbound.expect(!set.locals[subject] || k.kitSubject(subject, set), "%s: %s is reported for %q, the id or name of an account on the target, not a Syndra subject", name, what, subject)
+			unbound.expect(!set.locals[subject] || set.bound[subject], "%s: %s is reported for %q, the id or name of an account on the target, not a Syndra subject", name, what, subject)
 			sums[bucket] += v
 			maxes[bucket] = max(maxes[bucket], v)
 		} else {

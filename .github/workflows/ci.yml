@@ -102,8 +102,10 @@ jobs:
           go build -C addons/reference -o "$RUNNER_TEMP/reference-addon" ./cmd/reference-addon
           go build -C addons/conformance -o "$RUNNER_TEMP/syndra-addon-conform" ./cmd/syndra-addon-conform
           printf '%s' conformance-ci-test-secret-not-a-credential > "$RUNNER_TEMP/addon-secret"
+          trap 'kill $(jobs -p) 2>/dev/null' EXIT
           reference() { "$RUNNER_TEMP/reference-addon" -listen "127.0.0.1:$1" -target reference -secret-file "$RUNNER_TEMP/addon-secret" "${@:2}" &
-                        for _ in $(seq 50); do (: </dev/tcp/127.0.0.1/$1) 2>/dev/null && break; sleep 0.2; done; }
+                        for _ in $(seq 50); do (: </dev/tcp/127.0.0.1/$1) 2>/dev/null && return; sleep 0.2; done
+                        echo "::error::the reference on port $1 did not come up within 10 s"; return 1; }
           kit() { "$RUNNER_TEMP/syndra-addon-conform" -url "https://127.0.0.1:$port" -target reference \
                     -secret-file "$RUNNER_TEMP/addon-secret" "$@"; }
           port=8443; reference $port
@@ -114,6 +116,7 @@ jobs:
           kit
           kit -mutate -item item-0001 -subject "conformance-ci-all-$GITHUB_RUN_ID"
           kit
+          # item-0002: the run before leaves item-0001 checked out to its subject.
           kit -mutate -mutate-settings -item item-0002 -subject "conformance-ci-all-settings-$GITHUB_RUN_ID"
 
   ui:

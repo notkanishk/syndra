@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -236,10 +237,10 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 
 // One add-on outlives many kit runs. Each -mutate run leaves its subject's
 // account behind, disabled and still bound, so a later run's reads see
-// points for an earlier kit subject: that is a Syndra subject, not an
-// account name, even where the add-on named the account after it (the
-// reference does). Report #51 D1: reads after a -mutate failed stats.unbound,
-// and the next -mutate was refused.
+// points for an earlier kit subject: the add-on's /plan says it is bound, so
+// it is a Syndra subject, even where the add-on named the account after it
+// (the reference does). Report #51 D1: reads after a -mutate failed
+// stats.unbound, and the next -mutate was refused.
 func TestPointsForAnEarlierKitSubjectAreNotAccountNames(t *testing.T) {
 	url, _ := serveRewriting(t, testSecret, nil, nil, reference.OptionalFeatures)
 	for i, step := range []struct {
@@ -275,5 +276,31 @@ func TestAPointNamingTheKitsOwnAccountIsStillALocalName(t *testing.T) {
 	}
 	if got := r.Status("stats.unbound"); got != "fail" {
 		t.Errorf("stats.unbound says %s, want fail: %v", got, result(r, "stats.unbound").Detail)
+	}
+}
+
+// The other way round: an add-on that reports each person under the account's
+// username, named from an -email that is not the subject. The earlier run's
+// name is listed and no binding has it as a subject, so the reads-only run
+// fails stats.unbound (a namespace rule would have let it pass).
+func TestPointsUnderAnEarlierRunsUsernameAreLocalNames(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, statsRewrite("/stats", eachPoint(func(p map[string]any) {
+		if s, _ := p["subject"].(string); strings.HasPrefix(s, "conformance-self-test-") {
+			p["subject"] = "conformance-n" + strings.TrimPrefix(s, "conformance-self-test-") // the username
+		}
+	})), reference.OptionalFeatures)
+	for i, mutate := range []bool{true, false, true} {
+		cfg := config(url, mutate)
+		cfg.Subject, cfg.Email = fmt.Sprintf("conformance-self-test-%d", i), fmt.Sprintf("conformance-n%d@example.org", i)
+		if mutate {
+			cfg.Item = fmt.Sprintf("item-000%d", i+1)
+		}
+		r, err := Run(context.Background(), cfg)
+		if err != nil && !errors.Is(err, ErrReadsFailed) {
+			t.Fatal(err)
+		}
+		if got := r.Status("stats.unbound"); i < 2 && got != "fail" {
+			t.Errorf("run %d (mutate %v): stats.unbound says %s, want fail: points name accounts, not subjects", i, mutate, got)
+		}
 	}
 }

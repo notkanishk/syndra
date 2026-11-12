@@ -2243,17 +2243,29 @@ per-person only) applied there.
       account's username *is* the earlier subject. `statsSetup` put every
       listed username in `locals` and excused only this run's subject.
       `/subjects` carries no binding (its schema has `id`, `username`,
-      `account_id`; never a Syndra subject), so the kit cannot exclude
-      "every listed subject". It excuses the kit's namespace instead
-      (`kitSubject`): only kit runs make `conformance-` subjects, and kit.go
-      refuses any `-subject` or `-email` outside it. This run's own
-      account stays strict when its name or id is not its subject. Ceiling:
-      an earlier run whose name differed from its subject is not told
-      apart. `locals` is now every listed id and username, so the
-      dimension checks are unchanged. Tests:
-      `TestPointsForAnEarlierKitSubjectAreNotAccountNames` (one reference,
-      every feature: `-mutate`, reads, `-mutate -mutate-settings`; fails
-      before the fix) and `TestAPointNamingTheKitsOwnAccountIsStillALocalName`;
+      `account_id`; never a Syndra subject), so the kit asks the add-on:
+      a point subject that is also a listed id or name is excused only when
+      one batched withdraw-only `/plan` (`learnBound`; desired
+      `{account: false}`, email `""`) answers it with an `account_id`. A
+      plan changes nothing (guide "POST /plan"), an outcome carries
+      `account_id` only when an account exists (`apply_response.json`),
+      and withdraw-only on an unbound subject is `no_change` whatever the
+      email (guide; reference `decide`), so the empty email cannot
+      mislead. Only collisions are asked: usually no extra call. A plan
+      that fails proves nothing, so the point stays a local name. A
+      username equal to a bound subject is excused: ambiguous by
+      construction. The first cut excused the `conformance-` namespace;
+      review showed an add-on reporting under usernames (`-email
+      conformance-nN@…`) then passed a reads-only run, so it was replaced.
+      `locals` no longer drops `k.cfg.Subject`, which is stricter for
+      `.no-people.ids` when an account is named after the kit's subject.
+      Tests: `TestPointsForAnEarlierKitSubjectAreNotAccountNames` (one
+      reference, every feature: `-mutate`, reads, `-mutate
+      -mutate-settings`; fails before the fix),
+      `TestPointsUnderAnEarlierRunsUsernameAreLocalNames` (that bad add-on,
+      three runs; the reads-only run fails, and passes under the
+      namespace rule) and
+      `TestAPointNamingTheKitsOwnAccountIsStillALocalName`;
       `stats-local-name-subject` still fails `stats.unbound`.
     - Decided while building (6d-1 fix round): the `.no-people` MUST is the kit's own account only (username and `account_id`, which it makes unique); any other listed account is advisory (`.no-people.ids`), since TrueNAS lists service accounts and a `scanner` share by a `scanner` user is no leak (`TestAResourceNamedLikeAServiceAccountIsAdvisory`; `stats-dimension-names-person` still fails the MUST).
 
