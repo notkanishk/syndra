@@ -11,7 +11,7 @@ import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { notePage } from "@/lib/motion";
 import { usePageCrumb } from "@/lib/page-crumb";
 import { crumbsFor } from "@/lib/nav";
-import { useSystemNames } from "@/lib/queries/useFieldSchema";
+import { useSystemNamesIfRead } from "@/lib/queries/useFieldSchema";
 import type { SessionUser } from "@/lib/session";
 import { useUiView } from "@/lib/ui-view";
 
@@ -29,9 +29,10 @@ export function TopBar({ session }: { session: SessionUser }) {
   const { crumb } = usePageCrumb();
 
   // An operator's system page is crumbed by the roster's name (the rail reads
-  // the same one). A member's system page names itself (useCrumb) from
-  // GET /me/systems, so nothing here asks a read that calls each add-on.
-  const crumbs = crumbsFor(pathname, audience, useSystemNames(isOperator));
+  // the same one), and only once the roster is read, never the id first. A
+  // member's system page names itself (useCrumb) from GET /me/systems, so
+  // nothing here asks a read that calls each add-on.
+  const crumbs = crumbsFor(pathname, audience, useSystemNamesIfRead(isOperator));
   const trail = crumb ? [...crumbs, { label: crumb }] : crumbs;
 
   return (

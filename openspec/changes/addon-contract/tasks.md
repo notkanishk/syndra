@@ -643,6 +643,17 @@ already did). See 3.7.
     `memberNav(useMyStorage(member).data)`; `TopBar` passes
     `useSchemaSource(isOperator).nameOf` to `crumbsFor`. Middleware unchanged:
     reachability is the seat's pattern.
+    *Fixed (13 Nov 2026):* the operator's crumb drew the id title-cased while
+    the roster was being read, then swapped it for the name. `TopBar` now
+    passes `useSystemNamesIfRead` (undefined while the roster is first read,
+    otherwise the one `sourceOf`'s `nameOf`) and
+    `crumbsFor` stops at "System" until a name is known, as a member's page
+    waits for its `useCrumb`. `MappingScreen`'s own `useCrumb` waits for the
+    same read, so the trail only grows at its end (review of PR 173). Left: the
+    page heading and lede (`TargetOverview`, `MappingScreen`'s subline) still
+    show the id title-cased for that first read, then the name
+    (`useSystemNames`). Fixing that needs a heading placeholder, so it is a
+    follow-up, not this fix. #ready-for-agent
   - [x] 3.10d `app/systems/[target]` (`member/MemberSystemPage`): the kind's
     card under a header named by `name`; a storage-kind system
     `router.replace("/storage")`; not connected or not read → "This system
@@ -944,6 +955,34 @@ settings with the full §5 rules.
   against the **v2** add-on before 1.10; report attached; the kit's last
   line names the one disabled, labelled account it leaves (removal disables,
   never deletes) #ready-for-human
+  *Prepared (13 Nov 2026), owner's rule "only temporary, back to the
+  production setting afterwards":* run the kit inside
+  `scripts/addon-quiet-run.sh`. It refuses off staging (the dump directory
+  and a stand-in-Zitadel `.env`, both required). It recreates the add-on
+  with `TRUENAS_STATS_COLLECT_EVERY=0` and stops the backend (its 30 s HEALTH
+  probe) for the one command, then restores both on any exit. That includes a
+  dropped ssh session or a closed pipe: PIPE is ignored, the restore ignores
+  HUP, INT and TERM, and output stops after a failed write. The restore
+  verifies the add-on's setting equals its value before and the backend
+  answers `/healthz`, and records the outcome in syslog. Nothing is written to
+  `.env`. Staging shares production's NAS, so its add-on runs `read_only`
+  (`TRUENAS_LIFECYCLE_STATE`, which the script requires): nothing staging's
+  backend decides can write there, unless an operator switches it to active
+  on staging's target page (until the next recreate). The restore never
+  starts the backend beside an add-on it could not put back to read_only. `--writes` makes it `active` for the one command, the kit's `-mutate`
+  run, while the backend is stopped, and the restore puts `read_only` back and
+  verifies it. The whole staging procedure, including switching staging's
+  add-on back off afterwards, is in `scripts/README.md`. Held by
+  `repoguard/addon_quiet_run_test.go` against a fake `docker`, which checks:
+  - restore on success, on a failing command, and on a failing quiet
+    (`env -u` proved, for both overrides);
+  - read_only during a run without `--writes`, active only inside a
+    `--writes` command;
+  - a SIGHUP with nobody reading;
+  - a restore that did not take, and a backend that does not answer, both
+    reported;
+  - a stopped backend left stopped;
+  - refusal off staging and with a production `.env`.
 
 ## 5. The guide
 
