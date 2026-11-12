@@ -105,13 +105,15 @@ func TestANameIsAWholeToken(t *testing.T) {
 // name matches nothing at all.
 func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 	who := peopleOn(
-		[]db.TargetBinding{{SubjectID: "sub-cena"}, {SubjectID: "sub-blank"}, {SubjectID: "sub-one"}, {SubjectID: "sub-rey"}, {SubjectID: "sub-dashes"}, {SubjectID: "sub-digits"}, {SubjectID: "sub-accent"}},
+		[]db.TargetBinding{{SubjectID: "sub-cena"}, {SubjectID: "sub-blank"}, {SubjectID: "sub-one"}, {SubjectID: "sub-rey"}, {SubjectID: "sub-dashes"}, {SubjectID: "sub-digits"}, {SubjectID: "sub-accent"}, {SubjectID: "sub-raj"}, {SubjectID: "sub-ram"}},
 		[]models.UserProfile{
 			{ID: "sub-cena", Name: "John Cena"},
 			{ID: "sub-blank", Name: "   "},
 			{ID: "sub-one", Name: "x"},
 			{ID: "sub-dashes", Name: "--"},
 			{ID: "sub-digits", Name: "42"},
+			{ID: "sub-raj", Name: "Raj\u0915"},
+			{ID: "sub-ram", Name: "\u0930\u093e\u092e"},
 			{ID: "sub-accent", Name: "Andr\u00e9 the Giant"}, // precomposed
 			{ID: "sub-rey", Name: "Rey (Mysterio)"},
 			{ID: "sub-unbound", Name: "The Undertaker"},
@@ -126,9 +128,15 @@ func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 		{"john  cena", false}, // one phrase, as spelled
 		{"John", false},
 		{"Johnny Cena", false},
-		{"Rey (Mysterio) files", true},  // metacharacters are literal
-		{"The Undertaker", false},       // not bound on this target
-		{"x", false},                    // one character is never a name
+		{"Rey (Mysterio) files", true}, // metacharacters are literal
+		{"The Undertaker", false},      // not bound on this target
+		{"x", false},                   // one character is never a name
+		// A combining mark is part of the word: a nukta letter (NFC decomposes
+		// U+0958 to U+0915 U+093C) and a vowel sign continue the name's token.
+		{"Raj\u0958", false},
+		{"\u0930\u093e\u092e\u093e", false},
+		{"Raj\u0915 files", true},
+		{"\u0930\u093e\u092e files", true},
 		{"a -- b", false},               // no letter, no name
 		{"room 42", false},              // digits alone are no name
 		{"Andre\u0301 the Giant", true}, // decomposed spelling of the same name

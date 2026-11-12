@@ -252,7 +252,7 @@ func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
 	if len(quoted) == 0 {
 		quoted = []string{nobody}
 	}
-	who.named = regexp.MustCompile(`(?i)(?:^|[^\pL\pN])(?:` + strings.Join(quoted, "|") + `)(?:[^\pL\pN]|$)`)
+	who.named = regexp.MustCompile(`(?i)(?:^|[^\pL\pN\pM])(?:` + strings.Join(quoted, "|") + `)(?:[^\pL\pN\pM]|$)`)
 	return who
 }
 
