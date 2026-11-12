@@ -327,6 +327,16 @@ After the two Opus reviews (11 Nov 2026), decided by the owner and built:
   name **only under a logged create intent**, else `conflict` (test: an
   `employee_number` typed in a console does not bind; a second conflict on
   the same account inserts after the first is resolved) #ready-for-agent
+  - *Rollback note (slice 7b, 13 Nov 2026):* the TrueNAS mutation log's
+    records gain `account_id` (5.3d). A binary from before 7b decodes such a
+    record and drops the field, so its own `VerifyChain`/`VerifyLog` would
+    recompute those records' digests without it and call them altered. Both
+    are test-only: no running path calls them. `Append` chains on the stored
+    `digest`, and recovery (`recoverHead`, `InDoubt`, `Recover`) reads the
+    stored head and the outcome fields, so a rolled-back add-on appends,
+    recovers and reports its head as before, and Syndra's anchor still moves
+    forward. Rollback works; only an offline verify by the old binary
+    misreads the newer records.
 - [ ] 1.7b A release later: drop `account_uid` from both tables and the
   dual write; the one task the earlier draft lacked #ready-for-agent
 - [x] 1.9 Code for every message that moved in 1a: `PLAN_TOO_LARGE` (422)
@@ -1228,23 +1238,37 @@ settings with the full §5 rules.
   is exactly the derived one; `unboundConflict(...).Adoptable` (no binding
   names it, the add-on knows its own account and this is not it); its uid is
   in the add-on's range; no binding holds that uid under an older name
-  (`Store.UIDBound`); and `MutationLog.CreateInDoubt(subject, account_id)`
-  finds a `user.create` intent for this subject asking for that uid whose
-  latest result is `unknown`, with no `store.bind` of the subject (succeeded
-  or unknown) logged after it. Anything else stays `BINDING_CONFLICT`.
+  (`Store.UIDBound`); and `MutationLog.CreateInDoubt(subject, account_id)`,
+  reading every subject's records of that id, finds a `user.create` intent
+  for this subject asking for that uid whose latest result is `unknown`,
+  with no later binding record of the uid by anyone (`store.bind` or
+  `store.unbind`, succeeded or unknown), no later `store.bind` of this
+  subject, and no other subject's create of the uid that did not plainly
+  fail (failed, not_sent). Anything else stays `BINDING_CONFLICT`.
   - Log format: `Record.AccountID` (`account_id`, omitempty, in the digest
     only when set, so older records digest as before and the anchored chain
-    verifies across the upgrade), set on every write of a create from the
-    uid on (`caller.accountID` in `createAndConverge`). The intent is tied to
-    the account by the uid it asked for, not the name (ClaimID never hands a
-    uid out twice; a name is display, never identity), so an email change, a
-    released account or another subject's crashed create of the same name is
-    never adopted. An intent written before this field is never adopted.
+    verifies across the upgrade), set on a create's writes from the uid on
+    and on every binding write: apply's binds (create, rename, wanted SMB,
+    adoption), and `account.adopt`, `account.release` and `account.purge`
+    (`caller.on`). The intent is tied to the account by the uid it asked
+    for, not the name (a name is display, never identity). A uid is NOT
+    unique across the log on trust: an orphan group's gid is reused by the
+    next create (`emptyGroupNamed`), and a restored `state.db` rolls
+    `ClaimID`'s high-water mark back. Hence the cross-subject reading: any
+    later binding of the uid cancels the doubt whoever wrote it (an operator
+    adopting it to someone else, who then released it, review finding (a)),
+    and two subjects' creates of one uid are a conflict for a person, never
+    an adoption (design §5's two candidates, finding (b)). An intent written
+    before this field is never adopted.
   - The trace that settles the doubt is the adoption's own bind, logged
-    through `mutate` (`store.bind`, `BindIfFree`) like every binding change:
-    `CreateInDoubt` reads no create before a binding of the subject, so a
-    second create (or one after an operator's `account.release`) does not
-    adopt again. No new record kind or outcome.
+    through `mutate` (`store.bind`, `BindIfFree`, carrying the uid) like
+    every binding change, so a second create (or one after an operator's
+    `account.release`) does not adopt again. No new record kind or outcome.
+  - What can block the converge (the groups) is asked before the bind, so
+    a blocked adoption binds nothing and "Nothing was changed." is true; a
+    block that arises later (the group table changed in between) says
+    "Adopted X …" and "Only the binding was recorded", and a converge
+    error after the bind says the account was adopted.
   - The bind happens in `applyOne` after the fingerprint check, so a stale
     plan writes nothing; then `converge` and the outcome is `applied`
     ("Adopted X, which an earlier create made and could not record."), the
@@ -1253,12 +1277,21 @@ settings with the full §5 rules.
     Under the subject lock (`once`); `BindIfFree` holds the name against
     every other subject.
   - Tests: `adopt_in_doubt_test.go` (crash after the intent then `Recover`
-    then adopt; no intent, failed, not_sent, still open, another subject,
-    another uid, out of range, bound under an older name: conflict, plan
-    alike; second create bound path; release then create: conflict; the
-    bind logged; a create names its account). Mutation-checked: subject
-    equality, the `unknown` check, the later-binding rule, the uid tie,
-    `UIDBound`, the range.
+    then adopt; another subject's failed create of the uid still adopts; no
+    intent, failed, not_sent, still open, another subject's create, another
+    uid, two subjects' creates both unknown, bound since by another subject
+    with an unknown result, released since, this subject bound since before
+    ids, bound under an older name, the add-on's own account, below and
+    above the range: conflict, plan alike; adopted elsewhere then released,
+    end to end: conflict; a blocked adoption binds nothing; rotated
+    segments; second create bound path; release then create: conflict; the
+    bind logged; a create names its account) and `intent_test.go`
+    (`namesItsAccount`: every bind, unbind and purge delete carries the id).
+    Mutation-checked, each red: subject equality, the `unknown` check, the
+    uid tie, `!conflict.Adoptable`, the floor, the ceiling, an unknown bind
+    result cancelling, another subject's bind cancelling, the two-candidate
+    rule, `UIDBound`, the group check before the bind, the id on release and
+    on purge.
   - A name bound to another managed subject never reaches this rule: the
     derivation suffixes past it (unchanged).
 - [x] 5.3c A membership field that is not enumerable: the add-on cannot
@@ -1612,14 +1645,27 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
     and called by the live handlers and by `settleByCall` through
     `bindingHalf` (handlers/unconfirmed.go). A `recorded` adopt or release is
     settled by `db.ResolveBindingCall`: one transaction that locks the row
-    (`FOR UPDATE`), refuses with `ErrBindingDecidedSince` when a later
-    `account.adopt`, `account.release` or `account.purge` of the subject on
-    the target exists (its half would write over that decision), runs the
+    (`FOR UPDATE`), skips the half when the subject's binding was decided
+    since (see the review fixes below), runs the
     half (its writes join via `beginOrJoin`/`querier`), then
     `ResolveAddonOperation` (now joining an ambient transaction) as happened
     by `system:syndra`. One transaction rather than an order, so a crash
     leaves both or neither; a second settle finds the row answered and runs
-    nothing. An adoption's half needs `account_id` from the recorded reply
+    nothing.
+    *Review fixes (13 Nov 2026):* locks in one order, so settles cannot
+    deadlock: the call's advisory lock (`addonOperationLock`, the insert's
+    own spelling, now one const for both), the row `FOR UPDATE`, then the
+    subject's binding row `FOR UPDATE`. The copy counts as decided since,
+    and the half is NOT run, when a later adopt/release/purge of the subject
+    exists, when the binding row's `last_seen_at` is at or after the call was
+    recorded (the drain's `recordBinding` writes the copy with no operation
+    row, so a stale release would otherwise delete a newer copy, its merge
+    base and its propagation memory), or, for an adoption, when the binding
+    row names another account than the recorded reply. Decided since, the row
+    is still settled as happened (the add-on recorded it; the later write
+    owns the copy), never left with a person who could only repeat what is
+    true; `ErrBindingDecidedSince` is gone. `superseded` was not used: its
+    CHECK needs `superseded_by`, and a drain write has no row to name. An adoption's half needs `account_id` from the recorded reply
     (`addonop.AccountIDOf`, the one reading of it, now also Dispatch's) and
     the row's `about` (the username); without either it is not settled.
     `in_doubt` and `unknown` are unchanged (neither is physical). The
@@ -1634,9 +1680,21 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       own binding, forgets without the merge base, settles by status alone,
       or drops the account-id check, each fails.
     - Copy traced: AUTHORING "What settles a record" said these were never
-      asked (fixed); the unconfirmed list's header comment (fixed); the UI
-      copy and help say nothing about how these rows settle, so nothing
-      there lies. `unconfirmed-and-self-settling` 2.5 annotated.
+      asked (fixed); the unconfirmed list's header comment (fixed);
+      `unconfirmed-and-self-settling` 2.5 annotated. The Say what happened
+      dialog (`UnconfirmedChanges.tsx`) told a person to look under Accounts
+      Syndra manages and promised "Syndra manages it", but a person's answer
+      writes no binding (`handleSettleUnconfirmed`) and those lists read
+      Syndra's copy: now it says the lists can't tell and the next step is to
+      assign it (or stop tracking it) again, which the system answers either
+      way and the lists then follow (test in `UnconfirmedChanges.test.tsx`).
+    - `merge_findings.go`'s `ResolutionUnbound` now calls
+      `forgetReleasedBinding`, so an unbind also forgets what Syndra landed
+      (`ForgetPropagations`), which the inline copy skipped.
+    - More tests: concurrent settles of one row run the half once (live, 5
+      rounds); a newer drain-written binding survives a stale release; an
+      adoption whose copy names another account is not rewritten, one of the
+      same account is; an adopt row with no `about` stays for a person.
   - [ ] The UI half (6.3u, a separate builder from the 6c UI handoff): the
     member action with `format: target_id` as a typed-or-scanned input,
     preview then confirm, the poll, and the desk's sentence on Waiting on you

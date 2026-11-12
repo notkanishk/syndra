@@ -63,6 +63,20 @@ beforeEach(() => {
 });
 
 describe("Waiting on you: changes nobody confirmed", () => {
+  // An answer records the answer only: it writes no binding, and Syndra's lists
+  // read the binding. So no answer may claim the lists moved, and how to tell
+  // is to do it again (addon-contract 6.3r).
+  it.each([
+    ["account.adopt", /Assign sami\.zayn to Sami Zayn again/],
+    ["account.release", /Stop tracking sami\.zayn again/],
+  ])("%s: the lists can't tell, so the next step is to do it again", (operation, again) => {
+    renderIt([{ ...PURGE, operation }]);
+    fireEvent.click(screen.getByRole("button", { name: /^Say what happened/ }));
+    const dialog = document.body.textContent ?? "";
+    expect(dialog).toMatch(again);
+    expect(dialog).not.toMatch(/Syndra manages it|Syndra no longer manages it|under Accounts Syndra manages|under Not created by Syndra, it happened/);
+  });
+
   it("no rows: nothing shows, no card and no zero", () => {
     const { container } = renderIt([]);
     expect(container.textContent).toBe("");

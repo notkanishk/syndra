@@ -245,9 +245,12 @@ func (s *server) unboundConflict(account *Subject, owner string) *BindingConflic
 //     account and none a person made by hand, and no binding holds that uid
 //     under an older name;
 //   - the log holds a user.create intent for THIS subject that asked for that
-//     very uid, whose result is unknown, with no binding of the subject since
-//     (MutationLog.CreateInDoubt). ClaimID never hands a uid out twice, so
-//     the uid names exactly the account that create made.
+//     very uid, whose result is unknown; no binding of that uid by anyone,
+//     and none of this subject, logged since; and no other subject's create
+//     of the uid still open (MutationLog.CreateInDoubt). A uid is usually
+//     handed out once, but not always (an orphan group's gid is reused, a
+//     restored store rolls ClaimID back), so the log is read across subjects
+//     rather than the uid trusted to name one create.
 func (s *server) leftByCrashedCreate(subject, derived string, account *Subject, conflict *BindingConflict) (bool, error) {
 	floor, ceiling := s.idRange()
 	if account.Username != derived || !conflict.Adoptable || account.UID < floor || account.UID > ceiling {
@@ -262,7 +265,8 @@ func (s *server) leftByCrashedCreate(subject, derived string, account *Subject, 
 // adoptionWords prefixes an outcome with leftByCrashedCreate's adoption, once
 // for plan and apply. An outcome that converged nothing still bound the
 // account, so it says applied (the plan: apply), as the create it finishes
-// would; a blocked one is left as it is.
+// would; a blocked plan is left as it is, and a blocked apply says the
+// binding was recorded.
 func adoptionWords(out ApplyOutcome, planned bool) ApplyOutcome {
 	said := fmt.Sprintf("Adopted %s, which an earlier create made and could not record.", out.Username)
 	if planned {
@@ -275,7 +279,12 @@ func adoptionWords(out ApplyOutcome, planned bool) ApplyOutcome {
 			out.Effect = EffectApply
 		}
 	case EffectBlocked:
-		return out
+		if planned {
+			return out
+		}
+		// Only a block that arose after the checks applyOne asks first (the
+		// group table changed in between): the binding was written.
+		out.Consequence = "Only the binding was recorded; nothing on the account was changed."
 	}
 	out.Detail = strings.TrimSpace(said + " " + out.Detail)
 	return out
@@ -595,13 +604,21 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 	}
 
 	if adopt {
+		// What can block the converge is asked first (the groups, as converge
+		// and the plan ask it), so a blocked adoption binds nothing and its
+		// "Nothing was changed." is true.
+		if g := decide(current, desired, homeDecision{}).groups; g != nil {
+			if _, err := s.groupIDsFor(*g); err != nil {
+				return blockedOr(req.Subject, err, statusFor(err))
+			}
+		}
 		// The account this subject's own create left behind (5.3d), bound only
 		// now the plan is verified, so a stale plan changes nothing. A logged
 		// binding like every other (mutate), and the trace that settles the
 		// create in doubt: CreateInDoubt reads no create before a binding. Under
 		// the subject's lock (once), so no second create of theirs races it;
 		// BindIfFree holds the name against every other subject.
-		if err := s.mutate(applyCaller(req), "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
+		if err := s.mutate(applyCaller(req).on(binding.UID), "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
 			logStoreFailure("binding", req.Subject, err)
 			return ApplyOutcome{}, http.StatusInternalServerError, err
 		}
@@ -609,10 +626,11 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 		// the account, answered as a create.
 		out, status, err := s.converge(req, desired, current)
 		s.rememberWantedSMB(req, desired, err)
-		if err == nil {
-			out = adoptionWords(out, false)
+		if err != nil {
+			// The binding landed; what failed came after it.
+			return out, status, fmt.Errorf("%s was adopted for this subject, then: %w", binding.Username, err)
 		}
-		return out, status, err
+		return adoptionWords(out, false), status, nil
 	}
 
 	if current == nil {
@@ -677,7 +695,7 @@ func (s *server) rememberWantedSMB(req ApplyRequest, desired desiredState, apply
 	}
 	want := desired.smbEnabled
 	b.WantsSMB = &want
-	if err := s.mutate(applyCaller(req), "store.bind", func() error { return s.store.PutBinding(b) }); err != nil {
+	if err := s.mutate(applyCaller(req).on(b.UID), "store.bind", func() error { return s.store.PutBinding(b) }); err != nil {
 		logStoreFailure("binding", req.Subject, err)
 	}
 }
@@ -769,7 +787,7 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		if resolved.Username != binding.Username || resolved.UID != binding.UID {
 			// A rename, or a legacy binding's real uid: recorded so the next
 			// pass finds the account by name and is guarded by its uid.
-			if err := s.mutate(applyCaller(req), "store.bind", func() error { return s.store.PutBinding(resolved) }); err != nil {
+			if err := s.mutate(applyCaller(req).on(resolved.UID), "store.bind", func() error { return s.store.PutBinding(resolved) }); err != nil {
 				logStoreFailure("binding", req.Subject, err)
 			}
 		}
@@ -1166,7 +1184,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	// From here every write names the account it is for, by the uid asked
 	// for, so a crash between user.create and its record leaves an intent the
 	// next apply can match to exactly this account (CreateInDoubt, 5.3d).
-	who.accountID = accountID(id)
+	who = who.on(id)
 	create["group"] = groupID
 	create["group_create"] = false
 	// failed answers a failure before the account exists. A group made here
@@ -1216,7 +1234,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		uid = created.UID
 	}
 	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, uid, "apply"
-	if err := s.mutate(who, "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
+	if err := s.mutate(who.on(uid), "store.bind", func() error { return s.store.BindIfFree(binding) }); err != nil {
 		// The account exists and the record of whose it is did not land. Not a
 		// silent success: the next apply would derive the same name, find it
 		// unbound, and halt as a binding conflict — which is recoverable but
@@ -1315,9 +1333,20 @@ func (s *server) emptyGroupNamed(name string) (apiID, int64, bool) {
 
 // caller is the call a write belongs to: what its log records say beside the
 // write itself. Never a parameter's value: there is no field for one, which is
-// what keeps a password out of the log. accountID is the account a create's
-// writes are for (Record.AccountID), set by createAndConverge only.
+// what keeps a password out of the log. accountID is the account the write
+// is for (Record.AccountID): set by a create from its uid on, and by every
+// binding write, so the log can tell a create in doubt from an account bound,
+// released or created since (CreateInDoubt).
 type caller struct{ operation, subject, actor, callID, accountID string }
+
+// on is c naming the account uid its writes are for; a zero uid (a legacy
+// binding that kept none) names none.
+func (c caller) on(uid int64) caller {
+	if uid != 0 {
+		c.accountID = accountID(uid)
+	}
+	return c
+}
 
 // errNotLogged is a write refused because its intent could not be made
 // durable: nothing was sent. Answered 500 (APPLY_FAILED, OPERATION_FAILED,

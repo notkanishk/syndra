@@ -35,9 +35,10 @@ import (
 //
 // What is left in practice is deletes, a write whose add-on answered unknown
 // (it may keep no write-ahead record, or have forgotten), and an adopt or
-// release the add-on did not record, recorded without the account id an
-// adoption's copy needs, or whose subject's binding was acted on again since:
-// a person looks (the inventory and the binding conflict are where it shows).
+// release the add-on did not record, or recorded without the account id an
+// adoption's copy needs: a person looks, and repeats it (their answer writes
+// no binding copy; the repeat does). One recorded after which the subject's
+// binding was acted on again settles without its half (db.ResolveBindingCall).
 
 // unresolvedGrace is how long a claimed call may go unanswered before it is a
 // question rather than a call in flight; one value for the read, the answer
@@ -140,20 +141,17 @@ func settleByCall(ctx context.Context, o db.AddonOperation) (settled bool, s add
 	if !vouched {
 		return false, s, nil
 	}
-	if half, binding := bindingHalf(o, s.Reply); binding {
+	if half, accountID, binding := bindingHalf(o, s.Reply); binding {
 		// Only recorded gets here: neither is physical.
 		if half == nil {
 			return false, s, nil
 		}
-		_, err = dbResolveBindingCall(ctx, o.Target, o.ID, unresolvedGrace, half)
+		_, err = dbResolveBindingCall(ctx, o.Target, o.ID, accountID, unresolvedGrace, half)
 	} else {
 		_, err = dbResolveAddonOperation(ctx, o.Target, o.ID, happened, db.SyndraReader, unresolvedGrace)
 	}
 	if errors.Is(err, db.ErrAddonOperationNotUnresolved) {
 		return true, s, nil
-	}
-	if errors.Is(err, db.ErrBindingDecidedSince) {
-		return false, s, nil
 	}
 	if err != nil {
 		log.Printf("[ADDON] could not settle %s from its add-on's record on %s: %v (non-fatal)", o.ID, o.Target, err)
@@ -164,24 +162,25 @@ func settleByCall(ctx context.Context, o db.AddonOperation) (settled bool, s add
 
 // bindingHalf is the backend's half of a recorded adopt or release, the same
 // function its handler runs after a live success, bound to what the row and
-// the add-on's recorded reply say: binding is false for any other operation.
-// An adoption's copy needs the account id the add-on read off the target and
-// the name the row was sent about; a reply without the id leaves half nil and
-// the row with a person, never a copy keyed on the name alone.
-func bindingHalf(o db.AddonOperation, reply []byte) (half func(context.Context) error, binding bool) {
+// the add-on's recorded reply say, with the account id the reply names: binding
+// is false for any other operation. An adoption's copy needs the account id
+// the add-on read off the target and the name the row was sent about; a reply
+// without either leaves half nil and the row with a person, never a copy keyed
+// on the name alone.
+func bindingHalf(o db.AddonOperation, reply []byte) (half func(context.Context) error, accountID string, binding bool) {
 	switch o.Operation {
 	case "account.adopt":
 		id := addonop.AccountIDOf(reply)
 		if id == "" || o.About == "" {
-			return nil, true
+			return nil, "", true
 		}
 		return func(ctx context.Context) error {
 			return recordAdoptedBinding(ctx, o.Target, o.SubjectID, o.About, o.ActorID, id)
-		}, true
+		}, id, true
 	case "account.release":
-		return func(ctx context.Context) error { return forgetReleasedBinding(ctx, o.Target, o.SubjectID) }, true
+		return func(ctx context.Context) error { return forgetReleasedBinding(ctx, o.Target, o.SubjectID) }, "", true
 	}
-	return nil, false
+	return nil, "", false
 }
 
 // settleFromRead settles the setting changes a read of the target can answer,

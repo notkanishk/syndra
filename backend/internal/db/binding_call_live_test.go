@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -77,41 +79,56 @@ func boundRow(t *testing.T, ctx context.Context, subject string) (TargetBinding,
 	return b, found
 }
 
+// aged makes a binding row last written two hours ago, before any lostCall.
+func aged(t *testing.T, ctx context.Context, subject string) {
+	t.Helper()
+	if _, err := PG.Exec(ctx, `UPDATE target_account_bindings SET last_seen_at = NOW() - interval '2 hours', bound_at = NOW() - interval '2 hours'
+		WHERE target = $1 AND subject_id = $2`, bindTarget, subject); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func adoptionOf(subject, username, id string) func(context.Context) error {
+	return func(ctx context.Context) error {
+		return RecordTargetBinding(ctx, TargetBinding{Target: bindTarget, SubjectID: subject, Username: username, BoundBy: "op-lita", AccountID: &id})
+	}
+}
+
+func releaseOf(subject string) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := ForgetMergeBase(ctx, bindTarget, subject); err != nil {
+			return err
+		}
+		return ForgetTargetBinding(ctx, bindTarget, subject)
+	}
+}
+
 func TestLiveARecordedBindingCallSettlesWithItsHalfOnce(t *testing.T) {
 	ctx := bindingLive(t)
-	id := "200001"
-	adoption := func(ctx context.Context) error {
-		return RecordTargetBinding(ctx, TargetBinding{Target: bindTarget, SubjectID: "u-becky", Username: "charlotte", BoundBy: "op-lita", AccountID: &id})
-	}
-
 	call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
 	runs := 0
-	half := func(ctx context.Context) error { runs++; return adoption(ctx) }
-	if _, err := ResolveBindingCall(ctx, bindTarget, call, AddonUnresolvedGrace, half); err != nil {
+	half := func(ctx context.Context) error { runs++; return adoptionOf("u-becky", "charlotte", "200001")(ctx) }
+	if _, err := ResolveBindingCall(ctx, bindTarget, call, "200001", AddonUnresolvedGrace, half); err != nil {
 		t.Fatal(err)
 	}
 	if res, by := resolution(t, ctx, call); res != AddonResolutionHappened || by != SyndraReader {
 		t.Fatalf("want happened by Syndra's reading, got %q %q", res, by)
 	}
 	b, found := boundRow(t, ctx, "u-becky")
-	if !found || b.Username != "charlotte" || b.AccountID == nil || *b.AccountID != id || b.BoundBy != "op-lita" {
+	if !found || b.Username != "charlotte" || b.AccountID == nil || *b.AccountID != "200001" || b.BoundBy != "op-lita" {
 		t.Fatalf("want the binding the adoption writes, got %+v %t", b, found)
 	}
 
 	// Twice: the row is answered, so the half does not run again.
-	if _, err := ResolveBindingCall(ctx, bindTarget, call, AddonUnresolvedGrace, half); !errors.Is(err, ErrAddonOperationNotUnresolved) || runs != 1 {
+	if _, err := ResolveBindingCall(ctx, bindTarget, call, "200001", AddonUnresolvedGrace, half); !errors.Is(err, ErrAddonOperationNotUnresolved) || runs != 1 {
 		t.Fatalf("a second settle must change nothing: %v, half ran %d times", err, runs)
 	}
 
-	// A release recorded: the binding goes, with the row's answer.
+	// A release recorded, the binding older than it: the binding goes, with
+	// the row's answer.
+	aged(t, ctx, "u-becky")
 	rel := lostCall(t, ctx, "account.release", "u-becky", "charlotte")
-	forget := func(ctx context.Context) error {
-		if err := ForgetMergeBase(ctx, bindTarget, "u-becky"); err != nil {
-			return err
-		}
-		return ForgetTargetBinding(ctx, bindTarget, "u-becky")
-	}
-	if _, err := ResolveBindingCall(ctx, bindTarget, rel, AddonUnresolvedGrace, forget); err != nil {
+	if _, err := ResolveBindingCall(ctx, bindTarget, rel, "", AddonUnresolvedGrace, releaseOf("u-becky")); err != nil {
 		t.Fatal(err)
 	}
 	if _, found := boundRow(t, ctx, "u-becky"); found {
@@ -122,18 +139,52 @@ func TestLiveARecordedBindingCallSettlesWithItsHalfOnce(t *testing.T) {
 	}
 }
 
+// Settles of one row at once run its half once (the advisory lock, then the
+// row lock). Rounds, because a race lost once is luck.
+func TestLiveConcurrentSettlesOfOneBindingCallRunItsHalfOnce(t *testing.T) {
+	ctx := bindingLive(t)
+	for round := range 5 {
+		if _, err := PG.Exec(ctx, `DELETE FROM target_account_bindings WHERE target = $1`, bindTarget); err != nil {
+			t.Fatal(err)
+		}
+		call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
+		var runs atomic.Int32
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for range 8 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				_, err := ResolveBindingCall(ctx, bindTarget, call, "200001", AddonUnresolvedGrace, func(ctx context.Context) error {
+					runs.Add(1)
+					return adoptionOf("u-becky", "charlotte", "200001")(ctx)
+				})
+				if err != nil && !errors.Is(err, ErrAddonOperationNotUnresolved) {
+					t.Error(err)
+				}
+			}()
+		}
+		close(start)
+		wg.Wait()
+		if runs.Load() != 1 {
+			t.Fatalf("round %d: the half ran %d times", round, runs.Load())
+		}
+		if _, err := PG.Exec(ctx, `DELETE FROM addon_operations WHERE id = $1`, call); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // One transaction: a half that fails leaves no binding and the row open, and
 // a resolve that cannot happen takes the half's write back with it.
 func TestLiveABindingHalfAndItsSettleCommitTogether(t *testing.T) {
 	ctx := bindingLive(t)
-	id := "200002"
-	write := func(ctx context.Context) error {
-		return RecordTargetBinding(ctx, TargetBinding{Target: bindTarget, SubjectID: "u-kofi", Username: "kofi", BoundBy: "op-lita", AccountID: &id})
-	}
+	write := adoptionOf("u-kofi", "kofi", "200002")
 
 	call := lostCall(t, ctx, "account.adopt", "u-kofi", "kofi")
 	boom := errors.New("half failed")
-	if _, err := ResolveBindingCall(ctx, bindTarget, call, AddonUnresolvedGrace, func(ctx context.Context) error {
+	if _, err := ResolveBindingCall(ctx, bindTarget, call, "200002", AddonUnresolvedGrace, func(ctx context.Context) error {
 		if err := write(ctx); err != nil {
 			return err
 		}
@@ -150,14 +201,14 @@ func TestLiveABindingHalfAndItsSettleCommitTogether(t *testing.T) {
 
 	// Still in flight (dispatching inside the grace): the resolve refuses, and
 	// the half's write rolls back with it.
-	young, err := BeginAddonOperation(ctx, AddonOperationParams{Target: bindTarget, Operation: "account.adopt", ActorID: "op-lita", SubjectID: "u-xavier", About: "xavier"})
+	young, err := BeginAddonOperation(ctx, AddonOperationParams{Target: bindTarget, Operation: "account.adopt", ActorID: "op-lita", SubjectID: "u-kofi", About: "kofi"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ClaimAddonOperation(ctx, young, bindTarget, "account.adopt", "u-xavier"); err != nil {
+	if _, err := ClaimAddonOperation(ctx, young, bindTarget, "account.adopt", "u-kofi"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ResolveBindingCall(ctx, bindTarget, young, AddonUnresolvedGrace, write); !errors.Is(err, ErrAddonOperationNotUnresolved) {
+	if _, err := ResolveBindingCall(ctx, bindTarget, young, "200002", AddonUnresolvedGrace, write); !errors.Is(err, ErrAddonOperationNotUnresolved) {
 		t.Fatalf("a call in flight must not settle: %v", err)
 	}
 	if _, found := boundRow(t, ctx, "u-kofi"); found {
@@ -165,29 +216,78 @@ func TestLiveABindingHalfAndItsSettleCommitTogether(t *testing.T) {
 	}
 }
 
-// A later adopt, release or purge of the subject means its binding was
-// decided since: the older call's half would write over it.
-func TestLiveABindingCallDecidedSinceStaysForAPerson(t *testing.T) {
-	ctx := bindingLive(t)
-	call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
-	if _, err := BeginAddonOperation(ctx, AddonOperationParams{Target: bindTarget, Operation: "account.release", ActorID: "op-lita", SubjectID: "u-becky"}); err != nil {
-		t.Fatal(err)
+// The binding copy was decided since: the row settles as happened (the
+// add-on recorded it), and the half does not run over the later write.
+func TestLiveABindingCallDecidedSinceSettlesWithoutItsHalf(t *testing.T) {
+	never := func(t *testing.T) (func(context.Context) error, *bool) {
+		ran := false
+		return func(context.Context) error { ran = true; return nil }, &ran
 	}
-	ran := false
-	_, err := ResolveBindingCall(ctx, bindTarget, call, AddonUnresolvedGrace, func(context.Context) error { ran = true; return nil })
-	if !errors.Is(err, ErrBindingDecidedSince) || ran {
-		t.Fatalf("want ErrBindingDecidedSince and no half, got %v (ran %t)", err, ran)
-	}
-	if res, _ := resolution(t, ctx, call); res != "" {
-		t.Fatalf("the row must stay open, got %q", res)
+	settledWithout := func(t *testing.T, ctx context.Context, call, accountID string) {
+		t.Helper()
+		half, ran := never(t)
+		if _, err := ResolveBindingCall(ctx, bindTarget, call, accountID, AddonUnresolvedGrace, half); err != nil || *ran {
+			t.Fatalf("want settled without the half, got %v (ran %t)", err, *ran)
+		}
+		if res, _ := resolution(t, ctx, call); res != AddonResolutionHappened {
+			t.Fatalf("the row must settle as happened, got %q", res)
+		}
 	}
 
-	// Another subject's later call is not this binding's.
-	other := lostCall(t, ctx, "account.adopt", "u-kofi", "kofi")
-	if _, err := BeginAddonOperation(ctx, AddonOperationParams{Target: bindTarget, Operation: "account.purge", ActorID: "op-lita", SubjectID: "u-xavier"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ResolveBindingCall(ctx, bindTarget, other, AddonUnresolvedGrace, func(context.Context) error { return nil }); err != nil {
-		t.Fatalf("an unrelated subject's call must not block it: %v", err)
-	}
+	t.Run("a later call of the subject", func(t *testing.T) {
+		ctx := bindingLive(t)
+		call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
+		if _, err := BeginAddonOperation(ctx, AddonOperationParams{Target: bindTarget, Operation: "account.release", ActorID: "op-lita", SubjectID: "u-becky"}); err != nil {
+			t.Fatal(err)
+		}
+		settledWithout(t, ctx, call, "200001")
+	})
+	t.Run("another subject's later call is not this binding's", func(t *testing.T) {
+		ctx := bindingLive(t)
+		call := lostCall(t, ctx, "account.adopt", "u-kofi", "kofi")
+		if _, err := BeginAddonOperation(ctx, AddonOperationParams{Target: bindTarget, Operation: "account.purge", ActorID: "op-lita", SubjectID: "u-xavier"}); err != nil {
+			t.Fatal(err)
+		}
+		half, ran := never(t)
+		if _, err := ResolveBindingCall(ctx, bindTarget, call, "200002", AddonUnresolvedGrace, half); err != nil || !*ran {
+			t.Fatalf("want the half run, got %v (ran %t)", err, *ran)
+		}
+	})
+	// Review 2: the drain records a binding with no operation row. A release
+	// recorded before it must not delete it, its merge base or its memory.
+	t.Run("a binding written after the release, by the drain", func(t *testing.T) {
+		ctx := bindingLive(t)
+		call := lostCall(t, ctx, "account.release", "u-becky", "charlotte")
+		if err := adoptionOf("u-becky", "charlotte", "200001")(ctx); err != nil {
+			t.Fatal(err)
+		}
+		settledWithout(t, ctx, call, "")
+		if _, found := boundRow(t, ctx, "u-becky"); !found {
+			t.Fatal("a stale release deleted a newer binding")
+		}
+	})
+	t.Run("an adoption whose binding names another account", func(t *testing.T) {
+		ctx := bindingLive(t)
+		if err := adoptionOf("u-becky", "charlotte", "200009")(ctx); err != nil {
+			t.Fatal(err)
+		}
+		aged(t, ctx, "u-becky")
+		call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
+		settledWithout(t, ctx, call, "200001")
+		if b, _ := boundRow(t, ctx, "u-becky"); b.AccountID == nil || *b.AccountID != "200009" {
+			t.Fatalf("the binding was rewritten: %+v", b)
+		}
+	})
+	t.Run("an older binding of the same account is rewritten", func(t *testing.T) {
+		ctx := bindingLive(t)
+		if err := adoptionOf("u-becky", "charlotte", "200001")(ctx); err != nil {
+			t.Fatal(err)
+		}
+		aged(t, ctx, "u-becky")
+		call := lostCall(t, ctx, "account.adopt", "u-becky", "charlotte")
+		half, ran := never(t)
+		if _, err := ResolveBindingCall(ctx, bindTarget, call, "200001", AddonUnresolvedGrace, half); err != nil || !*ran {
+			t.Fatalf("want the half run, got %v (ran %t)", err, *ran)
+		}
+	})
 }

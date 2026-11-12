@@ -553,9 +553,8 @@ func performResolution(ctx context.Context, f db.MergeFinding, req resolveMergeF
 	case db.ResolutionUnbound:
 		// The add-on has already let go — `releaseOnTarget` ran before this
 		// transaction opened. This is the backend's half, and it runs only after
-		// the add-on confirmed its own.
-		forgetMergeBase(ctx, f.Target, f.SubjectID)
-		if err := dbForgetTargetBinding(ctx, f.Target, f.SubjectID); err != nil {
+		// the add-on confirmed its own: the same half as a release's.
+		if err := forgetReleasedBinding(ctx, f.Target, f.SubjectID); err != nil {
 			return fmt.Errorf("forget the binding for %s: %w", f.SubjectID, err)
 		}
 		return nil

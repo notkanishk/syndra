@@ -101,52 +101,91 @@ func TestACreateLeftInDoubtByACrashIsAdoptedByTheNextCreate(t *testing.T) {
 	}
 }
 
-// Every case but the one: each keeps BINDING_CONFLICT, plan and apply alike,
-// and binds nothing. The first row is the control that does adopt.
+// logWrite appends one write's intent and, unless result is empty, its result,
+// as mutate writes them.
+func logWrite(t *testing.T, s *server, subject, write, account, result string) {
+	t.Helper()
+	r := Record{Operation: "apply", Subject: subject, CallID: "c0-" + subject, Write: write, AccountID: account}
+	intent := r
+	intent.Outcome = outcomeIntent
+	logged, err := s.log.Append(intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result == "" {
+		return
+	}
+	r.Intent, r.Outcome = logged.Seq, result
+	if _, err := s.log.Append(r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Every case but the ones that adopt: each keeps BINDING_CONFLICT, plan and
+// apply alike, and binds nothing.
 func TestOnlyThisSubjectsUnknownCreateOfThatAccountIsAdopted(t *testing.T) {
 	const inRange = `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"groups":[42]}]`
+	unknownCreate := func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "200001", outcomeUnknown) }
 	for _, tc := range []struct {
-		name, users      string
-		subject, account string // the logged create's; empty logs none
-		result           string // its result; empty leaves it open
-		bind             *Binding
-		adopts           bool
+		name, users string
+		setup       func(*testing.T, *server)
+		adopts      bool
 		// routedAround: the name is another managed subject's, so the derivation
 		// suffixes past it (DeriveUsername) and a new account is made instead.
 		routedAround bool
 	}{
-		{name: "this subject's create, unknown", users: inRange, subject: "sub-1", account: "200001", result: outcomeUnknown, adopts: true},
-		{name: "no create logged", users: inRange},
-		{name: "the create failed", users: inRange, subject: "sub-1", account: "200001", result: outcomeFailed},
-		{name: "the create was never sent", users: inRange, subject: "sub-1", account: "200001", result: outcomeNotSent},
-		{name: "the create is still open", users: inRange, subject: "sub-1", account: "200001"},
-		{name: "another subject's create of that account", users: inRange, subject: "sub-2", account: "200001", result: outcomeUnknown},
-		{name: "this subject's create of another account", users: inRange, subject: "sub-1", account: "200002", result: outcomeUnknown},
-		{name: "bound to another subject", users: inRange, subject: "sub-1", account: "200001", result: outcomeUnknown,
-			bind: &Binding{SubjectID: "sub-2", Username: "charlotte", UID: 200001}, routedAround: true},
-		{name: "bound to another subject under an older name", users: inRange, subject: "sub-1", account: "200001", result: outcomeUnknown,
-			bind: &Binding{SubjectID: "sub-2", Username: "lita", UID: 200001}},
-		{name: "outside the add-on's range", subject: "sub-1", account: "9001", result: outcomeUnknown,
+		{name: "this subject's create, unknown", users: inRange, setup: unknownCreate, adopts: true},
+		{name: "another subject's create of it failed", users: inRange, adopts: true, setup: func(t *testing.T, s *server) {
+			logWrite(t, s, "sub-2", "user.create", "200001", outcomeFailed)
+			unknownCreate(t, s)
+		}},
+		{name: "no create logged", users: inRange, setup: func(*testing.T, *server) {}},
+		{name: "the create failed", users: inRange, setup: func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "200001", outcomeFailed) }},
+		{name: "the create was never sent", users: inRange, setup: func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "200001", outcomeNotSent) }},
+		{name: "the create is still open", users: inRange, setup: func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "200001", "") }},
+		{name: "another subject's create of that account", users: inRange, setup: func(t *testing.T, s *server) { logWrite(t, s, "sub-2", "user.create", "200001", outcomeUnknown) }},
+		{name: "this subject's create of another account", users: inRange, setup: func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "200002", outcomeUnknown) }},
+		// Review (b): an orphan group's gid reused, two creates of one uid in doubt.
+		{name: "two subjects' creates of the uid, both unknown", users: inRange, setup: func(t *testing.T, s *server) {
+			unknownCreate(t, s)
+			logWrite(t, s, "sub-2", "user.create", "200001", outcomeUnknown)
+		}},
+		{name: "the account was bound since, by another subject, and the bind's result is unknown", users: inRange, setup: func(t *testing.T, s *server) {
+			unknownCreate(t, s)
+			logWrite(t, s, "sub-2", "store.bind", "200001", outcomeUnknown)
+		}},
+		{name: "the account was released since", users: inRange, setup: func(t *testing.T, s *server) {
+			unknownCreate(t, s)
+			logWrite(t, s, "sub-2", "store.unbind", "200001", outcomeSucceeded)
+		}},
+		{name: "this subject was bound since, before records carried an id", users: inRange, setup: func(t *testing.T, s *server) {
+			unknownCreate(t, s)
+			logWrite(t, s, "sub-1", "store.bind", "", outcomeSucceeded)
+		}},
+		{name: "bound to another subject", users: inRange, routedAround: true, setup: func(t *testing.T, s *server) {
+			unknownCreate(t, s)
+			if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "charlotte", UID: 200001}); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "bound to another subject under an older name", users: inRange, setup: func(t *testing.T, s *server) {
+			unknownCreate(t, s)
+			if err := s.store.PutBinding(Binding{SubjectID: "sub-2", Username: "lita", UID: 200001}); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "the add-on's own account", users: inRange, setup: func(t *testing.T, s *server) {
+			unknownCreate(t, s)
+			s.nas.selfName, s.nas.selfUID = "charlotte", 200001
+		}},
+		{name: "below the add-on's range", setup: func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "9001", outcomeUnknown) },
 			users: `[{"username":"charlotte","id":19,"uid":9001,"locked":false,"smb":false,"groups":[42]}]`},
+		{name: "above the add-on's range", setup: func(t *testing.T, s *server) { logWrite(t, s, "sub-1", "user.create", "1000000", outcomeUnknown) },
+			users: `[{"username":"charlotte","id":19,"uid":1000000,"locked":false,"smb":false,"groups":[42]}]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, m := applyServer(t, tc.users)
-			if tc.bind != nil {
-				if err := s.store.PutBinding(*tc.bind); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if tc.subject != "" {
-				intent, err := s.log.Append(Record{Operation: "apply", Subject: tc.subject, CallID: "c0", Write: "user.create", AccountID: tc.account, Outcome: outcomeIntent})
-				if err != nil {
-					t.Fatal(err)
-				}
-				if tc.result != "" {
-					if _, err := s.log.Append(Record{Operation: "apply", Subject: tc.subject, CallID: "c0", Write: "user.create", AccountID: tc.account, Intent: intent.Seq, Outcome: tc.result}); err != nil {
-						t.Fatal(err)
-					}
-				}
-			}
+			tc.setup(t, s)
 
 			planned := planCharlotte(t, s)
 			rr := postApply(t, s, applyCall("c1"))
@@ -158,7 +197,7 @@ func TestOnlyThisSubjectsUnknownCreateOfThatAccountIsAdopted(t *testing.T) {
 				return
 			}
 			if tc.adopts {
-				if rr.Code != http.StatusOK || !bound || planned.Effect != EffectApply {
+				if rr.Code != http.StatusOK || !bound || b.UID != 200001 || planned.Effect != EffectApply {
 					t.Fatalf("want adopted, got plan %s, apply %d %s", planned.Effect, rr.Code, rr.Body.String())
 				}
 				return
@@ -173,6 +212,76 @@ func TestOnlyThisSubjectsUnknownCreateOfThatAccountIsAdopted(t *testing.T) {
 				t.Fatal("nothing may be written")
 			}
 		})
+	}
+}
+
+// Review (a), end to end: this subject's create is in doubt, an operator
+// adopts the account to someone else, who releases it. The next create must
+// not take that person's former account.
+func TestAnAccountBoundElsewhereSinceIsNotAdoptedByAnOldDoubt(t *testing.T) {
+	s, _ := applyServer(t, `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"groups":[42]}]`)
+	logWrite(t, s, "sub-1", "user.create", "200001", outcomeUnknown)
+	if rr := postOperation(t, s, "account.adopt", `{"call_id":"c2","operation":"account.adopt","subject":"sub-2","actor":"op-lita","params":{"username":"charlotte"}}`); rr.Code != http.StatusOK {
+		t.Fatalf("adopt: %d %s", rr.Code, rr.Body.String())
+	}
+	if rr := postOperation(t, s, "account.release", `{"call_id":"c3","subject":"sub-2"}`); rr.Code != http.StatusOK {
+		t.Fatalf("release: %d %s", rr.Code, rr.Body.String())
+	}
+	for _, r := range records(t, s) {
+		if (r.Write == "store.bind" || r.Write == "store.unbind") && r.AccountID != "200001" {
+			t.Fatalf("a binding write must name its account: %+v", r)
+		}
+	}
+	if rr := postApply(t, s, applyCall("c4")); rr.Code != http.StatusConflict || problemCode(t, rr) != CodeBindingConflict {
+		t.Fatalf("want BINDING_CONFLICT, got %d %s", rr.Code, rr.Body.String())
+	}
+	if _, bound, _ := s.store.GetBinding("sub-1"); bound {
+		t.Fatal("sub-1 took an account another subject held since")
+	}
+}
+
+// An adoption whose converge would block binds nothing, so the blocked
+// outcome's "Nothing was changed." is true; the plan blocks alike.
+func TestAnAdoptionThatWouldBlockBindsNothing(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"charlotte","id":19,"uid":200001,"locked":false,"smb":false,"groups":[42]}]`)
+	logWrite(t, s, "sub-1", "user.create", "200001", outcomeUnknown)
+	body := `{"call_id":"c1","subject":"sub-1","email":"charlotte@example.org","desired":{"group":["no_such_group"],"enabled":true}}`
+	rr := postApply(t, s, body)
+	out := decodeOutcome(t, rr)
+	if rr.Code != http.StatusUnprocessableEntity || problemCode(t, rr) != CodeApplyBlocked || out.Consequence != "Nothing was changed." {
+		t.Fatalf("want 422 APPLY_BLOCKED saying nothing changed, got %d %s", rr.Code, rr.Body.String())
+	}
+	if _, bound, _ := s.store.GetBinding("sub-1"); bound || len(m.updates) != 0 {
+		t.Fatal("a blocked adoption bound the account")
+	}
+}
+
+// The licence is read across rotated segments: a create in an old segment
+// still counts, and a bind of its account in a later one still cancels it.
+func TestCreateInDoubtReadsEveryRotatedSegment(t *testing.T) {
+	l, err := OpenMutationLog(t.TempDir(), 1, 16) // rotates before every append
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	app := func(r Record) Record {
+		t.Helper()
+		got, err := l.Append(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	in := app(Record{Subject: "sub-1", Write: "user.create", AccountID: "200001", Outcome: outcomeIntent})
+	app(Record{Subject: "sub-1", Write: "user.create", AccountID: "200001", Intent: in.Seq, Outcome: outcomeUnknown})
+	app(Record{Subject: "sub-3", Write: "user.update", Outcome: outcomeIntent})
+	if ok, err := l.CreateInDoubt("sub-1", "200001"); err != nil || !ok {
+		t.Fatalf("a create in an older segment must count: %t %v", ok, err)
+	}
+	bind := app(Record{Subject: "sub-2", Write: "store.bind", AccountID: "200001", Outcome: outcomeIntent})
+	app(Record{Subject: "sub-2", Write: "store.bind", AccountID: "200001", Intent: bind.Seq, Outcome: outcomeSucceeded})
+	if ok, err := l.CreateInDoubt("sub-1", "200001"); err != nil || ok {
+		t.Fatalf("a bind in a later segment must cancel it: %t %v", ok, err)
 	}
 }
 

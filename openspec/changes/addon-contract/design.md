@@ -751,13 +751,17 @@ account.
 `leftByCrashedCreate`): the account holding the derived name is unbound (by
 name and by uid), not the add-on's own, inside the add-on's uid range, and
 the log holds a `user.create` intent for **this** subject asking for **that
-uid** (each create's records carry `account_id`, the uid it asked for; a name
-is display, never identity) whose latest result is `unknown`, with no
-binding of the subject logged after it. Plan predicts it (`Adopts …`), apply
-binds it after the fingerprint check through `mutate`, then converges and
-answers as the create would have. That logged bind is the trace that settles
-the doubt: a later create, even after a release, finds a binding after the
-intent and does not adopt again.
+uid** (a create's records and every binding write carry `account_id`; a
+name is display, never identity) whose latest result is `unknown`, with no
+binding of that uid by any subject, and none of this subject, logged after
+it, and no other subject's create of the uid that did not plainly fail (two
+candidates are a conflict). The log is read across subjects because a uid is
+not unique on trust: an orphan group's gid is reused, and a restored store
+rolls the high-water mark back. Plan predicts it (`Adopts …`); apply checks
+what could block, then binds it after the fingerprint check through
+`mutate`, converges and answers as the create would have. That logged bind
+is the trace that settles the doubt: a later create, even after a release,
+finds a binding of the uid after the intent and does not adopt again.
 
 ## 6. States beyond on and off: `standing`
 

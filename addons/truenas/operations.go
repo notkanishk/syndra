@@ -458,7 +458,7 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 			Detail: "No account was bound to this subject.",
 		}, http.StatusOK, nil
 	}
-	if err := s.mutate(opCaller("account.release", req), "store.unbind", func() error {
+	if err := s.mutate(opCaller("account.release", req).on(binding.UID), "store.unbind", func() error {
 		return s.store.DeleteBinding(req.Subject)
 	}); errors.Is(err, errNotLogged) {
 		return OperationResult{}, http.StatusInternalServerError, errNotLogged
@@ -570,7 +570,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	defer client.Close()
 
 	// Through the seam like every write, on its own session: callOnce, not send.
-	if err := s.mutate(opCaller("account.purge", req), "user.delete", func() error {
+	if err := s.mutate(opCaller("account.purge", req).on(binding.UID), "user.delete", func() error {
 		return callOnce(client, "user.delete", []any{id}, nil)
 	}); err != nil {
 		return OperationResult{}, statusFor(err), failedWrite(err, "deletion")
@@ -581,7 +581,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// that path exists for an account deleted BEHIND our back. A purge is not
 	// that: we deleted it, on purpose, and it must not resurrect itself.
 	detail := "Deleted " + binding.Username + "."
-	if err := s.mutate(opCaller("account.purge", req), "store.unbind", func() error {
+	if err := s.mutate(opCaller("account.purge", req).on(binding.UID), "store.unbind", func() error {
 		return s.store.DeleteBinding(req.Subject)
 	}); err != nil {
 		logStoreFailure("binding", req.Subject, err)
@@ -1306,7 +1306,7 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 		return OperationResult{}, http.StatusNotFound, noAdoptableAccount(username)
 	}
 
-	if err := s.mutate(opCaller("account.adopt", req), "store.bind", func() error {
+	if err := s.mutate(opCaller("account.adopt", req).on(account.UID), "store.bind", func() error {
 		return s.store.BindIfFree(Binding{
 			SubjectID: req.Subject, Username: account.Username, UID: account.UID,
 			// Who decided it. An adoption that turns out to be wrong hands

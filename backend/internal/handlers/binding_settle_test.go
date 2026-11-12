@@ -20,7 +20,7 @@ import (
 // stubBindingSettle answers /calls with s and runs ResolveBindingCall's half
 // as the database would (a stub, so nothing is resolved twice by it: the
 // row-lock and the one-transaction half are db's, tested live there).
-func stubBindingSettle(t *testing.T, s addons.Settlement) (ran *int) {
+func stubBindingSettle(t *testing.T, s addons.Settlement) (ran *int, gotID *string) {
 	t.Helper()
 	ask, resolveBinding, resolve := addonsCallAnswer, dbResolveBindingCall, dbResolveAddonOperation
 	t.Cleanup(func() { addonsCallAnswer, dbResolveBindingCall, dbResolveAddonOperation = ask, resolveBinding, resolve })
@@ -29,12 +29,13 @@ func stubBindingSettle(t *testing.T, s addons.Settlement) (ran *int) {
 		t.Error("an adoption or release was settled by its status alone")
 		return db.AddonOperation{}, nil
 	}
-	n := 0
-	dbResolveBindingCall = func(ctx context.Context, _, _ string, _ time.Duration, half func(context.Context) error) (db.AddonOperation, error) {
+	n, id := 0, ""
+	dbResolveBindingCall = func(ctx context.Context, _, _, accountID string, _ time.Duration, half func(context.Context) error) (db.AddonOperation, error) {
 		n++
+		id = accountID
 		return db.AddonOperation{}, half(ctx)
 	}
-	return &n
+	return &n, &id
 }
 
 func recorded(reply string) addons.Settlement {
@@ -52,27 +53,34 @@ func TestARecordedAdoptionOrReleaseSettlesWithTheHandlersBindingHalf(t *testing.
 		}
 		live := h.recorded[0]
 
-		ran := stubBindingSettle(t, recorded(`{"operation":"account.adopt","subject":"u-becky","outcome":"succeeded","account_id":"200001"}`))
+		ran, gotID := stubBindingSettle(t, recorded(`{"operation":"account.adopt","subject":"u-becky","outcome":"succeeded","account_id":"200001"}`))
 		row := db.AddonOperation{ID: "op_1", Target: "truenas", Operation: "account.adopt", SubjectID: "u-becky",
 			ActorID: live.BoundBy, About: "charlotte", ClaimedAt: &sent}
-		if open := settleFromCalls(context.Background(), []db.AddonOperation{row}); len(open) != 0 || *ran != 1 {
-			t.Fatalf("a recorded adoption must settle with its half: open %v, ran %d", open, *ran)
+		if open := settleFromCalls(context.Background(), []db.AddonOperation{row}); len(open) != 0 || *ran != 1 || *gotID != "200001" {
+			t.Fatalf("a recorded adoption must settle with its half and its account id: open %v, ran %d, id %q", open, *ran, *gotID)
 		}
 		if len(h.recorded) != 2 || !reflect.DeepEqual(h.recorded[1], live) {
 			t.Fatalf("the settle must leave the binding the live handler leaves: live %+v, settle %+v", live, h.recorded[1:])
 		}
 	})
 
-	t.Run("adopt recorded without its account id", func(t *testing.T) {
-		h := &adoptHarness{}
-		stubAdopt(t, h)
-		ran := stubBindingSettle(t, recorded(`{"operation":"account.adopt","subject":"u-becky","outcome":"succeeded"}`))
-		row := db.AddonOperation{ID: "op_1", Target: "truenas", Operation: "account.adopt", SubjectID: "u-becky",
-			ActorID: "op_lita", About: "charlotte", ClaimedAt: &sent}
-		if open := settleFromCalls(context.Background(), []db.AddonOperation{row}); len(open) != 1 || *ran != 0 || len(h.recorded) != 0 {
-			t.Fatalf("no account id: want it left for a person, open %d, ran %d, recorded %v", len(open), *ran, h.recorded)
-		}
-	})
+	// What the copy needs, missing: the account id from the reply, or the
+	// name the row was sent about. Either stays for a person.
+	for _, tc := range []struct{ name, reply, about string }{
+		{"adopt recorded without its account id", `{"operation":"account.adopt","subject":"u-becky","outcome":"succeeded"}`, "charlotte"},
+		{"adopt row with no name", `{"operation":"account.adopt","subject":"u-becky","outcome":"succeeded","account_id":"200001"}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &adoptHarness{}
+			stubAdopt(t, h)
+			ran, _ := stubBindingSettle(t, recorded(tc.reply))
+			row := db.AddonOperation{ID: "op_1", Target: "truenas", Operation: "account.adopt", SubjectID: "u-becky",
+				ActorID: "op_lita", About: tc.about, ClaimedAt: &sent}
+			if open := settleFromCalls(context.Background(), []db.AddonOperation{row}); len(open) != 1 || *ran != 0 || len(h.recorded) != 0 {
+				t.Fatalf("want it left for a person, open %d, ran %d, recorded %v", len(open), *ran, h.recorded)
+			}
+		})
+	}
 
 	t.Run("release", func(t *testing.T) {
 		h := &releaseHarness{}
@@ -82,7 +90,7 @@ func TestARecordedAdoptionOrReleaseSettlesWithTheHandlersBindingHalf(t *testing.
 		}
 		live := []string{h.forgotten[0], h.basesForgotten[0]}
 
-		ran := stubBindingSettle(t, recorded(`{"operation":"account.release","subject":"u1","outcome":"succeeded"}`))
+		ran, _ := stubBindingSettle(t, recorded(`{"operation":"account.release","subject":"u1","outcome":"succeeded"}`))
 		row := db.AddonOperation{ID: "op_r", Target: "truenas", Operation: "account.release", SubjectID: "u1",
 			ActorID: "op_lita", About: "roman.reigns", ClaimedAt: &sent}
 		if open := settleFromCalls(context.Background(), []db.AddonOperation{row}); len(open) != 0 || *ran != 1 {
@@ -100,7 +108,7 @@ func TestARecordedAdoptionOrReleaseSettlesWithTheHandlersBindingHalf(t *testing.
 		t.Run(state, func(t *testing.T) {
 			h := &adoptHarness{}
 			stubAdopt(t, h)
-			ran := stubBindingSettle(t, addons.Settlement{State: state})
+			ran, _ := stubBindingSettle(t, addons.Settlement{State: state})
 			rows := []db.AddonOperation{
 				{ID: "a", Target: "truenas", Operation: "account.adopt", SubjectID: "u-becky", About: "charlotte", ClaimedAt: &sent},
 				{ID: "r", Target: "truenas", Operation: "account.release", SubjectID: "u1", ClaimedAt: &sent},
@@ -111,15 +119,4 @@ func TestARecordedAdoptionOrReleaseSettlesWithTheHandlersBindingHalf(t *testing.
 		})
 	}
 
-	// The binding was acted on again since: db refuses, nothing is settled.
-	t.Run("decided since", func(t *testing.T) {
-		stubBindingSettle(t, recorded(`{"account_id":"200001"}`))
-		dbResolveBindingCall = func(context.Context, string, string, time.Duration, func(context.Context) error) (db.AddonOperation, error) {
-			return db.AddonOperation{}, db.ErrBindingDecidedSince
-		}
-		row := db.AddonOperation{ID: "a", Target: "truenas", Operation: "account.adopt", SubjectID: "u-becky", About: "charlotte", ClaimedAt: &sent}
-		if open := settleFromCalls(context.Background(), []db.AddonOperation{row}); len(open) != 1 {
-			t.Fatal("a row whose binding was decided since must stay with a person")
-		}
-	})
 }

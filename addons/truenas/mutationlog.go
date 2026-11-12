@@ -78,13 +78,16 @@ type Record struct {
 	// every record written before intents.
 	Write  string `json:"write,omitempty"`
 	Intent uint64 `json:"intent,omitempty"`
-	// AccountID is the account a create's writes are for: the uid the create
-	// asks for, from this add-on's own range (ClaimID never hands one out
-	// twice), set by the create path only (createAndConverge). A `user.create`
-	// is the one write no other field ties to an account, and design §5's one
-	// adoption without a person matches on it (CreateInDoubt): by id, since a
-	// name is display, never identity. The binding's own id, which the store
-	// and Syndra hold already; never a value sent beside it.
+	// AccountID is the account the write is for, by uid: on a create's writes
+	// from the uid on (createAndConverge), and on every binding write (bind,
+	// unbind, and a purge's delete). A `user.create` is the one write no other
+	// field ties to an account, and design §5's one adoption without a person
+	// matches on it (CreateInDoubt): by id, since a name is display, never
+	// identity. A uid is not unique across the log on trust: an orphan
+	// group's gid is reused by the next create (emptyGroupNamed), and a
+	// restored store rolls ClaimID's high-water mark back, so CreateInDoubt
+	// reads every subject's records of the id. The binding's own id, which
+	// the store and Syndra hold already; never a value sent beside it.
 	AccountID string `json:"account_id,omitempty"`
 	// Prev is the digest of the record before this one, empty for the first.
 	Prev string `json:"prev"`
@@ -535,15 +538,25 @@ func (l *MutationLog) Recover() ([]Record, error) {
 }
 
 // CreateInDoubt says whether the log holds design §5's one licence to adopt
-// without a person: a `user.create` intent for this subject asking for this
-// account id, whose newest result is unknown (settled so at a start by
-// Recover, or a write that got no answer), with no binding of the subject
-// logged after it. Every other case is no: no such intent, one that failed or
-// was never sent, one for another subject or account, one written before
-// intents carried an account id, or one whose segment has been rotated away. A binding after it
-// means the subject has had an account since, an adoption's own bind included,
-// which is what keeps one in-doubt create from adopting twice (5.3d); a bind
-// whose own result is unknown counts, since it may have landed.
+// without a person, for this subject and this account id: one candidate,
+// this subject's, and nothing since that says the account was anyone's.
+//
+//   - A candidate is a `user.create` intent asking for the id, kept with its
+//     newest result. This subject's must have result `unknown` (settled so at
+//     a start by Recover, or a write that got no answer).
+//   - Any later binding record of the id, whichever subject wrote it (a
+//     store.bind or store.unbind whose result is succeeded or unknown, since
+//     an unknown one may have landed), cancels every candidate before it: the
+//     account has been bound since, by a create, an adoption or this licence
+//     itself, so the doubt is over and it is adopted at most once. So does a
+//     later bind of this subject to any account, which covers a binding
+//     written before records carried an id.
+//   - Another subject's surviving candidate that did not plainly fail (any
+//     result but failed or not_sent) is a second claim on the id: two
+//     candidates are a conflict for a person, never an adoption.
+//
+// Every other case is no, an intent written before intents carried an
+// account id, or one whose segment has been rotated away, included.
 //
 // ponytail: reads every segment, as InDoubt does, once per create that finds
 // its derived name taken; an index of open creates is the upgrade if slow.
@@ -554,20 +567,21 @@ func (l *MutationLog) CreateInDoubt(subject, accountID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	creates := map[uint64]string{} // intent seq -> its newest result
+	type candidate struct{ subject, result string }
+	creates := map[uint64]candidate{} // intent seq -> who asked, its newest result
 	for i := len(segments) - 1; i >= 0; i-- {
 		err := eachRecord(segments[i], func(r Record) {
-			if r.Subject != subject {
-				return
-			}
-			_, create := creates[r.Intent]
+			mine := r.AccountID == accountID
+			bound := r.Intent != 0 && (r.Outcome == outcomeSucceeded || r.Outcome == outcomeUnknown)
+			c, create := creates[r.Intent]
 			switch {
-			case r.Outcome == outcomeIntent && r.Write == "user.create" && r.AccountID == accountID:
-				creates[r.Seq] = ""
+			case mine && r.Outcome == outcomeIntent && r.Write == "user.create":
+				creates[r.Seq] = candidate{subject: r.Subject}
 			case r.Intent != 0 && create:
-				creates[r.Intent] = r.Outcome
-			case r.Intent != 0 && r.Write == "store.bind" &&
-				(r.Outcome == outcomeSucceeded || r.Outcome == outcomeUnknown):
+				c.result = r.Outcome
+				creates[r.Intent] = c
+			case bound && mine && (r.Write == "store.bind" || r.Write == "store.unbind"),
+				bound && r.Subject == subject && r.Write == "store.bind":
 				clear(creates)
 			}
 		})
@@ -575,12 +589,16 @@ func (l *MutationLog) CreateInDoubt(subject, accountID string) (bool, error) {
 			return false, err
 		}
 	}
-	for _, result := range creates {
-		if result == outcomeUnknown {
-			return true, nil
+	licensed := false
+	for _, c := range creates {
+		switch {
+		case c.subject == subject && c.result == outcomeUnknown:
+			licensed = true
+		case c.subject != subject && c.result != outcomeFailed && c.result != outcomeNotSent:
+			return false, nil
 		}
 	}
-	return false, nil
+	return licensed, nil
 }
 
 // syncDir makes a directory's entries durable: a created or renamed file's

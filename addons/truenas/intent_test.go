@@ -637,6 +637,17 @@ func intentWrites(t *testing.T, s *server) []string {
 // Every change to the bindings is in the log beside the NAS writes it goes
 // with: the create's bind, the purge's unbind, a wanted SMB state. A write
 // that would change nothing is not made, so it adds nothing.
+// namesItsAccount fails a binding write, or a purge's delete, that does not
+// say which account it is for (CreateInDoubt reads them by account id).
+func namesItsAccount(t *testing.T, s *server) {
+	t.Helper()
+	for _, r := range records(t, s) {
+		if (r.Write == "store.bind" || r.Write == "store.unbind" || r.Write == "user.delete") && r.AccountID == "" {
+			t.Errorf("a binding write names no account: %+v", r)
+		}
+	}
+}
+
 func TestEveryBindingChangeIsInTheLog(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		s, _ := applyServer(t, `[]`)
@@ -646,6 +657,7 @@ func TestEveryBindingChangeIsInTheLog(t *testing.T) {
 		if got := strings.Join(intentWrites(t, s), ","); got != "group.create,user.create,store.bind" {
 			t.Fatalf("want the bind logged after the create, got %s", got)
 		}
+		namesItsAccount(t, s)
 	})
 	t.Run("purge", func(t *testing.T) {
 		s, _ := opServer(t)
@@ -659,6 +671,7 @@ func TestEveryBindingChangeIsInTheLog(t *testing.T) {
 		if _, bound, _ := s.store.GetBinding("sub-1"); bound {
 			t.Fatal("the binding outlived the purge")
 		}
+		namesItsAccount(t, s)
 	})
 	t.Run("wanted SMB, once", func(t *testing.T) {
 		s, _ := opServer(t)
@@ -670,6 +683,7 @@ func TestEveryBindingChangeIsInTheLog(t *testing.T) {
 		if got := strings.Join(intentWrites(t, s), ","); got != "store.bind" {
 			t.Fatalf("want one bind for the wanted SMB state and none for the repeat, got %s", got)
 		}
+		namesItsAccount(t, s)
 	})
 }
 
