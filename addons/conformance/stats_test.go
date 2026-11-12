@@ -4,11 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"syndra/addons/reference"
 )
 
 // The stats checks skip, with the reason, without the feature, and pass the
@@ -228,5 +233,142 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 		if failed := len(k.at("stats.points").fails) > 0; failed != tc.fails {
 			t.Errorf("%s: stats.points failed %v (%v), want %v", tc.name, failed, k.at("stats.points").fails, tc.fails)
 		}
+	}
+}
+
+// One add-on outlives many kit runs. Each -mutate run leaves its subject's
+// account behind, disabled and still bound, so a later run's reads see
+// points for an earlier kit subject: the add-on's /plan says it is bound, so
+// it is a Syndra subject, even where the add-on named the account after it
+// (the reference does). Report #51 D1: reads after a -mutate failed
+// stats.unbound, and the next -mutate was refused.
+func TestPointsForAnEarlierKitSubjectAreNotAccountNames(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, nil, reference.OptionalFeatures)
+	for i, step := range []struct {
+		mutate, settings bool
+		item             string
+	}{{true, false, "item-0001"}, {false, false, ""}, {true, true, "item-0002"}} {
+		cfg := config(url, step.mutate)
+		cfg.Subject, cfg.MutateSettings, cfg.Item = fmt.Sprintf("conformance-self-test-%d", i), step.settings, step.item
+		r := run(t, cfg)
+		for _, f := range failures(r) {
+			t.Errorf("run %d (mutate %v): %s failed against one reference serving every feature: %v", i, step.mutate, f.ID, f.Detail)
+		}
+		if got := r.Status("stats.unbound"); got != "pass" {
+			t.Errorf("run %d: stats.unbound says %s, want pass", i, got)
+		}
+	}
+}
+
+// The namespace does not excuse this run's own account: when the add-on named
+// it from an -email that is not the subject, a point carrying that name
+// instead of the subject is a local name, and the kit can prove it.
+func TestAPointNamingTheKitsOwnAccountIsStillALocalName(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, statsRewrite("/stats", eachPoint(func(p map[string]any) {
+		if p["subject"] == "conformance-self-test" {
+			p["subject"] = "conformance-nickname" // the account's username, not its subject
+		}
+	})), []string{"stats"})
+	cfg := config(url, true)
+	cfg.Email = "conformance-nickname@example.org"
+	r, err := Run(context.Background(), cfg)
+	if err != nil && !errors.Is(err, ErrReadsFailed) {
+		t.Fatal(err)
+	}
+	if got := r.Status("stats.unbound"); got != "fail" {
+		t.Errorf("stats.unbound says %s, want fail: %v", got, result(r, "stats.unbound").Detail)
+	}
+}
+
+// The other way round: an add-on that reports each person under the account's
+// username, named from an -email that is not the subject. The earlier run's
+// name is listed and no binding has it as a subject, so the reads-only run
+// fails stats.unbound (a namespace rule would have let it pass).
+func TestPointsUnderAnEarlierRunsUsernameAreLocalNames(t *testing.T) {
+	url, _ := serveRewriting(t, testSecret, nil, statsRewrite("/stats", eachPoint(func(p map[string]any) {
+		if s, _ := p["subject"].(string); strings.HasPrefix(s, "conformance-self-test-") {
+			p["subject"] = "conformance-n" + strings.TrimPrefix(s, "conformance-self-test-") // the username
+		}
+	})), reference.OptionalFeatures)
+	for i, mutate := range []bool{true, false, true} {
+		cfg := config(url, mutate)
+		cfg.Subject, cfg.Email = fmt.Sprintf("conformance-self-test-%d", i), fmt.Sprintf("conformance-n%d@example.org", i)
+		if mutate {
+			cfg.Item = fmt.Sprintf("item-000%d", i+1)
+		}
+		r, err := Run(context.Background(), cfg)
+		if err != nil && !errors.Is(err, ErrReadsFailed) {
+			t.Fatal(err)
+		}
+		if got := r.Status("stats.unbound"); i < 2 && got != "fail" {
+			t.Errorf("run %d (mutate %v): stats.unbound says %s, want fail: points name accounts, not subjects", i, mutate, got)
+		}
+	}
+}
+
+// The binding question is asked in plans of at most limits.subjects_per_plan
+// subjects, and each chunk's answers land on its own subjects.
+func TestBindingsAreAskedInPlansOfTheLimit(t *testing.T) {
+	var mu sync.Mutex
+	var sizes []int
+	url, _ := serve(t, testSecret, func(r *http.Request, body []byte, answered bool) {
+		var plan struct{ Subjects []any }
+		if !answered && r.URL.Path == "/plan" && json.Unmarshal(body, &plan) == nil {
+			mu.Lock()
+			sizes = append(sizes, len(plan.Subjects))
+			mu.Unlock()
+		}
+	})
+	subs := []string{"conformance-self-test-0", "conformance-self-test-1"}
+	for _, s := range subs {
+		cfg := config(url, true)
+		cfg.Subject = s
+		run(t, cfg) // leaves an account named after s, disabled and bound
+	}
+	k, err := newKit(context.Background(), config(url, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.m = &manifest{account: "enabled", perPlan: 1}
+	set := statsSetup{locals: map[string]bool{subs[0]: true, subs[1]: true}, bound: map[string]bool{}, unproven: map[string]string{}}
+	mu.Lock()
+	sizes = nil
+	mu.Unlock()
+	k.learnBound(set, []map[string]any{{"subject": subs[0]}, {"subject": subs[1]}, {"subject": subs[0]}})
+	if !set.bound[subs[0]] || !set.bound[subs[1]] || len(set.unproven) > 0 {
+		t.Errorf("bound %v, unproven %v; want both bound", set.bound, set.unproven)
+	}
+	if mu.Lock(); !slices.Equal(sizes, []int{1, 1}) {
+		t.Errorf("plans of %v subjects, want two plans of 1 (subjects_per_plan 1)", sizes)
+	}
+	mu.Unlock()
+}
+
+// A refused plan proves no binding, so the point still fails, and the failure
+// names the refusal: a passing hiccup is not read as a naming defect.
+func TestARefusedPlanSaysTheBindingIsUnproven(t *testing.T) {
+	url, _ := serve(t, testSecret, nil)
+	k, err := newKit(context.Background(), config(url, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.m = &manifest{account: "enabled", statsZone: "Asia/Kolkata"} // no subjects_per_plan: one plan, past the reference's 50
+	zone, _ := time.LoadLocation("Asia/Kolkata")
+	day := "2026-11-09T00:00:00+05:30"
+	set := statsSetup{zone: zone, locals: map[string]bool{}, bound: map[string]bool{}, unproven: map[string]string{}}
+	r := statsRead{first: map[string]any{"unbound": map[string]any{"accounts": json.Number("0")}, "gaps": []any{}, "watermark": day, "taken_at": "2026-11-10T09:00:00Z"}}
+	r.watermark, _ = time.Parse(time.RFC3339, day)
+	r.takeAt, _ = time.Parse(time.RFC3339, "2026-11-10T09:00:00Z")
+	set.since = r.watermark.Add(-time.Hour)
+	for i := range 51 {
+		s := fmt.Sprintf("conformance-name-%02d", i)
+		set.locals[s] = true
+		r.points = append(r.points, map[string]any{"start": day, "end": "2026-11-10T00:00:00+05:30", "subject": s, "value": json.Number("1")})
+	}
+	r.points = append([]map[string]any{{"start": day, "end": "2026-11-10T00:00:00+05:30", "value": json.Number("51")}}, r.points...)
+	k.judgeStats(map[string]any{"name": "machine.jobs", "instrument": "counter", "per_subject": true}, r, set)
+	fails := k.at("stats.unbound").fails
+	if len(fails) != 51 || !strings.HasSuffix(fails[0], "not a Syndra subject, and /plan answered 422, so its binding is unproven") {
+		t.Errorf("stats.unbound failed %d times (%.1q); want 51, each naming /plan's 422", len(fails), fails)
 	}
 }
