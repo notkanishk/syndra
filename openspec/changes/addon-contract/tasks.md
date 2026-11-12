@@ -1219,6 +1219,13 @@ settings with the full §5 rules.
   compare the two answers (`allowances_value_test.go`). The UI needs nothing:
   the hold dialog shows a refusal through `outcomeFromError`, which already
   words the `unlistable` step.
+  Note for a future group-hold dialog: it must handle `details.value ===
+  "unresolvable"` the way `AddMappingDialog.tsx` does (read the list again,
+  pick another). Today the only hold the UI creates is lifecycle, so that
+  refusal is unreachable from it.
+  *Display names (7a review):* a name needs a letter as well as two characters,
+  and names and checked values are compared in NFC (`golang.org/x/text`, already
+  a dependency).
 - [x] 5.4 `openspec/NEXT.md` and `architecture-deepening/tasks.md` item 6
   point here; `addon-platform/design.md` §5 and §16 gain a one-line pointer
   to this contract as the current statement #ready-for-agent

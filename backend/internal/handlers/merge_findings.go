@@ -583,7 +583,10 @@ func adoptOwnLimit(ctx context.Context, f db.MergeFinding, req resolveMergeFindi
 	if err := json.Unmarshal(f.Theirs, &held); err != nil || len(held) != 1 {
 		return fmt.Errorf("%w: the target's value for %s is not one limit", ErrResolutionNotExpressible, f.Field)
 	}
-	field, value, err := validateAllowanceAgainstTarget(ctx, f.Target, f.Field, held[0])
+	// Structure only: this runs under the access lock, and a limit is never
+	// enumerable, so asking /values would only let a slow add-on stall every
+	// grant for nothing.
+	field, value, _, err := validateAllowanceStructure(f.Target, f.Field, held[0])
 	if err != nil {
 		return err
 	}

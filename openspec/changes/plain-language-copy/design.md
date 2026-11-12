@@ -690,6 +690,9 @@ One set of generic renderers (`ui/src/components/results/`) draws every member-s
 | A records list's column heading, the record's name (sorts the list) | Record |
 | A records list's column heading, held since (sorts the list) | Since |
 | A records list's column heading, due (sorts the list; the list opens on it) | Due |
+| What a screen reader hears after "Sort by", the record's name | name |
+| The same, held since | date held |
+| The same, due | due date |
 | What the add-on adds that Syndra does not know (heading) | What the add-on also says |
 | More of it than is shown | …and {n} more |
 | One place that was not recording, to a member | {place} did not record you, so nothing from that place appears here, whether or not it happened. Nothing for you to do. |

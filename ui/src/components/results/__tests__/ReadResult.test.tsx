@@ -107,13 +107,13 @@ describe("records", () => {
 
   it("re-sorts by a heading, reverses on a second press, and keeps records with no date last either way", () => {
     const { container } = show(dated);
-    fireEvent.click(screen.getByRole("button", { name: "Sort by due" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort by due date" }));
     expect(order(container)).toEqual(["Anvil", "Caliper", "bandsaw", "Jig", "Awl", "zip ties"]); // ties stay in name order
-    fireEvent.click(screen.getByRole("button", { name: "Sort by record" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort by name" }));
     expect(order(container)).toEqual(["Anvil", "Awl", "bandsaw", "Caliper", "Jig", "zip ties"]);
-    fireEvent.click(screen.getByRole("button", { name: "Sort by record" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort by name" }));
     expect(order(container)).toEqual(["zip ties", "Jig", "Caliper", "bandsaw", "Awl", "Anvil"]);
-    fireEvent.click(screen.getByRole("button", { name: "Sort by since" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort by date held" }));
     expect(order(container)[0]).toBe("Anvil");
   });
 

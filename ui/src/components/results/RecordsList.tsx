@@ -1,6 +1,6 @@
 "use client";
 
-import { dueDate, emptyRecords, RECORD_HEADS, sinceDate, type Reader } from "@/components/results/copy";
+import { dueDate, emptyRecords, RECORD_HEADS, RECORD_SORT_BY, sinceDate, type Reader } from "@/components/results/copy";
 import { CardColumns } from "@/components/ui/Card";
 import { observed, ReadFreshness, useReadAgainPress, useReadAgainSince } from "@/components/ui/ReadFreshness";
 import { orderBy, SortHead, useSort } from "@/components/ui/SortHead";
@@ -50,13 +50,13 @@ export function RecordsList({ result, name, reader }: { result: RecordsResult; n
         <div>
           <CardColumns className="!px-0">
             <span className="min-w-[200px] flex-1">
-              <SortHead label={RECORD_HEADS.record} name="record" sort={sort} onSort={setSort} />
+              <SortHead label={RECORD_HEADS.record} by={RECORD_SORT_BY.record} name="record" sort={sort} onSort={setSort} />
             </span>
             <span className="w-[110px] shrink-0">
-              <SortHead label={RECORD_HEADS.since} name="since" sort={sort} onSort={setSort} />
+              <SortHead label={RECORD_HEADS.since} by={RECORD_SORT_BY.since} name="since" sort={sort} onSort={setSort} />
             </span>
             <span className="w-[110px] shrink-0">
-              <SortHead label={RECORD_HEADS.due} name="due" sort={sort} onSort={setSort} />
+              <SortHead label={RECORD_HEADS.due} by={RECORD_SORT_BY.due} name="due" sort={sort} onSort={setSort} />
             </span>
             <span aria-hidden className="w-[240px] shrink-0" />
           </CardColumns>

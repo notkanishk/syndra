@@ -17,13 +17,15 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
+	"unicode"
 
 	"syndra/internal/addons"
 	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // directoryUsers is who the directory knows, for the display names the privacy
@@ -226,7 +228,7 @@ func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
 	var quoted []string
 	add := func(name string) {
 		if name != "" { // "" would name every text
-			quoted = append(quoted, regexp.QuoteMeta(name))
+			quoted = append(quoted, regexp.QuoteMeta(norm.NFC.String(name)))
 		}
 	}
 	for _, b := range bindings {
@@ -239,10 +241,11 @@ func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
 	}
 	// A bound person's display name goes through the same matcher. QuoteMeta
 	// keeps a name with spaces or punctuation literal; whole-token matching
-	// holds for it as for any word. Under two characters it is never added:
-	// a one-letter "name" would name every text that has the letter as a token.
+	// holds for it as for any word. It must hold a letter and be two characters
+	// or more: "--" or "42" or one letter is no name, and would name every text
+	// that carries it as a token.
 	for _, u := range users {
-		if name := strings.TrimSpace(u.Name); who.bound[u.ID] && utf8.RuneCountInString(name) >= 2 {
+		if name := strings.TrimSpace(u.Name); who.bound[u.ID] && nameable(name) {
 			add(name)
 		}
 	}
@@ -253,6 +256,11 @@ func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
 	return who
 }
 
+// nameable is a display name worth matching: two characters or more, one a letter.
+func nameable(name string) bool {
+	return len([]rune(name)) >= 2 && strings.IndexFunc(name, unicode.IsLetter) >= 0
+}
+
 // names is the one rule for "this text names a bound person": a name, in any
 // case, as a whole token — at the text's ends or beside a character that is
 // neither a letter nor a digit, in any script. "home-JOHN_CENA", "home_ana"
@@ -260,7 +268,8 @@ func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
 // name lab, nor "proj-30512" account 3051, nor "activity" ty. Not \b: RE2's
 // \b is ASCII-only and counts "_" as a word character, so "home_ana" would
 // hide ana.
-func (p people) names(text string) bool { return p.named.MatchString(text) }
+// Both sides are NFC, so a precomposed "é" and "e" plus a combining accent are one name.
+func (p people) names(text string) bool { return p.named.MatchString(norm.NFC.String(text)) }
 
 // keep is the points of a page worth storing, each checked (checkPoint), the
 // series cap applied, and one per key (an add-on that repeats a key in a page
