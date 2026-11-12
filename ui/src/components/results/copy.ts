@@ -34,6 +34,10 @@ export const NO_LIMIT = "no limit";
 export const ofLimit = (limit: string) => `of ${limit}`;
 export const sinceDate = (date: string) => `Since ${date}`;
 export const dueDate = (date: string) => `Due ${date}`;
+/** The records list's column headings: each sorts the list (the default is Due, soonest first). */
+export const RECORD_HEADS = { record: "Record", since: "Since", due: "Due" } as const;
+/** What a screen reader hears after "Sort by" on each of those headings. */
+export const RECORD_SORT_BY = { record: "name", since: "date held", due: "due date" } as const;
 export const ALSO_SAYS = "What the add-on also says";
 export const noMoreLines = (n: number) => `…and ${n} more`;
 

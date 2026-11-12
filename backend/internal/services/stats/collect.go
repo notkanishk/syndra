@@ -17,11 +17,22 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"syndra/internal/addons"
 	"syndra/internal/clock"
 	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
+
+	"golang.org/x/text/unicode/norm"
 )
+
+// directoryUsers is who the directory knows, for the display names the privacy
+// rule checks. A var so a test can stand in for Zitadel.
+var directoryUsers = func(ctx context.Context) ([]models.UserProfile, error) {
+	return directory.Default.Users(ctx)
+}
 
 // Read is one page of one metric's GET /stats, since an instant, from a
 // cursor ("" the first page).
@@ -97,7 +108,14 @@ func Collect(ctx context.Context, target string, m addons.Metric, buffer time.Du
 	if err != nil {
 		return nil, err
 	}
-	who := peopleOn(bindings)
+	// A refusal to read the directory fails the collection (the watermark
+	// stays): a privacy check that could not look at the names must not read
+	// as one that found none.
+	users, err := directoryUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("stats: the directory could not be read for display names: %w", err)
+	}
+	who := peopleOn(bindings, users)
 	dropped := map[string]int{}
 	err = db.CollectStats(ctx, target, m.Name, func(c *db.StatsTx) error {
 		stored, err := c.Watermark(ctx)
@@ -194,7 +212,7 @@ func finalThrough(reported, now time.Time) (time.Time, error) {
 
 // people is who is bound on the target: the subjects a point may name, and
 // the one pattern for every word that names a bound person (subject id,
-// account name and id), which no dimension value and no gap reason may
+// account name and id, and the display name the directory holds), which no dimension value and no gap reason may
 // contain (ruling B7).
 type people struct {
 	bound map[string]bool
@@ -205,12 +223,12 @@ type people struct {
 // has a name, so the pattern matches no text at all, "" included.
 const nobody = `[^\x00-\x{10FFFF}]`
 
-func peopleOn(bindings []db.TargetBinding) people {
+func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
 	who := people{bound: map[string]bool{}}
 	var quoted []string
 	add := func(name string) {
 		if name != "" { // "" would name every text
-			quoted = append(quoted, regexp.QuoteMeta(name))
+			quoted = append(quoted, regexp.QuoteMeta(norm.NFC.String(name)))
 		}
 	}
 	for _, b := range bindings {
@@ -221,11 +239,26 @@ func peopleOn(bindings []db.TargetBinding) people {
 			add(*b.AccountID)
 		}
 	}
+	// A bound person's display name goes through the same matcher. QuoteMeta
+	// keeps a name with spaces or punctuation literal; whole-token matching
+	// holds for it as for any word. It must hold a letter and be two characters
+	// or more: "--" or "42" or one letter is no name, and would name every text
+	// that carries it as a token.
+	for _, u := range users {
+		if name := strings.TrimSpace(u.Name); who.bound[u.ID] && nameable(name) {
+			add(name)
+		}
+	}
 	if len(quoted) == 0 {
 		quoted = []string{nobody}
 	}
-	who.named = regexp.MustCompile(`(?i)(?:^|[^\pL\pN])(?:` + strings.Join(quoted, "|") + `)(?:[^\pL\pN]|$)`)
+	who.named = regexp.MustCompile(`(?i)(?:^|[^\pL\pN\pM])(?:` + strings.Join(quoted, "|") + `)(?:[^\pL\pN\pM]|$)`)
 	return who
+}
+
+// nameable is a display name worth matching: two characters or more, one a letter.
+func nameable(name string) bool {
+	return len([]rune(name)) >= 2 && strings.IndexFunc(name, unicode.IsLetter) >= 0
 }
 
 // names is the one rule for "this text names a bound person": a name, in any
@@ -235,7 +268,8 @@ func peopleOn(bindings []db.TargetBinding) people {
 // name lab, nor "proj-30512" account 3051, nor "activity" ty. Not \b: RE2's
 // \b is ASCII-only and counts "_" as a word character, so "home_ana" would
 // hide ana.
-func (p people) names(text string) bool { return p.named.MatchString(text) }
+// Both sides are NFC, so a precomposed "é" and "e" plus a combining accent are one name.
+func (p people) names(text string) bool { return p.named.MatchString(norm.NFC.String(text)) }
 
 // keep is the points of a page worth storing, each checked (checkPoint), the
 // series cap applied, and one per key (an add-on that repeats a key in a page

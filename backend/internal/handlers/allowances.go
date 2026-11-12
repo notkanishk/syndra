@@ -145,31 +145,52 @@ func handleAllowancesDueForReview(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{"due_for_review": rows, "count": len(rows)})
 }
 
-// validateAllowanceAgainstTarget checks the term against the target's own
-// schema, in the order `validateMappingAgainstTarget` does: an unregistered
-// target first, because the foreign key would refuse the row anyway with a
-// message about a constraint rather than about the deployment.
+// validateAllowanceStructure checks the term against the target's own schema,
+// in the order `validateMappingAgainstTarget` does: an unregistered target
+// first, because the foreign key would refuse the row anyway with a message
+// about a constraint rather than about the deployment. No network call.
 // It returns the CANONICAL pair, not merely a verdict. A validator that checks
 // a trimmed copy and leaves the caller holding the original is how `group=x `
-// gets accepted and then matches nothing — see NormaliseTerm.
-func validateAllowanceAgainstTarget(ctx context.Context, target, field, value string) (string, string, error) {
+// gets accepted and then matches nothing — see NormaliseTerm. The schema comes
+// back too, for the value half.
+func validateAllowanceStructure(target, field, value string) (string, string, []addons.EntitlementField, error) {
 	if strings.TrimSpace(target) == "" {
-		return "", "", fmt.Errorf("%w: an allowance needs a target", db.ErrAllowanceInvalid)
+		return "", "", nil, fmt.Errorf("%w: an allowance needs a target", db.ErrAllowanceInvalid)
 	}
 	schema, err := addonsEntitlementSchema(target)
 	switch {
 	case errors.Is(err, addons.ErrNotRegistered):
-		return "", "", fmt.Errorf("%w: %s is not a registered add-on target", db.ErrAllowanceInvalid, target)
+		return "", "", nil, fmt.Errorf("%w: %s is not a registered add-on target", db.ErrAllowanceInvalid, target)
 	case err != nil:
 		// Registered and silent. Nothing about the term can be checked against a
 		// manifest we do not have, and recording a denial nobody has verified is
 		// the failure this whole check exists for.
-		return "", "", fmt.Errorf("%w: %s has not published a capability manifest yet, so its fields are unknown",
+		return "", "", nil, fmt.Errorf("%w: %s has not published a capability manifest yet, so its fields are unknown",
 			db.ErrAllowanceInvalid, target)
 	}
 	// Lifecycle fields are included rather than skipped: they are not bindable
 	// by a mapping and they are exactly what an operator suspension names.
-	return services.ValidateAllowanceTerm(schema, field, value)
+	field, value, err = services.ValidateAllowanceTerm(schema, field, value)
+	if err != nil {
+		return "", "", nil, err
+	}
+	return field, value, schema, nil
+}
+
+// validateAllowanceAgainstTarget is both halves, structure then value, for a
+// request handler: before any transaction, as the mapping handlers do. The value
+// half asks the add-on's /values through the SAME rule a mapping answers to, so
+// a hold on a group the target does not list is refused like a mapping on one
+// (5.3e). Never call it under the access lock: it is a network call.
+func validateAllowanceAgainstTarget(ctx context.Context, target, field, value string) (string, string, error) {
+	field, value, schema, err := validateAllowanceStructure(target, field, value)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := resolveValue(ctx, target, field, value, schema); err != nil {
+		return "", "", err
+	}
+	return field, value, nil
 }
 
 func writeAllowanceError(w http.ResponseWriter, err error) {
@@ -184,6 +205,8 @@ func writeAllowanceError(w http.ResponseWriter, err error) {
 			"Adding to what a person already holds is not available yet. Replace their allowance instead.")
 	case errors.Is(err, db.ErrAllowanceInvalid):
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"allowance": "invalid"})
+	case writeValueRefusal(w, err):
+		// The mapping surface's answer, in its shape (5.3e).
 	case errors.Is(err, db.ErrAllowanceNotFound):
 		jsonErrorResponse(w, http.StatusNotFound, "ALLOWANCE_NOT_FOUND", err.Error())
 	case errors.Is(err, db.ErrAllowanceAlreadyInForce):

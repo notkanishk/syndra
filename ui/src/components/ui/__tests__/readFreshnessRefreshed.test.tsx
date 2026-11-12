@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ReadFreshness, useRefreshPress } from "@/components/ui/ReadFreshness";
 import { motionInTests } from "@/test-utils/motion";
@@ -115,5 +115,25 @@ describe("S17 Refreshed, pressed from elsewhere", () => {
     const { rerender } = render(<Page readAt={ago(5)} run={async () => {}} />);
     rerender(<Page readAt={new Date().toISOString()} run={async () => {}} />);
     expect(dot().className).not.toContain("bloom");
+  });
+});
+
+// CI caught a card unmounting before its press was forgotten: the forget
+// timer then set state after the test environment was gone ("window is not
+// defined"). Unmounting cancels it.
+describe("a press on a card that goes away", () => {
+  it("leaves no timer behind", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result, unmount } = renderHook(() => useRefreshPress("2026-11-13T10:00:00Z"));
+      await act(async () => {
+        await result.current.press(() => undefined);
+      });
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
