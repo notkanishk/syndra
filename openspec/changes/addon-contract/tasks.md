@@ -1752,7 +1752,9 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       refused when someone else now holds the account.
     - Review round 4: the TrueNAS `account.release` reply carries the
       `account_id` it let go of (none when nothing was bound, or for a
-      legacy binding with no uid), so the settle compares ids, not the name:
+      legacy binding whose uid is outside the add-on's range and may be the
+      NAS record key: `inIDRange`, the one check `boundAccount` and
+      `leftByCrashedCreate` use too), so the settle compares ids, not the name:
       a release of charlotte (200001) recorded before the drain made
       charlotte again (200002) keeps the new copy (live test). The reply
       schema already allowed `account_id`; its description and the guide's

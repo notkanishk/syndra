@@ -260,7 +260,7 @@ func (s *server) unboundConflict(account *Subject, owner string) *BindingConflic
 //     rather than the uid trusted to name one create.
 func (s *server) leftByCrashedCreate(subject, derived string, account *Subject, conflict *BindingConflict) (bool, error) {
 	floor, ceiling := s.idRange()
-	if account.Username != derived || !conflict.Adoptable || account.UID < floor || account.UID > ceiling ||
+	if account.Username != derived || !conflict.Adoptable || !inIDRange(account.UID, floor, ceiling) ||
 		account.PasswordSet || account.SMBEnabled {
 		return false, nil
 	}
@@ -708,6 +708,11 @@ func (s *server) rememberWantedSMB(req ApplyRequest, desired desiredState, apply
 	}
 }
 
+// inIDRange is whether n is a number this add-on hands out (identity.go). A
+// binding's uid outside it is a legacy one holding the NAS record key, never
+// an account's uid (boundAccount).
+func inIDRange(n, floor, ceiling int64) bool { return n >= floor && n <= ceiling }
+
 // boundAccount is the one rule for which account a binding names. Plan asks
 // it of its snapshot and apply of the target, so the plan never says "absent"
 // (or "creates") for an account the apply would find, or the other way round.
@@ -721,7 +726,7 @@ func boundAccount(binding Binding, floor, ceiling int64,
 	if err != nil {
 		return nil, binding, nil, err
 	}
-	owned := binding.UID >= floor && binding.UID <= ceiling
+	owned := inIDRange(binding.UID, floor, ceiling)
 	if found != nil {
 		if owned && found.UID != binding.UID {
 			// A name some other account now holds (the original was deleted
@@ -729,7 +734,7 @@ func boundAccount(binding Binding, floor, ceiling int64,
 			// entitlements to a stranger, so it halts like any foreign name.
 			return nil, binding, &BindingConflict{Username: found.Username, AccountID: accountID(found.UID)}, nil
 		}
-		if !owned && found.UID >= floor && found.UID <= ceiling {
+		if !owned && inIDRange(found.UID, floor, ceiling) {
 			// A legacy binding holding a record key, not a uid: the real one,
 			// so the next pass is guarded by the check above.
 			binding.UID = found.UID

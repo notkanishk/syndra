@@ -468,9 +468,10 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 	// The account let go of, by id, so Syndra settling a release whose answer
 	// was lost (GET /calls) forgets its copy only while the copy still names
 	// this account, never one bound since under the same name. None for a
-	// legacy binding that kept no uid.
+	// legacy binding, whose uid may be the NAS record key (boundAccount):
+	// Syndra then compares the name.
 	released := ""
-	if binding.UID != 0 {
+	if floor, ceiling := s.idRange(); inIDRange(binding.UID, floor, ceiling) {
 		released = accountID(binding.UID)
 	}
 	return OperationResult{
