@@ -90,11 +90,11 @@ func TestARecordedAdoptionOrReleaseSettlesWithTheHandlersBindingHalf(t *testing.
 		}
 		live := []string{h.forgotten[0], h.basesForgotten[0]}
 
-		ran, _ := stubBindingSettle(t, recorded(`{"operation":"account.release","subject":"u1","outcome":"succeeded"}`))
+		ran, gotID := stubBindingSettle(t, recorded(`{"operation":"account.release","subject":"u1","outcome":"succeeded","account_id":"200001"}`))
 		row := db.AddonOperation{ID: "op_r", Target: "truenas", Operation: "account.release", SubjectID: "u1",
 			ActorID: "op_lita", About: "roman.reigns", ClaimedAt: &sent}
-		if open := settleFromCalls(context.Background(), []db.AddonOperation{row}); len(open) != 0 || *ran != 1 {
-			t.Fatalf("a recorded release must settle with its half: open %v, ran %d", open, *ran)
+		if open := settleFromCalls(context.Background(), []db.AddonOperation{row}); len(open) != 0 || *ran != 1 || *gotID != "200001" {
+			t.Fatalf("a recorded release must settle with its half and the id it let go of: open %v, ran %d, id %q", open, *ran, *gotID)
 		}
 		if len(h.forgotten) != 2 || len(h.basesForgotten) != 2 ||
 			!slices.Equal([]string{h.forgotten[1], h.basesForgotten[1]}, live) {

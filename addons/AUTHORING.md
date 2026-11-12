@@ -1767,7 +1767,11 @@ feature and serve both:
   app. It is how an operator lets go of an account (`handleReleaseBinding`
   there, and `releaseOnTarget` in
   `backend/internal/handlers/merge_findings.go` for one the app no longer
-  holds), so it MUST answer while the app is unreachable.
+  holds), so it MUST answer while the app is unreachable. It SHOULD answer
+  the `account_id` it let go of when one was bound, so a release Syndra
+  settles from its record (`GET /calls`) forgets Syndra's copy only while
+  that copy names the same account (`ResolveBindingCall` in
+  `backend/internal/db/addon_operations.go`).
 
 `account.adopt` and `account.release` are the only way inside Syndra to
 resolve a conflict (renaming the account in the app is the other); without

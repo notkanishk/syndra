@@ -790,6 +790,18 @@ The dialog is one dialog: the form, the preview, the camera and the result are i
 | After "It happened" | {item} went out to {person} on {name}. |
 | After "It didn't happen" | You recorded that {item} did not go out to {person}. |
 
+**Assigning an account, and letting one go, on the same list.** An assign (`account.adopt`) or a stop-tracking (`account.release`) whose answer was lost waits here too, unless the system's own record settles it (addon-contract 6.3r). Syndra's lists of accounts read Syndra's copy of the binding, which changes only when the system confirms, and a person's answer records the answer alone. So How to tell never points at those lists: the next step is to do it again, which the system answers when it already happened and refuses for an account someone else now holds. Every answer ends with a next step. `wording` in `components/targets/UnconfirmedChanges.tsx` holds those words; `{account}` is the account's name, or "{person}'s account" when the record has none.
+
+| Row | Assign (`account.adopt`) | Let go (`account.release`) |
+|---|---|---|
+| What was asked | Assign {account} to {person} | Let go of {person}'s account on {name}, keeping it |
+| The question | Did {name} assign {account} to {person}? | Did {name} let go of {person}'s account? |
+| How to tell | Syndra's lists change only when {name} confirms, so they can't tell you. Assign {account} to {person} again. If it already happened, {name} says so and Syndra lists it then. If someone else holds it now, {name} refuses. | Syndra's lists change only when {name} confirms, so they can't tell you. Stop tracking {account} again. If it already happened, {name} says so and Syndra stops listing it then. |
+| It happened | {name} assigned {account} to {person}. Syndra lists it once you assign it again. | {name} let go of {account}. Syndra stops listing it once you stop tracking it again. |
+| It didn't happen | {name} didn't assign {account}. | {name} still holds {account} for {person}. |
+| After "It happened" | You recorded that {name} assigned {account} to {person}. Assign it again to have Syndra list it. | You recorded that {name} let go of {account}. Stop tracking it again to have Syndra stop listing it. |
+| After "It didn't happen" | You recorded that {name} didn't assign {account} to {person}. Assign it again if {account} should be {person}'s. | You recorded that {name} didn't let go of {account}. Stop tracking it again if Syndra shouldn't manage it. |
+
 ## 15. What has been used (addon-contract slice 6e)
 
 An add-on that reports statistics (feature `stats`) gets the same four surfaces with no code of its own: the member's card **What I have used**, the same card on a person's page, the target overview's totals, and Insights, Usage. `components/usage/copy.ts` holds every sentence; `usageCopyGuide.test.ts` fails when this table and that file disagree, and the lint guard refuses an inline sentence in `components/usage/*.tsx` (as in sections 12 and 14). Syndra's own sentences only: what the add-on wrote (a metric's label, a breakdown's name and value, a gap's reason) is escaped, capped (label 60, value 40, reason 120 characters) and, inside a sentence, put in quotes; this table never holds it. `{value}` is a number in its unit's words ("18.4 GiB", "3 items"), `{day}` a makerspace day ("9 Nov", with the year when it is not this year's; never "UTC"), `{range}` days ("8–9 Nov"), `{where}` a breakdown (`Area: “ring”`). Every card ends on a next step or "Nothing for you to do."

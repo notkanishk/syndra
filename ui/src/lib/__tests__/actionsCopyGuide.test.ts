@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import * as copy from "@/components/actions/copy";
+import { wording as unconfirmedWording } from "@/components/targets/UnconfirmedChanges";
 import { NOTHING_TO_DO } from "@/lib/outcome";
 
 /**
@@ -116,6 +117,26 @@ describe("the copy guide's section on acting on things in the world", () => {
       expect(section, row).toContain(`| ${row} |`);
     }
     expect(w.tell).toContain("Ask at the desk whether {item} went out to {person}");
+  });
+
+  // The assign and let-go rows on the same list, one table row per sentence,
+  // each answer ending on its next step (addon-contract 6.3r).
+  it.each([
+    ["account.adopt", "Assign {account} to {person}"],
+    ["account.release", "Let go of {person}'s account on {name}, keeping it"],
+  ])("carries %s's row, one cell per sentence", (operation, asked) => {
+    const w = unconfirmedWording(
+      { id: "x", operation, subject_id: "s", actor_id: "a", about: "{account}", sent_at: "2026-11-13T00:00:00Z" },
+      "{person}",
+      "{name}",
+    );
+    // As the row draws it: the person's name between the two halves.
+    const [pre, post] = w.asked;
+    expect(post === null ? pre : `${pre}{person}${post}`).toBe(asked);
+    for (const cell of [asked, w.question, w.tell, w.yes, w.no, w.done, w.notDone]) {
+      expect(section, cell).toContain(`| ${cell} |`);
+    }
+    expect(w.notDone).toMatch(/again/);
   });
 
   // One home each: a component that spells one out inline would drift from the guide without the table failing.

@@ -296,6 +296,20 @@ func TestLiveABindingCallDecidedSinceSettlesWithoutItsHalf(t *testing.T) {
 		}
 		settles(t, ctx, call, "", true)
 	})
+	// Review round 4: the same name, a new account. A release of charlotte
+	// (200001) is recorded; the drain then creates charlotte again (200002)
+	// and saves its copy. The release's id, not the name, decides.
+	t.Run("a release of the same name, a new account since", func(t *testing.T) {
+		ctx := bindingLive(t)
+		call := lostCall(t, ctx, "account.release", "u-becky", "charlotte")
+		if err := adoptionOf("u-becky", "charlotte", "200002")(ctx); err != nil {
+			t.Fatal(err)
+		}
+		settles(t, ctx, call, "200001", false)
+		if b, found := boundRow(t, ctx, "u-becky"); !found || b.AccountID == nil || *b.AccountID != "200002" {
+			t.Fatalf("a stale release forgot the new account's copy: %+v %t", b, found)
+		}
+	})
 	t.Run("a release whose reply names another account", func(t *testing.T) {
 		ctx := bindingLive(t)
 		if err := adoptionOf("u-becky", "charlotte", "200001")(ctx); err != nil {

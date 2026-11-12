@@ -82,8 +82,12 @@ function usePersonName(id: string): string {
   return personOr(useNameResolver().resolveUser(id).value?.display_name);
 }
 
-/** Each kind, worded (A-09 §4's table, less the two password rows A-13 §5 drops). */
-function wording(op: UnconfirmedOperation, who: string, name: string) {
+/**
+ * Each kind, worded (A-09 §4's table, less the two password rows A-13 §5 drops).
+ * Exported for the copy guide's guard: the adopt and release rows are its §14
+ * table (actionsCopyGuide.test.ts).
+ */
+export function wording(op: UnconfirmedOperation, who: string, name: string) {
   const account = op.about || `${who}'s account`;
   switch (op.operation) {
     case "account.purge":

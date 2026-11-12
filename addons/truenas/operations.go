@@ -465,8 +465,17 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 	} else if err != nil {
 		return OperationResult{}, http.StatusInternalServerError, errors.New("the binding could not be released")
 	}
+	// The account let go of, by id, so Syndra settling a release whose answer
+	// was lost (GET /calls) forgets its copy only while the copy still names
+	// this account, never one bound since under the same name. None for a
+	// legacy binding that kept no uid.
+	released := ""
+	if binding.UID != 0 {
+		released = accountID(binding.UID)
+	}
 	return OperationResult{
 		Operation: "account.release", Subject: req.Subject, Outcome: "succeeded",
+		AccountID: released,
 		Detail: "Syndra no longer manages " + binding.Username +
 			". Nothing on the target was changed — the account still exists and still works.",
 	}, http.StatusOK, nil

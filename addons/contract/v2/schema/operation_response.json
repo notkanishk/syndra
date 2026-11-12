@@ -22,7 +22,7 @@
     },
     "account_id": {
       "$ref": "common/field.json#/$defs/AccountId",
-      "description": "The id of the account an adoption bound."
+      "description": "The id of the account an adoption bound, or a release let go of when one was bound."
     },
     "result": {
       "type": "object",

@@ -880,6 +880,20 @@ func TestReleaseIsAWrite(t *testing.T) {
 	}
 }
 
+// A release answers the account it let go of, by id, so Syndra settling one
+// whose answer was lost forgets its copy only while the copy names that
+// account. A repeat, with nothing bound, names none.
+func TestAReleaseAnswersTheAccountItLetGoOf(t *testing.T) {
+	s, _ := opServer(t)
+	for _, want := range []string{"3001", ""} {
+		rr := postOperation(t, s, "account.release", `{"call_id":"r-`+want+`","operation":"account.release","subject":"sub-1"}`)
+		var out OperationResult
+		if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil || rr.Code != http.StatusOK || out.AccountID != want {
+			t.Fatalf("want account_id %q, got %d %s", want, rr.Code, rr.Body.String())
+		}
+	}
+}
+
 // readOperation is the registry's effect: read, so the split between what is
 // recorded and gated and what is not is the contract's, not a list kept here.
 func TestReadOperationsAreTheRegistrysReads(t *testing.T) {

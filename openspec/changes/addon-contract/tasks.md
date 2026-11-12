@@ -1750,6 +1750,16 @@ nothing here is a wire break and nothing in slices 0–5 depends on it. Depends 
       "Stop tracking it again if Syndra shouldn't manage it."), and How to
       tell no longer says the system "answers either way": an assign is
       refused when someone else now holds the account.
+    - Review round 4: the TrueNAS `account.release` reply carries the
+      `account_id` it let go of (none when nothing was bound, or for a
+      legacy binding with no uid), so the settle compares ids, not the name:
+      a release of charlotte (200001) recorded before the drain made
+      charlotte again (200002) keeps the new copy (live test). The reply
+      schema already allowed `account_id`; its description and the guide's
+      account operations now say so (SHOULD; the reference serves no
+      release, so the kit is unchanged). The copy guide's §14 carries the
+      assign and let-go rows as a table, guarded by `actionsCopyGuide.test.ts`
+      against `wording` in `UnconfirmedChanges.tsx`.
   - [x] The UI half (6.3u, a separate builder from the 6c UI handoff): the
     member action with `format: target_id` as a typed-or-scanned input,
     preview then confirm, the poll, and the desk's sentence on Waiting on you
