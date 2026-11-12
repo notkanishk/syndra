@@ -954,11 +954,17 @@ settings with the full §5 rules.
   HUP, INT and TERM, and output stops after a failed write. The restore
   verifies the add-on's setting equals its value before and the backend
   answers `/healthz`, and records the outcome in syslog. Nothing is written to
-  `.env`. The whole staging procedure, including switching staging's add-on
-  back off afterwards, is in `scripts/README.md`. Held by
+  `.env`. Staging shares production's NAS, so its add-on runs `read_only`
+  (`TRUENAS_LIFECYCLE_STATE`): nothing staging's backend decides can write
+  there. `--writes` makes it `active` for the one command, the kit's `-mutate`
+  run, while the backend is stopped, and the restore puts `read_only` back and
+  verifies it. The whole staging procedure, including switching staging's
+  add-on back off afterwards, is in `scripts/README.md`. Held by
   `repoguard/addon_quiet_run_test.go` against a fake `docker`, which checks:
   - restore on success, on a failing command, and on a failing quiet
-    (`env -u` proved);
+    (`env -u` proved, for both overrides);
+  - read_only during a run without `--writes`, active only inside a
+    `--writes` command;
   - a SIGHUP with nobody reading;
   - a restore that did not take, and a backend that does not answer, both
     reported;

@@ -94,30 +94,40 @@ The whole staging run, in order. Every step that reaches the real NAS is the
 owner's to approve:
 
 ```bash
+# Every compose call by hand on staging layers the staging override, or a
+# recreated backend loses its stand-in Zitadel and starts on the demo directory:
+export COMPOSE_FILE=docker-compose.yml:docker-compose.staging.yml
+
 # 0. Hold merges to main for the run: a main deploy re-checks-out staging,
 #    stops the backend and the add-on, and resets the database mid-run.
 # 1. Deploy the contract branch to staging (it has the collector; main does not):
 gh workflow run deploy-staging.yml -f ref=feat/addon-contract
-# 2. On staging, switch the add-on on: in /opt/syndra/.env set
-#    COMPOSE_PROFILES=truenas and ADDON_TARGETS=truenas, then
-#    docker compose up -d   (from /opt/syndra, with COMPOSE_FILE as below)
+# 2. On staging, switch the add-on on READ-ONLY: staging shares production's
+#    NAS, so nothing staging's backend decides may write there. In
+#    /opt/syndra/.env set COMPOSE_PROFILES=truenas, ADDON_TARGETS=truenas and
+#    TRUENAS_LIFECYCLE_STATE=read_only, then (from /opt/syndra):
+docker compose up -d
 # 3. On the Mac: the kit for the staging host (x86_64)
 GOOS=linux GOARCH=amd64 go build -C addons/conformance -o /tmp/syndra-addon-conform ./cmd/syndra-addon-conform
 scp /tmp/syndra-addon-conform root@<staging>:/tmp/
-# 4. On staging, inside tmux, from /opt/syndra:
-SECRET="$(docker volume inspect -f '{{.Mountpoint}}' syndra_truenas_addon_secret)/secret.key" \
-scripts/addon-quiet-run.sh -- sh -c \
-  '/tmp/syndra-addon-conform -url "https://$ADDON_IP:8443" -target truenas -secret-file "$SECRET" -mutate -json /tmp/conformance.json'
+# 4. On staging, inside tmux, from /opt/syndra. Reads only first; then, only
+#    with the owner's OK, the -mutate run, which alone gets --writes (the add-on
+#    active for that command, the backend stopped throughout):
+SECRET="$(docker volume inspect -f '{{.Mountpoint}}' syndra_truenas_addon_secret)/secret.key"
+export SECRET
+kit='/tmp/syndra-addon-conform -url "https://$ADDON_IP:8443" -target truenas -secret-file "$SECRET"'
+scripts/addon-quiet-run.sh -- sh -c "$kit -json /tmp/conformance-reads.json"
+scripts/addon-quiet-run.sh --writes -- sh -c "$kit -mutate -json /tmp/conformance-mutate.json"
 # 5. When staging testing is over, staging goes back to its normal settings
-#    (no add-on: it shares production's NAS): remove truenas from
-#    COMPOSE_PROFILES and ADDON_TARGETS in .env, then
-#    docker compose stop truenas-addon && docker compose up -d
+#    (no add-on): remove truenas from COMPOSE_PROFILES and ADDON_TARGETS in
+#    .env, then
+docker compose stop truenas-addon && docker compose up -d
 ```
 
-`$ADDON_IP` is set by the script, so it is expanded inside the quoted `sh -c`,
-not by your shell before the script runs. The script layers
-`docker-compose.staging.yml` itself (as `_staging.yml` does) when `COMPOSE_FILE`
-is unset, so a recreate keeps the stand-in Zitadel.
+`$ADDON_IP` is set by the script, so it is expanded inside the `sh -c` (the kit
+line is single-quoted for that), not by your shell before the script runs. The
+script layers `docker-compose.staging.yml` itself (as `_staging.yml` does) when
+`COMPOSE_FILE` is unset.
 
 If the script is killed outright (SIGKILL, a lost host), run
 `scripts/addon-quiet-run.sh --restore`. It recreates the add-on from `.env`,

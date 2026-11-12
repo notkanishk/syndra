@@ -27,7 +27,8 @@ if [[ "$1" == compose ]]; then
       [[ "$*" == "up -d --no-deps --wait truenas-addon" ]] || { echo "fake docker: unexpected up $*" >&2; exit 9; }
       if [[ -e "$S/sticky" ]]; then exit 0; fi
       if [[ -e "$S/fail-quiet-up" && "${TRUENAS_STATS_COLLECT_EVERY:-}" == 0 ]]; then rm "$S/fail-quiet-up"; exit 1; fi
-      echo "${TRUENAS_STATS_COLLECT_EVERY:-$FAKE_DOTENV}" > "$S/every" ;;
+      echo "${TRUENAS_STATS_COLLECT_EVERY:-$FAKE_DOTENV}" > "$S/every"
+      echo "${TRUENAS_LIFECYCLE_STATE:-read_only}" > "$S/life" ;;
     "stop backend") rm -f "$S/backend" ;;
     "start backend") [[ -e "$S/backend-broken" ]] || touch "$S/backend" ;;
     *) echo "fake docker: unexpected compose $*" >&2; exit 9 ;;
@@ -36,7 +37,7 @@ if [[ "$1" == compose ]]; then
 fi
 if [[ "$1" == inspect ]]; then
   case "$3" in
-    *Config.Env*) echo "TZ=Asia/Kolkata"; echo "STATS_COLLECT_EVERY=$(cat "$S/every")" ;;
+    *Config.Env*) echo "TZ=Asia/Kolkata"; echo "STATS_COLLECT_EVERY=$(cat "$S/every")"; echo "LIFECYCLE_STATE=$(cat "$S/life")" ;;
     *NetworkSettings*) echo "172.20.0.5 " ;;
   esac
   exit 0
@@ -97,6 +98,7 @@ func runQuietTo(t *testing.T, staging bool, setup func(state string), out *os.Fi
 		}
 	}
 	write("every", "PT1H\n")
+	write("life", "read_only\n")
 	write("backend", "")
 	if setup != nil {
 		setup(state)
@@ -268,5 +270,36 @@ func TestAddonQuietRunRefusesAProductionEnv(t *testing.T) {
 	}
 	if calls, _ := r.file(t, "calls"); calls != "" {
 		t.Errorf("docker was called with a production .env: %q", calls)
+	}
+}
+
+// Staging's add-on is read_only: a run stays read_only unless it asks for
+// writes, and one that asks is active only for its command.
+func TestAddonQuietRunIsActiveOnlyWhenAskedAndOnlyForTheCommand(t *testing.T) {
+	during := `echo "during life=$(cat "$FAKE_STATE/life")"`
+	r := runQuiet(t, true, nil, "--", "bash", "-c", during)
+	if r.code != 0 || !strings.Contains(r.out, "during life=read_only") {
+		t.Fatalf("a run without --writes was not read_only (exit %d)\n%s", r.code, r.out)
+	}
+	r = runQuiet(t, true, nil, "--writes", "--", "bash", "-c", during+"; exit 4")
+	if r.code != 4 || !strings.Contains(r.out, "during life=active") {
+		t.Fatalf("a --writes run was not active (exit %d)\n%s", r.code, r.out)
+	}
+	if life, _ := r.file(t, "life"); life != "read_only" {
+		t.Errorf("LIFECYCLE_STATE after a --writes run = %q, want read_only back", life)
+	}
+}
+
+// A --writes run whose quiet recreate fails still leaves read_only behind:
+// the restore removes the lifecycle override too.
+func TestAddonQuietRunPutsReadOnlyBackWhenAWritesQuietFails(t *testing.T) {
+	r := runQuiet(t, true, func(state string) {
+		os.WriteFile(filepath.Join(state, "fail-quiet-up"), nil, 0o644)
+	}, "--writes", "--", "true")
+	if r.code == 0 {
+		t.Fatalf("exit 0 after a failed quiet\n%s", r.out)
+	}
+	if life, _ := r.file(t, "life"); life != "read_only" {
+		t.Errorf("LIFECYCLE_STATE after a failed --writes quiet = %q, want read_only", life)
 	}
 }
