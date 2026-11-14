@@ -1,44 +1,54 @@
-// Package clock is the makerspace's time zone: the one zone every calendar day,
-// and every clock window, in Syndra is counted in (owner, 5 Nov 2026: "get
-// everything in one IST time zone").
+// Package clock is the deployment's time zone (the TZ setting): the one zone
+// every calendar day, and every clock window, in Syndra is counted in.
 //
 // Instants are stored as timestamptz and never move. Only a DAY (or a time of
 // day) depends on a zone, and it is always this one:
 //
 //   - Go: Day(t), or t.In(Loc) before reading a date or a clock off it.
 //   - SQL: (ts AT TIME ZONE $n)::date with Name passed in. Never the session's
-//     TimeZone (the cluster's is UTC), never 'UTC'. A migration, which has no
-//     Go to ask, writes the zone's name: 'Asia/Kolkata'.
+//     TimeZone (the cluster's is UTC), never 'UTC'. A migration that
+//     must name a zone is a one-time re-bucket of this deployment's history
+//     (000079) and says so; a new one reads the zone from the caller.
 //
 // repoguard's TestDaysAreCountedInTheMakerspaceZone holds every caller to it.
 package clock
 
 import (
+	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
 	_ "time/tzdata" // the zone must load in a minimal image with no zoneinfo
 )
 
-// Default is the makerspace's zone, used when TZ is unset or names no zone.
-const Default = "Asia/Kolkata"
-
 // Name is the zone's IANA name, the form Postgres's AT TIME ZONE takes; Loc is
-// the zone itself. Both are read from TZ once, at start.
-var Name, Loc = load(os.Getenv("TZ"))
+// the zone itself. Both come from the deployment's TZ, once, at start, and from
+// nothing else: no zone is written in code. TZ unset or empty is UTC, as in
+// POSIX and Go (time.LoadLocation("") is UTC). A TZ that names no zone refuses
+// to start; it is never replaced by a guess.
+var Name, Loc = mustLoad(os.Getenv("TZ"))
 
-func load(tz string) (string, *time.Location) {
-	tz = strings.TrimPrefix(tz, ":") // POSIX allows TZ=":Asia/Kolkata"
-	if tz != "" && tz != "Local" {
-		if loc, err := time.LoadLocation(tz); err == nil {
-			return tz, loc
-		}
-	}
-	loc, err := time.LoadLocation(Default)
+func mustLoad(tz string) (string, *time.Location) {
+	name, loc, err := load(tz)
 	if err != nil {
-		panic("zone: " + err.Error()) // unreachable: time/tzdata is embedded
+		log.Fatalf("[STARTUP] %v", err)
 	}
-	return Default, loc
+	return name, loc
+}
+
+func load(tz string) (string, *time.Location, error) {
+	tz = strings.TrimPrefix(strings.TrimSpace(tz), ":") // POSIX allows TZ=":Area/Location"
+	if tz == "" {
+		return "UTC", time.UTC, nil
+	}
+	// "Local" would make the zone whatever the host's is, which is what a
+	// stated zone exists to avoid.
+	loc, err := time.LoadLocation(tz)
+	if err != nil || tz == "Local" {
+		return "", nil, fmt.Errorf("TZ=%q is not an IANA time zone name (for example Europe/London, or UTC); refusing to start rather than guess a zone", tz)
+	}
+	return tz, loc, nil
 }
 
 // Now is the current time, read in the makerspace's zone.

@@ -30,8 +30,6 @@ import (
 // where it was while the app cannot be read (Config.Down).
 
 const (
-	// defaultStatsZone is the reference's zone when TZ is unset.
-	defaultStatsZone = "Asia/Kolkata"
 	// statsBufferDays is limits.stats_buffer (P30D): a day stays while its end
 	// is within it.
 	statsBufferDays = 30
@@ -49,16 +47,22 @@ const (
 	offReason     = "The xl-1 printer's job log could not be read"
 )
 
-// statsZoneName is TZ (POSIX allows a leading colon), else the default: the
-// zone every deployment of Syndra's services follows, so the day buckets here
-// agree with the container's own clock. The TrueNAS add-on reads TZ the same
-// way (loadZone). An unreadable TZ is a misconfiguration, refused at start.
+// statsZoneName is the deployment's TZ and nothing else (POSIX allows a leading
+// colon); unset or empty is UTC, as in POSIX and Go. The TrueNAS add-on reads TZ
+// the same way (loadZone), so every add-on's day buckets agree with Syndra's.
+// An unreadable TZ is a misconfiguration, refused at start.
 var statsZoneName, statsZone = zoneFromTZ(os.Getenv("TZ"))
+
+// UseZone replaces the zone the add-on reads from TZ, for a harness that hosts
+// it in-process and must state a zone (the kit's self-tests need one that is
+// not UTC, to tell a UTC-day defect from the add-on's own days). Call it before
+// serving; it is not safe against concurrent requests.
+func UseZone(name string) { statsZoneName, statsZone = zoneFromTZ(name) }
 
 func zoneFromTZ(tz string) (string, *time.Location) {
 	name := strings.TrimPrefix(strings.TrimSpace(tz), ":")
 	if name == "" {
-		name = defaultStatsZone
+		name = "UTC"
 	}
 	loc, err := time.LoadLocation(name)
 	if err != nil {

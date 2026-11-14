@@ -12,13 +12,21 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# Both are required with no default. A default here is a trap: it would be one
+# All three are required with no default. A default here is a trap: it would be one
 # specific installation's hostname, so every other operator would generate a
 # .env that looks complete and points at someone else's infrastructure. The
 # external URL in particular fails silently when wrong — it is the address
 # *Zitadel* calls, so no local health check ever exercises it.
 : "${EXTERNAL_URL:?set EXTERNAL_URL to the public base URL Zitadel will POST to, e.g. https://syndra.example.org}"
 : "${ZITADEL_DOMAIN:?set ZITADEL_DOMAIN to your Zitadel instance domain, e.g. auth.example.org}"
+# TZ is the deployment's zone (every service, and the UI, read it). Unset would
+# silently mean UTC, so every calendar day would be counted in a zone nobody
+# chose: it is asked for, and checked against the host's IANA database.
+: "${TZ:?set TZ to the IANA time zone of this deployment, e.g. Europe/London (or UTC)}"
+if [ "$TZ" != "UTC" ] && ! [ -f "/usr/share/zoneinfo/$TZ" ]; then
+  echo "error: TZ=$TZ is not an IANA time zone name (no /usr/share/zoneinfo/$TZ)" >&2
+  exit 1
+fi
 
 if [ -e .env ]; then
   echo "error: .env already exists in $(pwd)" >&2
@@ -66,6 +74,9 @@ SESSION_SECRET=$(secret)
 # Zitadel, which is why it is the public hostname and not the LXC IP.
 SYNDRA_EXTERNAL_URL=${EXTERNAL_URL}
 ZITADEL_DOMAIN=${ZITADEL_DOMAIN}
+
+# The deployment's time zone (IANA). Every service and the UI read it.
+TZ=${TZ}
 ZITADEL_ADMIN_ROLE_KEY=admin
 ZITADEL_MACHINE_KEY_PATH=./zitadel-machine-key.json
 

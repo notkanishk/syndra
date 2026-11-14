@@ -4,7 +4,7 @@ import "testing"
 
 func TestTheStatsZoneFollowsTZ(t *testing.T) {
 	for tz, want := range map[string]string{
-		"":                 "Asia/Kolkata",  // the reference's default
+		"":                 "UTC",           // POSIX and Go: unset is UTC; no zone is written in code
 		":Europe/London":   "Europe/London", // POSIX leading colon
 		"America/Santiago": "America/Santiago",
 	} {

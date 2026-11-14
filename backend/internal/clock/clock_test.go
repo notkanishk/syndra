@@ -1,21 +1,33 @@
 package clock
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestLoadReadsTZAndFallsBackToTheMakerspace(t *testing.T) {
+func TestLoadReadsTZAndNothingElse(t *testing.T) {
 	for _, tc := range []struct{ tz, want string }{
-		{"", Default},
-		{"Local", Default},
-		{"Not/AZone", Default},
+		{"", "UTC"}, // POSIX and Go: unset is UTC, not a zone chosen for the deployment
+		{"  ", "UTC"},
+		{"UTC", "UTC"},
 		{"Asia/Kolkata", "Asia/Kolkata"},
 		{":Asia/Kolkata", "Asia/Kolkata"},
 		{"Europe/London", "Europe/London"},
 	} {
-		if name, loc := load(tc.tz); name != tc.want || loc.String() != tc.want {
-			t.Errorf("load(%q) = %s, %s; want %s", tc.tz, name, loc, tc.want)
+		name, loc, err := load(tc.tz)
+		if err != nil || name != tc.want || loc.String() != tc.want {
+			t.Errorf("load(%q) = %s, %v, %v; want %s", tc.tz, name, loc, err, tc.want)
+		}
+	}
+}
+
+// A TZ that names no zone is an error with the value in it, never a silent
+// replacement: a day counted in a zone nobody chose is a wrong count.
+func TestLoadRefusesAZoneItCannotRead(t *testing.T) {
+	for _, tz := range []string{"Not/AZone", "Local", "Asia/Kolkatta"} {
+		if _, _, err := load(tz); err == nil || !strings.Contains(err.Error(), tz) {
+			t.Errorf("load(%q) err = %v; want a refusal naming it", tz, err)
 		}
 	}
 }
@@ -23,7 +35,7 @@ func TestLoadReadsTZAndFallsBackToTheMakerspace(t *testing.T) {
 // 23:00 UTC is 04:30 the next morning in India: that sign-in belongs to the
 // next day, not the UTC one.
 func TestDayIsTheMakerspaceDayNotTheUTCOne(t *testing.T) {
-	_, ist := load("Asia/Kolkata")
+	ist := zone(t, "Asia/Kolkata")
 	old := Loc
 	Loc = ist
 	t.Cleanup(func() { Loc = old })
@@ -43,7 +55,7 @@ func TestDayIsTheMakerspaceDayNotTheUTCOne(t *testing.T) {
 // "Until 30 Nov" holds through the whole of 30 Nov in India, not until UTC
 // midnight (05:30 IST); "for 7 days" ends as the 7th calendar day does.
 func TestEndsAreTheWholeOfTheirDay(t *testing.T) {
-	_, ist := load("Asia/Kolkata")
+	ist := zone(t, "Asia/Kolkata")
 	old := Loc
 	Loc = ist
 	t.Cleanup(func() { Loc = old })
@@ -72,7 +84,7 @@ func TestEndsAreTheWholeOfTheirDay(t *testing.T) {
 // the previous day's 23:00, and that day still ends as its own day does. A
 // statistics bucket starts there (addon-contract §9.2), as the add-ons' do.
 func TestASkippedMidnightIsWhenTheClocksResume(t *testing.T) {
-	_, santiago := load("America/Santiago")
+	santiago := zone(t, "America/Santiago")
 	old := Loc
 	Loc = santiago
 	t.Cleanup(func() { Loc = old })
@@ -91,4 +103,13 @@ func TestASkippedMidnightIsWhenTheClocksResume(t *testing.T) {
 	if got := AddDate("2026-11-12", 0, -11, 0); got != "2025-12-12" {
 		t.Fatalf("AddDate(12 Nov, -11 months) = %s", got)
 	}
+}
+
+func zone(t *testing.T, name string) *time.Location {
+	t.Helper()
+	_, loc, err := load(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return loc
 }

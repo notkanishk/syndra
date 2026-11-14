@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -33,7 +32,7 @@ func AwaitRedis(ctx context.Context) error {
 		err := Redis.Ping(pctx).Err()
 		cancel()
 		if err == nil {
-			fmt.Println("Connected to Redis successfully.")
+			log.Println("[STARTUP] Connected to Redis successfully.")
 			return nil
 		}
 		if i%5 == 0 {
@@ -62,3 +61,14 @@ func AwaitRedis(ctx context.Context) error {
 // The options live in claimserve so the claims process (cmd/claims) builds
 // its client the same way without importing this package.
 func NewRedisClient(addr string) *redis.Client { return claimserve.NewRedisClient(addr) }
+
+// libLogger carries go-redis's own diagnostics through the standard logger, so
+// they get the one stamp and the one vocabulary (the library's default logger
+// writes to stderr with its own LstdFlags stamp, a second and different one).
+type libLogger struct{}
+
+func (libLogger) Printf(_ context.Context, format string, v ...interface{}) {
+	log.Printf("[CACHE] redis: "+format, v...)
+}
+
+func init() { redis.SetLogger(libLogger{}) }

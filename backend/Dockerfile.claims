@@ -12,7 +12,6 @@ RUN go mod download
 COPY internal/claims ./internal/claims
 COPY internal/claimtel ./internal/claimtel
 COPY internal/claimserve ./internal/claimserve
-COPY internal/clock ./internal/clock
 COPY internal/logstamp ./internal/logstamp
 COPY internal/ratelimit ./internal/ratelimit
 COPY internal/services/periodic ./internal/services/periodic

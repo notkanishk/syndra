@@ -4,7 +4,7 @@
 // centralizes the human-readable formatting so every view does it the same way.
 
 import { humanizeKey, roleName } from "@/lib/names";
-import { civilDay, makerspaceZone, daysFromToday, endAfterDaysISO, isSameDay } from "@/lib/time";
+import { civilDay, makerspaceZone, zoneTag, daysFromToday, endAfterDaysISO, isSameDay } from "@/lib/time";
 
 export { humanizeKey };
 
@@ -155,7 +155,7 @@ export function formatClock(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString(DATE_LOCALE, { ...inZone(), hour: "2-digit", minute: "2-digit", hour12: false });
+  return date.toLocaleTimeString(DATE_LOCALE, { ...inZone(), hour: "2-digit", minute: "2-digit", hour12: false }) + zoneTag();
 }
 
 /**
@@ -190,7 +190,10 @@ export function formatClockSeconds(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleTimeString(DATE_LOCALE, { ...inZone(), hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  return (
+    date.toLocaleTimeString(DATE_LOCALE, { ...inZone(), hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) +
+    zoneTag()
+  );
 }
 
 /** "Friday 31 July" — the line under a greeting. */

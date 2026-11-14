@@ -22,10 +22,13 @@ Run once, on the production host, from the compose directory.
 ```bash
 EXTERNAL_URL=https://syndra.example.org \
 ZITADEL_DOMAIN=auth.example.org \
+TZ=Europe/London \
   scripts/gen-prod-env.sh
 ```
 
-Both variables are required with no default. A default would be one specific
+All three variables are required with no default. `TZ` is the deployment's IANA
+time zone (every service and the UI read it); the script refuses a name the
+host's zoneinfo does not know. A default would be one specific
 installation's hostname, which every other operator would then inherit without
 noticing — and `EXTERNAL_URL` is the address *Zitadel* calls, so a wrong value
 fails silently. No local health check exercises it.

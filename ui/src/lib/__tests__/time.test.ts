@@ -1,11 +1,10 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { formatClock } from "@/lib/format";
+import { formatClock, formatClockSeconds } from "@/lib/format";
 import {
-  DEFAULT_ZONE,
   addDays,
   civilDay,
   daysBetween,
@@ -15,6 +14,7 @@ import {
   isSameDay,
   makerspaceZone,
   setMakerspaceZone,
+  zoneTag,
 } from "@/lib/time";
 
 describe("the makerspace's day", () => {
@@ -89,11 +89,9 @@ describe("days and end dates", () => {
  * reader (day, end of day, clock) follows it; none keeps a zone of its own.
  */
 describe("the zone the backend names", () => {
-  afterEach(() => setMakerspaceZone(DEFAULT_ZONE));
-
-  it("starts as the backend's own default", () => {
-    expect(makerspaceZone()).toBe("Asia/Kolkata");
-  });
+  // The suite's own zone is test config (vitest.config.ts); the product writes none.
+  beforeEach(() => setMakerspaceZone("Asia/Kolkata"));
+  afterEach(() => setMakerspaceZone("Asia/Kolkata"));
 
   it("moves the day, the end of a day and the clock together", () => {
     setMakerspaceZone("America/Santiago"); // UTC-3 in November (DST)
@@ -105,12 +103,21 @@ describe("the zone the backend names", () => {
     expect(formatClock(at.toISOString())).toBe("01:00");
   });
 
-  it("refuses a name it cannot read, and keeps the zone it had", () => {
-    setMakerspaceZone("Europe/London");
-    setMakerspaceZone("Not/AZone");
-    expect(makerspaceZone()).toBe("Europe/London");
-    setMakerspaceZone(undefined);
-    expect(makerspaceZone()).toBe("Europe/London");
+  it("shows UTC, labelled, when the backend's zone is unknown: never a guessed zone", () => {
+    for (const unknown of [undefined, null, "", "Not/AZone"]) {
+      setMakerspaceZone("Europe/London");
+      setMakerspaceZone(unknown);
+      expect(makerspaceZone()).toBe("UTC");
+      expect(zoneTag()).toBe(" UTC");
+      expect(formatClock("2026-11-05T01:00:00Z")).toBe("01:00 UTC");
+      expect(formatClockSeconds("2026-11-05T01:00:09Z")).toBe("01:00:09 UTC");
+    }
+  });
+
+  it("says nothing extra when the zone is known, even UTC itself", () => {
+    setMakerspaceZone("UTC");
+    expect(zoneTag()).toBe("");
+    expect(formatClock("2026-11-05T01:00:00Z")).toBe("01:00");
   });
 });
 
@@ -121,6 +128,16 @@ describe("the zone the backend names", () => {
  * inZone() which is makerspaceZone()).
  */
 describe("a time is never shown in the browser's zone", () => {
+  // A zone is named when timeZone has a value (not `timeZone: undefined`, which
+  // is the browser's zone again) or the call spreads inZone().
+  const namesAZone = (call: string) => /inZone\(\)/.test(call) || /timeZone\b(?!\s*:\s*undefined\b)/.test(call);
+  it("recognises a named zone, and refuses undefined as one", () => {
+    expect(namesAZone('("en-GB", { timeZone: "UTC" })')).toBe(true);
+    expect(namesAZone('("en-GB", { ...inZone(), hour: "2-digit" })')).toBe(true);
+    expect(namesAZone('("en-GB", { timeZone: undefined })')).toBe(false);
+    expect(namesAZone('("en-GB", { timeZone:undefined, hour12: false })')).toBe(false);
+    expect(namesAZone('("en-GB", { hour12: false })')).toBe(false);
+  });
   const CALL = /(toLocale(?:Time|Date)String|Intl\.DateTimeFormat)\s*\(/g;
   it("names a zone at every call", () => {
     const found: string[] = [];
@@ -133,7 +150,7 @@ describe("a time is never shown in the browser's zone", () => {
           if (text[end] === "(") depth++;
           else if (text[end] === ")") depth--;
         }
-        if (!/timeZone|inZone\(\)/.test(text.slice(m.index, end))) {
+        if (!namesAZone(text.slice(m.index, end))) {
           found.push(`${file.slice(SRC.length + 1)}:${text.slice(0, m.index).split("\n").length} ${m[1]} without a zone`);
         }
       }

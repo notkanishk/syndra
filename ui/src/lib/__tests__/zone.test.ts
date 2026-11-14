@@ -12,10 +12,17 @@ describe("the zone the layout reads from the backend", () => {
     expect(await fetchMakerspaceZone()).toBe("Europe/London");
   });
 
-  it("degrades to the backend's own default when it cannot be read", async () => {
+  it("is undefined for a name Intl cannot read: UTC, labelled, never the bad name", async () => {
+    answer({ status: "ok", time_zone: "Not/AZone" });
+    expect(await fetchMakerspaceZone()).toBeUndefined();
+    answer({ status: "ok", time_zone: 5 });
+    expect(await fetchMakerspaceZone()).toBeUndefined();
+  });
+
+  it("is undefined, never a guessed zone, when it cannot be read", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down"); }));
-    expect(await fetchMakerspaceZone()).toBe("Asia/Kolkata");
+    expect(await fetchMakerspaceZone()).toBeUndefined();
     answer({ status: "ok" });
-    expect(await fetchMakerspaceZone()).toBe("Asia/Kolkata");
+    expect(await fetchMakerspaceZone()).toBeUndefined();
   });
 });

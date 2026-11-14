@@ -75,8 +75,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getSession();
-  const timeZone = await fetchMakerspaceZone();
+  // In parallel: the zone read is bounded (1 s) and must not add to the session read.
+  const [session, timeZone] = await Promise.all([getSession(), fetchMakerspaceZone()]);
   // The view is rendered by the server, so the first paint is already the right one.
   const initialView = parseUiView((await cookies()).get(VIEW_COOKIE)?.value);
   const fontVars = `${bricolage.variable} ${figtree.variable} ${jetbrains.variable}`;

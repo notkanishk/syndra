@@ -15,19 +15,21 @@
  */
 
 /**
- * The makerspace's zone is the backend's `TZ` (backend/internal/clock.Name),
- * the one source. The root layout reads it from /healthz on the server and
- * hands it to <MakerspaceZone>, which calls setMakerspaceZone while rendering,
- * before any child formats a time: no date is ever drawn in a zone the backend
- * did not name. DEFAULT_ZONE is only what the backend itself falls back to
- * (clock.Default) and what the layout uses if /healthz cannot be read.
+ * The zone is the deployment's `TZ`, read by the backend (clock.Name), the one
+ * source: no zone is written here. The root layout reads it from /healthz on
+ * the server and hands it to <Providers>, which calls setMakerspaceZone while
+ * rendering, before any child formats a time, so the first paint is already in
+ * that zone. If it cannot be read (or names no zone) times are shown in UTC and
+ * say so (zoneTag), never in a guessed zone.
  */
-export const DEFAULT_ZONE = "Asia/Kolkata";
-
-let zone = DEFAULT_ZONE;
+let zone = "UTC";
+let known = false;
 
 /** The zone every date and clock is read in; pass as `{ timeZone: makerspaceZone() }`. */
 export const makerspaceZone = (): string => zone;
+
+/** " UTC" while the backend's zone is unknown, so a reader is never left guessing; otherwise empty. */
+export const zoneTag = (): string => (known ? "" : " UTC");
 
 const wallClockIn = (timeZone: string) =>
   new Intl.DateTimeFormat("en-US", {
@@ -42,15 +44,23 @@ const wallClockIn = (timeZone: string) =>
   });
 let wallClock = wallClockIn(zone);
 
-/** Adopt the backend's zone. An unknown name is refused (kept as is), never half-applied. */
+/** Adopt the backend's zone; nothing or a name Intl cannot read means "unknown": UTC, labelled. */
 export function setMakerspaceZone(name: string | null | undefined): void {
-  if (!name || name === zone) return;
-  try {
-    wallClock = wallClockIn(name); // throws RangeError on an unknown zone
-  } catch {
-    return;
+  let next = "UTC";
+  let ok = false;
+  if (name) {
+    try {
+      wallClockIn(name); // throws RangeError on an unknown zone
+      next = name;
+      ok = true;
+    } catch {
+      /* unknown: UTC, labelled */
+    }
   }
-  zone = name;
+  if (next === zone && ok === known) return;
+  zone = next;
+  known = ok;
+  wallClock = wallClockIn(zone);
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
