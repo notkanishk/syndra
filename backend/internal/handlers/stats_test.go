@@ -441,16 +441,17 @@ func TestInsightsStatsNameThePeopleForAdmins(t *testing.T) {
 	}
 }
 
-// What names a person (names_person, set at collection) is an admin's to see:
-// a member's own page leaves out a series with any flagged point and says how
-// many, and replaces a flagged gap's reason with Syndra's sentence; an admin on
+// What names someone (named_subjects, set at collection) is an admin's to see:
+// a member's own page leaves out a series with any point naming anyone but
+// them and says how many, and gives such a gap Syndra's sentence for its
+// reason and no dimensions; an admin on
 // that person's page, and the totals, see every value and reason as stored.
 func TestAMemberNeverSeesWhatNamesAPerson(t *testing.T) {
 	stubStats(t, &statsStore{})
 	dbStatsDays = func(context.Context, string, string, string) ([]db.StatsValue, error) {
 		return []db.StatsValue{
 			{Metric: "storage.sessions", Dims: map[string]string{"share": "makers"}, When: "2026-11-10", Value: 2},
-			{Metric: "storage.sessions", Dims: map[string]string{"share": "home-john_cena"}, When: "2026-11-10", Value: 5, NamesPerson: true},
+			{Metric: "storage.sessions", Dims: map[string]string{"share": "home-john_cena"}, When: "2026-11-10", Value: 5, NamedSubjects: []string{"sub-cena"}},
 			{Metric: "storage.sessions", Dims: map[string]string{"share": "home-john_cena"}, When: "2026-11-11", Value: 1},
 		}, nil
 	}
@@ -458,13 +459,17 @@ func TestAMemberNeverSeesWhatNamesAPerson(t *testing.T) {
 		return []db.StatsValue{
 			{Metric: "storage.sessions", Dims: map[string]string{"share": "makers"}, When: "2026-11", Value: 2},
 			// Flagged in a month only: the 12 months are the member's page too.
-			{Metric: "storage.sessions", Dims: map[string]string{"share": "lita-scratch"}, When: "2026-09", Value: 4, NamesPerson: true},
+			{Metric: "storage.sessions", Dims: map[string]string{"share": "lita-scratch"}, When: "2026-09", Value: 4, NamedSubjects: []string{"sub-lita", "u1"}},
 		}, nil
 	}
 	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {
 		return []db.StatsGapRow{
-			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{}, Start: "2026-11-08", End: "2026-11-09", Reason: "John Cena's home is offline", NamesPerson: true}},
-			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": "home-john_cena"}, Start: "2026-11-05", End: "2026-11-06", Reason: "Auditing was off", NamesPerson: true}},
+			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{}, Start: "2026-11-08", End: "2026-11-09", Reason: "John Cena's home is offline", NamedSubjects: []string{"sub-cena"}}},
+			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": "home-john_cena"}, Start: "2026-11-05", End: "2026-11-06", Reason: "Auditing was off", NamedSubjects: []string{"sub-cena"}}},
+			// Names someone else, on a line the member keeps (a name bound
+			// after the line's points were read): the window stays, nothing
+			// that names anyone does.
+			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": "makers"}, Start: "2026-11-03", End: "2026-11-04", Reason: "Auditing was off", NamedSubjects: []string{"sub-makers"}}},
 			{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{"share": "makers"}, Start: "2026-11-01", End: "2026-11-02", Reason: "Auditing was off"}},
 		}, nil
 	}
@@ -485,8 +490,16 @@ func TestAMemberNeverSeesWhatNamesAPerson(t *testing.T) {
 	if len(sessions.Series) != 1 || sessions.Series[0].Dimensions["share"] != "makers" || sessions.LeftOut != 2 {
 		t.Errorf("the member sees %+v, left out %d: want makers only and 2 series said to be left out", sessions.Series, sessions.LeftOut)
 	}
-	if len(sessions.Gaps) != 2 || sessions.Gaps[0].Reason != reasonWithheld || sessions.Gaps[1].Reason != "Auditing was off" {
-		t.Errorf("the member's gaps %+v: want the whole-metric gap's reason withheld, the makers gap as stored, none on a series left out", sessions.Gaps)
+	var gaps []string
+	for _, g := range sessions.Gaps {
+		gaps = append(gaps, g.Start+" "+dimsText(g.Dimensions)+" "+g.Reason)
+	}
+	if want := []string{
+		"2026-11-08 null " + reasonWithheld,             // the whole metric's, its reason withheld
+		"2026-11-03 null " + reasonWithheld,             // names someone else: no dimensions, no reason
+		`2026-11-01 {"share":"makers"} Auditing was off`, // as stored
+	}; !slices.Equal(gaps, want) {
+		t.Errorf("the member's gaps %q, want %q (none on a series left out)", gaps, want)
 	}
 
 	for _, subject := range []string{"u1", ""} { // an admin on u1's page, and the totals
@@ -506,6 +519,36 @@ func TestAMemberNeverSeesWhatNamesAPerson(t *testing.T) {
 	}
 }
 
+// A member's own name hides nothing of theirs: a share named after its owner
+// is on the owner's page as stored, and left out of anyone else's; a reason
+// naming only them is theirs to read. An admin sees it on every page.
+func TestAMembersOwnNameHidesNothingOfTheirs(t *testing.T) {
+	stubStats(t, &statsStore{})
+	dbStatsDays = func(context.Context, string, string, string) ([]db.StatsValue, error) {
+		return []db.StatsValue{{Metric: "storage.sessions", Dims: map[string]string{"share": "home-john_cena"}, When: "2026-11-10", Value: 5, NamedSubjects: []string{"sub-cena"}}}, nil
+	}
+	dbStatsMonths = func(context.Context, string, string, string) ([]db.StatsValue, error) { return nil, nil }
+	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {
+		return []db.StatsGapRow{{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{}, Start: "2026-11-08", End: "2026-11-09", Reason: "john_cena's home is offline", NamedSubjects: []string{"sub-cena"}}}}, nil
+	}
+	now := time.Date(2026, 11, 12, 6, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		subject string
+		member  bool
+		shown   bool
+	}{{"sub-cena", true, true}, {"sub-lita", true, false}, {"sub-lita", false, true}} {
+		usage, err := statsUsageFor(context.Background(), "truenas", c.subject, c.member, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(usage)
+		s := sessionsOf(t, usage)
+		if got := strings.Contains(string(raw), "john_cena"); got != c.shown || (len(s.Series) == 1) != c.shown || (s.LeftOut == 1) == c.shown {
+			t.Errorf("%s (member view %t): shown %t, series %d, left out %d; want shown %t: %s", c.subject, c.member, got, len(s.Series), s.LeftOut, c.shown, raw)
+		}
+	}
+}
+
 // Through the real handlers: /me/targets is the member's view, masked;
 // /users/{id}/targets the admin's, as stored.
 func TestOnlyTheMembersOwnPageIsMasked(t *testing.T) {
@@ -518,7 +561,7 @@ func TestOnlyTheMembersOwnPageIsMasked(t *testing.T) {
 	}
 	stubStats(t, &statsStore{})
 	dbStatsGaps = func(context.Context, string, string) ([]db.StatsGapRow, error) {
-		return []db.StatsGapRow{{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{}, Start: "2026-11-08", End: "2026-11-10", Reason: "rey_mysterio's share is offline", NamesPerson: true}}}, nil
+		return []db.StatsGapRow{{Metric: "storage.sessions", StatsGap: db.StatsGap{Dims: map[string]string{}, Start: "2026-11-08", End: "2026-11-10", Reason: "rey_mysterio's share is offline", NamedSubjects: []string{"sub-rey"}}}}, nil
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
 	req = req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "u1"}))

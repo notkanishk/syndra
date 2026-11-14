@@ -207,8 +207,9 @@ describe("sortDrift", () => {
   const ids = (list: DriftTriageItem[]) => list.map((item) => item.id);
 
   it("puts the most recently found first, and reverses", () => {
-    expect(ids(sortDrift(rows, "found", 1, names))).toEqual(["b", "c", "a"]);
-    expect(ids(sortDrift(rows, "found", -1, names))).toEqual(["a", "c", "b"]);
+    // Found descends first (newest first, as the heading says); ascending is oldest first.
+    expect(ids(sortDrift(rows, "found", -1, names))).toEqual(["b", "c", "a"]);
+    expect(ids(sortDrift(rows, "found", 1, names))).toEqual(["a", "c", "b"]);
   });
 
   it("orders by name, newest first among equals", () => {

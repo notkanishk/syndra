@@ -53,22 +53,18 @@ function Spread({ metric, row }: { metric: InsightsStatsMetric; row: InsightsSer
 
 type PeopleSort = "person" | "last30" | "last12";
 
-/** A gauge's missing 30 days sort after every value, whichever way the column is turned. */
-const LAST = Number.MAX_VALUE;
-
 /**
  * One breakdown's people: Person, Last 30 days, Last 12 months. A number's
- * first order is largest first, as Operations' time is newest first, and a
- * second press turns it; the name is the directory's, never the id, linking
- * to the person's page.
+ * first order is largest first (descending, said so), a second press turns
+ * it, and a gauge with no value in the 30 days sits last either way; the name
+ * is the directory's, never the id, linking to the person's page.
  */
 function People({ metric, row, what }: { metric: InsightsStatsMetric; row: InsightsSeries; what: string }) {
-  const [sort, setSort, view] = useSort<PeopleSort>("last30");
-  const dir = view.sort.dir;
-  const by: Record<PeopleSort, (p: InsightsPerson) => string | number> = {
+  const [sort, setSort, view] = useSort<PeopleSort>("last30", undefined, ["last30", "last12"]);
+  const by: Record<PeopleSort, (p: InsightsPerson) => string | number | null> = {
     person: (p) => p.name || UNKNOWN_ACCOUNT,
-    last30: (p) => (p.last_30d === null ? dir * LAST : -p.last_30d),
-    last12: (p) => -p.last_12m,
+    last30: (p) => p.last_30d,
+    last12: (p) => p.last_12m,
   };
   const rows = orderBy(row.people, view.sort, by);
   const value = (v: number | null) => (v === null ? <span className="text-faint">{copy.NO_VALUE}</span> : formatValue(v, metric.unit));

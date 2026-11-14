@@ -112,8 +112,8 @@ export function WithdrawnAccess() {
   const clearedByMe = useQueueCleared(rows, !query.isLoading && !query.error, true).cleared?.mine != null;
   const [search, setSearch] = useState("");
   const [where, setWhere] = useState("");
-  // Most recent first, as the board draws it: `when` is how long ago, so ascending is newest.
-  const [sort, flipSort, view] = useSort<SortKey>("when", { list: "withdrawn", keys: ["who", "what", "where", "when"] });
+  // Most recent first, as the board draws it: When descends (said so), newest first.
+  const [sort, flipSort, view] = useSort<SortKey>("when", { list: "withdrawn", keys: ["who", "what", "where", "when"] }, ["when"]);
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({ spent: true, queued: true });
 
   const text = useMemo(
@@ -121,7 +121,8 @@ export function WithdrawnAccess() {
       who: (row: UnconfirmedRevocation) => resolver.resolveUser(row.user_id).value?.display_name ?? "",
       what: (row: UnconfirmedRevocation) => whatText(row, resolver.resolveProject(row.project_id).value?.name ?? "", nameOf),
       where: (row: UnconfirmedRevocation) => nameOf(row.target),
-      when: (row: UnconfirmedRevocation) => row.age_seconds,
+      // How long ago, negated: a later moment is a larger value.
+      when: (row: UnconfirmedRevocation) => -row.age_seconds,
     }),
     [resolver, nameOf],
   );

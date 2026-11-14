@@ -383,9 +383,10 @@ func TestMigration93IsExpandOnly(t *testing.T) {
 }
 
 // 000094 runs up, down and up on the real engine, from where the database
-// stands: down leaves what a backend at 000093 would hold (a flagged point
-// gone with any flagged gap on its series, another flagged gap's reason the
-// sentence 000093 stored, the rest as it was) and drops both columns; up brings them back, every row false. Left
+// stands: down leaves what a backend at 000093 would show (a point that names
+// a person gone; a gap that does keeps its window, even with no point left on
+// it, with the sentence 000093 stored for its reason; the rest as it was) and
+// drops both columns; up brings them back, every row naming nobody. Left
 // where it began.
 func TestLiveMigration94RunsUpDownUp(t *testing.T) {
 	ctx := statsLive(t)
@@ -415,7 +416,7 @@ func TestLiveMigration94RunsUpDownUp(t *testing.T) {
 		}
 	})
 	columns := func() (n int) {
-		if err := PG.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name IN ('addon_metric_points', 'addon_metric_gaps') AND column_name = 'names_person'`).Scan(&n); err != nil {
+		if err := PG.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_name IN ('addon_metric_points', 'addon_metric_gaps') AND column_name = 'named_subjects'`).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n
@@ -423,16 +424,18 @@ func TestLiveMigration94RunsUpDownUp(t *testing.T) {
 	today := clock.Day(clock.Now())
 	d := clock.AddDate(today, 0, 0, -1)
 	put(t, ctx, "storage.sessions", today,
-		StatsPoint{Subject: "sub-cena", Dims: map[string]string{"share": "home-john_cena"}, Day: d, Value: 2, NamesPerson: true},
+		StatsPoint{Subject: "sub-cena", Dims: map[string]string{"share": "home-john_cena"}, Day: d, Value: 2, NamedSubjects: []string{"sub-cena"}},
 		StatsPoint{Subject: "sub-cena", Dims: map[string]string{"share": "makers"}, Day: d, Value: 3})
 	if err := CollectStats(ctx, statsTarget, "storage.sessions", func(c *StatsTx) error {
 		_, err := c.UpsertGaps(ctx, today, []StatsGap{
-			{Dims: map[string]string{}, Start: d, End: today, Reason: "john_cena's share is offline", NamesPerson: true},
+			{Dims: map[string]string{}, Start: d, End: today, Reason: "john_cena's share is offline", NamedSubjects: []string{"sub-cena"}},
 			{Dims: map[string]string{"share": "makers"}, Start: d, End: today, Reason: "Auditing is off"},
-			// Flagged for its dimension: on the series the down deletes, so it goes with it.
-			{Dims: map[string]string{"share": "home-john_cena"}, Start: d, End: today, Reason: "Auditing is off", NamesPerson: true},
-			// Flagged for its reason, on a series that stays: kept, its reason withheld.
-			{Dims: map[string]string{"share": "makers"}, Start: clock.AddDate(d, 0, 0, -1), End: d, Reason: "account of john_cena is locked", NamesPerson: true},
+			// Naming him by its dimension, on the series the down deletes: no
+			// surviving point holds it, and its window still stays (a deleted
+			// gap would read as counted), its reason withheld.
+			{Dims: map[string]string{"share": "home-john_cena"}, Start: d, End: today, Reason: "Auditing is off", NamedSubjects: []string{"sub-cena"}},
+			// Naming him by its reason, on a series that stays: kept, its reason withheld.
+			{Dims: map[string]string{"share": "makers"}, Start: clock.AddDate(d, 0, 0, -1), End: d, Reason: "account of john_cena is locked", NamedSubjects: []string{"sub-cena"}},
 		})
 		return err
 	}); err != nil {
@@ -440,7 +443,7 @@ func TestLiveMigration94RunsUpDownUp(t *testing.T) {
 	}
 	// A whole-metric gap on a metric with no points at all: on no series, and kept.
 	if err := CollectStats(ctx, statsTarget, "storage.home_bytes", func(c *StatsTx) error {
-		_, err := c.UpsertGaps(ctx, today, []StatsGap{{Dims: map[string]string{}, Start: d, End: today, Reason: "rey_mysterio's pool is offline", NamesPerson: true}})
+		_, err := c.UpsertGaps(ctx, today, []StatsGap{{Dims: map[string]string{}, Start: d, End: today, Reason: "rey_mysterio's pool is offline", NamedSubjects: []string{"sub-rey"}}})
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -450,23 +453,30 @@ func TestLiveMigration94RunsUpDownUp(t *testing.T) {
 		t.Fatalf("000094 down: %v", err)
 	}
 	if n := columns(); n != 0 {
-		t.Fatalf("after down: %d names_person columns", n)
+		t.Fatalf("after down: %d named_subjects columns", n)
 	}
-	var held, reasons string
+	var held, reasons, windows string
 	if err := PG.QueryRow(ctx, `SELECT string_agg(dims::text, ' ' ORDER BY dims::text) FROM addon_metric_points WHERE target_id = $1`, statsTarget).Scan(&held); err != nil {
 		t.Fatal(err)
 	}
 	if err := PG.QueryRow(ctx, `SELECT string_agg(reason, ' | ' ORDER BY reason) FROM addon_metric_gaps WHERE target_id = $1`, statsTarget).Scan(&reasons); err != nil {
 		t.Fatal(err)
 	}
-	if held != `{"share": "makers"}` || reasons != "Auditing is off | The add-on's reason named a person. | The add-on's reason named a person. | The add-on's reason named a person." {
+	if err := PG.QueryRow(ctx, `SELECT string_agg(metric || ' ' || dims::text || ' ' || reason, ' | ' ORDER BY metric, dims::text, gap_start) FROM addon_metric_gaps WHERE target_id = $1 AND dims <> '{}'`, statsTarget).Scan(&windows); err != nil {
+		t.Fatal(err)
+	}
+	withheld := "The add-on's reason named a person."
+	if held != `{"share": "makers"}` || reasons != "Auditing is off | "+strings.Repeat(withheld+" | ", 3)+withheld {
 		t.Errorf("after down: points %s, reasons %s: want what 000093 would hold", held, reasons)
+	}
+	if want := `storage.sessions {"share": "home-john_cena"} ` + withheld + ` | storage.sessions {"share": "makers"} ` + withheld + ` | storage.sessions {"share": "makers"} Auditing is off`; windows != want {
+		t.Errorf("after down: gaps %s, want %s: a gap naming a person keeps its window, even with no point left on it", windows, want)
 	}
 	if err := m.Migrate(94); err != nil {
 		t.Fatalf("000094 up: %v", err)
 	}
 	var flagged int
-	if err := PG.QueryRow(ctx, `SELECT (SELECT count(*) FROM addon_metric_points WHERE names_person) + (SELECT count(*) FROM addon_metric_gaps WHERE names_person)`).Scan(&flagged); err != nil {
+	if err := PG.QueryRow(ctx, `SELECT (SELECT count(*) FROM addon_metric_points WHERE named_subjects <> '{}') + (SELECT count(*) FROM addon_metric_gaps WHERE named_subjects <> '{}')`).Scan(&flagged); err != nil {
 		t.Fatal(err)
 	}
 	if n := columns(); n != 2 || flagged != 0 {
@@ -475,23 +485,23 @@ func TestLiveMigration94RunsUpDownUp(t *testing.T) {
 }
 
 // 000094 only adds (two columns with a default), and its down drops exactly
-// those, after folding what a 000093 backend would never have stored.
+// those, after folding what a 000093 backend would never have shown.
 func TestMigration94IsExpandOnly(t *testing.T) {
-	up, down := readMigrationPair(t, "000094_stats_names_person")
+	up, down := readMigrationPair(t, "000094_stats_named_subjects")
 	if u := strings.ToUpper(stripSQLComments(up)); strings.Contains(u, "DROP ") || strings.Contains(u, " TYPE ") || strings.Contains(u, "DELETE") || strings.Contains(u, "UPDATE") {
 		t.Error("000094 up must be additive")
 	}
 	for _, want := range []string{
-		"ALTER TABLE addon_metric_points ADD COLUMN IF NOT EXISTS names_person BOOLEAN NOT NULL DEFAULT false",
-		"ALTER TABLE addon_metric_gaps ADD COLUMN IF NOT EXISTS names_person BOOLEAN NOT NULL DEFAULT false",
+		"ALTER TABLE addon_metric_points ADD COLUMN IF NOT EXISTS named_subjects TEXT[] NOT NULL DEFAULT '{}'",
+		"ALTER TABLE addon_metric_gaps ADD COLUMN IF NOT EXISTS named_subjects TEXT[] NOT NULL DEFAULT '{}'",
 	} {
 		if !strings.Contains(up, want) {
 			t.Errorf("000094 up must contain %q", want)
 		}
 	}
 	for _, want := range []string{
-		"DELETE FROM addon_metric_points WHERE names_person", "ALTER TABLE addon_metric_gaps DROP COLUMN IF EXISTS names_person",
-		"ALTER TABLE addon_metric_points DROP COLUMN IF EXISTS names_person",
+		"DELETE FROM addon_metric_points WHERE named_subjects <> '{}'", "ALTER TABLE addon_metric_gaps DROP COLUMN IF EXISTS named_subjects",
+		"ALTER TABLE addon_metric_points DROP COLUMN IF EXISTS named_subjects",
 	} {
 		if !strings.Contains(down, want) {
 			t.Errorf("000094 down must contain %q", want)

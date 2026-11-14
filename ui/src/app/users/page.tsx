@@ -196,6 +196,7 @@ export default function PeoplePage() {
     filters.bundle === NO_BUNDLE ? "joined" : "person",
     // A link that chose its own order or filters is not a return to your last view.
     { list: "people", keys: ["person", "bundles", "attention", "joined"], when: !hasAnyFilter(filters) },
+    ["joined"],
   );
   const rows = useMemo(
     () => orderBy(applyFilters(all, filters, holders), view.sort, PEOPLE_SORT),
@@ -714,17 +715,17 @@ function attentionOf(entry: UserListEntry): { text: string; tone: string; rank: 
 
 type PeopleSort = "person" | "bundles" | "attention" | "joined";
 
-const PEOPLE_SORT: Record<PeopleSort, (entry: UserListEntry) => string | number> = {
+const PEOPLE_SORT: Record<PeopleSort, (entry: UserListEntry) => string | number | null> = {
   person: (entry) => entry.user.name,
   // Nobody-in-a-bundle sorts after the last bundle name, not before the first.
   bundles: (entry) => entry.bundle_names?.[0] ?? "\uffff",
   attention: (entry) => attentionOf(entry)?.rank ?? 0,
-  // Newest first is its natural order (A-07 §18), so it ascends on the negated
-  // time. Nobody with no date goes last, not first. No heading of its own: it
-  // is only ever the default for a view that is about who just arrived.
+  // Newest first is its natural order (A-07 §18): it descends. Nobody with no
+  // date goes last (orderBy's null). No heading of its own: it is only ever
+  // the default for a view that is about who just arrived.
   joined: (entry) => {
     const at = Date.parse(entry.user.joined ?? "");
-    return Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : -at;
+    return Number.isNaN(at) ? null : at;
   },
 };
 

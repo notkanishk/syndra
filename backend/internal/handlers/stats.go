@@ -20,9 +20,9 @@ import (
 // Statistics, read (addon-contract 6.8, design §9.7, §9.8). Who sees what:
 //
 //   - a member, their own per-person points, on /me/targets (usage), the
-//     subject always the actor and never a parameter, less what names a
-//     person (names_person): a series flagged so is left out and counted, a
-//     gap's flagged reason replaced (memberView);
+//     subject always the actor and never a parameter, less what names anyone
+//     but them (named_subjects): such a series is left out and counted, such
+//     a gap's reason replaced and its dimensions dropped (memberView);
 //   - an admin, everything as stored: one person on GET /users/{id}/targets
 //     (the same view, personalUsage), the target-wide series on GET
 //     /targets/{target}/stats, and on GET /insights/stats each per-person
@@ -123,20 +123,31 @@ func statsWindows(now time.Time) (today, from30, from12m string) {
 }
 
 // reasonWithheld is a gap's reason, on a member's own view, in place of one
-// that names a person (names_person).
+// that names someone else.
 const reasonWithheld = "The add-on's reason named a person."
+
+// namesOther reports whether a row's named_subjects name anyone but subject:
+// what a member's own view never shows. Their own name hides nothing of theirs.
+func namesOther(named []string, subject string) bool {
+	return slices.ContainsFunc(named, func(s string) bool { return s != subject })
+}
 
 // statsUsageFor is one target's statistics for a person (subject), or its
 // totals (subject ""): a person's page carries per-person metrics only, and
 // only that person's points; the totals page every metric and the collection
-// line. memberView is the member's own page: a series with a point flagged
-// names_person is left out (and counted in LeftOut), and a flagged gap's
-// reason is replaced; an admin's page shows everything as stored.
+// line. memberView is the member's own page: a series with a point that names
+// anyone but them is left out (and counted in LeftOut), and such a gap's
+// reason is replaced and its dimensions dropped; an admin's page shows
+// everything as stored.
 //
-// Left out, not relabelled: the flag is the series', not one dimension's, so
-// a relabelled row would be a number under a label that is neither the
-// add-on's nor true, and two would be indistinguishable. Leaving it out and
-// saying how many keeps every word on the page true.
+// A series left out, not relabelled: what is named is the series', not one
+// dimension's, so a relabelled row would be a number under a label that is
+// neither the add-on's nor true, and two would be indistinguishable. Leaving
+// it out and saying how many keeps every word on the page true.
+//
+// A gap that names someone else keeps its window with no dimensions: the days
+// stay said as uncounted (dropped, they would read as counted, a counter's as
+// 0), at the cost of covering the member's whole metric rather than one line.
 func statsUsageFor(ctx context.Context, target, subject string, memberView bool, now time.Time) (statsUsage, error) {
 	stored, err := dbStatsMetrics(ctx, target)
 	if err != nil || len(stored) == 0 {
@@ -164,11 +175,11 @@ func statsUsageFor(ctx context.Context, target, subject string, memberView bool,
 	if err != nil {
 		return statsUsage{}, err
 	}
-	// A member's series is left out when any of its points read names a person.
+	// A member's series is left out when any of its points read names someone else.
 	leftOut := map[string]bool{}
 	if memberView {
 		for _, v := range slices.Concat(days, months) {
-			if v.NamesPerson {
+			if namesOther(v.NamedSubjects, subject) {
 				leftOut[v.Metric+"\x00"+dimsText(v.Dims)] = true
 			}
 		}
@@ -241,11 +252,11 @@ func statsUsageFor(ctx context.Context, target, subject string, memberView bool,
 			if g.Metric != m.Name || subject != "" && len(g.Dims) > 0 && !slices.ContainsFunc(view.Series, func(s statsSeries) bool { return within(g.Dims, s.Dimensions) }) {
 				continue
 			}
-			reason := g.Reason
-			if memberView && g.NamesPerson {
-				reason = reasonWithheld
+			gap := statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Reason: g.Reason}
+			if memberView && namesOther(g.NamedSubjects, subject) {
+				gap.Dimensions, gap.Reason = nil, reasonWithheld
 			}
-			view.Gaps = append(view.Gaps, statsGapView{Start: g.Start, End: g.End, Dimensions: g.Dims, Reason: reason})
+			view.Gaps = append(view.Gaps, gap)
 		}
 		view.LeftOut = len(left)
 		out.Metrics = append(out.Metrics, view)

@@ -1,7 +1,9 @@
 package stats
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"syndra/internal/addons"
@@ -10,12 +12,12 @@ import (
 	"syndra/internal/models"
 )
 
-// One rule names a bound person, for a dimension value and a gap reason
+// One rule names a person, for a dimension value and a gap reason
 // alike: a subject id, account name or account id as a whole token, in any
 // case. Nothing that names one is dropped or rewritten (the owner's ruling of
-// 14 Nov 2026): the point or gap is kept as sent and flagged names_person,
+// 14 Nov 2026): the point or gap is kept as sent with whom it names,
 // and nothing else is.
-func TestWhatNamesABoundPersonIsKeptAndFlagged(t *testing.T) {
+func TestWhatNamesAPersonIsKeptWithWhomItNames(t *testing.T) {
 	account := "3051"
 	who := peopleOn([]db.TargetBinding{{SubjectID: "sub-cena", Username: "john_cena", AccountID: &account}, {SubjectID: "sub-orton", Username: ""}, {SubjectID: "sub-rey", Username: "Rey_Mysterio"}}, nil)
 	m := addons.Metric{Name: "storage.sessions", Instrument: "counter", Unit: "count", PerSubject: true,
@@ -33,34 +35,34 @@ func TestWhatNamesABoundPersonIsKeptAndFlagged(t *testing.T) {
 
 	dropped := map[string]int{}
 	kept := keep([]addons.StatPoint{point("John_Cena"), point("home-JOHN_CENA"), point("SUB-CENA"), point("makers")}, m, who, map[string]bool{}, dropped)
-	var flags []bool
+	var named []string
 	for _, p := range kept {
-		flags = append(flags, p.NamesPerson)
+		named = append(named, strings.Join(p.NamedSubjects, "+"))
 	}
-	if len(kept) != 4 || kept[1].Dims["share"] != "home-JOHN_CENA" || !slices.Equal(flags, []bool{true, true, true, false}) {
-		t.Errorf("kept %+v: want every point as sent, flagged only where a value names a person", kept)
+	if len(kept) != 4 || kept[1].Dims["share"] != "home-JOHN_CENA" || !slices.Equal(named, []string{"sub-cena", "sub-cena", "sub-cena", ""}) {
+		t.Errorf("kept %+v: want every point as sent, naming cena only where a value names him", kept)
 	}
 	gaps := keepGaps([]addons.StatGap{
 		gap("makers", "John_Cena's home is offline"), gap("makers", "account 3051 is locked"), gap("makers", "rey_mysterio is away"),
 		gap("JOHN_CENA", "Auditing is off"), gap("makers", "Auditing is off on this share"),
 	}, m, who, dropped)
 	var reasons []string
-	flags = nil
+	named = nil
 	for _, g := range gaps {
 		reasons = append(reasons, g.Reason)
-		flags = append(flags, g.NamesPerson)
+		named = append(named, strings.Join(g.NamedSubjects, "+"))
 	}
 	if want := []string{"John_Cena's home is offline", "account 3051 is locked", "rey_mysterio is away", "Auditing is off", "Auditing is off on this share"}; !slices.Equal(reasons, want) {
 		t.Errorf("kept reasons %q, want %q: a reason was rewritten or its gap lost", reasons, want)
 	}
-	if want := []bool{true, true, true, true, false}; !slices.Equal(flags, want) {
-		t.Errorf("gap flags %v, want %v: a reason or a dimension value naming a person flags its gap", flags, want)
+	if want := []string{"sub-cena", "sub-cena", "sub-rey", "sub-cena", ""}; !slices.Equal(named, want) {
+		t.Errorf("gaps name %q, want %q: a reason or a dimension value names whom it names", named, want)
 	}
 	if len(dropped) != 0 {
 		t.Errorf("dropped %v: naming a person is no longer a drop", dropped)
 	}
 	// An empty username names nobody: "" is in every string.
-	if who.names("makers") {
+	if who.names("makers") != nil {
 		t.Error("an empty name matched everything")
 	}
 }
@@ -95,20 +97,20 @@ func TestANameIsAWholeToken(t *testing.T) {
 		{"ch", "Too much activity to count yet", false},
 		{"a.b", "axb", false}, // a name is text, never a pattern
 	} {
-		if got := who(c.name).names(c.text); got != c.want {
+		if got := who(c.name).names(c.text) != nil; got != c.want {
 			t.Errorf("%q names %q: %t, want %t", c.text, c.name, got, c.want)
 		}
 	}
 	// No binding has a name: the pattern names no text, the empty one included.
-	if nobody := peopleOn([]db.TargetBinding{{}}, nil); nobody.names("") || nobody.names("anything") {
+	if nobody := peopleOn([]db.TargetBinding{{}}, nil); nobody.names("") != nil || nobody.names("anything") != nil {
 		t.Error("a target with no names named someone")
 	}
 }
 
-// Design 6d-2: a display name is checked like any other name. Only a bound
-// person's counts (an unbound user's name is not a person this target holds),
-// a name with spaces matches as a whole phrase, and a blank or one-character
-// name matches nothing at all.
+// Design 6d-2: a display name is checked like any other name, for everyone in
+// the directory (7i: a member never reads the name of someone not bound on
+// this target either), a name with spaces matches as a whole phrase, and a
+// blank or one-character name matches nothing at all.
 func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 	who := peopleOn(
 		[]db.TargetBinding{{SubjectID: "sub-cena"}, {SubjectID: "sub-blank"}, {SubjectID: "sub-one"}, {SubjectID: "sub-rey"}, {SubjectID: "sub-dashes"}, {SubjectID: "sub-digits"}, {SubjectID: "sub-accent"}, {SubjectID: "sub-raj"}, {SubjectID: "sub-ram"}},
@@ -135,7 +137,7 @@ func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 		{"John", false},
 		{"Johnny Cena", false},
 		{"Rey (Mysterio) files", true}, // metacharacters are literal
-		{"The Undertaker", false},      // not bound on this target
+		{"The Undertaker", true},       // in the directory, bound here or not
 		{"x", false},                   // one character is never a name
 		// A combining mark is part of the word: a nukta letter (NFC decomposes
 		// U+0958 to U+0915 U+093C) and a vowel sign continue the name's token.
@@ -149,7 +151,7 @@ func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 		{"", false},                     // nor is blank
 		{"makers", false},
 	} {
-		if got := who.names(c.text); got != c.want {
+		if got := who.names(c.text) != nil; got != c.want {
 			t.Errorf("%q names someone: %t, want %t", c.text, got, c.want)
 		}
 	}
@@ -167,13 +169,76 @@ func TestADisplayNameIsCheckedLikeAnyOtherName(t *testing.T) {
 		{Start: start, End: end, Dimensions: map[string]string{"share": "John Cena"}, Value: &v},
 		{Start: start, End: end, Dimensions: map[string]string{"share": "makers"}, Value: &v},
 	}, m, who, map[string]bool{}, dropped)
-	if len(kept) != 2 || !kept[0].NamesPerson || kept[1].NamesPerson || len(dropped) != 0 {
-		t.Errorf("kept %+v, dropped %v: want both kept, the display name's flagged", kept, dropped)
+	if len(kept) != 2 || !slices.Equal(kept[0].NamedSubjects, []string{"sub-cena"}) || kept[1].NamedSubjects != nil || len(dropped) != 0 {
+		t.Errorf("kept %+v, dropped %v: want both kept, the display name's naming cena", kept, dropped)
 	}
 	gaps := keepGaps([]addons.StatGap{
 		{Start: start, End: end, Dimensions: map[string]string{"share": "makers"}, Reason: "John Cena's home is offline"},
 	}, m, who, dropped)
-	if len(gaps) != 1 || gaps[0].Reason != "John Cena's home is offline" || !gaps[0].NamesPerson || len(dropped) != 0 {
-		t.Errorf("gaps %+v, dropped %v: want the gap kept as sent and flagged", gaps, dropped)
+	if len(gaps) != 1 || gaps[0].Reason != "John Cena's home is offline" || !slices.Equal(gaps[0].NamedSubjects, []string{"sub-cena"}) || len(dropped) != 0 {
+		t.Errorf("gaps %+v, dropped %v: want the gap kept as sent, naming cena", gaps, dropped)
 	}
+}
+
+// The name set is everyone in the directory (7i), not only who is bound here:
+// an unbound user's id, display name and username are each a name, recorded
+// as their subject id; an account name and id only for a binding. A text
+// naming two people names both, even where one name overlaps the other
+// ("john cena" inside "the john cena jr"), and the result is sorted, once each.
+func TestEveryoneInTheDirectoryIsAName(t *testing.T) {
+	account := "3051"
+	who := peopleOn([]db.TargetBinding{{SubjectID: "sub-cena", Username: "jc_nas", AccountID: &account}},
+		[]models.UserProfile{
+			{ID: "sub-cena", Name: "John Cena"},
+			{ID: "sub-jr", Name: "Cena Jr", Username: "cenajr"},
+			{ID: "sub-taker", Name: "The Undertaker", Username: "deadman"},
+			{ID: "sub-x", Name: "x", Username: "7"}, // no letter or one character: no name, the id still is
+		})
+	for text, want := range map[string]string{
+		"home-deadman":                "sub-taker",
+		"The Undertaker's pool":       "sub-taker",
+		"sub-taker":                   "sub-taker",
+		"jc_nas scratch":              "sub-cena",
+		"proj-3051":                   "sub-cena",
+		"cenajr":                      "sub-jr",
+		"the John Cena Jr share":      "sub-cena sub-jr",
+		"deadman and jc_nas, deadman": "sub-cena sub-taker",
+		"x 7 sub-x":                   "sub-x",
+		"x and 7":                     "",
+		"makers":                      "",
+	} {
+		if got := strings.Join(who.names(text), " "); got != want {
+			t.Errorf("%q names %q, want %q", text, got, want)
+		}
+	}
+	if who.bound["sub-taker"] || !who.bound["sub-cena"] {
+		t.Error("only a binding makes a subject bound here")
+	}
+}
+
+// The cost of the name set at a makerspace's size: a few hundred people, each
+// with three names. Run with -bench Names -benchmem.
+func BenchmarkNames(b *testing.B) {
+	users := make([]models.UserProfile, 600)
+	for i := range users {
+		users[i] = models.UserProfile{ID: fmt.Sprintf("3%017d", i), Name: fmt.Sprintf("Wrestler Number%d", i), Username: fmt.Sprintf("ring_name_%d", i)}
+	}
+	b.Run("build", func(b *testing.B) {
+		for b.Loop() {
+			peopleOn(nil, users)
+		}
+	})
+	who := peopleOn(nil, users)
+	b.Run("a value naming nobody", func(b *testing.B) {
+		for b.Loop() {
+			clear(who.seen) // the first time a text is asked; after, it is a map read
+			who.names("projects-archive-2026")
+		}
+	})
+	b.Run("a value naming one", func(b *testing.B) {
+		for b.Loop() {
+			clear(who.seen) // the first time a text is asked; after, it is a map read
+			who.names("home-ring_name_599")
+		}
+	})
 }

@@ -1323,11 +1323,10 @@ rules the schema cannot express:
   as the quantity means.
 - Each dimension MUST name a **resource, never a person** (a machine, a
   share, a category): a person is a `subject`. Syndra keeps a dimension
-  value or gap reason that names a bound person as you sent it, flags it,
-  and shows it to admins only; a member's own page leaves it out. That is
-  Syndra's guard for a broken add-on, not a second way to report a person.
-  The kit fails a dimension value equal to
-  the username or `account_id` of the account it created, and warns on one
+  value or gap reason that names a person as you sent it, records whom,
+  and shows it to admins only; a member's own page leaves out what names
+  anyone else. That is Syndra's guard for a broken add-on, not a second way
+  to report a person. The kit fails a dimension value equal to the username or `account_id` of the account it created, and warns on one
   equal to those of any other account `/subjects` lists (a service account
   may share a resource's name: a `scanner` share written by a `scanner`
   user).

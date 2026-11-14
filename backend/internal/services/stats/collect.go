@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -29,8 +30,9 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// directoryUsers is who the directory knows, for the display names the
-// matcher checks. A var so a test can stand in for Zitadel.
+// directoryUsers is who the directory knows: every current user's id, display
+// name and username go in the matcher's name set. A var so a test can stand
+// in for Zitadel.
 var directoryUsers = func(ctx context.Context) ([]models.UserProfile, error) {
 	return directory.Default.Users(ctx)
 }
@@ -52,12 +54,13 @@ const (
 	DropSeries              = "series"               // a new series past constants.series_per_metric
 )
 
-// A dimension value or gap reason that names a bound person is not a drop:
-// it is kept as sent and flagged names_person (migration 000094, the owner's
-// ruling of 14 Nov 2026, superseding ruling B7's drop and withhold). Admins
-// read it as stored; a member's own view leaves it out (handlers/stats.go).
-// The contract rule stands: people go in `subject`, never in a dimension (kit
-// stats.no-people); the flag is Syndra's guard against an add-on that breaks it.
+// A dimension value or gap reason that names a person is not a drop: it is
+// kept as sent, and who it names is recorded as named_subjects (migration
+// 000094, the owner's ruling of 14 Nov 2026, superseding ruling B7's drop and
+// withhold). Admins read it as stored; a member's own view leaves out what
+// names anyone but them (handlers/stats.go). The contract rule stands: people
+// go in `subject`, never in a dimension (kit stats.no-people); the record is
+// Syndra's guard against an add-on that breaks it.
 
 // metricTimeout bounds one metric's collection, its pages and its
 // transaction: one slow metric holds only its own rows, and only this long.
@@ -112,8 +115,8 @@ func Collect(ctx context.Context, target string, m addons.Metric, buffer time.Du
 		return nil, err
 	}
 	// A refusal to read the directory fails the collection (the watermark
-	// stays): a flag set without looking at the names would read as one that
-	// found none, and a member would be shown what names a person.
+	// stays): a row checked without the names would read as one that named
+	// nobody, and a member would be shown what names a person.
 	users, err := directoryUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("stats: the directory could not be read for display names: %w", err)
@@ -213,49 +216,90 @@ func finalThrough(reported, now time.Time) (time.Time, error) {
 	return floor, nil
 }
 
-// people is who is bound on the target: the subjects a point may name, and
-// the one pattern for every word that names a bound person (subject id,
-// account name and id, and the display name the directory holds), which flags
-// a dimension value or gap reason that contains one (names_person).
+// people is who is bound on the target (the subjects a point may name) and
+// the words that name a person: for everyone in the directory (current
+// users, bound here or not, so a member never reads the name of someone who
+// is not), their user id, display name and username; for a person bound here,
+// their account name and id on this target too. One pattern over every name
+// finds whether a text names anyone; one per person says who, compiled the
+// first time a text names someone (rare: a conformant add-on never does), as
+// compiling one per person for a few hundred costs some 60 ms a collection
+// against 2 ms for the shared one.
 type people struct {
 	bound map[string]bool
 	named *regexp.Regexp
+	each  []*person
+	// seen is each text already asked, by its NFC form: a page repeats one
+	// share for every person and day, and asking costs ~0.1 ms at 600 people.
+	seen map[string][]string
+}
+
+// person is one subject id and their names, quoted, with their pattern.
+type person struct {
+	subject string
+	quoted  []string
+	once    sync.Once
+	named   *regexp.Regexp
+}
+
+func (p *person) pattern() *regexp.Regexp {
+	p.once.Do(func() { p.named = namePattern(p.quoted) })
+	return p.named
 }
 
 // nobody is an RE2 class with no members: the alternation when no binding
 // has a name, so the pattern matches no text at all, "" included.
 const nobody = `[^\x00-\x{10FFFF}]`
 
-func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
-	who := people{bound: map[string]bool{}}
-	var quoted []string
-	add := func(name string) {
-		if name != "" { // "" would name every text
-			quoted = append(quoted, regexp.QuoteMeta(norm.NFC.String(name)))
-		}
-	}
-	for _, b := range bindings {
-		who.bound[b.SubjectID] = true
-		add(b.SubjectID)
-		add(b.Username)
-		if b.AccountID != nil {
-			add(*b.AccountID)
-		}
-	}
-	// A bound person's display name goes through the same matcher. QuoteMeta
-	// keeps a name with spaces or punctuation literal; whole-token matching
-	// holds for it as for any word. It must hold a letter and be two characters
-	// or more: "--" or "42" or one letter is no name, and would name every text
-	// that carries it as a token.
-	for _, u := range users {
-		if name := strings.TrimSpace(u.Name); who.bound[u.ID] && nameable(name) {
-			add(name)
-		}
-	}
+// namePattern is a whole-token, case-insensitive match of any of the quoted
+// names (see names).
+func namePattern(quoted []string) *regexp.Regexp {
 	if len(quoted) == 0 {
 		quoted = []string{nobody}
 	}
-	who.named = regexp.MustCompile(`(?i)(?:^|[^\pL\pN\pM])(?:` + strings.Join(quoted, "|") + `)(?:[^\pL\pN\pM]|$)`)
+	return regexp.MustCompile(`(?i)(?:^|[^\pL\pN\pM])(?:` + strings.Join(quoted, "|") + `)(?:[^\pL\pN\pM]|$)`)
+}
+
+func peopleOn(bindings []db.TargetBinding, users []models.UserProfile) people {
+	who := people{bound: map[string]bool{}, seen: map[string][]string{}}
+	var order []string
+	byID := map[string][]string{}
+	add := func(id, name string) {
+		if id == "" || name == "" { // "" would name every text
+			return
+		}
+		if byID[id] == nil {
+			order = append(order, id)
+		}
+		byID[id] = append(byID[id], regexp.QuoteMeta(norm.NFC.String(name)))
+	}
+	for _, b := range bindings {
+		who.bound[b.SubjectID] = true
+		add(b.SubjectID, b.SubjectID)
+		add(b.SubjectID, b.Username)
+		if b.AccountID != nil {
+			add(b.SubjectID, *b.AccountID)
+		}
+	}
+	// A directory name goes through the same matcher. QuoteMeta keeps a name
+	// with spaces or punctuation literal; whole-token matching holds for it as
+	// for any word. A display name or username must hold a letter and be two
+	// characters or more: "--" or "42" or one letter is no name, and would
+	// name every text that carries it as a token.
+	for _, u := range users {
+		add(u.ID, u.ID)
+		for _, name := range []string{u.Name, u.Username} {
+			if name = strings.TrimSpace(name); nameable(name) {
+				add(u.ID, name)
+			}
+		}
+	}
+	var all []string
+	for _, id := range order {
+		all = append(all, byID[id]...)
+		who.each = append(who.each, &person{subject: id, quoted: byID[id]})
+	}
+	who.named = namePattern(all)
 	return who
 }
 
@@ -264,28 +308,46 @@ func nameable(name string) bool {
 	return len([]rune(name)) >= 2 && strings.IndexFunc(name, unicode.IsLetter) >= 0
 }
 
-// names is the one rule for "this text names a bound person": a name, in any
-// case, as a whole token — at the text's ends or beside a character that is
-// neither a letter nor a digit, in any script. "home-JOHN_CENA", "home_ana"
-// and the reason "john_cena's share is offline" name them; "makerlab" does not
-// name lab, nor "proj-30512" account 3051, nor "activity" ty. Not \b: RE2's
-// \b is ASCII-only and counts "_" as a word character, so "home_ana" would
-// hide ana.
+// names is the one rule for "this text names a person", and says whom, as
+// their subject ids, sorted: a name, in any case, as a whole token — at the
+// text's ends or beside a character that is neither a letter nor a digit, in
+// any script. "home-JOHN_CENA", "home_ana" and the reason "john_cena's share
+// is offline" name them; "makerlab" does not name lab, nor "proj-30512"
+// account 3051, nor "activity" ty. Not \b: RE2's \b is ASCII-only and counts
+// "_" as a word character, so "home_ana" would hide ana. Each person's own
+// pattern is asked, not the match of the shared one, which reports one name
+// per position and would miss a second name overlapping the first.
 // Both sides are NFC, so a precomposed "é" and "e" plus a combining accent are one name.
-func (p people) names(text string) bool { return p.named.MatchString(norm.NFC.String(text)) }
-
-// namesIn reports whether any dimension value names a bound person.
-func (p people) namesIn(dims map[string]string) bool {
-	for _, v := range dims {
-		if p.names(v) {
-			return true
-		}
+func (p people) names(text string) []string {
+	text = norm.NFC.String(text)
+	if out, ok := p.seen[text]; ok {
+		return out
 	}
-	return false
+	var out []string
+	if p.named.MatchString(text) {
+		for _, each := range p.each {
+			if each.pattern().MatchString(text) {
+				out = append(out, each.subject)
+			}
+		}
+		slices.Sort(out)
+	}
+	p.seen[text] = out
+	return out
+}
+
+// namesIn is everyone any dimension value names, sorted and once each.
+func (p people) namesIn(dims map[string]string) []string {
+	var out []string
+	for _, v := range dims {
+		out = append(out, p.names(v)...)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // keep is the points of a page worth storing, each checked (checkPoint) and
-// flagged when a dimension value names a bound person, the series cap
+// with whoever a dimension value names (named_subjects), the series cap
 // applied, and one per key (an add-on that repeats a key in a page has the
 // last one kept: equal keys replace).
 func keep(points []addons.StatPoint, m addons.Metric, who people, series map[string]bool, dropped map[string]int) []db.StatsPoint {
@@ -305,7 +367,7 @@ func keep(points []addons.StatPoint, m addons.Metric, who people, series map[str
 			}
 			series[key] = true
 		}
-		point := db.StatsPoint{Subject: p.Subject, Dims: p.Dimensions, Day: day, Value: *p.Value, NamesPerson: who.namesIn(p.Dimensions)}
+		point := db.StatsPoint{Subject: p.Subject, Dims: p.Dimensions, Day: day, Value: *p.Value, NamedSubjects: who.namesIn(p.Dimensions)}
 		if i, seen := at[p.Subject+"\x00"+day+"\x00"+key]; seen {
 			out[i] = point
 			continue
@@ -336,8 +398,8 @@ func checkPoint(p addons.StatPoint, m addons.Metric, who people) (string, string
 }
 
 // keepGaps is the gaps of a page worth storing: whole makerspace days, only
-// declared dimensions, a reason capped at 200 characters, flagged when a
-// dimension value or the reason names a bound person.
+// declared dimensions, a reason capped at 200 characters, with whoever a
+// dimension value or the reason names (named_subjects).
 func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[string]int) []db.StatsGap {
 	var out []db.StatsGap
 	for _, g := range gaps {
@@ -354,10 +416,17 @@ func keepGaps(gaps []addons.StatGap, m addons.Metric, who people, dropped map[st
 		default:
 			reason := []rune(g.Reason)
 			out = append(out, db.StatsGap{Dims: g.Dimensions, Start: start, End: end, Reason: string(reason[:min(len(reason), 200)]),
-				NamesPerson: who.namesIn(g.Dimensions) || who.names(g.Reason)})
+				NamedSubjects: union(who.namesIn(g.Dimensions), who.names(g.Reason))})
 		}
 	}
 	return out
+}
+
+// union is two sorted sets of subject ids as one.
+func union(a, b []string) []string {
+	out := slices.Concat(a, b)
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 func checkDims(dims map[string]string, m addons.Metric) string {

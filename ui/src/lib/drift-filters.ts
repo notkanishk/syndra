@@ -209,8 +209,9 @@ export function sortDrift(
   const text = (item: DriftTriageItem) =>
     key === "who" ? names.who(item) : key === "what" ? names.what(item) : REASON_LABELS[driftReason(item)];
   return [...items].sort((a, b) => {
-    const order = key === "found" ? newest(a, b) : compareNames(text(a), text(b)) * dir;
-    return (key === "found" ? order * dir : order) || newest(a, b);
+    // Found is a time: ascending is oldest first, and its first order is descending.
+    const order = key === "found" ? a.detected_at.localeCompare(b.detected_at) : compareNames(text(a), text(b));
+    return order * dir || newest(a, b);
   });
 }
 

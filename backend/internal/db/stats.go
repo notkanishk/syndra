@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -68,23 +69,24 @@ func SaveStatsDescriptors(ctx context.Context, target string, descriptors map[st
 }
 
 // StatsPoint is one point as stored: Subject "" is the total, Day the bucket.
-// NamesPerson is the collector's finding that a dimension value names a bound
-// person (migration 000094): kept for admins, left out of a member's view.
+// NamedSubjects is who the collector found a dimension value names, as
+// subject ids (migration 000094): shown to admins, left out of the view of a
+// member it names anyone else to.
 type StatsPoint struct {
-	Subject     string
-	Dims        map[string]string
-	Day         string
-	Value       float64
-	NamesPerson bool
+	Subject       string
+	Dims          map[string]string
+	Day           string
+	Value         float64
+	NamedSubjects []string
 }
 
 // StatsGap is one unobserved window [Start, End) of a metric's series.
-// NamesPerson: a dimension value or the reason names a bound person.
+// NamedSubjects: who a dimension value or the reason names.
 type StatsGap struct {
-	Dims        map[string]string
-	Start, End  string
-	Reason      string
-	NamesPerson bool
+	Dims          map[string]string
+	Start, End    string
+	Reason        string
+	NamedSubjects []string
 }
 
 // StatsTx is one metric's collection, inside one transaction (design §9.6):
@@ -144,22 +146,27 @@ func (c *StatsTx) UpsertPoints(ctx context.Context, today string, observedAt tim
 	if len(points) == 0 {
 		return 0, nil
 	}
-	subjects, dims, days, values, named := make([]string, len(points)), make([]string, len(points)), make([]string, len(points)), make([]float64, len(points)), make([]bool, len(points))
+	subjects, dims, days, values, named := make([]string, len(points)), make([]string, len(points)), make([]string, len(points)), make([]float64, len(points)), make([]string, len(points))
 	for i, p := range points {
 		raw, err := json.Marshal(nonNilDims(p.Dims))
 		if err != nil {
 			return 0, err
 		}
-		subjects[i], dims[i], days[i], values[i], named[i] = p.Subject, string(raw), p.Day, p.Value, p.NamesPerson
+		// A list per row travels as JSON: unnest flattens a text[][].
+		who, err := json.Marshal(nonNil(p.NamedSubjects))
+		if err != nil {
+			return 0, err
+		}
+		subjects[i], dims[i], days[i], values[i], named[i] = p.Subject, string(raw), p.Day, p.Value, string(who)
 	}
 	tag, err := c.tx.Exec(ctx, `
-		INSERT INTO addon_metric_points (target_id, metric, subject, dims, bucket_start, value, observed_at, names_person)
-		SELECT $2, $3, x.s, x.d::jsonb, x.b, x.v, $8, x.n
-		  FROM unnest($4::text[], $5::text[], $6::date[], $7::numeric[], $9::boolean[]) AS x(s, d, b, v, n)
+		INSERT INTO addon_metric_points (target_id, metric, subject, dims, bucket_start, value, observed_at, named_subjects)
+		SELECT $2, $3, x.s, x.d::jsonb, x.b, x.v, $8, ARRAY(SELECT jsonb_array_elements_text(x.n::jsonb))
+		  FROM unnest($4::text[], $5::text[], $6::date[], $7::numeric[], $9::text[]) AS x(s, d, b, v, n)
 		  JOIN targets t ON t.target = $2
 		 WHERE x.b >= `+statsKeptFrom("x.s")+`
 		ON CONFLICT (target_id, metric, subject, dims, bucket_start)
-		DO UPDATE SET value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, names_person = EXCLUDED.names_person`,
+		DO UPDATE SET value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, named_subjects = EXCLUDED.named_subjects`,
 		today, c.target, c.metric, subjects, dims, days, values, observedAt, named)
 	if err != nil {
 		return 0, fmt.Errorf("store points: %w", err)
@@ -177,12 +184,12 @@ func (c *StatsTx) UpsertGaps(ctx context.Context, today string, gaps []StatsGap)
 			return 0, err
 		}
 		tag, err := c.tx.Exec(ctx, `
-			INSERT INTO addon_metric_gaps (target_id, metric, dims, gap_start, gap_end, reason, names_person)
+			INSERT INTO addon_metric_gaps (target_id, metric, dims, gap_start, gap_end, reason, named_subjects)
 			SELECT $2, $3, $4::jsonb, $5::date, $6::date, $7, $8
 			 WHERE $6::date > `+statsTotalKeptFrom+`
 			ON CONFLICT (target_id, metric, dims, gap_start)
-			DO UPDATE SET gap_end = EXCLUDED.gap_end, reason = EXCLUDED.reason, names_person = EXCLUDED.names_person`,
-			today, c.target, c.metric, string(raw), g.Start, g.End, g.Reason, g.NamesPerson)
+			DO UPDATE SET gap_end = EXCLUDED.gap_end, reason = EXCLUDED.reason, named_subjects = EXCLUDED.named_subjects`,
+			today, c.target, c.metric, string(raw), g.Start, g.End, g.Reason, nonNil(g.NamedSubjects))
 		if err != nil {
 			return 0, fmt.Errorf("store gap: %w", err)
 		}
@@ -208,6 +215,14 @@ func (c *StatsTx) Finish(ctx context.Context, watermark, at time.Time, unbound i
 		return fmt.Errorf("write watermark: %w", err)
 	}
 	return nil
+}
+
+// nonNil is a list never NULL: the column is NOT NULL, and nobody named is {}.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 func nonNilDims(d map[string]string) map[string]string {
@@ -328,20 +343,20 @@ func StatsMetrics(ctx context.Context, target string) ([]StatsMetric, error) {
 }
 
 // StatsValue is one series' value for a day (YYYY-MM-DD) or, summed, a
-// month (YYYY-MM). NamesPerson: the point, or any point of the month, was
-// found at collection to name a bound person in a dimension value.
+// month (YYYY-MM). NamedSubjects: whom the point's dimension values, or any
+// point's of the month, were found at collection to name, sorted, once each.
 type StatsValue struct {
-	Metric      string
-	Dims        map[string]string
-	When        string
-	Value       float64
-	NamesPerson bool
+	Metric        string
+	Dims          map[string]string
+	When          string
+	Value         float64
+	NamedSubjects []string
 }
 
 // StatsDays is one subject's points ("" the totals) on a target from a day on.
 func StatsDays(ctx context.Context, target, subject, from string) ([]StatsValue, error) {
 	return statsValues(ctx, `
-		SELECT metric, dims, to_char(bucket_start, 'YYYY-MM-DD'), value, names_person
+		SELECT metric, dims, to_char(bucket_start, 'YYYY-MM-DD'), value, jsonb_build_array(named_subjects)
 		  FROM addon_metric_points
 		 WHERE bucket_start >= $1::date AND target_id = $2 AND subject = $3
 		 ORDER BY metric, bucket_start`, from, target, subject)
@@ -351,7 +366,7 @@ func StatsDays(ctx context.Context, target, subject, from string) ([]StatsValue,
 // a temporal sum, meaningful for a counter alone (the caller's to choose).
 func StatsMonths(ctx context.Context, target, subject, from string) ([]StatsValue, error) {
 	return statsValues(ctx, `
-		SELECT metric, dims, to_char(bucket_start, 'YYYY-MM') AS month, SUM(value), bool_or(names_person)
+		SELECT metric, dims, to_char(bucket_start, 'YYYY-MM') AS month, SUM(value), jsonb_agg(named_subjects)
 		  FROM addon_metric_points
 		 WHERE bucket_start >= $1::date AND target_id = $2 AND subject = $3
 		 GROUP BY metric, dims, month
@@ -367,9 +382,14 @@ func statsValues(ctx context.Context, q string, args ...any) ([]StatsValue, erro
 	var out []StatsValue
 	for rows.Next() {
 		var v StatsValue
-		if err := rows.Scan(&v.Metric, &v.Dims, &v.When, &v.Value, &v.NamesPerson); err != nil {
+		// Each read gives its rows' lists as one JSON list of lists (a
+		// month's are its days'; jsonb, as array_agg cannot stack lists of
+		// different lengths): one set here.
+		var named [][]string
+		if err := rows.Scan(&v.Metric, &v.Dims, &v.When, &v.Value, &named); err != nil {
 			return nil, err
 		}
+		v.NamedSubjects = slices.Compact(slices.Sorted(slices.Values(slices.Concat(named...))))
 		out = append(out, v)
 	}
 	return out, rows.Err()
@@ -384,7 +404,7 @@ type StatsGapRow struct {
 // StatsGaps is every gap on a target that ends after a day.
 func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT metric, dims, to_char(gap_start, 'YYYY-MM-DD'), to_char(gap_end, 'YYYY-MM-DD'), reason, names_person
+		SELECT metric, dims, to_char(gap_start, 'YYYY-MM-DD'), to_char(gap_end, 'YYYY-MM-DD'), reason, named_subjects
 		  FROM addon_metric_gaps
 		 WHERE gap_end > $1::date AND target_id = $2
 		 ORDER BY metric, gap_start`, after, target)
@@ -395,7 +415,7 @@ func StatsGaps(ctx context.Context, target, after string) ([]StatsGapRow, error)
 	var out []StatsGapRow
 	for rows.Next() {
 		var g StatsGapRow
-		if err := rows.Scan(&g.Metric, &g.Dims, &g.Start, &g.End, &g.Reason, &g.NamesPerson); err != nil {
+		if err := rows.Scan(&g.Metric, &g.Dims, &g.Start, &g.End, &g.Reason, &g.NamedSubjects); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

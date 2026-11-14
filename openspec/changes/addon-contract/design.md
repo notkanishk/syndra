@@ -1331,18 +1331,29 @@ in the totals". No local name crosses the wire for an unbound account.
   *Superseded (14 Nov 2026, slice 7i, the owner's ruling: "those statistics
   would need to be able to identify individuals. visible only to the admins.
   under the required situations, admin should be able to trace down the
-  individual.").* The same matcher (unchanged) no longer drops or rewrites:
-  a point whose dimension value names a bound person, and a gap whose value
-  or reason does, are kept as the add-on sent them and flagged
-  `names_person` on the row (migration 000094, expand-only, both tables;
-  `stats.keep`, `keepGaps`, `people.namesIn`). The flag is set at
-  collection: a name bound later is flagged from its next collection on,
-  and a series is treated as flagged when any point read for it is. The
-  drop reason `person_in_dimension` is gone (the stored `dropped` map is
-  rewritten by each hourly collection, so an old count clears within the
-  hour); the other drops stand. The contract rule is unchanged: people go
-  in `subject`, never in a dimension (kit `stats.no-people`); the flag is
-  Syndra's guard for an add-on that breaks it.
+  individual.").* The matcher no longer drops or rewrites: a point whose
+  dimension value names a person, and a gap whose value or reason does, are
+  kept as the add-on sent them, and whom the row names is recorded as
+  `named_subjects text[]` (subject ids, `{}` for nobody; migration 000094,
+  expand-only, both tables; `stats.keep`, `keepGaps`, `people.names`,
+  `people.namesIn`). The rule of a match is unchanged (whole token, any
+  case, NFC, `\pM` part of a word; a display name or username needs a
+  letter and two characters); its name set grows from the people bound on
+  the target to everyone in the directory (every current user's id,
+  display name and username, plus a binding's account name and id), so a
+  member never reads the name of someone not bound there either. One
+  shared pattern says whether a text names anyone (about 0.1 ms a value at
+  600 people, each text asked once a collection); a per-person pattern,
+  compiled only when the shared one matches, says whom, so a text naming
+  two people names both even where the names overlap. What is named is
+  recorded at collection: a name added later is recorded from its next
+  collection on, and a series counts as naming someone when any point read
+  for it does. The drop reason `person_in_dimension` is gone (the stored
+  `dropped` map is rewritten by each hourly collection, so an old count
+  clears within the hour); the other drops stand. The contract rule is
+  unchanged: people go in `subject`, never in a dimension (kit
+  `stats.no-people`); the record is Syndra's guard for an add-on that
+  breaks it.
 - **A metric is never re-purposed**: a manifest that changes an existing
   metric's `instrument` or `unit` is refused at registration with the
   reason; a new meaning is a new name (§2 rule 6). Bucket width is not
@@ -1449,18 +1460,23 @@ this contract carries.
   counted, logged, and the kit warns; a gap reason that names one is
   withheld, its gap kept and counted. Dimensions are resources, never
   people. *Superseded for the person rule (14 Nov 2026, 7i):* what names a
-  person is kept and flagged `names_person`; admin surfaces (the target
-  overview, Insights, an admin's person page) show it as stored, and a
-  member's own view (`/me/targets`, `statsUsageFor(memberView)`) leaves out
-  every series with a flagged point, saying how many (`left_out`, "1 more
-  line is not shown here, as the add-on named a person in it."), and
-  replaces a flagged gap's reason with "The add-on's reason named a
-  person.", in the backend response, not only the UI. Left out rather than
-  relabelled: the flag is the series', not one dimension's, so a relabelled
-  row would be a number under a label that is neither the add-on's nor
-  true, and two such rows could not be told apart; leaving it out and
-  saying so keeps every word true. A gap on a series left out is not shown
-  either (it is on no series of theirs). A person's page carries only the gaps whose dimensions are `{}`
+  person is kept with whom it names (`named_subjects`); admin surfaces (the
+  target overview, Insights, an admin's person page) show it as stored, and
+  a member's own view (`/me/targets`, `statsUsageFor(memberView)`) hides
+  only what names **someone other than that member** (`namesOther`): a
+  share named after its own owner is on the owner's page as stored. Such a
+  series is left out, saying how many (`left_out`, "1 more line is not
+  shown here, as the add-on named a person in it."), and such a gap keeps
+  its window with the reason "The add-on's reason named a person." and no
+  dimensions, in the backend response, not only the UI. Left out rather
+  than relabelled: what is named is the series', not one dimension's, so a
+  relabelled row would be a number under a label that is neither the
+  add-on's nor true, and two such rows could not be told apart; leaving it
+  out and saying so keeps every word true. The gap without its dimensions
+  rather than dropped: dropped, its days would read as counted (a
+  counter's as 0); without dimensions it covers the member's whole metric
+  on those days, which overstates only what was not counted. A gap on a
+  series left out is not shown either (it is on no series of theirs). A person's page carries only the gaps whose dimensions are `{}`
   or a subset of one of that person's own series (every key=value of the
   gap in that series: `{"share":"makers"}` is on their
   `{"share":"makers","protocol":"smb"}`), never a gap on a resource only
@@ -1492,7 +1508,11 @@ four targets does.
   does not report statistics" when the feature is absent (not "no data").
 - **Insights** (admin, Advanced view): every target's metrics grouped by
   unit, distributions over members for `per_subject` metrics; one person's
-  numbers are on that person's page, not here (§9.7, a UI choice). Where
+  numbers are on that person's page, not here (§9.7, a UI choice).
+  *Superseded (14 Nov 2026, 7i, the owner's ruling in §9.7):* each
+  breakdown also lists its people by name, linking to their pages, with
+  their last 30 days and last 12 months, ordered largest first by the last
+  30 days with sortable headings; the spread has no floor. Where
   this page sits in the navigation contract is a design-canvas question
   (`basic-advanced-ia`), not this change's.
 - **Windows**: 30 days and 12 months, in makerspace days, the same day axis

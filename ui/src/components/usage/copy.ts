@@ -103,7 +103,8 @@ export const LAST_12_COLUMN = "Last 12 months";
 /** What the id beside a name the directory could not give is, for its copy control. */
 export const ACCOUNT_ID = "account id";
 /** A gauge with no sample in the 30 days, in its cell. */
-export const NO_VALUE = "No value";export const spread = (p50: string, p90: string) => `Half are at ${p50} or under; nine in ten are at ${p90} or under.`;
+export const NO_VALUE = "No value";
+export const spread = (p50: string, p90: string) => `Half are at ${p50} or under; nine in ten are at ${p90} or under.`;
 export const INSIGHTS_EMPTY = `No system reports per-person statistics yet. ${NOTHING_TO_DO}`;
 export const INSIGHTS_NEXT = `${NOTHING_TO_DO} One person's numbers are on their page in People.`;
 export const INSIGHTS_NEXT_LINK = "Open People";
