@@ -409,7 +409,7 @@ describe("one target's page", () => {
     renderTarget();
 
     // Words outside; the ids wait under Technical detail until it is opened (A-20 P11).
-    expect(screen.getByText("Deletes an account (its files stay on TrueNAS)")).toBeInTheDocument();
+    expect(screen.getByText("Deletes an account")).toBeInTheDocument();
     expect(screen.queryByText("account.purge")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
     expect(screen.getByText("password.set")).toBeInTheDocument();
@@ -459,7 +459,7 @@ describe("one target's page", () => {
 
     // Shown disabled and explained. Omitted, an operator wonders whether the
     // feature exists at all.
-    expect(screen.getByText("Deletes an account (its files stay on TrueNAS)")).toBeInTheDocument();
+    expect(screen.getByText("Deletes an account")).toBeInTheDocument();
     expect(screen.getByText(/does not expose user.delete/)).toBeInTheDocument();
   });
 
@@ -497,6 +497,25 @@ describe("one target's page", () => {
     expect(screen.queryByText(/Somebody set that on purpose: startup/)).toBeNull();
   });
 
+  // A paused add-on refuses every change, and Maintenance is the way back. Basic does not show it
+  // (structure never moves with data), so the reach card is the next step: it switches to Advanced.
+  it("gives a paused add-on a next step in both views", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "read_only", lifecycle_note: "startup" };
+    const basic = renderTarget("basic");
+    expect(screen.queryByRole("heading", { name: "Maintenance" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open Maintenance in Advanced" }));
+    expect(screen.getByText("Maintenance")).toBeInTheDocument();
+    expect(document.getElementById("maintenance")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Open Maintenance" })).toBeInTheDocument();
+    basic.unmount();
+
+    renderTarget("advanced");
+    expect(document.getElementById("maintenance")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Open Maintenance" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /in Advanced/ })).toBeNull();
+  });
+
   // R4: Basic hides the machine's words; the sections around them keep their order and their anchors.
   it("hides the technical parts in Basic without moving or removing any section", () => {
     state.roster = [{ ...summary([{ id: "account.purge", scope: "admin", confirm: true, available: true }]), also_says: ["x-vendor: 1"] }];
@@ -514,7 +533,7 @@ describe("one target's page", () => {
     expect(screen.queryByText("What the add-on also says")).toBeNull();
     expect(screen.queryByRole("button", { name: /Technical detail/ })).toBeNull();
     // What stays: the operations in words, and every region, in the same order, jumpable by id.
-    expect(screen.getByText("Deletes an account (its files stay on TrueNAS)")).toBeInTheDocument();
+    expect(screen.getByText("Deletes an account")).toBeInTheDocument();
     expect(sections()).toEqual(inAdvanced);
     expect(screen.getAllByRole("link", { name: /What runs here/ }).length).toBeGreaterThan(0);
   });
@@ -598,6 +617,15 @@ describe("one target's page", () => {
     // A mirror read: the card recedes, its words at full strength.
     const card = screen.getByText("Not created by Syndra").closest(".card") as HTMLElement;
     expect(card).toHaveAttribute("data-stale");
+  });
+
+  // At phone width the status wraps under the name rather than being squeezed, as in the managed rows.
+  it("gives an unmanaged row's status a width of its own", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [{ username: "root", account_id: "0" }], current: true };
+    renderTarget();
+    expect(document.querySelector("[data-standing-seat]")).toHaveClass("basis-[200px]");
   });
 
   // 1.19 — the inventory is reported, never triaged. Nothing on this page calls
@@ -931,7 +959,7 @@ describe("what it can do · the confirmation the manifest declares", () => {
     renderTarget();
 
     // The board's words: "Stops and asks" / "Runs by itself" (route-system-targets-id).
-    const purge = screen.getByText("Deletes an account (its files stay on TrueNAS)").closest(".flex-wrap");
+    const purge = screen.getByText("Deletes an account").closest(".flex-wrap");
     expect(purge?.textContent).toContain("Stops and asks");
 
     const provision = screen.getByText("Creates an account").closest(".flex-wrap");

@@ -10,6 +10,7 @@ import { motionInTests } from "@/test-utils/motion";
  * flashes once. Still, it jumps and the flash stays (colour only).
  */
 function page(scrollTop = 0) {
+  document.documentElement.style.setProperty("--section-band", "64px"); // globals.css, not loaded here
   const scroller = document.createElement("div");
   scroller.id = "app-scroll";
   scroller.scrollTo = vi.fn(({ top }: ScrollToOptions) => {

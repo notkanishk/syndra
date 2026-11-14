@@ -45,7 +45,7 @@ type statsMeta struct {
 	Failing bool      `json:"failing,omitempty"`
 	// HeldFrom is the oldest day the buffer holds; before it, a gap.
 	HeldFrom string `json:"held_from"`
-	// Began is the day the first collection ran. While HeldFrom is still Began, the days before
+	// Began is the day the first collection ran (set once, in PutStats). While HeldFrom is still Began, the days before
 	// it were never collected; once the buffer has trimmed past it, they were collected and dropped.
 	Began string `json:"began,omitempty"`
 	// Behind is the day from which the audit log was too long to read in
@@ -139,6 +139,13 @@ func (s *Store) PutStats(metric string, meta statsMeta, days map[string]statDay,
 			}
 		}
 
+		// The buffer holds from the first day collected until it first trims; a HeldFrom still after the
+		// oldest day it could hold has never trimmed, so it is the day counting began. This also adopts
+		// state written before Began existed. At or before the oldest day it may have trimmed: left unset,
+		// the gap before it stays "no longer holds".
+		if meta.Began == "" && meta.HeldFrom > oldest {
+			meta.Began = meta.HeldFrom
+		}
 		if meta.HeldFrom < oldest {
 			meta.HeldFrom = oldest
 		}

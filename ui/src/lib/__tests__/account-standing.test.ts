@@ -32,18 +32,29 @@ describe("standing, in words", () => {
 describe("an account that is switched off", () => {
   const off: Standing = { usable: false, waiting_on: "none", note: "The account is switched off." };
 
-  it("says it is off and why it may be, and does not promise 'yet'", () => {
+  it("is expected, in one statement that stays in Syndra, and does not promise 'yet'", () => {
     const w = standingWords(off, "TrueNAS", "operator");
     expect(w.state).toBe("Switched off");
     expect(w.state).not.toMatch(/yet/i);
-    expect(w.note).toContain("The account is switched off.");
-    expect(w.note).toMatch(/put on hold or is deactivated in Zitadel/);
-    expect(w.note).toMatch(/switch it off on TrueNAS directly/);
-    expect(w.next).toMatch(/Nothing for you to do if the person is on hold or deactivated/);
+    expect(w.next).toBe(
+      `${NOTHING_TO_DO} Syndra keeps it off while the person is on hold, deactivated or has no role that reaches TrueNAS.`,
+    );
+    expect(w.next).not.toMatch(/on on|switch it back on|by hand/i);
+  });
+
+  it("does not repeat the add-on's own 'switched off' note beside the state", () => {
+    expect(standingWords(off, "TrueNAS", "operator").note).toBeUndefined();
+    expect(standingWords({ ...off, note: "the account is switched off" }, "TrueNAS", "member").note).toBeUndefined();
+  });
+
+  it("keeps a note that says more than the state", () => {
+    expect(standingWords({ ...off, note: "Held since 12 Nov." }, "TrueNAS", "operator").note).toBe("Held since 12 Nov.");
   });
 
   it("tells a member to ask staff rather than wait", () => {
-    expect(standingWords(off, "TrueNAS", "member").next).toMatch(/Ask them if you did not expect this/);
+    expect(standingWords(off, "TrueNAS", "member").next).toBe(
+      "It stays off while you are on hold or deactivated. Ask makerspace staff if you did not expect this.",
+    );
   });
 
   it("keeps the add-on's own next step when it gave one", () => {

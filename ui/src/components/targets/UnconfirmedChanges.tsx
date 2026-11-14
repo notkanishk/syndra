@@ -95,7 +95,7 @@ export function wording(op: UnconfirmedOperation, who: string, name: string) {
         asked: [`Delete `, `'s account on ${name}`],
         question: `Did ${name} delete ${who}'s account?`,
         tell: `Read ${name} again. If ${account} is gone from Accounts on ${name}, it happened. Syndra won't send a delete again by itself.`,
-        yes: `${account} is gone from ${name}. Its files stay.`,
+        yes: `${account} is gone from ${name}.`,
         no: `${account} is still on ${name}.`,
         done: `${name} deleted ${who}'s account.`,
         notDone: `You recorded that ${name} didn't delete ${who}'s account.`,

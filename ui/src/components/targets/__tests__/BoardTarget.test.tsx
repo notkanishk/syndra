@@ -352,7 +352,7 @@ describe("the page in plain words (route-system-targets-id)", () => {
 
     const row = (label: string) => screen.getByText(label).closest(".flex-wrap") as HTMLElement;
     expect(within(row("Creates an account")).getByText("Runs by itself")).toBeInTheDocument();
-    expect(within(row("Deletes an account (its files stay on TrueNAS)")).getByText("Stops and asks")).toBeInTheDocument();
+    expect(within(row("Deletes an account")).getByText("Stops and asks")).toBeInTheDocument();
     // The ids are under Technical detail, closed.
     expect(screen.queryByText("account.purge")).toBeNull();
     // No scope, no secret parameter name; an id Syndra has no word for is not made the label.
@@ -376,7 +376,7 @@ describe("the page in plain words (route-system-targets-id)", () => {
     ] as TargetSummary["operations"];
     renderTarget();
 
-    const said = ["Creates an account", "Deletes an account (its files stay on TrueNAS)", "Reads space used and quota"];
+    const said = ["Creates an account", "Deletes an account", "Reads space used and quota"];
     const at = said.map((text) => screen.getByText(text));
     for (let i = 1; i < at.length; i++) {
       expect(at[i - 1].compareDocumentPosition(at[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

@@ -21,6 +21,7 @@ import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowled
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { useUiView } from "@/lib/ui-view";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
@@ -792,6 +793,7 @@ function ReachCard({
 }) {
   const nameOf = useSystemNames();
   const name = nameOf(target);
+  const { view, revealInAdvanced } = useUiView();
 
   // Nothing read yet: no word, no count, no age.
   if (isLoading && !health) {
@@ -828,11 +830,18 @@ function ReachCard({
         ? holdingOff
           ? `The add-on on the Syndra server is waiting before it calls ${name} again, after repeated failures, and tries again by itself. Changes for ${name} wait, and nothing is lost.`
           : paused
-            ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)}. ${lifecycleWhy(health.lifecycle_note)} ${
+            ? <>{`Syndra can reach ${name}, but it is ${stateLabel(lifecycle)}. ${lifecycleWhy(health.lifecycle_note)} ${
                 lifecycle === "draining"
                   ? "New changes are refused and the ones already sent are being allowed to finish."
                   : "Every change is refused at once. Reads keep working."
-              }`
+              }`}
+              {/* The next step. Maintenance is Advanced only and structure does not move with data,
+                  so in Basic this is how to reach it: it switches the view and glides there. */}
+              {" "}
+              <Button size="sm" onClick={() => revealInAdvanced("maintenance")}>
+                {view === "advanced" ? "Open Maintenance" : "Open Maintenance in Advanced"}
+              </Button>
+              </>
             : (reading.sentence ??
               // A failed live read is not "accepting changes": the copy below the card
               // (LastKnown) is all there is, and it cannot say what is in flight now.
@@ -965,9 +974,10 @@ export const OPERATION_LABEL: Record<string, string> = {
   "account.converge": "Brings an account in line",
   "account.release": "Lets go of an account, keeping it",
   "account.adopt": "Assigns an existing account to a person",
-  // TrueNAS's user.delete removes the account and its `.ssh` folder only; the home folder stays
-  // (middleware TS-25.10.7, plugins/account.py do_delete), so "and its files" would be false: the files stay.
-  "account.purge": "Deletes an account (its files stay on TrueNAS)",
+  // Generic: this serves every system, and the manifest gives an operation no description, so it
+  // claims nothing about what a system does with the account's files (TrueNAS's user.delete keeps
+  // the home folder: middleware TS-25.10.7, plugins/account.py do_delete, but that is its fact).
+  "account.purge": "Deletes an account",
   "account.list": "Reads the list of accounts",
   "health.get": "Reads the system's own health report",
   "credential.set": "Sets a member's password, never logged",
@@ -1579,7 +1589,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
               {/* Columns, as in "Accounts Syndra manages": the name in a seat of its own width, so
                   the standing starts at one x whatever the username's length. */}
               <span className="w-[220px] min-w-0 flex-none [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
-              <span className="min-w-0 flex-1" data-standing-seat>
+              <span className="min-w-0 flex-1 basis-[200px]" data-standing-seat>
                 {account.standing && <StandingLine standing={account.standing} system={name} audience="operator" />}
               </span>
               {account.self ? (
@@ -1877,7 +1887,7 @@ function LifecycleControl({
   // call Active, and no Drain or Read-only to offer from it: the card keeps its seat and says so.
   if (!health?.lifecycle) {
     return (
-      <Card>
+      <Card id="maintenance">
         <CardHeader title="Maintenance" />
         {isLoading ? (
           <RowSkeleton rows={2} label="Reading the maintenance state" />
@@ -1915,7 +1925,7 @@ function LifecycleControl({
   ].filter((a) => a.id !== current);
 
   return (
-    <Card>
+    <Card id="maintenance">
       <CardHeader title="Maintenance" />
       <CardRow first>
         <span className="inline-flex items-center gap-2 text-[15px] font-semibold">

@@ -908,18 +908,20 @@ One meter draws every "used of limit" in the product (`components/ui/Meter.tsx`)
 
 | Where | Sentence |
 |---|---|
-| Operation label, `account.purge` (TrueNAS's `user.delete` removes the account and its `.ssh` keys, never the home directory: middleware TS-25.10.7 `plugins/account.py` `do_delete`) | Deletes an account (its files stay on TrueNAS) |
+| Operation label, `account.purge` (generic: every system shows it and the manifest gives an operation no description, so it says nothing of what a system does with files; TrueNAS's `user.delete` removes the account and its `.ssh` keys, never the home directory: middleware TS-25.10.7 `plugins/account.py` `do_delete`) | Deletes an account |
 | Operation labels with no storage verb | `password.set` Lets a member set their own storage password, never logged; `holdings.list` Reads what a member holds; `item.checkout` Records that a member took an item |
-| Removing dormant accounts, what it costs | The accounts cannot be brought back. {size} of their files stays on {name}, with nobody's account to open it. (Unknown size: Their files stay on {name}, with nobody's account to open them. Syndra cannot see how much there is.) |
-| An unconfirmed delete | Did {name} delete {who}'s account? Yes: {account} is gone from {name}. Its files stay. No: {account} is still on {name}. |
+| Removing dormant accounts, what it costs | The accounts cannot be brought back. Syndra does not delete their files: {size} on {name} are left as they are. (Unknown size: Syndra does not delete their files on {name}. It cannot see how much there is.) |
+| An unconfirmed delete | Did {name} delete {who}'s account? Yes: {account} is gone from {name}. No: {account} is still on {name}. |
 | Choosing where home folders go, before a choice | Placeholder Choose a folder…; the primary Use this folder is off, reason Choose a folder first.; the lede ends The same folder is used for every role on {name}; each role does not get its own. |
 | A role's holders, on its mapping row | {n} people hold this role / 1 person holds this role; nobody holds it is said once, as the reason on the convergence button: Nobody holds this role |
 | Why an add-on is not active (`lifecycle_note`, one place: `lifecycleWhy`) | startup: It was started this way by its configuration. shutting down: It is shutting down. an unrecognised configured state: Its configured state was not recognised, so it started read-only to be safe. An operator's own words: Somebody set that on purpose: “{reason}”. No reason: Somebody set that on purpose. |
 | A last sign-in, in one column (A-10 §6) | Last signed in {10 min ago or 3 hours ago under a day, then 15 Oct} |
-| An account that is switched off, nobody waited on | State Switched off. Note: the add-on's, then Syndra switches an account off when its person is put on hold or is deactivated in Zitadel, and somebody can also switch it off on {system} directly. Next (operator): Nothing for you to do if the person is on hold or deactivated. If neither, switch it back on on {system}. Next (member): It stays off until makerspace staff switch it back on. Ask them if you did not expect this. |
+| An account that is switched off, nobody waited on | State Switched off, said once: the add-on's own note is shown only when it says more than the state. Next (operator): Nothing for you to do. Syndra keeps it off while the person is on hold, deactivated or has no role that reaches {system}. (Off outside Syndra is a difference Syndra triages, never a standing.) Next (member): It stays off while you are on hold or deactivated. Ask makerspace staff if you did not expect this. |
 | Statistics, days before the first collection | Not collected yet: counting began on {day} (the add-on's reason; it keeps The add-on no longer holds these days for days it dropped) |
 | Statistics, gaps | One line per reason over the same days: {14–15 Nov}, {Share}: “a” and “b”: {reason}; consecutive days joined; days outside the window shown are not listed |
 | The Mappings freshness | One line: the read line (What each group opens was read {age}) when it is shown, otherwise the header's (What each group opens, read from {name}'s folder permissions {age}) |
-| Copy button on an id (Clipboard API, or the browser's copy command on plain http) | Copy; Copied; announced as {what} copied |
+| Copy button on an id (Clipboard API, or a hidden read-only field and the browser's copy command on plain http, the reader's selection and focus put back) | Copy; Copied; announced as {what} copied. When the browser refuses: it is selected, announced as Couldn't copy {what}: select it and copy |
+| The reach card of a paused add-on (the next step to Maintenance, which only Advanced shows) | Button Open Maintenance in Advanced (Basic: switches the view, then goes to it); in Advanced, Open Maintenance |
+| Section jumps | The scroller keeps the sticky section band's height (`--section-band`) clear above what a link, a focus or a glide lands on |
 
 Basic hides the machine's words (ids, Maintenance, What the add-on also says, a finding's exact sides, the Merge findings term) and never a section: see `basic-advanced-ia` design.

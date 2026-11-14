@@ -78,6 +78,7 @@ describe("the read line", () => {
 
   it("asks for the section to be opened, then glides to it", () => {
     vi.useFakeTimers();
+    document.documentElement.style.setProperty("--section-band", "64px"); // globals.css, not loaded here
     const onOpen = vi.fn();
     render(<Page onOpen={onOpen} />);
     document.getElementById("sec-b")!.getBoundingClientRect = () => rect(900);
@@ -160,7 +161,7 @@ describe("the band behind the pill", () => {
   it("backs the pill with the page's own ground, only while the pill shows", () => {
     render(<Page />);
     const band = document.querySelector<HTMLElement>("[data-section-band]")!;
-    expect(band).toHaveClass("bg-canvas");
+    expect(band).toHaveClass("bg-canvas", "h-(--section-band)");
     expect(band).toHaveAttribute("aria-hidden", "true");
     place(80, { "sec-a": 200, "sec-b": 900 });
     expect(band).toHaveClass("opacity-0");

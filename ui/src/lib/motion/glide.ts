@@ -36,17 +36,20 @@ let gliding = 0;
  * it jumps and the flash stays. Every jump to a section, from a chip, the
  * pill, a count or a revealed panel, goes through here. The shell's own
  * scroller where there is one, so a narrow page never moves sideways.
- * `clear` is the space left above the heading. Resolves true once it has
+ * `clear` is the space left above the heading (the section band's height unless given). Resolves true once it has
  * landed (at once when still), false if a later jump took over.
  */
-export function glideTo(target: HTMLElement, clear = 64): Promise<boolean> {
+export function glideTo(target: HTMLElement, clear?: number): Promise<boolean> {
   const container = document.getElementById("app-scroll");
   const from = container ? container.scrollTop : window.scrollY;
   const base = container ? container.getBoundingClientRect().top : 0;
-  const to = from + target.getBoundingClientRect().top - base - clear;
+  const root = getComputedStyle(document.documentElement);
+  // Default: the section band's own height (--section-band), the room the scroller's scroll-padding
+  // leaves for a native jump or a focus, so a glide and a link land alike.
+  const room = clear ?? (parseFloat(root.getPropertyValue("--section-band")) || 0);
+  const to = from + target.getBoundingClientRect().top - base - room;
   const go = (top: number) => (container ? container.scrollTo?.({ top }) : window.scrollTo?.({ top }));
 
-  const root = getComputedStyle(document.documentElement);
   const ms = parseFloat(root.getPropertyValue("--duration-glide"));
   const ease = bezier(root.getPropertyValue("--ease-settle"));
   const token = gliding + 1;

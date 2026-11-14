@@ -94,7 +94,7 @@ export function UiViewProvider({
     if (!pendingPanel) return;
     const frame = requestAnimationFrame(() => {
       const target = document.getElementById(pendingPanel);
-      if (target) glideTo(target, 24);
+      if (target) glideTo(target);
       setPendingPanel(null);
     });
     return () => cancelAnimationFrame(frame);

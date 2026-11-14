@@ -225,7 +225,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
       {chosen.length > 0 && (
         <div className="grid gap-3 border-t border-line px-5 py-4">
           {/* The acknowledgement names the DATA, not the people. Removing the
-              row is not what cannot be undone — the account is. TrueNAS's user.delete leaves the home directory and its files. */}
+              row is not what cannot be undone — the account is. What a system keeps of its files is its own. */}
           <AcknowledgeCount
             checked={acknowledged}
             onChange={setAcknowledged}
@@ -306,7 +306,8 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
 }
 
 /**
- * What a removal does: the accounts go, the files stay (TrueNAS's user.delete keeps the home directory).
+ * What a removal does: the accounts go, and Syndra deletes no files. Said as Syndra's own act, not as
+ * a fact about the system (what a system does with an account's files is its own).
  *
  * Says the size when the target reported one and says so plainly when it did
  * not. A sentence claiming "0 bytes" from a read that never happened would be
@@ -317,9 +318,9 @@ function filesSentence(chosen: DormantAccount[], name: string): string {
   const known = chosen.filter((a) => typeof a.bytes_held === "number");
   if (known.length === chosen.length && known.length > 0) {
     const total = known.reduce((sum, a) => sum + (a.bytes_held ?? 0), 0);
-    return `The accounts cannot be brought back. ${formatBytes(total)} of their files stays on ${name}, with nobody's account to open it.`;
+    return `The accounts cannot be brought back. Syndra does not delete their files: ${formatBytes(total)} on ${name} are left as they are.`;
   }
-  return `The accounts cannot be brought back. Their files stay on ${name}, with nobody's account to open them. Syndra cannot see how much there is.`;
+  return `The accounts cannot be brought back. Syndra does not delete their files on ${name}. It cannot see how much there is.`;
 }
 
 function GroupHeading({ title, blurb }: { title: string; blurb: string }) {
@@ -343,7 +344,7 @@ function AccountLine({ account }: { account: DormantAccount }) {
       <span className="flex-1" />
       <span className="text-[13px] text-faint">
         {/* One rule for the whole column (A-10 §6): minutes or hours under a day, then the date. */}
-        Last signed in {formatSignIn(account.last_seen_at)}
+        Last signed in <time dateTime={account.last_seen_at}>{formatSignIn(account.last_seen_at)}</time>
       </span>
     </>
   );

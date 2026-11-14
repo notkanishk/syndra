@@ -79,7 +79,10 @@ function SeriesRow({ metric, series, cells, limits, windows }: { metric: StatsMe
 
 /** `kept`: how many days Syndra keeps, said only when a drawn row's window starts at what retention keeps. */
 function Gaps({ metric, kept, windows }: { metric: StatsMetric; kept?: number; windows: UsageWindows }) {
-  const lines = gapLines(metric.gaps, windows.window_30d_from, addDays(windows.today, 1));
+  // The widest window the block shows: a counter's 12-month total is drawn, so every gap inside it
+  // is explained; a level shows 30 days only.
+  const from = metric.instrument === "counter" && windows.window_12m_from < windows.window_30d_from ? windows.window_12m_from : windows.window_30d_from;
+  const lines = gapLines(metric.gaps, from, addDays(windows.today, 1));
   if (lines.length === 0 && kept === undefined) return null;
   const shown = lines.slice(0, MAX_ROWS);
   return (

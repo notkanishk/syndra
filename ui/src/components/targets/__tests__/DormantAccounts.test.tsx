@@ -176,7 +176,7 @@ describe("dormant accounts", () => {
     renderDormant();
     fireEvent.click(screen.getByLabelText("Select former-member"));
 
-    expect(screen.getByText(/files stay on TrueNAS/i)).toBeInTheDocument();
+    expect(screen.getByText(/Syndra does not delete their files on TrueNAS/i)).toBeInTheDocument();
     expect(screen.queryByText(/0 bytes/)).toBeNull();
   });
 
@@ -187,7 +187,7 @@ describe("dormant accounts", () => {
 
     // GiB, not GB. This divided by 1024 and printed a decimal unit name, which
     // by the terabyte is naming a quantity 10% smaller than the one shown.
-    expect(screen.getByText(/38\.4 GiB of their files stays/)).toBeInTheDocument();
+    expect(screen.getByText(/Syndra does not delete their files: 38\.4 GiB on TrueNAS are left as they are/i)).toBeInTheDocument();
   });
 
   // Everything else on these screens queues. This one does not, and saying so
@@ -392,9 +392,13 @@ describe("the sign-in column", () => {
     state.report!.accounts[0].last_seen_at = ago(23);
     state.report!.accounts[1].last_seen_at = ago(40);
     renderDormant();
-    const lines = await screen.findAllByText(/^Last signed in /);
+    const lines = (await screen.findAllByText((_, el) => el?.tagName === "SPAN" && /^Last signed in /.test(el.textContent ?? ""))).filter(
+      (el) => el.querySelector("time"),
+    );
     expect(lines).toHaveLength(2);
     for (const line of lines) expect(line.textContent).toMatch(/^Last signed in \d{1,2} [A-Z][a-z]{2,4}( \d{4})?$/);
+    // The date stays machine-readable (<time datetime>), as <Relative> made it.
+    for (const line of lines) expect(line.querySelector("time[datetime]")).not.toBeNull();
   });
 });
 

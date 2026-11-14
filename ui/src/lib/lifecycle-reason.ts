@@ -1,3 +1,5 @@
+import { CAP, capText } from "@/lib/usage";
+
 /**
  * Why an add-on is not simply active, in a sentence (health `lifecycle_note`).
  *
@@ -14,7 +16,8 @@ const OWN_REASON: Record<string, string> = {
 };
 
 export function lifecycleWhy(note: string | undefined): string {
-  const text = note?.trim();
+  // An operator's words, cut and stripped of control characters like every add-on text (capText).
+  const text = note ? capText(note, CAP.reason) : "";
   if (!text) return "Somebody set that on purpose.";
   return OWN_REASON[text] ?? `Somebody set that on purpose: “${text}”.`;
 }

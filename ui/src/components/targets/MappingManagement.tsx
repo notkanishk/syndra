@@ -279,23 +279,15 @@ function MappingRow({
           />
         )}
         {home?.home && <MappingHomeLine quota={home.quota?.value} homeRoot={homeRoot} />}
-      </span>
-      <span className="basis-full">
-        <AdvancedOnly>
-          <TechnicalDetail placeKey={`mapping:${mapping.id}`}>
-            <CopyableValue value={mapping.role_key} label="Role key" />
-            <CopyableValue value={`${mapping.field} → ${mapping.value}`} label="Field and value" />
-          </TechnicalDetail>
-        </AdvancedOnly>
-      </span>
-      {/* The count says what it counts. Nobody holding the role is said once, as the reason on the
-          convergence button beside it, never as a bare "0" as well. */}
-      <span data-holders className="min-w-[110px] flex-none text-right text-[13.5px] text-muted">
-        {holders.isLoading
-          ? "…"
-          : cohort.length > 0
-            ? `${cohort.length} ${cohort.length === 1 ? "person holds" : "people hold"} this role`
-            : null}
+        {/* The count says what it counts. Nobody holding the role is said once, as the reason on the
+            convergence button beside it, never as a bare "0" as well. */}
+        {(holders.isLoading || cohort.length > 0) && (
+          <span data-holders className="text-[13.5px] text-muted">
+            {holders.isLoading
+              ? "…"
+              : `${cohort.length} ${cohort.length === 1 ? "person holds" : "people hold"} this role`}
+          </span>
+        )}
       </span>
       <span className="flex-1" />
       <ConvergeButton
@@ -311,6 +303,13 @@ function MappingRow({
       <Button variant="danger" size="sm" onClick={onDelete}>
         Remove
       </Button>
+      {/* Last, and a region of its own that Basic does not render, so Basic leaves no empty line. */}
+      <AdvancedOnly className="basis-full">
+        <TechnicalDetail placeKey={`mapping:${mapping.id}`}>
+          <CopyableValue value={mapping.role_key} label="Role key" />
+          <CopyableValue value={`${mapping.field} → ${mapping.value}`} label="Field and value" />
+        </TechnicalDetail>
+      </AdvancedOnly>
     </CardRow>
   );
 }

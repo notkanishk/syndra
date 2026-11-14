@@ -16,6 +16,35 @@ const clipboardWorks = () =>
   (Boolean(navigator.clipboard) || (typeof document !== "undefined" && Boolean(document.queryCommandSupported?.("copy"))));
 
 /**
+ * The plain-http copy: a hidden read-only textarea holds the text, `execCommand("copy")` copies its
+ * selection, and the reader's own selection and focus are put back (the standard fallback; the
+ * page must not lose the selection or the focus place to a copy). True only if the browser says
+ * it copied.
+ */
+function copyViaTextarea(value: string): boolean {
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const selection = window.getSelection?.();
+  const ranges = selection ? Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i)) : [];
+  const area = document.createElement("textarea");
+  area.value = value;
+  area.readOnly = true; // no on-screen keyboard on a phone
+  area.setAttribute("aria-hidden", "true");
+  area.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+  document.body.appendChild(area);
+  try {
+    area.focus({ preventScroll: true }); // selecting needs focus in some browsers (Safari)
+    area.select();
+    area.setSelectionRange(0, value.length);
+    return document.execCommand("copy");
+  } finally {
+    area.remove();
+    selection?.removeAllRanges();
+    for (const range of ranges) selection?.addRange(range);
+    active?.focus({ preventScroll: true });
+  }
+}
+
+/**
  * A value somebody retypes into another application.
  *
  * Mono, on its own ground, copyable — the same treatment `CommandBlock` gives a
@@ -49,6 +78,7 @@ export function CopyableValue({
 }) {
   const [copied, setCopied] = useState(false);
   const [selected, setSelected] = useState(false);
+  const [failed, setFailed] = useState(false);
   // "Your account name" mid-sentence is "your account name"; "TrueNAS host" stays.
   const object = label.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase());
   // Resolved after mount. Rendering the answer on the server would mean a
@@ -70,17 +100,15 @@ export function CopyableValue({
   async function copy() {
     try {
       if (navigator.clipboard) await navigator.clipboard.writeText(value);
-      else {
-        // No Clipboard API (plain http): select the value and ask the browser to copy the selection.
-        highlight();
-        if (!document.execCommand("copy")) throw new Error("copy refused");
-      }
+      else if (!copyViaTextarea(value)) throw new Error("copy refused"); // plain http: no Clipboard API
+      setFailed(false);
       confirmFor(setCopied);
     } catch {
       // A clipboard the browser refuses at the moment of the tap: fall back to
       // the same selection the insecure-origin path uses, rather than leaving
       // the operator with a control that appeared to do nothing.
       setCanCopy(false);
+      setFailed(true);
       select();
     }
   }
@@ -173,7 +201,11 @@ export function CopyableValue({
       {/* Announced rather than only coloured: the label change is the whole
           feedback, and a sighted user gets it from the button's own text. */}
       <span aria-live="polite" className="sr-only">
-        {copied ? `${label} copied` : selected ? `${label} is selected. Hold to copy` : ""}
+        {copied
+          ? `${label} copied`
+          : failed
+            ? `Couldn't copy ${object}: select it and copy`
+            : selected ? `${label} is selected. Hold to copy` : ""}
       </span>
     </div>
   );

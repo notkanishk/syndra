@@ -179,6 +179,26 @@ describe("what roles reach a target", () => {
     expect(screen.getByText("1 person holds this role")).toBeInTheDocument();
   });
 
+  // The count sits in the "Gives" column, before the Technical fold, which is the row's last part:
+  // it never drops to a line of its own, and Basic leaves no empty line or gap at the end.
+  it("puts the count with what the role gives, and the Technical fold last", () => {
+    state.holders = ["u1", "u2"];
+    const advanced = renderMappings();
+    const count = document.querySelector("[data-holders]") as HTMLElement;
+    const gives = screen.getByText("Gives the lab_makers group");
+    expect(count.parentElement).toBe(gives.parentElement);
+    const row = count.closest(".row-divider, [class*='flex-wrap']") as HTMLElement;
+    const fold = screen.getByRole("button", { name: /Technical detail/ }).closest(".unfold") as HTMLElement;
+    expect(row.lastElementChild).toBe(fold);
+    expect(fold).toHaveClass("basis-full");
+    advanced.unmount();
+
+    renderMappings("basic");
+    const basicRow = (document.querySelector("[data-holders]") as HTMLElement).closest("[class*='flex-wrap']") as HTMLElement;
+    expect(basicRow.querySelector(".unfold")).toBeNull();
+    expect(basicRow.lastElementChild).toHaveTextContent("Remove");
+  });
+
   // The cohort is the reason this row can offer a convergence at all: the
   // entitlement endpoints take an explicit list of subjects, and a control that
   // assembled its own would be assembling one nobody reviewed.
@@ -189,7 +209,7 @@ describe("what roles reach a target", () => {
     expect(screen.queryByRole("button", { name: /bring accounts in line/i })).toBeNull();
     // Said once, as the button's reason: no bare "0" in a column of its own, no second sentence.
     expect(screen.getAllByText(/Nobody holds this role/i)).toHaveLength(1);
-    expect(document.querySelector("[data-holders]")?.textContent).toBe("");
+    expect(document.querySelector("[data-holders]")).toBeNull();
   });
 
   // "maker" alone is not an identity — the same key means a different role in

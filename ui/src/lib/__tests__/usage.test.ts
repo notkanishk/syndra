@@ -151,6 +151,17 @@ describe("gaps said as lines", () => {
     expect(gapRange(lines[1])).toBe("14–15 Nov");
   });
 
+  it("cuts what ends after the window, and lists three or more series as a list", () => {
+    const lines = gapLines(
+      ["a", "b", "c"].map((share) => ({ start: "2026-11-18", end: "2026-11-30", dimensions: dims(share), reason: audit })),
+      "2026-10-20",
+      "2026-11-20",
+    );
+    expect(lines.map((l) => [l.start, l.end])).toEqual([["2026-11-18", "2026-11-20"]]);
+    const metric = { dimensions: [{ name: "share", label: "Share" }] } as Parameters<typeof gapWhere>[0];
+    expect(gapWhere(metric, lines[0])).toBe("Share: \u201ca\u201d, \u201cb\u201d and \u201cc\u201d");
+  });
+
   it("joins consecutive days of one series", () => {
     const lines = gapLines(
       [

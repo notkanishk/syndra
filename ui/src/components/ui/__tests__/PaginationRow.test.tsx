@@ -97,6 +97,7 @@ describe("PaginationRow motion", () => {
   function glidePage() {
     vi.useFakeTimers();
     motionInTests();
+    document.documentElement.style.setProperty("--section-band", "64px"); // globals.css, not loaded here
     document.documentElement.style.setProperty("--duration-glide", "520ms");
     document.documentElement.style.setProperty("--ease-settle", "cubic-bezier(0.16, 1, 0.3, 1)");
     const scroller = document.createElement("div");

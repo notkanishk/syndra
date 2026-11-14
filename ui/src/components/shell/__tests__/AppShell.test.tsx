@@ -46,10 +46,21 @@ describe("AppShell scrolling", () => {
       </AppShell>,
     );
     const root = container.querySelector("#app-root")!;
-    expect(root).toHaveClass("overflow-clip");
+    expect(root).toHaveClass("overflow-clip", "relative");
     expect(root).not.toHaveClass("overflow-hidden");
     const scroller = container.querySelector("#app-scroll")!;
     expect(scroller).toHaveClass("relative", "overflow-y-auto");
+  });
+
+  // The sticky section band covers the top of the scroller; a link to an anchor or a focus that
+  // scrolls must land below it (WCAG 2.4.11), from the same value the band and glideTo use.
+  it("keeps a native jump or a focus below the section band", () => {
+    const { container } = render(
+      <AppShell session={{ id: "u1", role: "admin" } as SessionUser}>
+        <p>page</p>
+      </AppShell>,
+    );
+    expect(container.querySelector("#app-scroll")).toHaveClass("scroll-pt-(--section-band)");
   });
 });
 

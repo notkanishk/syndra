@@ -140,12 +140,12 @@ export function SectionPill<T extends NavSection>({
   return (
     <div className="sticky top-0 z-(--layer-bar) h-0" style={{ marginBottom: -gap }}>
       {/* The band behind the pill: the page's own ground, full width of the column, so text that
-          scrolls up never shows through beside the pill. 64px is the `clear` a jump leaves above a
-          heading (glideTo), so a section it lands on starts just under the band. */}
+          scrolls up never shows through beside the pill. --section-band is the `clear` a jump leaves above a
+          heading (glideTo, and the scroller's scroll-padding), so a section it lands on starts just under the band. */}
       <div
         aria-hidden
         data-section-band
-        className={`absolute -inset-x-4 top-0 h-16 border-b border-line bg-canvas motion-tint tablet:-inset-x-[26px] ${
+        className={`absolute -inset-x-4 top-0 h-(--section-band) border-b border-line bg-canvas motion-tint tablet:-inset-x-[26px] ${
           spy.away ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       />

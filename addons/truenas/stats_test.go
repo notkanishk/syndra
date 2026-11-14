@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	bolt "go.etcd.io/bbolt"
 )
 
 // The statistics collector and GET /stats against a fake NAS: two members
@@ -764,21 +766,60 @@ func TestTheZonePatternIsTheSchemas(t *testing.T) {
 
 // Days before the first collection were never counted, and the reason says so (with the day)
 // rather than claiming the add-on lost them; once the buffer has trimmed past it, they were lost.
+// Every metric, including the levels.
 func TestADayBeforeCountingBeganIsNotCollectedYet(t *testing.T) {
-	s, _, at := statsServer(t)
-	s.collectStatsOnce()
-	first, _, _ := allStats(t, s, metricSessions, day0.AddDate(0, 0, -3))
-	want := s.stats.reasonBegan(s.stats.day(day0))
-	if !strings.HasPrefix(want, "Not collected yet: counting began on ") {
-		t.Fatalf("reason %q", want)
+	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
+		t.Run(metric, func(t *testing.T) {
+			s, _, at := statsServer(t)
+			s.collectStatsOnce()
+			first, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -3))
+			want := s.stats.reasonBegan(s.stats.day(day0))
+			if !strings.HasPrefix(want, "Not collected yet: counting began on ") {
+				t.Fatalf("reason %q", want)
+			}
+			if len(first.Gaps) == 0 || first.Gaps[0].Reason != want {
+				t.Errorf("gaps %+v, want the first to say %q", first.Gaps, want)
+			}
+			*at = day0.AddDate(0, 0, 95)
+			s.collectStatsOnce()
+			later, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -3))
+			if len(later.Gaps) == 0 || later.Gaps[0].Reason != reasonBuffer {
+				t.Errorf("after the buffer trimmed past it, gaps %+v, want %q", later.Gaps, reasonBuffer)
+			}
+		})
 	}
-	if len(first.Gaps) == 0 || first.Gaps[0].Reason != want {
-		t.Errorf("gaps %+v, want the first to say %q", first.Gaps, want)
-	}
-	*at = day0.AddDate(0, 0, 95)
-	s.collectStatsOnce()
-	later, _, _ := allStats(t, s, metricSessions, day0.AddDate(0, 0, -3))
-	if len(later.Gaps) == 0 || later.Gaps[0].Reason != reasonBuffer {
-		t.Errorf("after the buffer trimmed past it, gaps %+v, want %q", later.Gaps, reasonBuffer)
+}
+
+// State from before Began existed: a HeldFrom after the oldest day the buffer could hold was never
+// trimmed, so it is adopted as the day counting began; at or before it, the buffer may have trimmed.
+func TestStateWithoutBeganIsAdoptedOnlyWhenNeverTrimmed(t *testing.T) {
+	for _, metric := range []string{metricSessions, metricUsedBytes, metricHomeBytes} {
+		for _, trimmed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/trimmed=%v", metric, trimmed), func(t *testing.T) {
+				s, _, at := statsServer(t)
+				s.collectStatsOnce()
+				meta, _, _ := s.store.StatsMeta(metric)
+				meta.Began = ""
+				if trimmed {
+					meta.HeldFrom = s.stats.oldest(*at)
+				}
+				raw, _ := json.Marshal(meta)
+				if err := s.store.db.Update(func(tx *bolt.Tx) error {
+					return tx.Bucket(bucketStats).Bucket([]byte(metric)).Put(statsMetaKey, raw)
+				}); err != nil {
+					t.Fatal(err)
+				}
+				*at = at.Add(time.Hour)
+				s.collectStatsOnce()
+				got, _, _ := allStats(t, s, metric, day0.AddDate(0, 0, -200))
+				want := s.stats.reasonBegan(s.stats.day(day0))
+				if trimmed {
+					want = reasonBuffer
+				}
+				if len(got.Gaps) == 0 || got.Gaps[0].Reason != want {
+					t.Errorf("gaps %+v, want the first to say %q", got.Gaps, want)
+				}
+			})
+		}
 	}
 }

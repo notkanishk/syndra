@@ -133,6 +133,18 @@ describe("reduced motion is first-class", () => {
       expect(target.classList.contains("flash")).toBe(true);
     });
 
+    it("leaves the section band's height above the heading unless told otherwise", async () => {
+      document.documentElement.style.setProperty("--section-band", "64px");
+      try {
+        await motion.glideTo(document.getElementById("t")!);
+        await motion.glideTo(document.getElementById("t")!, 10);
+        const calls = (document.getElementById("app-scroll")!.scrollTo as ReturnType<typeof vi.fn>).mock.calls;
+        expect(calls[0][0].top - calls[1][0].top).toBe(-54);
+      } finally {
+        document.documentElement.style.removeProperty("--section-band");
+      }
+    });
+
     it("a later jump takes over a glide in motion, and only the last one lands", async () => {
       motionInTests();
       const target = document.getElementById("t")!;

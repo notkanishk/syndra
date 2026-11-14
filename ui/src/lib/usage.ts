@@ -58,7 +58,7 @@ export interface GapLine {
  * The gaps worth a line in the window shown, oldest first.
  *
  * Days outside `[from, end)` are not the reader's business and are dropped; one that starts before
- * `from` is cut to it. Consecutive days of one series with one reason are one range, and series
+ * `from`, or ends after `end`, is cut to the window. Consecutive days of one series with one reason are one range, and series
  * whose ranges and reason are identical are one line ("14–15 Nov, shares a and b: …"), so a page of
  * sixty near-identical rows is five.
  */
@@ -67,7 +67,7 @@ export function gapLines(gaps: StatsGap[], from: string, end: string): GapLine[]
   const series = new Map<string, StatsGap[]>();
   for (const g of gaps) {
     if (g.end <= from || g.start >= end) continue;
-    const clipped = { ...g, start: g.start < from ? from : g.start };
+    const clipped = { ...g, start: g.start < from ? from : g.start, end: g.end > end ? end : g.end };
     const k = `${g.reason}\u0000${key(g.dimensions)}`;
     series.set(k, [...(series.get(k) ?? []), clipped]);
   }
@@ -90,13 +90,13 @@ export function gapLines(gaps: StatsGap[], from: string, end: string): GapLine[]
   return lines.sort((a, b) => byText(a.start, b.start) || compareNames(a.reason, b.reason));
 }
 
-/** A line's series as words: one dimension's values joined ("Share: “a” and “b”"). */
+/** A line's series as words: one dimension's values as a list in the display locale ("Share: “a”, “b” and “c”"). */
 export function gapWhere(metric: Pick<StatsMetric, "dimensions">, line: Pick<GapLine, "dimensions">): string {
   const parts: string[] = [];
   for (const d of metric.dimensions ?? []) {
     const values = line.dimensions.map((x) => x?.[d.name]).filter((v): v is string => v !== undefined);
     values.sort(compareNames);
-    if (values.length) parts.push(`${capText(d.label, CAP.label)}: ${values.map((v) => quoted(v, CAP.value)).join(" and ")}`);
+    if (values.length) parts.push(`${capText(d.label, CAP.label)}: ${new Intl.ListFormat(displayLocale(), { type: "conjunction" }).format(values.map((v) => quoted(v, CAP.value)))}`);
   }
   return parts.join(", ");
 }

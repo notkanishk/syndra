@@ -19,10 +19,13 @@ describe("the operations list", () => {
     });
   }
 
-  // TrueNAS's user.delete removes the account and its .ssh folder only (middleware TS-25.10.7,
-  // plugins/account.py do_delete): the home directory and its files stay, so no label may say they go.
-  it("says a purge leaves the files", () => {
-    expect(OPERATION_LABEL["account.purge"]).not.toMatch(/and its files/);
-    expect(OPERATION_LABEL["account.purge"]).toMatch(/files stay/);
+  // Every system shows these words, and the manifest gives an operation no description of its own, so
+  // a label names no system and says nothing of what one does with files (TrueNAS keeps the home
+  // folder on user.delete, middleware TS-25.10.7 plugins/account.py do_delete: that is its fact).
+  it("makes no claim about any one system", () => {
+    for (const [id, label] of Object.entries(OPERATION_LABEL)) {
+      expect(label, id).not.toMatch(/TrueNAS|\bfiles?\b/i);
+    }
+    expect(OPERATION_LABEL["account.purge"]).toBe("Deletes an account");
   });
 });

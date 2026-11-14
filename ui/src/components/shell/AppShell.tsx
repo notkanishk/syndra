@@ -40,7 +40,7 @@ import { UiViewProvider } from "@/lib/ui-view";
  *   └───────────────────────────────────┘
  *
  * `h-dvh` and not `h-screen`: `100vh` on a phone is the viewport with the URL
- * bar retracted, so the bottom of a `h-screen overflow-hidden` shell sits
+ * bar retracted, so the bottom of a `h-screen overflow-clip` shell sits
  * permanently under it — and the bottom of this shell is where every primary
  * action lives.
  */
@@ -57,8 +57,9 @@ export function AppShell({
   return (
     <UiViewProvider isOperator={session.role === "admin"} selfId={session.id} initialView={initialView}>
       <PageCrumbProvider>
-        {/* `app-root` is what a dialog makes inert (Modal): overlays portal to <body>, outside it. */}
-        <div id="app-root" className="flex h-dvh flex-col overflow-clip bg-canvas tablet:flex-row">
+        {/* `app-root` is what a dialog makes inert (Modal): overlays portal to <body>, outside it.
+            `relative` so `overflow-clip` also clips absolutely positioned descendants. */}
+        <div id="app-root" className="relative flex h-dvh flex-col overflow-clip bg-canvas tablet:flex-row">
           {/* First in the tab order, off-screen until focused: a keyboard user
               reaches the page without tabbing through the whole rail first. */}
           <a
@@ -72,7 +73,7 @@ export function AppShell({
               item defaults to `min-height: auto`, which refuses to shrink below
               its content — so `flex-1` never constrained the scroller, it grew
               to the height of the page inside it, `overflow-y-auto` never had
-              anything to scroll, and the shell's own `overflow-hidden` clipped
+              anything to scroll, and the shell's own `overflow-clip` clipped
               the remainder. On a phone that meant any route taller than the
               viewport could not be scrolled at all and the tab bar sat below
               the fold: on /roles it was at y=4037 of an 844px screen. Every
@@ -84,8 +85,11 @@ export function AppShell({
                 (the `sr-only` live regions, popovers), so none of it sits outside the scroller where
                 the shell could be scrolled to reach it. `overflow-clip` on the shell above is the other
                 half: unlike `overflow-hidden` it is never a scroll container, so no focus, find or
-                animation can scroll the window and push the top bar off. The app scrolls here, only. */}
-            <div id="app-scroll" className="relative min-h-0 flex-1 overflow-y-auto">
+                animation can scroll the window and push the top bar off. The app scrolls here, only.
+                `scroll-pt`: the sticky section band covers the top of this scroller, so a link
+                to an anchor or a focus that scrolls lands below it (WCAG 2.4.11), on top of each
+                section's own `scroll-mt`. */}
+            <div id="app-scroll" className="relative min-h-0 flex-1 scroll-pt-(--section-band) overflow-y-auto">
               {/* Notices, not a band under the top bar (6a): every dysfunction
                   is said in the content column and pushes the page down
                   rather than covering it. They sit under the page's own
