@@ -113,7 +113,7 @@ function AskForAccessOpen({
   );
   const termOff = keep && "reason" in keep.term ? keep.term.reason : undefined;
   const keepsToTerm = keepHow === "term" && !termOff;
-  const keepChoice = keep ? (keepsToTerm ? (keep.term as { days: number; until: string }) : keep.month) : null;
+  const keepChoice = keep ? (keepsToTerm ? (keep.term as { days: number; until: string; day: string }) : keep.month) : null;
 
   const final = result?.final ?? false;
 
@@ -127,7 +127,7 @@ function AskForAccessOpen({
         justification: why,
         duration_days: extend && keepChoice ? keepChoice.days : ordinaryDays,
         // Days alone for a week, a month or another month; the date for a term.
-        ...(extend ? (keepsToTerm && keepChoice ? { until: keepChoice.until } : {}) : howLong === "term" ? { until: ordinaryUntil } : {}),
+        ...(extend ? (keepsToTerm && keepChoice ? { until: keepChoice.day } : {}) : howLong === "term" ? { until: nextTermEnd(new Date(), terms.data) } : {}),
         kind: extend ? "extend" : "access",
       });
       setResult({

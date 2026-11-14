@@ -776,14 +776,14 @@ func TestACreateForARoleThatEndsIsRefusedToo(t *testing.T) {
 	}
 }
 
-// The end date is judged once, when the ask arrives. A date that passes while the holding is
-// being read is not an ask for an ended date, and must not be filed as one by a second clock.
-func TestAnAskIsJudgedOnOneClockWhenItsEndDatePassesMidRequest(t *testing.T) {
+// An end date on the wire is a date, resolved by the backend to the last second of that day in
+// its own zone: asking "until today" is asking for all of today, however slowly the request
+// is served, and is filed as that end.
+func TestAnAskForAnEndDateIsFiledAsTheEndOfThatDayInTheDeploymentZone(t *testing.T) {
 	resetAccessDeps(t)
 	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
-	until := time.Now().Add(40 * time.Millisecond)
+	today := clock.Day(time.Now())
 	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
-		time.Sleep(80 * time.Millisecond)
 		return models.RequestHolding{Kind: models.HoldingNone}, nil
 	}
 	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
@@ -792,12 +792,14 @@ func TestAnAskIsJudgedOnOneClockWhenItsEndDatePassesMidRequest(t *testing.T) {
 		filedUntil = u
 		return "req-1", nil
 	}
-	body := fmt.Sprintf(`{"project_id":"p1","role_key":"community","justification":"term","duration_days":30,"until":%q}`,
-		until.Format(time.RFC3339Nano))
+	body := fmt.Sprintf(`{"project_id":"p1","role_key":"community","justification":"term","duration_days":30,"until":%q}`, today)
 	rr := httptest.NewRecorder()
 	handleCreateAccessRequest(rr, memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests", strings.NewReader(body)), "member-1"))
 	if rr.Code != http.StatusCreated || filedUntil == nil {
 		t.Fatalf("want it filed on the clock it arrived on: %d %s (filed %v)", rr.Code, rr.Body.String(), filedUntil)
+	}
+	if want, _ := clock.EndOfDay(today); !filedUntil.Equal(want) {
+		t.Fatalf("filed %v, want the end of %s in the deployment zone, %v", filedUntil, today, want)
 	}
 }
 

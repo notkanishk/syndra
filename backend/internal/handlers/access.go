@@ -42,11 +42,11 @@ type CreateAccessRequestRequest struct {
 	RoleKey       string `json:"role_key"`
 	Justification string `json:"justification"`
 	DurationDays  int    `json:"duration_days"`
-	// Until is a fixed end date the ask names ("until the end of term", RFC
-	// 3339). When present, approving gives the grant this end however late it
+	// Until is a fixed end date the ask names ("until the end of term", a date
+	// YYYY-MM-DD, resolved to its last second in the deployment's zone). When present, approving gives the grant this end however late it
 	// is decided, and it wins over DurationDays. Absent: days count from the
 	// decision, as before (older clients send only days).
-	Until *time.Time `json:"until,omitempty"`
+	Until *clock.EndDay `json:"until,omitempty"`
 	// Kind is "access" (the default) or "extend": "Ask to keep it longer".
 	Kind string `json:"kind,omitempty"`
 }
@@ -294,7 +294,7 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	switch err := services.CheckRequestKind(req.Kind, holding, durationDays, req.Until, now); {
+	switch err := services.CheckRequestKind(req.Kind, holding, durationDays, req.Until.Instant(), now); {
 	case errors.Is(err, services.ErrAskEnded):
 		jsonValidationErrorResponse(w, "until must be a date that hasn't passed yet", map[string]string{"until": "future"})
 		return
@@ -313,7 +313,7 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := dbCreateAccessRequestOfKind(r.Context(), req.Kind, req.RequesterID, req.ProjectID, req.RoleKey, req.Justification, durationDays, req.Until)
+	id, err := dbCreateAccessRequestOfKind(r.Context(), req.Kind, req.RequesterID, req.ProjectID, req.RoleKey, req.Justification, durationDays, req.Until.Instant())
 	if errors.Is(err, db.ErrAlreadyAsked) {
 		// The same ask is already waiting: one in the queue, however many
 		// times it was sent. Its id is returned so the page can point at it.

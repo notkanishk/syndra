@@ -313,7 +313,7 @@ func TestAnAllowanceRecordsTheAuthenticatedOperator(t *testing.T) {
 	// Authenticated, so the assertion below is about the PRINCIPAL rather than
 	// about whichever fallback the surface happens to use.
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
-		`{"subject_id":"u1","target":"truenas","field":"group","value":"lab_makers","direction":"deny","reason":"safety review","expires_at":"2026-12-01T00:00:00Z"}`))
+		`{"subject_id":"u1","target":"truenas","field":"group","value":"lab_makers","direction":"deny","reason":"safety review","expires_at":"2026-12-01"}`))
 	req = req.WithContext(withPrincipal(req.Context(), &auth.Principal{Subject: "op_7"}))
 	handleCreateAllowance(rr, req)
 
@@ -345,7 +345,7 @@ func TestAnAdditiveAllowanceIsNotImplementedRatherThanInvalid(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
-		`{"subject_id":"u1","target":"truenas","field":"group","value":"x","direction":"allow","reason":"r","expires_at":"2026-12-01T00:00:00Z"}`)))
+		`{"subject_id":"u1","target":"truenas","field":"group","value":"x","direction":"allow","reason":"r","expires_at":"2026-12-01"}`)))
 
 	if rr.Code != http.StatusNotImplemented {
 		t.Fatalf("want 501, got %d (%s)", rr.Code, rr.Body.String())
@@ -385,7 +385,7 @@ func TestALifecycleDenialWrittenAsFalseIsRefused(t *testing.T) {
 		rr := httptest.NewRecorder()
 		handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
 			`{"subject_id":"u1","target":"truenas","field":"enabled","value":"`+value+`",`+
-				`"direction":"deny","reason":"safety review","expires_at":"2026-12-01T00:00:00Z"}`)))
+				`"direction":"deny","reason":"safety review","expires_at":"2026-12-01"}`)))
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("value %q must be refused, got %d (%s)", value, rr.Code, rr.Body.String())
 		}
@@ -398,7 +398,7 @@ func TestALifecycleDenialWrittenAsFalseIsRefused(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
 		`{"subject_id":"u1","target":"truenas","field":"enabled","value":"true",`+
-			`"direction":"deny","reason":"safety review","expires_at":"2026-12-01T00:00:00Z"}`)))
+			`"direction":"deny","reason":"safety review","expires_at":"2026-12-01"}`)))
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("want 201 for enabled=true, got %d (%s)", rr.Code, rr.Body.String())
 	}
@@ -417,7 +417,7 @@ func TestAnAllowanceOnAFieldTheTargetLacksIsRefused(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
 		`{"subject_id":"u1","target":"truenas","field":"groups","value":"lab_makers",`+
-			`"direction":"deny","reason":"r","expires_at":"2026-12-01T00:00:00Z"}`)))
+			`"direction":"deny","reason":"r","expires_at":"2026-12-01"}`)))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
 	}
@@ -442,7 +442,7 @@ func TestAnAllowanceOnAnUnregisteredTargetIsRefusedBeforeTheForeignKey(t *testin
 	rr := httptest.NewRecorder()
 	handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
 		`{"subject_id":"u1","target":"unifi","field":"group","value":"x",`+
-			`"direction":"deny","reason":"r","expires_at":"2026-12-01T00:00:00Z"}`)))
+			`"direction":"deny","reason":"r","expires_at":"2026-12-01"}`)))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
 	}

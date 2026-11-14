@@ -143,7 +143,7 @@ export function formatShortDate(
     day: "numeric",
     month: "short",
     ...(civilDay(date).slice(0, 4) === civilDay(now).slice(0, 4) ? {} : { year: "numeric" }),
-  });
+  }) + zoneTag(); // " UTC" only while the server's zone is unknown: the day may be a day off, and it says so
 }
 
 /**
@@ -206,7 +206,7 @@ export function formatWeekday(date: Date = new Date()): string {
     weekday: "long",
     day: "numeric",
     month: "short",
-  });
+  }) + zoneTag();
 }
 
 /**

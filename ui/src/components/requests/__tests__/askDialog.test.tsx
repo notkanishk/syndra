@@ -361,9 +361,8 @@ describe("Ask for access · Until the end of term", () => {
     renderAs(false);
     fireEvent.click(sendButton());
     await screen.findByText("Asked");
-    const until = new Date(String(create.last?.until));
-    expect([until.getFullYear(), until.getMonth(), until.getDate()]).toEqual([2026, 11, 31]);
-    expect(until.getHours()).toBe(23);
+    // The date, never an instant worked out here: the backend ends it in its own zone.
+    expect(create.last?.until).toBe("2026-12-31");
     expect(create.last).toMatchObject({ kind: "access", duration_days: 121 });
   });
 
@@ -385,8 +384,7 @@ describe("Ask for access · Until the end of term", () => {
     fireEvent.click(screen.getByRole("radio", { name: "To the end of next term" }));
     fireEvent.click(screen.getByRole("button", { name: "Ask to keep it" }));
     await screen.findByText("Asked");
-    const until = new Date(String(create.last?.until));
-    expect([until.getFullYear(), until.getMonth(), until.getDate()]).toEqual([2027, 4, 31]);
+    expect(create.last?.until).toBe("2027-05-31");
     expect(create.last).toMatchObject({ kind: "extend" });
   });
 

@@ -76,7 +76,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // In parallel: the zone read is bounded (1 s) and must not add to the session read.
+  // In parallel: the zone read is bounded (3 s, over the 2 s /healthz may spend on its database ping) and must not add to the session read.
   const [session, read] = await Promise.all([getSession(), fetchMakerspaceZone()]);
   // What this render really uses: after the (write-once) set, not what was read.
   const timeZone = effectiveZone(read);

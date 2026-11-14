@@ -113,3 +113,41 @@ func zone(t *testing.T, name string) *time.Location {
 	}
 	return loc
 }
+
+// An end date on the wire is the date the person means; the backend turns it
+// into that day's last second in its own zone, so "until 30 Nov" is all of 30
+// Nov wherever the client is and whatever zone it believed in.
+func TestAnEndDayOnTheWireIsTheLastSecondOfThatDayInTheDeploymentZone(t *testing.T) {
+	old := Loc
+	t.Cleanup(func() { Loc = old })
+	for _, tc := range []struct{ zone, want string }{
+		{"Asia/Kolkata", "2026-11-30T23:59:59+05:30"},
+		{"America/Santiago", "2026-11-30T23:59:59-03:00"},
+		{"UTC", "2026-11-30T23:59:59Z"},
+	} {
+		Loc = zone(t, tc.zone)
+		var d EndDay
+		if err := d.UnmarshalJSON([]byte(`"2026-11-30"`)); err != nil {
+			t.Fatal(err)
+		}
+		if got := d.Time.Format(time.RFC3339); got != tc.want || d.Time.Location() != Loc {
+			t.Errorf("%s: %s, want %s", tc.zone, got, tc.want)
+		}
+		if got := d.Instant(); got == nil || !got.Equal(d.Time) {
+			t.Errorf("Instant() = %v", got)
+		}
+	}
+	if (*EndDay)(nil).Instant() != nil {
+		t.Error("an absent end must stay absent")
+	}
+}
+
+// One shape only: a client's own guess at the day's end is refused, not read.
+func TestAnEndDayRefusesAnythingButADate(t *testing.T) {
+	for _, in := range []string{`"2026-11-30T00:00:00Z"`, `"2026-11-30T23:59:59+05:30"`, `"2026-02-30"`, `"30 Nov 2026"`, `"2026-1-5"`, `""`, `5`, `true`} {
+		var d EndDay
+		if err := d.UnmarshalJSON([]byte(in)); err == nil {
+			t.Errorf("%s was accepted as %v", in, d.Time)
+		}
+	}
+}

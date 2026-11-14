@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { formatClock, formatClockSeconds } from "@/lib/format";
+import { formatClock, formatClockSeconds, formatShortDate, formatWeekday } from "@/lib/format";
 import { effectiveZone } from "@/lib/zone-effective";
 import {
   addDays,
@@ -118,6 +118,14 @@ describe("the zone the backend names", () => {
       expect(formatClock("2026-11-05T01:00:00Z")).toBe("01:00 UTC");
       expect(formatClockSeconds("2026-11-05T01:00:09Z")).toBe("01:00:09 UTC");
     }
+  });
+
+  it("labels a day as well as a clock while the zone is unknown, and not once it is known", () => {
+    resetMakerspaceZoneForTests();
+    expect(formatShortDate("2026-11-30T18:30:00Z", new Date("2026-11-01T00:00:00Z"))).toBe("30 Nov UTC");
+    expect(formatWeekday(new Date("2026-11-30T12:00:00Z"))).toBe("Monday 30 Nov UTC");
+    setMakerspaceZone("UTC");
+    expect(formatShortDate("2026-11-30T18:30:00Z", new Date("2026-11-01T00:00:00Z"))).toBe("30 Nov");
   });
 
   it("is write-once: a fallback never overwrites a zone that was learned", () => {

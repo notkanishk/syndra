@@ -14,6 +14,7 @@
 package clock
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -97,6 +98,35 @@ func EndOfDay(day string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return next.Add(-time.Second), nil
+}
+
+// EndDay is an end date on the wire: what the person means, an ISO 8601 date
+// ("2026-11-30"), never an instant the client worked out in a zone of its own.
+// Decoding resolves it, here and only here, to EndOfDay in Loc; the column it
+// lands in stays timestamptz. Anything but a plain date is refused (strict, one
+// shape): "2026-11-30T00:00:00Z" is a client's guess at the day's end.
+type EndDay struct{ time.Time }
+
+func (d *EndDay) UnmarshalJSON(b []byte) error {
+	var day string
+	if err := json.Unmarshal(b, &day); err != nil {
+		return fmt.Errorf("an end date is a string YYYY-MM-DD")
+	}
+	if p, err := time.Parse(time.DateOnly, day); err != nil || p.Format(time.DateOnly) != day {
+		return fmt.Errorf("end date %q is not a date YYYY-MM-DD", day)
+	}
+	t, err := EndOfDay(day)
+	d.Time = t
+	return err
+}
+
+// Instant is the end as the instant it resolved to; nil-safe, for an optional field.
+func (d *EndDay) Instant() *time.Time {
+	if d == nil {
+		return nil
+	}
+	t := d.Time
+	return &t
 }
 
 // EndAfterDays is the last second of the n-th day after t's own (both in the

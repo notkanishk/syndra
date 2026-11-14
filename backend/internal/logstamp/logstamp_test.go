@@ -2,6 +2,7 @@ package logstamp
 
 import (
 	"bytes"
+	"context"
 	"log"
 	"regexp"
 	"strings"
@@ -58,5 +59,19 @@ func TestInstallLeavesOneStamp(t *testing.T) {
 	}
 	if _, ok := log.Writer().(stampWriter); !ok {
 		t.Fatalf("log output is %T, not the stamping writer", log.Writer())
+	}
+}
+
+// go-redis's diagnostics come out as one stamped, tagged line, not on the
+// library's own stderr logger.
+func TestRedisDiagnosticsAreStampedAndTagged(t *testing.T) {
+	var b bytes.Buffer
+	flags, out := log.Flags(), log.Writer()
+	t.Cleanup(func() { log.SetFlags(flags); log.SetOutput(out) })
+	log.SetFlags(0)
+	log.SetOutput(stampWriter{&b, time.Now})
+	libLogger{}.Printf(context.Background(), "dial %s failed", "cache:6379")
+	if line := b.String(); !stampPrefix.MatchString(line) || !strings.HasSuffix(line, " [CACHE] redis: dial cache:6379 failed\n") {
+		t.Fatalf("line %q", line)
 	}
 }

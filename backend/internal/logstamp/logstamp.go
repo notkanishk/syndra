@@ -1,10 +1,13 @@
 package logstamp
 
 import (
+	"context"
 	"io"
 	"log"
 	"os"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // Every log line in every Syndra service starts with one stamp: RFC 3339 in UTC
@@ -35,4 +38,14 @@ func (s stampWriter) Write(p []byte) (int, error) {
 func Install() {
 	log.SetFlags(0)
 	log.SetOutput(stampWriter{os.Stderr, time.Now})
+	redis.SetLogger(libLogger{}) // both binaries that talk to Redis (api, claims) call Install
+}
+
+// libLogger carries go-redis's own diagnostics through the standard logger, so
+// they get the one stamp and the one vocabulary (the library's default logger
+// writes to stderr with its own LstdFlags stamp, a second and different one).
+type libLogger struct{}
+
+func (libLogger) Printf(_ context.Context, format string, v ...interface{}) {
+	log.Printf("[CACHE] redis: "+format, v...)
 }

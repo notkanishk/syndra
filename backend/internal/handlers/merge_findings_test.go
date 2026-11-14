@@ -868,7 +868,7 @@ func TestAHandEditedLimitIsAdoptedAsTheirOwnLimit(t *testing.T) {
 	}
 	h := &findingHarness{finding: theirsOnly("home_quota", `["10737418240"]`)}
 	stubFindings(t, h)
-	rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"thesis data","review_date":"2027-01-15T00:00:00Z"}`)
+	rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"thesis data","review_date":"2027-01-15"}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -888,7 +888,7 @@ func TestAHandEditedLimitIsAdoptedAsTheirOwnLimit(t *testing.T) {
 	for _, theirs := range []string{`["5 GiB"]`, `["1","2"]`, `"10737418240"`} {
 		h := &findingHarness{finding: theirsOnly("home_quota", theirs)}
 		stubFindings(t, h)
-		if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"x","review_date":"2027-01-15T00:00:00Z"}`); rr.Code == http.StatusOK || len(h.allowances) != 0 {
+		if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"x","review_date":"2027-01-15"}`); rr.Code == http.StatusOK || len(h.allowances) != 0 {
 			t.Errorf("theirs %s must be refused: %d %+v", theirs, rr.Code, h.allowances)
 		}
 	}

@@ -193,9 +193,9 @@ func TestTheBufferDropsTheOldestAndSaysSo(t *testing.T) {
 // is a calendar day, 23 or 25 hours. A read across both changes finishes,
 // every point one such day.
 func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
-	kolkata := statsZone
-	statsZone, _ = time.LoadLocation("America/Santiago")
-	t.Cleanup(func() { statsZone = kolkata })
+	prevName, prevZone := statsZoneName, statsZone
+	statsZoneName, statsZone = "America/Santiago", mustZone(t, "America/Santiago")
+	t.Cleanup(func() { statsZoneName, statsZone = prevName, prevZone })
 	sep6 := dayOf(time.Date(2026, 9, 6, 12, 0, 0, 0, statsZone))
 	if got := stamp3339(sep6); got != "2026-09-06T01:00:00-03:00" {
 		t.Errorf("6 Sep starts at %s, want 2026-09-06T01:00:00-03:00", got)
@@ -242,3 +242,12 @@ func TestADayWhoseMidnightIsSkippedStartsWhenTheClocksResume(t *testing.T) {
 // nov is midnight of a November 2026 day in the add-on's zone, as /stats sends
 // it: the fixtures hold for whatever TZ the add-on runs under.
 func nov(d int) string { return stamp3339(time.Date(2026, 11, d, 0, 0, 0, 0, statsZone)) }
+
+func mustZone(t *testing.T, name string) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return loc
+}

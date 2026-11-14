@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/services/addonop"
 	"syndra/internal/services/merge"
@@ -240,8 +241,8 @@ type resolveMergeFindingRequest struct {
 	// The bound in time an adopted suspension carries. Exactly one is enough
 	// and neither is not — the schema refuses an unbounded denial, and this
 	// surface must not be the way around it.
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	ReviewDate *time.Time `json:"review_date,omitempty"`
+	ExpiresAt  *clock.EndDay `json:"expires_at,omitempty"`
+	ReviewDate *clock.EndDay `json:"review_date,omitempty"`
 }
 
 // ErrResolutionNotExpressible refuses an adoption that has nowhere to live.
@@ -596,7 +597,7 @@ func adoptOwnLimit(ctx context.Context, f db.MergeFinding, req resolveMergeFindi
 		SubjectID: f.SubjectID, Target: f.Target,
 		Field: field, Value: value, Direction: db.AllowanceSet,
 		ActorID: actor, Reason: req.Reason,
-		ExpiresAt: req.ExpiresAt, ReviewDate: req.ReviewDate,
+		ExpiresAt: req.ExpiresAt.Instant(), ReviewDate: req.ReviewDate.Instant(),
 	})
 	return err
 }
@@ -652,7 +653,7 @@ func adoptTargetValue(ctx context.Context, f db.MergeFinding, req resolveMergeFi
 		SubjectID: f.SubjectID, Target: f.Target,
 		Field: f.Field, Value: "true", Direction: db.AllowanceDeny,
 		ActorID: actor, Reason: req.Reason,
-		ExpiresAt: req.ExpiresAt, ReviewDate: req.ReviewDate,
+		ExpiresAt: req.ExpiresAt.Instant(), ReviewDate: req.ReviewDate.Instant(),
 	})
 	return err
 }

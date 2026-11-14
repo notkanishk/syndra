@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/services/addonop"
 )
@@ -50,7 +51,7 @@ type revokeRequest struct {
 	// ReviewDate bounds an indefinite suspension. A subtractive allowance must
 	// be bounded by an expiry or a review date, and a revocation is the case
 	// where an expiry is wrong — it is not meant to lapse on its own.
-	ReviewDate *time.Time `json:"review_date,omitempty"`
+	ReviewDate *clock.EndDay `json:"review_date,omitempty"`
 }
 
 // handleRevokeTargetAccess writes the disabling allowance and rotates the
@@ -90,7 +91,7 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor := resolveActor(r, "")
-	reviewDate := req.ReviewDate
+	reviewDate := req.ReviewDate.Instant()
 	if reviewDate == nil {
 		// An indefinite suspension with no review date is one nobody ever looks
 		// at again. Defaulted rather than refused, because refusing would make

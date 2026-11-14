@@ -172,8 +172,8 @@ export function LimitDialog({
         subjectId: home.subject_id,
         bytes,
         reason: reason.trim(),
-        endsOn: until === "ends" ? endOfDayISO(date) : undefined,
-        reviewOn: until === "review" ? endOfDayISO(date) : undefined,
+        endsOn: until === "ends" ? date : undefined, // dates: the backend ends them in its own zone
+        reviewOn: until === "review" ? date : undefined,
       },
       {
         onSuccess: () =>

@@ -14,7 +14,6 @@ import { fieldNoun, limitWordsFor, membershipNoun, type EntitlementField } from 
 import { schemaReason } from "@/components/states/SchemaState";
 import { useFieldSchemaState, useSystemNames } from "@/lib/queries/useFieldSchema";
 import { UntilChoice, untilWords, type Until } from "@/components/targets/UntilChoice";
-import { endOfDayISO, } from "@/lib/time";
 import { fieldWords } from "@/lib/role-mapping-plan";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
@@ -391,7 +390,7 @@ function DecisionForm({
               reason={!reason.trim() ? "Say why. This becomes the record of the decision." : date === "" ? "Pick the day it ends or is reviewed." : undefined}
               onClick={() => {
                 setResolution("take_theirs");
-                const day = endOfDayISO(date);
+                const day = date; // the date itself: the backend ends it in its own zone
                 onResolve(
                   {
                     id: finding.id,

@@ -21,7 +21,7 @@ export async function fetchMakerspaceZone(): Promise<string | undefined> {
   try {
     const res = await fetch(`${process.env.BACKEND_URL || "http://backend:8080"}/healthz`, {
       next: { revalidate: 60 },
-      signal: AbortSignal.timeout(1000),
+      signal: AbortSignal.timeout(3000),
     });
     const body = (await res.json()) as { time_zone?: unknown };
     return validZone(body.time_zone);

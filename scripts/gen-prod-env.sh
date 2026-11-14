@@ -19,12 +19,16 @@ cd "$(dirname "$0")/.."
 # *Zitadel* calls, so no local health check ever exercises it.
 : "${EXTERNAL_URL:?set EXTERNAL_URL to the public base URL Zitadel will POST to, e.g. https://syndra.example.org}"
 : "${ZITADEL_DOMAIN:?set ZITADEL_DOMAIN to your Zitadel instance domain, e.g. auth.example.org}"
-# TZ is the deployment's zone (every service, and the UI, read it). Unset would
-# silently mean UTC, so every calendar day would be counted in a zone nobody
-# chose: it is asked for, and checked against the host's IANA database.
-: "${TZ:?set TZ to the IANA time zone of this deployment, e.g. Europe/London (or UTC)}"
-if [ "$TZ" != "UTC" ] && ! [ -f "/usr/share/zoneinfo/$TZ" ]; then
-  echo "error: TZ=$TZ is not an IANA time zone name (no /usr/share/zoneinfo/$TZ)" >&2
+# The deployment's time zone (every service, and the UI, read it as TZ). Asked
+# for like the others, under its own name: TZ itself is usually set in the
+# operator's login shell, and would be written into .env unnoticed. Unset would
+# mean UTC, so every calendar day would be counted in a zone nobody chose. The
+# POSIX ":Area/Location" form the services accept is accepted here too; the name
+# is checked against the host's IANA database.
+: "${DEPLOYMENT_TZ:?set DEPLOYMENT_TZ to the IANA time zone of this deployment, e.g. Europe/London (or UTC)}"
+DEPLOYMENT_TZ="${DEPLOYMENT_TZ#:}"
+if [ "$DEPLOYMENT_TZ" != "UTC" ] && ! [ -f "/usr/share/zoneinfo/$DEPLOYMENT_TZ" ]; then
+  echo "error: DEPLOYMENT_TZ=$DEPLOYMENT_TZ is not an IANA time zone name (no /usr/share/zoneinfo/$DEPLOYMENT_TZ)" >&2
   exit 1
 fi
 
@@ -76,7 +80,7 @@ SYNDRA_EXTERNAL_URL=${EXTERNAL_URL}
 ZITADEL_DOMAIN=${ZITADEL_DOMAIN}
 
 # The deployment's time zone (IANA). Every service and the UI read it.
-TZ=${TZ}
+TZ=${DEPLOYMENT_TZ}
 ZITADEL_ADMIN_ROLE_KEY=admin
 ZITADEL_MACHINE_KEY_PATH=./zitadel-machine-key.json
 
