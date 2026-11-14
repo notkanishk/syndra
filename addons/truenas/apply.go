@@ -798,9 +798,12 @@ func (s *server) rememberWishes(req ApplyRequest, desired desiredState, out Appl
 // outside it can come back after a delete, so it never names an account by itself (boundAccount).
 func inIDRange(n, floor, ceiling int64) bool { return n >= floor && n <= ceiling }
 
-// boundAccount is the one rule for which account a binding names. Plan asks
-// it of its snapshot and apply of the target, so the plan never says "absent"
-// (or "creates") for an account the apply would find, or the other way round.
+// boundAccount is the rule for which account a binding names, for apply (locate), plan and
+// resolveBinding (standing, statistics, accountBound). Plan asks it of its snapshot and apply of the
+// target, so the plan never says "absent" (or "creates") for an account the apply would find, or the
+// other way round. It is not yet the rule of the account operations: (*server).operatedAccount goes
+// through recordID, which has its own, and so do storageStatus, smbActivity and the backend's drift
+// matching (slice 7t, one account identity).
 // byName and byUID look up one account by an exact key. It returns the account
 // (nil when there is none), the binding as it should now read, and a conflict
 // when the name is held by a different account of ours, or, for a uid outside this add-on's range,

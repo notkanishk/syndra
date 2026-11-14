@@ -82,7 +82,7 @@ type Meter struct {
 
 // storageStatus reads the caller's own account state and usage.
 func (s *server) storageStatus(req OperationRequest) (OperationResult, int, error) {
-	binding, refused, err := s.boundAccount(req.Subject)
+	binding, refused, err := s.operatedAccount(req.Subject)
 	if err != nil {
 		return OperationResult{}, refused, err
 	}

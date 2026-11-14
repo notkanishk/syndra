@@ -314,12 +314,14 @@ func (s *server) runOperation(name string, req OperationRequest) (OperationResul
 	return OperationResult{}, http.StatusNotFound, fmt.Errorf("no such operation")
 }
 
-// boundAccount resolves the subject's account, refusing rather than guessing.
+// operatedAccount resolves the subject's account for an operation, refusing rather than guessing. It
+// is NOT the free function boundAccount (apply's rule): it goes through recordID, which has its own.
+// Slice 7t brings the two together.
 //
 // An operation that could not find its subject must not fall back to
 // derivation: derivation names an account that may not exist, and setting a
 // password on the wrong one is the whole hazard.
-func (s *server) boundAccount(subject string) (Binding, int, error) {
+func (s *server) operatedAccount(subject string) (Binding, int, error) {
 	b, bound, err := s.store.GetBinding(subject)
 	if err != nil {
 		// The add-on's own store, read before anything is sent to the NAS:
@@ -352,7 +354,7 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	if err != nil {
 		return OperationResult{}, http.StatusBadRequest, err
 	}
-	binding, status, err := s.boundAccount(req.Subject)
+	binding, status, err := s.operatedAccount(req.Subject)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
@@ -504,7 +506,7 @@ func (s *server) releaseAccount(req OperationRequest) (OperationResult, int, err
 // they reconnect — TrueNAS exposes no session-close method at all — which is
 // why the operator surface must say so rather than implying immediacy.
 func (s *server) rotatePassword(req OperationRequest) (OperationResult, int, error) {
-	binding, status, err := s.boundAccount(req.Subject)
+	binding, status, err := s.operatedAccount(req.Subject)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
@@ -563,7 +565,7 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	if err != nil {
 		return OperationResult{}, http.StatusBadRequest, err
 	}
-	binding, status, err := s.boundAccount(req.Subject)
+	binding, status, err := s.operatedAccount(req.Subject)
 	if err != nil {
 		return OperationResult{}, status, err
 	}
@@ -694,7 +696,7 @@ func statusToken(s string) string {
 
 // smbActivity reads the audit log and says what it could not see.
 func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error) {
-	binding, status, err := s.boundAccount(req.Subject)
+	binding, status, err := s.operatedAccount(req.Subject)
 	if err != nil {
 		return OperationResult{}, status, err
 	}

@@ -144,7 +144,7 @@ func idRangeFromEnv(floorRaw, ceilingRaw string) (floor, ceiling int64, err erro
 	}
 	switch {
 	case floor <= minIDFloor:
-		return 0, 0, fmt.Errorf("TRUENAS_ID_FLOOR=%d is inside TrueNAS's own automatic numbering (%d and below): "+
+		return 0, 0, fmt.Errorf("TRUENAS_ID_FLOOR=%d is inside TrueNAS's reserved and automatic numbers (%d and below): "+
 			"the add-on would hand out numbers TrueNAS hands out too, and will not start", floor, minIDFloor)
 	case ceiling <= floor:
 		return 0, 0, fmt.Errorf("TRUENAS_ID_CEILING=%d is not above TRUENAS_ID_FLOOR=%d: the range holds no number, and the add-on will not start", ceiling, floor)

@@ -413,7 +413,12 @@ func groupIDs(names []string, byName map[string]apiID, builtin map[string]bool) 
 // account (6.9); the one-shot operations went through the NAME instead, so an
 // out-of-band rename made `password.set`, `password.rotate` and `account.purge`
 // answer "the target has no account named X" until an apply happened to run and
-// re-sync the binding. One rule for both paths, and it is the uid.
+// re-sync the binding.
+//
+// This is NOT apply's rule (boundAccount): it follows any uid, whatever its range, and falls back
+// to the name only when there is none or the uid finds nothing. So for an adopted account outside
+// the range this add-on hands out, a number TrueNAS has since given to another account is followed
+// here where apply would halt. Slice 7t (one account identity) replaces it with the one rule.
 //
 // The name is the fallback, for a binding recorded before a uid was, and it is
 // also what a uid of zero would otherwise match: uid 0 is root.
