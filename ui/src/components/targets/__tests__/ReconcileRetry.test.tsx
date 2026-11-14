@@ -96,10 +96,15 @@ describe("Check now inside the add-on's cooldown", () => {
     renderTarget();
     fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(passes.sent).toBe(1);
-    expect(screen.getByText(/was read moments ago; trying again by itself in 5 s$/)).toBeInTheDocument();
+    // Its start announced once, the line amber in the card's main line, and focus on Stop waiting.
+    expect(screen.getByText(/was read moments ago; trying again by itself in 5 s$/, { selector: '[role="status"]' })).toBeInTheDocument();
+    expect(screen.getByText(/was read moments ago; trying again by itself in 5 s$/, { selector: ".text-warn-text > span[aria-hidden]" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop waiting" })).toHaveFocus();
     expect(screen.queryByText(/stopped before it concluded anything/i)).toBeNull();
-    // Off until the count ends, with the line as its reason (§13).
-    expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
+    // Off until the count ends, with the line as its reason, linked (§13).
+    const check = screen.getByRole("button", { name: "Check now" });
+    expect(check).toBeDisabled();
+    expect(check).toHaveAccessibleDescription(/trying again by itself in 5 s$/);
     act(() => void vi.advanceTimersByTime(5000));
     expect(passes.sent).toBe(2);
     expect(screen.queryByText(/trying again by itself/)).toBeNull();
@@ -114,10 +119,12 @@ describe("Check now inside the add-on's cooldown", () => {
     expect(passes.sent).toBe(2);
     expect(screen.getByText(/was read moments ago; you can read again in 5 s\. Press Check now again when the count ends\.$/)).toBeInTheDocument();
     expect(screen.queryByText(/read_stale|stopped before it concluded|once it is reachable|Nothing was concluded/i)).toBeNull();
-    expect(screen.getByRole("button", { name: "Check now" })).toBeEnabled();
+    // Off until its count ends, then on, and the step says so.
+    expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
     act(() => void vi.advanceTimersByTime(120_000));
     expect(passes.sent).toBe(2);
     expect(screen.getByText("Press Check now again.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check now" })).toBeEnabled();
   });
 
   it("leaving the page cancels the wait", () => {
@@ -133,13 +140,16 @@ describe("Check now inside the add-on's cooldown", () => {
     passes.answers = [skipped(3600), skipped(3600), ran];
     renderTarget();
     fireEvent.click(screen.getByRole("button", { name: "Check now" }));
-    expect(screen.getByText(/trying again by itself in 60 s$/)).toBeInTheDocument();
+    expect(screen.getByText(/trying again by itself in 60 s$/, { selector: '[role="status"]' })).toBeInTheDocument();
     act(() => void vi.advanceTimersByTime(10_000));
     fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
     // The skip it held is said, counting from when it arrived, with its step.
     expect(screen.getByText(/you can read again in 3590 s\. Press Check now again when the count ends\.$/)).toBeInTheDocument();
     act(() => void vi.advanceTimersByTime(120_000));
     expect(passes.sent).toBe(1);
+    // The skip's own count still holds Check now off (§13), however long the add-on said.
+    expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
+    act(() => void vi.advanceTimersByTime(3_600_000));
 
     // A new press is a new press: it may wait once again, the ceiling at most.
     fireEvent.click(screen.getByRole("button", { name: "Check now" }));

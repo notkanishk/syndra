@@ -2,7 +2,7 @@
 
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
-import { NOTHING_TO_DO, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { NOTHING_TO_DO, cooldownNext, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { formatBytes } from "@/lib/format";
 import { useState } from "react";
 
@@ -12,7 +12,7 @@ import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { RowCheckbox } from "@/components/ui/SelectionBar";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
@@ -22,8 +22,8 @@ import {
   type DormantAccount,
   type SweepResult,
 } from "@/lib/queries/useDormant";
-import { cooldownOf, pageLoad, useRetryOnce } from "@/lib/queries/fresh";
-import { retryingLine, STOP_WAITING } from "@/components/results/copy";
+import { cooldownOf, pageLoad, useCountdown, useRetryOnce } from "@/lib/queries/fresh";
+import { retryingLine } from "@/components/results/copy";
 import { sortByName } from "@/lib/sort";
 import { oneShot } from "@/lib/secret";
 
@@ -76,12 +76,22 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
   const retry = useRetryOnce();
   // The refusal a wait is holding back: Stop waiting shows it, so there is always a next step.
   const [held, setHeld] = useState<unknown>(null);
+  // A refusal on show keeps Remove off until its count ends (§13), then the same press is the step.
+  const [cool, setCool] = useState<{ seconds: number; since: number } | null>(null);
+  const cooling = useCountdown(cool?.seconds, cool?.since);
+  function refusedAfter(error: unknown, seconds?: number) {
+    const outcome = outcomeFromError(error);
+    const wait = seconds ?? outcome.retryAfter;
+    setCool(wait ? { seconds: wait, since: Date.now() } : null);
+    setResult({ outcome: wait === undefined ? outcome : { ...outcome, retryAfter: wait }, word: "Not removed" });
+  }
   function stopWaiting() {
     retry.cancel();
-    setResult({ outcome: { ...outcomeFromError(held), retryAfter: retry.left }, word: "Not removed" });
+    refusedAfter(held, retry.left);
   }
   function removeNow(accounts: string[], key: string) {
     setResult(null);
+    setCool(null);
     remove.mutate(
       { accounts, elevatedKey: oneShot(key) },
       {
@@ -97,7 +107,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
             setHeld(error);
             return;
           }
-          setResult({ outcome: outcomeFromError(error), word: "Not removed" });
+          refusedAfter(error);
         },
       },
     );
@@ -240,15 +250,20 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
               stored.
             </FieldHint>
           </div>
+          {retry.waiting && (
+            <RetryWait name={name} seconds={retry.seconds} left={retry.left} onStop={stopWaiting} />
+          )}
           <div className="flex gap-2">
             <Button
               variant="danger"
               size="sm"
-              disabled={!acknowledged || !elevatedKey || retry.waiting}
+              disabled={!acknowledged || !elevatedKey || retry.waiting || cooling > 0}
               isPending={remove.isPending}
               reason={
                 retry.waiting
                   ? retryingLine(name, retry.left)
+                  : cooling > 0
+                  ? cooldownNext(cooling)
                   : !remove.isPending
                   ? !acknowledged
                     ? "Check the box above to confirm you understand what this removes."
@@ -261,11 +276,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
             >
               {`Remove ${chosen.length} ${chosen.length === 1 ? "account" : "accounts"}`}
             </Button>
-            {retry.waiting && (
-              <Button variant="outline" size="sm" onClick={stopWaiting}>
-                {STOP_WAITING}
-              </Button>
-            )}
+
             <Button
               variant="outline"
               size="sm"

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 
-import { copyLine, cooldownLine, READ_AGAIN, READING, unreachableLine, type Reader } from "@/components/results/copy";
+import { copyLine, cooldownLine, READ_AGAIN, READING, retryingLine, STOP_WAITING, unreachableLine, type Reader } from "@/components/results/copy";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Crossfade } from "@/lib/motion";
@@ -372,4 +372,28 @@ function sentence(
         ? `Could not reach the connected system. This is the last state seen, ${age}`
         : "Could not reach the connected system, and there is no earlier copy to show";
   }
+}
+
+/**
+ * A press going again by itself once its cooldown is over (useRetryOnce): the line amber, as a
+ * cooldown the reader caused is (copy guide section 13), and **Stop waiting** beside it, which takes
+ * focus so the press's own next step is where the reader already is. The start of the wait is
+ * announced once (`role="status"` on a line that does not tick); the visible count ticks silently.
+ */
+export function RetryWait({ name, seconds, left, onStop }: { name: string; seconds: number; left: number; onStop: () => void }) {
+  const stopId = useId();
+  useEffect(() => document.getElementById(stopId)?.focus(), [stopId]);
+  return (
+    <span className="flex flex-wrap items-center gap-3">
+      <span className="flex-1 text-[14px] text-warn-text">
+        <span role="status" className="sr-only">
+          {retryingLine(name, seconds)}
+        </span>
+        <span aria-hidden>{retryingLine(name, left)}</span>
+      </span>
+      <Button id={stopId} variant="outline" size="sm" onClick={onStop}>
+        {STOP_WAITING}
+      </Button>
+    </span>
+  );
 }

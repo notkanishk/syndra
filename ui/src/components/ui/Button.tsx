@@ -86,6 +86,10 @@ export function Button({
   ...props
 }: ButtonProps) {
   const isDisabled = disabled || isPending;
+  // The reason is the button's description (WAI-ARIA aria-describedby), so a screen reader on the
+  // control hears why it is off, not only someone looking below it.
+  const reasonId = React.useId();
+  const describedBy = [props["aria-describedby"], reason ? reasonId : undefined].filter(Boolean).join(" ") || undefined;
 
   const button = (
     <button
@@ -96,6 +100,7 @@ export function Button({
       data-skip-initial-focus={variant === "dangerConfirm" || undefined}
       className={buttonClasses({ variant, size, disabled: isDisabled, className })}
       {...props}
+      aria-describedby={describedBy}
     >
       {/* A dot on the product's one licensed loop, not a spinner. `breathe`
           already means "this is still happening" everywhere else in the
@@ -129,7 +134,9 @@ export function Button({
     <span className="inline-flex flex-col items-start gap-1.5">
       {button}
       {reason && (
-        <span className="max-w-[46ch] text-[12.5px] leading-[1.5] text-faint">{reason}</span>
+        <span id={reasonId} className="max-w-[46ch] text-[12.5px] leading-[1.5] text-faint">
+          {reason}
+        </span>
       )}
     </span>
   );

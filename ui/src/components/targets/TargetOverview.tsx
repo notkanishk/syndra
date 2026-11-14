@@ -3,7 +3,7 @@
 import { useSystemNames } from "@/lib/queries/useFieldSchema";
 
 import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
-import { checkAgainNext, cooldownLine, retryingLine, STOP_WAITING } from "@/components/results/copy";
+import { checkAgainNext, cooldownLine, retryingLine } from "@/components/results/copy";
 import { useState } from "react";
 
 import { ADOPT_STAYS, SERVICE_STOPPED, STORAGE_OPERATION_LABEL, UNAUDITED_LABEL, UnauditedShares, serviceName } from "@/components/kinds/storage/readings";
@@ -32,7 +32,7 @@ import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
-import { blocksIrreversibleAction, ReadAgainError, ReadFreshness } from "@/components/ui/ReadFreshness";
+import { blocksIrreversibleAction, ReadAgainError, ReadFreshness, RetryWait } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
@@ -564,7 +564,9 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
       />
       <CardRow>
         <div className="flex-1 text-[14.5px] text-muted">
-          {waiting ? null : skipped ? (
+          {waiting ? (
+            <RetryWait name={name} seconds={retry.seconds} left={retry.left} onStop={retry.cancel} />
+          ) : skipped ? (
             <span className="text-warn-text">
               {left > 0 ? `${cooldownLine(name, left)}. ` : ""}
               {checkAgainNext(left)}
@@ -587,11 +589,13 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           variant="outline"
           size="sm"
           isPending={run.isPending}
-          disabled={lastKnown || waiting}
+          disabled={lastKnown || waiting || left > 0}
           reason={
             waiting
               ? retryingLine(name, retry.left)
-              : lastKnown
+              : left > 0
+                ? cooldownLine(name, left)
+                : lastKnown
                 ? `Check now waits too: it reads ${name} first.`
                 : undefined
           }
@@ -599,11 +603,6 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
         >
           Check now
         </Button>
-        {waiting && (
-          <Button variant="outline" size="sm" onClick={retry.cancel}>
-            {STOP_WAITING}
-          </Button>
-        )}
       </CardRow>
 
       {run.error && (

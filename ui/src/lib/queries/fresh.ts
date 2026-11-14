@@ -133,6 +133,8 @@ export function useRetryOnce() {
   }
   return {
     waiting: wait !== null,
+    /** The whole wait, as it started: what is announced once (the count itself ticks silently). */
+    seconds: wait?.seconds ?? 0,
     left,
     cancel,
     press(send: () => void) {

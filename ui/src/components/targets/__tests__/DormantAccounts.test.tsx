@@ -252,7 +252,8 @@ describe("inside the add-on's cooldown", () => {
     renderDormant();
     pressRemove();
     expect(state.swept).toHaveLength(1);
-    expect(screen.getByText(/^Truenas was read moments ago; trying again by itself in 2 s$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Truenas was read moments ago; trying again by itself in 2 s$/, { selector: '[role="status"]' })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop waiting" })).toHaveFocus();
     expect(screen.queryByText("Not removed")).toBeNull();
     state.sweepError = undefined;
     state.answer = { removed: 1, outcomes: [{ account: "former-member", outcome: "removed" }] } as SweepResult;
@@ -273,7 +274,10 @@ describe("inside the add-on's cooldown", () => {
     expect(state.swept).toHaveLength(2);
     expect(screen.getByText("Not removed")).toBeInTheDocument();
     expect(screen.getByText("That system was read moments ago, so nothing was changed.")).toBeInTheDocument();
-    expect(screen.getByText("You can try again in 2 s.")).toBeInTheDocument();
+    expect(screen.getAllByText("You can try again in 2 s.").length).toBeGreaterThan(0);
+    // Off until its count ends, the count its linked reason.
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toHaveAccessibleDescription("You can try again in 2 s.");
     act(() => void vi.advanceTimersByTime(120_000));
     expect(state.swept).toHaveLength(2);
     expect(screen.getByText("Press the same button once more.")).toBeInTheDocument();
@@ -281,7 +285,7 @@ describe("inside the add-on's cooldown", () => {
     expect(screen.getByLabelText(/API key that is allowed to delete/i)).toHaveValue("k");
     fireEvent.click(screen.getByRole("button", { name: /remove 1 account/i }));
     expect(state.swept).toHaveLength(3);
-    expect(screen.getByText(/trying again by itself in 2 s/)).toBeInTheDocument();
+    expect(screen.getByText(/trying again by itself in 2 s/, { selector: '[role="status"]' })).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -290,14 +294,16 @@ describe("inside the add-on's cooldown", () => {
     state.sweepError = cooling(3600);
     renderDormant();
     pressRemove();
-    expect(screen.getByText(/trying again by itself in 60 s/)).toBeInTheDocument();
+    expect(screen.getByText(/trying again by itself in 60 s/, { selector: '[role="status"]' })).toBeInTheDocument();
     // Off while it waits, the line its reason (§13).
     expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toHaveAccessibleDescription(/trying again by itself in 60 s/);
     act(() => void vi.advanceTimersByTime(20_000));
     fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
     expect(screen.getByText("Not removed")).toBeInTheDocument();
     expect(screen.getByText("That system was read moments ago, so nothing was changed.")).toBeInTheDocument();
-    expect(screen.getByText("You can try again in 40 s.")).toBeInTheDocument();
+    expect(screen.getAllByText("You can try again in 40 s.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /remove 1 account/i })).toBeDisabled();
     act(() => void vi.advanceTimersByTime(120_000));
     expect(state.swept).toHaveLength(1);
     expect(screen.queryByText(/trying again by itself/)).toBeNull();

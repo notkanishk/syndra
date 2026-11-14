@@ -2485,7 +2485,11 @@ end to end) found no missing function; three regressions with one root cause
     says `cooldownLine` counting from the skipped pass with
     `checkAgainNext` ("Press Check now again when the count ends."), never
     the pass's raw reason, and Remove shows the refusal it held ("Not
-    removed", its countdown, "Press the same button once more.").
+    removed", its countdown, "Press the same button once more."); each
+    control stays off until its count ends. The retrying line is amber in
+    the card (`RetryWait`, `ReadFreshness.tsx`), its start announced once
+    (`role="status"`), focus moved to **Stop waiting**, and every
+    `Button` reason is linked with `aria-describedby`.
   - One standing everywhere (parity A W5): `Subject.needsNewPassword`
     (password set, SMB off, SMB wanted) is the one fact and `standingOf`
     answers it "waiting on the member, set a new password". The wish
