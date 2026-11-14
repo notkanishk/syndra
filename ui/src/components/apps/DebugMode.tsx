@@ -20,6 +20,7 @@ import { StatusSeat } from "@/components/ui/StatusSeat";
 import { TokenBlock, type TokenBlockLine } from "@/components/ui/TokenBlock";
 import { Unfold } from "@/lib/motion";
 import { clockOf, literal, minutesLeft } from "@/lib/claims";
+import { formatClockSeconds } from "@/lib/format";
 import { useClipboardAvailable } from "@/lib/clipboard";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCatalogUsers, type CatalogUser } from "@/lib/queries/useCatalogUsers";
@@ -41,8 +42,6 @@ import { ToolRow } from "./ToolRow";
 const MINUTES = 15;
 const WINDOW = `${MINUTES} minutes`;
 
-const clockSec = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 
 /** Re-renders once a minute, so "14 min left" changes in place (S4), never ticking. */
 function useMinute() {
@@ -225,7 +224,7 @@ function LiveList({
           {shown.slice(0, paging.limit).map((s) => (
             <Arriving key={s.seq} fresh={s.seq > (firstSeen.current ?? 0)}>
               <SignInRow
-                time={clockSec(s.at)}
+                time={formatClockSeconds(s.at)}
                 person={
                   <>
                     <UserAvatar id={s.user_id} size="row" />

@@ -4,6 +4,8 @@ import localFont from 'next/font/local';
 import { AppShell } from '@/components/shell/AppShell';
 import { Providers } from '@/components/providers';
 import { getSession } from '@/lib/session';
+import { fetchMakerspaceZone } from '@/lib/zone';
+import { effectiveZone } from '@/lib/zone-effective';
 import { THEME_SCRIPT } from '@/lib/theme-script';
 import { VIEW_COOKIE, parseUiView } from '@/lib/ui-view-cookie';
 import './globals.css';
@@ -74,7 +76,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getSession();
+  // In parallel: the zone read is bounded (3 s, over the 2 s /healthz may spend on its database ping) and must not add to the session read.
+  const [session, read] = await Promise.all([getSession(), fetchMakerspaceZone()]);
+  // What this render really uses: after the (write-once) set, not what was read.
+  const timeZone = effectiveZone(read);
   // The view is rendered by the server, so the first paint is already the right one.
   const initialView = parseUiView((await cookies()).get(VIEW_COOKIE)?.value);
   const fontVars = `${bricolage.variable} ${figtree.variable} ${jetbrains.variable}`;
@@ -85,7 +90,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="bg-ground text-ink antialiased">
-        <Providers hasSession={Boolean(session)} isOperator={session?.role === "admin"}>
+        <Providers timeZone={timeZone} hasSession={Boolean(session)} isOperator={session?.role === "admin"}>
           {session ? <AppShell session={session} initialView={initialView}>{children}</AppShell> : children}
         </Providers>
       </body>

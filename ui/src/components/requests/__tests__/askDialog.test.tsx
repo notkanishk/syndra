@@ -5,6 +5,7 @@ import { actPlan } from "@/test-utils/plan";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetMakerspaceZoneForTests, setMakerspaceZone } from "@/lib/time";
 import { RequestsScreen } from "@/components/requests/RequestsScreen";
 import { ApiError } from "@/lib/api-client";
 
@@ -361,10 +362,25 @@ describe("Ask for access · Until the end of term", () => {
     renderAs(false);
     fireEvent.click(sendButton());
     await screen.findByText("Asked");
-    const until = new Date(String(create.last?.until));
-    expect([until.getFullYear(), until.getMonth(), until.getDate()]).toEqual([2026, 11, 31]);
-    expect(until.getHours()).toBe(23);
+    // The date, never an instant worked out here: the backend ends it in its own zone.
+    expect(create.last?.until).toBe("2026-12-31");
     expect(create.last).toMatchObject({ kind: "access", duration_days: 121 });
+  });
+
+  // "Until the end of term" is picked from today's day, and today depends on the
+  // zone: until the server has said which, it waits; a week does not.
+  it("waits for the server's zone before sending the end of term, never a week", () => {
+    resetMakerspaceZoneForTests();
+    try {
+      search.value = "project=pLaser&role=trained";
+      renderAs(false);
+      expect(sendButton()).toBeDisabled();
+      expect(screen.getByText(/Waiting for the server to say which time zone/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("radio", { name: "A week" }));
+      expect(sendButton()).toBeEnabled();
+    } finally {
+      setMakerspaceZone(process.env.TZ);
+    }
   });
 
   it("a week or a month still sends days only", async () => {
@@ -385,8 +401,7 @@ describe("Ask for access · Until the end of term", () => {
     fireEvent.click(screen.getByRole("radio", { name: "To the end of next term" }));
     fireEvent.click(screen.getByRole("button", { name: "Ask to keep it" }));
     await screen.findByText("Asked");
-    const until = new Date(String(create.last?.until));
-    expect([until.getFullYear(), until.getMonth(), until.getDate()]).toEqual([2027, 4, 31]);
+    expect(create.last?.until).toBe("2027-05-31");
     expect(create.last).toMatchObject({ kind: "extend" });
   });
 

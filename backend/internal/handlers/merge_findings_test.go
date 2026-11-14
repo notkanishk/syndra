@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/services"
 	"syndra/internal/services/addonop"
@@ -868,7 +869,7 @@ func TestAHandEditedLimitIsAdoptedAsTheirOwnLimit(t *testing.T) {
 	}
 	h := &findingHarness{finding: theirsOnly("home_quota", `["10737418240"]`)}
 	stubFindings(t, h)
-	rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"thesis data","review_date":"2027-01-15T00:00:00Z"}`)
+	rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"thesis data","review_date":"2027-01-15"}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -888,7 +889,7 @@ func TestAHandEditedLimitIsAdoptedAsTheirOwnLimit(t *testing.T) {
 	for _, theirs := range []string{`["5 GiB"]`, `["1","2"]`, `"10737418240"`} {
 		h := &findingHarness{finding: theirsOnly("home_quota", theirs)}
 		stubFindings(t, h)
-		if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"x","review_date":"2027-01-15T00:00:00Z"}`); rr.Code == http.StatusOK || len(h.allowances) != 0 {
+		if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"x","review_date":"2027-01-15"}`); rr.Code == http.StatusOK || len(h.allowances) != 0 {
 			t.Errorf("theirs %s must be refused: %d %+v", theirs, rr.Code, h.allowances)
 		}
 	}
@@ -896,5 +897,36 @@ func TestAHandEditedLimitIsAdoptedAsTheirOwnLimit(t *testing.T) {
 	stubFindings(t, h)
 	if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"  "}`); rr.Code == http.StatusOK || len(h.allowances) != 0 {
 		t.Fatalf("no reason, no limit: %d", rr.Code)
+	}
+}
+
+// An adoption with no bound sent gets a review date from the backend, six
+// months on from today at the end of that day in the deployment's zone: the page
+// does not work out time. A bound the operator sent is kept as sent.
+func TestAnAdoptionWithNoBoundIsReviewedInSixMonths(t *testing.T) {
+	orig := addonsEntitlementSchema
+	t.Cleanup(func() { addonsEntitlementSchema = orig })
+	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) { return truenasSchema, nil }
+	h := &findingHarness{finding: theirsOnly("home_quota", `["10737418240"]`)}
+	stubFindings(t, h)
+	if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"thesis data"}`); rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	a := h.allowances[0]
+	want := clock.EndAfterMonths(time.Now(), 6)
+	if a.ReviewDate == nil || a.ExpiresAt != nil || !a.ReviewDate.Equal(want) {
+		t.Fatalf("review %v expires %v, want a review at %v and no expiry", a.ReviewDate, a.ExpiresAt, want)
+	}
+	if time.Until(*a.ReviewDate) < 5*30*24*time.Hour {
+		t.Fatalf("review date %v is not about six months out", a.ReviewDate)
+	}
+
+	h = &findingHarness{finding: theirsOnly("home_quota", `["10737418240"]`)}
+	stubFindings(t, h)
+	if rr := resolveFinding(t, `{"resolution":"take_theirs","reason":"x","expires_at":"2027-03-01"}`); rr.Code != http.StatusOK {
+		t.Fatal(rr.Body.String())
+	}
+	if a := h.allowances[0]; a.ReviewDate != nil || a.ExpiresAt == nil {
+		t.Fatalf("a bound the operator sent is kept, and no second one is added: %+v", a)
 	}
 }

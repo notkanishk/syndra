@@ -1,9 +1,23 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { addDays, civilDay, daysBetween, daysFromToday, endAfterDaysISO, endOfDayISO, isSameDay } from "@/lib/time";
+import { formatClock, formatClockSeconds, formatShortDate, formatWeekday } from "@/lib/format";
+import { effectiveZone } from "@/lib/zone-effective";
+import {
+  addDays,
+  civilDay,
+  daysBetween,
+  daysFromToday,
+  endAfterDaysISO,
+  endOfDayISO,
+  isSameDay,
+  makerspaceZone,
+  resetMakerspaceZoneForTests,
+  setMakerspaceZone,
+  zoneTag,
+} from "@/lib/time";
 
 describe("the makerspace's day", () => {
   it("is the IST day, not the UTC one: 23:00 UTC is 04:30 the next morning", () => {
@@ -67,6 +81,120 @@ describe("days and end dates", () => {
         .forEach((line, i) => {
           for (const [why, re] of BANNED) if (re.test(line)) found.push(`${file.slice(SRC.length + 1)}:${i + 1} ${why}`);
         });
+    }
+    expect(found).toEqual([]);
+  });
+});
+
+/**
+ * The zone is the backend's TZ (clock.Name), handed over by the layout. Every
+ * reader (day, end of day, clock) follows it; none keeps a zone of its own.
+ */
+describe("the zone the backend names", () => {
+  // The suite's own zone is test config (vitest.config.ts); the product writes none.
+  const adopt = (zone: string) => {
+    resetMakerspaceZoneForTests();
+    setMakerspaceZone(zone);
+  };
+  beforeEach(() => adopt("Asia/Kolkata"));
+  afterEach(() => adopt("Asia/Kolkata"));
+
+  it("moves the day, the end of a day and the clock together", () => {
+    adopt("America/Santiago"); // UTC-3 in November (DST)
+    const at = new Date("2026-11-05T01:00:00Z"); // 22:00 on the 4th there, 06:30 on the 5th in IST
+    expect(civilDay(at)).toBe("2026-11-04");
+    expect(endOfDayISO("2026-11-30")).toBe("2026-12-01T02:59:59.000Z");
+    expect(formatClock(at.toISOString())).toBe("22:00");
+    adopt("UTC");
+    expect(formatClock(at.toISOString())).toBe("01:00");
+  });
+
+  it("shows UTC, labelled, until a valid zone is learned: never a guessed zone", () => {
+    for (const unknown of [undefined, null, "", "Not/AZone"]) {
+      resetMakerspaceZoneForTests();
+      setMakerspaceZone(unknown);
+      expect(makerspaceZone()).toBe("UTC");
+      expect(zoneTag()).toBe(" UTC");
+      expect(formatClock("2026-11-05T01:00:00Z")).toBe("01:00 UTC");
+      expect(formatClockSeconds("2026-11-05T01:00:09Z")).toBe("01:00:09 UTC");
+    }
+  });
+
+  it("labels a day as well as a clock while the zone is unknown, and not once it is known", () => {
+    resetMakerspaceZoneForTests();
+    expect(formatShortDate("2026-11-30T18:30:00Z", new Date("2026-11-01T00:00:00Z"))).toBe("30 Nov UTC");
+    expect(formatWeekday(new Date("2026-11-30T12:00:00Z"))).toBe("Monday 30 Nov UTC");
+    setMakerspaceZone("UTC");
+    expect(formatShortDate("2026-11-30T18:30:00Z", new Date("2026-11-01T00:00:00Z"))).toBe("30 Nov");
+  });
+
+  it("is write-once: a fallback never overwrites a zone that was learned", () => {
+    adopt("Europe/London");
+    for (const bad of [undefined, null, "", "Not/AZone"]) setMakerspaceZone(bad);
+    expect(makerspaceZone()).toBe("Europe/London");
+    expect(zoneTag()).toBe("");
+  });
+
+  it("is write-once: a second, different valid zone is ignored, and said once", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    adopt("Europe/London");
+    setMakerspaceZone("Europe/London"); // same: no-op
+    setMakerspaceZone("America/Santiago");
+    setMakerspaceZone("Asia/Tokyo");
+    expect(makerspaceZone()).toBe("Europe/London");
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("hands the client exactly the zone the server used", () => {
+    resetMakerspaceZoneForTests();
+    expect(effectiveZone(undefined)).toBeUndefined(); // cold start, backend down: UTC, labelled
+    expect(effectiveZone("Asia/Tokyo")).toBe("Asia/Tokyo");
+    expect(effectiveZone(undefined)).toBe("Asia/Tokyo"); // a later failed read renders the learned zone
+    expect(effectiveZone("Europe/London")).toBe("Asia/Tokyo"); // a different answer is ignored, and so is not sent
+    expect(makerspaceZone()).toBe("Asia/Tokyo");
+  });
+
+  it("says nothing extra when the zone is known, even UTC itself", () => {
+    adopt("UTC");
+    expect(zoneTag()).toBe("");
+    expect(formatClock("2026-11-05T01:00:00Z")).toBe("01:00");
+  });
+});
+
+/**
+ * A time shown with no zone named is read in the browser's, so an admin abroad
+ * saw different hours from the rest of the makerspace. Every toLocaleTimeString,
+ * toLocaleDateString and Intl.DateTimeFormat call names its zone (timeZone, or
+ * inZone() which is makerspaceZone()).
+ */
+describe("a time is never shown in the browser's zone", () => {
+  // A zone is named when timeZone has a value (not `timeZone: undefined`, which
+  // is the browser's zone again) or the call spreads inZone().
+  const namesAZone = (call: string) => /inZone\(\)/.test(call) || /timeZone\b(?!\s*:\s*undefined\b)/.test(call);
+  it("recognises a named zone, and refuses undefined as one", () => {
+    expect(namesAZone('("en-GB", { timeZone: "UTC" })')).toBe(true);
+    expect(namesAZone('("en-GB", { ...inZone(), hour: "2-digit" })')).toBe(true);
+    expect(namesAZone('("en-GB", { timeZone: undefined })')).toBe(false);
+    expect(namesAZone('("en-GB", { timeZone:undefined, hour12: false })')).toBe(false);
+    expect(namesAZone('("en-GB", { hour12: false })')).toBe(false);
+  });
+  const CALL = /(toLocale(?:Time|Date)String|Intl\.DateTimeFormat)\s*\(/g;
+  it("names a zone at every call", () => {
+    const found: string[] = [];
+    for (const file of sources(SRC)) {
+      const text = readFileSync(file, "utf8");
+      for (const m of text.matchAll(CALL)) {
+        let depth = 1;
+        let end = m.index + m[0].length;
+        for (; end < text.length && depth > 0; end++) {
+          if (text[end] === "(") depth++;
+          else if (text[end] === ")") depth--;
+        }
+        if (!namesAZone(text.slice(m.index, end))) {
+          found.push(`${file.slice(SRC.length + 1)}:${text.slice(0, m.index).split("\n").length} ${m[1]} without a zone`);
+        }
+      }
     }
     expect(found).toEqual([]);
   });

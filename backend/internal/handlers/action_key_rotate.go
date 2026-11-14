@@ -43,7 +43,7 @@ import (
 const (
 	envAutoRotate  = "SYNDRA_ACTION_KEY_AUTOROTATE" // "off" is the kill switch
 	envLeadDays    = "SYNDRA_ACTION_KEY_LEAD_DAYS"
-	envQuietWindow = "SYNDRA_ACTION_KEY_WINDOW" // "HH:MM-HH:MM", in the makerspace's zone (clock.Loc: TZ, else Asia/Kolkata)
+	envQuietWindow = "SYNDRA_ACTION_KEY_WINDOW" // "HH:MM-HH:MM", in the makerspace's zone (clock.Loc: the deployment's TZ)
 
 	defaultLeadDays    = 5
 	defaultQuietWindow = "03:00-05:00"

@@ -216,6 +216,7 @@ func TestUsageCarriesSumsLatestAndGaps(t *testing.T) {
 // retention can still be stored); every metric says its last final day. The
 // totals keep five years and say neither.
 func TestUsageSaysWhatRetentionKeptAndWhatIsFinal(t *testing.T) {
+	inIST(t)
 	now := time.Date(2026, 11, 12, 20, 0, 0, 0, time.UTC) // 13 Nov, 01:30 in the makerspace
 	for _, c := range []struct {
 		retention              int

@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NameResolverProvider } from "@/lib/queries/useNameResolver";
 import { getQueryClient } from "@/lib/query-client";
 import { ThemeProvider } from "@/lib/theme";
+import { setMakerspaceZone } from "@/lib/time";
 
 /**
  * Single-mount root provider stack for the dashboard. Composes:
@@ -21,6 +22,7 @@ export function Providers({
   children,
   hasSession = true,
   isOperator = false,
+  timeZone,
 }: {
   children: React.ReactNode;
   /**
@@ -31,7 +33,11 @@ export function Providers({
   hasSession?: boolean;
   /** Bundles are an operator's read; a member's proxy refuses it. */
   isOperator?: boolean;
+  /** The backend's zone (TZ), read by the layout. Set during render, before any child formats a time. */
+  timeZone?: string;
 }) {
+  setMakerspaceZone(timeZone);
+
   // The cache() inside getQueryClient ensures one client per request on the
   // server and one shared client for the browser session. Calling it directly
   // here (not in a useState) is correct because Providers is itself rendered

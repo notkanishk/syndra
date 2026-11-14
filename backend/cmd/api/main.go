@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -25,6 +24,7 @@ import (
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/handlers"
+	"syndra/internal/logstamp"
 	"syndra/internal/observe"
 	"syndra/internal/ratelimit"
 	"syndra/internal/seed"
@@ -244,10 +244,11 @@ func warnIfWelcomeBundleMissing(ctx context.Context) {
 }
 
 func main() {
+	logstamp.Install()
 	requireProductionSigningKeys()
 	requireLiveAuthConfig()
 	requireClaimsConfig()
-	fmt.Println("Syndra Backend Starting...")
+	log.Println("[STARTUP] Syndra Backend Starting...")
 
 	// Root context cancelled on SIGINT/SIGTERM. Created before anything that
 	// runs in the background so all of it shares one shutdown signal.
@@ -634,7 +635,7 @@ func main() {
 		log.Fatalf("Server error: %v", err)
 	}
 	go func() {
-		fmt.Println("Control Plane Backend Listening on :8080")
+		log.Println("[STARTUP] Control Plane Backend Listening on :8080")
 		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
@@ -666,7 +667,7 @@ func main() {
 
 	<-ctx.Done()
 
-	fmt.Println("\nShutting down gracefully...")
+	log.Println("[SHUTDOWN] Shutting down gracefully...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -795,7 +796,7 @@ func main() {
 		log.Printf("Redis close error: %v", err)
 	}
 
-	fmt.Println("Server stopped.")
+	log.Println("[SHUTDOWN] Server stopped.")
 }
 
 func schedulerEnabled() bool {

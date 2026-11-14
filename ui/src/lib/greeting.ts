@@ -1,5 +1,5 @@
 import { formatShortDate } from "@/lib/format";
-import { civilDay, daysBetween, MAKERSPACE_TZ } from "@/lib/time";
+import { civilDay, daysBetween, makerspaceZone, zoneTag } from "@/lib/time";
 
 /**
  * Quiet hours: 22:00 up to 05:00, on the reader's own clock (A-18 §4 idea 9).
@@ -51,7 +51,7 @@ export function lastHere(
   if (days <= 0) return null;
   if (days === 1) return { since: "yesterday", on: "yesterday" };
   if (days < 7) {
-    const weekday = then.toLocaleDateString("en-GB", { weekday: "long", timeZone: MAKERSPACE_TZ });
+    const weekday = then.toLocaleDateString("en-GB", { weekday: "long", timeZone: makerspaceZone() }) + zoneTag();
     return { since: weekday, on: `on ${weekday}` };
   }
   const date = formatShortDate(iso, now);

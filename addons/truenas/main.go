@@ -247,7 +247,7 @@ func collectEvery(raw string) (time.Duration, error) {
 // every startup failure after the store was opened closed neither the bbolt
 // file nor the mutation log.
 func main() {
-	log.SetFlags(log.LstdFlags | log.LUTC)
+	stampLogs()
 	if err := run(); err != nil {
 		log.Fatalf("[STARTUP] %v", err)
 	}
@@ -471,7 +471,9 @@ func (probeNoiseFilter) Write(p []byte) (int, error) {
 	if isProbeNoise(string(p)) {
 		return len(p), nil
 	}
-	return os.Stderr.Write(p)
+	// Through the standard logger's writer, so the net/http error log (which
+	// has no flags of its own) carries the same stamp as every other line.
+	return log.Writer().Write(p)
 }
 
 // isProbeNoise is the whole of the decision, in one place because the test has

@@ -129,7 +129,7 @@ describe("differences waiting on a decision", () => {
 
   // An adopted suspension carries a bound in time. The schema refuses a denial
   // without one, and this surface must not be the way around it.
-  it("adopts the target's value with a review date", () => {
+  it("adopts the target's value and leaves the review date to the backend", () => {
     state.findings = [finding({ adoptable: true })];
     state.resolved = [];
     renderFindings();
@@ -139,7 +139,8 @@ describe("differences waiting on a decision", () => {
     fireEvent.click(screen.getByText("Use TrueNAS's value"));
 
     expect(state.resolved[0].resolution).toBe("take_theirs");
-    expect(state.resolved[0].review_date).toBeTruthy();
+    // Never an instant worked out here (the backend refuses one): absent, so the backend sets it.
+    expect(state.resolved[0].review_date).toBeUndefined();
   });
 
   // A value with no per-person home gets no button at all. Offering one and

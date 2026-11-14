@@ -69,6 +69,7 @@ func ptrTime(t time.Time) *time.Time { return &t }
 // An ask sent as UTC midnight (the old date picker) still means the whole of
 // that day in the makerspace's zone, not until 05:30 IST.
 func TestAskedEndIsTheWholeOfItsDay(t *testing.T) {
+	inIST(t)
 	sent := time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC) // 05:30 IST on 30 Nov
 	want, _ := clock.EndOfDay("2026-11-30")
 	if got := services.AskedEnd(&sent); !got.Equal(want) {

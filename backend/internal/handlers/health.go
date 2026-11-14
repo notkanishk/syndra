@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/db"
 )
 
@@ -15,8 +16,8 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 
 	if err := db.PG.Ping(ctx); err != nil {
 		log.Printf("[HTTP] database ping failed: %v", err)
-		jsonResponse(w, http.StatusServiceUnavailable, map[string]string{"status": "unhealthy", "db": "unreachable"})
+		jsonResponse(w, http.StatusServiceUnavailable, map[string]string{"status": "unhealthy", "db": "unreachable", "time_zone": clock.Name})
 		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "ok", "time_zone": clock.Name})
 }

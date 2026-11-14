@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -33,7 +32,7 @@ func AwaitRedis(ctx context.Context) error {
 		err := Redis.Ping(pctx).Err()
 		cancel()
 		if err == nil {
-			fmt.Println("Connected to Redis successfully.")
+			log.Println("[STARTUP] Connected to Redis successfully.")
 			return nil
 		}
 		if i%5 == 0 {

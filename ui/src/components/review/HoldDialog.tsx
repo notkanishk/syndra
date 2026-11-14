@@ -10,7 +10,6 @@ import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCreateHold } from "@/lib/queries/useHolds";
-import { endOfDayISO } from "@/lib/time";
 
 /**
  * Putting a hold on something a role grants (9.22; design §25).
@@ -170,8 +169,8 @@ export function HoldDialog({
                   field,
                   value,
                   reason,
-                  expiresAt: ending === "lifts" ? endOfDayISO(date) : undefined,
-                  reviewDate: ending === "stays" ? endOfDayISO(date) : undefined,
+                  expiresAt: ending === "lifts" ? date : undefined, // dates: the backend ends them in its own zone
+                  reviewDate: ending === "stays" ? date : undefined,
                 });
                 // A hold is one write in Syndra's own database (`handleCreateAllowance`,
                 // HTTP 201) — nothing here reaches Zitadel or an outbox, so "waiting to

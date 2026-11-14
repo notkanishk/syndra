@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/clock"
 	"syndra/internal/db"
 	"syndra/internal/services"
 )
@@ -31,8 +32,8 @@ type allowanceRequest struct {
 	Reason    string `json:"reason"`
 	// Exactly one of these is enough, and neither is not. A denial with no
 	// bound is an open-ended carve-out nobody is prompted to revisit.
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	ReviewDate *time.Time `json:"review_date,omitempty"`
+	ExpiresAt  *clock.EndDay `json:"expires_at,omitempty"`
+	ReviewDate *clock.EndDay `json:"review_date,omitempty"`
 }
 
 func handleCreateAllowance(w http.ResponseWriter, r *http.Request) {
@@ -78,8 +79,8 @@ func handleCreateAllowance(w http.ResponseWriter, r *http.Request) {
 		SubjectID: req.SubjectID, Target: req.Target, Field: field, Value: value,
 		Direction: req.Direction, Reason: req.Reason,
 		ActorID:    resolveActor(r, ""),
-		ExpiresAt:  req.ExpiresAt,
-		ReviewDate: req.ReviewDate,
+		ExpiresAt:  req.ExpiresAt.Instant(),
+		ReviewDate: req.ReviewDate.Instant(),
 	})
 	if err != nil {
 		writeAllowanceError(w, err)
